@@ -178,7 +178,10 @@ fun OnboardingScreen() {
 
             Button(
                 onClick = {
-                    // El servicio y la bola flotante se implementan en M2/M3
+                    com.forge.pixpin.floating.PinHostService.start(context)
+                    android.widget.Toast.makeText(
+                        context, R.string.app_started, android.widget.Toast.LENGTH_LONG
+                    ).show()
                 },
                 enabled = overlayGranted,
                 modifier = Modifier.fillMaxWidth()
