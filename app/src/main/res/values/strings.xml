@@ -49,4 +49,12 @@
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="pin_type_image">Imagen</string>
+
+    <!-- Pantalla de captura -->
+    <string name="pinned">Fijado</string>
+    <string name="saved_to_gallery">Guardado en Pictures/PixPin</string>
+    <string name="copied_image">Imagen copiada al portapapeles</string>
+    <string name="add_text_title">Texto de la anotación</string>
+    <string name="add">Añadir</string>
+    <string name="cancel">Cancelar</string>
 </resources>

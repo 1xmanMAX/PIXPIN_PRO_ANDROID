@@ -127,8 +127,10 @@ class CaptureService : Service() {
             val frame = withContext(Dispatchers.IO) { FrameGrabber.grab(this@CaptureService, proj) }
             if (frame != null) {
                 FrameHolder.set(frame)
-                // M5 abrirá aquí la CaptureActivity; de momento confirmamos la captura.
-                toast(getString(R.string.capture_frame_ok, frame.width, frame.height))
+                startActivity(
+                    Intent(this@CaptureService, CaptureActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
             } else {
                 toast(getString(R.string.capture_error))
             }
