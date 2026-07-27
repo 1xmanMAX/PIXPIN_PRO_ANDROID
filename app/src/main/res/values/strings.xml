@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">PixPin</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Bienvenido a PixPin</string>
+    <string name="onboarding_subtitle">Captura, anota y fija notas flotantes sobre cualquier app. Necesito estos permisos para funcionar:</string>
+    <string name="perm_overlay_title">Mostrar sobre otras apps</string>
+    <string name="perm_overlay_desc">Imprescindible: los pines y la bola flotante son ventanas sobre las demás apps.</string>
+    <string name="perm_notif_title">Notificaciones</string>
+    <string name="perm_notif_desc">Barra persistente con botones de Capturar y Pinear.</string>
+    <string name="perm_battery_title">Excluir de ahorro de batería</string>
+    <string name="perm_battery_desc">Evita que el sistema cierre PixPin y desaparezcan tus pines.</string>
+    <string name="perm_capture_note">La primera vez que captures, Android te pedirá permiso de grabación de pantalla (solo esa vez por sesión).</string>
+    <string name="granted">Concedido</string>
+    <string name="grant">Conceder</string>
+    <string name="start_app">Comenzar</string>
+    <string name="need_overlay">Concede «Mostrar sobre otras apps» para continuar</string>
 </resources>
