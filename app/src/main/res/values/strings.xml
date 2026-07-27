@@ -33,4 +33,5 @@
     <string name="capture_consent_denied">Permiso de captura denegado</string>
     <string name="capture_error">No se pudo capturar la pantalla</string>
     <string name="capture_frame_ok">Fotograma %1$d×%2$d capturado</string>
+    <string name="coming_soon">Disponible en la siguiente fase</string>
 </resources>

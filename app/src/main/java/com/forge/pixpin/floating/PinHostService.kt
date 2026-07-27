@@ -34,6 +34,8 @@ class PinHostService : Service() {
         }
     }
 
+    private var ball: FloatingBallController? = null
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
@@ -43,6 +45,15 @@ class PinHostService : Service() {
         } else {
             startForeground(NOTIF_ID, notification)
         }
+        if (android.provider.Settings.canDrawOverlays(this)) {
+            FloatingBallController(this).also { ball = it }.show()
+        }
+    }
+
+    override fun onDestroy() {
+        ball?.hide()
+        ball = null
+        super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
