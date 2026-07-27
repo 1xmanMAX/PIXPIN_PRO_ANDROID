@@ -55,6 +55,12 @@ import kotlinx.coroutines.launch
  */
 class FloatingBallController(private val context: Context) {
 
+    companion object {
+        /** Instancia activa para que los pines puedan localizar la bola (drop-to-minimize). */
+        var active: FloatingBallController? = null
+            private set
+    }
+
     private val wm = context.getSystemService(WindowManager::class.java)!!
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -65,6 +71,15 @@ class FloatingBallController(private val context: Context) {
     private var snapAnimator: ValueAnimator? = null
 
     val isShowing: Boolean get() = ball != null
+
+    /** Rectángulo actual de la bola en coordenadas de pantalla, o null si está oculta. */
+    fun ballBounds(): android.graphics.Rect? {
+        val lp = ballLp ?: return null
+        val view = ball?.view ?: return null
+        val w = if (view.width > 0) view.width else dp(48)
+        val h = if (view.height > 0) view.height else dp(48)
+        return android.graphics.Rect(lp.x, lp.y, lp.x + w, lp.y + h)
+    }
 
     fun show() {
         if (ball != null) return
@@ -92,6 +107,7 @@ class FloatingBallController(private val context: Context) {
             runCatching {
                 wm.addView(window.view, lp)
                 window.onAttached()
+                active = this@FloatingBallController
             }
         }
     }
@@ -105,6 +121,7 @@ class FloatingBallController(private val context: Context) {
         ball = null
         ballLp = null
         snapAnimator?.cancel()
+        if (active == this) active = null
         scope.cancel()
     }
 

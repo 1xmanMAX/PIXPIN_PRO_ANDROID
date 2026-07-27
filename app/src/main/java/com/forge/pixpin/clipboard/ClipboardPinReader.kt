@@ -19,8 +19,9 @@ class ClipboardPinReader(private val context: Context) {
 
         item.uri?.let { uri ->
             val type = runCatching { context.contentResolver.getType(uri) }.getOrNull()
-            if (type == null || type.startsWith("image/")) {
-                return PinContent.ImageUri(uri.toString())
+            return when {
+                type == null || type.startsWith("image/") -> PinContent.ImageUri(uri.toString())
+                else -> PinContent.FileUri(uri.toString())
             }
         }
 

@@ -94,25 +94,29 @@ object PinExporter {
             }
         }
 
-        com.forge.pixpin.pin.PinType.TEXT -> {
-            val text = state.text ?: return null
-            val width = 720
-            val paint = android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.BLACK
-                textSize = 40f
-            }
-            val layout = android.text.StaticLayout.Builder
-                .obtain(text, 0, text.length, paint, width)
-                .build()
-            val pad = 48
-            val bitmap = Bitmap.createBitmap(
-                width + pad * 2, layout.height + pad * 2, Bitmap.Config.ARGB_8888
-            )
-            val canvas = android.graphics.Canvas(bitmap)
-            canvas.drawColor(android.graphics.Color.WHITE)
-            canvas.translate(pad.toFloat(), pad.toFloat())
-            layout.draw(canvas)
-            bitmap
+        com.forge.pixpin.pin.PinType.TEXT -> renderText(state.text)
+
+        com.forge.pixpin.pin.PinType.FILE -> renderText(state.fileName)
+    }
+
+    private fun renderText(text: String?): Bitmap? {
+        if (text.isNullOrBlank()) return null
+        val width = 720
+        val paint = android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.BLACK
+            textSize = 40f
         }
+        val layout = android.text.StaticLayout.Builder
+            .obtain(text, 0, text.length, paint, width)
+            .build()
+        val pad = 48
+        val bitmap = Bitmap.createBitmap(
+            width + pad * 2, layout.height + pad * 2, Bitmap.Config.ARGB_8888
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        canvas.translate(pad.toFloat(), pad.toFloat())
+        layout.draw(canvas)
+        return bitmap
     }
 }

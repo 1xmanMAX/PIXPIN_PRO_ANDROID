@@ -119,6 +119,13 @@ class CaptureActivity : ComponentActivity() {
             return
         }
         frame = bitmap
+        // Inmersiva: cubrir también la barra de estado para seleccionar a pantalla completa
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat
+                .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
         setContent {
             PixPinTheme {
                 CaptureScreen(
@@ -176,7 +183,7 @@ fun CaptureScreen(
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(if (annotateMode) Color.Black else Color.Transparent)
     ) {
         val viewW = constraints.maxWidth.toFloat()
         val viewH = constraints.maxHeight.toFloat()
@@ -228,17 +235,19 @@ fun CaptureScreen(
             }
         }
 
-        // 1) Fotograma
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = null,
-            modifier = Modifier
-                .offset { IntOffset(imageRect.left.toInt(), imageRect.top.toInt()) }
-                .size(
-                    with(density) { dispW.toDp() },
-                    with(density) { dispH.toDp() }
-                )
-        )
+        // 1) Fotograma: solo en modo anotación; en selección se ve la pantalla viva
+        if (annotateMode) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier
+                    .offset { IntOffset(imageRect.left.toInt(), imageRect.top.toInt()) }
+                    .size(
+                        with(density) { dispW.toDp() },
+                        with(density) { dispH.toDp() }
+                    )
+            )
+        }
 
         // 2) Anotaciones (siempre visibles)
         AnnotationCanvas(

@@ -49,6 +49,8 @@
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="pin_type_image">Imagen</string>
+    <string name="pin_type_file">Archivo</string>
+    <string name="no_app_for_file">No hay ninguna app para abrir este archivo</string>
 
     <!-- Pantalla de captura -->
     <string name="pinned">Fijado</string>

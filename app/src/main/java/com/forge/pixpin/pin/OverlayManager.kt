@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.TextFields
@@ -81,7 +82,9 @@ class OverlayManager(private val app: PixPinApp) {
 
         override fun onPinDestroyed(controller: PinWindowController) {
             pins.remove(controller.id)
-            ImageStore.delete(controller.snapshot().imagePath)
+            val state = controller.snapshot()
+            ImageStore.delete(state.imagePath)
+            FileStore.delete(state.filePath)
             saveNow()
             refreshPinList()
         }
@@ -131,6 +134,31 @@ class OverlayManager(private val app: PixPinApp) {
                     toast(R.string.pin_image_error)
                 }
             }
+            is PinContent.FileUri -> pinFromSharedUri(Uri.parse(content.uriString))
+        }
+    }
+
+    /** Compartido desde otra app o URI de archivo en portapapeles. */
+    fun pinFromSharedUri(uri: Uri) {
+        if (!Settings.canDrawOverlays(app)) {
+            toast(R.string.need_overlay_toast)
+            return
+        }
+        val mime = runCatching { app.contentResolver.getType(uri) }.getOrNull()
+        scope.launch {
+            if (mime == null || mime.startsWith("image/")) {
+                val path = withContext(Dispatchers.IO) { ImageStore.importFromUri(app, uri) }
+                if (path != null) {
+                    pinImage(path)
+                    return@launch
+                }
+            }
+            val imported = withContext(Dispatchers.IO) { FileStore.importFromUri(app, uri) }
+            if (imported != null) {
+                pinFile(imported.path, imported.name, imported.mime)
+            } else {
+                toast(R.string.pin_image_error)
+            }
         }
     }
 
@@ -139,6 +167,18 @@ class OverlayManager(private val app: PixPinApp) {
         if (!Settings.canDrawOverlays(app)) return
         createPin(PinState(id = newId(), type = PinType.IMAGE, imagePath = imagePath,
             x = cascadeX(), y = cascadeY()))
+    }
+
+    /** Crea un pin de archivo (documento compartido a PixPin). */
+    fun pinFile(filePath: String, fileName: String, mimeType: String) {
+        if (!Settings.canDrawOverlays(app)) return
+        createPin(
+            PinState(
+                id = newId(), type = PinType.FILE,
+                filePath = filePath, fileName = fileName, mimeType = mimeType,
+                x = cascadeX(), y = cascadeY()
+            )
+        )
     }
 
     private fun createPin(state: PinState) {
@@ -282,6 +322,7 @@ class OverlayManager(private val app: PixPinApp) {
                     PinType.IMAGE -> Icons.Filled.Image
                     PinType.TEXT -> Icons.Filled.TextFields
                     PinType.COLOR -> Icons.Filled.Palette
+                    PinType.FILE -> Icons.Filled.InsertDriveFile
                 },
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
@@ -316,6 +357,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.IMAGE -> app.getString(R.string.pin_type_image)
         PinType.COLOR -> pin.colorArgb?.let { ContentClassifier.toHex(it) } ?: "Color"
         PinType.TEXT -> pin.text.orEmpty().replace('\n', ' ').take(30)
+        PinType.FILE -> pin.fileName ?: app.getString(R.string.pin_type_file)
     }
 
     // ---- Persistencia ----

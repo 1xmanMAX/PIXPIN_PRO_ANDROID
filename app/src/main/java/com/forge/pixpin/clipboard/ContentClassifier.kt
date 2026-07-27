@@ -5,6 +5,7 @@ sealed interface PinContent {
     data class ColorPin(val argb: Int, val source: String) : PinContent
     data class TextPin(val text: String) : PinContent
     data class ImageUri(val uriString: String) : PinContent
+    data class FileUri(val uriString: String) : PinContent
     data object Empty : PinContent
 }
 
