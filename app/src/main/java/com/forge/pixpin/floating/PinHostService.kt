@@ -47,6 +47,7 @@ class PinHostService : Service() {
         }
         if (android.provider.Settings.canDrawOverlays(this)) {
             FloatingBallController(this).also { ball = it }.show()
+            (application as com.forge.pixpin.PixPinApp).overlayManager.restoreOnStart()
         }
     }
 
@@ -91,11 +92,17 @@ class PinHostService : Service() {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val pinPi = PendingIntent.getActivity(
+            context, 2,
+            Intent(context, com.forge.pixpin.clipboard.ClipboardPinActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(context.getString(R.string.notif_title))
             .setContentText(context.getString(R.string.notif_text))
             .addAction(0, context.getString(R.string.action_capture), capturePi)
+            .addAction(0, context.getString(R.string.action_pin), pinPi)
             .addAction(0, context.getString(R.string.action_open), openPi)
             .setOngoing(true)
             .setSilent(true)

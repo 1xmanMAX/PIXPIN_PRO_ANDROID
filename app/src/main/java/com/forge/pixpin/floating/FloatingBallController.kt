@@ -204,9 +204,15 @@ class FloatingBallController(private val context: Context) {
 
     private fun onMenuAction(action: BallAction) {
         closeMenu()
+        val app = context.applicationContext as PixPinApp
         when (action) {
             BallAction.CAPTURE -> CaptureService.requestCapture(context)
-            else -> Toast.makeText(context, R.string.coming_soon, Toast.LENGTH_SHORT).show()
+            BallAction.PIN_CLIPBOARD -> context.startActivity(
+                android.content.Intent(context, com.forge.pixpin.clipboard.ClipboardPinActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            BallAction.HIDE_ALL -> app.overlayManager.toggleHideAll()
+            BallAction.PIN_LIST -> app.overlayManager.togglePinList()
         }
     }
 
