@@ -72,3 +72,47 @@ object Export {
     private fun timestamp(): String =
         SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
 }
+
+/** Convierte el contenido de un pin en bitmap para guardarlo en galería. */
+object PinExporter {
+
+    fun savePin(context: Context, state: com.forge.pixpin.pin.PinState): Boolean {
+        val bitmap = render(state) ?: return false
+        val uri = Export.saveToGallery(context, bitmap)
+        if (!bitmap.isRecycled) bitmap.recycle()
+        return uri != null
+    }
+
+    private fun render(state: com.forge.pixpin.pin.PinState): Bitmap? = when (state.type) {
+        com.forge.pixpin.pin.PinType.IMAGE ->
+            state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+
+        com.forge.pixpin.pin.PinType.COLOR -> {
+            val argb = state.colorArgb ?: return null
+            Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(argb)
+            }
+        }
+
+        com.forge.pixpin.pin.PinType.TEXT -> {
+            val text = state.text ?: return null
+            val width = 720
+            val paint = android.text.TextPaint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.BLACK
+                textSize = 40f
+            }
+            val layout = android.text.StaticLayout.Builder
+                .obtain(text, 0, text.length, paint, width)
+                .build()
+            val pad = 48
+            val bitmap = Bitmap.createBitmap(
+                width + pad * 2, layout.height + pad * 2, Bitmap.Config.ARGB_8888
+            )
+            val canvas = android.graphics.Canvas(bitmap)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            canvas.translate(pad.toFloat(), pad.toFloat())
+            layout.draw(canvas)
+            bitmap
+        }
+    }
+}

@@ -87,7 +87,13 @@ class OverlayManager(private val app: PixPinApp) {
         }
 
         override fun onPinSaveRequested(controller: PinWindowController) {
-            toast(R.string.coming_soon)
+            val state = controller.snapshot()
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    com.forge.pixpin.capture.PinExporter.savePin(app, state)
+                }
+                toast(if (ok) R.string.saved_to_gallery else R.string.capture_error)
+            }
         }
     }
 
