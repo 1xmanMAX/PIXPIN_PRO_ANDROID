@@ -63,6 +63,10 @@
     <string name="cd_save">Guardar</string>
     <string name="cd_close">Cerrar</string>
     <string name="cd_annotate_pin">Dibujar sobre el pin</string>
+    <string name="cd_select_pin">Seleccionar</string>
+    <string name="pins_group">Agrupar</string>
+    <string name="pins_ungroup">Desagrupar</string>
+    <string name="pins_selected">%1$d seleccionados</string>
     <string name="cd_undo">Deshacer</string>
     <string name="cd_done">Listo</string>
     <string name="cd_destroy">Eliminar</string>

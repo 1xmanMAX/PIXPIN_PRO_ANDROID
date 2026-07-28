@@ -112,6 +112,14 @@ class PinWindowController(
 
         /** Se acaba de minimizar: el gestor decide dónde aparcar la burbuja. */
         fun onPinMinimized(controller: PinWindowController)
+
+        /**
+         * Arrastre en curso. El gestor es quien sabe qué pines forman grupo, así
+         * que es él quien arrastra a los compañeros: el pin solo cuenta cuánto
+         * se ha movido desde que empezó el gesto.
+         */
+        fun onPinDragStarted(controller: PinWindowController) {}
+        fun onPinDragged(controller: PinWindowController, dx: Int, dy: Int) {}
     }
 
     private val wm = context.getSystemService(WindowManager::class.java)!!
@@ -249,6 +257,14 @@ class PinWindowController(
 
     val isMinimized: Boolean get() = minimized.value
 
+    val groupId: String? get() = pin.value.groupId
+
+    fun setGroup(newGroupId: String?) {
+        if (pin.value.groupId == newGroupId) return
+        pin.value = pin.value.copy(groupId = newGroupId)
+        callbacks.onPinChanged(this)
+    }
+
     /**
      * @param dock true solo cuando se ha soltado el pin sobre la bola: entonces
      * la burbuja se aparca junto a ella. Con doble toque la burbuja se queda
@@ -309,6 +325,7 @@ class PinWindowController(
             closeActionBar()
             dragStartX = lp?.x ?: 0
             dragStartY = lp?.y ?: 0
+            callbacks.onPinDragStarted(this@PinWindowController)
         }
 
         override fun onDrag(dxFromDown: Float, dyFromDown: Float) {
@@ -316,6 +333,9 @@ class PinWindowController(
             p.x = dragStartX + dxFromDown.toInt()
             p.y = dragStartY + dyFromDown.toInt()
             applyLayout()
+            callbacks.onPinDragged(
+                this@PinWindowController, dxFromDown.toInt(), dyFromDown.toInt()
+            )
         }
 
         override fun onDragEnd() {
@@ -768,9 +788,12 @@ class PinWindowController(
         Surface(
             shape = if (small) CircleShape else RoundedCornerShape(12.dp),
             shadowElevation = 8.dp,
-            border = if (s.clickThrough) {
-                BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
-            } else null,
+            // El borde dice de un vistazo si los toques lo atraviesan o, si no,
+            // a qué grupo pertenece.
+            border = when {
+                s.clickThrough -> BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
+                else -> s.groupId?.let { BorderStroke(2.dp, Color(PinGroups.colorFor(it))) }
+            },
             // Se lee dentro del bloque de graphicsLayer: cambiar la opacidad
             // solo actualiza la capa, no recompone ni vuelve a medir nada.
             modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }

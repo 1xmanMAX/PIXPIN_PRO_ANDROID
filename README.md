@@ -10,7 +10,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 > port de su código, sino una implementación propia en Kotlin de las funciones que me
 > resultan útiles en el móvil. Se instala por APK, no está en Google Play.
 
-**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 78 tests
+**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 86 tests
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
 
@@ -112,6 +112,10 @@ Además de eso:
 - **Minimizar en burbuja**: doble toque y el pin se reduce a una burbuja que se queda
   donde estaba; otro doble toque lo devuelve. Arrastrarlo sobre la bola flotante lo aparca
   en una columna ordenada junto a ella.
+- **Grupos**: se marcan varios pines en la lista y se agrupan. A partir de ahí se mueven
+  juntos —arrastrar uno arrastra a los demás conservando las distancias— y se cierran
+  juntos; un borde del color del grupo los identifica. La escala y la opacidad siguen
+  siendo de cada pin: agrupar sirve para colocar, no para uniformar.
 - **Ocultar todo / mostrar todo** sin cerrar nada.
 - **Historial**: los pines cerrados se pueden recuperar; los eliminados, no.
 - **Sobreviven al reinicio** del teléfono, con su posición, tamaño y opacidad.
@@ -203,7 +207,7 @@ Requiere **Android 10 (API 29) o superior**. Probado en Android 10, 12 y 15/16.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
 
 ./gradlew assembleDebug        # APK de depuración
-./gradlew testDebugUnitTest    # 78 tests unitarios
+./gradlew testDebugUnitTest    # 86 tests unitarios
 ./gradlew lintDebug            # análisis estático
 ```
 
@@ -327,7 +331,7 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 |---|---|
 | ✅ **1 — MVP** | Disparadores, captura y recorte, 8 herramientas de anotación, pines de imagen/texto/color/archivo, gestos, burbujas, historial, restauración al reinicio |
 | ✅ **1.5** | Motor de trazo para lápiz óptico (presión, rechazo de palma, suavizado), anotar sobre un pin flotante, zoom del pin hasta el borde de la pantalla, nº de serie, polilínea y foco |
-| **2** | Grupos de pines |
+| ✅ **2** | Grupos de pines |
 | **3** | OCR local con ML Kit, reconocimiento de QR, traducción |
 | **4** | Captura con scroll y grabación en GIF/MP4 |
 

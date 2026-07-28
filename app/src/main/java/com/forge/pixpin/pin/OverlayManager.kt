@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.Image
@@ -29,10 +31,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
@@ -70,12 +74,21 @@ class OverlayManager(private val app: PixPinApp) {
     private var listWindow: OverlayComposeWindow? = null
     private val listState = mutableStateOf<List<PinState>>(emptyList())
 
+    /** Selección de la lista de pines, para agrupar y desagrupar. */
+    private val selection = mutableStateOf<Set<String>>(emptySet())
+
+    /** Posición de cada compañero de grupo al empezar el arrastre en curso. */
+    private var dragAnchors: Map<String, Pair<Int, Int>> = emptyMap()
+
     private val callbacks = object : PinWindowController.Callbacks {
         override fun onPinChanged(controller: PinWindowController) = scheduleSave()
 
         override fun onPinClosed(controller: PinWindowController) {
             pins.remove(controller.id)
             pushHistory(controller.snapshot())
+            // Un grupo se cierra entero: cerrar solo una parte dejaría el resto
+            // huérfano en pantalla sin forma evidente de recuperarlo junto.
+            controller.groupId?.let { closeRestOfGroup(it) }
             saveNow()
             refreshPinList()
         }
@@ -101,6 +114,25 @@ class OverlayManager(private val app: PixPinApp) {
             val baseY = (ball?.bottom ?: (app.resources.displayMetrics.heightPixels / 3)) + (8 * density).toInt()
             val slot = pins.values.count { it.isMinimized && it !== controller }
             controller.moveTo(baseX, baseY + slot * gap)
+        }
+
+        /** Al empezar a arrastrar se apuntan las posiciones de los compañeros de grupo. */
+        override fun onPinDragStarted(controller: PinWindowController) {
+            val group = controller.groupId
+            dragAnchors = if (group == null) {
+                emptyMap()
+            } else {
+                pins.values
+                    .filter { it.id != controller.id && it.groupId == group }
+                    .associate { val s = it.snapshot(); it.id to (s.x to s.y) }
+            }
+        }
+
+        override fun onPinDragged(controller: PinWindowController, dx: Int, dy: Int) {
+            if (dragAnchors.isEmpty()) return
+            PinGroups.followPositions(dragAnchors, dx, dy).forEach { (id, pos) ->
+                pins[id]?.moveTo(pos.first, pos.second)
+            }
         }
 
         override fun onPinSaveRequested(controller: PinWindowController) {
@@ -255,6 +287,39 @@ class OverlayManager(private val app: PixPinApp) {
         }
     }
 
+    // ---- Grupos ----
+
+    /** Une los pines seleccionados en un grupo nuevo. */
+    private fun groupSelected() {
+        val ids = selection.value
+        if (ids.size < 2) return
+        val groupId = UUID.randomUUID().toString()
+        ids.forEach { pins[it]?.setGroup(groupId) }
+        selection.value = emptySet()
+        saveNow()
+        refreshPinList()
+    }
+
+    private fun ungroupSelected() {
+        selection.value.forEach { pins[it]?.setGroup(null) }
+        selection.value = emptySet()
+        saveNow()
+        refreshPinList()
+    }
+
+    /**
+     * Cierra el resto del grupo. Se llama desde `onPinClosed`, así que el que
+     * disparó el cierre ya no está en el mapa y no hay riesgo de reentrada.
+     */
+    private fun closeRestOfGroup(groupId: String) {
+        if (closingGroup) return // cada cierre reentra aquí; una pasada basta
+        closingGroup = true
+        pins.values.filter { it.groupId == groupId }.toList().forEach { it.close() }
+        closingGroup = false
+    }
+
+    private var closingGroup = false
+
     // ---- Lista de pines (válvula de escape del click-through) ----
 
     fun togglePinList() {
@@ -289,6 +354,8 @@ class OverlayManager(private val app: PixPinApp) {
 
     private fun refreshPinList() {
         listState.value = pins.values.map { it.snapshot() }
+        // Los pines cerrados no pueden seguir marcados.
+        selection.value = selection.value.intersect(pins.keys)
     }
 
     @Composable
@@ -325,6 +392,39 @@ class OverlayManager(private val app: PixPinApp) {
                     ) {
                         items.forEach { pin -> PinListRow(pin) }
                     }
+                    GroupActions(items)
+                }
+            }
+        }
+    }
+
+    /**
+     * Agrupar y desagrupar, solo cuando la selección lo permite: con la lista
+     * limpia no hay botones de más estorbando.
+     */
+    @Composable
+    private fun GroupActions(items: List<PinState>) {
+        val chosen = items.filter { it.id in selection.value }
+        if (chosen.isEmpty()) return
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+        ) {
+            Text(
+                text = app.getString(R.string.pins_selected, chosen.size),
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.weight(1f)
+            )
+            if (PinGroups.canUngroup(chosen)) {
+                TextButton(onClick = { ungroupSelected() }) {
+                    Text(app.getString(R.string.pins_ungroup))
+                }
+            }
+            if (PinGroups.canGroup(chosen)) {
+                TextButton(onClick = { groupSelected() }) {
+                    Text(app.getString(R.string.pins_group))
                 }
             }
         }
@@ -338,6 +438,18 @@ class OverlayManager(private val app: PixPinApp) {
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
         ) {
+            val checked = pin.id in selection.value
+            IconButton(onClick = {
+                selection.value = if (checked) selection.value - pin.id
+                else selection.value + pin.id
+            }) {
+                Icon(
+                    if (checked) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank,
+                    contentDescription = app.getString(R.string.cd_select_pin),
+                    tint = if (pin.groupId != null) Color(PinGroups.colorFor(pin.groupId))
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Icon(
                 when (pin.type) {
                     PinType.IMAGE -> Icons.Filled.Image

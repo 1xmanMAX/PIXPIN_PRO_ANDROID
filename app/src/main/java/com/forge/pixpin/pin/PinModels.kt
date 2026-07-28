@@ -22,6 +22,8 @@ data class PinState(
     val alpha: Float = 1f,
     val clickThrough: Boolean = false,
     val minimized: Boolean = false,
+    /** Grupo al que pertenece: los del mismo grupo se mueven, ocultan y cierran juntos. */
+    val groupId: String? = null,
     /**
      * Lo dibujado encima del pin, en coordenadas de la imagen original: por eso
      * se ve igual de bien con el pin diminuto o a pantalla completa, y sigue
