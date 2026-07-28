@@ -10,7 +10,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 > port de su código, sino una implementación propia en Kotlin de las funciones que me
 > resultan útiles en el móvil. Se instala por APK, no está en Google Play.
 
-**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 102 tests
+**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 107 tests
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
 
@@ -53,7 +53,7 @@ pantalla en vivo, así que nada se mueve bajo el dedo.
   el dedo y su valor HEX, que se copia con un toque.
 - Los overlays de PixPin (bola y pines) se ocultan durante el fotograma: no salen dentro
   de tu propia captura.
-- Una sola barra de acciones, con **Pin** destacado: anotar · guardar · copiar · compartir · cerrar.
+- Una sola barra de acciones, con **Pin** destacado: anotar · scroll · copiar · compartir · cerrar.
 
 ### Captura con scroll
 
@@ -125,8 +125,9 @@ Además de eso:
   (herramienta · color · grosor · deshacer · listo). Como las anotaciones se guardan en
   coordenadas de la imagen, da igual anotar con el pin diminuto o a pantalla completa: se
   ven bien en cualquier tamaño, siguen siendo re-editables y se hornean al guardar.
-- **Zoom hasta llenar la pantalla**: el pin crece con el pellizco hasta que un eje toca el
-  borde, así que siempre se ve entero.
+- **Zoom más allá de la pantalla**: un pin de imagen crece con el pellizco hasta el triple
+  de lo que cabe en pantalla, para acercarse a leer letra pequeña. Nunca se pierde: al
+  soltarlo siempre queda un trozo agarrable, y arrastrarlo lo recorre.
 - **Opacidad por pin**, ajustable con dos dedos en vivo.
 - **Toques a través** (*click-through*): los toques atraviesan el pin hasta la app de
   abajo; un borde de color indica que está activo. Se desactiva desde la lista de pines.
@@ -134,9 +135,10 @@ Además de eso:
   donde estaba; otro doble toque lo devuelve. Arrastrarlo sobre la bola flotante lo aparca
   en una columna ordenada junto a ella.
 - **Grupos**: se marcan varios pines en la lista y se agrupan. A partir de ahí se mueven
-  juntos —arrastrar uno arrastra a los demás conservando las distancias— y se cierran
-  juntos; un borde del color del grupo los identifica. La escala y la opacidad siguen
-  siendo de cada pin: agrupar sirve para colocar, no para uniformar.
+  juntos —arrastrar uno arrastra a los demás conservando las distancias—, se minimizan en
+  **una sola burbuja** y se cierran juntos; un borde del color del grupo los identifica. La
+  escala y la opacidad siguen siendo de cada pin: agrupar sirve para colocar, no para
+  uniformar.
 - **Ocultar todo / mostrar todo** sin cerrar nada.
 - **Historial**: los pines cerrados se pueden recuperar; los eliminados, no.
 - **Sobreviven al reinicio** del teléfono, con su posición, tamaño y opacidad.
@@ -145,8 +147,10 @@ Además de eso:
 
 ### Guardar, copiar y compartir
 
-Guardado en `Pictures/PixPin` (visible en la galería), copiado al portapapeles como
-imagen, o compartido a cualquier app. Un pin también se puede guardar desde su barra.
+**No hay botón de guardar: se guarda solo.** Toda captura con la que hagas algo —fijarla,
+copiarla o compartirla— queda en `Pictures/PixPin`, visible en la galería. Si la cierras
+con la ✕ es que no la querías, y entonces no se guarda nada. Al terminar de dibujar sobre
+un pin, la versión con lo dibujado también se guarda sola.
 
 ### Si algo falla
 
@@ -170,7 +174,7 @@ Toda la interacción con un pin, sin menús:
 | Dos dedos arriba/abajo | Opacidad en vivo |
 | Toque | Copiar (imagen, texto, color) o abrir (archivo) |
 | Doble toque | Minimizar en burbuja / restaurar |
-| Pulsación larga | Barra de acciones: toques a través · **dibujar encima** · guardar · cerrar · eliminar |
+| Pulsación larga | Barra de acciones: toques a través · **dibujar encima** · cerrar · eliminar |
 
 Y con la bola flotante:
 
@@ -228,7 +232,7 @@ Requiere **Android 10 (API 29) o superior**. Probado en Android 10, 12 y 15/16.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
 
 ./gradlew assembleDebug        # APK de depuración
-./gradlew testDebugUnitTest    # 102 tests unitarios
+./gradlew testDebugUnitTest    # 107 tests unitarios
 ./gradlew lintDebug            # análisis estático
 ```
 

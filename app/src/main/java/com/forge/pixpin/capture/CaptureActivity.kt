@@ -238,7 +238,15 @@ fun CaptureScreen(
             return android.graphics.Rect(l.toInt(), t.toInt(), r.toInt(), b.toInt())
         }
 
-        /** Hornea el recorte + anotaciones fuera del hilo de UI y entrega el resultado. */
+        /**
+         * Hornea el recorte + anotaciones fuera del hilo de UI y entrega el
+         * resultado.
+         *
+         * De paso lo **guarda siempre** en `Pictures/PixPin`: ya no hay botón de
+         * guardar. Si has hecho algo con la captura —fijarla, copiarla,
+         * compartirla— es que la querías; y si no la querías, la cierras con la
+         * ✕ y entonces no se guarda nada.
+         */
         fun bake(block: suspend (Bitmap) -> Unit) {
             if (busy) return
             val sel = selection ?: imageRect
@@ -249,6 +257,10 @@ fun CaptureScreen(
                         AnnotationRenderer.bake(
                             bitmap, selectionToImageRect(sel), controller.annotations.toList()
                         )
+                    }
+                    val saved = withContext(Dispatchers.IO) { Export.saveToGallery(context, baked) }
+                    if (saved == null) {
+                        Toast.makeText(context, R.string.capture_error, Toast.LENGTH_SHORT).show()
                     }
                     block(baked)
                     if (!baked.isRecycled) baked.recycle()
@@ -428,6 +440,7 @@ fun CaptureScreen(
                             }
                             if (path != null) {
                                 app.overlayManager.pinImage(path)
+                                Toast.makeText(context, R.string.saved_to_gallery, Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, R.string.capture_error, Toast.LENGTH_SHORT).show()
                             }
@@ -441,17 +454,6 @@ fun CaptureScreen(
                         val sel = selection ?: imageRect
                         ScrollCaptureController.request(context, selectionToImageRect(sel))
                         onFinish()
-                    },
-                    onSave = {
-                        bake { baked ->
-                            val uri = withContext(Dispatchers.IO) { Export.saveToGallery(context, baked) }
-                            Toast.makeText(
-                                context,
-                                if (uri != null) R.string.saved_to_gallery else R.string.capture_error,
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            onFinish()
-                        }
                     },
                     onCopy = {
                         bake { baked ->
@@ -595,7 +597,6 @@ private fun ActionBar(
     onPin: () -> Unit,
     onAnnotate: () -> Unit,
     onScroll: () -> Unit,
-    onSave: () -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onClose: () -> Unit
@@ -621,7 +622,6 @@ private fun ActionBar(
             }
             ToolbarButton(Icons.Filled.Edit, active = false, onClick = onAnnotate)
             ToolbarButton(Icons.Filled.ExpandMore, active = false, onClick = onScroll)
-            ToolbarButton(Icons.Filled.Save, active = false, onClick = onSave)
             ToolbarButton(Icons.Filled.ContentCopy, active = false, onClick = onCopy)
             ToolbarButton(Icons.Filled.Share, active = false, onClick = onShare)
             ToolbarButton(Icons.Filled.Close, active = false, onClick = onClose)

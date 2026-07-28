@@ -40,6 +40,20 @@ object PinGroups {
     ): Map<String, Pair<Int, Int>> =
         anchors.mapValues { (_, start) -> (start.first + dx) to (start.second + dy) }
 
+    /**
+     * Quiénes se esconden detrás de la burbuja del grupo.
+     *
+     * Un grupo minimizado se representa con **una sola burbuja**: varias juntas
+     * se estorban —al mover una se movían todas y alguna podía acabar fuera de
+     * la pantalla— y no aportan nada, porque el grupo va siempre junto. La
+     * enseña [owner] si sigue minimizado; si no, el primero de la lista.
+     */
+    fun collapsedIds(minimizedIds: List<String>, owner: String? = null): Set<String> {
+        if (minimizedIds.isEmpty()) return emptySet()
+        val visible = owner?.takeIf { it in minimizedIds } ?: minimizedIds.first()
+        return minimizedIds.filterNot { it == visible }.toSet()
+    }
+
     /** Marca (o desmarca, con [groupId] nulo) la pertenencia de varios pines. */
     fun assign(pins: List<PinState>, ids: Set<String>, groupId: String?): List<PinState> =
         pins.map { if (it.id in ids) it.copy(groupId = groupId) else it }

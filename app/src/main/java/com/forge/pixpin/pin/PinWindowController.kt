@@ -16,11 +16,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,13 +33,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.AutoFixNormal
+import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.NorthEast
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
@@ -63,12 +72,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -120,6 +133,9 @@ class PinWindowController(
          */
         fun onPinDragStarted(controller: PinWindowController) {}
         fun onPinDragged(controller: PinWindowController, dx: Int, dy: Int) {}
+
+        /** Se ha minimizado o restaurado: un grupo lo hace entero, en una burbuja. */
+        fun onPinMinimizeChanged(controller: PinWindowController, minimized: Boolean) {}
     }
 
     private val wm = context.getSystemService(WindowManager::class.java)!!
@@ -145,6 +161,9 @@ class PinWindowController(
     }
     private val annotating = mutableStateOf(false)
 
+    /** Con qué se entró al modo anotación, para saber si hay algo nuevo que guardar. */
+    private var annotationsAtEnter: List<com.forge.pixpin.annotate.Annotation> = emptyList()
+
     /**
      * La transparencia se aplica al CONTENIDO, no a la ventana. Con
      * LayoutParams.alpha muy bajo el sistema deja de entregar toques a la
@@ -165,8 +184,28 @@ class PinWindowController(
     private var focusRelX = 0.5f
     private var focusRelY = 0.5f
 
-    /** Tope del gesto en curso: hasta que un eje del pin toque el borde de la pantalla. */
+    /** Tope del gesto en curso. */
     private var zoomMax = PinZoom.ABSOLUTE_MAX_SCALE
+
+    /**
+     * Tamaño del contenido a escala 1, en px. Solo se conoce en los pines de
+     * imagen, y es lo que permite darle a la ventana un **tamaño explícito**.
+     *
+     * Importa más de lo que parece: una ventana WRAP_CONTENT no puede medir más
+     * que la pantalla, así que al llegar ahí la imagen dejaba de crecer mientras
+     * la escala seguía subiendo — y lo dibujado encima, que se calculaba con el
+     * tamaño teórico, sí crecía y se despegaba de la foto. Con tamaño explícito
+     * la ventana crece de verdad y ambos van siempre a la par.
+     */
+    private var naturalW = 0
+    private var naturalH = 0
+
+    /** Dónde y cuánto ocupa la imagen dentro de la ventana, medido de verdad. */
+    private var imageOrigin = Offset.Zero
+    private var imageSize = IntSize.Zero
+
+    private var visibleByGlobal = true
+    private var collapsedInGroup = false
 
     val id: String get() = pin.value.id
     val isShowing: Boolean get() = window != null
@@ -216,11 +255,31 @@ class PinWindowController(
 
     /** Oculta la ventana conservando su posición y estado (ocultar todo / captura). */
     fun setViewVisible(visible: Boolean) {
-        window?.isContentVisible = visible
+        visibleByGlobal = visible
+        applyVisibility()
         if (!visible) {
             closeActionBar()
             exitAnnotateMode()
         }
+    }
+
+    /**
+     * Miembro de un grupo minimizado que NO es el que enseña la burbuja.
+     *
+     * Un grupo se minimiza en una sola burbuja: varias burbujas juntas se
+     * estorban —al mover una se movían todas y alguna podía acabar fuera de la
+     * pantalla— y no aportan nada, porque el grupo va siempre junto.
+     */
+    val isCollapsedInGroup: Boolean get() = collapsedInGroup
+
+    fun setCollapsedInGroup(value: Boolean) {
+        if (collapsedInGroup == value) return
+        collapsedInGroup = value
+        applyVisibility()
+    }
+
+    private fun applyVisibility() {
+        window?.isContentVisible = visibleByGlobal && !collapsedInGroup
     }
 
     fun hideView() {
@@ -277,17 +336,22 @@ class PinWindowController(
         restoreY = lp?.y ?: pin.value.y
         minimized.value = true
         closeActionBar()
+        exitAnnotateMode()
+        applyContentSize()
         if (dock) callbacks.onPinMinimized(this)
         // La imagen puede vivir fuera de la pantalla, pero la burbuja no: si no,
         // queda flotando en una zona invisible y ya no hay forma de tocarla.
         clampBubbleIntoScreen()
+        callbacks.onPinMinimizeChanged(this, true)
         callbacks.onPinChanged(this)
     }
 
     fun restore() {
         if (!minimized.value) return
         minimized.value = false
+        applyContentSize()
         moveTo(restoreX, restoreY)
+        callbacks.onPinMinimizeChanged(this, false)
         callbacks.onPinChanged(this)
     }
 
@@ -315,6 +379,34 @@ class PinWindowController(
         val p = lp ?: return
         val v = window?.view ?: return
         runCatching { wm.updateViewLayout(v, p) }
+    }
+
+    /**
+     * Tamaño natural de la imagen del pin: el ancho de partida (limitado para
+     * que un pin recién creado no ocupe media pantalla) y el alto que le
+     * corresponde por proporción.
+     */
+    private fun measureNatural(bitmap: Bitmap) {
+        if (naturalW > 0) return
+        val screenW = context.resources.displayMetrics.widthPixels
+        naturalW = minOf(bitmap.width, (screenW * 0.6f).toInt()).coerceAtLeast(1)
+        naturalH = (naturalW.toLong() * bitmap.height / bitmap.width).toInt().coerceAtLeast(1)
+        applyContentSize()
+    }
+
+    /** Lleva la ventana al tamaño que le toca por la escala actual. */
+    private fun applyContentSize() {
+        val p = lp ?: return
+        if (naturalW <= 0) return
+        if (minimized.value) {
+            // La burbuja se mide sola: es un círculo de tamaño fijo.
+            p.width = WindowManager.LayoutParams.WRAP_CONTENT
+            p.height = WindowManager.LayoutParams.WRAP_CONTENT
+        } else {
+            p.width = (naturalW * scale.floatValue).toInt().coerceAtLeast(1)
+            p.height = (naturalH * scale.floatValue).toInt().coerceAtLeast(1)
+        }
+        applyLayout()
     }
 
     // ---- Gestos ----
@@ -358,16 +450,25 @@ class PinWindowController(
             val p = lp
             scaleStartW = (v?.width ?: 0).coerceAtLeast(1)
             scaleStartH = (v?.height ?: 0).coerceAtLeast(1)
-            // El tope se deduce del tamaño real medido: crece hasta que un eje
-            // toque el borde de la pantalla.
             val metrics = context.resources.displayMetrics
-            zoomMax = PinZoom.maxScaleFor(
-                realW = scaleStartW,
-                realH = scaleStartH,
-                currentScale = scaleStart,
-                screenW = metrics.widthPixels,
-                screenH = metrics.heightPixels
-            )
+            zoomMax = if (naturalW > 0) {
+                // Imagen: la ventana tiene tamaño explícito, así que puede pasar
+                // del borde de la pantalla y se deja acercar bastante más para
+                // leer letra pequeña. Nunca se pierde: keepReachable() se
+                // encarga de que siempre quede un trozo agarrable.
+                PinZoom.maxScaleFor(
+                    realW = naturalW, realH = naturalH, currentScale = 1f,
+                    screenW = metrics.widthPixels, screenH = metrics.heightPixels,
+                    overzoom = PinZoom.IMAGE_OVERZOOM
+                )
+            } else {
+                // Texto, color y archivo siguen midiéndose solos, y ahí la
+                // ventana no puede pasar de la pantalla: el tope es llenarla.
+                PinZoom.maxScaleFor(
+                    realW = scaleStartW, realH = scaleStartH, currentScale = scaleStart,
+                    screenW = metrics.widthPixels, screenH = metrics.heightPixels
+                )
+            }
             // Posición del foco DENTRO del pin (0..1): es lo que hay que dejar
             // clavado bajo los dedos mientras se escala.
             focusRelX = ((focusX - (p?.x ?: 0)) / scaleStartW).coerceIn(0f, 1f)
@@ -392,12 +493,11 @@ class PinWindowController(
                 relY = focusRelY
             )
             scale.floatValue = stepResult.scale
-
-            if (p.x != stepResult.x || p.y != stepResult.y) {
-                p.x = stepResult.x
-                p.y = stepResult.y
-                applyLayout()
-            }
+            p.x = stepResult.x
+            p.y = stepResult.y
+            // Posición y tamaño de la ventana se actualizan a la vez: en dos
+            // pasadas el pin daría un tirón entre una y otra.
+            if (naturalW > 0) applyContentSize() else applyLayout()
         }
 
         override fun onScaleEnd() {
@@ -467,7 +567,10 @@ class PinWindowController(
         val w = v.width.coerceAtLeast(margin)
         val h = v.height.coerceAtLeast(margin)
         val newX = p.x.coerceIn(margin - w, metrics.widthPixels - margin)
-        val newY = p.y.coerceIn(0, metrics.heightPixels - margin)
+        // Un pin más alto que la pantalla tiene que poder subirse para ver su
+        // parte de abajo; uno normal, en cambio, no se mete bajo la barra.
+        val minY = minOf(0, metrics.heightPixels - h)
+        val newY = p.y.coerceIn(minY, metrics.heightPixels - margin)
         if (newX != p.x || newY != p.y) {
             p.x = newX
             p.y = newY
@@ -528,6 +631,7 @@ class PinWindowController(
         if (annotating.value || pin.value.type != PinType.IMAGE) return
         closeActionBar()
         annotating.value = true
+        annotationsAtEnter = annotator.annotations.toList()
         window?.setTouchHandler(
             StrokeTouchReader(
                 onBegin = { x, y, p -> toImagePt(x, y, p)?.let { annotator.begin(it) } },
@@ -542,11 +646,17 @@ class PinWindowController(
     private fun exitAnnotateMode() {
         if (!annotating.value) return
         annotating.value = false
+        annotator.finishPolyline()
         annotator.cancel()
         window?.setTouchHandler(OverlayTouchHandler(context, GestureListener()))
         closeAnnotateBar()
         pin.value = snapshot()
         callbacks.onPinChanged(this)
+        // Se acabó el botón de guardar: si has dibujado algo, la versión con lo
+        // dibujado va sola a la galería.
+        if (annotator.annotations != annotationsAtEnter) {
+            callbacks.onPinSaveRequested(this)
+        }
     }
 
     /**
@@ -556,12 +666,14 @@ class PinWindowController(
      */
     private fun toImagePt(x: Float, y: Float, pressure: Float): Pt? {
         val bmp = bitmapState.value ?: return null
-        val v = window?.view ?: return null
-        if (v.width <= 0 || bmp.width <= 0) return null
-        val shown = v.width.toFloat() / bmp.width
+        if (imageSize.width <= 0 || bmp.width <= 0) return null
+        // Se descuenta dónde empieza la imagen dentro de la ventana: si no, todo
+        // el trazo sale corrido justo ese margen.
+        val shownX = imageSize.width.toFloat() / bmp.width
+        val shownY = imageSize.height.toFloat() / bmp.height
         return Pt(
-            (x / shown).coerceIn(0f, bmp.width.toFloat()),
-            (y / shown).coerceIn(0f, bmp.height.toFloat()),
+            ((x - imageOrigin.x) / shownX).coerceIn(0f, bmp.width.toFloat()),
+            ((y - imageOrigin.y) / shownY).coerceIn(0f, bmp.height.toFloat()),
             pressure
         )
     }
@@ -634,12 +746,6 @@ class PinWindowController(
                         )
                     }
                 }
-                IconButton(onClick = {
-                    closeActionBar()
-                    callbacks.onPinSaveRequested(this@PinWindowController)
-                }) {
-                    Icon(Icons.Filled.Save, contentDescription = context.getString(R.string.cd_save))
-                }
                 IconButton(onClick = { close() }) {
                     Icon(Icons.Filled.Close, contentDescription = context.getString(R.string.cd_close))
                 }
@@ -661,16 +767,26 @@ class PinWindowController(
      */
     @Composable
     private fun AnnotateBarContent() {
+        // Las mismas herramientas que en la pantalla de captura, salvo el texto:
+        // escribir necesita teclado, y una ventana overlay sin foco no lo tiene.
         val tools = listOf(
             AnnotationType.PENCIL to Icons.Filled.Gesture,
             AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
             AnnotationType.ARROW to Icons.Filled.NorthEast,
             AnnotationType.RECT to Icons.Filled.CropSquare,
+            AnnotationType.ELLIPSE to Icons.Filled.RadioButtonUnchecked,
+            AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
+            AnnotationType.POLYLINE to Icons.Filled.Timeline,
+            AnnotationType.SPOTLIGHT to Icons.Filled.CenterFocusStrong,
+            AnnotationType.MOSAIC to Icons.Filled.BlurOn,
             AnnotationType.ERASER to Icons.Filled.AutoFixNormal
         )
         Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 6.dp) {
             Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     tools.forEach { (type, icon) ->
                         val selected = annotator.tool.value == type
                         IconButton(onClick = { annotator.selectTool(type) }) {
@@ -679,6 +795,15 @@ class PinWindowController(
                                 contentDescription = type.name,
                                 tint = if (selected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    if (annotator.polylineOpen) {
+                        IconButton(onClick = { annotator.finishPolyline() }) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = context.getString(R.string.cd_done),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -852,27 +977,34 @@ class PinWindowController(
             Box(Modifier.size(64.dp))
             return
         }
-        val zoom by scale
-        val density = context.resources.displayMetrics.density
-        val screenW = context.resources.displayMetrics.widthPixels
-        val baseWidthDp = minOf(bmp.width, (screenW * 0.6f).toInt()) / density
-        val widthDp = baseWidthDp * zoom
-        val heightDp = widthDp * bmp.height / bmp.width
-        Box {
+        // La ventana ya tiene el tamaño exacto que toca (measureNatural +
+        // applyContentSize), así que la imagen solo tiene que llenarla.
+        Box(
+            Modifier
+                .fillMaxSize()
+                // El origen y el tamaño REALES de la imagen en pantalla. Todo
+                // lo demás —dónde se dibuja y dónde se toca— se deriva de aquí:
+                // calcularlo por separado en dos sitios era lo que hacía que el
+                // trazo saliera desplazado del dedo.
+                .onGloballyPositioned { coords ->
+                    imageOrigin = coords.positionInRoot()
+                    imageSize = coords.size
+                }
+        ) {
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.FillWidth,
-                modifier = Modifier.width(widthDp.dp)
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize()
             )
-            // Las anotaciones se guardan en píxeles de la imagen, así que aquí
-            // solo hay que decir qué trozo de vista ocupa la imagen: se escalan
-            // solas con el pin.
             if (annotating.value || annotator.annotations.isNotEmpty()) {
+                val size = imageSize
                 AnnotationCanvas(
                     controller = annotator,
                     sourceBitmap = bmp,
-                    imageRectInView = Rect(0f, 0f, widthDp * density, heightDp * density),
+                    imageRectInView = Rect(
+                        0f, 0f, size.width.toFloat(), size.height.toFloat()
+                    ),
                     modifier = Modifier.matchParentSize()
                 )
             }
@@ -887,7 +1019,12 @@ class PinWindowController(
     private fun rememberPinBitmap(path: String?): State<Bitmap?> {
         LaunchedEffect(path) {
             if (path != null && bitmapState.value == null) {
-                bitmapState.value = withContext(Dispatchers.IO) { ImageStore.load(path) }
+                val loaded = withContext(Dispatchers.IO) { ImageStore.load(path) }
+                // Primero se le da tamaño a la ventana y después se publica la
+                // imagen: al revés, la composición se encontraría un instante
+                // con una ventana aún sin medida y el contenido daría un salto.
+                if (loaded != null) measureNatural(loaded)
+                bitmapState.value = loaded
             }
         }
         return bitmapState

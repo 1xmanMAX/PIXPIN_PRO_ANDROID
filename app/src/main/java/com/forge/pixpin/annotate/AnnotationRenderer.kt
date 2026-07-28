@@ -33,11 +33,7 @@ object AnnotationRenderer {
         val ox = region.left.toFloat()
         val oy = region.top.toFloat()
 
-        // El foco oscurece lo que hay debajo, así que va después de todo lo demás.
-        val ordered = annotations.filter { it.type != AnnotationType.SPOTLIGHT } +
-            annotations.filter { it.type == AnnotationType.SPOTLIGHT }
-
-        for (a in ordered) {
+        for (a in annotations) {
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = a.color
                 strokeWidth = a.strokeWidth
@@ -115,22 +111,27 @@ object AnnotationRenderer {
                     val baseline = cy - (label.descent() + label.ascent()) / 2f
                     canvas.drawText(a.text.orEmpty(), cx, baseline, label)
                 }
-                AnnotationType.SPOTLIGHT -> {
-                    val r = AnnotationGeometry.rectFrom(a.points[0], a.points[1])
-                    val l = r[0] - ox
-                    val t = r[1] - oy
-                    val rr = r[2] - ox
-                    val bb = r[3] - oy
-                    val dim = Paint().apply { color = 0x99000000.toInt() }
-                    val fw = w.toFloat()
-                    val fh = h.toFloat()
-                    canvas.drawRect(0f, 0f, fw, t.coerceIn(0f, fh), dim)
-                    canvas.drawRect(0f, bb.coerceIn(0f, fh), fw, fh, dim)
-                    canvas.drawRect(0f, t.coerceIn(0f, fh), l.coerceIn(0f, fw), bb.coerceIn(0f, fh), dim)
-                    canvas.drawRect(rr.coerceIn(0f, fw), t.coerceIn(0f, fh), fw, bb.coerceIn(0f, fh), dim)
-                }
+                // Va aparte, todos juntos en una sola capa (ver más abajo).
+                AnnotationType.SPOTLIGHT -> Unit
                 AnnotationType.ERASER -> Unit
             }
+        }
+
+        // El foco, el último y todos en la misma capa: una sola veladura con
+        // tantos huecos como focos haya. Pintando cada uno por su cuenta, dos
+        // focos oscurecían el doble.
+        val holes = annotations.filter { it.type == AnnotationType.SPOTLIGHT }
+        if (holes.isNotEmpty()) {
+            val layer = canvas.saveLayer(0f, 0f, w.toFloat(), h.toFloat(), null)
+            canvas.drawColor((0xFF * 0.6f).toInt() shl 24)
+            val cut = Paint().apply {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            }
+            for (a in holes) {
+                val r = AnnotationGeometry.rectFrom(a.points[0], a.points[1])
+                canvas.drawRect(r[0] - ox, r[1] - oy, r[2] - ox, r[3] - oy, cut)
+            }
+            canvas.restoreToCount(layer)
         }
 
         if (cornerRadiusPx > 0f) {

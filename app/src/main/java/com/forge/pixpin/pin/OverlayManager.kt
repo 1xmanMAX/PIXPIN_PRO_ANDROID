@@ -112,14 +112,41 @@ class OverlayManager(private val app: PixPinApp) {
             val ball = FloatingBallController.active?.ballBounds()
             val baseX = ball?.left ?: (app.resources.displayMetrics.widthPixels - (56 * density).toInt())
             val baseY = (ball?.bottom ?: (app.resources.displayMetrics.heightPixels / 3)) + (8 * density).toInt()
-            val slot = pins.values.count { it.isMinimized && it !== controller }
+            // Los escondidos detrás de la burbuja de su grupo no ocupan hueco.
+            val slot = pins.values.count {
+                it.isMinimized && !it.isCollapsedInGroup && it !== controller
+            }
             controller.moveTo(baseX, baseY + slot * gap)
+        }
+
+        /**
+         * Un grupo minimizado es UNA burbuja: los demás miembros están
+         * escondidos detrás y se restauran juntos.
+         */
+        override fun onPinMinimizeChanged(controller: PinWindowController, minimized: Boolean) {
+            val group = controller.groupId ?: return
+            if (syncingGroup) return
+            syncingGroup = true
+            pins.values.filter { it.groupId == group && it !== controller }.forEach { other ->
+                if (minimized) {
+                    other.minimize(dock = false)
+                } else {
+                    other.setCollapsedInGroup(false)
+                    other.restore()
+                }
+            }
+            // La burbuja que queda es la del pin con el que ha actuado el usuario.
+            if (minimized) collapseGroupBubbles(owner = controller.id)
+            syncingGroup = false
+            refreshPinList()
         }
 
         /** Al empezar a arrastrar se apuntan las posiciones de los compañeros de grupo. */
         override fun onPinDragStarted(controller: PinWindowController) {
             val group = controller.groupId
-            dragAnchors = if (group == null) {
+            // Una burbuja se mueve sola: arrastrar la del grupo no debe tirar de
+            // los pines escondidos detrás, que se restaurarán donde estaban.
+            dragAnchors = if (group == null || controller.isMinimized) {
                 emptyMap()
             } else {
                 pins.values
@@ -283,6 +310,7 @@ class OverlayManager(private val app: PixPinApp) {
                 // Escalona la creación: 20 ventanas de golpe atascan el hilo de UI.
                 delay(16)
             }
+            collapseGroupBubbles()
             refreshPinList()
         }
     }
@@ -301,7 +329,11 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     private fun ungroupSelected() {
-        selection.value.forEach { pins[it]?.setGroup(null) }
+        selection.value.forEach {
+            pins[it]?.setGroup(null)
+            // Fuera del grupo vuelve a tener su propia burbuja.
+            pins[it]?.setCollapsedInGroup(false)
+        }
         selection.value = emptySet()
         saveNow()
         refreshPinList()
@@ -319,6 +351,23 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     private var closingGroup = false
+
+    /** Evita que la propagación a los compañeros de grupo se dispare a sí misma. */
+    private var syncingGroup = false
+
+    /**
+     * Deja una sola burbuja por grupo minimizado. Hace falta al restaurar los
+     * pines al arrancar: en disco cada miembro guarda su propio "minimizado".
+     */
+    private fun collapseGroupBubbles(owner: String? = null) {
+        pins.values.filter { it.groupId != null }
+            .groupBy { it.groupId }
+            .forEach { (_, members) ->
+                val minimized = members.filter { it.isMinimized }
+                val hidden = PinGroups.collapsedIds(minimized.map { it.id }, owner)
+                minimized.forEach { it.setCollapsedInGroup(it.id in hidden) }
+            }
+    }
 
     // ---- Lista de pines (válvula de escape del click-through) ----
 

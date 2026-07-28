@@ -32,21 +32,32 @@ object PinZoom {
     const val ABSOLUTE_MAX_SCALE = 24f
 
     /**
+     * Cuánto se deja pasar del borde a los pines de imagen. Su ventana tiene
+     * tamaño explícito, así que puede ser mayor que la pantalla: acercarse a
+     * leer letra pequeña es justo para lo que sirve.
+     */
+    const val IMAGE_OVERZOOM = 3f
+
+    /**
      * Tope de escala del contenido que ahora mismo mide [realW]×[realH] px con
      * escala [currentScale]. Se deduce su tamaño natural y se mira cuánto cabe.
+     *
+     * @param overzoom 1 = parar justo al llenar la pantalla; más, dejar crecer
+     * por encima (solo tiene sentido si la ventana puede medir más que ella).
      */
     fun maxScaleFor(
         realW: Int,
         realH: Int,
         currentScale: Float,
         screenW: Int,
-        screenH: Int
+        screenH: Int,
+        overzoom: Float = 1f
     ): Float {
         if (realW <= 0 || realH <= 0 || currentScale <= 0f) return ABSOLUTE_MAX_SCALE
         val naturalW = realW / currentScale
         val naturalH = realH / currentScale
         val fits = minOf(screenW / naturalW, screenH / naturalH)
-        return fits.coerceIn(MIN_SCALE, ABSOLUTE_MAX_SCALE)
+        return (fits * overzoom).coerceIn(MIN_SCALE, ABSOLUTE_MAX_SCALE)
     }
 
     /**

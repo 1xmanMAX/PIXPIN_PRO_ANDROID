@@ -9,8 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -80,6 +82,33 @@ private fun DrawScope.drawFreehand(
         path, color,
         style = Stroke(width = baseWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
     )
+}
+
+/** Cuánto se oscurece lo que queda fuera del foco. */
+private const val SPOTLIGHT_DIM = 0.6f
+
+/**
+ * Oscurece la imagen dejando limpios los rectángulos marcados.
+ *
+ * Se dibuja **una sola capa oscura para todos los focos** y se le recortan los
+ * huecos. Antes cada foco pintaba sus propias bandas alrededor: con dos focos,
+ * la banda de uno caía sobre la del otro y la pantalla se iba oscureciendo más
+ * cuanto más señalabas, que es justo lo contrario de lo que se busca.
+ */
+private fun DrawScope.drawSpotlights(holes: List<Rect>) {
+    val canvas = drawContext.canvas
+    val area = Rect(0f, 0f, size.width, size.height)
+    canvas.saveLayer(area, Paint())
+    drawRect(Color.Black.copy(alpha = SPOTLIGHT_DIM), size = size)
+    for (hole in holes) {
+        drawRect(
+            color = Color.Transparent,
+            topLeft = Offset(hole.left, hole.top),
+            size = Size(hole.width.coerceAtLeast(0f), hole.height.coerceAtLeast(0f)),
+            blendMode = BlendMode.Clear
+        )
+    }
+    canvas.restore()
 }
 
 /**
@@ -226,25 +255,9 @@ fun AnnotationCanvas(
                         )
                     )
                 }
-                AnnotationType.SPOTLIGHT -> {
-                    val r = AnnotationGeometry.rectFrom(a.points[0], a.points[1])
-                    val tl = Pt(r[0], r[1]).toView()
-                    val br = Pt(r[2], r[3]).toView()
-                    val dim = Color.Black.copy(alpha = 0.6f)
-                    // Cuatro bandas alrededor del hueco: más barato y más nítido
-                    // que recortar una capa con un xfermode.
-                    drawRect(dim, Offset.Zero, Size(size.width, tl.y.coerceAtLeast(0f)))
-                    drawRect(
-                        dim, Offset(0f, br.y),
-                        Size(size.width, (size.height - br.y).coerceAtLeast(0f))
-                    )
-                    val bandH = (br.y - tl.y).coerceAtLeast(0f)
-                    drawRect(dim, Offset(0f, tl.y), Size(tl.x.coerceAtLeast(0f), bandH))
-                    drawRect(
-                        dim, Offset(br.x, tl.y),
-                        Size((size.width - br.x).coerceAtLeast(0f), bandH)
-                    )
-                }
+                // El foco no se dibuja aquí: va todo junto al final, en una sola
+                // capa. Ver drawSpotlights.
+                AnnotationType.SPOTLIGHT -> Unit
                 AnnotationType.ERASER -> Unit
             }
         }
@@ -255,10 +268,15 @@ fun AnnotationCanvas(
             if (it.type != AnnotationType.SPOTLIGHT) drawAnnotation(it)
         }
         controller.current.value?.let { if (it.type != AnnotationType.SPOTLIGHT) drawAnnotation(it) }
-        controller.annotations.forEach {
-            if (it.type == AnnotationType.SPOTLIGHT) drawAnnotation(it)
+
+        val spotlights = controller.annotations.filter { it.type == AnnotationType.SPOTLIGHT } +
+            listOfNotNull(controller.current.value?.takeIf { it.type == AnnotationType.SPOTLIGHT })
+        if (spotlights.isNotEmpty()) {
+            drawSpotlights(spotlights.map { a ->
+                val r = AnnotationGeometry.rectFrom(a.points[0], a.points[1])
+                Rect(vx(r[0]), vy(r[1]), vx(r[2]), vy(r[3]))
+            })
         }
-        controller.current.value?.let { if (it.type == AnnotationType.SPOTLIGHT) drawAnnotation(it) }
 
         // Trazo vivo: los puntos salen del búfer plano, no de una lista.
         controller.liveTemplate.value?.let { live ->

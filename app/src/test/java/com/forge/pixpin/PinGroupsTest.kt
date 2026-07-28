@@ -70,6 +70,36 @@ class PinGroupsTest {
         assertTrue(PinGroups.canUngroup(listOf(pin("a"), pin("b", group = "g1"))))
     }
 
+    // ---- Una sola burbuja por grupo minimizado ----
+
+    @Test
+    fun `un grupo minimizado deja una sola burbuja`() {
+        val hidden = PinGroups.collapsedIds(listOf("a", "b", "c"))
+        assertEquals("se esconden todos menos uno", setOf("b", "c"), hidden)
+    }
+
+    @Test
+    fun `la burbuja es la del pin con el que actuo el usuario`() {
+        val hidden = PinGroups.collapsedIds(listOf("a", "b", "c"), owner = "b")
+        assertEquals(setOf("a", "c"), hidden)
+    }
+
+    @Test
+    fun `si el pin que actuo ya no esta minimizado manda el primero`() {
+        val hidden = PinGroups.collapsedIds(listOf("a", "b"), owner = "z")
+        assertEquals(setOf("b"), hidden)
+    }
+
+    @Test
+    fun `sin nadie minimizado no se esconde nada`() {
+        assertTrue(PinGroups.collapsedIds(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `un solo pin minimizado enseña su burbuja`() {
+        assertTrue(PinGroups.collapsedIds(listOf("a")).isEmpty())
+    }
+
     @Test
     fun `el color del grupo es estable y valido`() {
         val id = "3f2b91a0-0000-4444-8888-aaaabbbbcccc"
