@@ -188,3 +188,20 @@ la ventana de pin con tamaño explícito.
 3. **Tanda C** — captura con scroll.
 
 Cada tanda se compila, pasa sus tests y se commitea por separado.
+
+## 8. Qué cambió al probarlo
+
+Este documento es el diseño acordado *antes* de escribir el código. Lo que el uso real
+obligó a cambiar, para que no quede engañoso:
+
+| Decisión del diseño | Qué acabó siendo | Por qué |
+|---|---|---|
+| El pin crece hasta llenar la pantalla y ahí para | Crece hasta **el triple** de lo que cabe | Llenar la pantalla se quedaba corto para leer letra pequeña. La ventana con tamaño explícito lo permite, y `keepReachable()` evita perderlo |
+| Se mantiene `WRAP_CONTENT` calculando bien el tope | Ventana con **tamaño explícito** en los pines de imagen | Con `WRAP_CONTENT` la imagen topa en el tamaño de la pantalla mientras la escala sigue subiendo, y lo dibujado encima se despega de la foto |
+| El foco se dibuja el último, cada uno con sus bandas | **Una sola veladura con varios huecos** | Con dos focos las bandas se solapaban y la pantalla se oscurecía el doble |
+| Un grupo se mueve, se oculta y se cierra junto | Además se minimiza en **una sola burbuja**, y guarda su disposición para recuperarla al desplegarse | Varias burbujas atadas se estorbaban y alguna acababa fuera de la pantalla; y al desplegar, el grupo aparecía deshecho |
+| La barra de anotación va pegada bajo el pin | Se pega al **borde de la pantalla que menos tape**, en una sola fila con las herramientas plegadas | Con un pin grande tapaba justo la zona que querías dibujar |
+| Se conserva el botón de guardar | **Guardado automático** en `Pictures/PixPin`; no hay botón | Petición explícita: si haces algo con una captura, la querías |
+
+Fuera de alcance confirmado: marca de agua y procesado de imagen del pin (rotar, voltear,
+escala de grises, invertir).

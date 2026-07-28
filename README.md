@@ -113,7 +113,7 @@ demás y todos siguen visibles sobre cualquier app.
 
 | Tipo | Origen | Al tocarlo |
 |---|---|---|
-| **Imagen** | Una captura, o una imagen del portapapeles | Se copia al portapapeles |
+| **Imagen** | Una captura, o una imagen del portapapeles | Se copia al portapapeles, con lo que hayas dibujado encima |
 | **Texto** | Texto copiado en cualquier app | Se copia al portapapeles |
 | **Color** | Un color copiado en formato CSS: `#29B8DB`, `rgb(41,184,219)`, `41, 184, 219`, `orange`… | Se copia el HEX |
 | **Archivo** | Cualquier documento compartido a PixPin desde otra app | Se abre con la app que corresponda |
@@ -121,10 +121,12 @@ demás y todos siguen visibles sobre cualquier app.
 Además de eso:
 
 - **Dibujar sobre el pin sin abrir nada**: el lápiz de la barra del pin activa el modo
-  anotación, el pin se queda quieto y se dibuja encima con una barrita pegada a él
-  (herramienta · color · grosor · deshacer · listo). Como las anotaciones se guardan en
-  coordenadas de la imagen, da igual anotar con el pin diminuto o a pantalla completa: se
-  ven bien en cualquier tamaño, siguen siendo re-editables y se hornean al guardar.
+  anotación, el pin se queda quieto y se dibuja encima. La barrita de una sola fila
+  —herramienta · color · grosor · deshacer · listo— se pega al borde de la pantalla que
+  menos tape del pin, y la herramienta activa hace de botón que despliega las demás solo
+  mientras eliges. Como las anotaciones se guardan en coordenadas de la imagen, da igual
+  anotar con el pin diminuto o a pantalla completa: se ven bien en cualquier tamaño,
+  escalan con él, siguen siendo re-editables y se hornean al guardar o copiar.
 - **Zoom más allá de la pantalla**: un pin de imagen crece con el pellizco hasta el triple
   de lo que cabe en pantalla, para acercarse a leer letra pequeña. Nunca se pierde: al
   soltarlo siempre queda un trozo agarrable, y arrastrarlo lo recorre.
@@ -279,15 +281,18 @@ com.forge.pixpin/
 | `OverlayTouchHandler` | Reconocedor de gestos en coordenadas absolutas de pantalla |
 | `StrokeTouchReader` | Motor de trazo: lee el `MotionEvent` crudo para no perder ni el arranque ni las muestras del lápiz. Lo comparten la pantalla de captura y los pines |
 | `StrokeSmoothing` | Suavizado por puntos medios y grosor según presión; alimenta tanto el dibujado en vivo como el horneado |
-| `PinZoom` | Matemática pura del pellizco (foco entre los dedos y detección de tope) |
+| `PinZoom` | Matemática pura del pellizco: foco entre los dedos clavado y tope deducido del tamaño natural y la pantalla |
+| `PinGroups` | Matemática pura de los grupos: pertenencia, arrastre solidario y disposición al plegar y desplegar la burbuja |
 | `OverlayComposeWindow` | Andamiaje para meter Compose en una ventana sin Activity detrás |
 | `SelectionGeometry` | Matemática pura del recorte (anclas, esquinas, límites) |
 | `ScrollMatcher` | Matemática pura del cosido: resume cada fila en una firma y busca el desplazamiento entre fotogramas, rechazando lo ambiguo |
 | `ScrollStitcher` | Guarda solo las tiras nuevas de cada fotograma y las junta al terminar |
 
-La lógica delicada está extraída en objetos puros (`PinZoom`, `SelectionGeometry`,
-`ContentClassifier`, `AnnotationGeometry`, `UndoStack`) precisamente para poder probarla
-sin dispositivo. El resto se cubre con Robolectric.
+La lógica delicada está extraída en objetos puros (`PinZoom`, `PinGroups`,
+`SelectionGeometry`, `ContentClassifier`, `AnnotationGeometry`, `UndoStack`,
+`StrokeSmoothing`, `ScrollMatcher`) precisamente para poder probarla sin dispositivo. El
+resto se cubre con Robolectric, que en los tests del cosido corre en modo gráfico nativo
+para trabajar con píxeles de verdad.
 
 ### Flujo de una captura
 
@@ -299,7 +304,8 @@ Bola / Tile / Notificación
                           (overlays ocultos durante el fotograma)
                                         ↓
                                  CaptureActivity
-                       recorte + anotación → Pin | Guardar | Copiar | Compartir
+                       recorte + anotación → Pin | Copiar | Compartir | Scroll
+                                    (y guardado automático)
 ```
 
 ---
@@ -331,8 +337,19 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 9. **Arrastrar con los gestos de Compose no funciona si mueves la propia ventana**: los
    deltas son relativos a una ventana que se mueve bajo el dedo y se anulan entre sí. Hay
    que trabajar con `MotionEvent.getRawX/getRawY`.
-10. **Una ventana `WRAP_CONTENT` no puede medir más que la pantalla**: al escalar hay que
-    recolocarla con su tamaño real, no con el teórico, o se escapa hacia una esquina.
+10. **Una ventana `WRAP_CONTENT` no puede medir más que la pantalla.** Es el techo con el
+    que los pines dejaban de crecer mientras la escala seguía subiendo. La salida es darle
+    a la ventana un **tamaño explícito en píxeles**, que sí puede pasarse de la pantalla.
+11. **Cambiar de tamaño una ventana no recompone nada.** Hay nueva medida y nueva
+    disposición, pero Compose solo recompone si cambia un estado que se haya leído. Un
+    tamaño guardado en un campo suelto se queda con el valor de la primera vez — y las
+    anotaciones dejan de seguir a la imagen al escalarla.
+12. **Los gestos de Compose se comen el arranque del trazo** (esperan al *touch slop*) y
+    entregan una muestra por fotograma. Un lápiz óptico muestrea a cientos de hercios y el
+    resto viajan dentro del evento como puntos históricos: sin leerlos, se tira la mayor
+    parte del trazo.
+13. **No hay API de captura con scroll.** La del sistema solo funciona dentro de apps que
+    la implementan; desde fuera solo queda coser fotogramas y deducir el desplazamiento.
 
 ---
 
