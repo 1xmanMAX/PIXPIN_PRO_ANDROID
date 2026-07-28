@@ -2,13 +2,13 @@ package com.forge.pixpin.floating
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
-import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,17 +34,13 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.animation.doOnEnd
 import com.forge.pixpin.PixPinApp
-import com.forge.pixpin.R
-import com.forge.pixpin.capture.CaptureService
+import com.forge.pixpin.capture.CaptureFlow
+import com.forge.pixpin.clipboard.ClipboardPinActivity
 import com.forge.pixpin.pin.OverlayComposeWindow
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import com.forge.pixpin.pin.OverlayTouchHandler
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -59,10 +55,13 @@ class FloatingBallController(private val context: Context) {
         /** Instancia activa para que los pines puedan localizar la bola (drop-to-minimize). */
         var active: FloatingBallController? = null
             private set
+
+        private const val BALL_DP = 48
     }
 
+    private val app = context.applicationContext as PixPinApp
     private val wm = context.getSystemService(WindowManager::class.java)!!
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = app.scope
 
     private var ball: OverlayComposeWindow? = null
     private var ballLp: WindowManager.LayoutParams? = null
@@ -70,46 +69,60 @@ class FloatingBallController(private val context: Context) {
     private var menu: OverlayComposeWindow? = null
     private var snapAnimator: ValueAnimator? = null
 
+    private var dragStartX = 0
+    private var dragStartY = 0
+
     val isShowing: Boolean get() = ball != null
 
     /** Rectángulo actual de la bola en coordenadas de pantalla, o null si está oculta. */
-    fun ballBounds(): android.graphics.Rect? {
+    fun ballBounds(): Rect? {
         val lp = ballLp ?: return null
         val view = ball?.view ?: return null
-        val w = if (view.width > 0) view.width else dp(48)
-        val h = if (view.height > 0) view.height else dp(48)
-        return android.graphics.Rect(lp.x, lp.y, lp.x + w, lp.y + h)
+        if (view.visibility != android.view.View.VISIBLE) return null
+        val w = if (view.width > 0) view.width else dp(BALL_DP)
+        val h = if (view.height > 0) view.height else dp(BALL_DP)
+        return Rect(lp.x, lp.y, lp.x + w, lp.y + h)
     }
 
     fun show() {
         if (ball != null) return
-        val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-        }
-
-        // Posición inicial: última guardada, o borde derecho a 1/3 de pantalla
         scope.launch {
-            val settings = (context.applicationContext as PixPinApp).settings.settings.first()
+            val settings = app.settings.settings.first()
             val screenW = context.resources.displayMetrics.widthPixels
             val screenH = context.resources.displayMetrics.heightPixels
-            lp.x = if (settings.ballX >= 0) settings.ballX else screenW - dp(12)
-            lp.y = if (settings.ballY >= 0) settings.ballY else screenH / 3
+            val lp = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = if (settings.ballX >= 0) settings.ballX else screenW - dp(BALL_DP) / 2
+                y = if (settings.ballY >= 0) settings.ballY else screenH / 3
+            }
+            if (ball != null) return@launch
             val window = OverlayComposeWindow(context) { BallContent() }
+            window.setTouchHandler(OverlayTouchHandler(context, BallGestures()))
             ball = window
             ballLp = lp
             runCatching {
                 wm.addView(window.view, lp)
                 window.onAttached()
                 active = this@FloatingBallController
+            }.onFailure {
+                ball = null
+                ballLp = null
             }
         }
+    }
+
+    /** Oculta sin destruir (durante la captura de pantalla). */
+    fun setVisible(visible: Boolean) {
+        if (!visible) closeMenu()
+        ball?.isContentVisible = visible
     }
 
     fun hide() {
@@ -122,41 +135,58 @@ class FloatingBallController(private val context: Context) {
         ballLp = null
         snapAnimator?.cancel()
         if (active == this) active = null
-        scope.cancel()
     }
 
     // ---- Gestos de la bola ----
 
-    private fun moveBy(dx: Float, dy: Float) {
-        val lp = ballLp ?: return
-        val view = ball?.view ?: return
-        closeMenu()
-        snapAnimator?.cancel()
-        lp.x += dx.toInt()
-        lp.y += dy.toInt()
-        runCatching { wm.updateViewLayout(view, lp) }
+    private inner class BallGestures : OverlayTouchHandler.Listener {
+        override fun onDragStart() {
+            closeMenu()
+            snapAnimator?.cancel()
+            dragStartX = ballLp?.x ?: 0
+            dragStartY = ballLp?.y ?: 0
+        }
+
+        override fun onDrag(dxFromDown: Float, dyFromDown: Float) {
+            val lp = ballLp ?: return
+            val view = ball?.view ?: return
+            lp.x = dragStartX + dxFromDown.toInt()
+            lp.y = dragStartY + dyFromDown.toInt()
+            runCatching { wm.updateViewLayout(view, lp) }
+        }
+
+        override fun onDragEnd() = snapToEdge()
+
+        override fun onTap() = toggleMenu()
+
+        override fun onDoubleTap() = CaptureFlow.requestCapture(context)
+
+        override fun onLongPress() {
+            app.overlayManager.toggleHideAll()
+        }
     }
 
     private fun snapToEdge() {
         val lp = ballLp ?: return
         val view = ball?.view ?: return
         val screenW = context.resources.displayMetrics.widthPixels
-        val viewW = if (view.width > 0) view.width else dp(48)
+        val screenH = context.resources.displayMetrics.heightPixels
+        val viewW = if (view.width > 0) view.width else dp(BALL_DP)
+        val viewH = if (view.height > 0) view.height else dp(BALL_DP)
+        // Nunca fuera del alcance vertical del pulgar.
+        lp.y = lp.y.coerceIn(0, screenH - viewH)
         val center = lp.x + viewW / 2
-        // Snap al borde más cercano, retraído a medias (estilo PixPin)
+        // Snap al borde más cercano, retraída a medias (estilo PixPin).
         val targetX = if (center < screenW / 2) -viewW / 2 else screenW - viewW / 2
         snapAnimator = ValueAnimator.ofInt(lp.x, targetX).apply {
-            duration = 250
+            duration = 220
             interpolator = DecelerateInterpolator()
             addUpdateListener { anim ->
                 lp.x = anim.animatedValue as Int
                 runCatching { wm.updateViewLayout(view, lp) }
             }
             doOnEnd {
-                scope.launch {
-                    (context.applicationContext as PixPinApp).settings
-                        .setBallPosition(lp.x, lp.y)
-                }
+                scope.launch { app.settings.setBallPosition(lp.x, lp.y) }
             }
             start()
         }
@@ -221,12 +251,11 @@ class FloatingBallController(private val context: Context) {
 
     private fun onMenuAction(action: BallAction) {
         closeMenu()
-        val app = context.applicationContext as PixPinApp
         when (action) {
-            BallAction.CAPTURE -> CaptureService.requestCapture(context)
+            BallAction.CAPTURE -> CaptureFlow.requestCapture(context)
             BallAction.PIN_CLIPBOARD -> context.startActivity(
-                android.content.Intent(context, com.forge.pixpin.clipboard.ClipboardPinActivity::class.java)
-                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent(context, ClipboardPinActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             BallAction.HIDE_ALL -> app.overlayManager.toggleHideAll()
             BallAction.PIN_LIST -> app.overlayManager.togglePinList()
@@ -242,7 +271,7 @@ class FloatingBallController(private val context: Context) {
     private fun BallContent() {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(BALL_DP.dp)
                 .shadow(6.dp, CircleShape)
                 .background(
                     Brush.radialGradient(
@@ -252,26 +281,10 @@ class FloatingBallController(private val context: Context) {
                         )
                     ),
                     CircleShape
-                )
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { toggleMenu() })
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDrag = { change, amount ->
-                            change.consume()
-                            moveBy(amount.x, amount.y)
-                        },
-                        onDragEnd = { snapToEdge() }
-                    )
-                },
+                ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Filled.PushPin,
-                contentDescription = stringResourceSafe(R.string.app_name),
-                tint = Color.White
-            )
+            Icon(Icons.Filled.PushPin, contentDescription = null, tint = Color.White)
         }
     }
 
@@ -297,6 +310,3 @@ class FloatingBallController(private val context: Context) {
 }
 
 private enum class BallAction { CAPTURE, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }
-
-@Composable
-private fun stringResourceSafe(resId: Int): String = LocalContext.current.getString(resId)

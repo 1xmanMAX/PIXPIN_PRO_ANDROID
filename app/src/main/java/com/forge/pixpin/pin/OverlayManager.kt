@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -40,10 +41,9 @@ import com.forge.pixpin.clipboard.ClipboardPinReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.clipboard.PinContent
 import com.forge.pixpin.data.PinRepository
-import kotlinx.coroutines.CoroutineScope
+import com.forge.pixpin.floating.FloatingBallController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -51,14 +51,14 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
- * Crea, destruye y gobierna todas las ventanas de pines: hide-all global,
+ * Crea, destruye y gobierna todas las ventanas de pines: ocultar-todo,
  * historial de cerrados, lista de pines (válvula de escape del click-through)
  * y persistencia en disco.
  */
 class OverlayManager(private val app: PixPinApp) {
 
     private val wm = app.getSystemService(WindowManager::class.java)!!
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = app.scope
     private val repo = PinRepository(app)
 
     private val pins = LinkedHashMap<String, PinWindowController>()
@@ -89,6 +89,20 @@ class OverlayManager(private val app: PixPinApp) {
             refreshPinList()
         }
 
+        /**
+         * Aparca la burbuja en una columna junto a la bola, para que varias
+         * minimizadas no queden una encima de otra.
+         */
+        override fun onPinMinimized(controller: PinWindowController) {
+            val density = app.resources.displayMetrics.density
+            val gap = (54 * density).toInt()
+            val ball = FloatingBallController.active?.ballBounds()
+            val baseX = ball?.left ?: (app.resources.displayMetrics.widthPixels - (56 * density).toInt())
+            val baseY = (ball?.bottom ?: (app.resources.displayMetrics.heightPixels / 3)) + (8 * density).toInt()
+            val slot = pins.values.count { it.isMinimized && it !== controller }
+            controller.moveTo(baseX, baseY + slot * gap)
+        }
+
         override fun onPinSaveRequested(controller: PinWindowController) {
             val state = controller.snapshot()
             scope.launch {
@@ -108,75 +122,69 @@ class OverlayManager(private val app: PixPinApp) {
 
     // ---- Pines desde portapapeles ----
 
-    fun pinFromClipboard() {
+    /**
+     * Suspende hasta terminar: quien llama (una actividad transparente) debe
+     * seguir viva mientras se importa el contenido, porque el permiso sobre la
+     * URI del portapapeles se revoca en cuanto la actividad termina.
+     */
+    suspend fun pinFromClipboard(): Boolean {
         if (!Settings.canDrawOverlays(app)) {
             toast(R.string.need_overlay_toast)
-            return
+            return false
         }
-        when (val content = ClipboardPinReader(app).read()) {
-            is PinContent.Empty -> toast(R.string.nothing_to_pin)
-            is PinContent.TextPin -> createPin(
-                PinState(id = newId(), type = PinType.TEXT, text = content.text,
-                    x = cascadeX(), y = cascadeY())
-            )
-            is PinContent.ColorPin -> createPin(
-                PinState(id = newId(), type = PinType.COLOR, colorArgb = content.argb,
-                    x = cascadeX(), y = cascadeY())
-            )
-            is PinContent.ImageUri -> scope.launch {
-                val path = withContext(Dispatchers.IO) {
-                    ImageStore.importFromUri(app, Uri.parse(content.uriString))
-                }
-                if (path != null) {
-                    createPin(PinState(id = newId(), type = PinType.IMAGE, imagePath = path,
-                        x = cascadeX(), y = cascadeY()))
-                } else {
-                    toast(R.string.pin_image_error)
-                }
+        return when (val content = ClipboardPinReader(app).read()) {
+            is PinContent.Empty -> {
+                toast(R.string.nothing_to_pin)
+                false
             }
-            is PinContent.FileUri -> pinFromSharedUri(Uri.parse(content.uriString))
+            is PinContent.TextPin -> {
+                createPin(newPin(PinType.TEXT).copy(text = content.text))
+                true
+            }
+            is PinContent.ColorPin -> {
+                createPin(newPin(PinType.COLOR).copy(colorArgb = content.argb))
+                true
+            }
+            is PinContent.ImageUri -> pinFromUri(Uri.parse(content.uriString))
+            is PinContent.FileUri -> pinFromUri(Uri.parse(content.uriString))
         }
     }
 
-    /** Compartido desde otra app o URI de archivo en portapapeles. */
-    fun pinFromSharedUri(uri: Uri) {
+    /** Importa una URI (compartida o del portapapeles) y la convierte en pin. */
+    suspend fun pinFromUri(uri: Uri): Boolean {
         if (!Settings.canDrawOverlays(app)) {
             toast(R.string.need_overlay_toast)
-            return
+            return false
         }
         val mime = runCatching { app.contentResolver.getType(uri) }.getOrNull()
-        scope.launch {
-            if (mime == null || mime.startsWith("image/")) {
-                val path = withContext(Dispatchers.IO) { ImageStore.importFromUri(app, uri) }
-                if (path != null) {
-                    pinImage(path)
-                    return@launch
-                }
-            }
-            val imported = withContext(Dispatchers.IO) { FileStore.importFromUri(app, uri) }
-            if (imported != null) {
-                pinFile(imported.path, imported.name, imported.mime)
-            } else {
-                toast(R.string.pin_image_error)
+        if (mime == null || mime.startsWith("image/")) {
+            val path = withContext(Dispatchers.IO) { ImageStore.importFromUri(app, uri) }
+            if (path != null) {
+                pinImage(path)
+                return true
             }
         }
+        val imported = withContext(Dispatchers.IO) { FileStore.importFromUri(app, uri) }
+        if (imported != null) {
+            pinFile(imported.path, imported.name, imported.mime)
+            return true
+        }
+        toast(R.string.pin_image_error)
+        return false
     }
 
-    /** Crea un pin (imagen desde captura). Usado por CaptureActivity en M5. */
+    /** Crea un pin de imagen (desde la captura o desde un archivo importado). */
     fun pinImage(imagePath: String) {
         if (!Settings.canDrawOverlays(app)) return
-        createPin(PinState(id = newId(), type = PinType.IMAGE, imagePath = imagePath,
-            x = cascadeX(), y = cascadeY()))
+        createPin(newPin(PinType.IMAGE).copy(imagePath = imagePath))
     }
 
     /** Crea un pin de archivo (documento compartido a PixPin). */
     fun pinFile(filePath: String, fileName: String, mimeType: String) {
         if (!Settings.canDrawOverlays(app)) return
         createPin(
-            PinState(
-                id = newId(), type = PinType.FILE,
-                filePath = filePath, fileName = fileName, mimeType = mimeType,
-                x = cascadeX(), y = cascadeY()
+            newPin(PinType.FILE).copy(
+                filePath = filePath, fileName = fileName, mimeType = mimeType
             )
         )
     }
@@ -189,11 +197,22 @@ class OverlayManager(private val app: PixPinApp) {
         refreshPinList()
     }
 
-    // ---- Ocultar / mostrar todo ----
+    // ---- Visibilidad ----
+
+    /**
+     * Oculta/muestra los overlays sin destruirlos. Se usa al capturar (si no,
+     * la bola y los pines saldrían dentro de la propia captura) y para el
+     * botón "ocultar todo".
+     */
+    fun setOverlaysVisible(visible: Boolean) {
+        if (!visible) closePinList()
+        pins.values.forEach { it.setViewVisible(visible && !hiddenAll) }
+        FloatingBallController.active?.setVisible(visible)
+    }
 
     fun toggleHideAll() {
         hiddenAll = !hiddenAll
-        pins.values.forEach { if (hiddenAll) it.hideView() else it.show() }
+        pins.values.forEach { it.setViewVisible(!hiddenAll) }
         toast(if (hiddenAll) R.string.pins_hidden else R.string.pins_shown)
     }
 
@@ -219,16 +238,20 @@ class OverlayManager(private val app: PixPinApp) {
     // ---- Restauración al arrancar ----
 
     fun restoreOnStart() {
-        if (pins.isNotEmpty()) return
+        if (pins.isNotEmpty() || !Settings.canDrawOverlays(app)) return
         scope.launch {
             val loaded = withContext(Dispatchers.IO) { repo.loadPins() }
             val loadedHistory = withContext(Dispatchers.IO) { repo.loadHistory() }
+            history.clear()
             history.addAll(loadedHistory)
             loaded.forEach { state ->
                 val controller = PinWindowController(app, state, callbacks)
                 pins[state.id] = controller
                 controller.show()
+                // Escalona la creación: 20 ventanas de golpe atascan el hilo de UI.
+                delay(16)
             }
+            refreshPinList()
         }
     }
 
@@ -244,7 +267,8 @@ class OverlayManager(private val app: PixPinApp) {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.CENTER }
         val window = OverlayComposeWindow(app) { PinListContent() }
@@ -252,7 +276,7 @@ class OverlayManager(private val app: PixPinApp) {
         runCatching {
             wm.addView(window.view, lp)
             window.onAttached()
-        }
+        }.onFailure { listWindow = null }
     }
 
     private fun closePinList() {
@@ -264,9 +288,7 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     private fun refreshPinList() {
-        if (listWindow != null) {
-            listState.value = pins.values.map { it.snapshot() }
-        }
+        listState.value = pins.values.map { it.snapshot() }
     }
 
     @Composable
@@ -298,11 +320,10 @@ class OverlayManager(private val app: PixPinApp) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(max = 420.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        items.forEach { pin ->
-                            PinListRow(pin)
-                        }
+                        items.forEach { pin -> PinListRow(pin) }
                     }
                 }
             }
@@ -379,14 +400,17 @@ class OverlayManager(private val app: PixPinApp) {
 
     private var cascadeCounter = 0
 
-    private fun cascadeX(): Int {
+    /** Pin nuevo, en cascada para que no se apilen exactamente uno sobre otro. */
+    private fun newPin(type: PinType): PinState {
         cascadeCounter++
-        return 120 + (cascadeCounter % 5) * 32
+        val step = (cascadeCounter % 5) * 32
+        return PinState(
+            id = UUID.randomUUID().toString(),
+            type = type,
+            x = 120 + step,
+            y = 200 + step
+        )
     }
-
-    private fun cascadeY(): Int = 160 + (cascadeCounter % 5) * 32
-
-    private fun newId(): String = UUID.randomUUID().toString()
 
     private fun toast(resId: Int) {
         Toast.makeText(app, resId, Toast.LENGTH_SHORT).show()

@@ -24,6 +24,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // Nota: no se puede activar unitTests.isIncludeAndroidResources porque el
+    // directorio de build vive en otra unidad (C:) que el proyecto (H:) y AGP
+    // no sabe calcular la ruta relativa. Los tests de Robolectric de aquí no
+    // necesitan recursos.
+
+    lint {
+        // Ruido que no depende del código: local.properties es de esta máquina y
+        // las versiones están fijadas a propósito (solo existe el SDK 36).
+        disable += setOf(
+            "PropertyEscape", "OldTargetApi", "GradleDependency", "NewerVersionAvailable"
+        )
+    }
 }
 
 dependencies {
@@ -48,4 +61,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    // Para probar el andamiaje de las ventanas overlay (vistas reales, sin dispositivo)
+    testImplementation("org.robolectric:robolectric:4.15.1")
 }

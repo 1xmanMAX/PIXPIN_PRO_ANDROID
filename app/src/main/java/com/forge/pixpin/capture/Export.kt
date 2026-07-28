@@ -48,8 +48,10 @@ object Export {
         return true
     }
 
-    fun share(context: Context, bitmap: Bitmap) {
-        val uri = writeShareFile(context, bitmap) ?: return
+    /** Escribe el PNG temporal (E/S: fuera del hilo de UI) y devuelve su Uri. */
+    fun prepareShare(context: Context, bitmap: Bitmap): Uri? = writeShareFile(context, bitmap)
+
+    fun share(context: Context, uri: Uri) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
@@ -63,7 +65,7 @@ object Export {
     private fun writeShareFile(context: Context, bitmap: Bitmap): Uri? {
         return runCatching {
             val dir = File(context.cacheDir, "share").apply { mkdirs() }
-            val file = File(dir, "pixpin_share.png")
+            val file = File(dir, "pixpin_${System.currentTimeMillis()}.png")
             FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         }.getOrNull()

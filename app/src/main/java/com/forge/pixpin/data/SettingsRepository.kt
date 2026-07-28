@@ -1,21 +1,34 @@
 package com.forge.pixpin.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "pixpin_settings")
 
+/**
+ * Cómo se gestiona el permiso de captura de Android 14+:
+ * - [FAST]: la sesión se mantiene viva → capturas instantáneas, pero el sistema
+ *   muestra el icono de "grabando pantalla" mientras dura.
+ * - [DISCREET]: la sesión se cierra tras cada captura → sin icono permanente,
+ *   pero Android pide permiso cada vez.
+ */
+enum class CaptureMode { FAST, DISCREET }
+
 /** Ajustes de la app. Se amplía con nuevas claves a medida que crecen las fases. */
 data class Settings(
     val defaultPinAlpha: Float = 1f,
     val historySize: Int = 10,
     val ballX: Int = -1,
-    val ballY: Int = -1
+    val ballY: Int = -1,
+    val captureMode: CaptureMode = CaptureMode.FAST,
+    val ballVisible: Boolean = true
 )
 
 class SettingsRepository(private val context: Context) {
@@ -25,6 +38,8 @@ class SettingsRepository(private val context: Context) {
         val HISTORY_SIZE = intPreferencesKey("history_size")
         val BALL_X = intPreferencesKey("ball_x")
         val BALL_Y = intPreferencesKey("ball_y")
+        val CAPTURE_MODE = stringPreferencesKey("capture_mode")
+        val BALL_VISIBLE = booleanPreferencesKey("ball_visible")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
@@ -32,7 +47,11 @@ class SettingsRepository(private val context: Context) {
             defaultPinAlpha = prefs[Keys.DEFAULT_PIN_ALPHA] ?: 1f,
             historySize = prefs[Keys.HISTORY_SIZE] ?: 10,
             ballX = prefs[Keys.BALL_X] ?: -1,
-            ballY = prefs[Keys.BALL_Y] ?: -1
+            ballY = prefs[Keys.BALL_Y] ?: -1,
+            captureMode = runCatching {
+                CaptureMode.valueOf(prefs[Keys.CAPTURE_MODE] ?: CaptureMode.FAST.name)
+            }.getOrDefault(CaptureMode.FAST),
+            ballVisible = prefs[Keys.BALL_VISIBLE] ?: true
         )
     }
 
@@ -49,5 +68,13 @@ class SettingsRepository(private val context: Context) {
             it[Keys.BALL_X] = x
             it[Keys.BALL_Y] = y
         }
+    }
+
+    suspend fun setCaptureMode(mode: CaptureMode) {
+        context.dataStore.edit { it[Keys.CAPTURE_MODE] = mode.name }
+    }
+
+    suspend fun setBallVisible(visible: Boolean) {
+        context.dataStore.edit { it[Keys.BALL_VISIBLE] = visible }
     }
 }

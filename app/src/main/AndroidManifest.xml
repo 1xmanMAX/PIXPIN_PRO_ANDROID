@@ -31,23 +31,35 @@
             </intent-filter>
         </activity>
 
+        <!--
+            taskAffinity propio: si comparten tarea con MainActivity, lanzarlas
+            desde la bola trae toda la tarea de PixPin al frente y el usuario
+            acaba viendo (y capturando) la propia app en vez de la suya.
+        -->
         <activity
             android:name=".capture.ConsentActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
             android:finishOnTaskLaunch="true"
+            android:taskAffinity="${applicationId}.consent"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
             android:name=".clipboard.ClipboardPinActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
             android:noHistory="true"
+            android:taskAffinity="${applicationId}.clipboard"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
             android:name=".capture.CaptureActivity"
             android:exported="false"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:taskAffinity="${applicationId}.capture"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
 
@@ -55,7 +67,9 @@
             android:name=".clipboard.ShareReceiverActivity"
             android:exported="true"
             android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
             android:noHistory="true"
+            android:taskAffinity="${applicationId}.share"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

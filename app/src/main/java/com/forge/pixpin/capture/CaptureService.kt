@@ -1,18 +1,15 @@
 package com.forge.pixpin.capture
 
-import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.IBinder
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.forge.pixpin.R
 import kotlinx.coroutines.CoroutineScope
@@ -20,34 +17,39 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
- * Guardián del token de MediaProjection: se arranca al primer intento de
- * captura, recibe el consentimiento (vía [ConsentActivity]) y conserva el
- * objeto MediaProjection en memoria para que las siguientes capturas de la
- * sesión no vuelvan a pedir permiso. Android 14 exige que este servicio esté
- * en primer plano con el tipo mediaProjection ANTES de getMediaProjection().
+ * Sostiene el servicio en primer plano mientras la sesión de captura está viva.
+ *
+ * ORDEN OBLIGATORIO en Android 14+: el usuario concede el permiso ([ConsentActivity])
+ * ANTES de que este servicio exista. Si se arranca un servicio de tipo
+ * mediaProjection sin consentimiento previo, startForeground() lanza
+ * SecurityException y el sistema mata la app. Por eso este servicio SOLO se
+ * arranca desde ConsentActivity con el resultado ya en la mano.
  */
 class CaptureService : Service() {
 
     companion object {
-        const val ACTION_CAPTURE_REQUEST = "com.forge.pixpin.action.CAPTURE_REQUEST"
-        const val ACTION_PROJECTION_GRANTED = "com.forge.pixpin.action.PROJECTION_GRANTED"
+        const val ACTION_START_SESSION = "com.forge.pixpin.action.START_SESSION"
+        const val ACTION_STOP_SESSION = "com.forge.pixpin.action.STOP_SESSION"
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_DATA = "data"
         private const val CHANNEL_ID = "pixpin_capture"
         private const val NOTIF_ID = 2
 
-        @Volatile
-        var projection: MediaProjection? = null
-            private set
+        /** Arranca la sesión con el consentimiento recién concedido. */
+        fun startSession(context: Context, resultCode: Int, data: Intent) {
+            context.startForegroundService(
+                Intent(context, CaptureService::class.java)
+                    .setAction(ACTION_START_SESSION)
+                    .putExtra(EXTRA_RESULT_CODE, resultCode)
+                    .putExtra(EXTRA_DATA, data)
+            )
+        }
 
-        /** Punto de entrada único para "quiero capturar" desde cualquier disparador. */
-        fun requestCapture(context: Context) {
-            val intent = Intent(context, CaptureService::class.java)
-                .setAction(ACTION_CAPTURE_REQUEST)
-            context.startForegroundService(intent)
+        fun stopSession(context: Context) {
+            ProjectionSession.stop()
+            context.stopService(Intent(context, CaptureService::class.java))
         }
     }
 
@@ -56,85 +58,54 @@ class CaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
-        } else {
-            startForeground(NOTIF_ID, notification)
-        }
+        startForeground(
+            NOTIF_ID,
+            buildNotification(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        )
+        ProjectionSession.onSessionLost = { stopSelf() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_CAPTURE_REQUEST -> handleCaptureRequest()
-            ACTION_PROJECTION_GRANTED -> handleProjectionGranted(
-                intent.getIntExtra(EXTRA_RESULT_CODE, 0),
-                intent.getParcelableExtra(EXTRA_DATA)
-            )
+            ACTION_START_SESSION -> startSession(intent)
+            ACTION_STOP_SESSION -> stopSelf()
         }
-        return START_STICKY
+        // NO_STICKY: si el sistema mata el servicio, la sesión de captura ya no
+        // es válida; recrearlo sin token solo provocaría el crash de Android 14+.
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        runCatching { projection?.stop() }
-        projection = null
+        ProjectionSession.onSessionLost = null
+        ProjectionSession.stop()
         scope.cancel()
         super.onDestroy()
     }
 
-    private fun handleProjectionGranted(resultCode: Int, data: Intent?) {
-        if (resultCode != Activity.RESULT_OK || data == null) {
-            toast(getString(R.string.capture_consent_denied))
+    private fun startSession(intent: Intent) {
+        val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+        @Suppress("DEPRECATION")
+        val data = intent.getParcelableExtra<Intent>(EXTRA_DATA)
+        if (data == null) {
+            stopSelf()
             return
         }
-        val mgr = getSystemService(MediaProjectionManager::class.java)
-        try {
-            val proj = mgr.getMediaProjection(resultCode, data)
-            if (proj == null) {
-                toast(getString(R.string.capture_error))
-                return
-            }
-            proj.registerCallback(object : MediaProjection.Callback() {
-                override fun onStop() {
-                    projection = null
-                }
-            }, null)
-            projection = proj
-            // El consentimiento siempre viene de un intento de captura: continuar.
-            grabAndDeliver()
-        } catch (t: Throwable) {
-            toast(getString(R.string.capture_error))
-        }
-    }
+        val proj = runCatching {
+            getSystemService(MediaProjectionManager::class.java)
+                .getMediaProjection(resultCode, data)
+        }.getOrNull()
 
-    private fun handleCaptureRequest() {
-        if (projection == null) {
-            // Sin token: abrir el diálogo de consentimiento del sistema.
-            startActivity(
-                Intent(this, ConsentActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        } else {
-            grabAndDeliver()
+        if (proj == null || !ProjectionSession.start(this, proj)) {
+            CaptureFlow.toast(this, R.string.capture_error)
+            stopSelf()
+            return
         }
-    }
-
-    private fun grabAndDeliver() {
-        val proj = projection ?: return
-        scope.launch {
-            val frame = withContext(Dispatchers.IO) { FrameGrabber.grab(this@CaptureService, proj) }
-            if (frame != null) {
-                FrameHolder.set(frame)
-                startActivity(
-                    Intent(this@CaptureService, CaptureActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            } else {
-                toast(getString(R.string.capture_error))
-            }
-        }
+        // Margen extra: el diálogo de permiso acaba de cerrarse y la pantalla
+        // tarda unos fotogramas en volver a la app del usuario.
+        scope.launch { CaptureFlow.captureNow(this@CaptureService, settleMs = 500) }
     }
 
     private fun createChannel() {
@@ -147,15 +118,18 @@ class CaptureService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        val stopPi = PendingIntent.getService(
+            this, 0,
+            Intent(this, CaptureService::class.java).setAction(ACTION_STOP_SESSION),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.capture_notif_title))
+            .setContentText(getString(R.string.capture_notif_text))
+            .addAction(0, getString(R.string.capture_stop_session), stopPi)
             .setOngoing(true)
             .setSilent(true)
             .build()
-    }
-
-    private fun toast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }

@@ -19,7 +19,6 @@ data class PinState(
     val y: Int = 200,
     val scale: Float = 1f,
     val alpha: Float = 1f,
-    val locked: Boolean = false,
     val clickThrough: Boolean = false,
     val minimized: Boolean = false
 )

@@ -8,18 +8,21 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.forge.pixpin.MainActivity
+import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
-import com.forge.pixpin.capture.CaptureService
+import com.forge.pixpin.capture.CaptureFlow
+import com.forge.pixpin.clipboard.ClipboardPinActivity
 
 /**
  * Servicio ambiental siempre activo: mantiene la notificación persistente,
- * la bola flotante (M3) y aloja los pines overlay (M4).
+ * la bola flotante y los pines overlay.
  * No tiene relación con la captura de pantalla; por eso puede arrancar
- * en el boot incluso en Android 15 (a diferencia del tipo mediaProjection).
+ * en el boot incluso en Android 15 (a diferencia del tipo mediaProjection,
+ * que el sistema prohíbe arrancar desde BOOT_COMPLETED).
  */
 class PinHostService : Service() {
 
@@ -27,7 +30,6 @@ class PinHostService : Service() {
         const val CHANNEL_ID = "pixpin_ambient"
         const val NOTIF_ID = 1
         const val ACTION_CAPTURE = "com.forge.pixpin.action.NOTIF_CAPTURE"
-        const val ACTION_OPEN = "com.forge.pixpin.action.NOTIF_OPEN"
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, PinHostService::class.java))
@@ -39,16 +41,20 @@ class PinHostService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        val notification = buildNotification(this)
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIF_ID, notification)
-        }
-        if (android.provider.Settings.canDrawOverlays(this)) {
-            FloatingBallController(this).also { ball = it }.show()
-            (application as com.forge.pixpin.PixPinApp).overlayManager.restoreOnStart()
-        }
+        startForeground(
+            NOTIF_ID,
+            buildNotification(this),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        )
+        ensureOverlays()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Se vuelve a intentar en cada arranque: el permiso de overlay puede
+        // haberse concedido después de crear el servicio.
+        ensureOverlays()
+        if (intent?.action == ACTION_CAPTURE) CaptureFlow.requestCapture(this)
+        return START_STICKY
     }
 
     override fun onDestroy() {
@@ -57,17 +63,14 @@ class PinHostService : Service() {
         super.onDestroy()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_CAPTURE -> CaptureService.requestCapture(this)
-            ACTION_OPEN -> startActivity(
-                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }
-        return START_STICKY
-    }
-
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun ensureOverlays() {
+        if (!Settings.canDrawOverlays(this)) return
+        if (ball == null) ball = FloatingBallController(this)
+        if (ball?.isShowing != true) ball?.show()
+        (application as PixPinApp).overlayManager.restoreOnStart()
+    }
 
     private fun createChannel() {
         val channel = NotificationChannel(
@@ -94,16 +97,16 @@ class PinHostService : Service() {
         )
         val pinPi = PendingIntent.getActivity(
             context, 2,
-            Intent(context, com.forge.pixpin.clipboard.ClipboardPinActivity::class.java),
+            Intent(context, ClipboardPinActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(context.getString(R.string.notif_title))
             .setContentText(context.getString(R.string.notif_text))
+            .setContentIntent(openPi)
             .addAction(0, context.getString(R.string.action_capture), capturePi)
             .addAction(0, context.getString(R.string.action_pin), pinPi)
-            .addAction(0, context.getString(R.string.action_open), openPi)
             .setOngoing(true)
             .setSilent(true)
             .build()

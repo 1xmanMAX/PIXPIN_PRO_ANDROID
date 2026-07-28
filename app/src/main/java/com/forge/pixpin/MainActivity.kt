@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CheckCircle
@@ -29,14 +32,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,7 +54,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.getSystemService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.forge.pixpin.data.CaptureMode
+import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.ui.theme.PixPinTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -149,6 +158,7 @@ fun OnboardingScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp)
         ) {
             Text(
@@ -168,13 +178,12 @@ fun OnboardingScreen() {
             }
 
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.perm_capture_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            CaptureModeCard()
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(12.dp))
+            CrashReportCard()
+
+            Spacer(Modifier.height(24.dp))
 
             Button(
                 onClick = {
@@ -195,6 +204,94 @@ fun OnboardingScreen() {
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Modo de captura. En Android 14+ un permiso de grabación solo vale para una
+ * sesión, así que hay que elegir: mantenerla viva (rápido, con icono de
+ * grabación) o cerrarla tras cada captura (discreto, pide permiso cada vez).
+ */
+@Composable
+private fun CaptureModeCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.capture_mode_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Spacer(Modifier.height(8.dp))
+            CaptureMode.entries.forEach { mode ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { scope.launch { app.settings.setCaptureMode(mode) } }
+                        .padding(vertical = 6.dp)
+                ) {
+                    RadioButton(
+                        selected = settings.captureMode == mode,
+                        onClick = { scope.launch { app.settings.setCaptureMode(mode) } }
+                    )
+                    Column(Modifier.padding(start = 4.dp)) {
+                        Text(
+                            stringResource(
+                                if (mode == CaptureMode.FAST) R.string.capture_mode_fast
+                                else R.string.capture_mode_discreet
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            stringResource(
+                                if (mode == CaptureMode.FAST) R.string.capture_mode_fast_desc
+                                else R.string.capture_mode_discreet_desc
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Aparece solo si la app se cerró de golpe: permite enviarme la traza. */
+@Composable
+private fun CrashReportCard() {
+    val context = LocalContext.current
+    var hasReport by remember { mutableStateOf(CrashLog.hasReport(context)) }
+    if (!hasReport) return
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.crash_title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+            Text(
+                stringResource(R.string.crash_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row {
+                TextButton(onClick = {
+                    CrashLog.shareIntent(context)?.let {
+                        context.startActivity(Intent.createChooser(it, null))
+                    }
+                }) { Text(stringResource(R.string.crash_share)) }
+                TextButton(onClick = {
+                    CrashLog.clear(context)
+                    hasReport = false
+                }) { Text(stringResource(R.string.crash_dismiss)) }
             }
         }
     }

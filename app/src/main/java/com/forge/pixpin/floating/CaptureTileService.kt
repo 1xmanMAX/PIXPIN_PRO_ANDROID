@@ -6,7 +6,7 @@ import android.os.Build
 import android.provider.Settings
 import android.service.quicksettings.TileService
 import com.forge.pixpin.MainActivity
-import com.forge.pixpin.capture.CaptureService
+import com.forge.pixpin.capture.CaptureFlow
 
 /**
  * Tile de ajustes rápidos: tercer disparador de captura.
@@ -14,6 +14,7 @@ import com.forge.pixpin.capture.CaptureService
  */
 class CaptureTileService : TileService() {
 
+    @Suppress("DEPRECATION", "StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
         if (!Settings.canDrawOverlays(this)) {
@@ -27,12 +28,11 @@ class CaptureTileService : TileService() {
                     )
                 )
             } else {
-                @Suppress("DEPRECATION")
                 startActivityAndCollapse(intent)
             }
             return
         }
         PinHostService.start(this)
-        CaptureService.requestCapture(this)
+        CaptureFlow.requestCapture(this)
     }
 }

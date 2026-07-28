@@ -8,31 +8,24 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteForever
@@ -41,10 +34,6 @@ import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Minimize
-import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TextFields
@@ -53,7 +42,6 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,21 +50,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -86,21 +67,20 @@ import com.forge.pixpin.floating.FloatingBallController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import kotlin.math.abs
 
 /**
- * Un pin = una ventana overlay independiente, SIN límites de pantalla
- * (atraviesa bordes y puede cubrir la barra de estado).
+ * Un pin = una ventana overlay independiente, sin límites de pantalla
+ * (puede cruzar los bordes y cubrir la barra de estado).
  *
- * Gestos:
- * - 1 dedo: mover (soltar sobre la bola flotante = minimizar en burbuja)
- * - pellizco: zoom temporal estilo Telegram (al soltar vuelve a su tamaño)
- * - 2 dedos vertical: ajustar opacidad en vivo
- * - tirador inferior-derecho: redimensionar persistente
- * - doble toque: cerrar · pulsación larga: menú · toque en burbuja: restaurar
+ * Todo por gestos, sin menús:
+ * - arrastrar: mover (soltarlo sobre la bola lo minimiza en burbuja)
+ * - pellizcar: escalar · 2 dedos arriba/abajo: opacidad
+ * - doble toque: minimizar/restaurar en burbuja
+ * - toque: copiar (texto/color) o abrir (archivo)
+ * - pulsación larga: barra mínima de 4 acciones
  *
  * Posición y opacidad viven en los LayoutParams (fuera del estado de Compose):
- * mover/ajustar no recompone el contenido.
+ * moverlo o atenuarlo no recompone el contenido.
  */
 class PinWindowController(
     private val context: Context,
@@ -113,24 +93,58 @@ class PinWindowController(
         fun onPinClosed(controller: PinWindowController)
         fun onPinDestroyed(controller: PinWindowController)
         fun onPinSaveRequested(controller: PinWindowController)
+
+        /** Se acaba de minimizar: el gestor decide dónde aparcar la burbuja. */
+        fun onPinMinimized(controller: PinWindowController)
     }
 
     private val wm = context.getSystemService(WindowManager::class.java)!!
     private var window: OverlayComposeWindow? = null
     private var lp: WindowManager.LayoutParams? = null
 
-    private val uiState = mutableStateOf(initialState)
-    private val menuOpen = mutableStateOf(false)
+    private var actionBar: OverlayComposeWindow? = null
 
-    val id: String get() = uiState.value.id
+    private val pin = mutableStateOf(initialState)
+    private val scale = mutableFloatStateOf(initialState.scale)
+    private val minimized = mutableStateOf(initialState.minimized)
+
+    /**
+     * La transparencia se aplica al CONTENIDO, no a la ventana. Con
+     * LayoutParams.alpha muy bajo el sistema deja de entregar toques a la
+     * ventana y el pin se quedaba intocable; atenuando solo lo que se dibuja,
+     * la zona táctil sigue intacta por transparente que se vea.
+     */
+    private val contentAlpha = mutableFloatStateOf(initialState.alpha)
+
+    // Anclas del gesto en curso
+    private var dragStartX = 0
+    private var dragStartY = 0
+    private var scaleStart = 1f
+    private var alphaStart = 1f
+    private var restoreX = initialState.x
+    private var restoreY = initialState.y
+    private var scaleStartW = 1
+    private var scaleStartH = 1
+    private var focusRelX = 0.5f
+    private var focusRelY = 0.5f
+    private var zoomState = ZoomState()
+
+    val id: String get() = pin.value.id
     val isShowing: Boolean get() = window != null
 
-    /** Estado completo actual, incluyendo posición y opacidad de la ventana. */
+    /** Estado completo actual, incluidos posición, escala y opacidad reales. */
     fun snapshot(): PinState {
-        val s = uiState.value
         val p = lp
-        return if (p != null) s.copy(x = p.x, y = p.y, alpha = p.alpha) else s
+        return pin.value.copy(
+            scale = scale.floatValue,
+            minimized = minimized.value,
+            x = p?.x ?: pin.value.x,
+            y = p?.y ?: pin.value.y,
+            alpha = contentAlpha.floatValue
+        )
     }
+
+    // ---- Ciclo de vida de la ventana ----
 
     fun show() {
         if (window != null) return
@@ -138,28 +152,39 @@ class PinWindowController(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            computeFlags(uiState.value.clickThrough),
+            computeFlags(pin.value.clickThrough),
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = uiState.value.x
-            y = uiState.value.y
-            alpha = uiState.value.alpha
-            @Suppress("DEPRECATION")
+            x = pin.value.x
+            y = pin.value.y
             layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         val w = OverlayComposeWindow(context) { PinRoot() }
+        w.setTouchHandler(OverlayTouchHandler(context, GestureListener()))
         window = w
         lp = params
         runCatching {
             wm.addView(w.view, params)
             w.onAttached()
+        }.onFailure {
+            window = null
+            lp = null
         }
     }
 
+    /** Oculta la ventana conservando su posición y estado (ocultar todo / captura). */
+    fun setViewVisible(visible: Boolean) {
+        window?.isContentVisible = visible
+        if (!visible) closeActionBar()
+    }
+
     fun hideView() {
+        closeActionBar()
         val w = window ?: return
+        // Guarda la posición viva antes de soltar los LayoutParams.
+        pin.value = snapshot()
         runCatching { wm.removeView(w.view) }
         w.onDetached()
         window = null
@@ -177,26 +202,52 @@ class PinWindowController(
     }
 
     fun setClickThrough(value: Boolean) {
-        if (uiState.value.clickThrough == value) return
-        uiState.value = uiState.value.copy(clickThrough = value)
+        if (pin.value.clickThrough == value) return
+        pin.value = pin.value.copy(clickThrough = value)
         lp?.let { p ->
             p.flags = computeFlags(value)
-            window?.view?.let { v -> runCatching { wm.updateViewLayout(v, p) } }
+            applyLayout()
         }
         callbacks.onPinChanged(this)
     }
 
-    fun minimize() {
-        if (uiState.value.minimized) return
-        uiState.value = uiState.value.copy(minimized = true)
-        menuOpen.value = false
+    val isMinimized: Boolean get() = minimized.value
+
+    /**
+     * @param dock true solo cuando se ha soltado el pin sobre la bola: entonces
+     * la burbuja se aparca junto a ella. Con doble toque la burbuja se queda
+     * exactamente donde estaba el pin.
+     */
+    fun minimize(dock: Boolean = false) {
+        if (minimized.value) return
+        // Guarda dónde estaba el pin para devolverlo ahí al restaurarlo.
+        restoreX = lp?.x ?: pin.value.x
+        restoreY = lp?.y ?: pin.value.y
+        minimized.value = true
+        closeActionBar()
+        if (dock) callbacks.onPinMinimized(this)
+        // La imagen puede vivir fuera de la pantalla, pero la burbuja no: si no,
+        // queda flotando en una zona invisible y ya no hay forma de tocarla.
+        clampBubbleIntoScreen()
         callbacks.onPinChanged(this)
     }
 
     fun restore() {
-        if (!uiState.value.minimized) return
-        uiState.value = uiState.value.copy(minimized = false)
+        if (!minimized.value) return
+        minimized.value = false
+        moveTo(restoreX, restoreY)
         callbacks.onPinChanged(this)
+    }
+
+    /** Coloca la ventana en coordenadas de pantalla (aparcar burbujas). */
+    fun moveTo(x: Int, y: Int) {
+        val p = lp ?: run {
+            pin.value = pin.value.copy(x = x, y = y)
+            return
+        }
+        p.x = x
+        p.y = y
+        applyLayout()
     }
 
     private fun computeFlags(clickThrough: Boolean): Int {
@@ -208,261 +259,215 @@ class PinWindowController(
         return flags
     }
 
-    private fun moveBy(dx: Float, dy: Float) {
+    private fun applyLayout() {
         val p = lp ?: return
         val v = window?.view ?: return
-        p.x += dx.toInt()
-        p.y += dy.toInt()
         runCatching { wm.updateViewLayout(v, p) }
     }
 
-    private fun onDragFinished() {
-        val p = lp ?: return
-        val v = window?.view ?: return
-        // Soltar sobre la bola flotante = minimizar en burbuja
-        val bounds = FloatingBallController.active?.ballBounds()
-        if (bounds != null && v.width > 0) {
-            val cx = p.x + v.width / 2
-            val cy = p.y + v.height / 2
-            if (bounds.contains(cx, cy)) {
-                minimize()
+    // ---- Gestos ----
+
+    private inner class GestureListener : OverlayTouchHandler.Listener {
+
+        override fun onDragStart() {
+            closeActionBar()
+            dragStartX = lp?.x ?: 0
+            dragStartY = lp?.y ?: 0
+        }
+
+        override fun onDrag(dxFromDown: Float, dyFromDown: Float) {
+            val p = lp ?: return
+            p.x = dragStartX + dxFromDown.toInt()
+            p.y = dragStartY + dyFromDown.toInt()
+            applyLayout()
+        }
+
+        override fun onDragEnd() {
+            if (!minimized.value && droppedOnBall()) {
+                minimize(dock = true)
                 return
             }
-        }
-        callbacks.onPinChanged(this)
-    }
-
-    private fun setAlphaLive(value: Float) {
-        val p = lp ?: return
-        val v = window?.view ?: return
-        p.alpha = value.coerceIn(0.2f, 1f)
-        runCatching { wm.updateViewLayout(v, p) }
-    }
-
-    private fun commitAlpha() {
-        val p = lp ?: return
-        uiState.value = uiState.value.copy(alpha = p.alpha)
-        callbacks.onPinChanged(this)
-    }
-
-    private fun copyColorToClipboard(argb: Int) {
-        val hex = ContentClassifier.toHex(argb)
-        val cm = context.getSystemService(ClipboardManager::class.java)
-        cm?.setPrimaryClip(ClipData.newPlainText("color", hex))
-        Toast.makeText(context, context.getString(R.string.copied_hex, hex), Toast.LENGTH_SHORT).show()
-    }
-
-    private fun openFile(s: PinState) {
-        val path = s.filePath ?: return
-        val uri = FileProvider.getUriForFile(
-            context, "${context.packageName}.fileprovider", File(path)
-        )
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, s.mimeType ?: "*/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, R.string.no_app_for_file, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // ---- Contenido Compose ----
-
-    @Composable
-    private fun PinRoot() {
-        val s by uiState
-        val menu by menuOpen
-        Box {
-            Surface(
-                shape = if (s.minimized) CircleShape else RoundedCornerShape(12.dp),
-                shadowElevation = 8.dp,
-                border = if (s.clickThrough) {
-                    BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
-                } else null,
-                modifier = Modifier
-                    .pointerInput(s.locked, menu, s.type, s.minimized) {
-                        detectTapGestures(
-                            onLongPress = { menuOpen.value = !menuOpen.value },
-                            onDoubleTap = {
-                                if (!menuOpen.value && !s.locked && !s.minimized) close()
-                            },
-                            onTap = {
-                                when {
-                                    s.minimized -> restore()
-                                    menuOpen.value -> Unit
-                                    s.type == PinType.COLOR ->
-                                        s.colorArgb?.let { copyColorToClipboard(it) }
-                                    s.type == PinType.FILE -> openFile(s)
-                                }
-                            }
-                        )
-                    }
-                    .pointerInput(s.minimized) {
-                        if (!s.minimized) return@pointerInput
-                        detectDragGestures(
-                            onDrag = { change, amount ->
-                                change.consume()
-                                moveBy(amount.x, amount.y)
-                            },
-                            onDragEnd = { callbacks.onPinChanged(this@PinWindowController) }
-                        )
-                    }
-                    .pointerInput(s.locked, menu, s.minimized) {
-                        if (s.locked || menu || s.minimized) return@pointerInput
-                        unifiedGestureLoop()
-                    }
-            ) {
-                when {
-                    menu -> PinMenuContent(s)
-                    s.minimized -> BubbleContent(s)
-                    else -> PinBodyContent(s)
-                }
+            if (minimized.value) {
+                clampBubbleIntoScreen()
+            } else {
+                keepReachable()
             }
-            if (!s.minimized && !s.locked && !menu) {
-                ResizeHandle(Modifier.align(Alignment.BottomEnd))
+            callbacks.onPinChanged(this@PinWindowController)
+        }
+
+        override fun onScaleStart(focusX: Float, focusY: Float) {
+            closeActionBar()
+            scaleStart = scale.floatValue
+            val v = window?.view
+            val p = lp
+            scaleStartW = (v?.width ?: 0).coerceAtLeast(1)
+            scaleStartH = (v?.height ?: 0).coerceAtLeast(1)
+            // Cada gesto empieza con el tope limpio: si topó antes, un pellizco
+            // nuevo vuelve a intentarlo.
+            zoomState = ZoomState()
+            // Posición del foco DENTRO del pin (0..1): es lo que hay que dejar
+            // clavado bajo los dedos mientras se escala.
+            focusRelX = ((focusX - (p?.x ?: 0)) / scaleStartW).coerceIn(0f, 1f)
+            focusRelY = ((focusY - (p?.y ?: 0)) / scaleStartH).coerceIn(0f, 1f)
+        }
+
+        override fun onScale(factorFromDown: Float, focusX: Float, focusY: Float) {
+            if (minimized.value) return
+            val v = window?.view ?: return
+            val p = lp ?: return
+            if (v.width <= 0 || v.height <= 0) return
+
+            val stepResult = PinZoom.step(
+                scaleAtStart = scaleStart,
+                factor = factorFromDown,
+                currentScale = scale.floatValue,
+                realW = v.width,
+                realH = v.height,
+                focusX = focusX,
+                focusY = focusY,
+                relX = focusRelX,
+                relY = focusRelY,
+                state = zoomState
+            )
+            zoomState = stepResult.state
+            scale.floatValue = stepResult.scale
+
+            if (p.x != stepResult.x || p.y != stepResult.y) {
+                p.x = stepResult.x
+                p.y = stepResult.y
+                applyLayout()
             }
         }
+
+        override fun onScaleEnd() {
+            keepReachable()
+            callbacks.onPinChanged(this@PinWindowController)
+        }
+
+        override fun onOpacityStart() {
+            closeActionBar()
+            alphaStart = contentAlpha.floatValue
+        }
+
+        override fun onOpacity(dyFromDown: Float) {
+            contentAlpha.floatValue = (alphaStart - dyFromDown / 600f).coerceIn(0.12f, 1f)
+        }
+
+        override fun onOpacityEnd() {
+            callbacks.onPinChanged(this@PinWindowController)
+        }
+
+        override fun onTap() {
+            val s = pin.value
+            when {
+                minimized.value -> restore()
+                actionBar != null -> closeActionBar()
+                s.type == PinType.TEXT -> copyText(s)
+                s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
+                s.type == PinType.FILE -> openFile(s)
+                s.type == PinType.IMAGE -> copyImage(s)
+            }
+        }
+
+        override fun onDoubleTap() {
+            // Sin dock: la burbuja se queda donde estaba el pin.
+            if (minimized.value) restore() else minimize(dock = false)
+        }
+
+        override fun onLongPress() {
+            window?.view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            if (actionBar != null) closeActionBar() else openActionBar()
+        }
+    }
+
+    /** La burbuja minimizada siempre entera dentro de la pantalla. */
+    private fun clampBubbleIntoScreen() {
+        val p = lp ?: return
+        val metrics = context.resources.displayMetrics
+        // Tamaño de la burbuja: la vista aún mide lo que medía el pin abierto.
+        val size = (BUBBLE_DP * metrics.density).toInt()
+        p.x = p.x.coerceIn(0, (metrics.widthPixels - size).coerceAtLeast(0))
+        p.y = p.y.coerceIn(0, (metrics.heightPixels - size).coerceAtLeast(0))
+        // El pin se restaurará donde acabe la burbuja, no donde estaba antes.
+        restoreX = p.x
+        restoreY = p.y
+        applyLayout()
     }
 
     /**
-     * Detector unificado de gestos: 1 dedo mueve, pellizco = zoom temporal
-     * (vuelve al soltar), 2 dedos en vertical = opacidad en vivo.
+     * Los pines pueden salirse de los bordes (es deliberado), pero nunca del
+     * todo: siempre queda un trozo agarrable en pantalla.
      */
-    private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.unifiedGestureLoop() {
-        awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false)
-            var prevSpan = 0f
-            var decided = false
-            var peek = false
-            var opacityGesture = false
-            var spanAccum = 0f
-            var vertAccum = 0f
-            var peekStartSpan = 1f
-            var peekStartScale = 1f
-            var opacityStartAlpha = 1f
-            var opacityDy = 0f
-            var moved = false
-
-            while (true) {
-                val event = awaitPointerEvent()
-                val pressed = event.changes.filter { it.pressed }
-                if (pressed.isEmpty()) break
-
-                if (pressed.size == 1 && !decided) {
-                    val change = pressed[0]
-                    val delta = change.positionChange()
-                    if (delta != Offset.Zero) {
-                        moved = true
-                        moveBy(delta.x, delta.y)
-                        change.consume()
-                    }
-                } else if (pressed.size >= 2) {
-                    val p0 = pressed[0]
-                    val p1 = pressed[1]
-                    val span = (p0.position - p1.position).getDistance()
-                    val dyAvg = (p0.positionChange().y + p1.positionChange().y) / 2f
-                    if (prevSpan == 0f) prevSpan = span
-
-                    if (!decided) {
-                        spanAccum += abs(span - prevSpan)
-                        vertAccum += abs(dyAvg)
-                        if (spanAccum > 24f || vertAccum > 24f) {
-                            decided = true
-                            if (spanAccum > vertAccum * 1.3f) {
-                                peek = true
-                                peekStartSpan = span
-                                peekStartScale = uiState.value.scale
-                            } else {
-                                opacityGesture = true
-                                opacityStartAlpha = lp?.alpha ?: uiState.value.alpha
-                            }
-                        }
-                    } else if (peek) {
-                        val newScale = (peekStartScale * span / peekStartSpan)
-                            .coerceIn(0.25f, 5f)
-                        uiState.value = uiState.value.copy(scale = newScale)
-                    } else if (opacityGesture) {
-                        opacityDy += dyAvg
-                        setAlphaLive(opacityStartAlpha - opacityDy / 500f)
-                    }
-                    prevSpan = span
-                    pressed.forEach { it.consume() }
-                }
-            }
-
-            when {
-                peek -> uiState.value = uiState.value.copy(scale = peekStartScale)
-                opacityGesture -> commitAlpha()
-                moved -> onDragFinished()
-            }
+    private fun keepReachable() {
+        val p = lp ?: return
+        val v = window?.view ?: return
+        val metrics = context.resources.displayMetrics
+        val margin = (48 * metrics.density).toInt()
+        val w = v.width.coerceAtLeast(margin)
+        val h = v.height.coerceAtLeast(margin)
+        val newX = p.x.coerceIn(margin - w, metrics.widthPixels - margin)
+        val newY = p.y.coerceIn(0, metrics.heightPixels - margin)
+        if (newX != p.x || newY != p.y) {
+            p.x = newX
+            p.y = newY
+            applyLayout()
         }
     }
 
-    @Composable
-    private fun ResizeHandle(modifier: Modifier = Modifier) {
-        Box(
-            modifier = modifier
-                .offset { IntOffset(8, 8) }
-                .size(22.dp)
-                .shadow(3.dp, CircleShape)
-                .background(MaterialTheme.colorScheme.primary, CircleShape)
-                .border(2.dp, Color.White, CircleShape)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDrag = { change, amount ->
-                            change.consume()
-                            val current = uiState.value.scale
-                            val newScale = (current + amount.x * 0.006f).coerceIn(0.25f, 5f)
-                            if (newScale != current) {
-                                uiState.value = uiState.value.copy(scale = newScale)
-                            }
-                        },
-                        onDragEnd = { callbacks.onPinChanged(this@PinWindowController) }
-                    )
-                }
-        )
+    private fun droppedOnBall(): Boolean {
+        val p = lp ?: return false
+        val v = window?.view ?: return false
+        val bounds = FloatingBallController.active?.ballBounds() ?: return false
+        if (v.width == 0) return false
+        return bounds.contains(p.x + v.width / 2, p.y + v.height / 2)
+    }
+
+    // ---- Barra de acciones (ventana aparte: la del pin no recibe toques de UI) ----
+
+    private fun openActionBar() {
+        if (actionBar != null) return
+        val p = lp ?: return
+        val v = window?.view ?: return
+        val density = context.resources.displayMetrics.density
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = p.x
+            y = p.y + v.height + (6 * density).toInt()
+        }
+        val bar = OverlayComposeWindow(context) { ActionBarContent() }
+        actionBar = bar
+        runCatching {
+            wm.addView(bar.view, params)
+            bar.onAttached()
+        }.onFailure { actionBar = null }
+    }
+
+    private fun closeActionBar() {
+        val bar = actionBar ?: return
+        runCatching { wm.removeView(bar.view) }
+        bar.onDetached()
+        actionBar = null
     }
 
     @Composable
-    private fun PinMenuContent(s: PinState) {
-        var sliderValue by remember(s.id) { mutableFloatStateOf(lp?.alpha ?: s.alpha) }
-        Column(
-            modifier = Modifier
-                .width(230.dp)
-                .padding(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { menuOpen.value = false }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                }
-                Text(
-                    context.getString(R.string.pin_menu_title),
-                    style = MaterialTheme.typography.titleSmall
-                )
-            }
-            Text(
-                context.getString(R.string.opacity_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Slider(
-                value = sliderValue,
-                onValueChange = {
-                    sliderValue = it
-                    setAlphaLive(it)
-                },
-                onValueChangeFinished = { commitAlpha() },
-                valueRange = 0.2f..1f
-            )
+    private fun ActionBarContent() {
+        val s by pin
+        Surface(shape = RoundedCornerShape(24.dp), shadowElevation = 6.dp) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = {
                     setClickThrough(!s.clickThrough)
-                    menuOpen.value = false
+                    closeActionBar()
                 }) {
                     Icon(
                         if (s.clickThrough) Icons.Filled.DoNotTouch else Icons.Filled.TouchApp,
@@ -472,42 +477,89 @@ class PinWindowController(
                     )
                 }
                 IconButton(onClick = {
-                    uiState.value = s.copy(locked = !s.locked)
-                    menuOpen.value = false
-                    callbacks.onPinChanged(this@PinWindowController)
-                }) {
-                    Icon(
-                        if (s.locked) Icons.Filled.Lock else Icons.Filled.LockOpen,
-                        contentDescription = null,
-                        tint = if (s.locked) MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                IconButton(onClick = {
-                    if (s.minimized) restore() else minimize()
-                }) {
-                    Icon(
-                        if (s.minimized) Icons.Filled.OpenInFull else Icons.Filled.Minimize,
-                        contentDescription = null
-                    )
-                }
-                IconButton(onClick = {
-                    menuOpen.value = false
+                    closeActionBar()
                     callbacks.onPinSaveRequested(this@PinWindowController)
                 }) {
-                    Icon(Icons.Filled.Save, contentDescription = null)
+                    Icon(Icons.Filled.Save, contentDescription = context.getString(R.string.cd_save))
                 }
                 IconButton(onClick = { close() }) {
-                    Icon(Icons.Filled.Close, contentDescription = null)
+                    Icon(Icons.Filled.Close, contentDescription = context.getString(R.string.cd_close))
                 }
                 IconButton(onClick = { destroy() }) {
                     Icon(
                         Icons.Filled.DeleteForever,
-                        contentDescription = null,
+                        contentDescription = context.getString(R.string.cd_destroy),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
             }
+        }
+    }
+
+    // ---- Acciones de contenido ----
+
+    private fun copyText(s: PinState) {
+        val text = s.text ?: return
+        clipboard()?.setPrimaryClip(ClipData.newPlainText("pixpin", text))
+        toast(context.getString(R.string.copied_text))
+    }
+
+    /** Un toque en la imagen la deja en el portapapeles, igual que el texto. */
+    private fun copyImage(s: PinState) {
+        val path = s.imagePath ?: return
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
+        }.getOrNull() ?: return
+        val clip = ClipData.newUri(context.contentResolver, "PixPin", uri)
+        clipboard()?.setPrimaryClip(clip)
+        toast(context.getString(R.string.copied_image))
+    }
+
+    private fun copyColor(argb: Int) {
+        val hex = ContentClassifier.toHex(argb)
+        clipboard()?.setPrimaryClip(ClipData.newPlainText("color", hex))
+        toast(context.getString(R.string.copied_hex, hex))
+    }
+
+    private fun openFile(s: PinState) {
+        val path = s.filePath ?: return
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
+        }.getOrNull() ?: return
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, s.mimeType ?: "*/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            toast(context.getString(R.string.no_app_for_file))
+        }
+    }
+
+    private fun clipboard() = context.getSystemService(ClipboardManager::class.java)
+
+    private fun toast(message: String) {
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
+
+    // ---- Contenido Compose ----
+
+    @Composable
+    private fun PinRoot() {
+        val s by pin
+        val small by minimized
+        Surface(
+            shape = if (small) CircleShape else RoundedCornerShape(12.dp),
+            shadowElevation = 8.dp,
+            border = if (s.clickThrough) {
+                BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
+            } else null,
+            // Se lee dentro del bloque de graphicsLayer: cambiar la opacidad
+            // solo actualiza la capa, no recompone ni vuelve a medir nada.
+            modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }
+        ) {
+            if (small) BubbleContent(s) else PinBodyContent(s)
         }
     }
 
@@ -525,7 +577,7 @@ class PinWindowController(
     private fun BubbleContent(s: PinState) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(BUBBLE_DP.dp)
                 .clip(CircleShape)
                 .background(
                     if (s.type == PinType.COLOR && s.colorArgb != null) Color(s.colorArgb)
@@ -541,15 +593,15 @@ class PinWindowController(
                             bitmap = bitmap.asImageBitmap(),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(44.dp).clip(CircleShape)
+                            modifier = Modifier
+                                .size(BUBBLE_DP.dp)
+                                .clip(CircleShape)
                         )
                     }
                 }
-                PinType.TEXT -> Icon(Icons.Filled.TextFields, contentDescription = null, tint = Color.White)
+                PinType.TEXT -> Icon(Icons.Filled.TextFields, null, tint = Color.White)
                 PinType.COLOR -> Unit // la burbuja ya es del color
-                PinType.FILE -> Icon(
-                    mimeIcon(s.mimeType), contentDescription = null, tint = Color.White
-                )
+                PinType.FILE -> Icon(mimeIcon(s.mimeType), null, tint = Color.White)
             }
         }
     }
@@ -561,15 +613,15 @@ class PinWindowController(
             Box(Modifier.size(64.dp))
             return
         }
-        val density = LocalDensity.current.density
+        val zoom by scale
+        val density = context.resources.displayMetrics.density
         val screenW = context.resources.displayMetrics.widthPixels
-        val baseWidthPx = minOf(bmp.width, (screenW * 0.6f).toInt())
-        val baseWidthDp = baseWidthPx / density
+        val baseWidthDp = minOf(bmp.width, (screenW * 0.6f).toInt()) / density
         Image(
             bitmap = bmp.asImageBitmap(),
             contentDescription = null,
             contentScale = ContentScale.FillWidth,
-            modifier = Modifier.width((baseWidthDp * s.scale).dp)
+            modifier = Modifier.width((baseWidthDp * zoom).dp)
         )
     }
 
@@ -584,22 +636,25 @@ class PinWindowController(
 
     @Composable
     private fun TextPinBody(s: PinState) {
-        SelectionContainer {
-            Text(
-                text = s.text.orEmpty(),
-                fontSize = (14f * s.scale).sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .widthIn(max = 320.dp)
-                    .padding(14.dp)
-            )
-        }
+        val zoom by scale
+        Text(
+            text = s.text.orEmpty(),
+            fontSize = (14f * zoom).sp,
+            lineHeight = (20f * zoom).sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 40,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .widthIn(max = 330.dp)
+                .padding(14.dp)
+        )
     }
 
     @Composable
     private fun ColorPinBody(s: PinState) {
         val argb = s.colorArgb ?: return
-        val side = (96f * s.scale).coerceIn(48f, 480f)
+        val zoom by scale
+        val side = (96f * zoom).coerceIn(48f, 480f)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 Modifier
@@ -619,7 +674,7 @@ class PinWindowController(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .widthIn(max = 230.dp)
+                .widthIn(max = 250.dp)
                 .padding(12.dp)
         ) {
             Icon(
@@ -643,6 +698,11 @@ class PinWindowController(
                 )
             }
         }
+    }
+
+    private companion object {
+        /** Diámetro de la burbuja minimizada, en dp. */
+        const val BUBBLE_DP = 46
     }
 
     private fun mimeIcon(mime: String?) = when {

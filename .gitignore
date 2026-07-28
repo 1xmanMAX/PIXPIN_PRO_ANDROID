@@ -1,10 +1,23 @@
+# Android / Gradle
 *.iml
 .gradle/
-/local.properties
-/.idea/
-.DS_Store
-/build/
+.kotlin/
+build/
 /captures
 .externalNativeBuild
 .cxx
+
+# Rutas y claves de esta máquina
 local.properties
+/local.properties
+*.jks
+*.keystore
+
+# IDE y sistema operativo
+/.idea/
+.DS_Store
+Thumbs.db
+
+# Artefactos
+*.apk
+*.aab

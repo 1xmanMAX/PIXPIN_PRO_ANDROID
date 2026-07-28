@@ -11,12 +11,24 @@
     <string name="perm_notif_desc">Barra persistente con botones de Capturar y Pinear.</string>
     <string name="perm_battery_title">Excluir de ahorro de batería</string>
     <string name="perm_battery_desc">Evita que el sistema cierre PixPin y desaparezcan tus pines.</string>
-    <string name="perm_capture_note">La primera vez que captures, Android te pedirá permiso de grabación de pantalla (solo esa vez por sesión).</string>
     <string name="granted">Concedido</string>
     <string name="grant">Conceder</string>
     <string name="start_app">Comenzar</string>
     <string name="app_started">PixPin activo — la bola flotante aparece en tu pantalla</string>
     <string name="need_overlay">Concede «Mostrar sobre otras apps» para continuar</string>
+
+    <!-- Modo de captura -->
+    <string name="capture_mode_title">Modo de captura</string>
+    <string name="capture_mode_fast">Rápido</string>
+    <string name="capture_mode_fast_desc">Android pide permiso una vez y las siguientes capturas son instantáneas y fiables. Mientras dura, la sesión gasta como una grabación de pantalla y el sistema muestra su icono. Puedes cerrarla desde la notificación.</string>
+    <string name="capture_mode_discreet">Discreto</string>
+    <string name="capture_mode_discreet_desc">La sesión se cierra tras cada captura: sin icono permanente ni gasto de batería, pero Android pide permiso cada vez.</string>
+
+    <!-- Informe de fallo -->
+    <string name="crash_title">PixPin se cerró de forma inesperada</string>
+    <string name="crash_desc">Hay un informe guardado con el detalle técnico del fallo. Mientras no lo descartes, PixPin no se activará sola al reiniciar el móvil.</string>
+    <string name="crash_share">Compartir informe</string>
+    <string name="crash_dismiss">Descartar</string>
 
     <!-- Notificación persistente -->
     <string name="notif_channel_name">PixPin</string>
@@ -25,35 +37,37 @@
     <string name="notif_text">Captura y fija notas sobre cualquier app</string>
     <string name="action_capture">Capturar</string>
     <string name="action_open">Abrir</string>
-    <string name="action_pin">Pinear</string>
+    <string name="action_pin">Pin</string>
 
     <!-- Captura -->
-    <string name="capture_channel_name">Captura de pantalla</string>
-    <string name="capture_notif_title">Captura de pantalla activa</string>
+    <string name="capture_channel_name">Sesión de captura</string>
+    <string name="capture_notif_title">Sesión de captura activa</string>
+    <string name="capture_notif_text">Las capturas son instantáneas mientras dure</string>
+    <string name="capture_stop_session">Detener</string>
     <string name="capture_consent_denied">Permiso de captura denegado</string>
     <string name="capture_error">No se pudo capturar la pantalla</string>
-    <string name="capture_frame_ok">Fotograma %1$d×%2$d capturado</string>
-    <string name="coming_soon">Disponible en la siguiente fase</string>
+    <string name="capture_hint">Arrastra para recortar · toca para la pantalla entera</string>
 
     <!-- Pines -->
     <string name="nothing_to_pin">No hay nada que pinear en el portapapeles</string>
-    <string name="pin_image_error">No se pudo leer la imagen del portapapeles</string>
+    <string name="pin_image_error">No se pudo leer el contenido del portapapeles</string>
     <string name="pins_hidden">Pines ocultos</string>
     <string name="pins_shown">Pines visibles</string>
     <string name="pin_history_empty">No hay pines en el historial</string>
     <string name="pins_title">Pines</string>
     <string name="pins_empty">No hay pines activos</string>
-    <string name="pin_menu_title">Opciones del pin</string>
-    <string name="opacity_label">Opacidad</string>
     <string name="copied_hex">Copiado %1$s</string>
+    <string name="copied_text">Texto copiado</string>
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
+    <string name="cd_save">Guardar</string>
+    <string name="cd_close">Cerrar</string>
+    <string name="cd_destroy">Eliminar</string>
     <string name="pin_type_image">Imagen</string>
     <string name="pin_type_file">Archivo</string>
     <string name="no_app_for_file">No hay ninguna app para abrir este archivo</string>
 
     <!-- Pantalla de captura -->
-    <string name="pinned">Fijado</string>
     <string name="saved_to_gallery">Guardado en Pictures/PixPin</string>
     <string name="copied_image">Imagen copiada al portapapeles</string>
     <string name="add_text_title">Texto de la anotación</string>

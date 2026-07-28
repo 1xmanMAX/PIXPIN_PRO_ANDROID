@@ -31,11 +31,14 @@ object ImageStore {
         }.getOrNull()
     }
 
-    fun saveBitmap(context: Context, bitmap: Bitmap, name: String): String {
-        val dir = File(context.filesDir, "pins").apply { mkdirs() }
-        val file = File(dir, name)
-        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        return file.absolutePath
+    /** Guarda el bitmap en el almacén privado. Null si el disco falla. */
+    fun saveBitmap(context: Context, bitmap: Bitmap, name: String): String? {
+        return runCatching {
+            val dir = File(context.filesDir, "pins").apply { mkdirs() }
+            val file = File(dir, name)
+            FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            file.absolutePath
+        }.getOrNull()
     }
 
     fun load(path: String, maxDim: Int = MAX_DIMENSION): Bitmap? {

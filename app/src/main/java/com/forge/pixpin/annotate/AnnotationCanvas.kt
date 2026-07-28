@@ -21,7 +21,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
+
+/** Tamaño del bloque de pixelado, en px de imagen. */
+private const val MOSAIC_BLOCK = 14
 
 /**
  * Dibuja las anotaciones sobre el fotograma. Las listas observables se leen
@@ -36,10 +41,23 @@ fun AnnotationCanvas(
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
-    val mosaicCache = remember { mutableMapOf<Int, ImageBitmap>() }
     val annotations = controller.annotations
     val current = controller.current.value
     val scale = imageRectInView.width / sourceBitmap.width
+
+    // Una única versión pixelada de TODA la imagen, calculada una vez. Antes se
+    // recortaba y reescalaba un bitmap por fotograma mientras se arrastraba el
+    // mosaico: eso son decenas de allocations por segundo en el hilo de UI.
+    val pixelated = remember(sourceBitmap) {
+        runCatching {
+            Bitmap.createScaledBitmap(
+                sourceBitmap,
+                (sourceBitmap.width / MOSAIC_BLOCK).coerceAtLeast(1),
+                (sourceBitmap.height / MOSAIC_BLOCK).coerceAtLeast(1),
+                false
+            ).asImageBitmap()
+        }.getOrNull()
+    }
 
     Canvas(modifier = modifier.fillMaxSize()) {
         fun Pt.toView(): Offset =
@@ -52,6 +70,7 @@ fun AnnotationCanvas(
         )
 
         fun drawMosaic(a: Annotation) {
+            val small = pixelated ?: return
             val r = AnnotationGeometry.rectFrom(a.points[0], a.points[1])
             val l = r[0].coerceIn(0f, sourceBitmap.width - 1f).toInt()
             val t = r[1].coerceIn(0f, sourceBitmap.height - 1f).toInt()
@@ -60,19 +79,20 @@ fun AnnotationCanvas(
             val w = rr - l
             val h = bb - t
             if (w < 4 || h < 4) return
-            val key = a.hashCode()
-            val small = mosaicCache.getOrPut(key) {
-                val crop = Bitmap.createBitmap(sourceBitmap, l, t, w, h)
-                Bitmap.createScaledBitmap(crop, (w / 14).coerceAtLeast(1), (h / 14).coerceAtLeast(1), false)
-                    .asImageBitmap()
-            }
+            // Recorte sobre la imagen pixelada ya cacheada: cero allocations.
+            val sx = (l / MOSAIC_BLOCK).coerceIn(0, small.width - 1)
+            val sy = (t / MOSAIC_BLOCK).coerceIn(0, small.height - 1)
+            val sw = (w / MOSAIC_BLOCK).coerceIn(1, small.width - sx)
+            val sh = (h / MOSAIC_BLOCK).coerceIn(1, small.height - sy)
             drawImage(
                 image = small,
-                dstOffset = Offset(
-                    imageRectInView.left + l * scale,
-                    imageRectInView.top + t * scale
-                ).let { androidx.compose.ui.unit.IntOffset(it.x.toInt(), it.y.toInt()) },
-                dstSize = androidx.compose.ui.unit.IntSize((w * scale).toInt(), (h * scale).toInt()),
+                srcOffset = IntOffset(sx, sy),
+                srcSize = IntSize(sw, sh),
+                dstOffset = IntOffset(
+                    (imageRectInView.left + l * scale).toInt(),
+                    (imageRectInView.top + t * scale).toInt()
+                ),
+                dstSize = IntSize((w * scale).toInt(), (h * scale).toInt()),
                 filterQuality = if (a.variant == 1) FilterQuality.Low else FilterQuality.None
             )
         }
@@ -130,7 +150,6 @@ fun AnnotationCanvas(
             }
         }
 
-        if (mosaicCache.size > annotations.size + 1) mosaicCache.clear()
         annotations.forEach { drawAnnotation(it) }
         current?.let { drawAnnotation(it) }
     }

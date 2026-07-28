@@ -5,34 +5,45 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.floating.PinHostService
+import kotlinx.coroutines.launch
 
 /**
  * Receptor del menú «Compartir» del sistema: cualquier documento, archivo o
  * foto compartido a PixPin se convierte en pin (imagen → pin de imagen,
  * cualquier otro archivo → pin de archivo que se abre al tocarlo).
+ *
+ * La copia del archivo se hace ANTES de finish(): el permiso sobre la URI
+ * compartida se revoca en cuanto la actividad termina.
  */
 class ShareReceiverActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleIntent(intent)
-        finish()
-    }
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
 
-    private fun handleIntent(intent: Intent) {
         val app = application as PixPinApp
-        val uris = when (intent.action) {
+        val uris = when (intent?.action) {
             Intent.ACTION_SEND -> listOfNotNull(intent.streamUri())
             Intent.ACTION_SEND_MULTIPLE -> intent.streamUris()
             else -> emptyList()
         }
-        if (uris.isEmpty()) return
+        if (uris.isEmpty()) {
+            finish()
+            return
+        }
 
         // Asegura que el servicio host esté vivo para mantener los pines
         PinHostService.start(this)
-        uris.forEach { uri -> app.overlayManager.pinFromSharedUri(uri) }
+        lifecycleScope.launch {
+            uris.forEach { uri -> app.overlayManager.pinFromUri(uri) }
+            finishAndRemoveTask()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
     }
 
     private fun Intent.streamUri(): Uri? {

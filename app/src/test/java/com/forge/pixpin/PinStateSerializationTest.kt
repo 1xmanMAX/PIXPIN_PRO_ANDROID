@@ -16,7 +16,7 @@ class PinStateSerializationTest {
             text = "hola\nmundo",
             x = 42, y = 84,
             scale = 1.5f, alpha = 0.7f,
-            locked = true, clickThrough = true
+            clickThrough = true, minimized = true
         )
         val restored = json.decodeFromString<PinState>(json.encodeToString(state))
         assertEquals(state, restored)
@@ -28,7 +28,16 @@ class PinStateSerializationTest {
         val restored = json.decodeFromString<PinState>(minimal)
         assertEquals(1f, restored.scale)
         assertEquals(1f, restored.alpha)
-        assertEquals(false, restored.locked)
+        assertEquals(false, restored.clickThrough)
+    }
+
+    /** Los pines guardados por versiones anteriores deben seguir abriéndose. */
+    @Test
+    fun `formato antiguo con campos retirados`() {
+        val legacy = """{"id":"x","type":"TEXT","text":"hola","locked":true,"x":10}"""
+        val restored = json.decodeFromString<PinState>(legacy)
+        assertEquals("hola", restored.text)
+        assertEquals(10, restored.x)
     }
 
     @Test
