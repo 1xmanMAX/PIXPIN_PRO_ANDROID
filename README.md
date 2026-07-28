@@ -10,7 +10,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 > port de su código, sino una implementación propia en Kotlin de las funciones que me
 > resultan útiles en el móvil. Se instala por APK, no está en Google Play.
 
-**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 86 tests
+**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 102 tests
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
 
@@ -54,6 +54,27 @@ pantalla en vivo, así que nada se mueve bajo el dedo.
 - Los overlays de PixPin (bola y pines) se ocultan durante el fotograma: no salen dentro
   de tu propia captura.
 - Una sola barra de acciones, con **Pin** destacado: anotar · guardar · copiar · compartir · cerrar.
+
+### Captura con scroll
+
+Para páginas más largas que la pantalla. Eliges la zona, pulsas **Scroll** y aparece una
+barrita abajo: desplazas con el dedo a ritmo normal y PixPin va cosiendo, enseñando cuántas
+pantallas lleva. Al pulsar *Listo* la imagen larga entra en la pantalla de siempre, lista
+para anotar, fijar, guardar o compartir.
+
+Android no ofrece ninguna API para esto —la captura larga del sistema solo funciona dentro
+de apps que la implementan—, así que el desplazamiento se deduce comparando fotogramas.
+Las consecuencias, dichas de frente:
+
+- **Ante la duda no cose.** Un tramo mal encajado estropea la imagen entera y no se ve
+  hasta el final; descartarlo solo cuesta unos milisegundos. Se rechazan los fotogramas
+  ambiguos, los de zonas sin textura y los saltos demasiado grandes; si vas muy rápido, la
+  barrita te lo dice.
+- **Las cabeceras fijas salen repetidas** si quedan dentro de la zona elegida. La solución
+  es elegir la zona sin ellas.
+- Tope de **5 pantallas** de alto, por memoria.
+- Necesita el **modo Rápido** (sesión de captura abierta). En Discreto te lo pide y retoma
+  la captura tras concederlo.
 
 ### Anotación
 
@@ -207,7 +228,7 @@ Requiere **Android 10 (API 29) o superior**. Probado en Android 10, 12 y 15/16.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
 
 ./gradlew assembleDebug        # APK de depuración
-./gradlew testDebugUnitTest    # 86 tests unitarios
+./gradlew testDebugUnitTest    # 102 tests unitarios
 ./gradlew lintDebug            # análisis estático
 ```
 
@@ -257,6 +278,8 @@ com.forge.pixpin/
 | `PinZoom` | Matemática pura del pellizco (foco entre los dedos y detección de tope) |
 | `OverlayComposeWindow` | Andamiaje para meter Compose en una ventana sin Activity detrás |
 | `SelectionGeometry` | Matemática pura del recorte (anclas, esquinas, límites) |
+| `ScrollMatcher` | Matemática pura del cosido: resume cada fila en una firma y busca el desplazamiento entre fotogramas, rechazando lo ambiguo |
+| `ScrollStitcher` | Guarda solo las tiras nuevas de cada fotograma y las junta al terminar |
 
 La lógica delicada está extraída en objetos puros (`PinZoom`, `SelectionGeometry`,
 `ContentClassifier`, `AnnotationGeometry`, `UndoStack`) precisamente para poder probarla
@@ -319,7 +342,9 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 - **Fabricantes agresivos con la batería** (Xiaomi, Huawei, Oppo…): si el sistema mata el
   servicio, los pines desaparecen hasta volver a abrir la app. Excluir PixPin del ahorro
   de batería lo evita.
-- Aún **sin OCR, sin QR, sin captura con scroll y sin grabación** de GIF/vídeo.
+- Aún **sin OCR, sin QR y sin grabación** de GIF/vídeo.
+- La **captura con scroll** funciona cosiendo fotogramas, no con una API del sistema: en
+  pantallas sin textura o con cabeceras fijas el resultado puede no ser perfecto.
 - El APK de depuración pesa ~65 MB porque incluye el paquete completo de iconos de
   Material y no está minificado.
 
@@ -332,8 +357,8 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 | ✅ **1 — MVP** | Disparadores, captura y recorte, 8 herramientas de anotación, pines de imagen/texto/color/archivo, gestos, burbujas, historial, restauración al reinicio |
 | ✅ **1.5** | Motor de trazo para lápiz óptico (presión, rechazo de palma, suavizado), anotar sobre un pin flotante, zoom del pin hasta el borde de la pantalla, nº de serie, polilínea y foco |
 | ✅ **2** | Grupos de pines |
-| **3** | OCR local con ML Kit, reconocimiento de QR, traducción |
-| **4** | Captura con scroll y grabación en GIF/MP4 |
+| ✅ **3** | Captura con scroll |
+| **4** | OCR local con ML Kit, reconocimiento de QR, traducción, grabación en GIF/MP4 |
 
 Descartados a propósito: pin de fórmulas LaTeX, motor de scripts y sincronización en la nube.
 

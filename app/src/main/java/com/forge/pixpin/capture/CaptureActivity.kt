@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
@@ -434,6 +435,13 @@ fun CaptureScreen(
                         }
                     },
                     onAnnotate = { annotateMode = true },
+                    onScroll = {
+                        // La zona se entrega en píxeles de pantalla: el fotograma
+                        // congelado es la pantalla entera, así que coinciden.
+                        val sel = selection ?: imageRect
+                        ScrollCaptureController.request(context, selectionToImageRect(sel))
+                        onFinish()
+                    },
                     onSave = {
                         bake { baked ->
                             val uri = withContext(Dispatchers.IO) { Export.saveToGallery(context, baked) }
@@ -586,6 +594,7 @@ private fun ColorChip(argb: Int, onClick: () -> Unit) {
 private fun ActionBar(
     onPin: () -> Unit,
     onAnnotate: () -> Unit,
+    onScroll: () -> Unit,
     onSave: () -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
@@ -611,6 +620,7 @@ private fun ActionBar(
                 )
             }
             ToolbarButton(Icons.Filled.Edit, active = false, onClick = onAnnotate)
+            ToolbarButton(Icons.Filled.ExpandMore, active = false, onClick = onScroll)
             ToolbarButton(Icons.Filled.Save, active = false, onClick = onSave)
             ToolbarButton(Icons.Filled.ContentCopy, active = false, onClick = onCopy)
             ToolbarButton(Icons.Filled.Share, active = false, onClick = onShare)

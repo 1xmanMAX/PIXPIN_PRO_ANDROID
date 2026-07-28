@@ -105,7 +105,14 @@ class CaptureService : Service() {
         }
         // Margen extra: el diálogo de permiso acaba de cerrarse y la pantalla
         // tarda unos fotogramas en volver a la app del usuario.
-        scope.launch { CaptureFlow.captureNow(this@CaptureService, settleMs = 500) }
+        scope.launch {
+            kotlinx.coroutines.delay(380)
+            // Si veníamos de pedir permiso para una captura con scroll, se retoma
+            // ahí en vez de tomar un solo fotograma.
+            if (!ScrollCaptureController.resumePending(this@CaptureService)) {
+                CaptureFlow.captureNow(this@CaptureService, settleMs = 120)
+            }
+        }
     }
 
     private fun createChannel() {

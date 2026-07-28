@@ -156,6 +156,24 @@ object ProjectionSession {
         }
     }
 
+    /**
+     * Fotograma solo si la pantalla se ha movido. Null si no llega nada.
+     *
+     * A diferencia de [grab], no fuerza un repintado del espejo cuando no hay
+     * novedad: esto se llama en bucle durante la captura con scroll y ahí "no ha
+     * pasado nada" es una respuesta válida y frecuente —el dedo está parado—,
+     * no un fallo que haya que remediar.
+     */
+    suspend fun grabIfChanged(timeoutMs: Long = 200): Bitmap? {
+        if (!isAlive) return null
+        val image = awaitFrame(timeoutMs) ?: takeLatest() ?: return null
+        return try {
+            withContext(Dispatchers.Default) { image.use { it.toBitmap(width, height) } }
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
     private suspend fun awaitFrame(timeoutMs: Long): Image? = withTimeoutOrNull(timeoutMs) {
         suspendCancellableCoroutine { cont ->
             val ready = synchronized(lock) {

@@ -38,6 +38,15 @@
     <string name="action_capture">Capturar</string>
     <string name="action_open">Abrir</string>
     <string name="action_pin">Pin</string>
+    <string name="action_done">Listo</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_scroll">Scroll</string>
+    <string name="scroll_hint">Desplaza despacio con el dedo. PixPin va cosiendo.</string>
+    <string name="scroll_progress">%.1f pantallas</string>
+    <string name="scroll_slower">Vas muy rápido: desplaza más despacio</string>
+    <string name="scroll_full">Alto máximo alcanzado</string>
+    <string name="scroll_needs_session">La captura con scroll necesita la sesión abierta</string>
+    <string name="scroll_region_too_small">Elige una zona más alta para capturar con scroll</string>
 
     <!-- Captura -->
     <string name="capture_channel_name">Sesión de captura</string>
