@@ -62,6 +62,9 @@
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="cd_save">Guardar</string>
     <string name="cd_close">Cerrar</string>
+    <string name="cd_annotate_pin">Dibujar sobre el pin</string>
+    <string name="cd_undo">Deshacer</string>
+    <string name="cd_done">Listo</string>
     <string name="cd_destroy">Eliminar</string>
     <string name="pin_type_image">Imagen</string>
     <string name="pin_type_file">Archivo</string>

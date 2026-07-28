@@ -29,12 +29,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.NorthEast
@@ -44,6 +47,7 @@ import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -73,7 +77,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -89,6 +95,7 @@ import com.forge.pixpin.annotate.AnnotationController
 import com.forge.pixpin.annotate.AnnotationRenderer
 import com.forge.pixpin.annotate.AnnotationType
 import com.forge.pixpin.annotate.Pt
+import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.pin.ImageStore
 import com.forge.pixpin.ui.theme.PixPinTheme
@@ -152,6 +159,7 @@ private val PALETTE = listOf(
     0xFF4CAF50.toInt(), 0xFF2196F3.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt()
 )
 
+@OptIn(ExperimentalComposeUiApi::class) // pointerInteropFilter: hace falta el MotionEvent crudo
 @Composable
 fun CaptureScreen(
     bitmap: Bitmap,
@@ -210,6 +218,17 @@ fun CaptureScreen(
             )
         }
 
+        /**
+         * Igual que [toImage] pero sin descartar nada: al dibujar, un punto que
+         * cae fuera de la imagen se pega al borde en vez de perderse, o el trazo
+         * se cortaría al llegar al final de la foto.
+         */
+        fun toImagePt(x: Float, y: Float, pressure: Float): Pt = Pt(
+            ((x - imageRect.left) / imgScale).coerceIn(0f, bitmap.width.toFloat()),
+            ((y - imageRect.top) / imgScale).coerceIn(0f, bitmap.height.toFloat()),
+            pressure
+        )
+
         fun selectionToImageRect(sel: Rect): android.graphics.Rect {
             val l = ((sel.left - imageRect.left) / imgScale).coerceIn(0f, bitmap.width - 1f)
             val t = ((sel.top - imageRect.top) / imgScale).coerceIn(0f, bitmap.height - 1f)
@@ -238,6 +257,16 @@ fun CaptureScreen(
                     busy = false
                 }
             }
+        }
+
+        // Motor de trazo, el mismo que usan los pines al anotar.
+        val strokeReader = remember(controller, imageRect) {
+            StrokeTouchReader(
+                onBegin = { x, y, p -> controller.begin(toImagePt(x, y, p)) },
+                onExtend = { x, y, p -> controller.drag(toImagePt(x, y, p)) },
+                onFinish = { controller.end() },
+                onCancel = { controller.cancel() }
+            )
         }
 
         // 1) Fotograma congelado (lo que se ve es exactamente lo que se recorta)
@@ -327,24 +356,25 @@ fun CaptureScreen(
                     )
                 }
                 .pointerInput(annotateMode, controller.tool.value) {
-                    if (!annotateMode) return@pointerInput
-                    if (controller.tool.value == AnnotationType.TEXT) {
-                        detectTapGestures { pos ->
-                            toImage(pos)?.let {
-                                textPoint = it
-                                textInput = ""
-                                showTextDialog = true
-                            }
+                    if (!annotateMode || controller.tool.value != AnnotationType.TEXT) {
+                        return@pointerInput
+                    }
+                    detectTapGestures { pos ->
+                        toImage(pos)?.let {
+                            textPoint = it
+                            textInput = ""
+                            showTextDialog = true
                         }
+                    }
+                }
+                // Dibujo: se lee el MotionEvent en crudo en vez de usar los gestos
+                // de Compose, que se comen el arranque del trazo (touch slop) y
+                // tiran las muestras intermedias del lápiz. Ver StrokeTouchReader.
+                .pointerInteropFilter { event ->
+                    if (!annotateMode || controller.tool.value == AnnotationType.TEXT) {
+                        false
                     } else {
-                        detectDragGestures(
-                            onDragStart = { pos -> toImage(pos)?.let { controller.begin(it) } },
-                            onDrag = { change, _ ->
-                                change.consume()
-                                toImage(change.position)?.let { controller.drag(it) }
-                            },
-                            onDragEnd = { controller.end() }
-                        )
+                        strokeReader.onTouchEvent(event)
                     }
                 }
         )
@@ -599,6 +629,9 @@ private fun AnnotateToolbar(controller: AnnotationController, onDone: () -> Unit
         AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
         AnnotationType.MOSAIC to Icons.Filled.BlurOn,
         AnnotationType.TEXT to Icons.Filled.TextFields,
+        AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
+        AnnotationType.POLYLINE to Icons.Filled.Timeline,
+        AnnotationType.SPOTLIGHT to Icons.Filled.CenterFocusStrong,
         AnnotationType.ERASER to Icons.Filled.AutoFixNormal
     )
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -644,7 +677,15 @@ private fun AnnotateToolbar(controller: AnnotationController, onDone: () -> Unit
                     ToolbarButton(
                         icon,
                         active = controller.tool.value == type,
-                        onClick = { controller.tool.value = type }
+                        onClick = { controller.selectTool(type) }
+                    )
+                }
+                // Solo mientras haya una polilínea a medias: es su forma de cerrarse.
+                if (controller.polylineOpen) {
+                    ToolbarButton(
+                        Icons.Filled.CheckCircle,
+                        active = true,
+                        onClick = { controller.finishPolyline() }
                     )
                 }
                 ToolbarButton(Icons.Filled.Done, active = true, onClick = onDone)

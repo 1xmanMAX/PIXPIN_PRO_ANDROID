@@ -14,6 +14,8 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +29,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.AutoFixNormal
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Gesture
+import androidx.compose.material.icons.filled.Highlight
+import androidx.compose.material.icons.filled.NorthEast
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DoNotTouch
@@ -45,14 +55,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
@@ -62,6 +73,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.forge.pixpin.R
+import com.forge.pixpin.annotate.AnnotationCanvas
+import com.forge.pixpin.annotate.AnnotationController
+import com.forge.pixpin.annotate.AnnotationType
+import com.forge.pixpin.annotate.Pt
+import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.floating.FloatingBallController
 import kotlinx.coroutines.Dispatchers
@@ -103,10 +119,23 @@ class PinWindowController(
     private var lp: WindowManager.LayoutParams? = null
 
     private var actionBar: OverlayComposeWindow? = null
+    private var annotateBar: OverlayComposeWindow? = null
 
     private val pin = mutableStateOf(initialState)
     private val scale = mutableFloatStateOf(initialState.scale)
     private val minimized = mutableStateOf(initialState.minimized)
+
+    /** Imagen del pin, compartida entre el dibujado y el conversor de coordenadas. */
+    private val bitmapState = mutableStateOf<Bitmap?>(null)
+
+    /**
+     * Anotaciones del pin. Vive siempre (para dibujar lo ya anotado); solo
+     * recibe gestos mientras [annotating] está activo.
+     */
+    private val annotator = AnnotationController().apply {
+        annotations.addAll(initialState.annotations)
+    }
+    private val annotating = mutableStateOf(false)
 
     /**
      * La transparencia se aplica al CONTENIDO, no a la ventana. Con
@@ -127,7 +156,9 @@ class PinWindowController(
     private var scaleStartH = 1
     private var focusRelX = 0.5f
     private var focusRelY = 0.5f
-    private var zoomState = ZoomState()
+
+    /** Tope del gesto en curso: hasta que un eje del pin toque el borde de la pantalla. */
+    private var zoomMax = PinZoom.ABSOLUTE_MAX_SCALE
 
     val id: String get() = pin.value.id
     val isShowing: Boolean get() = window != null
@@ -140,7 +171,8 @@ class PinWindowController(
             minimized = minimized.value,
             x = p?.x ?: pin.value.x,
             y = p?.y ?: pin.value.y,
-            alpha = contentAlpha.floatValue
+            alpha = contentAlpha.floatValue,
+            annotations = annotator.annotations.toList()
         )
     }
 
@@ -177,10 +209,14 @@ class PinWindowController(
     /** Oculta la ventana conservando su posición y estado (ocultar todo / captura). */
     fun setViewVisible(visible: Boolean) {
         window?.isContentVisible = visible
-        if (!visible) closeActionBar()
+        if (!visible) {
+            closeActionBar()
+            exitAnnotateMode()
+        }
     }
 
     fun hideView() {
+        exitAnnotateMode()
         closeActionBar()
         val w = window ?: return
         // Guarda la posición viva antes de soltar los LayoutParams.
@@ -302,9 +338,16 @@ class PinWindowController(
             val p = lp
             scaleStartW = (v?.width ?: 0).coerceAtLeast(1)
             scaleStartH = (v?.height ?: 0).coerceAtLeast(1)
-            // Cada gesto empieza con el tope limpio: si topó antes, un pellizco
-            // nuevo vuelve a intentarlo.
-            zoomState = ZoomState()
+            // El tope se deduce del tamaño real medido: crece hasta que un eje
+            // toque el borde de la pantalla.
+            val metrics = context.resources.displayMetrics
+            zoomMax = PinZoom.maxScaleFor(
+                realW = scaleStartW,
+                realH = scaleStartH,
+                currentScale = scaleStart,
+                screenW = metrics.widthPixels,
+                screenH = metrics.heightPixels
+            )
             // Posición del foco DENTRO del pin (0..1): es lo que hay que dejar
             // clavado bajo los dedos mientras se escala.
             focusRelX = ((focusX - (p?.x ?: 0)) / scaleStartW).coerceIn(0f, 1f)
@@ -320,16 +363,14 @@ class PinWindowController(
             val stepResult = PinZoom.step(
                 scaleAtStart = scaleStart,
                 factor = factorFromDown,
-                currentScale = scale.floatValue,
+                maxScale = zoomMax,
                 realW = v.width,
                 realH = v.height,
                 focusX = focusX,
                 focusY = focusY,
                 relX = focusRelX,
-                relY = focusRelY,
-                state = zoomState
+                relY = focusRelY
             )
-            zoomState = stepResult.state
             scale.floatValue = stepResult.scale
 
             if (p.x != stepResult.x || p.y != stepResult.y) {
@@ -456,6 +497,94 @@ class PinWindowController(
         actionBar = null
     }
 
+    // ---- Modo anotación (dibujar sobre el pin sin abrir ninguna pantalla) ----
+
+    /**
+     * Mientras dura, el pin queda clavado: los toques dejan de mover, escalar y
+     * atenuar, y se los queda el motor de trazo. Se sale con el botón de la
+     * barrita, que persiste lo dibujado.
+     */
+    private fun enterAnnotateMode() {
+        if (annotating.value || pin.value.type != PinType.IMAGE) return
+        closeActionBar()
+        annotating.value = true
+        window?.setTouchHandler(
+            StrokeTouchReader(
+                onBegin = { x, y, p -> toImagePt(x, y, p)?.let { annotator.begin(it) } },
+                onExtend = { x, y, p -> toImagePt(x, y, p)?.let { annotator.drag(it) } },
+                onFinish = { annotator.end() },
+                onCancel = { annotator.cancel() }
+            )
+        )
+        openAnnotateBar()
+    }
+
+    private fun exitAnnotateMode() {
+        if (!annotating.value) return
+        annotating.value = false
+        annotator.cancel()
+        window?.setTouchHandler(OverlayTouchHandler(context, GestureListener()))
+        closeAnnotateBar()
+        pin.value = snapshot()
+        callbacks.onPinChanged(this)
+    }
+
+    /**
+     * Coordenadas de la ventana → píxeles de la imagen original. Guardar las
+     * anotaciones en el espacio de la imagen es lo que hace que se puedan
+     * dibujar con el pin pequeño y sigan cuadrando al agrandarlo.
+     */
+    private fun toImagePt(x: Float, y: Float, pressure: Float): Pt? {
+        val bmp = bitmapState.value ?: return null
+        val v = window?.view ?: return null
+        if (v.width <= 0 || bmp.width <= 0) return null
+        val shown = v.width.toFloat() / bmp.width
+        return Pt(
+            (x / shown).coerceIn(0f, bmp.width.toFloat()),
+            (y / shown).coerceIn(0f, bmp.height.toFloat()),
+            pressure
+        )
+    }
+
+    private fun openAnnotateBar() {
+        if (annotateBar != null) return
+        val p = lp ?: return
+        val v = window?.view ?: return
+        val density = context.resources.displayMetrics.density
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            // Debajo del pin, o encima si no cabe: la barra no puede quedar fuera.
+            val metrics = context.resources.displayMetrics
+            val below = p.y + v.height + (6 * density).toInt()
+            x = p.x.coerceIn(0, (metrics.widthPixels - (200 * density).toInt()).coerceAtLeast(0))
+            y = if (below > metrics.heightPixels - (110 * density).toInt()) {
+                (p.y - (110 * density).toInt()).coerceAtLeast(0)
+            } else {
+                below
+            }
+        }
+        val bar = OverlayComposeWindow(context) { AnnotateBarContent() }
+        annotateBar = bar
+        runCatching {
+            wm.addView(bar.view, params)
+            bar.onAttached()
+        }.onFailure { annotateBar = null }
+    }
+
+    private fun closeAnnotateBar() {
+        val bar = annotateBar ?: return
+        runCatching { wm.removeView(bar.view) }
+        bar.onDetached()
+        annotateBar = null
+    }
+
     @Composable
     private fun ActionBarContent() {
         val s by pin
@@ -476,6 +605,15 @@ class PinWindowController(
                         else MaterialTheme.colorScheme.onSurface
                     )
                 }
+                // Dibujar encima solo tiene sentido sobre una imagen.
+                if (s.type == PinType.IMAGE) {
+                    IconButton(onClick = { enterAnnotateMode() }) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = context.getString(R.string.cd_annotate_pin)
+                        )
+                    }
+                }
                 IconButton(onClick = {
                     closeActionBar()
                     callbacks.onPinSaveRequested(this@PinWindowController)
@@ -491,6 +629,84 @@ class PinWindowController(
                         contentDescription = context.getString(R.string.cd_destroy),
                         tint = MaterialTheme.colorScheme.error
                     )
+                }
+            }
+        }
+    }
+
+    /**
+     * Barrita de dibujo: herramienta · color · grosor · deshacer · listo. Va en
+     * su propia ventana porque la del pin se queda con todos los toques para el
+     * trazo y ahí ningún botón llegaría a enterarse.
+     */
+    @Composable
+    private fun AnnotateBarContent() {
+        val tools = listOf(
+            AnnotationType.PENCIL to Icons.Filled.Gesture,
+            AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
+            AnnotationType.ARROW to Icons.Filled.NorthEast,
+            AnnotationType.RECT to Icons.Filled.CropSquare,
+            AnnotationType.ERASER to Icons.Filled.AutoFixNormal
+        )
+        Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 6.dp) {
+            Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    tools.forEach { (type, icon) ->
+                        val selected = annotator.tool.value == type
+                        IconButton(onClick = { annotator.selectTool(type) }) {
+                            Icon(
+                                icon,
+                                contentDescription = type.name,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PIN_PALETTE.forEach { argb ->
+                        val selected = annotator.color.value == argb
+                        Box(
+                            Modifier
+                                .padding(3.dp)
+                                .size(if (selected) 24.dp else 20.dp)
+                                .background(Color(argb), CircleShape)
+                                .border(
+                                    width = if (selected) 3.dp else 1.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.primary
+                                    else Color.Gray,
+                                    shape = CircleShape
+                                )
+                                .clickable { annotator.color.value = argb }
+                        )
+                    }
+                    IconButton(onClick = {
+                        // Tres grosores en rotación: no hay sitio para un slider.
+                        annotator.strokeWidth.value = when (annotator.strokeWidth.value) {
+                            in 0f..6f -> 8f
+                            in 6f..12f -> 18f
+                            else -> 4f
+                        }
+                    }) {
+                        Box(
+                            Modifier
+                                .size((annotator.strokeWidth.value / 2 + 4).dp)
+                                .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                        )
+                    }
+                    IconButton(
+                        onClick = { annotator.undo() },
+                        enabled = annotator.canUndo.value
+                    ) {
+                        Icon(Icons.Filled.Undo, contentDescription = context.getString(R.string.cd_undo))
+                    }
+                    IconButton(onClick = { exitAnnotateMode() }) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = context.getString(R.string.cd_done),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
@@ -617,21 +833,41 @@ class PinWindowController(
         val density = context.resources.displayMetrics.density
         val screenW = context.resources.displayMetrics.widthPixels
         val baseWidthDp = minOf(bmp.width, (screenW * 0.6f).toInt()) / density
-        Image(
-            bitmap = bmp.asImageBitmap(),
-            contentDescription = null,
-            contentScale = ContentScale.FillWidth,
-            modifier = Modifier.width((baseWidthDp * zoom).dp)
-        )
-    }
-
-    @Composable
-    private fun rememberPinBitmap(path: String?): State<Bitmap?> {
-        return produceState<Bitmap?>(initialValue = null, path) {
-            if (path != null) {
-                value = withContext(Dispatchers.IO) { ImageStore.load(path) }
+        val widthDp = baseWidthDp * zoom
+        val heightDp = widthDp * bmp.height / bmp.width
+        Box {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.width(widthDp.dp)
+            )
+            // Las anotaciones se guardan en píxeles de la imagen, así que aquí
+            // solo hay que decir qué trozo de vista ocupa la imagen: se escalan
+            // solas con el pin.
+            if (annotating.value || annotator.annotations.isNotEmpty()) {
+                AnnotationCanvas(
+                    controller = annotator,
+                    sourceBitmap = bmp,
+                    imageRectInView = Rect(0f, 0f, widthDp * density, heightDp * density),
+                    modifier = Modifier.matchParentSize()
+                )
             }
         }
+    }
+
+    /**
+     * La imagen se guarda en el controlador y no solo en la composición: el
+     * conversor de coordenadas del modo anotación necesita su tamaño real.
+     */
+    @Composable
+    private fun rememberPinBitmap(path: String?): State<Bitmap?> {
+        LaunchedEffect(path) {
+            if (path != null && bitmapState.value == null) {
+                bitmapState.value = withContext(Dispatchers.IO) { ImageStore.load(path) }
+            }
+        }
+        return bitmapState
     }
 
     @Composable
@@ -654,7 +890,8 @@ class PinWindowController(
     private fun ColorPinBody(s: PinState) {
         val argb = s.colorArgb ?: return
         val zoom by scale
-        val side = (96f * zoom).coerceIn(48f, 480f)
+        // Sin tope propio: quien manda es el tope del pellizco (PinZoom).
+        val side = (96f * zoom).coerceAtLeast(48f)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 Modifier
@@ -722,3 +959,9 @@ class PinWindowController(
         return mime.substringAfter('/').take(12).uppercase()
     }
 }
+
+/** Colores de la barrita de anotación del pin (los mismos de la pantalla de captura). */
+private val PIN_PALETTE = listOf(
+    0xFFF44336.toInt(), 0xFFFFEB3B.toInt(), 0xFF4CAF50.toInt(),
+    0xFF2196F3.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt()
+)

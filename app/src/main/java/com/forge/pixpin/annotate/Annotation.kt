@@ -8,11 +8,28 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** Punto en coordenadas de imagen (px del bitmap fuente). Propio para ser serializable. */
+/**
+ * Punto en coordenadas de imagen (px del bitmap fuente). Propio para ser serializable.
+ *
+ * [p] es la presión del lápiz, normalizada a 0..1; con el dedo llega siempre 1.
+ * Tiene valor por defecto para que los pines ya guardados en disco sigan
+ * leyéndose sin migración.
+ */
 @Serializable
-data class Pt(val x: Float, val y: Float)
+data class Pt(val x: Float, val y: Float, val p: Float = 1f)
 
-enum class AnnotationType { RECT, ELLIPSE, ARROW, PENCIL, HIGHLIGHT, MOSAIC, TEXT, ERASER }
+enum class AnnotationType {
+    RECT, ELLIPSE, ARROW, PENCIL, HIGHLIGHT, MOSAIC, TEXT, ERASER,
+
+    /** Un toque = un círculo numerado 1, 2, 3… El número va en `text`. */
+    SERIAL,
+
+    /** Rectas encadenadas: el último punto es la previsualización hasta el dedo. */
+    POLYLINE,
+
+    /** Oscurece todo MENOS el rectángulo marcado. Se dibuja siempre el último. */
+    SPOTLIGHT
+}
 
 /**
  * Anotación vectorial: serializable, re-editable, en coordenadas de imagen.
@@ -91,6 +108,18 @@ object AnnotationGeometry {
             l = min(l, p.x); t = min(t, p.y); r = max(r, p.x); b = max(b, p.y)
         }
         return floatArrayOf(l - pad, t - pad, r + pad, b + pad)
+    }
+
+    /**
+     * Blanco o negro, el que se lea sobre [argb]. Lo usa el número de serie,
+     * que va dentro de un círculo del color elegido.
+     */
+    fun contrastingTextColor(argb: Int): Int {
+        val r = (argb shr 16) and 0xFF
+        val g = (argb shr 8) and 0xFF
+        val b = argb and 0xFF
+        val luminance = 0.299f * r + 0.587f * g + 0.114f * b
+        return if (luminance > 150f) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
     }
 
     fun distance(a: Pt, b: Pt): Float {

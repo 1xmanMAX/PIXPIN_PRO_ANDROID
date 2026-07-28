@@ -87,7 +87,20 @@ object PinExporter {
 
     private fun render(state: com.forge.pixpin.pin.PinState): Bitmap? = when (state.type) {
         com.forge.pixpin.pin.PinType.IMAGE ->
-            state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+            state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }?.let { bmp ->
+                // Lo dibujado sobre el pin se hornea al exportar: hasta aquí eran
+                // vectores encima de la imagen, re-editables.
+                if (state.annotations.isEmpty()) bmp
+                else {
+                    val baked = com.forge.pixpin.annotate.AnnotationRenderer.bake(
+                        bmp,
+                        android.graphics.Rect(0, 0, bmp.width, bmp.height),
+                        state.annotations
+                    )
+                    if (!bmp.isRecycled) bmp.recycle()
+                    baked
+                }
+            }
 
         com.forge.pixpin.pin.PinType.COLOR -> {
             val argb = state.colorArgb ?: return null

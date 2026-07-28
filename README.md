@@ -10,7 +10,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 > port de su código, sino una implementación propia en Kotlin de las funciones que me
 > resultan útiles en el móvil. Se instala por APK, no está en Google Play.
 
-**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 47 tests
+**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 78 tests
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
 
@@ -57,13 +57,33 @@ pantalla en vivo, así que nada se mueve bajo el dedo.
 
 ### Anotación
 
-Ocho herramientas sobre el recorte, con deshacer y rehacer ilimitados:
+Once herramientas sobre el recorte, con deshacer y rehacer ilimitados:
 
-rectángulo · elipse · flecha · lápiz · resaltador · mosaico/pixelado · texto · borrador
+rectángulo · elipse · flecha · lápiz · resaltador · mosaico/pixelado · texto · borrador ·
+**nº de serie** · **polilínea** · **foco**
+
+- **Nº de serie**: cada toque coloca un círculo numerado 1, 2, 3… para explicar pasos.
+  Deshacer devuelve la cuenta atrás sola.
+- **Polilínea**: rectas encadenadas; se cierra con el botón de la barra o al cambiar de
+  herramienta.
+- **Foco**: oscurece todo menos la zona marcada.
 
 Las anotaciones son **vectoriales y serializables** (no se "queman" hasta exportar), con
 paleta de colores y grosor ajustable. El mosaico se calcula una sola vez sobre la imagen
 completa, así que arrastrarlo va fluido aunque tapes media pantalla.
+
+### Escribir a mano y con lápiz óptico
+
+El dibujo a mano alzada está pensado para el lápiz, no solo para el dedo:
+
+- El trazo empieza **en el primer contacto**, sin margen muerto: un punto, una tilde o la
+  barra de una «t» se dibujan igual que un trazo largo.
+- Se aprovechan **todas las muestras** del digitalizador, no solo una por fotograma —un
+  lápiz muestrea a cientos de hercios y el resto viajan como puntos históricos.
+- Trazo **suavizado por curvas**, no por segmentos rectos.
+- **Presión**: el grosor sigue la fuerza del lápiz. Con el dedo se mantiene constante,
+  porque ahí la presión es ruido.
+- **Rechazo de palma**: mientras el lápiz está en uso, la mano apoyada no pinta.
 
 ### Pines: notas flotantes siempre visibles
 
@@ -79,6 +99,13 @@ demás y todos siguen visibles sobre cualquier app.
 
 Además de eso:
 
+- **Dibujar sobre el pin sin abrir nada**: el lápiz de la barra del pin activa el modo
+  anotación, el pin se queda quieto y se dibuja encima con una barrita pegada a él
+  (herramienta · color · grosor · deshacer · listo). Como las anotaciones se guardan en
+  coordenadas de la imagen, da igual anotar con el pin diminuto o a pantalla completa: se
+  ven bien en cualquier tamaño, siguen siendo re-editables y se hornean al guardar.
+- **Zoom hasta llenar la pantalla**: el pin crece con el pellizco hasta que un eje toca el
+  borde, así que siempre se ve entero.
 - **Opacidad por pin**, ajustable con dos dedos en vivo.
 - **Toques a través** (*click-through*): los toques atraviesan el pin hasta la app de
   abajo; un borde de color indica que está activo. Se desactiva desde la lista de pines.
@@ -118,7 +145,7 @@ Toda la interacción con un pin, sin menús:
 | Dos dedos arriba/abajo | Opacidad en vivo |
 | Toque | Copiar (imagen, texto, color) o abrir (archivo) |
 | Doble toque | Minimizar en burbuja / restaurar |
-| Pulsación larga | Barra de cuatro acciones: toques a través · guardar · cerrar · eliminar |
+| Pulsación larga | Barra de acciones: toques a través · **dibujar encima** · guardar · cerrar · eliminar |
 
 Y con la bola flotante:
 
@@ -176,7 +203,7 @@ Requiere **Android 10 (API 29) o superior**. Probado en Android 10, 12 y 15/16.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
 
 ./gradlew assembleDebug        # APK de depuración
-./gradlew testDebugUnitTest    # 47 tests unitarios
+./gradlew testDebugUnitTest    # 78 tests unitarios
 ./gradlew lintDebug            # análisis estático
 ```
 
@@ -221,6 +248,8 @@ com.forge.pixpin/
 | `OverlayManager` | Crea y gobierna todos los pines: visibilidad, historial, persistencia |
 | `PinWindowController` | Un pin = una ventana. Gestos, contenido y estado serializable |
 | `OverlayTouchHandler` | Reconocedor de gestos en coordenadas absolutas de pantalla |
+| `StrokeTouchReader` | Motor de trazo: lee el `MotionEvent` crudo para no perder ni el arranque ni las muestras del lápiz. Lo comparten la pantalla de captura y los pines |
+| `StrokeSmoothing` | Suavizado por puntos medios y grosor según presión; alimenta tanto el dibujado en vivo como el horneado |
 | `PinZoom` | Matemática pura del pellizco (foco entre los dedos y detección de tope) |
 | `OverlayComposeWindow` | Andamiaje para meter Compose en una ventana sin Activity detrás |
 | `SelectionGeometry` | Matemática pura del recorte (anclas, esquinas, límites) |
@@ -297,7 +326,8 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 | Fase | Contenido |
 |---|---|
 | ✅ **1 — MVP** | Disparadores, captura y recorte, 8 herramientas de anotación, pines de imagen/texto/color/archivo, gestos, burbujas, historial, restauración al reinicio |
-| **2** | Herramientas restantes (nº de serie, polilínea, foco, marca de agua), procesado de imagen del pin (rotar, voltear, escala de grises, invertir), grupos de pines |
+| ✅ **1.5** | Motor de trazo para lápiz óptico (presión, rechazo de palma, suavizado), anotar sobre un pin flotante, zoom del pin hasta el borde de la pantalla, nº de serie, polilínea y foco |
+| **2** | Grupos de pines |
 | **3** | OCR local con ML Kit, reconocimiento de QR, traducción |
 | **4** | Captura con scroll y grabación en GIF/MP4 |
 

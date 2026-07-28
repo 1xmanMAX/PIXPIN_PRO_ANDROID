@@ -15,9 +15,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -28,10 +28,64 @@ import androidx.compose.ui.unit.sp
 /** Tamaño del bloque de pixelado, en px de imagen. */
 private const val MOSAIC_BLOCK = 14
 
+/** Adaptador del suavizado al Path de Compose. */
+private class ComposePathSink(private val path: Path) : PathSink {
+    override fun moveTo(x: Float, y: Float) = path.moveTo(x, y)
+    override fun lineTo(x: Float, y: Float) = path.lineTo(x, y)
+    override fun quadTo(controlX: Float, controlY: Float, x: Float, y: Float) =
+        path.quadraticTo(controlX, controlY, x, y)
+}
+
 /**
- * Dibuja las anotaciones sobre el fotograma. Las listas observables se leen
- * dentro del bloque de dibujo del Canvas: invalidar el trazo NO recompone,
- * solo redibuja (clave para 60+ fps).
+ * Dibuja un trazo a mano alzada ya en coordenadas de vista.
+ *
+ * Tres casos, por orden de frecuencia: un solo punto (un toque seco) se dibuja
+ * como punto redondo; con presión variable hay que ir tramo a tramo, porque un
+ * `Path` solo admite un grosor; y el caso normal es un único `Path` suavizado.
+ */
+private fun DrawScope.drawFreehand(
+    count: Int,
+    xAt: (Int) -> Float,
+    yAt: (Int) -> Float,
+    pressureAt: (Int) -> Float,
+    color: Color,
+    baseWidth: Float
+) {
+    if (count <= 0) return
+    if (count == 1) {
+        drawCircle(
+            color,
+            radius = StrokeSmoothing.widthFor(baseWidth, pressureAt(0)) / 2f,
+            center = Offset(xAt(0), yAt(0))
+        )
+        return
+    }
+    if (StrokeSmoothing.hasVariablePressure(count, pressureAt)) {
+        for (i in 0 until count - 1) {
+            drawLine(
+                color,
+                Offset(xAt(i), yAt(i)),
+                Offset(xAt(i + 1), yAt(i + 1)),
+                strokeWidth = StrokeSmoothing.widthFor(
+                    baseWidth, (pressureAt(i) + pressureAt(i + 1)) / 2f
+                ),
+                cap = StrokeCap.Round
+            )
+        }
+        return
+    }
+    val path = Path()
+    StrokeSmoothing.feed(count, xAt, yAt, ComposePathSink(path))
+    drawPath(
+        path, color,
+        style = Stroke(width = baseWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    )
+}
+
+/**
+ * Dibuja las anotaciones sobre el fotograma. Todo el estado observable se lee
+ * DENTRO del bloque de dibujo del Canvas: añadir un punto al trazo no recompone,
+ * solo redibuja (clave para 60+ fps con un lápiz que muestrea a cientos de Hz).
  */
 @Composable
 fun AnnotationCanvas(
@@ -41,8 +95,6 @@ fun AnnotationCanvas(
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
-    val annotations = controller.annotations
-    val current = controller.current.value
     val scale = imageRectInView.width / sourceBitmap.width
 
     // Una única versión pixelada de TODA la imagen, calculada una vez. Antes se
@@ -60,8 +112,12 @@ fun AnnotationCanvas(
     }
 
     Canvas(modifier = modifier.fillMaxSize()) {
-        fun Pt.toView(): Offset =
-            Offset(imageRectInView.left + x * scale, imageRectInView.top + y * scale)
+        // Suscribe el DIBUJADO (no la composición) a cada muestra del trazo vivo.
+        val version = controller.strokeVersion.intValue
+
+        fun vx(x: Float) = imageRectInView.left + x * scale
+        fun vy(y: Float) = imageRectInView.top + y * scale
+        fun Pt.toView(): Offset = Offset(vx(x), vy(y))
 
         fun strokeOf(a: Annotation) = Stroke(
             width = a.strokeWidth * scale,
@@ -88,10 +144,7 @@ fun AnnotationCanvas(
                 image = small,
                 srcOffset = IntOffset(sx, sy),
                 srcSize = IntSize(sw, sh),
-                dstOffset = IntOffset(
-                    (imageRectInView.left + l * scale).toInt(),
-                    (imageRectInView.top + t * scale).toInt()
-                ),
+                dstOffset = IntOffset(vx(l.toFloat()).toInt(), vy(t.toFloat()).toInt()),
                 dstSize = IntSize((w * scale).toInt(), (h * scale).toInt()),
                 filterQuality = if (a.variant == 1) FilterQuality.Low else FilterQuality.None
             )
@@ -123,15 +176,12 @@ fun AnnotationCanvas(
                     drawLine(color, end, h2.toView(), strokeWidth = stroke, cap = StrokeCap.Round)
                 }
                 AnnotationType.PENCIL, AnnotationType.HIGHLIGHT -> {
-                    if (a.points.size < 2) return
-                    val path = Path()
-                    val first = a.points.first().toView()
-                    path.moveTo(first.x, first.y)
-                    for (i in 1 until a.points.size) {
-                        val p = a.points[i].toView()
-                        path.lineTo(p.x, p.y)
-                    }
-                    drawPath(path, Color(a.color), style = strokeOf(a))
+                    val pts = a.points
+                    drawFreehand(
+                        pts.size,
+                        { vx(pts[it].x) }, { vy(pts[it].y) }, { pts[it].p },
+                        Color(a.color), a.strokeWidth * scale
+                    )
                 }
                 AnnotationType.MOSAIC -> drawMosaic(a)
                 AnnotationType.TEXT -> {
@@ -146,11 +196,82 @@ fun AnnotationCanvas(
                         )
                     )
                 }
+                AnnotationType.POLYLINE -> {
+                    val pts = a.points
+                    val color = Color(a.color)
+                    val width = a.strokeWidth * scale
+                    for (i in 0 until pts.size - 1) {
+                        drawLine(
+                            color, pts[i].toView(), pts[i + 1].toView(),
+                            strokeWidth = width, cap = StrokeCap.Round
+                        )
+                    }
+                }
+                AnnotationType.SERIAL -> {
+                    val center = a.points[0].toView()
+                    val radius = a.strokeWidth * scale
+                    drawCircle(Color(a.color), radius, center)
+                    val layout = textMeasurer.measure(
+                        a.text.orEmpty(),
+                        TextStyle(
+                            color = Color(AnnotationGeometry.contrastingTextColor(a.color)),
+                            fontSize = (radius * 1.1f).toSp()
+                        )
+                    )
+                    drawText(
+                        layout,
+                        topLeft = Offset(
+                            center.x - layout.size.width / 2f,
+                            center.y - layout.size.height / 2f
+                        )
+                    )
+                }
+                AnnotationType.SPOTLIGHT -> {
+                    val r = AnnotationGeometry.rectFrom(a.points[0], a.points[1])
+                    val tl = Pt(r[0], r[1]).toView()
+                    val br = Pt(r[2], r[3]).toView()
+                    val dim = Color.Black.copy(alpha = 0.6f)
+                    // Cuatro bandas alrededor del hueco: más barato y más nítido
+                    // que recortar una capa con un xfermode.
+                    drawRect(dim, Offset.Zero, Size(size.width, tl.y.coerceAtLeast(0f)))
+                    drawRect(
+                        dim, Offset(0f, br.y),
+                        Size(size.width, (size.height - br.y).coerceAtLeast(0f))
+                    )
+                    val bandH = (br.y - tl.y).coerceAtLeast(0f)
+                    drawRect(dim, Offset(0f, tl.y), Size(tl.x.coerceAtLeast(0f), bandH))
+                    drawRect(
+                        dim, Offset(br.x, tl.y),
+                        Size((size.width - br.x).coerceAtLeast(0f), bandH)
+                    )
+                }
                 AnnotationType.ERASER -> Unit
             }
         }
 
-        annotations.forEach { drawAnnotation(it) }
-        current?.let { drawAnnotation(it) }
+        // El foco va siempre el último: oscurece lo que hay debajo, incluidas
+        // las demás anotaciones.
+        controller.annotations.forEach {
+            if (it.type != AnnotationType.SPOTLIGHT) drawAnnotation(it)
+        }
+        controller.current.value?.let { if (it.type != AnnotationType.SPOTLIGHT) drawAnnotation(it) }
+        controller.annotations.forEach {
+            if (it.type == AnnotationType.SPOTLIGHT) drawAnnotation(it)
+        }
+        controller.current.value?.let { if (it.type == AnnotationType.SPOTLIGHT) drawAnnotation(it) }
+
+        // Trazo vivo: los puntos salen del búfer plano, no de una lista.
+        controller.liveTemplate.value?.let { live ->
+            val buf = controller.liveStroke
+            @Suppress("UNUSED_EXPRESSION") version
+            drawFreehand(
+                buf.size,
+                { vx(buf.x(it)) }, { vy(buf.y(it)) }, { buf.pressure(it) },
+                // El borrador no deja marca, pero mientras se arrastra hay que ver
+                // por dónde va o se borra a ciegas.
+                if (live.type == AnnotationType.ERASER) Color(0x66FFFFFF) else Color(live.color),
+                live.strokeWidth * scale
+            )
+        }
     }
 }
