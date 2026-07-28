@@ -12,6 +12,8 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 
 **Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 47 tests
 
+[**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
+
 ---
 
 ## Índice
@@ -157,12 +159,13 @@ los ajustes:
 
 ## Instalación
 
-1. Descarga el APK (`app-debug.apk`) desde las *Releases* o compílalo tú.
+1. Descarga el APK desde la [última versión](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
+   (o compílalo tú, más abajo).
 2. Permite la instalación de orígenes desconocidos en tu navegador o gestor de archivos.
 3. Abre PixPin y concede los permisos que pide el onboarding.
 4. Pulsa **Comenzar**: aparece la bola flotante.
 
-Requiere **Android 10 (API 29) o superior**.
+Requiere **Android 10 (API 29) o superior**. Probado en Android 10, 12 y 15/16.
 
 ---
 
