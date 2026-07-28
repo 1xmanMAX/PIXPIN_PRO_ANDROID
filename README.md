@@ -10,7 +10,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 > port de su código, sino una implementación propia en Kotlin de las funciones que me
 > resultan útiles en el móvil. Se instala por APK, no está en Google Play.
 
-**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 107 tests
+**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 109 tests
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
 
@@ -232,7 +232,7 @@ Requiere **Android 10 (API 29) o superior**. Probado en Android 10, 12 y 15/16.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
 
 ./gradlew assembleDebug        # APK de depuración
-./gradlew testDebugUnitTest    # 107 tests unitarios
+./gradlew testDebugUnitTest    # 109 tests unitarios
 ./gradlew lintDebug            # análisis estático
 ```
 

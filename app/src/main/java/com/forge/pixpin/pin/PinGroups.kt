@@ -54,6 +54,20 @@ object PinGroups {
         return minimizedIds.filterNot { it == visible }.toSet()
     }
 
+    /**
+     * Disposición del grupo respecto al pin que va a enseñar la burbuja.
+     *
+     * Se apunta al minimizar y se aplica al restaurar. Sin esto, cada miembro
+     * volvía a donde estaba antes de encogerse mientras que la burbuja sí se
+     * había movido: al desplegar, el grupo aparecía deshecho.
+     */
+    fun offsetsFrom(
+        positions: Map<String, Pair<Int, Int>>,
+        ownerX: Int,
+        ownerY: Int
+    ): Map<String, Pair<Int, Int>> =
+        positions.mapValues { (_, p) -> (p.first - ownerX) to (p.second - ownerY) }
+
     /** Marca (o desmarca, con [groupId] nulo) la pertenencia de varios pines. */
     fun assign(pins: List<PinState>, ids: Set<String>, groupId: String?): List<PinState> =
         pins.map { if (it.id in ids) it.copy(groupId = groupId) else it }

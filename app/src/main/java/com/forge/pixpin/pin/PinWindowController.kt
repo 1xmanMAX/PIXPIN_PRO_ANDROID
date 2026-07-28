@@ -69,6 +69,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -122,6 +124,9 @@ class PinWindowController(
         fun onPinClosed(controller: PinWindowController)
         fun onPinDestroyed(controller: PinWindowController)
         fun onPinSaveRequested(controller: PinWindowController)
+
+        /** Copiar al portapapeles, horneando lo dibujado encima. */
+        fun onPinCopyRequested(controller: PinWindowController) {}
 
         /** Se acaba de minimizar: el gestor decide dónde aparcar la burbuja. */
         fun onPinMinimized(controller: PinWindowController)
@@ -179,6 +184,15 @@ class PinWindowController(
     private var alphaStart = 1f
     private var restoreX = initialState.x
     private var restoreY = initialState.y
+    private var preMinimizeX = initialState.x
+    private var preMinimizeY = initialState.y
+
+    /** Dónde estaba el pin justo antes de encogerse en burbuja. */
+    val positionBeforeMinimize: Pair<Int, Int> get() = preMinimizeX to preMinimizeY
+
+    /** Posición actual de la ventana. */
+    val position: Pair<Int, Int>
+        get() = (lp?.x ?: pin.value.x) to (lp?.y ?: pin.value.y)
     private var scaleStartW = 1
     private var scaleStartH = 1
     private var focusRelX = 0.5f
@@ -200,9 +214,16 @@ class PinWindowController(
     private var naturalW = 0
     private var naturalH = 0
 
-    /** Dónde y cuánto ocupa la imagen dentro de la ventana, medido de verdad. */
-    private var imageOrigin = Offset.Zero
-    private var imageSize = IntSize.Zero
+    /**
+     * Dónde y cuánto ocupa la imagen dentro de la ventana, medido de verdad.
+     *
+     * Tiene que ser ESTADO, no un campo normal: al escalar, la ventana cambia
+     * de tamaño con una nueva medida y disposición, pero sin recomponer nada.
+     * Guardado en un campo suelto, la capa de anotaciones se quedaba con el
+     * tamaño de la primera vez y los trazos dejaban de seguir a la imagen.
+     */
+    private val imageOrigin = mutableStateOf(Offset.Zero)
+    private val imageSize = mutableStateOf(IntSize.Zero)
 
     private var visibleByGlobal = true
     private var collapsedInGroup = false
@@ -334,6 +355,12 @@ class PinWindowController(
         // Guarda dónde estaba el pin para devolverlo ahí al restaurarlo.
         restoreX = lp?.x ?: pin.value.x
         restoreY = lp?.y ?: pin.value.y
+        // Dónde estaba ANTES de convertirse en burbuja. Es lo que necesita el
+        // gestor para colocar a sus compañeros de grupo en su sitio relativo:
+        // más abajo, clampBubbleIntoScreen() machaca restoreX/Y con la posición
+        // de la burbuja ya recolocada.
+        preMinimizeX = restoreX
+        preMinimizeY = restoreY
         minimized.value = true
         closeActionBar()
         exitAnnotateMode()
@@ -666,14 +693,16 @@ class PinWindowController(
      */
     private fun toImagePt(x: Float, y: Float, pressure: Float): Pt? {
         val bmp = bitmapState.value ?: return null
-        if (imageSize.width <= 0 || bmp.width <= 0) return null
+        val size = imageSize.value
+        val origin = imageOrigin.value
+        if (size.width <= 0 || bmp.width <= 0) return null
         // Se descuenta dónde empieza la imagen dentro de la ventana: si no, todo
         // el trazo sale corrido justo ese margen.
-        val shownX = imageSize.width.toFloat() / bmp.width
-        val shownY = imageSize.height.toFloat() / bmp.height
+        val shownX = size.width.toFloat() / bmp.width
+        val shownY = size.height.toFloat() / bmp.height
         return Pt(
-            ((x - imageOrigin.x) / shownX).coerceIn(0f, bmp.width.toFloat()),
-            ((y - imageOrigin.y) / shownY).coerceIn(0f, bmp.height.toFloat()),
+            ((x - origin.x) / shownX).coerceIn(0f, bmp.width.toFloat()),
+            ((y - origin.y) / shownY).coerceIn(0f, bmp.height.toFloat()),
             pressure
         )
     }
@@ -682,7 +711,20 @@ class PinWindowController(
         if (annotateBar != null) return
         val p = lp ?: return
         val v = window?.view ?: return
-        val density = context.resources.displayMetrics.density
+        val metrics = context.resources.displayMetrics
+        val density = metrics.density
+        val barPx = (ANNOTATE_BAR_DP * density).toInt()
+
+        // La barra se pega al borde que menos tape del pin. Antes iba justo
+        // debajo del pin y con un pin grande se le echaba encima, dejando sin
+        // poder dibujar precisamente la parte que tapaba.
+        val pinTop = p.y
+        val pinBottom = p.y + v.height
+        val overlapBottom =
+            (minOf(pinBottom, metrics.heightPixels) - maxOf(pinTop, metrics.heightPixels - barPx))
+                .coerceAtLeast(0)
+        val overlapTop = (minOf(pinBottom, barPx) - maxOf(pinTop, 0)).coerceAtLeast(0)
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -691,16 +733,9 @@ class PinWindowController(
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            // Debajo del pin, o encima si no cabe: la barra no puede quedar fuera.
-            val metrics = context.resources.displayMetrics
-            val below = p.y + v.height + (6 * density).toInt()
-            x = p.x.coerceIn(0, (metrics.widthPixels - (200 * density).toInt()).coerceAtLeast(0))
-            y = if (below > metrics.heightPixels - (110 * density).toInt()) {
-                (p.y - (110 * density).toInt()).coerceAtLeast(0)
-            } else {
-                below
-            }
+            gravity = Gravity.CENTER_HORIZONTAL or
+                if (overlapTop < overlapBottom) Gravity.TOP else Gravity.BOTTOM
+            y = (12 * density).toInt()
         }
         val bar = OverlayComposeWindow(context) { AnnotateBarContent() }
         annotateBar = bar
@@ -761,60 +796,60 @@ class PinWindowController(
     }
 
     /**
-     * Barrita de dibujo: herramienta · color · grosor · deshacer · listo. Va en
-     * su propia ventana porque la del pin se queda con todos los toques para el
-     * trazo y ahí ningún botón llegaría a enterarse.
+     * Barrita de dibujo, pegada al borde de la pantalla que menos tape del pin.
+     *
+     * Va en su propia ventana porque la del pin se queda con TODOS los toques
+     * para el trazo, y ahí ningún botón llegaría a enterarse.
+     *
+     * Es de una sola fila a propósito: diez herramientas en fila hacían una
+     * barra larguísima que tapaba media imagen. La herramienta activa hace de
+     * botón y despliega las demás en una rejilla solo mientras eliges.
      */
     @Composable
     private fun AnnotateBarContent() {
-        // Las mismas herramientas que en la pantalla de captura, salvo el texto:
-        // escribir necesita teclado, y una ventana overlay sin foco no lo tiene.
-        val tools = listOf(
-            AnnotationType.PENCIL to Icons.Filled.Gesture,
-            AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
-            AnnotationType.ARROW to Icons.Filled.NorthEast,
-            AnnotationType.RECT to Icons.Filled.CropSquare,
-            AnnotationType.ELLIPSE to Icons.Filled.RadioButtonUnchecked,
-            AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
-            AnnotationType.POLYLINE to Icons.Filled.Timeline,
-            AnnotationType.SPOTLIGHT to Icons.Filled.CenterFocusStrong,
-            AnnotationType.MOSAIC to Icons.Filled.BlurOn,
-            AnnotationType.ERASER to Icons.Filled.AutoFixNormal
-        )
-        Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 6.dp) {
-            Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    tools.forEach { (type, icon) ->
-                        val selected = annotator.tool.value == type
-                        IconButton(onClick = { annotator.selectTool(type) }) {
-                            Icon(
-                                icon,
-                                contentDescription = type.name,
-                                tint = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    if (annotator.polylineOpen) {
-                        IconButton(onClick = { annotator.finishPolyline() }) {
-                            Icon(
-                                Icons.Filled.CheckCircle,
-                                contentDescription = context.getString(R.string.cd_done),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+        var toolsOpen by remember { mutableStateOf(false) }
+        val current = annotator.tool.value
+        val currentIcon = ANNOTATE_TOOLS.firstOrNull { it.first == current }?.second
+            ?: Icons.Filled.Gesture
+
+        Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp) {
+            Column(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (toolsOpen) {
+                    ANNOTATE_TOOLS.chunked(5).forEach { row ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            row.forEach { (type, icon) ->
+                                IconButton(onClick = {
+                                    annotator.selectTool(type)
+                                    toolsOpen = false
+                                }) {
+                                    Icon(
+                                        icon,
+                                        contentDescription = type.name,
+                                        tint = if (current == type) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { toolsOpen = !toolsOpen }) {
+                        Icon(
+                            currentIcon,
+                            contentDescription = context.getString(R.string.cd_tools),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     PIN_PALETTE.forEach { argb ->
                         val selected = annotator.color.value == argb
                         Box(
                             Modifier
-                                .padding(3.dp)
-                                .size(if (selected) 24.dp else 20.dp)
+                                .padding(2.dp)
+                                .size(if (selected) 22.dp else 18.dp)
                                 .background(Color(argb), CircleShape)
                                 .border(
                                     width = if (selected) 3.dp else 1.dp,
@@ -838,6 +873,16 @@ class PinWindowController(
                                 .size((annotator.strokeWidth.value / 2 + 4).dp)
                                 .background(MaterialTheme.colorScheme.onSurface, CircleShape)
                         )
+                    }
+                    // Solo mientras haya una polilínea a medias: es su forma de cerrarse.
+                    if (annotator.polylineOpen) {
+                        IconButton(onClick = { annotator.finishPolyline() }) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                contentDescription = context.getString(R.string.cd_done),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                     IconButton(
                         onClick = { annotator.undo() },
@@ -865,15 +910,15 @@ class PinWindowController(
         toast(context.getString(R.string.copied_text))
     }
 
-    /** Un toque en la imagen la deja en el portapapeles, igual que el texto. */
+    /**
+     * Un toque en la imagen la deja en el portapapeles, igual que el texto.
+     *
+     * Va por el gestor porque hay que hornear las anotaciones y escribir un
+     * archivo, y eso no se hace en el hilo de UI.
+     */
     private fun copyImage(s: PinState) {
-        val path = s.imagePath ?: return
-        val uri = runCatching {
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
-        }.getOrNull() ?: return
-        val clip = ClipData.newUri(context.contentResolver, "PixPin", uri)
-        clipboard()?.setPrimaryClip(clip)
-        toast(context.getString(R.string.copied_image))
+        if (s.imagePath == null) return
+        callbacks.onPinCopyRequested(this)
     }
 
     private fun copyColor(argb: Int) {
@@ -987,8 +1032,8 @@ class PinWindowController(
                 // calcularlo por separado en dos sitios era lo que hacía que el
                 // trazo saliera desplazado del dedo.
                 .onGloballyPositioned { coords ->
-                    imageOrigin = coords.positionInRoot()
-                    imageSize = coords.size
+                    imageOrigin.value = coords.positionInRoot()
+                    imageSize.value = coords.size
                 }
         ) {
             Image(
@@ -998,13 +1043,19 @@ class PinWindowController(
                 modifier = Modifier.fillMaxSize()
             )
             if (annotating.value || annotator.annotations.isNotEmpty()) {
-                val size = imageSize
+                // Los trazos se dibujan sobre el MISMO tamaño con el que se
+                // dimensiona la ventana (naturalW × escala, con el mismo
+                // truncado), y leyendo la misma escala. Así imagen y dibujo
+                // cambian de tamaño en el mismo fotograma: midiendo el
+                // resultado ya dispuesto, el dibujo iría siempre uno por
+                // detrás y se vería perseguir a la imagen al pellizcar.
+                val zoom by scale
+                val drawW = (naturalW * zoom).toInt().toFloat()
+                val drawH = (naturalH * zoom).toInt().toFloat()
                 AnnotationCanvas(
                     controller = annotator,
                     sourceBitmap = bmp,
-                    imageRectInView = Rect(
-                        0f, 0f, size.width.toFloat(), size.height.toFloat()
-                    ),
+                    imageRectInView = Rect(0f, 0f, drawW, drawH),
                     modifier = Modifier.matchParentSize()
                 )
             }
@@ -1125,3 +1176,23 @@ private val PIN_PALETTE = listOf(
     0xFFF44336.toInt(), 0xFFFFEB3B.toInt(), 0xFF4CAF50.toInt(),
     0xFF2196F3.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt()
 )
+
+/**
+ * Herramientas del pin: las mismas de la pantalla de captura salvo el texto,
+ * que necesita teclado, y una ventana overlay sin foco no lo tiene.
+ */
+private val ANNOTATE_TOOLS = listOf(
+    AnnotationType.PENCIL to Icons.Filled.Gesture,
+    AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
+    AnnotationType.ARROW to Icons.Filled.NorthEast,
+    AnnotationType.RECT to Icons.Filled.CropSquare,
+    AnnotationType.ELLIPSE to Icons.Filled.RadioButtonUnchecked,
+    AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
+    AnnotationType.POLYLINE to Icons.Filled.Timeline,
+    AnnotationType.SPOTLIGHT to Icons.Filled.CenterFocusStrong,
+    AnnotationType.MOSAIC to Icons.Filled.BlurOn,
+    AnnotationType.ERASER to Icons.Filled.AutoFixNormal
+)
+
+/** Alto aproximado de la barrita, para decidir a qué borde se pega. */
+private const val ANNOTATE_BAR_DP = 76

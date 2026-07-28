@@ -100,6 +100,31 @@ class PinGroupsTest {
         assertTrue(PinGroups.collapsedIds(listOf("a")).isEmpty())
     }
 
+    /**
+     * Regresión: al minimizar un grupo, mover la burbuja y volver a desplegarlo,
+     * solo el pin de la burbuja aparecía en su sitio nuevo y el resto se quedaba
+     * donde estaba, deshaciendo la disposición del grupo.
+     */
+    @Test
+    fun `el grupo conserva su forma tras moverlo en burbuja`() {
+        // A en (100,100) enseña la burbuja; B y C están alrededor.
+        val posiciones = mapOf("b" to (160 to 100), "c" to (100 to 260))
+        val offsets = PinGroups.offsetsFrom(posiciones, ownerX = 100, ownerY = 100)
+
+        // La burbuja acaba en (700, 900) tras arrastrarla.
+        val sitios = PinGroups.followPositions(offsets, 700, 900)
+
+        assertEquals("B sigue 60 px a la derecha de A", 760 to 900, sitios["b"])
+        assertEquals("C sigue 160 px por debajo de A", 700 to 1060, sitios["c"])
+    }
+
+    @Test
+    fun `sin mover la burbuja el grupo vuelve donde estaba`() {
+        val posiciones = mapOf("b" to (160 to 100))
+        val offsets = PinGroups.offsetsFrom(posiciones, 100, 100)
+        assertEquals(160 to 100, PinGroups.followPositions(offsets, 100, 100)["b"])
+    }
+
     @Test
     fun `el color del grupo es estable y valido`() {
         val id = "3f2b91a0-0000-4444-8888-aaaabbbbcccc"

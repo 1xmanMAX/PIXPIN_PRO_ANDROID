@@ -127,16 +127,32 @@ class OverlayManager(private val app: PixPinApp) {
             val group = controller.groupId ?: return
             if (syncingGroup) return
             syncingGroup = true
-            pins.values.filter { it.groupId == group && it !== controller }.forEach { other ->
-                if (minimized) {
-                    other.minimize(dock = false)
-                } else {
+            val others = pins.values.filter { it.groupId == group && it !== controller }
+
+            if (minimized) {
+                // Se apunta la disposición del grupo respecto al pin que va a
+                // enseñar la burbuja. Si no, al restaurar cada uno volvía a
+                // donde estaba de antes mientras que la burbuja sí se había
+                // movido: el grupo se deshacía.
+                val (ox, oy) = controller.positionBeforeMinimize
+                groupOffsets[group] = PinGroups.offsetsFrom(
+                    others.associate { it.id to it.position }, ox, oy
+                )
+                others.forEach { it.minimize(dock = false) }
+                collapseGroupBubbles(owner = controller.id)
+            } else {
+                val offsets = groupOffsets.remove(group).orEmpty()
+                val (ox, oy) = controller.position
+                // Cada uno vuelve a su sitio RELATIVO a donde haya acabado la
+                // burbuja, así que mover el grupo minimizado mueve el grupo
+                // entero y la disposición se conserva.
+                val places = PinGroups.followPositions(offsets, ox, oy)
+                others.forEach { other ->
                     other.setCollapsedInGroup(false)
                     other.restore()
+                    places[other.id]?.let { (x, y) -> other.moveTo(x, y) }
                 }
             }
-            // La burbuja que queda es la del pin con el que ha actuado el usuario.
-            if (minimized) collapseGroupBubbles(owner = controller.id)
             syncingGroup = false
             refreshPinList()
         }
@@ -169,6 +185,16 @@ class OverlayManager(private val app: PixPinApp) {
                     com.forge.pixpin.capture.PinExporter.savePin(app, state)
                 }
                 toast(if (ok) R.string.saved_to_gallery else R.string.capture_error)
+            }
+        }
+
+        override fun onPinCopyRequested(controller: PinWindowController) {
+            val state = controller.snapshot()
+            scope.launch {
+                val ok = withContext(Dispatchers.IO) {
+                    com.forge.pixpin.capture.PinExporter.copyPin(app, state)
+                }
+                toast(if (ok) R.string.copied_image else R.string.capture_error)
             }
         }
     }
@@ -354,6 +380,13 @@ class OverlayManager(private val app: PixPinApp) {
 
     /** Evita que la propagación a los compañeros de grupo se dispare a sí misma. */
     private var syncingGroup = false
+
+    /**
+     * Disposición de cada grupo minimizado: dónde estaba cada miembro respecto
+     * al que enseña la burbuja. Es lo que permite mover el grupo en burbuja y
+     * que al desplegarlo mantenga su forma.
+     */
+    private val groupOffsets = mutableMapOf<String, Map<String, Pair<Int, Int>>>()
 
     /**
      * Deja una sola burbuja por grupo minimizado. Hace falta al restaurar los

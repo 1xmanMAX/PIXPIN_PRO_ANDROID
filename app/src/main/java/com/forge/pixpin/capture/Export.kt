@@ -85,6 +85,18 @@ object PinExporter {
         return uri != null
     }
 
+    /**
+     * Copia el pin al portapapeles. Pasa por [render], así que lo dibujado
+     * encima va incluido: antes se copiaba el archivo original tal cual y las
+     * anotaciones se quedaban por el camino.
+     */
+    fun copyPin(context: Context, state: com.forge.pixpin.pin.PinState): Boolean {
+        val bitmap = render(state) ?: return false
+        val ok = Export.copyToClipboard(context, bitmap)
+        if (!bitmap.isRecycled) bitmap.recycle()
+        return ok
+    }
+
     private fun render(state: com.forge.pixpin.pin.PinState): Bitmap? = when (state.type) {
         com.forge.pixpin.pin.PinType.IMAGE ->
             state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }?.let { bmp ->
