@@ -58,6 +58,16 @@
     <string name="capture_hint">Arrastra para recortar · toca para la pantalla entera</string>
 
     <!-- Pines -->
+    <string name="search_pins">Buscar pines…</string>
+    <string name="saved_pins_section">⭐ Guardados</string>
+    <string name="pin_type_text_plural">Textos</string>
+    <string name="pin_type_color_plural">Colores</string>
+    <string name="pin_type_file_plural">Archivos</string>
+    <string name="pin_saved">Pin guardado</string>
+    <string name="pin_unsaved">Pin desmarcado</string>
+    <string name="cd_bookmark">Guardar pin</string>
+    <string name="cd_unbookmark">Desmarcar pin</string>
+    <string name="cd_restore_pin">Mostrar pin</string>
     <string name="nothing_to_pin">No hay nada que pinear en el portapapeles</string>
     <string name="pin_image_error">No se pudo leer el contenido del portapapeles</string>
     <string name="pins_hidden">Pines ocultos</string>

@@ -16,6 +16,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +48,8 @@ import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DoNotTouch
@@ -68,12 +71,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -130,6 +135,9 @@ class PinWindowController(
 
         /** Se acaba de minimizar: el gestor decide dónde aparcar la burbuja. */
         fun onPinMinimized(controller: PinWindowController)
+
+        /** El usuario marcó/desmarcó el pin como guardado. */
+        fun onPinToggleSave(controller: PinWindowController)
 
         /**
          * Arrastre en curso. El gestor es quien sabe qué pines forman grupo, así
@@ -229,6 +237,7 @@ class PinWindowController(
     private var collapsedInGroup = false
 
     val id: String get() = pin.value.id
+    val isPinned: Boolean get() = pin.value.isPinned
     val isShowing: Boolean get() = window != null
 
     /** Estado completo actual, incluidos posición, escala y opacidad reales. */
@@ -342,6 +351,16 @@ class PinWindowController(
     fun setGroup(newGroupId: String?) {
         if (pin.value.groupId == newGroupId) return
         pin.value = pin.value.copy(groupId = newGroupId)
+        callbacks.onPinChanged(this)
+    }
+
+    /** Marca/desmarca el pin como guardado. */
+    fun togglePinned() {
+        val wasPinned = pin.value.isPinned
+        pin.value = pin.value.copy(
+            isPinned = !wasPinned,
+            savedCategory = if (wasPinned) null else "other"
+        )
         callbacks.onPinChanged(this)
     }
 
@@ -479,18 +498,18 @@ class PinWindowController(
             scaleStartH = (v?.height ?: 0).coerceAtLeast(1)
             val metrics = context.resources.displayMetrics
             zoomMax = if (naturalW > 0) {
-                // Imagen: la ventana tiene tamaño explícito, así que puede pasar
-                // del borde de la pantalla y se deja acercar bastante más para
-                // leer letra pequeña. Nunca se pierde: keepReachable() se
-                // encarga de que siempre quede un trozo agarrable.
-                PinZoom.maxScaleFor(
+                // Imagen o texto con tamaño explícito: puede pasar del borde de
+                // la pantalla para acercarse y leer. Las imágenes usan mayor
+                // overzoom (3×); los textos se limitan a 5×.
+                val max = PinZoom.maxScaleFor(
                     realW = naturalW, realH = naturalH, currentScale = 1f,
                     screenW = metrics.widthPixels, screenH = metrics.heightPixels,
-                    overzoom = PinZoom.IMAGE_OVERZOOM
+                    overzoom = if (pin.value.type == PinType.IMAGE) PinZoom.IMAGE_OVERZOOM else 1f
                 )
+                if (pin.value.type == PinType.TEXT) max.coerceAtMost(5f) else max
             } else {
-                // Texto, color y archivo siguen midiéndose solos, y ahí la
-                // ventana no puede pasar de la pantalla: el tope es llenarla.
+                // Texto, color y archivo sin tamaño explícito se miden solos,
+                // y ahí la ventana no puede pasar de la pantalla: el tope es llenarla.
                 PinZoom.maxScaleFor(
                     realW = scaleStartW, realH = scaleStartH, currentScale = scaleStart,
                     screenW = metrics.widthPixels, screenH = metrics.heightPixels
@@ -781,6 +800,14 @@ class PinWindowController(
                         )
                     }
                 }
+                IconButton(onClick = { callbacks.onPinToggleSave(this@PinWindowController) }) {
+                    Icon(
+                        if (s.isPinned) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
+                        contentDescription = context.getString(R.string.cd_bookmark),
+                        tint = if (s.isPinned) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                }
                 IconButton(onClick = { close() }) {
                     Icon(Icons.Filled.Close, contentDescription = context.getString(R.string.cd_close))
                 }
@@ -976,7 +1003,13 @@ class PinWindowController(
     private fun PinBodyContent(s: PinState) {
         when (s.type) {
             PinType.IMAGE -> ImagePinBody(s)
-            PinType.TEXT -> TextPinBody(s)
+            PinType.TEXT -> TextPinBody(s) { w, h ->
+                if (naturalW != w || naturalH != h) {
+                    naturalW = w
+                    naturalH = h
+                    applyContentSize()
+                }
+            }
             PinType.COLOR -> ColorPinBody(s)
             PinType.FILE -> FilePinBody(s)
         }
@@ -1082,19 +1115,55 @@ class PinWindowController(
     }
 
     @Composable
-    private fun TextPinBody(s: PinState) {
+    private fun TextPinBody(s: PinState, onSizeChanged: (Int, Int) -> Unit) {
         val zoom by scale
-        Text(
-            text = s.text.orEmpty(),
-            fontSize = (14f * zoom).sp,
-            lineHeight = (20f * zoom).sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 40,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .widthIn(max = 330.dp)
-                .padding(14.dp)
-        )
+        val textBoxWidthDp = s.textBoxWidth.dp
+        var textHeightPx by remember { mutableIntStateOf(0) }
+
+        Box(
+            Modifier.fillMaxSize()
+        ) {
+            Text(
+                text = s.text.orEmpty(),
+                fontSize = (14f * zoom).sp,
+                lineHeight = (20f * zoom).sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 40,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .widthIn(max = textBoxWidthDp)
+                    .padding(14.dp)
+                    .onGloballyPositioned { coords ->
+                        val newHeight = coords.size.height
+                        if (newHeight != textHeightPx) {
+                            textHeightPx = newHeight
+                            onSizeChanged(s.textBoxWidth, newHeight)
+                        }
+                    }
+            )
+
+            val handleSize = 14.dp
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(2.dp)
+                    .size(handleSize)
+                    .background(Color.White, CircleShape)
+                    .border(1.5.dp, Color.Gray, CircleShape)
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { change, dragAmount ->
+                                val dragDp = dragAmount / density
+                                val newWidth = (s.textBoxWidth + dragDp).toInt()
+                                    .coerceIn(100, 600)
+                                if (newWidth != s.textBoxWidth) {
+                                    pin.value = pin.value.copy(textBoxWidth = newWidth)
+                                }
+                            }
+                        )
+                    }
+            )
+        }
     }
 
     @Composable

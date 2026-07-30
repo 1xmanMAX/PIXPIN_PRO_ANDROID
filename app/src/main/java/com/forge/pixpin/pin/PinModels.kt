@@ -29,5 +29,11 @@ data class PinState(
      * se ve igual de bien con el pin diminuto o a pantalla completa, y sigue
      * siendo re-editable. Vacío en los pines que no son de imagen.
      */
-    val annotations: List<Annotation> = emptyList()
+    val annotations: List<Annotation> = emptyList(),
+    /** Marca el pin como guardado: sobrevive al cierre y se muestra en la lista de guardados. */
+    val isPinned: Boolean = false,
+    /** Categoría del pin guardado: null si no está guardado, "credential", "code", "document", "photo", "other". */
+    val savedCategory: String? = null,
+    /** Ancho del cuadro de texto en dp (solo para TEXT pins). */
+    val textBoxWidth: Int = 330
 )
