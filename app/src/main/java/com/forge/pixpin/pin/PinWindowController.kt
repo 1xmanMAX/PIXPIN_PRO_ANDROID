@@ -982,17 +982,21 @@ class PinWindowController(
     private fun PinRoot() {
         val s by pin
         val small by minimized
+        LaunchedEffect(s.type) {
+            if (s.type == PinType.TEXT && naturalW == 0) {
+                val screenW = context.resources.displayMetrics.widthPixels
+                naturalW = (screenW * 0.5f).toInt().coerceAtLeast(1)
+                naturalH = 120
+                applyContentSize()
+            }
+        }
         Surface(
             shape = if (small) CircleShape else RoundedCornerShape(12.dp),
             shadowElevation = 8.dp,
-            // El borde dice de un vistazo si los toques lo atraviesan o, si no,
-            // a qué grupo pertenece.
             border = when {
                 s.clickThrough -> BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
                 else -> s.groupId?.let { BorderStroke(2.dp, Color(PinGroups.colorFor(it))) }
             },
-            // Se lee dentro del bloque de graphicsLayer: cambiar la opacidad
-            // solo actualiza la capa, no recompone ni vuelve a medir nada.
             modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }
         ) {
             if (small) BubbleContent(s) else PinBodyContent(s)
@@ -1003,13 +1007,7 @@ class PinWindowController(
     private fun PinBodyContent(s: PinState) {
         when (s.type) {
             PinType.IMAGE -> ImagePinBody(s)
-            PinType.TEXT -> TextPinBody(s) { w, h ->
-                if (naturalW != w || naturalH != h) {
-                    naturalW = w
-                    naturalH = h
-                    applyContentSize()
-                }
-            }
+            PinType.TEXT -> TextPinBody(s)
             PinType.COLOR -> ColorPinBody(s)
             PinType.FILE -> FilePinBody(s)
         }
@@ -1115,11 +1113,8 @@ class PinWindowController(
     }
 
     @Composable
-    private fun TextPinBody(s: PinState, onSizeChanged: (Int, Int) -> Unit) {
+    private fun TextPinBody(s: PinState) {
         val zoom by scale
-        val textBoxWidthDp = s.textBoxWidth.dp
-        var textHeightPx by remember { mutableIntStateOf(0) }
-
         Box(
             Modifier.fillMaxSize()
         ) {
@@ -1131,31 +1126,23 @@ class PinWindowController(
                 maxLines = 40,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .widthIn(max = textBoxWidthDp)
+                    .widthIn(max = s.textBoxWidth.dp)
                     .padding(14.dp)
-                    .onGloballyPositioned { coords ->
-                        val newHeight = coords.size.height
-                        if (newHeight != textHeightPx) {
-                            textHeightPx = newHeight
-                            onSizeChanged(s.textBoxWidth, newHeight)
-                        }
-                    }
             )
 
-            val handleSize = 14.dp
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(2.dp)
-                    .size(handleSize)
+                    .padding(4.dp)
+                    .size(48.dp)
                     .background(Color.White, CircleShape)
-                    .border(1.5.dp, Color.Gray, CircleShape)
+                    .border(2.dp, Color.Gray, CircleShape)
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onHorizontalDrag = { change, dragAmount ->
                                 val dragDp = dragAmount / density
                                 val newWidth = (s.textBoxWidth + dragDp).toInt()
-                                    .coerceIn(100, 600)
+                                    .coerceIn(120, 500)
                                 if (newWidth != s.textBoxWidth) {
                                     pin.value = pin.value.copy(textBoxWidth = newWidth)
                                 }

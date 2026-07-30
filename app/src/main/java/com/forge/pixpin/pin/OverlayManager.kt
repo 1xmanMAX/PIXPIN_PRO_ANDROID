@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,9 +48,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
@@ -304,9 +310,21 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     /** Crea un pin de imagen (desde la captura o desde un archivo importado). */
-    fun pinImage(imagePath: String) {
+    fun pinImage(imagePath: String, x: Int? = null, y: Int? = null, scale: Float? = null) {
         if (!Settings.canDrawOverlays(app)) return
-        createPin(newPin(PinType.IMAGE).copy(imagePath = imagePath))
+        val state = if (x != null && y != null && scale != null) {
+            PinState(
+                id = UUID.randomUUID().toString(),
+                type = PinType.IMAGE,
+                imagePath = imagePath,
+                x = x,
+                y = y,
+                scale = scale
+            )
+        } else {
+            newPin(PinType.IMAGE).copy(imagePath = imagePath)
+        }
+        createPin(state)
     }
 
     /** Crea un pin de archivo (documento compartido a PixPin). */
@@ -509,6 +527,8 @@ class OverlayManager(private val app: PixPinApp) {
         val items = listState.value
         val savedItems = savedPinsState.value
         val query = searchQuery.value
+        var renamingPin by remember { mutableStateOf<String?>(null) }
+        var newName by remember { mutableStateOf("") }
 
         // Filtrar por búsqueda
         val filteredItems = if (query.isBlank()) items else items.filter { matchesSearch(it, query) }
@@ -569,7 +589,16 @@ class OverlayManager(private val app: PixPinApp) {
                                 count = filteredSaved.size,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            filteredSaved.forEach { pin -> SavedPinRow(pin) }
+                            filteredSaved.forEach { pin ->
+                                SavedPinRow(pin) {
+                                    renamingPin = pin.id
+                                    newName = when (pin.type) {
+                                        PinType.TEXT -> pin.text ?: ""
+                                        PinType.FILE -> pin.fileName ?: ""
+                                        else -> ""
+                                    }
+                                }
+                            }
                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         }
 
@@ -587,13 +616,74 @@ class OverlayManager(private val app: PixPinApp) {
                                     count = groupItems.size,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                groupItems.forEach { pin -> PinListRow(pin) }
+                                groupItems.forEach { pin ->
+                                    PinListRow(pin) {
+                                        renamingPin = pin.id
+                                        newName = when (pin.type) {
+                                            PinType.TEXT -> pin.text ?: ""
+                                            PinType.FILE -> pin.fileName ?: ""
+                                            else -> ""
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     GroupActions(filteredItems)
                 }
             }
+        }
+
+        renamingPin?.let { pinId ->
+            AlertDialog(
+                onDismissRequest = { renamingPin = null },
+                title = { Text("Rename") },
+                text = {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        // Intenta renombrar en pines activos
+                        val activePin = pins[pinId]
+                        if (activePin != null) {
+                            val updated = when (activePin.snapshot().type) {
+                                PinType.TEXT -> activePin.snapshot().copy(text = newName)
+                                PinType.FILE -> activePin.snapshot().copy(fileName = newName)
+                                else -> activePin.snapshot()
+                            }
+                            val newController = PinWindowController(app, updated, callbacks)
+                            pins[pinId] = newController
+                            scope.launch(Dispatchers.IO) { repo.savePins(pins.values.map { it.snapshot() }) }
+                        } else {
+                            // Renombrar en pines guardados (no activos)
+                            scope.launch(Dispatchers.IO) {
+                                val saved = repo.loadSavedPins().map { pin ->
+                                    if (pin.id == pinId) {
+                                        when (pin.type) {
+                                            PinType.TEXT -> pin.copy(text = newName)
+                                            PinType.FILE -> pin.copy(fileName = newName)
+                                            else -> pin
+                                        }
+                                    } else pin
+                                }
+                                repo.saveSavedPins(saved)
+                            }
+                        }
+                        renamingPin = null
+                        refreshPinList()
+                    }) { Text("Save") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renamingPin = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 
@@ -669,7 +759,7 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     @Composable
-    private fun PinListRow(pin: PinState) {
+    private fun PinListRow(pin: PinState, onLongPress: () -> Unit = {}) {
         val groupColor = pin.groupId?.let { Color(PinGroups.colorFor(it)) }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -680,6 +770,9 @@ class OverlayManager(private val app: PixPinApp) {
                     if (groupColor != null) Modifier.padding(start = 4.dp)
                     else Modifier
                 )
+                .pointerInput(pin.id) {
+                    detectTapGestures(onLongPress = { onLongPress() })
+                }
         ) {
             // Indicador visual de grupo: una barra de color a la izquierda
             if (groupColor != null) {
@@ -761,7 +854,7 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     @Composable
-    private fun SavedPinRow(pin: PinState) {
+    private fun SavedPinRow(pin: PinState, onLongPress: () -> Unit = {}) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -772,6 +865,9 @@ class OverlayManager(private val app: PixPinApp) {
                     RoundedCornerShape(8.dp)
                 )
                 .padding(horizontal = 4.dp)
+                .pointerInput(pin.id) {
+                    detectTapGestures(onLongPress = { onLongPress() })
+                }
         ) {
             Icon(
                 Icons.Filled.Star,

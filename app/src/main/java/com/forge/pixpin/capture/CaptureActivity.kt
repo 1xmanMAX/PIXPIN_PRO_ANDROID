@@ -439,7 +439,16 @@ fun CaptureScreen(
                                 )
                             }
                             if (path != null) {
-                                app.overlayManager.pinImage(path)
+                                val sel = selection ?: imageRect
+                                val screenW = context.resources.displayMetrics.widthPixels
+                                val defaultNaturalW = minOf(baked.width, (screenW * 0.6f).toInt()).coerceAtLeast(1)
+                                val scale = sel.width / defaultNaturalW
+                                app.overlayManager.pinImage(
+                                    path,
+                                    x = sel.left.toInt(),
+                                    y = sel.top.toInt(),
+                                    scale = scale
+                                )
                                 Toast.makeText(context, R.string.saved_to_gallery, Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, R.string.capture_error, Toast.LENGTH_SHORT).show()
