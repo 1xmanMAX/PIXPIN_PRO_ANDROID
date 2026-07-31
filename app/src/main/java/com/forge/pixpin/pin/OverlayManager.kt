@@ -9,6 +9,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,13 +38,11 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +63,7 @@ import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.clipboard.PinContent
 import com.forge.pixpin.data.PinRepository
 import com.forge.pixpin.floating.FloatingBallController
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -95,11 +95,10 @@ class OverlayManager(private val app: PixPinApp) {
     /** Lista de pines guardados (isPinned = true) para mostrar en la sección de guardados. */
     private val savedPinsState = mutableStateOf<List<PinState>>(emptyList())
 
-    /** Término de búsqueda para filtrar la lista de pines. */
-    private val searchQuery = mutableStateOf("")
-
     /** Selección de la lista de pines, para agrupar y desagrupar. */
     private val selection = mutableStateOf<Set<String>>(emptySet())
+
+    private val showingTagsFor = mutableStateOf<String?>(null)
 
     /** Posición de cada compañero de grupo al empezar el arrastre en curso. */
     private var dragAnchors: Map<String, Pair<Int, Int>> = emptyMap()
@@ -393,6 +392,12 @@ class OverlayManager(private val app: PixPinApp) {
             history.clear()
             history.addAll(loadedHistory)
             loaded.forEach { state ->
+                // No restaurar pines de imagen si la imagen ya no existe en disco
+                if (state.type == PinType.IMAGE) {
+                    if (state.imagePath == null || !withContext(Dispatchers.IO) { File(state.imagePath).exists() }) {
+                        return@forEach
+                    }
+                }
                 val controller = PinWindowController(app, state, callbacks)
                 pins[state.id] = controller
                 controller.show()
@@ -509,6 +514,26 @@ class OverlayManager(private val app: PixPinApp) {
         listWindow = null
     }
 
+    private fun assignCategory(pinId: String, category: String) {
+        runCatching {
+            val activePin = pins[pinId]
+            if (activePin != null) {
+                val updated = activePin.snapshot().copy(savedCategory = category)
+                activePin.updateState(updated)
+                scope.launch(Dispatchers.IO) { repo.savePins(pins.values.map { it.snapshot() }) }
+            } else {
+                scope.launch(Dispatchers.IO) {
+                    val saved = repo.loadSavedPins().map { pin ->
+                        if (pin.id == pinId) pin.copy(savedCategory = category) else pin
+                    }
+                    repo.saveSavedPins(saved)
+                }
+            }
+        }
+        showingTagsFor.value = null
+        refreshPinList()
+    }
+
     private fun refreshPinList() {
         listState.value = pins.values.map { it.snapshot() }
         // Carga los pines guardados del disco para la sección de guardados.
@@ -526,16 +551,9 @@ class OverlayManager(private val app: PixPinApp) {
     private fun PinListContent() {
         val items = listState.value
         val savedItems = savedPinsState.value
-        val query = searchQuery.value
-        var renamingPin by remember { mutableStateOf<String?>(null) }
-        var newName by remember { mutableStateOf("") }
-
-        // Filtrar por búsqueda
-        val filteredItems = if (query.isBlank()) items else items.filter { matchesSearch(it, query) }
-        val filteredSaved = if (query.isBlank()) savedItems else savedItems.filter { matchesSearch(it, query) }
 
         // Agrupar por tipo
-        val groupedByType: Map<PinType, List<PinState>> = filteredItems.groupBy { it.type }
+        val groupedByType: Map<PinType, List<PinState>> = items.groupBy { it.type }
         val typeOrder = listOf(PinType.IMAGE, PinType.TEXT, PinType.COLOR, PinType.FILE)
 
         Card(modifier = Modifier.width(360.dp)) {
@@ -555,19 +573,6 @@ class OverlayManager(private val app: PixPinApp) {
                     }
                 }
 
-                // Buscador
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { searchQuery.value = it },
-                    placeholder = { Text(app.getString(R.string.search_pins)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    textStyle = MaterialTheme.typography.bodySmall
-                )
-
                 if (items.isEmpty() && savedItems.isEmpty()) {
                     Text(
                         app.getString(R.string.pins_empty),
@@ -583,21 +588,14 @@ class OverlayManager(private val app: PixPinApp) {
                             .verticalScroll(rememberScrollState())
                     ) {
                         // --- Sección de pines guardados ---
-                        if (filteredSaved.isNotEmpty()) {
+                        if (savedItems.isNotEmpty()) {
                             SectionHeader(
                                 title = app.getString(R.string.saved_pins_section),
-                                count = filteredSaved.size,
+                                count = savedItems.size,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            filteredSaved.forEach { pin ->
-                                SavedPinRow(pin) {
-                                    renamingPin = pin.id
-                                    newName = when (pin.type) {
-                                        PinType.TEXT -> pin.text ?: ""
-                                        PinType.FILE -> pin.fileName ?: ""
-                                        else -> ""
-                                    }
-                                }
+                            savedItems.forEach { pin ->
+                                SavedPinRow(pin)
                             }
                             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         }
@@ -617,73 +615,14 @@ class OverlayManager(private val app: PixPinApp) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 groupItems.forEach { pin ->
-                                    PinListRow(pin) {
-                                        renamingPin = pin.id
-                                        newName = when (pin.type) {
-                                            PinType.TEXT -> pin.text ?: ""
-                                            PinType.FILE -> pin.fileName ?: ""
-                                            else -> ""
-                                        }
-                                    }
+                                    PinListRow(pin)
                                 }
                             }
                         }
                     }
-                    GroupActions(filteredItems)
+                    GroupActions(items)
                 }
             }
-        }
-
-        renamingPin?.let { pinId ->
-            AlertDialog(
-                onDismissRequest = { renamingPin = null },
-                title = { Text("Rename") },
-                text = {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        // Intenta renombrar en pines activos
-                        val activePin = pins[pinId]
-                        if (activePin != null) {
-                            val updated = when (activePin.snapshot().type) {
-                                PinType.TEXT -> activePin.snapshot().copy(text = newName)
-                                PinType.FILE -> activePin.snapshot().copy(fileName = newName)
-                                else -> activePin.snapshot()
-                            }
-                            val newController = PinWindowController(app, updated, callbacks)
-                            pins[pinId] = newController
-                            scope.launch(Dispatchers.IO) { repo.savePins(pins.values.map { it.snapshot() }) }
-                        } else {
-                            // Renombrar en pines guardados (no activos)
-                            scope.launch(Dispatchers.IO) {
-                                val saved = repo.loadSavedPins().map { pin ->
-                                    if (pin.id == pinId) {
-                                        when (pin.type) {
-                                            PinType.TEXT -> pin.copy(text = newName)
-                                            PinType.FILE -> pin.copy(fileName = newName)
-                                            else -> pin
-                                        }
-                                    } else pin
-                                }
-                                repo.saveSavedPins(saved)
-                            }
-                        }
-                        renamingPin = null
-                        refreshPinList()
-                    }) { Text("Save") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { renamingPin = null }) {
-                        Text("Cancel")
-                    }
-                }
-            )
         }
     }
 
@@ -714,16 +653,6 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.TEXT -> "📝 " + app.getString(R.string.pin_type_text_plural)
         PinType.COLOR -> "🎨 " + app.getString(R.string.pin_type_color_plural)
         PinType.FILE -> "📁 " + app.getString(R.string.pin_type_file_plural)
-    }
-
-    private fun matchesSearch(pin: PinState, query: String): Boolean {
-        val q = query.lowercase()
-        return when (pin.type) {
-            PinType.TEXT -> pin.text.orEmpty().lowercase().contains(q)
-            PinType.FILE -> pin.fileName.orEmpty().lowercase().contains(q)
-            PinType.COLOR -> ContentClassifier.toHex(pin.colorArgb ?: 0).lowercase().contains(q)
-            PinType.IMAGE -> true // las imágenes siempre aparecen
-        }
     }
 
     /**
@@ -759,159 +688,211 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     @Composable
-    private fun PinListRow(pin: PinState, onLongPress: () -> Unit = {}) {
+    private fun PinListRow(pin: PinState) {
         val groupColor = pin.groupId?.let { Color(PinGroups.colorFor(it)) }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .then(
-                    if (groupColor != null) Modifier.padding(start = 4.dp)
-                    else Modifier
-                )
-                .pointerInput(pin.id) {
-                    detectTapGestures(onLongPress = { onLongPress() })
+        val showTags = showingTagsFor.value == pin.id
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .then(
+                        if (groupColor != null) Modifier.padding(start = 4.dp)
+                        else Modifier
+                    )
+            ) {
+                if (groupColor != null) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(24.dp)
+                            .padding(end = 4.dp)
+                            .background(groupColor, RoundedCornerShape(2.dp))
+                    )
                 }
-        ) {
-            // Indicador visual de grupo: una barra de color a la izquierda
-            if (groupColor != null) {
+                val checked = pin.id in selection.value
+                IconButton(onClick = {
+                    selection.value = if (checked) selection.value - pin.id
+                    else selection.value + pin.id
+                }) {
+                    Icon(
+                        if (checked) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank,
+                        contentDescription = app.getString(R.string.cd_select_pin),
+                        tint = groupColor ?: MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    when (pin.type) {
+                        PinType.IMAGE -> Icons.Filled.Image
+                        PinType.TEXT -> Icons.Filled.TextFields
+                        PinType.COLOR -> Icons.Filled.Palette
+                        PinType.FILE -> Icons.Filled.InsertDriveFile
+                    },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
                 Box(
                     modifier = Modifier
-                        .width(3.dp)
-                        .height(24.dp)
-                        .padding(end = 4.dp)
-                        .background(groupColor, RoundedCornerShape(2.dp))
-                )
-            }
-            val checked = pin.id in selection.value
-            IconButton(onClick = {
-                selection.value = if (checked) selection.value - pin.id
-                else selection.value + pin.id
-            }) {
-                Icon(
-                    if (checked) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank,
-                    contentDescription = app.getString(R.string.cd_select_pin),
-                    tint = groupColor ?: MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Icon(
-                when (pin.type) {
-                    PinType.IMAGE -> Icons.Filled.Image
-                    PinType.TEXT -> Icons.Filled.TextFields
-                    PinType.COLOR -> Icons.Filled.Palette
-                    PinType.FILE -> Icons.Filled.InsertDriveFile
-                },
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = labelFor(pin),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            )
-            // Botón de guardar/estrella
-            IconButton(onClick = {
-                pins[pin.id]?.let { controller ->
-                    controller.togglePinned()
-                    if (controller.isPinned) {
-                        scope.launch(Dispatchers.IO) { repo.saveSavedPin(controller.snapshot()) }
-                    } else {
-                        scope.launch(Dispatchers.IO) { repo.removeSavedPin(controller.id) }
-                    }
-                    refreshPinList()
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                        .pointerInput(pin.id) {
+                            detectTapGestures(onLongPress = {
+                                showingTagsFor.value = pin.id
+                            })
+                        }
+                ) {
+                    Text(
+                        text = labelFor(pin),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-            }) {
-                Icon(
-                    if (pin.isPinned) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    contentDescription = app.getString(
-                        if (pin.isPinned) R.string.cd_unbookmark else R.string.cd_bookmark
-                    ),
-                    tint = if (pin.isPinned) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
+                IconButton(onClick = {
+                    pins[pin.id]?.let { controller ->
+                        controller.togglePinned()
+                        if (controller.isPinned) {
+                            scope.launch(Dispatchers.IO) { repo.saveSavedPin(controller.snapshot()) }
+                        } else {
+                            scope.launch(Dispatchers.IO) { repo.removeSavedPin(controller.id) }
+                        }
+                        refreshPinList()
+                    }
+                }) {
+                    Icon(
+                        if (pin.isPinned) Icons.Filled.Star else Icons.Filled.StarBorder,
+                        contentDescription = app.getString(
+                            if (pin.isPinned) R.string.cd_unbookmark else R.string.cd_bookmark
+                        ),
+                        tint = if (pin.isPinned) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = {
+                    pins[pin.id]?.setClickThrough(!pin.clickThrough)
+                    refreshPinList()
+                }) {
+                    Icon(
+                        if (pin.clickThrough) Icons.Filled.DoNotTouch else Icons.Filled.TouchApp,
+                        contentDescription = app.getString(R.string.cd_clickthrough),
+                        tint = if (pin.clickThrough) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = { pins[pin.id]?.close() }) {
+                    Icon(Icons.Filled.Close, contentDescription = null)
+                }
             }
-            IconButton(onClick = {
-                pins[pin.id]?.setClickThrough(!pin.clickThrough)
-                refreshPinList()
-            }) {
-                Icon(
-                    if (pin.clickThrough) Icons.Filled.DoNotTouch else Icons.Filled.TouchApp,
-                    contentDescription = app.getString(R.string.cd_clickthrough),
-                    tint = if (pin.clickThrough) MaterialTheme.colorScheme.tertiary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = { pins[pin.id]?.close() }) {
-                Icon(Icons.Filled.Close, contentDescription = null)
+            if (showTags) {
+                TagsRow(pin)
             }
         }
     }
 
     @Composable
-    private fun SavedPinRow(pin: PinState, onLongPress: () -> Unit = {}) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 4.dp)
-                .background(
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                    RoundedCornerShape(8.dp)
-                )
-                .padding(horizontal = 4.dp)
-                .pointerInput(pin.id) {
-                    detectTapGestures(onLongPress = { onLongPress() })
-                }
-        ) {
-            Icon(
-                Icons.Filled.Star,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                when (pin.type) {
-                    PinType.IMAGE -> Icons.Filled.Image
-                    PinType.TEXT -> Icons.Filled.TextFields
-                    PinType.COLOR -> Icons.Filled.Palette
-                    PinType.FILE -> Icons.Filled.InsertDriveFile
-                },
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = labelFor(pin),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+    private fun SavedPinRow(pin: PinState) {
+        val showTags = showingTagsFor.value == pin.id
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 6.dp)
-            )
-            // Botón para mostrar el pin guardado (restaurarlo en pantalla)
-            IconButton(onClick = { restoreSavedPin(pin) }) {
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp, horizontal = 4.dp)
+                    .background(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 4.dp)
+            ) {
                 Icon(
-                    Icons.Filled.Visibility,
-                    contentDescription = app.getString(R.string.cd_restore_pin),
+                    Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    when (pin.type) {
+                        PinType.IMAGE -> Icons.Filled.Image
+                        PinType.TEXT -> Icons.Filled.TextFields
+                        PinType.COLOR -> Icons.Filled.Palette
+                        PinType.FILE -> Icons.Filled.InsertDriveFile
+                    },
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 6.dp)
+                        .pointerInput(pin.id) {
+                            detectTapGestures(onLongPress = {
+                                showingTagsFor.value = pin.id
+                            })
+                        }
+                ) {
+                    Text(
+                        text = labelFor(pin),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                IconButton(onClick = { restoreSavedPin(pin) }) {
+                    Icon(
+                        Icons.Filled.Visibility,
+                        contentDescription = app.getString(R.string.cd_restore_pin),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                IconButton(onClick = {
+                    scope.launch(Dispatchers.IO) { repo.removeSavedPin(pin.id) }
+                    refreshPinList()
+                }) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            IconButton(onClick = {
-                scope.launch(Dispatchers.IO) { repo.removeSavedPin(pin.id) }
-                refreshPinList()
-            }) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (showTags) {
+                TagsRow(pin)
+            }
+        }
+    }
+
+    @Composable
+    private fun TagsRow(pin: PinState) {
+        val tags = listOf(
+            "⭐ Importante",
+            "👁️ Vigilar",
+            "📁 Archivo",
+            "⏳ Temporal",
+            "🗑️ Un solo uso"
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            tags.forEach { tag ->
+                TextButton(
+                    onClick = {
+                        assignCategory(pin.id, tag)
+                    },
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text(
+                        text = tag,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
     }

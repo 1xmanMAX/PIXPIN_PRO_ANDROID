@@ -458,10 +458,16 @@ fun CaptureScreen(
                     },
                     onAnnotate = { annotateMode = true },
                     onScroll = {
-                        // La zona se entrega en píxeles de pantalla: el fotograma
-                        // congelado es la pantalla entera, así que coinciden.
+                        // La zona está en coordenadas de view. ScrollCaptureController captura
+                        // de la pantalla en vivo, no del fotograma congelado, así que necesita
+                        // coordenadas de pantalla sin transformar.
                         val sel = selection ?: imageRect
-                        ScrollCaptureController.request(context, selectionToImageRect(sel))
+                        ScrollCaptureController.request(context, android.graphics.Rect(
+                            sel.left.toInt(),
+                            sel.top.toInt(),
+                            sel.right.toInt(),
+                            sel.bottom.toInt()
+                        ))
                         onFinish()
                     },
                     onCopy = {

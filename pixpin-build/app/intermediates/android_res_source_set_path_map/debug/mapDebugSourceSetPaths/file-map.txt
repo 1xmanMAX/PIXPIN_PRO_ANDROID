@@ -1,0 +1,8 @@
+com.forge.pixpin.app-debug-0 /tmp/PIXPIN_PRO_ANDROID/app/src/debug/res
+com.forge.pixpin.app-main-1 /tmp/PIXPIN_PRO_ANDROID/app/src/main/res
+com.forge.pixpin.app-pngs-2 /tmp/PIXPIN_PRO_ANDROID/pixpin-build/app/generated/res/pngs/debug
+com.forge.pixpin.app-updated_navigation_xml-3 /tmp/PIXPIN_PRO_ANDROID/pixpin-build/app/generated/updated_navigation_xml/debug
+com.forge.pixpin.app-packageDebugResources-4 /tmp/PIXPIN_PRO_ANDROID/pixpin-build/app/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.forge.pixpin.app-packageDebugResources-5 /tmp/PIXPIN_PRO_ANDROID/pixpin-build/app/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.forge.pixpin.app-debug-6 /tmp/PIXPIN_PRO_ANDROID/pixpin-build/app/intermediates/merged_res/debug/mergeDebugResources
+gradleHome-0 /home/ubuntu/.gradle

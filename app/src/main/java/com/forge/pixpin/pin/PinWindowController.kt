@@ -16,7 +16,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -87,6 +86,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -361,6 +361,12 @@ class PinWindowController(
             isPinned = !wasPinned,
             savedCategory = if (wasPinned) null else "other"
         )
+        callbacks.onPinChanged(this)
+    }
+
+    /** Actualiza el estado del pin (usado para renombrar, etc.). */
+    fun updateState(newState: PinState) {
+        pin.value = newState
         callbacks.onPinChanged(this)
     }
 
@@ -811,13 +817,6 @@ class PinWindowController(
                 IconButton(onClick = { close() }) {
                     Icon(Icons.Filled.Close, contentDescription = context.getString(R.string.cd_close))
                 }
-                IconButton(onClick = { destroy() }) {
-                    Icon(
-                        Icons.Filled.DeleteForever,
-                        contentDescription = context.getString(R.string.cd_destroy),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
             }
         }
     }
@@ -1050,7 +1049,20 @@ class PinWindowController(
     private fun ImagePinBody(s: PinState) {
         val bmp = rememberPinBitmap(s.imagePath).value
         if (bmp == null) {
-            Box(Modifier.size(64.dp))
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .border(2.dp, MaterialTheme.colorScheme.error),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Image,
+                    contentDescription = context.getString(R.string.pin_image_error),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
             return
         }
         // La ventana ya tiene el tamaño exacto que toca (measureNatural +
@@ -1058,6 +1070,7 @@ class PinWindowController(
         Box(
             Modifier
                 .fillMaxSize()
+                .border(2.dp, Color.Gray)
                 // El origen y el tamaño REALES de la imagen en pantalla. Todo
                 // lo demás —dónde se dibuja y dónde se toca— se deriva de aquí:
                 // calcularlo por separado en dos sitios era lo que hacía que el
@@ -1115,8 +1128,33 @@ class PinWindowController(
     @Composable
     private fun TextPinBody(s: PinState) {
         val zoom by scale
+        val density = LocalDensity.current
+        var textBoxStart by remember { mutableIntStateOf(s.textBoxWidth) }
+
         Box(
-            Modifier.fillMaxSize()
+            Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pointers = event.changes.filter { it.pressed }
+
+                            if (pointers.size == 3) {
+                                val current = event.changes[0]
+                                val prev = current.previousPosition
+                                val dragAmount = (current.position.x - prev.x) / density.density
+                                val newWidth = (textBoxStart + dragAmount).toInt()
+                                    .coerceIn(120, 500)
+                                if (newWidth != pin.value.textBoxWidth) {
+                                    pin.value = pin.value.copy(textBoxWidth = newWidth)
+                                    textBoxStart = newWidth
+                                }
+                                current.consume()
+                            }
+                        }
+                    }
+                }
         ) {
             Text(
                 text = s.text.orEmpty(),
@@ -1128,27 +1166,6 @@ class PinWindowController(
                 modifier = Modifier
                     .widthIn(max = s.textBoxWidth.dp)
                     .padding(14.dp)
-            )
-
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(4.dp)
-                    .size(48.dp)
-                    .background(Color.White, CircleShape)
-                    .border(2.dp, Color.Gray, CircleShape)
-                    .pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onHorizontalDrag = { change, dragAmount ->
-                                val dragDp = dragAmount / density
-                                val newWidth = (s.textBoxWidth + dragDp).toInt()
-                                    .coerceIn(120, 500)
-                                if (newWidth != s.textBoxWidth) {
-                                    pin.value = pin.value.copy(textBoxWidth = newWidth)
-                                }
-                            }
-                        )
-                    }
             )
         }
     }
