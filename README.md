@@ -141,6 +141,13 @@ Además de eso:
   **una sola burbuja** y se cierran juntos; un borde del color del grupo los identifica. La
   escala y la opacidad siguen siendo de cada pin: agrupar sirve para colocar, no para
   uniformar.
+- **Cuadro de texto redimensionable**: los pines de texto se estiran por su esquina inferior
+  derecha, a lo ancho y a lo alto. Fijado el alto, el texto que sobra se desplaza dentro en
+  vez de recortarse.
+- **Prioridad**: cada pin nace sin prioridad y se alterna con una pulsación larga sobre su
+  nombre en la lista. Solo hay dos estados a propósito: cinco etiquetas eran cuatro de más.
+- **Pegatinas**: un emoji pegado en la esquina del pin, torcido y desbordando el recuadro,
+  para distinguir de un vistazo cuál es cuál cuando hay media docena en pantalla.
 - **Ocultar todo / mostrar todo** sin cerrar nada.
 - **Historial**: los pines cerrados se pueden recuperar; los eliminados, no.
 - **Sobreviven al reinicio** del teléfono, con su posición, tamaño y opacidad.
@@ -172,11 +179,18 @@ Toda la interacción con un pin, sin menús:
 |---|---|
 | Arrastrar | Mover el pin |
 | Arrastrar sobre la bola | Minimizar en burbuja aparcada junto a ella |
+| Arrastrar la esquina inferior derecha (pin de texto) | **Redimensionar el cuadro**: ancho y alto, con scroll si el texto no cabe |
 | Pellizcar | Escalar, con el punto entre los dedos clavado en su sitio |
 | Dos dedos arriba/abajo | Opacidad en vivo |
 | Toque | Copiar (imagen, texto, color) o abrir (archivo) |
 | Doble toque | Minimizar en burbuja / restaurar |
-| Pulsación larga | Barra de acciones: toques a través · **dibujar encima** · cerrar · eliminar |
+| Pulsación larga | Barra de acciones: toques a través · **dibujar encima** · **pegatina** · guardar · cerrar |
+
+En la lista de pines:
+
+| Gesto | Efecto |
+|---|---|
+| Pulsación larga sobre el nombre | **Alternar prioridad**. En texto, archivo y color sale como etiqueta delante del nombre; en las imágenes el nombre entero pasa de «PixPin» a «Prioridad» |
 
 Y con la bola flotante:
 
