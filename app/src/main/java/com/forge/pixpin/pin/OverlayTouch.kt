@@ -37,14 +37,30 @@ class OverlayTouchHandler(
         fun onOpacityStart() {}
         fun onOpacity(dyFromDown: Float) {}
         fun onOpacityEnd() {}
+
+        /**
+         * Arranca el redimensionado: el dedo ha bajado dentro de [handleRect].
+         * No espera al touch slop — un handle de 30 dp no da margen para eso.
+         */
+        fun onResizeStart() {}
+        fun onResize(dxFromDown: Float, dyFromDown: Float) {}
+        fun onResizeEnd() {}
+
         fun onTap() {}
         fun onDoubleTap() {}
         fun onLongPress() {}
     }
 
-    private enum class Mode { NONE, DRAG, SCALE, OPACITY }
+    private enum class Mode { NONE, DRAG, SCALE, OPACITY, RESIZE }
 
     private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+
+    /**
+     * Esquina que redimensiona en vez de arrastrar, en coordenadas LOCALES de la
+     * vista (no raw): el dueño la calcula midiendo su propio contenido. null =
+     * la ventana no se redimensiona.
+     */
+    var handleRect: android.graphics.Rect? = null
 
     private var mode = Mode.NONE
     private var downX = 0f
@@ -91,6 +107,10 @@ class OverlayTouchHandler(
                 mode = Mode.NONE
                 twoFingerDecided = false
                 multiTouch = false
+                if (handleRect?.contains(event.x.toInt(), event.y.toInt()) == true) {
+                    mode = Mode.RESIZE
+                    listener.onResizeStart()
+                }
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -119,6 +139,12 @@ class OverlayTouchHandler(
     }
 
     private fun handleMove(event: MotionEvent) {
+        // Los deltas van en coordenadas raw: la ventana cambia de tamaño bajo el
+        // dedo, así que los locales se falsearían igual que con el arrastre.
+        if (mode == Mode.RESIZE) {
+            listener.onResize(event.rawX - downX, event.rawY - downY)
+            return
+        }
         if (event.pointerCount >= 2) {
             val currentSpan = span(event)
             val currentMid = midRawY(event)
@@ -163,6 +189,7 @@ class OverlayTouchHandler(
             Mode.DRAG -> listener.onDragEnd()
             Mode.SCALE -> listener.onScaleEnd()
             Mode.OPACITY -> listener.onOpacityEnd()
+            Mode.RESIZE -> listener.onResizeEnd()
             Mode.NONE -> Unit
         }
         mode = Mode.NONE

@@ -42,6 +42,19 @@ class OverlayTouchHandlerTest {
         override fun onScaleEnd() { scaleEnds++ }
         override fun onOpacity(dyFromDown: Float) { opacityDy = dyFromDown }
         override fun onOpacityEnd() { opacityEnds++ }
+
+        var resizes = 0
+        var lastResizeDx = 0f
+        var lastResizeDy = 0f
+        var resizeEnds = 0
+
+        override fun onResize(dxFromDown: Float, dyFromDown: Float) {
+            resizes++
+            lastResizeDx = dxFromDown
+            lastResizeDy = dyFromDown
+        }
+
+        override fun onResizeEnd() { resizeEnds++ }
     }
 
     private lateinit var recorder: Recorder
@@ -103,6 +116,45 @@ class OverlayTouchHandlerTest {
         assertEquals(0f, recorder.scaleFactor, 0.001f)
         send(up(300f, 950f))
         assertEquals(1, recorder.opacityEnds)
+    }
+
+    /**
+     * El handle es pequeño: tiene que responder al primer píxel, sin esperar al
+     * touch slop, o resultaría imposible de agarrar.
+     */
+    @Test
+    fun `el toque en la esquina redimensiona en vez de arrastrar`() {
+        handler.handleRect = android.graphics.Rect(170, 270, 200, 300)
+        send(down(180f, 280f))
+        send(move(240f, 320f))
+
+        assertEquals("no debe arrastrar", 0, recorder.drags)
+        assertTrue("debe redimensionar", recorder.resizes > 0)
+        assertEquals(60f, recorder.lastResizeDx, 0.01f)
+        assertEquals(40f, recorder.lastResizeDy, 0.01f)
+
+        send(up(240f, 320f))
+        assertEquals(1, recorder.resizeEnds)
+    }
+
+    @Test
+    fun `fuera de la esquina se sigue arrastrando`() {
+        handler.handleRect = android.graphics.Rect(170, 270, 200, 300)
+        send(down(100f, 200f))
+        send(move(160f, 260f))
+
+        assertTrue(recorder.drags > 0)
+        assertEquals(0, recorder.resizes)
+    }
+
+    @Test
+    fun `sin handle el comportamiento es el de siempre`() {
+        handler.handleRect = null
+        send(down(180f, 280f))
+        send(move(240f, 320f))
+
+        assertTrue(recorder.drags > 0)
+        assertEquals(0, recorder.resizes)
     }
 
     // ---- Construcción de eventos ----
