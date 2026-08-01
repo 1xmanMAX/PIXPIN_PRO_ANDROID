@@ -105,6 +105,8 @@ import com.forge.pixpin.annotate.Pt
 import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.floating.FloatingBallController
+import com.forge.pixpin.markdown.Markdown
+import com.forge.pixpin.markdown.MarkdownText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -510,6 +512,9 @@ class PinWindowController(
         touchHandler?.handleRect = rect
     }
 
+    /** Zoom actual, nunca cero: se usa como divisor al pasar px a tamaño base. */
+    private fun zoomOrOne(): Float = scale.floatValue.takeIf { it > 0.01f } ?: 1f
+
     // ---- Gestos ----
 
     private inner class GestureListener : OverlayTouchHandler.Listener {
@@ -627,19 +632,25 @@ class PinWindowController(
             val density = context.resources.displayMetrics.density
             resizeStartW = pin.value.textBoxWidth
             // Sin alto fijado aún, se parte del que tenga el pin ahora mismo:
-            // así el cuadro no pega un salto en el primer píxel de arrastre.
+            // así el cuadro no pega un salto en el primer píxel de arrastre. La
+            // ventana medida ya incluye el zoom, y lo que se guarda es la base.
             resizeStartH = pin.value.textBoxHeight
-                ?: ((window?.view?.height ?: 0) / density).toInt()
+                ?: ((window?.view?.height ?: 0) / density / zoomOrOne()).toInt()
                     .coerceAtLeast(TextBoxSize.MIN_HEIGHT)
         }
 
         override fun onResize(dxFromDown: Float, dyFromDown: Float) {
             val density = context.resources.displayMetrics.density
+            // Se divide TAMBIÉN por el zoom: lo que se guarda es el tamaño base,
+            // y sin esto un dedo que recorre 100 px sobre un pin al triple
+            // movería la base 100 dp en vez de 33, estirando el cuadro tres
+            // veces más rápido que el dedo.
+            val z = zoomOrOne()
             val dims = TextBoxSize.resize(
                 startWidth = resizeStartW,
                 startHeight = resizeStartH,
-                dxDp = dxFromDown / density,
-                dyDp = dyFromDown / density
+                dxDp = dxFromDown / density / z,
+                dyDp = dyFromDown / density / z
             )
             if (dims.width != pin.value.textBoxWidth ||
                 dims.height != pin.value.textBoxHeight
@@ -1306,6 +1317,11 @@ class PinWindowController(
      * El ancho y el alto los manda el estado, no la medida del texto: es lo que
      * permite estirar el cuadro por su esquina. Sin alto fijado, se ajusta al
      * texto; con él, lo que sobre se desplaza dentro.
+     *
+     * Los dos son el tamaño BASE, a zoom 1. Al pellizcar se multiplican por el
+     * zoom igual que la fuente, así que el pin crece entero y en proporción,
+     * como si fuera una imagen, en vez de re-ajustar el texto dentro de un
+     * cuadro que no se mueve.
      */
     @Composable
     private fun TextPinBody(s: PinState) {
@@ -1313,11 +1329,14 @@ class PinWindowController(
         val density = LocalDensity.current
         // Se lee aquí y no dentro del Canvas: en un DrawScope no hay MaterialTheme.
         val handleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        // Se re-interpreta solo cuando cambia el texto, no en cada fotograma del
+        // pellizco: el zoom no afecta a la sintaxis.
+        val blocks = remember(s.text) { Markdown.parse(s.text.orEmpty()) }
         Box(
             Modifier
-                .width(s.textBoxWidth.dp)
+                .width((s.textBoxWidth * zoom).dp)
                 .then(
-                    if (s.textBoxHeight != null) Modifier.height(s.textBoxHeight.dp)
+                    if (s.textBoxHeight != null) Modifier.height((s.textBoxHeight * zoom).dp)
                     else Modifier
                 )
                 // El handle se mide de verdad en vez de calcularse aparte: es lo
@@ -1333,18 +1352,16 @@ class PinWindowController(
                     )
                 }
         ) {
-            Text(
-                text = s.text.orEmpty(),
-                fontSize = (14f * zoom).sp,
-                lineHeight = (20f * zoom).sp,
-                color = MaterialTheme.colorScheme.onSurface,
+            MarkdownText(
+                blocks = blocks,
+                baseSizeSp = 14f * zoom,
                 modifier = Modifier
                     // fillMaxWidth y no fillMaxSize: sin alto fijado, el Box se
                     // ajusta al texto, y un hijo que llenase el alto máximo lo
                     // estiraría hasta el tope de la pantalla.
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(14.dp)
+                    .padding((14f * zoom).dp)
             )
             Canvas(
                 modifier = Modifier
