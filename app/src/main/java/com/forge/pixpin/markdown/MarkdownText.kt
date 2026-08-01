@@ -14,9 +14,18 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -39,12 +48,31 @@ private const val H3 = 1.15f
  * deriva de él: así el renderizador no sabe nada del pellizco y el pin entero
  * escala en proporción, letra y cuadro a la vez.
  */
+/** Dónde cae un enlace dentro del contenido, en coordenadas SIN escalar. */
+data class LinkHit(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val url: String
+) {
+    fun contains(x: Float, y: Float): Boolean =
+        x >= left && x <= right && y >= top && y <= bottom
+}
+
 @Composable
 fun MarkdownText(
     blocks: List<MarkdownBlock>,
     baseSizeSp: Float,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLinks: (List<LinkHit>) -> Unit = {}
 ) {
+    // Los rectángulos de cada bloque se juntan aquí para publicarlos de una vez:
+    // quien hace la prueba de impacto necesita la lista entera, no trozos.
+    val perBlock = remember { mutableStateMapOf<Int, List<LinkHit>>() }
+    LaunchedEffect(perBlock.size, blocks) {
+        onLinks(perBlock.values.flatten())
+    }
     val gap = (baseSizeSp * 0.35f).dp
     Column(modifier = modifier) {
         blocks.forEachIndexed { index, block ->
@@ -63,7 +91,11 @@ fun MarkdownText(
                     )
                 }
 
-                is MarkdownBlock.Paragraph -> Body(block.content, baseSizeSp)
+                is MarkdownBlock.Paragraph -> Body(
+                    content = block.content,
+                    sizeSp = baseSizeSp,
+                    onLinks = { perBlock[index] = it }
+                )
 
                 is MarkdownBlock.Bullet -> Row {
                     Marker("•  ", baseSizeSp)
@@ -132,14 +164,42 @@ private fun Body(
     content: InlineText,
     sizeSp: Float,
     weight: FontWeight = FontWeight.Normal,
-    color: Color = MaterialTheme.colorScheme.onSurface
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    onLinks: (List<LinkHit>) -> Unit = {}
 ) {
+    val links = content.spans.filter { it.kind == SpanKind.LINK && it.url != null }
+    var origin by remember { mutableStateOf(Offset.Zero) }
     Text(
         text = content.annotated(MaterialTheme.colorScheme.primary),
         fontSize = sizeSp.sp,
         lineHeight = (sizeSp * 1.4f).sp,
         fontWeight = weight,
-        color = color
+        color = color,
+        modifier = if (links.isEmpty()) Modifier else Modifier.onGloballyPositioned {
+            origin = it.positionInRoot()
+        },
+        onTextLayout = { layout ->
+            if (links.isEmpty()) return@Text
+            // Un enlace puede partirse en varias líneas, así que se recogen las
+            // cajas de cada carácter y se agrupan por línea: una sola caja
+            // envolvente daría por tocable medio párrafo.
+            onLinks(
+                links.flatMap { span ->
+                    val byLine = (span.start until span.end).groupBy { layout.getLineForOffset(it) }
+                    byLine.values.mapNotNull { offsets ->
+                        val boxes = offsets.map { layout.getBoundingBox(it) }
+                        if (boxes.isEmpty()) return@mapNotNull null
+                        LinkHit(
+                            left = origin.x + boxes.minOf { it.left },
+                            top = origin.y + boxes.minOf { it.top },
+                            right = origin.x + boxes.maxOf { it.right },
+                            bottom = origin.y + boxes.maxOf { it.bottom },
+                            url = span.url!!
+                        )
+                    }
+                }
+            )
+        }
     )
 }
 

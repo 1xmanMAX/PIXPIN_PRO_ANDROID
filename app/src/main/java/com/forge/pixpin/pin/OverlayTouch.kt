@@ -46,7 +46,8 @@ class OverlayTouchHandler(
         fun onResize(dxFromDown: Float, dyFromDown: Float) {}
         fun onResizeEnd() {}
 
-        fun onTap() {}
+        /** x/y en coordenadas LOCALES de la ventana: sirven para saber qué se tocó. */
+        fun onTap(x: Float, y: Float) {}
         fun onDoubleTap() {}
         fun onLongPress() {}
     }
@@ -80,7 +81,7 @@ class OverlayTouchHandler(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (idle()) listener.onTap()
+                if (idle()) listener.onTap(e.x, e.y)
                 return true
             }
 

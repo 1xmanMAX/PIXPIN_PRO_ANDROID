@@ -174,7 +174,7 @@ class FloatingBallController(private val context: Context) {
 
         override fun onDragEnd() = snapToEdge()
 
-        override fun onTap() = toggleMenu()
+        override fun onTap(x: Float, y: Float) = toggleMenu()
 
         override fun onDoubleTap() = CaptureFlow.requestCapture(context)
 

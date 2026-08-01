@@ -16,6 +16,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.ScrollState
@@ -110,6 +115,7 @@ import com.forge.pixpin.annotate.Pt
 import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.floating.FloatingBallController
+import com.forge.pixpin.markdown.LinkHit
 import com.forge.pixpin.markdown.Markdown
 import com.forge.pixpin.markdown.MarkdownText
 import kotlinx.coroutines.Dispatchers
@@ -175,6 +181,13 @@ class PinWindowController(
 
     /** Esquina agarrable del cuadro de texto, en coordenadas de la ventana. */
     private var resizeHandle: android.graphics.Rect? = null
+
+    /**
+     * Enlaces del pin de texto, en coordenadas SIN escalar del contenido. El
+     * toque llega en píxeles de ventana, así que hay que dividirlo por el zoom
+     * antes de comparar.
+     */
+    private var linkHits: List<LinkHit> = emptyList()
 
     private val pin = mutableStateOf(initialState)
     private val scale = mutableFloatStateOf(initialState.scale)
@@ -451,12 +464,47 @@ class PinWindowController(
     }
 
     private fun computeFlags(clickThrough: Boolean): Int {
-        var flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+        var flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        // Editando NO se pone NOT_FOCUSABLE: sin foco no hay teclado, que es
+        // justo el motivo por el que hasta ahora no se podía escribir en un pin.
+        if (!editing.value) flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         if (clickThrough) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         return flags
+    }
+
+    /** Mientras dura, el pin deja de responder a gestos y se escribe en él. */
+    private val editing = mutableStateOf(false)
+
+    private fun enterEditMode() {
+        if (editing.value || pin.value.type != PinType.TEXT) return
+        closeActionBar()
+        closeEmojiPicker()
+        editing.value = true
+        // Sin reconocedor: los toques son para el cursor y la selección.
+        window?.setTouchHandler(null)
+        touchHandler = null
+        lp?.let { p ->
+            p.flags = computeFlags(pin.value.clickThrough)
+            // El teclado no debe tapar el pin que se está editando.
+            p.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            applyLayoutNow()
+        }
+    }
+
+    private fun exitEditMode(newText: String) {
+        if (!editing.value) return
+        editing.value = false
+        if (newText != pin.value.text) {
+            pin.value = pin.value.copy(text = newText)
+        }
+        window?.setTouchHandler(newTouchHandler())
+        lp?.let { p ->
+            p.flags = computeFlags(pin.value.clickThrough)
+            applyLayoutNow()
+        }
+        callbacks.onPinChanged(this)
     }
 
     private var layoutScheduled = false
@@ -727,11 +775,14 @@ class PinWindowController(
             callbacks.onPinChanged(this@PinWindowController)
         }
 
-        override fun onTap() {
+        override fun onTap(x: Float, y: Float) {
             val s = pin.value
             when {
                 minimized.value -> restore()
                 actionBar != null -> closeActionBar()
+                // Un enlace tocado abre el navegador; el resto del pin sigue
+                // copiando el texto entero, como siempre.
+                s.type == PinType.TEXT && openLinkAt(x, y) -> Unit
                 s.type == PinType.TEXT -> copyText(s)
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
@@ -1004,6 +1055,14 @@ class PinWindowController(
                         )
                     }
                 }
+                if (s.type == PinType.TEXT) {
+                    IconButton(onClick = { enterEditMode() }) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = context.getString(R.string.cd_edit_text)
+                        )
+                    }
+                }
                 IconButton(onClick = { openEmojiPicker() }) {
                     Icon(
                         Icons.Filled.EmojiEmotions,
@@ -1162,6 +1221,26 @@ class PinWindowController(
     }
 
     // ---- Acciones de contenido ----
+
+    /**
+     * ¿Cayó el toque sobre un enlace? El contenido está escalado por el zoom y
+     * desplazado por el hueco de la sombra, así que el punto se devuelve a
+     * coordenadas de contenido antes de comparar.
+     *
+     * @return true si se abrió algo, para que quien llama no copie además el texto.
+     */
+    private fun openLinkAt(x: Float, y: Float): Boolean {
+        if (linkHits.isEmpty()) return false
+        val z = zoomOrOne()
+        val hit = linkHits.firstOrNull { it.contains(x / z, y / z) } ?: return false
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(hit.url))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return runCatching { context.startActivity(intent); true }
+            .getOrElse {
+                toast(context.getString(R.string.no_app_for_file))
+                false
+            }
+    }
 
     private fun copyText(s: PinState) {
         val text = s.text ?: return
@@ -1452,15 +1531,20 @@ class PinWindowController(
                         }
                     }
             ) {
-                MarkdownText(
-                    blocks = blocks,
-                    baseSizeSp = 14f,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(textScroll)
-                        .padding(14.dp)
-                )
-                ScrollPip(textScroll)
+                if (editing.value) {
+                    TextEditor(s)
+                } else {
+                    MarkdownText(
+                        blocks = blocks,
+                        baseSizeSp = 14f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(textScroll)
+                            .padding(14.dp),
+                        onLinks = { linkHits = it }
+                    )
+                    ScrollPip(textScroll)
+                }
             }
             // El handle va FUERA de la capa escalada: es un control, no
             // contenido, y así su zona táctil sale medida sin corregir nada.
@@ -1528,6 +1612,48 @@ class PinWindowController(
                     .size(SCROLL_PIP_DP.dp)
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
             )
+        }
+    }
+
+    /**
+     * Edición en el sitio. Se escribe el Markdown en crudo, con sus marcas: es
+     * lo que se guarda y lo que se copia, así que es lo que hay que poder tocar.
+     */
+    @Composable
+    private fun TextEditor(s: PinState) {
+        var draft by remember { mutableStateOf(s.text.orEmpty()) }
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focus.requestFocus() }
+        Column(Modifier.fillMaxSize()) {
+            BasicTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                textStyle = TextStyle(
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .focusRequester(focus)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { exitEditMode(s.text.orEmpty()) }) {
+                    Text(context.getString(R.string.cancel))
+                }
+                TextButton(onClick = { exitEditMode(draft) }) {
+                    Text(context.getString(R.string.cd_done))
+                }
+            }
         }
     }
 
