@@ -138,12 +138,17 @@ Además de eso:
   en una columna ordenada junto a ella.
 - **Grupos**: se marcan varios pines en la lista y se agrupan. A partir de ahí se mueven
   juntos —arrastrar uno arrastra a los demás conservando las distancias—, se minimizan en
-  **una sola burbuja** y se cierran juntos; un borde del color del grupo los identifica. La
+  **una sola burbuja** y se cierran juntos; una sombra del color del grupo los identifica. La
   escala y la opacidad siguen siendo de cada pin: agrupar sirve para colocar, no para
   uniformar.
 - **Cuadro de texto redimensionable**: los pines de texto se estiran por su esquina inferior
   derecha, a lo ancho y a lo alto. Fijado el alto, el texto que sobra se desplaza dentro en
-  vez de recortarse.
+  vez de recortarse. Al pellizcar crece **todo en proporción** —cuadro y letra a la vez—,
+  igual que una imagen.
+- **Markdown en los pines de texto**: títulos, negrita, cursiva, tachado, código en línea y en
+  bloque, listas con viñeta y numeradas, citas, reglas y enlaces. Siempre activo, porque el
+  texto plano no lleva marcas y se ve igual. Lo que se copia al tocar el pin sigue siendo el
+  original con sus marcas, no lo formateado. Los enlaces se ven pero no se tocan.
 - **Prioridad**: cada pin nace sin prioridad y se alterna con una pulsación larga sobre su
   nombre en la lista. Solo hay dos estados a propósito: cinco etiquetas eran cuatro de más.
 - **Pegatinas**: un emoji pegado en la esquina del pin, torcido y desbordando el recuadro,
