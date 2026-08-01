@@ -196,12 +196,46 @@ class AnnotationController {
         annotations.add(stroke)
     }
 
-    fun addText(pt: Pt, text: String) {
+    /**
+     * Tamaño y ancho del último texto puesto. Poner tres seguidos del mismo
+     * tamaño no debería obligar a ajustarlo tres veces.
+     */
+    val lastTextSize = mutableStateOf(40f)
+    val lastTextBoxWidth = mutableStateOf<Float?>(240f)
+
+    fun addText(pt: Pt, text: String, fontSize: Float, boxWidth: Float?) {
         if (text.isBlank()) return
+        lastTextSize.value = fontSize
+        lastTextBoxWidth.value = boxWidth
         undoStack.push(annotations.toList())
         annotations.add(
-            Annotation(AnnotationType.TEXT, listOf(pt), color.value,
-                strokeWidth.value * 5, text = text)
+            Annotation(
+                AnnotationType.TEXT, listOf(pt), color.value,
+                fontSize, text = text, boxWidth = boxWidth
+            )
+        )
+        refreshUndoState()
+    }
+
+    /**
+     * Índice del texto que hay bajo [pt], o −1 si no hay ninguno. Se busca el
+     * último: si dos se solapan, se edita el de encima, que es el que se ve.
+     */
+    fun textAt(pt: Pt): Int = annotations.indexOfLast {
+        it.type == AnnotationType.TEXT && AnnotationGeometry.boundingBox(it).let { b ->
+            pt.x >= b[0] && pt.x <= b[2] && pt.y >= b[1] && pt.y <= b[3]
+        }
+    }
+
+    /** Sustituye un texto ya puesto, conservando su punto de anclaje. */
+    fun replaceText(index: Int, text: String, fontSize: Float, boxWidth: Float?) {
+        val old = annotations.getOrNull(index) ?: return
+        if (text.isBlank()) return
+        lastTextSize.value = fontSize
+        lastTextBoxWidth.value = boxWidth
+        undoStack.push(annotations.toList())
+        annotations[index] = old.copy(
+            text = text, strokeWidth = fontSize, boxWidth = boxWidth
         )
         refreshUndoState()
     }

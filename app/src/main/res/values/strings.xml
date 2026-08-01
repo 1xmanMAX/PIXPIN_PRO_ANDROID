@@ -104,6 +104,10 @@
     <string name="saved_to_gallery">Guardado en Pictures/PixPin</string>
     <string name="copied_image">Imagen copiada al portapapeles</string>
     <string name="add_text_title">Texto de la anotación</string>
+    <string name="text_size">Tamaño</string>
+    <string name="text_box_width">Ancho</string>
+    <string name="text_no_box">Sin cuadro</string>
+    <string name="text_preview">Vista previa</string>
     <string name="add">Añadir</string>
     <string name="cancel">Cancelar</string>
 </resources>

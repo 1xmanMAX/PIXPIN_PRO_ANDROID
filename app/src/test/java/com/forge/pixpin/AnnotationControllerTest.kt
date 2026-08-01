@@ -226,9 +226,38 @@ class AnnotationControllerTest {
     @Test
     fun `texto en blanco no se añade`() {
         val c = AnnotationController()
-        c.addText(Pt(10f, 10f), "   ")
+        c.addText(Pt(10f, 10f), "   ", fontSize = 40f, boxWidth = null)
         assertEquals(0, c.annotations.size)
-        c.addText(Pt(10f, 10f), "hola")
+        c.addText(Pt(10f, 10f), "hola", fontSize = 40f, boxWidth = null)
         assertEquals(1, c.annotations.size)
+    }
+
+    /** El tamaño y el ancho llegan ya resueltos desde el diálogo. */
+    @Test
+    fun `el texto guarda el tamaño y el ancho que se le den`() {
+        val c = AnnotationController()
+        c.addText(Pt(10f, 10f), "hola", fontSize = 64f, boxWidth = 300f)
+        assertEquals(64f, c.annotations[0].strokeWidth, 0.01f)
+        assertEquals(300f, c.annotations[0].boxWidth!!, 0.01f)
+    }
+
+    @Test
+    fun `un toque dentro de un texto lo localiza para reeditarlo`() {
+        val c = AnnotationController()
+        c.addText(Pt(100f, 100f), "hola", fontSize = 40f, boxWidth = 200f)
+        assertEquals(0, c.textAt(Pt(150f, 110f)))
+        assertEquals(-1, c.textAt(Pt(900f, 900f)))
+    }
+
+    @Test
+    fun `reemplazar un texto conserva su punto de anclaje`() {
+        val c = AnnotationController()
+        c.addText(Pt(100f, 100f), "hola", fontSize = 40f, boxWidth = 200f)
+        c.replaceText(0, "adios", fontSize = 20f, boxWidth = null)
+        assertEquals(1, c.annotations.size)
+        assertEquals("adios", c.annotations[0].text)
+        assertEquals(100f, c.annotations[0].points[0].x, 0.01f)
+        assertEquals(20f, c.annotations[0].strokeWidth, 0.01f)
+        assertEquals(null, c.annotations[0].boxWidth)
     }
 }

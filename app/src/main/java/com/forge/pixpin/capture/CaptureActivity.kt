@@ -18,11 +18,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -184,6 +188,9 @@ fun CaptureScreen(
     var showTextDialog by remember { mutableStateOf(false) }
     var textPoint by remember { mutableStateOf(Pt(0f, 0f)) }
     var textInput by remember { mutableStateOf("") }
+    var textSize by remember { mutableStateOf(controller.lastTextSize.value) }
+    var textBoxWidth by remember { mutableStateOf(controller.lastTextBoxWidth.value) }
+    var editingIndex by remember { mutableIntStateOf(-1) }
 
     BackHandler {
         when {
@@ -373,9 +380,22 @@ fun CaptureScreen(
                         return@pointerInput
                     }
                     detectTapGestures { pos ->
-                        toImage(pos)?.let {
-                            textPoint = it
-                            textInput = ""
+                        toImage(pos)?.let { pt ->
+                            // Tocar un texto ya puesto lo reabre en vez de
+                            // plantar otro encima.
+                            val hit = controller.textAt(pt)
+                            editingIndex = hit
+                            if (hit >= 0) {
+                                val a = controller.annotations[hit]
+                                textInput = a.text.orEmpty()
+                                textSize = a.strokeWidth
+                                textBoxWidth = a.boxWidth
+                            } else {
+                                textPoint = pt
+                                textInput = ""
+                                textSize = controller.lastTextSize.value
+                                textBoxWidth = controller.lastTextBoxWidth.value
+                            }
                             showTextDialog = true
                         }
                     }
@@ -497,16 +517,72 @@ fun CaptureScreen(
                 onDismissRequest = { showTextDialog = false },
                 title = { Text(stringResource(R.string.add_text_title)) },
                 text = {
-                    OutlinedTextField(
-                        value = textInput,
-                        onValueChange = { textInput = it },
-                        singleLine = false,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Column {
+                        OutlinedTextField(
+                            value = textInput,
+                            onValueChange = { textInput = it },
+                            singleLine = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Stepper(
+                            label = stringResource(R.string.text_size),
+                            value = "${textSize.toInt()}",
+                            onLess = { textSize = (textSize - 4f).coerceAtLeast(12f) },
+                            onMore = { textSize = (textSize + 4f).coerceAtMost(96f) }
+                        )
+                        Stepper(
+                            label = stringResource(R.string.text_box_width),
+                            value = textBoxWidth?.toInt()?.toString()
+                                ?: stringResource(R.string.text_no_box),
+                            onLess = {
+                                val w = textBoxWidth
+                                // Por debajo del mínimo se sale del cuadro: es
+                                // la forma de volver al texto suelto de siempre.
+                                textBoxWidth = if (w == null || w <= 80f) null else w - 20f
+                            },
+                            onMore = {
+                                val w = textBoxWidth
+                                textBoxWidth = if (w == null) 80f else (w + 20f).coerceAtMost(600f)
+                            }
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            stringResource(R.string.text_preview),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        // La previsualización evita el ciclo de poner, mirar,
+                        // deshacer y repetir. El tamaño va en px de imagen, así
+                        // que aquí se reduce para que quepa: lo que orienta es
+                        // la proporción entre letra y ancho de cuadro.
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .border(1.dp, Color.Gray)
+                                .padding(4.dp)
+                        ) {
+                            val boxW = textBoxWidth
+                            Text(
+                                text = textInput,
+                                color = Color(controller.color.value),
+                                fontSize = (textSize / 3f).sp,
+                                modifier = if (boxW != null) {
+                                    Modifier.width((boxW / 3f).dp)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                        }
+                    }
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        controller.addText(textPoint, textInput)
+                        if (editingIndex >= 0) {
+                            controller.replaceText(editingIndex, textInput, textSize, textBoxWidth)
+                        } else {
+                            controller.addText(textPoint, textInput, textSize, textBoxWidth)
+                        }
                         showTextDialog = false
                     }) { Text(stringResource(R.string.add)) }
                 },
@@ -517,6 +593,25 @@ fun CaptureScreen(
                 }
             )
         }
+    }
+}
+
+/** Etiqueta, valor y dos botones. No hay sitio para un slider en el diálogo. */
+@Composable
+private fun Stepper(
+    label: String,
+    value: String,
+    onLess: () -> Unit,
+    onMore: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        IconButton(onClick = onLess) { Text("−", fontSize = 20.sp) }
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+        IconButton(onClick = onMore) { Text("+", fontSize = 20.sp) }
     }
 }
 
