@@ -8,6 +8,54 @@ import org.junit.Test
 class AnnotationGeometryTest {
 
     @Test
+    fun `un texto con cuadro ocupa el ancho del cuadro`() {
+        val a = Annotation(
+            type = AnnotationType.TEXT,
+            points = listOf(Pt(100f, 50f)),
+            color = 0xFFFF0000.toInt(),
+            strokeWidth = 20f,
+            text = "hola",
+            boxWidth = 200f
+        )
+        val b = AnnotationGeometry.textBoxBounds(a)
+        assertEquals(100f, b[0], 0.01f)
+        assertEquals(50f, b[1], 0.01f)
+        assertEquals(300f, b[2], 0.01f)
+        assertTrue("debe tener alto", b[3] > b[1])
+    }
+
+    @Test
+    fun `un texto largo con cuadro estrecho ocupa mas alto que uno corto`() {
+        fun bounds(text: String) = AnnotationGeometry.textBoxBounds(
+            Annotation(
+                type = AnnotationType.TEXT,
+                points = listOf(Pt(0f, 0f)),
+                color = 0,
+                strokeWidth = 20f,
+                text = text,
+                boxWidth = 120f
+            )
+        )
+        val corto = bounds("hola")
+        val largo = bounds("hola ".repeat(40))
+        assertTrue("el largo debe ocupar más alto", largo[3] > corto[3])
+    }
+
+    @Test
+    fun `un texto sin cuadro sigue midiendose en una linea`() {
+        val a = Annotation(
+            type = AnnotationType.TEXT,
+            points = listOf(Pt(10f, 10f)),
+            color = 0,
+            strokeWidth = 20f,
+            text = "hola"
+        )
+        val b = AnnotationGeometry.textBoxBounds(a)
+        assertEquals(10f, b[0], 0.01f)
+        assertTrue(b[2] > b[0])
+    }
+
+    @Test
     fun `rectFrom normaliza min y max`() {
         val r = AnnotationGeometry.rectFrom(Pt(10f, 20f), Pt(5f, 30f))
         assertEquals(5f, r[0], 0.001f)

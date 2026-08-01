@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
@@ -215,15 +216,36 @@ fun AnnotationCanvas(
                 AnnotationType.MOSAIC -> drawMosaic(a)
                 AnnotationType.TEXT -> {
                     val pos = a.points[0].toView()
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = a.text.orEmpty(),
-                        topLeft = pos,
-                        style = TextStyle(
-                            color = Color(a.color),
-                            fontSize = (a.strokeWidth * scale).toSp()
-                        )
+                    val style = TextStyle(
+                        color = Color(a.color),
+                        fontSize = (a.strokeWidth * scale).toSp()
                     )
+                    val boxW = a.boxWidth
+                    if (boxW == null) {
+                        drawText(
+                            textMeasurer = textMeasurer,
+                            text = a.text.orEmpty(),
+                            topLeft = pos,
+                            style = style
+                        )
+                    } else {
+                        val pad = AnnotationGeometry.TEXT_BOX_PAD * scale
+                        val outer = boxW * scale
+                        val layout = textMeasurer.measure(
+                            text = a.text.orEmpty(),
+                            style = style,
+                            constraints = Constraints(
+                                maxWidth = (outer - pad * 2).toInt().coerceAtLeast(1)
+                            )
+                        )
+                        drawRect(
+                            color = Color(a.color),
+                            topLeft = pos,
+                            size = Size(outer, layout.size.height + pad * 2),
+                            style = Stroke(width = 1.5f * scale)
+                        )
+                        drawText(layout, topLeft = Offset(pos.x + pad, pos.y + pad))
+                    }
                 }
                 AnnotationType.POLYLINE -> {
                     val pts = a.points

@@ -8,6 +8,8 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.text.StaticLayout
+import android.text.TextPaint
 
 /**
  * Hornea las anotaciones sobre el recorte final del bitmap
@@ -81,12 +83,36 @@ object AnnotationRenderer {
                 AnnotationType.TEXT -> {
                     paint.style = Paint.Style.FILL
                     paint.textSize = a.strokeWidth
-                    canvas.drawText(
-                        a.text.orEmpty(),
-                        a.points[0].x - ox,
-                        a.points[0].y - oy + a.strokeWidth * 0.9f,
-                        paint
-                    )
+                    val boxW = a.boxWidth
+                    val left = a.points[0].x - ox
+                    val top = a.points[0].y - oy
+                    if (boxW == null) {
+                        canvas.drawText(
+                            a.text.orEmpty(), left, top + a.strokeWidth * 0.9f, paint
+                        )
+                    } else {
+                        // Mismo cálculo que en AnnotationCanvas: si los dos
+                        // renderizadores no coinciden, lo exportado no es lo
+                        // que se vio en pantalla.
+                        val pad = AnnotationGeometry.TEXT_BOX_PAD
+                        val body = a.text.orEmpty()
+                        val inner = (boxW - pad * 2).toInt().coerceAtLeast(1)
+                        val layout = StaticLayout.Builder
+                            .obtain(body, 0, body.length, TextPaint(paint), inner)
+                            .build()
+                        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = a.color
+                            style = Paint.Style.STROKE
+                            strokeWidth = 1.5f
+                        }
+                        canvas.drawRect(
+                            left, top, left + boxW, top + layout.height + pad * 2, border
+                        )
+                        canvas.save()
+                        canvas.translate(left + pad, top + pad)
+                        layout.draw(canvas)
+                        canvas.restore()
+                    }
                 }
                 AnnotationType.POLYLINE -> {
                     val pts = a.points

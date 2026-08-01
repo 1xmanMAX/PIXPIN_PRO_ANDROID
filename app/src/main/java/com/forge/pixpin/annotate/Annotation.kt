@@ -43,7 +43,12 @@ data class Annotation(
     val strokeWidth: Float,
     val text: String? = null,
     val filled: Boolean = false,
-    val variant: Int = 0 // MOSAIC: 0 = pixelado, 1 = desenfoque
+    val variant: Int = 0, // MOSAIC: 0 = pixelado, 1 = desenfoque
+    /**
+     * Solo en TEXT: ancho del cuadro en px de imagen. Con null el texto se
+     * dibuja suelto en una línea, que es como se guardaron los de la v0.2.
+     */
+    val boxWidth: Float? = null
 )
 
 /** Geometría pura de las anotaciones (sin Android: testable en JVM). */
@@ -69,8 +74,37 @@ object AnnotationGeometry {
         return floatArrayOf(min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y))
     }
 
+    /** Margen interior del cuadro de texto, en px de imagen. */
+    const val TEXT_BOX_PAD = 8f
+
+    /**
+     * Rectángulo [l, t, r, b] que ocupa una anotación de texto.
+     *
+     * El alto se estima contando caracteres por línea en vez de medirlo: medirlo
+     * de verdad exige StaticLayout, que es de Android, y esto solo lo usan el
+     * borrador y el toque para reeditar — ahí una aproximación basta y se puede
+     * comprobar sin dispositivo.
+     */
+    fun textBoxBounds(a: Annotation): FloatArray {
+        val p = a.points.first()
+        val avgChar = a.strokeWidth * 0.55f
+        val width = a.boxWidth
+        if (width == null) {
+            val w = avgChar * (a.text?.length ?: 0)
+            return floatArrayOf(p.x, p.y - a.strokeWidth, p.x + w, p.y)
+        }
+        val perLine = ((width - TEXT_BOX_PAD * 2) / avgChar).toInt().coerceAtLeast(1)
+        val lines = a.text.orEmpty().split('\n').sumOf { line ->
+            maxOf(1, (line.length + perLine - 1) / perLine)
+        }
+        val h = lines * a.strokeWidth * 1.3f + TEXT_BOX_PAD * 2
+        return floatArrayOf(p.x, p.y, p.x + width, p.y + h)
+    }
+
     /** Bounding box [left, top, right, bottom] de una anotación. */
     fun boundingBox(annotation: Annotation): FloatArray {
+        // El texto no se mide por sus puntos: solo tiene uno, el de anclaje.
+        if (annotation.type == AnnotationType.TEXT) return textBoxBounds(annotation)
         var l = Float.MAX_VALUE
         var t = Float.MAX_VALUE
         var r = -Float.MAX_VALUE
