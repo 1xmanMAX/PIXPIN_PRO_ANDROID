@@ -85,6 +85,58 @@ private fun DrawScope.drawFreehand(
     )
 }
 
+/**
+ * Trazo vivo dibujado **sin rehacerlo entero en cada muestra**.
+ *
+ * Reconstruir el `Path` desde el principio costaba O(n) por muestra, y como se
+ * redibuja en cada muestra, el trazo entero salía O(n²): empezaba fluido y se
+ * iba atascando cuanto más largo. Con un lápiz que muestrea a cientos de Hz eso
+ * son miles de puntos en unos segundos.
+ *
+ * El suavizado por puntos medios permite acumular: cada muestra nueva añade
+ * exactamente un `quadTo` y no toca lo ya dibujado. Lo único provisional es el
+ * tramo final hasta el último punto, que se pinta aparte en cada fotograma.
+ */
+private class LiveStrokePath {
+    val path = Path()
+    /** Cuántas muestras están ya dentro de [path]. */
+    var built = 0
+
+    fun reset() {
+        path.reset()
+        built = 0
+    }
+
+    /** Añade al camino los tramos estables que aún no estaban. */
+    fun extendTo(count: Int, xAt: (Int) -> Float, yAt: (Int) -> Float) {
+        if (count <= 0) return
+        if (built == 0) {
+            path.moveTo(xAt(0), yAt(0))
+            built = 1
+        }
+        // El último punto siempre es provisional: su tramo se dibuja aparte.
+        for (i in built until count - 1) {
+            path.quadraticTo(
+                xAt(i), yAt(i),
+                (xAt(i) + xAt(i + 1)) / 2f,
+                (yAt(i) + yAt(i + 1)) / 2f
+            )
+        }
+        if (count >= 2) built = count - 1
+    }
+
+    /** Dónde acaba el camino acumulado: de ahí arranca el tramo provisional. */
+    fun tailStart(count: Int, xAt: (Int) -> Float, yAt: (Int) -> Float): Offset =
+        if (count <= 2) {
+            Offset(xAt(0), yAt(0))
+        } else {
+            Offset(
+                (xAt(count - 2) + xAt(count - 1)) / 2f,
+                (yAt(count - 2) + yAt(count - 1)) / 2f
+            )
+        }
+}
+
 /** Cuánto se oscurece lo que queda fuera del foco. */
 private const val SPOTLIGHT_DIM = 0.6f
 
@@ -140,6 +192,10 @@ fun AnnotationCanvas(
             ).asImageBitmap()
         }.getOrNull()
     }
+
+    // Sobrevive a los redibujados: es lo que permite no rehacer el trazo entero
+    // en cada muestra.
+    val livePath = remember { LiveStrokePath() }
 
     Canvas(modifier = modifier.fillMaxSize()) {
         // Suscribe el DIBUJADO (no la composición) a cada muestra del trazo vivo.
@@ -301,17 +357,56 @@ fun AnnotationCanvas(
         }
 
         // Trazo vivo: los puntos salen del búfer plano, no de una lista.
-        controller.liveTemplate.value?.let { live ->
+        val live = controller.liveTemplate.value
+        if (live == null) {
+            livePath.reset()
+        } else {
             val buf = controller.liveStroke
             @Suppress("UNUSED_EXPRESSION") version
-            drawFreehand(
-                buf.size,
-                { vx(buf.x(it)) }, { vy(buf.y(it)) }, { buf.pressure(it) },
-                // El borrador no deja marca, pero mientras se arrastra hay que ver
-                // por dónde va o se borra a ciegas.
-                if (live.type == AnnotationType.ERASER) Color(0x66FFFFFF) else Color(live.color),
-                live.strokeWidth * scale
-            )
+            // El borrador no deja marca, pero mientras se arrastra hay que ver
+            // por dónde va o se borra a ciegas.
+            val color =
+                if (live.type == AnnotationType.ERASER) Color(0x66FFFFFF) else Color(live.color)
+            val width = live.strokeWidth * scale
+            val n = buf.size
+            val xAt = { i: Int -> vx(buf.x(i)) }
+            val yAt = { i: Int -> vy(buf.y(i)) }
+
+            when {
+                n <= 0 -> Unit
+
+                n == 1 -> drawCircle(
+                    color,
+                    radius = StrokeSmoothing.widthFor(width, buf.pressure(0)) / 2f,
+                    center = Offset(xAt(0), yAt(0))
+                )
+
+                // Con presión variable el trazo va tramo a tramo con grosores
+                // distintos y no cabe en un Path único: ahí no hay nada que
+                // acumular, pero tampoco es el caso frecuente (solo con lápiz).
+                StrokeSmoothing.hasVariablePressure(n) { buf.pressure(it) } -> {
+                    livePath.reset()
+                    drawFreehand(n, xAt, yAt, { buf.pressure(it) }, color, width)
+                }
+
+                else -> {
+                    // Si el trazo se reinició (undo, cancelar) el acumulado ya no vale.
+                    if (livePath.built > n) livePath.reset()
+                    livePath.extendTo(n, xAt, yAt)
+                    val stroke = Stroke(
+                        width = width, cap = StrokeCap.Round, join = StrokeJoin.Round
+                    )
+                    drawPath(livePath.path, color, style = stroke)
+                    // El tramo hasta el último punto, que aún puede moverse.
+                    drawLine(
+                        color,
+                        livePath.tailStart(n, xAt, yAt),
+                        Offset(xAt(n - 1), yAt(n - 1)),
+                        strokeWidth = width,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
         }
     }
 }
