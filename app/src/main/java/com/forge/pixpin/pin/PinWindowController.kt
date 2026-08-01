@@ -12,18 +12,22 @@ import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,14 +74,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -157,6 +159,11 @@ class PinWindowController(
 
     private var actionBar: OverlayComposeWindow? = null
     private var annotateBar: OverlayComposeWindow? = null
+
+    private var touchHandler: OverlayTouchHandler? = null
+
+    /** Esquina agarrable del cuadro de texto, en coordenadas de la ventana. */
+    private var resizeHandle: android.graphics.Rect? = null
 
     private val pin = mutableStateOf(initialState)
     private val scale = mutableFloatStateOf(initialState.scale)
@@ -271,7 +278,7 @@ class PinWindowController(
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         val w = OverlayComposeWindow(context) { PinRoot() }
-        w.setTouchHandler(OverlayTouchHandler(context, GestureListener()))
+        w.setTouchHandler(newTouchHandler())
         window = w
         lp = params
         runCatching {
@@ -385,6 +392,8 @@ class PinWindowController(
         minimized.value = true
         closeActionBar()
         exitAnnotateMode()
+        // La burbuja no se redimensiona; sin esto conservaría el rect del pin abierto.
+        setResizeHandle(null)
         applyContentSize()
         if (dock) callbacks.onPinMinimized(this)
         // La imagen puede vivir fuera de la pantalla, pero la burbuja no: si no,
@@ -457,6 +466,22 @@ class PinWindowController(
         applyLayout()
     }
 
+    /**
+     * Un reconocedor nuevo hereda el handle vivo: se recrea al salir del modo
+     * anotación y sin esto el cuadro de texto dejaba de poder redimensionarse
+     * hasta la siguiente recomposición.
+     */
+    private fun newTouchHandler(): OverlayTouchHandler =
+        OverlayTouchHandler(context, GestureListener()).also {
+            it.handleRect = resizeHandle
+            touchHandler = it
+        }
+
+    private fun setResizeHandle(rect: android.graphics.Rect?) {
+        resizeHandle = rect
+        touchHandler?.handleRect = rect
+    }
+
     // ---- Gestos ----
 
     private inner class GestureListener : OverlayTouchHandler.Listener {
@@ -500,22 +525,22 @@ class PinWindowController(
             scaleStartH = (v?.height ?: 0).coerceAtLeast(1)
             val metrics = context.resources.displayMetrics
             zoomMax = if (naturalW > 0) {
-                // Imagen o texto con tamaño explícito: puede pasar del borde de
-                // la pantalla para acercarse y leer. Las imágenes usan mayor
-                // overzoom (3×); los textos se limitan a 5×.
-                val max = PinZoom.maxScaleFor(
+                // Imagen con tamaño explícito: puede pasar del borde de la
+                // pantalla para acercarse y leer.
+                PinZoom.maxScaleFor(
                     realW = naturalW, realH = naturalH, currentScale = 1f,
                     screenW = metrics.widthPixels, screenH = metrics.heightPixels,
-                    overzoom = if (pin.value.type == PinType.IMAGE) PinZoom.IMAGE_OVERZOOM else 1f
+                    overzoom = PinZoom.IMAGE_OVERZOOM
                 )
-                if (pin.value.type == PinType.TEXT) max.coerceAtMost(5f) else max
             } else {
-                // Texto, color y archivo sin tamaño explícito se miden solos,
-                // y ahí la ventana no puede pasar de la pantalla: el tope es llenarla.
-                PinZoom.maxScaleFor(
+                // Texto, color y archivo se miden solos, y ahí la ventana no
+                // puede pasar de la pantalla: el tope es llenarla. El texto se
+                // queda además en 5×, que es donde deja de leerse mejor.
+                val max = PinZoom.maxScaleFor(
                     realW = scaleStartW, realH = scaleStartH, currentScale = scaleStart,
                     screenW = metrics.widthPixels, screenH = metrics.heightPixels
                 )
+                if (pin.value.type == PinType.TEXT) max.coerceAtMost(5f) else max
             }
             // Posición del foco DENTRO del pin (0..1): es lo que hay que dejar
             // clavado bajo los dedos mientras se escala.
@@ -563,6 +588,45 @@ class PinWindowController(
         }
 
         override fun onOpacityEnd() {
+            callbacks.onPinChanged(this@PinWindowController)
+        }
+
+        private var resizeStartW = 0
+        private var resizeStartH = 0
+
+        override fun onResizeStart() {
+            closeActionBar()
+            val density = context.resources.displayMetrics.density
+            resizeStartW = pin.value.textBoxWidth
+            // Sin alto fijado aún, se parte del que tenga el pin ahora mismo:
+            // así el cuadro no pega un salto en el primer píxel de arrastre.
+            resizeStartH = pin.value.textBoxHeight
+                ?: ((window?.view?.height ?: 0) / density).toInt()
+                    .coerceAtLeast(TextBoxSize.MIN_HEIGHT)
+        }
+
+        override fun onResize(dxFromDown: Float, dyFromDown: Float) {
+            val density = context.resources.displayMetrics.density
+            val dims = TextBoxSize.resize(
+                startWidth = resizeStartW,
+                startHeight = resizeStartH,
+                dxDp = dxFromDown / density,
+                dyDp = dyFromDown / density
+            )
+            if (dims.width != pin.value.textBoxWidth ||
+                dims.height != pin.value.textBoxHeight
+            ) {
+                pin.value = pin.value.copy(
+                    textBoxWidth = dims.width,
+                    textBoxHeight = dims.height
+                )
+            }
+        }
+
+        override fun onResizeEnd() {
+            keepReachable()
+            // Se persiste al soltar, no en cada muestra: scheduleSave ya hace
+            // debounce, pero escribir el estado por píxel arrastrado es ruido.
             callbacks.onPinChanged(this@PinWindowController)
         }
 
@@ -696,7 +760,7 @@ class PinWindowController(
         annotating.value = false
         annotator.finishPolyline()
         annotator.cancel()
-        window?.setTouchHandler(OverlayTouchHandler(context, GestureListener()))
+        window?.setTouchHandler(newTouchHandler())
         closeAnnotateBar()
         pin.value = snapshot()
         callbacks.onPinChanged(this)
@@ -977,14 +1041,6 @@ class PinWindowController(
     private fun PinRoot() {
         val s by pin
         val small by minimized
-        LaunchedEffect(s.type) {
-            if (s.type == PinType.TEXT && naturalW == 0) {
-                val screenW = context.resources.displayMetrics.widthPixels
-                naturalW = (screenW * 0.5f).toInt().coerceAtLeast(1)
-                naturalH = 120
-                applyContentSize()
-            }
-        }
         Surface(
             shape = if (small) CircleShape else RoundedCornerShape(12.dp),
             shadowElevation = 8.dp,
@@ -1121,35 +1177,35 @@ class PinWindowController(
         return bitmapState
     }
 
+    /**
+     * El ancho y el alto los manda el estado, no la medida del texto: es lo que
+     * permite estirar el cuadro por su esquina. Sin alto fijado, se ajusta al
+     * texto; con él, lo que sobre se desplaza dentro.
+     */
     @Composable
     private fun TextPinBody(s: PinState) {
         val zoom by scale
         val density = LocalDensity.current
-        var textBoxStart by remember { mutableIntStateOf(s.textBoxWidth) }
-
+        // Se lee aquí y no dentro del Canvas: en un DrawScope no hay MaterialTheme.
+        val handleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         Box(
             Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val pointers = event.changes.filter { it.pressed }
-
-                            if (pointers.size == 3) {
-                                val current = event.changes[0]
-                                val prev = current.previousPosition
-                                val dragAmount = (current.position.x - prev.x) / density.density
-                                val newWidth = (textBoxStart + dragAmount).toInt()
-                                    .coerceIn(120, 500)
-                                if (newWidth != pin.value.textBoxWidth) {
-                                    pin.value = pin.value.copy(textBoxWidth = newWidth)
-                                    textBoxStart = newWidth
-                                }
-                                current.consume()
-                            }
-                        }
-                    }
+                .width(s.textBoxWidth.dp)
+                .then(
+                    if (s.textBoxHeight != null) Modifier.height(s.textBoxHeight.dp)
+                    else Modifier
+                )
+                // El handle se mide de verdad en vez de calcularse aparte: es lo
+                // único que garantiza que la zona que responde al dedo y el
+                // triangulito que se ve sean el mismo sitio.
+                .onGloballyPositioned { coords ->
+                    val origin = coords.positionInRoot()
+                    val side = with(density) { HANDLE_DP.dp.roundToPx() }
+                    val right = (origin.x + coords.size.width).toInt()
+                    val bottom = (origin.y + coords.size.height).toInt()
+                    setResizeHandle(
+                        android.graphics.Rect(right - side, bottom - side, right, bottom)
+                    )
                 }
         ) {
             Text(
@@ -1157,12 +1213,31 @@ class PinWindowController(
                 fontSize = (14f * zoom).sp,
                 lineHeight = (20f * zoom).sp,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 40,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .widthIn(max = s.textBoxWidth.dp)
+                    // fillMaxWidth y no fillMaxSize: sin alto fijado, el Box se
+                    // ajusta al texto, y un hijo que llenase el alto máximo lo
+                    // estiraría hasta el tope de la pantalla.
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(14.dp)
             )
+            Canvas(
+                modifier = Modifier
+                    .size(HANDLE_DP.dp)
+                    .align(Alignment.BottomEnd)
+            ) {
+                // Tres rayas en diagonal, el gesto universal de "estírame".
+                val stroke = 1.5.dp.toPx()
+                for (i in 1..3) {
+                    val inset = size.width * (i / 4f)
+                    drawLine(
+                        color = handleColor,
+                        start = Offset(size.width - inset, size.height),
+                        end = Offset(size.width, size.height - inset),
+                        strokeWidth = stroke
+                    )
+                }
+            }
         }
     }
 
@@ -1220,6 +1295,9 @@ class PinWindowController(
     private companion object {
         /** Diámetro de la burbuja minimizada, en dp. */
         const val BUBBLE_DP = 46
+
+        /** Lado de la esquina agarrable del cuadro de texto, en dp. */
+        const val HANDLE_DP = 30
     }
 
     private fun mimeIcon(mime: String?) = when {
