@@ -41,6 +41,42 @@ class PinStateSerializationTest {
     }
 
     @Test
+    fun `roundtrip con los campos nuevos`() {
+        val state = PinState(
+            id = "abc",
+            type = PinType.TEXT,
+            text = "hola",
+            textBoxWidth = 240,
+            textBoxHeight = 180,
+            priority = true,
+            emoji = "🔥"
+        )
+        val restored = json.decodeFromString<PinState>(json.encodeToString(state))
+        assertEquals(state, restored)
+    }
+
+    @Test
+    fun `los campos nuevos tienen valores por defecto seguros`() {
+        val minimal = """{"id":"x","type":"TEXT","text":"hola"}"""
+        val restored = json.decodeFromString<PinState>(minimal)
+        assertEquals(330, restored.textBoxWidth)
+        assertEquals(null, restored.textBoxHeight)
+        assertEquals(false, restored.priority)
+        assertEquals(null, restored.emoji)
+    }
+
+    /** Un pins.json de la v0.2 lleva savedCategory; el campo ya no existe y debe ignorarse. */
+    @Test
+    fun `un pin de la version anterior sigue cargando`() {
+        val v02 = """{"id":"x","type":"IMAGE","imagePath":"/f/a.png",""" +
+            """"isPinned":true,"savedCategory":"⭐ Importante","textBoxWidth":330}"""
+        val restored = json.decodeFromString<PinState>(v02)
+        assertEquals("/f/a.png", restored.imagePath)
+        assertEquals(true, restored.isPinned)
+        assertEquals(false, restored.priority)
+    }
+
+    @Test
     fun `lista de pines`() {
         val pins = listOf(
             PinState(id = "1", type = PinType.IMAGE, imagePath = "/f/a.png"),

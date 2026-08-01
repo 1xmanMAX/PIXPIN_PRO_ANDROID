@@ -356,11 +356,7 @@ class PinWindowController(
 
     /** Marca/desmarca el pin como guardado. */
     fun togglePinned() {
-        val wasPinned = pin.value.isPinned
-        pin.value = pin.value.copy(
-            isPinned = !wasPinned,
-            savedCategory = if (wasPinned) null else "other"
-        )
+        pin.value = pin.value.copy(isPinned = !pin.value.isPinned)
         callbacks.onPinChanged(this)
     }
 

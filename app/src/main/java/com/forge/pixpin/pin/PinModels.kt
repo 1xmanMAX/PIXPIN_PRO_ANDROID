@@ -32,8 +32,15 @@ data class PinState(
     val annotations: List<Annotation> = emptyList(),
     /** Marca el pin como guardado: sobrevive al cierre y se muestra en la lista de guardados. */
     val isPinned: Boolean = false,
-    /** Categoría del pin guardado: null si no está guardado, "credential", "code", "document", "photo", "other". */
-    val savedCategory: String? = null,
     /** Ancho del cuadro de texto en dp (solo para TEXT pins). */
-    val textBoxWidth: Int = 330
+    val textBoxWidth: Int = 330,
+    /** Alto máximo del cuadro de texto en dp; null = se ajusta al texto. */
+    val textBoxHeight: Int? = null,
+    /**
+     * Pin prioritario. Nace siempre en false y se alterna con pulsación larga
+     * sobre su nombre en la lista de pines.
+     */
+    val priority: Boolean = false,
+    /** Emoji pegado en la esquina, a modo de pegatina; null = sin pegatina. */
+    val emoji: String? = null
 )

@@ -9,7 +9,6 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -97,8 +96,6 @@ class OverlayManager(private val app: PixPinApp) {
 
     /** Selección de la lista de pines, para agrupar y desagrupar. */
     private val selection = mutableStateOf<Set<String>>(emptySet())
-
-    private val showingTagsFor = mutableStateOf<String?>(null)
 
     /** Posición de cada compañero de grupo al empezar el arrastre en curso. */
     private var dragAnchors: Map<String, Pair<Int, Int>> = emptyMap()
@@ -514,26 +511,6 @@ class OverlayManager(private val app: PixPinApp) {
         listWindow = null
     }
 
-    private fun assignCategory(pinId: String, category: String) {
-        runCatching {
-            val activePin = pins[pinId]
-            if (activePin != null) {
-                val updated = activePin.snapshot().copy(savedCategory = category)
-                activePin.updateState(updated)
-                scope.launch(Dispatchers.IO) { repo.savePins(pins.values.map { it.snapshot() }) }
-            } else {
-                scope.launch(Dispatchers.IO) {
-                    val saved = repo.loadSavedPins().map { pin ->
-                        if (pin.id == pinId) pin.copy(savedCategory = category) else pin
-                    }
-                    repo.saveSavedPins(saved)
-                }
-            }
-        }
-        showingTagsFor.value = null
-        refreshPinList()
-    }
-
     private fun refreshPinList() {
         listState.value = pins.values.map { it.snapshot() }
         // Carga los pines guardados del disco para la sección de guardados.
@@ -690,7 +667,6 @@ class OverlayManager(private val app: PixPinApp) {
     @Composable
     private fun PinListRow(pin: PinState) {
         val groupColor = pin.groupId?.let { Color(PinGroups.colorFor(it)) }
-        val showTags = showingTagsFor.value == pin.id
 
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -738,9 +714,8 @@ class OverlayManager(private val app: PixPinApp) {
                         .weight(1f)
                         .padding(horizontal = 8.dp)
                         .pointerInput(pin.id) {
-                            detectTapGestures(onLongPress = {
-                                showingTagsFor.value = pin.id
-                            })
+                            // La pulsación larga se cablea en la tarea siguiente.
+                            detectTapGestures(onLongPress = { })
                         }
                 ) {
                     Text(
@@ -786,16 +761,11 @@ class OverlayManager(private val app: PixPinApp) {
                     Icon(Icons.Filled.Close, contentDescription = null)
                 }
             }
-            if (showTags) {
-                TagsRow(pin)
-            }
         }
     }
 
     @Composable
     private fun SavedPinRow(pin: PinState) {
-        val showTags = showingTagsFor.value == pin.id
-
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -830,9 +800,8 @@ class OverlayManager(private val app: PixPinApp) {
                         .weight(1f)
                         .padding(horizontal = 6.dp)
                         .pointerInput(pin.id) {
-                            detectTapGestures(onLongPress = {
-                                showingTagsFor.value = pin.id
-                            })
+                            // La pulsación larga se cablea en la tarea siguiente.
+                            detectTapGestures(onLongPress = { })
                         }
                 ) {
                     Text(
@@ -857,40 +826,6 @@ class OverlayManager(private val app: PixPinApp) {
                         Icons.Filled.Close,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            if (showTags) {
-                TagsRow(pin)
-            }
-        }
-    }
-
-    @Composable
-    private fun TagsRow(pin: PinState) {
-        val tags = listOf(
-            "⭐ Importante",
-            "👁️ Vigilar",
-            "📁 Archivo",
-            "⏳ Temporal",
-            "🗑️ Un solo uso"
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            tags.forEach { tag ->
-                TextButton(
-                    onClick = {
-                        assignCategory(pin.id, tag)
-                    },
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Text(
-                        text = tag,
-                        style = MaterialTheme.typography.labelSmall
                     )
                 }
             }
