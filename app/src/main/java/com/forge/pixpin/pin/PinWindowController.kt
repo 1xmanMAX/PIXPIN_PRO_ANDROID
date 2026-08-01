@@ -18,11 +18,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -87,6 +90,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -597,13 +601,15 @@ class PinWindowController(
             scaleStartH = (v?.height ?: 0).coerceAtLeast(1)
             val metrics = context.resources.displayMetrics
             zoomMax = if (naturalW > 0) {
-                // Imagen con tamaño explícito: puede pasar del borde de la
-                // pantalla para acercarse y leer.
-                PinZoom.maxScaleFor(
+                // Con tamaño explícito la ventana puede pasar del borde de la
+                // pantalla para acercarse y leer. El texto también, ahora que lo
+                // tiene, pero se queda en 5×: más allá no se lee mejor.
+                val max = PinZoom.maxScaleFor(
                     realW = naturalW, realH = naturalH, currentScale = 1f,
                     screenW = metrics.widthPixels, screenH = metrics.heightPixels,
                     overzoom = PinZoom.IMAGE_OVERZOOM
                 )
+                if (pin.value.type == PinType.TEXT) max.coerceAtMost(5f) else max
             } else {
                 // Texto, color y archivo se miden solos, y ahí la ventana no
                 // puede pasar de la pantalla: el tope es llenarla. El texto se
@@ -1408,41 +1414,71 @@ class PinWindowController(
         // Se re-interpreta solo cuando cambia el texto, no en cada fotograma del
         // pellizco: el zoom no afecta a la sintaxis.
         val blocks = remember(s.text) { Markdown.parse(s.text.orEmpty()) }
-        Box(
-            Modifier
-                .width((s.textBoxWidth * zoom).dp)
-                .then(
-                    if (s.textBoxHeight != null) Modifier.height((s.textBoxHeight * zoom).dp)
-                    else Modifier
-                )
-                // El handle se mide de verdad en vez de calcularse aparte: es lo
-                // único que garantiza que la zona que responde al dedo y el
-                // triangulito que se ve sean el mismo sitio.
-                .onGloballyPositioned { coords ->
-                    val origin = coords.positionInRoot()
-                    val side = with(density) { HANDLE_DP.dp.roundToPx() }
-                    val right = (origin.x + coords.size.width).toInt()
-                    val bottom = (origin.y + coords.size.height).toInt()
-                    setResizeHandle(
-                        android.graphics.Rect(right - side, bottom - side, right, bottom)
+        val textScroll = rememberScrollState()
+        Box(Modifier.fillMaxSize()) {
+            // El texto se compone UNA VEZ a tamaño base y se escala con una
+            // transformación de GPU, igual que una imagen.
+            //
+            // Antes el ancho iba en dp multiplicados por el zoom, así que cada
+            // fotograma del pellizco re-medía y re-ajustaba el texto: las
+            // palabras cambiaban de línea, volvían y repetían, y el cuadro
+            // vibraba. Escalando el dibujado ya compuesto no hay re-ajuste
+            // ninguno que hacer.
+            Box(
+                Modifier
+                    .width(s.textBoxWidth.dp)
+                    .then(
+                        if (s.textBoxHeight != null) Modifier.height(s.textBoxHeight.dp)
+                        else Modifier
                     )
-                }
-        ) {
-            MarkdownText(
-                blocks = blocks,
-                baseSizeSp = 14f * zoom,
-                modifier = Modifier
-                    // fillMaxWidth y no fillMaxSize: sin alto fijado, el Box se
-                    // ajusta al texto, y un hijo que llenase el alto máximo lo
-                    // estiraría hasta el tope de la pantalla.
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding((14f * zoom).dp)
-            )
+                    .graphicsLayer {
+                        scaleX = zoom
+                        scaleY = zoom
+                        // Desde la esquina superior izquierda: es la que la
+                        // ventana tiene clavada en su posición.
+                        transformOrigin = TransformOrigin(0f, 0f)
+                    }
+                    // El tamaño BASE medido de verdad: de él sale el tamaño
+                    // explícito de la ventana, y con tamaño explícito se acabó
+                    // el tope de ancho (una ventana WRAP_CONTENT no puede medir
+                    // más que la pantalla, y ahí el texto crecía hacia abajo).
+                    .onGloballyPositioned { coords ->
+                        val w = coords.size.width
+                        val h = coords.size.height
+                        if (w > 0 && h > 0 && (w != naturalW || h != naturalH)) {
+                            naturalW = w
+                            naturalH = h
+                            applyContentSize()
+                        }
+                    }
+            ) {
+                MarkdownText(
+                    blocks = blocks,
+                    baseSizeSp = 14f,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(textScroll)
+                        .padding(14.dp)
+                )
+                ScrollPip(textScroll)
+            }
+            // El handle va FUERA de la capa escalada: es un control, no
+            // contenido, y así su zona táctil sale medida sin corregir nada.
             Canvas(
                 modifier = Modifier
                     .size(HANDLE_DP.dp)
                     .align(Alignment.BottomEnd)
+                    .onGloballyPositioned { coords ->
+                        val origin = coords.positionInRoot()
+                        setResizeHandle(
+                            android.graphics.Rect(
+                                origin.x.toInt(),
+                                origin.y.toInt(),
+                                (origin.x + coords.size.width).toInt(),
+                                (origin.y + coords.size.height).toInt()
+                            )
+                        )
+                    }
             ) {
                 // Tres rayas en diagonal, el gesto universal de "estírame".
                 val stroke = 1.5.dp.toPx()
@@ -1456,6 +1492,42 @@ class PinWindowController(
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Pastilla de desplazamiento del cuadro de texto, a caballo sobre el borde
+     * derecho: medio dentro y medio fuera.
+     *
+     * Solo aparece cuando hay algo que desplazar; con el texto entero a la vista
+     * sería un adorno que estorba. Va dentro de la capa escalada a propósito:
+     * así crece con el pellizco y sigue siendo agarrable con el pin grande.
+     */
+    @Composable
+    private fun BoxScope.ScrollPip(state: ScrollState) {
+        val max = state.maxValue
+        if (max <= 0) return
+        val fraction = (state.value.toFloat() / max).coerceIn(0f, 1f)
+        val trackHeight = 54.dp
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                // La mitad de su ancho por fuera del borde del cuadro.
+                .offset(x = SCROLL_PIP_DP.dp / 2)
+                .width(SCROLL_PIP_DP.dp)
+                .height(trackHeight)
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    RoundedCornerShape(50)
+                ),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Box(
+                Modifier
+                    .offset(y = (trackHeight - SCROLL_PIP_DP.dp) * fraction)
+                    .size(SCROLL_PIP_DP.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+            )
         }
     }
 
@@ -1516,6 +1588,9 @@ class PinWindowController(
 
         /** Lado de la esquina agarrable del cuadro de texto, en dp. */
         const val HANDLE_DP = 30
+
+        /** Diámetro de la pastilla de desplazamiento del cuadro de texto, en dp. */
+        const val SCROLL_PIP_DP = 10
     }
 
     private fun mimeIcon(mime: String?) = when {

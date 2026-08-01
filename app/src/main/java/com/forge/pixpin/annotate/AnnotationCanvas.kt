@@ -97,6 +97,39 @@ private fun DrawScope.drawFreehand(
  * exactamente un `quadTo` y no toca lo ya dibujado. Lo único provisional es el
  * tramo final hasta el último punto, que se pinta aparte en cada fotograma.
  */
+/**
+ * Caché del `Path` de los trazos YA TERMINADOS.
+ *
+ * Un trazo cerrado no vuelve a cambiar nunca, pero se reconstruía entero en cada
+ * redibujado. Con quince trazos sobre la imagen, cada muestra del lápiz rehacía
+ * los quince: por eso el lag no aparecía al empezar a dibujar sino a medida que
+ * se acumulaban trazos.
+ *
+ * Se indexa por IDENTIDAD y no por valor: `Annotation` es un data class y su
+ * hashCode recorre la lista de puntos entera, con lo que buscar en el mapa
+ * costaría casi tanto como el problema que viene a resolver.
+ */
+private class StrokePathCache {
+    private val cache = java.util.IdentityHashMap<Annotation, Path>()
+    private var builtAtScale = Float.NaN
+
+    fun pathFor(a: Annotation, scale: Float, build: (Path) -> Unit): Path {
+        // Los caminos están en coordenadas de vista: al cambiar el zoom ya no valen.
+        if (builtAtScale != scale) {
+            cache.clear()
+            builtAtScale = scale
+        }
+        // Deshacer y rehacer van dejando entradas huérfanas; con el mapa grande
+        // sale más barato tirarlo entero que llevar la cuenta de cuáles sobran.
+        if (cache.size > MAX_ENTRIES) cache.clear()
+        return cache.getOrPut(a) { Path().also(build) }
+    }
+
+    private companion object {
+        const val MAX_ENTRIES = 128
+    }
+}
+
 private class LiveStrokePath {
     val path = Path()
     /** Cuántas muestras están ya dentro de [path]. */
@@ -197,6 +230,9 @@ fun AnnotationCanvas(
     // en cada muestra.
     val livePath = remember { LiveStrokePath() }
 
+    // Los trazos ya cerrados no cambian: se construyen una vez y se reutilizan.
+    val pathCache = remember { StrokePathCache() }
+
     Canvas(modifier = modifier.fillMaxSize()) {
         // Suscribe el DIBUJADO (no la composición) a cada muestra del trazo vivo.
         val version = controller.strokeVersion.intValue
@@ -263,11 +299,31 @@ fun AnnotationCanvas(
                 }
                 AnnotationType.PENCIL, AnnotationType.HIGHLIGHT -> {
                     val pts = a.points
-                    drawFreehand(
-                        pts.size,
-                        { vx(pts[it].x) }, { vy(pts[it].y) }, { pts[it].p },
-                        Color(a.color), a.strokeWidth * scale
-                    )
+                    // Con grosor variable el trazo va tramo a tramo y no cabe en
+                    // un Path único; ese caso no se puede cachear, pero solo se
+                    // da con lápiz de presión.
+                    if (pts.size < 3 || StrokeSmoothing.hasVariablePressure(pts)) {
+                        drawFreehand(
+                            pts.size,
+                            { vx(pts[it].x) }, { vy(pts[it].y) }, { pts[it].p },
+                            Color(a.color), a.strokeWidth * scale
+                        )
+                    } else {
+                        val cached = pathCache.pathFor(a, scale) { path ->
+                            StrokeSmoothing.feed(
+                                pts.size, { vx(pts[it].x) }, { vy(pts[it].y) },
+                                ComposePathSink(path)
+                            )
+                        }
+                        drawPath(
+                            cached, Color(a.color),
+                            style = Stroke(
+                                width = a.strokeWidth * scale,
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
+                    }
                 }
                 AnnotationType.MOSAIC -> drawMosaic(a)
                 AnnotationType.TEXT -> {
