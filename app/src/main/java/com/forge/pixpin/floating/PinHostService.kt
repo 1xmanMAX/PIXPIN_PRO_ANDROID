@@ -68,8 +68,13 @@ class PinHostService : Service() {
     private fun ensureOverlays() {
         if (!Settings.canDrawOverlays(this)) return
         if (ball == null) ball = FloatingBallController(this)
-        if (ball?.isShowing != true) ball?.show()
-        (application as PixPinApp).overlayManager.restoreOnStart()
+        // ensureVisible y no show(): la bola puede estar puesta pero oculta, y
+        // show() se daba por hecho el trabajo al ver que la ventana ya existía.
+        ball?.ensureVisible()
+        val app = application as PixPinApp
+        app.overlayManager.restoreOnStart()
+        // Los pines pueden haberse quedado ocultos por el mismo motivo.
+        app.overlayManager.recoverVisibility()
     }
 
     private fun createChannel() {

@@ -357,6 +357,16 @@ class OverlayManager(private val app: PixPinApp) {
         FloatingBallController.active?.setVisible(visible)
     }
 
+    /**
+     * Red de seguridad: devuelve los pines a la vista si se quedaron ocultos por
+     * una captura que murió antes de restaurarlos. Respeta el ocultar-todo, que
+     * eso sí lo pidió el usuario a propósito.
+     */
+    fun recoverVisibility() {
+        if (hiddenAll) return
+        pins.values.forEach { it.setViewVisible(true) }
+    }
+
     fun toggleHideAll() {
         hiddenAll = !hiddenAll
         pins.values.forEach { it.setViewVisible(!hiddenAll) }

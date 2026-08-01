@@ -45,11 +45,20 @@ object CaptureFlow {
         val overlays = app.overlayManager
 
         overlays.setOverlaysVisible(false)
-        // Margen para que el compositor ya no dibuje los overlays (y, tras el
-        // diálogo de permiso, para que su atenuación haya desaparecido).
-        delay(settleMs)
-        val frame = ProjectionSession.grab()
-        overlays.setOverlaysVisible(true)
+        // El restaurado va en finally y no a continuación: esto corre en el
+        // scope de CaptureService, que se destruye —y lo cancela— si la sesión
+        // de proyección se cae a media captura (pantalla bloqueada, permiso
+        // revocado, otra app tomando la proyección). Sin el finally, la
+        // cancelación se comía el setOverlaysVisible(true) y la bola y los pines
+        // se quedaban ocultos para siempre.
+        val frame = try {
+            // Margen para que el compositor ya no dibuje los overlays (y, tras
+            // el diálogo de permiso, para que su atenuación haya desaparecido).
+            delay(settleMs)
+            ProjectionSession.grab()
+        } finally {
+            overlays.setOverlaysVisible(true)
+        }
 
         if (frame == null) {
             toast(app, R.string.capture_error)

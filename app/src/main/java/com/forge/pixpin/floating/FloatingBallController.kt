@@ -72,7 +72,24 @@ class FloatingBallController(private val context: Context) {
     private var dragStartX = 0
     private var dragStartY = 0
 
-    val isShowing: Boolean get() = ball != null
+    /**
+     * Puesta Y visible. Mirar solo si la ventana existe dejaba fuera el caso en
+     * que está puesta pero oculta, y ahí nadie la recuperaba. Ver [BallState].
+     */
+    val isShowing: Boolean get() = ball?.isContentVisible == true
+
+    /**
+     * Deja la bola a la vista venga del estado que venga. Es el punto de
+     * recuperación: lo llama el servicio en cada arranque, así que pulsar
+     * «Comenzar» siempre la devuelve.
+     */
+    fun ensureVisible() {
+        when (BallState.recoveryFor(windowExists = ball != null, contentVisible = isShowing)) {
+            BallRecovery.NADA -> Unit
+            BallRecovery.CREAR -> show()
+            BallRecovery.VOLVER_A_ENSENAR -> setVisible(true)
+        }
+    }
 
     /** Rectángulo actual de la bola en coordenadas de pantalla, o null si está oculta. */
     fun ballBounds(): Rect? {

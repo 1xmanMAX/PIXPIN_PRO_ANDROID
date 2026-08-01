@@ -146,7 +146,16 @@ class ScrollCaptureController private constructor(
         running = true
         app.overlayManager.setOverlaysVisible(false)
         openBar()
-        job = app.scope.launch { loop() }
+        // Si el bucle muere por lo que sea, hay que cerrar igual: dejar `running`
+        // en true significaría que finish() no vuelve a entrar nunca y los
+        // overlays se quedarían ocultos sin forma de recuperarlos.
+        job = app.scope.launch {
+            try {
+                loop()
+            } finally {
+                if (running) finish(save = !stitcher.isEmpty)
+            }
+        }
         return true
     }
 
