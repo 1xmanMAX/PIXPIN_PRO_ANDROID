@@ -858,6 +858,11 @@ class OverlayManager(private val app: PixPinApp) {
                 })
             }
         ) {
+            pin.emoji?.let {
+                // Sin rotar: la pegatina se inclina sobre el pin, no en una lista.
+                Text(text = it, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(4.dp))
+            }
             if (pin.priority && pin.type != PinType.IMAGE) {
                 PriorityChip()
                 Spacer(Modifier.width(4.dp))

@@ -80,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -228,6 +229,9 @@ class PinWindowController(
      */
     private var naturalW = 0
     private var naturalH = 0
+
+    /** Margen del sticker ya aplicado a la ventana, para compensar al cambiarlo. */
+    private var appliedMargin = 0
 
     /**
      * Dónde y cuánto ocupa la imagen dentro de la ventana, medido de verdad.
@@ -451,7 +455,14 @@ class PinWindowController(
         applyContentSize()
     }
 
-    /** Lleva la ventana al tamaño que le toca por la escala actual. */
+    /**
+     * Lleva la ventana al tamaño que le toca por la escala actual, más el hueco
+     * del sticker si lo hay.
+     *
+     * [naturalW]/[naturalH] siguen siendo el tamaño de la IMAGEN, no el de la
+     * ventana: AnnotationCanvas calcula su rectángulo con naturalW × zoom, y si
+     * incluyeran el margen los trazos se despegarían de la foto.
+     */
     private fun applyContentSize() {
         val p = lp ?: return
         if (naturalW <= 0) return
@@ -460,11 +471,22 @@ class PinWindowController(
             p.width = WindowManager.LayoutParams.WRAP_CONTENT
             p.height = WindowManager.LayoutParams.WRAP_CONTENT
         } else {
-            p.width = (naturalW * scale.floatValue).toInt().coerceAtLeast(1)
-            p.height = (naturalH * scale.floatValue).toInt().coerceAtLeast(1)
+            val margin = stickerMarginPx()
+            // El margen va arriba: sin compensar, poner un emoji empujaba la
+            // imagen hacia abajo y el pin parecía saltar.
+            if (margin != appliedMargin) {
+                p.y -= margin - appliedMargin
+                appliedMargin = margin
+            }
+            p.width = (naturalW * scale.floatValue).toInt().coerceAtLeast(1) + margin
+            p.height = (naturalH * scale.floatValue).toInt().coerceAtLeast(1) + margin
         }
         applyLayout()
     }
+
+    private fun stickerMarginPx(): Int =
+        if (pin.value.emoji == null) 0
+        else (STICKER_INSET_DP * context.resources.displayMetrics.density).toInt()
 
     /**
      * Un reconocedor nuevo hereda el handle vivo: se recrea al salir del modo
@@ -1041,16 +1063,37 @@ class PinWindowController(
     private fun PinRoot() {
         val s by pin
         val small by minimized
-        Surface(
-            shape = if (small) CircleShape else RoundedCornerShape(12.dp),
-            shadowElevation = 8.dp,
-            border = when {
-                s.clickThrough -> BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
-                else -> s.groupId?.let { BorderStroke(2.dp, Color(PinGroups.colorFor(it))) }
-            },
-            modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }
-        ) {
-            if (small) BubbleContent(s) else PinBodyContent(s)
+        Box(modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }) {
+            Surface(
+                shape = if (small) CircleShape else RoundedCornerShape(12.dp),
+                shadowElevation = 8.dp,
+                border = when {
+                    s.clickThrough -> BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
+                    else -> s.groupId?.let { BorderStroke(2.dp, Color(PinGroups.colorFor(it))) }
+                },
+                modifier = if (s.emoji != null) {
+                    Modifier.padding(top = STICKER_INSET_DP.dp, end = STICKER_INSET_DP.dp)
+                } else {
+                    Modifier
+                }
+            ) {
+                if (small) BubbleContent(s) else PinBodyContent(s)
+            }
+            // La pegatina va DESPUÉS del Surface para quedar por encima, y se
+            // dibuja dentro de su propia caja: rotado 30°, un glifo de 22 dp
+            // ocupa unos 30 dp, así que en una caja de 34 dp no se sale ni se
+            // corta contra el borde de la ventana.
+            s.emoji?.let { emoji ->
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(STICKER_SIZE_DP.dp)
+                        .rotate(30f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = emoji, fontSize = if (small) 16.sp else 22.sp)
+                }
+            }
         }
     }
 
@@ -1298,6 +1341,12 @@ class PinWindowController(
 
         /** Lado de la esquina agarrable del cuadro de texto, en dp. */
         const val HANDLE_DP = 30
+
+        /** Hueco que se le deja al sticker fuera del recuadro del pin, en dp. */
+        const val STICKER_INSET_DP = 20
+
+        /** Lado del sticker. Mayor que el hueco: por eso pisa la esquina. */
+        const val STICKER_SIZE_DP = 34
     }
 
     private fun mimeIcon(mime: String?) = when {
