@@ -11,7 +11,6 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -83,6 +82,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -235,8 +235,9 @@ class PinWindowController(
     private var naturalW = 0
     private var naturalH = 0
 
-    /** Margen del sticker ya aplicado a la ventana, para compensar al cambiarlo. */
-    private var appliedMargin = 0
+    /** Hueco ya aplicado a la ventana, en px, para compensar al cambiarlo. */
+    private var appliedLeft = 0
+    private var appliedTop = 0
 
     /**
      * Dónde y cuánto ocupa la imagen dentro de la ventana, medido de verdad.
@@ -479,22 +480,26 @@ class PinWindowController(
             p.width = WindowManager.LayoutParams.WRAP_CONTENT
             p.height = WindowManager.LayoutParams.WRAP_CONTENT
         } else {
-            val margin = stickerMarginPx()
-            // El margen va arriba: sin compensar, poner un emoji empujaba la
-            // imagen hacia abajo y el pin parecía saltar.
-            if (margin != appliedMargin) {
-                p.y -= margin - appliedMargin
-                appliedMargin = margin
+            val density = context.resources.displayMetrics.density
+            val insets = PinChrome.insetsFor(pin.value.emoji != null)
+            val left = (insets.left * density).toInt()
+            val top = (insets.top * density).toInt()
+            // La ventana se coloca por su esquina superior izquierda: sin
+            // compensar, poner un emoji empujaba la imagen hacia abajo y el pin
+            // parecía dar un salto.
+            if (left != appliedLeft || top != appliedTop) {
+                p.x -= left - appliedLeft
+                p.y -= top - appliedTop
+                appliedLeft = left
+                appliedTop = top
             }
-            p.width = (naturalW * scale.floatValue).toInt().coerceAtLeast(1) + margin
-            p.height = (naturalH * scale.floatValue).toInt().coerceAtLeast(1) + margin
+            p.width = (naturalW * scale.floatValue).toInt().coerceAtLeast(1) +
+                (insets.horizontal * density).toInt()
+            p.height = (naturalH * scale.floatValue).toInt().coerceAtLeast(1) +
+                (insets.vertical * density).toInt()
         }
         applyLayout()
     }
-
-    private fun stickerMarginPx(): Int =
-        if (pin.value.emoji == null) 0
-        else (STICKER_INSET_DP * context.resources.displayMetrics.density).toInt()
 
     /**
      * Un reconocedor nuevo hereda el handle vivo: se recrea al salir del modo
@@ -1156,19 +1161,35 @@ class PinWindowController(
     private fun PinRoot() {
         val s by pin
         val small by minimized
+        val insets = PinChrome.insetsFor(s.emoji != null)
+        val shape = if (small) CircleShape else RoundedCornerShape(12.dp)
+        // El color lo lleva la SOMBRA, no un marco: misma información, sin
+        // dibujar una caja alrededor. Se respeta la precedencia que tenían los
+        // marcos, con los toques a través por delante del grupo.
+        val shadowColor = when {
+            s.clickThrough -> MaterialTheme.colorScheme.tertiary
+            s.groupId != null -> Color(PinGroups.colorFor(s.groupId!!))
+            else -> Color.Black
+        }
         Box(modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }) {
             Surface(
-                shape = if (small) CircleShape else RoundedCornerShape(12.dp),
-                shadowElevation = 8.dp,
-                border = when {
-                    s.clickThrough -> BorderStroke(2.dp, MaterialTheme.colorScheme.tertiary)
-                    else -> s.groupId?.let { BorderStroke(2.dp, Color(PinGroups.colorFor(it))) }
-                },
-                modifier = if (s.emoji != null) {
-                    Modifier.padding(top = STICKER_INSET_DP.dp, end = STICKER_INSET_DP.dp)
-                } else {
-                    Modifier
-                }
+                shape = shape,
+                // A cero: la sombra la pone el Modifier, que es el único que
+                // admite color. Dejarla aquí también pintaría dos.
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .padding(
+                        start = insets.left.dp,
+                        top = insets.top.dp,
+                        end = insets.right.dp,
+                        bottom = insets.bottom.dp
+                    )
+                    .shadow(
+                        elevation = PinChrome.SHADOW_ELEVATION_DP.dp,
+                        shape = shape,
+                        ambientColor = shadowColor,
+                        spotColor = shadowColor
+                    )
             ) {
                 if (small) BubbleContent(s) else PinBodyContent(s)
             }
@@ -1180,7 +1201,11 @@ class PinWindowController(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .size(STICKER_SIZE_DP.dp)
+                        // El hueco de la sombra también rodea a la pegatina: sin
+                        // descontarlo se pegaría al borde de la ventana y se
+                        // cortaría al rotar.
+                        .padding(top = PinChrome.SHADOW_DP.dp, end = PinChrome.SHADOW_DP.dp)
+                        .size(PinChrome.STICKER_SIZE_DP.dp)
                         .rotate(30f),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1258,7 +1283,7 @@ class PinWindowController(
         Box(
             Modifier
                 .fillMaxSize()
-                .border(2.dp, Color.Gray)
+                // Sin marco: la separación del fondo la da la sombra de PinRoot.
                 // El origen y el tamaño REALES de la imagen en pantalla. Todo
                 // lo demás —dónde se dibuja y dónde se toca— se deriva de aquí:
                 // calcularlo por separado en dos sitios era lo que hacía que el
@@ -1440,12 +1465,6 @@ class PinWindowController(
 
         /** Lado de la esquina agarrable del cuadro de texto, en dp. */
         const val HANDLE_DP = 30
-
-        /** Hueco que se le deja al sticker fuera del recuadro del pin, en dp. */
-        const val STICKER_INSET_DP = 20
-
-        /** Lado del sticker. Mayor que el hueco: por eso pisa la esquina. */
-        const val STICKER_SIZE_DP = 34
     }
 
     private fun mimeIcon(mime: String?) = when {
