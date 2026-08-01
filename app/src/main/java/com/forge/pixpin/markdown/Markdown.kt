@@ -46,6 +46,15 @@ object Markdown {
     private val NUMBERED = Regex("""^(\d{1,3})[.)]\s+(.*)$""")
     private val RULE = Regex("""^\s*([-*_])\1{2,}\s*$""")
 
+    /** Prefijos que arrancan una url suelta. Van de más largo a más corto. */
+    private val AUTOLINK_PREFIXES = listOf("https://", "http://", "www.")
+
+    /**
+     * Puntuación que, al final de una url, es de la frase y no del enlace.
+     * `https://ejemplo.com.` termina en la url, no en el punto.
+     */
+    private const val TRAILING = ".,;:!?)]}>\"'"
+
     fun parse(source: String): List<MarkdownBlock> {
         val blocks = mutableListOf<MarkdownBlock>()
         val lines = source.replace("\r\n", "\n").split('\n')
@@ -206,10 +215,45 @@ object Markdown {
                 }
             }
 
+            // Una url suelta. Va la última de las reglas porque es la más
+            // ambiciosa: dentro de un `código` o de un [enlace] con corchetes ya
+            // se ha consumido el texto y aquí no llega, que es lo que se quiere.
+            val auto = autolinkAt(line, i)
+            if (auto != null) {
+                val start = out.length
+                out.append(line, i, auto.end)
+                spans += InlineSpan(start, out.length, SpanKind.LINK, url = auto.url)
+                i = auto.end
+                continue
+            }
+
             out.append(line[i])
             i++
         }
         return InlineText(out.toString(), spans)
+    }
+
+    private class Auto(val end: Int, val url: String)
+
+    /**
+     * ¿Empieza en [from] una url suelta? Devuelve dónde acaba y con qué url.
+     *
+     * El prefijo tiene que caer en frontera de palabra: sin eso, «httpsomething»
+     * se comería medio texto como si fuera un enlace.
+     */
+    private fun autolinkAt(line: String, from: Int): Auto? {
+        if (from > 0 && (line[from - 1].isLetterOrDigit() || line[from - 1] == '.')) return null
+        val prefix = AUTOLINK_PREFIXES.firstOrNull { line.startsWith(it, from) } ?: return null
+
+        var end = from + prefix.length
+        while (end < line.length && !line[end].isWhitespace()) end++
+        // La puntuación de la frase se queda fuera del enlace.
+        while (end > from + prefix.length && line[end - 1] in TRAILING) end--
+        // Solo el prefijo no es una url: hace falta algo de dominio detrás.
+        if (end <= from + prefix.length) return null
+
+        val raw = line.substring(from, end)
+        return Auto(end, if (prefix == "www.") "https://$raw" else raw)
     }
 
     /** Copia el contenido entre marcas y le apunta su tramo. */

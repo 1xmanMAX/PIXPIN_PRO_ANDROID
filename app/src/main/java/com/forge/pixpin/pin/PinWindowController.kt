@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
@@ -177,6 +178,15 @@ class PinWindowController(
 
     /** Imagen del pin, compartida entre el dibujado y el conversor de coordenadas. */
     private val bitmapState = mutableStateOf<Bitmap?>(null)
+
+    /**
+     * Si ya se intentó leer la imagen del disco.
+     *
+     * Sin esto, «todavía cargando» y «no se pudo leer» eran el mismo null, y el
+     * recuadro rojo de error parpadeaba un instante en CADA pin de imagen antes
+     * de que la lectura terminase.
+     */
+    private val bitmapLoadTried = mutableStateOf(false)
 
     /**
      * Anotaciones del pin. Vive siempre (para dibujar lo ya anotado); solo
@@ -445,7 +455,31 @@ class PinWindowController(
         return flags
     }
 
+    private var layoutScheduled = false
+
+    /**
+     * Un solo `updateViewLayout` por fotograma dibujado.
+     *
+     * Los eventos táctiles llegan a 120-240 Hz según el panel, y cada uno pedía
+     * su propio redimensionado de ventana: dos, tres o cuatro operaciones entre
+     * procesos contra el WindowManager por cada fotograma que se llega a ver.
+     * Todas menos la última son trabajo tirado, y en Android 10 y 12 —donde ese
+     * camino es bastante más caro que en 16— son las que se notan como tirones.
+     *
+     * Encolarlo en el Choreographer deja exactamente una por fotograma, que es
+     * justo la que el usuario ve.
+     */
     private fun applyLayout() {
+        if (layoutScheduled) return
+        layoutScheduled = true
+        Choreographer.getInstance().postFrameCallback {
+            layoutScheduled = false
+            applyLayoutNow()
+        }
+    }
+
+    /** Sin esperar al fotograma: para lo que tiene que estar ya, como aparcar una burbuja. */
+    private fun applyLayoutNow() {
         val p = lp ?: return
         val v = window?.view ?: return
         runCatching { wm.updateViewLayout(v, p) }
@@ -592,12 +626,25 @@ class PinWindowController(
             val p = lp ?: return
             if (v.width <= 0 || v.height <= 0) return
 
+            // El tamaño con el que se ancla el foco es al que la ventana VA a
+            // quedar, no el que tiene ahora. v.width va uno o dos fotogramas por
+            // detrás porque el redimensionado es asíncrono, y realimentar esa
+            // medida retrasada en la fórmula de posición es lo que hacía
+            // temblar el pin al pellizcar en Android 10 y 12 (en 16 el
+            // compositor iba lo bastante rápido para taparlo).
+            //
+            // Antes se usaba la medida real porque el tamaño teórico se
+            // desviaba: una ventana WRAP_CONTENT no puede medir más que la
+            // pantalla y ahí ambos dejaban de coincidir. Con tamaño explícito
+            // eso ya no pasa, así que el teórico es a la vez exacto y estable.
+            val projected = PinZoom.scaleFor(scaleStart, factorFromDown, zoomMax)
+            val useNatural = naturalW > 0 && naturalH > 0
             val stepResult = PinZoom.step(
                 scaleAtStart = scaleStart,
                 factor = factorFromDown,
                 maxScale = zoomMax,
-                realW = v.width,
-                realH = v.height,
+                realW = if (useNatural) (naturalW * projected).toInt() else v.width,
+                realH = if (useNatural) (naturalH * projected).toInt() else v.height,
                 focusX = focusX,
                 focusY = focusY,
                 relX = focusRelX,
@@ -1261,6 +1308,9 @@ class PinWindowController(
     @Composable
     private fun ImagePinBody(s: PinState) {
         val bmp = rememberPinBitmap(s.imagePath).value
+        // Mientras se lee del disco no se pinta nada: enseñar el recuadro de
+        // error en ese hueco hacía parpadear un cuadro rojo en cada pin.
+        if (bmp == null && !bitmapLoadTried.value) return
         if (bmp == null) {
             Box(
                 Modifier
@@ -1333,6 +1383,7 @@ class PinWindowController(
                 // con una ventana aún sin medida y el contenido daría un salto.
                 if (loaded != null) measureNatural(loaded)
                 bitmapState.value = loaded
+                bitmapLoadTried.value = true
             }
         }
         return bitmapState

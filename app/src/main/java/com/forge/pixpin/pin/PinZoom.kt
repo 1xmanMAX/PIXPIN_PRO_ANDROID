@@ -68,6 +68,15 @@ object PinZoom {
      * @param focusX/focusY punto medio entre los dedos, en pantalla
      * @param relX/relY posición del foco dentro del pin (0..1) al empezar
      */
+    /**
+     * Escala que toca, ya con sus topes. Está aparte de [step] porque quien
+     * dimensiona la ventana necesita saberla ANTES de llamar a step: la posición
+     * se calcula con el tamaño al que la ventana va a quedar, no con el que
+     * tiene todavía.
+     */
+    fun scaleFor(scaleAtStart: Float, factor: Float, maxScale: Float): Float =
+        (scaleAtStart * factor).coerceIn(MIN_SCALE, maxScale.coerceAtLeast(MIN_SCALE))
+
     fun step(
         scaleAtStart: Float,
         factor: Float,
@@ -79,7 +88,7 @@ object PinZoom {
         relX: Float,
         relY: Float
     ): ZoomStep {
-        val scale = (scaleAtStart * factor).coerceIn(MIN_SCALE, maxScale.coerceAtLeast(MIN_SCALE))
+        val scale = scaleFor(scaleAtStart, factor, maxScale)
         return ZoomStep(
             scale = scale,
             x = (focusX - relX * realW).toInt(),

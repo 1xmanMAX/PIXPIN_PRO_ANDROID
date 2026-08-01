@@ -143,6 +143,70 @@ class MarkdownTest {
         assertEquals(SpanKind.ITALIC, r.spans[1].kind)
     }
 
+    // ---- Enlaces sueltos: lo que se pega de verdad no viene en [texto](url) ----
+
+    @Test
+    fun `una url suelta se reconoce como enlace`() {
+        val r = Markdown.parseInline("mira https://ejemplo.com/a?b=1 y ya")
+        assertEquals("mira https://ejemplo.com/a?b=1 y ya", r.text)
+        assertEquals(1, r.spans.size)
+        assertEquals(SpanKind.LINK, r.spans[0].kind)
+        assertEquals("https://ejemplo.com/a?b=1", r.spans[0].url)
+        assertEquals(
+            "https://ejemplo.com/a?b=1",
+            r.text.substring(r.spans[0].start, r.spans[0].end)
+        )
+    }
+
+    @Test
+    fun `www sin protocolo tambien es enlace y se le pone https`() {
+        val r = Markdown.parseInline("entra en www.ejemplo.com hoy")
+        assertEquals("entra en www.ejemplo.com hoy", r.text)
+        assertEquals(SpanKind.LINK, r.spans[0].kind)
+        assertEquals("https://www.ejemplo.com", r.spans[0].url)
+    }
+
+    /** Un punto o una coma detrás de la url son puntuación de la frase, no parte del enlace. */
+    @Test
+    fun `la puntuacion final no entra en el enlace`() {
+        val r = Markdown.parseInline("visita https://ejemplo.com.")
+        assertEquals("visita https://ejemplo.com.", r.text)
+        assertEquals("https://ejemplo.com", r.spans[0].url)
+        assertEquals("https://ejemplo.com", r.text.substring(r.spans[0].start, r.spans[0].end))
+    }
+
+    @Test
+    fun `dos urls en la misma linea`() {
+        val r = Markdown.parseInline("http://a.com y http://b.com")
+        assertEquals(2, r.spans.size)
+        assertEquals("http://a.com", r.spans[0].url)
+        assertEquals("http://b.com", r.spans[1].url)
+    }
+
+    /** El formato explícito manda: su texto no se toca aunque la url vaya dentro. */
+    @Test
+    fun `un enlace con corchetes sigue ganando al automatico`() {
+        val r = Markdown.parseInline("mira [aqui](https://ejemplo.com) ya")
+        assertEquals("mira aqui ya", r.text)
+        assertEquals(1, r.spans.size)
+        assertEquals("https://ejemplo.com", r.spans[0].url)
+    }
+
+    @Test
+    fun `una url dentro de codigo en linea no se enlaza`() {
+        val r = Markdown.parseInline("usa `https://ejemplo.com` asi")
+        assertEquals("usa https://ejemplo.com asi", r.text)
+        assertEquals(1, r.spans.size)
+        assertEquals(SpanKind.CODE, r.spans[0].kind)
+    }
+
+    @Test
+    fun `una palabra que empieza por http pero no es url no se enlaza`() {
+        val r = Markdown.parseInline("httpsomething no es nada")
+        assertEquals("httpsomething no es nada", r.text)
+        assertTrue(r.spans.isEmpty())
+    }
+
     // ---- Marcas rotas: no pueden comerse texto ----
 
     @Test
