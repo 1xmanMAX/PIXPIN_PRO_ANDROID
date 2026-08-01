@@ -2,6 +2,7 @@ package com.forge.pixpin.pin
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.view.HapticFeedbackConstants
 import android.net.Uri
 import android.provider.Settings
 import android.view.Gravity
@@ -42,6 +43,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
@@ -511,6 +514,32 @@ class OverlayManager(private val app: PixPinApp) {
         listWindow = null
     }
 
+    /**
+     * Alterna la prioridad de un pin. Va por dos caminos porque el pin puede
+     * estar vivo en pantalla o ser un guardado que ya se cerró: en el primer
+     * caso manda el controlador, en el segundo el archivo de guardados.
+     */
+    private fun togglePriority(pinId: String) {
+        val active = pins[pinId]
+        if (active != null) {
+            val state = active.snapshot()
+            active.updateState(state.copy(priority = !state.priority))
+            saveNow()
+            if (active.isPinned) {
+                scope.launch(Dispatchers.IO) { repo.saveSavedPin(active.snapshot()) }
+            }
+            refreshPinList()
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val saved = repo.loadSavedPins().map {
+                if (it.id == pinId) it.copy(priority = !it.priority) else it
+            }
+            repo.saveSavedPins(saved)
+            refreshPinList()
+        }
+    }
+
     private fun refreshPinList() {
         listState.value = pins.values.map { it.snapshot() }
         // Carga los pines guardados del disco para la sección de guardados.
@@ -709,22 +738,12 @@ class OverlayManager(private val app: PixPinApp) {
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
-                Box(
+                PinLabel(
+                    pin = pin,
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 8.dp)
-                        .pointerInput(pin.id) {
-                            // La pulsación larga se cablea en la tarea siguiente.
-                            detectTapGestures(onLongPress = { })
-                        }
-                ) {
-                    Text(
-                        text = labelFor(pin),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                )
                 IconButton(onClick = {
                     pins[pin.id]?.let { controller ->
                         controller.togglePinned()
@@ -795,22 +814,12 @@ class OverlayManager(private val app: PixPinApp) {
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
                 )
-                Box(
+                PinLabel(
+                    pin = pin,
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 6.dp)
-                        .pointerInput(pin.id) {
-                            // La pulsación larga se cablea en la tarea siguiente.
-                            detectTapGestures(onLongPress = { })
-                        }
-                ) {
-                    Text(
-                        text = labelFor(pin),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                )
                 IconButton(onClick = { restoreSavedPin(pin) }) {
                     Icon(
                         Icons.Filled.Visibility,
@@ -832,8 +841,62 @@ class OverlayManager(private val app: PixPinApp) {
         }
     }
 
+    /**
+     * El nombre del pin en la lista, con su pulsación larga para alternar la
+     * prioridad. Lo comparten la fila de activos y la de guardados: eran dos
+     * copias del mismo bloque y se desincronizaban a cada cambio.
+     */
+    @Composable
+    private fun PinLabel(pin: PinState, modifier: Modifier = Modifier) {
+        val view = LocalView.current
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier.pointerInput(pin.id) {
+                detectTapGestures(onLongPress = {
+                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    togglePriority(pin.id)
+                })
+            }
+        ) {
+            if (pin.priority && pin.type != PinType.IMAGE) {
+                PriorityChip()
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(
+                text = labelFor(pin),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (pin.priority) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+
+    @Composable
+    private fun PriorityChip() {
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Text(
+                text = app.getString(R.string.priority_chip),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+            )
+        }
+    }
+
+    /**
+     * En la imagen el nombre ES el estado: no lleva chip, cambia entero. Antes
+     * todas las imágenes se llamaban igual y seis capturas eran seis filas
+     * idénticas.
+     */
     private fun labelFor(pin: PinState): String = when (pin.type) {
-        PinType.IMAGE -> app.getString(R.string.pin_type_image)
+        PinType.IMAGE -> app.getString(
+            if (pin.priority) R.string.pin_image_priority else R.string.pin_image_default
+        )
         PinType.COLOR -> pin.colorArgb?.let { ContentClassifier.toHex(it) } ?: "Color"
         PinType.TEXT -> pin.text.orEmpty().replace('\n', ' ').take(30)
         PinType.FILE -> pin.fileName ?: app.getString(R.string.pin_type_file)
