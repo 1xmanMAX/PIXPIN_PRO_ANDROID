@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
@@ -69,6 +70,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -160,6 +162,7 @@ class PinWindowController(
 
     private var actionBar: OverlayComposeWindow? = null
     private var annotateBar: OverlayComposeWindow? = null
+    private var emojiPicker: OverlayComposeWindow? = null
 
     private var touchHandler: OverlayTouchHandler? = null
 
@@ -300,6 +303,7 @@ class PinWindowController(
         applyVisibility()
         if (!visible) {
             closeActionBar()
+            closeEmojiPicker()
             exitAnnotateMode()
         }
     }
@@ -326,6 +330,7 @@ class PinWindowController(
     fun hideView() {
         exitAnnotateMode()
         closeActionBar()
+        closeEmojiPicker()
         val w = window ?: return
         // Guarda la posición viva antes de soltar los LayoutParams.
         pin.value = snapshot()
@@ -395,6 +400,7 @@ class PinWindowController(
         preMinimizeY = restoreY
         minimized.value = true
         closeActionBar()
+        closeEmojiPicker()
         exitAnnotateMode()
         // La burbuja no se redimensiona; sin esto conservaría el rect del pin abierto.
         setResizeHandle(null)
@@ -859,6 +865,47 @@ class PinWindowController(
         annotateBar = null
     }
 
+    // ---- Pegatinas ----
+
+    /**
+     * Va en ventana propia por el mismo motivo que la barrita de anotación: la
+     * del pin se queda con TODOS los toques y ningún botón dentro de ella se
+     * enteraría.
+     */
+    private fun openEmojiPicker() {
+        if (emojiPicker != null) return
+        closeActionBar()
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.CENTER }
+        val picker = OverlayComposeWindow(context) { EmojiPickerContent() }
+        emojiPicker = picker
+        runCatching {
+            wm.addView(picker.view, params)
+            picker.onAttached()
+        }.onFailure { emojiPicker = null }
+    }
+
+    private fun closeEmojiPicker() {
+        val picker = emojiPicker ?: return
+        runCatching { wm.removeView(picker.view) }
+        picker.onDetached()
+        emojiPicker = null
+    }
+
+    private fun setEmoji(value: String?) {
+        pin.value = pin.value.copy(emoji = value)
+        // Poner o quitar la pegatina cambia el tamaño que necesita la ventana.
+        applyContentSize()
+        closeEmojiPicker()
+        callbacks.onPinChanged(this)
+    }
+
     @Composable
     private fun ActionBarContent() {
         val s by pin
@@ -887,6 +934,14 @@ class PinWindowController(
                             contentDescription = context.getString(R.string.cd_annotate_pin)
                         )
                     }
+                }
+                IconButton(onClick = { openEmojiPicker() }) {
+                    Icon(
+                        Icons.Filled.EmojiEmotions,
+                        contentDescription = context.getString(R.string.cd_emoji),
+                        tint = if (s.emoji != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface
+                    )
                 }
                 IconButton(onClick = { callbacks.onPinToggleSave(this@PinWindowController) }) {
                     Icon(
@@ -1005,6 +1060,33 @@ class PinWindowController(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun EmojiPickerContent() {
+        Surface(shape = RoundedCornerShape(20.dp), shadowElevation = 8.dp) {
+            Column(
+                modifier = Modifier.padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                PIN_EMOJIS.chunked(6).forEach { row ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        row.forEach { emoji ->
+                            Text(
+                                text = emoji,
+                                fontSize = 24.sp,
+                                modifier = Modifier
+                                    .padding(6.dp)
+                                    .clickable { setEmoji(emoji) }
+                            )
+                        }
+                    }
+                }
+                TextButton(onClick = { setEmoji(null) }) {
+                    Text(context.getString(R.string.emoji_none))
                 }
             }
         }
@@ -1392,3 +1474,14 @@ private val ANNOTATE_TOOLS = listOf(
 
 /** Alto aproximado de la barrita, para decidir a qué borde se pega. */
 private const val ANNOTATE_BAR_DP = 76
+
+/**
+ * Pegatinas disponibles. Es una lista fija y no el teclado de emojis del
+ * sistema porque una ventana overlay no es enfocable y no puede abrirlo.
+ */
+private val PIN_EMOJIS = listOf(
+    "⭐", "🔥", "❗", "✅", "❌", "⏳",
+    "📌", "💡", "🔒", "💰", "📈", "🎯",
+    "❤️", "👀", "🔔", "📅", "✏️", "🧠",
+    "🚀", "🐛", "☕", "🎵", "📷", "🗑️"
+)

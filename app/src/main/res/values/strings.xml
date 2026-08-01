@@ -82,6 +82,8 @@
     <string name="cd_save">Guardar</string>
     <string name="cd_close">Cerrar</string>
     <string name="cd_annotate_pin">Dibujar sobre el pin</string>
+    <string name="cd_emoji">Pegatina</string>
+    <string name="emoji_none">Sin pegatina</string>
     <string name="cd_select_pin">Seleccionar</string>
     <string name="pins_group">Agrupar</string>
     <string name="pins_ungroup">Desagrupar</string>
