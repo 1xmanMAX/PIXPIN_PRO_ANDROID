@@ -473,18 +473,55 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 | ✅ **3** | Captura con scroll |
 | ✅ **4** | Cuadro de texto redimensionable, Markdown con enlaces, edición en el pin, prioridad, pegatinas de emoji y sombra con color de grupo |
 | ✅ **5** | Mini-aplicaciones por palabra mágica, tablas del portapapeles y visor de PDF |
-| **6** | OCR local con ML Kit, reconocimiento de QR, traducción, grabación en GIF/MP4 |
+| **6** | OCR local con ML Kit, reconocimiento de QR y traducción |
+| **7 — Vídeo** | Pin de vídeo que se reproduce en su sitio, rejilla de fotogramas, recorte por tiempo y grabación de pantalla |
+| **8 — Documentos y planos** | Contenido de DOCX, XLSX y PPTX como pin de texto o de tabla; planos DXF dibujados a vector con capas conmutables |
+
+### Fase 7 — Vídeo
+
+El vídeo entra por donde ya entró el PDF: **lo que Android trae de fábrica**.
+
+- **Pin de vídeo.** `MediaPlayer` sobre un `TextureView` dentro de la ventana del pin. Toque
+  para marcha y pausa, doble toque al principio — los mismos gestos que el cronómetro.
+  Arrastrar, pellizcar y agrupar siguen funcionando igual que en cualquier otro pin.
+- **Rejilla de fotogramas.** Pulsación larga → miniaturas cada pocos segundos con
+  `MediaMetadataRetriever`. Tocar una la extrae como **pin de imagen normal**, con su zoom,
+  sus anotaciones y su pegatina. Es el visor de PDF aplicado al eje del tiempo.
+- **Recorte por tiempo.** Dos marcas sobre la barra de reproducción y el trozo sale a un
+  archivo con `MediaMuxer`, sin recodificar y sin perder calidad.
+- **Grabación de pantalla en MP4.** `MediaRecorder` colgado de la **misma `MediaProjection`
+  que ya está viva**: la restricción nº 2 obliga a conservar un único display durante toda
+  la sesión, así que grabar es engancharse a él, no pedir otro permiso.
+- **GIF.** Aquí sí hay que escribir el codificador: Android sabe leer GIF, no escribirlo.
+  Queda al final de la fase por ser lo único que no regala la plataforma.
+
+### Fase 8 — Documentos de oficina y planos
+
+- **DOCX, XLSX y PPTX.** Son ZIP con XML dentro, y tanto `ZipInputStream` como
+  `XmlPullParser` vienen en Android. Se extrae el contenido y se pinta con el renderizador
+  de **Markdown y tablas que ya existe desde v0.3.0**: el documento se convierte en un pin
+  de texto y la hoja de cálculo en un pin de tabla. Es contenido, **no maquetado** — sin
+  saltos de página, sin estilos ni fórmulas. Un pin no es un visor de Office.
+- **Planos DXF.** DWG es binario, propietario y cerrado; queda fuera. Pero **DXF** es el
+  formato de intercambio que exporta el propio AutoCAD, es texto plano y está documentado
+  por Autodesk. Sus entidades de dibujo —`LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `TEXT`— se
+  parsean y se pintan en un `Canvas` corriente. **Es donde el zoom del pin más va a lucir**:
+  un plano vectorial aguanta el pellizco hasta el detalle, cosa que una captura no hace.
+- **Capas del DXF** como conmutadores en la pulsación larga, para apagar cotas o
+  sombreados y quedarse con la geometría.
+- Fuera de la primera pasada del DXF: splines, bloques con atributos, sombreados y cotas
+  asociativas. Entran solo si el resto se sostiene.
 
 Descartados a propósito: pin de fórmulas LaTeX, motor de scripts y sincronización en la nube.
 
 Estudiados y **descartados por lo que costarían frente a lo que dan**:
 
-- **Word, Excel y AutoCAD como el PDF.** El visor de PDF existe porque `PdfRenderer` viene
-  en Android. Para esos formatos no hay equivalente: harían falta librerías grandes, y DWG
-  es binario propietario. Lo viable sería extraer su contenido —DOCX y XLSX son ZIP con XML
-  dentro— y mostrarlo como texto o tabla, sin maquetado.
+- **DWG, y Office con su maquetado.** Renderizar esos formatos tal cual se ven pide
+  librerías grandes —y DWG es además binario propietario—. La fase 8 se queda a propósito
+  en el contenido, que es lo que se puede sacar con lo que ya trae el sistema.
 - **SVG.** Es donde el zoom más luciría, pero necesita una dependencia externa; sería la
-  primera del proyecto.
+  primera del proyecto. Si el lienzo vectorial del DXF sale bien, SVG vuelve a la mesa:
+  sería el mismo `Canvas` con otro parser.
 - **Historial del portapapeles.** Android 10+ prohíbe leerlo en segundo plano, así que solo
   podría registrar lo que pase por PixPin — que es el historial que ya hay.
 - **Buscador en la lista de pines.** Queda a medias: el texto está en los recursos y el
