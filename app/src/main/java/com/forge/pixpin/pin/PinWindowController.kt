@@ -1812,6 +1812,11 @@ class PinWindowController(
         val shadowColor = when {
             s.clickThrough -> MaterialTheme.colorScheme.tertiary
             s.groupId != null -> Color(PinGroups.colorFor(s.groupId!!))
+            // La burbuja lleva SIEMPRE sombra de color. Es lo más pequeño que
+            // hay en pantalla y lo que peor se distingue: una sombra negra sobre
+            // una app oscura la deja invisible, y entonces no hay forma de
+            // encontrar el pin que acabas de minimizar.
+            small -> MaterialTheme.colorScheme.primary
             else -> Color.Black
         }
         Box(modifier = Modifier.graphicsLayer { alpha = contentAlpha.floatValue }) {

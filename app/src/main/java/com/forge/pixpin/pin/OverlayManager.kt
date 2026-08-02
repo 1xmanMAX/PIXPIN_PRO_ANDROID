@@ -113,11 +113,12 @@ class OverlayManager(private val app: PixPinApp) {
             pins.remove(controller.id)
             // Si el pin está guardado, no se borra su imagen: sobrevive al cierre.
             if (!controller.isPinned) {
+                // Los archivos NO se borran aquí: el pin sigue vivo en el
+                // historial y hay que poder restaurarlo. Borrarlos en este punto
+                // era lo que hacía que un pin de imagen recuperado saliera como
+                // un recuadro rojo de error: quedaba la ficha, no el archivo.
+                // Se borran cuando el pin se cae del historial, en pushHistory.
                 pushHistory(controller.snapshot())
-                // Solo se borran los archivos si el pin NO está guardado.
-                val state = controller.snapshot()
-                ImageStore.delete(state.imagePath)
-                FileStore.delete(state.filePath)
             } else {
                 // El pin guardado persiste en disco aunque se cierre.
                 val state = controller.snapshot().copy(minimized = false)
@@ -430,9 +431,29 @@ class OverlayManager(private val app: PixPinApp) {
         createPin(state)
     }
 
+    /**
+     * Mete el pin cerrado en el historial y borra los archivos de los que se
+     * caen por el otro extremo.
+     *
+     * Este es el único sitio donde muere el archivo de un pin cerrado: mientras
+     * siga en el historial tiene que poder restaurarse con su contenido, no con
+     * un hueco.
+     */
     private fun pushHistory(state: PinState) {
         history.addLast(state)
-        while (history.size > historyLimit) history.removeFirst()
+        while (history.size > historyLimit) {
+            val dropped = history.removeFirst()
+            // Un pin guardado comparte archivo con su copia en saved.json: ese
+            // no se toca aunque su paso por el historial haya terminado.
+            if (!dropped.isPinned) {
+                val image = dropped.imagePath
+                val file = dropped.filePath
+                scope.launch(Dispatchers.IO) {
+                    ImageStore.delete(image)
+                    FileStore.delete(file)
+                }
+            }
+        }
         scope.launch(Dispatchers.IO) { repo.saveHistory(history.toList()) }
     }
 

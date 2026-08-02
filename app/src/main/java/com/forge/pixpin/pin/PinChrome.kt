@@ -25,14 +25,22 @@ data class PinInsets(
  */
 object PinChrome {
 
-    /** Hueco para la sombra, por los cuatro lados. */
-    const val SHADOW_DP = 8
+    /**
+     * Hueco para la sombra, por los cuatro lados. Va por delante de la
+     * elevación: una sombra necesita más sitio del que eleva, y si se queda
+     * corta se corta en seco contra el borde de la ventana.
+     */
+    const val SHADOW_DP = 16
 
     /** Hueco extra para la pegatina, que va arriba a la derecha. */
     const val STICKER_INSET_DP = 20
 
-    /** Elevación de la sombra. Pequeña: separa del fondo sin dibujar una caja. */
-    const val SHADOW_ELEVATION_DP = 6
+    /**
+     * Elevación de la sombra. Un pin flota sobre CUALQUIER app, incluidas las de
+     * fondo claro donde una sombra tenue desaparece: tiene que separarse del
+     * fondo siempre, no solo cuando el fondo ayuda.
+     */
+    const val SHADOW_ELEVATION_DP = 12
 
     /** Lado de la pegatina. Mayor que su hueco: por eso pisa la esquina. */
     const val STICKER_SIZE_DP = 34
