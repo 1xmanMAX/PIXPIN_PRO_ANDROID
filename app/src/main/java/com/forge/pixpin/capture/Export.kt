@@ -19,11 +19,23 @@ import java.util.Locale
 /** Guardar en galería (MediaStore), copiar imagen al portapapeles y compartir. */
 object Export {
 
-    fun saveToGallery(context: Context, bitmap: Bitmap): Uri? {
-        val name = "PixPin_${timestamp()}.png"
+    /**
+     * Guarda en la galería. El formato es parámetro con PNG por defecto: una
+     * captura anotada quiere PNG, pero un croquis que se manda por WhatsApp
+     * pesa mucho menos en JPG y no pierde nada visible al ser línea sobre
+     * blanco.
+     */
+    fun saveToGallery(
+        context: Context,
+        bitmap: Bitmap,
+        format: Bitmap.CompressFormat = Bitmap.CompressFormat.PNG,
+        quality: Int = 100
+    ): Uri? {
+        val jpeg = format == Bitmap.CompressFormat.JPEG
+        val name = "PixPin_${timestamp()}." + if (jpeg) "jpg" else "png"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.MIME_TYPE, if (jpeg) "image/jpeg" else "image/png")
             put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/PixPin")
         }
         val resolver = context.contentResolver
@@ -31,7 +43,7 @@ object Export {
             ?: return null
         return try {
             resolver.openOutputStream(uri)?.use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                bitmap.compress(format, quality, out)
             } ?: return null
             uri
         } catch (t: Throwable) {

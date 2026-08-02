@@ -18,6 +18,12 @@ data class P(val x: Double, val y: Double)
 /** Punto en píxeles de la pantalla. `Float` porque es lo que come el `Canvas`. */
 data class Px(val x: Float, val y: Float)
 
+/** Rectángulo del mundo que abarca algo: para encajar el croquis en una hoja. */
+data class Caja(val min: P, val max: P) {
+    val ancho: Double get() = max.x - min.x
+    val alto: Double get() = max.y - min.y
+}
+
 /**
  * Qué trozo del mundo se está mirando: dónde cae el centro de la pantalla y
  * cuánto se amplía. La hoja es infinita, así que no hay más estado que este.

@@ -42,6 +42,45 @@ class CroquisVistaTest {
         assertEquals(original.y, vuelta.y, 1e-6)
     }
 
+    // --- Extension: el rectangulo que ocupa todo, para encajarlo en la hoja ---
+
+    @Test
+    fun `la extension abarca todas las entidades`() {
+        val croquis = Croquis(
+            entidades = listOf(
+                Entidad.Linea(P(0.0, 0.0), P(10.0, 2.0)),
+                Entidad.Circulo(P(-3.0, 5.0), 1.0)
+            )
+        )
+        val (min, max) = CroquisGeometria.extension(croquis)!!
+        // El circulo manda por la izquierda (-3 menos su radio) y por arriba.
+        assertEquals(-4.0, min.x, 1e-12)
+        assertEquals(0.0, min.y, 1e-12)
+        assertEquals(10.0, max.x, 1e-12)
+        assertEquals(6.0, max.y, 1e-12)
+    }
+
+    @Test
+    fun `un croquis vacio no tiene extension`() {
+        assertEquals(null, CroquisGeometria.extension(Croquis()))
+    }
+
+    @Test
+    fun `encajar en la hoja usa el lado que se queda corto`() {
+        val croquis = Croquis(entidades = listOf(Entidad.Linea(P(0.0, 0.0), P(10.0, 5.0))))
+        // Hoja de 800x600 con 40 de margen deja 720x520 utiles.
+        // 720/10 = 72 px/m contra 520/5 = 104 px/m: manda el 72.
+        val vista = CroquisGeometria.vistaQueEncaja(croquis, 800, 600, 40)!!
+        assertEquals(72.0, vista.pixelsPorMetro, 1e-9)
+        assertEquals(5.0, vista.centro.x, 1e-9)
+        assertEquals(2.5, vista.centro.y, 1e-9)
+    }
+
+    @Test
+    fun `un croquis vacio no se puede encajar`() {
+        assertEquals(null, CroquisGeometria.vistaQueEncaja(Croquis(), 800, 600, 40))
+    }
+
     @Test
     fun `a coordenadas UTM, la ida y vuelta conserva los milimetros`() {
         // Este es el motivo de restar el centro de la vista ANTES de pasar a

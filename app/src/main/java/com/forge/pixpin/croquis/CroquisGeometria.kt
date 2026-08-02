@@ -123,6 +123,65 @@ object CroquisGeometria {
         return Px((anchoPx / 2.0 + dx).toFloat(), (altoPx / 2.0 - dy).toFloat())
     }
 
+    /**
+     * El rectángulo del mundo que abarca todo lo dibujado, o null si no hay
+     * nada. Es lo que permite encajar el croquis en una hoja al exportar.
+     */
+    fun extension(croquis: Croquis): Caja? {
+        var minX = Double.MAX_VALUE
+        var minY = Double.MAX_VALUE
+        var maxX = -Double.MAX_VALUE
+        var maxY = -Double.MAX_VALUE
+        var hayAlgo = false
+
+        fun meter(x: Double, y: Double) {
+            hayAlgo = true
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+        }
+
+        for (e in croquis.entidades) when (e) {
+            is Entidad.Linea -> { meter(e.a.x, e.a.y); meter(e.b.x, e.b.y) }
+            is Entidad.Polilinea -> e.puntos.forEach { meter(it.x, it.y) }
+            is Entidad.Rect -> { meter(e.a.x, e.a.y); meter(e.b.x, e.b.y) }
+            is Entidad.Circulo -> {
+                meter(e.centro.x - e.radio, e.centro.y - e.radio)
+                meter(e.centro.x + e.radio, e.centro.y + e.radio)
+            }
+            // El texto cuenta solo por su anclaje: medir su ancho real exige
+            // Android, y aquí basta para no dejarlo fuera de la hoja.
+            is Entidad.Texto -> meter(e.en.x, e.en.y)
+            is Entidad.Cota -> { meter(e.a.x, e.a.y); meter(e.b.x, e.b.y) }
+        }
+
+        return if (hayAlgo) Caja(P(minX, minY), P(maxX, maxY)) else null
+    }
+
+    /**
+     * La vista que mete el croquis entero dentro de una hoja de [anchoPx] por
+     * [altoPx], dejando [margenPx] alrededor.
+     *
+     * Manda el lado que se queda corto: encajar por el otro sacaría el dibujo
+     * de la hoja. Devuelve null si no hay nada que encajar.
+     */
+    fun vistaQueEncaja(croquis: Croquis, anchoPx: Int, altoPx: Int, margenPx: Int): Vista? {
+        val caja = extension(croquis) ?: return null
+        val utilAncho = (anchoPx - 2 * margenPx).coerceAtLeast(1)
+        val utilAlto = (altoPx - 2 * margenPx).coerceAtLeast(1)
+        // Un croquis puede ser una sola línea horizontal: sin alto no hay
+        // división que valga, así que ese lado no restringe.
+        val porAncho = if (caja.ancho > 0) utilAncho / caja.ancho else Double.MAX_VALUE
+        val porAlto = if (caja.alto > 0) utilAlto / caja.alto else Double.MAX_VALUE
+        val escala = minOf(porAncho, porAlto)
+        if (!escala.isFinite() || escala <= 0.0) return null
+        return Vista(
+            centro = P((caja.min.x + caja.max.x) / 2, (caja.min.y + caja.max.y) / 2),
+            pixelsPorMetro = escala
+        )
+    }
+
     /** De la pantalla al mundo: la inversa exacta de [aPantalla]. */
     fun aMundo(px: Px, vista: Vista, anchoPx: Int, altoPx: Int): P {
         val dx = (px.x - anchoPx / 2.0) / vista.pixelsPorMetro
