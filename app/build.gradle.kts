@@ -12,9 +12,14 @@ android {
         applicationId = "com.forge.pixpin"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.4.3-croquis"
+        versionCode = 8
+        versionName = "0.4.4-croquis"
     }
+
+    // Nota: `enableV1Signing` aquí NO surte efecto. Con minSdk 29 el plugin
+    // decide que la firma v1 sobra y la omite igualmente. Los APK que se
+    // reparten para instalar a mano se vuelven a firmar con apksigner
+    // pasándole `--min-sdk-version 21`, que es lo que la incluye de verdad.
 
     buildFeatures {
         compose = true
