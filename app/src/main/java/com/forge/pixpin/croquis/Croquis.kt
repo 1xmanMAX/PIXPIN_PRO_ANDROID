@@ -15,6 +15,15 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class P(val x: Double, val y: Double)
 
+/** Punto en píxeles de la pantalla. `Float` porque es lo que come el `Canvas`. */
+data class Px(val x: Float, val y: Float)
+
+/**
+ * Qué trozo del mundo se está mirando: dónde cae el centro de la pantalla y
+ * cuánto se amplía. La hoja es infinita, así que no hay más estado que este.
+ */
+data class Vista(val centro: P, val pixelsPorMetro: Double)
+
 /**
  * Lo que se puede dibujar, en coordenadas del mundo.
  *

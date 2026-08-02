@@ -106,4 +106,27 @@ object CroquisGeometria {
      */
     fun formatear(metros: Double, decimales: Int, locale: Locale = Locale.getDefault()): String =
         String.format(locale, "%.${decimales.coerceIn(0, 6)}f m", metros)
+
+    /**
+     * Del mundo a la pantalla.
+     *
+     * **La resta del centro va en `Double`, y solo el resultado pasa a
+     * `Float`.** Convertir primero la coordenada absoluta y restar después
+     * perdería los milímetros de un plano en UTM, que es justo lo que esta
+     * herramienta promete no perder.
+     *
+     * La Y se invierte: en CAD crece hacia arriba, en pantalla hacia abajo.
+     */
+    fun aPantalla(p: P, vista: Vista, anchoPx: Int, altoPx: Int): Px {
+        val dx = (p.x - vista.centro.x) * vista.pixelsPorMetro
+        val dy = (p.y - vista.centro.y) * vista.pixelsPorMetro
+        return Px((anchoPx / 2.0 + dx).toFloat(), (altoPx / 2.0 - dy).toFloat())
+    }
+
+    /** De la pantalla al mundo: la inversa exacta de [aPantalla]. */
+    fun aMundo(px: Px, vista: Vista, anchoPx: Int, altoPx: Int): P {
+        val dx = (px.x - anchoPx / 2.0) / vista.pixelsPorMetro
+        val dy = (altoPx / 2.0 - px.y) / vista.pixelsPorMetro
+        return P(vista.centro.x + dx, vista.centro.y + dy)
+    }
 }
