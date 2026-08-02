@@ -19,6 +19,17 @@ object CroquisStore {
     private fun dir(context: Context): File =
         File(context.filesDir, "pins/croquis").apply { mkdirs() }
 
+    /**
+     * Dónde vive el croquis de un pin dado.
+     *
+     * El archivo se nombra por el id del pin, así que la ruta es **deducible**
+     * y no hay que devolvérsela a nadie. Importa porque el editor se lanza
+     * desde el overlay, que no recibe resultados de actividad: si la ruta
+     * hubiera que propagarla, la calibración se perdería al cerrar.
+     */
+    fun rutaDe(context: Context, id: String): String =
+        File(dir(context), "$id.json").absolutePath
+
     /** Escribe el croquis y devuelve su ruta, o null si no se pudo. */
     fun guardar(context: Context, id: String, croquis: Croquis): String? = runCatching {
         val destino = File(dir(context), "$id.json")

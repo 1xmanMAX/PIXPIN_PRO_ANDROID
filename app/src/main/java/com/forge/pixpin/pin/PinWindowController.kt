@@ -48,6 +48,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.SquareFoot
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.CenterFocusStrong
@@ -105,6 +106,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
@@ -1568,6 +1573,25 @@ class PinWindowController(
                         )
                     }
                 }
+                // La segunda puerta al croquis: medir sobre la captura de un
+                // plano. En obra no llevas el DXF, llevas la captura que te
+                // mandaron — y calibrada contra una medida conocida da metros
+                // reales sin parsear ningún formato de CAD.
+                if (s.type == PinType.IMAGE && s.imagePath != null) {
+                    IconButton(onClick = {
+                        com.forge.pixpin.croquis.CroquisEditorActivity.abrir(
+                            context,
+                            s.id,
+                            com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id),
+                            s.imagePath
+                        )
+                    }) {
+                        Icon(
+                            Icons.Filled.SquareFoot,
+                            contentDescription = context.getString(R.string.cd_measure_pin)
+                        )
+                    }
+                }
                 if (isPdf) {
                     IconButton(onClick = { openPdfViewer() }) {
                         Icon(
@@ -1923,6 +1947,61 @@ class PinWindowController(
             // editor. Solo cambia lo que se dibuja dentro.
             PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE -> TextPinBody(s)
             PinType.COUNTER -> CounterBody(s.widget)
+            PinType.CROQUIS -> CroquisPinBody(s)
+        }
+    }
+
+    /**
+     * El croquis dentro del pin: **solo se mira**.
+     *
+     * Se dibuja encajado, sin desplazamiento ni zoom propios, porque aquí la
+     * hoja infinita no tiene sentido. Un toque abre el editor a pantalla
+     * completa, que es donde vive de verdad.
+     */
+    @Composable
+    private fun CroquisPinBody(s: PinState) {
+        val contexto = androidx.compose.ui.platform.LocalContext.current
+        val croquis = androidx.compose.runtime.remember(s.croquisPath, s.id) {
+            com.forge.pixpin.croquis.CroquisStore.cargar(s.croquisPath)
+        }
+        val fondo = androidx.compose.runtime.remember(croquis?.fondo?.imagenPath) {
+            croquis?.fondo?.imagenPath?.let { ImageStore.load(it) }
+        }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .pointerInput(s.id) {
+                    detectTapGestures {
+                        com.forge.pixpin.croquis.CroquisEditorActivity.abrir(
+                            contexto, s.id, s.croquisPath, null
+                        )
+                    }
+                }
+        ) {
+            if (croquis == null || croquis.entidades.isEmpty()) {
+                Text(
+                    "📐  Toca para dibujar",
+                    color = Color(0xFF556070),
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            } else {
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    val ancho = size.width.toInt().coerceAtLeast(1)
+                    val alto = size.height.toInt().coerceAtLeast(1)
+                    val vista = com.forge.pixpin.croquis.CroquisGeometria
+                        .vistaQueEncaja(croquis, ancho, alto, 12)
+                    if (vista != null) {
+                        drawIntoCanvas { lienzo ->
+                            com.forge.pixpin.croquis.CroquisRenderer.dibujar(
+                                lienzo.nativeCanvas, croquis, vista, ancho, alto, fondo,
+                                android.graphics.Color.BLACK
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -2046,6 +2125,7 @@ class PinWindowController(
                 PinType.COUNTER -> Text("${s.widget.count}", color = Color.White)
                 PinType.LEDGER -> Text("€", color = Color.White)
                 PinType.TABLE -> Text("▦", color = Color.White)
+                PinType.CROQUIS -> Text("📐", color = Color.White)
             }
         }
     }

@@ -3,7 +3,7 @@ package com.forge.pixpin.pin
 import com.forge.pixpin.annotate.Annotation
 import kotlinx.serialization.Serializable
 
-enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE }
+enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE, CROQUIS }
 
 /**
  * Estado de las mini-aplicaciones.
@@ -79,5 +79,13 @@ data class PinState(
     /** Emoji pegado en la esquina, a modo de pegatina; null = sin pegatina. */
     val emoji: String? = null,
     /** Estado de la mini-aplicación, si el pin es una. */
-    val widget: WidgetState = WidgetState()
+    val widget: WidgetState = WidgetState(),
+    /**
+     * Ruta del JSON del croquis, si el pin es uno.
+     *
+     * Va la ruta y no el contenido: un croquis puede llevar cientos de
+     * entidades y este registro se lee entero al arrancar para restaurar los
+     * pines. Mismo trato que `imagePath` y `filePath`.
+     */
+    val croquisPath: String? = null
 )

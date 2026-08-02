@@ -7,6 +7,24 @@ import org.junit.Test
 class MagicWordTest {
 
     @Test
+    fun `croquis, cad y sketch abren el croquis`() {
+        assertEquals(MiniApp.CROQUIS, MagicWord.detect("croquis"))
+        assertEquals(MiniApp.CROQUIS, MagicWord.detect("cad"))
+        assertEquals(MiniApp.CROQUIS, MagicWord.detect("sketch"))
+        assertEquals(MiniApp.CROQUIS, MagicWord.detect("  CROQUIS "))
+    }
+
+    @Test
+    fun `plano no es palabra magica, se copia solo demasiado a menudo`() {
+        assertNull(MagicWord.detect("plano"))
+    }
+
+    @Test
+    fun `croquis dentro de una frase sigue siendo texto`() {
+        assertNull(MagicWord.detect("hazme un croquis"))
+    }
+
+    @Test
     fun `reconoce las palabras en cualquier combinacion de mayusculas`() {
         assertEquals(MiniApp.TIMER, MagicWord.detect("time"))
         assertEquals(MiniApp.TIMER, MagicWord.detect("TIME"))

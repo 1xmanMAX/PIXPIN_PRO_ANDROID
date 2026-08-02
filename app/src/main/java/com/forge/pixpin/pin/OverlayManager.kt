@@ -65,6 +65,9 @@ import com.forge.pixpin.clipboard.ClipboardPinReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.clipboard.MiniApp
 import com.forge.pixpin.clipboard.PinContent
+import com.forge.pixpin.croquis.Croquis
+import com.forge.pixpin.croquis.CroquisEditorActivity
+import com.forge.pixpin.croquis.CroquisStore
 import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.data.PinRepository
 import com.forge.pixpin.floating.FloatingBallController
@@ -368,12 +371,21 @@ class OverlayManager(private val app: PixPinApp) {
             }
             return
         }
+        // El croquis nace vacío y abre su editor de inmediato: la palabra
+        // mágica es la orden de ponerse a dibujar, no de mirar una hoja.
+        if (app == MiniApp.CROQUIS) {
+            val pin = newPin(PinType.CROQUIS)
+            val ruta = CroquisStore.guardar(this@OverlayManager.app, pin.id, Croquis())
+            createPin(pin.copy(croquisPath = ruta))
+            CroquisEditorActivity.abrir(this@OverlayManager.app, pin.id, ruta, null)
+            return
+        }
         val type = when (app) {
             MiniApp.TIMER, MiniApp.STOPWATCH -> PinType.TIMER
             MiniApp.CHECKLIST -> PinType.CHECKLIST
             MiniApp.COUNTER -> PinType.COUNTER
             MiniApp.LEDGER -> PinType.LEDGER
-            MiniApp.BOARD -> return
+            MiniApp.BOARD, MiniApp.CROQUIS -> return
         }
         val seed = when (app) {
             MiniApp.CHECKLIST -> appString(R.string.checklist_seed)
@@ -764,6 +776,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COUNTER -> "🔢 " + app.getString(R.string.pin_type_counter)
         PinType.LEDGER -> "💶 " + app.getString(R.string.pin_type_ledger)
         PinType.TABLE -> "▦ " + app.getString(R.string.pin_type_table)
+        PinType.CROQUIS -> "📐 " + app.getString(R.string.pin_type_croquis)
     }
 
     /**
@@ -1017,6 +1030,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COUNTER -> app.getString(R.string.pin_type_counter) + " ${pin.widget.count}"
         PinType.LEDGER -> app.getString(R.string.pin_type_ledger)
         PinType.TABLE -> app.getString(R.string.pin_type_table)
+        PinType.CROQUIS -> app.getString(R.string.pin_type_croquis)
     }
 
     // ---- Persistencia ----

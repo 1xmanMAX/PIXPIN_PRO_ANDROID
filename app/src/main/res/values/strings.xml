@@ -105,6 +105,8 @@
     <string name="pin_type_counter">Contador</string>
     <string name="pin_type_ledger">Cuentas</string>
     <string name="pin_type_table">Tabla</string>
+    <string name="pin_type_croquis">Croquis</string>
+    <string name="cd_measure_pin">Acotar y medir</string>
     <string name="ledger_total">Total</string>
     <string name="timer_done">Tiempo cumplido</string>
     <string name="board_color">Color de la pizarra</string>

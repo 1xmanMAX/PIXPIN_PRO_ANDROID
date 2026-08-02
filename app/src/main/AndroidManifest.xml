@@ -63,6 +63,20 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
 
+        <!--
+            El editor del croquis va a pantalla completa y con taskAffinity
+            propia, como el resto de lo que se lanza desde el overlay. Aquí
+            además interesa que SÍ quede en Recientes: es una sesión de trabajo
+            larga, no un paso intermedio como el consentimiento o la captura.
+        -->
+        <activity
+            android:name=".croquis.CroquisEditorActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.croquis"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+
         <activity
             android:name=".clipboard.ShareReceiverActivity"
             android:exported="true"

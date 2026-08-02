@@ -145,6 +145,15 @@ object PinExporter {
         com.forge.pixpin.pin.PinType.LEDGER,
         com.forge.pixpin.pin.PinType.TABLE -> renderText(state.text)
         com.forge.pixpin.pin.PinType.TIMER -> null
+
+        // El croquis se rasteriza con su propio renderizador, el mismo que
+        // dibuja la pantalla y escribe el PDF.
+        com.forge.pixpin.pin.PinType.CROQUIS ->
+            com.forge.pixpin.croquis.CroquisStore.cargar(state.croquisPath)?.let { croquis ->
+                val fondo = croquis.fondo?.imagenPath
+                    ?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                com.forge.pixpin.croquis.CroquisExport.aBitmap(croquis, fondo)
+            }
     }
 
     private fun renderText(text: String?): Bitmap? {

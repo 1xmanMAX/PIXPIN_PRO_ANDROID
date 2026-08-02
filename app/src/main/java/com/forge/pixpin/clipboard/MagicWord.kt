@@ -1,7 +1,7 @@
 package com.forge.pixpin.clipboard
 
 /** Mini-aplicaciones que se abren pineando una palabra. */
-enum class MiniApp { TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD }
+enum class MiniApp { TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD, CROQUIS }
 
 /**
  * Palabras que, pineadas **solas**, abren una mini-aplicación en vez de un pin
@@ -42,7 +42,14 @@ object MagicWord {
         "money" to MiniApp.LEDGER,
 
         "board" to MiniApp.BOARD,
-        "pizarra" to MiniApp.BOARD
+        "pizarra" to MiniApp.BOARD,
+
+        // «plano» se quedó fuera a propósito: se copia solo demasiado a menudo
+        // en un texto de obra, y perderlo como pin de texto costaría más de lo
+        // que aporta como atajo.
+        "croquis" to MiniApp.CROQUIS,
+        "cad" to MiniApp.CROQUIS,
+        "sketch" to MiniApp.CROQUIS
     )
 
     /**
