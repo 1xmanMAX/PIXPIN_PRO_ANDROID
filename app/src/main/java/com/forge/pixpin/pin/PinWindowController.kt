@@ -1143,17 +1143,24 @@ class PinWindowController(
      * encima de la imagen, no píxeles horneados en ella, así que basta con
      * sustituir el fondo por otro del mismo tamaño.
      */
-    private var boardColor = ImageStore.WHITE_BOARD
-    private var boardGrid = ImageStore.BoardGrid.NONE
+    // Observables: la paleta se queda abierta y tiene que marcar lo elegido.
+    private val boardColorState = mutableStateOf(ImageStore.WHITE_BOARD)
+    private val boardGridState = mutableStateOf(ImageStore.BoardGrid.NONE)
+    private var boardColor: Int
+        get() = boardColorState.value
+        set(v) { boardColorState.value = v }
+    private var boardGrid: ImageStore.BoardGrid
+        get() = boardGridState.value
+        set(v) { boardGridState.value = v }
 
-    private fun setBoardColor(argb: Int) = regenerateBoard(argb, boardGrid)
-
-    private fun setBoardGrid(grid: ImageStore.BoardGrid) = regenerateBoard(boardColor, grid)
-
+    /**
+     * Se cambia el lienzo en el sitio y **sin cerrar la paleta**: elegir color y
+     * pauta son dos decisiones sobre la misma cosa, y obligar a reabrir el menú
+     * entre una y otra convierte un ajuste en un trámite.
+     */
     private fun regenerateBoard(argb: Int, grid: ImageStore.BoardGrid) {
         boardColor = argb
         boardGrid = grid
-        closeBoardPalette()
         val old = pin.value.imagePath
         scope.launch {
             val path = withContext(Dispatchers.IO) {
@@ -1174,6 +1181,8 @@ class PinWindowController(
                 modifier = Modifier.padding(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                val chosenColor by boardColorState
+                val chosenGrid by boardGridState
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BOARD_COLORS.forEach { argb ->
                         Box(
@@ -1181,17 +1190,40 @@ class PinWindowController(
                                 .padding(6.dp)
                                 .size(40.dp)
                                 .background(Color(argb), CircleShape)
-                                .border(1.dp, Color.Gray, CircleShape)
-                                .clickable { setBoardColor(argb) }
+                                .border(
+                                    width = if (argb == chosenColor) 3.dp else 1.dp,
+                                    color = if (argb == chosenColor) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Gray
+                                    },
+                                    shape = CircleShape
+                                )
+                                .clickable { regenerateBoard(argb, chosenGrid) }
                         )
                     }
                 }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BOARD_GRIDS.forEach { (glyph, grid) ->
-                        TextButton(onClick = { setBoardGrid(grid) }) {
-                            Text(glyph, fontSize = 20.sp)
+                        TextButton(onClick = { regenerateBoard(chosenColor, grid) }) {
+                            Text(
+                                text = glyph,
+                                fontSize = 20.sp,
+                                color = if (grid == chosenGrid) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
                         }
+                    }
+                    IconButton(onClick = { closeBoardPalette() }) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = context.getString(R.string.cd_done),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -1306,12 +1338,17 @@ class PinWindowController(
                     )
                     return@Column
                 }
+                // Las columnas salen del ancho REAL de la pantalla, no de un 3
+                // fijo: en una tableta cabían cinco y se dejaban dos huecos.
+                val metrics = context.resources.displayMetrics
+                val availableDp = (metrics.widthPixels / metrics.density) - 40f
+                val columns = (availableDp / THUMB_SLOT_DP).toInt().coerceIn(2, 8)
                 Column(
                     modifier = Modifier
-                        .heightIn(max = 420.dp)
+                        .heightIn(max = (metrics.heightPixels / metrics.density * 0.6f).dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    (0 until pages).chunked(3).forEach { row ->
+                    (0 until pages).chunked(columns).forEach { row ->
                         Row {
                             row.forEach { index -> PdfThumb(path!!, index) }
                         }
@@ -1910,11 +1947,13 @@ class PinWindowController(
      */
     private fun rowAt(y: Float): Int {
         if (checkRows.isEmpty()) return -1
-        val density = context.resources.displayMetrics.density
-        val insetTop = PinChrome.insetsFor(pin.value.emoji != null).top * density
-        val layoutY = (y - insetTop) / zoomOrOne() + insetTop
+        val z = zoomOrOne()
         return checkRows.entries
-            .firstOrNull { (_, r) -> layoutY >= r.first && layoutY <= r.second }
+            .firstOrNull { (_, r) ->
+                // r.first ya es coordenada de ventana; r.second es el alto sin
+                // escalar, así que es aquí donde entra el zoom, una sola vez.
+                y >= r.first && y <= r.first + r.second * z
+            }
             ?.key ?: -1
     }
 
@@ -2384,6 +2423,9 @@ class PinWindowController(
          * tampoco lo quiere.
          */
         const val MAX_PAGES_AT_ONCE = 20
+
+        /** Ancho que ocupa cada miniatura con su margen, en dp. */
+        const val THUMB_SLOT_DP = 104
     }
 
     private fun mimeIcon(mime: String?) = when {

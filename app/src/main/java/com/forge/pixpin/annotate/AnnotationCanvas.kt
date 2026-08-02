@@ -233,9 +233,18 @@ fun AnnotationCanvas(
     // Los trazos ya cerrados no cambian: se construyen una vez y se reutilizan.
     val pathCache = remember { StrokePathCache() }
 
+    // DOS lienzos apilados a propósito.
+    //
+    // El de abajo dibuja lo ya terminado y NO lee strokeVersion, así que el
+    // sistema no lo invalida cuando llega una muestra del lápiz: se queda
+    // cacheado en su capa y solo se rehace si cambia la lista de anotaciones.
+    // El de arriba solo lleva el trazo en curso.
+    //
+    // Con un solo lienzo, cada punto del lápiz obligaba a repintar las cuarenta
+    // anotaciones que ya hubiera encima, y en un procesador modesto eso es lo
+    // que hacía que dibujar se volviera lento según se acumulaba trabajo.
     Canvas(modifier = modifier.fillMaxSize()) {
-        // Suscribe el DIBUJADO (no la composición) a cada muestra del trazo vivo.
-        val version = controller.strokeVersion.intValue
+        val version = 0
 
         fun vx(x: Float) = imageRectInView.left + x * scale
         fun vy(y: Float) = imageRectInView.top + y * scale
@@ -419,7 +428,16 @@ fun AnnotationCanvas(
             })
         }
 
-        // Trazo vivo: los puntos salen del búfer plano, no de una lista.
+    }
+
+    // Segundo lienzo, solo para el trazo en curso. Este SÍ lee strokeVersion, y
+    // por eso es el único que se repinta con cada muestra del lápiz.
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val version = controller.strokeVersion.intValue
+        val scaleNow = imageRectInView.width / sourceBitmap.width
+        fun vx(x: Float) = imageRectInView.left + x * scaleNow
+        fun vy(y: Float) = imageRectInView.top + y * scaleNow
+
         val live = controller.liveTemplate.value
         if (live == null) {
             livePath.reset()
@@ -430,7 +448,7 @@ fun AnnotationCanvas(
             // por dónde va o se borra a ciegas.
             val color =
                 if (live.type == AnnotationType.ERASER) Color(0x66FFFFFF) else Color(live.color)
-            val width = live.strokeWidth * scale
+            val width = live.strokeWidth * scaleNow
             val n = buf.size
             val xAt = { i: Int -> vx(buf.x(i)) }
             val yAt = { i: Int -> vy(buf.y(i)) }

@@ -157,9 +157,12 @@ fun ChecklistBody(
                     // Cada fila dice dónde está de verdad. Calcularlo con una
                     // altura estimada desfasaba el toque una fila, y el error se
                     // acumulaba según se bajaba por la lista.
+                    // positionInRoot YA viene con la escala de la capa aplicada,
+                    // así que es directamente la coordenada de ventana. El alto,
+                    // en cambio, es de disposición y sin escalar: lo escala
+                    // quien compara, que es el único que conoce el zoom.
                     .onGloballyPositioned { coords ->
-                        val top = coords.positionInRoot().y
-                        onRowBounds(index, top, top + coords.size.height)
+                        onRowBounds(index, coords.positionInRoot().y, coords.size.height.toFloat())
                     }
             ) {
                 Text(
