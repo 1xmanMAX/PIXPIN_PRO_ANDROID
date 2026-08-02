@@ -53,6 +53,29 @@ object ImageStore {
         }.getOrNull()
     }
 
+    /**
+     * Lienzo liso para la pizarra.
+     *
+     * Una pizarra no es un tipo de pin nuevo: es un pin de imagen con el fondo
+     * en blanco. Así hereda gratis el dibujo a mano, el zoom, las anotaciones
+     * re-editables y la exportación, que ya están hechos y probados.
+     *
+     * El tamaño es fijo y en proporción vertical, como una cuartilla: es donde
+     * se escribe a gusto sin que el pin ocupe la pantalla entera.
+     */
+    fun saveBlankBoard(context: Context, dark: Boolean = false): String? {
+        return runCatching {
+            val bmp = Bitmap.createBitmap(BOARD_W, BOARD_H, Bitmap.Config.ARGB_8888)
+            bmp.eraseColor(if (dark) 0xFF1B1B1B.toInt() else 0xFFFFFFFF.toInt())
+            val path = saveBitmap(context, bmp, "board_${System.currentTimeMillis()}.png")
+            bmp.recycle()
+            path
+        }.getOrNull()
+    }
+
+    private const val BOARD_W = 900
+    private const val BOARD_H = 1200
+
     fun delete(path: String?) {
         if (path != null) runCatching { File(path).delete() }
     }

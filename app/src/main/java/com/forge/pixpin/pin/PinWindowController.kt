@@ -76,6 +76,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -871,6 +872,9 @@ class PinWindowController(
                 // copiando el texto entero, como siempre.
                 s.type == PinType.TEXT && openLinkAt(x, y) -> Unit
                 s.type == PinType.TEXT -> copyText(s)
+                s.type == PinType.COUNTER -> bumpCounter(+1)
+                // La lista reparte el toque por filas: cada una son ~26 dp.
+                s.type == PinType.CHECKLIST -> toggleCheck(rowAt(y))
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
                 s.type == PinType.IMAGE -> copyImage(s)
@@ -878,6 +882,10 @@ class PinWindowController(
         }
 
         override fun onDoubleTap() {
+            if (!minimized.value && pin.value.type == PinType.COUNTER) {
+                bumpCounter(-1)
+                return
+            }
             // Sin dock: la burbuja se queda donde estaba el pin.
             if (minimized.value) restore() else minimize(dock = false)
         }
@@ -1380,6 +1388,31 @@ class PinWindowController(
                 modifier = Modifier.padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // En un temporizador la pegatina deja de ser decoración y hace
+                // de mando: cada emoji de número arranca esos minutos.
+                if (pin.value.type == PinType.TIMER) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TIMER_PRESETS.forEach { (emoji, minutes) ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .clickable {
+                                        startTimer(minutes)
+                                        setEmoji(emoji)
+                                    }
+                            ) {
+                                Text(text = emoji, fontSize = 26.sp)
+                                Text(
+                                    text = "$minutes",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                }
                 PIN_EMOJIS.chunked(6).forEach { row ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         row.forEach { emoji ->
@@ -1534,7 +1567,60 @@ class PinWindowController(
             PinType.TEXT -> TextPinBody(s)
             PinType.COLOR -> ColorPinBody(s)
             PinType.FILE -> FilePinBody(s)
+            PinType.TIMER -> TimerBody(
+                widget = s.widget,
+                nowProvider = { System.currentTimeMillis() },
+                onFinished = { onTimerFinished() }
+            )
+            PinType.CHECKLIST -> ChecklistBody(s.text, s.widget) { toggleCheck(it) }
+            PinType.COUNTER -> CounterBody(s.widget)
+            PinType.LEDGER -> LedgerBody(s.text, context.getString(R.string.ledger_total))
         }
+    }
+
+    /** Marca o desmarca un ítem de la lista, creciendo la lista si hace falta. */
+    private fun toggleCheck(index: Int) {
+        val w = pin.value.widget
+        val marks = w.checked.toMutableList()
+        while (marks.size <= index) marks.add(false)
+        marks[index] = !marks[index]
+        pin.value = pin.value.copy(widget = w.copy(checked = marks))
+        callbacks.onPinChanged(this)
+    }
+
+    private fun bumpCounter(delta: Int) {
+        val w = pin.value.widget
+        pin.value = pin.value.copy(widget = w.copy(count = w.count + delta))
+        callbacks.onPinChanged(this)
+    }
+
+    /** Qué fila de la lista cae bajo el dedo, en coordenadas de ventana. */
+    private fun rowAt(y: Float): Int {
+        val density = context.resources.displayMetrics.density
+        val padTop = (12 + PinChrome.SHADOW_DP) * density
+        val rowH = 26 * density * zoomOrOne()
+        return (((y - padTop) / rowH).toInt()).coerceAtLeast(0)
+    }
+
+    private var timerAlerted = false
+
+    private fun onTimerFinished() {
+        if (timerAlerted) return
+        timerAlerted = true
+        window?.view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        toast(context.getString(R.string.timer_done))
+    }
+
+    /** Arranca la cuenta atrás con los minutos que diga la pegatina elegida. */
+    private fun startTimer(minutes: Int) {
+        timerAlerted = false
+        pin.value = pin.value.copy(
+            widget = pin.value.widget.copy(
+                timerMinutes = minutes,
+                timerEndsAt = System.currentTimeMillis() + minutes * 60_000L
+            )
+        )
+        callbacks.onPinChanged(this)
     }
 
     @Composable
@@ -1566,6 +1652,10 @@ class PinWindowController(
                 PinType.TEXT -> Icon(Icons.Filled.TextFields, null, tint = Color.White)
                 PinType.COLOR -> Unit // la burbuja ya es del color
                 PinType.FILE -> Icon(mimeIcon(s.mimeType), null, tint = Color.White)
+                PinType.TIMER -> Text("⏱", color = Color.White)
+                PinType.CHECKLIST -> Text("☑", color = Color.White)
+                PinType.COUNTER -> Text("${s.widget.count}", color = Color.White)
+                PinType.LEDGER -> Text("€", color = Color.White)
             }
         }
     }

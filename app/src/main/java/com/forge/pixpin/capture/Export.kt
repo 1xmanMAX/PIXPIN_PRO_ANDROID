@@ -124,6 +124,14 @@ object PinExporter {
         com.forge.pixpin.pin.PinType.TEXT -> renderText(state.text)
 
         com.forge.pixpin.pin.PinType.FILE -> renderText(state.fileName)
+
+        // Las mini-aplicaciones se exportan por su contenido en texto: el
+        // contador, su número; la lista y las cuentas, sus líneas. El
+        // temporizador no tiene nada que valga la pena guardar en la galería.
+        com.forge.pixpin.pin.PinType.COUNTER -> renderText("${state.widget.count}")
+        com.forge.pixpin.pin.PinType.CHECKLIST,
+        com.forge.pixpin.pin.PinType.LEDGER -> renderText(state.text)
+        com.forge.pixpin.pin.PinType.TIMER -> null
     }
 
     private fun renderText(text: String?): Bitmap? {

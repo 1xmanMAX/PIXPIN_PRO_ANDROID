@@ -98,6 +98,14 @@
     <string name="pin_image_default">PixPin</string>
     <string name="pin_image_priority">Prioridad</string>
     <string name="cd_toggle_priority">Alternar prioridad</string>
+    <string name="checklist_seed">Primera tarea\nSegunda tarea</string>
+    <string name="ledger_seed">+1000 Sueldo\n-250 Compra</string>
+    <string name="pin_type_timer">Temporizador</string>
+    <string name="pin_type_checklist">Lista</string>
+    <string name="pin_type_counter">Contador</string>
+    <string name="pin_type_ledger">Cuentas</string>
+    <string name="ledger_total">Total</string>
+    <string name="timer_done">Tiempo cumplido</string>
     <string name="pin_type_image">Imagen</string>
     <string name="pin_type_file">Archivo</string>
     <string name="no_app_for_file">No hay ninguna app para abrir este archivo</string>

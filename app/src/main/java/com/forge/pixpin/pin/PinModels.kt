@@ -3,7 +3,32 @@ package com.forge.pixpin.pin
 import com.forge.pixpin.annotate.Annotation
 import kotlinx.serialization.Serializable
 
-enum class PinType { IMAGE, TEXT, COLOR, FILE }
+enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER }
+
+/**
+ * Estado de las mini-aplicaciones.
+ *
+ * Va todo en una sola clase, con un campo por herramienta, en vez de una
+ * jerarquía sellada: la serialización polimórfica obligaría a registrar cada
+ * subtipo y a migrar lo ya guardado en disco, y aquí son cuatro campos sueltos
+ * con valor por defecto que no le cuestan nada a quien no los usa.
+ */
+@Serializable
+data class WidgetState(
+    /** Casillas marcadas de la lista, una por línea del texto. */
+    val checked: List<Boolean> = emptyList(),
+    /** Valor del contador. */
+    val count: Int = 0,
+    /** Minutos configurados en el temporizador; 0 = solo reloj. */
+    val timerMinutes: Int = 0,
+    /**
+     * Momento en que vence la cuenta atrás, en milisegundos de reloj del
+     * sistema. Se guarda el VENCIMIENTO y no lo que queda para que el
+     * temporizador siga siendo correcto aunque el pin se cierre o el móvil se
+     * reinicie por el camino.
+     */
+    val timerEndsAt: Long? = null
+)
 
 /** Estado serializable de un pin: todo lo necesario para restaurarlo. */
 @Serializable
@@ -42,5 +67,7 @@ data class PinState(
      */
     val priority: Boolean = false,
     /** Emoji pegado en la esquina, a modo de pegatina; null = sin pegatina. */
-    val emoji: String? = null
+    val emoji: String? = null,
+    /** Estado de la mini-aplicación, si el pin es una. */
+    val widget: WidgetState = WidgetState()
 )

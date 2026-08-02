@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TextFields
@@ -62,6 +63,7 @@ import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.clipboard.ClipboardPinReader
 import com.forge.pixpin.clipboard.ContentClassifier
+import com.forge.pixpin.clipboard.MiniApp
 import com.forge.pixpin.clipboard.PinContent
 import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.data.PinRepository
@@ -277,6 +279,10 @@ class OverlayManager(private val app: PixPinApp) {
                 createPin(newPin(PinType.TEXT).copy(text = content.text))
                 true
             }
+            is PinContent.MiniAppPin -> {
+                createMiniApp(content.app)
+                true
+            }
             is PinContent.ColorPin -> {
                 createPin(newPin(PinType.COLOR).copy(colorArgb = content.argb))
                 true
@@ -336,6 +342,39 @@ class OverlayManager(private val app: PixPinApp) {
             )
         )
     }
+
+    /**
+     * Abre la herramienta que pidió la palabra mágica.
+     *
+     * La pizarra NO es un tipo de pin nuevo: es un pin de imagen con un lienzo
+     * liso generado al vuelo. Así hereda entero el dibujo a mano, el zoom, las
+     * anotaciones re-editables y la exportación a la galería, sin una línea de
+     * código de dibujo nueva.
+     */
+    private fun createMiniApp(app: MiniApp) {
+        if (app == MiniApp.BOARD) {
+            scope.launch {
+                val path = withContext(Dispatchers.IO) { ImageStore.saveBlankBoard(this@OverlayManager.app) }
+                if (path != null) pinImage(path) else toast(R.string.capture_error)
+            }
+            return
+        }
+        val type = when (app) {
+            MiniApp.TIMER -> PinType.TIMER
+            MiniApp.CHECKLIST -> PinType.CHECKLIST
+            MiniApp.COUNTER -> PinType.COUNTER
+            MiniApp.LEDGER -> PinType.LEDGER
+            MiniApp.BOARD -> return
+        }
+        val seed = when (app) {
+            MiniApp.CHECKLIST -> appString(R.string.checklist_seed)
+            MiniApp.LEDGER -> appString(R.string.ledger_seed)
+            else -> null
+        }
+        createPin(newPin(type).copy(text = seed))
+    }
+
+    private fun appString(resId: Int): String = app.getString(resId)
 
     private fun createPin(state: PinState) {
         val controller = PinWindowController(app, state, callbacks)
@@ -686,6 +725,10 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.TEXT -> "📝 " + app.getString(R.string.pin_type_text_plural)
         PinType.COLOR -> "🎨 " + app.getString(R.string.pin_type_color_plural)
         PinType.FILE -> "📁 " + app.getString(R.string.pin_type_file_plural)
+        PinType.TIMER -> "⏱ " + app.getString(R.string.pin_type_timer)
+        PinType.CHECKLIST -> "☑ " + app.getString(R.string.pin_type_checklist)
+        PinType.COUNTER -> "🔢 " + app.getString(R.string.pin_type_counter)
+        PinType.LEDGER -> "💶 " + app.getString(R.string.pin_type_ledger)
     }
 
     /**
@@ -761,6 +804,7 @@ class OverlayManager(private val app: PixPinApp) {
                         PinType.TEXT -> Icons.Filled.TextFields
                         PinType.COLOR -> Icons.Filled.Palette
                         PinType.FILE -> Icons.Filled.InsertDriveFile
+                        else -> Icons.Filled.Widgets
                     },
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
@@ -837,6 +881,7 @@ class OverlayManager(private val app: PixPinApp) {
                         PinType.TEXT -> Icons.Filled.TextFields
                         PinType.COLOR -> Icons.Filled.Palette
                         PinType.FILE -> Icons.Filled.InsertDriveFile
+                        else -> Icons.Filled.Widgets
                     },
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary
@@ -932,6 +977,10 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COLOR -> pin.colorArgb?.let { ContentClassifier.toHex(it) } ?: "Color"
         PinType.TEXT -> pin.text.orEmpty().replace('\n', ' ').take(30)
         PinType.FILE -> pin.fileName ?: app.getString(R.string.pin_type_file)
+        PinType.TIMER -> app.getString(R.string.pin_type_timer)
+        PinType.CHECKLIST -> app.getString(R.string.pin_type_checklist)
+        PinType.COUNTER -> app.getString(R.string.pin_type_counter) + " ${pin.widget.count}"
+        PinType.LEDGER -> app.getString(R.string.pin_type_ledger)
     }
 
     // ---- Persistencia ----
