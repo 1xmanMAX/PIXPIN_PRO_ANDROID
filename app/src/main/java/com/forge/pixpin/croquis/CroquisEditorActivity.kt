@@ -27,7 +27,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.SquareFoot
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,25 +78,42 @@ import kotlin.math.hypot
 
 private enum class Modo { DIBUJAR, MEDIR, CALIBRAR }
 
-private enum class Herramienta(val etiqueta: String) {
-    LINEA("Línea"),
-    POLILINEA("Polilínea"),
-    RECT("Rect"),
-    CIRCULO("Círculo"),
-    COTA("Cota"),
+/**
+ * Los iconos son los mismos que usa el editor de anotaciones sobre imagen
+ * (`PinWindowController`), para que las dos barras se lean igual.
+ */
+private enum class Herramienta(
+    val etiqueta: String,
+    val icono: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    LINEA("Línea", Icons.Filled.Remove),
+    POLILINEA("Polilínea", Icons.Filled.Timeline),
+    RECT("Rectángulo", Icons.Filled.CropSquare),
+    CIRCULO("Círculo", Icons.Filled.RadioButtonUnchecked),
+    COTA("Cota", Icons.Filled.SwapHoriz),
 
     /** Se toca la línea que corta y luego el trozo que sobra. */
-    RECORTAR("Recortar"),
+    RECORTAR("Recortar", Icons.Filled.ContentCut),
 
     /** Se toca la línea a alargar y luego hasta dónde. */
-    EXTENDER("Extender");
+    EXTENDER("Extender", Icons.Filled.OpenInFull);
 
     /** Las que trabajan sobre líneas ya dibujadas, no poniendo puntos. */
     val esEdicion: Boolean get() = this == RECORTAR || this == EXTENDER
 }
 
-/** Cuál de los dos puntos en juego se está arrastrando. */
-private enum class Agarre { NINGUNO, A, B }
+/**
+ * Qué se está arrastrando.
+ *
+ * Un índice y no un enum porque los vértices de una polilínea a medio hacer
+ * también se agarran, y son tantos como haya: [A] y [B] son los dos puntos
+ * sueltos, y cualquier valor >= 0 es la posición dentro de la cadena.
+ */
+private object Agarre {
+    const val NADA = Int.MIN_VALUE
+    const val A = -1
+    const val B = -2
+}
 
 /**
  * El editor del croquis, a pantalla completa.
@@ -103,7 +135,15 @@ class CroquisEditorActivity : ComponentActivity() {
                     putExtra(EXTRA_ID, id)
                     putExtra(EXTRA_RUTA, rutaCroquis)
                     putExtra(EXTRA_FONDO, fondoPath)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // CLEAR_TASK además de NEW_TASK, y no es un adorno: con su
+                    // propia taskAffinity, una instancia ya existente se trae al
+                    // frente en vez de crearse otra. Sin `onCreate`, el editor
+                    // seguía enseñando el croquis del pin ANTERIOR y había que
+                    // cerrarlo a mano para que leyera el nuevo.
+                    //
+                    // Vaciar la tarea es seguro porque el editor guarda en cada
+                    // cambio: no hay nada pendiente que se pueda perder.
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                 }
             )
         }
@@ -156,7 +196,6 @@ class CroquisEditorActivity : ComponentActivity() {
 
         var puntoA by remember { mutableStateOf<P?>(null) }
         var puntoB by remember { mutableStateOf<P?>(null) }
-        var agarre by remember { mutableStateOf(Agarre.NINGUNO) }
         var imantadoEn by remember { mutableStateOf<P?>(null) }
         var campo by remember { mutableStateOf("") }
         var campoAngulo by remember { mutableStateOf("") }
@@ -196,8 +235,12 @@ class CroquisEditorActivity : ComponentActivity() {
 
         fun limpiar() {
             puntoA = null; puntoB = null; campo = ""; campoAngulo = ""
-            imantadoEn = null; agarre = Agarre.NINGUNO; señalada = null
+            imantadoEn = null; señalada = null
         }
+
+        // `confirmar` se define más abajo porque necesita a `limpiar`, pero
+        // `tocar` tiene que poder llamarla: este hueco los enlaza.
+        var cerrarTrazo: () -> Unit = {}
 
         /**
          * Qué hace un toque, según la herramienta.
@@ -248,8 +291,14 @@ class CroquisEditorActivity : ComponentActivity() {
                 return
             }
 
-            if (puntoA == null) puntoA = colocar(bruto, null)
-            else if (puntoB == null) puntoB = colocar(bruto, puntoA)
+            when {
+                puntoA == null -> puntoA = colocar(bruto, null)
+                puntoB == null -> puntoB = colocar(bruto, puntoA)
+                // Con los dos puestos, tocar en un hueco **cierra el trazo**.
+                // Antes había que buscar el botón de confirmar; ahora ese botón
+                // es solo para cuando además se teclea una medida.
+                else -> cerrarTrazo()
+            }
         }
 
         /** Cierra la polilínea en curso y la deja dibujada. */
@@ -318,24 +367,9 @@ class CroquisEditorActivity : ComponentActivity() {
             }
             limpiar()
         }
+        cerrarTrazo = { confirmar() }
 
         Column(Modifier.fillMaxSize().background(Color(0xFF14181D))) {
-
-            BarraSuperior(
-                modo = modo,
-                herramienta = herramienta,
-                orto = orto,
-                hayFondo = croquis.fondo != null,
-                puedeDeshacer = croquis.entidades.isNotEmpty(),
-                alModo = { modo = it; limpiar(); aviso = null },
-                alHerramienta = { herramienta = it },
-                alOrto = { orto = !orto },
-                alDeshacer = {
-                    croquis = croquis.copy(entidades = croquis.entidades.dropLast(1))
-                    alGuardar(croquis)
-                },
-                alSalir = { alSalir(croquis) }
-            )
 
             Box(
                 Modifier
@@ -360,23 +394,32 @@ class CroquisEditorActivity : ComponentActivity() {
                             val mundoAbajo = CroquisGeometria.aMundo(
                                 Px(origen.x, origen.y), vista, ancho, alto
                             )
+                            // Se busca entre los dos puntos sueltos Y los
+                            // vértices de la polilínea a medio hacer: retocar
+                            // uno antes de cerrarla es lo normal.
                             val radio = radioAgarreM()
-                            val dA = puntoA?.let { CroquisGeometria.distancia(mundoAbajo, it) }
-                            val dB = puntoB?.let { CroquisGeometria.distancia(mundoAbajo, it) }
-                            var agarrado = when {
-                                dB != null && dB <= radio && (dA == null || dB <= dA) -> Agarre.B
-                                dA != null && dA <= radio -> Agarre.A
-                                else -> Agarre.NINGUNO
+                            var agarrado = Agarre.NADA
+                            var mejorD = Double.MAX_VALUE
+                            fun probar(p: P?, indice: Int) {
+                                if (p == null) return
+                                val d = CroquisGeometria.distancia(mundoAbajo, p)
+                                if (d <= radio && d < mejorD) { mejorD = d; agarrado = indice }
                             }
-                            agarre = agarrado
+                            probar(puntoA, Agarre.A)
+                            probar(puntoB, Agarre.B)
+                            cadena.forEachIndexed { i, p -> probar(p, i) }
 
                             // Se conserva la separación con la que agarraste, en
                             // vez de teletransportar el punto bajo el dedo. Si
                             // agarraste casi encima, se separa a la fuerza: un
                             // punto debajo de la mano no se ve.
                             var apartado = Offset.Zero
-                            if (agarrado != Agarre.NINGUNO) {
-                                val p = if (agarrado == Agarre.A) puntoA!! else puntoB!!
+                            if (agarrado != Agarre.NADA) {
+                                val p = when {
+                                    agarrado == Agarre.A -> puntoA!!
+                                    agarrado == Agarre.B -> puntoB!!
+                                    else -> cadena[agarrado]
+                                }
                                 val q = CroquisGeometria.aPantalla(p, vista, ancho, alto)
                                 apartado = Offset(q.x - origen.x, q.y - origen.y)
                                 if (apartado.getDistance() < 26f * densidad) {
@@ -397,8 +440,7 @@ class CroquisEditorActivity : ComponentActivity() {
                                     // pase: si empezaste agarrando un punto y
                                     // apoyas el segundo dedo, sueltas el punto.
                                     conDosDedos = true
-                                    agarrado = Agarre.NINGUNO
-                                    agarre = Agarre.NINGUNO
+                                    agarrado = Agarre.NADA
                                     val zoom = evento.calculateZoom()
                                     val pan = evento.calculatePan()
                                     if (zoom != 1f || pan != Offset.Zero) {
@@ -422,7 +464,7 @@ class CroquisEditorActivity : ComponentActivity() {
                                     ) movido = true
 
                                     if (movido) {
-                                        if (agarrado != Agarre.NINGUNO) {
+                                        if (agarrado != Agarre.NADA) {
                                             val destino = Px(
                                                 dedo.position.x + apartado.x,
                                                 dedo.position.y + apartado.y
@@ -430,10 +472,17 @@ class CroquisEditorActivity : ComponentActivity() {
                                             val bruto = CroquisGeometria.aMundo(
                                                 destino, vista, ancho, alto
                                             )
-                                            if (agarrado == Agarre.A) {
-                                                puntoA = colocar(bruto, puntoB)
-                                            } else {
-                                                puntoB = colocar(bruto, puntoA)
+                                            when {
+                                                agarrado == Agarre.A ->
+                                                    puntoA = colocar(bruto, puntoB)
+                                                agarrado == Agarre.B ->
+                                                    puntoB = colocar(bruto, puntoA)
+                                                else -> {
+                                                    val vecino = cadena.getOrNull(agarrado - 1)
+                                                    cadena = cadena.toMutableList().also {
+                                                        it[agarrado] = colocar(bruto, vecino)
+                                                    }
+                                                }
                                             }
                                         } else {
                                             // Un dedo sobre el vacío desplaza la
@@ -452,8 +501,6 @@ class CroquisEditorActivity : ComponentActivity() {
                                     }
                                 }
                             } while (evento.changes.any { it.pressed })
-
-                            agarre = Agarre.NINGUNO
 
                             // Sin desplazamiento, era un toque: coloca punto.
                             if (!movido && !conDosDedos) {
@@ -502,6 +549,22 @@ class CroquisEditorActivity : ComponentActivity() {
                 alTerminarCadena = { terminarCadena(false) },
                 alPdf = { exportar(croquis, true) { aviso = it } },
                 alJpg = { exportar(croquis, false) { aviso = it } }
+            )
+
+            BarraPrincipal(
+                modo = modo,
+                herramienta = herramienta,
+                orto = orto,
+                hayFondo = croquis.fondo != null,
+                puedeDeshacer = croquis.entidades.isNotEmpty(),
+                alModo = { modo = it; limpiar(); cadena = emptyList(); aviso = null },
+                alHerramienta = { herramienta = it; limpiar(); cadena = emptyList() },
+                alOrto = { orto = !orto },
+                alDeshacer = {
+                    croquis = croquis.copy(entidades = croquis.entidades.dropLast(1))
+                    alGuardar(croquis)
+                },
+                alSalir = { alSalir(croquis) }
             )
         }
     }
@@ -635,8 +698,42 @@ private fun Chip(texto: String, activo: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Botón de icono de la barra, con el mismo tamaño y trato para todos. */
 @Composable
-private fun BarraSuperior(
+private fun Boton(
+    icono: androidx.compose.ui.graphics.vector.ImageVector,
+    descripcion: String,
+    activo: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = if (activo) Color(0xFF29B8DB) else Color(0xFF272D35),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .size(42.dp)
+            .pointerInput(descripcion) { detectTapGestures { onClick() } }
+    ) {
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
+            androidx.compose.material3.Icon(
+                icono,
+                contentDescription = descripcion,
+                tint = if (activo) Color(0xFF06222B) else Color(0xFFC9D2DC),
+                modifier = Modifier.size(21.dp)
+            )
+        }
+    }
+}
+
+/**
+ * La barra principal, **abajo**, como la de anotar una imagen.
+ *
+ * Todo con iconos y en una sola fila que se desplaza. La fila anterior no se
+ * desplazaba, y con más de tres o cuatro botones los últimos quedaban fuera de
+ * la pantalla sin manera de alcanzarlos: por eso «no aparecían» ni las
+ * herramientas ni la opción de escalar.
+ */
+@Composable
+private fun BarraPrincipal(
     modo: Modo,
     herramienta: Herramienta,
     orto: Boolean,
@@ -648,41 +745,43 @@ private fun BarraSuperior(
     alDeshacer: () -> Unit,
     alSalir: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Chip("‹", false, alSalir)
-            Chip("Dibujar", modo == Modo.DIBUJAR) { alModo(Modo.DIBUJAR) }
-            Chip("Medir", modo == Modo.MEDIR) { alModo(Modo.MEDIR) }
-            // «Escalar» y no «Calibrar»: es la palabra que se busca cuando lo
-            // que se quiere es que la captura mida en metros de verdad.
-            if (hayFondo) Chip("⇔ Escalar", modo == Modo.CALIBRAR) { alModo(Modo.CALIBRAR) }
-        }
-        // Las herramientas solo existen en modo dibujar: en medir el dibujo
-        // está deshabilitado de verdad, no escondido detrás de un if.
-        if (modo == Modo.DIBUJAR) {
-            // Con desplazamiento horizontal: sin él, las herramientas que no
-            // caben en el ancho de la pantalla quedan cortadas y sin forma de
-            // llegar a ellas — parecía que solo existiera la de línea.
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 5.dp)
-                    .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Herramienta.entries.forEach { h ->
-                    Chip(h.etiqueta, herramienta == h) { alHerramienta(h) }
-                }
-                Chip(if (orto) "⊾ Orto" else "⊾", orto, alOrto)
-                if (puedeDeshacer) Chip("↶", false, alDeshacer)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1B2027))
+            .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Boton(Icons.Filled.Close, "Salir", false, alSalir)
+        Separador()
+        Boton(Icons.Filled.Edit, "Dibujar", modo == Modo.DIBUJAR) { alModo(Modo.DIBUJAR) }
+        Boton(Icons.Filled.SquareFoot, "Medir", modo == Modo.MEDIR) { alModo(Modo.MEDIR) }
+        if (hayFondo) {
+            Boton(Icons.Filled.ZoomOutMap, "Escalar la imagen", modo == Modo.CALIBRAR) {
+                alModo(Modo.CALIBRAR)
             }
         }
+        if (modo == Modo.DIBUJAR) {
+            Separador()
+            Herramienta.entries.forEach { h ->
+                Boton(h.icono, h.etiqueta, herramienta == h) { alHerramienta(h) }
+            }
+            Separador()
+            Boton(Icons.Filled.GridOn, "Horizontal y vertical", orto, alOrto)
+            if (puedeDeshacer) Boton(Icons.Filled.Undo, "Deshacer", false, alDeshacer)
+        }
     }
+}
+
+@Composable
+private fun Separador() {
+    Box(
+        Modifier
+            .size(width = 1.dp, height = 26.dp)
+            .background(Color(0xFF39414B))
+    )
 }
 
 @Composable
