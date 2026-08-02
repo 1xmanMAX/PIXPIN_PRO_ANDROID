@@ -38,8 +38,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -1545,10 +1548,27 @@ class PinWindowController(
             // ninguno que hacer.
             Box(
                 Modifier
-                    .width(s.textBoxWidth.dp)
+                    // requiredWidth/Height y no width/height: estas IGNORAN lo
+                    // que imponga el padre.
+                    //
+                    // Con las normales había un lazo de realimentación que se
+                    // comía el pin: el contenido vive dentro de la ventana, así
+                    // que al alejar el zoom la ventana quedaba más pequeña que
+                    // el texto, el Box se medía recortado, esa medida recortada
+                    // pasaba a ser naturalW, la ventana encogía más, y vuelta a
+                    // empezar hasta desaparecer. Al acercar no ocurría porque
+                    // ahí la ventana sobra y nadie recorta nada: de ahí que
+                    // fallara en una sola dirección.
+                    // Sin alto fijado el alto es wrap, y ahí el padre volvería a
+                    // recortar por el otro eje: unbounded lo mide libre.
+                    .wrapContentSize(Alignment.TopStart, unbounded = true)
+                    .requiredWidth(s.textBoxWidth.dp)
                     .then(
-                        if (s.textBoxHeight != null) Modifier.height(s.textBoxHeight.dp)
-                        else Modifier
+                        if (s.textBoxHeight != null) {
+                            Modifier.requiredHeight(s.textBoxHeight.dp)
+                        } else {
+                            Modifier
+                        }
                     )
                     .graphicsLayer {
                         scaleX = zoom
@@ -1564,7 +1584,11 @@ class PinWindowController(
                     .onGloballyPositioned { coords ->
                         val w = coords.size.width
                         val h = coords.size.height
-                        if (w > 0 && h > 0 && (w != naturalW || h != naturalH)) {
+                        // Suelo de seguridad: por muy mal que salga una medida,
+                        // un pin no puede quedarse en un tamaño del que ya no se
+                        // pueda recuperar tocándolo.
+                        val floor = with(density) { MIN_PIN_DP.dp.roundToPx() }
+                        if (w >= floor && h >= floor && (w != naturalW || h != naturalH)) {
                             naturalW = w
                             naturalH = h
                             applyContentSize()
@@ -1783,6 +1807,9 @@ class PinWindowController(
 
         /** Cuánto se ensancha su zona táctil respecto a lo que se ve, en dp. */
         const val SCROLL_TOUCH_PAD_DP = 10
+
+        /** Lado mínimo de un pin: por debajo de esto deja de poder agarrarse. */
+        const val MIN_PIN_DP = 24
     }
 
     private fun mimeIcon(mime: String?) = when {
