@@ -16,17 +16,29 @@ class ClipboardPinReader(private val context: Context) {
         if (clip.itemCount == 0) return PinContent.Empty
 
         val item = clip.getItemAt(0)
+        val text = item.text?.toString()
 
         item.uri?.let { uri ->
             val type = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+
+            // El texto manda cuando la URI es solo la versión enriquecida de lo
+            // mismo. Google Sheets, por ejemplo, deja la selección como texto Y
+            // como HTML: mirando la URI primero, una tabla copiada acababa
+            // siendo un pin de archivo y el texto no lo veía nadie.
+            val uriIsRichTextOfTheSameThing = type == null || type.startsWith("text/")
+            if (uriIsRichTextOfTheSameThing && !text.isNullOrBlank()) {
+                return ContentClassifier.classify(text)
+            }
+
             return when {
+                // Sin tipo y sin texto, lo más probable es una imagen.
                 type == null || type.startsWith("image/") -> PinContent.ImageUri(uri.toString())
                 else -> PinContent.FileUri(uri.toString())
             }
         }
 
-        val text = item.text?.toString()
+        val body = text
             ?: runCatching { item.coerceToText(context)?.toString() }.getOrNull()
-        return ContentClassifier.classify(text)
+        return ContentClassifier.classify(body)
     }
 }
