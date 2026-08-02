@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.requiredHeight
@@ -131,6 +132,8 @@ import com.forge.pixpin.markdown.Markdown
 import com.forge.pixpin.markdown.MarkdownEdit
 import com.forge.pixpin.markdown.MarkdownText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -168,6 +171,9 @@ class PinWindowController(
 
         /** El usuario marcó/desmarcó el pin como guardado. */
         fun onPinToggleSave(controller: PinWindowController)
+
+        /** Se ha extraído una página de un PDF: el gestor la convierte en pin. */
+        fun onPinImageExtracted(controller: PinWindowController, imagePath: String) {}
 
         /**
          * Arrastre en curso. El gestor es quien sabe qué pines forman grupo, así
@@ -365,6 +371,7 @@ class PinWindowController(
         if (!visible) {
             closeActionBar()
             closeEmojiPicker()
+        closePdfViewer()
             exitAnnotateMode()
         }
     }
@@ -392,6 +399,7 @@ class PinWindowController(
         exitAnnotateMode()
         closeActionBar()
         closeEmojiPicker()
+        closePdfViewer()
         val w = window ?: return
         // Guarda la posición viva antes de soltar los LayoutParams.
         pin.value = snapshot()
@@ -462,6 +470,7 @@ class PinWindowController(
         minimized.value = true
         closeActionBar()
         closeEmojiPicker()
+        closePdfViewer()
         exitAnnotateMode()
         // La burbuja no se redimensiona; sin esto conservaría el rect del pin abierto.
         setResizeHandle(null)
@@ -523,6 +532,7 @@ class PinWindowController(
         if (editing.value || pin.value.type != PinType.TEXT) return
         closeActionBar()
         closeEmojiPicker()
+        closePdfViewer()
         val body = pin.value.text.orEmpty()
         draft.value = TextFieldValue(body, TextRange(body.length))
         editing.value = true
@@ -1080,6 +1090,166 @@ class PinWindowController(
         annotateBar = null
     }
 
+    // ---- Visor de PDF ----
+
+    private var pdfViewer: OverlayComposeWindow? = null
+
+    /**
+     * Scope de la app y no uno propio: extraer una página tiene que terminar
+     * aunque el visor se cierre por el camino.
+     */
+    private val scope
+        get() = (context.applicationContext as com.forge.pixpin.PixPinApp).scope
+
+    val isPdf: Boolean
+        get() = pin.value.type == PinType.FILE && pin.value.mimeType == "application/pdf"
+
+    private fun openPdfViewer() {
+        if (pdfViewer != null) return
+        closeActionBar()
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.CENTER }
+        val viewer = OverlayComposeWindow(context) { PdfViewerContent() }
+        pdfViewer = viewer
+        runCatching {
+            wm.addView(viewer.view, params)
+            viewer.onAttached()
+        }.onFailure { pdfViewer = null }
+    }
+
+    private fun closePdfViewer() {
+        val viewer = pdfViewer ?: return
+        runCatching { wm.removeView(viewer.view) }
+        viewer.onDetached()
+        pdfViewer = null
+    }
+
+    /** Saca una página como pin de imagen. */
+    private fun extractPage(index: Int) {
+        val path = pin.value.filePath ?: return
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                val bmp = PdfDoc.render(path, index, PdfDoc.PAGE_WIDTH) ?: return@withContext null
+                val out = ImageStore.saveBitmap(
+                    context, bmp, "pdf_${System.currentTimeMillis()}_$index.png"
+                )
+                bmp.recycle()
+                out
+            }
+            if (saved != null) {
+                callbacks.onPinImageExtracted(this@PinWindowController, saved)
+            } else {
+                toast(context.getString(R.string.capture_error))
+            }
+        }
+    }
+
+    private fun extractAllPages(count: Int) {
+        closePdfViewer()
+        scope.launch {
+            // De una en una y con respiro: veinte páginas a la vez son veinte
+            // bitmaps grandes y veinte ventanas nuevas de golpe.
+            for (i in 0 until count.coerceAtMost(MAX_PAGES_AT_ONCE)) {
+                extractPage(i)
+                delay(120)
+            }
+        }
+    }
+
+    /**
+     * Rejilla de páginas. Las miniaturas se dibujan bajo demanda y pequeñas: un
+     * PDF de doscientas páginas renderizado entero de golpe se lleva la memoria
+     * por delante.
+     */
+    @Composable
+    private fun PdfViewerContent() {
+        val path = pin.value.filePath
+        val pages = remember(path) { if (path != null) PdfDoc.pageCount(path) else 0 }
+        Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 8.dp) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = context.getString(R.string.pdf_pages, pages),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (pages > 0) {
+                        TextButton(onClick = { extractAllPages(pages) }) {
+                            Text(context.getString(R.string.pdf_all))
+                        }
+                    }
+                    IconButton(onClick = { closePdfViewer() }) {
+                        Icon(Icons.Filled.Close, contentDescription = null)
+                    }
+                }
+                if (pages == 0) {
+                    Text(
+                        text = context.getString(R.string.pdf_unreadable),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    return@Column
+                }
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    (0 until pages).chunked(3).forEach { row ->
+                        Row {
+                            row.forEach { index -> PdfThumb(path!!, index) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun PdfThumb(path: String, index: Int) {
+        var thumb by remember(path, index) { mutableStateOf<Bitmap?>(null) }
+        LaunchedEffect(path, index) {
+            thumb = withContext(Dispatchers.IO) {
+                PdfDoc.render(path, index, PdfDoc.THUMB_WIDTH)
+            }
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .padding(4.dp)
+                .width(96.dp)
+                .clickable {
+                    extractPage(index)
+                    closePdfViewer()
+                }
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(96.dp)
+                    .height(130.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                thumb?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+            Text("${index + 1}", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+
     // ---- Barra de edición de texto ----
 
     /**
@@ -1211,6 +1381,7 @@ class PinWindowController(
         // Poner o quitar la pegatina cambia el tamaño que necesita la ventana.
         applyContentSize()
         closeEmojiPicker()
+        closePdfViewer()
         callbacks.onPinChanged(this)
     }
 
@@ -1240,6 +1411,14 @@ class PinWindowController(
                         Icon(
                             Icons.Filled.Edit,
                             contentDescription = context.getString(R.string.cd_annotate_pin)
+                        )
+                    }
+                }
+                if (isPdf) {
+                    IconButton(onClick = { openPdfViewer() }) {
+                        Icon(
+                            Icons.Filled.PictureAsPdf,
+                            contentDescription = context.getString(R.string.pdf_view)
                         )
                     }
                 }
@@ -2043,6 +2222,13 @@ class PinWindowController(
 
         /** Lado mínimo de un pin: por debajo de esto deja de poder agarrarse. */
         const val MIN_PIN_DP = 24
+
+        /**
+         * Tope al sacar «todas» las páginas. Un PDF de doscientas páginas son
+         * doscientas ventanas overlay: el sistema no lo aguanta y el usuario
+         * tampoco lo quiere.
+         */
+        const val MAX_PAGES_AT_ONCE = 20
     }
 
     private fun mimeIcon(mime: String?) = when {

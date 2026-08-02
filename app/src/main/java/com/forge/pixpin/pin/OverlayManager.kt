@@ -235,6 +235,10 @@ class OverlayManager(private val app: PixPinApp) {
             }
         }
 
+        override fun onPinImageExtracted(controller: PinWindowController, imagePath: String) {
+            pinImage(imagePath)
+        }
+
         override fun onPinToggleSave(controller: PinWindowController) {
             controller.togglePinned()
             if (controller.isPinned) {
