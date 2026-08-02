@@ -788,6 +788,13 @@ class PinWindowController(
                     textBoxWidth = dims.width,
                     textBoxHeight = dims.height
                 )
+                // Ya no se mide el contenido, así que la ventana tiene que
+                // seguir al estado desde aquí o el cuadro crecería por dentro
+                // sin que la ventana se enterase.
+                val d = context.resources.displayMetrics.density
+                naturalW = (dims.width * d).toInt().coerceAtLeast(1)
+                naturalH = (dims.height * d).toInt().coerceAtLeast(1)
+                applyContentSize()
             }
         }
 
@@ -1578,22 +1585,21 @@ class PinWindowController(
                     // explícito de la ventana, y con tamaño explícito se acabó
                     // el tope de ancho (una ventana WRAP_CONTENT no puede medir
                     // más que la pantalla, y ahí el texto crecía hacia abajo).
-                    // El tamaño base solo se toma con el zoom EN REPOSO.
+                    // El alto se mide UNA SOLA VEZ, la primera.
                     //
-                    // A escala 1 la ventana mide lo mismo que el contenido, así
-                    // que la medida es la buena. Durante el pellizco la ventana
-                    // es más pequeña que el contenido y el padre lo recorta:
-                    // tomar esa medida recortada como tamaño base era lo que
-                    // encogía el pin hasta hacerlo desaparecer, porque cada
-                    // medida achicaba la ventana y la ventana achicaba la
-                    // siguiente medida.
+                    // Medirlo de continuo realimentaba: el tamaño de la ventana
+                    // sale de esta medida, y la medida sale de dentro de esa
+                    // misma ventana. Aunque las dos cuentas quieran dar lo
+                    // mismo, no redondean igual —una trunca píxeles al pasar de
+                    // dp, la otra los redondea—, así que cada pasada se comía un
+                    // píxel y el cuadro encogía solo, poco a poco. A partir de
+                    // aquí el tamaño lo manda el estado y nadie más.
                     .onGloballyPositioned { coords ->
-                        if (scale.floatValue != 1f) return@onGloballyPositioned
-                        val w = coords.size.width
+                        if (naturalH > 0) return@onGloballyPositioned
                         val h = coords.size.height
                         val floor = with(density) { MIN_PIN_DP.dp.roundToPx() }
-                        if (w >= floor && h >= floor && (w != naturalW || h != naturalH)) {
-                            naturalW = w
+                        if (h >= floor) {
+                            naturalW = with(density) { s.textBoxWidth.dp.roundToPx() }
                             naturalH = h
                             applyContentSize()
                         }
