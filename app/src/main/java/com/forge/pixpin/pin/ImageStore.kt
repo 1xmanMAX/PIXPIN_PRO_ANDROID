@@ -63,10 +63,10 @@ object ImageStore {
      * El tamaño es fijo y en proporción vertical, como una cuartilla: es donde
      * se escribe a gusto sin que el pin ocupe la pantalla entera.
      */
-    fun saveBlankBoard(context: Context, dark: Boolean = false): String? {
+    fun saveBlankBoard(context: Context, argb: Int = WHITE_BOARD): String? {
         return runCatching {
             val bmp = Bitmap.createBitmap(BOARD_W, BOARD_H, Bitmap.Config.ARGB_8888)
-            bmp.eraseColor(if (dark) 0xFF1B1B1B.toInt() else 0xFFFFFFFF.toInt())
+            bmp.eraseColor(argb)
             val path = saveBitmap(context, bmp, "board_${System.currentTimeMillis()}.png")
             bmp.recycle()
             path
@@ -75,6 +75,7 @@ object ImageStore {
 
     private const val BOARD_W = 900
     private const val BOARD_H = 1200
+    const val WHITE_BOARD = 0xFFFFFFFF.toInt()
 
     fun delete(path: String?) {
         if (path != null) runCatching { File(path).delete() }

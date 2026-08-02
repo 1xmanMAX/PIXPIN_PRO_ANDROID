@@ -72,6 +72,7 @@ import androidx.compose.material.icons.filled.DoNotTouch
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TextFields
@@ -372,6 +373,7 @@ class PinWindowController(
             closeActionBar()
             closeEmojiPicker()
         closePdfViewer()
+        closeBoardPalette()
             exitAnnotateMode()
         }
     }
@@ -400,6 +402,7 @@ class PinWindowController(
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
+        closeBoardPalette()
         val w = window ?: return
         // Guarda la posición viva antes de soltar los LayoutParams.
         pin.value = snapshot()
@@ -471,6 +474,7 @@ class PinWindowController(
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
+        closeBoardPalette()
         exitAnnotateMode()
         // La burbuja no se redimensiona; sin esto conservaría el rect del pin abierto.
         setResizeHandle(null)
@@ -528,11 +532,19 @@ class PinWindowController(
 
     private var editBar: OverlayComposeWindow? = null
 
+    /** Los pines que se escriben a mano: texto, lista y cuentas. */
+    private val isEditable: Boolean
+        get() = pin.value.type in EDITABLE_TYPES
+
     private fun enterEditMode() {
-        if (editing.value || pin.value.type != PinType.TEXT) return
+        // La lista y las cuentas se alimentan del MISMO editor que el texto: sus
+        // ítems son las líneas. Sin esto no había forma de añadir una tarea ni
+        // un gasto, que es justo para lo que sirven.
+        if (editing.value || !isEditable) return
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
+        closeBoardPalette()
         val body = pin.value.text.orEmpty()
         draft.value = TextFieldValue(body, TextRange(body.length))
         editing.value = true
@@ -1090,6 +1102,82 @@ class PinWindowController(
         annotateBar = null
     }
 
+    // ---- Pizarra ----
+
+    /** Una pizarra es un pin de imagen cuyo lienzo generamos nosotros. */
+    val isBoard: Boolean
+        get() = pin.value.type == PinType.IMAGE &&
+            pin.value.imagePath?.substringAfterLast('/')?.startsWith("board_") == true
+
+    private var boardPalette: OverlayComposeWindow? = null
+
+    private fun openBoardPalette() {
+        if (boardPalette != null) return
+        closeActionBar()
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.CENTER }
+        val w = OverlayComposeWindow(context) { BoardPaletteContent() }
+        boardPalette = w
+        runCatching { wm.addView(w.view, params); w.onAttached() }
+            .onFailure { boardPalette = null }
+    }
+
+    private fun closeBoardPalette() {
+        val w = boardPalette ?: return
+        runCatching { wm.removeView(w.view) }
+        w.onDetached()
+        boardPalette = null
+    }
+
+    /**
+     * Cambia el color del lienzo.
+     *
+     * **Lo dibujado no se pierde**: las anotaciones son vectores que viven
+     * encima de la imagen, no píxeles horneados en ella, así que basta con
+     * sustituir el fondo por otro del mismo tamaño.
+     */
+    private fun setBoardColor(argb: Int) {
+        closeBoardPalette()
+        val old = pin.value.imagePath
+        scope.launch {
+            val path = withContext(Dispatchers.IO) {
+                ImageStore.saveBlankBoard(context, argb)
+            } ?: return@launch
+            bitmapState.value = null
+            bitmapLoadTried.value = false
+            pin.value = pin.value.copy(imagePath = path)
+            withContext(Dispatchers.IO) { ImageStore.delete(old) }
+            callbacks.onPinChanged(this@PinWindowController)
+        }
+    }
+
+    @Composable
+    private fun BoardPaletteContent() {
+        Surface(shape = RoundedCornerShape(20.dp), shadowElevation = 8.dp) {
+            Row(
+                modifier = Modifier.padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BOARD_COLORS.forEach { argb ->
+                    Box(
+                        Modifier
+                            .padding(6.dp)
+                            .size(40.dp)
+                            .background(Color(argb), CircleShape)
+                            .border(1.dp, Color.Gray, CircleShape)
+                            .clickable { setBoardColor(argb) }
+                    )
+                }
+            }
+        }
+    }
+
     // ---- Visor de PDF ----
 
     private var pdfViewer: OverlayComposeWindow? = null
@@ -1152,6 +1240,7 @@ class PinWindowController(
 
     private fun extractAllPages(count: Int) {
         closePdfViewer()
+        closeBoardPalette()
         scope.launch {
             // De una en una y con respiro: veinte páginas a la vez son veinte
             // bitmaps grandes y veinte ventanas nuevas de golpe.
@@ -1228,6 +1317,7 @@ class PinWindowController(
                 .clickable {
                     extractPage(index)
                     closePdfViewer()
+        closeBoardPalette()
                 }
         ) {
             Box(
@@ -1382,6 +1472,7 @@ class PinWindowController(
         applyContentSize()
         closeEmojiPicker()
         closePdfViewer()
+        closeBoardPalette()
         callbacks.onPinChanged(this)
     }
 
@@ -1422,7 +1513,15 @@ class PinWindowController(
                         )
                     }
                 }
-                if (s.type == PinType.TEXT) {
+                if (isBoard) {
+                    IconButton(onClick = { openBoardPalette() }) {
+                        Icon(
+                            Icons.Filled.Palette,
+                            contentDescription = context.getString(R.string.board_color)
+                        )
+                    }
+                }
+                if (isEditable) {
                     IconButton(onClick = { enterEditMode() }) {
                         Icon(
                             Icons.Filled.Edit,
@@ -1751,9 +1850,11 @@ class PinWindowController(
                 nowProvider = { System.currentTimeMillis() },
                 onFinished = { onTimerFinished() }
             )
-            PinType.CHECKLIST -> ChecklistBody(s.text, s.widget) { toggleCheck(it) }
+            // La lista y las cuentas comparten el cuerpo del texto: mismo cuadro
+            // redimensionable, mismo zoom proporcional, mismo scroll y mismo
+            // editor. Solo cambia lo que se dibuja dentro.
+            PinType.CHECKLIST, PinType.LEDGER -> TextPinBody(s)
             PinType.COUNTER -> CounterBody(s.widget)
-            PinType.LEDGER -> LedgerBody(s.text, context.getString(R.string.ledger_total))
         }
     }
 
@@ -1964,19 +2065,35 @@ class PinWindowController(
                 }
             ) {
                 Box {
-                    if (editing.value) {
-                        TextEditor(s)
-                    } else {
-                        MarkdownText(
-                            blocks = blocks,
-                            baseSizeSp = 14f,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(textScroll)
-                                .padding(14.dp),
-                            onLinks = { linkHits = it }
-                        )
-                        ScrollPip(textScroll)
+                    when {
+                        editing.value -> TextEditor(s)
+
+                        s.type == PinType.CHECKLIST -> {
+                            Box(Modifier.verticalScroll(textScroll)) {
+                                ChecklistBody(s.text, s.widget) { toggleCheck(it) }
+                            }
+                            ScrollPip(textScroll)
+                        }
+
+                        s.type == PinType.LEDGER -> {
+                            Box(Modifier.verticalScroll(textScroll)) {
+                                LedgerBody(s.text, context.getString(R.string.ledger_total))
+                            }
+                            ScrollPip(textScroll)
+                        }
+
+                        else -> {
+                            MarkdownText(
+                                blocks = blocks,
+                                baseSizeSp = 14f,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(textScroll)
+                                    .padding(14.dp),
+                                onLinks = { linkHits = it }
+                            )
+                            ScrollPip(textScroll)
+                        }
                     }
                 }
             }
@@ -2274,6 +2391,21 @@ private val ANNOTATE_TOOLS = listOf(
 
 /** Alto aproximado de la barrita, para decidir a qué borde se pega. */
 private const val ANNOTATE_BAR_DP = 76
+
+/** Tipos de pin que se escriben a mano con el mismo editor. */
+private val EDITABLE_TYPES = setOf(PinType.TEXT, PinType.CHECKLIST, PinType.LEDGER)
+
+/**
+ * Fondos de pizarra. Cuatro y bien elegidos: blanco y negro por contraste
+ * máximo, y azul y verde oscuros porque cansan menos la vista en pantalla y el
+ * trazo claro resalta sobre ellos.
+ */
+private val BOARD_COLORS = listOf(
+    0xFFFFFFFF.toInt(), // blanco
+    0xFF1B1B1B.toInt(), // negro
+    0xFF102A43.toInt(), // azul pizarra
+    0xFF14312A.toInt()  // verde pizarra
+)
 
 /**
  * Pegatinas disponibles. Es una lista fija y no el teclado de emojis del

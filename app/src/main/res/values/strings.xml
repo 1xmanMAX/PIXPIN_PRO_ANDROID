@@ -106,6 +106,7 @@
     <string name="pin_type_ledger">Cuentas</string>
     <string name="ledger_total">Total</string>
     <string name="timer_done">Tiempo cumplido</string>
+    <string name="board_color">Color de la pizarra</string>
     <string name="pdf_view">Ver el PDF</string>
     <string name="pdf_pages">%1$d páginas</string>
     <string name="pdf_all">Todas</string>
