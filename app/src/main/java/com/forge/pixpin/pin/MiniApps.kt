@@ -248,6 +248,41 @@ fun LedgerBody(text: String?, totalLabel: String) {
     }
 }
 
+/**
+ * Tabla pegada de una hoja de cálculo.
+ *
+ * Va en monoespaciada y con las columnas del mismo ancho: en un pin estrecho lo
+ * que salva la lectura es que las cifras queden alineadas unas bajo otras, no
+ * que cada columna se ajuste a su contenido.
+ */
+@Composable
+fun TableBody(text: String?) {
+    val rows = remember(text) { com.forge.pixpin.clipboard.TableData.parse(text) }
+    if (rows.isEmpty()) return
+    Column(modifier = Modifier.padding(10.dp)) {
+        rows.forEachIndexed { index, row ->
+            val header = index == 0
+            Row(modifier = Modifier.fillMaxWidth()) {
+                row.forEach { cell ->
+                    Text(
+                        text = cell,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = if (header) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 2,
+                        color = if (header) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            if (header) HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+        }
+    }
+}
+
 private val LEDGER_OUT = Color(0xFFD32F2F)
 private val LEDGER_IN = Color(0xFF2E7D32)
 

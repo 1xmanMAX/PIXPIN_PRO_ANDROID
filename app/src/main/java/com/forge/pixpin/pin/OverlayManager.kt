@@ -284,6 +284,10 @@ class OverlayManager(private val app: PixPinApp) {
                 createPin(newPin(PinType.TEXT).copy(text = content.text))
                 true
             }
+            is PinContent.TablePin -> {
+                createPin(newPin(PinType.TABLE).copy(text = content.tsv))
+                true
+            }
             is PinContent.MiniAppPin -> {
                 createMiniApp(content.app)
                 true
@@ -754,6 +758,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.CHECKLIST -> "☑ " + app.getString(R.string.pin_type_checklist)
         PinType.COUNTER -> "🔢 " + app.getString(R.string.pin_type_counter)
         PinType.LEDGER -> "💶 " + app.getString(R.string.pin_type_ledger)
+        PinType.TABLE -> "▦ " + app.getString(R.string.pin_type_table)
     }
 
     /**
@@ -1006,6 +1011,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.CHECKLIST -> app.getString(R.string.pin_type_checklist)
         PinType.COUNTER -> app.getString(R.string.pin_type_counter) + " ${pin.widget.count}"
         PinType.LEDGER -> app.getString(R.string.pin_type_ledger)
+        PinType.TABLE -> app.getString(R.string.pin_type_table)
     }
 
     // ---- Persistencia ----

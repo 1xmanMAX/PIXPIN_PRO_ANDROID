@@ -880,6 +880,11 @@ class PinWindowController(
         override fun onScrollEnd() = Unit
 
         override fun onResizeEnd() {
+            if (boardResizable) {
+                // El lienzo se rehace al soltar, no en cada píxel: generar un
+                // bitmap por muestra del dedo sería insostenible.
+                resizeBoard(pin.value.textBoxWidth, pin.value.textBoxHeight ?: 400)
+            }
             keepReachable()
             // Se persiste al soltar, no en cada muestra: scheduleSave ya hace
             // debounce, pero escribir el estado por píxel arrastrado es ruido.
@@ -1109,6 +1114,39 @@ class PinWindowController(
     val isBoard: Boolean
         get() = pin.value.type == PinType.IMAGE &&
             pin.value.imagePath?.substringAfterLast('/')?.startsWith("board_") == true
+
+    /**
+     * La pizarra solo se estira **mientras está en blanco**.
+     *
+     * En cuanto hay un trazo, cambiar el lienzo obligaría a decidir qué pasa con
+     * lo dibujado —estirarlo y deformarlo, o dejarlo quieto y descuadrarlo— y
+     * cualquiera de las dos puede arruinar un dibujo hecho. Al ajustarse antes
+     * de empezar, la pregunta no llega a existir.
+     */
+    private val boardResizable: Boolean
+        get() = isBoard && annotator.annotations.isEmpty()
+
+    /** Estira el lienzo, conservando color y pauta. */
+    private fun resizeBoard(widthDp: Int, heightDp: Int) {
+        val density = context.resources.displayMetrics.density
+        val old = pin.value.imagePath
+        scope.launch {
+            val path = withContext(Dispatchers.IO) {
+                ImageStore.saveBlankBoard(
+                    context, boardColor, boardGrid,
+                    width = (widthDp * density).toInt(),
+                    height = (heightDp * density).toInt()
+                )
+            } ?: return@launch
+            naturalW = 0
+            naturalH = 0
+            bitmapState.value = null
+            bitmapLoadTried.value = false
+            pin.value = pin.value.copy(imagePath = path)
+            withContext(Dispatchers.IO) { ImageStore.delete(old) }
+            callbacks.onPinChanged(this@PinWindowController)
+        }
+    }
 
     private var boardPalette: OverlayComposeWindow? = null
 
@@ -1915,7 +1953,7 @@ class PinWindowController(
             // La lista y las cuentas comparten el cuerpo del texto: mismo cuadro
             // redimensionable, mismo zoom proporcional, mismo scroll y mismo
             // editor. Solo cambia lo que se dibuja dentro.
-            PinType.CHECKLIST, PinType.LEDGER -> TextPinBody(s)
+            PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE -> TextPinBody(s)
             PinType.COUNTER -> CounterBody(s.widget)
         }
     }
@@ -2011,6 +2049,7 @@ class PinWindowController(
                 PinType.CHECKLIST -> Text("☑", color = Color.White)
                 PinType.COUNTER -> Text("${s.widget.count}", color = Color.White)
                 PinType.LEDGER -> Text("€", color = Color.White)
+                PinType.TABLE -> Text("▦", color = Color.White)
             }
         }
     }
@@ -2040,6 +2079,7 @@ class PinWindowController(
         }
         // La ventana ya tiene el tamaño exacto que toca (measureNatural +
         // applyContentSize), así que la imagen solo tiene que llenarla.
+        val handleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         Box(
             Modifier
                 .fillMaxSize()
@@ -2075,6 +2115,36 @@ class PinWindowController(
                     imageRectInView = Rect(0f, 0f, drawW, drawH),
                     modifier = Modifier.matchParentSize()
                 )
+            }
+            // La pizarra en blanco se estira por su esquina, como el cuadro de
+            // texto. Desaparece con el primer trazo.
+            if (boardResizable) {
+                Canvas(
+                    modifier = Modifier
+                        .size(HANDLE_DP.dp)
+                        .align(Alignment.BottomEnd)
+                        .onGloballyPositioned { coords ->
+                            val origin = coords.positionInRoot()
+                            setResizeHandle(
+                                android.graphics.Rect(
+                                    origin.x.toInt(), origin.y.toInt(),
+                                    (origin.x + coords.size.width).toInt(),
+                                    (origin.y + coords.size.height).toInt()
+                                )
+                            )
+                        }
+                ) {
+                    val stroke = 1.5.dp.toPx()
+                    for (i in 1..3) {
+                        val inset = size.width * (i / 4f)
+                        drawLine(
+                            color = handleColor,
+                            start = Offset(size.width - inset, size.height),
+                            end = Offset(size.width, size.height - inset),
+                            strokeWidth = stroke
+                        )
+                    }
+                }
             }
         }
     }
@@ -2156,6 +2226,11 @@ class PinWindowController(
                             Box(Modifier.verticalScroll(textScroll)) {
                                 LedgerBody(s.text, context.getString(R.string.ledger_total))
                             }
+                            ScrollPip(textScroll)
+                        }
+
+                        s.type == PinType.TABLE -> {
+                            Box(Modifier.verticalScroll(textScroll)) { TableBody(s.text) }
                             ScrollPip(textScroll)
                         }
 
@@ -2474,7 +2549,8 @@ private val ANNOTATE_TOOLS = listOf(
 private const val ANNOTATE_BAR_DP = 76
 
 /** Tipos de pin que se escriben a mano con el mismo editor. */
-private val EDITABLE_TYPES = setOf(PinType.TEXT, PinType.CHECKLIST, PinType.LEDGER)
+private val EDITABLE_TYPES =
+    setOf(PinType.TEXT, PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE)
 
 /**
  * Fondos de pizarra. Cuatro y bien elegidos: blanco y negro por contraste

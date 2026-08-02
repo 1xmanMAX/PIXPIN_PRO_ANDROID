@@ -6,6 +6,8 @@ sealed interface PinContent {
     data class TextPin(val text: String) : PinContent
     /** Una palabra mágica: abre una herramienta en vez de un pin de texto. */
     data class MiniAppPin(val app: MiniApp) : PinContent
+    /** Texto con tabuladores pegado de una hoja de cálculo. */
+    data class TablePin(val tsv: String) : PinContent
     data class ImageUri(val uriString: String) : PinContent
     data class FileUri(val uriString: String) : PinContent
     data object Empty : PinContent
@@ -30,6 +32,10 @@ object ContentClassifier {
         // pero si algún día lo fuera, mandaría la herramienta.
         MagicWord.detect(t)?.let { return PinContent.MiniAppPin(it) }
         parseColor(t)?.let { return PinContent.ColorPin(it, t) }
+        // Lo pegado de una hoja de cálculo llega como texto con tabuladores:
+        // mostrarlo en crudo lo vuelve ilegible justo cuando más importa la
+        // alineación.
+        if (TableData.looksLikeTable(t)) return PinContent.TablePin(t)
         return PinContent.TextPin(t)
     }
 

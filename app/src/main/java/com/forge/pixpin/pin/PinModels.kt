@@ -3,7 +3,7 @@ package com.forge.pixpin.pin
 import com.forge.pixpin.annotate.Annotation
 import kotlinx.serialization.Serializable
 
-enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER }
+enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE }
 
 /**
  * Estado de las mini-aplicaciones.

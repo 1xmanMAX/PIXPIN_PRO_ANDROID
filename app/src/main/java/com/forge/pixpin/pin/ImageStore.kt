@@ -69,10 +69,16 @@ object ImageStore {
     fun saveBlankBoard(
         context: Context,
         argb: Int = WHITE_BOARD,
-        grid: BoardGrid = BoardGrid.NONE
+        grid: BoardGrid = BoardGrid.NONE,
+        width: Int = BOARD_W,
+        height: Int = BOARD_H
     ): String? {
         return runCatching {
-            val bmp = Bitmap.createBitmap(BOARD_W, BOARD_H, Bitmap.Config.ARGB_8888)
+            val bmp = Bitmap.createBitmap(
+                width.coerceIn(200, 4000),
+                height.coerceIn(200, 4000),
+                Bitmap.Config.ARGB_8888
+            )
             bmp.eraseColor(argb)
             drawGrid(bmp, argb, grid)
             val path = saveBitmap(context, bmp, "board_${System.currentTimeMillis()}.png")
