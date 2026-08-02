@@ -293,14 +293,6 @@ class PinWindowController(
     /** Tope del gesto en curso. */
     private var zoomMax = PinZoom.ABSOLUTE_MAX_SCALE
 
-    /**
-     * Se incrementa para releer el croquis del disco.
-     *
-     * El editor vive en otra actividad y escribe el archivo por su cuenta: el
-     * pin no tiene forma de enterarse. Tocarlo fuerza la relectura, que es el
-     * momento en el que el usuario vuelve a mirarlo.
-     */
-    private val croquisRevision = androidx.compose.runtime.mutableIntStateOf(0)
 
     /**
      * Tamaño del contenido a escala 1, en px. Solo se conoce en los pines de
@@ -915,12 +907,7 @@ class PinWindowController(
                 s.type == PinType.CHECKLIST -> rowAt(y).takeIf { it >= 0 }?.let { toggleCheck(it) }
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
-                // Al tocar se relee el croquis: si se acaba de acotar en el
-                // editor, lo copiado ya lleva las cotas.
-                s.type == PinType.IMAGE -> {
-                    croquisRevision.intValue++
-                    copyImage(s)
-                }
+                s.type == PinType.IMAGE -> copyImage(s)
                 // El croquis se copia al tocarlo, igual que una imagen: sale
                 // rasterizado con sus cotas. Editarlo va por el botón, no por
                 // el toque, para que copiar sea lo barato.
@@ -2031,9 +2018,19 @@ class PinWindowController(
      */
     @Composable
     private fun CroquisPinBody(s: PinState) {
-        val contexto = androidx.compose.ui.platform.LocalContext.current
-        val croquis = androidx.compose.runtime.remember(s.croquisPath, s.id) {
-            com.forge.pixpin.croquis.CroquisStore.cargar(s.croquisPath)
+        // La ventana toma proporción de A4 y tamaño propio. Sin esto el pin no
+        // se puede pellizcar como una imagen —el tope sería llenar la pantalla—
+        // y además cambiaba de forma según lo que hubiera dibujado dentro.
+        measureCroquisA4()
+
+        // Clave en la revisión del almacén: al guardar el editor, esto se
+        // recompone solo. El editor es otra actividad, pero el mismo proceso.
+        val croquis = androidx.compose.runtime.remember(
+            s.id, com.forge.pixpin.croquis.CroquisStore.revision.intValue
+        ) {
+            com.forge.pixpin.croquis.CroquisStore.cargar(
+                com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id)
+            )
         }
         val fondo = androidx.compose.runtime.remember(croquis?.fondo?.imagenPath) {
             croquis?.fondo?.imagenPath?.let { ImageStore.load(it) }
@@ -2044,16 +2041,23 @@ class PinWindowController(
         Box(Modifier.fillMaxSize().background(Color.White)) {
             if (croquis == null || croquis.entidades.isEmpty()) {
                 Text(
-                    "📐  Toca para dibujar",
-                    color = Color(0xFF556070),
+                    "📐",
+                    color = Color(0xFF8A94A2),
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else {
                 androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                     val ancho = size.width.toInt().coerceAtLeast(1)
                     val alto = size.height.toInt().coerceAtLeast(1)
+                    // Se encuadra LA HOJA, no lo dibujado. Encuadrar el
+                    // contenido hacía que el pin se reajustara a cada trazo:
+                    // una línea sola llenaba el pin entero.
+                    val hoja = com.forge.pixpin.croquis.CroquisGeometria
+                        .hojaA4(croquis, com.forge.pixpin.croquis.Vista(
+                            com.forge.pixpin.croquis.P(0.0, 0.0), 1.0
+                        ), ancho, alto)
                     val vista = com.forge.pixpin.croquis.CroquisGeometria
-                        .vistaQueEncaja(croquis, ancho, alto, 12)
+                        .vistaParaCaja(hoja, ancho, alto, 4)
                     if (vista != null) {
                         drawIntoCanvas { lienzo ->
                             com.forge.pixpin.croquis.CroquisRenderer.dibujar(
@@ -2065,6 +2069,22 @@ class PinWindowController(
                 }
             }
         }
+    }
+
+    /**
+     * Da al pin del croquis un tamaño explícito con proporción de A4.
+     *
+     * Con tamaño explícito la ventana se comporta como la de una imagen: el
+     * pellizco la agranda de verdad y puede pasarse del borde de la pantalla
+     * para mirar un detalle. Sin él, el tope es llenar la pantalla y el pin
+     * cambiaba de forma según lo que hubiera dentro.
+     */
+    private fun measureCroquisA4() {
+        if (naturalW > 0) return
+        val screenW = context.resources.displayMetrics.widthPixels
+        naturalW = (screenW * 0.45f).toInt().coerceAtLeast(1)
+        naturalH = (naturalW * 842f / 595f).toInt().coerceAtLeast(1)
+        applyContentSize()
     }
 
     /** Marca o desmarca un ítem de la lista, creciendo la lista si hace falta. */
@@ -2267,7 +2287,7 @@ class PinWindowController(
      */
     @Composable
     private fun CroquisSobreImagen(s: PinState, bmp: Bitmap) {
-        val croquis = remember(s.id, croquisRevision.intValue) {
+        val croquis = remember(s.id, com.forge.pixpin.croquis.CroquisStore.revision.intValue) {
             com.forge.pixpin.croquis.CroquisStore.cargar(
                 com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id)
             )

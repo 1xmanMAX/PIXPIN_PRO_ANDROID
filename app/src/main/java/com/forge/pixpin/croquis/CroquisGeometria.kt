@@ -166,8 +166,12 @@ object CroquisGeometria {
      * Manda el lado que se queda corto: encajar por el otro sacaría el dibujo
      * de la hoja. Devuelve null si no hay nada que encajar.
      */
-    fun vistaQueEncaja(croquis: Croquis, anchoPx: Int, altoPx: Int, margenPx: Int): Vista? {
-        val caja = extension(croquis) ?: return null
+    fun vistaQueEncaja(croquis: Croquis, anchoPx: Int, altoPx: Int, margenPx: Int): Vista? =
+        vistaParaCaja(extension(croquis), anchoPx, altoPx, margenPx)
+
+    /** Igual que [vistaQueEncaja] pero para un rectángulo cualquiera del mundo. */
+    fun vistaParaCaja(caja: Caja?, anchoPx: Int, altoPx: Int, margenPx: Int): Vista? {
+        if (caja == null) return null
         val utilAncho = (anchoPx - 2 * margenPx).coerceAtLeast(1)
         val utilAlto = (altoPx - 2 * margenPx).coerceAtLeast(1)
         // Un croquis puede ser una sola línea horizontal: sin alto no hay

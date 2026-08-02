@@ -91,7 +91,7 @@ object Export {
 object PinExporter {
 
     fun savePin(context: Context, state: com.forge.pixpin.pin.PinState): Boolean {
-        val bitmap = render(state) ?: return false
+        val bitmap = render(context, state) ?: return false
         val uri = Export.saveToGallery(context, bitmap)
         if (!bitmap.isRecycled) bitmap.recycle()
         return uri != null
@@ -103,18 +103,20 @@ object PinExporter {
      * anotaciones se quedaban por el camino.
      */
     fun copyPin(context: Context, state: com.forge.pixpin.pin.PinState): Boolean {
-        val bitmap = render(state) ?: return false
+        val bitmap = render(context, state) ?: return false
         val ok = Export.copyToClipboard(context, bitmap)
         if (!bitmap.isRecycled) bitmap.recycle()
         return ok
     }
 
-    private fun render(state: com.forge.pixpin.pin.PinState): Bitmap? = when (state.type) {
+    private fun render(
+        context: Context, state: com.forge.pixpin.pin.PinState
+    ): Bitmap? = when (state.type) {
         com.forge.pixpin.pin.PinType.IMAGE ->
             state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }?.let { bmp ->
                 // Lo dibujado sobre el pin se hornea al exportar: hasta aquí eran
                 // vectores encima de la imagen, re-editables.
-                if (state.annotations.isEmpty()) horneaCroquis(state, bmp)
+                if (state.annotations.isEmpty()) horneaCroquis(context, state, bmp)
                 else {
                     val baked = com.forge.pixpin.annotate.AnnotationRenderer.bake(
                         bmp,
@@ -122,7 +124,7 @@ object PinExporter {
                         state.annotations
                     )
                     if (!bmp.isRecycled) bmp.recycle()
-                    horneaCroquis(state, baked)
+                    horneaCroquis(context, state, baked)
                 }
             }
 
@@ -163,9 +165,15 @@ object PinExporter {
      * actividad y escribe por su cuenta: preguntarle al pin daría lo que había
      * cuando se abrió, no lo último medido.
      */
-    private fun horneaCroquis(state: com.forge.pixpin.pin.PinState, base: Bitmap): Bitmap {
-        val croquis = com.forge.pixpin.croquis.CroquisStore
-            .cargar(state.croquisPath ?: return base) ?: return base
+    private fun horneaCroquis(
+        context: Context, state: com.forge.pixpin.pin.PinState, base: Bitmap
+    ): Bitmap {
+        // La ruta se deduce del id y NO se lee de `croquisPath`: un pin de
+        // imagen que se acota nunca llegó a guardarse esa ruta, así que mirarla
+        // devolvía null y las cotas no salían en la copia.
+        val ruta = state.croquisPath
+            ?: com.forge.pixpin.croquis.CroquisStore.rutaDe(context, state.id)
+        val croquis = com.forge.pixpin.croquis.CroquisStore.cargar(ruta) ?: return base
         if (croquis.entidades.isEmpty()) return base
         val fondo = croquis.fondo ?: return base
         if (fondo.metrosPorPixel <= 0.0 || base.width < 1) return base

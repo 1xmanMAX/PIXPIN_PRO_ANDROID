@@ -11,9 +11,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -240,60 +243,127 @@ class CroquisEditorActivity : ComponentActivity() {
                     .weight(1f)
                     .fillMaxWidth()
                     .background(Color(0xFF2A2F36))
+                    // UN SOLO gesto para todo.
+                    //
+                    // Antes había tres detectores encadenados y se robaban los
+                    // eventos entre ellos: el zoom iba a rachas y el punto se
+                    // escapaba del dedo. Peor aún, el detector llevaba puntoA y
+                    // puntoB en su clave, así que Compose lo cancelaba y lo
+                    // reiniciaba en cuanto el punto se movía — o sea, siempre.
+                    //
+                    // La clave es Unit y no se reinicia nunca: los valores se
+                    // leen a través de sus delegados, que siempre dan el actual.
                     .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val ppm = (vista.pixelsPorMetro * zoom).coerceIn(0.05, 200_000.0)
-                            vista = Vista(
-                                P(vista.centro.x - pan.x / ppm, vista.centro.y + pan.y / ppm), ppm
+                        awaitEachGesture {
+                            val abajo = awaitFirstDown(requireUnconsumed = false)
+                            val origen = abajo.position
+
+                            val mundoAbajo = CroquisGeometria.aMundo(
+                                Px(origen.x, origen.y), vista, ancho, alto
                             )
-                        }
-                    }
-                    .pointerInput(modo, herramienta, orto, croquis, puntoA, puntoB) {
-                        // Arrastrar un punto ya puesto. El agarre se decide por
-                        // cercanía, no por acertar encima: en obra, de pie, no se
-                        // acierta encima de nada.
-                        detectDragGestures(
-                            onDragStart = { pos ->
-                                val mundo = CroquisGeometria.aMundo(
-                                    Px(pos.x, pos.y), vista, ancho, alto
-                                )
-                                val dA = puntoA?.let { CroquisGeometria.distancia(mundo, it) }
-                                val dB = puntoB?.let { CroquisGeometria.distancia(mundo, it) }
-                                val r = radioAgarreM()
-                                agarre = when {
-                                    dB != null && dB <= r && (dA == null || dB <= dA) -> Agarre.B
-                                    dA != null && dA <= r -> Agarre.A
-                                    else -> Agarre.NINGUNO
-                                }
-                            },
-                            onDragEnd = { agarre = Agarre.NINGUNO },
-                            onDragCancel = { agarre = Agarre.NINGUNO }
-                        ) { cambio, _ ->
-                            if (agarre == Agarre.NINGUNO) return@detectDragGestures
-                            cambio.consume()
-                            // El punto va DESPLAZADO respecto al dedo: justo
-                            // debajo quedaría tapado por la propia mano y no se
-                            // vería adónde va.
-                            val pos = cambio.position
-                            val vistaPx = Px(
-                                pos.x + DESPLAZA_X * densidad,
-                                pos.y - DESPLAZA_Y * densidad
-                            )
-                            val bruto = CroquisGeometria.aMundo(vistaPx, vista, ancho, alto)
-                            if (agarre == Agarre.A) {
-                                puntoA = colocar(bruto, puntoB)
-                            } else {
-                                puntoB = colocar(bruto, puntoA)
+                            val radio = radioAgarreM()
+                            val dA = puntoA?.let { CroquisGeometria.distancia(mundoAbajo, it) }
+                            val dB = puntoB?.let { CroquisGeometria.distancia(mundoAbajo, it) }
+                            var agarrado = when {
+                                dB != null && dB <= radio && (dA == null || dB <= dA) -> Agarre.B
+                                dA != null && dA <= radio -> Agarre.A
+                                else -> Agarre.NINGUNO
                             }
-                        }
-                    }
-                    .pointerInput(modo, herramienta, croquis) {
-                        detectTapGestures { pos ->
-                            val bruto = CroquisGeometria.aMundo(
-                                Px(pos.x, pos.y), vista, ancho, alto
-                            )
-                            if (puntoA == null) puntoA = colocar(bruto, null)
-                            else if (puntoB == null) puntoB = colocar(bruto, puntoA)
+                            agarre = agarrado
+
+                            // Se conserva la separación con la que agarraste, en
+                            // vez de teletransportar el punto bajo el dedo. Si
+                            // agarraste casi encima, se separa a la fuerza: un
+                            // punto debajo de la mano no se ve.
+                            var apartado = Offset.Zero
+                            if (agarrado != Agarre.NINGUNO) {
+                                val p = if (agarrado == Agarre.A) puntoA!! else puntoB!!
+                                val q = CroquisGeometria.aPantalla(p, vista, ancho, alto)
+                                apartado = Offset(q.x - origen.x, q.y - origen.y)
+                                if (apartado.getDistance() < 26f * densidad) {
+                                    apartado = Offset(DESPLAZA_X * densidad, -DESPLAZA_Y * densidad)
+                                }
+                            }
+
+                            var movido = false
+                            var conDosDedos = false
+                            var evento: androidx.compose.ui.input.pointer.PointerEvent
+
+                            do {
+                                evento = awaitPointerEvent()
+                                val vivos = evento.changes.filter { it.pressed }
+
+                                if (vivos.size >= 2) {
+                                    // Dos dedos son SIEMPRE navegar, pase lo que
+                                    // pase: si empezaste agarrando un punto y
+                                    // apoyas el segundo dedo, sueltas el punto.
+                                    conDosDedos = true
+                                    agarrado = Agarre.NINGUNO
+                                    agarre = Agarre.NINGUNO
+                                    val zoom = evento.calculateZoom()
+                                    val pan = evento.calculatePan()
+                                    if (zoom != 1f || pan != Offset.Zero) {
+                                        val ppm = (vista.pixelsPorMetro * zoom)
+                                            .coerceIn(0.05, 200_000.0)
+                                        vista = Vista(
+                                            P(
+                                                vista.centro.x - pan.x / ppm,
+                                                vista.centro.y + pan.y / ppm
+                                            ),
+                                            ppm
+                                        )
+                                        movido = true
+                                    }
+                                    evento.changes.forEach { it.consume() }
+                                } else if (vivos.size == 1 && !conDosDedos) {
+                                    val dedo = vivos[0]
+                                    if (!movido &&
+                                        (dedo.position - origen).getDistance() >
+                                        viewConfiguration.touchSlop
+                                    ) movido = true
+
+                                    if (movido) {
+                                        if (agarrado != Agarre.NINGUNO) {
+                                            val destino = Px(
+                                                dedo.position.x + apartado.x,
+                                                dedo.position.y + apartado.y
+                                            )
+                                            val bruto = CroquisGeometria.aMundo(
+                                                destino, vista, ancho, alto
+                                            )
+                                            if (agarrado == Agarre.A) {
+                                                puntoA = colocar(bruto, puntoB)
+                                            } else {
+                                                puntoB = colocar(bruto, puntoA)
+                                            }
+                                        } else {
+                                            // Un dedo sobre el vacío desplaza la
+                                            // hoja: en obra se maneja con una mano.
+                                            val d = dedo.positionChange()
+                                            val ppm = vista.pixelsPorMetro
+                                            vista = Vista(
+                                                P(
+                                                    vista.centro.x - d.x / ppm,
+                                                    vista.centro.y + d.y / ppm
+                                                ),
+                                                ppm
+                                            )
+                                        }
+                                        dedo.consume()
+                                    }
+                                }
+                            } while (evento.changes.any { it.pressed })
+
+                            agarre = Agarre.NINGUNO
+
+                            // Sin desplazamiento, era un toque: coloca punto.
+                            if (!movido && !conDosDedos) {
+                                val bruto = CroquisGeometria.aMundo(
+                                    Px(origen.x, origen.y), vista, ancho, alto
+                                )
+                                if (puntoA == null) puntoA = colocar(bruto, null)
+                                else if (puntoB == null) puntoB = colocar(bruto, puntoA)
+                            }
                         }
                     }
             ) {

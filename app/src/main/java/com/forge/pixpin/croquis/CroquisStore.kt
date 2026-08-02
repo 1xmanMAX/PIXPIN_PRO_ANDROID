@@ -16,6 +16,17 @@ object CroquisStore {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Sube en cada escritura, para que los pines se enteren.
+     *
+     * El editor es otra actividad y escribe el archivo por su cuenta; el pin
+     * flotante no tiene forma de saberlo. Como viven en el **mismo proceso**,
+     * basta con que esto sea estado de Compose: quien lo lea se recompone solo
+     * al guardar, sin difusiones ni sondeos.
+     */
+    val revision: androidx.compose.runtime.MutableIntState =
+        androidx.compose.runtime.mutableIntStateOf(0)
+
     private fun dir(context: Context): File =
         File(context.filesDir, "pins/croquis").apply { mkdirs() }
 
@@ -41,6 +52,7 @@ object CroquisStore {
         temporal.writeText(json.encodeToString(croquis))
         if (destino.exists()) destino.delete()
         if (!temporal.renameTo(destino)) return null
+        revision.intValue++
         destino.absolutePath
     }.getOrNull()
 
