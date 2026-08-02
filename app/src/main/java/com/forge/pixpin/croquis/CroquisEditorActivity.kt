@@ -1,32 +1,35 @@
 package com.forge.pixpin.croquis
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color as AColor
+import android.graphics.DashPathEffect
+import android.graphics.Paint as APaint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,10 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,23 +53,25 @@ import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.hypot
 
-/** Qué se está haciendo con el dedo. */
 private enum class Modo { DIBUJAR, MEDIR, CALIBRAR }
 
-/** Con qué se dibuja. */
-private enum class Herramienta { LINEA, POLILINEA, RECT, CIRCULO, COTA }
+private enum class Herramienta(val etiqueta: String) {
+    LINEA("Línea"), POLILINEA("Polilínea"), RECT("Rect"), CIRCULO("Círculo"), COTA("Cota")
+}
+
+/** Cuál de los dos puntos en juego se está arrastrando. */
+private enum class Agarre { NINGUNO, A, B }
 
 /**
- * El editor del croquis, a **pantalla completa**.
+ * El editor del croquis, a pantalla completa.
  *
- * No vive en el pin flotante a propósito: una hoja infinita y una barra de
- * entrada numérica no caben en una ventana pequeña, y la precisión que se le
- * pide a esto necesita sitio. El pin sigue enseñando la vista reducida.
- *
- * `taskAffinity` propia, como el resto de actividades que se lanzan desde el
- * overlay: sin ella, Android trae toda la tarea de PixPin al frente.
+ * No vive en el pin flotante a propósito: una hoja de trabajo y una barra de
+ * entrada numérica no caben en una ventana pequeña. El pin sigue enseñando el
+ * resultado y sirve para copiarlo.
  */
 class CroquisEditorActivity : ComponentActivity() {
 
@@ -73,7 +80,6 @@ class CroquisEditorActivity : ComponentActivity() {
         private const val EXTRA_ID = "croquis_id"
         private const val EXTRA_FONDO = "croquis_fondo"
 
-        /** Abre el editor; [fondoPath] es la captura sobre la que medir, si la hay. */
         fun abrir(context: Context, id: String, rutaCroquis: String?, fondoPath: String?) {
             context.startActivity(
                 Intent(context, CroquisEditorActivity::class.java).apply {
@@ -96,27 +102,26 @@ class CroquisEditorActivity : ComponentActivity() {
         val fondoPath = intent.getStringExtra(EXTRA_FONDO)
         fondoBitmap = fondoPath?.let { ImageStore.load(it) }
 
-        // Una captura recién traída llega sin calibrar: el fondo se registra ya,
-        // con escala provisional, y el usuario la fija con la regla.
         val inicial = if (fondoPath != null && cargado.fondo == null) {
             cargado.copy(fondo = Fondo(fondoPath, P(0.0, 0.0), metrosPorPixel = 0.01))
         } else cargado
 
         setContent {
             PixPinTheme {
-                Editor(
-                    inicial = inicial,
-                    fondo = fondoBitmap,
-                    alGuardar = { guardar(it) },
-                    alSalir = { guardar(it); finish() }
-                )
+                Editor(inicial, fondoBitmap, ::guardar) { guardar(it); finish() }
             }
         }
     }
 
+    /**
+     * Se guarda en cada cambio, no al salir.
+     *
+     * Reabrir el croquis tiene que devolverlo **exactamente como estaba**, y en
+     * esta aplicación el proceso muere sin avisar más de lo normal: guardar solo
+     * en `onPause` sería confiar en que siempre llega.
+     */
     private fun guardar(croquis: Croquis) {
-        val ruta = CroquisStore.guardar(this, croquisId, croquis)
-        setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_RUTA, ruta))
+        CroquisStore.guardar(this, croquisId, croquis)
     }
 
     @Composable
@@ -130,53 +135,70 @@ class CroquisEditorActivity : ComponentActivity() {
         var vista by remember { mutableStateOf(Vista(P(0.0, 0.0), 120.0)) }
         var modo by remember { mutableStateOf(Modo.DIBUJAR) }
         var herramienta by remember { mutableStateOf(Herramienta.LINEA) }
+        var orto by remember { mutableStateOf(false) }
 
-        // Los dos puntos en juego: sirven para la linea pendiente, para la
-        // medicion efimera y para la regla de calibrar.
         var puntoA by remember { mutableStateOf<P?>(null) }
         var puntoB by remember { mutableStateOf<P?>(null) }
-        var campoLongitud by remember { mutableStateOf("") }
+        var agarre by remember { mutableStateOf(Agarre.NINGUNO) }
+        var imantadoEn by remember { mutableStateOf<P?>(null) }
+        var campo by remember { mutableStateOf("") }
         var aviso by remember { mutableStateOf<String?>(null) }
 
-        var lienzoAncho by remember { mutableStateOf(1) }
-        var lienzoAlto by remember { mutableStateOf(1) }
+        var ancho by remember { mutableStateOf(1) }
+        var alto by remember { mutableStateOf(1) }
+        val densidad = resources.displayMetrics.density
 
-        /** Imanta y, en línea, endereza. La tolerancia se pasa de dp a metros. */
-        fun ajustar(bruto: P, desde: P?): P {
-            val toleranciaM = 14.0 / vista.pixelsPorMetro
-            var p = CroquisGeometria.imantar(bruto, croquis.extremos(), toleranciaM)
-            if (desde != null && p == bruto) p = CroquisGeometria.orto(desde, p, 5.0)
-            return p
+        /** Radio, en metros del mundo, dentro del cual el dedo agarra un punto. */
+        fun radioAgarreM() = 34.0 * densidad / vista.pixelsPorMetro
+        /** Radio de imantado, algo menor: conectar es más fino que agarrar. */
+        fun radioImanM() = 22.0 * densidad / vista.pixelsPorMetro
+
+        /**
+         * Coloca un punto aplicando imantado y, si toca, orto.
+         * Deja constancia en [imantadoEn] para poder pintar el cuadradito.
+         */
+        fun colocar(bruto: P, desde: P?): P {
+            val extremos = croquis.extremos()
+            val pegado = CroquisGeometria.imantar(bruto, extremos, radioImanM())
+            imantadoEn = if (pegado != bruto) pegado else null
+            if (pegado != bruto) return pegado
+            // Con orto encendido la restricción es dura: horizontal o vertical.
+            // Apagado queda la ayuda suave de 5°, que corrige el pulso sin
+            // impedir dibujar en diagonal.
+            return if (desde == null) bruto
+            else if (orto) CroquisGeometria.orto(desde, bruto, 46.0)
+            else CroquisGeometria.orto(desde, bruto, 5.0)
+        }
+
+        fun limpiar() {
+            puntoA = null; puntoB = null; campo = ""; imantadoEn = null; agarre = Agarre.NINGUNO
         }
 
         fun confirmar() {
-            val a = puntoA
-            val b = puntoB
-            if (a == null || b == null) return
+            val a = puntoA ?: return
+            val b = puntoB ?: return
             when (modo) {
                 Modo.CALIBRAR -> {
-                    val metros = campoLongitud.replace(',', '.').toDoubleOrNull()
+                    val metros = campo.replace(',', '.').toDoubleOrNull()
                     val f = croquis.fondo
-                    val escala = if (metros == null || f == null) null else {
-                        // Los puntos estan en metros de la escala provisional:
-                        // se vuelven a pixeles de imagen para recalibrar.
+                    val escala = if (metros == null || metros <= 0.0 || f == null) null else {
                         val px = CroquisGeometria.distancia(a, b) / f.metrosPorPixel
                         if (px > 0) metros / px else null
                     }
                     if (escala == null) {
-                        aviso = "Escala no válida: traza la regla y escribe cuánto mide"
-                    } else {
-                        croquis = croquis.copy(fondo = f!!.copy(metrosPorPixel = escala))
-                        aviso = "Calibrado: 1 px = ${"%.4f".format(escala)} m"
-                        modo = Modo.MEDIR
+                        aviso = "Traza la regla sobre una medida conocida y escribe cuánto mide"
+                        return
                     }
+                    croquis = croquis.copy(fondo = f!!.copy(metrosPorPixel = escala))
+                    alGuardar(croquis)
+                    aviso = "Calibrado. Ya puedes medir en metros reales"
+                    modo = Modo.MEDIR
                 }
 
                 Modo.DIBUJAR -> {
-                    val metros = campoLongitud.replace(',', '.').toDoubleOrNull()
-                    val destino = if (metros != null) {
-                        CroquisGeometria.conLongitud(a, b, metros) ?: b
-                    } else b
+                    val metros = campo.replace(',', '.').toDoubleOrNull()
+                    val destino =
+                        if (metros != null) CroquisGeometria.conLongitud(a, b, metros) ?: b else b
                     val nueva: Entidad = when (herramienta) {
                         Herramienta.LINEA -> Entidad.Linea(a, destino)
                         Herramienta.POLILINEA -> Entidad.Polilinea(listOf(a, destino))
@@ -187,30 +209,29 @@ class CroquisEditorActivity : ComponentActivity() {
                     }
                     croquis = croquis.copy(entidades = croquis.entidades + nueva)
                     alGuardar(croquis)
+                    aviso = null
                 }
 
                 Modo.MEDIR -> Unit
             }
-            puntoA = null
-            puntoB = null
-            campoLongitud = ""
+            limpiar()
         }
 
-        Column(Modifier.fillMaxSize().background(Color(0xFF101418))) {
+        Column(Modifier.fillMaxSize().background(Color(0xFF14181D))) {
 
             BarraSuperior(
                 modo = modo,
                 herramienta = herramienta,
+                orto = orto,
                 hayFondo = croquis.fondo != null,
-                alCambiarModo = { modo = it; puntoA = null; puntoB = null; campoLongitud = "" },
-                alCambiarHerramienta = { herramienta = it },
+                puedeDeshacer = croquis.entidades.isNotEmpty(),
+                alModo = { modo = it; limpiar(); aviso = null },
+                alHerramienta = { herramienta = it },
+                alOrto = { orto = !orto },
                 alDeshacer = {
-                    if (croquis.entidades.isNotEmpty()) {
-                        croquis = croquis.copy(entidades = croquis.entidades.dropLast(1))
-                        alGuardar(croquis)
-                    }
+                    croquis = croquis.copy(entidades = croquis.entidades.dropLast(1))
+                    alGuardar(croquis)
                 },
-                alExportar = { exportar(croquis, it) { m -> aviso = m } },
                 alSalir = { alSalir(croquis) }
             )
 
@@ -218,63 +239,75 @@ class CroquisEditorActivity : ComponentActivity() {
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(Color.White)
-                    // Dos dedos siempre desplazan y amplian, en cualquier modo:
-                    // moverse por la hoja no puede depender de la herramienta.
+                    .background(Color(0xFF2A2F36))
                     .pointerInput(Unit) {
                         detectTransformGestures { _, pan, zoom, _ ->
-                            val ppm = (vista.pixelsPorMetro * zoom).coerceIn(0.01, 500_000.0)
+                            val ppm = (vista.pixelsPorMetro * zoom).coerceIn(0.05, 200_000.0)
                             vista = Vista(
-                                centro = P(
-                                    vista.centro.x - pan.x / ppm,
-                                    vista.centro.y + pan.y / ppm
-                                ),
-                                pixelsPorMetro = ppm
+                                P(vista.centro.x - pan.x / ppm, vista.centro.y + pan.y / ppm), ppm
                             )
                         }
                     }
-                    .pointerInput(modo, herramienta, croquis) {
-                        detectTapGestures { offset ->
-                            val bruto = CroquisGeometria.aMundo(
-                                Px(offset.x, offset.y), vista, lienzoAncho, lienzoAlto
+                    .pointerInput(modo, herramienta, orto, croquis, puntoA, puntoB) {
+                        // Arrastrar un punto ya puesto. El agarre se decide por
+                        // cercanía, no por acertar encima: en obra, de pie, no se
+                        // acierta encima de nada.
+                        detectDragGestures(
+                            onDragStart = { pos ->
+                                val mundo = CroquisGeometria.aMundo(
+                                    Px(pos.x, pos.y), vista, ancho, alto
+                                )
+                                val dA = puntoA?.let { CroquisGeometria.distancia(mundo, it) }
+                                val dB = puntoB?.let { CroquisGeometria.distancia(mundo, it) }
+                                val r = radioAgarreM()
+                                agarre = when {
+                                    dB != null && dB <= r && (dA == null || dB <= dA) -> Agarre.B
+                                    dA != null && dA <= r -> Agarre.A
+                                    else -> Agarre.NINGUNO
+                                }
+                            },
+                            onDragEnd = { agarre = Agarre.NINGUNO },
+                            onDragCancel = { agarre = Agarre.NINGUNO }
+                        ) { cambio, _ ->
+                            if (agarre == Agarre.NINGUNO) return@detectDragGestures
+                            cambio.consume()
+                            // El punto va DESPLAZADO respecto al dedo: justo
+                            // debajo quedaría tapado por la propia mano y no se
+                            // vería adónde va.
+                            val pos = cambio.position
+                            val vistaPx = Px(
+                                pos.x + DESPLAZA_X * densidad,
+                                pos.y - DESPLAZA_Y * densidad
                             )
-                            if (puntoA == null) {
-                                puntoA = ajustar(bruto, null)
+                            val bruto = CroquisGeometria.aMundo(vistaPx, vista, ancho, alto)
+                            if (agarre == Agarre.A) {
+                                puntoA = colocar(bruto, puntoB)
                             } else {
-                                puntoB = ajustar(bruto, puntoA)
-                                if (modo == Modo.MEDIR) campoLongitud = ""
+                                puntoB = colocar(bruto, puntoA)
                             }
+                        }
+                    }
+                    .pointerInput(modo, herramienta, croquis) {
+                        detectTapGestures { pos ->
+                            val bruto = CroquisGeometria.aMundo(
+                                Px(pos.x, pos.y), vista, ancho, alto
+                            )
+                            if (puntoA == null) puntoA = colocar(bruto, null)
+                            else if (puntoB == null) puntoB = colocar(bruto, puntoA)
                         }
                     }
             ) {
                 Canvas(Modifier.fillMaxSize()) {
-                    lienzoAncho = size.width.toInt()
-                    lienzoAlto = size.height.toInt()
+                    ancho = size.width.toInt().coerceAtLeast(1)
+                    alto = size.height.toInt().coerceAtLeast(1)
                     drawIntoCanvas { lienzo ->
-                        val nativo = lienzo.nativeCanvas
-                        CroquisRenderer.dibujar(
-                            nativo, croquis, vista, lienzoAncho, lienzoAlto, fondo, AColor.BLACK
+                        val c = lienzo.nativeCanvas
+                        val hoja = CroquisGeometria.hojaA4(croquis, vista, ancho, alto)
+                        dibujarHoja(c, hoja, vista, ancho, alto)
+                        CroquisRenderer.dibujar(c, croquis, vista, ancho, alto, fondo, AColor.BLACK)
+                        dibujarPendiente(
+                            c, puntoA, puntoB, imantadoEn, vista, ancho, alto, densidad
                         )
-                        // Lo pendiente se pinta aparte y en otro color: aun no
-                        // forma parte del croquis.
-                        val a = puntoA
-                        val b = puntoB
-                        if (a != null) {
-                            val pa = CroquisGeometria.aPantalla(a, vista, lienzoAncho, lienzoAlto)
-                            val tinta = android.graphics.Paint().apply {
-                                color = AColor.rgb(0, 140, 255)
-                                strokeWidth = 3f
-                                isAntiAlias = true
-                            }
-                            nativo.drawCircle(pa.x, pa.y, 9f, tinta)
-                            if (b != null) {
-                                val pb = CroquisGeometria.aPantalla(
-                                    b, vista, lienzoAncho, lienzoAlto
-                                )
-                                nativo.drawLine(pa.x, pa.y, pb.x, pb.y, tinta)
-                                nativo.drawCircle(pb.x, pb.y, 9f, tinta)
-                            }
-                        }
                     }
                 }
             }
@@ -284,11 +317,13 @@ class CroquisEditorActivity : ComponentActivity() {
                 puntoA = puntoA,
                 puntoB = puntoB,
                 decimales = croquis.decimales,
-                campo = campoLongitud,
-                alEscribir = { campoLongitud = it },
+                campo = campo,
+                aviso = aviso,
+                alEscribir = { campo = it },
                 alConfirmar = { confirmar() },
-                alCancelar = { puntoA = null; puntoB = null; campoLongitud = "" },
-                aviso = aviso
+                alCancelar = { limpiar(); aviso = null },
+                alPdf = { exportar(croquis, true) { aviso = it } },
+                alJpg = { exportar(croquis, false) { aviso = it } }
             )
         }
     }
@@ -299,7 +334,8 @@ class CroquisEditorActivity : ComponentActivity() {
                 if (comoPdf) {
                     CroquisExport.aPdf(this@CroquisEditorActivity, croquis, fondoBitmap) != null
                 } else {
-                    val bmp = CroquisExport.aBitmap(croquis, fondoBitmap) ?: return@withContext false
+                    val bmp = CroquisExport.aBitmap(croquis, fondoBitmap)
+                        ?: return@withContext false
                     val uri = Export.saveToGallery(
                         this@CroquisEditorActivity, bmp, Bitmap.CompressFormat.JPEG, 92
                     )
@@ -308,8 +344,88 @@ class CroquisEditorActivity : ComponentActivity() {
                 }
             }
             avisar(
-                if (ok) (if (comoPdf) "PDF guardado en Descargas" else "JPG guardado en la galería")
-                else "No hay nada que exportar"
+                if (!ok) "No hay nada que exportar todavía"
+                else if (comoPdf) "PDF guardado en Descargas/PixPin"
+                else "JPG guardado en la galería"
+            )
+        }
+    }
+}
+
+/** Cuánto se separa del dedo el punto que se arrastra, en dp. */
+private const val DESPLAZA_X = 26f
+private const val DESPLAZA_Y = 34f
+
+/** La hoja que va a salir en el PDF, a rayas: lo de fuera no se exporta. */
+private fun dibujarHoja(
+    c: android.graphics.Canvas, hoja: Caja?, vista: Vista, ancho: Int, alto: Int
+) {
+    if (hoja == null) return
+    val a = CroquisGeometria.aPantalla(P(hoja.min.x, hoja.max.y), vista, ancho, alto)
+    val b = CroquisGeometria.aPantalla(P(hoja.max.x, hoja.min.y), vista, ancho, alto)
+    c.drawRect(a.x, a.y, b.x, b.y, APaint().apply { color = AColor.WHITE })
+    c.drawRect(a.x, a.y, b.x, b.y, APaint(APaint.ANTI_ALIAS_FLAG).apply {
+        style = APaint.Style.STROKE
+        strokeWidth = 2f
+        color = AColor.rgb(150, 160, 175)
+        pathEffect = DashPathEffect(floatArrayOf(12f, 10f), 0f)
+    })
+}
+
+/** Lo que está a medio poner: en azul, porque aún no es parte del croquis. */
+private fun dibujarPendiente(
+    c: android.graphics.Canvas,
+    a: P?, b: P?, iman: P?,
+    vista: Vista, ancho: Int, alto: Int, densidad: Float
+) {
+    val azul = APaint(APaint.ANTI_ALIAS_FLAG).apply {
+        color = AColor.rgb(0, 132, 255); strokeWidth = 3f * densidad / 2f
+    }
+    val hueco = APaint(APaint.ANTI_ALIAS_FLAG).apply {
+        color = AColor.WHITE; style = APaint.Style.FILL
+    }
+    fun nodo(p: P) {
+        val q = CroquisGeometria.aPantalla(p, vista, ancho, alto)
+        c.drawCircle(q.x, q.y, 11f * densidad / 2f, hueco)
+        c.drawCircle(q.x, q.y, 11f * densidad / 2f, azul.apply { style = APaint.Style.STROKE })
+    }
+    if (a != null && b != null) {
+        val pa = CroquisGeometria.aPantalla(a, vista, ancho, alto)
+        val pb = CroquisGeometria.aPantalla(b, vista, ancho, alto)
+        c.drawLine(pa.x, pa.y, pb.x, pb.y, azul.apply { style = APaint.Style.STROKE })
+    }
+    a?.let { nodo(it) }
+    b?.let { nodo(it) }
+
+    // El cuadradito del imantado: la señal de que ESO va a conectar de verdad.
+    iman?.let {
+        val q = CroquisGeometria.aPantalla(it, vista, ancho, alto)
+        val r = 13f * densidad / 2f
+        c.drawRect(q.x - r, q.y - r, q.x + r, q.y + r, APaint(APaint.ANTI_ALIAS_FLAG).apply {
+            style = APaint.Style.STROKE
+            strokeWidth = 2.5f * densidad / 2f
+            color = AColor.rgb(255, 145, 0)
+        })
+    }
+}
+
+// ---------- Barras ----------
+
+@Composable
+private fun Chip(texto: String, activo: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (activo) Color(0xFF29B8DB) else Color(0xFF272D35),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(7.dp),
+        modifier = Modifier
+            .height(30.dp)
+            .pointerInput(texto) { detectTapGestures { onClick() } }
+    ) {
+        Box(Modifier.padding(horizontal = 10.dp).fillMaxSize(), Alignment.Center) {
+            Text(
+                texto,
+                color = if (activo) Color(0xFF06222B) else Color(0xFFC9D2DC),
+                fontSize = 12.sp,
+                maxLines = 1
             )
         }
     }
@@ -319,67 +435,42 @@ class CroquisEditorActivity : ComponentActivity() {
 private fun BarraSuperior(
     modo: Modo,
     herramienta: Herramienta,
+    orto: Boolean,
     hayFondo: Boolean,
-    alCambiarModo: (Modo) -> Unit,
-    alCambiarHerramienta: (Herramienta) -> Unit,
+    puedeDeshacer: Boolean,
+    alModo: (Modo) -> Unit,
+    alHerramienta: (Herramienta) -> Unit,
+    alOrto: () -> Unit,
     alDeshacer: () -> Unit,
-    alExportar: (Boolean) -> Unit,
     alSalir: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)) {
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = alSalir) { Text("‹ Salir") }
-            FilterChip(
-                selected = modo == Modo.DIBUJAR,
-                onClick = { alCambiarModo(Modo.DIBUJAR) },
-                label = { Text("Dibujar") }
-            )
-            FilterChip(
-                selected = modo == Modo.MEDIR,
-                onClick = { alCambiarModo(Modo.MEDIR) },
-                label = { Text("Medir") }
-            )
-            if (hayFondo) {
-                FilterChip(
-                    selected = modo == Modo.CALIBRAR,
-                    onClick = { alCambiarModo(Modo.CALIBRAR) },
-                    label = { Text("Calibrar") }
-                )
-            }
+            Chip("‹", false, alSalir)
+            Chip("Dibujar", modo == Modo.DIBUJAR) { alModo(Modo.DIBUJAR) }
+            Chip("Medir", modo == Modo.MEDIR) { alModo(Modo.MEDIR) }
+            if (hayFondo) Chip("Calibrar", modo == Modo.CALIBRAR) { alModo(Modo.CALIBRAR) }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // En modo medir las herramientas desaparecen: el dibujo esta
-            // deshabilitado de verdad, no solo ignorado.
-            if (modo == Modo.DIBUJAR) {
+        // Las herramientas solo existen en modo dibujar: en medir el dibujo
+        // está deshabilitado de verdad, no escondido detrás de un if.
+        if (modo == Modo.DIBUJAR) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Herramienta.entries.forEach { h ->
-                    FilterChip(
-                        selected = herramienta == h,
-                        onClick = { alCambiarHerramienta(h) },
-                        label = { Text(etiqueta(h), fontSize = 12.sp) }
-                    )
+                    Chip(h.etiqueta, herramienta == h) { alHerramienta(h) }
                 }
-                TextButton(onClick = alDeshacer) { Text("Deshacer") }
+                Chip(if (orto) "⊾ Orto" else "⊾", orto, alOrto)
+                if (puedeDeshacer) Chip("↶", false, alDeshacer)
             }
-            TextButton(onClick = { alExportar(true) }) { Text("PDF") }
-            TextButton(onClick = { alExportar(false) }) { Text("JPG") }
         }
     }
-}
-
-private fun etiqueta(h: Herramienta): String = when (h) {
-    Herramienta.LINEA -> "Línea"
-    Herramienta.POLILINEA -> "Polilínea"
-    Herramienta.RECT -> "Rect"
-    Herramienta.CIRCULO -> "Círculo"
-    Herramienta.COTA -> "Cota"
 }
 
 @Composable
@@ -389,52 +480,69 @@ private fun BarraInferior(
     puntoB: P?,
     decimales: Int,
     campo: String,
+    aviso: String?,
     alEscribir: (String) -> Unit,
     alConfirmar: () -> Unit,
     alCancelar: () -> Unit,
-    aviso: String?
+    alPdf: () -> Unit,
+    alJpg: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(8.dp)) {
-        val medida = if (puntoA != null && puntoB != null) {
-            CroquisGeometria.distancia(puntoA, puntoB)
-        } else null
-        val angulo = if (puntoA != null && puntoB != null) {
-            Math.toDegrees(atan2(puntoB.y - puntoA.y, puntoB.x - puntoA.x))
-        } else null
+    val medida = if (puntoA != null && puntoB != null)
+        CroquisGeometria.distancia(puntoA, puntoB) else null
+    val angulo = if (puntoA != null && puntoB != null)
+        Math.toDegrees(atan2(puntoB.y - puntoA.y, puntoB.x - puntoA.x)) else null
 
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)) {
         Text(
             when {
                 aviso != null -> aviso
                 modo == Modo.MEDIR && medida != null ->
-                    "Distancia: " + CroquisGeometria.formatear(medida, decimales)
-                modo == Modo.CALIBRAR && puntoA == null -> "Toca el primer punto de la regla"
-                modo == Modo.CALIBRAR -> "Toca el segundo y escribe cuánto mide de verdad"
+                    "◄─► " + CroquisGeometria.formatear(medida, decimales)
+                modo == Modo.MEDIR -> "Toca dos puntos para medir"
+                modo == Modo.CALIBRAR && puntoA == null -> "Traza una medida que ya conozcas"
+                modo == Modo.CALIBRAR -> "Escribe cuánto mide de verdad"
                 puntoA == null -> "Toca dónde empieza"
-                medida != null -> "Longitud: " + CroquisGeometria.formatear(medida, decimales) +
-                    "   ·   " + "%.1f°".format(angulo)
-                else -> "Toca dónde acaba"
+                medida == null -> "Toca dónde acaba"
+                else -> CroquisGeometria.formatear(medida, decimales) +
+                    "   ∠ " + "%.1f°".format(angulo) + "   ·  arrastra los puntos para ajustar"
             },
-            color = Color(0xFFDDE3EA),
-            fontSize = 13.sp
+            color = Color(0xFFC9D2DC),
+            fontSize = 12.sp
         )
 
         if (puntoA != null && puntoB != null && modo != Modo.MEDIR) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = campo,
                     onValueChange = alEscribir,
-                    label = { Text(if (modo == Modo.CALIBRAR) "Mide (m)" else "Longitud (m)") },
+                    placeholder = { Text("metros", fontSize = 12.sp) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.width(170.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium
+                    textStyle = TextStyle(fontSize = 13.sp, color = Color.White),
+                    modifier = Modifier.width(112.dp).height(50.dp)
                 )
-                Button(onClick = alConfirmar) { Text("Confirmar") }
-                TextButton(onClick = alCancelar) { Text("Cancelar") }
+                Button(
+                    onClick = alConfirmar,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp, vertical = 0.dp
+                    ),
+                    modifier = Modifier.height(34.dp).defaultMinSize(minWidth = 1.dp)
+                ) { Text("✓", fontSize = 14.sp) }
+                Chip("✕", false, alCancelar)
+            }
+        } else {
+            // Exportar solo cuando no hay nada a medio poner: así la barra no
+            // crece ni se mueve bajo el pulgar mientras se dibuja.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Chip("PDF", false, alPdf)
+                Chip("JPG", false, alJpg)
             }
         }
     }

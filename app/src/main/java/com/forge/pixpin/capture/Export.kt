@@ -114,7 +114,7 @@ object PinExporter {
             state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }?.let { bmp ->
                 // Lo dibujado sobre el pin se hornea al exportar: hasta aquí eran
                 // vectores encima de la imagen, re-editables.
-                if (state.annotations.isEmpty()) bmp
+                if (state.annotations.isEmpty()) horneaCroquis(state, bmp)
                 else {
                     val baked = com.forge.pixpin.annotate.AnnotationRenderer.bake(
                         bmp,
@@ -122,7 +122,7 @@ object PinExporter {
                         state.annotations
                     )
                     if (!bmp.isRecycled) bmp.recycle()
-                    baked
+                    horneaCroquis(state, baked)
                 }
             }
 
@@ -154,6 +154,37 @@ object PinExporter {
                     ?.let { com.forge.pixpin.pin.ImageStore.load(it) }
                 com.forge.pixpin.croquis.CroquisExport.aBitmap(croquis, fondo)
             }
+    }
+
+    /**
+     * Quema sobre [base] lo acotado en el editor, si lo hay.
+     *
+     * Se lee del disco en vez de del `PinState` porque el editor vive en otra
+     * actividad y escribe por su cuenta: preguntarle al pin daría lo que había
+     * cuando se abrió, no lo último medido.
+     */
+    private fun horneaCroquis(state: com.forge.pixpin.pin.PinState, base: Bitmap): Bitmap {
+        val croquis = com.forge.pixpin.croquis.CroquisStore
+            .cargar(state.croquisPath ?: return base) ?: return base
+        if (croquis.entidades.isEmpty()) return base
+        val fondo = croquis.fondo ?: return base
+        if (fondo.metrosPorPixel <= 0.0 || base.width < 1) return base
+
+        val copia = base.copy(Bitmap.Config.ARGB_8888, true) ?: return base
+        val canvas = android.graphics.Canvas(copia)
+        val vista = com.forge.pixpin.croquis.Vista(
+            centro = com.forge.pixpin.croquis.P(
+                fondo.origen.x + base.width * fondo.metrosPorPixel / 2,
+                fondo.origen.y - base.height * fondo.metrosPorPixel / 2
+            ),
+            pixelsPorMetro = base.width / (base.width * fondo.metrosPorPixel)
+        )
+        com.forge.pixpin.croquis.CroquisRenderer.dibujar(
+            canvas, croquis.copy(fondo = null), vista, base.width, base.height, null,
+            android.graphics.Color.rgb(214, 24, 24)
+        )
+        if (!base.isRecycled && base !== copia) base.recycle()
+        return copia
     }
 
     private fun renderText(text: String?): Bitmap? {

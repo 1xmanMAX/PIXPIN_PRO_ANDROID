@@ -294,6 +294,15 @@ class PinWindowController(
     private var zoomMax = PinZoom.ABSOLUTE_MAX_SCALE
 
     /**
+     * Se incrementa para releer el croquis del disco.
+     *
+     * El editor vive en otra actividad y escribe el archivo por su cuenta: el
+     * pin no tiene forma de enterarse. Tocarlo fuerza la relectura, que es el
+     * momento en el que el usuario vuelve a mirarlo.
+     */
+    private val croquisRevision = androidx.compose.runtime.mutableIntStateOf(0)
+
+    /**
      * Tamaño del contenido a escala 1, en px. Solo se conoce en los pines de
      * imagen, y es lo que permite darle a la ventana un **tamaño explícito**.
      *
@@ -906,7 +915,23 @@ class PinWindowController(
                 s.type == PinType.CHECKLIST -> rowAt(y).takeIf { it >= 0 }?.let { toggleCheck(it) }
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
-                s.type == PinType.IMAGE -> copyImage(s)
+                // Al tocar se relee el croquis: si se acaba de acotar en el
+                // editor, lo copiado ya lleva las cotas.
+                s.type == PinType.IMAGE -> {
+                    croquisRevision.intValue++
+                    copyImage(s)
+                }
+                // El croquis se copia al tocarlo, igual que una imagen: sale
+                // rasterizado con sus cotas. Editarlo va por el botón, no por
+                // el toque, para que copiar sea lo barato.
+                s.type == PinType.CROQUIS -> {
+                    val ok = com.forge.pixpin.capture.PinExporter.copyPin(context, s)
+                    toast(
+                        context.getString(
+                            if (ok) R.string.copied_image else R.string.pin_croquis_empty
+                        )
+                    )
+                }
             }
         }
 
@@ -1592,6 +1617,30 @@ class PinWindowController(
                         )
                     }
                 }
+                // El croquis se sigue dibujando donde se dejó: el editor guarda
+                // en cada cambio y relee del mismo archivo, que se nombra por
+                // el id del pin.
+                if (s.type == PinType.CROQUIS) {
+                    IconButton(onClick = {
+                        com.forge.pixpin.croquis.CroquisEditorActivity.abrir(
+                            context,
+                            s.id,
+                            com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id),
+                            null
+                        )
+                    }) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = context.getString(R.string.cd_croquis_edit)
+                        )
+                    }
+                    IconButton(onClick = { exportarCroquisPdf(s) }) {
+                        Icon(
+                            Icons.Filled.PictureAsPdf,
+                            contentDescription = context.getString(R.string.cd_croquis_pdf)
+                        )
+                    }
+                }
                 if (isPdf) {
                     IconButton(onClick = { openPdfViewer() }) {
                         Icon(
@@ -1861,6 +1910,28 @@ class PinWindowController(
 
     private fun clipboard() = context.getSystemService(ClipboardManager::class.java)
 
+    /**
+     * Saca el croquis del pin como PDF, sin pasar por el editor.
+     *
+     * Va fuera del hilo de UI: dibujar y escribir un PDF no es instantáneo y
+     * este pin flota sobre la aplicación de otro.
+     */
+    private fun exportarCroquisPdf(s: PinState) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                val croquis = com.forge.pixpin.croquis.CroquisStore.cargar(s.croquisPath)
+                    ?: return@withContext false
+                val fondo = croquis.fondo?.imagenPath?.let { ImageStore.load(it) }
+                com.forge.pixpin.croquis.CroquisExport.aPdf(context, croquis, fondo) != null
+            }
+            toast(
+                context.getString(
+                    if (ok) R.string.pin_croquis_pdf_ok else R.string.pin_croquis_empty
+                )
+            )
+        }
+    }
+
     private fun toast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
@@ -1968,18 +2039,9 @@ class PinWindowController(
             croquis?.fondo?.imagenPath?.let { ImageStore.load(it) }
         }
 
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.White)
-                .pointerInput(s.id) {
-                    detectTapGestures {
-                        com.forge.pixpin.croquis.CroquisEditorActivity.abrir(
-                            contexto, s.id, s.croquisPath, null
-                        )
-                    }
-                }
-        ) {
+        // Sin gestos propios: el toque lo reparte el manejador del pin, para
+        // que copiar el croquis funcione igual que copiar una imagen.
+        Box(Modifier.fillMaxSize().background(Color.White)) {
             if (croquis == null || croquis.entidades.isEmpty()) {
                 Text(
                     "📐  Toca para dibujar",
@@ -2189,6 +2251,53 @@ class PinWindowController(
                     sourceBitmap = bmp,
                     imageRectInView = Rect(0f, 0f, drawW, drawH),
                     modifier = Modifier.matchParentSize()
+                )
+            }
+            CroquisSobreImagen(s, bmp)
+        }
+    }
+
+    /**
+     * Lo acotado en el editor, dibujado **encima** de la imagen del pin.
+     *
+     * Alinear es directo porque la imagen se pinta con `FillBounds` y ocupa el
+     * cuerpo entero: basta con montar la vista que hace que el rectángulo de la
+     * imagen en el mundo caiga exactamente sobre el cuerpo. Así lo medido sobre
+     * la captura se ve en el pin, y al copiarlo va incluido.
+     */
+    @Composable
+    private fun CroquisSobreImagen(s: PinState, bmp: Bitmap) {
+        val croquis = remember(s.id, croquisRevision.intValue) {
+            com.forge.pixpin.croquis.CroquisStore.cargar(
+                com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id)
+            )
+        }
+        if (croquis == null || croquis.entidades.isEmpty()) return
+        val fondo = croquis.fondo ?: return
+
+        // fillMaxSize y no matchParentSize: esto es un composable propio, así
+        // que no está en el BoxScope del cuerpo de la imagen. Las restricciones
+        // que le llegan ya son las del Box, de modo que llena lo mismo.
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            if (w < 1f || h < 1f || bmp.width < 1) return@Canvas
+            val mpp = fondo.metrosPorPixel
+            if (mpp <= 0.0) return@Canvas
+
+            val ppm = w / (bmp.width * mpp)
+            val vista = com.forge.pixpin.croquis.Vista(
+                centro = com.forge.pixpin.croquis.P(
+                    fondo.origen.x + bmp.width * mpp / 2,
+                    fondo.origen.y - bmp.height * mpp / 2
+                ),
+                pixelsPorMetro = ppm
+            )
+            drawIntoCanvas { lienzo ->
+                // Sin la imagen de fondo: ya está pintada debajo por el Image().
+                com.forge.pixpin.croquis.CroquisRenderer.dibujar(
+                    lienzo.nativeCanvas, croquis.copy(fondo = null), vista,
+                    w.toInt(), h.toInt(), null, android.graphics.Color.rgb(214, 24, 24)
                 )
             }
         }

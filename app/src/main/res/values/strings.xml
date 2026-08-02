@@ -107,6 +107,10 @@
     <string name="pin_type_table">Tabla</string>
     <string name="pin_type_croquis">Croquis</string>
     <string name="cd_measure_pin">Acotar y medir</string>
+    <string name="cd_croquis_edit">Seguir dibujando</string>
+    <string name="cd_croquis_pdf">Exportar a PDF</string>
+    <string name="pin_croquis_empty">El croquis está vacío</string>
+    <string name="pin_croquis_pdf_ok">PDF guardado en Descargas/PixPin</string>
     <string name="ledger_total">Total</string>
     <string name="timer_done">Tiempo cumplido</string>
     <string name="board_color">Color de la pizarra</string>

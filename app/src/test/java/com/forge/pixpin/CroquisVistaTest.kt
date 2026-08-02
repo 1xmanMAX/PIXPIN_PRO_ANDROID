@@ -1,6 +1,7 @@
 package com.forge.pixpin.croquis
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CroquisVistaTest {
@@ -74,6 +75,37 @@ class CroquisVistaTest {
         assertEquals(72.0, vista.pixelsPorMetro, 1e-9)
         assertEquals(5.0, vista.centro.x, 1e-9)
         assertEquals(2.5, vista.centro.y, 1e-9)
+    }
+
+    // --- La hoja A4 que se dibuja en el editor: lo que va a salir en el PDF ---
+
+    @Test
+    fun `la hoja envuelve el dibujo, lo centra y tiene proporcion de A4`() {
+        val croquis = Croquis(entidades = listOf(Entidad.Linea(P(0.0, 0.0), P(10.0, 5.0))))
+        val hoja = CroquisGeometria.hojaA4(croquis, Vista(P(0.0, 0.0), 100.0), 800, 600)!!
+
+        assertTrue("tiene que envolver el dibujo", hoja.min.x <= 0.0 && hoja.min.y <= 0.0)
+        assertTrue("tiene que envolver el dibujo", hoja.max.x >= 10.0 && hoja.max.y >= 5.0)
+        // Apaisada, porque el dibujo es más ancho que alto.
+        assertEquals(842.0 / 595.0, hoja.ancho / hoja.alto, 1e-9)
+        assertEquals(5.0, (hoja.min.x + hoja.max.x) / 2, 1e-9)
+        assertEquals(2.5, (hoja.min.y + hoja.max.y) / 2, 1e-9)
+    }
+
+    @Test
+    fun `un dibujo mas alto que ancho da una hoja vertical`() {
+        val croquis = Croquis(entidades = listOf(Entidad.Linea(P(0.0, 0.0), P(2.0, 20.0))))
+        val hoja = CroquisGeometria.hojaA4(croquis, Vista(P(0.0, 0.0), 100.0), 800, 600)!!
+        assertEquals(595.0 / 842.0, hoja.ancho / hoja.alto, 1e-9)
+    }
+
+    @Test
+    fun `sin nada dibujado, la hoja sale igualmente centrada en la vista`() {
+        val vista = Vista(P(3.0, 7.0), 100.0)
+        val hoja = CroquisGeometria.hojaA4(Croquis(), vista, 800, 600)!!
+        assertEquals(3.0, (hoja.min.x + hoja.max.x) / 2, 1e-9)
+        assertEquals(7.0, (hoja.min.y + hoja.max.y) / 2, 1e-9)
+        assertTrue("tiene que tener tamaño", hoja.ancho > 0 && hoja.alto > 0)
     }
 
     @Test

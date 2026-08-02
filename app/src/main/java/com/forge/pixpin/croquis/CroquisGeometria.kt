@@ -182,6 +182,59 @@ object CroquisGeometria {
         )
     }
 
+    /** Proporción de un A4: 595 × 842 puntos PostScript. */
+    private const val A4_CORTO = 595.0
+    private const val A4_LARGO = 842.0
+
+    /** Aire que se deja alrededor del dibujo dentro de la hoja. */
+    private const val AIRE = 0.10
+
+    /**
+     * La hoja A4 que se va a exportar, en coordenadas del mundo.
+     *
+     * Se dibuja en el editor para que **lo que se ve encuadrado sea lo que sale
+     * en el PDF**. Se orienta sola: apaisada si el dibujo es más ancho que alto.
+     * Con el croquis vacío se centra en la vista, para que haya hoja sobre la
+     * que empezar a dibujar.
+     */
+    fun hojaA4(croquis: Croquis, vista: Vista, anchoPx: Int, altoPx: Int): Caja? {
+        val contenido = extension(croquis)
+        val centro: P
+        var ancho: Double
+        var alto: Double
+
+        if (contenido == null) {
+            centro = vista.centro
+            // Una hoja que ocupe más o menos lo que se está mirando.
+            ancho = anchoPx / vista.pixelsPorMetro * 0.8
+            alto = altoPx / vista.pixelsPorMetro * 0.8
+        } else {
+            centro = P(
+                (contenido.min.x + contenido.max.x) / 2,
+                (contenido.min.y + contenido.max.y) / 2
+            )
+            ancho = contenido.ancho * (1 + 2 * AIRE)
+            alto = contenido.alto * (1 + 2 * AIRE)
+        }
+        if (!ancho.isFinite() || !alto.isFinite()) return null
+
+        // Un dibujo puede no tener alto —una línea horizontal sola—: hay que
+        // darle algo, o la proporción sería una división por cero.
+        val minimo = maxOf(ancho, alto, 1e-9) * 0.01
+        ancho = maxOf(ancho, minimo)
+        alto = maxOf(alto, minimo)
+
+        val proporcion = if (ancho >= alto) A4_LARGO / A4_CORTO else A4_CORTO / A4_LARGO
+        // Se crece por el lado que falte; nunca se recorta, o el dibujo se
+        // saldría de la hoja que dice contenerlo.
+        if (ancho / alto > proporcion) alto = ancho / proporcion else ancho = alto * proporcion
+
+        return Caja(
+            P(centro.x - ancho / 2, centro.y - alto / 2),
+            P(centro.x + ancho / 2, centro.y + alto / 2)
+        )
+    }
+
     /** De la pantalla al mundo: la inversa exacta de [aPantalla]. */
     fun aMundo(px: Px, vista: Vista, anchoPx: Int, altoPx: Int): P {
         val dx = (px.x - anchoPx / 2.0) / vista.pixelsPorMetro

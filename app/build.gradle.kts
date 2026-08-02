@@ -12,8 +12,8 @@ android {
         applicationId = "com.forge.pixpin"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0-croquis"
+        versionCode = 5
+        versionName = "0.4.1-croquis"
     }
 
     buildFeatures {
