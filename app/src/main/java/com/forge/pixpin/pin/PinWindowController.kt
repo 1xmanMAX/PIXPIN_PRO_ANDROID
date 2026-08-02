@@ -1559,9 +1559,6 @@ class PinWindowController(
                     // empezar hasta desaparecer. Al acercar no ocurría porque
                     // ahí la ventana sobra y nadie recorta nada: de ahí que
                     // fallara en una sola dirección.
-                    // Sin alto fijado el alto es wrap, y ahí el padre volvería a
-                    // recortar por el otro eje: unbounded lo mide libre.
-                    .wrapContentSize(Alignment.TopStart, unbounded = true)
                     .requiredWidth(s.textBoxWidth.dp)
                     .then(
                         if (s.textBoxHeight != null) {
@@ -1581,12 +1578,19 @@ class PinWindowController(
                     // explícito de la ventana, y con tamaño explícito se acabó
                     // el tope de ancho (una ventana WRAP_CONTENT no puede medir
                     // más que la pantalla, y ahí el texto crecía hacia abajo).
+                    // El tamaño base solo se toma con el zoom EN REPOSO.
+                    //
+                    // A escala 1 la ventana mide lo mismo que el contenido, así
+                    // que la medida es la buena. Durante el pellizco la ventana
+                    // es más pequeña que el contenido y el padre lo recorta:
+                    // tomar esa medida recortada como tamaño base era lo que
+                    // encogía el pin hasta hacerlo desaparecer, porque cada
+                    // medida achicaba la ventana y la ventana achicaba la
+                    // siguiente medida.
                     .onGloballyPositioned { coords ->
+                        if (scale.floatValue != 1f) return@onGloballyPositioned
                         val w = coords.size.width
                         val h = coords.size.height
-                        // Suelo de seguridad: por muy mal que salga una medida,
-                        // un pin no puede quedarse en un tamaño del que ya no se
-                        // pueda recuperar tocándolo.
                         val floor = with(density) { MIN_PIN_DP.dp.roundToPx() }
                         if (w >= floor && h >= floor && (w != naturalW || h != naturalH)) {
                             naturalW = w
@@ -1711,7 +1715,9 @@ class PinWindowController(
         var draft by remember { mutableStateOf(s.text.orEmpty()) }
         val focus = remember { FocusRequester() }
         LaunchedEffect(Unit) { focus.requestFocus() }
-        Column(Modifier.fillMaxSize()) {
+        // fillMaxWidth y no fillMaxSize: sin alto fijado las restricciones que
+        // llegan pueden no tener tope, y llenar un alto infinito revienta.
+        Column(Modifier.fillMaxWidth()) {
             BasicTextField(
                 value = draft,
                 onValueChange = { draft = it },
@@ -1722,7 +1728,6 @@ class PinWindowController(
                 ),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 10.dp)
                     .focusRequester(focus)

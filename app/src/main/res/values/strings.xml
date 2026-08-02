@@ -27,6 +27,7 @@
     <!-- Informe de fallo -->
     <string name="crash_title">PixPin se cerró de forma inesperada</string>
     <string name="crash_desc">Hay un informe guardado con el detalle técnico del fallo. Mientras no lo descartes, PixPin no se activará sola al reiniciar el móvil.</string>
+    <string name="safe_mode">Modo seguro: los pines guardados no se han restaurado. Descarta el informe de fallo para recuperarlos.</string>
     <string name="crash_share">Compartir informe</string>
     <string name="crash_dismiss">Descartar</string>
 

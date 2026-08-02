@@ -63,6 +63,7 @@ import com.forge.pixpin.R
 import com.forge.pixpin.clipboard.ClipboardPinReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.clipboard.PinContent
+import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.data.PinRepository
 import com.forge.pixpin.floating.FloatingBallController
 import java.io.File
@@ -394,8 +395,24 @@ class OverlayManager(private val app: PixPinApp) {
 
     // ---- Restauración al arrancar ----
 
+    /**
+     * Restaura los pines del arranque anterior.
+     *
+     * **Modo seguro:** si el arranque anterior acabó en fallo, NO se restaura
+     * nada. Un pin que revienta al dibujarse deja la app inservible para
+     * siempre: casca, se guarda tal cual, y al abrir se vuelve a crear y a
+     * cascar. Sin esta puerta no hay forma de entrar a la app ni siquiera para
+     * mandar el informe del fallo.
+     *
+     * No se borra nada: los pines siguen en disco y vuelven en cuanto se
+     * descarte el informe desde la pantalla principal.
+     */
     fun restoreOnStart() {
         if (pins.isNotEmpty() || !Settings.canDrawOverlays(app)) return
+        if (CrashLog.hasReport(app)) {
+            toast(R.string.safe_mode)
+            return
+        }
         scope.launch {
             val loaded = withContext(Dispatchers.IO) { repo.loadPins() }
             val loadedHistory = withContext(Dispatchers.IO) { repo.loadHistory() }
