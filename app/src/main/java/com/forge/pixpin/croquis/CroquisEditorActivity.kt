@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -663,8 +664,14 @@ private fun BarraSuperior(
         // Las herramientas solo existen en modo dibujar: en medir el dibujo
         // está deshabilitado de verdad, no escondido detrás de un if.
         if (modo == Modo.DIBUJAR) {
+            // Con desplazamiento horizontal: sin él, las herramientas que no
+            // caben en el ancho de la pantalla quedan cortadas y sin forma de
+            // llegar a ellas — parecía que solo existiera la de línea.
             Row(
-                Modifier.fillMaxWidth().padding(top = 5.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 5.dp)
+                    .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
