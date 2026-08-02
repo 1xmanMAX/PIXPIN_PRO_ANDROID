@@ -120,8 +120,14 @@ import com.forge.pixpin.annotate.Pt
 import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.floating.FloatingBallController
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextDecoration
 import com.forge.pixpin.markdown.LinkHit
 import com.forge.pixpin.markdown.Markdown
+import com.forge.pixpin.markdown.MarkdownEdit
 import com.forge.pixpin.markdown.MarkdownText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -501,11 +507,25 @@ class PinWindowController(
     /** Mientras dura, el pin deja de responder a gestos y se escribe en él. */
     private val editing = mutableStateOf(false)
 
+    /**
+     * El texto que se está escribiendo, CON su selección.
+     *
+     * Vive en el controlador y no en el composable porque la barra de formato
+     * está en otra ventana: para poner algo en negrita hay que saber qué hay
+     * seleccionado, y desde otra ventana no se llega al estado de la que edita.
+     */
+    private val draft = mutableStateOf(TextFieldValue(""))
+
+    private var editBar: OverlayComposeWindow? = null
+
     private fun enterEditMode() {
         if (editing.value || pin.value.type != PinType.TEXT) return
         closeActionBar()
         closeEmojiPicker()
+        val body = pin.value.text.orEmpty()
+        draft.value = TextFieldValue(body, TextRange(body.length))
         editing.value = true
+        openEditBar()
         // Sin reconocedor: los toques son para el cursor y la selección.
         window?.setTouchHandler(null)
         touchHandler = null
@@ -517,9 +537,23 @@ class PinWindowController(
         }
     }
 
+    /** Aplica un formato a lo que haya seleccionado ahora mismo. */
+    private fun applyWrap(marker: String) {
+        val v = draft.value
+        val r = MarkdownEdit.wrap(v.text, v.selection.start, v.selection.end, marker)
+        draft.value = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+    }
+
+    private fun applyPrefix(prefix: String) {
+        val v = draft.value
+        val r = MarkdownEdit.togglePrefix(v.text, v.selection.start, prefix)
+        draft.value = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+    }
+
     private fun exitEditMode(newText: String) {
         if (!editing.value) return
         editing.value = false
+        closeEditBar()
         if (newText != pin.value.text) {
             pin.value = pin.value.copy(text = newText)
         }
@@ -1036,6 +1070,99 @@ class PinWindowController(
         runCatching { wm.removeView(bar.view) }
         bar.onDetached()
         annotateBar = null
+    }
+
+    // ---- Barra de edición de texto ----
+
+    /**
+     * Va en ventana propia, pegada abajo, por dos motivos. Uno: dentro del pin
+     * los botones quedaban empujados fuera de la vista en cuanto el texto era
+     * largo, y no había forma de cerrar la edición. Y dos: es donde el usuario
+     * ya espera encontrarla, porque la barra de dibujo funciona igual.
+     */
+    private fun openEditBar() {
+        if (editBar != null) return
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            // Por encima del teclado, que es lo que ocupa la mitad de abajo.
+            y = (12 * context.resources.displayMetrics.density).toInt()
+        }
+        val bar = OverlayComposeWindow(context) { EditBarContent() }
+        editBar = bar
+        runCatching {
+            wm.addView(bar.view, params)
+            bar.onAttached()
+        }.onFailure { editBar = null }
+    }
+
+    private fun closeEditBar() {
+        val bar = editBar ?: return
+        runCatching { wm.removeView(bar.view) }
+        bar.onDetached()
+        editBar = null
+    }
+
+    /**
+     * Seis formatos y el botón de cerrar. Son los que se usan de verdad al
+     * tomar notas; meter subíndices y superíndices en una barra que tiene que
+     * caber sobre un teclado sería llenarla de cosas que nadie toca.
+     */
+    @Composable
+    private fun EditBarContent() {
+        Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                EditBarButton("H") { applyPrefix("# ") }
+                EditBarButton("B", bold = true) { applyWrap("**") }
+                EditBarButton("I", italic = true) { applyWrap("*") }
+                EditBarButton("S", strike = true) { applyWrap("~~") }
+                EditBarButton("</>") { applyWrap("`") }
+                EditBarButton("•") { applyPrefix("- ") }
+                IconButton(onClick = { exitEditMode(pin.value.text.orEmpty()) }) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = context.getString(R.string.cancel)
+                    )
+                }
+                IconButton(onClick = { exitEditMode(draft.value.text) }) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = context.getString(R.string.cd_done),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun EditBarButton(
+        label: String,
+        bold: Boolean = false,
+        italic: Boolean = false,
+        strike: Boolean = false,
+        onClick: () -> Unit
+    ) {
+        TextButton(onClick = onClick, modifier = Modifier.widthIn(min = 40.dp)) {
+            Text(
+                text = label,
+                fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+                fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+                textDecoration = if (strike) TextDecoration.LineThrough else null,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 
     // ---- Pegatinas ----
@@ -1738,15 +1865,14 @@ class PinWindowController(
      */
     @Composable
     private fun TextEditor(s: PinState) {
-        var draft by remember { mutableStateOf(s.text.orEmpty()) }
         val focus = remember { FocusRequester() }
         LaunchedEffect(Unit) { focus.requestFocus() }
-        // fillMaxWidth y no fillMaxSize: sin alto fijado las restricciones que
-        // llegan pueden no tener tope, y llenar un alto infinito revienta.
+        // Sin botones aquí dentro: con texto largo quedaban empujados fuera de
+        // la vista y no había forma de cerrar la edición. Están en EditBarContent.
         Column(Modifier.fillMaxWidth()) {
             BasicTextField(
-                value = draft,
-                onValueChange = { draft = it },
+                value = draft.value,
+                onValueChange = { draft.value = it },
                 textStyle = TextStyle(
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
@@ -1758,20 +1884,6 @@ class PinWindowController(
                     .padding(horizontal = 14.dp, vertical = 10.dp)
                     .focusRequester(focus)
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = { exitEditMode(s.text.orEmpty()) }) {
-                    Text(context.getString(R.string.cancel))
-                }
-                TextButton(onClick = { exitEditMode(draft) }) {
-                    Text(context.getString(R.string.cd_done))
-                }
-            }
         }
     }
 
