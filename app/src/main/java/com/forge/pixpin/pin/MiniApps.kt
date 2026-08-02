@@ -84,12 +84,38 @@ fun TimerBody(
     onFinished: () -> Unit
 ) {
     var now by remember { mutableLongStateOf(nowProvider()) }
-    LaunchedEffect(widget.timerEndsAt) {
+    LaunchedEffect(widget.timerEndsAt, widget.runningSince) {
         while (true) {
             now = nowProvider()
-            delay(250)
+            // El cronómetro enseña décimas, así que necesita ir más fino.
+            delay(if (widget.stopwatch) 60L else 250L)
         }
     }
+
+    if (widget.stopwatch) {
+        val elapsed = widget.accumulatedMs +
+            (widget.runningSince?.let { now - it } ?: 0L)
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stopwatchOf(elapsed),
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Medium,
+                fontFamily = FontFamily.Monospace,
+                color = if (widget.runningSince != null) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "toque: marcha/pausa · doble: a cero",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
     val endsAt = widget.timerEndsAt
     val remaining = if (endsAt != null) endsAt - now else null
 
@@ -127,6 +153,18 @@ fun TimerBody(
 private fun clockOf(nowMs: Long): String {
     val totalMinutes = (nowMs / 60000L) % (24 * 60)
     return "%02d:%02d".format(totalMinutes / 60, totalMinutes % 60)
+}
+
+/** Con décimas: en un cronómetro es justo lo que se mira. */
+private fun stopwatchOf(ms: Long): String {
+    val total = ms.coerceAtLeast(0)
+    val tenths = (total / 100) % 10
+    val s = total / 1000
+    return if (s >= 3600) {
+        "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60)
+    } else {
+        "%02d:%02d,%d".format(s / 60, s % 60, tenths)
+    }
 }
 
 private fun countdownOf(ms: Long): String {

@@ -15,6 +15,15 @@ class MagicWordTest {
         assertEquals(MiniApp.CHECKLIST, MagicWord.detect("TODO"))
         assertEquals(MiniApp.LEDGER, MagicWord.detect("Gastos"))
         assertEquals(MiniApp.BOARD, MagicWord.detect("PIZARRA"))
+        assertEquals(MiniApp.STOPWATCH, MagicWord.detect("Crono"))
+        assertEquals(MiniApp.STOPWATCH, MagicWord.detect("STOPWATCH"))
+    }
+
+    /** El cronómetro y el temporizador son palabras distintas y no se confunden. */
+    @Test
+    fun `crono y time no son lo mismo`() {
+        assertEquals(MiniApp.STOPWATCH, MagicWord.detect("cronometro"))
+        assertEquals(MiniApp.TIMER, MagicWord.detect("time"))
     }
 
     @Test

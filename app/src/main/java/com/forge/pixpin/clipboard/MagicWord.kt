@@ -1,7 +1,7 @@
 package com.forge.pixpin.clipboard
 
 /** Mini-aplicaciones que se abren pineando una palabra. */
-enum class MiniApp { TIMER, CHECKLIST, COUNTER, LEDGER, BOARD }
+enum class MiniApp { TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD }
 
 /**
  * Palabras que, pineadas **solas**, abren una mini-aplicación en vez de un pin
@@ -23,6 +23,11 @@ object MagicWord {
         "timer" to MiniApp.TIMER,
         "pomodoro" to MiniApp.TIMER,
         "temporizador" to MiniApp.TIMER,
+
+        "crono" to MiniApp.STOPWATCH,
+        "cronometro" to MiniApp.STOPWATCH,
+        "cronómetro" to MiniApp.STOPWATCH,
+        "stopwatch" to MiniApp.STOPWATCH,
 
         "todo" to MiniApp.CHECKLIST,
         "checklist" to MiniApp.CHECKLIST,

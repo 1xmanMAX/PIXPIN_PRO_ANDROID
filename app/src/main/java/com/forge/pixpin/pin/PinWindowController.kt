@@ -880,11 +880,6 @@ class PinWindowController(
         override fun onScrollEnd() = Unit
 
         override fun onResizeEnd() {
-            if (boardResizable) {
-                // El lienzo se rehace al soltar, no en cada píxel: generar un
-                // bitmap por muestra del dedo sería insostenible.
-                resizeBoard(pin.value.textBoxWidth, pin.value.textBoxHeight ?: 400)
-            }
             keepReachable()
             // Se persiste al soltar, no en cada muestra: scheduleSave ya hace
             // debounce, pero escribir el estado por píxel arrastrado es ruido.
@@ -901,6 +896,7 @@ class PinWindowController(
                 s.type == PinType.TEXT && openLinkAt(x, y) -> Unit
                 s.type == PinType.TEXT -> copyText(s)
                 s.type == PinType.COUNTER -> bumpCounter(+1)
+                s.type == PinType.TIMER && s.widget.stopwatch -> toggleStopwatch()
                 // La lista reparte el toque por filas: cada una son ~26 dp.
                 s.type == PinType.CHECKLIST -> rowAt(y).takeIf { it >= 0 }?.let { toggleCheck(it) }
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
@@ -912,6 +908,10 @@ class PinWindowController(
         override fun onDoubleTap() {
             if (!minimized.value && pin.value.type == PinType.COUNTER) {
                 bumpCounter(-1)
+                return
+            }
+            if (!minimized.value && pin.value.widget.stopwatch) {
+                resetStopwatch()
                 return
             }
             // Sin dock: la burbuja se queda donde estaba el pin.
@@ -1115,38 +1115,6 @@ class PinWindowController(
         get() = pin.value.type == PinType.IMAGE &&
             pin.value.imagePath?.substringAfterLast('/')?.startsWith("board_") == true
 
-    /**
-     * La pizarra solo se estira **mientras está en blanco**.
-     *
-     * En cuanto hay un trazo, cambiar el lienzo obligaría a decidir qué pasa con
-     * lo dibujado —estirarlo y deformarlo, o dejarlo quieto y descuadrarlo— y
-     * cualquiera de las dos puede arruinar un dibujo hecho. Al ajustarse antes
-     * de empezar, la pregunta no llega a existir.
-     */
-    private val boardResizable: Boolean
-        get() = isBoard && annotator.annotations.isEmpty()
-
-    /** Estira el lienzo, conservando color y pauta. */
-    private fun resizeBoard(widthDp: Int, heightDp: Int) {
-        val density = context.resources.displayMetrics.density
-        val old = pin.value.imagePath
-        scope.launch {
-            val path = withContext(Dispatchers.IO) {
-                ImageStore.saveBlankBoard(
-                    context, boardColor, boardGrid,
-                    width = (widthDp * density).toInt(),
-                    height = (heightDp * density).toInt()
-                )
-            } ?: return@launch
-            naturalW = 0
-            naturalH = 0
-            bitmapState.value = null
-            bitmapLoadTried.value = false
-            pin.value = pin.value.copy(imagePath = path)
-            withContext(Dispatchers.IO) { ImageStore.delete(old) }
-            callbacks.onPinChanged(this@PinWindowController)
-        }
-    }
 
     private var boardPalette: OverlayComposeWindow? = null
 
@@ -1995,6 +1963,34 @@ class PinWindowController(
             ?.key ?: -1
     }
 
+    /**
+     * Marcha y pausa. Al pausar se acumula lo corrido y se suelta el instante de
+     * arranque; así el estado guardado no depende de cuándo se mire.
+     */
+    private fun toggleStopwatch() {
+        val w = pin.value.widget
+        val now = System.currentTimeMillis()
+        val next = if (w.runningSince != null) {
+            w.copy(
+                accumulatedMs = w.accumulatedMs + (now - w.runningSince),
+                runningSince = null
+            )
+        } else {
+            w.copy(runningSince = now)
+        }
+        pin.value = pin.value.copy(widget = next)
+        callbacks.onPinChanged(this)
+    }
+
+    private fun resetStopwatch() {
+        val w = pin.value.widget
+        pin.value = pin.value.copy(
+            widget = w.copy(runningSince = null, accumulatedMs = 0)
+        )
+        window?.view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        callbacks.onPinChanged(this)
+    }
+
     private var timerAlerted = false
 
     private fun onTimerFinished() {
@@ -2079,7 +2075,6 @@ class PinWindowController(
         }
         // La ventana ya tiene el tamaño exacto que toca (measureNatural +
         // applyContentSize), así que la imagen solo tiene que llenarla.
-        val handleColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         Box(
             Modifier
                 .fillMaxSize()
@@ -2115,36 +2110,6 @@ class PinWindowController(
                     imageRectInView = Rect(0f, 0f, drawW, drawH),
                     modifier = Modifier.matchParentSize()
                 )
-            }
-            // La pizarra en blanco se estira por su esquina, como el cuadro de
-            // texto. Desaparece con el primer trazo.
-            if (boardResizable) {
-                Canvas(
-                    modifier = Modifier
-                        .size(HANDLE_DP.dp)
-                        .align(Alignment.BottomEnd)
-                        .onGloballyPositioned { coords ->
-                            val origin = coords.positionInRoot()
-                            setResizeHandle(
-                                android.graphics.Rect(
-                                    origin.x.toInt(), origin.y.toInt(),
-                                    (origin.x + coords.size.width).toInt(),
-                                    (origin.y + coords.size.height).toInt()
-                                )
-                            )
-                        }
-                ) {
-                    val stroke = 1.5.dp.toPx()
-                    for (i in 1..3) {
-                        val inset = size.width * (i / 4f)
-                        drawLine(
-                            color = handleColor,
-                            start = Offset(size.width - inset, size.height),
-                            end = Offset(size.width, size.height - inset),
-                            strokeWidth = stroke
-                        )
-                    }
-                }
             }
         }
     }

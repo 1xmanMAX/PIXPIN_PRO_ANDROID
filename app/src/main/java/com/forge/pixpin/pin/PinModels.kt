@@ -27,7 +27,17 @@ data class WidgetState(
      * temporizador siga siendo correcto aunque el pin se cierre o el móvil se
      * reinicie por el camino.
      */
-    val timerEndsAt: Long? = null
+    val timerEndsAt: Long? = null,
+    /** El pin cuenta hacia arriba en vez de hacia abajo. */
+    val stopwatch: Boolean = false,
+    /**
+     * Instante en que se puso en marcha, o null si está parado. Igual que el
+     * temporizador, se guarda el instante y no lo transcurrido: así la cuenta
+     * sigue siendo correcta aunque el pin pase un rato cerrado.
+     */
+    val runningSince: Long? = null,
+    /** Lo acumulado en las vueltas anteriores, antes de la pausa actual. */
+    val accumulatedMs: Long = 0
 )
 
 /** Estado serializable de un pin: todo lo necesario para restaurarlo. */

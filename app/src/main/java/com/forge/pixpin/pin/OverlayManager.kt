@@ -369,7 +369,7 @@ class OverlayManager(private val app: PixPinApp) {
             return
         }
         val type = when (app) {
-            MiniApp.TIMER -> PinType.TIMER
+            MiniApp.TIMER, MiniApp.STOPWATCH -> PinType.TIMER
             MiniApp.CHECKLIST -> PinType.CHECKLIST
             MiniApp.COUNTER -> PinType.COUNTER
             MiniApp.LEDGER -> PinType.LEDGER
@@ -380,7 +380,12 @@ class OverlayManager(private val app: PixPinApp) {
             MiniApp.LEDGER -> appString(R.string.ledger_seed)
             else -> null
         }
-        createPin(newPin(type).copy(text = seed))
+        createPin(
+            newPin(type).copy(
+                text = seed,
+                widget = WidgetState(stopwatch = app == MiniApp.STOPWATCH)
+            )
+        )
     }
 
     private fun appString(resId: Int): String = app.getString(resId)
