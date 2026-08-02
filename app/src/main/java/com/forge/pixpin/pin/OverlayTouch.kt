@@ -46,13 +46,22 @@ class OverlayTouchHandler(
         fun onResize(dxFromDown: Float, dyFromDown: Float) {}
         fun onResizeEnd() {}
 
+        /**
+         * Arrastre sobre la pastilla de desplazamiento. Como el handle, se
+         * decide en el ACTION_DOWN: es una zona pequeña y esperar al slop la
+         * haría inagarrable.
+         */
+        fun onScrollStart() {}
+        fun onScrollDrag(dyFromDown: Float) {}
+        fun onScrollEnd() {}
+
         /** x/y en coordenadas LOCALES de la ventana: sirven para saber qué se tocó. */
         fun onTap(x: Float, y: Float) {}
         fun onDoubleTap() {}
         fun onLongPress() {}
     }
 
-    private enum class Mode { NONE, DRAG, SCALE, OPACITY, RESIZE }
+    private enum class Mode { NONE, DRAG, SCALE, OPACITY, RESIZE, SCROLL }
 
     private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
@@ -62,6 +71,9 @@ class OverlayTouchHandler(
      * la ventana no se redimensiona.
      */
     var handleRect: android.graphics.Rect? = null
+
+    /** Zona de la pastilla de desplazamiento, también en coordenadas locales. */
+    var scrollRect: android.graphics.Rect? = null
 
     private var mode = Mode.NONE
     private var downX = 0f
@@ -108,9 +120,16 @@ class OverlayTouchHandler(
                 mode = Mode.NONE
                 twoFingerDecided = false
                 multiTouch = false
-                if (handleRect?.contains(event.x.toInt(), event.y.toInt()) == true) {
+                val px = event.x.toInt()
+                val py = event.y.toInt()
+                // El handle gana si se solapan: es el de la esquina y el más
+                // difícil de acertar de los dos.
+                if (handleRect?.contains(px, py) == true) {
                     mode = Mode.RESIZE
                     listener.onResizeStart()
+                } else if (scrollRect?.contains(px, py) == true) {
+                    mode = Mode.SCROLL
+                    listener.onScrollStart()
                 }
             }
 
@@ -144,6 +163,10 @@ class OverlayTouchHandler(
         // dedo, así que los locales se falsearían igual que con el arrastre.
         if (mode == Mode.RESIZE) {
             listener.onResize(event.rawX - downX, event.rawY - downY)
+            return
+        }
+        if (mode == Mode.SCROLL) {
+            listener.onScrollDrag(event.rawY - downY)
             return
         }
         if (event.pointerCount >= 2) {
@@ -191,6 +214,7 @@ class OverlayTouchHandler(
             Mode.SCALE -> listener.onScaleEnd()
             Mode.OPACITY -> listener.onOpacityEnd()
             Mode.RESIZE -> listener.onResizeEnd()
+            Mode.SCROLL -> listener.onScrollEnd()
             Mode.NONE -> Unit
         }
         mode = Mode.NONE

@@ -189,6 +189,25 @@ class PinWindowController(
      */
     private var linkHits: List<LinkHit> = emptyList()
 
+    /**
+     * Desplazamiento del cuadro de texto. Vive AQUÍ y no en la composición
+     * porque quien lo mueve es el reconocedor de gestos: la ventana del pin se
+     * queda con todos los toques, así que un `verticalScroll` dentro no recibe
+     * ninguno y no se desplazaría jamás.
+     */
+    private val textScroll = ScrollState(0)
+
+    /** Zona de la pastilla, y cuánto recorre, para traducir el arrastre. */
+    private var scrollPipTravelPx = 1f
+
+    private fun setScrollRect(rect: android.graphics.Rect?, travelPx: Float) {
+        scrollPipTravelPx = travelPx.coerceAtLeast(1f)
+        touchHandler?.scrollRect = rect
+        pendingScrollRect = rect
+    }
+
+    private var pendingScrollRect: android.graphics.Rect? = null
+
     private val pin = mutableStateOf(initialState)
     private val scale = mutableFloatStateOf(initialState.scale)
     private val minimized = mutableStateOf(initialState.minimized)
@@ -595,6 +614,7 @@ class PinWindowController(
     private fun newTouchHandler(): OverlayTouchHandler =
         OverlayTouchHandler(context, GestureListener()).also {
             it.handleRect = resizeHandle
+            it.scrollRect = pendingScrollRect
             touchHandler = it
         }
 
@@ -767,6 +787,27 @@ class PinWindowController(
                 )
             }
         }
+
+        private var scrollStartValue = 0
+
+        override fun onScrollStart() {
+            closeActionBar()
+            scrollStartValue = textScroll.value
+        }
+
+        override fun onScrollDrag(dyFromDown: Float) {
+            val max = textScroll.maxValue
+            if (max <= 0) return
+            // El dedo recorre la pastilla, no el texto: lo que avanza el
+            // contenido es proporcional a lo que le queda de recorrido.
+            val perPx = max / scrollPipTravelPx / zoomOrOne()
+            val target = (scrollStartValue + dyFromDown * perPx).coerceIn(0f, max.toFloat())
+            // dispatchRawDelta es síncrono; scrollTo suspende y aquí no hay
+            // corrutina que valga: esto corre en el reparto de toques.
+            textScroll.dispatchRawDelta(target - textScroll.value)
+        }
+
+        override fun onScrollEnd() = Unit
 
         override fun onResizeEnd() {
             keepReachable()
@@ -1493,7 +1534,6 @@ class PinWindowController(
         // Se re-interpreta solo cuando cambia el texto, no en cada fotograma del
         // pellizco: el zoom no afecta a la sintaxis.
         val blocks = remember(s.text) { Markdown.parse(s.text.orEmpty()) }
-        val textScroll = rememberScrollState()
         Box(Modifier.fillMaxSize()) {
             // El texto se compone UNA VEZ a tamaño base y se escala con una
             // transformación de GPU, igual que una imagen.
@@ -1590,7 +1630,12 @@ class PinWindowController(
     @Composable
     private fun BoxScope.ScrollPip(state: ScrollState) {
         val max = state.maxValue
-        if (max <= 0) return
+        val density = LocalDensity.current
+        if (max <= 0) {
+            // Sin nada que desplazar no hay zona que capturar toques.
+            LaunchedEffect(Unit) { setScrollRect(null, 1f) }
+            return
+        }
         val fraction = (state.value.toFloat() / max).coerceIn(0f, 1f)
         val trackHeight = 54.dp
         Box(
@@ -1603,7 +1648,25 @@ class PinWindowController(
                 .background(
                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                     RoundedCornerShape(50)
-                ),
+                )
+                // La zona que responde al dedo se ensancha a los lados: 10 dp de
+                // ancho son imposibles de acertar, y el rectángulo táctil no
+                // tiene por qué medir lo mismo que lo que se ve.
+                .onGloballyPositioned { coords ->
+                    val origin = coords.positionInRoot()
+                    val grow = with(density) { SCROLL_TOUCH_PAD_DP.dp.toPx() }
+                    val travel = coords.size.height -
+                        with(density) { SCROLL_PIP_DP.dp.toPx() }
+                    setScrollRect(
+                        android.graphics.Rect(
+                            (origin.x - grow).toInt(),
+                            (origin.y - grow).toInt(),
+                            (origin.x + coords.size.width + grow).toInt(),
+                            (origin.y + coords.size.height + grow).toInt()
+                        ),
+                        travel
+                    )
+                },
             contentAlignment = Alignment.TopCenter
         ) {
             Box(
@@ -1717,6 +1780,9 @@ class PinWindowController(
 
         /** Diámetro de la pastilla de desplazamiento del cuadro de texto, en dp. */
         const val SCROLL_PIP_DP = 10
+
+        /** Cuánto se ensancha su zona táctil respecto a lo que se ve, en dp. */
+        const val SCROLL_TOUCH_PAD_DP = 10
     }
 
     private fun mimeIcon(mime: String?) = when {

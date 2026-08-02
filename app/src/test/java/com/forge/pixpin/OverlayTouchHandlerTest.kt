@@ -55,6 +55,17 @@ class OverlayTouchHandlerTest {
         }
 
         override fun onResizeEnd() { resizeEnds++ }
+
+        var scrolls = 0
+        var lastScrollDy = 0f
+        var scrollEnds = 0
+
+        override fun onScrollDrag(dyFromDown: Float) {
+            scrolls++
+            lastScrollDy = dyFromDown
+        }
+
+        override fun onScrollEnd() { scrollEnds++ }
     }
 
     private lateinit var recorder: Recorder
@@ -155,6 +166,47 @@ class OverlayTouchHandlerTest {
 
         assertTrue(recorder.drags > 0)
         assertEquals(0, recorder.resizes)
+    }
+
+    /**
+     * Regresión: el `verticalScroll` de Compose nunca recibía un solo toque,
+     * porque la ventana del pin se los queda todos. El desplazamiento tiene que
+     * salir del reconocedor o no ocurre.
+     */
+    @Test
+    fun `la pastilla de scroll desplaza en vez de arrastrar el pin`() {
+        handler.scrollRect = android.graphics.Rect(300, 400, 320, 460)
+        send(down(310f, 430f))
+        send(move(312f, 500f))
+
+        assertEquals("no debe arrastrar el pin", 0, recorder.drags)
+        assertTrue(recorder.scrolls > 0)
+        assertEquals(70f, recorder.lastScrollDy, 0.01f)
+
+        send(up(312f, 500f))
+        assertEquals(1, recorder.scrollEnds)
+    }
+
+    /** Si se solapan gana el handle: es el más difícil de acertar de los dos. */
+    @Test
+    fun `el handle gana a la pastilla cuando se solapan`() {
+        handler.handleRect = android.graphics.Rect(300, 400, 340, 440)
+        handler.scrollRect = android.graphics.Rect(300, 400, 320, 460)
+        send(down(310f, 420f))
+        send(move(330f, 450f))
+
+        assertTrue(recorder.resizes > 0)
+        assertEquals(0, recorder.scrolls)
+    }
+
+    @Test
+    fun `fuera de la pastilla se sigue arrastrando el pin`() {
+        handler.scrollRect = android.graphics.Rect(300, 400, 320, 460)
+        send(down(100f, 200f))
+        send(move(160f, 260f))
+
+        assertTrue(recorder.drags > 0)
+        assertEquals(0, recorder.scrolls)
     }
 
     // ---- Construcción de eventos ----
