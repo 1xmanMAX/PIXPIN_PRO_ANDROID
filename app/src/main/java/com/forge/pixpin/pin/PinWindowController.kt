@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Bookmark
@@ -896,7 +897,7 @@ class PinWindowController(
                 s.type == PinType.TEXT -> copyText(s)
                 s.type == PinType.COUNTER -> bumpCounter(+1)
                 // La lista reparte el toque por filas: cada una son ~26 dp.
-                s.type == PinType.CHECKLIST -> toggleCheck(rowAt(y))
+                s.type == PinType.CHECKLIST -> rowAt(y).takeIf { it >= 0 }?.let { toggleCheck(it) }
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
                 s.type == PinType.IMAGE -> copyImage(s)
@@ -1142,12 +1143,21 @@ class PinWindowController(
      * encima de la imagen, no píxeles horneados en ella, así que basta con
      * sustituir el fondo por otro del mismo tamaño.
      */
-    private fun setBoardColor(argb: Int) {
+    private var boardColor = ImageStore.WHITE_BOARD
+    private var boardGrid = ImageStore.BoardGrid.NONE
+
+    private fun setBoardColor(argb: Int) = regenerateBoard(argb, boardGrid)
+
+    private fun setBoardGrid(grid: ImageStore.BoardGrid) = regenerateBoard(boardColor, grid)
+
+    private fun regenerateBoard(argb: Int, grid: ImageStore.BoardGrid) {
+        boardColor = argb
+        boardGrid = grid
         closeBoardPalette()
         val old = pin.value.imagePath
         scope.launch {
             val path = withContext(Dispatchers.IO) {
-                ImageStore.saveBlankBoard(context, argb)
+                ImageStore.saveBlankBoard(context, argb, grid)
             } ?: return@launch
             bitmapState.value = null
             bitmapLoadTried.value = false
@@ -1160,19 +1170,29 @@ class PinWindowController(
     @Composable
     private fun BoardPaletteContent() {
         Surface(shape = RoundedCornerShape(20.dp), shadowElevation = 8.dp) {
-            Row(
+            Column(
                 modifier = Modifier.padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                BOARD_COLORS.forEach { argb ->
-                    Box(
-                        Modifier
-                            .padding(6.dp)
-                            .size(40.dp)
-                            .background(Color(argb), CircleShape)
-                            .border(1.dp, Color.Gray, CircleShape)
-                            .clickable { setBoardColor(argb) }
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BOARD_COLORS.forEach { argb ->
+                        Box(
+                            Modifier
+                                .padding(6.dp)
+                                .size(40.dp)
+                                .background(Color(argb), CircleShape)
+                                .border(1.dp, Color.Gray, CircleShape)
+                                .clickable { setBoardColor(argb) }
+                        )
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BOARD_GRIDS.forEach { (glyph, grid) ->
+                        TextButton(onClick = { setBoardGrid(grid) }) {
+                            Text(glyph, fontSize = 20.sp)
+                        }
+                    }
                 }
             }
         }
@@ -1874,12 +1894,23 @@ class PinWindowController(
         callbacks.onPinChanged(this)
     }
 
-    /** Qué fila de la lista cae bajo el dedo, en coordenadas de ventana. */
+    /** Dónde está cada fila de la lista, en coordenadas de disposición. */
+    private val checkRows = mutableMapOf<Int, Pair<Float, Float>>()
+
+    /**
+     * Qué fila cae bajo el dedo. El toque llega en píxeles de ventana y las
+     * filas se miden en coordenadas de disposición, que es lo que devuelve
+     * `positionInRoot`; entre unas y otras está el zoom, que escala el dibujado
+     * pero no la disposición, y el hueco de la sombra, que sí está en ambas.
+     */
     private fun rowAt(y: Float): Int {
+        if (checkRows.isEmpty()) return -1
         val density = context.resources.displayMetrics.density
-        val padTop = (12 + PinChrome.SHADOW_DP) * density
-        val rowH = 26 * density * zoomOrOne()
-        return (((y - padTop) / rowH).toInt()).coerceAtLeast(0)
+        val insetTop = PinChrome.insetsFor(pin.value.emoji != null).top * density
+        val layoutY = (y - insetTop) / zoomOrOne() + insetTop
+        return checkRows.entries
+            .firstOrNull { (_, r) -> layoutY >= r.first && layoutY <= r.second }
+            ?.key ?: -1
     }
 
     private var timerAlerted = false
@@ -2070,7 +2101,9 @@ class PinWindowController(
 
                         s.type == PinType.CHECKLIST -> {
                             Box(Modifier.verticalScroll(textScroll)) {
-                                ChecklistBody(s.text, s.widget) { toggleCheck(it) }
+                                ChecklistBody(s.text, s.widget) { i, top, bottom ->
+                                    checkRows[i] = top to bottom
+                                }
                             }
                             ScrollPip(textScroll)
                         }
@@ -2380,6 +2413,7 @@ private val ANNOTATE_TOOLS = listOf(
     AnnotationType.PENCIL to Icons.Filled.Gesture,
     AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
     AnnotationType.ARROW to Icons.Filled.NorthEast,
+    AnnotationType.LINE to Icons.Filled.Remove,
     AnnotationType.RECT to Icons.Filled.CropSquare,
     AnnotationType.ELLIPSE to Icons.Filled.RadioButtonUnchecked,
     AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
@@ -2400,6 +2434,15 @@ private val EDITABLE_TYPES = setOf(PinType.TEXT, PinType.CHECKLIST, PinType.LEDG
  * máximo, y azul y verde oscuros porque cansan menos la vista en pantalla y el
  * trazo claro resalta sobre ellos.
  */
+/** Pautas de referencia: sin nada, cuadrícula, rayas, columnas y puntos. */
+private val BOARD_GRIDS = listOf(
+    "▢" to ImageStore.BoardGrid.NONE,
+    "▦" to ImageStore.BoardGrid.SQUARES,
+    "▤" to ImageStore.BoardGrid.HORIZONTAL,
+    "▥" to ImageStore.BoardGrid.VERTICAL,
+    "⁘" to ImageStore.BoardGrid.DOTS
+)
+
 private val BOARD_COLORS = listOf(
     0xFFFFFFFF.toInt(), // blanco
     0xFF1B1B1B.toInt(), // negro

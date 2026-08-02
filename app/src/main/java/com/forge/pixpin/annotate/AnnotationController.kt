@@ -56,7 +56,7 @@ class AnnotationController {
     fun begin(pt: Pt) {
         when (tool.value) {
             AnnotationType.RECT, AnnotationType.ELLIPSE, AnnotationType.ARROW,
-            AnnotationType.MOSAIC, AnnotationType.SPOTLIGHT ->
+            AnnotationType.LINE, AnnotationType.MOSAIC, AnnotationType.SPOTLIGHT ->
                 current.value = Annotation(tool.value, listOf(pt, pt), color.value,
                     strokeWidth.value, filled = filled.value)
             AnnotationType.PENCIL ->

@@ -114,6 +114,10 @@ object AnnotationRenderer {
                         canvas.restore()
                     }
                 }
+                AnnotationType.LINE -> canvas.drawLine(
+                    a.points[0].x - ox, a.points[0].y - oy,
+                    a.points[1].x - ox, a.points[1].y - oy, paint
+                )
                 AnnotationType.POLYLINE -> {
                     val pts = a.points
                     for (i in 0 until pts.size - 1) {

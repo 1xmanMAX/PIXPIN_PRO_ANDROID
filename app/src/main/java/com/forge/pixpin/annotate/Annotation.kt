@@ -21,6 +21,9 @@ data class Pt(val x: Float, val y: Float, val p: Float = 1f)
 enum class AnnotationType {
     RECT, ELLIPSE, ARROW, PENCIL, HIGHLIGHT, MOSAIC, TEXT, ERASER,
 
+    /** Recta simple, sin punta: subrayar, tachar, separar. */
+    LINE,
+
     /** Un toque = un círculo numerado 1, 2, 3… El número va en `text`. */
     SERIAL,
 

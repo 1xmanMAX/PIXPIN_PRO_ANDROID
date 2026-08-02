@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -141,7 +143,7 @@ private fun countdownOf(ms: Long): String {
 fun ChecklistBody(
     text: String?,
     widget: WidgetState,
-    onToggle: (Int) -> Unit
+    onRowBounds: (Int, Float, Float) -> Unit = { _, _, _ -> }
 ) {
     val items = remember(text) { text.orEmpty().lines().filter { it.isNotBlank() } }
     Column(modifier = Modifier.padding(12.dp)) {
@@ -152,6 +154,13 @@ fun ChecklistBody(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 3.dp)
+                    // Cada fila dice dónde está de verdad. Calcularlo con una
+                    // altura estimada desfasaba el toque una fila, y el error se
+                    // acumulaba según se bajaba por la lista.
+                    .onGloballyPositioned { coords ->
+                        val top = coords.positionInRoot().y
+                        onRowBounds(index, top, top + coords.size.height)
+                    }
             ) {
                 Text(
                     text = if (done) "☑" else "☐",

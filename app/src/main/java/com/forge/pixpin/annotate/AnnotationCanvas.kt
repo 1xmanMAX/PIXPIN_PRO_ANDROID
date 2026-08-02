@@ -285,6 +285,13 @@ fun AnnotationCanvas(
                         drawOval(Color(a.color), topLeft = tl, size = size, style = style)
                     }
                 }
+                AnnotationType.LINE -> drawLine(
+                    Color(a.color),
+                    a.points[0].toView(),
+                    a.points[1].toView(),
+                    strokeWidth = a.strokeWidth * scale,
+                    cap = StrokeCap.Round
+                )
                 AnnotationType.ARROW -> {
                     val start = a.points[0].toView()
                     val end = a.points[1].toView()
