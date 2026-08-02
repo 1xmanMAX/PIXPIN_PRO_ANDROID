@@ -19,6 +19,8 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 ## Índice
 
 - [Qué hace](#qué-hace)
+- [Mini-aplicaciones](#mini-aplicaciones)
+- [Visor de PDF](#visor-de-pdf)
 - [Gestos](#gestos)
 - [Permisos y por qué](#permisos-y-por-qué)
 - [Instalación](#instalación)
@@ -117,6 +119,8 @@ demás y todos siguen visibles sobre cualquier app.
 | **Texto** | Texto copiado en cualquier app | Se copia al portapapeles |
 | **Color** | Un color copiado en formato CSS: `#29B8DB`, `rgb(41,184,219)`, `41, 184, 219`, `orange`… | Se copia el HEX |
 | **Archivo** | Cualquier documento compartido a PixPin desde otra app | Se abre con la app que corresponda |
+| **Tabla** | Un rango copiado de una hoja de cálculo, de una web o de un PDF | Se copia el texto |
+| **Mini-app** | Una [palabra mágica](#mini-aplicaciones) pineada a solas | Depende de cuál |
 
 Además de eso:
 
@@ -148,7 +152,18 @@ Además de eso:
 - **Markdown en los pines de texto**: títulos, negrita, cursiva, tachado, código en línea y en
   bloque, listas con viñeta y numeradas, citas, reglas y enlaces. Siempre activo, porque el
   texto plano no lleva marcas y se ve igual. Lo que se copia al tocar el pin sigue siendo el
-  original con sus marcas, no lo formateado. Los enlaces se ven pero no se tocan.
+  original con sus marcas, no lo formateado. Un toque sobre un enlace lo abre en el
+  navegador; en cualquier otro sitio del pin, copia.
+- **Editar en el propio pin**: el lápiz de la barra abre el texto para escribir, con una
+  barrita abajo —título · negrita · cursiva · tachado · código · viñeta— que pone y quita
+  las marcas sobre lo seleccionado. Se escribe el Markdown en crudo, que es lo que se
+  guarda y lo que se copia. También editan así las listas, las cuentas y las tablas: sus
+  ítems son las líneas.
+- **Pastilla de desplazamiento** a caballo sobre el borde derecho, que solo aparece cuando
+  hay algo que desplazar.
+- **Tablas del portapapeles**: un rango copiado de una hoja de cálculo se reconoce y se
+  pinta alineado, con la cabecera separada. Se detectan columnas por tabulador, por barra
+  vertical y por espacios, porque cada origen usa el suyo.
 - **Prioridad**: cada pin nace sin prioridad y se alterna con una pulsación larga sobre su
   nombre en la lista. Solo hay dos estados a propósito: cinco etiquetas eran cuatro de más.
 - **Pegatinas**: un emoji pegado en la esquina del pin, torcido y desbordando el recuadro,
@@ -158,6 +173,41 @@ Además de eso:
 - **Sobreviven al reinicio** del teléfono, con su posición, tamaño y opacidad.
 - Los pines pueden salirse de los bordes de la pantalla, pero nunca del todo: siempre
   queda un trozo agarrable.
+
+### Mini-aplicaciones
+
+Herramientas que se abren **copiando una palabra y pineándola**. Nada de menús: la palabra
+es el comando.
+
+| Palabras | Qué abre | Cómo se usa |
+|---|---|---|
+| `time` · `timer` · `pomodoro` | Reloj y cuenta atrás | La pegatina de emoji hace de mando: **5 · 15 · 30 · 60** minutos |
+| `crono` · `cronómetro` · `stopwatch` | Cronómetro con décimas | Toque: marcha y pausa · doble toque: a cero |
+| `todo` · `compras` · `tareas` | Lista con casillas | Toque en una fila la marca · el lápiz añade ítems |
+| `count` · `contador` | Contador | Toque: +1 · doble toque: −1 |
+| `gastos` · `cuentas` · `money` | Libro de cuentas | `-250 Compra` en rojo, `+1000 Sueldo` en verde, con total |
+| `board` · `pizarra` | Pizarra para dibujar | Cuatro fondos y pauta de cuadrícula, rayas, columnas o puntos |
+
+Funcionan en mayúsculas, minúsculas o mezcla. **La palabra tiene que ir sola**: «el time es
+oro» sigue dando un pin de texto normal. Cada palabra mágica es una palabra que dejas de
+poder pinear como texto, y eso hay que gastarlo con cuidado.
+
+La pizarra no es un tipo de pin aparte: es un pin de imagen con el lienzo generado, así que
+hereda el dibujo a mano, el zoom, las anotaciones re-editables y la exportación sin nada
+propio.
+
+### Visor de PDF
+
+Un pin de PDF ofrece, en su pulsación larga, una rejilla con las miniaturas de todas sus
+páginas. Tocar una la extrae como **pin de imagen normal**, con su zoom, sus anotaciones y
+su pegatina; «Todas» saca las primeras veinte de una tacada.
+
+Las miniaturas se dibujan bajo demanda y pequeñas: un PDF de doscientas páginas renderizado
+entero de golpe se lleva la memoria por delante. Y el tope de veinte no es pereza —doscientas
+páginas serían doscientas ventanas overlay—.
+
+Usa `PdfRenderer`, que viene en el propio Android: **cero dependencias**. Word, Excel y CAD
+no tienen equivalente en el sistema y por eso no están.
 
 ### Guardar, copiar y compartir
 
@@ -171,8 +221,12 @@ un pin, la versión con lo dibujado también se guarda sola.
 - **Informe de fallo**: si la app se cierra de forma inesperada, guarda la traza y la
   pantalla principal ofrece compartirla. No hace falta cable ni `adb`.
 - **Modo seguro**: mientras haya un informe sin revisar, PixPin no se activa sola al
-  reiniciar el móvil, para que un fallo al crear una ventana flotante no pueda dejar la
-  app imposible de abrir.
+  reiniciar el móvil **ni restaura los pines guardados**. Un pin que revienta al dibujarse
+  dejaba la app inservible para siempre: cascaba, quedaba guardado tal cual, y al abrir se
+  volvía a crear y a cascar, sin forma de entrar ni siquiera para mandar el informe. No se
+  borra nada: los pines vuelven al descartar el informe desde la pantalla principal.
+- **La bola siempre vuelve**: pulsar «Comenzar» la devuelve aunque se haya quedado oculta
+  por una captura que no llegó a terminar.
 
 ---
 
@@ -184,12 +238,17 @@ Toda la interacción con un pin, sin menús:
 |---|---|
 | Arrastrar | Mover el pin |
 | Arrastrar sobre la bola | Minimizar en burbuja aparcada junto a ella |
-| Arrastrar la esquina inferior derecha (pin de texto) | **Redimensionar el cuadro**: ancho y alto, con scroll si el texto no cabe |
+| Arrastrar la esquina inferior derecha (texto, lista, cuentas, tabla) | **Redimensionar el cuadro**: ancho y alto, con scroll si no cabe |
+| Arrastrar la pastilla del borde derecho | Desplazar el contenido |
 | Pellizcar | Escalar, con el punto entre los dedos clavado en su sitio |
 | Dos dedos arriba/abajo | Opacidad en vivo |
-| Toque | Copiar (imagen, texto, color) o abrir (archivo) |
-| Doble toque | Minimizar en burbuja / restaurar |
-| Pulsación larga | Barra de acciones: toques a través · **dibujar encima** · **pegatina** · guardar · cerrar |
+| Toque | Copiar (imagen, texto, color), abrir (archivo, enlace) o actuar según la mini-app |
+| Doble toque | Minimizar en burbuja / restaurar. En contador y cronómetro, su propia acción |
+| Pulsación larga | Barra de acciones: toques a través · dibujar · **editar** · **PDF** · **pizarra** · pegatina · guardar · cerrar |
+
+Los botones de la barra aparecen **según el tipo de pin**: el lápiz de dibujo solo en
+imágenes, el de editar solo en los que se escriben, el de PDF solo en PDFs y la paleta solo
+en pizarras.
 
 En la lista de pines:
 
@@ -306,12 +365,26 @@ com.forge.pixpin/
 | `SelectionGeometry` | Matemática pura del recorte (anclas, esquinas, límites) |
 | `ScrollMatcher` | Matemática pura del cosido: resume cada fila en una firma y busca el desplazamiento entre fotogramas, rechazando lo ambiguo |
 | `ScrollStitcher` | Guarda solo las tiras nuevas de cada fotograma y las junta al terminar |
+| `Markdown` | Intérprete propio de un subconjunto de Markdown, en dos niveles: bloques e inline. Devuelve el texto ya sin marcas más los tramos que lo decoran |
+| `MarkdownEdit` | Aritmética de índices al poner y quitar marcas sobre la selección |
+| `MagicWord` | Qué palabra abre qué mini-aplicación, y la regla de que tenga que ir sola |
+| `TableData` | Detección de tablas: prueba varios separadores y se queda con la rejilla más coherente |
+| `Ledger` | Interpretación y suma del libro de cuentas |
+| `TextBoxSize` | Límites del cuadro de texto al estirarlo por la esquina |
+| `PinChrome` | Hueco que la ventana le deja a lo que se dibuja fuera del recuadro: sombra y pegatina |
+| `BallState` | Los tres estados de la bola. El tercero —puesta pero oculta— era el que la dejaba desaparecida sin vuelta |
+| `PdfDoc` | Lectura de PDFs con `PdfRenderer`, sin dependencias |
 
 La lógica delicada está extraída en objetos puros (`PinZoom`, `PinGroups`,
 `SelectionGeometry`, `ContentClassifier`, `AnnotationGeometry`, `UndoStack`,
-`StrokeSmoothing`, `ScrollMatcher`) precisamente para poder probarla sin dispositivo. El
-resto se cubre con Robolectric, que en los tests del cosido corre en modo gráfico nativo
-para trabajar con píxeles de verdad.
+`StrokeSmoothing`, `ScrollMatcher`, `Markdown`, `MarkdownEdit`, `MagicWord`, `TableData`,
+`Ledger`, `TextBoxSize`, `PinChrome`, `BallState`) precisamente para poder probarla sin
+dispositivo: son **190 pruebas** que corren en la JVM en menos de un minuto. El resto se
+cubre con Robolectric, que en los tests del cosido corre en modo gráfico nativo para
+trabajar con píxeles de verdad.
+
+Lo que queda fuera de las pruebas es todo lo que se ve y todo lo que se toca: composición,
+sombras, ventanas overlay y reparto de gestos solo se validan en un dispositivo real.
 
 ### Flujo de una captura
 
@@ -398,9 +471,24 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 | ✅ **1.5** | Motor de trazo para lápiz óptico (presión, rechazo de palma, suavizado), anotar sobre un pin flotante, zoom del pin hasta el borde de la pantalla, nº de serie, polilínea y foco |
 | ✅ **2** | Grupos de pines |
 | ✅ **3** | Captura con scroll |
-| **4** | OCR local con ML Kit, reconocimiento de QR, traducción, grabación en GIF/MP4 |
+| ✅ **4** | Cuadro de texto redimensionable, Markdown con enlaces, edición en el pin, prioridad, pegatinas de emoji y sombra con color de grupo |
+| ✅ **5** | Mini-aplicaciones por palabra mágica, tablas del portapapeles y visor de PDF |
+| **6** | OCR local con ML Kit, reconocimiento de QR, traducción, grabación en GIF/MP4 |
 
 Descartados a propósito: pin de fórmulas LaTeX, motor de scripts y sincronización en la nube.
+
+Estudiados y **descartados por lo que costarían frente a lo que dan**:
+
+- **Word, Excel y AutoCAD como el PDF.** El visor de PDF existe porque `PdfRenderer` viene
+  en Android. Para esos formatos no hay equivalente: harían falta librerías grandes, y DWG
+  es binario propietario. Lo viable sería extraer su contenido —DOCX y XLSX son ZIP con XML
+  dentro— y mostrarlo como texto o tabla, sin maquetado.
+- **SVG.** Es donde el zoom más luciría, pero necesita una dependencia externa; sería la
+  primera del proyecto.
+- **Historial del portapapeles.** Android 10+ prohíbe leerlo en segundo plano, así que solo
+  podría registrar lo que pase por PixPin — que es el historial que ya hay.
+- **Buscador en la lista de pines.** Queda a medias: el texto está en los recursos y el
+  campo no se llegó a construir.
 
 ---
 
@@ -408,6 +496,10 @@ Descartados a propósito: pin de fórmulas LaTeX, motor de scripts y sincronizac
 
 - [`docs/superpowers/specs/2026-07-26-pixpin-android-design.md`](docs/superpowers/specs/2026-07-26-pixpin-android-design.md) — diseño original y decisiones de producto
 - [`docs/superpowers/specs/2026-07-27-correcciones-estabilidad-fluidez.md`](docs/superpowers/specs/2026-07-27-correcciones-estabilidad-fluidez.md) — diagnóstico de estabilidad y fluidez
+- [`docs/superpowers/specs/2026-07-28-anotacion-grupos-scroll-design.md`](docs/superpowers/specs/2026-07-28-anotacion-grupos-scroll-design.md) — motor de trazo, anotación sobre el pin, grupos y captura con scroll
+- [`docs/superpowers/specs/2026-07-30-texto-prioridad-sticker-design.md`](docs/superpowers/specs/2026-07-30-texto-prioridad-sticker-design.md) — cuadro de texto, prioridad binaria y pegatinas
+- [`docs/superpowers/specs/2026-08-01-markdown-pellizco-sombra-design.md`](docs/superpowers/specs/2026-08-01-markdown-pellizco-sombra-design.md) — Markdown, pellizco proporcional y sombra en vez de marco
+- [`docs/superpowers/plans/2026-07-30-texto-prioridad-sticker.md`](docs/superpowers/plans/2026-07-30-texto-prioridad-sticker.md) — plan de implementación de esa tanda
 
 ---
 
