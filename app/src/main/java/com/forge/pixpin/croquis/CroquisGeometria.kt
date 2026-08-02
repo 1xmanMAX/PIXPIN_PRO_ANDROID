@@ -2,7 +2,9 @@ package com.forge.pixpin.croquis
 
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan
 import kotlin.math.atan2
+import kotlin.math.tan
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.round
@@ -38,6 +40,117 @@ object CroquisGeometria {
 
     /** Distancia euclídea entre dos puntos. */
     fun distancia(a: P, b: P): Double = hypot(b.x - a.x, b.y - a.y)
+
+    /** Ángulo de la dirección a→b respecto a la horizontal, en grados. */
+    fun gradosDe(a: P, b: P): Double =
+        Math.toDegrees(atan2(b.y - a.y, b.x - a.x))
+
+    /** Punto a [longitudM] de [desde] en la dirección [grados]. */
+    fun desdePolar(desde: P, longitudM: Double, grados: Double): P {
+        val r = Math.toRadians(grados)
+        return P(desde.x + longitudM * cos(r), desde.y + longitudM * sin(r))
+    }
+
+    /**
+     * Pendiente en tanto por ciento, que es como se habla de un desnivel en
+     * obra: el 100 % son 45°, no la vertical.
+     */
+    fun gradosAPorcentaje(grados: Double): Double = tan(Math.toRadians(grados)) * 100.0
+
+    fun porcentajeAGrados(porcentaje: Double): Double =
+        Math.toDegrees(atan(porcentaje / 100.0))
+
+    /**
+     * Dónde se cruzan las **rectas infinitas** que pasan por cada par de
+     * puntos, o null si son paralelas.
+     *
+     * Infinitas y no segmentos a propósito: extender necesita el corte de algo
+     * que todavía no llega, y recortar decide aparte si el corte le sirve.
+     */
+    fun corteDeRectas(a1: P, a2: P, b1: P, b2: P): P? {
+        val d1x = a2.x - a1.x
+        val d1y = a2.y - a1.y
+        val d2x = b2.x - b1.x
+        val d2y = b2.y - b1.y
+        val den = d1x * d2y - d1y * d2x
+        if (abs(den) < 1e-12) return null
+        val t = ((b1.x - a1.x) * d2y - (b1.y - a1.y) * d2x) / den
+        return P(a1.x + d1x * t, a1.y + d1y * t)
+    }
+
+    /**
+     * Alarga [linea] hasta la recta de [contra], moviendo **el extremo más
+     * cercano** al punto de corte y dejando el otro donde estaba.
+     */
+    fun extender(linea: Entidad.Linea, contra: Entidad.Linea): Entidad.Linea? {
+        val corte = corteDeRectas(linea.a, linea.b, contra.a, contra.b) ?: return null
+        return if (distancia(linea.a, corte) <= distancia(linea.b, corte)) {
+            linea.copy(a = corte)
+        } else {
+            linea.copy(b = corte)
+        }
+    }
+
+    /**
+     * Corta [linea] por donde la cruza [cuchilla] y **tira el trozo del lado
+     * donde se tocó**, que es como funciona el recorte de un CAD: se señala lo
+     * que sobra, no lo que se queda.
+     *
+     * Devuelve null si el corte no cae dentro del segmento: ahí no hay nada que
+     * recortar y alterarlo sería una sorpresa desagradable.
+     */
+    fun recortar(linea: Entidad.Linea, cuchilla: Entidad.Linea, tocado: P): Entidad.Linea? {
+        val corte = corteDeRectas(linea.a, linea.b, cuchilla.a, cuchilla.b) ?: return null
+        val tCorte = parametroEn(linea, corte) ?: return null
+        if (tCorte <= 1e-9 || tCorte >= 1.0 - 1e-9) return null
+        val tTocado = parametroEn(linea, tocado) ?: return null
+        return if (tTocado > tCorte) linea.copy(b = corte) else linea.copy(a = corte)
+    }
+
+    /**
+     * Distancia de [p] al **segmento**, no a su recta infinita.
+     *
+     * La diferencia importa al elegir con el dedo: tocando más allá del final
+     * de una línea, la perpendicular a su recta puede ser diminuta y la línea
+     * quedar a metros. Lo que se siente es la distancia al trozo dibujado.
+     */
+    fun distanciaA(linea: Entidad.Linea, p: P): Double {
+        val t = (parametroEn(linea, p) ?: return distancia(linea.a, p)).coerceIn(0.0, 1.0)
+        val sobre = P(
+            linea.a.x + (linea.b.x - linea.a.x) * t,
+            linea.a.y + (linea.b.y - linea.a.y) * t
+        )
+        return distancia(sobre, p)
+    }
+
+    /**
+     * Índice de la línea más cercana a [p] dentro de [toleranciaM], o null si
+     * no hay ninguna a tiro. Solo mira líneas: recortar y extender no tienen
+     * sentido sobre un círculo o un texto.
+     */
+    fun lineaMasCercana(croquis: Croquis, p: P, toleranciaM: Double): Int? {
+        var mejor: Int? = null
+        var mejorD = Double.MAX_VALUE
+        croquis.entidades.forEachIndexed { i, e ->
+            if (e is Entidad.Linea) {
+                val d = distanciaA(e, p)
+                if (d <= toleranciaM && d < mejorD) {
+                    mejorD = d
+                    mejor = i
+                }
+            }
+        }
+        return mejor
+    }
+
+    /** Dónde cae [p] sobre la línea, con 0 en su principio y 1 en su final. */
+    private fun parametroEn(linea: Entidad.Linea, p: P): Double? {
+        val dx = linea.b.x - linea.a.x
+        val dy = linea.b.y - linea.a.y
+        val largo2 = dx * dx + dy * dy
+        if (largo2 < 1e-18) return null
+        return ((p.x - linea.a.x) * dx + (p.y - linea.a.y) * dy) / largo2
+    }
 
     /**
      * Imanta [punto] al extremo más cercano que esté a menos de [toleranciaM],

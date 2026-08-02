@@ -63,7 +63,20 @@ import kotlin.math.hypot
 private enum class Modo { DIBUJAR, MEDIR, CALIBRAR }
 
 private enum class Herramienta(val etiqueta: String) {
-    LINEA("Línea"), POLILINEA("Polilínea"), RECT("Rect"), CIRCULO("Círculo"), COTA("Cota")
+    LINEA("Línea"),
+    POLILINEA("Polilínea"),
+    RECT("Rect"),
+    CIRCULO("Círculo"),
+    COTA("Cota"),
+
+    /** Se toca la línea que corta y luego el trozo que sobra. */
+    RECORTAR("Recortar"),
+
+    /** Se toca la línea a alargar y luego hasta dónde. */
+    EXTENDER("Extender");
+
+    /** Las que trabajan sobre líneas ya dibujadas, no poniendo puntos. */
+    val esEdicion: Boolean get() = this == RECORTAR || this == EXTENDER
 }
 
 /** Cuál de los dos puntos en juego se está arrastrando. */
@@ -145,6 +158,13 @@ class CroquisEditorActivity : ComponentActivity() {
         var agarre by remember { mutableStateOf(Agarre.NINGUNO) }
         var imantadoEn by remember { mutableStateOf<P?>(null) }
         var campo by remember { mutableStateOf("") }
+        var campoAngulo by remember { mutableStateOf("") }
+        /** El ángulo se teclea como pendiente en %, que es como se habla en obra. */
+        var enPorcentaje by remember { mutableStateOf(false) }
+        /** Vértices de la polilínea en curso: encadena hasta que se cierra. */
+        var cadena by remember { mutableStateOf<List<P>>(emptyList()) }
+        /** Primera línea señalada al recortar o extender. */
+        var señalada by remember { mutableStateOf<Int?>(null) }
         var aviso by remember { mutableStateOf<String?>(null) }
 
         var ancho by remember { mutableStateOf(1) }
@@ -174,7 +194,72 @@ class CroquisEditorActivity : ComponentActivity() {
         }
 
         fun limpiar() {
-            puntoA = null; puntoB = null; campo = ""; imantadoEn = null; agarre = Agarre.NINGUNO
+            puntoA = null; puntoB = null; campo = ""; campoAngulo = ""
+            imantadoEn = null; agarre = Agarre.NINGUNO; señalada = null
+        }
+
+        /**
+         * Qué hace un toque, según la herramienta.
+         *
+         * Las de edición trabajan sobre líneas ya dibujadas y no ponen puntos;
+         * la polilínea encadena; el resto ponen los dos puntos de siempre.
+         */
+        fun tocar(bruto: P) {
+            val tolerancia = 30.0 * densidad / vista.pixelsPorMetro
+
+            if (herramienta.esEdicion) {
+                val i = CroquisGeometria.lineaMasCercana(croquis, bruto, tolerancia)
+                if (i == null) { aviso = "Ahí no hay ninguna línea"; return }
+                val primera = señalada
+                if (primera == null) {
+                    señalada = i
+                    aviso = if (herramienta == Herramienta.RECORTAR)
+                        "Ahora toca el trozo que sobra" else "Ahora toca hasta dónde alargar"
+                    return
+                }
+                if (primera == i) { aviso = "Tiene que ser otra línea"; return }
+                val lineas = croquis.entidades.toMutableList()
+                if (herramienta == Herramienta.RECORTAR) {
+                    // La primera señalada es la cuchilla; la segunda, la que se
+                    // corta — y el punto tocado dice qué mitad sobra.
+                    val cuchilla = lineas[primera] as Entidad.Linea
+                    val victima = lineas[i] as Entidad.Linea
+                    val r = CroquisGeometria.recortar(victima, cuchilla, bruto)
+                    if (r == null) { aviso = "Esas dos no se cruzan"; señalada = null; return }
+                    lineas[i] = r
+                } else {
+                    val quien = lineas[primera] as Entidad.Linea
+                    val hasta = lineas[i] as Entidad.Linea
+                    val r = CroquisGeometria.extender(quien, hasta)
+                    if (r == null) { aviso = "Son paralelas: nunca se encuentran"; señalada = null; return }
+                    lineas[primera] = r
+                }
+                croquis = croquis.copy(entidades = lineas)
+                alGuardar(croquis)
+                señalada = null
+                aviso = null
+                return
+            }
+
+            if (herramienta == Herramienta.POLILINEA) {
+                val anterior = cadena.lastOrNull()
+                cadena = cadena + colocar(bruto, anterior)
+                return
+            }
+
+            if (puntoA == null) puntoA = colocar(bruto, null)
+            else if (puntoB == null) puntoB = colocar(bruto, puntoA)
+        }
+
+        /** Cierra la polilínea en curso y la deja dibujada. */
+        fun terminarCadena(cerrada: Boolean) {
+            if (cadena.size >= 2) {
+                croquis = croquis.copy(
+                    entidades = croquis.entidades + Entidad.Polilinea(cadena, cerrada)
+                )
+                alGuardar(croquis)
+            }
+            cadena = emptyList()
         }
 
         fun confirmar() {
@@ -199,9 +284,19 @@ class CroquisEditorActivity : ComponentActivity() {
                 }
 
                 Modo.DIBUJAR -> {
+                    // Longitud y ángulo son independientes: se puede fijar solo
+                    // una. El ángulo se teclea en grados o en pendiente %, según
+                    // el conmutador.
                     val metros = campo.replace(',', '.').toDoubleOrNull()
+                        ?: CroquisGeometria.distancia(a, b)
+                    val gradosTecleados = campoAngulo.replace(',', '.').toDoubleOrNull()
+                    val grados = when {
+                        gradosTecleados == null -> CroquisGeometria.gradosDe(a, b)
+                        enPorcentaje -> CroquisGeometria.porcentajeAGrados(gradosTecleados)
+                        else -> gradosTecleados
+                    }
                     val destino =
-                        if (metros != null) CroquisGeometria.conLongitud(a, b, metros) ?: b else b
+                        if (metros > 0) CroquisGeometria.desdePolar(a, metros, grados) else b
                     val nueva: Entidad = when (herramienta) {
                         Herramienta.LINEA -> Entidad.Linea(a, destino)
                         Herramienta.POLILINEA -> Entidad.Polilinea(listOf(a, destino))
@@ -209,6 +304,9 @@ class CroquisEditorActivity : ComponentActivity() {
                         Herramienta.CIRCULO ->
                             Entidad.Circulo(a, CroquisGeometria.distancia(a, destino))
                         Herramienta.COTA -> Entidad.Cota(a, destino, desplazamiento = 0.4)
+                        // Recortar y extender actúan al tocar líneas: nunca
+                        // llegan aquí con dos puntos puestos.
+                        Herramienta.RECORTAR, Herramienta.EXTENDER -> return
                     }
                     croquis = croquis.copy(entidades = croquis.entidades + nueva)
                     alGuardar(croquis)
@@ -358,11 +456,11 @@ class CroquisEditorActivity : ComponentActivity() {
 
                             // Sin desplazamiento, era un toque: coloca punto.
                             if (!movido && !conDosDedos) {
-                                val bruto = CroquisGeometria.aMundo(
-                                    Px(origen.x, origen.y), vista, ancho, alto
+                                tocar(
+                                    CroquisGeometria.aMundo(
+                                        Px(origen.x, origen.y), vista, ancho, alto
+                                    )
                                 )
-                                if (puntoA == null) puntoA = colocar(bruto, null)
-                                else if (puntoB == null) puntoB = colocar(bruto, puntoA)
                             }
                         }
                     }
@@ -376,7 +474,8 @@ class CroquisEditorActivity : ComponentActivity() {
                         dibujarHoja(c, hoja, vista, ancho, alto)
                         CroquisRenderer.dibujar(c, croquis, vista, ancho, alto, fondo, AColor.BLACK)
                         dibujarPendiente(
-                            c, puntoA, puntoB, imantadoEn, vista, ancho, alto, densidad
+                            c, puntoA, puntoB, cadena, señalada, croquis, imantadoEn,
+                            vista, ancho, alto, densidad
                         )
                     }
                 }
@@ -384,14 +483,22 @@ class CroquisEditorActivity : ComponentActivity() {
 
             BarraInferior(
                 modo = modo,
+                herramienta = herramienta,
                 puntoA = puntoA,
                 puntoB = puntoB,
+                vertices = cadena.size,
                 decimales = croquis.decimales,
                 campo = campo,
+                campoAngulo = campoAngulo,
+                enPorcentaje = enPorcentaje,
                 aviso = aviso,
                 alEscribir = { campo = it },
+                alEscribirAngulo = { campoAngulo = it },
+                alCambiarUnidadAngulo = { enPorcentaje = !enPorcentaje; campoAngulo = "" },
                 alConfirmar = { confirmar() },
-                alCancelar = { limpiar(); aviso = null },
+                alCancelar = { limpiar(); cadena = emptyList(); aviso = null },
+                alCerrarCadena = { terminarCadena(true) },
+                alTerminarCadena = { terminarCadena(false) },
                 alPdf = { exportar(croquis, true) { aviso = it } },
                 alJpg = { exportar(croquis, false) { aviso = it } }
             )
@@ -445,9 +552,25 @@ private fun dibujarHoja(
 /** Lo que está a medio poner: en azul, porque aún no es parte del croquis. */
 private fun dibujarPendiente(
     c: android.graphics.Canvas,
-    a: P?, b: P?, iman: P?,
+    a: P?, b: P?,
+    cadena: List<P>,
+    señalada: Int?,
+    croquis: Croquis,
+    iman: P?,
     vista: Vista, ancho: Int, alto: Int, densidad: Float
 ) {
+    // La línea señalada para recortar o extender, resaltada en naranja.
+    señalada?.let { i ->
+        (croquis.entidades.getOrNull(i) as? Entidad.Linea)?.let { l ->
+            val pa = CroquisGeometria.aPantalla(l.a, vista, ancho, alto)
+            val pb = CroquisGeometria.aPantalla(l.b, vista, ancho, alto)
+            c.drawLine(pa.x, pa.y, pb.x, pb.y, APaint(APaint.ANTI_ALIAS_FLAG).apply {
+                color = AColor.rgb(255, 145, 0)
+                strokeWidth = 5f * densidad / 2f
+                style = APaint.Style.STROKE
+            })
+        }
+    }
     val azul = APaint(APaint.ANTI_ALIAS_FLAG).apply {
         color = AColor.rgb(0, 132, 255); strokeWidth = 3f * densidad / 2f
     }
@@ -464,6 +587,16 @@ private fun dibujarPendiente(
         val pb = CroquisGeometria.aPantalla(b, vista, ancho, alto)
         c.drawLine(pa.x, pa.y, pb.x, pb.y, azul.apply { style = APaint.Style.STROKE })
     }
+    // La polilínea en curso, con un nodo por vértice puesto.
+    if (cadena.size >= 2) {
+        for (i in 0 until cadena.size - 1) {
+            val p1 = CroquisGeometria.aPantalla(cadena[i], vista, ancho, alto)
+            val p2 = CroquisGeometria.aPantalla(cadena[i + 1], vista, ancho, alto)
+            c.drawLine(p1.x, p1.y, p2.x, p2.y, azul.apply { style = APaint.Style.STROKE })
+        }
+    }
+    cadena.forEach { nodo(it) }
+
     a?.let { nodo(it) }
     b?.let { nodo(it) }
 
@@ -523,7 +656,9 @@ private fun BarraSuperior(
             Chip("‹", false, alSalir)
             Chip("Dibujar", modo == Modo.DIBUJAR) { alModo(Modo.DIBUJAR) }
             Chip("Medir", modo == Modo.MEDIR) { alModo(Modo.MEDIR) }
-            if (hayFondo) Chip("Calibrar", modo == Modo.CALIBRAR) { alModo(Modo.CALIBRAR) }
+            // «Escalar» y no «Calibrar»: es la palabra que se busca cuando lo
+            // que se quiere es que la captura mida en metros de verdad.
+            if (hayFondo) Chip("⇔ Escalar", modo == Modo.CALIBRAR) { alModo(Modo.CALIBRAR) }
         }
         // Las herramientas solo existen en modo dibujar: en medir el dibujo
         // está deshabilitado de verdad, no escondido detrás de un if.
@@ -546,55 +681,94 @@ private fun BarraSuperior(
 @Composable
 private fun BarraInferior(
     modo: Modo,
+    herramienta: Herramienta,
     puntoA: P?,
     puntoB: P?,
+    vertices: Int,
     decimales: Int,
     campo: String,
+    campoAngulo: String,
+    enPorcentaje: Boolean,
     aviso: String?,
     alEscribir: (String) -> Unit,
+    alEscribirAngulo: (String) -> Unit,
+    alCambiarUnidadAngulo: () -> Unit,
     alConfirmar: () -> Unit,
     alCancelar: () -> Unit,
+    alCerrarCadena: () -> Unit,
+    alTerminarCadena: () -> Unit,
     alPdf: () -> Unit,
     alJpg: () -> Unit
 ) {
     val medida = if (puntoA != null && puntoB != null)
         CroquisGeometria.distancia(puntoA, puntoB) else null
-    val angulo = if (puntoA != null && puntoB != null)
+    val grados = if (puntoA != null && puntoB != null)
         Math.toDegrees(atan2(puntoB.y - puntoA.y, puntoB.x - puntoA.x)) else null
+    val enCurso = puntoA != null && puntoB != null && modo != Modo.MEDIR
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)) {
         Text(
             when {
                 aviso != null -> aviso
                 modo == Modo.MEDIR && medida != null ->
-                    "◄─► " + CroquisGeometria.formatear(medida, decimales)
+                    "◄─► " + CroquisGeometria.formatear(medida, decimales) +
+                        "   ∠ " + "%.1f°".format(grados) +
+                        "   ↗ " + "%.1f%%".format(CroquisGeometria.gradosAPorcentaje(grados!!))
                 modo == Modo.MEDIR -> "Toca dos puntos para medir"
                 modo == Modo.CALIBRAR && puntoA == null -> "Traza una medida que ya conozcas"
                 modo == Modo.CALIBRAR -> "Escribe cuánto mide de verdad"
+                herramienta.esEdicion -> "Toca una línea"
+                herramienta == Herramienta.POLILINEA ->
+                    if (vertices == 0) "Toca dónde empieza" else "$vertices vértices · sigue tocando"
                 puntoA == null -> "Toca dónde empieza"
                 medida == null -> "Toca dónde acaba"
                 else -> CroquisGeometria.formatear(medida, decimales) +
-                    "   ∠ " + "%.1f°".format(angulo) + "   ·  arrastra los puntos para ajustar"
+                    "   ∠ " + "%.1f°".format(grados) + "   ·  arrastra los puntos para ajustar"
             },
             color = Color(0xFFC9D2DC),
             fontSize = 12.sp
         )
 
-        if (puntoA != null && puntoB != null && modo != Modo.MEDIR) {
+        if (herramienta == Herramienta.POLILINEA && vertices >= 2 && modo == Modo.DIBUJAR) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Chip("Terminar", false, alTerminarCadena)
+                Chip("Cerrar", false, alCerrarCadena)
+                Chip("✕", false, alCancelar)
+            }
+        } else if (enCurso) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = campo,
                     onValueChange = alEscribir,
-                    placeholder = { Text("metros", fontSize = 12.sp) },
+                    placeholder = { Text("largo m", fontSize = 11.sp) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     textStyle = TextStyle(fontSize = 13.sp, color = Color.White),
-                    modifier = Modifier.width(112.dp).height(50.dp)
+                    modifier = Modifier.width(95.dp).height(50.dp)
                 )
+                if (modo != Modo.CALIBRAR) {
+                    OutlinedTextField(
+                        value = campoAngulo,
+                        onValueChange = alEscribirAngulo,
+                        placeholder = {
+                            Text(if (enPorcentaje) "pend %" else "áng °", fontSize = 11.sp)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        textStyle = TextStyle(fontSize = 13.sp, color = Color.White),
+                        modifier = Modifier.width(95.dp).height(50.dp)
+                    )
+                    // El mismo dato en las dos unidades con las que se habla:
+                    // grados en un plano, pendiente % en una rasante.
+                    Chip(if (enPorcentaje) "%" else "°", true, alCambiarUnidadAngulo)
+                }
                 Button(
                     onClick = alConfirmar,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(

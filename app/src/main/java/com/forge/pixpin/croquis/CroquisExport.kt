@@ -33,6 +33,12 @@ object CroquisExport {
     private const val METROS_POR_PUNTO = 0.0254 / 72.0
 
     /**
+     * `hojaA4` solo usa la vista cuando el croquis está vacío, y aquí un
+     * croquis vacío ya se ha descartado antes. Vale cualquiera.
+     */
+    private val VISTA_NEUTRA = Vista(P(0.0, 0.0), 1.0)
+
+    /**
      * Escribe el croquis como PDF en Descargas y devuelve su Uri, o null si no
      * hay nada que exportar o falla la escritura.
      */
@@ -44,12 +50,15 @@ object CroquisExport {
     ): Uri? {
         // Apaisado si el dibujo es más ancho que alto: encaja mejor y evita
         // exportar un plano largo en una hoja donde no cabe.
-        val caja = CroquisGeometria.extension(croquis) ?: return null
-        val apaisado = caja.ancho > caja.alto
+        // Se exporta LA HOJA que se ve enmarcada en el editor, no el contorno
+        // de lo dibujado: si no, lo que sale por la impresora no es lo que se
+        // encuadró en pantalla.
+        val hoja = CroquisGeometria.hojaA4(croquis, VISTA_NEUTRA, 1000, 1000) ?: return null
+        val apaisado = hoja.ancho > hoja.alto
         val ancho = if (apaisado) A4_ALTO else A4_ANCHO
         val alto = if (apaisado) A4_ANCHO else A4_ALTO
 
-        val vista = CroquisGeometria.vistaQueEncaja(croquis, ancho, alto, MARGEN) ?: return null
+        val vista = CroquisGeometria.vistaParaCaja(hoja, ancho, alto, MARGEN) ?: return null
 
         val doc = PdfDocument()
         return try {
@@ -119,12 +128,14 @@ object CroquisExport {
         anchoPx: Int = 2000,
         locale: Locale = Locale.getDefault()
     ): Bitmap? {
-        val caja = CroquisGeometria.extension(croquis) ?: return null
-        val proporcion = if (caja.ancho > 0) caja.alto / caja.ancho else 1.0
-        val altoPx = (anchoPx * proporcion).toInt().coerceIn(200, 6000)
-        val margen = anchoPx / 20
+        // Misma hoja que enseña el pin, para que lo copiado tenga **la misma
+        // forma** que lo que se estaba viendo. Antes se encuadraba el contorno
+        // del dibujo y la copia salía con otra proporción que el pin.
+        val hoja = CroquisGeometria.hojaA4(croquis, VISTA_NEUTRA, 1000, 1000) ?: return null
+        val altoPx = (anchoPx * hoja.alto / hoja.ancho).toInt().coerceIn(200, 6000)
+        val margen = anchoPx / 40
 
-        val vista = CroquisGeometria.vistaQueEncaja(croquis, anchoPx, altoPx, margen) ?: return null
+        val vista = CroquisGeometria.vistaParaCaja(hoja, anchoPx, altoPx, margen) ?: return null
         val bmp = Bitmap.createBitmap(anchoPx, altoPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         canvas.drawColor(Color.WHITE)
