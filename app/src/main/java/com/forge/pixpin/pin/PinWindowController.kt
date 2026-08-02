@@ -102,6 +102,8 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -1553,71 +1555,33 @@ class PinWindowController(
             // palabras cambiaban de línea, volvían y repetían, y el cuadro
             // vibraba. Escalando el dibujado ya compuesto no hay re-ajuste
             // ninguno que hacer.
-            Box(
-                Modifier
-                    // requiredWidth/Height y no width/height: estas IGNORAN lo
-                    // que imponga el padre.
-                    //
-                    // Con las normales había un lazo de realimentación que se
-                    // comía el pin: el contenido vive dentro de la ventana, así
-                    // que al alejar el zoom la ventana quedaba más pequeña que
-                    // el texto, el Box se medía recortado, esa medida recortada
-                    // pasaba a ser naturalW, la ventana encogía más, y vuelta a
-                    // empezar hasta desaparecer. Al acercar no ocurría porque
-                    // ahí la ventana sobra y nadie recorta nada: de ahí que
-                    // fallara en una sola dirección.
-                    .requiredWidth(s.textBoxWidth.dp)
-                    .then(
-                        if (s.textBoxHeight != null) {
-                            Modifier.requiredHeight(s.textBoxHeight.dp)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .graphicsLayer {
-                        scaleX = zoom
-                        scaleY = zoom
-                        // Desde la esquina superior izquierda: es la que la
-                        // ventana tiene clavada en su posición.
-                        transformOrigin = TransformOrigin(0f, 0f)
+            ScaledContent(
+                baseWidthPx = with(density) { s.textBoxWidth.dp.roundToPx() },
+                baseHeightPx = s.textBoxHeight?.let { with(density) { it.dp.roundToPx() } },
+                zoom = zoom,
+                onBaseMeasured = { w, h ->
+                    if (w != naturalW || h != naturalH) {
+                        naturalW = w
+                        naturalH = h
+                        applyContentSize()
                     }
-                    // El tamaño BASE medido de verdad: de él sale el tamaño
-                    // explícito de la ventana, y con tamaño explícito se acabó
-                    // el tope de ancho (una ventana WRAP_CONTENT no puede medir
-                    // más que la pantalla, y ahí el texto crecía hacia abajo).
-                    // El alto se mide UNA SOLA VEZ, la primera.
-                    //
-                    // Medirlo de continuo realimentaba: el tamaño de la ventana
-                    // sale de esta medida, y la medida sale de dentro de esa
-                    // misma ventana. Aunque las dos cuentas quieran dar lo
-                    // mismo, no redondean igual —una trunca píxeles al pasar de
-                    // dp, la otra los redondea—, así que cada pasada se comía un
-                    // píxel y el cuadro encogía solo, poco a poco. A partir de
-                    // aquí el tamaño lo manda el estado y nadie más.
-                    .onGloballyPositioned { coords ->
-                        if (naturalH > 0) return@onGloballyPositioned
-                        val h = coords.size.height
-                        val floor = with(density) { MIN_PIN_DP.dp.roundToPx() }
-                        if (h >= floor) {
-                            naturalW = with(density) { s.textBoxWidth.dp.roundToPx() }
-                            naturalH = h
-                            applyContentSize()
-                        }
-                    }
+                }
             ) {
-                if (editing.value) {
-                    TextEditor(s)
-                } else {
-                    MarkdownText(
-                        blocks = blocks,
-                        baseSizeSp = 14f,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(textScroll)
-                            .padding(14.dp),
-                        onLinks = { linkHits = it }
-                    )
-                    ScrollPip(textScroll)
+                Box {
+                    if (editing.value) {
+                        TextEditor(s)
+                    } else {
+                        MarkdownText(
+                            blocks = blocks,
+                            baseSizeSp = 14f,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(textScroll)
+                                .padding(14.dp),
+                            onLinks = { linkHits = it }
+                        )
+                        ScrollPip(textScroll)
+                    }
                 }
             }
             // El handle va FUERA de la capa escalada: es un control, no
@@ -1661,6 +1625,62 @@ class PinWindowController(
      * sería un adorno que estorba. Va dentro de la capa escalada a propósito:
      * así crece con el pellizco y sigue siendo agarrable con el pin grande.
      */
+    /**
+     * Mide el contenido a tamaño base y le dice al padre que ocupa ese tamaño
+     * **ya multiplicado por el zoom**.
+     *
+     * Es la pieza que quita las tres fuentes de verdad que traía el pin de
+     * texto. Antes el estado decía un tamaño, el contenido le reportaba otro al
+     * padre (el base, porque `graphicsLayer` no cambia la disposición) y en
+     * pantalla se dibujaba un tercero (el escalado). De ahí venía todo: el
+     * cuadro que encogía solo, y el redimensionador que movía el texto sin que
+     * la ventana lo siguiera.
+     *
+     * Las restricciones con las que se mide son EXACTAS y salen del estado, no
+     * del padre. Eso corta la realimentación de raíz —el padre ya no puede
+     * recortar al hijo— y evita medir con restricciones infinitas, que es lo
+     * que revienta en la fase de medida.
+     */
+    @Composable
+    private fun ScaledContent(
+        baseWidthPx: Int,
+        baseHeightPx: Int?,
+        zoom: Float,
+        onBaseMeasured: (Int, Int) -> Unit,
+        content: @Composable () -> Unit
+    ) {
+        Layout(content = content) { measurables, _ ->
+            val child = measurables.firstOrNull()
+                ?: return@Layout layout(0, 0) {}
+            val w = baseWidthPx.coerceAtLeast(1)
+            // El alto SIEMPRE con tope. Sin él queda en infinito, y un
+            // verticalScroll medido con alto infinito lanza IllegalStateException
+            // y se lleva la app por delante: es exactamente lo que pasaba con el
+            // wrapContentSize(unbounded) que había aquí antes. El tope es la
+            // pantalla, que a escala 1 es todo lo alto que un pin puede ser útil.
+            val maxH = context.resources.displayMetrics.heightPixels.coerceAtLeast(1)
+            val placeable = child.measure(
+                if (baseHeightPx != null) {
+                    Constraints.fixed(w, baseHeightPx.coerceIn(1, maxH))
+                } else {
+                    Constraints(minWidth = w, maxWidth = w, maxHeight = maxH)
+                }
+            )
+            onBaseMeasured(placeable.width, placeable.height)
+            val z = if (zoom > 0.01f) zoom else 1f
+            layout(
+                (placeable.width * z).toInt().coerceAtLeast(1),
+                (placeable.height * z).toInt().coerceAtLeast(1)
+            ) {
+                placeable.placeWithLayer(0, 0) {
+                    scaleX = z
+                    scaleY = z
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+            }
+        }
+    }
+
     @Composable
     private fun BoxScope.ScrollPip(state: ScrollState) {
         val max = state.maxValue
