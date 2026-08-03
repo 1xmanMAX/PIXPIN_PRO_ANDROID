@@ -187,6 +187,7 @@ es el comando.
 | `count` · `contador` | Contador | Toque: +1 · doble toque: −1 |
 | `gastos` · `cuentas` · `money` | Libro de cuentas | `-250 Compra` en rojo, `+1000 Sueldo` en verde, con total |
 | `board` · `pizarra` | Pizarra para dibujar | Cuatro fondos y pauta de cuadrícula, rayas, columnas o puntos |
+| `croquis` · `cad` · `sketch` | Croquis acotado | Hoja con proporción de A4; el pin abre el editor a pantalla completa |
 
 Funcionan en mayúsculas, minúsculas o mezcla. **La palabra tiene que ir sola**: «el time es
 oro» sigue dando un pin de texto normal. Cada palabra mágica es una palabra que dejas de
@@ -208,6 +209,47 @@ páginas serían doscientas ventanas overlay—.
 
 Usa `PdfRenderer`, que viene en el propio Android: **cero dependencias**. Word, Excel y CAD
 no tienen equivalente en el sistema y por eso no están.
+
+### Croquis acotado
+
+Dibujar un plano pequeño con medidas reales, y medir sobre el plano de otro.
+
+**El mundo está en metros, no en píxeles**, y en `Double`. No es purismo: se midió un plano
+de topografía real y sus coordenadas UTM llegan a 8.240.708 m, donde un `Float` de 32 bits
+pierde alrededor de un metro. Un dibujo que se ve bien y mide mal es el peor fallo posible
+en una herramienta cuyo propósito es medir.
+
+**Dos puertas al mismo editor:**
+
+- La palabra `croquis` abre una hoja en blanco con proporción de A4.
+- El botón de escuadra de un **pin de imagen** abre esa misma hoja con la captura debajo.
+
+**Medir sobre una captura.** En obra no se lleva el DXF: se lleva la captura del plano que
+te mandaron. Se traza una línea sobre una medida conocida, se teclea cuánto mide, y a partir
+de ahí la imagen **es geometría**: medir sobre ella y medir sobre lo dibujado usan el mismo
+código. Una captura de pantalla es ortogonal por definición, así que no hay perspectiva que
+corregir y la calibración es exacta.
+
+| Herramienta | Qué hace |
+|---|---|
+| Línea · Polilínea · Rectángulo · Círculo | Dibujo. La polilínea encadena y sus vértices se arrastran antes de cerrarla |
+| **Cota** | Guarda sus dos puntos y **calcula** su cifra. Un número escrito a mano sobrevive a que muevas el extremo y se queda mintiendo |
+| **Recortar** | Corta una línea por donde la cruza otra y tira el trozo que tocas |
+| **Extender** | La alarga hasta encontrarse con otra, moviendo el extremo más cercano |
+| **Borrador** | Alcanza cada entidad por su **trazo**, no por su centro: un círculo se toca por el contorno |
+
+**Precisión.** Imantado a extremos —lo que hace que las líneas conecten de verdad y no
+«casi»—, orto para forzar horizontal o vertical, y **entrada numérica**: longitud y ángulo
+por separado, con el ángulo en grados o en **pendiente %**, que es como se habla de un
+desnivel en obra. Al teclear un número **manda el número y el dedo deja de contar**.
+
+**Modo medir**, con el dibujo deshabilitado de verdad: dos toques dan una distancia, cuantas
+veces haga falta, sin ensuciar el croquis.
+
+**Sale en PDF vectorial.** `PdfDocument` entrega un `Canvas`, así que el mismo renderizador
+que pinta la pantalla escribe geometría y texto de verdad en el documento: se amplía sin
+pixelar y se imprime a escala. El PDF lleva impresa la escala 1:N y la fecha, porque un
+croquis acotado que circula sin constancia de su escala engaña a quien lo recibe.
 
 ### Guardar, copiar y compartir
 
@@ -456,6 +498,10 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
   servicio, los pines desaparecen hasta volver a abrir la app. Excluir PixPin del ahorro
   de batería lo evita.
 - Aún **sin OCR, sin QR y sin grabación** de GIF/vídeo.
+- El **croquis acotado** está en uso pero sin verificar en dispositivo: su geometría tiene
+  pruebas, su interacción no. Ver la lista de lo que le queda, en el roadmap.
+- **No se leen DWG, RVT ni DXF.** Para medir sobre un plano ajeno se calibra su captura,
+  que es el camino que la fase 6 tomó a propósito.
 - La **captura con scroll** funciona cosiendo fotogramas, no con una API del sistema: en
   pantallas sin textura o con cabeceras fijas el resultado puede no ser perfecto.
 - El APK de depuración pesa ~65 MB porque incluye el paquete completo de iconos de
@@ -473,11 +519,30 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 | ✅ **3** | Captura con scroll |
 | ✅ **4** | Cuadro de texto redimensionable, Markdown con enlaces, edición en el pin, prioridad, pegatinas de emoji y sombra con color de grupo |
 | ✅ **5** | Mini-aplicaciones por palabra mágica, tablas del portapapeles y visor de PDF |
-| **6** | OCR local con ML Kit, reconocimiento de QR y traducción |
-| **7 — Vídeo** | Pin de vídeo que se reproduce en su sitio, rejilla de fotogramas, recorte por tiempo y grabación de pantalla |
-| **8 — Documentos y planos** | Contenido de DOCX, XLSX y PPTX como pin de texto o de tabla; planos DXF dibujados a vector con capas conmutables |
+| ✅ **6 — Croquis acotado** | Mundo en metros con `Double`, dibujo con imantado y entrada numérica, recortar y extender, cotas que calculan su cifra, medición sobre una captura calibrada y PDF vectorial |
+| **7** | OCR local con ML Kit, reconocimiento de QR y traducción |
+| **8 — Vídeo** | Pin de vídeo que se reproduce en su sitio, rejilla de fotogramas, recorte por tiempo y grabación de pantalla |
+| **9 — Documentos de oficina** | Contenido de DOCX, XLSX y PPTX como pin de texto o de tabla |
 
-### Fase 7 — Vídeo
+### Lo que le queda al croquis
+
+Está en uso pero no terminado. Por orden de lo que más se nota:
+
+- **Verificación en dispositivo.** La geometría tiene 249 pruebas en JVM, pero la interacción
+  —gestos, arrastre de puntos, teclado— solo se ha comprobado compilando. Es la deuda mayor.
+- **Deshacer no rehace**: quita la última entidad con un `dropLast` en vez de usar el
+  `UndoStack` que ya existe para las anotaciones.
+- **No hay herramienta de texto**, aunque `Entidad.Texto` existe en el modelo y se dibuja.
+- **No se pueden retocar entidades ya dibujadas**: mover un extremo o cambiarle el color
+  obliga a borrarla y rehacerla.
+- El **desplazamiento de la cota** está fijo en 0,4 m y su lado no se puede elegir.
+- El **origen de la captura de fondo** está fijo en (0, 0), así que dibujo e imagen pueden no
+  caer donde uno espera al mezclarlos.
+- Los **textos del editor son literales**, no `strings.xml`: no se traducen.
+- **Exportar a DXF** para devolver el croquis a un CAD de escritorio. Leer DXF sigue
+  descartado —ver más abajo—, pero escribirlo es mucho más fácil que leerlo.
+
+### Fase 8 — Vídeo
 
 El vídeo entra por donde ya entró el PDF: **lo que Android trae de fábrica**.
 
@@ -495,33 +560,33 @@ El vídeo entra por donde ya entró el PDF: **lo que Android trae de fábrica**.
 - **GIF.** Aquí sí hay que escribir el codificador: Android sabe leer GIF, no escribirlo.
   Queda al final de la fase por ser lo único que no regala la plataforma.
 
-### Fase 8 — Documentos de oficina y planos
+### Fase 9 — Documentos de oficina
 
-- **DOCX, XLSX y PPTX.** Son ZIP con XML dentro, y tanto `ZipInputStream` como
-  `XmlPullParser` vienen en Android. Se extrae el contenido y se pinta con el renderizador
-  de **Markdown y tablas que ya existe desde v0.3.0**: el documento se convierte en un pin
-  de texto y la hoja de cálculo en un pin de tabla. Es contenido, **no maquetado** — sin
-  saltos de página, sin estilos ni fórmulas. Un pin no es un visor de Office.
-- **Planos DXF.** DWG es binario, propietario y cerrado; queda fuera. Pero **DXF** es el
-  formato de intercambio que exporta el propio AutoCAD, es texto plano y está documentado
-  por Autodesk. Sus entidades de dibujo —`LINE`, `LWPOLYLINE`, `CIRCLE`, `ARC`, `TEXT`— se
-  parsean y se pintan en un `Canvas` corriente. **Es donde el zoom del pin más va a lucir**:
-  un plano vectorial aguanta el pellizco hasta el detalle, cosa que una captura no hace.
-- **Capas del DXF** como conmutadores en la pulsación larga, para apagar cotas o
-  sombreados y quedarse con la geometría.
-- Fuera de la primera pasada del DXF: splines, bloques con atributos, sombreados y cotas
-  asociativas. Entran solo si el resto se sostiene.
+**DOCX, XLSX y PPTX.** Son ZIP con XML dentro, y tanto `ZipInputStream` como
+`XmlPullParser` vienen en Android. Se extrae el contenido y se pinta con el renderizador
+de **Markdown y tablas que ya existe desde v0.3.0**: el documento se convierte en un pin
+de texto y la hoja de cálculo en un pin de tabla. Es contenido, **no maquetado** — sin
+saltos de página, sin estilos ni fórmulas. Un pin no es un visor de Office.
 
 Descartados a propósito: pin de fórmulas LaTeX, motor de scripts y sincronización en la nube.
 
 Estudiados y **descartados por lo que costarían frente a lo que dan**:
 
-- **DWG, y Office con su maquetado.** Renderizar esos formatos tal cual se ven pide
-  librerías grandes —y DWG es además binario propietario—. La fase 8 se queda a propósito
-  en el contenido, que es lo que se puede sacar con lo que ya trae el sistema.
+- **Leer DWG.** Binario, propietario, cerrado y comprimido desde 2004. Las tres únicas vías
+  chocan con el proyecto: LibreDWG es GPLv3 —incompatible con la licencia MIT—, el SDK de
+  ODA es comercial, y la nube de Autodesk está descartada por principio. Se barrieron **394
+  DWG del disco buscando la miniatura embebida y 0 la tenían accesible**, así que tampoco
+  hay atajo por ahí.
+- **Visor de DXF.** Viable, pero desproporcionado. Se convirtió un plano de topografía real
+  y salieron **59 MB, 133.102 entidades dentro de 345 bloques y 13.066 splines**: sin
+  expandir los `INSERT` se dibujaría el 1 % del plano, y las splines son las curvas de
+  nivel. Es un proyecto entero, y la **fase 6 resolvió la necesidad por otro lado** —medir
+  sobre la captura del plano, que es lo que uno lleva encima en obra—.
+- **Office con su maquetado.** Renderizarlo tal cual se ve pide librerías grandes. La fase 9
+  se queda a propósito en el contenido.
 - **SVG.** Es donde el zoom más luciría, pero necesita una dependencia externa; sería la
-  primera del proyecto. Si el lienzo vectorial del DXF sale bien, SVG vuelve a la mesa:
-  sería el mismo `Canvas` con otro parser.
+  primera del proyecto. El lienzo vectorial del croquis ya existe, así que sería ese mismo
+  `Canvas` con un parser delante.
 - **Historial del portapapeles.** Android 10+ prohíbe leerlo en segundo plano, así que solo
   podría registrar lo que pase por PixPin — que es el historial que ya hay.
 - **Buscador en la lista de pines.** Queda a medias: el texto está en los recursos y el
@@ -536,6 +601,7 @@ Estudiados y **descartados por lo que costarían frente a lo que dan**:
 - [`docs/superpowers/specs/2026-07-28-anotacion-grupos-scroll-design.md`](docs/superpowers/specs/2026-07-28-anotacion-grupos-scroll-design.md) — motor de trazo, anotación sobre el pin, grupos y captura con scroll
 - [`docs/superpowers/specs/2026-07-30-texto-prioridad-sticker-design.md`](docs/superpowers/specs/2026-07-30-texto-prioridad-sticker-design.md) — cuadro de texto, prioridad binaria y pegatinas
 - [`docs/superpowers/specs/2026-08-01-markdown-pellizco-sombra-design.md`](docs/superpowers/specs/2026-08-01-markdown-pellizco-sombra-design.md) — Markdown, pellizco proporcional y sombra en vez de marco
+- [`docs/superpowers/specs/2026-08-02-croquis-acotado-design.md`](docs/superpowers/specs/2026-08-02-croquis-acotado-design.md) — croquis acotado, con lo medido sobre DWG y DXF reales que descartó el visor de CAD
 - [`docs/superpowers/plans/2026-07-30-texto-prioridad-sticker.md`](docs/superpowers/plans/2026-07-30-texto-prioridad-sticker.md) — plan de implementación de esa tanda
 
 ---
