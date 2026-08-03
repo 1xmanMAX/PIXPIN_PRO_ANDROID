@@ -37,16 +37,25 @@ object CroquisRenderer {
     ) {
         val trazo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = TRAZO_PX
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
-            color = tinta
         }
-        val relleno = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = tinta }
+        val relleno = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // El texto de las cotas se mide **en proporción al destino**, no en
+        // píxeles fijos. Con un tamaño fijo, la misma cota salía diminuta en un
+        // bitmap grande y enorme —tapando las líneas— en uno pequeño: la copia
+        // no se parecía a lo que había en pantalla.
+        val textoPx = (minOf(anchoPx, altoPx) * 0.030f).coerceIn(9f, 72f)
+        val escalaTrazo = (minOf(anchoPx, altoPx) / 900f).coerceIn(0.5f, 4f)
 
         fondoBitmap?.let { dibujarFondo(canvas, it, croquis.fondo, vista, anchoPx, altoPx) }
 
         for (e in croquis.entidades) {
+            val color = if (e.estilo.usaTintaPorDefecto) tinta else e.estilo.colorArgb
+            trazo.color = color
+            trazo.strokeWidth = TRAZO_PX * escalaTrazo * e.estilo.grosor
+            relleno.color = color
             when (e) {
                 is Entidad.Linea -> {
                     val a = p(e.a, vista, anchoPx, altoPx)
@@ -87,7 +96,8 @@ object CroquisRenderer {
                 }
 
                 is Entidad.Cota -> dibujarCota(
-                    canvas, e, croquis.decimales, vista, anchoPx, altoPx, trazo, relleno, locale
+                    canvas, e, croquis.decimales, vista, anchoPx, altoPx,
+                    trazo, relleno, locale, textoPx, escalaTrazo
                 )
             }
         }
@@ -121,7 +131,9 @@ object CroquisRenderer {
         altoPx: Int,
         trazo: Paint,
         relleno: Paint,
-        locale: Locale
+        locale: Locale,
+        textoPx: Float,
+        escalaTrazo: Float
     ) {
         val a = p(cota.a, vista, anchoPx, altoPx)
         val b = p(cota.b, vista, anchoPx, altoPx)
@@ -141,11 +153,11 @@ object CroquisRenderer {
         // Líneas de referencia, del punto medido a su cota.
         canvas.drawLine(a.x, a.y, a2.x, a2.y, trazo)
         canvas.drawLine(b.x, b.y, b2.x, b2.y, trazo)
-        punta(canvas, a2, b2, trazo)
-        punta(canvas, b2, a2, trazo)
+        punta(canvas, a2, b2, trazo, escalaTrazo)
+        punta(canvas, b2, a2, trazo, escalaTrazo)
 
         val texto = CroquisGeometria.formatear(cota.medida(), decimales, locale)
-        relleno.textSize = 34f
+        relleno.textSize = textoPx
         val ancho = relleno.measureText(texto)
         canvas.save()
         canvas.translate((a2.x + b2.x) / 2f, (a2.y + b2.y) / 2f)
@@ -157,15 +169,16 @@ object CroquisRenderer {
         canvas.restore()
     }
 
-    private fun punta(canvas: Canvas, en: Px, hacia: Px, trazo: Paint) {
+    private fun punta(canvas: Canvas, en: Px, hacia: Px, trazo: Paint, escala: Float) {
         val ang = atan2((hacia.y - en.y).toDouble(), (hacia.x - en.x).toDouble())
         val abre = Math.toRadians(20.0)
+        val largo = PUNTA_PX * escala
         for (s in listOf(-1, 1)) {
             val a = ang + s * abre
             canvas.drawLine(
                 en.x, en.y,
-                (en.x + PUNTA_PX * cos(a)).toFloat(),
-                (en.y + PUNTA_PX * sin(a)).toFloat(),
+                (en.x + largo * cos(a)).toFloat(),
+                (en.y + largo * sin(a)).toFloat(),
                 trazo
             )
         }

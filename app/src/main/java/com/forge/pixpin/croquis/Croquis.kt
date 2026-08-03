@@ -37,23 +37,52 @@ data class Vista(val centro: P, val pixelsPorMetro: Double)
  * registrar subtipos a mano. La objeción anotada en `PinModels` iba contra el
  * polimorfismo abierto, que es otra cosa.
  */
+/**
+ * Cómo se pinta una entidad.
+ *
+ * Va en una clase aparte y con valores por defecto para que los croquis ya
+ * guardados en disco sigan leyéndose: un JSON sin `estilo` da el estilo normal.
+ * [grosor] es un multiplicador sobre el trazo base, no un ancho absoluto — así
+ * una línea gruesa lo sigue siendo con el dibujo diminuto o a pantalla completa.
+ */
+@Serializable
+data class Estilo(val grosor: Float = 1f, val colorArgb: Int = 0) {
+    /** El 0 significa «el color de la tinta», sea cual sea el fondo. */
+    val usaTintaPorDefecto: Boolean get() = colorArgb == 0
+}
+
 @Serializable
 sealed interface Entidad {
 
-    @Serializable
-    data class Linea(val a: P, val b: P) : Entidad
+    val estilo: Estilo
 
     @Serializable
-    data class Polilinea(val puntos: List<P>, val cerrada: Boolean = false) : Entidad
+    data class Linea(val a: P, val b: P, override val estilo: Estilo = Estilo()) : Entidad
 
     @Serializable
-    data class Rect(val a: P, val b: P) : Entidad
+    data class Polilinea(
+        val puntos: List<P>,
+        val cerrada: Boolean = false,
+        override val estilo: Estilo = Estilo()
+    ) : Entidad
 
     @Serializable
-    data class Circulo(val centro: P, val radio: Double) : Entidad
+    data class Rect(val a: P, val b: P, override val estilo: Estilo = Estilo()) : Entidad
 
     @Serializable
-    data class Texto(val en: P, val texto: String, val alturaM: Double) : Entidad
+    data class Circulo(
+        val centro: P,
+        val radio: Double,
+        override val estilo: Estilo = Estilo()
+    ) : Entidad
+
+    @Serializable
+    data class Texto(
+        val en: P,
+        val texto: String,
+        val alturaM: Double,
+        override val estilo: Estilo = Estilo()
+    ) : Entidad
 
     /**
      * Cota entre dos puntos.
@@ -64,7 +93,12 @@ sealed interface Entidad {
      * metros, con signo para elegir el lado.
      */
     @Serializable
-    data class Cota(val a: P, val b: P, val desplazamiento: Double = 0.0) : Entidad {
+    data class Cota(
+        val a: P,
+        val b: P,
+        val desplazamiento: Double = 0.0,
+        override val estilo: Estilo = Estilo()
+    ) : Entidad {
         fun medida(): Double = CroquisGeometria.distancia(a, b)
     }
 }

@@ -125,6 +125,40 @@ class CroquisEdicionTest {
         assertNull(CroquisGeometria.lineaMasCercana(croquis, P(5.0, 40.0), 2.0))
     }
 
+    // --- Borrador: elegir cualquier entidad, no solo lineas ---
+
+    @Test
+    fun `el borrador alcanza un circulo por su contorno, no por su centro`() {
+        val croquis = Croquis(entidades = listOf(Entidad.Circulo(P(0.0, 0.0), 5.0)))
+        // Tocando sobre el trazo del círculo: dentro de tolerancia.
+        assertEquals(0, CroquisGeometria.entidadMasCercana(croquis, P(5.2, 0.0), 1.0))
+        // Tocando en mitad del hueco: el círculo está a 5 m de ahí.
+        assertNull(CroquisGeometria.entidadMasCercana(croquis, P(0.0, 0.0), 1.0))
+    }
+
+    @Test
+    fun `el borrador elige la entidad mas cercana entre varias`() {
+        val croquis = Croquis(
+            entidades = listOf(
+                Entidad.Linea(P(0.0, 0.0), P(10.0, 0.0)),
+                Entidad.Linea(P(0.0, 20.0), P(10.0, 20.0)),
+                Entidad.Circulo(P(5.0, 9.0), 1.0)
+            )
+        )
+        assertEquals(2, CroquisGeometria.entidadMasCercana(croquis, P(5.0, 10.2), 1.0))
+        assertEquals(0, CroquisGeometria.entidadMasCercana(croquis, P(5.0, 0.5), 1.0))
+    }
+
+    @Test
+    fun `el borrador alcanza una polilinea por cualquiera de sus tramos`() {
+        val croquis = Croquis(
+            entidades = listOf(
+                Entidad.Polilinea(listOf(P(0.0, 0.0), P(10.0, 0.0), P(10.0, 10.0)))
+            )
+        )
+        assertEquals(0, CroquisGeometria.entidadMasCercana(croquis, P(10.3, 6.0), 1.0))
+    }
+
     // --- Pendiente en porcentaje, que es como se habla en obra ---
 
     @Test

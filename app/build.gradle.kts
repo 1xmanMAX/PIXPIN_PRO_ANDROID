@@ -12,8 +12,8 @@ android {
         applicationId = "com.forge.pixpin"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.4.5-croquis"
+        versionCode = 10
+        versionName = "0.4.6-croquis"
     }
 
     // Nota: `enableV1Signing` aquí NO surte efecto. Con minSdk 29 el plugin

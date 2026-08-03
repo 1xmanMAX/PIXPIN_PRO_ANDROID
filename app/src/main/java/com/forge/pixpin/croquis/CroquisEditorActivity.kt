@@ -51,7 +51,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,7 +91,6 @@ private enum class Herramienta(
 ) {
     LINEA("Línea", Icons.Filled.Remove),
     POLILINEA("Polilínea", Icons.Filled.Timeline),
-    RECT("Rectángulo", Icons.Filled.CropSquare),
     CIRCULO("Círculo", Icons.Filled.RadioButtonUnchecked),
     COTA("Cota", Icons.Filled.SwapHoriz),
 
@@ -96,10 +98,16 @@ private enum class Herramienta(
     RECORTAR("Recortar", Icons.Filled.ContentCut),
 
     /** Se toca la línea a alargar y luego hasta dónde. */
-    EXTENDER("Extender", Icons.Filled.OpenInFull);
+    EXTENDER("Extender", Icons.Filled.OpenInFull),
+
+    /** Un toque sobre algo dibujado y desaparece. */
+    BORRADOR("Borrar", Icons.Filled.AutoFixNormal);
 
     /** Las que trabajan sobre líneas ya dibujadas, no poniendo puntos. */
     val esEdicion: Boolean get() = this == RECORTAR || this == EXTENDER
+
+    /** Las que dibujan trazo, y por tanto tienen grosor y color. */
+    val pinta: Boolean get() = !esEdicion && this != BORRADOR
 }
 
 /**
@@ -193,6 +201,9 @@ class CroquisEditorActivity : ComponentActivity() {
         var modo by remember { mutableStateOf(Modo.DIBUJAR) }
         var herramienta by remember { mutableStateOf(Herramienta.LINEA) }
         var orto by remember { mutableStateOf(false) }
+        var grosor by remember { mutableFloatStateOf(1f) }
+        /** 0 = la tinta por defecto; cualquier otro, un color elegido. */
+        var colorTrazo by remember { mutableIntStateOf(0) }
 
         var puntoA by remember { mutableStateOf<P?>(null) }
         var puntoB by remember { mutableStateOf<P?>(null) }
@@ -250,6 +261,17 @@ class CroquisEditorActivity : ComponentActivity() {
          */
         fun tocar(bruto: P) {
             val tolerancia = 30.0 * densidad / vista.pixelsPorMetro
+
+            if (herramienta == Herramienta.BORRADOR) {
+                val i = CroquisGeometria.entidadMasCercana(croquis, bruto, tolerancia)
+                if (i == null) { aviso = "Ahí no hay nada que borrar"; return }
+                croquis = croquis.copy(
+                    entidades = croquis.entidades.filterIndexed { j, _ -> j != i }
+                )
+                alGuardar(croquis)
+                aviso = null
+                return
+            }
 
             if (herramienta.esEdicion) {
                 val i = CroquisGeometria.lineaMasCercana(croquis, bruto, tolerancia)
@@ -347,16 +369,17 @@ class CroquisEditorActivity : ComponentActivity() {
                     }
                     val destino =
                         if (metros > 0) CroquisGeometria.desdePolar(a, metros, grados) else b
+                    val e = Estilo(grosor = grosor, colorArgb = colorTrazo)
                     val nueva: Entidad = when (herramienta) {
-                        Herramienta.LINEA -> Entidad.Linea(a, destino)
-                        Herramienta.POLILINEA -> Entidad.Polilinea(listOf(a, destino))
-                        Herramienta.RECT -> Entidad.Rect(a, destino)
+                        Herramienta.LINEA -> Entidad.Linea(a, destino, e)
+                        Herramienta.POLILINEA -> Entidad.Polilinea(listOf(a, destino), false, e)
                         Herramienta.CIRCULO ->
-                            Entidad.Circulo(a, CroquisGeometria.distancia(a, destino))
-                        Herramienta.COTA -> Entidad.Cota(a, destino, desplazamiento = 0.4)
-                        // Recortar y extender actúan al tocar líneas: nunca
+                            Entidad.Circulo(a, CroquisGeometria.distancia(a, destino), e)
+                        Herramienta.COTA -> Entidad.Cota(a, destino, 0.4, e)
+                        // Recortar, extender y borrar actúan al tocar: nunca
                         // llegan aquí con dos puntos puestos.
-                        Herramienta.RECORTAR, Herramienta.EXTENDER -> return
+                        Herramienta.RECORTAR, Herramienta.EXTENDER,
+                        Herramienta.BORRADOR -> return
                     }
                     croquis = croquis.copy(entidades = croquis.entidades + nueva)
                     alGuardar(croquis)
@@ -547,8 +570,10 @@ class CroquisEditorActivity : ComponentActivity() {
                 alCancelar = { limpiar(); cadena = emptyList(); aviso = null },
                 alCerrarCadena = { terminarCadena(true) },
                 alTerminarCadena = { terminarCadena(false) },
-                alPdf = { exportar(croquis, true) { aviso = it } },
-                alJpg = { exportar(croquis, false) { aviso = it } }
+                grosor = grosor,
+                colorTrazo = colorTrazo,
+                alGrosor = { grosor = it },
+                alColor = { colorTrazo = it }
             )
 
             BarraPrincipal(
@@ -569,28 +594,8 @@ class CroquisEditorActivity : ComponentActivity() {
         }
     }
 
-    private fun exportar(croquis: Croquis, comoPdf: Boolean, avisar: (String) -> Unit) {
-        lifecycleScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                if (comoPdf) {
-                    CroquisExport.aPdf(this@CroquisEditorActivity, croquis, fondoBitmap) != null
-                } else {
-                    val bmp = CroquisExport.aBitmap(croquis, fondoBitmap)
-                        ?: return@withContext false
-                    val uri = Export.saveToGallery(
-                        this@CroquisEditorActivity, bmp, Bitmap.CompressFormat.JPEG, 92
-                    )
-                    if (!bmp.isRecycled) bmp.recycle()
-                    uri != null
-                }
-            }
-            avisar(
-                if (!ok) "No hay nada que exportar todavía"
-                else if (comoPdf) "PDF guardado en Descargas/PixPin"
-                else "JPG guardado en la galería"
-            )
-        }
-    }
+    // Exportar ya no vive aquí: el PDF sale desde el propio pin, que es donde
+    // se decide qué hacer con el croquis terminado. El editor solo dibuja.
 }
 
 /** Cuánto se separa del dedo el punto que se arrastra, en dp. */
@@ -775,6 +780,36 @@ private fun BarraPrincipal(
     }
 }
 
+/** Grosores en múltiplos del trazo normal: fino, normal, grueso. */
+private val GROSORES = listOf("─" to 0.6f, "━" to 1f, "▬" to 2f)
+
+/** El 0 es «la tinta por defecto», que se adapta al fondo. */
+private val COLORES = listOf(
+    0,
+    0xFFD61818.toInt(), 0xFF1E88E5.toInt(), 0xFF2E7D32.toInt(),
+    0xFFF9A825.toInt(), 0xFF8E24AA.toInt()
+)
+
+/** Pastilla de color; la del 0 lleva una diagonal, que es «el color normal». */
+@Composable
+private fun Muestra(argb: Int, activa: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (argb == 0) Color(0xFF3A424C) else Color(argb),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(7.dp),
+        border = if (activa)
+            androidx.compose.foundation.BorderStroke(2.dp, Color.White) else null,
+        modifier = Modifier
+            .size(30.dp)
+            .pointerInput(argb) { detectTapGestures { onClick() } }
+    ) {
+        if (argb == 0) {
+            Box(Modifier.fillMaxSize(), Alignment.Center) {
+                Text("A", color = Color(0xFFC9D2DC), fontSize = 12.sp)
+            }
+        }
+    }
+}
+
 @Composable
 private fun Separador() {
     Box(
@@ -803,8 +838,10 @@ private fun BarraInferior(
     alCancelar: () -> Unit,
     alCerrarCadena: () -> Unit,
     alTerminarCadena: () -> Unit,
-    alPdf: () -> Unit,
-    alJpg: () -> Unit
+    grosor: Float,
+    colorTrazo: Int,
+    alGrosor: (Float) -> Unit,
+    alColor: (Int) -> Unit
 ) {
     val medida = if (puntoA != null && puntoB != null)
         CroquisGeometria.distancia(puntoA, puntoB) else null
@@ -884,15 +921,25 @@ private fun BarraInferior(
                 ) { Text("✓", fontSize = 14.sp) }
                 Chip("✕", false, alCancelar)
             }
-        } else {
-            // Exportar solo cuando no hay nada a medio poner: así la barra no
-            // crece ni se mueve bajo el pulgar mientras se dibuja.
+        } else if (herramienta.pinta && modo == Modo.DIBUJAR) {
+            // Grosor y color: aparecen solo con una herramienta que pinte, que
+            // es cuando significan algo. El borrador y las de edición no tienen
+            // trazo propio.
             Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Chip("PDF", false, alPdf)
-                Chip("JPG", false, alJpg)
+                GROSORES.forEach { (etiqueta, valor) ->
+                    Chip(etiqueta, grosor == valor) { alGrosor(valor) }
+                }
+                Separador()
+                COLORES.forEach { argb ->
+                    Muestra(argb, colorTrazo == argb) { alColor(argb) }
+                }
             }
         }
     }

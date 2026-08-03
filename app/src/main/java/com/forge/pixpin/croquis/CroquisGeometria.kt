@@ -143,6 +143,46 @@ object CroquisGeometria {
         return mejor
     }
 
+    /**
+     * Distancia de [p] a lo **dibujado** de una entidad.
+     *
+     * De su trazo, no de su centro: un círculo se toca por el contorno, y por
+     * dentro está tan lejos como su radio. Es lo que hace que el borrador
+     * alcance lo que el dedo señala y no lo que el dedo rodea.
+     */
+    fun distanciaAEntidad(e: Entidad, p: P): Double = when (e) {
+        is Entidad.Linea -> distanciaA(e, p)
+        is Entidad.Cota -> distanciaA(Entidad.Linea(e.a, e.b), p)
+        is Entidad.Circulo -> abs(distancia(e.centro, p) - e.radio)
+        is Entidad.Texto -> distancia(e.en, p)
+        is Entidad.Polilinea -> {
+            if (e.puntos.size < 2) e.puntos.firstOrNull()?.let { distancia(it, p) }
+                ?: Double.MAX_VALUE
+            else (0 until e.puntos.size - 1).minOf { i ->
+                distanciaA(Entidad.Linea(e.puntos[i], e.puntos[i + 1]), p)
+            }
+        }
+        is Entidad.Rect -> {
+            val esquinas = listOf(
+                e.a, P(e.b.x, e.a.y), e.b, P(e.a.x, e.b.y), e.a
+            )
+            (0 until 4).minOf { i ->
+                distanciaA(Entidad.Linea(esquinas[i], esquinas[i + 1]), p)
+            }
+        }
+    }
+
+    /** Índice de la entidad cuyo trazo pasa más cerca de [p], o null si ninguna. */
+    fun entidadMasCercana(croquis: Croquis, p: P, toleranciaM: Double): Int? {
+        var mejor: Int? = null
+        var mejorD = Double.MAX_VALUE
+        croquis.entidades.forEachIndexed { i, e ->
+            val d = distanciaAEntidad(e, p)
+            if (d <= toleranciaM && d < mejorD) { mejorD = d; mejor = i }
+        }
+        return mejor
+    }
+
     /** Dónde cae [p] sobre la línea, con 0 en su principio y 1 en su final. */
     private fun parametroEn(linea: Entidad.Linea, p: P): Double? {
         val dx = linea.b.x - linea.a.x
