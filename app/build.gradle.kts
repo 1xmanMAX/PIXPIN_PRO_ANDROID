@@ -13,7 +13,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 11
-        versionName = "0.4.7-croquis"
+        versionName = "0.4.0"
     }
 
     // Nota: `enableV1Signing` aquí NO surte efecto. Con minSdk 29 el plugin
