@@ -34,7 +34,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Remove
@@ -91,6 +91,7 @@ private enum class Herramienta(
 ) {
     LINEA("Línea", Icons.Filled.Remove),
     POLILINEA("Polilínea", Icons.Filled.Timeline),
+    RECT("Rectángulo", Icons.Filled.CropSquare),
     CIRCULO("Círculo", Icons.Filled.RadioButtonUnchecked),
     COTA("Cota", Icons.Filled.SwapHoriz),
 
@@ -373,6 +374,7 @@ class CroquisEditorActivity : ComponentActivity() {
                     val nueva: Entidad = when (herramienta) {
                         Herramienta.LINEA -> Entidad.Linea(a, destino, e)
                         Herramienta.POLILINEA -> Entidad.Polilinea(listOf(a, destino), false, e)
+                        Herramienta.RECT -> Entidad.Rect(a, destino, e)
                         Herramienta.CIRCULO ->
                             Entidad.Circulo(a, CroquisGeometria.distancia(a, destino), e)
                         Herramienta.COTA -> Entidad.Cota(a, destino, 0.4, e)
@@ -774,7 +776,10 @@ private fun BarraPrincipal(
                 Boton(h.icono, h.etiqueta, herramienta == h) { alHerramienta(h) }
             }
             Separador()
-            Boton(Icons.Filled.GridOn, "Horizontal y vertical", orto, alOrto)
+            // Cruz de cuatro flechas y no una rejilla: la rejilla se leía como
+            // «tabla» y no decía nada de lo que hace, que es obligar al trazo a
+            // ir recto en horizontal o en vertical.
+            Boton(Icons.Filled.OpenWith, "Recto: horizontal o vertical", orto, alOrto)
             if (puedeDeshacer) Boton(Icons.Filled.Undo, "Deshacer", false, alDeshacer)
         }
     }

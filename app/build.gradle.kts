@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
@@ -12,8 +12,8 @@ android {
         applicationId = "com.forge.pixpin"
         minSdk = 29
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.4.6-croquis"
+        versionCode = 11
+        versionName = "0.4.7-croquis"
     }
 
     // Nota: `enableV1Signing` aquí NO surte efecto. Con minSdk 29 el plugin
