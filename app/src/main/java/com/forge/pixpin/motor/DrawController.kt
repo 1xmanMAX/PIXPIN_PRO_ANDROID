@@ -237,37 +237,11 @@ class DrawController(initial: Scene = Scene()) {
                 commit()
             }
 
-            Tool.TEXT -> {
-                // **Tocar un texto ya puesto lo abre para corregirlo**, en vez
-                // de plantar otro encima. Es lo que hace el original, y es lo
-                // que evita el montón de textos superpuestos que salía al
-                // intentar arreglar una errata: el de abajo seguía ahí.
-                val existente = getElementAtPosition(editables, p, threshold)
-                    ?.takeIf { it.type == ElementType.TEXT && !it.locked }
-                if (existente != null) {
-                    // **Sin seleccionarlo.** Ver abajo.
-                    selectedIds = emptySet()
-                    gesture = Gesture.None
-                    pendingTextId = existente.id
-                    return
-                }
-                val e = newElement(ElementType.TEXT, p.x, p.y, scene.style)
-                    .copy(reference = modoReferencia)
-                scene = scene.copy(elements = scene.elements + e)
-                // **Un texto recién plantado NO se selecciona.**
-                //
-                // Se seleccionaba, y como todavía no tiene medidas —su caja se
-                // mide cuando hay algo escrito— los nueve tiradores de la
-                // selección salían amontonados en el mismo punto, encima del
-                // cursor: un puñado de puntitos pegados justo donde estabas
-                // escribiendo. El marco es para mover el texto, y para eso ya
-                // está la herramienta de selección; mientras se escribe estorba.
-                selectedIds = emptySet()
-                // El texto no se arrastra para crearse: nace y pide teclado.
-                gesture = Gesture.None
-                pendingTextId = e.id
-                commit()
-            }
+            // **El texto también espera a que se levante el dedo.** Plantaba
+            // al bajarlo, y el primer dedo de un pellizco para hacer zoom baja
+            // igual que un toque: la escena se llenaba de textos vacíos que
+            // nadie había pedido. Es el mismo arreglo que salvó al bote.
+            Tool.TEXT -> gesture = Gesture.Tocando(p)
 
             // **Las de un toque no hacen nada hasta que se levanta el dedo.**
             //
@@ -298,6 +272,7 @@ class DrawController(initial: Scene = Scene()) {
         if (kotlin.math.hypot(fin.x - inicio.x, fin.y - inicio.y) > TOQUE_QUIETO / z) return
         when (tool) {
             Tool.RELLENO -> rellenar(inicio)
+            Tool.TEXT -> plantarTexto(inicio, DEFAULT_HIT_THRESHOLD / z)
             Tool.RECORTAR -> recortar(inicio, z)
             Tool.EXTENDER -> extender(inicio, z)
             Tool.NUDO -> soldar(inicio, z)
@@ -327,6 +302,33 @@ class DrawController(initial: Scene = Scene()) {
         rellenoSinCerrar = false
         val relleno = nuevaRegion(region, scene.style).copy(reference = modoReferencia)
         scene = scene.copy(elements = conRellenoDebajo(scene.elements, relleno, tocado = p))
+    }
+
+    /**
+     * Planta un texto donde se tocó, o abre el que ya hubiera ahí.
+     *
+     * **Tocar un texto ya puesto lo abre para corregirlo**, en vez de plantar
+     * otro encima: es lo que evita el montón de textos superpuestos que salía al
+     * intentar arreglar una errata, porque el de abajo seguía ahí.
+     *
+     * Y el texto recién plantado **no se selecciona**: como todavía no tiene
+     * medidas —su caja se mide cuando hay algo escrito— los nueve tiradores de
+     * la selección salían amontonados encima del cursor, justo donde estabas
+     * escribiendo.
+     */
+    private fun plantarTexto(p: Pt, threshold: Double) {
+        val existente = getElementAtPosition(editables, p, threshold)
+            ?.takeIf { it.type == ElementType.TEXT && !it.locked }
+        if (existente != null) {
+            selectedIds = emptySet()
+            pendingTextId = existente.id
+            return
+        }
+        val e = newElement(ElementType.TEXT, p.x, p.y, scene.style)
+            .copy(reference = modoReferencia)
+        scene = scene.copy(elements = scene.elements + e)
+        selectedIds = emptySet()
+        pendingTextId = e.id
     }
 
     /**
@@ -511,10 +513,20 @@ class DrawController(initial: Scene = Scene()) {
             // que atraviesa puesto.
             is Gesture.MovingPin -> {
                 val alfiler = scene.alfileres.getOrNull(g.indice) ?: return
+                // **El clavo también se imanta.** Un clavo se pone donde dos
+                // figuras se cruzan, así que al recolocarlo lo que uno busca es
+                // otro cruce o un vértice — y eso a pulso no se acierta. Se
+                // excluyen las figuras que el propio clavo lleva: si no, se
+                // pegaría a sí mismo en cuanto se moviera un pelo.
+                val suyas = alfiler.agarres.map { it.elementId }.toSet()
+                val destino = buscarAnclaje(
+                    scene.visibleConReferencias.filter { it.id !in suyas },
+                    pRaw, zoom, enganche
+                )?.also { anclajeActivo = it }?.punto ?: p
                 scene = scene.copy(
-                    elements = moverAlfiler(scene.elements, scene.alfileres, alfiler, p),
+                    elements = moverAlfiler(scene.elements, scene.alfileres, alfiler, destino),
                     alfileres = scene.alfileres.mapIndexed { i, a ->
-                        if (i == g.indice) a.copy(punto = p) else a
+                        if (i == g.indice) a.copy(punto = destino) else a
                     }
                 )
             }
@@ -894,6 +906,35 @@ class DrawController(initial: Scene = Scene()) {
     fun pendingScaleElement(): Element? = pendingScaleId?.let { scene.byId(it) }
 
     /**
+     * La cota recién trazada que está pidiendo cuánto mide y hacia dónde va.
+     *
+     * Igual que [pendingScaleId], y por lo mismo: el controlador no sabe pintar
+     * un teclado, así que lo deja puesto y quien lleve la interfaz lo abre.
+     */
+    var pendingCotaId: String? = null
+        private set
+
+    fun pendingCotaElement(): Element? = pendingCotaId?.let { scene.byId(it) }
+
+    /** Se acepta lo tecleado: la cota se rehace con ese largo y ese ángulo. */
+    fun aplicarCota(largo: Double, grados: Double) {
+        val id = pendingCotaId ?: return
+        pendingCotaId = null
+        mutate { elementos ->
+            elementos.map {
+                if (it.id == id) {
+                    conLargoYAngulo(it, largoEnPixeles(largo, scene.escala), grados)
+                } else it
+            }
+        }
+    }
+
+    /** Se desiste: la cota se queda como se trazó, que ya dice lo que mide. */
+    fun cancelarCota() {
+        pendingCotaId = null
+    }
+
+    /**
      * Calibra con la medida que se acaba de dictar y devuelve si valió.
      *
      * Al calibrar se pasa a medir: nadie escala por escalar, se escala para
@@ -1191,6 +1232,11 @@ class DrawController(initial: Scene = Scene()) {
         // lo pide la interfaz en cuanto ve esto puesto.
         if (tool == Tool.SCALE && finished.isMeasure) pendingScaleId = finished.id
 
+        // Y la cota **pide su medida nada más trazarla**, con el mismo teclado.
+        // Es el momento en que uno sabe cuánto mide; mandarle a buscar un panel
+        // después es perder el número por el camino.
+        if (tool == Tool.MEASURE && finished.isMeasure) pendingCotaId = finished.id
+
         // **La herramienta NO se desactiva al soltar.** Excalidraw vuelve a la
         // flecha después de cada forma porque en escritorio se retoma con una
         // tecla; aquí eso obliga a volver a la barra entre cuadrado y cuadrado,
@@ -1424,6 +1470,7 @@ class DrawController(initial: Scene = Scene()) {
         gesture = Gesture.None
         pendingTextId = null
         pendingScaleId = null
+        pendingCotaId = null
         history.clear()
     }
 

@@ -464,13 +464,17 @@ class DrawControllerTest {
     fun `tocar un texto con la herramienta de texto lo abre en vez de crear otro`() {
         val c = controller()
         c.selectTool(Tool.TEXT)
+        // Al **levantar** el dedo, no al bajarlo: plantando al bajarlo, el
+        // primer dedo de un pellizco para hacer zoom dejaba un texto vacío.
         c.pointerDown(Pt(10.0, 10.0))
+        c.pointerUp(Pt(10.0, 10.0))
         val primero = c.scene.visible.last()
         c.updateText(primero.id, "hola", 40.0, 25.0)
         c.clearPendingText()
 
         // Se vuelve a tocar encima del texto que ya hay.
         c.pointerDown(Pt(20.0, 20.0))
+        c.pointerUp(Pt(20.0, 20.0))
 
         assertEquals("no debería haber creado otro", 1, c.scene.visible.size)
         assertEquals(primero.id, c.pendingTextId)
@@ -482,11 +486,13 @@ class DrawControllerTest {
         val c = controller()
         c.selectTool(Tool.TEXT)
         c.pointerDown(Pt(10.0, 10.0))
+        c.pointerUp(Pt(10.0, 10.0))
         val primero = c.scene.visible.last()
         c.updateText(primero.id, "hola", 40.0, 25.0)
         c.clearPendingText()
 
         c.pointerDown(Pt(400.0, 400.0))
+        c.pointerUp(Pt(400.0, 400.0))
         assertEquals(2, c.scene.visible.size)
         assertTrue(c.pendingTextId != primero.id)
     }

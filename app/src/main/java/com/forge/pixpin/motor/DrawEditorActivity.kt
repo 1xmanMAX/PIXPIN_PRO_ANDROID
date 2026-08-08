@@ -445,6 +445,33 @@ class DrawEditorActivity : ComponentActivity() {
                     )
                 }
             }
+
+            // Y el de la cota: se abre nada más trazarla, con el mismo teclado.
+            // Es el momento en que uno sabe la medida; mandarle a buscar un
+            // panel después es perder el número por el camino.
+            controller.pendingCotaElement()?.let { cota ->
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(Color(0x66000000))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val escala = controller.scene.escala
+                    DialogoDeCota(
+                        largoActual = largoEnUnidades(cota, escala),
+                        anguloActual = anguloDe(cota),
+                        unidad = if (escala != null && escala.valida) escala.unidad else "px",
+                        onAceptar = { largo, grados ->
+                            controller.aplicarCota(largo, grados)
+                            cambiado()
+                        },
+                        onCancelar = { controller.cancelarCota(); cambiado() }
+                    )
+                }
+            }
         }
 
     }

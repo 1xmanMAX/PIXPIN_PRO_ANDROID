@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.PanTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:28.461Z" hostname="localhost" time="0.011">
+<testsuite name="com.forge.pixpin.motor.PanTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:58.263Z" hostname="localhost" time="0.014">
   <properties/>
   <testcase name="la mano no toca el dibujo" classname="com.forge.pixpin.motor.PanTest" time="0.001"/>
-  <testcase name="arrastrar suave da un movimiento suave" classname="com.forge.pixpin.motor.PanTest" time="0.005"/>
+  <testcase name="arrastrar suave da un movimiento suave" classname="com.forge.pixpin.motor.PanTest" time="0.011"/>
   <testcase name="con el dedo quieto el lienzo no se mueve" classname="com.forge.pixpin.motor.PanTest" time="0.0"/>
-  <testcase name="el punto bajo el dedo se queda bajo el dedo" classname="com.forge.pixpin.motor.PanTest" time="0.0"/>
-  <testcase name="el encuadre respeta el zoom" classname="com.forge.pixpin.motor.PanTest" time="0.002"/>
+  <testcase name="el punto bajo el dedo se queda bajo el dedo" classname="com.forge.pixpin.motor.PanTest" time="0.001"/>
+  <testcase name="el encuadre respeta el zoom" classname="com.forge.pixpin.motor.PanTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

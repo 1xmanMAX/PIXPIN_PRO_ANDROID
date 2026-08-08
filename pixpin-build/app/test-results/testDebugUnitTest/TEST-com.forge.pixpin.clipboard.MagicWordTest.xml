@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.clipboard.MagicWordTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.216Z" hostname="localhost" time="0.016">
+<testsuite name="com.forge.pixpin.clipboard.MagicWordTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:54.666Z" hostname="localhost" time="0.013">
   <properties/>
   <testcase name="los espacios de alrededor no estorban" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
-  <testcase name="las palabras del croquis retirado ya no abren nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.002"/>
-  <testcase name="crono y time no son lo mismo" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
-  <testcase name="reconoce las palabras en cualquier combinacion de mayusculas" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
-  <testcase name="croquis dentro de una frase sigue siendo texto" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
-  <testcase name="draw y dibujo se quedaron fuera a proposito" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.002"/>
-  <testcase name="un texto largo no activa nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
+  <testcase name="las palabras del croquis retirado ya no abren nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
+  <testcase name="crono y time no son lo mismo" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
+  <testcase name="reconoce las palabras en cualquier combinacion de mayusculas" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
+  <testcase name="croquis dentro de una frase sigue siendo texto" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
+  <testcase name="draw y dibujo se quedaron fuera a proposito" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
+  <testcase name="un texto largo no activa nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
   <testcase name="dentro de una frase no activa nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
-  <testcase name="una palabra corriente no activa nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
+  <testcase name="una palabra corriente no activa nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.002"/>
   <testcase name="plano no es palabra magica, se copia solo demasiado a menudo" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
   <testcase name="texto vacio o nulo no activa nada" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
-  <testcase name="canvas, lienzo y excalidraw abren el lienzo infinito" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.001"/>
+  <testcase name="canvas, lienzo y excalidraw abren el lienzo infinito" classname="com.forge.pixpin.clipboard.MagicWordTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

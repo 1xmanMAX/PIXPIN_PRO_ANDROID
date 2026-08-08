@@ -215,31 +215,30 @@ class MedidaTest {
     // ---- El mosaico ----
 
     /**
-     * El grano se cuenta **en bloques**, no en píxeles fijos.
+     * El grano es **fijo**, no una fracción del recuadro.
      *
-     * Antes eran cuatro píxeles por punto de grosor, y eso hacía que la misma
-     * herramienta tapase de forma muy distinta según el tamaño de la imagen: en
-     * una captura de 4000 px de ancho los bloques salían tan pequeños que se
-     * leía lo que había debajo, que es justo lo que el mosaico existe para
-     * impedir.
+     * Ha ido y ha vuelto. Con «tantos bloques en el lado mayor», agrandar el
+     * recuadro para tapar un poco más engordaba los bloques y convertía en
+     * cuatro manchas lo que ya estaba tapado: tapar más no puede significar
+     * tapar distinto. Con el lado fijo, el mosaico se comporta igual sea cual
+     * sea el recuadro, y el grosor sigue siendo el mando.
      */
     @Test
-    fun `más grosor son menos bloques y más gordos`() {
-        val anchos = ItemStyle.STROKE_WIDTHS
-        val bloques = anchos.map { mosaicoBloques(it) }
+    fun `mas grosor es mas grano y no depende del recuadro`() {
+        val granos = ItemStyle.STROKE_WIDTHS.map { mosaicoGrano(it) }
         assertEquals(
-            "de más fino a más gordo, los bloques solo pueden ir a menos",
-            bloques.sortedDescending(), bloques
+            "de más fino a más gordo, el grano solo puede ir a más",
+            granos.sorted(), granos
         )
-        assertTrue("con el grano más fino aún tiene que tapar", bloques.first() <= 40)
-        assertTrue("con el más gordo tiene que quedar algo de forma", bloques.last() >= 4)
+        assertTrue("el grano más fino tiene que tapar algo", granos.first() >= 4.0)
+        assertTrue("el más gordo no puede ser una sola mancha", granos.last() <= 128.0)
     }
 
-    /** Cualquier grosor da un número de bloques utilizable, incluso los raros. */
+    /** Cualquier grosor da un grano utilizable, incluso los raros. */
     @Test
-    fun `el grano nunca se va a cero ni a un solo bloque`() {
-        for (w in listOf(0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 8.0, 100.0)) {
-            assertTrue("grosor $w da ${mosaicoBloques(w)} bloques", mosaicoBloques(w) >= 2)
+    fun `el grano nunca se va a cero`() {
+        for (w in listOf(0.0, 0.1, 1.0, 2.0, 4.0, 8.0, 40.0)) {
+            assertTrue("grosor $w da un grano imposible", mosaicoGrano(w) >= 1.0)
         }
     }
 

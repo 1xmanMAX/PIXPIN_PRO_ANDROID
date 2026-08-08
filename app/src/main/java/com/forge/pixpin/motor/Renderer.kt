@@ -521,14 +521,11 @@ class Renderer(
      * muchas sin preocuparse; lo caro era hacerla.
      */
     private fun miniaturaDe(e: Element, fuente: Bitmap, recorte: Rect): Bitmap? {
-        val bloques = mosaicoBloques(e.strokeWidth)
-        // Bloques **cuadrados**: el lado sale del lado mayor de la caja y el
-        // otro se reparte con el mismo lado. Calculando cada eje por su cuenta,
-        // una caja alargada salía con los bloques estirados.
-        val lado = (maxOf(recorte.width(), recorte.height()).toDouble() / bloques)
-            .coerceAtLeast(1.0)
-        val miniW = Math.ceil(recorte.width() / lado).toInt().coerceAtLeast(1)
-        val miniH = Math.ceil(recorte.height() / lado).toInt().coerceAtLeast(1)
+        // El grano es **fijo**, no una fracción del recuadro: agrandar el
+        // recuadro tapa más, no tapa distinto. Ver [mosaicoGrano].
+        val lado = mosaicoGrano(e.strokeWidth).coerceAtLeast(1.0)
+        val miniW = Math.ceil(recorte.width() / lado).toInt().coerceIn(1, MAX_LADO_MINI)
+        val miniH = Math.ceil(recorte.height() / lado).toInt().coerceIn(1, MAX_LADO_MINI)
 
         val clave = "${recorte.left},${recorte.top},${recorte.right},${recorte.bottom}," +
             "$miniW,$miniH,${e.mosaicBlur}"
@@ -574,10 +571,9 @@ class Renderer(
 
         val ancho = c.x2 - c.x1
         val alto = c.y2 - c.y1
-        val bloques = mosaicoBloques(e.strokeWidth)
-        val lado = (maxOf(ancho, alto) / bloques).coerceAtLeast(1.0)
-        val miniW = Math.ceil(ancho / lado).toInt().coerceIn(1, 256)
-        val miniH = Math.ceil(alto / lado).toInt().coerceIn(1, 256)
+        val lado = mosaicoGrano(e.strokeWidth).coerceAtLeast(1.0)
+        val miniW = Math.ceil(ancho / lado).toInt().coerceIn(1, MAX_LADO_MINI)
+        val miniH = Math.ceil(alto / lado).toInt().coerceIn(1, MAX_LADO_MINI)
 
         val clave = "dibujo:${c.x1},${c.y1},${c.x2},${c.y2},$miniW,$miniH,${e.mosaicBlur}," +
             debajo.joinToString(",") { "${it.id}:${it.version}" }.hashCode()
@@ -1174,6 +1170,16 @@ class Renderer(
 
         /** Cuántos mosaicos reducidos se guardan antes de tirar el más viejo. */
         const val MAX_CACHED_MOSAICS = 24
+
+        /**
+         * Tope de bloques por lado.
+         *
+         * Con el grano fijo, un mosaico del tamaño de una captura entera pediría
+         * miles de bloques; el tope los acota y, si se alcanza, el grano sale un
+         * poco más gordo de lo pedido — que es infinitamente mejor que quedarse
+         * sin memoria por tapar un número de teléfono.
+         */
+        const val MAX_LADO_MINI = 400
 
         /** Tamaño del número respecto al radio de su círculo. */
         const val SERIAL_TEXT_RATIO = 1.25

@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.DrawPropertiesTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.675Z" hostname="localhost" time="0.014">
+<testsuite name="com.forge.pixpin.motor.DrawPropertiesTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:56.128Z" hostname="localhost" time="0.031">
   <properties/>
-  <testcase name="con el rectangulo activo se ofrece lo del rectangulo" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.005"/>
-  <testcase name="sin seleccion no hay acciones" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
-  <testcase name="con varios elementos se ofrece la union" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
+  <testcase name="con el rectangulo activo se ofrece lo del rectangulo" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.009"/>
+  <testcase name="sin seleccion no hay acciones" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
+  <testcase name="con varios elementos se ofrece la union" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.002"/>
   <testcase name="las herramientas que no dibujan no ofrecen ajustes" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
-  <testcase name="la seleccion manda sobre la herramienta activa" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
+  <testcase name="la seleccion manda sobre la herramienta activa" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
   <testcase name="la elipse no ofrece esquinas" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
-  <testcase name="el lapiz ofrece color fondo relleno grosor y opacidad" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
+  <testcase name="el lapiz ofrece color fondo relleno grosor y opacidad" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
   <testcase name="solo la flecha ofrece puntas" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
   <testcase name="las herramientas propias ofrecen lo justo" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
-  <testcase name="con uno solo no se puede agrupar ni alinear" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
+  <testcase name="con uno solo no se puede agrupar ni alinear" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.004"/>
   <testcase name="un elemento ya agrupado ofrece desagrupar" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
   <testcase name="ninguna herramienta que dibuja se queda sin ajustes" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
-  <testcase name="con dos o mas si" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
+  <testcase name="con dos o mas si" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.001"/>
   <testcase name="la hoja no ofrece estilo porque no es un dibujo" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
-  <testcase name="el texto ofrece fuente y no relleno" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.0"/>
+  <testcase name="el texto ofrece fuente y no relleno" classname="com.forge.pixpin.motor.DrawPropertiesTest" time="0.002"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

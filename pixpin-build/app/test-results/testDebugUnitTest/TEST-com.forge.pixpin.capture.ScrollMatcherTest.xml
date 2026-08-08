@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.capture.ScrollMatcherTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.112Z" hostname="localhost" time="0.014">
+<testsuite name="com.forge.pixpin.capture.ScrollMatcherTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:54.364Z" hostname="localhost" time="0.054">
   <properties/>
-  <testcase name="la firma de una fila resume su contenido" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.001"/>
-  <testcase name="un fotograma mas corto que la referencia no encaja" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.003"/>
-  <testcase name="detecta cuanto ha subido el contenido" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.002"/>
+  <testcase name="la firma de una fila resume su contenido" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.012"/>
+  <testcase name="un fotograma mas corto que la referencia no encaja" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.023"/>
+  <testcase name="detecta cuanto ha subido el contenido" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.004"/>
   <testcase name="sin desplazamiento el encaje es cero" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.002"/>
   <testcase name="las firmas se calculan fila a fila" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.0"/>
   <testcase name="una banda lisa se rechaza en vez de encajar en cualquier sitio" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.001"/>
-  <testcase name="un patron que se repite se considera ambiguo" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.0"/>
-  <testcase name="contenido totalmente distinto no encaja" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.0"/>
-  <testcase name="aguanta ruido de compresion" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.001"/>
+  <testcase name="un patron que se repite se considera ambiguo" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.001"/>
+  <testcase name="contenido totalmente distinto no encaja" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.001"/>
+  <testcase name="aguanta ruido de compresion" classname="com.forge.pixpin.capture.ScrollMatcherTest" time="0.004"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

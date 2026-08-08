@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.PaginaPdfTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:28.454Z" hostname="localhost" time="0.004">
+<testsuite name="com.forge.pixpin.motor.PaginaPdfTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:58.256Z" hostname="localhost" time="0.003">
   <properties/>
   <testcase name="la página se tumba solo cuando el dibujo es más ancho que alto" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.001"/>
   <testcase name="lo que sobra de folio se reparte a los dos lados" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>

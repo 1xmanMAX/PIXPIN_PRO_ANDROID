@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.DrawToolbarTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.730Z" hostname="localhost" time="0.121">
+<testsuite name="com.forge.pixpin.motor.DrawToolbarTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:56.226Z" hostname="localhost" time="0.262">
   <properties/>
   <testcase name="ninguna herramienta está en los dos sitios" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.001"/>
   <testcase name="la numeración vieja sigue valiendo" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.0"/>
-  <testcase name="los colores de la paleta se traducen al formato del excalidraw" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.009"/>
+  <testcase name="los colores de la paleta se traducen al formato del excalidraw" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.01"/>
   <testcase name="todas las herramientas están en la barra" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.0"/>
   <testcase name="la fila principal no crece sin control" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.001"/>
-  <testcase name="las herramientas propias van al desplegable" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.001"/>
-  <testcase name="la fila principal sigue el orden del original" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.0"/>
-  <testcase name="todas tienen icono y nombre" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.107"/>
+  <testcase name="las herramientas propias van al desplegable" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.004"/>
+  <testcase name="la fila principal sigue el orden del original" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.006"/>
+  <testcase name="todas tienen icono y nombre" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.231"/>
   <testcase name="las familias llevan los números del original" classname="com.forge.pixpin.motor.DrawToolbarTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

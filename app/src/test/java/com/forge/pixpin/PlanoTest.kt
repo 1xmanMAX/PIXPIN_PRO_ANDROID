@@ -212,6 +212,64 @@ class PlanoTest {
         assertEquals(raya, conLargoYAngulo(raya, Double.NaN, 45.0))
     }
 
+    /**
+     * **La cota pide su medida nada más trazarla.**
+     *
+     * Es el momento en que uno sabe cuánto mide lo que acaba de señalar;
+     * mandarle a buscar un panel después es perder el número por el camino.
+     */
+    @Test
+    fun `al trazar una cota se pide cuanto mide`() {
+        val c = DrawController()
+        c.selectTool(Tool.MEASURE)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerMove(Pt(100.0, 0.0))
+        c.pointerUp(Pt(100.0, 0.0))
+
+        val cota = c.pendingCotaElement()
+        assertNotNull("no ha pedido la medida", cota)
+        assertEquals(ElementType.MEASURE, cota!!.type)
+
+        // Se dicta: dos metros y medio a treinta grados.
+        c.aplicarCota(250.0, 30.0)
+        assertNull(c.pendingCotaElement())
+        val rehecha = c.scene.byId(cota.id)!!
+        assertEquals(250.0, longitudDe(rehecha), 0.001)
+        assertEquals(30.0, anguloDe(rehecha), 0.001)
+        // Y el principio no se ha movido.
+        assertEquals(0.0, absolutePoints(rehecha).first().x, 0.001)
+        assertEquals(0.0, absolutePoints(rehecha).first().y, 0.001)
+    }
+
+    /** Con escala puesta, lo que se teclea son unidades de mundo. */
+    @Test
+    fun `lo tecleado en la cota va en las unidades de la escena`() {
+        val c = DrawController(Scene(escala = Escala(unidadesPorPixel = 0.05)))
+        c.selectTool(Tool.MEASURE)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerMove(Pt(100.0, 0.0))
+        c.pointerUp(Pt(100.0, 0.0))
+
+        c.aplicarCota(3.0, 0.0)
+        val cota = c.scene.visible.last { it.isMeasure }
+        assertEquals(3.0, medidaDe(cota, c.scene.escala)!!, 0.001)
+        assertEquals(60.0, longitudDe(cota), 0.001)
+    }
+
+    /** Desistir deja la cota como se trazó: ya dice lo que mide. */
+    @Test
+    fun `cancelar la cota la deja como estaba`() {
+        val c = DrawController()
+        c.selectTool(Tool.MEASURE)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerMove(Pt(100.0, 0.0))
+        c.pointerUp(Pt(100.0, 0.0))
+
+        c.cancelarCota()
+        assertNull(c.pendingCotaElement())
+        assertEquals(100.0, longitudDe(c.scene.visible.last()), 0.001)
+    }
+
     // ---- La escala gráfica ----
 
     /**

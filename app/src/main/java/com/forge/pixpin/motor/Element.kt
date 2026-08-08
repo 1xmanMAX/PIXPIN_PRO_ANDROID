@@ -442,24 +442,31 @@ val Element.isBoxOverlay: Boolean
 val Element.isEscalaGrafica: Boolean get() = type == ElementType.ESCALA_GRAFICA
 
 /**
- * En cuántos bloques se parte el **lado mayor** de un mosaico.
+ * Cuánto mide el lado de un bloque de mosaico, **en píxeles de escena**.
  *
- * Antes el grano se medía en píxeles fijos —cuatro por cada punto de grosor—, y
- * eso hacía que la misma herramienta tapase de forma muy distinta según sobre
- * qué. En una captura de móvil a 1080 de ancho, un grano de 32 px sobre un
- * teléfono tapaba de sobra; el mismo grano sobre una captura de 4000 px dejaba
- * bloques tan pequeños que **se leía lo que había debajo**, que es exactamente
- * lo que esta herramienta existe para impedir.
+ * Esto ha ido y ha vuelto, y conviene dejar escrito por qué acaba aquí.
  *
- * Contando bloques en vez de píxeles, el resultado se ve igual de tapado sea
- * cual sea el tamaño de la imagen, y el grosor sigue siendo el mando: más
- * grosor, menos bloques y más gordos.
+ * Primero fue un tamaño fijo. Luego se cambió a «tantos bloques en el lado
+ * mayor» para que una captura enorme quedara igual de tapada que una pequeña —
+ * el problema era que un grano de 32 px sobre una captura de 4000 dejaba
+ * bloques tan finos que se leía lo de debajo.
+ *
+ * Pero contar bloques ata el grano al tamaño **del recuadro**, y eso hace algo
+ * mucho peor de usar: al agrandar el recuadro para tapar un poco más, los
+ * bloques crecen con él y lo que ya estaba tapado se convierte en cuatro
+ * manchas. Tapar más no puede significar tapar distinto. Con un lado fijo, el
+ * mosaico se comporta igual sea cual sea el recuadro y el grosor sigue siendo el
+ * mando: cuatro tamaños de grano, del fino al gordo.
+ *
+ * Lo que resolvía el reparto por bloques —que sobre una captura enorme el grano
+ * fino no tape— se resuelve mejor subiendo el grosor, que es justo el mando que
+ * uno tiene en la mano.
  */
-fun mosaicoBloques(strokeWidth: Double): Int = when {
-    strokeWidth <= 1.0 -> 28
-    strokeWidth <= 2.0 -> 18
-    strokeWidth <= 4.0 -> 11
-    else -> 6
+fun mosaicoGrano(strokeWidth: Double): Double = when {
+    strokeWidth <= 1.0 -> 8.0
+    strokeWidth <= 2.0 -> 16.0
+    strokeWidth <= 4.0 -> 32.0
+    else -> 64.0
 }
 
 /** El marco: la hoja que decide qué se ve fuera del editor. */

@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.GuiasTest" tests="25" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:28.003Z" hostname="localhost" time="0.251">
+<testsuite name="com.forge.pixpin.motor.GuiasTest" tests="25" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:56.863Z" hostname="localhost" time="0.656">
   <properties/>
   <testcase name="el lapiz no salta a los vertices" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
   <testcase name="el borrador no se lleva las guias por delante" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <testcase name="cambiar de mundo suelta la seleccion" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
   <testcase name="la seleccion solo coge lo del mundo activo" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="las guias no son una herramienta sino un interruptor" classname="com.forge.pixpin.motor.GuiasTest" time="0.002"/>
-  <testcase name="dos guias que se cruzan dan interseccion" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="en modo guia el borrador si borra guias" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
-  <testcase name="fuera del modo guia el bote no se apoya en las guias" classname="com.forge.pixpin.motor.GuiasTest" time="0.007"/>
+  <testcase name="las guias no son una herramienta sino un interruptor" classname="com.forge.pixpin.motor.GuiasTest" time="0.004"/>
+  <testcase name="dos guias que se cruzan dan interseccion" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="en modo guia el borrador si borra guias" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
+  <testcase name="fuera del modo guia el bote no se apoya en las guias" classname="com.forge.pixpin.motor.GuiasTest" time="0.012"/>
   <testcase name="seleccionar todo no mezcla guias y dibujo" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
-  <testcase name="repasar la guia redonda traza el arco entero" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
-  <testcase name="el trazo se pega a la curva de una guia redonda" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="en modo guia el bote solo mira las guias" classname="com.forge.pixpin.motor.GuiasTest" time="0.225"/>
-  <testcase name="en modo guia el borrador respeta el dibujo" classname="com.forge.pixpin.motor.GuiasTest" time="0.002"/>
+  <testcase name="repasar la guia redonda traza el arco entero" classname="com.forge.pixpin.motor.GuiasTest" time="0.005"/>
+  <testcase name="el trazo se pega a la curva de una guia redonda" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="en modo guia el bote solo mira las guias" classname="com.forge.pixpin.motor.GuiasTest" time="0.617"/>
+  <testcase name="en modo guia el borrador respeta el dibujo" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <testcase name="un arco que barre mas no reutiliza la geometria vieja" classname="com.forge.pixpin.motor.GuiasTest" time="0.002"/>
   <testcase name="en modo referencia la guia no se repasa" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
-  <testcase name="el lapiz sigue el canto de la guia" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="el canto de lo que no es guia no engancha" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="el trazo se pega al canto de una guia" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="en una esquina manda la esquina y no el canto" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="el lapiz sigue el canto de la guia" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="el canto de lo que no es guia no engancha" classname="com.forge.pixpin.motor.GuiasTest" time="0.002"/>
+  <testcase name="el trazo se pega al canto de una guia" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="en una esquina manda la esquina y no el canto" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <testcase name="esconder las guias no las borra y deja de imantar" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <testcase name="lejos de la guia no engancha" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
-  <testcase name="un toque sobre la guia no deja un arco vacio" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="un toque sobre la guia no deja un arco vacio" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <testcase name="repasar la guia no se lleva la guia" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
-  <testcase name="el canto se puede apagar por su cuenta" classname="com.forge.pixpin.motor.GuiasTest" time="0.001"/>
+  <testcase name="el canto se puede apagar por su cuenta" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <testcase name="las guias se quitan una a una con el borrador" classname="com.forge.pixpin.motor.GuiasTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

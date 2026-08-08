@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ViewportBoundsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:30.135Z" hostname="localhost" time="0.002">
+<testsuite name="com.forge.pixpin.motor.ViewportBoundsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:49:00.560Z" hostname="localhost" time="0.006">
   <properties/>
-  <testcase name="una imagen mas pequeña que el hueco queda centrada" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.0"/>
+  <testcase name="una imagen mas pequeña que el hueco queda centrada" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.004"/>
   <testcase name="acercarse no tiene tope practico, que es lo que permite afinar" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.0"/>
   <testcase name="el paneo se frena antes de dejar hueco en los bordes" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.0"/>
   <testcase name="sin limites no se toca nada, el lienzo sigue infinito" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.0"/>

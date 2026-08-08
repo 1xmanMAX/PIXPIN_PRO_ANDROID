@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ElbowTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.856Z" hostname="localhost" time="0.008">
+<testsuite name="com.forge.pixpin.motor.ElbowTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:56.495Z" hostname="localhost" time="0.016">
   <properties/>
-  <testcase name="el estilo decide si la flecha nace de codos" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
+  <testcase name="el estilo decide si la flecha nace de codos" classname="com.forge.pixpin.motor.ElbowTest" time="0.003"/>
   <testcase name="redondear conserva los extremos" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
-  <testcase name="todos los tramos van por un eje" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
+  <testcase name="todos los tramos van por un eje" classname="com.forge.pixpin.motor.ElbowTest" time="0.003"/>
   <testcase name="empieza y acaba donde se le dice" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
   <testcase name="el cruce va por la mitad del camino" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
   <testcase name="sale por el eje que mas hay que recorrer" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
-  <testcase name="casi alineadas se unen con una recta" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
-  <testcase name="un codo entre tramos cortos no se desborda" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
-  <testcase name="dos puntos no tienen codo que redondear" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
+  <testcase name="casi alineadas se unen con una recta" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
+  <testcase name="un codo entre tramos cortos no se desborda" classname="com.forge.pixpin.motor.ElbowTest" time="0.002"/>
+  <testcase name="dos puntos no tienen codo que redondear" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
   <testcase name="solo la flecha puede ser de codos" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
-  <testcase name="una flecha normal no se traza en codos" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
-  <testcase name="una flecha de codos si" classname="com.forge.pixpin.motor.ElbowTest" time="0.001"/>
+  <testcase name="una flecha normal no se traza en codos" classname="com.forge.pixpin.motor.ElbowTest" time="0.002"/>
+  <testcase name="una flecha de codos si" classname="com.forge.pixpin.motor.ElbowTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

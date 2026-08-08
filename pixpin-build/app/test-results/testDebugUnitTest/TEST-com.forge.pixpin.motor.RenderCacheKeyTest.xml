@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.RenderCacheKeyTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:30.074Z" hostname="localhost" time="0.001">
+<testsuite name="com.forge.pixpin.motor.RenderCacheKeyTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:49:00.282Z" hostname="localhost" time="0.041">
   <properties/>
-  <testcase name="cambiar entre dos colores de relleno no invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
-  <testcase name="un elemento identico reutiliza la geometria" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
+  <testcase name="cambiar entre dos colores de relleno no invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.007"/>
+  <testcase name="un elemento identico reutiliza la geometria" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
   <testcase name="la version no basta como clave" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
-  <testcase name="mover un punto de una linea invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
-  <testcase name="rotar, recolorear el trazo o cambiar la opacidad no invalidan" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
+  <testcase name="mover un punto de una linea invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
+  <testcase name="rotar, recolorear el trazo o cambiar la opacidad no invalidan" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.007"/>
   <testcase name="cambiar la semilla invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
-  <testcase name="pasar de transparente a relleno invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
-  <testcase name="los estilos que cambian el trazo invalidan" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
+  <testcase name="pasar de transparente a relleno invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
+  <testcase name="los estilos que cambian el trazo invalidan" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
   <testcase name="mover o redimensionar invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

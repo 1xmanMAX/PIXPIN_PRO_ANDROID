@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.BindingTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.574Z" hostname="localhost" time="0.007">
+<testsuite name="com.forge.pixpin.motor.BindingTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:55.873Z" hostname="localhost" time="0.007">
   <properties/>
-  <testcase name="la punta sobre el borde tambien" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
-  <testcase name="el alcance del iman crece al alejar la vista" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
+  <testcase name="la punta sobre el borde tambien" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
+  <testcase name="el alcance del iman crece al alejar la vista" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
   <testcase name="una forma transparente deja ver la de detras" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
   <testcase name="la punta un poco fuera sigue anclando" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
   <testcase name="una flecha que cruza una caja y acaba fuera no se ata a ella" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
   <testcase name="lejos no ancla" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
-  <testcase name="entre dos que se solapan gana la mas pequeña" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
-  <testcase name="lo borrado, lo bloqueado y lo no anclable se ignoran" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
-  <testcase name="una forma opaca tapa a la de detras" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
+  <testcase name="entre dos que se solapan gana la mas pequeña" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
+  <testcase name="lo borrado, lo bloqueado y lo no anclable se ignoran" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
+  <testcase name="una forma opaca tapa a la de detras" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
   <testcase name="soltar dentro guarda el punto y el modo dentro" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
-  <testcase name="el punto de dentro sobrevive a redimensionar" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
+  <testcase name="el punto de dentro sobrevive a redimensionar" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
   <testcase name="la punta dentro de la forma ancla" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
-  <testcase name="soltar en el borde usa el modo contorno" classname="com.forge.pixpin.motor.BindingTest" time="0.001"/>
+  <testcase name="soltar en el borde usa el modo contorno" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
   <testcase name="el punto de dentro sigue a la forma" classname="com.forge.pixpin.motor.BindingTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

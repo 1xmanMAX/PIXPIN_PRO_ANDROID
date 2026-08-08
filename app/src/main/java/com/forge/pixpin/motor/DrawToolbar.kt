@@ -524,6 +524,132 @@ fun DialogoEscala(
     }
 }
 
+/**
+ * El mismo teclado, para **dictarle a una cota cuánto mide y hacia dónde va**.
+ *
+ * Se abre en cuanto se traza, igual que el de calibrar: es el momento en que uno
+ * sabe la medida, y obligarle a ir a buscar un panel después es perderla. Se
+ * teclea la distancia, se pasa al ángulo con la misma pestaña y ya.
+ *
+ * Y **el principio de la raya no se mueve**: se acierta con el dedo dónde empieza
+ * una medida —en una esquina, en un cruce— y no se acierta nunca ni el largo ni
+ * el ángulo. Ver [conLargoYAngulo].
+ */
+@Composable
+fun DialogoDeCota(
+    largoActual: Double,
+    anguloActual: Double,
+    unidad: String,
+    onAceptar: (largo: Double, grados: Double) -> Unit,
+    onCancelar: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var enElAngulo by remember { mutableStateOf(false) }
+    var largo by remember { mutableStateOf(formatearMedida(largoActual)) }
+    var angulo by remember { mutableStateOf(formatearMedida(anguloActual)) }
+    val valorLargo = Escala.leerNumero(largo)
+    val valorAngulo = Escala.leerNumero(angulo)
+    val valida = valorLargo != null && valorLargo > 0.0 && valorAngulo != null
+
+    Surface(shape = RoundedCornerShape(16.dp), shadowElevation = 8.dp, modifier = modifier) {
+        Column(
+            Modifier.widthIn(max = 300.dp).padding(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                stringResource(R.string.cota_titulo),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            // Las dos casillas, y se teclea en la que esté encendida. Dos
+            // teclados no caben en una barra flotante, y con uno solo hay que
+            // decir a cuál de las dos va lo que se pulsa.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CasillaDeCota(
+                    valor = if (largo.isEmpty()) "0" else largo,
+                    sufijo = unidad,
+                    etiqueta = stringResource(R.string.medida_largo),
+                    activa = !enElAngulo,
+                    modifier = Modifier.weight(1f)
+                ) { enElAngulo = false }
+                CasillaDeCota(
+                    valor = if (angulo.isEmpty()) "0" else angulo,
+                    sufijo = "°",
+                    etiqueta = stringResource(R.string.medida_angulo),
+                    activa = enElAngulo,
+                    modifier = Modifier.weight(1f)
+                ) { enElAngulo = true }
+            }
+
+            for (fila in TECLAS) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    fila.forEach { tecla ->
+                        Tecla(tecla) {
+                            if (enElAngulo) angulo = teclear(angulo, tecla)
+                            else largo = teclear(largo, tecla)
+                        }
+                    }
+                }
+            }
+
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // El menos, para los ángulos que van hacia abajo. Solo cuando se
+                // está tecleando el ángulo: una distancia negativa no existe.
+                if (enElAngulo) {
+                    TextButton(onClick = {
+                        angulo = if (angulo.startsWith("-")) angulo.drop(1) else "-" + angulo
+                    }) { Text("±") }
+                }
+                TextButton(onClick = onCancelar) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+                TextButton(
+                    onClick = { onAceptar(valorLargo ?: 0.0, valorAngulo ?: 0.0) },
+                    enabled = valida
+                ) { Text(stringResource(R.string.escala_aceptar)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CasillaDeCota(
+    valor: String,
+    sufijo: String,
+    etiqueta: String,
+    activa: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (activa) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.clickable { onClick() }
+    ) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Text(
+                etiqueta,
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "$valor $sufijo",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
 /** Las teclas, en el orden del teclado de un teléfono. */
 private val TECLAS: List<List<String>> = listOf(
     listOf("1", "2", "3"),

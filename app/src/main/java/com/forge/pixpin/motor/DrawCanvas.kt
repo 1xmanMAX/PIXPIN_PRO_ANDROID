@@ -328,7 +328,14 @@ fun DrawCanvas(
                     style = Stroke(width = 1.dp.toPx())
                 )
             }
-            for (h in getSelectionTransformHandles(selected, vp.zoom)) {
+            // Con los clavos: donde hay uno **no se pinta el tirador**. El
+            // controlador ya no lo tiene en cuenta para el toque, pero aquí se
+            // seguía pintando, así que se veía la bolita blanca encima del punto
+            // rojo y parecía que seguía mandando ella.
+            val handles = getSelectionTransformHandles(
+                selected, vp.zoom, alfileres = controller.scene.alfileres.map { it.punto }
+            )
+            for (h in handles) {
                 val c = vp.toScreen(Pt(h.centerX, h.centerY))
                 val r = (h.width * vp.zoom / 2).toFloat()
                 val centro = Offset(c.x.toFloat(), c.y.toFloat())

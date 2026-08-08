@@ -68,6 +68,7 @@
     <string name="copy_format_title">Imagen al copiar</string>
     <string name="copy_format_webp">Comprimida sin pérdida (WebP)</string>
     <string name="copy_format_webp_desc">Exactamente la misma imagen, sin tocar un píxel, ocupando cerca de la mitad. A cambio, algún sitio viejo no la abre.</string>
+    <string name="cota_titulo">¿Cuánto mide y hacia dónde va?</string>
     <string name="crash_desc">Hay un informe guardado con el detalle técnico del fallo. Mientras no lo descartes, PixPin no se activará sola al reiniciar el móvil.</string>
     <string name="crash_dismiss">Descartar</string>
     <string name="crash_share">Compartir informe</string>
