@@ -65,9 +65,6 @@ import com.forge.pixpin.clipboard.ClipboardPinReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.clipboard.MiniApp
 import com.forge.pixpin.clipboard.PinContent
-import com.forge.pixpin.croquis.Croquis
-import com.forge.pixpin.croquis.CroquisEditorActivity
-import com.forge.pixpin.croquis.CroquisStore
 import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.data.PinRepository
 import com.forge.pixpin.floating.FloatingBallController
@@ -363,6 +360,31 @@ class OverlayManager(private val app: PixPinApp) {
      * anotaciones re-editables y la exportación a la galería, sin una línea de
      * código de dibujo nueva.
      */
+    /**
+     * Una escena que ya trae su hoja puesta.
+     *
+     * Proporción A4 en vertical, que es la que espera cualquiera al oír «hoja»,
+     * y de un tamaño con el que se puede escribir a mano sin acercarse. Se
+     * puede estirar luego: para eso está.
+     */
+    private fun escenaConHoja(): com.forge.pixpin.motor.Scene {
+        // 800 px de escena de ancho: con la letra a 20 caben unos sesenta
+        // caracteres por línea, que es una hoja donde se puede escribir de
+        // verdad sin tener que acercarse a cada palabra.
+        val ancho = 800.0
+        val marco = com.forge.pixpin.motor.Element(
+            id = com.forge.pixpin.motor.randomId(),
+            type = com.forge.pixpin.motor.ElementType.FRAME,
+            x = 0.0,
+            y = 0.0,
+            width = ancho,
+            height = ancho * 297.0 / 210.0,
+            seed = com.forge.pixpin.motor.randomSeed(),
+            name = app.getString(R.string.hoja_nombre)
+        )
+        return com.forge.pixpin.motor.Scene(elements = listOf(marco))
+    }
+
     private fun createMiniApp(app: MiniApp) {
         if (app == MiniApp.BOARD) {
             scope.launch {
@@ -371,21 +393,33 @@ class OverlayManager(private val app: PixPinApp) {
             }
             return
         }
-        // El croquis nace vacío y abre su editor de inmediato: la palabra
-        // mágica es la orden de ponerse a dibujar, no de mirar una hoja.
-        if (app == MiniApp.CROQUIS) {
-            val pin = newPin(PinType.CROQUIS)
-            val ruta = CroquisStore.guardar(this@OverlayManager.app, pin.id, Croquis())
-            createPin(pin.copy(croquisPath = ruta))
-            CroquisEditorActivity.abrir(this@OverlayManager.app, pin.id, ruta, null)
+        // El dibujo nace vacío y abre su editor de inmediato, igual que el
+        // croquis: la palabra mágica es la orden de ponerse a dibujar, no la de
+        // mirar una hoja en blanco dentro de un pin de dos dedos de ancho.
+        if (app == MiniApp.DRAW || app == MiniApp.SHEET) {
+            val pin = newPin(PinType.DRAW)
+            // La única diferencia entre las dos palabras: la hoja nace con su
+            // marco puesto y el lienzo no. De ahí en adelante son el mismo
+            // editor y el mismo motor — lo que cambia es con qué te encuentras
+            // al abrirlo, que es justo lo que separa «piensa sin límites» de
+            // «apunta esto en un papel».
+            val escena = if (app == MiniApp.SHEET) escenaConHoja() else com.forge.pixpin.motor.Scene()
+            val ruta = com.forge.pixpin.motor.ExcalidrawStore.guardar(
+                this@OverlayManager.app, pin.id, escena
+            )
+            createPin(pin.copy(drawPath = ruta))
+            com.forge.pixpin.motor.DrawEditorActivity.abrir(
+                this@OverlayManager.app, pin.id, ruta, null
+            )
             return
         }
         val type = when (app) {
+            MiniApp.SHEET -> PinType.DRAW
             MiniApp.TIMER, MiniApp.STOPWATCH -> PinType.TIMER
             MiniApp.CHECKLIST -> PinType.CHECKLIST
             MiniApp.COUNTER -> PinType.COUNTER
             MiniApp.LEDGER -> PinType.LEDGER
-            MiniApp.BOARD, MiniApp.CROQUIS -> return
+            MiniApp.BOARD, MiniApp.DRAW -> return
         }
         val seed = when (app) {
             MiniApp.CHECKLIST -> appString(R.string.checklist_seed)
@@ -417,10 +451,24 @@ class OverlayManager(private val app: PixPinApp) {
      * la bola y los pines saldrían dentro de la propia captura) y para el
      * botón "ocultar todo".
      */
+    /**
+     * La capa para dibujar sobre la pantalla.
+     *
+     * Vive aquí y no en su propio servicio porque es una ventana overlay más:
+     * hay que esconderla al capturar como a los pines, y hay que poder cerrarla
+     * cuando se cierra todo.
+     */
+    val capa: com.forge.pixpin.capa.CapaPantalla by lazy {
+        com.forge.pixpin.capa.CapaPantalla(app)
+    }
+
     fun setOverlaysVisible(visible: Boolean) {
         if (!visible) closePinList()
         pins.values.forEach { it.setViewVisible(visible && !hiddenAll) }
         FloatingBallController.active?.setVisible(visible)
+        // Si no, la capa saldría fotografiada dentro de la propia captura: una
+        // vez pintada de verdad y otra en la foto, con la barra en medio.
+        capa.setVisible(visible)
     }
 
     /**
@@ -776,7 +824,9 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COUNTER -> "🔢 " + app.getString(R.string.pin_type_counter)
         PinType.LEDGER -> "💶 " + app.getString(R.string.pin_type_ledger)
         PinType.TABLE -> "▦ " + app.getString(R.string.pin_type_table)
-        PinType.CROQUIS -> "📐 " + app.getString(R.string.pin_type_croquis)
+        PinType.DRAW -> "✎ " + app.getString(R.string.pin_type_draw)
+        // Retirado: no llega ninguno, se descartan al cargar la lista.
+        PinType.CROQUIS -> ""
     }
 
     /**
@@ -1030,7 +1080,8 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COUNTER -> app.getString(R.string.pin_type_counter) + " ${pin.widget.count}"
         PinType.LEDGER -> app.getString(R.string.pin_type_ledger)
         PinType.TABLE -> app.getString(R.string.pin_type_table)
-        PinType.CROQUIS -> app.getString(R.string.pin_type_croquis)
+        PinType.DRAW -> app.getString(R.string.pin_type_draw)
+        PinType.CROQUIS -> ""
     }
 
     // ---- Persistencia ----

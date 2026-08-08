@@ -25,7 +25,18 @@ import com.forge.pixpin.ui.theme.PixPinTheme
  * a ComposeView sus propios Lifecycle/ViewModel/SavedState owners y el tema de
  * la app (si no, Material usaría su paleta por defecto).
  */
-class OverlayComposeWindow(context: Context, content: @Composable () -> Unit) {
+class OverlayComposeWindow(
+    context: Context,
+    /**
+     * Si el contenido llena la ventana en vez de medirse por lo que ocupa.
+     *
+     * Lo normal aquí es lo segundo —un pin mide lo que mide su contenido—, pero
+     * la capa de dibujo cubre la pantalla entera, y con el hijo midiéndose solo
+     * un lienzo transparente se quedaría en cero.
+     */
+    matchParent: Boolean = false,
+    content: @Composable () -> Unit
+) {
 
     private val owner = OverlayLifecycleOwner()
 
@@ -42,13 +53,9 @@ class OverlayComposeWindow(context: Context, content: @Composable () -> Unit) {
         setViewTreeLifecycleOwner(owner)
         setViewTreeViewModelStoreOwner(owner)
         setViewTreeSavedStateRegistryOwner(owner)
-        addView(
-            composeView,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-        )
+        val medida = if (matchParent) FrameLayout.LayoutParams.MATCH_PARENT
+        else FrameLayout.LayoutParams.WRAP_CONTENT
+        addView(composeView, FrameLayout.LayoutParams(medida, medida))
     }
 
     /** La vista que se añade al WindowManager. */

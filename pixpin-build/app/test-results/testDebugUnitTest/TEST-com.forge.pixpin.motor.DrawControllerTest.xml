@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.forge.pixpin.motor.DrawControllerTest" tests="50" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:36.712Z" hostname="localhost" time="0.106">
+  <properties/>
+  <testcase name="mover una punta recalcula la caja" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.004"/>
+  <testcase name="el rectangulo de seleccion coge lo que encierra del todo" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="sin el segundo dedo la forma sigue al dedo" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="un doblez soltado encima de su vecino desaparece" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="la herramienta sigue activa despues de dibujar" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="un extremo soltado sobre una forma sí se ancla" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="una flecha en el vacio no se ancla a nada" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="mover una punta se engancha a la esquina de una forma" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="soltar la punta dentro de una forma la ancla" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="con proporcion bloqueada el rectangulo sale cuadrado" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="con el segundo dedo la línea sale recta" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="arrastrar una forma seleccionada la mueve" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="un extremo soltado encima del otro no borra nada" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="arrastrar el tirador SE redimensiona" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="con el segundo dedo la elipse sale redonda y el rombo simétrico" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="arrastrar con la herramienta rectangulo crea uno" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="deshacer retira la ultima forma dibujada" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="arrastrar una punta deja la otra donde estaba" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="el lapiz acumula puntos y presiones" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="los dos extremos no se anclan a la misma forma" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.005"/>
+  <testcase name="mover a saltitos acaba en el mismo sitio que de una vez" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.009"/>
+  <testcase name="deshacer no deja seleccionado lo que ya no existe" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="tocar dentro de una seleccion multiple la conserva" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.003"/>
+  <testcase name="atravesar una forma y acabar mas alla no la ancla" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="cada forma nueva recibe su propia semilla" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="apoyar el segundo dedo a mitad del trazo corrige la forma" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="cambiar de herramienta deselecciona" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="un punto intermedio soltado sobre una forma no se ancla" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.005"/>
+  <testcase name="tocar el vacio deselecciona" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="cada color es una tabla distinta" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.012"/>
+  <testcase name="cancelar deja la escena como estaba" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="una flecha que acaba sobre una forma se ancla sola" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="tocar una forma rellena la selecciona" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="un gesto entero es un solo paso de deshacer" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="seleccionar un miembro de un grupo coge el grupo entero" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="un punto intermedio se arrastra sin tocar los extremos" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="sin seleccion el color solo afecta a lo siguiente" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="un elemento bloqueado no se mueve ni se borra" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="una flecha seleccionada ofrece tiradores en sus dos puntas" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="tocar un texto con la herramienta de texto lo abre en vez de crear otro" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="un toque seco no deja una forma invisible" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="con seleccion el color afecta tambien a lo seleccionado" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="arrastrar el medio de un tramo dobla la línea" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="la mano desplaza la vista sin tocar los elementos" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="mover una punta se engancha a un punto de una tabla" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.011"/>
+  <testcase name="arrastrar la cola deja la punta donde estaba" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="el borrador marca lo que toca al pasar" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.002"/>
+  <testcase name="tocar en vacío con la herramienta de texto crea uno nuevo" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <testcase name="duplicar deja la copia seleccionada" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.001"/>
+  <testcase name="arrastrar en cualquier direccion da una caja valida" classname="com.forge.pixpin.motor.DrawControllerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,7 +1,22 @@
 package com.forge.pixpin.clipboard
 
 /** Mini-aplicaciones que se abren pineando una palabra. */
-enum class MiniApp { TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD, CROQUIS }
+enum class MiniApp {
+    TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD,
+
+    /** El lienzo infinito. */
+    DRAW,
+
+    /**
+     * **La hoja**: el mismo lienzo pero acotado.
+     *
+     * Nace con un marco puesto, así que tiene bordes desde el primer momento y
+     * el pin enseña exactamente eso. Es la diferencia entre «ponte a pensar sin
+     * límites» y «apunta esto en un papel»: dos intenciones distintas que
+     * merecen dos palabras distintas, aunque por dentro sean el mismo motor.
+     */
+    SHEET
+}
 
 /**
  * Palabras que, pineadas **solas**, abren una mini-aplicación en vez de un pin
@@ -47,9 +62,20 @@ object MagicWord {
         // «plano» se quedó fuera a propósito: se copia solo demasiado a menudo
         // en un texto de obra, y perderlo como pin de texto costaría más de lo
         // que aporta como atajo.
-        "croquis" to MiniApp.CROQUIS,
-        "cad" to MiniApp.CROQUIS,
-        "sketch" to MiniApp.CROQUIS
+
+        // El lienzo infinito. «draw» y «dibujo» se quedaron fuera por lo mismo
+        // que «plano»: se copian solos demasiado a menudo y perderlos como pin
+        // de texto costaría más de lo que aporta el atajo.
+        "canvas" to MiniApp.DRAW,
+        "lienzo" to MiniApp.DRAW,
+        "excalidraw" to MiniApp.DRAW,
+
+        // La hoja: el mismo lienzo, pero acotado y con bordes desde el minuto
+        // uno. «papel», «página» y «nota» se quedan fuera por lo mismo que
+        // «plano»: se copian solas demasiado a menudo en un texto cualquiera, y
+        // perderlas como pin de texto costaría más de lo que aporta el atajo.
+        "hoja" to MiniApp.SHEET,
+        "sheet" to MiniApp.SHEET
     )
 
     /**

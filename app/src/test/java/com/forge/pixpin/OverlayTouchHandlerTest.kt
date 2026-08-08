@@ -66,6 +66,10 @@ class OverlayTouchHandlerTest {
         }
 
         override fun onScrollEnd() { scrollEnds++ }
+
+        var dosDedosDobles = 0
+
+        override fun onTwoFingerDoubleTap() { dosDedosDobles++ }
     }
 
     private lateinit var recorder: Recorder
@@ -209,6 +213,69 @@ class OverlayTouchHandlerTest {
         assertEquals(0, recorder.scrolls)
     }
 
+    // ---- Doble toque con dos dedos: entrar a dibujar en el pin ----
+
+    /** Dos toques de dos dedos seguidos y sin mover nada: se entra a dibujar. */
+    @Test
+    fun `dos toques de dos dedos abren la edición simple`() {
+        toqueDeDosDedos(desde = 0L)
+        assertEquals("el primero solo arma el gesto", 0, recorder.dosDedosDobles)
+        toqueDeDosDedos(desde = 100L)
+        assertEquals(1, recorder.dosDedosDobles)
+    }
+
+    /** Uno solo no es doble: se queda esperando al segundo. */
+    @Test
+    fun `un toque suelto de dos dedos no hace nada`() {
+        toqueDeDosDedos(desde = 0L)
+        assertEquals(0, recorder.dosDedosDobles)
+    }
+
+    /** Con demasiado hueco entre los dos, son dos toques sueltos. */
+    @Test
+    fun `dos toques lejanos en el tiempo no cuentan como doble`() {
+        toqueDeDosDedos(desde = 0L)
+        toqueDeDosDedos(desde = 5_000L)
+        assertEquals(0, recorder.dosDedosDobles)
+    }
+
+    /**
+     * Pellizcar y volver a posar los dedos **no** puede abrir el dibujo: el
+     * pellizco es escalar, y encadenarlo con un toque acabaría entrando a
+     * dibujar cuando solo se estaba ajustando el tamaño del pin.
+     */
+    @Test
+    fun `un pellizco no cuenta como toque`() {
+        send(down(300f, 800f))
+        send(pointerDown(300f, 800f, 500f, 800f))
+        send(moveTwo(200f, 800f, 800f, 800f))
+        send(up(200f, 800f))
+
+        toqueDeDosDedos(desde = 100L)
+        assertEquals(0, recorder.dosDedosDobles)
+    }
+
+    /** Arrastrar el pin con un dedo tampoco arma el gesto. */
+    @Test
+    fun `arrastrar no cuenta como toque`() {
+        send(down(100f, 200f))
+        send(move(160f, 260f))
+        send(up(160f, 260f))
+
+        toqueDeDosDedos(desde = 100L)
+        assertEquals(0, recorder.dosDedosDobles)
+    }
+
+    /** Un toque completo de dos dedos: bajan los dos, se levantan los dos. */
+    private fun toqueDeDosDedos(desde: Long) {
+        send(MotionEvent.obtain(desde, desde, MotionEvent.ACTION_DOWN, 300f, 800f, 0))
+        send(multiEn(desde + 10, MotionEvent.ACTION_POINTER_DOWN or
+            (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 300f, 800f, 500f, 800f))
+        send(multiEn(desde + 40, MotionEvent.ACTION_POINTER_UP or
+            (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), 300f, 800f, 500f, 800f))
+        send(MotionEvent.obtain(desde, desde + 50, MotionEvent.ACTION_UP, 300f, 800f, 0))
+    }
+
     // ---- Construcción de eventos ----
 
     private fun send(event: MotionEvent) {
@@ -234,7 +301,13 @@ class OverlayTouchHandlerTest {
     private fun moveTwo(x0: Float, y0: Float, x1: Float, y1: Float) =
         multi(MotionEvent.ACTION_MOVE, x0, y0, x1, y1)
 
-    private fun multi(action: Int, x0: Float, y0: Float, x1: Float, y1: Float): MotionEvent {
+    private fun multi(action: Int, x0: Float, y0: Float, x1: Float, y1: Float): MotionEvent =
+        multiEn(30, action, x0, y0, x1, y1)
+
+    /** Igual, pero con el instante a elección: el doble toque se mide en tiempo. */
+    private fun multiEn(
+        cuando: Long, action: Int, x0: Float, y0: Float, x1: Float, y1: Float
+    ): MotionEvent {
         val props = arrayOf(
             MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER },
             MotionEvent.PointerProperties().apply { id = 1; toolType = MotionEvent.TOOL_TYPE_FINGER }
@@ -244,7 +317,7 @@ class OverlayTouchHandlerTest {
             MotionEvent.PointerCoords().apply { x = x1; y = y1 }
         )
         return MotionEvent.obtain(
-            0, 30, action, 2, props, coords,
+            cuando, cuando, action, 2, props, coords,
             0, 0, 1f, 1f, 0, 0, 0, 0
         )
     }

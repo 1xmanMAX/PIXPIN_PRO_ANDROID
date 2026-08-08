@@ -48,11 +48,26 @@ class StrokeTouchReader(
     private val onBegin: (x: Float, y: Float, pressure: Float) -> Unit,
     private val onExtend: (x: Float, y: Float, pressure: Float) -> Unit,
     private val onFinish: () -> Unit,
-    private val onCancel: () -> Unit
+    private val onCancel: () -> Unit,
+    /**
+     * **El segundo dedo, que hace de Shift.**
+     *
+     * Con el dedo que dibuja apoyado, posar otro en cualquier parte de la
+     * pantalla pide *forma perfecta*: el círculo sale redondo, el cuadrado
+     * cuadrado y el rombo simétrico. Al levantarlo, se vuelve a mano alzada.
+     *
+     * En un teclado esto es la tecla Shift, y en una pantalla no hay teclas: lo
+     * que hay es otra mano. Es el gesto que ya hace todo el mundo para «sujetar»
+     * algo mientras lo ajusta con la otra.
+     */
+    private val onModifier: (activo: Boolean) -> Unit = {}
 ) : View.OnTouchListener {
 
     private var activeId = INVALID_POINTER
     private var activeKind = ToolKind.OTHER
+
+    /** ¿Hay un dedo de más apoyado ahora mismo? */
+    private var modificador = false
 
     override fun onTouch(view: View, event: MotionEvent): Boolean = onTouchEvent(event)
 
@@ -67,6 +82,12 @@ class StrokeTouchReader(
                 if (kindOf(event, index) == ToolKind.STYLUS && activeKind != ToolKind.STYLUS) {
                     if (activeId != INVALID_POINTER) onCancel()
                     startFrom(event, index)
+                } else if (activeId != INVALID_POINTER && activeKind == ToolKind.FINGER) {
+                    // Solo cuando se dibuja **con el dedo**. Dibujando con
+                    // lápiz, el segundo contacto es la palma apoyándose, y
+                    // tomarla por un modificador convertiría todos los trazos
+                    // de la mano apoyada en formas perfectas.
+                    setModificador(true)
                 }
             }
 
@@ -90,14 +111,22 @@ class StrokeTouchReader(
                 }
             }
 
-            MotionEvent.ACTION_POINTER_UP ->
-                if (event.getPointerId(event.actionIndex) == activeId) finish()
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.getPointerId(event.actionIndex) == activeId) {
+                    finish()
+                } else if (event.pointerCount <= 2) {
+                    // El que se va todavía se cuenta aquí: si quedan dos o
+                    // menos, al soltarlo solo queda el que dibuja.
+                    setModificador(false)
+                }
+            }
 
             MotionEvent.ACTION_UP -> finish()
 
             MotionEvent.ACTION_CANCEL -> {
                 if (activeId != INVALID_POINTER) onCancel()
                 activeId = INVALID_POINTER
+                setModificador(false)
             }
         }
         return true
@@ -118,7 +147,18 @@ class StrokeTouchReader(
     private fun finish() {
         if (activeId == INVALID_POINTER) return
         activeId = INVALID_POINTER
+        // Primero se cierra el trazo y después se suelta el modificador: al
+        // revés, la forma se recalcularía sin él justo antes de darla por buena
+        // y el círculo perfecto se quedaría ovalado al levantar los dedos.
         onFinish()
+        setModificador(false)
+    }
+
+    /** Avisa solo cuando cambia: esto se llama en cada evento de un gesto. */
+    private fun setModificador(activo: Boolean) {
+        if (modificador == activo) return
+        modificador = activo
+        onModifier(activo)
     }
 
     private fun activeIndex(event: MotionEvent): Int =

@@ -3,7 +3,16 @@ package com.forge.pixpin.pin
 import com.forge.pixpin.annotate.Annotation
 import kotlinx.serialization.Serializable
 
-enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE, CROQUIS }
+/**
+ * Qué es un pin.
+ *
+ * [CROQUIS] es **historia**: era el editor de tipo CAD, retirado cuando medir
+ * pasó a ser dos herramientas del motor (escalar y acotar). El valor se queda
+ * en el enum porque los pines guardados llevan el nombre escrito en el JSON, y
+ * quitarlo haría que la lista entera fallara al leerse. Los pines de ese tipo
+ * se descartan al cargar; ver `PinRepository.read`.
+ */
+enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE, CROQUIS, DRAW }
 
 /**
  * Estado de las mini-aplicaciones.
@@ -87,5 +96,13 @@ data class PinState(
      * entidades y este registro se lee entero al arrancar para restaurar los
      * pines. Mismo trato que `imagePath` y `filePath`.
      */
-    val croquisPath: String? = null
+    val croquisPath: String? = null,
+
+    /**
+     * Ruta del `.excalidraw` comprimido del dibujo, si el pin es uno.
+     *
+     * Mismo trato y misma razón que [croquisPath]: una escena puede llevar
+     * cientos de elementos y este registro se lee entero al arrancar.
+     */
+    val drawPath: String? = null
 )

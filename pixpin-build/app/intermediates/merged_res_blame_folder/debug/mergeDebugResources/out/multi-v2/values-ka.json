@@ -4,7 +4,7 @@
             "outputFile": "com.forge.pixpin.app-mergeDebugResources-41:/values-ka/values-ka.xml",
             "map": [
                 {
-                    "source": "/home/ubuntu/.gradle/caches/9.5.0/transforms/b5ac1cbb476912d2a22c2bc792512649/transformed/ui/res/values-ka/values-ka.xml",
+                    "source": "/root/.gradle/caches/9.5.0/transforms/b5ac1cbb476912d2a22c2bc792512649/transformed/ui/res/values-ka/values-ka.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -21,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "/home/ubuntu/.gradle/caches/9.5.0/transforms/908f51296f9e7c37b6897ae31da72f3d/transformed/core-1.16.0/res/values-ka/values-ka.xml",
+                    "source": "/root/.gradle/caches/9.5.0/transforms/908f51296f9e7c37b6897ae31da72f3d/transformed/core-1.16.0/res/values-ka/values-ka.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -38,7 +38,24 @@
                     }
                 },
                 {
-                    "source": "/home/ubuntu/.gradle/caches/9.5.0/transforms/3a39d951e04961df6431fa6667f4c202/transformed/foundation/res/values-ka/values-ka.xml",
+                    "source": "/root/.gradle/caches/9.5.0/transforms/deb0d7985a3a1f805939c380970b11dc/transformed/material/res/values-ka/values-ka.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "93",
+                        "endOffsets": "144"
+                    },
+                    "to": {
+                        "startLines": "84",
+                        "startColumns": "4",
+                        "startOffsets": "8973",
+                        "endColumns": "93",
+                        "endOffsets": "9062"
+                    }
+                },
+                {
+                    "source": "/root/.gradle/caches/9.5.0/transforms/3a39d951e04961df6431fa6667f4c202/transformed/foundation/res/values-ka/values-ka.xml",
                     "from": {
                         "startLines": "2,3,4",
                         "startColumns": "4,4,4",
@@ -55,7 +72,7 @@
                     }
                 },
                 {
-                    "source": "/home/ubuntu/.gradle/caches/9.5.0/transforms/796640285635024812c6f33f5ac89b6f/transformed/material3/res/values-ka/values-ka.xml",
+                    "source": "/root/.gradle/caches/9.5.0/transforms/796640285635024812c6f33f5ac89b6f/transformed/material3/res/values-ka/values-ka.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -69,23 +86,6 @@
                         "startOffsets": "1699,1817,1934,2055,2169,2269,2368,2484,2620,2738,2886,2972,3074,3168,3266,3388,3508,3615,3750,3887,4022,4194,4323,4440,4558,4679,4774,4871,4989,5128,5231,5333,5444,5582,5722,5833,5936,6013,6108,6206,6316,6429,6543,6629,6716,6810,6923,7022,7102,7201,7286,7387,7490,7584,7686,7772,7878,7974,8082,8199,8279,8422,8552,8658,8755,8863",
                         "endColumns": "117,116,120,113,99,98,115,135,117,147,85,101,93,97,121,119,106,134,136,134,171,128,116,117,120,94,96,117,138,102,101,110,137,139,110,102,76,94,97,109,112,113,85,86,93,112,98,79,98,84,100,102,93,101,85,105,95,107,116,79,142,129,105,96,107,109",
                         "endOffsets": "1812,1929,2050,2164,2264,2363,2479,2615,2733,2881,2967,3069,3163,3261,3383,3503,3610,3745,3882,4017,4189,4318,4435,4553,4674,4769,4866,4984,5123,5226,5328,5439,5577,5717,5828,5931,6008,6103,6201,6311,6424,6538,6624,6711,6805,6918,7017,7097,7196,7281,7382,7485,7579,7681,7767,7873,7969,8077,8194,8274,8417,8547,8653,8750,8858,8968"
-                    }
-                },
-                {
-                    "source": "/home/ubuntu/.gradle/caches/9.5.0/transforms/deb0d7985a3a1f805939c380970b11dc/transformed/material/res/values-ka/values-ka.xml",
-                    "from": {
-                        "startLines": "2",
-                        "startColumns": "4",
-                        "startOffsets": "55",
-                        "endColumns": "93",
-                        "endOffsets": "144"
-                    },
-                    "to": {
-                        "startLines": "84",
-                        "startColumns": "4",
-                        "startOffsets": "8973",
-                        "endColumns": "93",
-                        "endOffsets": "9062"
                     }
                 }
             ]

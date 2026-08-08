@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.forge.pixpin.pin.PinChromeTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:59:09.838Z" hostname="localhost" time="0.022">
+  <properties/>
+  <testcase name="poner el emoji desplaza la ventana lo que crece por arriba y por la izquierda" classname="com.forge.pixpin.pin.PinChromeTest" time="0.019"/>
+  <testcase name="con emoji crecen arriba y a la derecha" classname="com.forge.pixpin.pin.PinChromeTest" time="0.0"/>
+  <testcase name="el ancho y el alto extra son la suma de los lados opuestos" classname="com.forge.pixpin.pin.PinChromeTest" time="0.0"/>
+  <testcase name="sin emoji solo hace falta hueco para la sombra" classname="com.forge.pixpin.pin.PinChromeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

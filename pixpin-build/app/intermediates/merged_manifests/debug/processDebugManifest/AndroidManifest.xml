@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.forge.pixpin"
-    android:versionCode="2"
-    android:versionName="0.2.0" >
+    android:versionCode="11"
+    android:versionName="0.4.0" >
 
     <uses-sdk
         android:minSdkVersion="29"
@@ -76,6 +76,20 @@
             android:exported="false"
             android:taskAffinity="com.forge.pixpin.capture"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
+
+        <!--
+            El editor del dibujo va a pantalla completa y con taskAffinity
+            propia, como el resto de lo que se lanza desde el overlay. Aquí
+            además interesa que SÍ quede en Recientes: es una sesión de trabajo
+            larga, no un paso intermedio como el consentimiento o la captura.
+        -->
+        <activity
+            android:name="com.forge.pixpin.motor.DrawEditorActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false"
+            android:taskAffinity="com.forge.pixpin.draw"
+            android:theme="@style/Theme.PixPin"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name="com.forge.pixpin.clipboard.ShareReceiverActivity"
             android:autoRemoveFromRecents="true"

@@ -59,6 +59,17 @@ class OverlayTouchHandler(
         fun onTap(x: Float, y: Float) {}
         fun onDoubleTap() {}
         fun onLongPress() {}
+
+        /**
+         * Dos dedos a la vez, dos veces seguidas y sin mover nada.
+         *
+         * Hacía falta un gesto libre para entrar a dibujar en el pin, y de los
+         * que quedaban este es el único que no le quita el sitio a ninguno: con
+         * un dedo el toque copia y el doble toque minimiza, y con dos dedos ya
+         * se escala y se gradúa la opacidad, pero **solo al arrastrar**. Posar
+         * dos dedos y levantarlos no significaba nada.
+         */
+        fun onTwoFingerDoubleTap() {}
     }
 
     private enum class Mode { NONE, DRAG, SCALE, OPACITY, RESIZE, SCROLL }
@@ -88,6 +99,25 @@ class OverlayTouchHandler(
      * donde empezó el gesto — un salto que lo mandaba fuera de la pantalla.
      */
     private var multiTouch = false
+
+    // ---- Doble toque con dos dedos ----
+    //
+    // Se reconoce a mano y no con el `GestureDetector`, que solo entiende de un
+    // dedo: en cuanto baja el segundo cancela lo que llevara. Lo que se mira es
+    // que en el gesto hayan llegado a estar dos dedos, que **no haya pasado
+    // nada más** —ni arrastre, ni pellizco, ni opacidad— y que haya durado poco.
+
+    /** ¿Han llegado a estar dos dedos en este gesto? */
+    private var dosDedos = false
+
+    /** ¿El gesto pasó a hacer algo? Entonces no fue un toque. */
+    private var huboGesto = false
+
+    /** Cuándo bajó el primer dedo de este gesto. */
+    private var gestoInicio = 0L
+
+    /** Cuándo acabó el último toque de dos dedos, para emparejarlos. */
+    private var ultimoDosDedos = 0L
 
     private val tapDetector = GestureDetector(
         context,
@@ -120,6 +150,9 @@ class OverlayTouchHandler(
                 mode = Mode.NONE
                 twoFingerDecided = false
                 multiTouch = false
+                dosDedos = false
+                huboGesto = false
+                gestoInicio = event.eventTime
                 val px = event.x.toInt()
                 val py = event.y.toInt()
                 // El handle gana si se solapan: es el de la esquina y el más
@@ -127,9 +160,11 @@ class OverlayTouchHandler(
                 if (handleRect?.contains(px, py) == true) {
                     mode = Mode.RESIZE
                     listener.onResizeStart()
+                    huboGesto = true
                 } else if (scrollRect?.contains(px, py) == true) {
                     mode = Mode.SCROLL
                     listener.onScrollStart()
+                    huboGesto = true
                 }
             }
 
@@ -140,6 +175,7 @@ class OverlayTouchHandler(
                         mode = Mode.NONE
                     }
                     multiTouch = true
+                    dosDedos = true
                     startSpan = span(event)
                     startMidY = midRawY(event)
                     twoFingerDecided = false
@@ -152,6 +188,11 @@ class OverlayTouchHandler(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 finishGesture()
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    comprobarDosDedos(event.eventTime)
+                } else {
+                    ultimoDosDedos = 0L
+                }
                 multiTouch = false
             }
         }
@@ -177,6 +218,7 @@ class OverlayTouchHandler(
                 val midDelta = abs(currentMid - startMidY)
                 if (spanDelta > slop * 1.5f || midDelta > slop * 1.5f) {
                     twoFingerDecided = true
+                    huboGesto = true
                     if (spanDelta > midDelta) {
                         mode = Mode.SCALE
                         listener.onScaleStart(midRawX(event), currentMid)
@@ -203,9 +245,32 @@ class OverlayTouchHandler(
         val dy = event.rawY - downY
         if (mode == Mode.NONE && hypot(dx, dy) > slop) {
             mode = Mode.DRAG
+            huboGesto = true
             listener.onDragStart()
         }
         if (mode == Mode.DRAG) listener.onDrag(dx, dy)
+    }
+
+    /**
+     * Al soltar: ¿ha sido un toque de dos dedos, y hace poco hubo otro?
+     *
+     * Los dos topes son lo que separa el gesto de posar la mano encima del pin:
+     * un toque tiene que ser corto, y dos toques tienen que ir seguidos.
+     */
+    private fun comprobarDosDedos(cuando: Long) {
+        val fueToque = dosDedos && !huboGesto && (cuando - gestoInicio) <= TOQUE_MAX_MS
+        if (!fueToque) {
+            // Cualquier otra cosa rompe la pareja: si no, un toque de hace un
+            // rato se emparejaría con otro después de haber movido el pin.
+            ultimoDosDedos = 0L
+            return
+        }
+        if (ultimoDosDedos != 0L && cuando - ultimoDosDedos <= HUECO_MAX_MS) {
+            ultimoDosDedos = 0L
+            listener.onTwoFingerDoubleTap()
+        } else {
+            ultimoDosDedos = cuando
+        }
     }
 
     private fun finishGesture() {
@@ -229,4 +294,18 @@ class OverlayTouchHandler(
 
     private fun midRawY(event: MotionEvent): Float =
         (event.getRawY(0) + event.getRawY(1)) / 2f
+
+    companion object {
+        /**
+         * Lo que puede durar un toque de dos dedos.
+         *
+         * Más largo que el toque de un dedo del sistema (100 ms) a propósito:
+         * poner dos dedos a la vez y levantarlos cuesta más que dar un golpecito
+         * con uno, y con el tope corto el gesto no salía casi nunca.
+         */
+        const val TOQUE_MAX_MS = 400L
+
+        /** Cuánto puede pasar entre los dos toques para que cuenten como uno doble. */
+        const val HUECO_MAX_MS = 500L
+    }
 }

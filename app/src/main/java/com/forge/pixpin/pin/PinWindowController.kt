@@ -89,6 +89,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -122,10 +123,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.forge.pixpin.R
-import com.forge.pixpin.annotate.AnnotationCanvas
-import com.forge.pixpin.annotate.AnnotationController
-import com.forge.pixpin.annotate.AnnotationType
-import com.forge.pixpin.annotate.Pt
 import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.floating.FloatingBallController
@@ -253,13 +250,56 @@ class PinWindowController(
      * Anotaciones del pin. Vive siempre (para dibujar lo ya anotado); solo
      * recibe gestos mientras [annotating] está activo.
      */
-    private val annotator = AnnotationController().apply {
-        annotations.addAll(initialState.annotations)
+    private val annotator = com.forge.pixpin.motor.DrawController(
+        com.forge.pixpin.motor.ExcalidrawStore.cargar(
+            com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, initialState.id)
+        ) ?: com.forge.pixpin.motor.Scene()
+    ).apply {
+        // Sobre una foto se viene a señalar, no a mover cajas: la flecha es la
+        // herramienta con la que se entra.
+        selectTool(com.forge.pixpin.motor.Tool.ARROW)
     }
+
+    /**
+     * Contador que ata el controlador —estado mutable corriente— a Compose.
+     * Mismo truco que en `DrawCanvas`: convertir la escena a estado de Compose
+     * obligaría a copiarla en cada punto del lápiz.
+     */
+    private val annotTick = mutableStateOf(0)
+
     private val annotating = mutableStateOf(false)
 
     /** Con qué se entró al modo anotación, para saber si hay algo nuevo que guardar. */
-    private var annotationsAtEnter: List<com.forge.pixpin.annotate.Annotation> = emptyList()
+    private var annotationsAtEnter: List<com.forge.pixpin.motor.Element> = emptyList()
+
+    /**
+     * Repinta. **No guarda.**
+     *
+     * Guardar aquí era el otro medio segundo de lentitud: el lector de toques
+     * entrega las muestras históricas del lápiz, así que esto se llama varias
+     * veces por fotograma, y cada llamada serializaba la escena entera a JSON y
+     * la escribía en disco. Se guarda al levantar el dedo, que es cuando hay
+     * algo que valga la pena guardar.
+     */
+    private fun annotRepaint() {
+        annotTick.value++
+    }
+
+    /**
+     * La última revisión del dibujo que ha escrito **este** pin.
+     *
+     * Es lo que distingue «he guardado yo» de «ha guardado el editor»: sin
+     * esto, cada trazo propio dispararía una recarga desde disco que tiraría el
+     * historial de deshacer a mitad de dibujo.
+     */
+    private var revisionPropia = com.forge.pixpin.motor.ExcalidrawStore.revisionDe(initialState.id)
+
+    /** Repinta y persiste. Solo al cerrar un trazo. */
+    private fun annotChanged() {
+        annotRepaint()
+        com.forge.pixpin.motor.ExcalidrawStore.guardar(context, pin.value.id, annotator.scene)
+        revisionPropia = com.forge.pixpin.motor.ExcalidrawStore.revisionDe(pin.value.id)
+    }
 
     /**
      * La transparencia se aplica al CONTENIDO, no a la ventana. Con
@@ -338,7 +378,11 @@ class PinWindowController(
             x = p?.x ?: pin.value.x,
             y = p?.y ?: pin.value.y,
             alpha = contentAlpha.floatValue,
-            annotations = annotator.annotations.toList()
+            // Lo dibujado ya no viaja dentro del estado del pin: vive en su
+            // propio `.excalidraw`, igual que el pin de dibujo. Un registro que
+            // se lee entero al arrancar no puede llevar cientos de elementos
+            // vectoriales dentro.
+            drawPath = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, pin.value.id)
         )
     }
 
@@ -656,8 +700,7 @@ class PinWindowController(
         } else {
             val density = context.resources.displayMetrics.density
             val insets = PinChrome.insetsFor(pin.value.emoji != null)
-            val left = (insets.left * density).toInt()
-            val top = (insets.top * density).toInt()
+            val (left, top) = contentInsetPx()
             // La ventana se coloca por su esquina superior izquierda: sin
             // compensar, poner un emoji empujaba la imagen hacia abajo y el pin
             // parecía dar un salto.
@@ -673,6 +716,69 @@ class PinWindowController(
                 (insets.vertical * density).toInt()
         }
         applyLayout()
+    }
+
+    /**
+     * Le da al pin de dibujo el tamaño de su hoja.
+     *
+     * Se limita al 60 % de la pantalla, igual que un pin de imagen: una hoja
+     * grande no debe nacer tapándolo todo, y para verla de cerca ya está el
+     * pellizco.
+     *
+     * A diferencia de [measureNatural], **sí vuelve a medir** cuando la hoja
+     * cambia: estirar el marco en el editor tiene que verse en el pin, que es
+     * justo para lo que sirve.
+     */
+    private fun medirNaturalDibujo(escena: com.forge.pixpin.motor.Scene) {
+        val screenW = context.resources.displayMetrics.widthPixels
+        val marco = escena.marco
+        val b = marco?.let { com.forge.pixpin.motor.getElementBounds(it) }
+
+        // **Sin hoja, el pin nace con proporción de A4 y tamaño de mano.**
+        //
+        // Antes se salía de aquí sin medir nada, y entonces el pin no tenía
+        // tamaño propio: se estiraba con lo que le pidiera el contenido y salía
+        // un rectángulo blanco alargado que se comía media pantalla. Y como el
+        // tope del pellizco es «llenar la pantalla», ya nacido así tampoco se
+        // podía encoger — que es exactamente lo que se veía.
+        //
+        // A4 y no cuadrado porque es la proporción con la que ya se piensa en
+        // papel, y porque lo que se dibuja acaba imprimiéndose o mandándose en
+        // PDF, donde la página es justo esa. En cuanto se pone un marco, manda
+        // el marco: eso no cambia.
+        val w: Int
+        val h: Int
+        if (b != null && b.width > 0 && b.height > 0) {
+            w = minOf(b.width, screenW * 0.6).toInt().coerceAtLeast(1)
+            h = (w * b.height / b.width).toInt().coerceAtLeast(1)
+        } else {
+            // Ya tiene un tamaño puesto por el usuario: no se le toca. Solo se
+            // decide el de partida, no el de después.
+            if (naturalW > 0) return
+            w = (screenW * LIENZO_ANCHO_PANTALLA).toInt().coerceAtLeast(1)
+            h = (w * com.forge.pixpin.motor.DrawPdf.A4_ALTO /
+                com.forge.pixpin.motor.DrawPdf.A4_ANCHO).coerceAtLeast(1)
+        }
+        if (w == naturalW && h == naturalH) return
+
+        naturalW = w
+        naturalH = h
+        applyContentSize()
+    }
+
+    /**
+     * Dónde empieza el contenido dentro de la ventana, en px: (izquierda, arriba).
+     *
+     * Es el hueco de la sombra más el de la pegatina. Vive aquí y no repartido
+     * porque lo necesitan dos sitios que **tienen** que coincidir: quien
+     * dimensiona la ventana ([applyContentSize]) y quien ancla el pellizco. Que
+     * el segundo lo ignorase es lo que desviaba el zoom del punto entre los
+     * dedos.
+     */
+    private fun contentInsetPx(): Pair<Int, Int> {
+        val density = context.resources.displayMetrics.density
+        val insets = PinChrome.insetsFor(pin.value.emoji != null)
+        return (insets.left * density).toInt() to (insets.top * density).toInt()
     }
 
     /**
@@ -757,10 +863,23 @@ class PinWindowController(
                 )
                 if (pin.value.type == PinType.TEXT) max.coerceAtMost(5f) else max
             }
-            // Posición del foco DENTRO del pin (0..1): es lo que hay que dejar
-            // clavado bajo los dedos mientras se escala.
-            focusRelX = ((focusX - (p?.x ?: 0)) / scaleStartW).coerceIn(0f, 1f)
-            focusRelY = ((focusY - (p?.y ?: 0)) / scaleStartH).coerceIn(0f, 1f)
+            // Posición del foco DENTRO del contenido (0..1): es lo que hay que
+            // dejar clavado bajo los dedos mientras se escala.
+            //
+            // **Contra el contenido, no contra la ventana.** En un pin de imagen
+            // la ventana mide de más —el hueco de la sombra y el de la pegatina—
+            // y la foto empieza desplazada dentro de ella. Midiendo la
+            // proporción sobre la ventana y aplicándola luego sobre el tamaño de
+            // la foto, que es lo que se hacía, el punto anclado se iba: poco en
+            // el centro y mucho en las esquinas, que es justo donde se notaba.
+            val useNatural = naturalW > 0 && naturalH > 0
+            val (insetLeft, insetTop) = if (useNatural) contentInsetPx() else 0 to 0
+            val contentW = if (useNatural) (naturalW * scaleStart) else scaleStartW.toFloat()
+            val contentH = if (useNatural) (naturalH * scaleStart) else scaleStartH.toFloat()
+            focusRelX = ((focusX - (p?.x ?: 0) - insetLeft) / contentW.coerceAtLeast(1f))
+                .coerceIn(0f, 1f)
+            focusRelY = ((focusY - (p?.y ?: 0) - insetTop) / contentH.coerceAtLeast(1f))
+                .coerceIn(0f, 1f)
         }
 
         override fun onScale(factorFromDown: Float, focusX: Float, focusY: Float) {
@@ -782,6 +901,10 @@ class PinWindowController(
             // eso ya no pasa, así que el teórico es a la vez exacto y estable.
             val projected = PinZoom.scaleFor(scaleStart, factorFromDown, zoomMax)
             val useNatural = naturalW > 0 && naturalH > 0
+            // El hueco solo existe cuando la ventana lleva tamaño explícito; en
+            // los demás pines la ventana **es** el contenido y no hay nada que
+            // descontar.
+            val (insetLeft, insetTop) = if (useNatural) contentInsetPx() else 0 to 0
             val stepResult = PinZoom.step(
                 scaleAtStart = scaleStart,
                 factor = factorFromDown,
@@ -791,7 +914,9 @@ class PinWindowController(
                 focusX = focusX,
                 focusY = focusY,
                 relX = focusRelX,
-                relY = focusRelY
+                relY = focusRelY,
+                insetLeft = insetLeft,
+                insetTop = insetTop
             )
             scale.floatValue = stepResult.scale
             p.x = stepResult.x
@@ -908,14 +1033,12 @@ class PinWindowController(
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
                 s.type == PinType.IMAGE -> copyImage(s)
-                // El croquis se copia al tocarlo, igual que una imagen: sale
-                // rasterizado con sus cotas. Editarlo va por el botón, no por
-                // el toque, para que copiar sea lo barato.
-                s.type == PinType.CROQUIS -> {
+                // Tocar copia, el botón edita: así copiar es lo barato.
+                s.type == PinType.DRAW -> {
                     val ok = com.forge.pixpin.capture.PinExporter.copyPin(context, s)
                     toast(
                         context.getString(
-                            if (ok) R.string.copied_image else R.string.pin_croquis_empty
+                            if (ok) R.string.copied_image else R.string.pin_draw_empty
                         )
                     )
                 }
@@ -938,6 +1061,21 @@ class PinWindowController(
         override fun onLongPress() {
             window?.view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             if (actionBar != null) closeActionBar() else openActionBar()
+        }
+
+        /**
+         * **La edición simple**: dibujar dentro del pin, sin abrir nada.
+         *
+         * Va en un gesto y no en un botón porque es lo que se hace de paso —una
+         * flecha, un recuadro, tapar un dato— y pasar por la barra de acciones
+         * para eso costaba más que el propio trazo. El lápiz de la barra queda
+         * para la edición avanzada, que es la que sí merece cambiar de pantalla.
+         */
+        override fun onTwoFingerDoubleTap() {
+            if (minimized.value || pin.value.type != PinType.IMAGE) return
+            if (annotating.value) return
+            window?.view?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            enterAnnotateMode()
         }
     }
 
@@ -1031,22 +1169,75 @@ class PinWindowController(
         if (annotating.value || pin.value.type != PinType.IMAGE) return
         closeActionBar()
         annotating.value = true
-        annotationsAtEnter = annotator.annotations.toList()
+        annotationsAtEnter = annotator.scene.visible
+        // **Se conserva `StrokeTouchReader`.** Trae el rechazo de palma y las
+        // muestras históricas del lápiz —un digitalizador va a cientos de hercios
+        // pero solo entrega un evento por fotograma—, y con los gestos de Compose
+        // se perderían las dos cosas. Lo único que cambia es a quién se las da.
         window?.setTouchHandler(
             StrokeTouchReader(
-                onBegin = { x, y, p -> toImagePt(x, y, p)?.let { annotator.begin(it) } },
-                onExtend = { x, y, p -> toImagePt(x, y, p)?.let { annotator.drag(it) } },
-                onFinish = { annotator.end() },
-                onCancel = { annotator.cancel() }
+                onBegin = { x, y, p ->
+                    toEscena(x, y)?.let {
+                        annotator.pointerDown(it, p.toDouble(), zoomEscena())
+                        annotRepaint()
+                    }
+                },
+                onExtend = { x, y, p ->
+                    toEscena(x, y)?.let {
+                        annotator.pointerMove(it, p.toDouble(), zoomEscena())
+                        annotRepaint()
+                    }
+                },
+                onFinish = {
+                    annotator.pointerUp(ultimoPuntoEscena, zoomEscena())
+                    annotChanged()
+                    // El bote no encontró hueco cerrado: se dice, que si no
+                    // parece que el toque se haya perdido.
+                    if (annotator.rellenoSinCerrar) {
+                        annotator.limpiarAvisoRelleno()
+                        android.widget.Toast.makeText(
+                            context, R.string.relleno_sin_cerrar,
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onCancel = { annotator.cancel(); annotChanged() },
+                // El segundo dedo apoyado pide forma perfecta: círculo redondo,
+                // cuadrado cuadrado, y la línea recta al eje más cercano.
+                onModifier = { activo ->
+                    annotator.keepAspectRatio = activo
+                    annotRepaint()
+                }
             )
         )
         openAnnotateBar()
     }
 
+    /**
+     * Abre la foto del pin en el editor a pantalla completa.
+     *
+     * Se guarda antes de salir: el editor lee del disco, así que lo que
+     * estuviera dibujado en el pin y sin persistir se perdería justo al ir a
+     * seguir editándolo, que es el peor momento posible.
+     */
+    private fun abrirEdicionAvanzada(s: PinState) {
+        closeActionBar()
+        exitAnnotateMode()
+        com.forge.pixpin.motor.ExcalidrawStore.guardar(context, s.id, annotator.scene)
+        revisionPropia = com.forge.pixpin.motor.ExcalidrawStore.revisionDe(s.id)
+        com.forge.pixpin.motor.DrawEditorActivity.abrir(
+            context,
+            s.id,
+            com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id),
+            // La foto va con el intent: allí el lienzo es infinito y sin ella se
+            // editaría a ciegas, con los trazos flotando sobre el vacío.
+            s.imagePath
+        )
+    }
+
     private fun exitAnnotateMode() {
         if (!annotating.value) return
         annotating.value = false
-        annotator.finishPolyline()
         annotator.cancel()
         window?.setTouchHandler(newTouchHandler())
         closeAnnotateBar()
@@ -1054,7 +1245,7 @@ class PinWindowController(
         callbacks.onPinChanged(this)
         // Se acabó el botón de guardar: si has dibujado algo, la versión con lo
         // dibujado va sola a la galería.
-        if (annotator.annotations != annotationsAtEnter) {
+        if (annotator.scene.visible != annotationsAtEnter) {
             callbacks.onPinSaveRequested(this)
         }
     }
@@ -1064,21 +1255,47 @@ class PinWindowController(
      * anotaciones en el espacio de la imagen es lo que hace que se puedan
      * dibujar con el pin pequeño y sigan cuadrando al agrandarlo.
      */
-    private fun toImagePt(x: Float, y: Float, pressure: Float): Pt? {
+    /** El último punto que tocó el dedo, para cerrar el trazo al levantarlo. */
+    private var ultimoPuntoEscena = com.forge.pixpin.motor.Pt(0.0, 0.0)
+
+    /**
+     * De coordenadas de la ventana a **coordenadas de escena del motor**.
+     *
+     * La escena de un pin de imagen **se mide en píxeles de la foto**, no en un
+     * sistema propio. Esa decisión es la que hace que todo lo demás encaje sin
+     * conversiones: lo dibujado se guarda en el espacio de la imagen —así se
+     * puede anotar con el pin diminuto y sigue cuadrando al agrandarlo—, el
+     * mosaico coge sus píxeles del fondo con correspondencia directa, y hornear
+     * al copiar es pintar la escena a escala 1.
+     */
+    private fun toEscena(x: Float, y: Float): com.forge.pixpin.motor.Pt? {
         val bmp = bitmapState.value ?: return null
         val size = imageSize.value
         val origin = imageOrigin.value
         if (size.width <= 0 || bmp.width <= 0) return null
-        // Se descuenta dónde empieza la imagen dentro de la ventana: si no, todo
-        // el trazo sale corrido justo ese margen.
-        val shownX = size.width.toFloat() / bmp.width
-        val shownY = size.height.toFloat() / bmp.height
-        return Pt(
-            ((x - origin.x) / shownX).coerceIn(0f, bmp.width.toFloat()),
-            ((y - origin.y) / shownY).coerceIn(0f, bmp.height.toFloat()),
-            pressure
-        )
+        val mostradoX = size.width.toFloat() / bmp.width
+        val mostradoY = size.height.toFloat() / bmp.height
+        if (mostradoX <= 0f || mostradoY <= 0f) return null
+        return com.forge.pixpin.motor.Pt(
+            ((x - origin.x) / mostradoX).toDouble(),
+            ((y - origin.y) / mostradoY).toDouble()
+        ).also { ultimoPuntoEscena = it }
     }
+
+    /**
+     * Cuántos píxeles de pantalla ocupa un píxel de la foto.
+     *
+     * El motor lo necesita para que los umbrales de toque —picar, anclar,
+     * engancharse— midan lo mismo bajo el dedo con el pin pequeño que agrandado.
+     * Sin esto, con el pin a media escala habría que acertar el doble de fino.
+     */
+    private fun zoomEscena(): Double {
+        val bmp = bitmapState.value ?: return 1.0
+        val size = imageSize.value
+        if (size.width <= 0 || bmp.width <= 0) return 1.0
+        return size.width.toDouble() / bmp.width
+    }
+
 
     private fun openAnnotateBar() {
         if (annotateBar != null) return
@@ -1576,55 +1793,40 @@ class PinWindowController(
                         else MaterialTheme.colorScheme.onSurface
                     )
                 }
-                // Dibujar encima solo tiene sentido sobre una imagen.
+                // **El lápiz abre la edición avanzada**, la de pantalla
+                // completa. Antes entraba al modo de dibujar dentro del pin, y
+                // eso ahora se hace con dos dedos y doble toque sobre la foto:
+                // el gesto rápido para lo rápido, y el botón para cuando hace
+                // falta sitio de verdad. Dibujar encima solo tiene sentido
+                // sobre una imagen.
                 if (s.type == PinType.IMAGE) {
-                    IconButton(onClick = { enterAnnotateMode() }) {
+                    IconButton(onClick = { abrirEdicionAvanzada(s) }) {
                         Icon(
                             Icons.Filled.Edit,
-                            contentDescription = context.getString(R.string.cd_annotate_pin)
+                            contentDescription = context.getString(R.string.cd_edicion_avanzada)
                         )
                     }
                 }
-                // La segunda puerta al croquis: medir sobre la captura de un
-                // plano. En obra no llevas el DXF, llevas la captura que te
-                // mandaron — y calibrada contra una medida conocida da metros
-                // reales sin parsear ningún formato de CAD.
-                if (s.type == PinType.IMAGE && s.imagePath != null) {
+                // Aquí vivía la puerta al croquis, el editor de tipo CAD que
+                // servía para medir sobre la captura de un plano. Ya no hace
+                // falta: escalar y acotar son dos herramientas del motor, y se
+                // usan en la misma edición que todo lo demás. Ver `Medida`.
+
+                // El dibujo se sigue haciendo donde se dejó: el editor guarda
+                // en cada cambio y relee del archivo nombrado por el id del
+                // pin, así que basta con abrirlo.
+                if (s.type == PinType.DRAW) {
                     IconButton(onClick = {
-                        com.forge.pixpin.croquis.CroquisEditorActivity.abrir(
+                        com.forge.pixpin.motor.DrawEditorActivity.abrir(
                             context,
                             s.id,
-                            com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id),
-                            s.imagePath
-                        )
-                    }) {
-                        Icon(
-                            Icons.Filled.SquareFoot,
-                            contentDescription = context.getString(R.string.cd_measure_pin)
-                        )
-                    }
-                }
-                // El croquis se sigue dibujando donde se dejó: el editor guarda
-                // en cada cambio y relee del mismo archivo, que se nombra por
-                // el id del pin.
-                if (s.type == PinType.CROQUIS) {
-                    IconButton(onClick = {
-                        com.forge.pixpin.croquis.CroquisEditorActivity.abrir(
-                            context,
-                            s.id,
-                            com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id),
+                            com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id),
                             null
                         )
                     }) {
                         Icon(
                             Icons.Filled.Edit,
-                            contentDescription = context.getString(R.string.cd_croquis_edit)
-                        )
-                    }
-                    IconButton(onClick = { exportarCroquisPdf(s) }) {
-                        Icon(
-                            Icons.Filled.PictureAsPdf,
-                            contentDescription = context.getString(R.string.cd_croquis_pdf)
+                            contentDescription = context.getString(R.string.cd_draw_edit)
                         )
                     }
                 }
@@ -1687,98 +1889,81 @@ class PinWindowController(
      */
     @Composable
     private fun AnnotateBarContent() {
-        var toolsOpen by remember { mutableStateOf(false) }
-        val current = annotator.tool.value
-        val currentIcon = ANNOTATE_TOOLS.firstOrNull { it.first == current }?.second
-            ?: Icons.Filled.Gesture
+        // **La misma barra que el editor a pantalla completa.** Antes el pin
+        // tenía la suya, con otras once herramientas y otro motor detrás: lo que
+        // aprendías en un sitio no valía en el otro, y todo lo que se arreglaba
+        // en uno había que volver a arreglarlo en el otro.
+        val tick by annotTick
+        @Suppress("UNUSED_EXPRESSION") tick
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // El diálogo de la escala va **dentro de la misma ventana de la
+            // barra**, encima de ella. Es lo que le permite existir en el pin:
+            // esta ventana no puede recibir el foco —se lo robaría a la
+            // aplicación de debajo— y por eso el diálogo trae su propio teclado
+            // numérico en vez de un campo de texto. Ver `DialogoEscala`.
+            annotator.pendingScaleElement()?.let { cota ->
+                com.forge.pixpin.motor.DialogoEscala(
+                    largoPx = com.forge.pixpin.motor.longitudDe(cota),
+                    onCalibrar = { medida, unidad ->
+                        annotator.applyScale(medida, unidad)
+                        annotChanged()
+                    },
+                    onCancelar = { annotator.cancelScale(); annotChanged() },
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+            // Solo las que el usuario haya dejado en el pin: el resto vive en la
+            // edición avanzada. Ver `HerramientasDelPinCard` en `MainActivity`.
+            val ajustes by (context.applicationContext as com.forge.pixpin.PixPinApp)
+                .settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+            val permitidas = ajustes.pinToolSet
 
-        Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp) {
-            Column(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (toolsOpen) {
-                    ANNOTATE_TOOLS.chunked(5).forEach { row ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            row.forEach { (type, icon) ->
-                                IconButton(onClick = {
-                                    annotator.selectTool(type)
-                                    toolsOpen = false
-                                }) {
-                                    Icon(
-                                        icon,
-                                        contentDescription = type.name,
-                                        tint = if (current == type) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { toolsOpen = !toolsOpen }) {
-                        Icon(
-                            currentIcon,
-                            contentDescription = context.getString(R.string.cd_tools),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    PIN_PALETTE.forEach { argb ->
-                        val selected = annotator.color.value == argb
-                        Box(
-                            Modifier
-                                .padding(2.dp)
-                                .size(if (selected) 22.dp else 18.dp)
-                                .background(Color(argb), CircleShape)
-                                .border(
-                                    width = if (selected) 3.dp else 1.dp,
-                                    color = if (selected) MaterialTheme.colorScheme.primary
-                                    else Color.Gray,
-                                    shape = CircleShape
-                                )
-                                .clickable { annotator.color.value = argb }
-                        )
-                    }
-                    IconButton(onClick = {
-                        // Tres grosores en rotación: no hay sitio para un slider.
-                        annotator.strokeWidth.value = when (annotator.strokeWidth.value) {
-                            in 0f..6f -> 8f
-                            in 6f..12f -> 18f
-                            else -> 4f
-                        }
-                    }) {
-                        Box(
-                            Modifier
-                                .size((annotator.strokeWidth.value / 2 + 4).dp)
-                                .background(MaterialTheme.colorScheme.onSurface, CircleShape)
-                        )
-                    }
-                    // Solo mientras haya una polilínea a medias: es su forma de cerrarse.
-                    if (annotator.polylineOpen) {
-                        IconButton(onClick = { annotator.finishPolyline() }) {
-                            Icon(
-                                Icons.Filled.CheckCircle,
-                                contentDescription = context.getString(R.string.cd_done),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = { annotator.undo() },
-                        enabled = annotator.canUndo.value
-                    ) {
-                        Icon(Icons.Filled.Undo, contentDescription = context.getString(R.string.cd_undo))
-                    }
-                    IconButton(onClick = { exitAnnotateMode() }) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = context.getString(R.string.cd_done),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
+            // Si la herramienta con la que se entra ya no está en el pin, se
+            // coge la primera que sí esté: si no, se dibujaría con una que la
+            // barra no puede enseñar puesta, y el botón encendido no cuadraría
+            // con lo que sale al arrastrar.
+            LaunchedEffect(permitidas) {
+                if (permitidas.isNotEmpty() && annotator.tool !in permitidas) {
+                    com.forge.pixpin.motor.ALL_TOOLS.firstOrNull { it in permitidas }
+                        ?.let { annotator.selectTool(it); annotRepaint() }
                 }
             }
+
+            // La letra de la edición simple se elige en los ajustes, no aquí.
+            LaunchedEffect(ajustes.pinFont) {
+                if (annotator.scene.style.fontFamily != ajustes.pinFont) {
+                    annotator.changeStyle(
+                        change = { it.copy(fontFamily = ajustes.pinFont) },
+                        toElement = { it }
+                    )
+                    annotRepaint()
+                }
+            }
+
+            com.forge.pixpin.motor.DrawToolbar(
+                tool = annotator.tool,
+                onTool = { annotator.selectTool(it); annotChanged() },
+                style = annotator.scene.style,
+                onStyle = { nuevo ->
+                    annotator.changeStyle({ nuevo }, {
+                        com.forge.pixpin.motor.estiloAplicado(it, nuevo)
+                    })
+                    annotChanged()
+                },
+                canUndo = annotator.canUndo,
+                onUndo = { annotator.undo(); annotChanged() },
+                onDone = { exitAnnotateMode() },
+                escala = annotator.scene.escala,
+                onQuitarEscala = { annotator.clearScale(); annotChanged() },
+                modoReferencia = annotator.modoReferencia,
+                onModoReferencia = { annotator.modoReferencia = !annotator.modoReferencia; annotChanged() },
+                referenciasVisibles = annotator.referenciasVisibles,
+                onAlternarReferencias = { annotator.alternarReferencias(); annotChanged() },
+                hayReferencias = annotator.hayReferencias,
+                permitidas = permitidas,
+                mostrarFuente = false,
+                grupos = ajustes.pinGroupList
+            )
         }
     }
 
@@ -1897,28 +2082,6 @@ class PinWindowController(
 
     private fun clipboard() = context.getSystemService(ClipboardManager::class.java)
 
-    /**
-     * Saca el croquis del pin como PDF, sin pasar por el editor.
-     *
-     * Va fuera del hilo de UI: dibujar y escribir un PDF no es instantáneo y
-     * este pin flota sobre la aplicación de otro.
-     */
-    private fun exportarCroquisPdf(s: PinState) {
-        scope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                val croquis = com.forge.pixpin.croquis.CroquisStore.cargar(s.croquisPath)
-                    ?: return@withContext false
-                val fondo = croquis.fondo?.imagenPath?.let { ImageStore.load(it) }
-                com.forge.pixpin.croquis.CroquisExport.aPdf(context, croquis, fondo) != null
-            }
-            toast(
-                context.getString(
-                    if (ok) R.string.pin_croquis_pdf_ok else R.string.pin_croquis_empty
-                )
-            )
-        }
-    }
-
     private fun toast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
@@ -2005,86 +2168,54 @@ class PinWindowController(
             // editor. Solo cambia lo que se dibuja dentro.
             PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE -> TextPinBody(s)
             PinType.COUNTER -> CounterBody(s.widget)
-            PinType.CROQUIS -> CroquisPinBody(s)
+            // El croquis ya no existe como herramienta; los pines de ese tipo
+            // se descartan al cargar la lista. Esta rama solo cubre el hueco
+            // que deja el `when` exhaustivo mientras el valor siga en el enum.
+            PinType.CROQUIS -> Unit
+            PinType.DRAW -> DrawPinBody(s)
         }
     }
 
     /**
-     * El croquis dentro del pin: **solo se mira**.
+     * El dibujo dentro del pin: **solo se mira**, igual que el croquis.
      *
-     * Se dibuja encajado, sin desplazamiento ni zoom propios, porque aquí la
-     * hoja infinita no tiene sentido. Un toque abre el editor a pantalla
-     * completa, que es donde vive de verdad.
+     * Aquí sí se encuadra el contenido y no una hoja, porque el lienzo es
+     * infinito y no hay hoja que encuadrar. El toque lo sigue repartiendo el
+     * manejador del pin, para que copiar funcione como con una imagen.
      */
     @Composable
-    private fun CroquisPinBody(s: PinState) {
-        // La ventana toma proporción de A4 y tamaño propio. Sin esto el pin no
-        // se puede pellizcar como una imagen —el tope sería llenar la pantalla—
-        // y además cambiaba de forma según lo que hubiera dibujado dentro.
-        measureCroquisA4()
-
-        // Clave en la revisión del almacén: al guardar el editor, esto se
-        // recompone solo. El editor es otra actividad, pero el mismo proceso.
-        val croquis = androidx.compose.runtime.remember(
-            s.id, com.forge.pixpin.croquis.CroquisStore.revision.intValue
+    private fun DrawPinBody(s: PinState) {
+        // Clave en la revisión del almacén: al guardar el editor —otra
+        // actividad, mismo proceso— esto se recompone solo.
+        val escena = androidx.compose.runtime.remember(
+            s.id, com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
         ) {
-            com.forge.pixpin.croquis.CroquisStore.cargar(
-                com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id)
+            com.forge.pixpin.motor.ExcalidrawStore.cargar(
+                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id)
             )
         }
-        val fondo = androidx.compose.runtime.remember(croquis?.fondo?.imagenPath) {
-            croquis?.fondo?.imagenPath?.let { ImageStore.load(it) }
-        }
 
-        // Sin gestos propios: el toque lo reparte el manejador del pin, para
-        // que copiar el croquis funcione igual que copiar una imagen.
+        // **La hoja manda el tamaño del pin.** Si el dibujo lleva marco, el pin
+        // adopta su proporción y su tamaño, y al estirar el marco en el editor
+        // el pin crece con él. Sin marco no se toca nada: el pin lo mide la
+        // ventana, como antes.
+        LaunchedEffect(escena) { escena?.let { medirNaturalDibujo(it) } }
+
         Box(Modifier.fillMaxSize().background(Color.White)) {
-            if (croquis == null || croquis.entidades.isEmpty()) {
+            if (escena == null || escena.visible.isEmpty()) {
                 Text(
-                    "📐",
+                    "✎",
                     color = Color(0xFF8A94A2),
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else {
-                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                    val ancho = size.width.toInt().coerceAtLeast(1)
-                    val alto = size.height.toInt().coerceAtLeast(1)
-                    // Se encuadra LA HOJA, no lo dibujado. Encuadrar el
-                    // contenido hacía que el pin se reajustara a cada trazo:
-                    // una línea sola llenaba el pin entero.
-                    val hoja = com.forge.pixpin.croquis.CroquisGeometria
-                        .hojaA4(croquis, com.forge.pixpin.croquis.Vista(
-                            com.forge.pixpin.croquis.P(0.0, 0.0), 1.0
-                        ), ancho, alto)
-                    val vista = com.forge.pixpin.croquis.CroquisGeometria
-                        .vistaParaCaja(hoja, ancho, alto, 4)
-                    if (vista != null) {
-                        drawIntoCanvas { lienzo ->
-                            com.forge.pixpin.croquis.CroquisRenderer.dibujar(
-                                lienzo.nativeCanvas, croquis, vista, ancho, alto, fondo,
-                                android.graphics.Color.BLACK
-                            )
-                        }
-                    }
-                }
+                com.forge.pixpin.motor.DrawPreview(
+                    scene = escena,
+                    modifier = Modifier.fillMaxSize(),
+                    imageProvider = { id -> escena.files[id]?.path?.let { ImageStore.load(it) } }
+                )
             }
         }
-    }
-
-    /**
-     * Da al pin del croquis un tamaño explícito con proporción de A4.
-     *
-     * Con tamaño explícito la ventana se comporta como la de una imagen: el
-     * pellizco la agranda de verdad y puede pasarse del borde de la pantalla
-     * para mirar un detalle. Sin él, el tope es llenar la pantalla y el pin
-     * cambiaba de forma según lo que hubiera dentro.
-     */
-    private fun measureCroquisA4() {
-        if (naturalW > 0) return
-        val screenW = context.resources.displayMetrics.widthPixels
-        naturalW = (screenW * 0.45f).toInt().coerceAtLeast(1)
-        naturalH = (naturalW * 842f / 595f).toInt().coerceAtLeast(1)
-        applyContentSize()
     }
 
     /** Marca o desmarca un ítem de la lista, creciendo la lista si hace falta. */
@@ -2207,7 +2338,8 @@ class PinWindowController(
                 PinType.COUNTER -> Text("${s.widget.count}", color = Color.White)
                 PinType.LEDGER -> Text("€", color = Color.White)
                 PinType.TABLE -> Text("▦", color = Color.White)
-                PinType.CROQUIS -> Text("📐", color = Color.White)
+                PinType.CROQUIS -> Unit
+                PinType.DRAW -> Text("✎", color = Color.White)
             }
         }
     }
@@ -2235,6 +2367,23 @@ class PinWindowController(
             }
             return
         }
+        // Lo que se haya dibujado en la edición avanzada —otra actividad, mismo
+        // proceso— hay que recogerlo al volver, o el pin seguiría enseñando lo
+        // que tenía en memoria desde que se creó.
+        //
+        // La revisión es **la de este dibujo**, no la global: con la global,
+        // guardar en cualquier otro pin recargaría este, y recargar tira el
+        // historial, o sea el deshacer de lo que estuvieras dibujando.
+        val revision = com.forge.pixpin.motor.ExcalidrawStore.revisionDe(s.id)
+        LaunchedEffect(revision) {
+            if (revision == revisionPropia || annotating.value) return@LaunchedEffect
+            com.forge.pixpin.motor.ExcalidrawStore.cargar(
+                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id)
+            )?.let { annotator.load(it) }
+            revisionPropia = revision
+            annotRepaint()
+        }
+
         // La ventana ya tiene el tamaño exacto que toca (measureNatural +
         // applyContentSize), así que la imagen solo tiene que llenarla.
         Box(
@@ -2256,68 +2405,56 @@ class PinWindowController(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize()
             )
-            if (annotating.value || annotator.annotations.isNotEmpty()) {
-                // Los trazos se dibujan sobre el MISMO tamaño con el que se
-                // dimensiona la ventana (naturalW × escala, con el mismo
-                // truncado), y leyendo la misma escala. Así imagen y dibujo
-                // cambian de tamaño en el mismo fotograma: midiendo el
-                // resultado ya dispuesto, el dibujo iría siempre uno por
-                // detrás y se vería perseguir a la imagen al pellizcar.
-                val zoom by scale
-                val drawW = (naturalW * zoom).toInt().toFloat()
-                val drawH = (naturalH * zoom).toInt().toFloat()
-                AnnotationCanvas(
-                    controller = annotator,
-                    sourceBitmap = bmp,
-                    imageRectInView = Rect(0f, 0f, drawW, drawH),
-                    modifier = Modifier.matchParentSize()
-                )
+            if (annotating.value || annotator.scene.visible.isNotEmpty()) {
+                CapaDeDibujo(bmp)
             }
-            CroquisSobreImagen(s, bmp)
         }
     }
 
     /**
-     * Lo acotado en el editor, dibujado **encima** de la imagen del pin.
+     * Lo dibujado sobre la foto, con el motor.
      *
-     * Alinear es directo porque la imagen se pinta con `FillBounds` y ocupa el
-     * cuerpo entero: basta con montar la vista que hace que el rectángulo de la
-     * imagen en el mundo caiga exactamente sobre el cuerpo. Así lo medido sobre
-     * la captura se ve en el pin, y al copiarlo va incluido.
+     * El tamaño se calcula igual que el de la ventana —`naturalW × escala`, con
+     * el mismo truncado— y **no** midiendo el resultado ya dispuesto: midiéndolo
+     * el dibujo iría un fotograma por detrás y se le vería perseguir a la foto
+     * al pellizcar. Es la misma razón por la que estaba así antes.
      */
     @Composable
-    private fun CroquisSobreImagen(s: PinState, bmp: Bitmap) {
-        val croquis = remember(s.id, com.forge.pixpin.croquis.CroquisStore.revision.intValue) {
-            com.forge.pixpin.croquis.CroquisStore.cargar(
-                com.forge.pixpin.croquis.CroquisStore.rutaDe(context, s.id)
+    private fun CapaDeDibujo(bmp: Bitmap) {
+        val zoom by scale
+        val tick by annotTick
+        val contexto = context
+        val renderer = androidx.compose.runtime.remember(bmp) {
+            com.forge.pixpin.motor.Renderer(
+                imageProvider = { id ->
+                    annotator.scene.files[id]?.path?.let { ImageStore.load(it) }
+                },
+                typefaces = com.forge.pixpin.motor.DrawFonts.provider(contexto),
+                // El fondo del que el mosaico saca sus píxeles es la propia foto.
+                backdrop = bmp
             )
         }
-        if (croquis == null || croquis.entidades.isEmpty()) return
-        val fondo = croquis.fondo ?: return
 
-        // fillMaxSize y no matchParentSize: esto es un composable propio, así
-        // que no está en el BoxScope del cuerpo de la imagen. Las restricciones
-        // que le llegan ya son las del Box, de modo que llena lo mismo.
+        // `fillMaxSize` y no `matchParentSize`: esto es un composable propio, así
+        // que no está en el `BoxScope` del cuerpo de la imagen. Las restricciones
+        // que le llegan ya son las del Box, de modo que llena lo mismo. Mismo
+        // caso que la capa de dibujo.
         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            if (w < 1f || h < 1f || bmp.width < 1) return@Canvas
-            val mpp = fondo.metrosPorPixel
-            if (mpp <= 0.0) return@Canvas
-
-            val ppm = w / (bmp.width * mpp)
-            val vista = com.forge.pixpin.croquis.Vista(
-                centro = com.forge.pixpin.croquis.P(
-                    fondo.origen.x + bmp.width * mpp / 2,
-                    fondo.origen.y - bmp.height * mpp / 2
-                ),
-                pixelsPorMetro = ppm
-            )
+            @Suppress("UNUSED_EXPRESSION") tick
+            val w = (naturalW * zoom).toInt().toDouble()
+            val h = (naturalH * zoom).toInt().toDouble()
+            if (w < 1 || h < 1 || bmp.width < 1) return@Canvas
+            // La escena está en píxeles de la foto: para verla encima basta con
+            // escalar por lo que la foto ocupa ahora. Sin desplazamiento, porque
+            // el origen de la escena es la esquina de la imagen.
+            val escala = w / bmp.width
             drawIntoCanvas { lienzo ->
-                // Sin la imagen de fondo: ya está pintada debajo por el Image().
-                com.forge.pixpin.croquis.CroquisRenderer.dibujar(
-                    lienzo.nativeCanvas, croquis.copy(fondo = null), vista,
-                    w.toInt(), h.toInt(), null, android.graphics.Color.rgb(214, 24, 24)
+                renderer.renderScene(
+                    lienzo.nativeCanvas,
+                    annotator.scene.copy(
+                        viewport = com.forge.pixpin.motor.Viewport(zoom = escala)
+                    ),
+                    w, h
                 )
             }
         }
@@ -2667,6 +2804,15 @@ class PinWindowController(
         const val MIN_PIN_DP = 24
 
         /**
+         * Qué parte del ancho de la pantalla ocupa un lienzo recién creado.
+         *
+         * Menos de la mitad a propósito: es un pin, no una ventana. Se agranda
+         * con el pellizco cuando haga falta, y en cuanto se le pone una hoja
+         * pasa a mandar la hoja.
+         */
+        const val LIENZO_ANCHO_PANTALLA = 0.42f
+
+        /**
          * Tope al sacar «todas» las páginas. Un PDF de doscientas páginas son
          * doscientas ventanas overlay: el sistema no lo aguanta y el usuario
          * tampoco lo quiere.
@@ -2695,29 +2841,7 @@ class PinWindowController(
     }
 }
 
-/** Colores de la barrita de anotación del pin (los mismos de la pantalla de captura). */
-private val PIN_PALETTE = listOf(
-    0xFFF44336.toInt(), 0xFFFFEB3B.toInt(), 0xFF4CAF50.toInt(),
-    0xFF2196F3.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt()
-)
 
-/**
- * Herramientas del pin: las mismas de la pantalla de captura salvo el texto,
- * que necesita teclado, y una ventana overlay sin foco no lo tiene.
- */
-private val ANNOTATE_TOOLS = listOf(
-    AnnotationType.PENCIL to Icons.Filled.Gesture,
-    AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
-    AnnotationType.ARROW to Icons.Filled.NorthEast,
-    AnnotationType.LINE to Icons.Filled.Remove,
-    AnnotationType.RECT to Icons.Filled.CropSquare,
-    AnnotationType.ELLIPSE to Icons.Filled.RadioButtonUnchecked,
-    AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
-    AnnotationType.POLYLINE to Icons.Filled.Timeline,
-    AnnotationType.SPOTLIGHT to Icons.Filled.CenterFocusStrong,
-    AnnotationType.MOSAIC to Icons.Filled.BlurOn,
-    AnnotationType.ERASER to Icons.Filled.AutoFixNormal
-)
 
 /** Alto aproximado de la barrita, para decidir a qué borde se pega. */
 private const val ANNOTATE_BAR_DP = 76

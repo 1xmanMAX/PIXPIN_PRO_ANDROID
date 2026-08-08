@@ -61,14 +61,6 @@ object PinZoom {
     }
 
     /**
-     * @param scaleAtStart escala al empezar el gesto
-     * @param factor separación actual entre los dedos ÷ separación inicial
-     * @param maxScale tope calculado con [maxScaleFor] al empezar el gesto
-     * @param realW/realH tamaño que la ventana tiene de verdad
-     * @param focusX/focusY punto medio entre los dedos, en pantalla
-     * @param relX/relY posición del foco dentro del pin (0..1) al empezar
-     */
-    /**
      * Escala que toca, ya con sus topes. Está aparte de [step] porque quien
      * dimensiona la ventana necesita saberla ANTES de llamar a step: la posición
      * se calcula con el tamaño al que la ventana va a quedar, no con el que
@@ -77,6 +69,26 @@ object PinZoom {
     fun scaleFor(scaleAtStart: Float, factor: Float, maxScale: Float): Float =
         (scaleAtStart * factor).coerceIn(MIN_SCALE, maxScale.coerceAtLeast(MIN_SCALE))
 
+    /**
+     * Un paso del pellizco: escala nueva y esquina donde recolocar la VENTANA.
+     *
+     * **El punto que se ancla es del contenido, pero lo que se coloca es la
+     * ventana**, y las dos cosas no coinciden: la ventana mide de más para que
+     * quepan la sombra y la pegatina, así que el contenido empieza [insetLeft]
+     * px a la derecha y [insetTop] px por debajo de su esquina. Sin restar ese
+     * hueco, el pin se ancla a un punto desplazado —y el desvío se nota más
+     * cuanto más lejos del centro se pellizque, porque ahí el error del hueco se
+     * suma al de medir la proporción sobre la ventana en vez de sobre la foto.
+     *
+     * @param scaleAtStart escala al empezar el gesto
+     * @param factor separación actual entre los dedos ÷ separación inicial
+     * @param maxScale tope calculado con [maxScaleFor] al empezar el gesto
+     * @param realW/realH tamaño al que va a quedar el CONTENIDO, sin el hueco
+     * @param focusX/focusY punto medio entre los dedos, en pantalla
+     * @param relX/relY posición del foco dentro del CONTENIDO (0..1) al empezar
+     * @param insetLeft/insetTop hueco entre la esquina de la ventana y la del
+     *   contenido, en px. Cero cuando la ventana **es** el contenido.
+     */
     fun step(
         scaleAtStart: Float,
         factor: Float,
@@ -86,13 +98,15 @@ object PinZoom {
         focusX: Float,
         focusY: Float,
         relX: Float,
-        relY: Float
+        relY: Float,
+        insetLeft: Int = 0,
+        insetTop: Int = 0
     ): ZoomStep {
         val scale = scaleFor(scaleAtStart, factor, maxScale)
         return ZoomStep(
             scale = scale,
-            x = (focusX - relX * realW).toInt(),
-            y = (focusY - relY * realH).toInt()
+            x = (focusX - relX * realW).toInt() - insetLeft,
+            y = (focusY - relY * realH).toInt() - insetTop
         )
     }
 }

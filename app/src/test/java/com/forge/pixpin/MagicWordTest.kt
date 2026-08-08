@@ -6,17 +6,39 @@ import org.junit.Test
 
 class MagicWordTest {
 
+    /**
+     * El croquis se retiró: medir es ahora dos herramientas del motor. Sus
+     * palabras dejan de abrir nada en vez de abrir otra cosa — quien copiaba
+     * «cad» esperaba el editor de tipo CAD, y darle un lienzo en blanco sería
+     * más desconcertante que no darle nada.
+     */
     @Test
-    fun `croquis, cad y sketch abren el croquis`() {
-        assertEquals(MiniApp.CROQUIS, MagicWord.detect("croquis"))
-        assertEquals(MiniApp.CROQUIS, MagicWord.detect("cad"))
-        assertEquals(MiniApp.CROQUIS, MagicWord.detect("sketch"))
-        assertEquals(MiniApp.CROQUIS, MagicWord.detect("  CROQUIS "))
+    fun `las palabras del croquis retirado ya no abren nada`() {
+        assertNull(MagicWord.detect("croquis"))
+        assertNull(MagicWord.detect("cad"))
+        assertNull(MagicWord.detect("sketch"))
     }
 
     @Test
     fun `plano no es palabra magica, se copia solo demasiado a menudo`() {
         assertNull(MagicWord.detect("plano"))
+    }
+
+    @Test
+    fun `canvas, lienzo y excalidraw abren el lienzo infinito`() {
+        assertEquals(MiniApp.DRAW, MagicWord.detect("canvas"))
+        assertEquals(MiniApp.DRAW, MagicWord.detect("lienzo"))
+        assertEquals(MiniApp.DRAW, MagicWord.detect("Excalidraw"))
+    }
+
+    /**
+     * Mismo criterio que «plano»: se copian solas demasiado a menudo y
+     * perderlas como pin de texto costaría más de lo que aporta el atajo.
+     */
+    @Test
+    fun `draw y dibujo se quedaron fuera a proposito`() {
+        assertNull(MagicWord.detect("draw"))
+        assertNull(MagicWord.detect("dibujo"))
     }
 
     @Test

@@ -109,7 +109,11 @@ class CaptureService : Service() {
             kotlinx.coroutines.delay(380)
             // Si veníamos de pedir permiso para una captura con scroll, se retoma
             // ahí en vez de tomar un solo fotograma.
-            if (!ScrollCaptureController.resumePending(this@CaptureService)) {
+            // Y si lo que esperaba era otra cosa —copiar la pantalla con la capa
+            // de dibujo encima—, se hace eso y no se abre el recorte.
+            if (!ScrollCaptureController.resumePending(this@CaptureService) &&
+                !CaptureFlow.resumePending(this@CaptureService)
+            ) {
                 CaptureFlow.captureNow(this@CaptureService, settleMs = 120)
             }
         }

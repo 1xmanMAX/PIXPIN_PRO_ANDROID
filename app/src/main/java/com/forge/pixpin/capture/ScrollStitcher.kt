@@ -10,71 +10,30 @@ import android.graphics.Canvas
  * que ya estaba se descarta en cuanto se sabe cuánto se ha desplazado. Al
  * terminar se pintan todas seguidas.
  *
- * Ante la duda, no cose: un fotograma mal encajado estropea la imagen entera y
- * el usuario no lo ve hasta el final, mientras que descartarlo solo cuesta unos
- * milisegundos porque el siguiente ya viene de camino.
+ * **Aquí solo se copian píxeles.** Qué franja de cada fotograma es nueva, si
+ * encaja o no y cuándo hay que parar lo decide [ScrollPlan], que no toca
+ * Android y por eso se puede comprobar en cualquier máquina. La separación no es
+ * teórica: con la decisión metida aquí, sus pruebas necesitaban bitmaps de
+ * verdad, y eso solo funciona con el motor gráfico nativo de Robolectric — que
+ * no existe para Linux sobre ARM.
  */
-class ScrollStitcher(private val width: Int, private val maxHeight: Int) {
+class ScrollStitcher(private val width: Int, maxHeight: Int) {
 
-    enum class Result {
-        /** Primer fotograma: es la base. */
-        FIRST,
-        /** Se ha añadido contenido nuevo. */
-        APPENDED,
-        /** La pantalla no se ha movido desde el fotograma anterior. */
-        NO_MOVEMENT,
-        /** No se puede encajar con confianza: se descarta y se espera al siguiente. */
-        UNCERTAIN,
-        /** Se ha alcanzado el alto máximo. */
-        FULL
-    }
-
-    private companion object {
-        /** Filas de referencia que se buscan en el fotograma siguiente. */
-        const val TAIL_ROWS = 48
-
-        /** Hasta dónde se agranda la referencia si la banda no tiene textura. */
-        const val MAX_TAIL_ROWS = 384
-
-        /** Se muestrea uno de cada N píxeles por fila: sobra para distinguirlas. */
-        const val SAMPLE_STEP = 5
-
-        const val TOLERANCE = 40
-        const val MIN_VARIATION = 300
-    }
-
+    private val plan = ScrollPlan(maxHeight)
     private val strips = mutableListOf<Bitmap>()
-    private var tail = IntArray(0)
     private var scratch = IntArray(0)
 
-    var height: Int = 0
-        private set
+    val height: Int get() = plan.height
 
     val isEmpty: Boolean get() = strips.isEmpty()
 
     /** @param frame el recorte de la zona elegida en el fotograma actual. */
-    fun addFrame(frame: Bitmap): Result {
-        if (frame.width != width || frame.height <= TAIL_ROWS) return Result.UNCERTAIN
-        val signatures = signaturesOf(frame)
+    fun addFrame(frame: Bitmap): ScrollPlan.Result {
+        if (frame.width != width) return ScrollPlan.Result.UNCERTAIN
 
-        if (strips.isEmpty()) {
-            if (frame.height > maxHeight) return Result.FULL
-            append(frame, 0, frame.height)
-            tail = chooseTail(signatures)
-            return Result.FIRST
-        }
-
-        val offset = ScrollMatcher.findOffset(tail, signatures, TOLERANCE)
-        if (offset == ScrollMatcher.NO_MATCH) return Result.UNCERTAIN
-
-        val newStart = offset + tail.size
-        val newRows = frame.height - newStart
-        if (newRows <= 0) return Result.NO_MOVEMENT
-        if (height + newRows > maxHeight) return Result.FULL
-
-        append(frame, newStart, newRows)
-        tail = chooseTail(signatures)
-        return Result.APPENDED
+        val orden = plan.plan(signaturesOf(frame), frame.height)
+        if (orden.filas > 0) append(frame, orden.desde, orden.filas)
+        return orden.result
     }
 
     /** Junta todas las tiras en la imagen final. Null si no hay nada. */
@@ -95,8 +54,7 @@ class ScrollStitcher(private val width: Int, private val maxHeight: Int) {
     fun recycle() {
         strips.forEach { if (!it.isRecycled) it.recycle() }
         strips.clear()
-        height = 0
-        tail = IntArray(0)
+        plan.reset()
         scratch = IntArray(0)
     }
 
@@ -109,29 +67,12 @@ class ScrollStitcher(private val width: Int, private val maxHeight: Int) {
             Bitmap.createBitmap(frame, 0, y, width, rows)
         }
         strips += strip
-        height += rows
-    }
-
-    /**
-     * Banda de referencia del final de lo acumulado. Si no tiene textura (un
-     * fondo liso, el final de una página en blanco) se agranda hasta encontrar
-     * algo distinguible: si no, encajaría en cualquier sitio.
-     */
-    private fun chooseTail(signatures: IntArray): IntArray {
-        var rows = TAIL_ROWS
-        while (rows < MAX_TAIL_ROWS && rows < signatures.size) {
-            val candidate = signatures.copyOfRange(signatures.size - rows, signatures.size)
-            if (!ScrollMatcher.isFlat(candidate, MIN_VARIATION)) return candidate
-            rows *= 2
-        }
-        val take = minOf(rows, signatures.size)
-        return signatures.copyOfRange(signatures.size - take, signatures.size)
     }
 
     private fun signaturesOf(frame: Bitmap): IntArray {
         val needed = width * frame.height
         if (scratch.size < needed) scratch = IntArray(needed)
         frame.getPixels(scratch, 0, width, 0, 0, width, frame.height)
-        return ScrollMatcher.signatures(scratch, width, frame.height, SAMPLE_STEP)
+        return ScrollMatcher.signatures(scratch, width, frame.height, ScrollPlan.SAMPLE_STEP)
     }
 }

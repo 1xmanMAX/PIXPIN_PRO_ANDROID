@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -181,6 +182,27 @@ fun OnboardingScreen() {
             CaptureModeCard()
 
             Spacer(Modifier.height(12.dp))
+            FormatoDeCopiaCard()
+
+            Spacer(Modifier.height(12.dp))
+            BarraDelPinCard()
+
+            Spacer(Modifier.height(12.dp))
+            BarraDeLaCapaCard()
+
+            Spacer(Modifier.height(12.dp))
+            BarraDelEditorCard()
+
+            Spacer(Modifier.height(12.dp))
+            OledCard()
+
+            Spacer(Modifier.height(12.dp))
+            ManoCard()
+
+            Spacer(Modifier.height(12.dp))
+            LetraDelPinCard()
+
+            Spacer(Modifier.height(12.dp))
             CrashReportCard()
 
             Spacer(Modifier.height(24.dp))
@@ -252,6 +274,318 @@ private fun CaptureModeCard() {
                             stringResource(
                                 if (mode == CaptureMode.FAST) R.string.capture_mode_fast_desc
                                 else R.string.capture_mode_discreet_desc
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Qué herramientas del motor se quedan en el pin.
+ *
+ * El pin y el editor a pantalla completa usan **el mismo motor**, y esa era
+ * justo la papeleta: todo lo que se le añade al motor aparece también en una
+ * barra flotante de dos dedos de ancho, encima de la foto que estás anotando.
+ * En vez de decidir por el usuario qué es «lo básico», se pregunta: lo marcado
+ * va al pin y lo demás sigue existiendo, pero en la edición avanzada.
+ *
+ * Se listan con su icono y su nombre, los mismos de la barra, para que lo que
+ * se marca aquí se reconozca allí sin traducir nada mentalmente.
+ */
+/**
+ * La barra del pin: qué herramientas salen y cómo se agrupan.
+ *
+ * Arrastrando, no con casillas. La diferencia importa: agrupar es una decisión
+ * sobre **qué va con qué**, y una lista de casillas no puede expresarla — lo
+ * más que sabe decir es sí o no.
+ */
+@Composable
+private fun BarraDelPinCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    BarraCard(
+        titulo = R.string.pin_tools_title,
+        descripcion = R.string.pin_tools_desc,
+        grupos = settings.pinGroupList,
+        puestas = settings.pinToolSet,
+        onCambio = { scope.launch { app.settings.setBarraDelPin(it) } },
+        onReset = { scope.launch { app.settings.resetBarraDelPin() } }
+    )
+}
+
+/**
+ * Lo mismo, para el editor a pantalla completa.
+ *
+ * Allí caben todas, y por eso de fábrica están todas; pero tener sitio no
+ * obliga a enseñarlo todo. Quien dibuje siempre lo mismo puede dejar a la vista
+ * lo suyo y plegar el resto, con el mismo gesto que en las otras dos barras.
+ */
+@Composable
+private fun BarraDelEditorCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    BarraCard(
+        titulo = R.string.editor_tools_title,
+        descripcion = R.string.editor_tools_desc,
+        grupos = settings.editorGroupList,
+        puestas = settings.editorToolSet,
+        onCambio = { scope.launch { app.settings.setBarraDelEditor(it) } },
+        onReset = { scope.launch { app.settings.resetBarraDelEditor() } }
+    )
+}
+
+/** Lo mismo, para la capa que se dibuja sobre la pantalla. */
+@Composable
+private fun BarraDeLaCapaCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    BarraCard(
+        titulo = R.string.capa_tools_title,
+        descripcion = R.string.capa_tools_desc,
+        grupos = settings.capaGroupList,
+        puestas = settings.capaToolSet,
+        onCambio = { scope.launch { app.settings.setBarraDeLaCapa(it) } },
+        onReset = { scope.launch { app.settings.resetBarraDeLaCapa() } }
+    )
+}
+
+/**
+ * El editor de una barra, con su título.
+ *
+ * Uno solo para las dos barras —la del pin y la de la capa— porque son la misma
+ * pregunta hecha en dos sitios: con dos copias, la segunda se queda atrás en
+ * cuanto el motor gana una herramienta.
+ */
+@Composable
+private fun BarraCard(
+    @androidx.annotation.StringRes titulo: Int,
+    @androidx.annotation.StringRes descripcion: Int,
+    grupos: List<List<com.forge.pixpin.motor.Tool>>,
+    puestas: Set<com.forge.pixpin.motor.Tool>,
+    onCambio: (List<List<com.forge.pixpin.motor.Tool>>) -> Unit,
+    onReset: () -> Unit
+) {
+    val fuera = com.forge.pixpin.motor.ALL_TOOLS.filter { it !in puestas }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(titulo), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(descripcion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Text(
+                stringResource(R.string.barra_ayuda),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 6.dp, bottom = 6.dp)
+            )
+
+            com.forge.pixpin.ui.EditorDeBarra(
+                grupos = grupos,
+                fuera = fuera,
+                onCambio = { nuevos, _ -> onCambio(nuevos) }
+            )
+
+            TextButton(onClick = onReset) {
+                Text(stringResource(R.string.pin_tools_reset))
+            }
+        }
+    }
+}
+
+/**
+ * Con qué mano se dibuja.
+ *
+ * No es una preferencia estética: el brazo entra por el lado de la mano y tapa
+ * lo que hay debajo. Todo lo que está bien colocado para una diestra —los
+ * paneles, la lupa que enseña el punto bajo el dedo— estorba con la izquierda.
+ */
+/**
+ * Negro de verdad en modo noche.
+ *
+ * En un OLED el negro puro no enciende el píxel: el lienzo desaparece contra el
+ * marco del móvil y gasta menos. En un LCD se ve gris lavado, así que va
+ * apagado de fábrica y lo enciende quien lo quiera.
+ */
+@Composable
+private fun OledCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.oled_title),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    stringResource(R.string.oled_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Switch(
+                checked = settings.oledNegro,
+                onCheckedChange = { scope.launch { app.settings.setOledNegro(it) } }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManoCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.mano_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.mano_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+            listOf(false to R.string.mano_diestro, true to R.string.mano_zurdo).forEach { (z, texto) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { scope.launch { app.settings.setZurdo(z) } }
+                        .padding(vertical = 2.dp)
+                ) {
+                    RadioButton(
+                        selected = settings.zurdo == z,
+                        onClick = { scope.launch { app.settings.setZurdo(z) } }
+                    )
+                    Text(stringResource(texto), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Con qué letra se escribe en la edición simple.
+ *
+ * Vive aquí y no en la barra del pin porque es una decisión que se toma una vez
+ * y no se vuelve a mirar: en una barra flotante ese botón ocupaba el sitio de
+ * algo que sí se cambia a menudo. En la edición avanzada sigue estando a mano.
+ */
+@Composable
+private fun LetraDelPinCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.pin_font_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                stringResource(R.string.pin_font_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+            com.forge.pixpin.motor.ItemStyle.FONT_FAMILIES.forEach { familia ->
+                val puesta = settings.pinFont == familia
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { scope.launch { app.settings.setPinFont(familia) } }
+                        .padding(vertical = 2.dp)
+                ) {
+                    RadioButton(
+                        selected = puesta,
+                        onClick = { scope.launch { app.settings.setPinFont(familia) } }
+                    )
+                    // Cada opción **escrita con su propia letra**: es lo único
+                    // que dice de verdad en qué se diferencian.
+                    Text(
+                        com.forge.pixpin.motor.DrawFonts.nombreDe(familia),
+                        fontFamily = com.forge.pixpin.motor.composeFontFamily(familia),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Cómo se escribe la imagen al copiar, compartir y guardar.
+ *
+ * Las dos opciones son **sin pérdida**: lo que cambia es cuánto ocupa el
+ * archivo y quién sabe abrirlo, no lo que se ve. Una captura es texto y bordes
+ * duros, que es justo lo que peor lleva la compresión con pérdida, así que
+ * ofrecer JPEG aquí sería ofrecer halos alrededor de las letras.
+ */
+@Composable
+private fun FormatoDeCopiaCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.copy_format_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Spacer(Modifier.height(8.dp))
+            com.forge.pixpin.data.CopyFormat.entries.forEach { formato ->
+                val png = formato == com.forge.pixpin.data.CopyFormat.PNG
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { scope.launch { app.settings.setCopyFormat(formato) } }
+                        .padding(vertical = 6.dp)
+                ) {
+                    RadioButton(
+                        selected = settings.copyFormat == formato,
+                        onClick = { scope.launch { app.settings.setCopyFormat(formato) } }
+                    )
+                    Column(Modifier.padding(start = 4.dp)) {
+                        Text(
+                            stringResource(
+                                if (png) R.string.copy_format_png else R.string.copy_format_webp
+                            ),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            stringResource(
+                                if (png) R.string.copy_format_png_desc
+                                else R.string.copy_format_webp_desc
                             ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

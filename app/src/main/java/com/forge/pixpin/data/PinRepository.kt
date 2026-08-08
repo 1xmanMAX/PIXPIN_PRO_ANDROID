@@ -47,10 +47,27 @@ class PinRepository(context: Context) {
         }
     }
 
+    /**
+     * Lee una lista de pines, **descartando los del croquis retirado**.
+     *
+     * El croquis era el editor de tipo CAD, y se ha ido: ya no hay con qué
+     * dibujarlo ni con qué pintarlo, así que un pin de ese tipo solo podría
+     * salir como un recuadro vacío que no se puede ni editar ni copiar.
+     *
+     * **El valor sigue en `PinType` a propósito.** Quitarlo del enum haría que
+     * `decodeFromString` fallara al encontrarse un `"CROQUIS"` guardado, y como
+     * aquí un fallo devuelve la lista vacía, quien tuviera un solo croquis
+     * perdería **todos** sus pines de golpe.
+     *
+     * Los archivos de la carpeta `pins/croquis` **no se borran**: dejan de
+     * usarse, pero siguen en el almacenamiento de la aplicación por si
+     * hicieran falta.
+     */
     private fun read(file: File): List<PinState> {
         return runCatching {
             if (!file.exists()) emptyList()
             else json.decodeFromString<List<PinState>>(file.readText())
+                .filter { it.type != com.forge.pixpin.pin.PinType.CROQUIS }
         }.getOrDefault(emptyList())
     }
 }

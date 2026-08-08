@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.forge.pixpin.clipboard.ContentClassifierTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:36.025Z" hostname="localhost" time="0.045">
+  <properties/>
+  <testcase name="hex de 6 digitos" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.01"/>
+  <testcase name="formatos de salida" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.011"/>
+  <testcase name="triples sueltos" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.001"/>
+  <testcase name="funcion rgba con alpha decimal" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.002"/>
+  <testcase name="classify devuelve el tipo correcto" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.014"/>
+  <testcase name="nombres css" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.001"/>
+  <testcase name="hex de 3 digitos se expande" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.0"/>
+  <testcase name="funcion rgb" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.0"/>
+  <testcase name="hex de 8 digitos con alpha" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.001"/>
+  <testcase name="no es color" classname="com.forge.pixpin.clipboard.ContentClassifierTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

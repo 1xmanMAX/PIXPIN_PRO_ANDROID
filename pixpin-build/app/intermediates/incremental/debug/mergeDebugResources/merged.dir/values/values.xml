@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:ns1="http://schemas.android.com/tools" xmlns:ns2="urn:oasis:names:tc:xliff:document:1.2">
+<resources xmlns:ns1="urn:oasis:names:tc:xliff:document:1.2" xmlns:ns2="http://schemas.android.com/tools">
     <attr format="color" name="animationBackgroundColor"/>
     <attr format="enum" name="finishPrimaryWithPlaceholder">
         
@@ -201,6 +201,9 @@
     <string name="androidx_startup" translatable="false">androidx.startup</string>
     <string name="app_name">PixPin</string>
     <string name="app_started">PixPin activo — la bola flotante aparece en tu pantalla</string>
+    <string name="barra_ayuda">Mantén pulsada una herramienta y arrástrala: a otra fila para juntarla con ese grupo, o abajo del todo para sacarla de la barra.</string>
+    <string name="barra_fuera">Fuera de la barra</string>
+    <string name="board_color">Color de la pizarra</string>
     <string name="call_notification_answer_action">Answer</string>
     <string name="call_notification_answer_video_action">Video</string>
     <string name="call_notification_decline_action">Decline</string>
@@ -209,6 +212,12 @@
     <string name="call_notification_ongoing_text">Ongoing call</string>
     <string name="call_notification_screening_text">Screening an incoming call</string>
     <string name="cancel">Cancelar</string>
+    <string name="capa_abrir">Dibujar sobre la pantalla</string>
+    <string name="capa_atravesar">Dejar pasar los toques</string>
+    <string name="capa_copiar">Copiar la pantalla con lo dibujado</string>
+    <string name="capa_limpiar">Borrar todo</string>
+    <string name="capa_tools_desc">Lo mismo para la capa que se dibuja sobre la pantalla. Ahí cabe más que en el pin, pero la barra sigue tapando lo que anotas.</string>
+    <string name="capa_tools_title">Herramientas de la capa</string>
     <string name="capture_channel_name">Sesión de captura</string>
     <string name="capture_consent_denied">Permiso de captura denegado</string>
     <string name="capture_error">No se pudo capturar la pantalla</string>
@@ -221,34 +230,77 @@
     <string name="capture_notif_text">Las capturas son instantáneas mientras dure</string>
     <string name="capture_notif_title">Sesión de captura activa</string>
     <string name="capture_stop_session">Detener</string>
-    <string name="cd_annotate_pin">Dibujar sobre el pin</string>
+    <string name="cd_ajustes">Ajustes</string>
     <string name="cd_bookmark">Guardar pin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="cd_close">Cerrar</string>
+    <string name="cd_color">Color</string>
+    <string name="cd_delete">Borrar</string>
     <string name="cd_destroy">Eliminar</string>
     <string name="cd_done">Listo</string>
+    <string name="cd_draw_edit">Seguir dibujando</string>
+    <string name="cd_draw_export">Compartir como .excalidraw</string>
+    <string name="cd_draw_image">Insertar una imagen</string>
+    <string name="cd_duplicate">Duplicar</string>
+    <string name="cd_edicion_avanzada">Edición avanzada</string>
+    <string name="cd_edit_text">Editar el texto</string>
+    <string name="cd_emoji">Pegatina</string>
+    <string name="cd_modo_dia">Modo día</string>
+    <string name="cd_modo_noche">Modo noche</string>
+    <string name="cd_redo">Rehacer</string>
     <string name="cd_restore_pin">Mostrar pin</string>
     <string name="cd_save">Guardar</string>
     <string name="cd_select_pin">Seleccionar</string>
+    <string name="cd_stroke_width">Grosor</string>
+    <string name="cd_toggle_priority">Alternar prioridad</string>
     <string name="cd_tools">Herramientas</string>
     <string name="cd_unbookmark">Desmarcar pin</string>
     <string name="cd_undo">Deshacer</string>
+    <string name="checklist_seed">Primera tarea\nSegunda tarea</string>
     <string name="close_drawer">"Close navigation menu"</string>
     <string name="close_sheet">"Close sheet"</string>
     <string name="copied_hex">Copiado %1$s</string>
     <string name="copied_image">Imagen copiada al portapapeles</string>
     <string name="copied_text">Texto copiado</string>
+    <string name="copy_format_png">Tamaño completo (PNG)</string>
+    <string name="copy_format_png_desc">Lo abre cualquier cosa. Es lo que hay que mandar si al otro lado la van a volver a editar.</string>
+    <string name="copy_format_title">Imagen al copiar</string>
+    <string name="copy_format_webp">Comprimida sin pérdida (WebP)</string>
+    <string name="copy_format_webp_desc">Exactamente la misma imagen, sin tocar un píxel, ocupando cerca de la mitad. A cambio, algún sitio viejo no la abre.</string>
     <string name="crash_desc">Hay un informe guardado con el detalle técnico del fallo. Mientras no lo descartes, PixPin no se activará sola al reiniciar el móvil.</string>
     <string name="crash_dismiss">Descartar</string>
     <string name="crash_share">Compartir informe</string>
     <string name="crash_title">PixPin se cerró de forma inesperada</string>
     <string name="default_error_message">"Invalid input"</string>
-    <string name="default_popup_window_title" ns1:ignore="ExtraTranslation">"Pop-Up Window"</string>
+    <string name="default_popup_window_title" ns2:ignore="ExtraTranslation">"Pop-Up Window"</string>
+    <string name="draw_text_hint">Escribe aquí</string>
+    <string name="draw_text_title">Texto</string>
     <string name="dropdown_menu">"Dropdown menu"</string>
+    <string name="editor_tools_desc">La edición a pantalla completa, la que se abre con el lápiz. Cabe todo, así que de fábrica están todas: aquí se quita lo que no uses y se agrupa el resto a tu manera.</string>
+    <string name="editor_tools_title">Barra del editor avanzado</string>
+    <string name="emoji_none">Sin pegatina</string>
+    <string name="escala_aceptar">Calibrar</string>
+    <string name="escala_ayuda">Traza la raya sobre algo cuya medida sepas y escríbela. A partir de ahí, las cotas salen en esa unidad.</string>
+    <string name="escala_borrar">Borrar la última cifra</string>
+    <string name="escala_puesta">Escala: 100 px = %1$s</string>
+    <string name="escala_quitar">Quitar la escala</string>
+    <string name="escala_sin">Sin escala: las cotas salen en píxeles</string>
+    <string name="escala_titulo">¿Cuánto mide de verdad?</string>
+    <string name="export_excalidraw">Compartir como .excalidraw</string>
+    <string name="export_imagen">Compartir como imagen</string>
+    <string name="export_pdf">Compartir como PDF</string>
     <string name="grant">Conceder</string>
     <string name="granted">Concedido</string>
+    <string name="grupo_formas">Formas</string>
+    <string name="grupo_marcar">Marcar</string>
+    <string name="grupo_mover">Mover</string>
+    <string name="grupo_tapar">Tapar</string>
+    <string name="grupo_trazar">Trazar</string>
+    <string name="hoja_nombre">Hoja</string>
     <string name="in_progress">In progress</string>
     <string name="indeterminate">Partially checked</string>
+    <string name="ledger_seed">+1000 Sueldo\n-250 Compra</string>
+    <string name="ledger_total">Total</string>
     <string name="m3c_bottom_sheet_collapse_description">Collapse bottom sheet</string>
     <string name="m3c_bottom_sheet_dismiss_description">Dismiss bottom sheet</string>
     <string name="m3c_bottom_sheet_drag_handle_description">Drag handle</string>
@@ -319,7 +371,16 @@
     <string name="m3c_tooltip_pane_description">Tooltip</string>
     <string name="m3c_wide_navigation_rail_close_rail">"Close rail"</string>
     <string name="m3c_wide_navigation_rail_pane_title">"Navigation rail"</string>
+    <string name="mano_desc">Los paneles y la lupa se colocan en el lado contrario, para que el brazo no tape lo que estás mirando.</string>
+    <string name="mano_diestro">Diestro</string>
+    <string name="mano_title">Mano con la que dibujas</string>
+    <string name="mano_zurdo">Zurdo</string>
     <string name="mc2_snackbar_pane_title">Alert</string>
+    <string name="medida_angulo">Ángulo</string>
+    <string name="medida_aplicar">Aplicar</string>
+    <string name="medida_largo">Longitud</string>
+    <string name="medida_texto_mayor">Número de la cota más grande</string>
+    <string name="medida_texto_menor">Número de la cota más pequeño</string>
     <string name="navigation_menu">"Navigation menu"</string>
     <string name="need_overlay">Concede «Mostrar sobre otras apps» para continuar</string>
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
@@ -330,22 +391,42 @@
     <string name="notif_channel_name">PixPin</string>
     <string name="notif_text">Captura y fija notas sobre cualquier app</string>
     <string name="notif_title">PixPin activo</string>
+    <string name="oled_desc">En pantallas OLED el negro apaga el píxel: se ve más negro y gasta menos. En una pantalla LCD se ve gris lavado, así que déjalo apagado.</string>
+    <string name="oled_title">Negro puro en modo noche</string>
     <string name="onboarding_subtitle">Captura, anota y fija notas flotantes sobre cualquier app. Necesito estos permisos para funcionar:</string>
     <string name="onboarding_title">Bienvenido a PixPin</string>
+    <string name="pdf_all">Todas</string>
+    <string name="pdf_pages">%1$d páginas</string>
+    <string name="pdf_unreadable">No se pudo leer el PDF</string>
+    <string name="pdf_view">Ver el PDF</string>
     <string name="perm_battery_desc">Evita que el sistema cierre PixPin y desaparezcan tus pines.</string>
     <string name="perm_battery_title">Excluir de ahorro de batería</string>
     <string name="perm_notif_desc">Barra persistente con botones de Capturar y Pinear.</string>
     <string name="perm_notif_title">Notificaciones</string>
     <string name="perm_overlay_desc">Imprescindible: los pines y la bola flotante son ventanas sobre las demás apps.</string>
     <string name="perm_overlay_title">Mostrar sobre otras apps</string>
+    <string name="pin_draw_empty">El dibujo está vacío</string>
+    <string name="pin_font_desc">Con qué letra se escribe en la edición simple. En la avanzada se sigue eligiendo sobre la marcha.</string>
+    <string name="pin_font_title">Letra del pin</string>
     <string name="pin_history_empty">No hay pines en el historial</string>
+    <string name="pin_image_default">PixPin</string>
     <string name="pin_image_error">No se pudo leer el contenido del portapapeles</string>
+    <string name="pin_image_priority">Prioridad</string>
     <string name="pin_saved">Pin guardado</string>
+    <string name="pin_tools_desc">Cada fila es un grupo: en la barra del pin sale un botón por grupo, y al volver a tocarlo se despliegan sus hermanas. El pin se abre con doble toque de dos dedos sobre la imagen.</string>
+    <string name="pin_tools_reset">Volver a las de siempre</string>
+    <string name="pin_tools_title">Herramientas del pin</string>
+    <string name="pin_type_checklist">Lista</string>
     <string name="pin_type_color_plural">Colores</string>
+    <string name="pin_type_counter">Contador</string>
+    <string name="pin_type_draw">Dibujo</string>
     <string name="pin_type_file">Archivo</string>
     <string name="pin_type_file_plural">Archivos</string>
     <string name="pin_type_image">Imagen</string>
+    <string name="pin_type_ledger">Cuentas</string>
+    <string name="pin_type_table">Tabla</string>
     <string name="pin_type_text_plural">Textos</string>
+    <string name="pin_type_timer">Temporizador</string>
     <string name="pin_unsaved">Pin desmarcado</string>
     <string name="pins_empty">No hay pines activos</string>
     <string name="pins_group">Agrupar</string>
@@ -354,8 +435,13 @@
     <string name="pins_shown">Pines visibles</string>
     <string name="pins_title">Pines</string>
     <string name="pins_ungroup">Desagrupar</string>
+    <string name="priority_chip">PRIORIDAD</string>
     <string name="range_end">"Range end"</string>
     <string name="range_start">"Range start"</string>
+    <string name="ref_modo">Trazar de referencia</string>
+    <string name="ref_ver">Ver u ocultar las referencias</string>
+    <string name="relleno_sin_cerrar">Ese espacio no está cerrado: el relleno se escapa por algún lado</string>
+    <string name="safe_mode">Modo seguro: los pines guardados no se han restaurado. Descarta el informe de fallo para recuperarlos.</string>
     <string name="saved_pins_section">⭐ Guardados</string>
     <string name="saved_to_gallery">Guardado en Pictures/PixPin</string>
     <string name="scroll_full">Alto máximo alcanzado</string>
@@ -374,7 +460,45 @@
     <string name="status_bar_notification_info_overflow">999+</string>
     <string name="switch_role">Switch</string>
     <string name="tab">Tab</string>
-    <string name="template_percent"><ns2:g id="percentage">%1$d</ns2:g> percent.</string>
+    <string name="tabla_abrir">Tablas de coordenadas</string>
+    <string name="tabla_fila">Añadir fila</string>
+    <string name="tabla_nueva">Nueva tabla de coordenadas</string>
+    <string name="tabla_pixeles">píxeles</string>
+    <string name="tabla_quitar_fila">Quitar la fila</string>
+    <string name="tabla_serie">Cada color es una serie distinta: al tocar otro se cambia de tabla.</string>
+    <string name="tabla_titulo">Puntos por coordenadas</string>
+    <string name="tabla_unidades">Unidades: %1$s · el origen es la cruz gris, y es el mismo para todas las series</string>
+    <string name="tabla_ver">Ver u ocultar los puntos</string>
+    <string name="template_percent"><ns1:g id="percentage">%1$d</ns1:g> percent.</string>
+    <string name="text_box_width">Ancho</string>
+    <string name="text_no_box">Sin cuadro</string>
+    <string name="text_preview">Vista previa</string>
+    <string name="text_size">Tamaño</string>
+    <string name="timer_done">Tiempo cumplido</string>
+    <string name="tool_arrow">Flecha</string>
+    <string name="tool_diamond">Rombo</string>
+    <string name="tool_ellipse">Elipse</string>
+    <string name="tool_eraser">Borrador</string>
+    <string name="tool_escala_grafica">Escala gráfica</string>
+    <string name="tool_extender">Extender</string>
+    <string name="tool_frame">Hoja</string>
+    <string name="tool_freedraw">Lápiz</string>
+    <string name="tool_hand">Mano</string>
+    <string name="tool_highlighter">Marcador</string>
+    <string name="tool_image">Imagen</string>
+    <string name="tool_lasso">Lazo</string>
+    <string name="tool_line">Línea</string>
+    <string name="tool_measure">Cota</string>
+    <string name="tool_mosaic">Pixelar</string>
+    <string name="tool_nudo">Soldar vértices</string>
+    <string name="tool_recortar">Recortar</string>
+    <string name="tool_rectangle">Rectángulo</string>
+    <string name="tool_relleno">Rellenar</string>
+    <string name="tool_scale">Escalar</string>
+    <string name="tool_selection">Seleccionar</string>
+    <string name="tool_serial">Numerar</string>
+    <string name="tool_spotlight">Foco</string>
+    <string name="tool_text">Texto</string>
     <string name="tooltip_description">tooltip</string>
     <string name="tooltip_label">show tooltip</string>
     <style name="DialogWindowTheme">
@@ -382,7 +506,7 @@
     </style>
     <style name="EdgeToEdgeFloatingDialogTheme" parent="android:Theme.DeviceDefault.Dialog">
         <item name="android:windowAnimationStyle">@null</item>
-        <item name="android:windowLayoutInDisplayCutoutMode" ns1:targetApi="27">@integer/m3c_window_layout_in_display_cutout_mode</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" ns2:targetApi="27">@integer/m3c_window_layout_in_display_cutout_mode</item>
         <item name="android:windowClipToOutline">false</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
@@ -446,9 +570,9 @@
     <declare-styleable name="DividerAttributes">
         
         <attr format="enum" name="embeddingDividerType">
-            <!-- Fixed divider type. -->
+            
             <enum name="fixed" value="0"/>
-            <!-- Draggable divider type. -->
+            
             <enum name="draggable" value="1"/>
         </attr>
         
@@ -475,23 +599,14 @@
         <attr format="reference" name="fontProviderCerts"/>
         
         <attr name="fontProviderFetchStrategy">
-            <!-- The blocking font fetch works as follows.
-              First, check the local cache, then if the requested font is not cached, request the
-              font from the provider and wait until it is finished.  You can change the length of
-              the timeout by modifying fontProviderFetchTimeout.  If the timeout happens, the
-              default typeface will be used instead. -->
+            
             <enum name="blocking" value="0"/>
-            <!-- The async font fetch works as follows.
-              First, check the local cache, then if the requested font is not cached, trigger a
-              request the font and continue with layout inflation. Once the font fetch succeeds, the
-              target text view will be refreshed with the downloaded font data. The
-              fontProviderFetchTimeout will be ignored if async loading is specified. -->
+            
             <enum name="async" value="1"/>
         </attr>
         
         <attr format="integer" name="fontProviderFetchTimeout">
-            <!-- A special value for the timeout. In this case, the blocking font fetching will not
-              timeout and wait until a reply is received from the font provider. -->
+            
             <enum name="forever" value="-1"/>
         </attr>
         

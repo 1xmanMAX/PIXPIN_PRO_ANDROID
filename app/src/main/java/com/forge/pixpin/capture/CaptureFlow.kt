@@ -79,6 +79,49 @@ object CaptureFlow {
         }
     }
 
+    /**
+     * Lo que hay que hacer en cuanto la sesión de captura esté viva.
+     *
+     * Mismo patrón que [ScrollCaptureController]: quien necesita un fotograma
+     * puede no tener sesión, y el permiso lo pide una actividad que se va y
+     * vuelve. En vez de que cada función invente su forma de retomar, deja aquí
+     * lo que quería hacer y el servicio lo llama al abrir.
+     */
+    private var pendiente: (suspend (Context) -> Unit)? = null
+
+    /**
+     * Ejecuta [accion] con la sesión de captura viva, pidiendo permiso antes si
+     * hace falta.
+     *
+     * Es lo que permite que algo distinto de «capturar y recortar» —copiar la
+     * pantalla con la capa de dibujo encima, por ejemplo— use el mismo camino
+     * sin acabar en la pantalla de recorte.
+     */
+    fun conSesion(context: Context, accion: suspend (Context) -> Unit) {
+        val app = context.applicationContext as PixPinApp
+        if (!Settings.canDrawOverlays(app)) {
+            toast(app, R.string.need_overlay_toast)
+            return
+        }
+        if (ProjectionSession.isAlive) {
+            app.scope.launch { accion(app) }
+        } else {
+            pendiente = accion
+            app.startActivity(
+                Intent(app, ConsentActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
+    /** ¿Había algo esperando a que abriera la sesión? Lo hace y dice que sí. */
+    suspend fun resumePending(context: Context): Boolean {
+        val accion = pendiente ?: return false
+        pendiente = null
+        accion(context)
+        return true
+    }
+
     fun toast(context: Context, resId: Int) {
         Toast.makeText(context.applicationContext, resId, Toast.LENGTH_SHORT).show()
     }

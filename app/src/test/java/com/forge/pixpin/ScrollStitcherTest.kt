@@ -1,119 +1,131 @@
 package com.forge.pixpin.capture
 
-import android.graphics.Bitmap
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 import kotlin.random.Random
 
 /**
- * El cosido sobre bitmaps de verdad: hace falta Robolectric en modo gráfico
- * nativo porque aquí se leen y se copian píxeles.
+ * El cosido de una captura con scroll.
+ *
+ * **Sin bitmaps y sin Robolectric.** Antes hacían falta imágenes de verdad, y
+ * eso solo funciona con el motor gráfico nativo de Robolectric, que no existe
+ * para Linux sobre ARM: las siete pruebas no fallaban por un error del cosido,
+ * es que no llegaban a ejecutarse. Ahora se comprueba [ScrollPlan], que es quien
+ * decide —si el fotograma encaja, qué franja es nueva, cuándo parar—; copiar los
+ * píxeles después es trabajo mecánico.
+ *
+ * La página se representa por sus **firmas de fila**, un número por fila, que es
+ * exactamente lo único que el algoritmo mira de una imagen.
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ScrollStitcherTest {
 
-    private val width = 60
-
     /**
-     * Página larga con textura. Deliberadamente "ruidosa" y no un degradado:
-     * un degradado desplazado se parece a sí mismo en cualquier posición, y el
+     * Página larga con textura. Deliberadamente «ruidosa» y no un degradado: un
+     * degradado desplazado se parece a sí mismo en cualquier posición, y el
      * cosido lo rechaza a propósito por ambiguo. El contenido real de una
      * pantalla —texto, iconos— tiene esta pinta, no la de una rampa.
      */
-    private fun page(rows: Int): Bitmap {
-        val bmp = Bitmap.createBitmap(width, rows, Bitmap.Config.ARGB_8888)
-        val pixels = IntArray(width * rows)
-        for (y in 0 until rows) {
-            val g = Random(y).nextInt(256)
-            val color = 0xFF000000.toInt() or (g shl 16) or (g shl 8) or g
-            for (x in 0 until width) pixels[y * width + x] = color
-        }
-        bmp.setPixels(pixels, 0, width, 0, 0, width, rows)
-        return bmp
-    }
+    private fun pagina(filas: Int): IntArray =
+        IntArray(filas) { y -> Random(y).nextInt(100_000) }
 
-    private fun window(source: Bitmap, top: Int, rows: Int): Bitmap =
-        Bitmap.createBitmap(source, 0, top, width, rows)
+    /** Lo que se ve por la ventana: las filas [desde, desde+filas). */
+    private fun ventana(pagina: IntArray, desde: Int, filas: Int): IntArray =
+        pagina.copyOfRange(desde, desde + filas)
 
     @Test
     fun `el primer fotograma es la base`() {
-        val stitcher = ScrollStitcher(width, maxHeight = 2000)
-        val result = stitcher.addFrame(page(200))
-        assertEquals(ScrollStitcher.Result.FIRST, result)
-        assertEquals(200, stitcher.height)
+        val plan = ScrollPlan(maxHeight = 2000)
+        val orden = plan.plan(pagina(200), 200)
+        assertEquals(ScrollPlan.Result.FIRST, orden.result)
+        assertEquals(200, plan.height)
+        assertEquals("del primero se queda todo", 0, orden.desde)
+        assertEquals(200, orden.filas)
     }
 
     @Test
     fun `solo se añade lo que hay de nuevo`() {
-        val source = page(600)
-        val stitcher = ScrollStitcher(width, maxHeight = 2000)
+        val fuente = pagina(600)
+        val plan = ScrollPlan(maxHeight = 2000)
 
-        stitcher.addFrame(window(source, 0, 200))
-        val result = stitcher.addFrame(window(source, 100, 200))
+        plan.plan(ventana(fuente, 0, 200), 200)
+        val orden = plan.plan(ventana(fuente, 100, 200), 200)
 
-        assertEquals(ScrollStitcher.Result.APPENDED, result)
-        assertEquals("200 filas + las 100 nuevas", 300, stitcher.height)
+        assertEquals(ScrollPlan.Result.APPENDED, orden.result)
+        assertEquals("200 filas + las 100 nuevas", 300, plan.height)
+        assertEquals("solo las 100 del final", 100, orden.filas)
+        assertEquals(100, orden.desde)
     }
 
+    /**
+     * La prueba que de verdad importa: **lo cosido reproduce la página**.
+     *
+     * Se sigue el plan fila a fila y se compara el resultado con el original.
+     * Antes esto se comprobaba mirando píxeles de un bitmap; lo que decidía si
+     * salían bien o mal era esto mismo.
+     */
     @Test
     fun `la imagen final reproduce la pagina original`() {
-        val source = page(600)
-        val stitcher = ScrollStitcher(width, maxHeight = 2000)
-        stitcher.addFrame(window(source, 0, 200))
-        stitcher.addFrame(window(source, 100, 200))
-        stitcher.addFrame(window(source, 200, 200))
+        val fuente = pagina(600)
+        val plan = ScrollPlan(maxHeight = 2000)
+        val cosido = mutableListOf<Int>()
 
-        val out = stitcher.build()
-        assertNotNull(out)
-        assertEquals(400, out!!.height)
-        // Se comprueba una fila de cada tramo cosido.
-        listOf(10, 150, 250, 399).forEach { y ->
-            assertEquals("fila $y", source.getPixel(0, y), out.getPixel(0, y))
+        for (desde in listOf(0, 100, 200)) {
+            val marco = ventana(fuente, desde, 200)
+            val orden = plan.plan(marco, 200)
+            repeat(orden.filas) { i -> cosido += marco[orden.desde + i] }
         }
+
+        assertEquals(400, cosido.size)
+        assertEquals(400, plan.height)
+        assertEquals(fuente.take(400), cosido)
     }
 
     @Test
     fun `si la pantalla no se movio no se añade nada`() {
-        val source = page(600)
-        val stitcher = ScrollStitcher(width, maxHeight = 2000)
-        stitcher.addFrame(window(source, 0, 200))
-        val result = stitcher.addFrame(window(source, 0, 200))
-        assertEquals(ScrollStitcher.Result.NO_MOVEMENT, result)
-        assertEquals(200, stitcher.height)
+        val fuente = pagina(600)
+        val plan = ScrollPlan(maxHeight = 2000)
+        plan.plan(ventana(fuente, 0, 200), 200)
+        val orden = plan.plan(ventana(fuente, 0, 200), 200)
+        assertEquals(ScrollPlan.Result.NO_MOVEMENT, orden.result)
+        assertEquals(200, plan.height)
+        assertEquals(0, orden.filas)
     }
 
+    /** Ante la duda, no cose: un fotograma mal encajado estropea la imagen entera. */
     @Test
     fun `un fotograma que no encaja se descarta`() {
-        val stitcher = ScrollStitcher(width, maxHeight = 2000)
-        stitcher.addFrame(page(200))
-        // Contenido sin ninguna relación: el usuario cambió de app.
-        val otro = Bitmap.createBitmap(width, 200, Bitmap.Config.ARGB_8888)
-        otro.eraseColor(0xFF3366CC.toInt())
-        assertEquals(ScrollStitcher.Result.UNCERTAIN, stitcher.addFrame(otro))
-        assertEquals("no se ha ensuciado lo acumulado", 200, stitcher.height)
+        val plan = ScrollPlan(maxHeight = 2000)
+        plan.plan(pagina(200), 200)
+        // Contenido sin ninguna relación: el usuario cambió de aplicación.
+        val otro = IntArray(200) { Random(it + 9_999).nextInt(100_000) }
+        assertEquals(ScrollPlan.Result.UNCERTAIN, plan.plan(otro, 200).result)
+        assertEquals("no se ha ensuciado lo acumulado", 200, plan.height)
     }
 
     @Test
     fun `al llegar al alto maximo deja de acumular`() {
-        val source = page(600)
-        val stitcher = ScrollStitcher(width, maxHeight = 250)
-        stitcher.addFrame(window(source, 0, 200))
-        val result = stitcher.addFrame(window(source, 100, 200))
-        assertEquals(ScrollStitcher.Result.FULL, result)
-        assertEquals("lo ya cosido se conserva", 200, stitcher.height)
+        val fuente = pagina(600)
+        val plan = ScrollPlan(maxHeight = 250)
+        plan.plan(ventana(fuente, 0, 200), 200)
+        val orden = plan.plan(ventana(fuente, 100, 200), 200)
+        assertEquals(ScrollPlan.Result.FULL, orden.result)
+        assertEquals("lo ya cosido se conserva", 200, plan.height)
+        assertEquals(0, orden.filas)
     }
 
     @Test
     fun `un fotograma mas bajo que la referencia se descarta`() {
-        val stitcher = ScrollStitcher(width, maxHeight = 2000)
-        stitcher.addFrame(page(200))
-        assertEquals(ScrollStitcher.Result.UNCERTAIN, stitcher.addFrame(page(20)))
+        val plan = ScrollPlan(maxHeight = 2000)
+        plan.plan(pagina(200), 200)
+        assertEquals(ScrollPlan.Result.UNCERTAIN, plan.plan(pagina(20), 20).result)
+    }
+
+    /** Y el primero tampoco entra si ya no cabe: no se empieza para nada. */
+    @Test
+    fun `un primer fotograma más alto que el tope no se cose`() {
+        val plan = ScrollPlan(maxHeight = 100)
+        assertEquals(ScrollPlan.Result.FULL, plan.plan(pagina(200), 200).result)
+        assertTrue(plan.isEmpty)
     }
 }

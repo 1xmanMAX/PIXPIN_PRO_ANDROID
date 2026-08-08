@@ -81,6 +81,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInput
@@ -95,13 +97,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
-import com.forge.pixpin.annotate.AnnotationCanvas
-import com.forge.pixpin.annotate.AnnotationController
-import com.forge.pixpin.annotate.AnnotationRenderer
-import com.forge.pixpin.annotate.AnnotationType
-import com.forge.pixpin.annotate.Pt
 import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
+import com.forge.pixpin.motor.DrawController
+import com.forge.pixpin.motor.DrawFonts
+import com.forge.pixpin.motor.DrawToolbar
+import com.forge.pixpin.motor.DialogoEscala
+import com.forge.pixpin.motor.Pt
+import com.forge.pixpin.motor.Renderer
+import com.forge.pixpin.motor.Tool
+import com.forge.pixpin.motor.Viewport
+import com.forge.pixpin.motor.estiloAplicado
+import com.forge.pixpin.motor.longitudDe
 import com.forge.pixpin.pin.ImageStore
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
@@ -117,7 +124,20 @@ import kotlin.math.min
  */
 class CaptureActivity : ComponentActivity() {
 
-    private val controller = AnnotationController()
+    /**
+     * **El mismo motor que el pin y el editor.**
+     *
+     * Esta pantalla era lo último que quedaba con el motor de anotación viejo:
+     * sus once herramientas, su barra y su renderizador, todo paralelo a lo del
+     * resto de la aplicación. Se notaba al usarla —lo aprendido en el pin no
+     * valía aquí— y se notaba al mantenerla, porque cada arreglo había que
+     * hacerlo dos veces. Ahora anota, mide y exporta con el mismo motor.
+     */
+    private val controller = DrawController().apply {
+        // Sobre una captura se viene a señalar: se entra con la flecha, igual
+        // que en el pin.
+        selectTool(Tool.ARROW)
+    }
     private var frame: Bitmap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -159,16 +179,11 @@ class CaptureActivity : ComponentActivity() {
     }
 }
 
-private val PALETTE = listOf(
-    0xFFF44336.toInt(), 0xFFFF9800.toInt(), 0xFFFFEB3B.toInt(),
-    0xFF4CAF50.toInt(), 0xFF2196F3.toInt(), 0xFF000000.toInt(), 0xFFFFFFFF.toInt()
-)
-
 @OptIn(ExperimentalComposeUiApi::class) // pointerInteropFilter: hace falta el MotionEvent crudo
 @Composable
 fun CaptureScreen(
     bitmap: Bitmap,
-    controller: AnnotationController,
+    controller: DrawController,
     onFinish: () -> Unit
 ) {
     val context = LocalContext.current
@@ -185,12 +200,14 @@ fun CaptureScreen(
     var magnifierPos by remember { mutableStateOf<Offset?>(null) }
     var pickedColor by remember { mutableIntStateOf(0) }
 
-    var showTextDialog by remember { mutableStateOf(false) }
-    var textPoint by remember { mutableStateOf(Pt(0f, 0f)) }
-    var textInput by remember { mutableStateOf("") }
-    var textSize by remember { mutableStateOf(controller.lastTextSize.value) }
-    var textBoxWidth by remember { mutableStateOf(controller.lastTextBoxWidth.value) }
-    var editingIndex by remember { mutableIntStateOf(-1) }
+    // El controlador no es estado de Compose —copiar la escena entera en cada
+    // punto del lápiz saldría carísimo—, así que este contador es lo que ata los
+    // dos mundos. Mismo truco que en `DrawCanvas` y en el pin.
+    //
+    // Se guarda el **objeto de estado**, no su valor: así lo lee cada trozo de
+    // interfaz que dependa del motor, y subirlo repinta el lienzo y refresca la
+    // barra sin recomponer la pantalla entera a cada muestra del lápiz.
+    val tick = remember { mutableIntStateOf(0) }
 
     BackHandler {
         when {
@@ -218,23 +235,25 @@ fun CaptureScreen(
         )
         val imgScale = imageRect.width / bitmap.width // imagen px → vista px
 
-        fun toImage(pos: Offset): Pt? {
+        fun toImage(pos: Offset): Offset? {
             if (!imageRect.contains(pos)) return null
-            return Pt(
+            return Offset(
                 ((pos.x - imageRect.left) / imgScale).coerceIn(0f, bitmap.width.toFloat()),
                 ((pos.y - imageRect.top) / imgScale).coerceIn(0f, bitmap.height.toFloat())
             )
         }
 
         /**
-         * Igual que [toImage] pero sin descartar nada: al dibujar, un punto que
+         * De la pantalla a **coordenadas de escena del motor**, que aquí son
+         * píxeles de la captura.
+         *
+         * Sin descartar nada, al revés que [toImage]: al dibujar, un punto que
          * cae fuera de la imagen se pega al borde en vez de perderse, o el trazo
          * se cortaría al llegar al final de la foto.
          */
-        fun toImagePt(x: Float, y: Float, pressure: Float): Pt = Pt(
-            ((x - imageRect.left) / imgScale).coerceIn(0f, bitmap.width.toFloat()),
-            ((y - imageRect.top) / imgScale).coerceIn(0f, bitmap.height.toFloat()),
-            pressure
+        fun toEscena(x: Float, y: Float): Pt = Pt(
+            ((x - imageRect.left) / imgScale).coerceIn(0f, bitmap.width.toFloat()).toDouble(),
+            ((y - imageRect.top) / imgScale).coerceIn(0f, bitmap.height.toFloat()).toDouble()
         )
 
         fun selectionToImageRect(sel: Rect): android.graphics.Rect {
@@ -261,8 +280,8 @@ fun CaptureScreen(
             scope.launch {
                 try {
                     val baked = withContext(Dispatchers.IO) {
-                        AnnotationRenderer.bake(
-                            bitmap, selectionToImageRect(sel), controller.annotations.toList()
+                        Export.horneaCaptura(
+                            context, bitmap, controller.scene, selectionToImageRect(sel)
                         )
                     }
                     val saved = withContext(Dispatchers.IO) { Export.saveToGallery(context, baked) }
@@ -279,13 +298,48 @@ fun CaptureScreen(
             }
         }
 
-        // Motor de trazo, el mismo que usan los pines al anotar.
+        // **Se conserva `StrokeTouchReader`**, igual que en el pin: trae el
+        // rechazo de palma y las muestras históricas del lápiz —un digitalizador
+        // va a cientos de hercios pero solo entrega un evento por fotograma—, y
+        // con los gestos de Compose se perderían las dos cosas. Lo único que
+        // cambia respecto a antes es a quién se las entrega.
         val strokeReader = remember(controller, imageRect) {
+            // El motor necesita saber dónde se levantó el dedo y `onFinish` no
+            // trae coordenadas; se recuerda el último punto entregado.
+            var ultimo = Pt(0.0, 0.0)
+            // Cuántos píxeles de pantalla ocupa un píxel de la foto: con esto
+            // los umbrales de toque —picar, enganchar— miden lo mismo bajo el
+            // dedo esté la captura como esté encajada.
+            val zoom = imgScale.toDouble()
             StrokeTouchReader(
-                onBegin = { x, y, p -> controller.begin(toImagePt(x, y, p)) },
-                onExtend = { x, y, p -> controller.drag(toImagePt(x, y, p)) },
-                onFinish = { controller.end() },
-                onCancel = { controller.cancel() }
+                onBegin = { x, y, p ->
+                    ultimo = toEscena(x, y)
+                    controller.pointerDown(ultimo, p.toDouble(), zoom)
+                    tick.intValue++
+                },
+                onExtend = { x, y, p ->
+                    ultimo = toEscena(x, y)
+                    controller.pointerMove(ultimo, p.toDouble(), zoom)
+                    tick.intValue++
+                },
+                onFinish = {
+                    controller.pointerUp(ultimo, zoom)
+                    tick.intValue++
+                    // El bote no encontró hueco cerrado. Se dice: si no, parece
+                    // que la herramienta no funciona.
+                    if (controller.rellenoSinCerrar) {
+                        controller.limpiarAvisoRelleno()
+                        Toast.makeText(
+                            context, R.string.relleno_sin_cerrar, Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onCancel = { controller.cancel(); tick.intValue++ },
+                // El segundo dedo apoyado pide forma perfecta.
+                onModifier = { activo ->
+                    controller.keepAspectRatio = activo
+                    tick.intValue++
+                }
             )
         }
 
@@ -301,13 +355,34 @@ fun CaptureScreen(
                 )
         )
 
-        // 2) Anotaciones
-        AnnotationCanvas(
-            controller = controller,
-            sourceBitmap = bitmap,
-            imageRectInView = imageRect,
-            modifier = Modifier.fillMaxSize()
-        )
+        // 2) Anotaciones, con el motor
+        //
+        // La escena está en píxeles de la captura, así que verla encima es
+        // desplazar el lienzo hasta la esquina de la imagen y escalar por lo que
+        // la imagen ocupa. Sin más conversiones: es la ventaja de haber elegido
+        // ese sistema de coordenadas, la misma que aprovecha el horneado.
+        val renderer = remember(bitmap, context) {
+            Renderer(
+                typefaces = DrawFonts.provider(context),
+                // De aquí saca el mosaico sus píxeles: la propia captura.
+                backdrop = bitmap
+            )
+        }
+        Canvas(Modifier.fillMaxSize()) {
+            @Suppress("UNUSED_EXPRESSION") tick
+            drawIntoCanvas { lienzo ->
+                val nativo = lienzo.nativeCanvas
+                nativo.save()
+                nativo.translate(imageRect.left, imageRect.top)
+                renderer.renderScene(
+                    nativo,
+                    controller.scene.copy(viewport = Viewport(zoom = imgScale.toDouble())),
+                    dispW.toDouble(),
+                    dispH.toDouble()
+                )
+                nativo.restore()
+            }
+        }
 
         // 3) Máscara de selección
         if (!annotateMode) {
@@ -375,40 +450,17 @@ fun CaptureScreen(
                         }
                     )
                 }
-                .pointerInput(annotateMode, controller.tool.value) {
-                    if (!annotateMode || controller.tool.value != AnnotationType.TEXT) {
-                        return@pointerInput
-                    }
-                    detectTapGestures { pos ->
-                        toImage(pos)?.let { pt ->
-                            // Tocar un texto ya puesto lo reabre en vez de
-                            // plantar otro encima.
-                            val hit = controller.textAt(pt)
-                            editingIndex = hit
-                            if (hit >= 0) {
-                                val a = controller.annotations[hit]
-                                textInput = a.text.orEmpty()
-                                textSize = a.strokeWidth
-                                textBoxWidth = a.boxWidth
-                            } else {
-                                textPoint = pt
-                                textInput = ""
-                                textSize = controller.lastTextSize.value
-                                textBoxWidth = controller.lastTextBoxWidth.value
-                            }
-                            showTextDialog = true
-                        }
-                    }
-                }
                 // Dibujo: se lee el MotionEvent en crudo en vez de usar los gestos
                 // de Compose, que se comen el arranque del trazo (touch slop) y
                 // tiran las muestras intermedias del lápiz. Ver StrokeTouchReader.
+                //
+                // **Todas las herramientas pasan por aquí, también el texto.** En
+                // el motor, tocar con el texto puesto crea el elemento y deja su
+                // id pedido; el teclado lo abre la barra al verlo. Antes el texto
+                // necesitaba su propio detector de toques porque el motor viejo
+                // no sabía crearlo sin uno.
                 .pointerInteropFilter { event ->
-                    if (!annotateMode || controller.tool.value == AnnotationType.TEXT) {
-                        false
-                    } else {
-                        strokeReader.onTouchEvent(event)
-                    }
+                    if (!annotateMode) false else strokeReader.onTouchEvent(event)
                 }
         )
 
@@ -439,7 +491,7 @@ fun CaptureScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (annotateMode) {
-                AnnotateToolbar(controller, onDone = { annotateMode = false })
+                BarraDeAnotar(controller, tick, onDone = { annotateMode = false })
             } else {
                 if (magnifierPos != null || pickedColor != 0) {
                     val hex = ContentClassifier.toHex(pickedColor)
@@ -511,107 +563,118 @@ fun CaptureScreen(
             }
         }
 
-        // 8) Diálogo de texto de anotación
-        if (showTextDialog) {
-            AlertDialog(
-                onDismissRequest = { showTextDialog = false },
-                title = { Text(stringResource(R.string.add_text_title)) },
-                text = {
-                    Column {
-                        OutlinedTextField(
-                            value = textInput,
-                            onValueChange = { textInput = it },
-                            singleLine = false,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Stepper(
-                            label = stringResource(R.string.text_size),
-                            value = "${textSize.toInt()}",
-                            onLess = { textSize = (textSize - 4f).coerceAtLeast(12f) },
-                            onMore = { textSize = (textSize + 4f).coerceAtMost(96f) }
-                        )
-                        Stepper(
-                            label = stringResource(R.string.text_box_width),
-                            value = textBoxWidth?.toInt()?.toString()
-                                ?: stringResource(R.string.text_no_box),
-                            onLess = {
-                                val w = textBoxWidth
-                                // Por debajo del mínimo se sale del cuadro: es
-                                // la forma de volver al texto suelto de siempre.
-                                textBoxWidth = if (w == null || w <= 80f) null else w - 20f
-                            },
-                            onMore = {
-                                val w = textBoxWidth
-                                textBoxWidth = if (w == null) 80f else (w + 20f).coerceAtMost(600f)
-                            }
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            stringResource(R.string.text_preview),
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                        // La previsualización evita el ciclo de poner, mirar,
-                        // deshacer y repetir. El tamaño va en px de imagen, así
-                        // que aquí se reduce para que quepa: lo que orienta es
-                        // la proporción entre letra y ancho de cuadro.
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .border(1.dp, Color.Gray)
-                                .padding(4.dp)
-                        ) {
-                            val boxW = textBoxWidth
-                            Text(
-                                text = textInput,
-                                color = Color(controller.color.value),
-                                fontSize = (textSize / 3f).sp,
-                                modifier = if (boxW != null) {
-                                    Modifier.width((boxW / 3f).dp)
-                                } else {
-                                    Modifier
-                                }
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        if (editingIndex >= 0) {
-                            controller.replaceText(editingIndex, textInput, textSize, textBoxWidth)
-                        } else {
-                            controller.addText(textPoint, textInput, textSize, textBoxWidth)
-                        }
-                        showTextDialog = false
-                    }) { Text(stringResource(R.string.add)) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showTextDialog = false }) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                }
-            )
-        }
     }
 }
 
-/** Etiqueta, valor y dos botones. No hay sitio para un slider en el diálogo. */
+/**
+ * La barra de dibujo de la captura: **la misma que el pin y el editor**.
+ *
+ * Lee el contador aquí dentro y no en la pantalla entera a propósito: mientras
+ * el dedo dibuja esto sube decenas de veces por segundo, y recomponer desde
+ * arriba arrastraría también el fotograma congelado, la máscara de recorte y la
+ * lupa. Mismo trato que en la barrita del pin.
+ *
+ * De paso cuelgan de aquí las dos cosas que el motor pide por su cuenta: el
+ * teclado del texto recién puesto y la medida de la raya de escalar.
+ */
 @Composable
-private fun Stepper(
-    label: String,
-    value: String,
-    onLess: () -> Unit,
-    onMore: () -> Unit
+private fun BarraDeAnotar(
+    controller: DrawController,
+    tick: androidx.compose.runtime.MutableIntState,
+    onDone: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        IconButton(onClick = onLess) { Text("−", fontSize = 20.sp) }
-        Text(value, style = MaterialTheme.typography.bodyMedium)
-        IconButton(onClick = onMore) { Text("+", fontSize = 20.sp) }
+    @Suppress("UNUSED_EXPRESSION") tick.intValue
+    val context = LocalContext.current
+
+    fun cambiado() {
+        tick.intValue++
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        controller.pendingScaleElement()?.let { cota ->
+            DialogoEscala(
+                largoPx = longitudDe(cota),
+                onCalibrar = { medida, unidad ->
+                    controller.applyScale(medida, unidad)
+                    cambiado()
+                },
+                onCancelar = { controller.cancelScale(); cambiado() },
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+        }
+
+        DrawToolbar(
+            tool = controller.tool,
+            onTool = { controller.selectTool(it); cambiado() },
+            style = controller.scene.style,
+            onStyle = { nuevo ->
+                controller.changeStyle({ nuevo }, { estiloAplicado(it, nuevo) })
+                cambiado()
+            },
+            canUndo = controller.canUndo,
+            onUndo = { controller.undo(); cambiado() },
+            onDone = onDone,
+            escala = controller.scene.escala,
+            onQuitarEscala = { controller.clearScale(); cambiado() },
+            // Las guías **también aquí**. Era el único sitio de los cuatro donde
+            // faltaban, y es donde más falta hacen: sobre una captura se traza
+            // encima de algo que ya está, así que apoyar el trazo en una guía es
+            // el caso normal, no el raro.
+            modoReferencia = controller.modoReferencia,
+            onModoReferencia = {
+                controller.modoReferencia = !controller.modoReferencia
+                cambiado()
+            },
+            referenciasVisibles = controller.referenciasVisibles,
+            onAlternarReferencias = { controller.alternarReferencias(); cambiado() },
+            hayReferencias = controller.hayReferencias
+        )
+    }
+
+    // El texto recién plantado pide teclado. Aquí sí cabe un campo de verdad
+    // —esto es una actividad con foco, no la ventana flotante del pin—, así que
+    // se escribe en un diálogo normal y corriente.
+    val textoId = controller.pendingTextId
+    if (textoId != null) {
+        // Con lo que ya hubiera: tocar un texto puesto lo abre para corregirlo,
+        // y empezar en blanco sería borrarlo sin querer.
+        var escrito by remember(textoId) {
+            mutableStateOf(controller.scene.byId(textoId)?.text.orEmpty())
+        }
+        fun cerrar(guardar: Boolean) {
+            val e = controller.scene.byId(textoId)
+            if (guardar && escrito.isNotBlank() && e != null) {
+                val (ancho, alto) = DrawFonts.medirTexto(
+                    context, escrito, e.fontFamily, e.fontSize ?: 20.0
+                )
+                controller.updateText(textoId, escrito, ancho, alto)
+            } else {
+                // Un texto vacío no deja rastro: sería un elemento invisible que
+                // roba toques al picar.
+                controller.setSelection(setOf(textoId))
+                controller.deleteSelection()
+            }
+            controller.clearPendingText()
+            cambiado()
+        }
+        AlertDialog(
+            onDismissRequest = { cerrar(false) },
+            title = { Text(stringResource(R.string.add_text_title)) },
+            text = {
+                OutlinedTextField(
+                    value = escrito,
+                    onValueChange = { escrito = it },
+                    singleLine = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { cerrar(true) }) { Text(stringResource(R.string.add)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { cerrar(false) }) { Text(stringResource(R.string.cancel)) }
+            }
+        )
     }
 }
 
@@ -621,7 +684,7 @@ private fun Stepper(
 private fun Magnifier(
     bitmap: Bitmap,
     touchPos: Offset,
-    toImage: (Offset) -> Pt?
+    toImage: (Offset) -> Offset?
 ) {
     val imgPt = toImage(touchPos) ?: return
     val density = LocalDensity.current
@@ -735,81 +798,6 @@ private fun ActionBar(
             ToolbarButton(Icons.Filled.ContentCopy, active = false, onClick = onCopy)
             ToolbarButton(Icons.Filled.Share, active = false, onClick = onShare)
             ToolbarButton(Icons.Filled.Close, active = false, onClick = onClose)
-        }
-    }
-}
-
-@Composable
-private fun AnnotateToolbar(controller: AnnotationController, onDone: () -> Unit) {
-    val tools = listOf(
-        AnnotationType.RECT to Icons.Filled.CropSquare,
-        AnnotationType.ELLIPSE to Icons.Filled.RadioButtonUnchecked,
-        AnnotationType.ARROW to Icons.Filled.NorthEast,
-        AnnotationType.PENCIL to Icons.Filled.Gesture,
-        AnnotationType.HIGHLIGHT to Icons.Filled.Highlight,
-        AnnotationType.MOSAIC to Icons.Filled.BlurOn,
-        AnnotationType.TEXT to Icons.Filled.TextFields,
-        AnnotationType.SERIAL to Icons.Filled.FormatListNumbered,
-        AnnotationType.POLYLINE to Icons.Filled.Timeline,
-        AnnotationType.SPOTLIGHT to Icons.Filled.CenterFocusStrong,
-        AnnotationType.ERASER to Icons.Filled.AutoFixNormal
-    )
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Card(shape = RoundedCornerShape(28.dp), modifier = Modifier.padding(bottom = 6.dp)) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PALETTE.forEach { c ->
-                    val selected = controller.color.value == c
-                    Box(
-                        Modifier
-                            .padding(3.dp)
-                            .size(if (selected) 26.dp else 22.dp)
-                            .background(Color(c), CircleShape)
-                            .border(
-                                width = if (selected) 3.dp else 1.dp,
-                                color = if (selected) MaterialTheme.colorScheme.primary else Color.Gray,
-                                shape = CircleShape
-                            )
-                            .pointerInput(c) {
-                                detectTapGestures { controller.color.value = c }
-                            }
-                    )
-                }
-                ToolbarButton(Icons.Filled.Undo, active = false, enabled = controller.canUndo.value) {
-                    controller.undo()
-                }
-                ToolbarButton(Icons.Filled.Redo, active = false, enabled = controller.canRedo.value) {
-                    controller.redo()
-                }
-                ToolbarButton(Icons.Filled.Delete, active = false) { controller.clearAll() }
-            }
-        }
-        Card(shape = RoundedCornerShape(28.dp)) {
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                tools.forEach { (type, icon) ->
-                    ToolbarButton(
-                        icon,
-                        active = controller.tool.value == type,
-                        onClick = { controller.selectTool(type) }
-                    )
-                }
-                // Solo mientras haya una polilínea a medias: es su forma de cerrarse.
-                if (controller.polylineOpen) {
-                    ToolbarButton(
-                        Icons.Filled.CheckCircle,
-                        active = true,
-                        onClick = { controller.finishPolyline() }
-                    )
-                }
-                ToolbarButton(Icons.Filled.Done, active = true, onClick = onDone)
-            }
         }
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -270,6 +271,9 @@ class FloatingBallController(private val context: Context) {
         closeMenu()
         when (action) {
             BallAction.CAPTURE -> CaptureFlow.requestCapture(context)
+            // Dibujar encima de lo que haya, sin capturar nada: la capa se abre
+            // y se cierra desde el mismo botón.
+            BallAction.CAPA -> app.overlayManager.capa.alternar()
             BallAction.PIN_CLIPBOARD -> context.startActivity(
                 Intent(context, ClipboardPinActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -313,6 +317,7 @@ class FloatingBallController(private val context: Context) {
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 MenuButton(BallAction.CAPTURE) { Icon(Icons.Filled.Crop, contentDescription = null) }
+                MenuButton(BallAction.CAPA) { Icon(Icons.Filled.Gesture, contentDescription = null) }
                 MenuButton(BallAction.PIN_CLIPBOARD) { Icon(Icons.Filled.PushPin, contentDescription = null) }
                 MenuButton(BallAction.HIDE_ALL) { Icon(Icons.Filled.VisibilityOff, contentDescription = null) }
                 MenuButton(BallAction.PIN_LIST) { Icon(Icons.Filled.FormatListBulleted, contentDescription = null) }
@@ -326,4 +331,4 @@ class FloatingBallController(private val context: Context) {
     }
 }
 
-private enum class BallAction { CAPTURE, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }
+private enum class BallAction { CAPTURE, CAPA, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }

@@ -186,12 +186,12 @@ class ScrollCaptureController private constructor(
                 val result = stitcher.addFrame(piece)
                 if (!piece.isRecycled) piece.recycle()
                 when (result) {
-                    ScrollStitcher.Result.FULL -> {
+                    ScrollPlan.Result.FULL -> {
                         hint.value = R.string.scroll_full
                         finishAfterHint()
                         return
                     }
-                    ScrollStitcher.Result.UNCERTAIN -> {
+                    ScrollPlan.Result.UNCERTAIN -> {
                         uncertainStreak++
                         if (uncertainStreak >= UNCERTAIN_HINT) hint.value = R.string.scroll_slower
                     }

@@ -105,6 +105,58 @@ class PinZoomTest {
         )
     }
 
+    // ---- El hueco de la sombra: la ventana mide más que el contenido ----
+
+    /**
+     * El caso que fallaba: pellizcar **lejos del centro** de un pin de imagen.
+     *
+     * La ventana lleva 48 px de hueco para la sombra, así que la foto empieza
+     * ahí dentro. Con el foco en la esquina superior izquierda de la foto, esa
+     * esquina tiene que seguir bajo los dedos pase lo que pase con la escala.
+     */
+    @Test
+    fun `el hueco de la sombra no desvia el punto anclado`() {
+        val inset = 48
+        val focusX = 300f
+        val focusY = 900f
+        val result = PinZoom.step(
+            scaleAtStart = 1f, factor = 2f, maxScale = 8f,
+            realW = 800, realH = 600,          // 400×300 al doble
+            focusX = focusX, focusY = focusY,
+            relX = 0f, relY = 0f,               // esquina de la FOTO
+            insetLeft = inset, insetTop = inset
+        )
+        // La esquina de la foto = esquina de la ventana + hueco.
+        assertEquals(focusX, (result.x + inset).toFloat(), 0.5f)
+        assertEquals(focusY, (result.y + inset).toFloat(), 0.5f)
+    }
+
+    @Test
+    fun `con el foco en el centro tambien se descuenta el hueco`() {
+        val inset = 48
+        val result = PinZoom.step(
+            scaleAtStart = 1f, factor = 1.5f, maxScale = 8f,
+            realW = 600, realH = 450,
+            focusX = 500f, focusY = 700f,
+            relX = 0.5f, relY = 0.5f,
+            insetLeft = inset, insetTop = inset
+        )
+        assertEquals(500 - 300 - inset, result.x)
+        assertEquals(700 - 225 - inset, result.y)
+    }
+
+    @Test
+    fun `sin hueco el resultado no cambia`() {
+        val conCero = PinZoom.step(
+            scaleAtStart = 1f, factor = 1.5f, maxScale = 8f,
+            realW = 600, realH = 450, focusX = 500f, focusY = 700f,
+            relX = 0.5f, relY = 0.5f, insetLeft = 0, insetTop = 0
+        )
+        val porDefecto = step(factor = 1.5f, realW = 600, realH = 450)
+        assertEquals(porDefecto.x, conCero.x)
+        assertEquals(porDefecto.y, conCero.y)
+    }
+
     @Test
     fun `encoger siempre se puede`() {
         val result = PinZoom.step(
