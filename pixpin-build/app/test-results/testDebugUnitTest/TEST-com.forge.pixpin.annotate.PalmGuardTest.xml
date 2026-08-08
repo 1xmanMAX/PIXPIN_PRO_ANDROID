@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.annotate.PalmGuardTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:17Z" hostname="localhost" time="0.019">
+<testsuite name="com.forge.pixpin.annotate.PalmGuardTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:46.043Z" hostname="localhost" time="0.007">
   <properties/>
-  <testcase name="sin lapiz el dedo dibuja" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.012"/>
-  <testcase name="con el lapiz recien usado se ignora la mano apoyada" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.0"/>
+  <testcase name="sin lapiz el dedo dibuja" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.003"/>
+  <testcase name="con el lapiz recien usado se ignora la mano apoyada" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.001"/>
   <testcase name="un raton o similar nunca se descarta" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.001"/>
-  <testcase name="pasada la ventana el dedo vuelve a valer" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.001"/>
+  <testcase name="pasada la ventana el dedo vuelve a valer" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

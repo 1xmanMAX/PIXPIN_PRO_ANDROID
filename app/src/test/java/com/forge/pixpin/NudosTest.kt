@@ -264,6 +264,85 @@ class NudosTest {
         assertEquals(0.0, c.scene.byId("b")!!.x, 0.001)
     }
 
+    // ---- Los dos fallos de la primera prueba en mano ----
+
+    /**
+     * **El clavo no se despega al girar la raya por su lado largo.**
+     *
+     * La caja de una raya horizontal no tiene alto, así que guardar el clavo
+     * como una proporción de esa caja era una división por cero disfrazada: se
+     * guardaba un cero que significaba «aquí» y, en cuanto la raya giraba y su
+     * caja dejaba de ser plana, pasaba a significar «arriba del todo». El clavo
+     * aparecía al otro lado de la raya.
+     */
+    @Test
+    fun `el clavo se queda pegado a la raya aunque gire`() {
+        // Una horizontal cruzada por un círculo: el cruce no cae en ningún
+        // vértice, así que el clavo agarra la raya por su cuerpo.
+        val escena = listOf(
+            raya("h", Pt(0.0, 0.0), Pt(200.0, 0.0)),
+            circulo("o", 60.0, 0.0, 40.0)
+        )
+        val alfiler = clavarEn(escena, emptyList(), Pt(100.0, 0.0), radio = 14.0)!!.single()
+        val agarre = alfiler.agarres.first { it.elementId == "h" }
+        assertTrue("no debería agarrarla por proporción", agarre.local == null)
+
+        val raya = escena.first()
+        val antes = puntoDelAgarre(raya, agarre)!!
+        // Se gira la raya media vuelta sobre su centro: el clavo tiene que
+        // seguir en el mismo trozo de raya, no saltar al otro lado.
+        val girada = girarElemento(raya, Pt(100.0, 0.0), Math.PI / 2)
+        val despues = puntoDelAgarre(girada, agarre)!!
+        assertEquals(
+            "el clavo se ha ido de la raya",
+            0.0,
+            distanceToSegment(despues, absolutePoints(girada).first(), absolutePoints(girada).last()),
+            0.5
+        )
+        assertEquals(
+            "el clavo ha cambiado de sitio dentro de la raya",
+            hypot(antes.x - absolutePoints(raya).first().x, antes.y - absolutePoints(raya).first().y),
+            hypot(
+                despues.x - absolutePoints(girada).first().x,
+                despues.y - absolutePoints(girada).first().y
+            ),
+            0.5
+        )
+    }
+
+    /**
+     * **Llevarse el clavo de una esquina deforma el triángulo, no lo hace
+     * girar.**
+     *
+     * Con un clavo en cada esquina, cada lado tiene dos, y arrastrar uno hacía
+     * que la raya girase rígida alrededor del otro: el triángulo se ponía a dar
+     * vueltas sobre su medio en vez de estirarse. Una raya **puede** estirarse,
+     * así que un clavo puesto en su vértice mueve ese vértice y ya.
+     */
+    @Test
+    fun `mover el clavo de una esquina estira el triangulo`() {
+        val c = DrawController(Scene(elements = triangulo()))
+        clavar(c, Pt(100.0, 100.0))
+        clavar(c, Pt(50.0, 0.0))
+        clavar(c, Pt(0.0, 100.0))
+        assertEquals(3, c.scene.alfileres.size)
+
+        c.selectTool(Tool.SELECTION)
+        c.pointerDown(Pt(100.0, 100.0))
+        c.pointerMove(Pt(190.0, 130.0))
+        c.pointerUp(Pt(190.0, 130.0))
+
+        // La esquina se ha ido al dedo, con los dos lados que llegan a ella…
+        assertEquals(190.0, puntas(c, "a").last().x, 0.001)
+        assertEquals(130.0, puntas(c, "a").last().y, 0.001)
+        assertEquals(190.0, puntas(c, "b").first().x, 0.001)
+        // …y las otras dos esquinas siguen donde estaban: se ha deformado, no
+        // ha girado.
+        assertEquals(0.0, puntas(c, "a").first().x, 0.001)
+        assertEquals(50.0, puntas(c, "c").first().x, 0.001)
+        assertEquals(0.0, c.scene.byId("a")!!.angle, 1e-9)
+    }
+
     // ---- Girar sobre el clavo ----
 
     /**

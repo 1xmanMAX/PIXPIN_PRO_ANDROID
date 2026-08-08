@@ -42,7 +42,23 @@ data class Agarre(
     /** El vértice por el que agarra, si la figura tiene vértices. */
     val indice: Int? = null,
     /** Y si no, dónde le entra el clavo: de 0 a 1 en cada eje de su caja. */
-    val local: Pt? = null
+    val local: Pt? = null,
+    /**
+     * Lo mismo pero **en distancia**, no en proporción: para lo que tiene la
+     * caja aplastada.
+     *
+     * La proporción falla justo donde más duele. La caja de una raya horizontal
+     * **no tiene alto**, así que la proporción vertical del clavo es una
+     * división por cero disfrazada: se guarda como cero y, en cuanto la raya
+     * gira y su caja deja de ser plana, ese cero deja de significar «aquí» y
+     * pasa a significar «arriba del todo». El clavo se despegaba y aparecía al
+     * otro lado — que es exactamente lo que se veía tirando de una raya por su
+     * lado largo.
+     *
+     * Guardando la distancia al origen del elemento, el clavo queda pegado a la
+     * raya pase lo que pase con su caja.
+     */
+    val rel: Pt? = null
 )
 
 /** Un clavo, con todo lo que atraviesa. */
@@ -58,11 +74,13 @@ data class Alfiler(
 /** Dónde cae ahora mismo el agarre de [a] sobre [e]. */
 fun puntoDelAgarre(e: Element, a: Agarre): Pt? {
     if (a.indice != null) return absolutePoints(e).getOrNull(a.indice)
-    val l = a.local ?: return null
     val c = getElementAbsoluteCoords(e)
+    val centro = Pt(c.cx, c.cy)
+    a.rel?.let { return pointRotateRads(Pt(e.x + it.x, e.y + it.y), centro, e.angle) }
+    val l = a.local ?: return null
     return pointRotateRads(
         Pt(c.x1 + l.x * (c.x2 - c.x1), c.y1 + l.y * (c.y2 - c.y1)),
-        Pt(c.cx, c.cy),
+        centro,
         e.angle
     )
 }
@@ -110,16 +128,35 @@ fun clavarEn(
     return alfileres + Alfiler(donde, agarres)
 }
 
-/** Cómo agarra el clavo a [e] si entra por [donde]. */
+/**
+ * Cómo agarra el clavo a [e] si entra por [donde].
+ *
+ * Tres formas, de la mejor a la peor:
+ *
+ * 1. **Por un vértice**, si lo hay ahí. Es la más fuerte: el clavo se mueve
+ *    exactamente con ese punto, y la raya puede estirarse desde el otro.
+ * 2. **Por distancia al origen** ([Agarre.rel]) en todo lo que se dibuja con
+ *    puntos. Su caja puede estar aplastada —una raya horizontal no tiene alto—
+ *    y una proporción sobre cero no significa nada en cuanto la figura gira.
+ * 3. **Por proporción de la caja** ([Agarre.local]) en las figuras con caja de
+ *    verdad, que es lo único que aguanta que además se las estire.
+ */
 private fun agarrarEn(e: Element, donde: Pt, radio: Double): Agarre {
+    val c = getElementAbsoluteCoords(e)
+    val sinGirar = pointRotateRads(donde, Pt(c.cx, c.cy), -e.angle)
+
     if (e.isLinear || e.isFreeDraw) {
         val i = absolutePoints(e).indexOfFirst { hypot(it.x - donde.x, it.y - donde.y) <= radio }
         if (i >= 0) return Agarre(e.id, indice = i)
+        return Agarre(e.id, rel = Pt(sinGirar.x - e.x, sinGirar.y - e.y))
     }
-    val c = getElementAbsoluteCoords(e)
-    val sinGirar = pointRotateRads(donde, Pt(c.cx, c.cy), -e.angle)
-    val ancho = (c.x2 - c.x1).takeIf { it != 0.0 } ?: 1.0
-    val alto = (c.y2 - c.y1).takeIf { it != 0.0 } ?: 1.0
+
+    val ancho = c.x2 - c.x1
+    val alto = c.y2 - c.y1
+    // Una caja sin superficie no admite proporciones: se guarda la distancia.
+    if (ancho == 0.0 || alto == 0.0) {
+        return Agarre(e.id, rel = Pt(sinGirar.x - e.x, sinGirar.y - e.y))
+    }
     return Agarre(
         e.id,
         local = Pt((sinGirar.x - c.x1) / ancho, (sinGirar.y - c.y1) / alto)
@@ -291,6 +328,22 @@ fun moverAlfiler(
 ): List<Element> = elementos.map { e ->
     val agarres = alfiler.agarres.filter { it.elementId == e.id }
     if (agarres.isEmpty() || e.locked) return@map e
+
+    // **Un clavo puesto en un vértice mueve ese vértice, y punto.**
+    //
+    // Es lo que hace un triángulo de tres rayas: al llevarse un clavo, la
+    // esquina va detrás y el triángulo se deforma. Antes esto caía en el caso de
+    // abajo y la raya giraba rígida alrededor de su otro clavo, que con dos
+    // clavos en los dos extremos se veía como un giro sobre su medio — el
+    // triángulo se ponía a dar vueltas en vez de estirarse.
+    //
+    // Una raya puede estirarse; un círculo no, y por eso solo vale para vértices.
+    val porVertice = agarres.filter { it.indice != null }
+    if (porVertice.isNotEmpty()) {
+        var estirado = e
+        for (a in porVertice) estirado = estirado.withPointMovedTo(a.indice!!, destino)
+        return@map estirado.touched()
+    }
 
     // **Si la figura tiene otro clavo, gira sobre él en vez de irse.** Es la
     // manivela: el otro clavo la sujeta, así que tirando de este lo único que

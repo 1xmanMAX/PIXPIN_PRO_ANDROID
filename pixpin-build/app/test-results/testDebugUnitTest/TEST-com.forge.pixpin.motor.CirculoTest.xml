@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.CirculoTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:18.259Z" hostname="localhost" time="0.036">
+<testsuite name="com.forge.pixpin.motor.CirculoTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:47.417Z" hostname="localhost" time="0.026">
   <properties/>
-  <testcase name="la circunferencia se engancha a una esquina" classname="com.forge.pixpin.motor.CirculoTest" time="0.002"/>
+  <testcase name="la circunferencia se engancha a una esquina" classname="com.forge.pixpin.motor.CirculoTest" time="0.004"/>
   <testcase name="sin nada naciendo no hay figura perfecta" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
-  <testcase name="la circunferencia se engancha a un cruce" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
-  <testcase name="el circulo perfecto llega hasta el dedo" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
-  <testcase name="el ovalo libre tambien pasa por el dedo" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
+  <testcase name="la circunferencia se engancha a un cruce" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
+  <testcase name="el circulo perfecto llega hasta el dedo" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
+  <testcase name="el ovalo libre tambien pasa por el dedo" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
   <testcase name="el centro tambien se engancha" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
-  <testcase name="apoyar el segundo dedo cuadra la forma sin mover" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
-  <testcase name="el punto de agarre se mueve por la circunferencia" classname="com.forge.pixpin.motor.CirculoTest" time="0.012"/>
-  <testcase name="el rectangulo se sigue agarrando por la esquina" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
-  <testcase name="el arco sigue vivo con el segundo dedo apoyado" classname="com.forge.pixpin.motor.CirculoTest" time="0.004"/>
-  <testcase name="el rombo perfecto sale simetrico" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
-  <testcase name="levantar el segundo dedo devuelve la forma libre" classname="com.forge.pixpin.motor.CirculoTest" time="0.003"/>
-  <testcase name="un toque seco no deja circulo" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
-  <testcase name="el centro es donde se toco" classname="com.forge.pixpin.motor.CirculoTest" time="0.001"/>
-  <testcase name="en diagonal el borde ya no se queda corto" classname="com.forge.pixpin.motor.CirculoTest" time="0.003"/>
+  <testcase name="apoyar el segundo dedo cuadra la forma sin mover" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
+  <testcase name="el punto de agarre se mueve por la circunferencia" classname="com.forge.pixpin.motor.CirculoTest" time="0.009"/>
+  <testcase name="el rectangulo se sigue agarrando por la esquina" classname="com.forge.pixpin.motor.CirculoTest" time="0.002"/>
+  <testcase name="el arco sigue vivo con el segundo dedo apoyado" classname="com.forge.pixpin.motor.CirculoTest" time="0.002"/>
+  <testcase name="el rombo perfecto sale simetrico" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
+  <testcase name="levantar el segundo dedo devuelve la forma libre" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
+  <testcase name="un toque seco no deja circulo" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
+  <testcase name="el centro es donde se toco" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
+  <testcase name="en diagonal el borde ya no se queda corto" classname="com.forge.pixpin.motor.CirculoTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.BarraTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:18.179Z" hostname="localhost" time="0.033">
+<testsuite name="com.forge.pixpin.motor.BarraTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:47.346Z" hostname="localhost" time="0.03">
   <properties/>
-  <testcase name="una herramienta que el reparto guardado no menciona aparece igual" classname="com.forge.pixpin.motor.BarraTest" time="0.01"/>
-  <testcase name="mover algo que no estaba lo añade donde se suelta" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
-  <testcase name="soltar más allá del último grupo crea uno nuevo" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="una herramienta que el reparto guardado no menciona aparece igual" classname="com.forge.pixpin.motor.BarraTest" time="0.011"/>
+  <testcase name="mover algo que no estaba lo añade donde se suelta" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="soltar más allá del último grupo crea uno nuevo" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
   <testcase name="el grupo enseña la herramienta puesta y si no la primera" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
-  <testcase name="todo se alcanza en dos toques" classname="com.forge.pixpin.motor.BarraTest" time="0.006"/>
-  <testcase name="un reparto guardado con repetidas se queda con la primera" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="todo se alcanza en dos toques" classname="com.forge.pixpin.motor.BarraTest" time="0.003"/>
+  <testcase name="un reparto guardado con repetidas se queda con la primera" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
   <testcase name="un nombre desconocido no tira el reparto entero" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
   <testcase name="mover dentro del mismo grupo hacia la derecha cae donde se soltó" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
-  <testcase name="lo guardado va y vuelve igual" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
-  <testcase name="sin filas no revienta" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
-  <testcase name="el grupo que se queda vacío desaparece" classname="com.forge.pixpin.motor.BarraTest" time="0.004"/>
-  <testcase name="mover nunca pierde ni duplica" classname="com.forge.pixpin.motor.BarraTest" time="0.003"/>
-  <testcase name="el dedo elige fila por la altura y hueco por el lado" classname="com.forge.pixpin.motor.BarraTest" time="0.002"/>
+  <testcase name="lo guardado va y vuelve igual" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="sin filas no revienta" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="el grupo que se queda vacío desaparece" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="mover nunca pierde ni duplica" classname="com.forge.pixpin.motor.BarraTest" time="0.002"/>
+  <testcase name="el dedo elige fila por la altura y hueco por el lado" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
   <testcase name="mover una herramienta a otro grupo la saca del suyo" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
-  <testcase name="por encima de la primera es el principio" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
+  <testcase name="por encima de la primera es el principio" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
   <testcase name="solo salen las permitidas" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
   <testcase name="por debajo de la última fila es grupo nuevo" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
-  <testcase name="los grupos de fábrica no pierden ni repiten ninguna herramienta" classname="com.forge.pixpin.motor.BarraTest" time="0.0"/>
+  <testcase name="los grupos de fábrica no pierden ni repiten ninguna herramienta" classname="com.forge.pixpin.motor.BarraTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

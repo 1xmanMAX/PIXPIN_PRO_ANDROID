@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.SnappingTest" tests="26" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:23.891Z" hostname="localhost" time="0.033">
+<testsuite name="com.forge.pixpin.motor.SnappingTest" tests="26" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:51.742Z" hostname="localhost" time="0.042">
   <properties/>
   <testcase name="las intersecciones se pueden apagar" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
-  <testcase name="engancha donde se cruzan dos lineas" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="engancha donde se cruzan dos lineas" classname="com.forge.pixpin.motor.SnappingTest" time="0.005"/>
   <testcase name="la hoja no engancha" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="se puede volver al modo esquina a esquina" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="se puede volver al modo esquina a esquina" classname="com.forge.pixpin.motor.SnappingTest" time="0.003"/>
   <testcase name="el rombo tambien se puede abrir hacia arriba" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="dos cajas que se solapan dan intersecciones en sus lados" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="cerca de una esquina engancha a la esquina" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="un rectangulo nuevo se pega a la esquina del anterior" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="dos lineas que no llegan a cruzarse no dan interseccion" classname="com.forge.pixpin.motor.SnappingTest" time="0.009"/>
-  <testcase name="el rombo nace de su punta de arriba" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
+  <testcase name="dos cajas que se solapan dan intersecciones en sus lados" classname="com.forge.pixpin.motor.SnappingTest" time="0.004"/>
+  <testcase name="cerca de una esquina engancha a la esquina" classname="com.forge.pixpin.motor.SnappingTest" time="0.004"/>
+  <testcase name="un rectangulo nuevo se pega a la esquina del anterior" classname="com.forge.pixpin.motor.SnappingTest" time="0.004"/>
+  <testcase name="dos lineas que no llegan a cruzarse no dan interseccion" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
+  <testcase name="el rombo nace de su punta de arriba" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
   <testcase name="dos lineas paralelas no dan interseccion" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="gana el mas cercano" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="gana el mas cercano" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
   <testcase name="las esquinas son las de verdad" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="el circulo desde el centro va en las cuatro direcciones" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
-  <testcase name="el radio se mide en pantalla" classname="com.forge.pixpin.motor.SnappingTest" time="0.002"/>
-  <testcase name="una forma crece igual en las cuatro direcciones" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="el circulo desde el centro va en las cuatro direcciones" classname="com.forge.pixpin.motor.SnappingTest" time="0.005"/>
+  <testcase name="el radio se mide en pantalla" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
+  <testcase name="una forma crece igual en las cuatro direcciones" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
   <testcase name="el circulo crece desde el centro y llega hasta el dedo" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
-  <testcase name="cada clase de punto se apaga por separado" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="cada clase de punto se apaga por separado" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
   <testcase name="el elemento excluido no cuenta" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="una flecha ofrece sus extremos y su medio, no su caja" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
-  <testcase name="la hoja no crece desde el centro" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
-  <testcase name="una caja ofrece cuatro esquinas, cuatro medios y su centro" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
-  <testcase name="apagado no engancha nada" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
-  <testcase name="el centro de una circunferencia engancha" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="una flecha ofrece sus extremos y su medio, no su caja" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
+  <testcase name="la hoja no crece desde el centro" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
+  <testcase name="una caja ofrece cuatro esquinas, cuatro medios y su centro" classname="com.forge.pixpin.motor.SnappingTest" time="0.001"/>
+  <testcase name="apagado no engancha nada" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
+  <testcase name="el centro de una circunferencia engancha" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
   <testcase name="lejos de todo no engancha" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
   <testcase name="el punto medio de un lado tambien engancha" classname="com.forge.pixpin.motor.SnappingTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>

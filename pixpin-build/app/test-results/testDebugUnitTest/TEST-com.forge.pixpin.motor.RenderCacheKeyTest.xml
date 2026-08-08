@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.RenderCacheKeyTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:23.786Z" hostname="localhost" time="0.004">
+<testsuite name="com.forge.pixpin.motor.RenderCacheKeyTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:51.581Z" hostname="localhost" time="0.009">
   <properties/>
-  <testcase name="cambiar entre dos colores de relleno no invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
+  <testcase name="cambiar entre dos colores de relleno no invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.004"/>
   <testcase name="un elemento identico reutiliza la geometria" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.001"/>
   <testcase name="la version no basta como clave" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
   <testcase name="mover un punto de una linea invalida" classname="com.forge.pixpin.motor.RenderCacheKeyTest" time="0.0"/>
