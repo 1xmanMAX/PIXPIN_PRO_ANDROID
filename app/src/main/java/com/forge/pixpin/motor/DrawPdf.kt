@@ -45,39 +45,60 @@ object DrawPdf {
         nombre: String,
         imageProvider: (String) -> Bitmap? = { null }
     ): File? = runCatching {
-        val visible = scene.contenidoVisible
-        if (visible.isEmpty()) return null
-
-        // Con hoja manda la hoja; sin ella, lo dibujado. Mismo criterio que al
-        // exportar a imagen: el marco es la hoja, y si lo has puesto es porque
-        // querías decidir tú el encuadre.
-        val marco = scene.marco
-        val caja = if (marco != null) getElementBounds(marco) else getCommonBounds(visible)
-        if (caja.width <= 0 || caja.height <= 0) return null
-
-        // La página se gira si el dibujo es apaisado, y el encaje lo decide
-        // `encuadreEnPagina`: son cuentas que se pueden comprobar sin papel.
-        val apaisado = paginaApaisada(caja)
-        val anchoPagina = if (apaisado) A4_ALTO else A4_ANCHO
-        val altoPagina = if (apaisado) A4_ANCHO else A4_ALTO
-
-        val vista = encuadreEnPagina(
-            caja, anchoPagina.toDouble(), altoPagina.toDouble(), MARGEN
-        ) ?: return null
+        // **Una hoja del dibujo, una página del PDF.**
+        //
+        // Es lo que uno espera de un documento: si has puesto tres marcos es
+        // porque estás montando tres láminas —una planta, un alzado, un
+        // detalle— y quieres mandarlas juntas. Sin marcos sigue saliendo una
+        // página con todo, que es el caso corriente.
+        //
+        // Cada página se encuadra por su cuenta y decide si va apaisada por su
+        // cuenta: un documento puede llevar una lámina ancha y otra alta, y
+        // forzarlas a la misma orientación dejaría una de las dos a media
+        // escala con medio folio en blanco.
+        val paginas: List<Pair<Bounds, List<Element>>> = scene.marcos
+            .map { getElementBounds(it) to scene.contenidoDe(it) }
+            .filter { (caja, contenido) ->
+                caja.width > 0 && caja.height > 0 && contenido.isNotEmpty()
+            }
+            .ifEmpty {
+                val visible = scene.contenidoVisible
+                if (visible.isEmpty()) return null
+                listOf(getCommonBounds(visible) to visible)
+            }
+        if (paginas.isEmpty()) return null
 
         val documento = PdfDocument()
-        val pagina = documento.startPage(
-            PdfDocument.PageInfo.Builder(anchoPagina, altoPagina, 1).create()
-        )
+        val renderizador = Renderer(imageProvider, DrawFonts.provider(context))
 
-        Renderer(imageProvider, DrawFonts.provider(context)).renderScene(
-            pagina.canvas,
-            scene.copy(elements = visible, viewport = vista),
-            anchoPagina.toDouble(),
-            altoPagina.toDouble()
-        )
+        for ((numero, hoja) in paginas.withIndex()) {
+            val (caja, contenido) = hoja
+            // La página se gira si el dibujo es apaisado, y el encaje lo decide
+            // `encuadreEnPagina`: son cuentas que se pueden comprobar sin papel.
+            val apaisado = paginaApaisada(caja)
+            val anchoPagina = if (apaisado) A4_ALTO else A4_ANCHO
+            val altoPagina = if (apaisado) A4_ANCHO else A4_ALTO
 
-        documento.finishPage(pagina)
+            val vista = encuadreEnPagina(
+                caja, anchoPagina.toDouble(), altoPagina.toDouble(), MARGEN
+            ) ?: continue
+
+            val pagina = documento.startPage(
+                PdfDocument.PageInfo.Builder(anchoPagina, altoPagina, numero + 1).create()
+            )
+            renderizador.renderScene(
+                pagina.canvas,
+                scene.copy(elements = contenido, viewport = vista),
+                anchoPagina.toDouble(),
+                altoPagina.toDouble()
+            )
+            documento.finishPage(pagina)
+        }
+
+        if (documento.pages.isEmpty()) {
+            documento.close()
+            return null
+        }
 
         val carpeta = File(context.cacheDir, "share").apply { mkdirs() }
         val destino = File(carpeta, "${nombre.ifBlank { "pixpin" }}.pdf")

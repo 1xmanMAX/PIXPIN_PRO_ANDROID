@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.annotate.AnnotationControllerTest" tests="21" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:43.154Z" hostname="localhost" time="0.297">
+<testsuite name="com.forge.pixpin.annotate.AnnotationControllerTest" tests="21" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:48.448Z" hostname="localhost" time="0.484">
   <properties/>
-  <testcase name="la polilinea encadena vertices y no se cierra sola" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.221"/>
-  <testcase name="el texto guarda el tamaño y el ancho que se le den" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.011"/>
-  <testcase name="undo tras borrar restaura" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.012"/>
-  <testcase name="reemplazar un texto conserva su punto de anclaje" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
+  <testcase name="la polilinea encadena vertices y no se cierra sola" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.465"/>
+  <testcase name="el texto guarda el tamaño y el ancho que se le den" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.003"/>
+  <testcase name="undo tras borrar restaura" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.006"/>
+  <testcase name="reemplazar un texto conserva su punto de anclaje" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
   <testcase name="un toque dentro de un texto lo localiza para reeditarlo" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
   <testcase name="arrastrar solo mueve la previsualizacion de la polilinea" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
-  <testcase name="el numero de serie va contando toque a toque" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
-  <testcase name="resaltador lleva alpha y trazo grueso" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.002"/>
+  <testcase name="el numero de serie va contando toque a toque" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.002"/>
+  <testcase name="resaltador lleva alpha y trazo grueso" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
   <testcase name="cambiar de herramienta cierra la polilinea abierta" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
   <testcase name="rectangulo diminuto se descarta" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
-  <testcase name="cancelar descarta el trazo en curso" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.004"/>
-  <testcase name="la presion del lapiz viaja hasta la anotacion" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.005"/>
-  <testcase name="una polilinea de un solo vertice se descarta" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.005"/>
-  <testcase name="borrador elimina la anotacion tocada" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.009"/>
-  <testcase name="texto en blanco no se añade" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
-  <testcase name="trazo de lapiz se commitea al soltar" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
+  <testcase name="cancelar descarta el trazo en curso" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
+  <testcase name="la presion del lapiz viaja hasta la anotacion" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
+  <testcase name="una polilinea de un solo vertice se descarta" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
+  <testcase name="borrador elimina la anotacion tocada" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
+  <testcase name="texto en blanco no se añade" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
+  <testcase name="trazo de lapiz se commitea al soltar" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
   <testcase name="un toque sin arrastrar deja un punto dibujado" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
-  <testcase name="el trazo vivo no ensucia la lista hasta soltar" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.002"/>
+  <testcase name="el trazo vivo no ensucia la lista hasta soltar" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
   <testcase name="al deshacer un numero la cuenta vuelve atras" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
   <testcase name="el foco se dibuja como un rectangulo" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
-  <testcase name="borrar sin tocar nada no gasta un paso de deshacer" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.001"/>
+  <testcase name="borrar sin tocar nada no gasta un paso de deshacer" classname="com.forge.pixpin.annotate.AnnotationControllerTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

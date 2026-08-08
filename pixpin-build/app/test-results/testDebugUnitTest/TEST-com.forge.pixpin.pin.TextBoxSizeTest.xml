@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.pin.TextBoxSizeTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:59.017Z" hostname="localhost" time="0.006">
+<testsuite name="com.forge.pixpin.pin.TextBoxSizeTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:46:36.292Z" hostname="localhost" time="0.006">
   <properties/>
-  <testcase name="arrastrar hacia dentro encoge" classname="com.forge.pixpin.pin.TextBoxSizeTest" time="0.002"/>
+  <testcase name="arrastrar hacia dentro encoge" classname="com.forge.pixpin.pin.TextBoxSizeTest" time="0.005"/>
   <testcase name="sin arrastre no cambia nada" classname="com.forge.pixpin.pin.TextBoxSizeTest" time="0.0"/>
   <testcase name="arrastrar en diagonal crece en los dos ejes" classname="com.forge.pixpin.pin.TextBoxSizeTest" time="0.0"/>
   <testcase name="no baja de los minimos por mucho que se arrastre" classname="com.forge.pixpin.pin.TextBoxSizeTest" time="0.0"/>

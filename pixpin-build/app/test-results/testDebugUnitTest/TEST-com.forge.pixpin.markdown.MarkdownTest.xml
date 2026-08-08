@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.markdown.MarkdownTest" tests="25" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:44.168Z" hostname="localhost" time="0.07">
+<testsuite name="com.forge.pixpin.markdown.MarkdownTest" tests="25" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:53.996Z" hostname="localhost" time="0.069">
   <properties/>
-  <testcase name="enlace guarda texto y url por separado" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.034"/>
-  <testcase name="dos urls en la misma linea" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.002"/>
+  <testcase name="enlace guarda texto y url por separado" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.013"/>
+  <testcase name="dos urls en la misma linea" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.006"/>
   <testcase name="un asterisco suelto no rompe nada" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
   <testcase name="tachado" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="una palabra que empieza por http pero no es url no se enlaza" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="un bloque de codigo sin cerrar llega hasta el final" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.006"/>
-  <testcase name="un enlace con corchetes sigue ganando al automatico" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="negrita y cursiva juntas en la misma linea" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="www sin protocolo tambien es enlace y se le pone https" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
+  <testcase name="una palabra que empieza por http pero no es url no se enlaza" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
+  <testcase name="un bloque de codigo sin cerrar llega hasta el final" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.009"/>
+  <testcase name="un enlace con corchetes sigue ganando al automatico" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
+  <testcase name="negrita y cursiva juntas en la misma linea" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
+  <testcase name="www sin protocolo tambien es enlace y se le pone https" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.003"/>
   <testcase name="una url dentro de codigo en linea no se enlaza" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="un corchete que no es enlace se queda tal cual" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="el texto plano sale intacto" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
-  <testcase name="titulos de tres niveles" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.004"/>
-  <testcase name="cursiva con asterisco y con guion bajo" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
-  <testcase name="vinetas con los tres marcadores" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.004"/>
-  <testcase name="texto vacio no revienta" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="la puntuacion final no entra en el enlace" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
+  <testcase name="un corchete que no es enlace se queda tal cual" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
+  <testcase name="el texto plano sale intacto" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.003"/>
+  <testcase name="titulos de tres niveles" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.003"/>
+  <testcase name="cursiva con asterisco y con guion bajo" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.003"/>
+  <testcase name="vinetas con los tres marcadores" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.003"/>
+  <testcase name="texto vacio no revienta" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
+  <testcase name="la puntuacion final no entra en el enlace" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
   <testcase name="una marca sin cerrar se queda tal cual" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="una url suelta se reconoce como enlace" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
+  <testcase name="una url suelta se reconoce como enlace" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
   <testcase name="el bloque de codigo conserva su contenido en crudo" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
-  <testcase name="listas numeradas conservan su numero" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.002"/>
-  <testcase name="cita y regla horizontal" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.002"/>
+  <testcase name="listas numeradas conservan su numero" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.004"/>
+  <testcase name="cita y regla horizontal" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.005"/>
   <testcase name="negrita limpia las marcas y marca el tramo" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
-  <testcase name="las lineas seguidas forman un solo parrafo" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
+  <testcase name="las lineas seguidas forman un solo parrafo" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.001"/>
   <testcase name="el codigo inline no interpreta lo que lleva dentro" classname="com.forge.pixpin.markdown.MarkdownTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

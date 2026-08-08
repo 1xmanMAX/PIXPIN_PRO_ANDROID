@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.pin.PinZoomTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:59Z" hostname="localhost" time="0.005">
+<testsuite name="com.forge.pixpin.pin.PinZoomTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:46:36.286Z" hostname="localhost" time="0.002">
   <properties/>
   <testcase name="el tope lo marca el eje que llega antes al borde" classname="com.forge.pixpin.pin.PinZoomTest" time="0.001"/>
-  <testcase name="un contenido diminuto no crece sin freno" classname="com.forge.pixpin.pin.PinZoomTest" time="0.0"/>
-  <testcase name="el punto entre los dedos se queda clavado" classname="com.forge.pixpin.pin.PinZoomTest" time="0.001"/>
+  <testcase name="un contenido diminuto no crece sin freno" classname="com.forge.pixpin.pin.PinZoomTest" time="0.001"/>
+  <testcase name="el punto entre los dedos se queda clavado" classname="com.forge.pixpin.pin.PinZoomTest" time="0.0"/>
   <testcase name="el hueco de la sombra no desvia el punto anclado" classname="com.forge.pixpin.pin.PinZoomTest" time="0.0"/>
   <testcase name="encoger siempre se puede" classname="com.forge.pixpin.pin.PinZoomTest" time="0.0"/>
   <testcase name="a ese tope el pin llena la pantalla justo sin pasarse" classname="com.forge.pixpin.pin.PinZoomTest" time="0.0"/>

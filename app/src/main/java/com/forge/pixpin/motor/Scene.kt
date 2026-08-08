@@ -347,13 +347,33 @@ data class Scene(
     val visible: List<Element> get() = elements.filter { !it.isDeleted }
 
     /**
-     * La hoja, si se ha puesto una.
+     * La hoja que manda: **la primera**.
      *
-     * Es el primer marco de la escena. Uno solo a propósito: el original admite
-     * varios porque exporta cada uno por separado, pero aquí un dibujo es **un**
-     * pin, y con dos marcos no habría forma de saber cuál manda.
+     * El pin y la exportación a imagen enseñan una sola, y tiene que ser una
+     * decisión y no un sorteo: con dos marcos, cuál se ve no puede depender del
+     * orden en que el motor recorra la lista. La primera que se puso.
+     *
+     * Que solo se enseñe una no quiere decir que solo pueda haber una: el PDF
+     * las saca **todas, una por página**, que es para lo que sirve un documento
+     * de varias hojas. Ver [marcos] y [DrawPdf].
      */
-    val marco: Element? get() = visible.firstOrNull { it.isFrame }
+    val marco: Element? get() = marcos.firstOrNull()
+
+    /**
+     * **Todas las hojas**, en el orden en que se pusieron.
+     *
+     * El pin y la exportación a imagen siguen enseñando solo la primera —una
+     * ventana de dos dedos de ancho no puede enseñar tres hojas— pero el PDF las
+     * saca todas, **una por página**, que es para lo que existe un documento de
+     * varias hojas. Ver [DrawPdf].
+     */
+    val marcos: List<Element> get() = visible.filter { it.isFrame }
+
+    /** Lo que cae dentro de [marco], sin el marco mismo. */
+    fun contenidoDe(marco: Element): List<Element> {
+        val caja = getElementBounds(marco)
+        return visible.filter { !it.isFrame && boundsOverlap(caja, getElementBounds(it)) }
+    }
 
     /**
      * Lo que se ve fuera del editor: en el pin y al exportar.
@@ -362,11 +382,7 @@ data class Scene(
      * marco mismo no entra: es la hoja, no una raya dibujada encima.
      */
     val contenidoVisible: List<Element>
-        get() {
-            val m = marco ?: return visible
-            val caja = getElementBounds(m)
-            return visible.filter { !it.isFrame && boundsOverlap(caja, getElementBounds(it)) }
-        }
+        get() = marco?.let { contenidoDe(it) } ?: visible
 
     fun byId(id: String): Element? = elements.firstOrNull { it.id == id }
 

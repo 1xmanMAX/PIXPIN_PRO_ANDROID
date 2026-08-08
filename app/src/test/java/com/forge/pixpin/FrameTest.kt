@@ -142,4 +142,52 @@ class FrameTest {
         assertTrue("por dentro no", !isPointInElement(Pt(100.0, 100.0), m))
         assertTrue("por el borde sí", isPointOnElementOutline(Pt(0.0, 100.0), m, 5.0))
     }
+
+    // ---- Varias hojas ----
+
+    /**
+     * **Varias hojas son varias páginas.**
+     *
+     * Si has puesto tres marcos es porque estás montando tres láminas —una
+     * planta, un alzado, un detalle— y quieres mandarlas juntas. El pin sigue
+     * enseñando la primera, que es lo único que cabe en una ventana de dos dedos
+     * de ancho, pero el documento las lleva todas.
+     */
+    @Test
+    fun `cada hoja lleva lo suyo`() {
+        val s = Scene(
+            elements = listOf(
+                marco(0.0, 0.0, 100.0, 100.0).copy(id = "h1"),
+                marco(500.0, 0.0, 100.0, 100.0).copy(id = "h2"),
+                caja("a", 10.0, 10.0, 20.0, 20.0),
+                caja("b", 510.0, 10.0, 20.0, 20.0)
+            )
+        )
+        assertEquals(2, s.marcos.size)
+        assertEquals(listOf("a"), s.contenidoDe(s.marcos[0]).map { it.id })
+        assertEquals(listOf("b"), s.contenidoDe(s.marcos[1]).map { it.id })
+    }
+
+    /** La que manda sigue siendo la primera, y eso no depende del orden de nada. */
+    @Test
+    fun `la hoja que se enseña es la primera`() {
+        val s = Scene(
+            elements = listOf(
+                marco(0.0, 0.0, 100.0, 100.0).copy(id = "h1"),
+                marco(500.0, 0.0, 100.0, 100.0).copy(id = "h2"),
+                caja("a", 10.0, 10.0, 20.0, 20.0)
+            )
+        )
+        assertEquals("h1", s.marco?.id)
+        assertEquals(listOf("a"), s.contenidoVisible.map { it.id })
+    }
+
+    /** Y una hoja apaisada y otra alta se llevan cada una su orientación. */
+    @Test
+    fun `cada hoja decide su orientacion`() {
+        val ancha = getElementBounds(marco(0.0, 0.0, 400.0, 100.0))
+        val alta = getElementBounds(marco(0.0, 0.0, 100.0, 400.0))
+        assertTrue(paginaApaisada(ancha))
+        assertTrue(!paginaApaisada(alta))
+    }
 }

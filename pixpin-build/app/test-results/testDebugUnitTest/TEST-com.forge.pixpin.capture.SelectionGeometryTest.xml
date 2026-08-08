@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.capture.SelectionGeometryTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:43.702Z" hostname="localhost" time="0.026">
+<testsuite name="com.forge.pixpin.capture.SelectionGeometryTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:49.364Z" hostname="localhost" time="0.03">
   <properties/>
   <testcase name="selección nueva en cualquier dirección" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.022"/>
-  <testcase name="tocar dentro mueve y fuera crea" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.0"/>
-  <testcase name="arrastrar la esquina superior izquierda ancla la inferior derecha" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.001"/>
-  <testcase name="mover no se sale de la pantalla" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.0"/>
-  <testcase name="la selección nunca queda degenerada" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.001"/>
+  <testcase name="tocar dentro mueve y fuera crea" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.002"/>
+  <testcase name="arrastrar la esquina superior izquierda ancla la inferior derecha" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.0"/>
+  <testcase name="mover no se sale de la pantalla" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.001"/>
+  <testcase name="la selección nunca queda degenerada" classname="com.forge.pixpin.capture.SelectionGeometryTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

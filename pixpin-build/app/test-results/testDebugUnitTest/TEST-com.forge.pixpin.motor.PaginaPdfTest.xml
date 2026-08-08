@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.PaginaPdfTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:45.677Z" hostname="localhost" time="0.005">
+<testsuite name="com.forge.pixpin.motor.PaginaPdfTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:57.999Z" hostname="localhost" time="0.004">
   <properties/>
-  <testcase name="la página se tumba solo cuando el dibujo es más ancho que alto" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>
-  <testcase name="lo que sobra de folio se reparte a los dos lados" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.001"/>
-  <testcase name="un dibujo pequeño no se estira para llenar el folio" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.001"/>
+  <testcase name="la página se tumba solo cuando el dibujo es más ancho que alto" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.001"/>
+  <testcase name="lo que sobra de folio se reparte a los dos lados" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>
+  <testcase name="un dibujo pequeño no se estira para llenar el folio" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>
   <testcase name="el A4 mide lo que mide un A4" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>
   <testcase name="un dibujo lejos del origen cae igual en la página" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>
-  <testcase name="sin nada que encuadrar no hay página" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.0"/>
+  <testcase name="sin nada que encuadrar no hay página" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.001"/>
   <testcase name="un dibujo grande se reduce hasta caber entero" classname="com.forge.pixpin.motor.PaginaPdfTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
