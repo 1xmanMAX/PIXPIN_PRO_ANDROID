@@ -804,6 +804,18 @@ class DrawController(initial: Scene = Scene()) {
     var anclajeActivo: Anclaje? = null
         private set
 
+    /**
+     * Si al trazar una cota se abre el teclado para dictarle su medida.
+     *
+     * Las dos formas de acotar son buenas y son distintas. Dictándola, la raya
+     * **acaba midiendo lo que uno dice**: es la de levantar un plano, donde las
+     * medidas se saben y el dibujo tiene que obedecerlas. Sin dictar, la cota
+     * mide lo que hay: es la de medir sobre una foto, donde la respuesta es
+     * justo lo que no se sabe. Obligar a una de las dos convierte la otra en un
+     * estorbo, así que es un interruptor y no una decisión.
+     */
+    var pedirLaMedida: Boolean = true
+
     /** Con cuánto detalle busca el bote el hueco que se toca. Ver [AjustesRelleno]. */
     var ajustesRelleno: AjustesRelleno = AjustesRelleno()
 
@@ -1235,7 +1247,9 @@ class DrawController(initial: Scene = Scene()) {
         // Y la cota **pide su medida nada más trazarla**, con el mismo teclado.
         // Es el momento en que uno sabe cuánto mide; mandarle a buscar un panel
         // después es perder el número por el camino.
-        if (tool == Tool.MEASURE && finished.isMeasure) pendingCotaId = finished.id
+        if (tool == Tool.MEASURE && finished.isMeasure && pedirLaMedida) {
+            pendingCotaId = finished.id
+        }
 
         // **La herramienta NO se desactiva al soltar.** Excalidraw vuelve a la
         // flecha después de cada forma porque en escritorio se retoma con una

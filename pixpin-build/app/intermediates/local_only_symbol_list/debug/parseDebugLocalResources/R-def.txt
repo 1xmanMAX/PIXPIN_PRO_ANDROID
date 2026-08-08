@@ -73,6 +73,8 @@ string copy_format_png_desc
 string copy_format_title
 string copy_format_webp
 string copy_format_webp_desc
+string cota_dictar
+string cota_medir
 string cota_titulo
 string crash_desc
 string crash_dismiss

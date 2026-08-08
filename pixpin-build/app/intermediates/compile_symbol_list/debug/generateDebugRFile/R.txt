@@ -71,6 +71,8 @@ int string copy_format_png_desc 0x0
 int string copy_format_title 0x0
 int string copy_format_webp 0x0
 int string copy_format_webp_desc 0x0
+int string cota_dictar 0x0
+int string cota_medir 0x0
 int string cota_titulo 0x0
 int string crash_desc 0x0
 int string crash_dismiss 0x0

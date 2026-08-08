@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.annotate.StrokeSmoothingTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:54.255Z" hostname="localhost" time="0.07">
+<testsuite name="com.forge.pixpin.annotate.StrokeSmoothingTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:28.081Z" hostname="localhost" time="0.034">
   <properties/>
-  <testcase name="el grosor sigue a la presion" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.01"/>
-  <testcase name="los puntos intermedios son controles y las curvas acaban en los medios" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.048"/>
-  <testcase name="sin puntos no emite nada" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.001"/>
-  <testcase name="un punto solo se posiciona" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.001"/>
-  <testcase name="dos puntos son una recta" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.001"/>
-  <testcase name="solo se considera presion variable si cambia de verdad" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.003"/>
+  <testcase name="el grosor sigue a la presion" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.007"/>
+  <testcase name="los puntos intermedios son controles y las curvas acaban en los medios" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.021"/>
+  <testcase name="sin puntos no emite nada" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.0"/>
+  <testcase name="un punto solo se posiciona" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.0"/>
+  <testcase name="dos puntos son una recta" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.0"/>
+  <testcase name="solo se considera presion variable si cambia de verdad" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.001"/>
   <testcase name="presion fuera de rango se recorta" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.0"/>
-  <testcase name="el trazo siempre empieza y acaba en los puntos reales" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.002"/>
+  <testcase name="el trazo siempre empieza y acaba en los puntos reales" classname="com.forge.pixpin.annotate.StrokeSmoothingTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

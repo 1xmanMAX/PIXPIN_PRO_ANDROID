@@ -420,6 +420,60 @@ class NudosTest {
         assertEquals(0.0, c.scene.byId("o")!!.angle, 1e-9)
     }
 
+    /**
+     * **Tirar de una punta con un clavo en el cuerpo no dispara la raya.**
+     *
+     * El clavo se guardaba medido desde el origen del elemento, y el origen de
+     * una raya **es su primer punto**: al mover una punta se recalcula, así que
+     * el clavo quedaba medido desde un sitio que ya no era ese y la raya pegaba
+     * un salto enorme. Eran los estirones infinitos. Midiéndolo sobre el propio
+     * recorrido no hay nada que se descoloque.
+     */
+    @Test
+    fun `tirar de una punta con un clavo en el cuerpo no dispara la raya`() {
+        val escena = listOf(
+            raya("h", Pt(0.0, 0.0), Pt(200.0, 0.0)),
+            raya("v", Pt(100.0, -100.0), Pt(100.0, 100.0))
+        )
+        val c = DrawController(Scene(elements = escena))
+        clavar(c, Pt(100.0, 0.0))
+        val clavo = c.scene.alfileres.single().punto
+
+        // Se coge la horizontal y se tira de su punta derecha.
+        c.selectTool(Tool.SELECTION)
+        c.setSelection(setOf("h"))
+        c.pointerDown(Pt(200.0, 0.0))
+        c.pointerMove(Pt(260.0, 40.0))
+        c.pointerUp(Pt(260.0, 40.0))
+
+        val trazo = contornosDe(c.scene.byId("h")!!).single().puntos
+        // La raya sigue siendo una raya de tamaño razonable…
+        assertTrue("la raya se ha disparado", largoDe(trazo) < 500.0)
+        // …y el clavo sigue encima de ella y donde estaba.
+        val despues = c.scene.alfileres.single().punto
+        assertEquals(clavo.x, despues.x, 2.0)
+        assertEquals(clavo.y, despues.y, 2.0)
+        assertEquals(
+            "el clavo se ha salido de la raya",
+            0.0,
+            distanceToSegment(despues, trazo.first(), trazo.last()),
+            2.0
+        )
+    }
+
+    /** Y el clavo se guarda sobre el recorrido, no sobre la caja. */
+    @Test
+    fun `el clavo de una raya se mide sobre su recorrido`() {
+        val escena = listOf(
+            raya("h", Pt(0.0, 0.0), Pt(200.0, 0.0)),
+            raya("v", Pt(50.0, -50.0), Pt(50.0, 50.0))
+        )
+        val agarre = clavarEn(escena, emptyList(), Pt(50.0, 0.0), radio = 14.0)!!
+            .single().agarres.first { it.elementId == "h" }
+        assertNull("no debería agarrarla por la caja", agarre.local)
+        assertEquals("está a un cuarto de la raya", 0.25, agarre.t!!, 0.02)
+    }
+
     // ---- Girar sobre el clavo ----
 
     /**

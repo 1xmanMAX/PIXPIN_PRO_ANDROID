@@ -143,6 +143,8 @@
     <string name="oled_desc">En pantallas OLED el negro apaga el píxel: se ve más negro y gasta menos. En una pantalla LCD se ve gris lavado, así que déjalo apagado.</string>
     <string name="tool_nudo">Soldar vértices</string>
     <string name="cota_titulo">¿Cuánto mide y hacia dónde va?</string>
+    <string name="cota_dictar">La cota se dicta: se teclea cuánto mide</string>
+    <string name="cota_medir">La cota mide: dice lo que hay</string>
     <string name="medida_largo">Longitud</string>
     <string name="medida_angulo">Ángulo</string>
     <string name="medida_aplicar">Aplicar</string>

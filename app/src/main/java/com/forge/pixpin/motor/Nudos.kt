@@ -44,21 +44,24 @@ data class Agarre(
     /** Y si no, dónde le entra el clavo: de 0 a 1 en cada eje de su caja. */
     val local: Pt? = null,
     /**
-     * Lo mismo pero **en distancia**, no en proporción: para lo que tiene la
-     * caja aplastada.
+     * En qué punto **del recorrido** de una raya está clavado: de 0 a 1.
      *
-     * La proporción falla justo donde más duele. La caja de una raya horizontal
-     * **no tiene alto**, así que la proporción vertical del clavo es una
-     * división por cero disfrazada: se guarda como cero y, en cuanto la raya
-     * gira y su caja deja de ser plana, ese cero deja de significar «aquí» y
-     * pasa a significar «arriba del todo». El clavo se despegaba y aparecía al
-     * otro lado — que es exactamente lo que se veía tirando de una raya por su
-     * lado largo.
+     * Esta es la tercera forma de guardarlo y la buena, y las dos anteriores
+     * fallaron por el mismo motivo — atar el clavo a algo que cambia:
      *
-     * Guardando la distancia al origen del elemento, el clavo queda pegado a la
-     * raya pase lo que pase con su caja.
+     * 1. **Proporción de la caja.** La caja de una raya horizontal no tiene
+     *    alto, así que la proporción vertical era una división por cero
+     *    disfrazada: en cuanto la raya giraba, el clavo saltaba al otro lado.
+     * 2. **Distancia al origen del elemento.** Mejor, pero el origen de una raya
+     *    **es su primer punto**, y al mover una punta se recalcula: el clavo
+     *    quedaba medido desde un sitio que ya no era ese y la raya pegaba un
+     *    salto enorme. Eran los estirones infinitos.
+     *
+     * Medido sobre el propio recorrido no hay nada que se descoloque: el clavo
+     * está «a un tercio de la raya», y eso sigue significando lo mismo la
+     * estires, la gires o le muevas una punta.
      */
-    val rel: Pt? = null
+    val t: Double? = null
 )
 
 /** Un clavo, con todo lo que atraviesa. */
@@ -76,13 +79,61 @@ fun puntoDelAgarre(e: Element, a: Agarre): Pt? {
     if (a.indice != null) return absolutePoints(e).getOrNull(a.indice)
     val c = getElementAbsoluteCoords(e)
     val centro = Pt(c.cx, c.cy)
-    a.rel?.let { return pointRotateRads(Pt(e.x + it.x, e.y + it.y), centro, e.angle) }
+    a.t?.let { return puntoEnElRecorrido(e, it) }
     val l = a.local ?: return null
     return pointRotateRads(
         Pt(c.x1 + l.x * (c.x2 - c.x1), c.y1 + l.y * (c.y2 - c.y1)),
         centro,
         e.angle
     )
+}
+
+/** El punto que está a la fracción [t] del recorrido de una raya, ya girado. */
+private fun puntoEnElRecorrido(e: Element, t: Double): Pt? {
+    val pts = contornosDe(e).firstOrNull()?.puntos ?: return null
+    if (pts.size < 2) return pts.firstOrNull()
+    val total = largoDe(pts)
+    if (total <= 0.0) return pts.first()
+    var falta = t.coerceIn(0.0, 1.0) * total
+    for (i in 0 until pts.size - 1) {
+        val tramo = hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y)
+        if (falta <= tramo || i == pts.size - 2) {
+            val f = if (tramo <= 0.0) 0.0 else (falta / tramo).coerceIn(0.0, 1.0)
+            return Pt(
+                pts[i].x + (pts[i + 1].x - pts[i].x) * f,
+                pts[i].y + (pts[i + 1].y - pts[i].y) * f
+            )
+        }
+        falta -= tramo
+    }
+    return pts.last()
+}
+
+/** A qué fracción del recorrido de [e] cae [p]. */
+private fun fraccionDelRecorrido(e: Element, p: Pt): Double {
+    val pts = contornosDe(e).firstOrNull()?.puntos ?: return 0.0
+    if (pts.size < 2) return 0.0
+    val total = largoDe(pts)
+    if (total <= 0.0) return 0.0
+
+    var recorrido = 0.0
+    var mejor = Double.MAX_VALUE
+    var respuesta = 0.0
+    for (i in 0 until pts.size - 1) {
+        val a = pts[i]
+        val b = pts[i + 1]
+        val largo = hypot(b.x - a.x, b.y - a.y)
+        val d = distanceToSegment(p, a, b)
+        if (d < mejor) {
+            mejor = d
+            val f = if (largo <= 0.0) 0.0 else
+                (((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (largo * largo))
+                    .coerceIn(0.0, 1.0)
+            respuesta = (recorrido + f * largo) / total
+        }
+        recorrido += largo
+    }
+    return respuesta
 }
 
 /**
@@ -135,9 +186,10 @@ fun clavarEn(
  *
  * 1. **Por un vértice**, si lo hay ahí. Es la más fuerte: el clavo se mueve
  *    exactamente con ese punto, y la raya puede estirarse desde el otro.
- * 2. **Por distancia al origen** ([Agarre.rel]) en todo lo que se dibuja con
- *    puntos. Su caja puede estar aplastada —una raya horizontal no tiene alto—
- *    y una proporción sobre cero no significa nada en cuanto la figura gira.
+ * 2. **Por la fracción del recorrido** ([Agarre.t]) en todo lo que se dibuja
+ *    con puntos: «a un tercio de la raya». Su caja puede estar aplastada —una
+ *    raya horizontal no tiene alto— y una proporción sobre cero no significa
+ *    nada en cuanto la figura gira.
  * 3. **Por proporción de la caja** ([Agarre.local]) en las figuras con caja de
  *    verdad, que es lo único que aguanta que además se las estire.
  */
@@ -148,14 +200,14 @@ private fun agarrarEn(e: Element, donde: Pt, radio: Double): Agarre {
     if (e.isLinear || e.isFreeDraw) {
         val i = absolutePoints(e).indexOfFirst { hypot(it.x - donde.x, it.y - donde.y) <= radio }
         if (i >= 0) return Agarre(e.id, indice = i)
-        return Agarre(e.id, rel = Pt(sinGirar.x - e.x, sinGirar.y - e.y))
+        return Agarre(e.id, t = fraccionDelRecorrido(e, donde))
     }
 
     val ancho = c.x2 - c.x1
     val alto = c.y2 - c.y1
-    // Una caja sin superficie no admite proporciones: se guarda la distancia.
+    // Una caja sin superficie no admite proporciones: se mide sobre el trazo.
     if (ancho == 0.0 || alto == 0.0) {
-        return Agarre(e.id, rel = Pt(sinGirar.x - e.x, sinGirar.y - e.y))
+        return Agarre(e.id, t = fraccionDelRecorrido(e, donde))
     }
     return Agarre(
         e.id,
@@ -399,6 +451,8 @@ fun fijarAlfileres(
         if (e.locked) return@map e
         var actualizado = e
         for (a in alfileres) {
+            // Los agarres por vértice no se fijan: mover ese vértice **es** el
+            // gesto, y devolverlo a su sitio sería no dejar mover nada.
             val agarre = a.agarres.firstOrNull {
                 it.elementId == e.id && it.indice == null
             } ?: continue

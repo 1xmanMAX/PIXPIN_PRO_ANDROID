@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ExcalidrawFormatTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:48:56.534Z" hostname="localhost" time="0.194">
+<testsuite name="com.forge.pixpin.motor.ExcalidrawFormatTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:30.232Z" hostname="localhost" time="0.172">
   <properties/>
-  <testcase name="un archivo con campos desconocidos se puede leer" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.122"/>
-  <testcase name="la escena sobrevive a un viaje de ida y vuelta" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.014"/>
-  <testcase name="los enums de estilo usan los nombres del formato" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.002"/>
-  <testcase name="lo borrado no se exporta" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.041"/>
-  <testcase name="el archivo exportado no lleva nulos de campos que no aplican" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.003"/>
-  <testcase name="los tipos se serializan con el nombre de Excalidraw" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.007"/>
-  <testcase name="el archivo exportado lleva el tipo y la version que Excalidraw exige" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.002"/>
+  <testcase name="un archivo con campos desconocidos se puede leer" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.08"/>
+  <testcase name="la escena sobrevive a un viaje de ida y vuelta" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.016"/>
+  <testcase name="los enums de estilo usan los nombres del formato" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.0"/>
+  <testcase name="lo borrado no se exporta" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.046"/>
+  <testcase name="el archivo exportado no lleva nulos de campos que no aplican" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.004"/>
+  <testcase name="los tipos se serializan con el nombre de Excalidraw" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.015"/>
+  <testcase name="el archivo exportado lleva el tipo y la version que Excalidraw exige" classname="com.forge.pixpin.motor.ExcalidrawFormatTest" time="0.007"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

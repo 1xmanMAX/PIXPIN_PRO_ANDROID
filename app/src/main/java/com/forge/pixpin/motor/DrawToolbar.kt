@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Gesture
@@ -112,6 +113,14 @@ fun DrawToolbar(
     escala: Escala? = null,
     onQuitarEscala: (() -> Unit)? = null,
     /**
+     * Si la cota pide su medida al trazarla. A null este sitio no lo ofrece.
+     *
+     * Ver [DrawController.pedirLaMedida]: son dos formas de acotar, no una
+     * mejor que la otra.
+     */
+    pedirLaMedida: Boolean? = null,
+    onPedirLaMedida: (() -> Unit)? = null,
+    /**
      * Qué herramientas se enseñan aquí. null = todas.
      *
      * Es lo que separa la edición simple de la avanzada: el pin lleva las que
@@ -174,6 +183,19 @@ fun DrawToolbar(
                     tamanoTexto = style.fontSize,
                     onTamanoTexto = { onStyle(style.copy(fontSize = it)) }
                 )
+                // El interruptor de las dos formas de acotar, junto al aviso de
+                // con qué se está midiendo: es donde uno está mirando cuando
+                // decide cómo quiere acotar.
+                if (tool == Tool.MEASURE && pedirLaMedida != null && onPedirLaMedida != null) {
+                    ToolButton(
+                        if (pedirLaMedida) Icons.Filled.Dialpad else Icons.Filled.Straighten,
+                        stringResource(
+                            if (pedirLaMedida) R.string.cota_dictar else R.string.cota_medir
+                        ),
+                        pedirLaMedida,
+                        onPedirLaMedida
+                    )
+                }
             }
 
             // Lo que hay dentro del grupo abierto, ENCIMA de la fila: así la

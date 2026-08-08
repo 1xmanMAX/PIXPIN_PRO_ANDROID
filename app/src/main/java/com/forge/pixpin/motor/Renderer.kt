@@ -760,10 +760,13 @@ class Renderer(
     /**
      * La cota: una raya que dice cuánto mide lo que cruza.
      *
-     * Se pinta **lisa y exacta**, sin pasar por rough.js, al revés que todo lo
-     * demás del motor. No es un descuido: el garabato de Excalidraw está para
-     * que un esquema no parezca definitivo, y una medida es justo lo contrario
-     * — si la raya tiembla, no se sabe dónde acaba lo que se está midiendo.
+     * **Se pinta con el mismo pulso que el resto del dibujo.** Estuvo lisa y
+     * exacta un tiempo, con el argumento de que una medida no debe temblar; y
+     * es verdad que no debe, pero el resultado no parecía dibujado sino
+     * insertado: una raya vectorial muerta en medio de un dibujo hecho a mano,
+     * y además más fina que sus vecinas, porque el trazo rugoso pasa dos veces
+     * y este pasaba una. Lo que no puede temblar es **el número**, y el número
+     * no tiembla.
      *
      * El número **no se guarda con el elemento**: se calcula aquí, del largo y
      * de la escala. Así una cota no puede mentir: al mover un extremo o al
@@ -793,20 +796,22 @@ class Renderer(
         // midiendo: tapaba justo eso. Partiéndola, el número queda *dentro* de
         // la cota —que es como se acota en un plano— y no tapa nada.
         val hueco = huecoDelRotulo(e, largo)
+        // **Con el pulso del resto del dibujo.** Los dos trozos pasan por el
+        // mismo generador que una línea a mano, así que la cota se ve dibujada
+        // y no insertada — y de paso vuelve a tener el grosor de sus vecinas,
+        // porque el trazo rugoso pasa dos veces.
+        fun trazo(desde: Pt, hasta: Pt) {
+            val rough = Rough(roughOptionsFor(e).copy(preserveVertices = true))
+            canvas.drawPath(rough.doubleLine(desde.x, desde.y, hasta.x, hasta.y).toPath(), paint)
+        }
         if (hueco <= 0.0) {
-            canvas.drawLine(a.x.toFloat(), a.y.toFloat(), b.x.toFloat(), b.y.toFloat(), paint)
+            trazo(a, b)
         } else {
             val ux = dx / largo
             val uy = dy / largo
             val corte = (largo - hueco) / 2
-            canvas.drawLine(
-                a.x.toFloat(), a.y.toFloat(),
-                (a.x + ux * corte).toFloat(), (a.y + uy * corte).toFloat(), paint
-            )
-            canvas.drawLine(
-                (b.x - ux * corte).toFloat(), (b.y - uy * corte).toFloat(),
-                b.x.toFloat(), b.y.toFloat(), paint
-            )
+            trazo(a, Pt(a.x + ux * corte, a.y + uy * corte))
+            trazo(Pt(b.x - ux * corte, b.y - uy * corte), b)
         }
 
         // Los banderines de los extremos: la perpendicular que marca dónde
@@ -1039,7 +1044,15 @@ class Renderer(
         }
         // El interlineado de Excalidraw es 1.25 del tamaño de fuente.
         val lineHeight = size * 1.25
-        var y = c.y1 + size
+        // **La primera línea se apoya en su ascendente, no en su tamaño.**
+        //
+        // Estaba en `y1 + size`, y el cuadro de escribir coloca la suya en
+        // `y1 + ascendente` —que es como coloca el texto cualquier caja de
+        // texto—: la diferencia son unos pocos píxeles hacia abajo, justo los
+        // que se veía saltar el texto al darle a intro. Ahora se pinta donde se
+        // estaba escribiendo.
+        val fm = paint.fontMetrics
+        var y = c.y1 - fm.ascent
         for (line in content.split('\n')) {
             canvas.drawText(line, originX.toFloat(), y.toFloat(), paint)
             y += lineHeight

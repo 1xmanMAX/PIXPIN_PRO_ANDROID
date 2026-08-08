@@ -644,6 +644,11 @@ class DrawEditorActivity : ComponentActivity() {
                 onToggleDark = onAlternarNoche,
                 escala = controller.scene.escala,
                 onQuitarEscala = { controller.clearScale(); cambiado() },
+                pedirLaMedida = controller.pedirLaMedida,
+                onPedirLaMedida = {
+                    controller.pedirLaMedida = !controller.pedirLaMedida
+                    cambiado()
+                },
                 modoReferencia = controller.modoReferencia,
                 onModoReferencia = {
                     controller.modoReferencia = !controller.modoReferencia
