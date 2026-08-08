@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.FotoDeFondoTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:48.052Z" hostname="localhost" time="0.004">
+<testsuite name="com.forge.pixpin.motor.FotoDeFondoTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.960Z" hostname="localhost" time="0.005">
   <properties/>
   <testcase name="una vez fijada no se puede seleccionar" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
-  <testcase name="el borrador no se lleva la foto" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
-  <testcase name="seleccionar todo no coge la foto" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.001"/>
-  <testcase name="fijarla la bloquea y la manda al fondo" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
+  <testcase name="el borrador no se lleva la foto" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.001"/>
+  <testcase name="seleccionar todo no coge la foto" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
+  <testcase name="fijarla la bloquea y la manda al fondo" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.001"/>
   <testcase name="fijar dos veces es lo mismo que fijar una" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
-  <testcase name="una vez fijada no se puede mover" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.001"/>
+  <testcase name="una vez fijada no se puede mover" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
   <testcase name="fijarla no se puede deshacer" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
   <testcase name="encima de la foto se dibuja igual" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>
   <testcase name="la hoja se puede poner encima de la foto" classname="com.forge.pixpin.motor.FotoDeFondoTest" time="0.0"/>

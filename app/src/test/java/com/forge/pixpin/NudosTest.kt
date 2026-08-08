@@ -343,6 +343,83 @@ class NudosTest {
         assertEquals(0.0, c.scene.byId("a")!!.angle, 1e-9)
     }
 
+    /**
+     * **Un círculo y una raya clavados: el clavo es el eje de los dos.**
+     *
+     * Es el caso que faltaba por comprobar. Da igual de cuál de las dos tires:
+     * la que se mueve gira alrededor del clavo, y la otra se queda.
+     */
+    @Test
+    fun `un circulo clavado a una raya gira sobre el clavo`() {
+        val escena = listOf(
+            circulo("o", 0.0, 0.0, 100.0),
+            raya("r", Pt(-200.0, 0.0), Pt(200.0, 0.0))
+        )
+        val c = DrawController(Scene(elements = escena))
+        clavar(c, Pt(100.0, 0.0))
+        assertEquals(1, c.scene.alfileres.size)
+        val clavo = c.scene.alfileres.single().punto
+        assertEquals(100.0, clavo.x, 0.6)
+
+        // Se agarra el círculo por su borde de arriba y se arrastra a un lado.
+        c.selectTool(Tool.SELECTION)
+        c.pointerDown(Pt(0.0, -100.0))
+        c.pointerMove(Pt(60.0, -90.0))
+        c.pointerUp(Pt(60.0, -90.0))
+
+        val ovalo = c.scene.byId("o")!!
+        assertTrue("el círculo no ha girado", ovalo.angle != 0.0)
+        // El clavo sigue en el mismo sitio…
+        val despues = c.scene.alfileres.single().punto
+        assertEquals(clavo.x, despues.x, 0.6)
+        assertEquals(clavo.y, despues.y, 0.6)
+        // …y el círculo sigue pasando por él: su centro está a un radio.
+        val centro = getElementAbsoluteCoords(ovalo)
+        assertEquals(
+            "el círculo se ha soltado del clavo",
+            100.0,
+            hypot(despues.x - centro.cx, despues.y - centro.cy),
+            1.5
+        )
+        // Y la raya no se ha movido.
+        assertEquals(-200.0, puntas(c, "r").first().x, 0.001)
+    }
+
+    /** Y tirando de la raya, gira ella y el círculo se queda. */
+    @Test
+    fun `la raya clavada a un circulo gira sobre el clavo`() {
+        val escena = listOf(
+            circulo("o", 0.0, 0.0, 100.0),
+            raya("r", Pt(-200.0, 0.0), Pt(200.0, 0.0))
+        )
+        val c = DrawController(Scene(elements = escena))
+        clavar(c, Pt(100.0, 0.0))
+        val clavo = c.scene.alfileres.single().punto
+
+        c.selectTool(Tool.SELECTION)
+        // Se agarra la raya por un trozo lejos del clavo.
+        c.pointerDown(Pt(-150.0, 0.0))
+        c.pointerMove(Pt(-140.0, 80.0))
+        c.pointerUp(Pt(-140.0, 80.0))
+
+        assertTrue("la raya no ha girado", c.scene.byId("r")!!.angle != 0.0)
+        val despues = c.scene.alfileres.single().punto
+        assertEquals(clavo.x, despues.x, 0.6)
+        assertEquals(clavo.y, despues.y, 0.6)
+        // El clavo sigue sobre la raya. Se mira su **contorno**, que es lo que
+        // se dibuja: los puntos de un lineal se guardan sin girar y la
+        // inclinación va aparte, así que compararlos en crudo con algo de la
+        // escena da una raya que no es la que se ve.
+        val trazo = contornosDe(c.scene.byId("r")!!).single().puntos
+        assertEquals(
+            "el clavo se ha salido de la raya",
+            0.0,
+            distanceToSegment(despues, trazo.first(), trazo.last()),
+            1.0
+        )
+        assertEquals(0.0, c.scene.byId("o")!!.angle, 1e-9)
+    }
+
     // ---- Girar sobre el clavo ----
 
     /**

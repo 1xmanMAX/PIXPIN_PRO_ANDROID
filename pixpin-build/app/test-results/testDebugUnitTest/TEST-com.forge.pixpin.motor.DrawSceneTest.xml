@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.DrawSceneTest" tests="20" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:47.664Z" hostname="localhost" time="0.051">
+<testsuite name="com.forge.pixpin.motor.DrawSceneTest" tests="20" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.694Z" hostname="localhost" time="0.031">
   <properties/>
-  <testcase name="distribuir con menos de tres no toca nada" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.007"/>
-  <testcase name="soltar el anclaje deja la flecha quieta" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
+  <testcase name="distribuir con menos de tres no toca nada" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.002"/>
+  <testcase name="soltar el anclaje deja la flecha quieta" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
   <testcase name="un cambio nuevo invalida la pila de rehacer" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
   <testcase name="deshacer recupera el orden de pintado" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
-  <testcase name="subir un paso intercambia con el vecino" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.015"/>
-  <testcase name="distribuir deja huecos iguales" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.011"/>
-  <testcase name="alinear al centro los deja con el mismo centro" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
-  <testcase name="deshacer restaura un elemento borrado en su sitio" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
-  <testcase name="agrupar uno solo no hace nada" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
-  <testcase name="indices sueltos se agrupan en tramos contiguos" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.006"/>
+  <testcase name="subir un paso intercambia con el vecino" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.006"/>
+  <testcase name="distribuir deja huecos iguales" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.005"/>
+  <testcase name="alinear al centro los deja con el mismo centro" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
+  <testcase name="deshacer restaura un elemento borrado en su sitio" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
+  <testcase name="agrupar uno solo no hace nada" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
+  <testcase name="indices sueltos se agrupan en tramos contiguos" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
   <testcase name="traer al frente pone la seleccion al final de la lista" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
-  <testcase name="sin cambios no se anota nada" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
-  <testcase name="seleccionar un miembro arrastra al grupo entero" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
+  <testcase name="sin cambios no se anota nada" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
+  <testcase name="seleccionar un miembro arrastra al grupo entero" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
   <testcase name="enviar al fondo pone la seleccion al principio" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
-  <testcase name="alinear a la izquierda lleva todo al borde de la caja comun" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
-  <testcase name="la punta se queda fuera de la forma, separada por el hueco" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
+  <testcase name="alinear a la izquierda lleva todo al borde de la caja comun" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.002"/>
+  <testcase name="la punta se queda fuera de la forma, separada por el hueco" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
   <testcase name="deshacer devuelve el estado anterior" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
   <testcase name="la punta anclada sigue a la forma cuando esta se mueve" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
-  <testcase name="una flecha no se ancla a si misma ni a otra flecha" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
+  <testcase name="una flecha no se ancla a si misma ni a otra flecha" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.001"/>
   <testcase name="agrupar añade el mismo id a todos y desagrupar lo quita" classname="com.forge.pixpin.motor.DrawSceneTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

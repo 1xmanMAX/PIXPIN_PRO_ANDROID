@@ -330,7 +330,7 @@ class DrawEditorActivity : ComponentActivity() {
                 zurdo = zurdo
             )
 
-            EditorEnSitio(tick, editandoTexto) { editandoTexto = it; cambiado() }
+            EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
 
             // **Las islas cambian de lado con la mano.** El brazo entra por el
             // lado de su mano y tapa lo que hay debajo: lo que se toca a menudo
@@ -1004,7 +1004,12 @@ class DrawEditorActivity : ComponentActivity() {
      * bajo los pies.
      */
     @Composable
-    private fun EditorEnSitio(tick: Int, id: String?, onCerrar: (String?) -> Unit) {
+    private fun EditorEnSitio(
+        tick: Int,
+        id: String?,
+        noche: Boolean,
+        onCerrar: (String?) -> Unit
+    ) {
         @Suppress("UNUSED_EXPRESSION") tick
         if (id == null) return
         val e = controller.scene.byId(id) ?: return
@@ -1055,7 +1060,12 @@ class DrawEditorActivity : ComponentActivity() {
                 fontSize = with(androidx.compose.ui.platform.LocalDensity.current) {
                     (tam * vp.zoom).toFloat().toSp()
                 },
-                color = Color(parseColor(e.strokeColor))
+                // **Con el filtro del modo noche puesto.** Sin él, lo que se
+                // escribía salía del color crudo y al aceptar cambiaba de tono:
+                // el lienzo pinta el modo noche como un filtro sobre el color
+                // guardado, y el cuadro de escribir se lo saltaba. Se veía como
+                // un texto que cambia de color al darle a intro.
+                color = Color(DrawTheme.filtrar(parseColor(e.strokeColor), noche))
             ),
             cursorBrush = androidx.compose.ui.graphics.SolidColor(
                 MaterialTheme.colorScheme.primary

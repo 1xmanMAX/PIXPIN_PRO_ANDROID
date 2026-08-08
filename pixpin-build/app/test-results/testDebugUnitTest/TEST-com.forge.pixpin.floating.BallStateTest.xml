@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.floating.BallStateTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:46.561Z" hostname="localhost" time="0.009">
+<testsuite name="com.forge.pixpin.floating.BallStateTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:27.295Z" hostname="localhost" time="0.004">
   <properties/>
-  <testcase name="sin ventana la visibilidad del contenido es irrelevante" classname="com.forge.pixpin.floating.BallStateTest" time="0.005"/>
+  <testcase name="sin ventana la visibilidad del contenido es irrelevante" classname="com.forge.pixpin.floating.BallStateTest" time="0.002"/>
   <testcase name="con la ventana puesta pero oculta hay que volver a ensenarla" classname="com.forge.pixpin.floating.BallStateTest" time="0.0"/>
   <testcase name="con la ventana visible no hay nada que hacer" classname="com.forge.pixpin.floating.BallStateTest" time="0.0"/>
-  <testcase name="sin ventana hay que crearla" classname="com.forge.pixpin.floating.BallStateTest" time="0.001"/>
+  <testcase name="sin ventana hay que crearla" classname="com.forge.pixpin.floating.BallStateTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

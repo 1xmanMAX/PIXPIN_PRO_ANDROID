@@ -178,7 +178,31 @@ fun DrawCanvas(
                                 )
                                 touched()
                             }
-                            deriva += event.calculatePan().getDistance()
+                            // **Y se sigue dibujando con el primer dedo.**
+                            //
+                            // Faltaba, y dejaba el gesto a medias: con el
+                            // segundo dedo apoyado, el primero dejaba de mandar
+                            // puntos y la forma se congelaba en el tamaño que
+                            // tuviera al apoyarlo. Para hacer un círculo del
+                            // tamaño que quieres hay que poder seguir abriendo
+                            // **mientras** lo mantienes cuadrado.
+                            val principal = active.firstOrNull { it.id == first.id }
+                            if (principal != null && principal.positionChange() != Offset.Zero) {
+                                val v = controller.scene.viewport
+                                last = v.toScene(
+                                    principal.position.x.toDouble(),
+                                    principal.position.y.toDouble()
+                                )
+                                controller.pointerMove(last, principal.pressure.toDouble(), v.zoom)
+                                dedo = principal.position
+                                touched()
+                            }
+                            // El pellizco se mide **con el otro dedo**, no con
+                            // el que dibuja: si contara el movimiento de los dos,
+                            // seguir dibujando se leería como encuadrar y el
+                            // trazo se cancelaría solo.
+                            val otro = active.firstOrNull { it.id != first.id }
+                            if (otro != null) deriva += otro.positionChange().getDistance()
                             factor *= event.calculateZoom()
                             val pellizco = deriva > DERIVA_ENCUADRE.dp.toPx() ||
                                 kotlin.math.abs(factor - 1f) > FACTOR_ENCUADRE

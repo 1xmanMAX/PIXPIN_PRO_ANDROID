@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.PlanoTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T12:19:49.007Z" hostname="localhost" time="0.016">
+<testsuite name="com.forge.pixpin.motor.PlanoTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T13:06:28.477Z" hostname="localhost" time="0.013">
   <properties/>
   <testcase name="el largo se teclea en las unidades en que se mide" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
   <testcase name="dictar el angulo gira sobre el principio" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
-  <testcase name="la escala grafica se coloca arrastrando" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
+  <testcase name="la escala grafica se coloca arrastrando" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
   <testcase name="el angulo se mide como en un plano" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
-  <testcase name="un rectangulo sin cruces se recorta entero" classname="com.forge.pixpin.motor.PlanoTest" time="0.005"/>
-  <testcase name="recortar un rombo lo deja en raya abierta" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
-  <testcase name="estirar la barra recalcula lo que mide" classname="com.forge.pixpin.motor.PlanoTest" time="0.002"/>
+  <testcase name="un rectangulo sin cruces se recorta entero" classname="com.forge.pixpin.motor.PlanoTest" time="0.003"/>
+  <testcase name="recortar un rombo lo deja en raya abierta" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
+  <testcase name="estirar la barra recalcula lo que mide" classname="com.forge.pixpin.motor.PlanoTest" time="0.003"/>
   <testcase name="dictar largo y angulo ancla el principio" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
-  <testcase name="recortar un ovalo lo convierte en arco" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
-  <testcase name="la herramienta recorta tambien un rectangulo" classname="com.forge.pixpin.motor.PlanoTest" time="0.003"/>
-  <testcase name="recortar un rectangulo lo deja en raya abierta" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
+  <testcase name="recortar un ovalo lo convierte en arco" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
+  <testcase name="la herramienta recorta tambien un rectangulo" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
+  <testcase name="recortar un rectangulo lo deja en raya abierta" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
   <testcase name="la barra se reparte en cuadros que caben enteros" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
   <testcase name="una barra sin ancho no se reparte" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
-  <testcase name="recortar un arco devuelve arcos" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
-  <testcase name="las cifras de la barra se escriben cortas" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
+  <testcase name="recortar un arco devuelve arcos" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
+  <testcase name="las cifras de la barra se escriben cortas" classname="com.forge.pixpin.motor.PlanoTest" time="0.001"/>
   <testcase name="sin escala la barra habla en pixeles" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
   <testcase name="sin escala se teclea en pixeles" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>
   <testcase name="un largo que no vale no toca la raya" classname="com.forge.pixpin.motor.PlanoTest" time="0.0"/>

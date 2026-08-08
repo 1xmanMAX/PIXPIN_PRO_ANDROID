@@ -255,26 +255,23 @@ fun DrawToolbar(
                         tool in extras
                     ) { extrasAbiertas = !extrasAbiertas }
                 }
-            }
 
-            // Trazar referencia, y qué hacer con lo trazado. Solo salen los dos
-            // últimos cuando hay algo: botones que no pueden hacer nada ocupan
-            // sitio en una barra que vive encima del dibujo.
-            if (modoReferencia != null && onModoReferencia != null) {
-                Separador(horizontal = true)
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // **El modo guía va al final de esta fila, no en una propia.**
+                //
+                // Tenía una fila para él solo con un botón y medio, y esta barra
+                // flota encima de lo que estás dibujando: una fila entera es una
+                // franja de dibujo que deja de verse. Aquí ocupa lo que ocupa
+                // una herramienta más, que es lo que es.
+                if (modoReferencia != null && onModoReferencia != null) {
+                    Separador()
                     ToolButton(
                         Icons.Filled.Layers,
                         stringResource(R.string.ref_modo),
                         modoReferencia,
                         onModoReferencia
                     )
-                    // **No hay botón de borrarlas todas.** Lo hubo, y era un
-                    // botón que en un descuido se lleva por delante el trabajo
-                    // de media hora sin más aviso que el propio destrozo.
-                    // Esconderlas ya resuelve lo de mirar el dibujo limpio, y lo
-                    // que sobre se quita con el borrador, de una en una y
-                    // mirando lo que se quita.
+                    // Y el ojo solo cuando hay guías que esconder: un botón que
+                    // no puede hacer nada no se enseña.
                     if (hayReferencias) {
                         onAlternarReferencias?.let {
                             ToolButton(

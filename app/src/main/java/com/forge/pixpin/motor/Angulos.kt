@@ -84,8 +84,34 @@ fun angulosInternos(
             out += AnguloInterno(a.donde, grados, bisectrizDe(a.hacia, b.hacia))
         }
     }
+
+    // **Uno por junta, y pocos.**
+    //
+    // Enseñarlos todos era peor que no enseñar ninguno: en una esquina donde se
+    // juntan tres rayas salen tres números amontonados encima del vértice, y en
+    // una figura cerrada salen tantos que tapan el propio dibujo. Lo que hace
+    // falta mientras se mueve algo es **el ángulo de la esquina que se está
+    // tocando**, así que se deja uno por sitio —el más cerrado, que es el que
+    // uno está intentando ajustar— y como mucho un puñado.
     return out
+        .groupBy { redondear(it.vertice) }
+        .map { (_, enLaJunta) -> enLaJunta.minByOrNull { it.grados }!! }
+        .sortedBy { it.grados }
+        .take(MAXIMOS)
 }
+
+/** Dos vértices a menos de un pelo son la misma junta. */
+private fun redondear(p: Pt): Pair<Long, Long> =
+    Math.round(p.x / JUNTA) to Math.round(p.y / JUNTA)
+
+/**
+ * Cuántos se enseñan a la vez.
+ *
+ * Cuatro son los de un cuadrilátero: pasado eso, lo que se ve es una nube de
+ * cifras y no un dibujo. Si hubiera más, los que se quedan son los más cerrados
+ * — un ángulo de 170° no lo está mirando nadie.
+ */
+private const val MAXIMOS = 4
 
 /** Hacia dónde va la raya que sale de [desde] pasando por [hacia]. */
 private fun direccion(desde: Pt, hacia: Pt): Double =
