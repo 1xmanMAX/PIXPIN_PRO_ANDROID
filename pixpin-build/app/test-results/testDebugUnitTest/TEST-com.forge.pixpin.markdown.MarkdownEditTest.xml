@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.markdown.MarkdownEditTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:28.752Z" hostname="localhost" time="0.061">
+<testsuite name="com.forge.pixpin.markdown.MarkdownEditTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:24.888Z" hostname="localhost" time="0.021">
   <properties/>
-  <testcase name="sin seleccion deja el cursor entre las marcas" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.044"/>
+  <testcase name="sin seleccion deja el cursor entre las marcas" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.01"/>
   <testcase name="indices desbordados se recortan en vez de reventar" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.0"/>
-  <testcase name="quita el prefijo si ya estaba" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.006"/>
+  <testcase name="quita el prefijo si ya estaba" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.0"/>
   <testcase name="cursiva y codigo usan la misma mecanica" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.0"/>
-  <testcase name="el prefijo en la primera linea" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.003"/>
+  <testcase name="el prefijo en la primera linea" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.006"/>
   <testcase name="envuelve la seleccion en negrita" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.0"/>
   <testcase name="pone el prefijo en la linea del cursor" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.0"/>
   <testcase name="texto vacio no revienta" classname="com.forge.pixpin.markdown.MarkdownEditTest" time="0.0"/>

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ArrowFollowTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:29.543Z" hostname="localhost" time="0.031">
+<testsuite name="com.forge.pixpin.motor.ArrowFollowTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:25.104Z" hostname="localhost" time="0.016">
   <properties/>
-  <testcase name="la punta persigue a la caja" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.018"/>
-  <testcase name="redimensionar tambien recoloca la flecha" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.005"/>
-  <testcase name="al soltar no da un salto" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.002"/>
-  <testcase name="la flecha se mueve en cada paso del arrastre, no solo al soltar" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.002"/>
-  <testcase name="mover el origen recoloca la cola" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.001"/>
+  <testcase name="la punta persigue a la caja" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.006"/>
+  <testcase name="redimensionar tambien recoloca la flecha" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.003"/>
+  <testcase name="al soltar no da un salto" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.001"/>
+  <testcase name="la flecha se mueve en cada paso del arrastre, no solo al soltar" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.001"/>
+  <testcase name="mover el origen recoloca la cola" classname="com.forge.pixpin.motor.ArrowFollowTest" time="0.003"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

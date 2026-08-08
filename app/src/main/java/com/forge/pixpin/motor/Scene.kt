@@ -476,6 +476,20 @@ fun Element.withPointMovedTo(index: Int, scenePoint: Pt): Element {
 }
 
 /**
+ * Lleva el punto [index] a [enElMundo], **contando la inclinación**.
+ *
+ * Los puntos se guardan sin girar y el ángulo va aparte, así que mandar
+ * directamente una coordenada de la escena a [withPointMovedTo] coloca el punto
+ * donde estaría si la figura no estuviera girada — o sea, en otro sitio. Al
+ * arrastrar el vértice de una raya inclinada, el vértice se iba por su cuenta.
+ */
+fun Element.conPuntoEnElMundo(index: Int, enElMundo: Pt): Element {
+    if (angle == 0.0) return withPointMovedTo(index, enElMundo)
+    val c = getElementAbsoluteCoords(this)
+    return withPointMovedTo(index, pointRotateRads(enElMundo, Pt(c.cx, c.cy), -angle))
+}
+
+/**
  * Mete un punto **después** del que ocupa [tras], en [scenePoint].
  *
  * Es lo que hace arrastrar el tirador del medio de un tramo: la línea gana un

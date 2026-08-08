@@ -51,6 +51,18 @@ class Renderer(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
+    /**
+     * Un pincel **solo para medir texto**, que no dibuja nunca.
+     *
+     * Medir con el mismo pincel con el que se pinta obliga a reconfigurarlo
+     * entero después, y olvidarse no da un error: da un trazo con los valores de
+     * fábrica. Fue justo lo que pasó con la cota — se medía el rótulo con el
+     * pincel de la raya y la raya salía luego rellena, de grosor cero y negra,
+     * o sea invisible, con solo los banderines de las puntas asomando como
+     * pelos. Un pincel aparte hace que eso no pueda volver a pasar.
+     */
+    private val medidor = Paint(Paint.ANTI_ALIAS_FLAG)
+
     /** Pasa un color por el filtro del modo noche. En modo día no toca nada. */
     private fun tema(argb: Int): Int = DrawTheme.filtrar(argb, dark)
 
@@ -844,10 +856,10 @@ class Renderer(
     private fun huecoDelRotulo(e: Element, largo: Double): Double {
         val tam = e.fontSize ?: MEASURE_TEXT_SIZE
         if (tam <= 0.0) return 0.0
-        paint.reset()
-        paint.textSize = tam.toFloat()
-        paint.typeface = typefaces(e.fontFamily)
-        val ancho = paint.measureText(textoDeCota(e, escalaActual)).toDouble()
+        medidor.reset()
+        medidor.textSize = tam.toFloat()
+        medidor.typeface = typefaces(e.fontFamily)
+        val ancho = medidor.measureText(textoDeCota(e, escalaActual)).toDouble()
         val hueco = ancho + tam * MEASURE_LABEL_GAP * 2
         return if (hueco > largo * MAXIMO_HUECO) 0.0 else hueco
     }

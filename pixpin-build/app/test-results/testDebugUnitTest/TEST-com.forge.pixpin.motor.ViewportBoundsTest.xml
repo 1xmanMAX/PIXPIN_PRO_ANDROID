@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ViewportBoundsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:34.965Z" hostname="localhost" time="0.002">
+<testsuite name="com.forge.pixpin.motor.ViewportBoundsTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:27.801Z" hostname="localhost" time="0.002">
   <properties/>
   <testcase name="una imagen mas pequeña que el hueco queda centrada" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.001"/>
   <testcase name="acercarse no tiene tope practico, que es lo que permite afinar" classname="com.forge.pixpin.motor.ViewportBoundsTest" time="0.0"/>

@@ -76,9 +76,17 @@ data class Alfiler(
 
 /** Dónde cae ahora mismo el agarre de [a] sobre [e]. */
 fun puntoDelAgarre(e: Element, a: Agarre): Pt? {
-    if (a.indice != null) return absolutePoints(e).getOrNull(a.indice)
     val c = getElementAbsoluteCoords(e)
     val centro = Pt(c.cx, c.cy)
+    // **Con la inclinación puesta.** Los puntos de un lineal se guardan sin
+    // girar y el ángulo va aparte, así que devolver el punto en crudo daba un
+    // clavo que no estaba donde se ve el vértice. Al girar sobre él, la cuenta
+    // de recolocar salía torcida y la figura acababa girando sobre su propio
+    // centro: era el vértice del triángulo que no se comportaba.
+    if (a.indice != null) {
+        return absolutePoints(e).getOrNull(a.indice)
+            ?.let { pointRotateRads(it, centro, e.angle) }
+    }
     a.t?.let { return puntoEnElRecorrido(e, it) }
     val l = a.local ?: return null
     return pointRotateRads(
@@ -350,7 +358,7 @@ fun arrastrarAlfiler(
         var actualizado = e
         for (a in agarres) {
             actualizado = if (a.indice != null) {
-                actualizado.withPointMovedTo(a.indice, destino)
+                actualizado.conPuntoEnElMundo(a.indice, destino)
             } else {
                 val actual = puntoDelAgarre(actualizado, a) ?: continue
                 actualizado.copy(
@@ -393,7 +401,7 @@ fun moverAlfiler(
     val porVertice = agarres.filter { it.indice != null }
     if (porVertice.isNotEmpty()) {
         var estirado = e
-        for (a in porVertice) estirado = estirado.withPointMovedTo(a.indice!!, destino)
+        for (a in porVertice) estirado = estirado.conPuntoEnElMundo(a.indice!!, destino)
         return@map estirado.touched()
     }
 
@@ -417,7 +425,7 @@ fun moverAlfiler(
     var actualizado = e
     for (a in agarres) {
         actualizado = if (a.indice != null) {
-            actualizado.withPointMovedTo(a.indice, destino)
+            actualizado.conPuntoEnElMundo(a.indice, destino)
         } else {
             val actual = puntoDelAgarre(actualizado, a) ?: continue
             actualizado.copy(

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.ManifiestoTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:26.920Z" hostname="localhost" time="0.786">
+<testsuite name="com.forge.pixpin.ManifiestoTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:24.003Z" hostname="localhost" time="0.382">
   <properties/>
-  <testcase name="el manifiesto existe y declara componentes" classname="com.forge.pixpin.ManifiestoTest" time="0.066"/>
-  <testcase name="cada clase del manifiesto existe en las fuentes" classname="com.forge.pixpin.ManifiestoTest" time="0.077"/>
-  <testcase name="ninguna clase nuestra se nombra como cadena de texto" classname="com.forge.pixpin.ManifiestoTest" time="0.624"/>
+  <testcase name="el manifiesto existe y declara componentes" classname="com.forge.pixpin.ManifiestoTest" time="0.03"/>
+  <testcase name="cada clase del manifiesto existe en las fuentes" classname="com.forge.pixpin.ManifiestoTest" time="0.018"/>
+  <testcase name="ninguna clase nuestra se nombra como cadena de texto" classname="com.forge.pixpin.ManifiestoTest" time="0.334"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

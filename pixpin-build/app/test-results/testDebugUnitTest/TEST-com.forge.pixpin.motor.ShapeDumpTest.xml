@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ShapeDumpTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:34.700Z" hostname="localhost" time="0.002">
+<testsuite name="com.forge.pixpin.motor.ShapeDumpTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:27.737Z" hostname="localhost" time="0.001">
   <properties/>
-  <testcase name="volcado de figuras" classname="com.forge.pixpin.motor.ShapeDumpTest" time="0.001"/>
+  <testcase name="volcado de figuras" classname="com.forge.pixpin.motor.ShapeDumpTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

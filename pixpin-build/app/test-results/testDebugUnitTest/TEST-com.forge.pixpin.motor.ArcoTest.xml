@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ArcoTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:28.952Z" hostname="localhost" time="0.582">
+<testsuite name="com.forge.pixpin.motor.ArcoTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:24.990Z" hostname="localhost" time="0.109">
   <properties/>
-  <testcase name="el modo referencia vale para todas las herramientas" classname="com.forge.pixpin.motor.ArcoTest" time="0.204"/>
-  <testcase name="un óvalo sin tamaño no da puntos" classname="com.forge.pixpin.motor.ArcoTest" time="0.004"/>
+  <testcase name="el modo referencia vale para todas las herramientas" classname="com.forge.pixpin.motor.ArcoTest" time="0.019"/>
+  <testcase name="un óvalo sin tamaño no da puntos" classname="com.forge.pixpin.motor.ArcoTest" time="0.002"/>
   <testcase name="el barrido se topa en una vuelta" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
   <testcase name="el barrido se acumula en las dos direcciones" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
-  <testcase name="borrar una referencia no toca el dibujo" classname="com.forge.pixpin.motor.ArcoTest" time="0.072"/>
-  <testcase name="el arco se guarda y se relee" classname="com.forge.pixpin.motor.ArcoTest" time="0.284"/>
+  <testcase name="borrar una referencia no toca el dibujo" classname="com.forge.pixpin.motor.ArcoTest" time="0.009"/>
+  <testcase name="el arco se guarda y se relee" classname="com.forge.pixpin.motor.ArcoTest" time="0.064"/>
   <testcase name="un óvalo normal no se repasa" classname="com.forge.pixpin.motor.ArcoTest" time="0.002"/>
-  <testcase name="escondidas dejan de imantar" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
-  <testcase name="el ángulo de un óvalo achatado sigue al dedo" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
-  <testcase name="repasar el óvalo de referencia traza un arco" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
-  <testcase name="esconder las referencias no las pierde" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
-  <testcase name="los puntos del arco caen sobre el óvalo" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
+  <testcase name="escondidas dejan de imantar" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
+  <testcase name="el ángulo de un óvalo achatado sigue al dedo" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
+  <testcase name="repasar el óvalo de referencia traza un arco" classname="com.forge.pixpin.motor.ArcoTest" time="0.002"/>
+  <testcase name="esconder las referencias no las pierde" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
+  <testcase name="los puntos del arco caen sobre el óvalo" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
   <testcase name="un arco corto no gasta los tramos de una vuelta entera" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
   <testcase name="sin barrido no queda nada en el dibujo" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
-  <testcase name="el arco se selecciona tocando su curva" classname="com.forge.pixpin.motor.ArcoTest" time="0.003"/>
-  <testcase name="fuera del óvalo la elipse sigue dibujando elipses" classname="com.forge.pixpin.motor.ArcoTest" time="0.002"/>
+  <testcase name="el arco se selecciona tocando su curva" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
+  <testcase name="fuera del óvalo la elipse sigue dibujando elipses" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
   <testcase name="el óvalo de referencia nace marcado" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
-  <testcase name="con el segundo dedo la guía sale circular" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
+  <testcase name="con el segundo dedo la guía sale circular" classname="com.forge.pixpin.motor.ArcoTest" time="0.001"/>
   <testcase name="el barrido cruza el cambio de signo sin pegar saltos" classname="com.forge.pixpin.motor.ArcoTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

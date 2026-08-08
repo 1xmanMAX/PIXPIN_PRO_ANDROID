@@ -150,8 +150,9 @@ class NudosTest {
         c.pointerMove(Pt(50.0, 160.0))
         c.pointerUp(Pt(50.0, 160.0))
 
-        // El punto clavado sigue clavado…
-        val punta = puntas(c, "a").last()
+        // El punto clavado sigue clavado. Se mira el **contorno**, que es lo
+        // que se dibuja: los puntos de un lineal se guardan sin girar.
+        val punta = contornosDe(c.scene.byId("a")!!).single().puntos.last()
         assertEquals("el clavo se ha soltado", clavo.x, punta.x, 0.5)
         assertEquals(clavo.y, punta.y, 0.5)
         // …la raya ha girado…

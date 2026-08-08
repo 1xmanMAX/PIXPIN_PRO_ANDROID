@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.capture.ScrollStitcherTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T14:30:28.234Z" hostname="localhost" time="0.056">
+<testsuite name="com.forge.pixpin.capture.ScrollStitcherTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:24.638Z" hostname="localhost" time="0.023">
   <properties/>
-  <testcase name="un fotograma mas bajo que la referencia se descarta" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.022"/>
-  <testcase name="solo se añade lo que hay de nuevo" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.004"/>
+  <testcase name="un fotograma mas bajo que la referencia se descarta" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.012"/>
+  <testcase name="solo se añade lo que hay de nuevo" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
   <testcase name="el primer fotograma es la base" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
-  <testcase name="la imagen final reproduce la pagina original" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.017"/>
-  <testcase name="al llegar al alto maximo deja de acumular" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
+  <testcase name="la imagen final reproduce la pagina original" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
+  <testcase name="al llegar al alto maximo deja de acumular" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.0"/>
   <testcase name="un primer fotograma más alto que el tope no se cose" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
-  <testcase name="si la pantalla no se movio no se añade nada" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
-  <testcase name="un fotograma que no encaja se descarta" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.0"/>
+  <testcase name="si la pantalla no se movio no se añade nada" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.0"/>
+  <testcase name="un fotograma que no encaja se descarta" classname="com.forge.pixpin.capture.ScrollStitcherTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

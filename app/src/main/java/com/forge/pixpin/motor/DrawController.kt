@@ -577,7 +577,7 @@ class DrawController(initial: Scene = Scene()) {
                 val puntos = absolutePoints(e)
                 val vecino = puntos.getOrNull(if (g.indice == 0) 1 else g.indice - 1)
                 val destino = if (keepAspectRatio && vecino != null) constrainToAxis(vecino, p) else p
-                replace(e.withPointMovedTo(g.indice, destino).touched())
+                replace(e.conPuntoEnElMundo(g.indice, destino).touched())
                 // **Y con él, todo lo que tenga clavado.** Es lo que hace que un
                 // triángulo hecho con tres rayas se deforme sin abrirse por el
                 // vértice que estás moviendo. Ver [Alfiler].
