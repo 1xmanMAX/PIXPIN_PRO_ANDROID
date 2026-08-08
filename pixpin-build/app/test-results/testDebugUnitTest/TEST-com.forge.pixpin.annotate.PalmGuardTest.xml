@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.annotate.PalmGuardTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:48.950Z" hostname="localhost" time="0.011">
+<testsuite name="com.forge.pixpin.annotate.PalmGuardTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:33.817Z" hostname="localhost" time="0.008">
   <properties/>
-  <testcase name="sin lapiz el dedo dibuja" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.004"/>
+  <testcase name="sin lapiz el dedo dibuja" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.006"/>
   <testcase name="con el lapiz recien usado se ignora la mano apoyada" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.001"/>
-  <testcase name="un raton o similar nunca se descarta" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.001"/>
+  <testcase name="un raton o similar nunca se descarta" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.0"/>
   <testcase name="pasada la ventana el dedo vuelve a valer" classname="com.forge.pixpin.annotate.PalmGuardTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

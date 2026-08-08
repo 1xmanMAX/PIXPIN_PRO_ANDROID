@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.RecorteTest" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:58.088Z" hostname="localhost" time="0.02">
+<testsuite name="com.forge.pixpin.motor.RecorteTest" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:36.213Z" hostname="localhost" time="0.007">
   <properties/>
-  <testcase name="extiende por el extremo que se toca" classname="com.forge.pixpin.motor.RecorteTest" time="0.002"/>
+  <testcase name="extiende por el extremo que se toca" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="una polilinea se estira por su ultimo tramo" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
   <testcase name="un toque con extender estira hasta lo que topa" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
   <testcase name="tocando el vacio no pasa nada" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
-  <testcase name="una polilinea conserva sus dobleces" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
+  <testcase name="una polilinea conserva sus dobleces" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="un toque con recortar quita el trozo tocado" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="el recorrido se mide por los tramos" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
   <testcase name="sin cruces la raya se va entera" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
@@ -13,15 +13,15 @@
   <testcase name="sin nada delante no se estira" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="recorta por el principio si es lo que se toca" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="recorta el rabo que sobresale" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
-  <testcase name="se agarra la raya aunque el dedo caiga un poco fuera" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
+  <testcase name="se agarra la raya aunque el dedo caiga un poco fuera" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
   <testcase name="se para en la primera y no en la segunda" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
-  <testcase name="se recorta contra una guia" classname="com.forge.pixpin.motor.RecorteTest" time="0.002"/>
+  <testcase name="se recorta contra una guia" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="una circunferencia tambien corta" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="el trozo del medio parte la raya en dos" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
-  <testcase name="el recorte no mueve la raya de sitio" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
+  <testcase name="el recorte no mueve la raya de sitio" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="extiende hasta la primera pared" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
-  <testcase name="los cruces salen ordenados y sin repetidos" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
-  <testcase name="arrastrando no hace nada" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
+  <testcase name="los cruces salen ordenados y sin repetidos" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
+  <testcase name="arrastrando no hace nada" classname="com.forge.pixpin.motor.RecorteTest" time="0.0"/>
   <testcase name="deshacer devuelve la raya entera" classname="com.forge.pixpin.motor.RecorteTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

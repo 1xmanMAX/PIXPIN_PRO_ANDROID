@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.data.HerramientasDelPinTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:49.565Z" hostname="localhost" time="4.263">
+<testsuite name="com.forge.pixpin.data.HerramientasDelPinTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:34.147Z" hostname="localhost" time="0.06">
   <properties/>
-  <testcase name="las de fábrica existen todas en la barra" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.025"/>
+  <testcase name="las de fábrica existen todas en la barra" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.026"/>
   <testcase name="algo se queda para la edición avanzada" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.001"/>
-  <testcase name="copiar viene en png y la otra opción también es sin pérdida" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.011"/>
-  <testcase name="la mano y el lazo no van al pin" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.002"/>
-  <testcase name="la letra del pin cae siempre en una familia real" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.021"/>
-  <testcase name="la lista de la barra son las dos filas, sin repetir" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.001"/>
-  <testcase name="sin elegir nada valen las de siempre" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.0"/>
-  <testcase name="un nombre desconocido se ignora sin arrastrar a los demás" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.018"/>
-  <testcase name="elegir ninguna se respeta" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.013"/>
-  <testcase name="lo que se usa sobre una captura sí va al pin" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="4.142"/>
-  <testcase name="lo guardado se traduce a herramientas" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.01"/>
+  <testcase name="copiar viene en png y la otra opción también es sin pérdida" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.006"/>
+  <testcase name="la mano y el lazo no van al pin" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.0"/>
+  <testcase name="la letra del pin cae siempre en una familia real" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.006"/>
+  <testcase name="la lista de la barra son las dos filas, sin repetir" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.0"/>
+  <testcase name="sin elegir nada valen las de siempre" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.001"/>
+  <testcase name="un nombre desconocido se ignora sin arrastrar a los demás" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.01"/>
+  <testcase name="elegir ninguna se respeta" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.004"/>
+  <testcase name="lo que se usa sobre una captura sí va al pin" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.001"/>
+  <testcase name="lo guardado se traduce a herramientas" classname="com.forge.pixpin.data.HerramientasDelPinTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

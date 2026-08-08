@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.FrameTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:55.934Z" hostname="localhost" time="0.011">
+<testsuite name="com.forge.pixpin.motor.FrameTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:35.321Z" hostname="localhost" time="0.011">
   <properties/>
   <testcase name="sin marco no hay hoja y se ve todo" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
   <testcase name="lo borrado no entra" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
   <testcase name="cada hoja decide su orientacion" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="solo entra lo que cae dentro de la hoja" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
-  <testcase name="estirar la hoja no mueve nada y hace entrar mas" classname="com.forge.pixpin.motor.FrameTest" time="0.003"/>
+  <testcase name="estirar la hoja no mueve nada y hace entrar mas" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="el marco no forma parte del contenido" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="la hoja no ofrece ajustes de estilo" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
-  <testcase name="la hoja se dibuja arrastrando, como un rectangulo" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
+  <testcase name="la hoja se dibuja arrastrando, como un rectangulo" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="cada hoja lleva lo suyo" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
-  <testcase name="la hoja se coge por el borde y no por dentro" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
-  <testcase name="el marco es el primero de la escena" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
+  <testcase name="la hoja se coge por el borde y no por dentro" classname="com.forge.pixpin.motor.FrameTest" time="0.004"/>
+  <testcase name="el marco es el primero de la escena" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
   <testcase name="lo que asoma por el borde sigue contando" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
-  <testcase name="la hoja que se enseña es la primera" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
+  <testcase name="la hoja que se enseña es la primera" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

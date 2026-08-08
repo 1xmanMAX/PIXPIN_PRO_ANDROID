@@ -1,34 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.RegionesTest" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:58.119Z" hostname="localhost" time="5.667">
+<testsuite name="com.forge.pixpin.motor.RegionesTest" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:36.230Z" hostname="localhost" time="1.462">
   <properties/>
-  <testcase name="el agujero no roba el toque" classname="com.forge.pixpin.motor.RegionesTest" time="0.267"/>
-  <testcase name="cuatro rayas que se tocan encierran un espacio" classname="com.forge.pixpin.motor.RegionesTest" time="0.222"/>
-  <testcase name="sobre un espacio abierto avisa y no dibuja" classname="com.forge.pixpin.motor.RegionesTest" time="0.109"/>
-  <testcase name="el elemento guarda el contorno y sus agujeros en relativo" classname="com.forge.pixpin.motor.RegionesTest" time="0.12"/>
+  <testcase name="el agujero no roba el toque" classname="com.forge.pixpin.motor.RegionesTest" time="0.105"/>
+  <testcase name="cuatro rayas que se tocan encierran un espacio" classname="com.forge.pixpin.motor.RegionesTest" time="0.246"/>
+  <testcase name="sobre un espacio abierto avisa y no dibuja" classname="com.forge.pixpin.motor.RegionesTest" time="0.043"/>
+  <testcase name="el elemento guarda el contorno y sus agujeros en relativo" classname="com.forge.pixpin.motor.RegionesTest" time="0.067"/>
   <testcase name="el camino del lapiz se simplifica antes de rellenar" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
-  <testcase name="el relleno queda por encima de la foto del fondo" classname="com.forge.pixpin.motor.RegionesTest" time="0.108"/>
-  <testcase name="el bote deja un relleno en la escena" classname="com.forge.pixpin.motor.RegionesTest" time="0.098"/>
-  <testcase name="tocando encima del trazo se rellena lo de al lado" classname="com.forge.pixpin.motor.RegionesTest" time="0.072"/>
-  <testcase name="si el espacio no esta cerrado no sale region" classname="com.forge.pixpin.motor.RegionesTest" time="0.02"/>
-  <testcase name="tocando fuera de todo no hay nada que rellenar" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
-  <testcase name="el hueco entre dos figuras deja el de dentro sin pintar" classname="com.forge.pixpin.motor.RegionesTest" time="0.091"/>
+  <testcase name="el relleno queda por encima de la foto del fondo" classname="com.forge.pixpin.motor.RegionesTest" time="0.083"/>
+  <testcase name="el bote deja un relleno en la escena" classname="com.forge.pixpin.motor.RegionesTest" time="0.066"/>
+  <testcase name="tocando encima del trazo se rellena lo de al lado" classname="com.forge.pixpin.motor.RegionesTest" time="0.081"/>
+  <testcase name="si el espacio no esta cerrado no sale region" classname="com.forge.pixpin.motor.RegionesTest" time="0.043"/>
+  <testcase name="tocando fuera de todo no hay nada que rellenar" classname="com.forge.pixpin.motor.RegionesTest" time="0.001"/>
+  <testcase name="el hueco entre dos figuras deja el de dentro sin pintar" classname="com.forge.pixpin.motor.RegionesTest" time="0.092"/>
   <testcase name="sin fondo elegido no hay nada que rellenar" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
-  <testcase name="sin fondo elegido se pinta del color del trazo" classname="com.forge.pixpin.motor.RegionesTest" time="0.066"/>
+  <testcase name="sin fondo elegido se pinta del color del trazo" classname="com.forge.pixpin.motor.RegionesTest" time="0.039"/>
   <testcase name="un lapiz abierto no se rellena" classname="com.forge.pixpin.motor.RegionesTest" time="0.001"/>
   <testcase name="sin nada dibujado no hay nada que rellenar" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
-  <testcase name="repintar el mismo hueco sustituye la mancha" classname="com.forge.pixpin.motor.RegionesTest" time="0.182"/>
-  <testcase name="el relleno de lineas sale recto" classname="com.forge.pixpin.motor.RegionesTest" time="0.024"/>
-  <testcase name="rellenar varias veces no degrada el resultado" classname="com.forge.pixpin.motor.RegionesTest" time="0.185"/>
-  <testcase name="una rendija diminuta se da por cerrada" classname="com.forge.pixpin.motor.RegionesTest" time="0.078"/>
-  <testcase name="el relleno se mete debajo de lo que lo encierra" classname="com.forge.pixpin.motor.RegionesTest" time="0.041"/>
+  <testcase name="repintar el mismo hueco sustituye la mancha" classname="com.forge.pixpin.motor.RegionesTest" time="0.12"/>
+  <testcase name="el relleno de lineas sale recto" classname="com.forge.pixpin.motor.RegionesTest" time="0.014"/>
+  <testcase name="rellenar varias veces no degrada el resultado" classname="com.forge.pixpin.motor.RegionesTest" time="0.211"/>
+  <testcase name="una rendija diminuta se da por cerrada" classname="com.forge.pixpin.motor.RegionesTest" time="0.052"/>
+  <testcase name="el relleno se mete debajo de lo que lo encierra" classname="com.forge.pixpin.motor.RegionesTest" time="0.039"/>
   <testcase name="un gesto cancelado no deja relleno" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
   <testcase name="arrastrando el dedo no se rellena" classname="com.forge.pixpin.motor.RegionesTest" time="0.001"/>
   <testcase name="el rayado no cruza los agujeros" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
   <testcase name="rellenar otro hueco no borra el anterior" classname="com.forge.pixpin.motor.RegionesTest" time="0.055"/>
-  <testcase name="la foto del fondo no encierra nada" classname="com.forge.pixpin.motor.RegionesTest" time="0.017"/>
-  <testcase name="un relleno se deshace entero" classname="com.forge.pixpin.motor.RegionesTest" time="3.887"/>
-  <testcase name="un lapiz cerrado con fondo se rellena" classname="com.forge.pixpin.motor.RegionesTest" time="0.0"/>
-  <testcase name="tocando dentro del circulo se rellena el circulo" classname="com.forge.pixpin.motor.RegionesTest" time="0.008"/>
+  <testcase name="la foto del fondo no encierra nada" classname="com.forge.pixpin.motor.RegionesTest" time="0.016"/>
+  <testcase name="un relleno se deshace entero" classname="com.forge.pixpin.motor.RegionesTest" time="0.063"/>
+  <testcase name="un lapiz cerrado con fondo se rellena" classname="com.forge.pixpin.motor.RegionesTest" time="0.001"/>
+  <testcase name="tocando dentro del circulo se rellena el circulo" classname="com.forge.pixpin.motor.RegionesTest" time="0.007"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

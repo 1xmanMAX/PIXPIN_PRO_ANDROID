@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.InterseccionesTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:56.940Z" hostname="localhost" time="0.026">
+<testsuite name="com.forge.pixpin.motor.InterseccionesTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:35.656Z" hostname="localhost" time="0.016">
   <properties/>
-  <testcase name="una imagen se cruza con una linea" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.002"/>
+  <testcase name="una imagen se cruza con una linea" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="lo que se esta dibujando queda fuera" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="el contorno de una figura girada sale girado" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.0"/>
   <testcase name="una linea que se queda corta no cruza el circulo" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="un trazo que se cruza consigo mismo engancha en su cruce" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="dos tramos seguidos no cuentan como cruce consigo misma" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.0"/>
-  <testcase name="una linea corta un circulo por donde lo corta" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.009"/>
+  <testcase name="una linea corta un circulo por donde lo corta" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="un circulo que no toca la caja no da cruce" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
-  <testcase name="un arco se cruza con una linea" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.0"/>
-  <testcase name="una figura girada cruza por donde se ve" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
-  <testcase name="una esquina redondeada corta por la curva y no por el pico" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.0"/>
+  <testcase name="un arco se cruza con una linea" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
+  <testcase name="una figura girada cruza por donde se ve" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.003"/>
+  <testcase name="una esquina redondeada corta por la curva y no por el pico" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="dos circulos que se solapan se cruzan" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.001"/>
   <testcase name="todos los tipos que se dibujan tienen perimetro" classname="com.forge.pixpin.motor.InterseccionesTest" time="0.002"/>
   <system-out><![CDATA[]]></system-out>

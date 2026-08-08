@@ -1,35 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.NudosTest" tests="31" skipped="0" failures="0" errors="0" timestamp="2026-08-08T18:45:57.904Z" hostname="localhost" time="0.085">
+<testsuite name="com.forge.pixpin.motor.NudosTest" tests="31" skipped="0" failures="0" errors="0" timestamp="2026-08-08T22:32:36.010Z" hostname="localhost" time="0.071">
   <properties/>
-  <testcase name="con dos clavos ya no gira" classname="com.forge.pixpin.motor.NudosTest" time="0.011"/>
-  <testcase name="los clavos de lo que ya no existe se tiran" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="sin clavo el triangulo se abre" classname="com.forge.pixpin.motor.NudosTest" time="0.003"/>
-  <testcase name="sin clavos la figura se traslada" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
+  <testcase name="con dos clavos ya no gira" classname="com.forge.pixpin.motor.NudosTest" time="0.005"/>
+  <testcase name="los clavos de lo que ya no existe se tiran" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
+  <testcase name="sin clavo el triangulo se abre" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="sin clavos la figura se traslada" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
   <testcase name="sin clavos gira como siempre" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
   <testcase name="arrastrando no se clava" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
   <testcase name="tocar un clavo lo quita" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="con dos clavos la figura no se mueve" classname="com.forge.pixpin.motor.NudosTest" time="0.009"/>
-  <testcase name="con un clavo se gira sobre el clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="mover un punto de una raya girada es exacto" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="dos circunferencias se clavan en su interseccion" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="tirar de la punta libre no desfasa el clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.005"/>
+  <testcase name="con dos clavos la figura no se mueve" classname="com.forge.pixpin.motor.NudosTest" time="0.003"/>
+  <testcase name="con un clavo se gira sobre el clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="mover un punto de una raya girada es exacto" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="dos circunferencias se clavan en su interseccion" classname="com.forge.pixpin.motor.NudosTest" time="0.004"/>
+  <testcase name="tirar de la punta libre no desfasa el clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.004"/>
   <testcase name="cada clavo da un punto que pintar" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="tocar el clavo lo arranca y lo lleva" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
+  <testcase name="tocar el clavo lo arranca y lo lleva" classname="com.forge.pixpin.motor.NudosTest" time="0.003"/>
   <testcase name="el clavo se queda pegado a la raya aunque gire" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="el clavo se afina hasta la interseccion" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="el clavo se afina hasta la interseccion" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
   <testcase name="lejos de todo no se clava nada" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="el tirador desaparece donde hay un clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="tirar de una punta con un clavo en el cuerpo no dispara la raya" classname="com.forge.pixpin.motor.NudosTest" time="0.004"/>
+  <testcase name="el tirador desaparece donde hay un clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="tirar de una punta con un clavo en el cuerpo no dispara la raya" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
   <testcase name="con un clavo la figura gira sobre el en vez de trasladarse" classname="com.forge.pixpin.motor.NudosTest" time="0.005"/>
-  <testcase name="cuantos clavos decide cuanto se puede mover" classname="com.forge.pixpin.motor.NudosTest" time="0.007"/>
-  <testcase name="una figura sola no se puede clavar" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="mover un vertice clavado se lleva al otro" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
-  <testcase name="un circulo clavado gira alrededor del clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.012"/>
+  <testcase name="cuantos clavos decide cuanto se puede mover" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
+  <testcase name="una figura sola no se puede clavar" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="mover un vertice clavado se lleva al otro" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
+  <testcase name="un circulo clavado gira alrededor del clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.004"/>
   <testcase name="la raya clavada a un circulo gira sobre el clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
-  <testcase name="el clavo atraviesa las figuras que pasan por el punto" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
+  <testcase name="el clavo atraviesa las figuras que pasan por el punto" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
   <testcase name="el clavo de una raya se mide sobre su recorrido" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
   <testcase name="un circulo clavado a una raya gira sobre el clavo" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
-  <testcase name="un clavo en el medio no se mueve al tirar de una punta" classname="com.forge.pixpin.motor.NudosTest" time="0.002"/>
+  <testcase name="un clavo en el medio no se mueve al tirar de una punta" classname="com.forge.pixpin.motor.NudosTest" time="0.007"/>
   <testcase name="mover el clavo de una esquina estira el triangulo" classname="com.forge.pixpin.motor.NudosTest" time="0.001"/>
   <testcase name="tocar el vacio con el alfiler avisa" classname="com.forge.pixpin.motor.NudosTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
