@@ -337,6 +337,43 @@ fun DrawCanvas(
             drawCircle(NUDO_COLOR, NUDO_RADIO.dp.toPx(), Offset(s.x.toFloat(), s.y.toFloat()))
         }
 
+        // Los ángulos de las juntas, **solo mientras dura el gesto**. Es la
+        // guía del nivel de burbuja: se enseña mientras colocas y desaparece en
+        // cuanto sueltas, porque un dibujo con todos sus ángulos escritos no se
+        // lee. Ver [angulosInternos].
+        for (a in controller.angulosDelGesto()) {
+            val v = vp.toScreen(a.vertice)
+            val r = ANGULO_RADIO.dp.toPx()
+            val etiqueta = "${a.grados.toInt()}°"
+            drawIntoCanvas { canvas ->
+                val pincel = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                // El arco del ángulo, del tamaño de una uña y en el mismo morado
+                // que el resto de los adornos: es andamio, no dibujo.
+                pincel.style = android.graphics.Paint.Style.STROKE
+                pincel.strokeWidth = 1.5.dp.toPx()
+                pincel.color = SELECTION_COLOR.value.toLong().let {
+                    android.graphics.Color.argb(200, 0x69, 0x65, 0xDB)
+                }
+                canvas.nativeCanvas.drawCircle(v.x.toFloat(), v.y.toFloat(), r, pincel)
+
+                // El número **dentro** del ángulo, en su bisectriz: fuera se lee
+                // como si fuera del ángulo de al lado.
+                val tx = v.x + kotlin.math.cos(a.bisectriz) * r * ANGULO_TEXTO
+                val ty = v.y + kotlin.math.sin(a.bisectriz) * r * ANGULO_TEXTO
+                pincel.textSize = ANGULO_LETRA.dp.toPx()
+                pincel.textAlign = android.graphics.Paint.Align.CENTER
+                // Halo blanco primero: sobre un trazo oscuro, el número solo no
+                // se lee, y es justo encima de un trazo donde siempre cae.
+                pincel.style = android.graphics.Paint.Style.STROKE
+                pincel.strokeWidth = 3.dp.toPx()
+                pincel.color = android.graphics.Color.WHITE
+                canvas.nativeCanvas.drawText(etiqueta, tx.toFloat(), ty.toFloat(), pincel)
+                pincel.style = android.graphics.Paint.Style.FILL
+                pincel.color = android.graphics.Color.argb(255, 0x69, 0x65, 0xDB)
+                canvas.nativeCanvas.drawText(etiqueta, tx.toFloat(), ty.toFloat(), pincel)
+            }
+        }
+
         controller.selectionBox?.let { b ->
             val tl = vp.toScreen(Pt(b.x1, b.y1))
             val br = vp.toScreen(Pt(b.x2, b.y2))
@@ -529,6 +566,11 @@ private val SELECTION_COLOR = Color(0xFF6965DB)
  */
 private val NUDO_COLOR = Color(0xFFE03131)
 private const val NUDO_RADIO = 2.5f
+
+/** El arco del ángulo, dónde cae su número y de qué tamaño, en dp. */
+private const val ANGULO_RADIO = 16f
+private const val ANGULO_TEXTO = 1.55f
+private const val ANGULO_LETRA = 11f
 private val SELECTION_FILL = Color(0x186965DB)
 private val BINDING_COLOR = Color(0xFF1971C2)
 

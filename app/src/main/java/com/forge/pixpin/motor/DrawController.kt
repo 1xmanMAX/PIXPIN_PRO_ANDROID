@@ -383,6 +383,28 @@ class DrawController(initial: Scene = Scene()) {
         nudoSinPareja = false
     }
 
+    /**
+     * Los ángulos que enseñar ahora mismo, o nada si no se está moviendo nada.
+     *
+     * Aparecen al empezar el gesto y se van al soltar: un dibujo con todos sus
+     * ángulos escritos no se lee, pero mientras arrastras un vértice el ángulo
+     * es lo único que quieres saber. Ver [angulosInternos].
+     */
+    fun angulosDelGesto(): List<AnguloInterno> {
+        val moviendose = when (val g = gesture) {
+            is Gesture.MovingPoint -> setOf(g.elementId)
+            is Gesture.Moving -> g.originals.map { it.id }.toSet()
+            is Gesture.Rotating -> g.originals.map { it.id }.toSet()
+            is Gesture.MovingPin ->
+                scene.alfileres.getOrNull(g.indice)?.agarres?.map { it.elementId }?.toSet()
+                    ?: emptySet()
+            is Gesture.Creating -> setOf(g.elementId)
+            else -> emptySet()
+        }
+        if (moviendose.isEmpty()) return emptyList()
+        return angulosInternos(scene.visibleConReferencias, scene.alfileres, moviendose)
+    }
+
     /** Dónde hay que pintar las cabezas de los clavos. Ver [Alfiler]. */
     fun nudosVisibles(): List<Pt> =
         puntosDeAlfileres(scene.visibleConReferencias, scene.alfileres)
@@ -490,7 +512,7 @@ class DrawController(initial: Scene = Scene()) {
             is Gesture.MovingPin -> {
                 val alfiler = scene.alfileres.getOrNull(g.indice) ?: return
                 scene = scene.copy(
-                    elements = moverAlfiler(scene.elements, alfiler, p),
+                    elements = moverAlfiler(scene.elements, scene.alfileres, alfiler, p),
                     alfileres = scene.alfileres.mapIndexed { i, a ->
                         if (i == g.indice) a.copy(punto = p) else a
                     }
@@ -576,11 +598,15 @@ class DrawController(initial: Scene = Scene()) {
             is Gesture.Moving -> {
                 val dx = p.x - g.startPointer.x
                 val dy = p.y - g.startPointer.y
-                // **Lo clavado va detrás.** Arrastrando la figura entera —y no
-                // uno de sus puntos— lo que se mueve es el racimo: dos listones
-                // clavados son una sola pieza, y separarlos al arrastrar era
-                // justo lo que rompía la unión sin que nadie la hubiera tocado.
-                applyToOriginals(g.originals) { dragElements(it, dx, dy) }
+                // **Cada figura se mueve según lo que sus clavos le dejen.**
+                // Sin clavos sigue al dedo; con uno gira alrededor de él; con
+                // dos no se mueve. Ver [Libertad]: es la ley entera del alfiler,
+                // y es lo que convierte el clavo en un eje de verdad en vez de
+                // en un pegamento que arrastra el conjunto en bloque.
+                applyToOriginals(g.originals) {
+                    if (scene.alfileres.isEmpty()) dragElements(it, dx, dy)
+                    else arrastrarConAlfileres(it, scene.alfileres, g.startPointer, p)
+                }
                 scene = scene.copy(
                     alfileres = refrescarAlfileres(scene.elements, scene.alfileres)
                 )
@@ -1253,10 +1279,12 @@ class DrawController(initial: Scene = Scene()) {
             if (hit.id !in selectedIds) {
                 selectedIds = getElementsInGroupOf(editables, hit).map { it.id }.toSet()
             }
-            // **Y con lo seleccionado se mueve lo que tenga clavado.** Es la
-            // diferencia entre un clavo y una coincidencia: arrastrando la
-            // figura entera, lo unido tiene que ir detrás. Ver [Alfiler].
-            gesture = Gesture.Moving(p, elementosDelRacimo())
+            // **Solo lo seleccionado.** Lo clavado a ello NO se arrastra: esa
+            // es justo la diferencia entre un clavo y un pegamento. Lo que hace
+            // el clavo es limitar a la propia figura —con uno solo puede girar,
+            // con dos no puede nada—, y para mover el conjunto se mueve el
+            // clavo. Ver [Libertad].
+            gesture = Gesture.Moving(p, selectedElements())
             return
         }
 
@@ -1407,12 +1435,6 @@ class DrawController(initial: Scene = Scene()) {
         scene = scene.copy(
             elements = scene.elements.map { if (it.id == element.id) element else it }
         )
-    }
-
-    /** Lo seleccionado **más todo lo que lleve clavado**, en orden de escena. */
-    private fun elementosDelRacimo(): List<Element> {
-        val racimo = racimoDe(scene.alfileres, selectedIds)
-        return scene.elements.filter { it.id in racimo && !it.locked }
     }
 
     /** Recalcula desde los originales del gesto, nunca desde el paso anterior. */

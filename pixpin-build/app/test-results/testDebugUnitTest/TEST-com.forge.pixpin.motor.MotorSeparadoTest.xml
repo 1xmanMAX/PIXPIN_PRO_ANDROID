@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.MotorSeparadoTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:37.520Z" hostname="localhost" time="0.213">
+<testsuite name="com.forge.pixpin.motor.MotorSeparadoTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:19.939Z" hostname="localhost" time="0.276">
   <properties/>
   <testcase name="el núcleo del motor no toca Android" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.114"/>
-  <testcase name="el motor no depende del resto de la aplicación" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.096"/>
-  <testcase name="el motor existe y no está vacío" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.001"/>
-  <testcase name="la lista de la capa de Android está al día" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.0"/>
+  <testcase name="el motor no depende del resto de la aplicación" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.145"/>
+  <testcase name="el motor existe y no está vacío" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.004"/>
+  <testcase name="la lista de la capa de Android está al día" classname="com.forge.pixpin.motor.MotorSeparadoTest" time="0.005"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

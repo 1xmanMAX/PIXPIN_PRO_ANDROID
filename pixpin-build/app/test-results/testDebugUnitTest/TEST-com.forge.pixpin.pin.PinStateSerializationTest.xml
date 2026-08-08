@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.pin.PinStateSerializationTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:59:09.882Z" hostname="localhost" time="0.018">
+<testsuite name="com.forge.pixpin.pin.PinStateSerializationTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:57:09.913Z" hostname="localhost" time="0.016">
   <properties/>
   <testcase name="un pin de la version anterior sigue cargando" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.013"/>
-  <testcase name="campos por defecto al faltar" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.0"/>
-  <testcase name="los campos nuevos tienen valores por defecto seguros" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.001"/>
-  <testcase name="lista de pines" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.002"/>
+  <testcase name="campos por defecto al faltar" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.001"/>
+  <testcase name="los campos nuevos tienen valores por defecto seguros" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.0"/>
+  <testcase name="lista de pines" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.001"/>
   <testcase name="formato antiguo con campos retirados" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.0"/>
-  <testcase name="roundtrip con los campos nuevos" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.0"/>
-  <testcase name="roundtrip completo" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.001"/>
+  <testcase name="roundtrip con los campos nuevos" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.001"/>
+  <testcase name="roundtrip completo" classname="com.forge.pixpin.pin.PinStateSerializationTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

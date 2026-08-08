@@ -53,12 +53,20 @@ data class AjustesRelleno(
     /**
      * En cuántas celdas se parte el lado mayor de la zona de trabajo.
      *
-     * Es el mando que reparte precisión y tiempo. Con 320, un dibujo de 2000 px
-     * de ancho tiene celdas de unos 6 px: cierra los huecos que el ojo ve
-     * cerrados y deja el contorno con un error muy por debajo del grosor de un
-     * trazo. Subirlo multiplica el coste por su cuadrado.
+     * Es el mando que reparte precisión y tiempo, y **también es el que decide
+     * cuánto se sale la mancha**. El relleno crece una celda hacia el trazo para
+     * llegar hasta él (ver `dilatar`), así que puede asomar hasta una celda por
+     * la cara de fuera: con celdas gordas eso es un reborde de color alrededor
+     * de la figura, que es lo que se veía como «el relleno se sale de su
+     * contenedor».
+     *
+     * Subido de 320 a 480 por eso: en un dibujo de 2000 px de ancho la celda
+     * pasa de 6 a 4 px, así que lo que puede asomar es menos que el grosor de un
+     * trazo normal y queda tapado por él. El coste sube con el cuadrado, y 480
+     * son 230.000 celdas — un derrame de unos pocos milisegundos, y solo al
+     * tocar.
      */
-    val celdas: Int = 320,
+    val celdas: Int = 480,
     /**
      * Cuánto se aparta el borde de la zona de trabajo del dibujo, en celdas.
      *
@@ -394,11 +402,9 @@ private class Rejilla(
             )) {
                 // El borde de la zona de trabajo no se invade: es lo que sostiene
                 // la comprobación de «se ha escapado».
-                if (jx in 1 until cols - 1 && jy in 1 until filas - 1 &&
-                    estado[indice(jx, jy)] == PARED
-                ) {
-                    frontera += indice(jx, jy)
-                }
+                if (jx !in 1 until cols - 1 || jy !in 1 until filas - 1) continue
+                if (estado[indice(jx, jy)] != PARED) continue
+                frontera += indice(jx, jy)
             }
         }
         for (i in frontera) estado[i] = MANCHA

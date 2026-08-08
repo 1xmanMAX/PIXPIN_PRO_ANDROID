@@ -131,26 +131,105 @@ fun alfileresDe(alfileres: List<Alfiler>, id: String): List<Alfiler> =
     alfileres.filter { a -> a.agarres.any { it.elementId == id } }
 
 /**
- * Todo lo que va detrás de [ids] al moverlos: **el racimo**.
+ * Cuánto se puede mover una figura, según cuántos clavos la atraviesan.
  *
- * Se propaga de clavo en clavo hasta que no hay más: dos listones clavados y un
- * tercero clavado al segundo se mueven los tres, porque físicamente son una
- * sola cosa. Sin la propagación, mover el primero rompería la unión del tercero
- * sin tocarlo siquiera.
+ * **Esta es la ley entera del alfiler**, y sale de contar clavos como se cuenta
+ * en cualquier mecanismo:
+ *
+ * | Clavos | Qué puede hacer                                    |
+ * |--------|----------------------------------------------------|
+ * | 0      | Todo: se traslada, gira sobre su centro, se estira. |
+ * | 1      | **Solo girar**, y alrededor del clavo.              |
+ * | 2 o más| Nada: dos puntos fijos fijan la figura entera.      |
+ *
+ * Lo importante es que **la traslación desaparece con el primer clavo**. Un
+ * listón clavado por un punto no se puede llevar a otro sitio: se puede girar y
+ * ya. Antes se trasladaba y arrastraba al vecino, y eso hacía que el clavo
+ * pareciera un pegamento en vez de un eje — se movía todo el conjunto en bloque
+ * y no había forma de articular nada.
+ *
+ * Para mover de sitio lo que está clavado se mueve **el clavo**, que es lo que
+ * se hace en la realidad: se arranca y se vuelve a clavar. Ver [moverAlfiler].
  */
-fun racimoDe(alfileres: List<Alfiler>, ids: Set<String>): Set<String> {
-    if (alfileres.isEmpty()) return ids
-    val racimo = ids.toMutableSet()
-    var creciendo = true
-    while (creciendo) {
-        creciendo = false
-        for (a in alfileres) {
-            val suyos = a.agarres.map { it.elementId }
-            if (suyos.none { it in racimo }) continue
-            for (id in suyos) if (racimo.add(id)) creciendo = true
+enum class Libertad { LIBRE, GIRA, FIJA }
+
+fun libertadDe(alfileres: List<Alfiler>, id: String): Libertad =
+    when (alfileresDe(alfileres, id).size) {
+        0 -> Libertad.LIBRE
+        1 -> Libertad.GIRA
+        else -> Libertad.FIJA
+    }
+
+/**
+ * Gira [e] alrededor de [centro], sumando [delta] a su inclinación.
+ *
+ * Vale para cualquier tipo: el motor pinta **toda** figura girada alrededor del
+ * centro de su caja, así que basta con girar ese centro alrededor del eje y
+ * sumar el ángulo. Un óvalo, un rombo y una raya giran los tres igual.
+ */
+fun girarElemento(e: Element, centro: Pt, delta: Double): Element {
+    if (delta == 0.0 || e.locked) return e
+    val c = getElementAbsoluteCoords(e)
+    val nuevoCentro = pointRotateRads(Pt(c.cx, c.cy), centro, delta)
+    return e.copy(
+        x = e.x + (nuevoCentro.x - c.cx),
+        y = e.y + (nuevoCentro.y - c.cy),
+        angle = normalizeAngle(e.angle + delta)
+    ).touched()
+}
+
+/**
+ * Arrastra [seleccion] del dedo, **respetando lo que cada figura puede hacer**.
+ *
+ * Es donde la tabla de [Libertad] se convierte en movimiento:
+ *
+ * - Sin clavos, la figura sigue al dedo como siempre.
+ * - Con uno, **gira alrededor de él**: el dedo marca hacia dónde apunta, no a
+ *   dónde va. Es el gesto de mover la aguja de un reloj.
+ * - Con dos o más no se mueve, y no hace falta avisar de nada: se ve que no se
+ *   mueve, igual que se ve que una puerta con dos bisagras no se descuelga.
+ */
+fun arrastrarConAlfileres(
+    originales: List<Element>,
+    alfileres: List<Alfiler>,
+    desde: Pt,
+    hasta: Pt
+): List<Element> {
+    val dx = hasta.x - desde.x
+    val dy = hasta.y - desde.y
+    return originales.map { e ->
+        if (e.locked) return@map e
+        when (libertadDe(alfileres, e.id)) {
+            Libertad.LIBRE -> e.copy(x = e.x + dx, y = e.y + dy).touched()
+            Libertad.FIJA -> e
+            Libertad.GIRA -> {
+                val agarre = alfileresDe(alfileres, e.id).first()
+                    .agarres.first { it.elementId == e.id }
+                val eje = puntoDelAgarre(e, agarre) ?: return@map e
+                val delta = anguloEntre(eje, desde, hasta)
+                // Se gira y después se recoloca: girar mueve el centro de la
+                // caja, y el punto del clavo tiene que acabar exactamente donde
+                // estaba o el eje se iría desplazando a cada fotograma.
+                val girado = girarElemento(e, eje, delta)
+                val despues = puntoDelAgarre(girado, agarre) ?: return@map girado
+                girado.copy(
+                    x = girado.x + (eje.x - despues.x),
+                    y = girado.y + (eje.y - despues.y)
+                )
+            }
         }
     }
-    return racimo
+}
+
+/** Cuánto hay que girar alrededor de [eje] para ir de [desde] a [hasta]. */
+internal fun anguloEntre(eje: Pt, desde: Pt, hasta: Pt): Double {
+    val a = kotlin.math.atan2(desde.y - eje.y, desde.x - eje.x)
+    val b = kotlin.math.atan2(hasta.y - eje.y, hasta.x - eje.x)
+    if (!a.isFinite() || !b.isFinite()) return 0.0
+    var d = b - a
+    while (d > Math.PI) d -= 2 * Math.PI
+    while (d < -Math.PI) d += 2 * Math.PI
+    return d
 }
 
 /**
@@ -205,10 +284,31 @@ fun arrastrarAlfiler(
  * punto suyo a otro sitio sin irse con él.
  */
 fun moverAlfiler(
-    elementos: List<Element>, alfiler: Alfiler, destino: Pt
+    elementos: List<Element>,
+    alfileres: List<Alfiler>,
+    alfiler: Alfiler,
+    destino: Pt
 ): List<Element> = elementos.map { e ->
     val agarres = alfiler.agarres.filter { it.elementId == e.id }
     if (agarres.isEmpty() || e.locked) return@map e
+
+    // **Si la figura tiene otro clavo, gira sobre él en vez de irse.** Es la
+    // manivela: el otro clavo la sujeta, así que tirando de este lo único que
+    // puede hacer es dar vueltas alrededor del primero. Sin esto, arrastrar un
+    // clavo de una pieza con dos la despegaba del otro.
+    val otro = alfileresDe(alfileres, e.id).firstOrNull { it !== alfiler }
+    if (otro != null) {
+        val ejeAgarre = otro.agarres.first { it.elementId == e.id }
+        val eje = puntoDelAgarre(e, ejeAgarre) ?: return@map e
+        val mano = puntoDelAgarre(e, agarres.first()) ?: return@map e
+        val girado = girarElemento(e, eje, anguloEntre(eje, mano, destino))
+        val despues = puntoDelAgarre(girado, ejeAgarre) ?: return@map girado
+        return@map girado.copy(
+            x = girado.x + (eje.x - despues.x),
+            y = girado.y + (eje.y - despues.y)
+        )
+    }
+
     var actualizado = e
     for (a in agarres) {
         actualizado = if (a.indice != null) {

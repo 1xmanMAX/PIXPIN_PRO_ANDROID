@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.MedidaTest" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:37.456Z" hostname="localhost" time="0.055">
+<testsuite name="com.forge.pixpin.motor.MedidaTest" tests="24" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:19.873Z" hostname="localhost" time="0.058">
   <properties/>
-  <testcase name="el largo es de punta a punta" classname="com.forge.pixpin.motor.MedidaTest" time="0.004"/>
+  <testcase name="el largo es de punta a punta" classname="com.forge.pixpin.motor.MedidaTest" time="0.003"/>
   <testcase name="calibrar reparte la medida entre los pixeles" classname="com.forge.pixpin.motor.MedidaTest" time="0.006"/>
-  <testcase name="el rótulo se voltea cuando la línea va hacia atrás" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
-  <testcase name="el estilo lleva el tamaño de letra a la cota y no al resto" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="una escala que no es un número positivo no vale para medir" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
-  <testcase name="el tamaño del número sube y baja en proporción" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="el rótulo se voltea cuando la línea va hacia atrás" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
+  <testcase name="el estilo lleva el tamaño de letra a la cota y no al resto" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="una escala que no es un número positivo no vale para medir" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
+  <testcase name="el tamaño del número sube y baja en proporción" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
   <testcase name="dictar el largo conserva la dirección" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="una calibración imposible no devuelve escala" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="con escala se rotula en su unidad" classname="com.forge.pixpin.motor.MedidaTest" time="0.021"/>
-  <testcase name="una escena sin escala se lee igual" classname="com.forge.pixpin.motor.MedidaTest" time="0.004"/>
-  <testcase name="el número se lee con coma y con punto" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="sin escala se rotula en píxeles y se avisa" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
+  <testcase name="una calibración imposible no devuelve escala" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="con escala se rotula en su unidad" classname="com.forge.pixpin.motor.MedidaTest" time="0.009"/>
+  <testcase name="una escena sin escala se lee igual" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="el número se lee con coma y con punto" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="sin escala se rotula en píxeles y se avisa" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
   <testcase name="el modo de tapar viaja en el estilo y llega al mosaico" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="la escala viaja con la escena" classname="com.forge.pixpin.motor.MedidaTest" time="0.004"/>
-  <testcase name="el teclado no deja escribir un número imposible" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
+  <testcase name="la escala viaja con la escena" classname="com.forge.pixpin.motor.MedidaTest" time="0.002"/>
+  <testcase name="el teclado no deja escribir un número imposible" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
   <testcase name="sin puntos no hay largo" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
   <testcase name="la medida en unidades solo existe con escala" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
   <testcase name="la cota nace con tamaño y familia de letra" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
   <testcase name="el tamaño del número tiene topes" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="los decimales y la unidad son los de la escala" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="el grano nunca se va a cero ni a un solo bloque" classname="com.forge.pixpin.motor.MedidaTest" time="0.003"/>
+  <testcase name="los decimales y la unidad son los de la escala" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="el grano nunca se va a cero ni a un solo bloque" classname="com.forge.pixpin.motor.MedidaTest" time="0.012"/>
   <testcase name="más grosor son menos bloques y más gordos" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="los grados se normalizan al medio giro" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
-  <testcase name="un largo imposible deja la cota como estaba" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="los grados se normalizan al medio giro" classname="com.forge.pixpin.motor.MedidaTest" time="0.001"/>
+  <testcase name="un largo imposible deja la cota como estaba" classname="com.forge.pixpin.motor.MedidaTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

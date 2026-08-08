@@ -131,14 +131,18 @@ class NudosTest {
     }
 
     /**
-     * **Y arrastrando la figura entera también.** Era el fallo que se veía: se
-     * agarraba la raya por el medio en vez de por su punta y la unión se
-     * rompía, porque lo que se movía era solo lo seleccionado.
+     * **Con un clavo, arrastrar la figura la hace girar sobre él.**
+     *
+     * Es la ley del alfiler (ver [Libertad]): un listón clavado por un punto no
+     * se puede llevar a otro sitio, solo dar vueltas alrededor del clavo. Antes
+     * se trasladaba y arrastraba al vecino en bloque, y así el clavo parecía un
+     * pegamento en vez de un eje: no se podía articular nada.
      */
     @Test
-    fun `arrastrar la figura entera se lleva lo clavado`() {
+    fun `con un clavo la figura gira sobre el en vez de trasladarse`() {
         val c = DrawController(Scene(elements = triangulo()))
         clavar(c, Pt(100.0, 100.0))
+        val clavo = c.scene.alfileres.single().punto
 
         c.selectTool(Tool.SELECTION)
         // Se agarra «a» por su mitad, lejos del clavo, y se arrastra.
@@ -146,18 +150,53 @@ class NudosTest {
         c.pointerMove(Pt(50.0, 160.0))
         c.pointerUp(Pt(50.0, 160.0))
 
-        // Las dos se han ido juntas: el clavo no se ha soltado.
-        assertEquals(60.0, puntas(c, "a").last().y - 100.0, 0.001)
-        assertEquals(60.0, puntas(c, "b").first().y - 100.0, 0.001)
-        assertEquals(
-            "la unión se ha roto",
-            0.0,
-            hypot(
-                puntas(c, "a").last().x - puntas(c, "b").first().x,
-                puntas(c, "a").last().y - puntas(c, "b").first().y
-            ),
-            0.001
+        // El punto clavado sigue clavado…
+        val punta = puntas(c, "a").last()
+        assertEquals("el clavo se ha soltado", clavo.x, punta.x, 0.5)
+        assertEquals(clavo.y, punta.y, 0.5)
+        // …la raya ha girado…
+        assertTrue("no ha girado nada", c.scene.byId("a")!!.angle != 0.0)
+        // …y la vecina no se ha movido: es una articulación, no un bloque.
+        assertEquals(100.0, puntas(c, "b").first().x, 0.001)
+    }
+
+    /** Con dos clavos no se mueve nada: dos puntos fijan la figura entera. */
+    @Test
+    fun `con dos clavos la figura no se mueve`() {
+        val cruz = listOf(
+            raya("h", Pt(0.0, 100.0), Pt(200.0, 100.0)),
+            raya("v", Pt(0.0, 100.0), Pt(200.0, 100.0)).copy(id = "v2"),
+            raya("a", Pt(0.0, 100.0), Pt(0.0, 300.0)),
+            raya("b", Pt(200.0, 100.0), Pt(200.0, 300.0))
         )
+        val c = DrawController(Scene(elements = cruz))
+        clavar(c, Pt(0.0, 100.0))
+        clavar(c, Pt(200.0, 100.0))
+        assertEquals(2, c.scene.alfileres.size)
+        assertEquals(Libertad.FIJA, libertadDe(c.scene.alfileres, "h"))
+
+        c.selectTool(Tool.SELECTION)
+        c.setSelection(setOf("h"))
+        c.pointerDown(Pt(100.0, 100.0))
+        c.pointerMove(Pt(140.0, 180.0))
+        c.pointerUp(Pt(140.0, 180.0))
+
+        assertEquals(0.0, puntas(c, "h").first().x, 0.001)
+        assertEquals(100.0, puntas(c, "h").first().y, 0.001)
+    }
+
+    /** Y sin clavos, la figura se traslada como siempre. */
+    @Test
+    fun `sin clavos la figura se traslada`() {
+        val c = DrawController(Scene(elements = triangulo()))
+        c.selectTool(Tool.SELECTION)
+        // Sin preseleccionar: el primer toque la coge y empieza a moverla. Con
+        // ella ya seleccionada, tocar su mitad agarraría el tirador de añadir
+        // punto, que es otro gesto distinto.
+        c.pointerDown(Pt(50.0, 100.0))
+        c.pointerMove(Pt(50.0, 160.0))
+        c.pointerUp(Pt(50.0, 160.0))
+        assertEquals(160.0, puntas(c, "a").first().y, 0.001)
     }
 
     /** Sin clavo, cada uno por su lado — que es el problema de partida. */
@@ -172,35 +211,57 @@ class NudosTest {
         assertEquals("se ha movido sin estar clavada", 100.0, puntas(c, "b").first().x, 0.001)
     }
 
-    /** El racimo se propaga: clavado a clavado, todo lo unido va junto. */
+    /** La tabla de libertades, que es la ley entera del alfiler. */
     @Test
-    fun `lo clavado en cadena se mueve entero`() {
-        val alfileres = listOf(
-            Alfiler(Pt(0.0, 0.0), listOf(Agarre("a"), Agarre("b"))),
-            Alfiler(Pt(9.0, 9.0), listOf(Agarre("b"), Agarre("c")))
-        )
-        assertEquals(setOf("a", "b", "c"), racimoDe(alfileres, setOf("a")))
-        assertEquals(setOf("a", "b", "c"), racimoDe(alfileres, setOf("c")))
-        assertEquals(setOf("z"), racimoDe(alfileres, setOf("z")))
+    fun `cuantos clavos decide cuanto se puede mover`() {
+        val uno = listOf(Alfiler(Pt(0.0, 0.0), listOf(Agarre("a"), Agarre("b"))))
+        val dos = uno + Alfiler(Pt(9.0, 9.0), listOf(Agarre("a"), Agarre("c")))
+        assertEquals(Libertad.LIBRE, libertadDe(emptyList(), "a"))
+        assertEquals(Libertad.GIRA, libertadDe(uno, "a"))
+        assertEquals(Libertad.FIJA, libertadDe(dos, "a"))
+        assertEquals(Libertad.GIRA, libertadDe(dos, "c"))
     }
 
-    /** Dos círculos clavados: se mueve uno y va el otro, sin separarse. */
+    /**
+     * **Dos círculos clavados por su cruce: uno gira alrededor del otro.**
+     *
+     * Es el caso que pedía la analogía. El clavo es absoluto: sujeta el círculo
+     * por ese punto, y como es uno solo, lo único que puede hacer el círculo es
+     * girar a su alrededor.
+     */
     @Test
-    fun `dos circunferencias clavadas se mueven juntas`() {
+    fun `un circulo clavado gira alrededor del clavo`() {
         val dos = listOf(circulo("a", 0.0, 0.0, 100.0), circulo("b", 100.0, 0.0, 100.0))
         val c = DrawController(Scene(elements = dos))
         clavar(c, Pt(52.0, -84.0))
         assertEquals(1, c.scene.alfileres.size)
+        val clavo = c.scene.alfileres.single().punto
 
         c.selectTool(Tool.SELECTION)
-        c.setSelection(setOf("a"))
-        c.pointerDown(Pt(0.0, 0.0))
-        c.pointerMove(Pt(40.0, 30.0))
-        c.pointerUp(Pt(40.0, 30.0))
+        // Se agarra el círculo por su borde —un óvalo sin relleno no se coge por
+        // dentro— y se arrastra.
+        c.pointerDown(Pt(-100.0, 0.0))
+        c.pointerMove(Pt(-90.0, 60.0))
+        c.pointerUp(Pt(-90.0, 60.0))
 
-        val b = c.scene.byId("b")!!
-        assertEquals("el otro círculo no ha ido detrás", 40.0, b.x - 0.0, 0.001)
-        assertEquals(30.0, b.y + 100.0, 0.001)
+        // El clavo no se ha movido…
+        val despues = c.scene.alfileres.single().punto
+        assertEquals(clavo.x, despues.x, 0.5)
+        assertEquals(clavo.y, despues.y, 0.5)
+        // …el círculo movido ha girado sobre él…
+        assertTrue("no ha girado", c.scene.byId("a")!!.angle != 0.0)
+        // …y sigue pasando por el clavo: no se ha despegado.
+        assertEquals(
+            "el círculo se ha soltado del clavo",
+            100.0,
+            hypot(
+                despues.x - getElementAbsoluteCoords(c.scene.byId("a")!!).cx,
+                despues.y - getElementAbsoluteCoords(c.scene.byId("a")!!).cy
+            ),
+            1.0
+        )
+        // …y el otro círculo no se ha movido.
+        assertEquals(0.0, c.scene.byId("b")!!.x, 0.001)
     }
 
     // ---- Girar sobre el clavo ----

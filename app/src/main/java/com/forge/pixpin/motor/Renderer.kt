@@ -209,9 +209,14 @@ class Renderer(
         // El foco se pinta el último **de todos**, y no en su sitio del montón:
         // lo que hace es oscurecer el resto, así que si se pintara en orden lo
         // dibujado después se quedaría fuera de la sombra y el efecto se rompía.
-        for (element in visible) {
-            if (element.type != ElementType.SPOTLIGHT) renderElement(canvas, element)
+        for ((i, element) in visible.withIndex()) {
+            if (element.type == ElementType.SPOTLIGHT) continue
+            // Lo que hay debajo de este elemento, por si es un mosaico y tiene
+            // que sacar de ahí sus píxeles. Ver [fondoDelDibujo].
+            capaDebajo = if (element.type == ElementType.MOSAIC) visible.subList(0, i) else null
+            renderElement(canvas, element)
         }
+        capaDebajo = null
         val focos = visible.filter { it.type == ElementType.SPOTLIGHT }
         if (focos.isNotEmpty()) {
             drawSpotlights(canvas, focos, scene.viewport, screenWidth, screenHeight)
@@ -326,8 +331,19 @@ class Renderer(
         for (f in focos) {
             val c = getElementAbsoluteCoords(f)
             val hueco = Path()
-            hueco.addRect(
+            // **El hueco es un óvalo, no un rectángulo.**
+            //
+            // Con el hueco cuadrado, el foco era un telón negro con una ventana:
+            // servía para «mira solo esto» y para nada más, y a nadie le hace
+            // falta tapar la pantalla entera para señalar un botón. Redondeado
+            // se lee como lo que es —una linterna sobre el sitio— y por eso
+            // ahora la sombra es mucho más suave (ver [SPOTLIGHT_DIM]): resalta
+            // sin esconder el contexto, que es justo lo que se necesita
+            // señalando algo dentro de una captura.
+            val redondeo = minOf(c.x2 - c.x1, c.y2 - c.y1).toFloat() * SPOTLIGHT_REDONDEO
+            hueco.addRoundRect(
                 c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(),
+                redondeo, redondeo,
                 Path.Direction.CCW
             )
             // Con la rotación aplicada al hueco: el foco también se puede girar.
@@ -446,12 +462,30 @@ class Renderer(
         fillPaint.reset()
         fillPaint.alpha = alpha
 
-        if (fuente == null || destino.width() < 1f || destino.height() < 1f) {
-            // Sin fondo del que tirar, una placa esmerilada: tapa igual.
-            fillPaint.isAntiAlias = true
-            fillPaint.style = Paint.Style.FILL
-            fillPaint.color = Color.argb(alpha * 220 / 255, 224, 224, 228)
-            canvas.drawRect(destino, fillPaint)
+        if (destino.width() < 1f || destino.height() < 1f) return
+
+        // **Sin foto debajo, se pixela el propio dibujo.**
+        //
+        // Antes se pintaba una placa esmerilada y ya: sobre una captura tapaba
+        // de verdad, pero en un dibujo del lienzo —donde no hay foto— la
+        // herramienta no pixelaba nada, ponía un cuadro blanquecino encima. Y un
+        // cuadro blanco no es un mosaico: es un tachón.
+        //
+        // Lo que hay debajo se puede pintar, así que se pinta: se dibuja la
+        // escena de debajo **a la resolución del grano** y se estira sin
+        // filtrar. Reducir promedia y estirar sin filtro da el canto duro; es el
+        // mismo camino que con la foto, cambiando de dónde salen los píxeles.
+        if (fuente == null) {
+            val mini = fondoDelDibujo(e, c) ?: run {
+                fillPaint.isAntiAlias = true
+                fillPaint.style = Paint.Style.FILL
+                fillPaint.color = Color.argb(alpha * 220 / 255, 224, 224, 228)
+                canvas.drawRect(destino, fillPaint)
+                return
+            }
+            fillPaint.isFilterBitmap = e.mosaicBlur
+            fillPaint.isAntiAlias = false
+            canvas.drawBitmap(mini, null, destino, fillPaint)
             return
         }
 
@@ -519,6 +553,60 @@ class Renderer(
         }
         return mini
     }
+
+    /**
+     * Lo que hay debajo del mosaico, dibujado **a la resolución del grano**.
+     *
+     * Pintar la escena directamente en un mapa de bits diminuto es lo mismo que
+     * pintarla grande y reducirla —cada bloque sale del promedio de lo que
+     * tapa— pero cuesta una fracción, que importa porque esto se rehace cada vez
+     * que cambia algo de debajo.
+     *
+     * Se saltan los mosaicos y los focos de debajo: un mosaico que se pixela a
+     * sí mismo se degradaría en cada pasada, y la sombra del foco taparía el
+     * grano con una mancha uniforme.
+     */
+    private fun fondoDelDibujo(e: Element, c: AbsoluteCoords): Bitmap? {
+        val debajo = capaDebajo?.filter {
+            it.type != ElementType.MOSAIC && it.type != ElementType.SPOTLIGHT
+        }.orEmpty()
+        if (debajo.isEmpty()) return null
+
+        val ancho = c.x2 - c.x1
+        val alto = c.y2 - c.y1
+        val bloques = mosaicoBloques(e.strokeWidth)
+        val lado = (maxOf(ancho, alto) / bloques).coerceAtLeast(1.0)
+        val miniW = Math.ceil(ancho / lado).toInt().coerceIn(1, 256)
+        val miniH = Math.ceil(alto / lado).toInt().coerceIn(1, 256)
+
+        val clave = "dibujo:${c.x1},${c.y1},${c.x2},${c.y2},$miniW,$miniH,${e.mosaicBlur}," +
+            debajo.joinToString(",") { "${it.id}:${it.version}" }.hashCode()
+        mosaicCache[e.id]?.let { if (it.clave == clave) return it.mini }
+
+        val mini = runCatching {
+            val bmp = Bitmap.createBitmap(miniW, miniH, Bitmap.Config.ARGB_8888)
+            val lienzo = Canvas(bmp)
+            // El papel primero: la escena no pinta su fondo, así que sin esto lo
+            // de debajo saldría flotando sobre transparente y el mosaico dejaría
+            // ver a través de él justo donde no hay nada dibujado.
+            lienzo.drawColor(parseColor(DrawTheme.fondoDe(dark)))
+            lienzo.scale((miniW / ancho).toFloat(), (miniH / alto).toFloat())
+            lienzo.translate(-c.x1.toFloat(), -c.y1.toFloat())
+            val guardado = capaDebajo
+            capaDebajo = null
+            for (el in debajo) renderElement(lienzo, el)
+            capaDebajo = guardado
+            bmp
+        }.getOrNull() ?: return null
+
+        mosaicCache.put(e.id, CachedMosaic(clave, mini))?.let {
+            if (it.mini !== mini && !it.mini.isRecycled) it.mini.recycle()
+        }
+        return mini
+    }
+
+    /** Lo que hay debajo del elemento que se está pintando, si hace falta. */
+    private var capaDebajo: List<Element>? = null
 
     /** Un mosaico ya reducido, con la huella de lo que lo hizo así. */
     private class CachedMosaic(val clave: String, val mini: Bitmap)
@@ -1043,8 +1131,20 @@ class Renderer(
     }
 
     private companion object {
-        /** Cuánto llega a oscurecer el foco, a opacidad plena. 0-255. */
-        const val SPOTLIGHT_DIM = 150
+        /**
+         * Cuánto llega a oscurecer el foco, a opacidad plena. 0-255.
+         *
+         * Bajado de 150 a 96: con el valor de antes, lo de alrededor
+         * desaparecía y el foco solo servía para presentaciones. Señalando algo
+         * dentro de una captura hace falta **seguir viendo el contexto** —de
+         * qué pantalla es, dónde está ese botón—, y para eso basta con
+         * apagarlo, no con borrarlo. Quien quiera el telón sube la opacidad del
+         * elemento, que es su mando.
+         */
+        const val SPOTLIGHT_DIM = 96
+
+        /** Cuánto se redondea el hueco, en proporción de su lado corto. */
+        const val SPOTLIGHT_REDONDEO = 0.35f
 
         // ---- Las tablas de coordenadas ----
 

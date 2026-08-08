@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.TablasTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:38.786Z" hostname="localhost" time="0.015">
+<testsuite name="com.forge.pixpin.motor.TablasTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:23.935Z" hostname="localhost" time="0.019">
   <properties/>
-  <testcase name="pegarse a la horizontal conserva la X" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
+  <testcase name="pegarse a la horizontal conserva la X" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
   <testcase name="pegarse a la vertical conserva la Y" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="dos tablas nuevas no nacen del mismo color" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
-  <testcase name="fuera del eje no engancha" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
-  <testcase name="el origen imanta" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
+  <testcase name="fuera del eje no engancha" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
+  <testcase name="el origen imanta" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
   <testcase name="los puntos de la tabla enganchan como una esquina" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
   <testcase name="con todos los colores usados se reaprovecha en vez de fallar" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="sin escala, una unidad es un píxel" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="con escala, las unidades son las del dibujo" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="el imán del eje se puede quitar" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
-  <testcase name="las tablas se guardan con la escena" classname="com.forge.pixpin.motor.TablasTest" time="0.009"/>
-  <testcase name="de coordenadas a escena y de vuelta" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
+  <testcase name="las tablas se guardan con la escena" classname="com.forge.pixpin.motor.TablasTest" time="0.008"/>
+  <testcase name="de coordenadas a escena y de vuelta" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="todas las series cuentan desde el mismo origen" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
-  <testcase name="la Y sube, como en unos ejes de toda la vida" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
+  <testcase name="la Y sube, como en unos ejes de toda la vida" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
   <testcase name="lejos del punto no engancha nada" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="sin origen no hay anclajes" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <testcase name="las coordenadas se leen con coma, con punto y con signo" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
-  <testcase name="una escena sin tablas se lee igual" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
-  <testcase name="una tabla oculta deja de enganchar" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
+  <testcase name="una escena sin tablas se lee igual" classname="com.forge.pixpin.motor.TablasTest" time="0.001"/>
+  <testcase name="una tabla oculta deja de enganchar" classname="com.forge.pixpin.motor.TablasTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.pin.OverlayComposeWindowTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:39.315Z" hostname="localhost" time="27.528">
+<testsuite name="com.forge.pixpin.pin.OverlayComposeWindowTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:25.295Z" hostname="localhost" time="42.486">
   <properties/>
-  <testcase name="con handler todos los eventos van al reconocedor" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="10.833"/>
-  <testcase name="el ciclo de vida llega a RESUMED al adjuntar" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="0.488"/>
-  <testcase name="ocultar conserva la ventana" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="0.526"/>
-  <testcase name="sin handler la ventana no intercepta los toques" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="1.334"/>
-  <testcase name="la vista raiz expone los tres owners" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="13.543"/>
+  <testcase name="con handler todos los eventos van al reconocedor" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="15.799"/>
+  <testcase name="el ciclo de vida llega a RESUMED al adjuntar" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="0.262"/>
+  <testcase name="ocultar conserva la ventana" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="0.185"/>
+  <testcase name="sin handler la ventana no intercepta los toques" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="0.336"/>
+  <testcase name="la vista raiz expone los tres owners" classname="com.forge.pixpin.pin.OverlayComposeWindowTest" time="0.253"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

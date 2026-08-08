@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.RoughTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:38.731Z" hostname="localhost" time="0.004">
+<testsuite name="com.forge.pixpin.motor.RoughTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:23.797Z" hostname="localhost" time="0.012">
   <properties/>
-  <testcase name="el relleno solido no genera trazos de rayado" classname="com.forge.pixpin.motor.RoughTest" time="0.0"/>
-  <testcase name="el rayado de un cuadrado produce lineas" classname="com.forge.pixpin.motor.RoughTest" time="0.002"/>
-  <testcase name="semillas distintas dan trazos distintos" classname="com.forge.pixpin.motor.RoughTest" time="0.0"/>
-  <testcase name="la misma semilla da exactamente el mismo trazo" classname="com.forge.pixpin.motor.RoughTest" time="0.001"/>
+  <testcase name="el relleno solido no genera trazos de rayado" classname="com.forge.pixpin.motor.RoughTest" time="0.001"/>
+  <testcase name="el rayado de un cuadrado produce lineas" classname="com.forge.pixpin.motor.RoughTest" time="0.005"/>
+  <testcase name="semillas distintas dan trazos distintos" classname="com.forge.pixpin.motor.RoughTest" time="0.002"/>
+  <testcase name="la misma semilla da exactamente el mismo trazo" classname="com.forge.pixpin.motor.RoughTest" time="0.0"/>
   <testcase name="el trazo doble emite dos pasadas y el sencillo una" classname="com.forge.pixpin.motor.RoughTest" time="0.0"/>
-  <testcase name="el generador reproduce la secuencia de rough js" classname="com.forge.pixpin.motor.RoughTest" time="0.0"/>
+  <testcase name="el generador reproduce la secuencia de rough js" classname="com.forge.pixpin.motor.RoughTest" time="0.001"/>
   <testcase name="con rugosidad cero el trazo no se dispersa" classname="com.forge.pixpin.motor.RoughTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

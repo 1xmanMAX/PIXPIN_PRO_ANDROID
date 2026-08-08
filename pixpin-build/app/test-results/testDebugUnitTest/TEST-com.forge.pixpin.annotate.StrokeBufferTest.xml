@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.annotate.StrokeBufferTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T05:57:35.851Z" hostname="localhost" time="0.009">
+<testsuite name="com.forge.pixpin.annotate.StrokeBufferTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-08-08T10:56:17.030Z" hostname="localhost" time="0.008">
   <properties/>
-  <testcase name="clear reutiliza el buffer" classname="com.forge.pixpin.annotate.StrokeBufferTest" time="0.0"/>
+  <testcase name="clear reutiliza el buffer" classname="com.forge.pixpin.annotate.StrokeBufferTest" time="0.001"/>
   <testcase name="un solo contacto deja un punto" classname="com.forge.pixpin.annotate.StrokeBufferTest" time="0.001"/>
-  <testcase name="crece sin perder puntos" classname="com.forge.pixpin.annotate.StrokeBufferTest" time="0.001"/>
+  <testcase name="crece sin perder puntos" classname="com.forge.pixpin.annotate.StrokeBufferTest" time="0.002"/>
   <testcase name="descarta la muestra repetida en el mismo punto" classname="com.forge.pixpin.annotate.StrokeBufferTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
