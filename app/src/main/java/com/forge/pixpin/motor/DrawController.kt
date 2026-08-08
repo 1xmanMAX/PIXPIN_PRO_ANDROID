@@ -591,7 +591,8 @@ class DrawController(initial: Scene = Scene()) {
                     // de una punta, la raya gira sobre el clavo en vez de
                     // llevárselo por delante.
                     val fijados = fijarAlfileres(
-                        escena.elements, escena.alfileres, salvo = g.elementId
+                        escena.elements, escena.alfileres,
+                        movido = Agarre(g.elementId, indice = g.indice)
                     )
                     escena.copy(
                         elements = fijados,

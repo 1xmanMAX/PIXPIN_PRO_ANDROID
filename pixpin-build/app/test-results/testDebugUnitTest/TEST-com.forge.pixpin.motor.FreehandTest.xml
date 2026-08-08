@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.FreehandTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:25.671Z" hostname="localhost" time="0.022">
+<testsuite name="com.forge.pixpin.motor.FreehandTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:44.977Z" hostname="localhost" time="0.03">
   <properties/>
-  <testcase name="el grosor del lapiz usa su propia escala" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
+  <testcase name="el grosor del lapiz usa su propia escala" classname="com.forge.pixpin.motor.FreehandTest" time="0.0"/>
   <testcase name="deprisa el trazo sale mas fino que despacio" classname="com.forge.pixpin.motor.FreehandTest" time="0.004"/>
   <testcase name="el grosor pedido manda sobre el tamaño de la mancha" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
-  <testcase name="un toque seco deja una mancha del tamaño del trazo" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
-  <testcase name="el alisado suaviza pero no endereza" classname="com.forge.pixpin.motor.FreehandTest" time="0.0"/>
-  <testcase name="sin adelgazamiento el ancho es el tamaño pedido" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
-  <testcase name="el contorno envuelve el trazo" classname="com.forge.pixpin.motor.FreehandTest" time="0.004"/>
-  <testcase name="las opciones salen de los ajustes del original" classname="com.forge.pixpin.motor.FreehandTest" time="0.002"/>
-  <testcase name="el recorrido acumulado crece y el primer punto no tiene distancia" classname="com.forge.pixpin.motor.FreehandTest" time="0.0"/>
-  <testcase name="el alisado sigue de cerca al trazo original" classname="com.forge.pixpin.motor.FreehandTest" time="0.005"/>
-  <testcase name="sin puntos no hay contorno" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
-  <testcase name="dos puntos se convierten en cinco antes de alisar" classname="com.forge.pixpin.motor.FreehandTest" time="0.0"/>
+  <testcase name="un toque seco deja una mancha del tamaño del trazo" classname="com.forge.pixpin.motor.FreehandTest" time="0.002"/>
+  <testcase name="el alisado suaviza pero no endereza" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
+  <testcase name="sin adelgazamiento el ancho es el tamaño pedido" classname="com.forge.pixpin.motor.FreehandTest" time="0.0"/>
+  <testcase name="el contorno envuelve el trazo" classname="com.forge.pixpin.motor.FreehandTest" time="0.006"/>
+  <testcase name="las opciones salen de los ajustes del original" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
+  <testcase name="el recorrido acumulado crece y el primer punto no tiene distancia" classname="com.forge.pixpin.motor.FreehandTest" time="0.002"/>
+  <testcase name="el alisado sigue de cerca al trazo original" classname="com.forge.pixpin.motor.FreehandTest" time="0.004"/>
+  <testcase name="sin puntos no hay contorno" classname="com.forge.pixpin.motor.FreehandTest" time="0.0"/>
+  <testcase name="dos puntos se convierten en cinco antes de alisar" classname="com.forge.pixpin.motor.FreehandTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

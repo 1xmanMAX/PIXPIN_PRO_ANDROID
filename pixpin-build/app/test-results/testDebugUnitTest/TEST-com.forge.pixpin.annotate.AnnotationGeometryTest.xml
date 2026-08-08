@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.annotate.AnnotationGeometryTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:24.525Z" hostname="localhost" time="0.002">
+<testsuite name="com.forge.pixpin.annotate.AnnotationGeometryTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:43.465Z" hostname="localhost" time="0.011">
   <properties/>
-  <testcase name="boxesIntersect" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.001"/>
-  <testcase name="un texto con cuadro ocupa el ancho del cuadro" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
-  <testcase name="pathHitsAnnotation detecta cruce y no cruce" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
-  <testcase name="un texto largo con cuadro estrecho ocupa mas alto que uno corto" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
-  <testcase name="rectFrom normaliza min y max" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
-  <testcase name="un texto sin cuadro sigue midiendose en una linea" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
+  <testcase name="boxesIntersect" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
+  <testcase name="un texto con cuadro ocupa el ancho del cuadro" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.002"/>
+  <testcase name="pathHitsAnnotation detecta cruce y no cruce" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.001"/>
+  <testcase name="un texto largo con cuadro estrecho ocupa mas alto que uno corto" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.001"/>
+  <testcase name="rectFrom normaliza min y max" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.002"/>
+  <testcase name="un texto sin cuadro sigue midiendose en una linea" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.001"/>
   <testcase name="arrowHead apunta hacia atras" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.001"/>
-  <testcase name="boundingBox incluye el grosor" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.0"/>
+  <testcase name="boundingBox incluye el grosor" classname="com.forge.pixpin.annotate.AnnotationGeometryTest" time="0.001"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

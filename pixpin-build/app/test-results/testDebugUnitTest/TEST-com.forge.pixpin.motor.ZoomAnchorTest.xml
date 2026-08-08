@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ZoomAnchorTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:27.809Z" hostname="localhost" time="0.008">
+<testsuite name="com.forge.pixpin.motor.ZoomAnchorTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:47.518Z" hostname="localhost" time="0.007">
   <properties/>
-  <testcase name="ampliar mantiene el punto bajo los dedos" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.007"/>
+  <testcase name="ampliar mantiene el punto bajo los dedos" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.005"/>
   <testcase name="reducir tambien lo mantiene" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.0"/>
-  <testcase name="el zoom se queda dentro de los limites" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.001"/>
+  <testcase name="el zoom se queda dentro de los limites" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.0"/>
   <testcase name="funciona con la vista ya desplazada y lejos del origen" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.0"/>
   <testcase name="el punto acompaña al centroide cuando ademas se desplaza" classname="com.forge.pixpin.motor.ZoomAnchorTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>

@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.pin.PinGroupsTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:37.369Z" hostname="localhost" time="0.015">
+<testsuite name="com.forge.pixpin.pin.PinGroupsTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:58.941Z" hostname="localhost" time="0.027">
   <properties/>
-  <testcase name="un solo pin minimizado enseña su burbuja" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.002"/>
-  <testcase name="el grupo conserva su forma tras moverlo en burbuja" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
-  <testcase name="el desplazamiento es absoluto, no acumulativo" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
-  <testcase name="sin mover la burbuja el grupo vuelve donde estaba" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
-  <testcase name="desagrupar se ofrece si alguno ya pertenece a un grupo" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.009"/>
-  <testcase name="un grupo minimizado deja una sola burbuja" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
+  <testcase name="un solo pin minimizado enseña su burbuja" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
+  <testcase name="el grupo conserva su forma tras moverlo en burbuja" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.003"/>
+  <testcase name="el desplazamiento es absoluto, no acumulativo" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
+  <testcase name="sin mover la burbuja el grupo vuelve donde estaba" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
+  <testcase name="desagrupar se ofrece si alguno ya pertenece a un grupo" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.016"/>
+  <testcase name="un grupo minimizado deja una sola burbuja" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
   <testcase name="hace falta mas de un pin para formar grupo" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
   <testcase name="el grupo se mueve conservando las distancias" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
-  <testcase name="si el pin que actuo ya no esta minimizado manda el primero" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
+  <testcase name="si el pin que actuo ya no esta minimizado manda el primero" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
   <testcase name="el color del grupo es estable y valido" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
-  <testcase name="desagrupar borra la pertenencia" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
+  <testcase name="desagrupar borra la pertenencia" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
   <testcase name="sin nadie minimizado no se esconde nada" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
-  <testcase name="la burbuja es la del pin con el que actuo el usuario" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
-  <testcase name="agrupar solo marca a los elegidos" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
+  <testcase name="la burbuja es la del pin con el que actuo el usuario" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
+  <testcase name="agrupar solo marca a los elegidos" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.001"/>
   <testcase name="los miembros son los del mismo grupo" classname="com.forge.pixpin.pin.PinGroupsTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

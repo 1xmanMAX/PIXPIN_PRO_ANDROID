@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.DrawGeometryTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:25.347Z" hostname="localhost" time="0.008">
+<testsuite name="com.forge.pixpin.motor.DrawGeometryTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:44.646Z" hostname="localhost" time="0.01">
   <properties/>
-  <testcase name="rotar con angulo discreto se engancha a multiplos de quince grados" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
+  <testcase name="rotar con angulo discreto se engancha a multiplos de quince grados" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="el tirador mide lo mismo en pantalla a cualquier zoom" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
   <testcase name="redimensionar por SE deja clavada la esquina NW" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="redimensionar nunca deja tamaño cero o negativo" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="caja sin rotar coincide con la posicion y el tamaño" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
+  <testcase name="caja sin rotar coincide con la posicion y el tamaño" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="un elemento bloqueado no se pica" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="por defecto solo salen las cuatro esquinas y la rotacion" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
+  <testcase name="por defecto solo salen las cuatro esquinas y la rotacion" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="redimensionar un elemento rotado tambien deja clavada el ancla" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="gana el elemento de mas arriba" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="la caja de un cuadrado girado 45 grados crece por la raiz de dos" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
+  <testcase name="la caja de un cuadrado girado 45 grados crece por la raiz de dos" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
   <testcase name="un rectangulo relleno si se pica por dentro" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="un rectangulo transparente no se pica por dentro" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
   <testcase name="rotar suelta los anclajes de la flecha" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="voltear en horizontal refleja sobre el centro de la seleccion" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="seleccion por area en modo contener exige encerrar del todo" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
+  <testcase name="voltear en horizontal refleja sobre el centro de la seleccion" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.003"/>
+  <testcase name="seleccion por area en modo contener exige encerrar del todo" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
   <testcase name="girar un punto y desgirarlo lo devuelve a su sitio" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="un elemento bloqueado no enseña tiradores" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
+  <testcase name="un elemento bloqueado no enseña tiradores" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
   <testcase name="el picado respeta la rotacion del elemento" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.0"/>
-  <testcase name="duplicar cambia id y semilla pero no la forma" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.001"/>
+  <testcase name="duplicar cambia id y semilla pero no la forma" classname="com.forge.pixpin.motor.DrawGeometryTest" time="0.002"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

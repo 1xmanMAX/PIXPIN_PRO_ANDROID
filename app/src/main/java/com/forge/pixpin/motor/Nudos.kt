@@ -452,26 +452,43 @@ fun moverAlfiler(
  * propósito, que para eso se arrastra el vértice.
  */
 fun fijarAlfileres(
-    elementos: List<Element>, alfileres: List<Alfiler>, salvo: String? = null
+    elementos: List<Element>,
+    alfileres: List<Alfiler>,
+    /** El punto que se está arrastrando: es el único que no se devuelve a su sitio. */
+    movido: Agarre? = null
 ): List<Element> {
     if (alfileres.isEmpty()) return elementos
     return elementos.map { e ->
         if (e.locked) return@map e
         var actualizado = e
         for (a in alfileres) {
-            // Los agarres por vértice no se fijan: mover ese vértice **es** el
-            // gesto, y devolverlo a su sitio sería no dejar mover nada.
-            val agarre = a.agarres.firstOrNull {
-                it.elementId == e.id && it.indice == null
-            } ?: continue
-            if (e.id == salvo && a.agarres.any { it.elementId == salvo && it.indice != null }) {
-                continue
+            for (agarre in a.agarres) {
+                if (agarre.elementId != e.id) continue
+                // El punto que lleva el dedo no se toca: moverlo **es** el
+                // gesto, y devolverlo a su sitio sería no dejar mover nada.
+                if (movido != null &&
+                    agarre.elementId == movido.elementId && agarre.indice == movido.indice
+                ) continue
+
+                val actual = puntoDelAgarre(actualizado, agarre) ?: continue
+                val dx = a.punto.x - actual.x
+                val dy = a.punto.y - actual.y
+                if (kotlin.math.hypot(dx, dy) < 1e-9) continue
+
+                actualizado = if (agarre.indice != null) {
+                    // **Un vértice clavado se devuelve al clavo, él solo.**
+                    //
+                    // Faltaba, y era el desfase: moviendo la otra punta de la
+                    // raya, su vértice clavado se recolocaba una pizca por el
+                    // camino y el clavo se recalculaba desde él, así que las dos
+                    // rayas se iban separando un pelo a cada arrastre. Mover la
+                    // figura entera aquí arrastraría también la punta que lleva
+                    // el dedo; lo que hay que devolver es solo el vértice.
+                    actualizado.conPuntoEnElMundo(agarre.indice, a.punto)
+                } else {
+                    actualizado.copy(x = actualizado.x + dx, y = actualizado.y + dy)
+                }
             }
-            val actual = puntoDelAgarre(actualizado, agarre) ?: continue
-            actualizado = actualizado.copy(
-                x = actualizado.x + (a.punto.x - actual.x),
-                y = actualizado.y + (a.punto.y - actual.y)
-            )
         }
         actualizado
     }

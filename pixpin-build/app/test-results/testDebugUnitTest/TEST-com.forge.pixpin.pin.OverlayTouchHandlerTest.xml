@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.pin.OverlayTouchHandlerTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:35.202Z" hostname="localhost" time="2.138">
+<testsuite name="com.forge.pixpin.pin.OverlayTouchHandlerTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:56.339Z" hostname="localhost" time="2.572">
   <properties/>
-  <testcase name="sin handle el comportamiento es el de siempre" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.236"/>
-  <testcase name="fuera de la pastilla se sigue arrastrando el pin" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.097"/>
-  <testcase name="la pastilla de scroll desplaza en vez de arrastrar el pin" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.155"/>
-  <testcase name="arrastrar no cuenta como toque" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.247"/>
-  <testcase name="el handle gana a la pastilla cuando se solapan" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.093"/>
-  <testcase name="un dedo arrastra en coordenadas de pantalla" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.122"/>
-  <testcase name="dos dedos en vertical ajustan opacidad" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.101"/>
-  <testcase name="un pellizco no cuenta como toque" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.097"/>
-  <testcase name="dos toques lejanos en el tiempo no cuentan como doble" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.104"/>
-  <testcase name="fuera de la esquina se sigue arrastrando" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.187"/>
-  <testcase name="pellizcar informa del punto medio entre los dedos" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.122"/>
-  <testcase name="al soltar un dedo del pellizco el pin no salta" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.179"/>
-  <testcase name="dos toques de dos dedos abren la edición simple" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.108"/>
-  <testcase name="el toque en la esquina redimensiona en vez de arrastrar" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.082"/>
-  <testcase name="un toque suelto de dos dedos no hace nada" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.151"/>
+  <testcase name="sin handle el comportamiento es el de siempre" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.323"/>
+  <testcase name="fuera de la pastilla se sigue arrastrando el pin" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.103"/>
+  <testcase name="la pastilla de scroll desplaza en vez de arrastrar el pin" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.199"/>
+  <testcase name="arrastrar no cuenta como toque" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.152"/>
+  <testcase name="el handle gana a la pastilla cuando se solapan" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.26"/>
+  <testcase name="un dedo arrastra en coordenadas de pantalla" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.104"/>
+  <testcase name="dos dedos en vertical ajustan opacidad" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.107"/>
+  <testcase name="un pellizco no cuenta como toque" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.103"/>
+  <testcase name="dos toques lejanos en el tiempo no cuentan como doble" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.22"/>
+  <testcase name="fuera de la esquina se sigue arrastrando" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.243"/>
+  <testcase name="pellizcar informa del punto medio entre los dedos" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.146"/>
+  <testcase name="al soltar un dedo del pellizco el pin no salta" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.094"/>
+  <testcase name="dos toques de dos dedos abren la edición simple" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.111"/>
+  <testcase name="el toque en la esquina redimensiona en vez de arrastrar" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.119"/>
+  <testcase name="un toque suelto de dos dedos no hace nada" classname="com.forge.pixpin.pin.OverlayTouchHandlerTest" time="0.222"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

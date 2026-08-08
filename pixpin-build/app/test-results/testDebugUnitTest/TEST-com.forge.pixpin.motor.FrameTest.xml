@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.FrameTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:25.665Z" hostname="localhost" time="0.002">
+<testsuite name="com.forge.pixpin.motor.FrameTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:44.969Z" hostname="localhost" time="0.003">
   <properties/>
   <testcase name="sin marco no hay hoja y se ve todo" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="lo borrado no entra" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
@@ -7,7 +7,7 @@
   <testcase name="estirar la hoja no mueve nada y hace entrar mas" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
   <testcase name="el marco no forma parte del contenido" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="la hoja no ofrece ajustes de estilo" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
-  <testcase name="la hoja se dibuja arrastrando, como un rectangulo" classname="com.forge.pixpin.motor.FrameTest" time="0.001"/>
+  <testcase name="la hoja se dibuja arrastrando, como un rectangulo" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="la hoja se coge por el borde y no por dentro" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="el marco es el primero de la escena" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>
   <testcase name="lo que asoma por el borde sigue contando" classname="com.forge.pixpin.motor.FrameTest" time="0.0"/>

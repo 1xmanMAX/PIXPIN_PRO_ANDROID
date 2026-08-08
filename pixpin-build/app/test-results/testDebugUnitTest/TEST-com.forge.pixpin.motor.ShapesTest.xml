@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.motor.ShapesTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:27.743Z" hostname="localhost" time="0.018">
+<testsuite name="com.forge.pixpin.motor.ShapesTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:47.450Z" hostname="localhost" time="0.02">
   <properties/>
-  <testcase name="el rombo con roundness sale redondeado y sin roundness en pico" classname="com.forge.pixpin.motor.ShapesTest" time="0.003"/>
-  <testcase name="el rombo redondeado no se sale de su caja en ninguna proporcion" classname="com.forge.pixpin.motor.ShapesTest" time="0.008"/>
-  <testcase name="el contorno no repite el punto de partida" classname="com.forge.pixpin.motor.ShapesTest" time="0.002"/>
+  <testcase name="el rombo con roundness sale redondeado y sin roundness en pico" classname="com.forge.pixpin.motor.ShapesTest" time="0.002"/>
+  <testcase name="el rombo redondeado no se sale de su caja en ninguna proporcion" classname="com.forge.pixpin.motor.ShapesTest" time="0.011"/>
+  <testcase name="el contorno no repite el punto de partida" classname="com.forge.pixpin.motor.ShapesTest" time="0.001"/>
   <testcase name="una figura enorme no dispara el numero de puntos" classname="com.forge.pixpin.motor.ShapesTest" time="0.0"/>
-  <testcase name="el rombo redondeado no se sale de su caja" classname="com.forge.pixpin.motor.ShapesTest" time="0.0"/>
-  <testcase name="en el rombo redondeado tampoco" classname="com.forge.pixpin.motor.ShapesTest" time="0.002"/>
-  <testcase name="el rectangulo sin roundness son sus cuatro esquinas" classname="com.forge.pixpin.motor.ShapesTest" time="0.0"/>
-  <testcase name="en el rectangulo redondeado ningun vecino queda cinco veces mas lejos que el otro" classname="com.forge.pixpin.motor.ShapesTest" time="0.001"/>
+  <testcase name="el rombo redondeado no se sale de su caja" classname="com.forge.pixpin.motor.ShapesTest" time="0.001"/>
+  <testcase name="en el rombo redondeado tampoco" classname="com.forge.pixpin.motor.ShapesTest" time="0.003"/>
+  <testcase name="el rectangulo sin roundness son sus cuatro esquinas" classname="com.forge.pixpin.motor.ShapesTest" time="0.001"/>
+  <testcase name="en el rectangulo redondeado ningun vecino queda cinco veces mas lejos que el otro" classname="com.forge.pixpin.motor.ShapesTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

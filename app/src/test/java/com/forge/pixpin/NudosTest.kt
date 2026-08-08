@@ -475,6 +475,60 @@ class NudosTest {
         assertEquals("está a un cuarto de la raya", 0.25, agarre.t!!, 0.02)
     }
 
+    /**
+     * **El clavo no se desfasa al tirar de la otra punta.**
+     *
+     * Dos rayas unidas por sus puntas y clavadas ahí: al arrastrar la punta
+     * libre de una, su vértice clavado se recolocaba una pizca por el camino, y
+     * como el clavo se recalcula desde él, las dos rayas se iban separando un
+     * pelo a cada arrastre. Se ve poco de una vez y muchísimo después de diez.
+     */
+    @Test
+    fun `tirar de la punta libre no desfasa el clavo`() {
+        val escena = listOf(
+            raya("a", Pt(0.0, 0.0), Pt(100.0, 100.0)),
+            raya("b", Pt(100.0, 100.0), Pt(200.0, 0.0))
+        )
+        val c = DrawController(Scene(elements = escena))
+        clavar(c, Pt(100.0, 100.0))
+        val clavo = c.scene.alfileres.single().punto
+
+        c.selectTool(Tool.SELECTION)
+        c.setSelection(setOf("a"))
+        // Se tira de la punta libre de «a», diez veces, un poco cada vez.
+        repeat(10) { i ->
+            val destino = Pt(-10.0 * i, -5.0 * i)
+            c.pointerDown(if (i == 0) Pt(0.0, 0.0) else Pt(-10.0 * (i - 1), -5.0 * (i - 1)))
+            c.pointerMove(destino)
+            c.pointerUp(destino)
+        }
+
+        // Las dos puntas siguen juntas y en el clavo, sin acumular deriva.
+        val puntaA = contornosDe(c.scene.byId("a")!!).single().puntos.last()
+        val puntaB = contornosDe(c.scene.byId("b")!!).single().puntos.first()
+        assertEquals("la punta clavada de «a» se ha ido", clavo.x, puntaA.x, 0.01)
+        assertEquals(clavo.y, puntaA.y, 0.01)
+        assertEquals("la punta clavada de «b» se ha ido", clavo.x, puntaB.x, 0.01)
+        assertEquals(clavo.y, puntaB.y, 0.01)
+        assertEquals(
+            "las dos rayas se han separado",
+            0.0, hypot(puntaA.x - puntaB.x, puntaA.y - puntaB.y), 0.01
+        )
+        // Y el clavo sigue donde se puso.
+        assertEquals(clavo.x, c.scene.alfileres.single().punto.x, 0.01)
+    }
+
+    /** Mover un punto de una figura girada lo deja **donde se pide**. */
+    @Test
+    fun `mover un punto de una raya girada es exacto`() {
+        val inclinada = raya("a", Pt(0.0, 0.0), Pt(100.0, 0.0))
+            .copy(angle = Math.PI / 5)
+        val movida = inclinada.conPuntoEnElMundo(1, Pt(160.0, 40.0))
+        val donde = contornosDe(movida).single().puntos.last()
+        assertEquals(160.0, donde.x, 0.01)
+        assertEquals(40.0, donde.y, 0.01)
+    }
+
     // ---- Girar sobre el clavo ----
 
     /**

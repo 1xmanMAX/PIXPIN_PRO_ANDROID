@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.forge.pixpin.clipboard.TableDataTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-08-08T15:55:24.772Z" hostname="localhost" time="0.049">
+<testsuite name="com.forge.pixpin.clipboard.TableDataTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-08-08T16:31:43.872Z" hostname="localhost" time="0.069">
   <properties/>
   <testcase name="una sola fila no es una tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
-  <testcase name="texto con algun tabulador suelto no es una tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.028"/>
-  <testcase name="las filas cortas se rellenan con celdas vacias" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
-  <testcase name="gana el separador que estructura de verdad" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.006"/>
-  <testcase name="los saltos de Windows no estorban" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
-  <testcase name="separa filas y columnas" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
-  <testcase name="tabla alineada con espacios" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.007"/>
-  <testcase name="tabla con barras verticales" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
-  <testcase name="texto vacio o nulo no es una tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.0"/>
-  <testcase name="texto corriente con alguna barra no es tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.0"/>
-  <testcase name="reconoce lo pegado de una hoja de calculo" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.0"/>
+  <testcase name="texto con algun tabulador suelto no es una tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.017"/>
+  <testcase name="las filas cortas se rellenan con celdas vacias" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.003"/>
+  <testcase name="gana el separador que estructura de verdad" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
+  <testcase name="los saltos de Windows no estorban" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.002"/>
+  <testcase name="separa filas y columnas" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.007"/>
+  <testcase name="tabla alineada con espacios" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.009"/>
+  <testcase name="tabla con barras verticales" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.006"/>
+  <testcase name="texto vacio o nulo no es una tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.001"/>
+  <testcase name="texto corriente con alguna barra no es tabla" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.003"/>
+  <testcase name="reconoce lo pegado de una hoja de calculo" classname="com.forge.pixpin.clipboard.TableDataTest" time="0.002"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

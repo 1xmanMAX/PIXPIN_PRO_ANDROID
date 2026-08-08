@@ -485,8 +485,32 @@ fun Element.withPointMovedTo(index: Int, scenePoint: Pt): Element {
  */
 fun Element.conPuntoEnElMundo(index: Int, enElMundo: Pt): Element {
     if (angle == 0.0) return withPointMovedTo(index, enElMundo)
-    val c = getElementAbsoluteCoords(this)
-    return withPointMovedTo(index, pointRotateRads(enElMundo, Pt(c.cx, c.cy), -angle))
+
+    // **Y se afina, porque mover el punto mueve el centro.** La figura gira
+    // alrededor del centro de su caja, y al mover un punto la caja cambia: el
+    // centro con el que se deshace el giro deja de ser el que se usará al
+    // pintar, así que el punto acaba unos píxeles al lado. Poco, pero suficiente
+    // para que un clavo se desfase — y a cada arrastre, un poco más.
+    //
+    // Se resuelve mirando dónde acabó de verdad y corrigiendo. No hay solución
+    // directa —el centro sale de un mínimo y un máximo, que no son derivables—
+    // pero cada pasada deja el error en `sen(ángulo/2)` de lo que era, así que
+    // converge rápido y siempre: con dieciséis, la peor inclinación posible baja
+    // de una millonésima de píxel. Se sale en cuanto no queda error.
+    fun centro(e: Element) = getElementAbsoluteCoords(e).let { Pt(it.cx, it.cy) }
+    var resultado = withPointMovedTo(index, pointRotateRads(enElMundo, centro(this), -angle))
+    repeat(16) {
+        val donde = absolutePoints(resultado).getOrNull(index) ?: return resultado
+        val actual = pointRotateRads(donde, centro(resultado), angle)
+        val ex = enElMundo.x - actual.x
+        val ey = enElMundo.y - actual.y
+        if (kotlin.math.hypot(ex, ey) < 1e-7) return resultado
+        // El error se mide en la escena y se corrige en los puntos, que van sin
+        // girar: hay que deshacerle el giro **al vector**, no al punto.
+        val corr = pointRotateRads(Pt(ex, ey), Pt(0.0, 0.0), -angle)
+        resultado = resultado.withPointMovedTo(index, Pt(donde.x + corr.x, donde.y + corr.y))
+    }
+    return resultado
 }
 
 /**
