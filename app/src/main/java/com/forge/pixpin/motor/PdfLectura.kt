@@ -95,7 +95,17 @@ class PdfArchivo internal constructor(
     /** Dónde está cada objeto, por su número. */
     val indice: Map<Int, Sitio>,
     /** El diccionario final, con `/Root` y `/Size`. */
-    val trailer: PdfValor.Dicc
+    val trailer: PdfValor.Dicc,
+    /**
+     * Si el índice más reciente era **comprimido** (`/Type /XRef`).
+     *
+     * Lo necesita [PdfEscritura], y no es un detalle: una actualización
+     * incremental tiene que escribir su índice **del mismo tipo** que el que
+     * había. Colgar una tabla clásica de un índice comprimido produce un
+     * archivo que unos lectores abren y otros no, que es la peor de las dos
+     * opciones posibles porque el fallo aparece en el ordenador de otro.
+     */
+    val indiceEsFlujo: Boolean = false
 ) {
 
     /** Objetos ya leídos: un `/Pages` se pide una vez por página. */
@@ -277,11 +287,14 @@ fun leerPdf(bytes: ByteArray): PdfArchivo? = runCatching {
     var trailer: PdfValor.Dicc? = null
     var siguiente: Long? = inicio
     val vistos = HashSet<Long>()
+    var indiceEsFlujo = false
+    var primera = true
 
     // Se van encadenando revisiones hacia atrás. **La primera que se lee manda**:
     // es la más reciente, y una revisión vieja no puede pisar a una nueva.
     while (siguiente != null && vistos.add(siguiente)) {
         val seccion = leerSeccion(bytes, siguiente.toInt()) ?: break
+        if (primera) { indiceEsFlujo = seccion.esFlujo; primera = false }
         for ((numero, sitio) in seccion.entradas) indice.putIfAbsent(numero, sitio)
         if (trailer == null) trailer = seccion.trailer
         else {
@@ -296,14 +309,16 @@ fun leerPdf(bytes: ByteArray): PdfArchivo? = runCatching {
 
     val t = trailer ?: return null
     if (indice.isEmpty()) return null
-    PdfArchivo(bytes, indice, t)
+    PdfArchivo(bytes, indice, t, indiceEsFlujo)
 }.getOrNull()
 
 /** Una sección del índice: sus entradas, su cola y a qué revisión apunta. */
 private class Seccion(
     val entradas: Map<Int, Sitio>,
     val trailer: PdfValor.Dicc,
-    val previa: Long?
+    val previa: Long?,
+    /** Si esta sección venía como flujo comprimido y no como tabla clásica. */
+    val esFlujo: Boolean
 )
 
 /** El `startxref` de más al final, que es el del índice bueno. */
@@ -362,7 +377,7 @@ private fun tablaClasica(bytes: ByteArray, lector: PdfLector): Seccion? {
     if (extra != null) {
         indiceComprimido(bytes, extra)?.entradas?.forEach { (n, s) -> entradas.putIfAbsent(n, s) }
     }
-    return Seccion(entradas, trailer, trailer.numero("Prev")?.toLong())
+    return Seccion(entradas, trailer, trailer.numero("Prev")?.toLong(), esFlujo = false)
 }
 
 /**
@@ -424,7 +439,7 @@ private fun indiceComprimido(bytes: ByteArray, desde: Int): Seccion? {
         }
         t += 2
     }
-    return Seccion(entradas, dicc, dicc.numero("Prev")?.toLong())
+    return Seccion(entradas, dicc, dicc.numero("Prev")?.toLong(), esFlujo = true)
 }
 
 /** El flujo del índice, descomprimido y sin predictor. */

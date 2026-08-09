@@ -24,7 +24,8 @@ import kotlin.math.roundToLong
  * | `Op.Move`          | `M x y`                    |
  * | `Op.LineTo`        | `L x y`                    |
  * | `Op.CurveTo`       | `C x1 y1 x2 y2 x y`        |
- * | contorno del lápiz | `Q` por puntos medios      |
+ * | contorno del lápiz | `C` cosido por puntos medios |
+ * | `Op.Cerrar`        | `Z`                        |
  * | relleno con huecos | `fill-rule="evenodd"`      |
  *
  * Es la misma correspondencia que hace falta para escribir dentro de un PDF
@@ -75,52 +76,27 @@ object Svg {
                 append(num(op.x2)).append(' ').append(num(op.y2)).append(' ')
                 append(num(op.x)).append(' ').append(num(op.y))
             }
+            Op.Cerrar -> append('Z')
         }
     }.trim()
 
     /**
-     * El contorno del lápiz, cerrado y **suavizado**.
+     * Los cuatro constructores de camino, ya en SVG.
      *
-     * Es la misma costura que hace el renderizador en pantalla: cuadráticas que
-     * pasan por los puntos medios de cada par, con cada punto de tirador. Tenía
-     * que repetirse aquí y no reutilizarse porque allí devuelve un `Path` de
-     * Android y aquí hace falta texto — pero la fórmula es la misma, y si una
-     * cambia la otra tiene que cambiar con ella.
+     * La geometría no se hace aquí: se pide a [Caminos], que es donde vive para
+     * las tres salidas. Aquí solo queda escribirla. Cuando esto tenía su propia
+     * costura de cuadráticas, era una copia de la del renderizador esperando a
+     * separarse de ella.
      */
-    fun caminoSuaveCerrado(pts: List<Pt>): String {
-        if (pts.isEmpty()) return ""
-        if (pts.size < 4) return caminoCerrado(pts)
-        return buildString {
-            punto("M", pts[0].x, pts[0].y)
-            cuadratica(pts[1], medio(pts[1], pts[2]))
-            for (i in 2 until pts.size - 1) cuadratica(pts[i], medio(pts[i], pts[i + 1]))
-            append('Z')
-        }
-    }
+    fun caminoSuaveCerrado(pts: List<Pt>): String = camino(opsSuaveCerrado(pts))
 
-    /** Una polilínea cerrada a rectas. */
-    fun caminoCerrado(pts: List<Pt>): String {
-        if (pts.isEmpty()) return ""
-        return buildString {
-            punto("M", pts[0].x, pts[0].y)
-            for (i in 1 until pts.size) punto("L", pts[i].x, pts[i].y)
-            append('Z')
-        }
-    }
+    fun caminoCerrado(pts: List<Pt>): String = camino(opsDePuntos(pts, cerrado = true))
 
-    /**
-     * Varios anillos en un solo camino.
-     *
-     * Con `fill-rule="evenodd"` puesto en el atributo, esto es lo que hace que
-     * el agujero de un relleno sea un agujero de verdad y no una mancha más.
-     * Ver la nota equivalente del renderizador.
-     */
-    fun caminoDeAnillos(anillos: List<List<Pt>>): String =
-        anillos.filter { it.size >= 3 }.joinToString("") { caminoCerrado(it) }
+    fun caminoDeAnillos(anillos: List<List<Pt>>): String = camino(opsDeAnillos(anillos, 3))
 
     /** Igual, pero admitiendo contornos de dos puntos: los usa el texto en curvas. */
     fun caminoDeContornos(contornos: List<List<Pt>>): String =
-        contornos.filter { it.size >= 2 }.joinToString("") { caminoCerrado(it) }
+        camino(opsDeAnillos(contornos, 2))
 
     /** El color, en `#rrggbb`. La transparencia va aparte, en [alfa]. */
     fun hex(argb: Int): String =
@@ -192,10 +168,4 @@ object Svg {
         append(orden).append(num(x)).append(' ').append(num(y))
     }
 
-    private fun StringBuilder.cuadratica(tirador: Pt, hasta: Pt) {
-        append('Q').append(num(tirador.x)).append(' ').append(num(tirador.y)).append(' ')
-        append(num(hasta.x)).append(' ').append(num(hasta.y))
-    }
-
-    private fun medio(a: Pt, b: Pt) = Pt((a.x + b.x) / 2, (a.y + b.y) / 2)
 }

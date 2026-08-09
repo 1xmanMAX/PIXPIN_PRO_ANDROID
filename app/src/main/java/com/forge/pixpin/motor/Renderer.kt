@@ -1352,6 +1352,7 @@ fun List<Op>.toPath(): Path {
             op.x2.toFloat(), op.y2.toFloat(),
             op.x.toFloat(), op.y.toFloat()
         )
+        Op.Cerrar -> path.close()
     }
     return path
 }

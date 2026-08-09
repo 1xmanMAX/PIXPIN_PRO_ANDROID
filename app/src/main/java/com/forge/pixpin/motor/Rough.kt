@@ -25,7 +25,13 @@ import kotlin.math.sqrt
  * que en Kotlin quedaría más natural.
  */
 
-/** Una orden de dibujo. Se traducen a `Path` en [toPath]. */
+/**
+ * Una orden de dibujo. Se traducen a `Path` en [toPath].
+ *
+ * Son **las mismas cuatro que entienden un camino de SVG y un flujo de PDF**
+ * (`M`/`m`, `L`/`l`, `C`/`c`, `Z`/`h`), y no es casualidad: por eso exportar a
+ * cualquiera de los dos es traducir, no recalcular. Ver [DibujoVectorial].
+ */
 sealed interface Op {
     data class Move(val x: Double, val y: Double) : Op
     data class LineTo(val x: Double, val y: Double) : Op
@@ -34,6 +40,17 @@ sealed interface Op {
         val x2: Double, val y2: Double,
         val x: Double, val y: Double
     ) : Op
+
+    /**
+     * Cierra el subcamino: vuelve al punto donde empezó.
+     *
+     * El generador rugoso no la emite nunca —sus trazos son abiertos a
+     * propósito, que es parte de que parezcan hechos a mano— pero los caminos
+     * que se construyen a mano sí la necesitan: una silueta, un anillo de un
+     * relleno o el perfil de una letra tienen que cerrar, y «volver al primer
+     * punto con una recta» no es lo mismo, porque deja la unión en pico.
+     */
+    data object Cerrar : Op
 }
 
 /**

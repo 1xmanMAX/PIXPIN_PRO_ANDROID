@@ -33,6 +33,7 @@ class ShapeDumpTest {
             is Op.Move -> moveTo(op.x, op.y)
             is Op.LineTo -> lineTo(op.x, op.y)
             is Op.CurveTo -> curveTo(op.x1, op.y1, op.x2, op.y2, op.x, op.y)
+            Op.Cerrar -> closePath()
         }
     }
 

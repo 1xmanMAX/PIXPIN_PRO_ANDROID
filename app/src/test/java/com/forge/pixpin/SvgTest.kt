@@ -82,19 +82,44 @@ class SvgTest {
     }
 
     /**
-     * El contorno del lápiz se cose con cuadráticas por los puntos medios, que
-     * es lo que hace el renderizador en pantalla. Si esta fórmula y la de allí
-     * se separan, el lápiz exportado deja de parecerse al de la pantalla.
+     * El contorno del lápiz se cose por los puntos medios, que es lo que hace el
+     * renderizador en pantalla. Si esta costura y la de allí se separan, el
+     * lápiz exportado deja de parecerse al de la pantalla.
+     *
+     * Sale en cúbicas y no en cuadráticas porque [opsSuaveCerrado] las convierte
+     * —una cuadrática **es** una cúbica con los tiradores a dos tercios—, para
+     * que las tres salidas manejen un solo tipo de curva.
      */
     @Test
-    fun `el contorno del lápiz se suaviza con cuadráticas`() {
+    fun `el contorno del lápiz se suaviza y cierra`() {
         val pts = listOf(Pt(0.0, 0.0), Pt(10.0, 0.0), Pt(20.0, 10.0), Pt(0.0, 10.0))
         val d = Svg.caminoSuaveCerrado(pts)
         assertTrue("no empieza donde el trazo: $d", d.startsWith("M0 0"))
-        assertTrue("no cose con cuadráticas: $d", d.contains("Q"))
+        assertTrue("no cose con curvas: $d", d.contains("C"))
         assertTrue("no cierra: $d", d.endsWith("Z"))
-        // El primer tirador es el segundo punto y el destino, el medio del 2.º y el 3.º.
-        assertTrue("el primer tramo no va por el punto medio: $d", d.contains("Q10 0 15 5"))
+        // El primer tramo acaba en el punto medio del 2.º y el 3.º: (15, 5).
+        assertTrue("el primer tramo no va por el punto medio: $d", d.contains(" 15 5"))
+    }
+
+    /**
+     * Y la conversión es exacta, no un parecido: la cúbica pasa por el mismo
+     * punto medio que pasaría la cuadrática.
+     */
+    @Test
+    fun `una cuadrática convertida recorre la misma curva`() {
+        // El primer tramo cose de (0,0) con el tirador en el 2.º punto hasta el
+        // medio del 2.º y el 3.º: la cuadrática (0,0) → (0,0) → (5,10).
+        val ops = opsSuaveCerrado(
+            listOf(Pt(0.0, 0.0), Pt(0.0, 0.0), Pt(10.0, 20.0), Pt(10.0, 20.0))
+        )
+        val curva = ops.filterIsInstance<Op.CurveTo>().first()
+        // El punto medio de una cúbica es (P0 + 3C1 + 3C2 + P3) / 8, y el de una
+        // cuadrática (P0 + 2C + P2) / 4. Con la conversión, los dos dan lo mismo:
+        // aquí (0 + 0 + 5)/4 = 1,25 y (0 + 0 + 10)/4 = 2,5.
+        val mx = (0.0 + 3 * curva.x1 + 3 * curva.x2 + curva.x) / 8
+        val my = (0.0 + 3 * curva.y1 + 3 * curva.y2 + curva.y) / 8
+        assertEquals(1.25, mx, 1e-9)
+        assertEquals(2.5, my, 1e-9)
     }
 
     @Test
