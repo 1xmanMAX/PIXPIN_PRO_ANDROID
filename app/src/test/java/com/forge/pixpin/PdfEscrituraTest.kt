@@ -167,7 +167,7 @@ class PdfEscrituraTest {
     @Test
     fun `los bytes del original siguen intactos`() {
         val original = pdfClasico()
-        val anotado = PdfAnotado.anotar(leerPdf(original)!!, 0, dibujo)
+        val anotado = PdfAnotado.fundir(leerPdf(original)!!, 0, dibujo)
         assertNotNull("no ha salido nada", anotado)
         assertTrue("el archivo no ha crecido", anotado!!.size > original.size)
         assertArrayEquals(original, anotado.copyOfRange(0, original.size))
@@ -175,7 +175,7 @@ class PdfEscrituraTest {
 
     @Test
     fun `el archivo anotado se vuelve a leer`() {
-        val anotado = PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!
+        val anotado = PdfAnotado.fundir(leerPdf(pdfClasico())!!, 0, dibujo)!!
         val releido = leerPdf(anotado)
         assertNotNull("el resultado no se puede leer", releido)
         assertEquals(listOf(3), releido!!.paginas())
@@ -188,7 +188,7 @@ class PdfEscrituraTest {
      */
     @Test
     fun `el contenido original sigue ahí, con el nuestro detrás`() {
-        val anotado = PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!
+        val anotado = PdfAnotado.fundir(leerPdf(pdfClasico())!!, 0, dibujo)!!
         val pagina = leerPdf(anotado)!!.pagina(0)!!
         val contenidos = pagina.lista("Contents")
         assertNotNull("el contenido ya no es una lista", contenidos)
@@ -199,7 +199,7 @@ class PdfEscrituraTest {
     /** Y lo que escribimos se puede recuperar y es lo que mandamos. */
     @Test
     fun `el dibujo llega al archivo`() {
-        val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
+        val releido = leerPdf(PdfAnotado.fundir(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
         val contenidos = releido.pagina(0)!!.lista("Contents")!!
         val ultimo = releido.resolver(contenidos.last()) as PdfValor.Flujo
         val texto = String(releido.descomprimir(ultimo)!!, Charsets.ISO_8859_1)
@@ -212,7 +212,7 @@ class PdfEscrituraTest {
     /** El texto de la página sigue siendo texto de verdad, no una imagen. */
     @Test
     fun `el texto original sigue siendo texto`() {
-        val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
+        val releido = leerPdf(PdfAnotado.fundir(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
         val original = releido.resolver(PdfValor.Ref(4, 0)) as PdfValor.Flujo
         val texto = String(releido.descomprimir(original)!!, Charsets.ISO_8859_1)
         assertTrue(texto, texto.contains("(Hola mundo) Tj"))
@@ -235,7 +235,7 @@ class PdfEscrituraTest {
             )
         )
         val archivo = leerPdf(pdfModerno())!!
-        val anotado = PdfAnotado.anotar(archivo, 0, dibujo, recursos)!!
+        val anotado = PdfAnotado.fundir(archivo, 0, dibujo, recursos)!!
         val releido = leerPdf(anotado)!!
         val res = releido.diccDe(releido.pagina(0)!!.entradas["Resources"])
         assertNotNull("la página se ha quedado sin recursos", res)
@@ -249,7 +249,7 @@ class PdfEscrituraTest {
         val original = pdfModerno()
         val archivo = leerPdf(original)!!
         assertTrue("el de prueba no tiene índice comprimido", archivo.indiceEsFlujo)
-        val anotado = PdfAnotado.anotar(archivo, 0, dibujo)!!
+        val anotado = PdfAnotado.fundir(archivo, 0, dibujo)!!
         assertArrayEquals(original, anotado.copyOfRange(0, original.size))
         val cola = String(
             anotado.copyOfRange(original.size, anotado.size), Charsets.ISO_8859_1
@@ -263,8 +263,8 @@ class PdfEscrituraTest {
     /** Anotar dos veces seguidas encadena revisiones y las dos se ven. */
     @Test
     fun `se puede anotar dos veces`() {
-        val primera = PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!
-        val segunda = PdfAnotado.anotar(
+        val primera = PdfAnotado.fundir(leerPdf(pdfClasico())!!, 0, dibujo)!!
+        val segunda = PdfAnotado.fundir(
             leerPdf(primera)!!, 0, "0 0 1 RG 2 w 10 10 m 50 50 l S\n".toByteArray()
         )!!
         val releido = leerPdf(segunda)!!
@@ -273,6 +273,151 @@ class PdfEscrituraTest {
         assertEquals(5, contenidos.size)
         val ultimo = releido.resolver(contenidos.last()) as PdfValor.Flujo
         assertTrue(String(releido.descomprimir(ultimo)!!).contains("10 10 m"))
+    }
+
+    // ---- La capa ----
+
+    /**
+     * **La página no se toca.**
+     *
+     * Es la ventaja gorda de la capa frente a fundir el dibujo en el contenido:
+     * de la hoja solo cambia que tiene una anotación más. Su contenido, sus
+     * recursos y todo lo demás quedan exactamente como estaban, así que no hay
+     * nada que se pueda romper ahí.
+     */
+    @Test
+    fun `en capa, el contenido de la página ni se roza`() {
+        val archivo = leerPdf(pdfClasico())!!
+        val antes = archivo.pagina(0)!!
+        val releido = leerPdf(PdfAnotado.anotar(archivo, 0, dibujo)!!)!!
+        val despues = releido.pagina(0)!!
+
+        assertEquals("le han tocado el contenido", antes.entradas["Contents"], despues.entradas["Contents"])
+        assertEquals("le han tocado los recursos", antes.entradas["Resources"], despues.entradas["Resources"])
+        // Lo único nuevo: la lista de anotaciones.
+        assertEquals(
+            setOf("Annots"),
+            despues.entradas.keys - antes.entradas.keys
+        )
+    }
+
+    @Test
+    fun `la capa cuelga de una anotación que se imprime`() {
+        val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
+        val anots = releido.pagina(0)!!.lista("Annots")
+        assertNotNull("no hay anotaciones", anots)
+        assertEquals(1, anots!!.size)
+        val marca = releido.diccDe(anots[0])!!
+        assertEquals("Annot", marca.nombre("Type"))
+        assertEquals("Stamp", marca.nombre("Subtype"))
+        // Sin el bit de imprimir se ve en pantalla y no sale en el papel, que es
+        // la peor forma de enterarse.
+        assertEquals(4, marca.entero("F"))
+        assertNotNull("no lleva capa", marca.ref("OC"))
+        assertNotNull("no lleva apariencia", releido.diccDe(marca.entradas["AP"]))
+    }
+
+    /** Y el dibujo está dentro de esa apariencia, marcado como de la capa. */
+    @Test
+    fun `el dibujo va dentro de la capa`() {
+        val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
+        val marca = releido.diccDe(releido.pagina(0)!!.lista("Annots")!![0])!!
+        val ap = releido.diccDe(marca.entradas["AP"])!!
+        val forma = releido.resolver(ap.entradas["N"]) as PdfValor.Flujo
+        assertEquals("Form", forma.dicc.nombre("Subtype"))
+        assertEquals(
+            "la forma y la anotación no son de la misma capa",
+            marca.ref("OC"), forma.dicc.ref("OC")
+        )
+        val texto = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
+        assertTrue(texto, texto.contains("100 100 m 300 400 l S"))
+    }
+
+    /**
+     * El catálogo tiene que conocerla, o el panel de capas no la enseña y hay
+     * lectores que ni siquiera dibujan lo que la lleva.
+     */
+    @Test
+    fun `el catálogo anuncia la capa, y encendida`() {
+        val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo, nombre = "Revisión")!!)!!
+        val catalogo = releido.diccDe(releido.trailer.entradas["Root"])!!
+        val props = releido.diccDe(catalogo.entradas["OCProperties"])
+        assertNotNull("el catálogo no conoce la capa", props)
+        val todas = (releido.resolver(props!!.entradas["OCGs"]) as PdfValor.Lista).valores
+        assertEquals(1, todas.size)
+        val d = releido.diccDe(props.entradas["D"])!!
+        val encendidas = (releido.resolver(d.entradas["ON"]) as PdfValor.Lista).valores
+        assertEquals("nace apagada", todas, encendidas)
+        // Y con su nombre, que es lo que se lee en el panel.
+        val capa = releido.diccDe(todas[0])!!
+        val nombre = (capa.entradas["Name"] as PdfValor.Cadena).bytes
+        assertTrue("el nombre no va en UTF-16", nombre.size > 2 && nombre[0] == 0xFE.toByte())
+        assertEquals("Revisión", String(nombre.copyOfRange(2, nombre.size), Charsets.UTF_16BE))
+    }
+
+    /** Anotar dos veces da dos capas, no una pisando a la otra. */
+    @Test
+    fun `dos tandas son dos capas`() {
+        val una = PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo, nombre = "Lunes")!!
+        val dos = PdfAnotado.anotar(
+            leerPdf(una)!!, 0, "0 0 1 RG 10 10 m 50 50 l S\n".toByteArray(), nombre = "Martes"
+        )!!
+        val releido = leerPdf(dos)!!
+        assertEquals(2, releido.pagina(0)!!.lista("Annots")!!.size)
+        val props = releido.diccDe(
+            releido.diccDe(releido.trailer.entradas["Root"])!!.entradas["OCProperties"]
+        )!!
+        assertEquals(2, (releido.resolver(props.entradas["OCGs"]) as PdfValor.Lista).valores.size)
+    }
+
+    /** Y si el PDF ya traía sus capas, no se le pierden. */
+    @Test
+    fun `las capas que ya tenía el archivo se conservan`() {
+        val conCapas = pdfConCapaPropia()
+        val releido = leerPdf(PdfAnotado.anotar(leerPdf(conCapas)!!, 0, dibujo)!!)!!
+        val props = releido.diccDe(
+            releido.diccDe(releido.trailer.entradas["Root"])!!.entradas["OCProperties"]
+        )!!
+        val todas = (releido.resolver(props.entradas["OCGs"]) as PdfValor.Lista).valores
+        assertEquals("le hemos borrado su capa", 2, todas.size)
+        assertTrue("falta la suya", todas.contains(PdfValor.Ref(6, 0)))
+    }
+
+    /** Un PDF que ya viene con una capa suya, como los que salen de un CAD. */
+    private fun pdfConCapaPropia(): ByteArray {
+        val objetos = listOf(
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /OCProperties " +
+                "<< /OCGs [6 0 R] /D << /Order [6 0 R] /ON [6 0 R] >> >> >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] " +
+                "/Contents 4 0 R /Resources << >> >>\nendobj\n",
+            "4 0 obj\n<< /Length 10 >>\nstream\n0 0 m 1 1 l\nendstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Type /OCG /Name (Cotas) >>\nendobj\n"
+        )
+        val salida = ByteArrayOutputStream()
+        salida.write("%PDF-1.5\n".toByteArray())
+        val desplazamientos = mutableListOf<Int>()
+        for (o in objetos) {
+            desplazamientos += salida.size()
+            salida.write(o.toByteArray())
+        }
+        val inicioXref = salida.size()
+        val tabla = StringBuilder("xref\n0 ${objetos.size + 1}\n0000000000 65535 f \n")
+        for (d in desplazamientos) tabla.append("%010d 00000 n \n".format(d))
+        tabla.append("trailer\n<< /Size ${objetos.size + 1} /Root 1 0 R >>\n")
+        tabla.append("startxref\n$inicioXref\n%%EOF\n")
+        salida.write(tabla.toString().toByteArray())
+        return salida.toByteArray()
+    }
+
+    /** En capa el original también sigue intacto, que es lo primero de todo. */
+    @Test
+    fun `en capa los bytes del original siguen intactos`() {
+        val original = pdfModerno()
+        val anotado = PdfAnotado.anotar(leerPdf(original)!!, 0, dibujo)!!
+        assertArrayEquals(original, anotado.copyOfRange(0, original.size))
+        assertNotNull(leerPdf(anotado))
     }
 
     // ---- Las cuatro esquinas ----

@@ -40,7 +40,7 @@ object PdfAnotado {
      * Devuelve null si el PDF está cifrado, si la página no existe o si algo no
      * cuadra. **Nunca devuelve un archivo a medias**: o sale entero o no sale.
      */
-    fun anotar(
+    fun fundir(
         archivo: PdfArchivo,
         indicePagina: Int,
         contenido: ByteArray,
@@ -89,6 +89,202 @@ object PdfAnotado {
 
         return PdfEscritura.incremental(archivo, objetos)
     }
+
+    // ---------------------------------------------------------------------
+    // La capa: lo dibujado va encima y aparte
+    // ---------------------------------------------------------------------
+
+    /**
+     * Lo dibujado como **una capa propia encima de la página**.
+     *
+     * Es la forma buena, y la que se usa por defecto. [fundir] mete el dibujo
+     * dentro del contenido de la página, lo que funciona pero lo deja soldado:
+     * a partir de ahí es tan «de la página» como el texto que ya tenía. Aquí no.
+     * El dibujo va en una **capa** con su nombre —lo que un PDF llama grupo de
+     * contenido opcional— dentro de una **anotación** propia.
+     *
+     * Lo que eso cambia, que no es poco:
+     *
+     * - **La página no se toca en absoluto.** Ni su contenido ni sus recursos:
+     *   lo único que cambia de ella es que su lista de anotaciones tiene una
+     *   más. Es la edición menos invasiva que admite el formato, y por tanto la
+     *   que menos puede romper. Ni siquiera hace falta ya proteger la pila
+     *   gráfica con `q`/`Q`, porque nunca entramos en su flujo.
+     * - **Se puede apagar.** En Acrobat, Foxit, PDF-XChange u Okular sale un
+     *   panel de capas y se enciende y se apaga: se ve el plano limpio o el
+     *   plano con tus marcas, sin dos archivos.
+     * - **Se puede quitar.** Es una anotación, así que cualquier lector con
+     *   herramientas la selecciona y la borra. Fundida en el contenido habría
+     *   que reescribir el archivo.
+     * - **Cada tanda es su capa.** Anotar otro día añade otra, con su nombre, y
+     *   se pueden mirar por separado.
+     *
+     * Lo que hay que decir por delante: **el interruptor solo aparece en
+     * lectores de escritorio**. En el móvil, en Chrome y en el visor de Android
+     * —todos con el mismo motor por dentro— la capa se ve, porque nace
+     * encendida, pero no hay panel donde apagarla. Se pierde el interruptor, no
+     * el dibujo.
+     *
+     * [nombre] es lo que se leerá en ese panel: conviene que diga algo, como
+     * «PixPin — 9 de agosto», y no «Capa 1».
+     */
+    fun anotar(
+        archivo: PdfArchivo,
+        indicePagina: Int,
+        contenido: ByteArray,
+        recursos: PdfValor.Dicc? = null,
+        extra: List<ObjetoPdf> = emptyList(),
+        nombre: String = "PixPin"
+    ): ByteArray? {
+        if (archivo.cifrado) return null
+        if (contenido.isEmpty()) return null
+        val numeroPagina = archivo.paginas().getOrNull(indicePagina) ?: return null
+        val pagina = archivo.diccDe(PdfValor.Ref(numeroPagina, 0)) ?: return null
+        val caja = cajaDePagina(archivo, indicePagina) ?: return null
+
+        var siguiente = maxOf(
+            PdfEscritura.primerNumeroLibre(archivo),
+            (extra.maxOfOrNull { it.numero } ?: 0) + 1
+        )
+        fun pedirNumero(): Int = siguiente++
+
+        val capa = pedirNumero()
+        val forma = pedirNumero()
+        val marca = pedirNumero()
+        val objetos = ArrayList<ObjetoPdf>(extra)
+
+        // La capa: un nombre y poco más. Lo que la hace una capa es que la
+        // nombre el catálogo y que el dibujo diga que es suyo.
+        objetos += ObjetoPdf(
+            capa,
+            PdfValor.Dicc(
+                mapOf(
+                    "Type" to PdfValor.Nombre("OCG"),
+                    "Name" to PdfValor.Cadena(textoPdf(nombre))
+                )
+            )
+        )
+
+        // El dibujo, como formulario suelto. Sus recursos son los suyos y no los
+        // de la página: por eso la página no hay que tocarla.
+        val cajaPdf = PdfValor.Lista(caja.map { PdfValor.Numero(it) })
+        objetos += ObjetoPdf(
+            forma,
+            PdfValor.Flujo(
+                PdfValor.Dicc(
+                    buildMap {
+                        put("Type", PdfValor.Nombre("XObject"))
+                        put("Subtype", PdfValor.Nombre("Form"))
+                        put("FormType", PdfValor.Numero(1.0))
+                        put("BBox", cajaPdf)
+                        put("Matrix", identidad())
+                        put("OC", PdfValor.Ref(capa, 0))
+                        put("Resources", recursos ?: PdfValor.Dicc(emptyMap()))
+                        put("Filter", PdfValor.Nombre("FlateDecode"))
+                    }
+                ),
+                PdfEscritura.desinflar(contenido)
+            )
+        )
+
+        // Y la anotación que la coloca sobre la hoja.
+        objetos += ObjetoPdf(
+            marca,
+            PdfValor.Dicc(
+                buildMap {
+                    put("Type", PdfValor.Nombre("Annot"))
+                    put("Subtype", PdfValor.Nombre("Stamp"))
+                    put("Rect", cajaPdf)
+                    // **El bit de imprimir.** Sin él la anotación se ve en
+                    // pantalla y no sale en el papel, que es la peor forma de
+                    // enterarse: cuando ya has impreso.
+                    put("F", PdfValor.Numero(4.0))
+                    put("AP", PdfValor.Dicc(mapOf("N" to PdfValor.Ref(forma, 0))))
+                    put("OC", PdfValor.Ref(capa, 0))
+                    put("T", PdfValor.Cadena(textoPdf("PixPin")))
+                    put("Contents", PdfValor.Cadena(textoPdf(nombre)))
+                    put("NM", PdfValor.Cadena(textoPdf("$PREFIJO-$indicePagina-$marca")))
+                }
+            )
+        )
+
+        // De la página solo cambia esto: una anotación más.
+        val anotaciones = when (val a = archivo.resolver(pagina.entradas["Annots"])) {
+            is PdfValor.Lista -> a.valores
+            else -> emptyList()
+        }
+        objetos += ObjetoPdf(
+            numeroPagina,
+            PdfValor.Dicc(
+                pagina.entradas + ("Annots" to PdfValor.Lista(anotaciones + PdfValor.Ref(marca, 0)))
+            )
+        )
+
+        // Y el catálogo tiene que conocer la capa, o el panel no la enseña.
+        val catalogo = anunciarLaCapa(archivo, capa) ?: return null
+        objetos += catalogo
+
+        return PdfEscritura.incremental(archivo, objetos)
+    }
+
+    /**
+     * Apunta la capa en el catálogo, junto a las que ya hubiera.
+     *
+     * `/OCProperties` es la lista de capas del documento y **tiene que estar en
+     * el catálogo**: una capa que no figura ahí no sale en el panel, y hay
+     * lectores que directamente no dibujan lo que la lleva. Se fusiona con lo
+     * que haya: un PDF de AutoCAD llega con sus propias capas y perderlas sería
+     * romperle el archivo a quien más lo va a notar.
+     *
+     * Nace **encendida** —en `/ON`— porque lo normal es querer ver lo que
+     * acabas de dibujar.
+     */
+    private fun anunciarLaCapa(archivo: PdfArchivo, capa: Int): ObjetoPdf? {
+        val numeroCatalogo = (archivo.trailer.entradas["Root"] as? PdfValor.Ref)?.numero
+            ?: return null
+        val catalogo = archivo.diccDe(PdfValor.Ref(numeroCatalogo, 0)) ?: return null
+        val nueva = PdfValor.Ref(capa, 0)
+
+        val propiedades = archivo.diccDe(catalogo.entradas["OCProperties"])
+        val todas = (archivo.resolver(propiedades?.entradas?.get("OCGs")) as? PdfValor.Lista)
+            ?.valores.orEmpty()
+        val porDefecto = archivo.diccDe(propiedades?.entradas?.get("D"))
+        val orden = (archivo.resolver(porDefecto?.entradas?.get("Order")) as? PdfValor.Lista)
+            ?.valores.orEmpty()
+        val encendidas = (archivo.resolver(porDefecto?.entradas?.get("ON")) as? PdfValor.Lista)
+            ?.valores.orEmpty()
+
+        val nuevoD = PdfValor.Dicc(
+            porDefecto?.entradas.orEmpty() + mapOf(
+                "Order" to PdfValor.Lista(orden + nueva),
+                "ON" to PdfValor.Lista(encendidas + nueva)
+            )
+        )
+        val nuevasPropiedades = PdfValor.Dicc(
+            propiedades?.entradas.orEmpty() + mapOf(
+                "OCGs" to PdfValor.Lista(todas + nueva),
+                "D" to nuevoD
+            )
+        )
+        return ObjetoPdf(
+            numeroCatalogo,
+            PdfValor.Dicc(catalogo.entradas + ("OCProperties" to nuevasPropiedades))
+        )
+    }
+
+    private fun identidad(): PdfValor.Lista = PdfValor.Lista(
+        listOf(1.0, 0.0, 0.0, 1.0, 0.0, 0.0).map { PdfValor.Numero(it) }
+    )
+
+    /**
+     * Un texto para dentro del PDF, en UTF-16 con su marca por delante.
+     *
+     * Es la única codificación del formato que admite acentos y eñes sin
+     * sorpresas. En latín-1 a secas, «Revisión» sale «Revisin» o peor en la
+     * mitad de los lectores.
+     */
+    private fun textoPdf(texto: String): ByteArray =
+        byteArrayOf(0xFE.toByte(), 0xFF.toByte()) + texto.toByteArray(Charsets.UTF_16BE)
 
     /** El `/Contents` de una página, siempre como lista de referencias. */
     private fun contenidosDe(pagina: PdfValor.Dicc): List<PdfValor> =
