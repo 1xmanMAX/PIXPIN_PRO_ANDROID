@@ -1,8 +1,10 @@
 package com.forge.pixpin.floating
 
 import android.animation.ValueAnimator
+import android.content.ComponentCallbacks
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.view.Gravity
@@ -74,6 +76,80 @@ class FloatingBallController(private val context: Context) {
     private var dragStartY = 0
 
     /**
+     * De qué tamaño era la pantalla la última vez que se colocó la bola.
+     *
+     * Es lo que permite saber **qué ha cambiado** al girar y trasladar el sitio
+     * en vez de recalcularlo a ciegas. Ver [BallState.alCambiarLaPantalla].
+     */
+    private var ultimaPantalla: Pair<Int, Int>? = null
+
+    /** Quien avisa de que el móvil ha girado. Se quita al esconder la bola. */
+    private var vigilante: ComponentCallbacks? = null
+
+    /**
+     * El tamaño **real** de la pantalla, con la rotación de ahora mismo.
+     *
+     * No vale `resources.displayMetrics`: en un contexto de servicio devuelve el
+     * área útil de la aplicación y no siempre se entera de que el móvil ha
+     * girado. Y la bola es una ventana con `FLAG_LAYOUT_NO_LIMITS`, o sea que
+     * sus coordenadas son las del display entero, barras del sistema incluidas
+     * — hay que preguntar por el display entero o el borde derecho cae donde no
+     * es.
+     */
+    private fun pantalla(): Pair<Int, Int> {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val b = wm.maximumWindowMetrics.bounds
+            if (b.width() > 0 && b.height() > 0) return b.width() to b.height()
+        }
+        val metrics = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(metrics)
+        if (metrics.widthPixels > 0) return metrics.widthPixels to metrics.heightPixels
+        val dm = context.resources.displayMetrics
+        return dm.widthPixels to dm.heightPixels
+    }
+
+    /** Lo que mide la bola de lado, con lo que ya esté medido si lo hay. */
+    private fun ladoDeLaBola(): Int {
+        val view = ball?.view
+        val medido = minOf(view?.width ?: 0, view?.height ?: 0)
+        return if (medido > 0) medido else dp(BALL_DP)
+    }
+
+    /**
+     * La devuelve a la pantalla si hiciera falta, y la deja quieta si no.
+     *
+     * Es el único sitio que mueve la bola sin que el usuario la toque, y se
+     * llama desde los tres puntos donde puede haberse perdido: al crearla —por
+     * si lo guardado es de otra orientación—, al girar el móvil y al pedir que
+     * vuelva a verse.
+     */
+    private fun recolocar() {
+        val lp = ballLp ?: return
+        val view = ball?.view ?: return
+        val (ancho, alto) = pantalla()
+        if (ancho <= 0 || alto <= 0) return
+        val lado = ladoDeLaBola()
+        val anterior = ultimaPantalla
+
+        val sitio = if (anterior != null && anterior != (ancho to alto)) {
+            BallState.alCambiarLaPantalla(
+                lp.x, lp.y, lado, anterior.first, anterior.second, ancho, alto
+            )
+        } else {
+            BallState.rescatar(lp.x, lp.y, lado, ancho, alto)
+        }
+        ultimaPantalla = ancho to alto
+        if (sitio.x == lp.x && sitio.y == lp.y) return
+
+        snapAnimator?.cancel()
+        lp.x = sitio.x
+        lp.y = sitio.y
+        runCatching { wm.updateViewLayout(view, lp) }
+        scope.launch { app.settings.setBallPosition(lp.x, lp.y) }
+    }
+
+    /**
      * Puesta Y visible. Mirar solo si la ventana existe dejaba fuera el caso en
      * que está puesta pero oculta, y ahí nadie la recuperaba. Ver [BallState].
      */
@@ -86,9 +162,16 @@ class FloatingBallController(private val context: Context) {
      */
     fun ensureVisible() {
         when (BallState.recoveryFor(windowExists = ball != null, contentVisible = isShowing)) {
-            BallRecovery.NADA -> Unit
+            // **NADA ya no quiere decir «no hagas nada».** La ventana puede
+            // existir y estar visible y aun así no verse, porque se quedó fuera
+            // de la pantalla al girar el móvil; desde dentro todo parecía
+            // correcto y por eso «Comenzar» no la recuperaba. Ver [BallState].
+            BallRecovery.NADA -> recolocar()
             BallRecovery.CREAR -> show()
-            BallRecovery.VOLVER_A_ENSENAR -> setVisible(true)
+            BallRecovery.VOLVER_A_ENSENAR -> {
+                setVisible(true)
+                recolocar()
+            }
         }
     }
 
@@ -106,8 +189,7 @@ class FloatingBallController(private val context: Context) {
         if (ball != null) return
         scope.launch {
             val settings = app.settings.settings.first()
-            val screenW = context.resources.displayMetrics.widthPixels
-            val screenH = context.resources.displayMetrics.heightPixels
+            val (screenW, screenH) = pantalla()
             val lp = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -130,11 +212,39 @@ class FloatingBallController(private val context: Context) {
                 wm.addView(window.view, lp)
                 window.onAttached()
                 active = this@FloatingBallController
+                ultimaPantalla = screenW to screenH
+                // Lo guardado puede ser de la otra orientación: una bola pegada
+                // al borde derecho en horizontal cae en mitad de la pantalla al
+                // volver a vertical. Se recoloca antes de que nadie la vea.
+                window.view.post { recolocar() }
+                vigilarLaOrientacion()
             }.onFailure {
                 ball = null
                 ballLp = null
             }
         }
+    }
+
+    /**
+     * Se apunta a los cambios de configuración para enterarse de los giros.
+     *
+     * Un servicio no recibe `onConfigurationChanged` por su cuenta como una
+     * actividad; hay que pedirlo. Y cuando llega, **el sistema todavía no ha
+     * terminado de girar**: preguntar por el tamaño en ese instante devuelve a
+     * veces el de antes, así que se espera al siguiente ciclo de dibujo de la
+     * propia ventana, que ya está girada.
+     */
+    private fun vigilarLaOrientacion() {
+        if (vigilante != null) return
+        val cb = object : ComponentCallbacks {
+            override fun onConfigurationChanged(newConfig: Configuration) {
+                ball?.view?.post { recolocar() }
+            }
+
+            override fun onLowMemory() = Unit
+        }
+        runCatching { context.registerComponentCallbacks(cb) }
+            .onSuccess { vigilante = cb }
     }
 
     /** Oculta sin destruir (durante la captura de pantalla). */
@@ -149,8 +259,11 @@ class FloatingBallController(private val context: Context) {
             runCatching { wm.removeView(window.view) }
             window.onDetached()
         }
+        vigilante?.let { runCatching { context.unregisterComponentCallbacks(it) } }
+        vigilante = null
         ball = null
         ballLp = null
+        ultimaPantalla = null
         snapAnimator?.cancel()
         if (active == this) active = null
     }
@@ -168,8 +281,17 @@ class FloatingBallController(private val context: Context) {
         override fun onDrag(dxFromDown: Float, dyFromDown: Float) {
             val lp = ballLp ?: return
             val view = ball?.view ?: return
-            lp.x = dragStartX + dxFromDown.toInt()
-            lp.y = dragStartY + dyFromDown.toInt()
+            val (ancho, alto) = pantalla()
+            // Acotada mientras se arrastra: sin esto un manotazo la saca de la
+            // pantalla entera y, aunque al soltar volviera, por el camino
+            // desaparece y da la sensación de que se ha ido volando.
+            val sitio = BallState.mientrasSeArrastra(
+                dragStartX + dxFromDown.toInt(),
+                dragStartY + dyFromDown.toInt(),
+                ladoDeLaBola(), ancho, alto
+            )
+            lp.x = sitio.x
+            lp.y = sitio.y
             runCatching { wm.updateViewLayout(view, lp) }
         }
 
@@ -187,15 +309,15 @@ class FloatingBallController(private val context: Context) {
     private fun snapToEdge() {
         val lp = ballLp ?: return
         val view = ball?.view ?: return
-        val screenW = context.resources.displayMetrics.widthPixels
-        val screenH = context.resources.displayMetrics.heightPixels
-        val viewW = if (view.width > 0) view.width else dp(BALL_DP)
-        val viewH = if (view.height > 0) view.height else dp(BALL_DP)
+        val (screenW, screenH) = pantalla()
+        val lado = ladoDeLaBola()
         // Nunca fuera del alcance vertical del pulgar.
-        lp.y = lp.y.coerceIn(0, screenH - viewH)
-        val center = lp.x + viewW / 2
-        // Snap al borde más cercano, retraída a medias (estilo PixPin).
-        val targetX = if (center < screenW / 2) -viewW / 2 else screenW - viewW / 2
+        lp.y = BallState.alturaSegura(lp.y, lado, screenH)
+        // Al borde más cercano, retraída a medias (estilo PixPin).
+        val targetX = BallState.pegadaAlBorde(
+            BallState.enLaIzquierda(lp.x, lado, screenW), lado, screenW
+        )
+        ultimaPantalla = screenW to screenH
         snapAnimator = ValueAnimator.ofInt(lp.x, targetX).apply {
             duration = 220
             interpolator = DecelerateInterpolator()

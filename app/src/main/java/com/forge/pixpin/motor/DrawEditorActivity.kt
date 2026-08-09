@@ -413,6 +413,7 @@ class DrawEditorActivity : ComponentActivity() {
                         // se salta a la tabla de ese color, creándola si aún no
                         // existía. Así el color de un punto dice siempre de qué
                         // tabla salió.
+                        textoPegado = ::textoDelPortapapeles,
                         onCambiarDeSerie = { color, actual ->
                             controller.updateTabla(actual)
                             tablaAbierta = controller.tablaDeColor(color, centroDeLaVista()).id
@@ -522,6 +523,27 @@ class DrawEditorActivity : ComponentActivity() {
      * quiere quien va a teclear coordenadas es que su origen caiga donde está
      * mirando.
      */
+    /**
+     * El texto que haya en el portapapeles, para pegar una tabla de Excel.
+     *
+     * Se lee aquí y no en el editor de tablas porque el portapapeles es del
+     * sistema y aquel archivo es del motor. Aquí ya estamos en una actividad
+     * con la ventana enfocada, que es la única condición que Android pone para
+     * poder leerlo.
+     */
+    private fun textoDelPortapapeles(): String? = runCatching {
+        val cm = getSystemService(android.content.ClipboardManager::class.java) ?: return null
+        val clip = cm.primaryClip ?: return null
+        // Se juntan todos los trozos: una selección de varias celdas puede
+        // llegar repartida en varios `Item`, y quedarse con el primero traería
+        // una fila de las cincuenta.
+        (0 until clip.itemCount)
+            .mapNotNull { clip.getItemAt(it)?.coerceToText(this)?.toString() }
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+            .ifBlank { null }
+    }.getOrNull()
+
     private fun centroDeLaVista(): Pt {
         val m = resources.displayMetrics
         return controller.scene.viewport.toScene(m.widthPixels / 2.0, m.heightPixels / 2.0)

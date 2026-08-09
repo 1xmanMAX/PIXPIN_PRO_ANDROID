@@ -162,3 +162,129 @@ const val EJE_ID = "eje"
  */
 fun leerCoordenada(texto: String): Double? =
     texto.trim().replace(',', '.').toDoubleOrNull()
+
+// -------------------------------------------------------------------------
+// Pegar desde una hoja de cálculo
+// -------------------------------------------------------------------------
+
+/**
+ * Una tabla de coordenadas copiada de Excel, de Google Sheets o de un PDF.
+ *
+ * **Teclear coordenadas a mano en un móvil es lo más lento que hace esta app.**
+ * Cincuenta puntos son cien números en un teclado numérico, y el que los tiene
+ * ya los tiene escritos en algún sitio: en una hoja de cálculo, en un correo, en
+ * la tabla de un PDF. Copiar y pegar convierte diez minutos en dos toques.
+ *
+ * ## Qué se admite
+ *
+ * Lo que sale del portapapeles no viene en un formato, viene en el que sea:
+ *
+ * - **Excel y Google Sheets** separan por tabulador. Es el caso corriente.
+ * - Un **CSV** europeo separa por `;`, y uno inglés por `,`.
+ * - Una tabla **copiada de un PDF** suele venir con varios espacios.
+ * - Y muchas traen una **columna de nombre** delante —`P1`, `A`, `Est. 3`— y una
+ *   **cabecera** arriba.
+ *
+ * De cada fila se cogen **las dos primeras columnas que sean números**, así que
+ * la columna de nombres se salta sola y no hay que preparar nada antes de
+ * copiar. Una fila sin dos números —la cabecera, una línea en blanco, un total—
+ * se descarta en silencio: avisar de cada una convertiría pegar en un
+ * interrogatorio.
+ */
+fun leerTablaPegada(texto: String?): List<PuntoDeTabla> {
+    val lineas = texto?.lineSequence()?.map { it.trim() }?.filter { it.isNotEmpty() }?.toList()
+    if (lineas.isNullOrEmpty()) return emptyList()
+    val separador = separadorDe(lineas) ?: return emptyList()
+    return lineas.mapNotNull { linea ->
+        val numeros = linea.split(separador)
+            .map { it.trim().trim('|') }
+            .mapNotNull { leerNumeroDeHoja(it) }
+        if (numeros.size >= 2) PuntoDeTabla(numeros[0], numeros[1]) else null
+    }
+}
+
+/**
+ * Con qué se separan las columnas.
+ *
+ * Se prueban por orden de **cuán seguro es cada uno**, no de cuán común:
+ *
+ * El tabulador no puede ser otra cosa, así que va primero — y es el que usan
+ * Excel y Sheets, o sea el caso que importa. El punto y coma y la barra
+ * tampoco. Los espacios sí podrían ser parte de un nombre (`Est. 3`), pero solo
+ * se aceptan de dos en adelante, que es como quedan las columnas de un PDF.
+ *
+ * **La coma va la última y con condiciones**, porque en español es el separador
+ * decimal: `12,5` es un número, no dos. Solo se toma como separador si la línea
+ * parte en tres trozos o más —ahí ya no hay duda— o si los trozos llevan punto
+ * decimal, que es la pinta de un CSV inglés. Con `12,5` a secas gana el número,
+ * que es lo que quiso escribir quien lo escribió.
+ */
+private fun separadorDe(lineas: List<String>): Regex? {
+    if (lineas.any { it.contains('\t') }) return Regex("\t")
+    if (lineas.any { it.contains(';') }) return Regex(";")
+    if (lineas.any { it.contains('|') }) return Regex("\\|")
+    if (lineas.any { Regex("\\S {2,}\\S").containsMatchIn(it) }) return Regex(" {2,}")
+    if (lineas.any { linea ->
+            val trozos = linea.split(',')
+            trozos.size >= 3 || (trozos.size == 2 && trozos.any { it.contains('.') })
+        }
+    ) {
+        return Regex(",")
+    }
+    // Sin separador que valga, cada línea es una sola columna: no hay pares que
+    // formar. Devolver un separador que no aparece daría filas de un número y
+    // todas se caerían igual, pero más tarde y habiendo trabajado.
+    return null
+}
+
+/**
+ * Un número tal como lo escribe una hoja de cálculo, venga del país que venga.
+ *
+ * `1.234,56` y `1,234.56` son el mismo número escrito por un español y por un
+ * inglés, y del portapapeles llegan los dos. La regla que los separa es simple y
+ * no falla: **manda el último signo de puntuación**. El que va detrás es el
+ * decimal y el otro es de los miles, porque los miles nunca van después de la
+ * coma decimal.
+ *
+ * Con uno solo hay que decidir. `1,5` es decimal en español y `1.5` en inglés,
+ * los dos con la misma pinta y el mismo valor si se leen como decimal — así que
+ * se leen como decimal y se acabó. El único caso que sale mal es `1.234`
+ * queriendo decir mil doscientos treinta y cuatro, y quien pega coordenadas de
+ * un plano prefiere que un metro con doscientos treinta y cuatro se lea bien.
+ */
+internal fun leerNumeroDeHoja(campo: String): Double? {
+    val texto = campo.trim().trim('"', '\'').trim()
+    if (texto.isEmpty()) return null
+
+    // **Tiene que empezar por número.** Antes se filtraban las letras de todo el
+    // campo para poder leer «12,5 m», y eso convertía la columna de nombres en
+    // números: `P1` se quedaba en `1` y `E2` en `2`, así que la primera columna
+    // de una libreta de campo entraba como coordenada y todos los puntos caían
+    // en el sitio equivocado. Un nombre no empieza por cifra y una medida sí, y
+    // esa es toda la diferencia que hace falta.
+    if (!(texto[0].isDigit() || texto[0] == '-' || texto[0] == '+' ||
+            texto[0] == '.' || texto[0] == ',')
+    ) {
+        return null
+    }
+
+    // De ahí se coge el número y se tira lo que venga detrás, que es la unidad.
+    val limpio = texto.takeWhile {
+        it.isDigit() || it == '.' || it == ',' || it == '-' || it == '+'
+    }
+    if (limpio.isEmpty() || limpio.none { it.isDigit() }) return null
+
+    val ultimaComa = limpio.lastIndexOf(',')
+    val ultimoPunto = limpio.lastIndexOf('.')
+    val normalizado = when {
+        ultimaComa >= 0 && ultimoPunto >= 0 ->
+            if (ultimaComa > ultimoPunto) {
+                limpio.replace(".", "").replace(',', '.')
+            } else {
+                limpio.replace(",", "")
+            }
+        ultimaComa >= 0 -> limpio.replace(',', '.')
+        else -> limpio
+    }
+    return normalizado.toDoubleOrNull()
+}

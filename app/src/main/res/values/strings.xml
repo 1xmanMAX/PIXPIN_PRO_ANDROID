@@ -201,6 +201,9 @@
     <string name="tabla_pixeles">píxeles</string>
     <string name="tabla_fila">Añadir fila</string>
     <string name="tabla_quitar_fila">Quitar la fila</string>
+    <string name="tabla_pegar">Pegar</string>
+    <string name="tabla_pegadas">Pegados %1$d puntos</string>
+    <string name="tabla_nada_que_pegar">En el portapapeles no hay una tabla de coordenadas</string>
     <string name="tabla_ver">Ver u ocultar los puntos</string>
     <string name="tabla_nueva">Nueva tabla de coordenadas</string>
     <string name="tabla_abrir">Tablas de coordenadas</string>

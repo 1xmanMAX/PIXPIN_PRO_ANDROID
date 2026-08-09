@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.unit.dp
@@ -139,11 +140,11 @@ fun DrawCanvas(
                 var huboDosDedos = false
                 var huboEncuadre = false
                 var perfecta = false
-                // Cuánto se han movido los dos dedos desde que se posó el
-                // segundo: es lo que distingue «cuadra esta figura» de «déjame
-                // mirar de cerca». Ver el bloque de dos dedos.
-                var deriva = 0f
-                var factor = 1f
+                // Dónde se posó el segundo dedo. Lo que distingue «cuadra esta
+                // figura» de «déjame mirar de cerca» es **cuánto se ha ido de
+                // ahí**, y solo él. Ver el bloque de dos dedos.
+                var segundoDedo: PointerId? = null
+                var dondeSePuso = Offset.Zero
 
                 while (true) {
                     val event = awaitPointerEvent()
@@ -197,16 +198,39 @@ fun DrawCanvas(
                                 dedo = principal.position
                                 touched()
                             }
-                            // El pellizco se mide **con el otro dedo**, no con
-                            // el que dibuja: si contara el movimiento de los dos,
-                            // seguir dibujando se leería como encuadrar y el
-                            // trazo se cancelaría solo.
+                            // **El pellizco se mide con el otro dedo y solo con
+                            // él, y por dónde está, no por dónde ha pasado.**
+                            //
+                            // Aquí estaban los dos motivos por los que mantener
+                            // el segundo dedo apoyado acababa siempre en zoom:
+                            //
+                            // 1. `calculateZoom()` mira **todos** los dedos, así
+                            //    que el que está dibujando contaba. Y tiene que
+                            //    moverse, que es como se abre la figura: en
+                            //    cuanto el círculo crecía un poco, la separación
+                            //    entre los dos dedos cambiaba, eso se leía como
+                            //    pellizco y el trazo se cancelaba. Cuanto más
+                            //    grande querías la figura, antes se rompía.
+                            // 2. La deriva se **acumulaba** sumando cada
+                            //    movimiento. Un dedo quieto no está quieto: el
+                            //    digitalizador tiembla un poco, y esos temblores
+                            //    se sumaban hasta cruzar el umbral solos. Bastaba
+                            //    con mantenerlo apoyado unos segundos.
+                            //
+                            // Con la distancia neta desde donde se posó, un dedo
+                            // quieto da cero por mucho que tiemble y por mucho
+                            // que el otro dibuje, y uno que pellizca de verdad se
+                            // pasa del umbral enseguida — porque para pellizcar
+                            // hay que mover este dedo.
                             val otro = active.firstOrNull { it.id != first.id }
-                            if (otro != null) deriva += otro.positionChange().getDistance()
-                            factor *= event.calculateZoom()
-                            val pellizco = deriva > DERIVA_ENCUADRE.dp.toPx() ||
-                                kotlin.math.abs(factor - 1f) > FACTOR_ENCUADRE
-                            if (!pellizco) {
+                            if (otro != null && segundoDedo != otro.id) {
+                                segundoDedo = otro.id
+                                dondeSePuso = otro.position
+                            }
+                            val deriva =
+                                if (otro == null) 0f
+                                else (otro.position - dondeSePuso).getDistance()
+                            if (deriva <= DERIVA_ENCUADRE.dp.toPx()) {
                                 event.changes.forEach { it.consume() }
                                 continue
                             }
@@ -623,13 +647,16 @@ private const val LUPA_SEPARACION = 1.15f
 private val LUPA_FONDO = Color.White
 
 /**
- * Cuánto tienen que moverse dos dedos apoyados para que la cosa deje de ser
- * «cuadra esta figura» y pase a ser «déjame encuadrar», en dp y en proporción.
+ * Cuánto tiene que irse el segundo dedo **de donde se posó** para que la cosa
+ * deje de ser «cuadra esta figura» y pase a ser «déjame encuadrar», en dp.
  *
- * No puede ser cualquier movimiento: un dedo apoyado nunca está del todo quieto
- * y el reconocedor entrega temblores de un píxel constantemente. Con doce dp hay
- * sitio de sobra para apoyar el dedo sin que el trazo se cancele, y sigue siendo
- * mucho menos de lo que se mueve la mano al pellizcar de verdad.
+ * Se mide en distancia neta desde su sitio, no sumando lo que se mueve: un dedo
+ * apoyado nunca está del todo quieto y el digitalizador entrega temblores de un
+ * píxel constantemente, así que sumándolos el umbral se cruzaba solo con el dedo
+ * parado. En neto, temblar no cuenta: para pasarse hay que ir a alguna parte.
+ *
+ * Veinte dp es medio centímetro. Deja apoyar el dedo con holgura —y recolocarlo
+ * un poco, que la mano lo hace sola— sin que el trazo se cancele, y sigue siendo
+ * mucho menos de lo que se abre la mano al pellizcar de verdad.
  */
-private const val DERIVA_ENCUADRE = 12
-private const val FACTOR_ENCUADRE = 0.06f
+private const val DERIVA_ENCUADRE = 20

@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -79,10 +80,27 @@ fun EditorDeTabla(
      * volver a esta tabla tiene que estar como se dejó.
      */
     onCambiarDeSerie: (color: String, actual: TablaDeCoordenadas) -> Unit,
+    /**
+     * Lo que haya ahora mismo en el portapapeles, o null si no hay texto.
+     *
+     * Llega de fuera y no se lee aquí porque el portapapeles es del sistema y
+     * este archivo es del motor: pedirlo aquí ataría el editor de tablas a
+     * Android y no se podría probar. Quien lo hospeda ya sabe leerlo.
+     */
+    textoPegado: () -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     val color = tabla.color
     var visible by remember(tabla.id) { mutableStateOf(tabla.visible) }
+    /**
+     * Cuántas filas trajo el último pegado, o null si todavía no se ha pegado.
+     *
+     * Se enseña porque **pegar puede no traer nada** —el portapapeles tiene una
+     * foto, o un texto sin dos números por línea— y sin decirlo el botón parece
+     * roto. Con el número, además, se ve de un vistazo si entraron las
+     * cincuenta filas o solo cuarenta y nueve.
+     */
+    var pegadas: Int? by remember(tabla.id) { mutableStateOf(null) }
     val filas = remember(tabla.id) {
         androidx.compose.runtime.mutableStateListOf<Pair<String, String>>().apply {
             tabla.puntos.forEach { add(numero(it.x) to numero(it.y)) }
@@ -207,10 +225,53 @@ fun EditorDeTabla(
                         modifier = Modifier.padding(start = 4.dp)
                     )
                 }
+                // **Pegar desde la hoja de cálculo.** Teclear cincuenta puntos
+                // en un móvil son cien números en un teclado numérico, y quien
+                // los tiene ya los tiene escritos. Ver [leerTablaPegada].
+                TextButton(
+                    onClick = {
+                        val pegados = leerTablaPegada(textoPegado())
+                        if (pegados.isNotEmpty()) {
+                            // Se **añaden**, no se sustituyen: se pega en dos
+                            // tandas desde dos sitios sin perder la primera, y
+                            // deshacer un pegado es quitar filas, que se ve.
+                            // Antes se tira la fila en blanco del final, que si
+                            // no queda un hueco en medio.
+                            if (filas.isNotEmpty() &&
+                                filas.last().first.isBlank() && filas.last().second.isBlank()
+                            ) {
+                                filas.removeAt(filas.size - 1)
+                            }
+                            pegados.forEach { filas.add(numero(it.x) to numero(it.y)) }
+                            filas.add("" to "")
+                            pegadas = pegados.size
+                        } else {
+                            pegadas = 0
+                        }
+                    },
+                    modifier = Modifier.padding(start = 2.dp)
+                ) {
+                    Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
+                    Text(
+                        stringResource(R.string.tabla_pegar),
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
                 Box(Modifier.weight(1f))
                 TextButton(onClick = { onAceptar(resultado()) }) {
                     Text(stringResource(R.string.action_done))
                 }
+            }
+
+            pegadas?.let { cuantas ->
+                Text(
+                    if (cuantas > 0) stringResource(R.string.tabla_pegadas, cuantas)
+                    else stringResource(R.string.tabla_nada_que_pegar),
+                    style = MaterialTheme.typography.labelSmall,
+                    color =
+                        if (cuantas > 0) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+                )
             }
         }
     }
