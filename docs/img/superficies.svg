@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 300" role="img" aria-label="Las cuatro pantallas donde vive el mismo motor de dibujo">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <text x="410" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#6965DB">
+      un solo motor, cuatro sitios
+    </text>
+
+    <!-- 1 captura -->
+    <g transform="translate(30,44)">
+      <rect x="0" y="0" width="150" height="180" rx="12" fill="none" stroke="#8B8B9E" stroke-width="1.6"/>
+      <rect x="14" y="16" width="122" height="120" rx="3" fill="#8B8B9E" opacity="0.12"/>
+      <rect x="30" y="34" width="90" height="70" rx="2" fill="none" stroke="#6965DB" stroke-width="2" stroke-dasharray="5 4"/>
+      <g fill="#6965DB"><rect x="26" y="30" width="8" height="8"/><rect x="116" y="30" width="8" height="8"/>
+        <rect x="26" y="100" width="8" height="8"/><rect x="116" y="100" width="8" height="8"/></g>
+      <rect x="24" y="148" width="102" height="18" rx="9" fill="#6965DB" opacity="0.22"/>
+      <text x="75" y="200" text-anchor="middle" font-size="12" fill="#6965DB" font-weight="bold">captura</text>
+      <text x="75" y="218" text-anchor="middle" font-size="11">recorta y dibuja antes de guardar</text>
+    </g>
+
+    <!-- 2 pin -->
+    <g transform="translate(225,44)">
+      <rect x="0" y="0" width="150" height="180" rx="12" fill="none" stroke="#8B8B9E" stroke-width="1.6"/>
+      <rect x="14" y="16" width="122" height="120" rx="3" fill="#8B8B9E" opacity="0.06"/>
+      <rect x="34" y="40" width="86" height="72" rx="6" fill="#ffffff" stroke="#6965DB" stroke-width="1.8"/>
+      <rect x="34" y="40" width="86" height="14" rx="6" fill="#6965DB" opacity="0.3"/>
+      <path d="M46 84 q16 -22 30 -6 q12 14 26 -12" fill="none" stroke="#6965DB" stroke-width="2"/>
+      <text x="75" y="200" text-anchor="middle" font-size="12" fill="#6965DB" font-weight="bold">pin flotante</text>
+      <text x="75" y="218" text-anchor="middle" font-size="11">encima de cualquier app</text>
+    </g>
+
+    <!-- 3 capa -->
+    <g transform="translate(420,44)">
+      <rect x="0" y="0" width="150" height="180" rx="12" fill="none" stroke="#8B8B9E" stroke-width="1.6"/>
+      <rect x="14" y="16" width="122" height="120" rx="3" fill="#8B8B9E" opacity="0.12"/>
+      <g font-size="9" fill="#8B8B9E" opacity="0.8">
+        <text x="24" y="38">otra app</text>
+      </g>
+      <path d="M28 96 q30 -46 58 -12 q22 26 44 -18" fill="none" stroke="#E03131" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="112" cy="66" r="16" fill="none" stroke="#E03131" stroke-width="2.2"/>
+      <rect x="24" y="148" width="102" height="18" rx="9" fill="#6965DB" opacity="0.22"/>
+      <text x="75" y="200" text-anchor="middle" font-size="12" fill="#6965DB" font-weight="bold">capa sobre la pantalla</text>
+      <text x="75" y="218" text-anchor="middle" font-size="11">pinta sobre lo que estés usando</text>
+    </g>
+
+    <!-- 4 editor -->
+    <g transform="translate(615,44)">
+      <rect x="0" y="0" width="175" height="180" rx="12" fill="none" stroke="#8B8B9E" stroke-width="1.6"/>
+      <rect x="12" y="14" width="151" height="124" rx="3" fill="none" stroke="#8B8B9E" stroke-width="0.8"/>
+      <rect x="28" y="30" width="60" height="42" fill="none" stroke="#6965DB" stroke-width="2"/>
+      <circle cx="118" cy="60" r="24" fill="none" stroke="#6965DB" stroke-width="2"/>
+      <path d="M28 110 h120" stroke="#6965DB" stroke-width="2"/>
+      <g fill="#6965DB" opacity="0.28">
+        <rect x="18" y="148" width="20" height="20" rx="5"/><rect x="44" y="148" width="20" height="20" rx="5"/>
+        <rect x="70" y="148" width="20" height="20" rx="5"/><rect x="96" y="148" width="20" height="20" rx="5"/>
+        <rect x="122" y="148" width="20" height="20" rx="5"/><rect x="148" y="148" width="17" height="20" rx="5"/>
+      </g>
+      <text x="87" y="200" text-anchor="middle" font-size="12" fill="#6965DB" font-weight="bold">editor completo</text>
+      <text x="87" y="218" text-anchor="middle" font-size="11">hojas, capas, medidas, PDF</text>
+    </g>
+
+    <text x="410" y="286" text-anchor="middle" font-size="11">
+      el mismo dibujo se abre en cualquiera de los cuatro: los elementos son los mismos bytes
+    </text>
+  </g>
+</svg>

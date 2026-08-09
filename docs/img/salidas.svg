@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 330" role="img" aria-label="Salidas: imagen, PDF de varias hojas, archivo editable y portapapeles">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <text x="400" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#6965DB">
+      por dónde sale el dibujo
+    </text>
+
+    <!-- lienzo origen -->
+    <g transform="translate(30,52)">
+      <rect x="0" y="0" width="150" height="150" rx="6" fill="none" stroke="#8B8B9E" stroke-width="1.6"/>
+      <rect x="18" y="18" width="52" height="36" fill="none" stroke="#6965DB" stroke-width="1.8"/>
+      <circle cx="108" cy="46" r="22" fill="none" stroke="#6965DB" stroke-width="1.8"/>
+      <path d="M18 100 h114" stroke="#6965DB" stroke-width="1.8"/>
+      <path d="M18 124 q34 -26 60 -4" fill="none" stroke="#6965DB" stroke-width="1.8"/>
+      <text x="75" y="172" text-anchor="middle" font-size="12" fill="#6965DB" font-weight="bold">lienzo</text>
+    </g>
+    <path d="M195 128 h40" stroke="#8B8B9E" stroke-width="1.6" marker-end="url(#sa)"/>
+
+    <!-- PNG -->
+    <g transform="translate(255,44)">
+      <rect x="0" y="0" width="120" height="80" rx="4" fill="none" stroke="#2F9E44" stroke-width="1.8"/>
+      <path d="M0 68 l32 -28 l24 20 l20 -16 l44 34z" fill="#2F9E44" opacity="0.25"/>
+      <text x="60" y="100" text-anchor="middle" font-size="12" fill="#2F9E44" font-weight="bold">PNG · JPG</text>
+      <text x="60" y="116" text-anchor="middle" font-size="10.5">transparente o con fondo · a 1×, 2× o 3×</text>
+    </g>
+
+    <!-- excalidraw -->
+    <g transform="translate(255,166)">
+      <rect x="0" y="0" width="120" height="70" rx="4" fill="none" stroke="#6965DB" stroke-width="1.8"/>
+      <g font-size="9" fill="#6965DB" opacity="0.85">
+        <text x="10" y="20">{ "type":</text><text x="10" y="34">  "excalidraw",</text>
+        <text x="10" y="48">  "elements": [ … ]</text><text x="10" y="62">}</text>
+      </g>
+      <text x="60" y="92" text-anchor="middle" font-size="12" fill="#6965DB" font-weight="bold">.excalidraw</text>
+      <text x="60" y="108" text-anchor="middle" font-size="10.5">se vuelve a abrir y se sigue editando</text>
+    </g>
+
+    <!-- PDF multipagina -->
+    <g transform="translate(450,44)">
+      <rect x="24" y="0" width="86" height="112" rx="3" fill="#ffffff" stroke="#8B8B9E" stroke-width="1.4"/>
+      <rect x="12" y="8" width="86" height="112" rx="3" fill="#ffffff" stroke="#8B8B9E" stroke-width="1.4"/>
+      <rect x="0" y="16" width="86" height="112" rx="3" fill="#ffffff" stroke="#E03131" stroke-width="1.8"/>
+      <rect x="14" y="34" width="40" height="26" fill="none" stroke="#6965DB" stroke-width="1.4"/>
+      <circle cx="60" cy="88" r="16" fill="none" stroke="#6965DB" stroke-width="1.4"/>
+      <text x="55" y="148" text-anchor="middle" font-size="12" fill="#E03131" font-weight="bold">PDF</text>
+      <text x="55" y="164" text-anchor="middle" font-size="10.5">una hoja del lienzo = una página</text>
+      <text x="55" y="180" text-anchor="middle" font-size="10.5">vertical u horizontal, cada una a su aire</text>
+      <text x="55" y="200" text-anchor="middle" font-size="10.5" fill="#2F9E44">sobre un PDF ajeno: su texto sigue vivo</text>
+    </g>
+
+    <!-- portapapeles / compartir -->
+    <g transform="translate(650,44)">
+      <rect x="0" y="0" width="100" height="112" rx="8" fill="none" stroke="#1971C2" stroke-width="1.8"/>
+      <rect x="30" y="-8" width="40" height="18" rx="5" fill="#1971C2" opacity="0.3"/>
+      <g fill="#1971C2" opacity="0.4"><rect x="16" y="30" width="68" height="6" rx="3"/>
+        <rect x="16" y="46" width="50" height="6" rx="3"/><rect x="16" y="62" width="68" height="6" rx="3"/></g>
+      <g stroke="#1971C2" stroke-width="1.6" fill="none">
+        <circle cx="34" cy="92" r="6"/><circle cx="70" cy="80" r="6"/><circle cx="70" cy="104" r="6"/>
+        <path d="M40 89 l24 -7 M40 95 l24 7"/>
+      </g>
+      <text x="50" y="148" text-anchor="middle" font-size="12" fill="#1971C2" font-weight="bold">portapapeles</text>
+      <text x="50" y="164" text-anchor="middle" font-size="10.5">y compartir a cualquier app</text>
+    </g>
+
+    <text x="400" y="318" text-anchor="middle" font-size="11">
+      nada de esto sube a ningún sitio: todo se hace en el teléfono
+    </text>
+  </g>
+  <defs>
+    <marker id="sa" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#8B8B9E"/>
+    </marker>
+  </defs>
+</svg>

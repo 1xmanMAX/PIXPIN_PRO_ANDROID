@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" role="img" aria-label="El trazo con lapiz: arranca en el primer contacto, aprovecha todas las muestras, sigue la presion y rechaza la palma">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <g font-size="13" font-weight="bold" fill="#6965DB" text-anchor="middle">
+      <text x="105" y="22">arranca al tocar</text>
+      <text x="300" y="22">todas las muestras</text>
+      <text x="500" y="22">presión</text>
+      <text x="695" y="22">palma</text>
+    </g>
+
+    <!-- arranque -->
+    <g>
+      <text x="30" y="62" font-size="10" fill="#E03131">otros</text>
+      <path d="M76 56 h100" stroke="#8B8B9E" stroke-width="1" stroke-dasharray="3 3"/>
+      <path d="M120 56 h56" stroke="#E03131" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="76" cy="56" r="3" fill="#8B8B9E"/>
+      <text x="88" y="76" font-size="9" fill="#E03131">se come el arranque</text>
+
+      <text x="30" y="112" font-size="10" fill="#2F9E44">PixPin</text>
+      <path d="M76 106 h100" stroke="#2F9E44" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="76" cy="106" r="3" fill="#2F9E44"/>
+      <text x="88" y="126" font-size="9" fill="#2F9E44">desde el primer píxel</text>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="105" y="168">un punto o una tilde salen igual</text></g>
+
+    <!-- todas las muestras -->
+    <g>
+      <path d="M215 106 q40 -56 85 -22 q40 30 85 -30" fill="none" stroke="#8B8B9E" stroke-width="1.2" opacity="0.5"/>
+      <g fill="#8B8B9E" opacity="0.5">
+        <circle cx="215" cy="106" r="4"/><circle cx="300" cy="84" r="4"/><circle cx="385" cy="54" r="4"/>
+      </g>
+      <g fill="#6965DB">
+        <circle cx="230" cy="93" r="2"/><circle cx="248" cy="83" r="2"/><circle cx="266" cy="79" r="2"/>
+        <circle cx="284" cy="80" r="2"/><circle cx="318" cy="90" r="2"/><circle cx="336" cy="88" r="2"/>
+        <circle cx="354" cy="78" r="2"/><circle cx="370" cy="66" r="2"/>
+      </g>
+      <text x="300" y="132" font-size="9" text-anchor="middle" fill="#6965DB">
+        1 por fotograma · cientos por segundo
+      </text>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="300" y="168">no se tira ni una</text></g>
+
+    <!-- presion -->
+    <path d="M425 88 C 455 74, 470 52, 500 50 C 530 48, 552 60, 578 56
+             L 578 64 C 552 72, 530 76, 500 78 C 470 80, 455 92, 425 94 Z" fill="#6965DB"/>
+    <g stroke="#8B8B9E" stroke-width="1" opacity="0.7">
+      <path d="M440 118 v10 M500 118 v10 M566 118 v10"/>
+    </g>
+    <g font-size="9" fill="#8B8B9E" text-anchor="middle">
+      <text x="440" y="140">flojo</text><text x="500" y="140">fuerte</text><text x="566" y="140">flojo</text>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="500" y="168">con el dedo, grosor constante</text></g>
+
+    <!-- palma -->
+    <path d="M628 118 q34 -50 66 -18" fill="none" stroke="#6965DB" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M694 100 l24 -34" stroke="#6965DB" stroke-width="4" stroke-linecap="round"/>
+    <ellipse cx="656" cy="82" rx="24" ry="15" fill="#8B8B9E" opacity="0.25" transform="rotate(-18 656 82)"/>
+    <g stroke="#E03131" stroke-width="2.2" stroke-linecap="round">
+      <path d="M646 74 l20 16 M666 74 l-20 16"/>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="695" y="168">la mano apoyada no pinta</text></g>
+  </g>
+</svg>

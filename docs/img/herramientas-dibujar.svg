@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" role="img" aria-label="Herramientas de dibujo: rectangulo, elipse, rombo, linea, flecha, lapiz, marcador y texto">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <g font-size="13" font-weight="bold" fill="#6965DB" text-anchor="middle">
+      <text x="105" y="24">rectángulo</text>
+      <text x="300" y="24">elipse</text>
+      <text x="495" y="24">rombo</text>
+      <text x="690" y="24">línea · flecha</text>
+      <text x="105" y="194">lápiz</text>
+      <text x="300" y="194">marcador</text>
+      <text x="495" y="194">texto</text>
+      <text x="690" y="194">esquinas</text>
+    </g>
+
+    <!-- rectangulo -->
+    <path d="M35 45 q70 -5 140 2 q4 45 -1 78 q-70 6 -139 -1 q-4 -40 0 -79z"
+          fill="none" stroke="#6965DB" stroke-width="2.4"/>
+    <g font-size="11" text-anchor="middle"><text x="105" y="150">trazo a mano alzada</text></g>
+
+    <!-- elipse: agarrada por el borde -->
+    <ellipse cx="300" cy="88" rx="62" ry="42" fill="none" stroke="#6965DB" stroke-width="2.4"/>
+    <circle cx="300" cy="88" r="3.5" fill="#8B8B9E"/>
+    <line x1="300" y1="88" x2="352" y2="65" stroke="#8B8B9E" stroke-width="1" stroke-dasharray="3 3"/>
+    <circle cx="352" cy="65" r="7" fill="#E03131"/>
+    <g font-size="11" text-anchor="middle"><text x="300" y="150">el dedo va sobre el borde</text></g>
+
+    <!-- rombo -->
+    <path d="M495 46 L556 88 L495 130 L434 88 Z" fill="none" stroke="#6965DB" stroke-width="2.4"/>
+    <circle cx="495" cy="46" r="5" fill="#E03131"/>
+    <g font-size="11" text-anchor="middle"><text x="495" y="150">nace de su vértice</text></g>
+
+    <!-- linea y flecha -->
+    <g stroke="#6965DB" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M628 54 L748 54"/>
+      <path d="M736 45 L750 54 L736 63"/>
+      <path d="M628 96 Q 690 62 752 96"/>
+      <path d="M628 132 h46 v-24 h78"/>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="690" y="150">recta, curva o de codos</text></g>
+
+    <!-- lapiz: ancho variable -->
+    <path d="M35 250 C 60 215, 85 300, 110 250 S 155 210, 175 246
+             C 158 262, 140 240, 120 268 S 70 300, 48 268 Z"
+          fill="#6965DB" opacity="0.9"/>
+    <g font-size="11" text-anchor="middle"><text x="105" y="320">el grosor sigue la presión</text></g>
+
+    <!-- marcador -->
+    <path d="M232 262 L368 236" stroke="#F08C00" stroke-width="22" stroke-linecap="round" opacity="0.4"/>
+    <g font-size="12" fill="#8B8B9E"><text x="248" y="264">lo de debajo se lee</text></g>
+    <g font-size="11" text-anchor="middle"><text x="300" y="320">translúcido y gordo</text></g>
+
+    <!-- texto -->
+    <g font-size="26" fill="#6965DB"><text x="434" y="262">Aa</text></g>
+    <line x1="500" y1="238" x2="500" y2="268" stroke="#E03131" stroke-width="2"/>
+    <g font-size="11" text-anchor="middle"><text x="495" y="320">a su tamaño real, sin marco</text></g>
+
+    <!-- esquinas -->
+    <path d="M632 234 h74 a22 22 0 0 1 22 22 v34" fill="none" stroke="#6965DB" stroke-width="2.4"/>
+    <path d="M706 234 h22 v22" fill="none" stroke="#8B8B9E" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <path d="M632 272 h74 v18" fill="none" stroke="#8B8B9E" stroke-width="2.4" opacity="0.55"/>
+    <g font-size="11" text-anchor="middle"><text x="690" y="320">redondeadas o en pico</text></g>
+  </g>
+</svg>

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 210" role="img" aria-label="Ajustes: modo de captura, barra configurable, guardado automatico y modo seguro">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <g font-size="13" font-weight="bold" fill="#6965DB" text-anchor="middle">
+      <text x="110" y="22">modo de captura</text>
+      <text x="330" y="22">barra a tu gusto</text>
+      <text x="540" y="22">se guarda solo</text>
+      <text x="710" y="22">modo seguro</text>
+    </g>
+
+    <!-- modo de captura -->
+    <g>
+      <rect x="30" y="38" width="160" height="42" rx="8" fill="#2F9E44" opacity="0.1"/>
+      <rect x="30" y="38" width="160" height="42" rx="8" fill="none" stroke="#2F9E44" stroke-width="1.4"/>
+      <text x="44" y="58" font-size="12" fill="#2F9E44" font-weight="bold">rápido</text>
+      <text x="44" y="73" font-size="10">sesión abierta · instantáneo</text>
+
+      <rect x="30" y="92" width="160" height="42" rx="8" fill="none" stroke="#8B8B9E" stroke-width="1.4"/>
+      <text x="44" y="112" font-size="12" fill="#8B8B9E" font-weight="bold">discreto</text>
+      <text x="44" y="127" font-size="10">sin icono · permiso cada vez</text>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="110" y="164">Android 14 obliga a elegir</text></g>
+
+    <!-- barra configurable -->
+    <g transform="translate(250,40)">
+      <g fill="#6965DB" opacity="0.5">
+        <rect x="0" y="0" width="22" height="22" rx="5"/><rect x="28" y="0" width="22" height="22" rx="5"/>
+        <rect x="56" y="0" width="22" height="22" rx="5"/><rect x="84" y="0" width="22" height="22" rx="5"/>
+        <rect x="112" y="0" width="22" height="22" rx="5"/><rect x="140" y="0" width="22" height="22" rx="5"/>
+      </g>
+      <path d="M80 34 v14" stroke="#8B8B9E" stroke-width="1.2" marker-end="url(#aj)"/>
+      <g fill="#6965DB">
+        <rect x="26" y="58" width="26" height="26" rx="6"/>
+        <rect x="60" y="58" width="26" height="26" rx="6"/>
+        <rect x="94" y="58" width="26" height="26" rx="6"/>
+      </g>
+      <g fill="#6965DB" opacity="0.25">
+        <rect x="60" y="90" width="26" height="18" rx="5"/>
+        <rect x="90" y="90" width="26" height="18" rx="5"/>
+        <rect x="30" y="90" width="26" height="18" rx="5"/>
+      </g>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="330" y="164">un botón por grupo</text>
+      <text x="330" y="180">eliges cuáles y cómo se agrupan</text>
+    </g>
+
+    <!-- se guarda solo -->
+    <g transform="translate(480,40)">
+      <rect x="0" y="0" width="60" height="46" rx="4" fill="none" stroke="#6965DB" stroke-width="1.6"/>
+      <path d="M0 38 l18 -16 l14 12 l12 -10 l16 14z" fill="#6965DB" opacity="0.3"/>
+      <path d="M70 24 h22" stroke="#8B8B9E" stroke-width="1.2" marker-end="url(#aj)"/>
+      <g>
+        <rect x="100" y="0" width="60" height="46" rx="4" fill="none" stroke="#2F9E44" stroke-width="1.6"/>
+        <path d="M112 24 l10 10 l22 -24" fill="none" stroke="#2F9E44" stroke-width="2.6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="80" y="70" text-anchor="middle" font-size="10">Pictures/PixPin</text>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="540" y="164">no hay botón de guardar</text>
+      <text x="540" y="180" fill="#E03131">si la cierras con la ✕, no</text>
+    </g>
+
+    <!-- modo seguro -->
+    <g transform="translate(660,38)">
+      <path d="M50 0 L96 16 v30 c0 26 -20 44 -46 54 C24 90 4 72 4 46 V16 Z"
+            fill="#6965DB" opacity="0.12" stroke="#6965DB" stroke-width="1.6"/>
+      <path d="M34 48 l12 12 l24 -26" fill="none" stroke="#6965DB" stroke-width="2.6"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="706" y="164">tras un fallo no restaura pines</text>
+      <text x="706" y="180">nada se borra: vuelven luego</text>
+    </g>
+  </g>
+  <defs>
+    <marker id="aj" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#8B8B9E"/>
+    </marker>
+  </defs>
+</svg>

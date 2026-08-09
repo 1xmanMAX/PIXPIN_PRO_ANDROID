@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" role="img" aria-label="Herramientas de medir: cota, escalar, escala grafica y angulos internos">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <g font-size="13" font-weight="bold" fill="#6965DB" text-anchor="middle">
+      <text x="200" y="24">cota</text>
+      <text x="600" y="24">escalar</text>
+      <text x="200" y="194">escala gráfica</text>
+      <text x="600" y="194">ángulos internos</text>
+    </g>
+
+    <!-- cota: la raya se abre para el numero -->
+    <g stroke="#6965DB" stroke-width="2.2" stroke-linecap="round">
+      <path d="M50 90 q40 -3 78 1"/>
+      <path d="M272 90 q40 3 78 -2"/>
+      <path d="M50 76 v28 M350 76 v28"/>
+      <path d="M50 90 l16 -8 M50 90 l16 8 M350 90 l-16 -8 M350 90 l-16 8"/>
+    </g>
+    <g font-size="16" fill="#6965DB" text-anchor="middle" font-weight="bold">
+      <text x="200" y="96">3,45 m · 30°</text>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="200" y="132">calcula su cifra: al mover un extremo, cambia sola</text>
+      <text x="200" y="150">se abre en el medio para no tapar lo que mide</text>
+    </g>
+
+    <!-- escalar: raya sobre algo conocido + teclado -->
+    <rect x="430" y="52" width="150" height="46" rx="3" fill="#8B8B9E" opacity="0.14"/>
+    <g stroke="#E03131" stroke-width="2.2" stroke-linecap="round">
+      <path d="M430 116 h150 M430 108 v16 M580 108 v16"/>
+    </g>
+    <g font-size="11" fill="#E03131" text-anchor="middle"><text x="505" y="140">esto mide 4,20 m</text></g>
+    <g>
+      <rect x="620" y="46" width="120" height="96" rx="6" fill="none" stroke="#8B8B9E" stroke-width="1.4"/>
+      <rect x="628" y="52" width="104" height="20" rx="3" fill="#6965DB" opacity="0.15"/>
+      <g font-size="12" fill="#6965DB"><text x="636" y="67">4,20 m</text></g>
+      <g fill="#8B8B9E" opacity="0.55">
+        <rect x="628" y="78" width="30" height="16" rx="3"/><rect x="665" y="78" width="30" height="16" rx="3"/>
+        <rect x="702" y="78" width="30" height="16" rx="3"/><rect x="628" y="100" width="30" height="16" rx="3"/>
+        <rect x="665" y="100" width="30" height="16" rx="3"/><rect x="702" y="100" width="30" height="16" rx="3"/>
+        <rect x="628" y="122" width="30" height="14" rx="3"/><rect x="665" y="122" width="30" height="14" rx="3"/>
+        <rect x="702" y="122" width="30" height="14" rx="3"/>
+      </g>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="600" y="162">a partir de ahí, la imagen es geometría</text></g>
+
+    <!-- escala grafica -->
+    <g transform="translate(60,222)">
+      <g stroke="#101B24" stroke-width="1.4" fill="none"><rect x="0" y="0" width="240" height="22"/></g>
+      <rect x="0" y="0" width="60" height="22" fill="#101B24"/>
+      <rect x="120" y="0" width="60" height="22" fill="#101B24"/>
+      <g font-size="11" fill="#8B8B9E">
+        <text x="0" y="38">0</text><text x="52" y="38">5</text><text x="112" y="38">10</text>
+        <text x="172" y="38">15</text><text x="212" y="38">20 m</text>
+      </g>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="200" y="292">cuadros redondos: 1, 2 o 5 por potencia de diez</text>
+      <text x="200" y="310">encoge con el dibujo, así que no puede mentir</text>
+    </g>
+
+    <!-- angulos internos -->
+    <g stroke="#6965DB" stroke-width="2.4" stroke-linecap="round">
+      <path d="M480 300 L600 232"/>
+      <path d="M480 300 L620 300"/>
+    </g>
+    <path d="M524 300 A 44 44 0 0 0 505 275" fill="none" stroke="#E03131" stroke-width="1.6"/>
+    <g font-size="13" fill="#E03131" font-weight="bold"><text x="530" y="284">30°</text></g>
+    <circle cx="600" cy="232" r="6" fill="#8B8B9E"/>
+    <path d="M614 226 l22 -12" stroke="#8B8B9E" stroke-width="1.2" marker-end="url(#fm)"/>
+    <g font-size="11" text-anchor="middle">
+      <text x="600" y="326">solo mientras mueves · desaparecen al soltar</text>
+    </g>
+  </g>
+  <defs>
+    <marker id="fm" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#8B8B9E"/>
+    </marker>
+  </defs>
+</svg>

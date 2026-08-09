@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" role="img" aria-label="Herramientas de tapar y señalar: mosaico, foco, numeros de serie, imagen, hoja y borrador">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <g font-size="13" font-weight="bold" fill="#6965DB" text-anchor="middle">
+      <text x="140" y="24">mosaico</text>
+      <text x="400" y="24">foco</text>
+      <text x="660" y="24">números de serie</text>
+      <text x="140" y="194">imagen</text>
+      <text x="400" y="194">hoja</text>
+      <text x="660" y="194">borrador</text>
+    </g>
+
+    <!-- mosaico: texto legible -> bloques -->
+    <g font-size="15" fill="#8B8B9E"><text x="30" y="70">DNI 12345678</text></g>
+    <g>
+      <rect x="28" y="88" width="120" height="34" fill="none" stroke="#8B8B9E" stroke-width="0.8" opacity="0.4"/>
+      <g fill="#6965DB">
+        <rect x="28" y="88" width="20" height="17" opacity="0.75"/><rect x="48" y="88" width="20" height="17" opacity="0.35"/>
+        <rect x="68" y="88" width="20" height="17" opacity="0.6"/><rect x="88" y="88" width="20" height="17" opacity="0.25"/>
+        <rect x="108" y="88" width="20" height="17" opacity="0.7"/><rect x="128" y="88" width="20" height="17" opacity="0.4"/>
+        <rect x="28" y="105" width="20" height="17" opacity="0.3"/><rect x="48" y="105" width="20" height="17" opacity="0.65"/>
+        <rect x="68" y="105" width="20" height="17" opacity="0.2"/><rect x="88" y="105" width="20" height="17" opacity="0.55"/>
+        <rect x="108" y="105" width="20" height="17" opacity="0.35"/><rect x="128" y="105" width="20" height="17" opacity="0.7"/>
+      </g>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="140" y="148">el grano no cambia con el tamaño</text></g>
+
+    <!-- foco -->
+    <rect x="300" y="42" width="200" height="90" rx="4" fill="#1971C2" opacity="0.1"/>
+    <path d="M300 42 h200 v90 h-200z M400 62 a44 30 0 1 0 0.1 0 z"
+          fill="#101B24" fill-rule="evenodd" opacity="0.45"/>
+    <ellipse cx="400" cy="92" rx="44" ry="30" fill="none" stroke="#6965DB" stroke-width="1.6" opacity="0.6"/>
+    <g font-size="11" text-anchor="middle"><text x="400" y="148">apaga el resto, no lo esconde</text></g>
+
+    <!-- numeros de serie -->
+    <g fill="#E03131">
+      <circle cx="600" cy="60" r="17"/><circle cx="660" cy="100" r="17"/><circle cx="720" cy="66" r="17"/>
+    </g>
+    <g font-size="15" fill="#ffffff" text-anchor="middle" font-weight="bold">
+      <text x="600" y="66">1</text><text x="660" y="106">2</text><text x="720" y="72">3</text>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="660" y="148">un toque, un número · sigue la cuenta</text></g>
+
+    <!-- imagen -->
+    <rect x="60" y="216" width="160" height="92" rx="4" fill="none" stroke="#8B8B9E" stroke-width="2"/>
+    <path d="M60 290 l45 -40 l35 30 l25 -22 l55 50z" fill="#8B8B9E" opacity="0.35"/>
+    <circle cx="95" cy="240" r="9" fill="#F08C00" opacity="0.6"/>
+    <ellipse cx="150" cy="272" rx="30" ry="20" fill="none" stroke="#E03131" stroke-width="2.2"/>
+    <g stroke="#E03131" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M196 226 L162 258"/><path d="M162 258 l14 -2 M162 258 l2 -14"/>
+    </g>
+    <g font-size="11" text-anchor="middle"><text x="140" y="326">clavada al fondo: se dibuja encima</text></g>
+
+    <!-- hoja -->
+    <rect x="330" y="212" width="140" height="100" rx="6" fill="none" stroke="#8B8B9E"
+          stroke-width="1.6" stroke-dasharray="6 4"/>
+    <g font-size="10" fill="#8B8B9E"><text x="330" y="206">hoja 1</text></g>
+    <rect x="352" y="234" width="60" height="26" fill="none" stroke="#6965DB" stroke-width="2"/>
+    <circle cx="440" cy="282" r="16" fill="none" stroke="#6965DB" stroke-width="2"/>
+    <g font-size="11" text-anchor="middle"><text x="400" y="326">una hoja, una página del PDF</text></g>
+
+    <!-- borrador -->
+    <path d="M600 300 q30 -60 60 -20 q25 34 60 -14" fill="none" stroke="#6965DB"
+          stroke-width="2.4" stroke-dasharray="0"/>
+    <path d="M600 300 q30 -60 60 -20" stroke="#8B8B9E" stroke-width="9" opacity="0.25" fill="none"/>
+    <rect x="646" y="252" width="26" height="20" rx="3" fill="#E03131" opacity="0.85" transform="rotate(-20 659 262)"/>
+    <g font-size="11" text-anchor="middle"><text x="660" y="326">no toca las guías, ni ellas al dibujo</text></g>
+  </g>
+</svg>
