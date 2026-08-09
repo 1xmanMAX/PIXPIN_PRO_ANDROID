@@ -10,7 +10,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 > port de su código, sino una implementación propia en Kotlin de las funciones que me
 > resultan útiles en el móvil. Se instala por APK, no está en Google Play.
 
-**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 109 tests
+**Estado:** funcional en Android 10, 12 y 15/16 · Kotlin + Jetpack Compose · 732 pruebas
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest)
 
@@ -19,6 +19,7 @@ atajos de teclado, sin menús anidados y sin diálogos intermedios. Todo se hace
 ## Índice
 
 - [Qué hace](#qué-hace)
+- [Motor de edición](#motor-de-edición)
 - [Mini-aplicaciones](#mini-aplicaciones)
 - [Visor de PDF](#visor-de-pdf)
 - [Gestos](#gestos)
@@ -80,20 +81,34 @@ Las consecuencias, dichas de frente:
 
 ### Anotación
 
-Once herramientas sobre el recorte, con deshacer y rehacer ilimitados:
+Un solo motor de edición para todo: la pantalla de captura, el pin flotante, la capa sobre
+la pantalla y el editor a pantalla completa dibujan con **el mismo código**. Es un port de
+Excalidraw —su trazo a mano alzada, su modelo y su formato— más las herramientas que aquí
+hacían falta.
 
-rectángulo · elipse · flecha · lápiz · resaltador · mosaico/pixelado · texto · borrador ·
-**nº de serie** · **polilínea** · **foco**
+Veintitantas herramientas repartidas en grupos: formas, rayas, lápiz y marcador, texto,
+números de serie, mosaico, foco, marco, imagen… y las que no vienen del original:
 
-- **Nº de serie**: cada toque coloca un círculo numerado 1, 2, 3… para explicar pasos.
-  Deshacer devuelve la cuenta atrás sola.
-- **Polilínea**: rectas encadenadas; se cierra con el botón de la barra o al cambiar de
-  herramienta.
-- **Foco**: oscurece todo menos la zona marcada.
+- **Bote de relleno** — pinta el hueco que dejan varias figuras, que no es de ninguna de
+  ellas. Si el espacio no está cerrado, no pinta y lo dice.
+- **Recortar y extender** — se traza de largo y se quita lo que sobra, hasta donde lo cruzan
+  las demás. Vale para rayas, rectángulos, rombos, óvalos y arcos.
+- **Alfiler** — un clavo que une dos figuras: con uno giran alrededor de él, con dos quedan
+  fijas.
+- **Guías** — el lápiz azul de los planos: se traza el andamio, se dibuja encima apoyándose
+  en él y al final se borra.
+- **Cota, escalar y escala gráfica** — medir de verdad sobre lo que sea. Ver
+  [Medir y levantar planos](#medir-y-levantar-planos).
 
-Las anotaciones son **vectoriales y serializables** (no se "queman" hasta exportar), con
-paleta de colores y grosor ajustable. El mosaico se calcula una sola vez sobre la imagen
-completa, así que arrastrarlo va fluido aunque tapes media pantalla.
+Con **imán** a esquinas, puntos medios, centros e **intersecciones de cualquier figura con
+cualquier figura**; deshacer y rehacer ilimitados; y todo vectorial y serializable, que no
+se «quema» hasta exportar.
+
+La barra enseña **un botón por grupo** y despliega sus hermanas al volver a tocarlo, y **qué
+herramientas salen y cómo se agrupan se elige en los ajustes**, por separado para el pin, la
+capa y el editor.
+
+Detalle completo del motor: [`docs/motor.md`](docs/motor.md).
 
 ### Escribir a mano y con lápiz óptico
 
@@ -210,46 +225,31 @@ páginas serían doscientas ventanas overlay—.
 Usa `PdfRenderer`, que viene en el propio Android: **cero dependencias**. Word, Excel y CAD
 no tienen equivalente en el sistema y por eso no están.
 
-### Croquis acotado
+### Medir y levantar planos
 
-Dibujar un plano pequeño con medidas reales, y medir sobre el plano de otro.
-
-**El mundo está en metros, no en píxeles**, y en `Double`. No es purismo: se midió un plano
-de topografía real y sus coordenadas UTM llegan a 8.240.708 m, donde un `Float` de 32 bits
-pierde alrededor de un metro. Un dibujo que se ve bien y mide mal es el peor fallo posible
-en una herramienta cuyo propósito es medir.
-
-**Dos puertas al mismo editor:**
-
-- La palabra `croquis` abre una hoja en blanco con proporción de A4.
-- El botón de escuadra de un **pin de imagen** abre esa misma hoja con la captura debajo.
+Medir sobre el plano de otro, y dibujar uno pequeño con medidas reales. Fue una aplicación
+aparte —el croquis— y hoy son herramientas del mismo motor, así que **se puede acotar encima
+de un dibujo y dibujar encima de un plano acotado**.
 
 **Medir sobre una captura.** En obra no se lleva el DXF: se lleva la captura del plano que
-te mandaron. Se traza una línea sobre una medida conocida, se teclea cuánto mide, y a partir
-de ahí la imagen **es geometría**: medir sobre ella y medir sobre lo dibujado usan el mismo
-código. Una captura de pantalla es ortogonal por definición, así que no hay perspectiva que
-corregir y la calibración es exacta.
+te mandaron. Se traza una raya sobre una medida conocida, se teclea cuánto mide, y a partir
+de ahí la imagen **es geometría**. Una captura de pantalla es ortogonal por definición, así
+que no hay perspectiva que corregir y la calibración es exacta.
 
 | Herramienta | Qué hace |
 |---|---|
-| Línea · Polilínea · Rectángulo · Círculo | Dibujo. La polilínea encadena y sus vértices se arrastran antes de cerrarla |
-| **Cota** | Guarda sus dos puntos y **calcula** su cifra. Un número escrito a mano sobrevive a que muevas el extremo y se queda mintiendo |
-| **Recortar** | Corta una línea por donde la cruza otra y tira el trozo que tocas |
-| **Extender** | La alarga hasta encontrarse con otra, moviendo el extremo más cercano |
-| **Borrador** | Alcanza cada entidad por su **trazo**, no por su centro: un círculo se toca por el contorno |
+| **Cota** | Guarda sus dos puntos y **calcula** su cifra: al mover un extremo o al recalibrar, el número cambia solo. Un número escrito a mano se quedaría mintiendo |
+| **Escalar** | Se traza sobre algo de medida conocida y se dicta cuánto mide. Es lo que le da unidades a todas las cotas |
+| **Escala gráfica** | La reglita a cuadros de los planos. Un «1:50» escrito miente en cuanto alguien fotocopia; la barra encoge con el dibujo |
+| **Recortar** y **extender** | Se traza de largo y se ajusta después, como a escuadra y cartabón |
+| **Guías** y **alfileres** | El andamio, y los clavos que hacen que una figura hecha a trozos no se abra al moverla |
 
-**Precisión.** Imantado a extremos —lo que hace que las líneas conecten de verdad y no
-«casi»—, orto para forzar horizontal o vertical, y **entrada numérica**: longitud y ángulo
-por separado, con el ángulo en grados o en **pendiente %**, que es como se habla de un
-desnivel en obra. Al teclear un número **manda el número y el dedo deja de contar**.
+**Dos formas de acotar**, con interruptor: *dictada* —se teclea la longitud y el ángulo con
+teclado numérico, y la raya obedece anclada por su principio— o *medida*, que dice lo que
+hay. Los **ángulos internos** aparecen mientras mueves y desaparecen al soltar.
 
-**Modo medir**, con el dibujo deshabilitado de verdad: dos toques dan una distancia, cuantas
-veces haga falta, sin ensuciar el croquis.
-
-**Sale en PDF vectorial.** `PdfDocument` entrega un `Canvas`, así que el mismo renderizador
-que pinta la pantalla escribe geometría y texto de verdad en el documento: se amplía sin
-pixelar y se imprime a escala. El PDF lleva impresa la escala 1:N y la fecha, porque un
-croquis acotado que circula sin constancia de su escala engaña a quien lo recibe.
+**Sale en PDF vectorial**, y con varias hojas: si pones tres marcos salen tres páginas, cada
+una encuadrada y orientada por su cuenta.
 
 ### Guardar, copiar y compartir
 
@@ -380,7 +380,9 @@ el estado es pequeño y se guarda en JSON.
 ```
 com.forge.pixpin/
 ├── capture/    Sesión de MediaProjection, pantalla de recorte, exportación
-├── annotate/   Modelo vectorial de anotaciones, undo/redo, dibujado y horneado
+├── motor/      Motor de edición: modelo, geometría, trazo, gestos, render y salidas
+├── capa/       Capa para dibujar encima de la pantalla, sobre otras apps
+├── annotate/   Lector de trazo del lápiz (presión y rechazo de palma) e histórico
 ├── pin/        Ventanas overlay: gestos, tipos de pin, almacenes, gestor global
 ├── clipboard/  Lectura y clasificación del portapapeles, receptor de "compartir"
 ├── floating/   Bola flotante, tile de ajustes rápidos, servicio ambiental
@@ -416,12 +418,20 @@ com.forge.pixpin/
 | `PinChrome` | Hueco que la ventana le deja a lo que se dibuja fuera del recuadro: sombra y pegatina |
 | `BallState` | Los tres estados de la bola. El tercero —puesta pero oculta— era el que la dejaba desaparecida sin vuelta |
 | `PdfDoc` | Lectura de PDFs con `PdfRenderer`, sin dependencias |
+| `DrawController` | La máquina de estados del dedo del motor: qué pasa entre que se toca y se levanta. Sin una línea de Android |
+| `Renderer` | Pintado de la escena, con caché de geometría por elemento y el modo noche como filtro |
+| `Perimetros` | El perímetro de **cualquier** figura en tramos rectos: de ahí salen las intersecciones y el relleno |
+| `Regiones` | El bote: rejilla, derrame y contorno con agujeros |
+| `Nudos` | Los alfileres y su ley de grados de libertad |
+| `Recorte` | Recortar y extender sobre rayas, arcos, óvalos, rectángulos y rombos |
+| `Medida` · `EscalaGrafica` | La escala, la cota que calcula su cifra y la reglita a cuadros |
+| `PdfLectura` · `PdfLector` | Lectura del formato PDF por dentro —índice comprimido incluido— para poder escribir encima sin romperlo |
 
 La lógica delicada está extraída en objetos puros (`PinZoom`, `PinGroups`,
 `SelectionGeometry`, `ContentClassifier`, `AnnotationGeometry`, `UndoStack`,
 `StrokeSmoothing`, `ScrollMatcher`, `Markdown`, `MarkdownEdit`, `MagicWord`, `TableData`,
 `Ledger`, `TextBoxSize`, `PinChrome`, `BallState`) precisamente para poder probarla sin
-dispositivo: son **190 pruebas** que corren en la JVM en menos de un minuto. El resto se
+dispositivo: son **732 pruebas** que corren en la JVM en menos de un minuto. El resto se
 cubre con Robolectric, que en los tests del cosido corre en modo gráfico nativo para
 trabajar con píxeles de verdad.
 
@@ -498,8 +508,9 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
   servicio, los pines desaparecen hasta volver a abrir la app. Excluir PixPin del ahorro
   de batería lo evita.
 - Aún **sin OCR, sin QR y sin grabación** de GIF/vídeo.
-- El **croquis acotado** está en uso pero sin verificar en dispositivo: su geometría tiene
-  pruebas, su interacción no. Ver la lista de lo que le queda, en el roadmap.
+- Lo más reciente del motor —los ángulos en vivo, el pixelado del propio dibujo, las
+  cabezas de los alfileres— está **sin verificar en dispositivo**: su geometría tiene
+  pruebas, su aspecto no.
 - **No se leen DWG, RVT ni DXF.** Para medir sobre un plano ajeno se calibra su captura,
   que es el camino que la fase 6 tomó a propósito.
 - La **captura con scroll** funciona cosiendo fotogramas, no con una API del sistema: en
@@ -519,28 +530,24 @@ evidentes. Quedan aquí por si le ahorran tiempo a alguien:
 | ✅ **3** | Captura con scroll |
 | ✅ **4** | Cuadro de texto redimensionable, Markdown con enlaces, edición en el pin, prioridad, pegatinas de emoji y sombra con color de grupo |
 | ✅ **5** | Mini-aplicaciones por palabra mágica, tablas del portapapeles y visor de PDF |
-| ✅ **6 — Croquis acotado** | Mundo en metros con `Double`, dibujo con imantado y entrada numérica, recortar y extender, cotas que calculan su cifra, medición sobre una captura calibrada y PDF vectorial |
+| ✅ **6 — Croquis acotado** | Mundo en metros con `Double`, imantado y entrada numérica, recortar y extender, cotas que calculan su cifra, medición sobre una captura calibrada y PDF vectorial |
+| ✅ **6.5 — Motor único** | Un solo motor para captura, pin, capa y editor: port de Excalidraw, bote de relleno, alfileres, guías con escuadra, escala gráfica, PDF de varias hojas y capa sobre la pantalla. Retira `croquis` y jubila `annotate` |
+| **6.9 — Editar PDFs** | Anotar una página y **devolverla al PDF original** con una actualización incremental, conservando su texto seleccionable y buscable. El lector del formato ya está |
 | **7** | OCR local con ML Kit, reconocimiento de QR y traducción |
 | **8 — Vídeo** | Pin de vídeo que se reproduce en su sitio, rejilla de fotogramas, recorte por tiempo y grabación de pantalla |
 | **9 — Documentos de oficina** | Contenido de DOCX, XLSX y PPTX como pin de texto o de tabla |
 
-### Lo que le queda al croquis
+### Lo que le queda al motor
 
-Está en uso pero no terminado. Por orden de lo que más se nota:
-
-- **Verificación en dispositivo.** La geometría tiene 249 pruebas en JVM, pero la interacción
-  —gestos, arrastre de puntos, teclado— solo se ha comprobado compilando. Es la deuda mayor.
-- **Deshacer no rehace**: quita la última entidad con un `dropLast` en vez de usar el
-  `UndoStack` que ya existe para las anotaciones.
-- **No hay herramienta de texto**, aunque `Entidad.Texto` existe en el modelo y se dibuja.
-- **No se pueden retocar entidades ya dibujadas**: mover un extremo o cambiarle el color
-  obliga a borrarla y rehacerla.
-- El **desplazamiento de la cota** está fijo en 0,4 m y su lado no se puede elegir.
-- El **origen de la captura de fondo** está fijo en (0, 0), así que dibujo e imagen pueden no
-  caer donde uno espera al mezclarlos.
-- Los **textos del editor son literales**, no `strings.xml`: no se traducen.
-- **Exportar a DXF** para devolver el croquis a un CAD de escritorio. Leer DXF sigue
-  descartado —ver más abajo—, pero escribirlo es mucho más fácil que leerlo.
+- **Verificación en dispositivo** de lo más reciente. La geometría tiene pruebas; el aspecto
+  y el tacto solo se han comprobado compilando. Es la deuda mayor.
+- **Escribir dentro de un PDF**: el apéndice incremental. Leerlo ya funciona.
+- **Pegar una tabla de coordenadas** desde Excel o Google Sheets, y poder ponerle una letra
+  a cada punto.
+- **La fuente Excalifont** del texto y una auditoría de las puntas de flecha contra el
+  original — lo que queda para igualar a Excalidraw.
+- **Exportar a DXF** para devolver el dibujo a un CAD de escritorio. Leer DXF sigue
+  descartado; escribirlo es mucho más fácil.
 
 ### Fase 8 — Vídeo
 
@@ -596,6 +603,8 @@ Estudiados y **descartados por lo que costarían frente a lo que dan**:
 
 ## Documentación de diseño
 
+- [`docs/motor.md`](docs/motor.md) — **el motor de edición por dentro**: el modelo, el trazo,
+  el imán, los alfileres, el bote, la máquina de estados del dedo y el PDF
 - [`docs/superpowers/specs/2026-07-26-pixpin-android-design.md`](docs/superpowers/specs/2026-07-26-pixpin-android-design.md) — diseño original y decisiones de producto
 - [`docs/superpowers/specs/2026-07-27-correcciones-estabilidad-fluidez.md`](docs/superpowers/specs/2026-07-27-correcciones-estabilidad-fluidez.md) — diagnóstico de estabilidad y fluidez
 - [`docs/superpowers/specs/2026-07-28-anotacion-grupos-scroll-design.md`](docs/superpowers/specs/2026-07-28-anotacion-grupos-scroll-design.md) — motor de trazo, anotación sobre el pin, grupos y captura con scroll

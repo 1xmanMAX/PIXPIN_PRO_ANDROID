@@ -3,6 +3,11 @@
 .gradle/
 .kotlin/
 build/
+# Este proyecto manda las salidas de compilacion aqui en vez de a app/build,
+# asi que la regla de arriba no lo cubria: entraron 1.795 archivos de virutas
+# —clases, dex, cache del compilador e informes— que se regeneran solos con
+# `./gradlew assembleDebug` y no aportan nada al repositorio.
+pixpin-build/
 /captures
 .externalNativeBuild
 .cxx
