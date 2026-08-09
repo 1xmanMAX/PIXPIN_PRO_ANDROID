@@ -19,10 +19,27 @@ import kotlinx.serialization.Serializable
  *
  * Dos orígenes, y el proyecto no los mezcla por capricho:
  *
- * - Una **hoja en blanco**: un lienzo del editor de siempre. Al exportar, sale
- *   como una página nueva.
+ * - Un **marco de un lienzo**: dibujas donde quieras y guardas lo que has
+ *   encuadrado. En un lienzo infinito uno tiene la planta a un lado, un detalle
+ *   al otro y cuatro pruebas en medio; lo que entrega es lo que ha encuadrado.
  * - Una **página de un PDF**: se abre la hoja de ese PDF, se dibuja encima y lo
  *   dibujado vuelve **dentro del PDF**, como capa. Ver [PdfAnotado].
+ *
+ * ## La hoja del PDF va de fondo, y el fondo no se exporta
+ *
+ * Al abrir una página se ve la hoja **debajo, como referencia**: no se puede
+ * mover ni borrar, porque no es un elemento del dibujo — es el papel. Lo que se
+ * traza va encima, en su capa, y **solo eso** vuelve al PDF.
+ *
+ * No es un detalle de presentación, es lo que evita el peor fallo posible aquí:
+ * si la hoja entrara en el dibujo como un elemento más, al escribir la capa se
+ * estamparía **una foto de la página encima de la propia página**. El resultado
+ * pesaría diez veces más, se vería casi igual… y el texto de debajo habría
+ * quedado tapado por una imagen, o sea que dejaría de poder buscarse y
+ * seleccionarse. Justo lo que todo esto existe para conservar.
+ *
+ * Por eso el fondo va como **telón** ([Scene] no lo contiene) y no como
+ * elemento: así no es que no se exporte, es que **no puede** exportarse.
  *
  * ## La regla que decide qué sale al exportar
  *
@@ -65,22 +82,51 @@ data class Proyecto(
     val pdfOrigen: String? = null
 )
 
-/** Una hoja del proyecto. */
+/**
+ * Una hoja del proyecto.
+ *
+ * **Es una referencia, no una copia.** El proyecto es un índice de dónde está
+ * cada hoja, así que seguir dibujando en el lienzo actualiza lo que saldrá
+ * impreso sin tener que volver a guardarla. Copiando, el proyecto se quedaría
+ * con la versión del día que la metiste y nadie se enteraría hasta ver el PDF.
+ */
 @Serializable
 data class Hoja(
     val id: String,
     val nombre: String = "",
-    /** El dibujo, por su identificador en el almacén de escenas. */
-    val dibujo: String,
     /**
-     * Qué página del PDF es, contando desde cero, o null si es hoja en blanco.
+     * El dibujo, por su identificador en el almacén de escenas.
+     *
+     * Puede no haberlo: una página de un PDF recién importada es una hoja del
+     * proyecto **antes** de que nadie dibuje nada en ella.
+     */
+    val dibujo: String? = null,
+    /**
+     * Qué marco de ese dibujo.
+     *
+     * Es la unidad que se guarda: **un marco, no el lienzo entero**. En un
+     * lienzo infinito uno tiene la planta a un lado, un detalle al otro y
+     * cuatro pruebas en medio; lo que quiere entregar es lo que ha encuadrado,
+     * no todo lo que hay dibujado. A null, la hoja es el lienzo completo.
+     */
+    val marco: String? = null,
+    /**
+     * Qué página del PDF es, contando desde cero, o null si no viene de uno.
      *
      * Es lo que hoy no se guarda en ninguna parte: al sacar una página de un
      * PDF se creaba un pin de imagen suelto y **se perdía de dónde venía**, así
      * que lo dibujado no tenía camino de vuelta. Con esto lo tiene.
      */
     val pagina: Int? = null
-)
+) {
+    /** Dos hojas son la misma si señalan al mismo sitio. */
+    val señal: String
+        get() = when {
+            pagina != null -> "pagina:$pagina"
+            marco != null -> "marco:$dibujo/$marco"
+            else -> "dibujo:$dibujo"
+        }
+}
 
 /**
  * Lo que se puede hacer con los proyectos, sin tocar el disco ni Android.
@@ -125,13 +171,69 @@ object Proyectos {
         )
 
     fun conHoja(proyecto: Proyecto, hoja: Hoja, cuando: Long): Proyecto {
-        // Una página del PDF no se mete dos veces: se vuelve a abrir la que hay.
-        // Sin esto, anotar la página 3 el lunes y el martes daría dos hojas 3 y
-        // la de después taparía a la de antes al exportar.
-        val yaEsta = proyecto.hojas.any { it.pagina != null && it.pagina == hoja.pagina }
+        // **Lo mismo no entra dos veces.** Guardar otra vez el mismo marco, o
+        // volver a la misma página del PDF, lleva a la hoja que ya hay. Sin
+        // esto, guardar el marco cada vez que se retoca daría diez hojas
+        // iguales, y anotar la página 3 dos días daría dos hojas 3 de las que
+        // una taparía a la otra al exportar, sin que nadie se enterara.
+        val yaEsta = proyecto.hojas.any { it.señal == hoja.señal }
         if (yaEsta || proyecto.hojas.size >= MAX_HOJAS) return proyecto
         return proyecto.copy(hojas = proyecto.hojas + hoja, tocado = cuando)
     }
+
+    /** La hoja que ya señala a lo mismo, si la hay. */
+    fun hojaComo(proyecto: Proyecto, hoja: Hoja): Hoja? =
+        proyecto.hojas.firstOrNull { it.señal == hoja.señal }
+
+    /** La hoja de una página concreta del PDF. */
+    fun hojaDePagina(proyecto: Proyecto, pagina: Int): Hoja? =
+        proyecto.hojas.firstOrNull { it.pagina == pagina }
+
+    /**
+     * Un proyecto con **todas las páginas del PDF dentro**, de una vez.
+     *
+     * Al pinear un plano de doce hojas uno no quiere doce decisiones: quiere
+     * las doce ahí, poder abrir la que le interese y dibujar. Las hojas nacen
+     * sin dibujo —todavía no hay nada anotado— y lo reciben cuando se abren.
+     *
+     * No se renderiza nada aquí: son doce entradas en una lista. Las miniaturas
+     * se dibujan cuando se miran, que es lo que evita que abrir un PDF de
+     * doscientas páginas se lleve la memoria por delante.
+     */
+    fun dePdf(
+        id: String,
+        nombre: String,
+        pdf: String,
+        paginas: Int,
+        cuando: Long,
+        idDeHoja: (Int) -> String
+    ): Proyecto = Proyecto(
+        id = id,
+        nombre = nombre,
+        pdfOrigen = pdf,
+        tocado = cuando,
+        hojas = (0 until paginas.coerceIn(0, MAX_HOJAS)).map {
+            Hoja(id = idDeHoja(it), pagina = it)
+        }
+    )
+
+    /**
+     * Le pone dibujo a una hoja que aún no lo tenía.
+     *
+     * Es lo que pasa al abrir una página del PDF y trazar la primera raya: la
+     * hoja existía desde que se importó el documento, y ahora tiene encima algo
+     * que enseñar.
+     */
+    fun conDibujo(proyecto: Proyecto, hojaId: String, dibujo: String, cuando: Long): Proyecto {
+        if (proyecto.hojas.none { it.id == hojaId }) return proyecto
+        return proyecto.copy(
+            hojas = proyecto.hojas.map { if (it.id == hojaId) it.copy(dibujo = dibujo) else it },
+            tocado = cuando
+        )
+    }
+
+    /** Las hojas que ya tienen algo dibujado encima. */
+    fun anotadas(proyecto: Proyecto): List<Hoja> = proyecto.hojas.filter { it.dibujo != null }
 
     fun sinHoja(proyecto: Proyecto, hojaId: String, cuando: Long): Proyecto =
         proyecto.copy(hojas = proyecto.hojas.filter { it.id != hojaId }, tocado = cuando)

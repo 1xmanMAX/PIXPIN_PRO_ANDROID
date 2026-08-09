@@ -17,8 +17,8 @@ import org.junit.Test
  */
 class ProyectosTest {
 
-    private fun hoja(id: String, pagina: Int? = null) =
-        Hoja(id = id, dibujo = "d$id", pagina = pagina)
+    private fun hoja(id: String, pagina: Int? = null, marco: String? = null) =
+        Hoja(id = id, dibujo = "d$id", marco = marco, pagina = pagina)
 
     private fun proyecto(
         id: String = "p", nombre: String = "Obra", pdf: String? = null, tocado: Long = 0
@@ -95,6 +95,74 @@ class ProyectosTest {
         p = Proyectos.conHoja(p, hoja("b", pagina = 3), 2)
         assertEquals(1, p.hojas.size)
         assertEquals("a", p.hojas[0].id)
+    }
+
+    /**
+     * **El mismo marco tampoco entra dos veces.**
+     *
+     * La unidad que se guarda es un marco del lienzo, y uno retoca el marco y
+     * vuelve a guardarlo. Sin esto, cada retoque dejaría otra hoja igual en el
+     * proyecto y al exportar saldría la misma lámina diez veces.
+     */
+    @Test
+    fun `el mismo marco no se guarda dos veces`() {
+        var p = proyecto()
+        p = Proyectos.conHoja(p, Hoja("a", dibujo = "lienzo", marco = "m1"), 1)
+        p = Proyectos.conHoja(p, Hoja("b", dibujo = "lienzo", marco = "m1"), 2)
+        assertEquals(1, p.hojas.size)
+        // Pero otro marco del mismo lienzo sí es otra hoja: es otra lámina.
+        p = Proyectos.conHoja(p, Hoja("c", dibujo = "lienzo", marco = "m2"), 3)
+        assertEquals(2, p.hojas.size)
+    }
+
+    /** Y se puede encontrar la que ya estaba, para abrirla en vez de duplicarla. */
+    @Test
+    fun `se encuentra la hoja que señala a lo mismo`() {
+        val p = Proyectos.conHoja(proyecto(), Hoja("a", dibujo = "l", marco = "m1"), 1)
+        val otra = Hoja("nueva", dibujo = "l", marco = "m1")
+        assertEquals("a", Proyectos.hojaComo(p, otra)?.id)
+        assertNull(Proyectos.hojaComo(p, Hoja("x", dibujo = "l", marco = "m9")))
+    }
+
+    // ---- Un PDF entero como proyecto ----
+
+    /**
+     * Al pinear un plano de doce hojas uno no quiere doce decisiones: quiere
+     * las doce ahí, poder abrir la que le interese y dibujar.
+     */
+    @Test
+    fun `un PDF entra con todas sus páginas`() {
+        val p = Proyectos.dePdf("p", "Plano", "plano.pdf", 12, 5) { "h$it" }
+        assertEquals(12, p.hojas.size)
+        assertEquals((0 until 12).toList(), p.hojas.map { it.pagina })
+        // Nacen sin dibujo: todavía no hay nada anotado encima.
+        assertTrue(p.hojas.all { it.dibujo == null })
+        assertEquals("plano.pdf", p.pdfOrigen)
+    }
+
+    @Test
+    fun `un PDF enorme se corta en el tope`() {
+        val p = Proyectos.dePdf("p", "Tocho", "t.pdf", 5000, 1) { "h$it" }
+        assertEquals(Proyectos.MAX_HOJAS, p.hojas.size)
+    }
+
+    /** Abrir una página y trazar la primera raya le pone dibujo a esa hoja. */
+    @Test
+    fun `una hoja del PDF recibe su dibujo`() {
+        var p = Proyectos.dePdf("p", "Plano", "plano.pdf", 3, 1) { "h$it" }
+        assertTrue(Proyectos.anotadas(p).isEmpty())
+        p = Proyectos.conDibujo(p, "h1", "dibujo-1", 9)
+        assertEquals(listOf("h1"), Proyectos.anotadas(p).map { it.id })
+        assertEquals("dibujo-1", Proyectos.hojaDePagina(p, 1)?.dibujo)
+        // Y las demás siguen como estaban.
+        assertNull(Proyectos.hojaDePagina(p, 0)?.dibujo)
+        assertEquals(9L, p.tocado)
+    }
+
+    @Test
+    fun `poner dibujo a una hoja que no existe no toca nada`() {
+        val p = Proyectos.dePdf("p", "Plano", "plano.pdf", 2, 1) { "h$it" }
+        assertSame(p, Proyectos.conDibujo(p, "no-existe", "d", 9))
     }
 
     /** Pero dos hojas en blanco sí son dos hojas: no tienen número que repetir. */
