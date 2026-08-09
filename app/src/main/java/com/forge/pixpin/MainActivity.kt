@@ -19,18 +19,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -154,6 +158,24 @@ fun OnboardingScreen() {
         )
     }
 
+    // **La portada enseña lo que hace falta para empezar, y nada más.**
+    //
+    // Antes eran trece bloques uno detrás de otro: los tres permisos, el modo de
+    // captura, el formato de copia, tres barras configurables, el negro OLED, la
+    // mano, la letra del pin y el informe de fallo. Todo abierto a la vez y todo
+    // con el mismo peso, así que abrir la app era enfrentarse a un formulario en
+    // vez de a un botón.
+    //
+    // Lo que uno viene a hacer aquí es **pulsar «Comenzar»**. Lo demás se toca
+    // una vez y no se vuelve a mirar, así que se va detrás de una puerta.
+    var enAjustes by remember { mutableStateOf(false) }
+    val listo = overlayGranted && notifGranted && batteryIgnored
+
+    if (enAjustes) {
+        PantallaDeAjustes(onVolver = { enAjustes = false })
+        return
+    }
+
     Scaffold { innerPadding ->
         Column(
             modifier = Modifier
@@ -168,44 +190,32 @@ fun OnboardingScreen() {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.onboarding_subtitle),
-                style = MaterialTheme.typography.bodyMedium
+                text = stringResource(
+                    if (listo) R.string.onboarding_listo else R.string.onboarding_subtitle
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(24.dp))
 
-            items.forEach { item ->
+            // **Un permiso concedido deja de ocupar sitio.** Su tarjeta ya no
+            // dice nada que haga falta: si está dado, está dado. Lo que queda a
+            // la vista es lo que todavía hay que tocar, que es justo lo que uno
+            // necesita ver.
+            items.filter { !it.granted }.forEach { item ->
                 PermissionCard(item)
                 Spacer(Modifier.height(12.dp))
             }
+            if (listo) {
+                TodoConcedido()
+                Spacer(Modifier.height(12.dp))
+            }
 
-            Spacer(Modifier.height(8.dp))
-            CaptureModeCard()
-
-            Spacer(Modifier.height(12.dp))
-            FormatoDeCopiaCard()
-
-            Spacer(Modifier.height(12.dp))
-            BarraDelPinCard()
-
-            Spacer(Modifier.height(12.dp))
-            BarraDeLaCapaCard()
-
-            Spacer(Modifier.height(12.dp))
-            BarraDelEditorCard()
-
-            Spacer(Modifier.height(12.dp))
-            OledCard()
-
-            Spacer(Modifier.height(12.dp))
-            ManoCard()
-
-            Spacer(Modifier.height(12.dp))
-            LetraDelPinCard()
-
-            Spacer(Modifier.height(12.dp))
+            // El informe de fallo sí manda: si lo hay, es lo primero que hay que
+            // ver, porque hasta descartarlo los pines no vuelven.
             CrashReportCard()
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
 
             Button(
                 onClick = {
@@ -215,7 +225,7 @@ fun OnboardingScreen() {
                     ).show()
                 },
                 enabled = overlayGranted,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
                 Text(stringResource(R.string.start_app))
             }
@@ -227,8 +237,113 @@ fun OnboardingScreen() {
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
+
+            Spacer(Modifier.height(12.dp))
+            TextButton(
+                onClick = { enAjustes = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Tune, contentDescription = null, Modifier.size(18.dp))
+                Text(
+                    stringResource(R.string.ajustes_titulo),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
         }
     }
+}
+
+/** Una línea en vez de tres tarjetas cuando ya no hay nada que conceder. */
+@Composable
+private fun TodoConcedido() {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            stringResource(R.string.permisos_listos),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 10.dp)
+        )
+    }
+}
+
+/**
+ * Los ajustes, detrás de una puerta y **en tres grupos**.
+ *
+ * Sueltos y todos seguidos daban nueve tarjetas del mismo tamaño y con el mismo
+ * peso, sin decir cuál importa ni cuál va con cuál. Agrupados por lo que tocan
+ * —capturar, dibujar, cómo se ve— se leen de un vistazo y se encuentra lo que se
+ * busca sin recorrerlos todos.
+ */
+@Composable
+private fun PantallaDeAjustes(onVolver: () -> Unit) {
+    Scaffold { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onVolver, modifier = Modifier.padding(end = 4.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.cd_close)
+                    )
+                }
+                Text(
+                    stringResource(R.string.ajustes_titulo),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+
+            GrupoDeAjustes(stringResource(R.string.ajustes_capturar)) {
+                CaptureModeCard()
+                Spacer(Modifier.height(12.dp))
+                FormatoDeCopiaCard()
+            }
+
+            GrupoDeAjustes(stringResource(R.string.ajustes_dibujar)) {
+                ManoCard()
+                Spacer(Modifier.height(12.dp))
+                BarraDelEditorCard()
+                Spacer(Modifier.height(12.dp))
+                BarraDelPinCard()
+                Spacer(Modifier.height(12.dp))
+                BarraDeLaCapaCard()
+            }
+
+            GrupoDeAjustes(stringResource(R.string.ajustes_aspecto)) {
+                OledCard()
+                Spacer(Modifier.height(12.dp))
+                LetraDelPinCard()
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun GrupoDeAjustes(titulo: String, contenido: @Composable () -> Unit) {
+    Text(
+        titulo,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp)
+    )
+    contenido()
+    Spacer(Modifier.height(28.dp))
 }
 
 /**

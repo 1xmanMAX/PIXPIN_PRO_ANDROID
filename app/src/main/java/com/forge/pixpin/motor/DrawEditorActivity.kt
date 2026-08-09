@@ -38,6 +38,9 @@ import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Polyline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
@@ -568,24 +571,33 @@ class DrawEditorActivity : ComponentActivity() {
                 expanded = abierto,
                 onDismissRequest = { abierto = false }
             ) {
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(getString(R.string.export_imagen)) },
-                    onClick = { abierto = false; compartirImagen() }
-                )
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(getString(R.string.export_pdf)) },
-                    onClick = { abierto = false; compartirPdf() }
-                )
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(getString(R.string.export_svg)) },
-                    onClick = { abierto = false; compartirSvg() }
-                )
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(getString(R.string.export_excalidraw)) },
-                    onClick = { abierto = false; compartir() }
-                )
+                // **Una palabra por línea, y un icono delante.**
+                //
+                // Eran cuatro líneas que empezaban por «Compartir como…», así
+                // que para elegir había que leerse las cuatro enteras y llegar
+                // al final de cada una. Lo que cambia entre ellas es la última
+                // palabra: pues esa es la que se enseña. El verbo ya lo dice el
+                // botón que abrió el menú.
+                Formato(Icons.Filled.Image, R.string.formato_imagen) { compartirImagen() }
+                Formato(Icons.Filled.PictureAsPdf, R.string.formato_pdf) { compartirPdf() }
+                Formato(Icons.Filled.Polyline, R.string.formato_svg) { compartirSvg() }
+                Formato(Icons.Filled.Edit, R.string.formato_editable) { compartir() }
             }
         }
+    }
+
+    /** Una línea del menú de exportar: icono, una palabra y ya. */
+    @Composable
+    private fun Formato(
+        icono: androidx.compose.ui.graphics.vector.ImageVector,
+        texto: Int,
+        alTocar: () -> Unit
+    ) {
+        androidx.compose.material3.DropdownMenuItem(
+            leadingIcon = { Icon(icono, contentDescription = null) },
+            text = { Text(getString(texto)) },
+            onClick = alTocar
+        )
     }
 
     /**

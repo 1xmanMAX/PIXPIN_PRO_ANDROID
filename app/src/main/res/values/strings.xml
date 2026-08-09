@@ -16,6 +16,12 @@
     <string name="start_app">Comenzar</string>
     <string name="app_started">PixPin activo — la bola flotante aparece en tu pantalla</string>
     <string name="need_overlay">Concede «Mostrar sobre otras apps» para continuar</string>
+    <string name="onboarding_listo">Todo listo. Pulsa Comenzar y aparecerá la bola flotante.</string>
+    <string name="permisos_listos">Permisos concedidos</string>
+    <string name="ajustes_titulo">Ajustes</string>
+    <string name="ajustes_capturar">Capturar</string>
+    <string name="ajustes_dibujar">Dibujar</string>
+    <string name="ajustes_aspecto">Aspecto</string>
 
     <!-- Modo de captura -->
     <string name="capture_mode_title">Modo de captura</string>
@@ -216,6 +222,10 @@
     <string name="export_imagen">Compartir como imagen</string>
     <string name="export_pdf">Compartir como PDF</string>
     <string name="export_svg">Compartir como SVG</string>
+    <string name="formato_imagen">Imagen</string>
+    <string name="formato_pdf">PDF</string>
+    <string name="formato_svg">SVG</string>
+    <string name="formato_editable">Archivo editable</string>
     <string name="export_excalidraw">Compartir como .excalidraw</string>
 
     <!-- Letra de la edición simple -->
