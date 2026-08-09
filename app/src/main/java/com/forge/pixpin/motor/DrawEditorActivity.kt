@@ -76,6 +76,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.material3.CircularProgressIndicator
 import com.forge.pixpin.R
 import com.forge.pixpin.pin.ImageStore
 import com.forge.pixpin.ui.theme.PixPinTheme
@@ -564,8 +569,21 @@ class DrawEditorActivity : ComponentActivity() {
     private fun MenuDeExportar() {
         var abierto by remember { mutableStateOf(false) }
         Box {
-            IconButton(onClick = { abierto = true }) {
-                Icon(Icons.Filled.Share, contentDescription = getString(R.string.cd_draw_export))
+            IconButton(onClick = { abierto = true }, enabled = !exportando) {
+                // Mientras se escribe el archivo, la ruedecita. Es lo único que
+                // distingue «está trabajando» de «no ha hecho nada al tocarlo»,
+                // y ahora que el trabajo va por detrás hace falta decirlo.
+                if (exportando) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Share,
+                        contentDescription = getString(R.string.cd_draw_export)
+                    )
+                }
             }
             androidx.compose.material3.DropdownMenu(
                 expanded = abierto,
@@ -1202,15 +1220,8 @@ class DrawEditorActivity : ComponentActivity() {
      * Es la vía de «esto lo tiene que poder abrir cualquiera»: un `.excalidraw`
      * solo lo entiende Excalidraw y un PNG grande pesa y no se imprime bien.
      */
-    private fun compartirPdf() {
-        val archivo = DrawPdf.aArchivo(this, controller.scene, dibujoId, ::bitmapDe)
-        if (archivo == null) {
-            android.widget.Toast.makeText(
-                this, R.string.pin_draw_empty, android.widget.Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-        compartirArchivo(archivo, DrawPdf.MIME_TYPE)
+    private fun compartirPdf() = exportando(DrawPdf.MIME_TYPE) {
+        DrawPdf.aArchivo(this, controller.scene, dibujoId, ::bitmapDe)
     }
 
     /**
@@ -1222,15 +1233,8 @@ class DrawEditorActivity : ComponentActivity() {
      * curvas para que se vea igual en un ordenador que no tenga estas fuentes.
      * Ver [DrawSvg].
      */
-    private fun compartirSvg() {
-        val archivo = DrawSvg.aArchivo(this, controller.scene, dibujoId, ::bitmapDe)
-        if (archivo == null) {
-            android.widget.Toast.makeText(
-                this, R.string.pin_draw_empty, android.widget.Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
-        compartirArchivo(archivo, DrawSvg.MIME_TYPE)
+    private fun compartirSvg() = exportando(DrawSvg.MIME_TYPE) {
+        DrawSvg.aArchivo(this, controller.scene, dibujoId, ::bitmapDe)
     }
 
     /**
@@ -1243,24 +1247,63 @@ class DrawEditorActivity : ComponentActivity() {
      * compresor y qué extensión—, que es de la capa de ajustes.
      */
     private fun compartirImagen() {
-        val bitmap = DrawExport.aBitmap(controller.scene, imageProvider = ::bitmapDe)
-        if (bitmap == null) {
-            android.widget.Toast.makeText(
-                this, R.string.pin_draw_empty, android.widget.Toast.LENGTH_SHORT
-            ).show()
-            return
-        }
         val formato = (application as? com.forge.pixpin.PixPinApp)?.ajustes?.copyFormat
             ?: com.forge.pixpin.data.CopyFormat.PNG
-        val archivo = runCatching {
-            val carpeta = File(cacheDir, "share").apply { mkdirs() }
-            File(carpeta, "$dibujoId.${formato.extension}").also { destino ->
-                destino.outputStream().use { bitmap.compress(formato.compresor, 100, it) }
-            }
-        }.getOrNull()
-        if (!bitmap.isRecycled) bitmap.recycle()
-        archivo?.let { compartirArchivo(it, formato.mime) }
+        exportando(formato.mime) {
+            val bitmap = DrawExport.aBitmap(controller.scene, imageProvider = ::bitmapDe)
+                ?: return@exportando null
+            val archivo = runCatching {
+                val carpeta = File(cacheDir, "share").apply { mkdirs() }
+                File(carpeta, "$dibujoId.${formato.extension}").also { destino ->
+                    destino.outputStream().use { bitmap.compress(formato.compresor, 100, it) }
+                }
+            }.getOrNull()
+            if (!bitmap.isRecycled) bitmap.recycle()
+            archivo
+        }
     }
+
+    /**
+     * Escribe el archivo **fuera del hilo principal** y luego lo comparte.
+     *
+     * Aquí había un cuelgue esperando. Todo esto corría en el hilo de la
+     * pantalla: comprimir un PNG de cuatro mil píxeles, pasar una foto a base64
+     * para meterla en un SVG, dibujar las páginas de un PDF. Con un garabato no
+     * se nota —y por eso nunca saltó—, pero con un plano y una captura dentro
+     * son segundos con la pantalla congelada, y Android acaba ofreciendo cerrar
+     * la aplicación.
+     *
+     * Mientras dura, el botón de compartir se cambia por una ruedecita: no es
+     * un adorno, es lo único que distingue «está trabajando» de «no ha hecho
+     * nada al tocarlo».
+     */
+    private fun exportando(mime: String, escribir: suspend () -> File?) {
+        if (exportando) return
+        exportando = true
+        lifecycleScope.launch {
+            val archivo = withContext(Dispatchers.IO) { runCatching { escribir() }.getOrNull() }
+            exportando = false
+            if (archivo == null) {
+                android.widget.Toast.makeText(
+                    this@DrawEditorActivity,
+                    R.string.pin_draw_empty,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            compartirArchivo(archivo, mime)
+        }
+    }
+
+    /**
+     * Si hay una exportación en marcha.
+     *
+     * Es estado de Compose porque la barra lo lee: con `var` normal el botón no
+     * cambiaría a ruedecita, por lo mismo que el lienzo no se repinta solo. Y
+     * sirve además de cerrojo — tocar compartir tres veces seguidas escribía el
+     * mismo archivo tres veces a la vez, cada una pisando a la anterior.
+     */
+    private var exportando by mutableStateOf(false)
 
     /** Manda un archivo ya escrito en `cache/share`, que es lo que ve el proveedor. */
     private fun compartirArchivo(archivo: File, mime: String) {
@@ -1281,27 +1324,13 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
-    private fun compartir() {
-        runCatching {
-            // En `share/` y no en la raíz de la caché: el FileProvider solo
-            // publica esa subcarpeta (`res/xml/file_paths.xml`), y desde fuera
-            // el archivo daría un fallo de permisos.
-            val carpeta = File(cacheDir, "share").apply { mkdirs() }
-            val destino = File(carpeta, "$dibujoId.excalidraw")
-            destino.writeText(ExcalidrawStore.exportar(controller.scene))
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                this, "$packageName.fileprovider", destino
-            )
-            startActivity(
-                Intent.createChooser(
-                    Intent(Intent.ACTION_SEND).apply {
-                        type = ExcalidrawStore.MIME_TYPE
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    },
-                    getString(R.string.cd_draw_export)
-                )
-            )
+    private fun compartir() = exportando(ExcalidrawStore.MIME_TYPE) {
+        // En `share/` y no en la raíz de la caché: el FileProvider solo publica
+        // esa subcarpeta (`res/xml/file_paths.xml`), y desde fuera el archivo
+        // daría un fallo de permisos.
+        val carpeta = File(cacheDir, "share").apply { mkdirs() }
+        File(carpeta, "$dibujoId.excalidraw").also {
+            it.writeText(ExcalidrawStore.exportar(controller.scene))
         }
     }
 }

@@ -12,8 +12,35 @@ android {
         applicationId = "com.forge.pixpin"
         minSdk = 29
         targetSdk = 36
-        versionCode = 11
-        versionName = "0.4.0"
+        // **Esto sube en cada APK que salga de aquí.** Se había quedado en 0.4.0
+        // mientras se repartían archivos llamados v0.5.0, v0.5.1 y v0.5.2: los
+        // tres se declaraban la misma versión y con el mismo `versionCode`, así
+        // que Android no tenía forma de saber que uno era más nuevo que otro
+        // —a veces se niega a instalar encima— y desde el móvil no había manera
+        // de comprobar cuál estaba puesto.
+        versionCode = 12
+        versionName = "0.5.3"
+    }
+
+    buildTypes {
+        release {
+            // **Los 73 MB eran esto.** Sin bloque de release solo existía el
+            // build de depuración: sin minificar y arrastrando el paquete
+            // entero de iconos de Material, del que se usan treinta. Con R8 se
+            // queda en una fracción, y eso se nota cada vez que hay que
+            // bajárselo por un enlace y meterlo a mano en el móvil.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // Firmado con la clave de depuración a propósito: esto no va a
+            // Google Play, se reparte por un enlace y se instala a mano. Sin
+            // firma el APK no se puede instalar, y montar una clave de release
+            // para un proyecto personal es ceremonia sin nadie que la lea.
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     // Nota: `enableV1Signing` aquí NO surte efecto. Con minSdk 29 el plugin
@@ -23,6 +50,9 @@ android {
 
     buildFeatures {
         compose = true
+        // Para poder enseñar la versión dentro de la app. Si el número solo vive
+        // en este archivo, desde el móvil no hay forma de saber qué build tienes.
+        buildConfig = true
     }
 
     compileOptions {

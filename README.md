@@ -115,7 +115,8 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 ```bash
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
-./gradlew assembleDebug        # APK
+./gradlew assembleRelease      # APK pequeño (~4 MB, minificado)
+./gradlew assembleDebug        # APK de depuración (~74 MB)
 ./gradlew testDebugUnitTest    # 836 pruebas
 ./gradlew lintDebug
 ```
@@ -193,7 +194,7 @@ en la JVM, en menos de un minuto. Lo que se ve y se toca solo se valida en un m�
 - Lo más reciente del motor está **sin verificar en dispositivo**: la geometría tiene pruebas, el aspecto no.
 - **No se leen DWG, RVT ni DXF**: para medir sobre un plano ajeno se calibra su captura.
 - La **captura con scroll** cose fotogramas: con cabeceras fijas o sin textura puede fallar.
-- El APK de depuración pesa ~73 MB: iconos completos de Material, sin minificar.
+- El APK de depuración pesa ~74 MB; el de release, **3,7 MB**. Para instalar a mano, el de release.
 
 ## Roadmap
 
