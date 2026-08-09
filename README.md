@@ -2,7 +2,7 @@
 
 Captura, anota y **fija notas flotantes** sobre cualquier app.
 
-**Android 10+** · Kotlin + Compose · 732 pruebas · sin red, sin cuentas, sin analítica
+**Android 10+** · Kotlin + Compose · 764 pruebas · sin red, sin cuentas, sin analítica
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual completo**](docs/motor.md)
 
@@ -48,7 +48,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app.
 
 ## Salidas
 
-![Imagen, PDF de varias hojas, archivo editable y portapapeles](docs/img/salidas.svg)
+![Imagen, SVG para documentos, PDF de varias hojas y archivo editable](docs/img/salidas.svg)
 
 ## Ajustes
 
@@ -116,7 +116,7 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleDebug        # APK
-./gradlew testDebugUnitTest    # 732 pruebas
+./gradlew testDebugUnitTest    # 764 pruebas
 ./gradlew lintDebug
 ```
 
@@ -161,7 +161,7 @@ com.forge.pixpin/
 | `Nudos` · `Recorte` · `Medida` · `EscalaGrafica` | Alfileres, recortar/extender, cotas y escala |
 | `PdfLectura` · `PdfLector` | El PDF por dentro, índice comprimido incluido |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **732 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **764 pruebas**
 en la JVM, en menos de un minuto. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---
@@ -207,9 +207,14 @@ en la JVM, en menos de un minuto. Lo que se ve y se toca solo se valida en un m�
 | 6.9 | **Editar PDFs**: devolver la página anotada al original conservando su texto |
 | 7 · 8 · 9 | OCR y QR · vídeo · contenido de DOCX/XLSX/PPTX |
 
-**Descartados a propósito**: leer DWG (GPLv3, SDK comercial o nube), visor de DXF
-(un plano real dio 59 MB y 133.102 entidades), Office con maquetado, SVG (sería la primera
-dependencia externa), historial del portapapeles (Android 10+ lo prohíbe en segundo plano).
+**Descartados a propósito**: **leer** DWG (GPLv3, SDK comercial o nube), visor de DXF
+(un plano real dio 59 MB y 133.102 entidades), Office con maquetado, **leer** SVG (haría
+falta un parser: sería la primera dependencia externa), historial del portapapeles
+(Android 10+ lo prohíbe en segundo plano).
+
+> Ojo con el SVG: lo descartado es **leerlo**. Escribirlo no necesita nada, porque el motor
+> ya genera las figuras como `M`/`L`/`C`, que es el repertorio exacto de un camino SVG. Por
+> eso exportar sí está hecho y abrir un SVG ajeno sigue sin estarlo.
 
 ---
 

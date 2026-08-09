@@ -212,6 +212,7 @@
     <!-- Sacar el dibujo de aquí: los tres bajo el mismo botón -->
     <string name="export_imagen">Compartir como imagen</string>
     <string name="export_pdf">Compartir como PDF</string>
+    <string name="export_svg">Compartir como SVG</string>
     <string name="export_excalidraw">Compartir como .excalidraw</string>
 
     <!-- Letra de la edición simple -->

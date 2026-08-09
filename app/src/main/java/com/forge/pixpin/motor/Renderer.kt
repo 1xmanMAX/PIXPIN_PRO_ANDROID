@@ -613,6 +613,40 @@ class Renderer(
         return mini
     }
 
+    /**
+     * La miniatura de un mosaico, para quien tenga que **guardarla** en vez de
+     * pintarla.
+     *
+     * La necesita el SVG. Un mosaico no se puede escribir como trazos: lo que
+     * hace es coger los píxeles de debajo y devolverlos gordos, así que lo que
+     * hay que guardar son esos píxeles. Y resulta que lo que ya se calcula aquí
+     * para pintarlo —una miniatura de unas decenas de píxeles de lado— es
+     * **justo** lo que conviene incrustar: se estira en el visor igual que se
+     * estira en la pantalla, y el archivo pesa lo que pesa un icono en vez de lo
+     * que pesaría el recorte a tamaño real.
+     *
+     * [debajo] son los elementos que van por debajo de [e] en la escena, por si
+     * no hay foto y el mosaico tiene que pixelar el propio dibujo.
+     */
+    internal fun miniaturaDelMosaico(e: Element, debajo: List<Element>): Bitmap? {
+        val c = getElementAbsoluteCoords(e)
+        val fuente = backdrop ?: run {
+            val guardado = capaDebajo
+            capaDebajo = debajo
+            val mini = fondoDelDibujo(e, c)
+            capaDebajo = guardado
+            return mini
+        }
+        val recorte = Rect(
+            c.x1.toInt().coerceIn(0, fuente.width - 1),
+            c.y1.toInt().coerceIn(0, fuente.height - 1),
+            c.x2.toInt().coerceIn(1, fuente.width),
+            c.y2.toInt().coerceIn(1, fuente.height)
+        )
+        if (recorte.width() < 1 || recorte.height() < 1) return null
+        return miniaturaDe(e, fuente, recorte)
+    }
+
     /** Lo que hay debajo del elemento que se está pintando, si hace falta. */
     private var capaDebajo: List<Element>? = null
 

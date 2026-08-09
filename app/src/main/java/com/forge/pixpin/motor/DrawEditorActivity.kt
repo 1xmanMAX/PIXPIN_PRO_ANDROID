@@ -555,6 +555,10 @@ class DrawEditorActivity : ComponentActivity() {
                     onClick = { abierto = false; compartirPdf() }
                 )
                 androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(getString(R.string.export_svg)) },
+                    onClick = { abierto = false; compartirSvg() }
+                )
+                androidx.compose.material3.DropdownMenuItem(
                     text = { Text(getString(R.string.export_excalidraw)) },
                     onClick = { abierto = false; compartir() }
                 )
@@ -1173,6 +1177,26 @@ class DrawEditorActivity : ComponentActivity() {
             return
         }
         compartirArchivo(archivo, DrawPdf.MIME_TYPE)
+    }
+
+    /**
+     * El dibujo como SVG, para **pegarlo dentro de un documento**.
+     *
+     * Es lo que el PDF no cubre: un PDF se manda, pero no se inserta en medio de
+     * un párrafo de Word ni en una diapositiva. Sale vectorial, así que se puede
+     * estirar cuanto haga falta sin que se pixele, y el texto va convertido en
+     * curvas para que se vea igual en un ordenador que no tenga estas fuentes.
+     * Ver [DrawSvg].
+     */
+    private fun compartirSvg() {
+        val archivo = DrawSvg.aArchivo(this, controller.scene, dibujoId, ::bitmapDe)
+        if (archivo == null) {
+            android.widget.Toast.makeText(
+                this, R.string.pin_draw_empty, android.widget.Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        compartirArchivo(archivo, DrawSvg.MIME_TYPE)
     }
 
     /**

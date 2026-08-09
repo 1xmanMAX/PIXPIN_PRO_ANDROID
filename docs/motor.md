@@ -119,7 +119,7 @@ Prioridad: vértice → punto medio → cruce → centro → **borde** (solo si 
 
 ## Salidas
 
-![Imagen, PDF de varias hojas, archivo editable y portapapeles](img/salidas.svg)
+![Imagen, SVG para documentos, PDF de varias hojas y archivo editable](img/salidas.svg)
 
 ---
 
@@ -172,5 +172,5 @@ flowchart TB
 El núcleo no importa `android.*`. Se prueba en la JVM, sin emulador.
 
 ```
-732 pruebas · todas en verde
+764 pruebas · todas en verde
 ```

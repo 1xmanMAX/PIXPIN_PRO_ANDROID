@@ -34,8 +34,8 @@ class MotorSeparadoTest {
      */
     private val conAndroid = setOf(
         "Renderer.kt", "DrawCanvas.kt", "DrawToolbar.kt", "DrawEditorActivity.kt",
-        "DrawExport.kt", "DrawPdf.kt", "DrawTablas.kt", "DrawFonts.kt", "Theme.kt",
-        "ExcalidrawStore.kt"
+        "DrawExport.kt", "DrawPdf.kt", "DrawSvg.kt", "DrawTablas.kt", "DrawFonts.kt",
+        "Theme.kt", "ExcalidrawStore.kt"
     )
 
     private fun archivos(): List<File> =
