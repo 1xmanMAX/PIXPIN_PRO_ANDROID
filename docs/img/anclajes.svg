@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 300" role="img" aria-label="Los puntos a los que se pega el trazo: esquina, punto medio, centro, interseccion y canto de guia">
+  <g font-family="sans-serif" font-size="12" fill="#8B8B9E">
+
+    <!-- la escena -->
+    <g transform="translate(40,30)">
+      <!-- una guia, a trazos -->
+      <rect x="30" y="30" width="230" height="140" fill="none" stroke="#2F9E44"
+            stroke-width="2" stroke-dasharray="7 5" opacity="0.85"/>
+      <!-- una figura del dibujo -->
+      <circle cx="260" cy="100" r="80" fill="none" stroke="#6965DB" stroke-width="2.5"/>
+
+      <!-- esquinas -->
+      <circle cx="30" cy="30" r="5" fill="#6965DB"/>
+      <circle cx="30" cy="170" r="5" fill="#6965DB"/>
+      <circle cx="260" cy="30" r="5" fill="#6965DB"/>
+      <!-- medios -->
+      <circle cx="145" cy="30" r="5" fill="#1971C2"/>
+      <circle cx="30" cy="100" r="5" fill="#1971C2"/>
+      <!-- centro -->
+      <circle cx="145" cy="100" r="5" fill="#8B8B9E"/>
+      <circle cx="260" cy="100" r="5" fill="#8B8B9E"/>
+      <!-- intersecciones: la guia corta al circulo -->
+      <circle cx="260" cy="30" r="9" fill="none" stroke="#E03131" stroke-width="2"/>
+      <circle cx="260" cy="170" r="5" fill="#E03131"/>
+      <circle cx="196" cy="170" r="5" fill="#E03131"/>
+      <circle cx="196" cy="30" r="5" fill="#E03131"/>
+      <!-- canto de la guia -->
+      <circle cx="100" cy="170" r="5" fill="#2F9E44"/>
+      <path d="M70 190 L96 176" stroke="#2F9E44" stroke-width="1.4" fill="none"/>
+      <text x="66" y="204" text-anchor="end" fill="#2F9E44">cualquier punto del canto</text>
+    </g>
+
+    <!-- leyenda -->
+    <g transform="translate(40,250)">
+      <circle cx="8" cy="-4" r="5" fill="#6965DB"/><text x="20" y="0">esquina</text>
+      <circle cx="98" cy="-4" r="5" fill="#1971C2"/><text x="110" y="0">punto medio</text>
+      <circle cx="216" cy="-4" r="5" fill="#8B8B9E"/><text x="228" y="0">centro</text>
+      <circle cx="300" cy="-4" r="5" fill="#E03131"/><text x="312" y="0">intersección — gana a todo</text>
+      <circle cx="500" cy="-4" r="5" fill="#2F9E44"/><text x="512" y="0">canto de guía — el último recurso</text>
+    </g>
+
+    <text x="740" y="30" text-anchor="end" font-size="13" fill="#6965DB" font-weight="bold">a qué se pega el trazo</text>
+  </g>
+</svg>

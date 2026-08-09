@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 210" role="img" aria-label="Recortar quita el trozo que se toca hasta donde lo cruzan otras figuras; si esta en medio la raya se parte en dos">
+  <g font-family="sans-serif" font-size="12" fill="#8B8B9E">
+
+    <!-- antes -->
+    <g transform="translate(30,30)">
+      <text x="140" y="0" text-anchor="middle" font-size="13" fill="#6965DB" font-weight="bold">se toca el trozo que sobra</text>
+      <line x1="0" y1="80" x2="280" y2="80" stroke="#6965DB" stroke-width="3" stroke-linecap="round"/>
+      <line x1="80" y1="30" x2="80" y2="130" stroke="#8B8B9E" stroke-width="2.5"/>
+      <line x1="200" y1="30" x2="200" y2="130" stroke="#8B8B9E" stroke-width="2.5"/>
+      <circle cx="80" cy="80" r="4" fill="#8B8B9E"/>
+      <circle cx="200" cy="80" r="4" fill="#8B8B9E"/>
+      <circle cx="140" cy="80" r="7" fill="#E03131"/>
+      <text x="140" y="112" text-anchor="middle" fill="#E03131">aquí</text>
+    </g>
+
+    <!-- flecha -->
+    <path d="M350 110 L410 110" stroke="#8B8B9E" stroke-width="2" marker-end="url(#f3)"/>
+
+    <!-- despues -->
+    <g transform="translate(450,30)">
+      <text x="140" y="0" text-anchor="middle" font-size="13" fill="#6965DB" font-weight="bold">la raya se parte en dos</text>
+      <line x1="0" y1="80" x2="80" y2="80" stroke="#6965DB" stroke-width="3" stroke-linecap="round"/>
+      <line x1="200" y1="80" x2="280" y2="80" stroke="#6965DB" stroke-width="3" stroke-linecap="round"/>
+      <line x1="80" y1="30" x2="80" y2="130" stroke="#8B8B9E" stroke-width="2.5"/>
+      <line x1="200" y1="30" x2="200" y2="130" stroke="#8B8B9E" stroke-width="2.5"/>
+      <line x1="80" y1="80" x2="200" y2="80" stroke="#E03131" stroke-width="1.4"
+            stroke-dasharray="4 4" opacity="0.55"/>
+      <text x="140" y="112" text-anchor="middle" font-size="11" opacity="0.8">hasta donde la cruzan</text>
+    </g>
+
+    <text x="390" y="185" text-anchor="middle" font-size="12">
+      vale para rayas, rectángulos, rombos, óvalos y arcos · lo redondo se recorta en arco, no en segmentos
+    </text>
+  </g>
+  <defs>
+    <marker id="f3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#8B8B9E"/>
+    </marker>
+  </defs>
+</svg>

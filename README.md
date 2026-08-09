@@ -108,7 +108,10 @@ La barra enseña **un botón por grupo** y despliega sus hermanas al volver a to
 herramientas salen y cómo se agrupan se elige en los ajustes**, por separado para el pin, la
 capa y el editor.
 
-Detalle completo del motor: [`docs/motor.md`](docs/motor.md).
+![Un solo motor para los cuatro sitios donde se dibuja](docs/img/anclajes.svg)
+
+Detalle completo del motor, **con dibujos de cada mecanismo**:
+[`docs/motor.md`](docs/motor.md).
 
 ### Escribir a mano y con lápiz óptico
 
@@ -243,6 +246,8 @@ que no hay perspectiva que corregir y la calibración es exacta.
 | **Escala gráfica** | La reglita a cuadros de los planos. Un «1:50» escrito miente en cuanto alguien fotocopia; la barra encoge con el dibujo |
 | **Recortar** y **extender** | Se traza de largo y se ajusta después, como a escuadra y cartabón |
 | **Guías** y **alfileres** | El andamio, y los clavos que hacen que una figura hecha a trozos no se abra al moverla |
+
+![Los grados de libertad segun cuantos alfileres](docs/img/alfiler.svg)
 
 **Dos formas de acotar**, con interruptor: *dictada* —se teclea la longitud y el ángulo con
 teclado numérico, y la raya obedece anclada por su principio— o *medida*, que dice lo que

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 250" role="img" aria-label="Como encuentra el bote el hueco cerrado: rejilla, derrame y contorno con agujero">
+  <g font-family="sans-serif" font-size="12" fill="#8B8B9E">
+
+    <!-- 1 -->
+    <g transform="translate(15,25)">
+      <text x="85" y="0" text-anchor="middle" font-size="13" fill="#6965DB" font-weight="bold">1 · se toca</text>
+      <rect x="10" y="20" width="150" height="130" fill="none" stroke="#6965DB" stroke-width="2.5"/>
+      <circle cx="85" cy="85" r="30" fill="none" stroke="#6965DB" stroke-width="2.5"/>
+      <circle cx="38" cy="122" r="5" fill="#E03131"/>
+      <text x="85" y="180" text-anchor="middle">el dedo cae en el hueco</text>
+    </g>
+
+    <!-- 2 -->
+    <g transform="translate(210,25)">
+      <text x="85" y="0" text-anchor="middle" font-size="13" fill="#6965DB" font-weight="bold">2 · paredes</text>
+      <g stroke="#8B8B9E" stroke-width="0.4" opacity="0.45">
+        <path d="M10 20 h150 M10 40 h150 M10 60 h150 M10 80 h150 M10 100 h150 M10 120 h150 M10 140 h150"/>
+        <path d="M10 20 v130 M30 20 v130 M50 20 v130 M70 20 v130 M90 20 v130 M110 20 v130 M130 20 v130 M150 20 v130"/>
+      </g>
+      <rect x="10" y="20" width="150" height="130" fill="none" stroke="#6965DB" stroke-width="8" opacity="0.35"/>
+      <circle cx="85" cy="85" r="30" fill="none" stroke="#6965DB" stroke-width="8" opacity="0.35"/>
+      <text x="85" y="180" text-anchor="middle">cada trazo pinta sus celdas</text>
+    </g>
+
+    <!-- 3 -->
+    <g transform="translate(405,25)">
+      <text x="85" y="0" text-anchor="middle" font-size="13" fill="#6965DB" font-weight="bold">3 · se derrama</text>
+      <path d="M14 24 h142 v122 h-142 z M85 55 a30 30 0 1 0 0.1 0 z"
+            fill="#2F9E44" fill-rule="evenodd" opacity="0.3"/>
+      <rect x="10" y="20" width="150" height="130" fill="none" stroke="#6965DB" stroke-width="2.5"/>
+      <circle cx="85" cy="85" r="30" fill="none" stroke="#6965DB" stroke-width="2.5"/>
+      <text x="85" y="180" text-anchor="middle">llena hasta topar con pared</text>
+      <text x="85" y="196" text-anchor="middle" font-size="11" fill="#E03131">si llega al borde: no está cerrado</text>
+    </g>
+
+    <!-- 4 -->
+    <g transform="translate(600,25)">
+      <text x="85" y="0" text-anchor="middle" font-size="13" fill="#6965DB" font-weight="bold">4 · contorno</text>
+      <path d="M14 24 h142 v122 h-142 z M85 55 a30 30 0 1 0 0.1 0 z"
+            fill="#6965DB" fill-rule="evenodd" opacity="0.25"
+            stroke="#6965DB" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="85" y="180" text-anchor="middle">sale con su agujero</text>
+      <text x="85" y="196" text-anchor="middle" font-size="11">el círculo no se pinta</text>
+    </g>
+  </g>
+</svg>

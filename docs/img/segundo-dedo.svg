@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 260" role="img" aria-label="El segundo dedo significa dos cosas: quieto pide figura perfecta, moviendose pide encuadrar">
+  <g font-family="sans-serif" font-size="12" fill="#8B8B9E">
+
+    <text x="390" y="22" text-anchor="middle" font-size="14" fill="#6965DB" font-weight="bold">
+      el segundo dedo significa dos cosas, y no se sabe cuál hasta que se mueve
+    </text>
+
+    <!-- quieto -->
+    <g transform="translate(40,50)">
+      <rect x="0" y="0" width="320" height="180" rx="10" fill="none" stroke="#8B8B9E"
+            stroke-width="1" opacity="0.35"/>
+      <text x="160" y="24" text-anchor="middle" font-size="13" fill="#2F9E44" font-weight="bold">se queda quieto</text>
+
+      <!-- el ovalo libre, a trazos, y el circulo cuadrado -->
+      <ellipse cx="150" cy="105" rx="95" ry="45" fill="none" stroke="#8B8B9E"
+               stroke-width="1.6" stroke-dasharray="5 4" opacity="0.7"/>
+      <circle cx="150" cy="105" r="48" fill="none" stroke="#6965DB" stroke-width="2.6"/>
+
+      <circle cx="150" cy="105" r="6" fill="#6965DB"/>
+      <circle cx="198" cy="105" r="7" fill="#2F9E44"/>
+      <circle cx="65" cy="60" r="7" fill="#2F9E44"/>
+
+      <text x="160" y="172" text-anchor="middle" fill="#2F9E44">figura perfecta · y se sigue dibujando</text>
+    </g>
+
+    <!-- pellizca -->
+    <g transform="translate(420,50)">
+      <rect x="0" y="0" width="320" height="180" rx="10" fill="none" stroke="#8B8B9E"
+            stroke-width="1" opacity="0.35"/>
+      <text x="160" y="24" text-anchor="middle" font-size="13" fill="#E03131" font-weight="bold">se separan más de 12 dp</text>
+
+      <ellipse cx="160" cy="105" rx="95" ry="45" fill="none" stroke="#8B8B9E"
+               stroke-width="1.6" stroke-dasharray="5 4" opacity="0.35"/>
+      <g stroke="#E03131" stroke-width="2" opacity="0.6">
+        <line x1="132" y1="80" x2="188" y2="130"/>
+        <line x1="188" y1="80" x2="132" y2="130"/>
+      </g>
+
+      <circle cx="70" cy="60" r="7" fill="#E03131"/>
+      <circle cx="250" cy="150" r="7" fill="#E03131"/>
+      <path d="M84 72 L108 92" stroke="#E03131" stroke-width="1.4" marker-end="url(#f2)"/>
+      <path d="M236 138 L212 118" stroke="#E03131" stroke-width="1.4" marker-end="url(#f2)"/>
+
+      <text x="160" y="172" text-anchor="middle" fill="#E03131">era encuadrar · lo trazado se descarta</text>
+    </g>
+  </g>
+  <defs>
+    <marker id="f2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#E03131"/>
+    </marker>
+  </defs>
+</svg>

@@ -13,6 +13,24 @@ Es un **port de [Excalidraw](https://github.com/excalidraw/excalidraw)** —su m
 trazo a mano alzada y su formato de archivo— más las herramientas que hacían falta aquí y
 que el original no tiene.
 
+```mermaid
+flowchart LR
+    subgraph sitios["Los cuatro sitios donde se dibuja"]
+        A[Pantalla de captura]
+        B[Pin flotante]
+        C[Capa sobre la pantalla]
+        D[Editor a pantalla completa]
+    end
+    A & B & C & D --> E["DrawController<br/><i>la máquina de estados del dedo</i>"]
+    E --> F["Scene<br/><i>elementos, guías, alfileres, escala</i>"]
+    F --> G["Renderer<br/><i>rough.js + perfect-freehand</i>"]
+    F --> H["Salidas"]
+    G --> I([lo que se ve])
+    H --> J([PNG])
+    H --> K([PDF vectorial])
+    H --> L([.excalidraw])
+```
+
 ---
 
 ## Índice
@@ -160,6 +178,8 @@ cuando el dedo pasa cerca de un punto notable, lo que estás dibujando se pega a
 | `INTERSECCION` | Donde se cruzan **dos figuras cualesquiera**, o una consigo misma |
 | `BORDE` | Todo el canto de una guía: la escuadra |
 
+![A qué se pega el trazo](img/anclajes.svg)
+
 La intersección gana a todo: es la más difícil de acertar a pulso —no existe como vértice
 de nada— y por tanto la que más se agradece. El borde es lo contrario, **el último
 recurso**: pasa por encima de los vértices de su propia figura, así que si compitiera por
@@ -195,6 +215,8 @@ andamio entero es de los que solo se pulsan por error.
 Un clavo que atraviesa dos figuras. La analogía es literal y de ella sale todo el
 comportamiento:
 
+![Los grados de libertad segun cuantos clavos](img/alfiler.svg)
+
 | Clavos en una figura | Qué puede hacer |
 |---|---|
 | 0 | Todo: se traslada, gira sobre su centro, se estira |
@@ -223,6 +245,8 @@ Cómo se agarra a cada figura importa más de lo que parece, y costó tres inten
 Rellena **el hueco que dejan varias figuras**, que no es de ninguna de ellas. Hasta ahora
 solo se podía colorear lo que alguien hubiera dibujado de una tacada.
 
+![Rejilla, derrame y contorno con agujero](img/relleno.svg)
+
 Se hace **por rejilla y no por geometría**: se pintan las paredes en una rejilla y se
 derrama desde el punto tocado. La respuesta de libro —construir el grafo de intersecciones
 y buscar la cara mínima— es exacta y es una fuente inagotable de casos degenerados: tres
@@ -246,6 +270,8 @@ nunca se tocan de verdad.
 
 Las dos operaciones de un plano hecho a mano: se traza de largo, se cruza con lo que tenga
 que cruzar, y después se quita lo que sobra y se estira lo que falta.
+
+![Recortar parte la raya en dos](img/recorte.svg)
 
 - **Recortar** quita el trozo que tocas, hasta donde lo cruzan las demás figuras. Si el
   trozo está en medio, la raya se parte en dos. Funciona con rayas, rectángulos, rombos,
@@ -284,6 +310,30 @@ Viene del croquis, que era una aplicación entera dedicada a esto.
 `DrawController` decide qué pasa entre que se toca la pantalla y se levanta el dedo. No sabe
 nada de Android: recibe puntos en coordenadas de escena y devuelve escenas nuevas.
 
+```mermaid
+stateDiagram-v2
+    [*] --> Nada
+    Nada --> Creando: baja el dedo con una forma
+    Nada --> Moviendo: baja sobre algo ya dibujado
+    Nada --> MoviendoPunto: baja sobre un tirador
+    Nada --> MoviendoClavo: baja sobre un alfiler
+    Nada --> Tocando: bote · recortar · extender · alfiler · texto
+    Nada --> Encuadrando: dos dedos, sin nada empezado
+
+    Creando --> Perfecta: segundo dedo quieto
+    Perfecta --> Creando: se levanta el segundo
+    Perfecta --> Encuadrando: los dedos se separan → se descarta lo trazado
+
+    Tocando --> Nada: si el dedo se paseó, no hace nada
+    Tocando --> Hecho: si fue un toque
+    Creando --> Hecho: se levanta el dedo
+    Moviendo --> Hecho
+    MoviendoPunto --> Hecho
+    MoviendoClavo --> Hecho
+    Encuadrando --> Nada
+    Hecho --> Nada: al historial
+```
+
 La regla que gobierna el archivo entero: **una operación en curso se calcula siempre contra
 los elementos originales**, guardados al empezar el gesto, y nunca contra el resultado del
 fotograma anterior. Aplicar deltas encadenados acumula error y la forma se deforma sola si
@@ -293,6 +343,8 @@ Tres decisiones que costaron sangre:
 
 - **Un dedo dibuja, dos mueven la vista.** No hay tecla de espacio ni rueda del ratón: el
   segundo dedo es lo único que queda para separar «dibujo» de «me muevo».
+![El segundo dedo quieto cuadra la figura; pellizcando, encuadra](img/segundo-dedo.svg)
+
 - **Y el segundo dedo significa dos cosas**, que no se sabe cuáles hasta que se mueve:
   quieto pide **figura perfecta**, pellizcando pide **encuadrar**. Decidirlo al posarlo
   rompe una de las dos siempre. Se espera: se cuadra la figura mientras tanto —que es lo
@@ -315,6 +367,18 @@ baja exactamente igual que un toque, y actuar al bajarlo las disparaba solas.
 | **PDF** | `DrawPdf`. **Una página por hoja**, cada una encuadrada y orientada por su cuenta |
 | **`.excalidraw`** | `ExcalidrawStore`. Va y viene de la web sin traducir nada |
 
+```mermaid
+flowchart LR
+    M1[Marco 1] --> P1[Página 1<br/>vertical]
+    M2[Marco 2] --> P2[Página 2<br/>apaisada]
+    M3[Marco 3] --> P3[Página 3<br/>vertical]
+    P1 & P2 & P3 --> PDF([un PDF de tres hojas])
+```
+
+Cada página se encuadra y se orienta **por su cuenta**: un documento puede llevar una lámina
+ancha y otra alta, y forzarlas a la misma orientación dejaría una a media escala con medio
+folio en blanco.
+
 El PDF **no es una imagen metida en un PDF**: se pinta con el mismo renderizador que la
 pantalla, directamente sobre el lienzo de la página, así que lo que sale son trazos y texto
 de verdad.
@@ -325,6 +389,8 @@ de verdad.
 
 Leer PDFs ya se hacía con `PdfRenderer` del sistema. Lo que se está construyendo ahora es lo
 contrario: **pegarle algo encima sin romperlo**.
+
+![La actualizacion incremental: el original intacto y el apendice al final](img/pdf-incremental.svg)
 
 `PdfLector` y `PdfLectura` son lo justo del formato para eso, escritos a mano y sin
 librerías: la sintaxis (números, nombres, cadenas, listas, diccionarios, referencias y

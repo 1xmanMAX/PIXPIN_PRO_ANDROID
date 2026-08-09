@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 250" role="img" aria-label="Los tres grados de libertad de una figura segun cuantos alfileres la atraviesan">
+  <g font-family="sans-serif" font-size="13" fill="#8B8B9E">
+
+    <!-- ================= sin clavo ================= -->
+    <g transform="translate(20,20)">
+      <text x="110" y="0" text-anchor="middle" font-size="15" fill="#6965DB" font-weight="bold">sin clavo</text>
+      <text x="110" y="20" text-anchor="middle">se traslada, gira y se estira</text>
+
+      <line x1="20" y1="120" x2="150" y2="120" stroke="#6965DB" stroke-width="3" stroke-linecap="round"/>
+      <line x1="60" y1="70" x2="60" y2="175" stroke="#8B8B9E" stroke-width="3" stroke-linecap="round"/>
+
+      <!-- la copia desplazada: se ha ido entera -->
+      <line x1="70" y1="150" x2="200" y2="150" stroke="#6965DB" stroke-width="3"
+            stroke-linecap="round" stroke-dasharray="6 5" opacity="0.55"/>
+      <path d="M150 126 L196 146" stroke="#6965DB" stroke-width="1.5" fill="none"
+            marker-end="url(#flecha)" opacity="0.8"/>
+      <text x="185" y="185" text-anchor="middle" font-size="12">libre</text>
+    </g>
+
+    <!-- ================= un clavo ================= -->
+    <g transform="translate(275,20)">
+      <text x="110" y="0" text-anchor="middle" font-size="15" fill="#6965DB" font-weight="bold">un clavo</text>
+      <text x="110" y="20" text-anchor="middle">solo gira, alrededor de él</text>
+
+      <line x1="60" y1="70" x2="60" y2="175" stroke="#8B8B9E" stroke-width="3" stroke-linecap="round"/>
+      <line x1="60" y1="120" x2="190" y2="120" stroke="#6965DB" stroke-width="3" stroke-linecap="round"/>
+      <!-- la misma raya, girada sobre el clavo -->
+      <line x1="60" y1="120" x2="172" y2="55" stroke="#6965DB" stroke-width="3"
+            stroke-linecap="round" stroke-dasharray="6 5" opacity="0.55"/>
+      <path d="M186 104 A 130 130 0 0 0 165 70" stroke="#E03131" stroke-width="1.6" fill="none"
+            marker-end="url(#flechaRoja)"/>
+
+      <circle cx="60" cy="120" r="6" fill="#E03131"/>
+      <circle cx="60" cy="120" r="11" fill="none" stroke="#E03131" stroke-width="1.4" opacity="0.5"/>
+      <text x="60" y="200" text-anchor="middle" font-size="12" fill="#E03131">eje</text>
+    </g>
+
+    <!-- ================= dos clavos ================= -->
+    <g transform="translate(530,20)">
+      <text x="110" y="0" text-anchor="middle" font-size="15" fill="#6965DB" font-weight="bold">dos clavos</text>
+      <text x="110" y="20" text-anchor="middle">no se mueve: es una sola pieza</text>
+
+      <line x1="40" y1="120" x2="190" y2="120" stroke="#6965DB" stroke-width="3" stroke-linecap="round"/>
+      <line x1="60" y1="75" x2="60" y2="175" stroke="#8B8B9E" stroke-width="3" stroke-linecap="round"/>
+      <line x1="170" y1="75" x2="170" y2="175" stroke="#8B8B9E" stroke-width="3" stroke-linecap="round"/>
+
+      <circle cx="60" cy="120" r="6" fill="#E03131"/>
+      <circle cx="170" cy="120" r="6" fill="#E03131"/>
+
+      <g stroke="#E03131" stroke-width="2.2" opacity="0.75">
+        <line x1="100" y1="60" x2="130" y2="90"/>
+        <line x1="130" y1="60" x2="100" y2="90"/>
+      </g>
+    </g>
+  </g>
+
+  <defs>
+    <marker id="flecha" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#6965DB"/>
+    </marker>
+    <marker id="flechaRoja" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 z" fill="#E03131"/>
+    </marker>
+  </defs>
+</svg>
