@@ -83,7 +83,17 @@ enum class Tool {
      * Soldar vértices: se tocan los que no se tienen que separar y a partir de
      * ahí se mueven juntos. Ver [Nudos].
      */
-    NUDO;
+    NUDO,
+
+    /**
+     * Punto etiquetado: **A, B, C sobre el dibujo**.
+     *
+     * Un toque —imantado a la intersección o al vértice más cercano— y ahí
+     * queda el punto con su letra, que sale sola siguiendo la serie. Es la
+     * herramienta de las matemáticas: un croquis de geometría se explica
+     * nombrando los puntos, no señalándolos con el dedo. Ver [Puntos].
+     */
+    PUNTO;
 
     /** Las que crean una forma con caja al arrastrar. */
     val isShape: Boolean

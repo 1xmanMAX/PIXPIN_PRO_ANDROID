@@ -135,8 +135,11 @@ fun regionEn(
  * chocar contra un rectángulo invisible es de las cosas que más desconciertan.
  */
 fun esPared(e: Element): Boolean = when (e.type) {
+    // El punto tampoco: es una marca sobre el dibujo, no encierra nada, y un
+    // redondel de cinco píxeles no puede detener un derrame.
     ElementType.IMAGE, ElementType.FRAME, ElementType.SPOTLIGHT,
-    ElementType.MOSAIC, ElementType.TEXT, ElementType.ESCALA_GRAFICA -> false
+    ElementType.MOSAIC, ElementType.TEXT, ElementType.ESCALA_GRAFICA,
+    ElementType.PUNTO -> false
 
     /**
      * **Un relleno no es pared, y esto costó descubrirlo.**

@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.CenterFocusStrong
@@ -38,6 +39,9 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.LooksOne
+import androidx.compose.material.icons.filled.LooksTwo
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PanTool
@@ -121,6 +125,15 @@ fun DrawToolbar(
     pedirLaMedida: Boolean? = null,
     onPedirLaMedida: (() -> Unit)? = null,
     /**
+     * De qué serie salen las letras de los puntos, y cómo cambiarla.
+     *
+     * Sale **solo con la herramienta de punto puesta**, junto a ella: es donde
+     * uno está mirando cuando decide si estos van a ser vértices (A, B, C),
+     * lados (a, b, c) o una nube numerada. Ver [SerieDePunto].
+     */
+    seriePuntos: SerieDePunto? = null,
+    onSeriePuntos: (() -> Unit)? = null,
+    /**
      * Qué herramientas se enseñan aquí. null = todas.
      *
      * Es lo que separa la edición simple de la avanzada: el pin lleva las que
@@ -186,6 +199,24 @@ fun DrawToolbar(
                 // El interruptor de las dos formas de acotar, junto al aviso de
                 // con qué se está midiendo: es donde uno está mirando cuando
                 // decide cómo quiere acotar.
+                if (tool == Tool.PUNTO && seriePuntos != null && onSeriePuntos != null) {
+                    ToolButton(
+                        when (seriePuntos) {
+                            SerieDePunto.MAYUSCULAS -> Icons.Filled.LooksOne
+                            SerieDePunto.MINUSCULAS -> Icons.Filled.LooksTwo
+                            SerieDePunto.NUMEROS -> Icons.Filled.Pin
+                        },
+                        // La etiqueta dice qué serie está puesta, con un ejemplo
+                        // de la propia serie: «A B C» se entiende sin leer.
+                        when (seriePuntos) {
+                            SerieDePunto.MAYUSCULAS -> "A B C"
+                            SerieDePunto.MINUSCULAS -> "a b c"
+                            SerieDePunto.NUMEROS -> "1 2 3"
+                        },
+                        false,
+                        onSeriePuntos
+                    )
+                }
                 if (tool == Tool.MEASURE && pedirLaMedida != null && onPedirLaMedida != null) {
                     ToolButton(
                         if (pedirLaMedida) Icons.Filled.Dialpad else Icons.Filled.Straighten,
@@ -877,7 +908,8 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.SCALE,
     Tool.MEASURE,
     Tool.ESCALA_GRAFICA,
-    Tool.NUDO
+    Tool.NUDO,
+    Tool.PUNTO
 )
 
 /**
@@ -963,10 +995,12 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.NUDO -> Icons.Filled.JoinFull
     Tool.RECORTAR -> Icons.Filled.ContentCut
     Tool.EXTENDER -> Icons.Filled.OpenInFull
+    Tool.PUNTO -> Icons.Filled.Adjust
 }
 
 @StringRes
 fun labelFor(tool: Tool): Int = when (tool) {
+    Tool.PUNTO -> R.string.tool_punto
     Tool.SELECTION -> R.string.tool_selection
     Tool.LASSO -> R.string.tool_lasso
     Tool.HAND -> R.string.tool_hand

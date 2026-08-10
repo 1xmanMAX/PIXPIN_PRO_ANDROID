@@ -71,6 +71,13 @@ fun isPointInElement(p: Pt, element: Element): Boolean {
     val local = toLocal(p, element)
     val c = getElementAbsoluteCoords(element)
     return when (element.type) {
+        // **Un punto se coge por su redondel o por su letra.** Su caja no tiene
+        // tamaño —es el punto y ya está—, así que preguntar si el dedo cae
+        // «dentro» de ella no acertaría nunca.
+        ElementType.PUNTO ->
+            hypot(p.x - element.x, p.y - element.y) <= RADIO_DEL_PUNTO + ARO_DEL_PUNTO ||
+                tocaLaEtiqueta(element, p, 0.0)
+
         // El mosaico y el foco se agarran por dentro: son manchas, no contornos,
         // y buscarles el borde con el dedo sería absurdo.
         ElementType.RECTANGLE, ElementType.IMAGE, ElementType.TEXT,
@@ -120,6 +127,10 @@ fun isPointOnElementOutline(p: Pt, element: Element, threshold: Double): Boolean
     val local = toLocal(p, element)
     val c = getElementAbsoluteCoords(element)
     return when (element.type) {
+        // El punto es todo trazo: no hay dentro ni fuera que distinguir.
+        ElementType.PUNTO -> isPointInElement(p, element) ||
+            hypot(p.x - element.x, p.y - element.y) <= RADIO_DEL_PUNTO + threshold
+
         ElementType.RECTANGLE, ElementType.IMAGE, ElementType.TEXT,
         ElementType.MOSAIC, ElementType.SPOTLIGHT, ElementType.FRAME,
         ElementType.ESCALA_GRAFICA -> {

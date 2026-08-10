@@ -38,7 +38,9 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     // Las dos que arreglan una raya ya trazada, juntas: se traza de largo y
     // luego se recorta lo que sobra y se estira lo que falta.
     listOf(Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO),
-    listOf(Tool.TEXT, Tool.SERIAL),
+    // El punto va con el texto y el numerito: los tres son para nombrar
+    // cosas del dibujo, no para dibujarlas.
+    listOf(Tool.TEXT, Tool.SERIAL, Tool.PUNTO),
     listOf(Tool.MOSAIC, Tool.SPOTLIGHT),
     listOf(Tool.MEASURE, Tool.SCALE, Tool.ESCALA_GRAFICA),
     listOf(Tool.FRAME, Tool.IMAGE),

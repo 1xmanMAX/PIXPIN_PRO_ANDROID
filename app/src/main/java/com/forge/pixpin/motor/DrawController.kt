@@ -253,7 +253,7 @@ class DrawController(initial: Scene = Scene()) {
             // había anotado en el historial no se deshace solo.
             //
             // Esperando al final, mover el dedo o apoyar el segundo lo anula.
-            Tool.RELLENO, Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO ->
+            Tool.RELLENO, Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO, Tool.PUNTO ->
                 gesture = Gesture.Tocando(p)
 
             // La imagen la coloca la interfaz, que es quien abre el selector.
@@ -272,6 +272,7 @@ class DrawController(initial: Scene = Scene()) {
         if (kotlin.math.hypot(fin.x - inicio.x, fin.y - inicio.y) > TOQUE_QUIETO / z) return
         when (tool) {
             Tool.RELLENO -> rellenar(inicio)
+            Tool.PUNTO -> plantarPunto(inicio)
             Tool.TEXT -> plantarTexto(inicio, DEFAULT_HIT_THRESHOLD / z)
             Tool.RECORTAR -> recortar(inicio, z)
             Tool.EXTENDER -> extender(inicio, z)
@@ -288,6 +289,39 @@ class DrawController(initial: Scene = Scene()) {
      * cuando el espacio está abierto teñiría media escena, y un botellazo que
      * hay que deshacer asusta más que uno que no hace nada.
      */
+    /**
+     * De qué serie salen las letras de los puntos: A, a o 1.
+     *
+     * Es del controlador y no del estilo del elemento porque **es una decisión
+     * del dibujo entero**, no de cada punto: en un croquis los vértices son
+     * mayúsculas y los lados minúsculas, y quien elige una serie va a poner
+     * diez puntos seguidos de esa serie.
+     */
+    var seriePuntos: SerieDePunto = SerieDePunto.MAYUSCULAS
+
+    /**
+     * Planta un punto con su letra donde se ha tocado.
+     *
+     * El sitio ya llega imantado —el imán actúa antes, en `pointerDown`—, que es
+     * lo que hace que el punto caiga **exactamente** en la intersección o en el
+     * vértice y no a dos píxeles. En geometría eso no es cosmético: un punto que
+     * no está en la intersección no es el punto del que habla el enunciado.
+     */
+    private fun plantarPunto(p: Pt) {
+        val before = scene.elements
+        val e = nuevoPunto(
+            id = randomId(),
+            donde = p,
+            elementos = editables,
+            serie = seriePuntos,
+            estilo = scene.style,
+            seed = randomSeed()
+        ).copy(reference = modoReferencia)
+        scene = scene.copy(elements = scene.elements + e)
+        selectedIds = setOf(e.id)
+        history.record(before, scene.elements)
+    }
+
     private fun rellenar(p: Pt) {
         // **El bote también vive en un solo mundo.** En modo guía encierran las
         // guías y solo ellas; fuera, el dibujo y solo él. Mezclarlos hacía que

@@ -127,6 +127,8 @@
     <string name="grupo_formas">Formas</string>
     <string name="grupo_marcar">Marcar</string>
     <string name="grupo_tapar">Tapar</string>
+    <string name="tool_punto">Punto</string>
+    <string name="punto_serie">Serie</string>
     <string name="tool_selection">Seleccionar</string>
     <string name="tool_lasso">Lazo</string>
     <string name="tool_hand">Mano</string>

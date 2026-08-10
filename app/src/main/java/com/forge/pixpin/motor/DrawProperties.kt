@@ -55,6 +55,7 @@ fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
  * seleccionado no hay ningún estilo que ajustar y el panel desaparece entero.
  */
 fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
+    Tool.PUNTO -> ElementType.PUNTO
     Tool.RECTANGLE -> ElementType.RECTANGLE
     Tool.DIAMOND -> ElementType.DIAMOND
     Tool.ELLIPSE -> ElementType.ELLIPSE
@@ -77,6 +78,10 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
 }
 
 private fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
+    // El punto se ve en negro sobre blanco siempre —para eso está— así que de
+    // color solo manda el de su letra, y del tamaño, el de la letra también.
+    ElementType.PUNTO -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)
+
     ElementType.RECTANGLE, ElementType.DIAMOND -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
         Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD

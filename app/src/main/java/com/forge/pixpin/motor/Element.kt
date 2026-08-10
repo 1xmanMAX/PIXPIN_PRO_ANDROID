@@ -101,7 +101,20 @@ enum class ElementType {
      * Es el mismo `frame` del original, con su nombre serializado, así que un
      * dibujo con marco va y viene de la web sin traducir nada.
      */
-    @SerialName("frame") FRAME
+    @SerialName("frame") FRAME,
+
+    /**
+     * Un punto con su letra: **A, B, C sobre el dibujo**.
+     *
+     * Es la herramienta de las matemáticas. Un croquis de geometría se explica
+     * nombrando los puntos —«el triángulo ABC», «la mediatriz de AB»—, y sin
+     * poder nombrarlos cada frase hay que acompañarla de un dedo señalando.
+     *
+     * Su caja **no tiene tamaño**: `x` e `y` son el punto y ya está. El redondel
+     * y la letra se dibujan alrededor, como el rótulo de una cota, para que
+     * arrastrarlo lo mueva en vez de estirarlo. Ver [Puntos].
+     */
+    @SerialName("pixpin-point") PUNTO
 }
 
 @Serializable
@@ -319,6 +332,18 @@ data class Element(
      */
     val arcStart: Double? = null,
     val arcSweep: Double? = null,
+
+    /**
+     * Hacia dónde queda la letra de un punto, en radianes, y a qué distancia.
+     *
+     * Van juntos y en polares y no como un desplazamiento en x/y porque lo que
+     * define la etiqueta es **que orbita su punto**: al mover el punto la letra
+     * lo sigue conservando su sitio relativo, y al arrastrar la letra lo que
+     * cambia es el ángulo. En cartesianas habría que recalcular las dos
+     * coordenadas en cada movimiento y el radio se iría solo. Ver [Puntos].
+     */
+    val etiquetaAngulo: Double? = null,
+    val etiquetaRadio: Double? = null,
 
     // --- Solo MOSAIC ---
     /** Desenfocar en vez de pixelar. Son las dos formas de tapar de PixPin. */

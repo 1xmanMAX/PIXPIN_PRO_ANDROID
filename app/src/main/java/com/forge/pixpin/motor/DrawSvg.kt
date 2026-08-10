@@ -214,6 +214,7 @@ object DrawSvg {
                 ElementType.TEXT -> texto(e, alpha)
                 ElementType.MOSAIC -> mosaico(e, alpha, debajo)
                 ElementType.SERIAL -> serie(e, alpha)
+                ElementType.PUNTO -> punto(e, alpha)
                 ElementType.MEASURE -> cota(e, alpha)
                 ElementType.ESCALA_GRAFICA -> escalaGrafica(e, alpha)
                 // El marco es la hoja, no una raya: decide el encuadre y no se
@@ -774,6 +775,51 @@ object DrawSvg {
                 )
             )
             medidor.isFakeBoldText = false
+            return s.toString()
+        }
+
+        /**
+         * Un punto con su letra.
+         *
+         * El redondel va negro con aro blanco pase lo que pase con el color del
+         * trazo: es una referencia que se cita en el texto, y tiene que leerse
+         * sobre lo que sea. La letra sí lleva el color, y su halo, igual que en
+         * pantalla.
+         */
+        private fun punto(e: Element, alpha: Int): String {
+            val s = StringBuilder(
+                "<circle cx=\"${Svg.num(e.x)}\" cy=\"${Svg.num(e.y)}\" " +
+                    "r=\"${Svg.num(RADIO_DEL_PUNTO + ARO_DEL_PUNTO)}\" fill=\"#ffffff\"" +
+                    (if (alpha < 255) " fill-opacity=\"${Svg.num(alpha / 255.0)}\"" else "") +
+                    "/>\n" +
+                    "<circle cx=\"${Svg.num(e.x)}\" cy=\"${Svg.num(e.y)}\" " +
+                    "r=\"${Svg.num(RADIO_DEL_PUNTO)}\" fill=\"#000000\"" +
+                    (if (alpha < 255) " fill-opacity=\"${Svg.num(alpha / 255.0)}\"" else "") +
+                    "/>\n"
+            )
+            val texto = e.text
+            if (texto.isNullOrEmpty()) return s.toString()
+
+            val tam = (e.fontSize ?: 22.0).coerceAtLeast(1.0)
+            val donde = sitioDeLaEtiqueta(e)
+            val tinta = parseColor(e.strokeColor, alpha)
+
+            medidor.reset()
+            medidor.textSize = tam.toFloat()
+            medidor.typeface = typefaces(e.fontFamily)
+            val fm = medidor.fontMetrics
+            val base = donde.y - (fm.ascent + fm.descent) / 2.0
+
+            val perfil = perfilDe(texto, donde.x, base, tam, e.fontFamily, Paint.Align.CENTER)
+            if (perfil.isEmpty()) return s.toString()
+            val d = Svg.caminoDeContornos(perfil)
+            val halo = contrastingTextColor(tinta, alpha)
+            s.append(
+                "<path d=\"$d\" fill=\"none\" stroke=\"${Svg.hex(halo)}\"" +
+                    opacidad(halo, "stroke-opacity") +
+                    " stroke-width=\"${Svg.num(tam * 0.22)}\" stroke-linejoin=\"round\"/>\n"
+            )
+            s.append("<path d=\"$d\" fill=\"${Svg.hex(tinta)}\"${opacidad(tinta)}/>\n")
             return s.toString()
         }
 

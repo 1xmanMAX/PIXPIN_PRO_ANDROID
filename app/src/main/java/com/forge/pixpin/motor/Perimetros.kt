@@ -72,6 +72,11 @@ fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
         if (pts.size < 2) emptyList() else listOf(Contorno(girar(pts), cerrado = true))
 
     return when (e.type) {
+        // **Un punto no tiene contorno: es un sitio.** No corta a nadie ni nadie
+        // lo corta, así que no aporta intersecciones — pero sí es de lo primero
+        // a lo que se engancha el dedo, y de eso se encarga el imán aparte.
+        ElementType.PUNTO -> emptyList()
+
         // El redondeo cambia el contorno de verdad: una esquina redondeada no
         // corta donde cortaría el pico. Se reusa el mismo muestreo que dibuja.
         ElementType.RECTANGLE ->

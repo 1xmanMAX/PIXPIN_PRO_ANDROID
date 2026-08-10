@@ -301,22 +301,67 @@ class Renderer(
         canvas.drawLine(ox, oy - brazo, ox, oy + brazo, paint)
     }
 
+    /**
+     * Los puntos tecleados en una tabla, **con su número**.
+     *
+     * ## Numerados por su posición, con apóstrofo
+     *
+     * `1'`, `2'`, `3'`… en el orden en que están escritos en la tabla. El
+     * apóstrofo no es un adorno: es lo que los distingue de los puntos
+     * etiquetados a mano, que van A, B, C. En un croquis donde conviven los
+     * vértices de la figura y una serie de coordenadas tecleadas, poder decir
+     * «de A a 3'» sin ambigüedad es la diferencia entre explicarse y señalar
+     * con el dedo.
+     *
+     * Sale de la posición y no de un contador guardado porque la tabla se edita:
+     * quitar la fila tercera tiene que renumerar de la cuarta en adelante, y un
+     * número guardado se quedaría diciendo lo que decía.
+     *
+     * ## Y más gordos
+     *
+     * Eran de cuatro píxeles y se perdían: son el sitio al que hay que llevar el
+     * dedo para engancharse, no una mota. Van en píxeles de pantalla y no de
+     * escena, así que se ven igual de acertables muy acercado y muy alejado.
+     */
     private fun drawTabla(
         canvas: Canvas, tabla: TablaDeCoordenadas, origen: Pt, escala: Escala?, zoom: Double
     ) {
         val color = tema(parseColor(tabla.color, 255))
         val radio = (TABLA_PUNTO / zoom).toFloat()
+        val tam = (TABLA_LETRA / zoom).toFloat()
 
-        for (p in puntosEnEscena(tabla, origen, escala)) {
+        for ((i, p) in puntosEnEscena(tabla, origen, escala).withIndex()) {
             // Relleno con aro blanco alrededor: sobre una foto oscura, un punto
             // de color sin más se pierde.
             fillPaint.reset()
             fillPaint.isAntiAlias = true
             fillPaint.style = Paint.Style.FILL
             fillPaint.color = Color.WHITE
-            canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), radio * 1.6f, fillPaint)
+            canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), radio * 1.55f, fillPaint)
             fillPaint.color = color
             canvas.drawCircle(p.x.toFloat(), p.y.toFloat(), radio, fillPaint)
+
+            val etiqueta = "${i + 1}'"
+            paint.reset()
+            paint.isAntiAlias = true
+            paint.textAlign = Paint.Align.LEFT
+            paint.textSize = tam
+            paint.typeface = typefaces(null)
+            // Arriba a la derecha del punto: es donde menos tapa cuando los
+            // puntos van seguidos formando una poligonal, que es como llegan de
+            // una libreta de campo.
+            val x = (p.x + radio * 1.8f).toFloat()
+            val y = (p.y - radio * 1.4f).toFloat()
+
+            // Con halo, como todo lo que tiene que leerse sobre lo que sea.
+            paint.style = Paint.Style.STROKE
+            paint.strokeJoin = Paint.Join.ROUND
+            paint.strokeWidth = tam * PUNTO_HALO.toFloat()
+            paint.color = contrastingTextColor(color, 255)
+            canvas.drawText(etiqueta, x, y, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = color
+            canvas.drawText(etiqueta, x, y, paint)
         }
     }
 
@@ -442,6 +487,7 @@ class Renderer(
             ElementType.TEXT -> drawText(canvas, element, alpha)
             ElementType.MOSAIC -> drawMosaic(canvas, element, alpha)
             ElementType.SERIAL -> drawSerial(canvas, element, alpha)
+            ElementType.PUNTO -> drawPunto(canvas, element, alpha)
             ElementType.MEASURE -> drawMeasure(canvas, element, alpha)
             // El arco pasa por el mismo generador rugoso que una línea, así
             // que sale con el pulso del resto. Ver `buildGeometry`.
@@ -801,6 +847,68 @@ class Renderer(
         val fm = paint.fontMetrics
         val baseline = c.cy - (fm.ascent + fm.descent) / 2
         canvas.drawText(texto, c.cx.toFloat(), baseline.toFloat(), paint)
+    }
+
+    /**
+     * Un punto con su letra: **A, B, C sobre el dibujo**.
+     *
+     * ## Negro con aro blanco, y gordo
+     *
+     * El redondel va negro con un aro blanco alrededor, y no del color del
+     * trazo. Un punto de geometría no es decoración: es una referencia que se
+     * cita en el texto —«el triángulo ABC»— y tiene que leerse **siempre**,
+     * caiga sobre una raya, sobre un relleno o sobre la foto de un plano. El aro
+     * blanco es lo que lo despega del fondo; sin él, un punto negro sobre una
+     * línea negra desaparece justo donde más falta hace.
+     *
+     * Y más gordo que los puntos de una tabla de coordenadas, que son marcas de
+     * referencia y no parte del dibujo. Este sale en la foto que alguien hace de
+     * la pizarra desde el fondo del aula.
+     *
+     * ## La letra, con halo
+     *
+     * La letra sí va del color del trazo, y con halo del color contrario por lo
+     * mismo que el rótulo de una cota: sobre una zona de su mismo color
+     * desaparecería. Ver [dibujarRotulo].
+     */
+    private fun drawPunto(canvas: Canvas, e: Element, alpha: Int) {
+        val cx = e.x.toFloat()
+        val cy = e.y.toFloat()
+
+        fillPaint.reset()
+        fillPaint.isAntiAlias = true
+        fillPaint.style = Paint.Style.FILL
+        // El aro primero y el punto encima: al revés se comería el borde.
+        fillPaint.color = Color.argb(alpha, 255, 255, 255)
+        canvas.drawCircle(cx, cy, (RADIO_DEL_PUNTO + ARO_DEL_PUNTO).toFloat(), fillPaint)
+        fillPaint.color = tema(Color.argb(alpha, 0, 0, 0))
+        canvas.drawCircle(cx, cy, RADIO_DEL_PUNTO.toFloat(), fillPaint)
+
+        val texto = e.text ?: return
+        if (texto.isEmpty()) return
+        val donde = sitioDeLaEtiqueta(e)
+        val tam = (e.fontSize ?: PUNTO_LETRA).coerceAtLeast(1.0)
+        val tinta = tema(parseColor(e.strokeColor, alpha))
+
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = tam.toFloat()
+        paint.typeface = typefaces(e.fontFamily)
+        // Centrado óptico: la línea base no es el centro del glifo, y sin
+        // corregirlo la letra queda alta respecto del punto al que se refiere.
+        val fm = paint.fontMetrics
+        val base = (donde.y - (fm.ascent + fm.descent) / 2).toFloat()
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.strokeWidth = (tam * PUNTO_HALO).toFloat()
+        paint.color = contrastingTextColor(tinta, alpha)
+        canvas.drawText(texto, donde.x.toFloat(), base, paint)
+
+        paint.style = Paint.Style.FILL
+        paint.color = tinta
+        canvas.drawText(texto, donde.x.toFloat(), base, paint)
     }
 
     /**
@@ -1203,8 +1311,16 @@ class Renderer(
 
         // ---- Las tablas de coordenadas ----
 
-        /** Radio del punto tecleado, en píxeles de pantalla. */
-        const val TABLA_PUNTO = 4.0
+        /**
+         * Radio del punto tecleado, en píxeles de pantalla.
+         *
+         * Subido de 4 a 6,5: con cuatro se perdían. Son el sitio al que hay que
+         * llevar el dedo para engancharse, no una mota.
+         */
+        const val TABLA_PUNTO = 6.5
+
+        /** Y el tamaño de su número, también en píxeles de pantalla. */
+        const val TABLA_LETRA = 16.0
 
         /** Medio brazo de la cruz del origen y grosor de su trazo. */
         const val TABLA_ORIGEN = 14.0
@@ -1242,6 +1358,12 @@ class Renderer(
 
         /** Tamaño del número respecto al radio de su círculo. */
         const val SERIAL_TEXT_RATIO = 1.25
+
+        /** Tamaño de la letra de un punto cuando no trae uno propio. */
+        const val PUNTO_LETRA = 22.0
+
+        /** Grosor del halo de esa letra, en múltiplos de su tamaño. */
+        const val PUNTO_HALO = 0.22
 
         // ---- La cota ----
 

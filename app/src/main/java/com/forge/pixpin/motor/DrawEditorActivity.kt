@@ -700,6 +700,18 @@ class DrawEditorActivity : ComponentActivity() {
                 onToggleDark = onAlternarNoche,
                 escala = controller.scene.escala,
                 onQuitarEscala = { controller.clearScale(); cambiado() },
+                seriePuntos = controller.seriePuntos,
+                onSeriePuntos = {
+                    // Rueda entre las tres: son tres, así que un botón que gira
+                    // basta y sobra. Un menú para elegir entre tres cosas es un
+                    // menú de más.
+                    controller.seriePuntos = when (controller.seriePuntos) {
+                        SerieDePunto.MAYUSCULAS -> SerieDePunto.MINUSCULAS
+                        SerieDePunto.MINUSCULAS -> SerieDePunto.NUMEROS
+                        SerieDePunto.NUMEROS -> SerieDePunto.MAYUSCULAS
+                    }
+                    cambiado()
+                },
                 pedirLaMedida = controller.pedirLaMedida,
                 onPedirLaMedida = {
                     controller.pedirLaMedida = !controller.pedirLaMedida
