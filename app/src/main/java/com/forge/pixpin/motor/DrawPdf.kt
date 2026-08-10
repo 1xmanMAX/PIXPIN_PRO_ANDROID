@@ -186,7 +186,15 @@ object DrawPdf {
         anchoImagen: Double,
         altoImagen: Double,
         nombreDeLaCapa: String = "PixPin",
-        imageProvider: (String) -> Bitmap? = { null }
+        imageProvider: (String) -> Bitmap? = { null },
+        /**
+         * La página ya pintada, si quien llama la tiene.
+         *
+         * Solo la necesita el mosaico, que no inventa píxeles: los coge de lo
+         * que tapa. Sin ella un mosaico sale como una placa esmerilada — sigue
+         * tapando, que es lo suyo, pero no se parece al de la pantalla.
+         */
+        hojaPintada: Bitmap? = null
     ): ByteArray? = runCatching {
         val archivo = leerPdf(original) ?: return null
         if (archivo.cifrado) return null
@@ -199,7 +207,8 @@ object DrawPdf {
             // los suyos con `max(primerLibre, elMayorDeExtra + 1)`, así que se
             // colocan detrás solas y no hace falta apartarles sitio.
             primerObjeto = PdfEscritura.primerNumeroLibre(archivo),
-            imageProvider = imageProvider
+            imageProvider = imageProvider,
+            fondo = hojaPintada
         ) ?: return null
 
         PdfAnotado.anotar(

@@ -60,15 +60,20 @@ object PdfDelProyecto {
                 ?: continue
             if (escena.contenidoVisible.isEmpty()) continue
 
-            // La medida de la página se saca del propio PDF y no se guarda: es
-            // la misma con la que se renderizó para dibujar encima, así que
-            // pedirla otra vez no puede desincronizarse de nada.
-            val medida = medidaDeLaPagina(limpio.path, pagina) ?: continue
+            // La página pintada, y **del archivo limpio**: es la misma con la
+            // que se renderizó para dibujar encima, así que la escala de lo
+            // anotado no puede desincronizarse. Hace falta además para que el
+            // mosaico tenga píxeles que tapar.
+            val pintada = PdfDoc.render(limpio.path, pagina, PdfDoc.PAGE_WIDTH) ?: continue
             val salida = DrawPdf.anotarPagina(
-                context, bytes, pagina, escena, medida.first, medida.second,
-                nombreDeLaCapa = "${NOMBRE_DE_CAPA} ${pagina + 1}",
-                imageProvider = imageProvider
-            ) ?: continue
+                context, bytes, pagina, escena,
+                pintada.width.toDouble(), pintada.height.toDouble(),
+                nombreDeLaCapa = "$NOMBRE_DE_CAPA ${pagina + 1}",
+                imageProvider = imageProvider,
+                hojaPintada = pintada
+            )
+            if (!pintada.isRecycled) pintada.recycle()
+            if (salida == null) continue
             bytes = salida
             algo = true
         }
@@ -89,14 +94,6 @@ object PdfDelProyecto {
         temporal.delete()
         true
     }.getOrDefault(false)
-
-    /** Lo que mide la imagen con la que se dibujó sobre esa página. */
-    private fun medidaDeLaPagina(ruta: String, pagina: Int): Pair<Double, Double>? {
-        val bmp = PdfDoc.render(ruta, pagina, PdfDoc.PAGE_WIDTH) ?: return null
-        val medida = bmp.width.toDouble() to bmp.height.toDouble()
-        if (!bmp.isRecycled) bmp.recycle()
-        return medida
-    }
 
     /** Lo que se lee en el panel de capas de un lector de escritorio. */
     private const val NOMBRE_DE_CAPA = "PixPin — página"

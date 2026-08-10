@@ -186,6 +186,57 @@ class PdfLienzoTest {
         assertTrue(destino.length() > 0)
     }
 
+    /**
+     * **Todo lo que se pone tiene que verse en el PDF.**
+     *
+     * Tres tipos no se escribían y el usuario los echó de menos. El peor con
+     * diferencia es el mosaico: darías por tapado un dato que sigue a la vista,
+     * y eso no se descubre hasta que el documento ya está en manos de otro.
+     */
+    @Test
+    fun `el mosaico, la escala y la cota llegan al PDF`() {
+        val escena = Scene(
+            escala = Escala(unidadesPorPixel = 0.01, unidad = "m"),
+            elements = listOf(
+                Element(
+                    id = "m", type = ElementType.MOSAIC,
+                    x = 50.0, y = 50.0, width = 120.0, height = 40.0, seed = 3
+                ),
+                Element(
+                    id = "b", type = ElementType.ESCALA_GRAFICA,
+                    x = 50.0, y = 300.0, width = 240.0, height = 40.0, seed = 4
+                ),
+                Element(
+                    id = "c", type = ElementType.MEASURE,
+                    x = 50.0, y = 500.0, width = 300.0, height = 0.0, seed = 5,
+                    points = listOf(Pt(0.0, 0.0), Pt(300.0, 0.0))
+                )
+            )
+        )
+        val salida = DrawPdf.anotarPagina(
+            context, pdfDeUnaPagina(), 0, escena, 595.0, 842.0
+        )
+        assertNotNull("no ha salido nada", salida)
+
+        val releido = leerPdf(salida!!)!!
+        val marca = releido.diccDe(releido.pagina(0)!!.lista("Annots")!![0])!!
+        val forma = releido.resolver(
+            releido.diccDe(marca.entradas["AP"])!!.entradas["N"]
+        ) as PdfValor.Flujo
+        val ordenes = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
+
+        // El mosaico tapa: o con su grano incrustado, o con la placa lisa, pero
+        // algo tiene que haber donde estaba.
+        assertTrue("el mosaico no ha dejado nada", ordenes.contains("Do") || ordenes.contains("f"))
+        // La escala gráfica pinta sus cuadros.
+        assertTrue("no hay relleno de los tramos", ordenes.contains("f"))
+        // Y la cota traza.
+        assertTrue("la cota no ha trazado nada", ordenes.contains("S"))
+        // Sobre todo: tiene que haber bastante más que antes de escribir los
+        // tres. Con los tipos sin implementar, la capa salía casi vacía.
+        assertTrue("la capa sale demasiado escueta", ordenes.length > 400)
+    }
+
     // ---- Una hoja nueva al final ----
 
     /**

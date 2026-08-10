@@ -83,14 +83,26 @@ object PdfLienzo {
         scene: Scene,
         matriz: DoubleArray,
         primerObjeto: Int,
-        imageProvider: (String) -> Bitmap? = { null }
+        imageProvider: (String) -> Bitmap? = { null },
+        /**
+         * La página sobre la que se dibujó, si la hay.
+         *
+         * La necesita **el mosaico**: no inventa píxeles, los coge de lo que
+         * tiene debajo y los devuelve gordos. Sin ella no hay nada que
+         * pixelar — y un mosaico que no aparece en el PDF final es la peor
+         * forma de fallar que tiene esta herramienta: darías por tapado un
+         * dato que está a la vista.
+         */
+        fondo: Bitmap? = null
     ): Resultado? = runCatching {
         val pintables = scene.contenidoVisible.let { visible ->
             if (scene.referenciasVisibles) visible else visible.filter { !it.reference }
         }
         if (pintables.isEmpty()) return null
 
-        val pincel = Pincel(DrawFonts.provider(context), imageProvider, primerObjeto)
+        val pincel = Pincel(
+            DrawFonts.provider(context), imageProvider, primerObjeto, fondo, scene.escala
+        )
         val cuerpo = ByteArrayOutputStream()
         cuerpo.orden("q")
         cuerpo.orden(
@@ -120,8 +132,20 @@ object PdfLienzo {
     private class Pincel(
         private val typefaces: (Int?) -> android.graphics.Typeface?,
         private val imageProvider: (String) -> Bitmap?,
-        private var siguienteObjeto: Int
+        private var siguienteObjeto: Int,
+        private val fondo: Bitmap?,
+        /** La vara con la que se miden las cotas y la escala gráfica. */
+        private val escala: Escala?
     ) {
+        /**
+         * El renderizador, **solo para reducir los mosaicos**.
+         *
+         * Un mosaico no se puede escribir como trazos: lo que hace es coger los
+         * píxeles de debajo. Quien sabe sacarlos es el renderizador, así que se
+         * le piden a él en vez de repetir aquí la reducción y arriesgarse a que
+         * las dos versiones se separen.
+         */
+        private val reductor by lazy { Renderer(imageProvider, backdrop = fondo) }
         private val medidor = Paint(Paint.ANTI_ALIAS_FLAG)
 
         /** Las transparencias que se han necesitado, por su valor. */
@@ -166,9 +190,11 @@ object PdfLienzo {
                 ElementType.SERIAL -> serie(e, alpha)
                 ElementType.MEASURE -> cota(e, alpha)
                 ElementType.IMAGE -> imagen(e, alpha)
-                ElementType.MOSAIC -> ByteArray(0)
-                ElementType.ESCALA_GRAFICA, ElementType.FRAME,
-                ElementType.SPOTLIGHT -> ByteArray(0)
+                ElementType.MOSAIC -> mosaico(e, alpha, debajo)
+                ElementType.ESCALA_GRAFICA -> escalaGrafica(e, alpha)
+                // El marco es la hoja, no una raya: decide el encuadre y no se
+                // dibuja. El foco va aparte, el último de todos.
+                ElementType.FRAME, ElementType.SPOTLIGHT -> ByteArray(0)
             }
             if (dentro.isEmpty()) return dentro
 
@@ -502,6 +528,48 @@ object PdfLienzo {
                     )
                 )
             }
+            salida.write(mediaPunta(a, b, e.strokeWidth, color))
+            salida.write(mediaPunta(b, a, e.strokeWidth, color))
+
+            // **Y el número, que es lo que la cota viene a decir.** Faltaba: la
+            // raya salía en el PDF y la medida no, así que lo entregado decía
+            // «esto mide» sin decir cuánto.
+            val texto = textoDeCota(e, escala)
+            val tam = e.fontSize ?: 20.0
+            if (texto.isNotEmpty() && tam > 0) {
+                prepararPincel(tam, e.fontFamily, Paint.Align.CENTER)
+                val fm = medidor.fontMetrics
+                val separacion = -(fm.ascent + fm.descent) / 2.0
+                val grados = Math.toDegrees(atan2(b.y - a.y, b.x - a.x))
+                val giro = if (rotuloDelReves(grados)) grados + 180.0 else grados
+                val perfil = Glifos.perfilDe(medidor, texto, 0.0, separacion)
+                if (perfil.isNotEmpty()) {
+                    val ops = opsDeAnillos(perfil, 2)
+                    val cx = (a.x + b.x) / 2
+                    val cy = (a.y + b.y) / 2
+                    salida.orden("q")
+                    salida.orden(
+                        "1 0 0 1 ${PdfEscritura.numero(cx)} ${PdfEscritura.numero(cy)} cm"
+                    )
+                    salida.orden(giroSobre(Math.toRadians(giro), 0.0, 0.0))
+                    salida.write(pintado(ops, color, "f"))
+                    salida.orden("Q")
+                }
+            }
+            return salida.toByteArray()
+        }
+
+        /** Media punta de flecha, apuntando de [en] hacia afuera de [hacia]. */
+        private fun mediaPunta(en: Pt, hacia: Pt, grosor: Double, color: Int): ByteArray {
+            val ang = atan2(hacia.y - en.y, hacia.x - en.x)
+            val largo = (grosor * 5.0).coerceAtLeast(9.0)
+            val salida = ByteArrayOutputStream()
+            for (s in listOf(-1, 1)) {
+                val giro = ang + s * Math.toRadians(20.0)
+                salida.write(
+                    raya(en, Pt(en.x + largo * cos(giro), en.y + largo * sin(giro)), color, grosor)
+                )
+            }
             return salida.toByteArray()
         }
 
@@ -569,6 +637,110 @@ object PdfLienzo {
             imagenes[nombre] = PdfValor.Ref(numero, 0)
             nombre
         }.getOrNull()
+
+        /**
+         * El mosaico: los píxeles de debajo, gordos.
+         *
+         * Se incrusta la miniatura de la que sale —unas decenas de píxeles de
+         * lado— y el PDF la estira, igual que hace la pantalla. Un mosaico que
+         * tapa media página ocupa en el archivo lo que un icono.
+         */
+        private fun mosaico(e: Element, alpha: Int, debajo: List<Element>): ByteArray {
+            val c = getElementAbsoluteCoords(e)
+            val ancho = c.x2 - c.x1
+            val alto = c.y2 - c.y1
+            if (ancho < 1 || alto < 1) return ByteArray(0)
+
+            val mini = reductor.miniaturaDelMosaico(e, debajo)
+                // Sin nada de lo que sacar píxeles, la placa esmerilada: no hay
+                // grano que poner, pero **tapar hay que tapar**.
+                ?: return pintado(
+                    opsDePuntos(
+                        listOf(
+                            Pt(c.x1, c.y1), Pt(c.x2, c.y1), Pt(c.x2, c.y2), Pt(c.x1, c.y2)
+                        ),
+                        cerrado = true
+                    ),
+                    android.graphics.Color.argb(alpha * 220 / 255, 224, 224, 228),
+                    "f"
+                )
+
+            val nombre = incrustar(mini, ancho, alto) ?: return ByteArray(0)
+            val salida = ByteArrayOutputStream()
+            salida.orden("q")
+            if (alpha < 255) salida.write(alfa(android.graphics.Color.argb(alpha, 0, 0, 0)))
+            salida.orden(
+                listOf(ancho, 0.0, 0.0, -alto, c.x1, c.y1 + alto)
+                    .joinToString(" ") { PdfEscritura.numero(it) } + " cm"
+            )
+            salida.orden("${PdfEscritura.nombre(nombre)} Do")
+            salida.orden("Q")
+            return salida.toByteArray()
+        }
+
+        /** La reglita a cuadros: los tramos, el marco y las cifras. */
+        private fun escalaGrafica(e: Element, alpha: Int): ByteArray {
+            val c = getElementAbsoluteCoords(e)
+            val ancho = c.x2 - c.x1
+            val altoCaja = c.y2 - c.y1
+            if (ancho <= 1.0 || altoCaja <= 1.0) return ByteArray(0)
+            val barra = barraDeEscala(ancho, escala) ?: return ByteArray(0)
+            val alto = (altoCaja * ALTO_DE_LA_BARRA).coerceAtLeast(1.0)
+            val tinta = parseColor(e.strokeColor, alpha)
+            val papel = contrastingTextColor(tinta, alpha)
+
+            val salida = ByteArrayOutputStream()
+            for (i in 0 until barra.tramos) {
+                val x = c.x1 + i * barra.anchoDeTramo
+                salida.write(
+                    pintado(
+                        opsDePuntos(
+                            listOf(
+                                Pt(x, c.y1), Pt(x + barra.anchoDeTramo, c.y1),
+                                Pt(x + barra.anchoDeTramo, c.y1 + alto), Pt(x, c.y1 + alto)
+                            ),
+                            cerrado = true
+                        ),
+                        if (i % 2 == 0) tinta else papel, "f"
+                    )
+                )
+            }
+            // El marco de la regla, que es lo que la separa del fondo.
+            val marco = e.copy(strokeWidth = e.strokeWidth.coerceAtLeast(1.0))
+            salida.write(
+                trazo(
+                    marco,
+                    opsDePuntos(
+                        listOf(
+                            Pt(c.x1, c.y1), Pt(c.x1 + barra.ancho, c.y1),
+                            Pt(c.x1 + barra.ancho, c.y1 + alto), Pt(c.x1, c.y1 + alto)
+                        ),
+                        cerrado = true
+                    ),
+                    alpha
+                )
+            )
+
+            val tam = (e.fontSize ?: (altoCaja * (1 - ALTO_DE_LA_BARRA) * 0.8)).coerceAtLeast(1.0)
+            val base = c.y1 + alto + tam * 1.05
+            for (i in 0..barra.tramos) {
+                val x = c.x1 + i * barra.anchoDeTramo
+                val alineado = when (i) {
+                    0 -> Paint.Align.LEFT
+                    barra.tramos -> Paint.Align.RIGHT
+                    else -> Paint.Align.CENTER
+                }
+                val etiqueta =
+                    if (i == barra.tramos) "${barra.etiqueta(i)} ${barra.unidad}"
+                    else barra.etiqueta(i)
+                prepararPincel(tam, e.fontFamily, alineado)
+                val perfil = Glifos.perfilDe(medidor, etiqueta, x, base)
+                if (perfil.isNotEmpty()) {
+                    salida.write(pintado(opsDeAnillos(perfil, 2), tinta, "f"))
+                }
+            }
+            return salida.toByteArray()
+        }
 
         // -- el foco ---------------------------------------------------------
 
