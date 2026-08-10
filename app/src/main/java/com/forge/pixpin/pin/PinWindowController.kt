@@ -96,6 +96,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -1488,7 +1489,17 @@ class PinWindowController(
     val isPdf: Boolean
         get() = pin.value.type == PinType.FILE && pin.value.mimeType == "application/pdf"
 
+    /**
+     * Sube cada vez que se abre la rejilla, para que vuelva a mirar el archivo.
+     *
+     * La fecha del PDF se lee al componer, y componer lo mismo dos veces no
+     * repite la lectura: sin este contador, cerrar la rejilla, anotar y volver a
+     * abrirla enseñaba lo de antes.
+     */
+    private var pdfViewerTick by mutableIntStateOf(0)
+
     private fun openPdfViewer() {
+        pdfViewerTick++
         if (pdfViewer != null) return
         closeActionBar()
         val params = WindowManager.LayoutParams(
@@ -1599,7 +1610,12 @@ class PinWindowController(
     @Composable
     private fun PdfViewerContent() {
         val path = pin.value.filePath
-        val pages = remember(path) { if (path != null) PdfDoc.pageCount(path) else 0 }
+        // La cuenta también se rehace si el archivo cambió: añadir una hoja
+        // desde el editor cambia el número de páginas.
+        val version = remember(path, pdfViewerTick) {
+            if (path != null) java.io.File(path).lastModified() else 0L
+        }
+        val pages = remember(path, version) { if (path != null) PdfDoc.pageCount(path) else 0 }
         Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 8.dp) {
             Column(modifier = Modifier.padding(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1657,7 +1673,12 @@ class PinWindowController(
     @OptIn(ExperimentalFoundationApi::class)
     private fun PdfThumb(path: String, index: Int) {
         var thumb by remember(path, index) { mutableStateOf<Bitmap?>(null) }
-        LaunchedEffect(path, index) {
+        // **Con la fecha del archivo en la clave.** Sin ella la miniatura se
+        // dibuja una vez y se queda: anotabas una página, volvías a la rejilla y
+        // seguías viendo la de antes, así que parecía que no se había guardado
+        // nada. Cambiando el archivo cambia su fecha, y con ella la clave.
+        val version = remember(path) { java.io.File(path).lastModified() }
+        LaunchedEffect(path, index, version) {
             thumb = withContext(Dispatchers.IO) {
                 PdfDoc.render(path, index, PdfDoc.THUMB_WIDTH)
             }

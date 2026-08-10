@@ -165,6 +165,15 @@ class DrawEditorActivity : ComponentActivity() {
      */
     private var medidaDeLaPagina: Pair<Double, Double>? = null
 
+    /**
+     * Si hay algo trazado que todavía no ha vuelto al PDF.
+     *
+     * Sin esta marca se rehacía el documento en cada pausa —abrir el menú de
+     * compartir, apagar la pantalla— aunque no hubiera cambiado nada, que es
+     * trabajo tirado y un aviso que nadie pidió.
+     */
+    private var faltaDevolverAlPdf = false
+
     /** Caché de bitmaps por `fileId`: el renderer los pide en cada fotograma. */
     private val bitmaps = HashMap<String, Bitmap?>()
 
@@ -331,85 +340,46 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     /**
-     * Devuelve lo anotado **dentro del PDF**, como una capa.
-     *
-     * Se hace al salir y no en cada trazo: escribir una revisión del archivo por
-     * cada raya lo llenaría de revisiones y de bytes. Al cerrar la página, el
-     * PDF del pin ya lleva lo dibujado, así que **no hay que exportar nada al
-     * final** — el archivo está completo en todo momento. Ver [Proyecto].
-     */
-    /**
-     * Si hay algo trazado que todavía no ha vuelto al PDF.
-     *
-     * Sin esta marca, escribir al pausar **y** al cerrar metía dos capas por una
-     * sola edición: salir del editor pasa por los dos sitios.
-     */
-    private var faltaDevolverAlPdf = false
-
-    /**
-     * Devuelve lo anotado **dentro del PDF**, como una capa.
+     * Rehace el PDF del proyecto con lo anotado.
      *
      * ## Al pausar, no al cerrar
      *
      * Estaba en `finish()` y era frágil: si el sistema se lleva la actividad por
      * delante, o si se sale por un camino que no pasa por ahí, lo dibujado se
      * quedaba sin escribir **y sin decir nada**. `onPause` es el único momento
-     * que Android garantiza antes de que una actividad deje de verse, así que
-     * es donde tiene que estar lo que no se puede perder.
+     * que Android garantiza antes de que una actividad deje de verse.
      *
-     * ## Y los fallos se dicen
+     * ## Y se rehace entero, no se añade
      *
-     * Antes iba envuelto en un `runCatching` mudo. Un PDF cifrado, un archivo
-     * que ya no está o cualquier otra cosa daban el mismo resultado: nada, sin
-     * aviso, y con el dibujo aparentemente guardado. Es la misma clase de
-     * silencio que escondió lo del proveedor de archivos durante dos versiones.
+     * Antes se escribía una capa encima de la anterior, y eso se estropeaba a la
+     * segunda pasada: retocar la misma página dejaba dos capas con dos versiones
+     * del mismo trazo, y **borrar una raya no la borraba** porque seguía en la
+     * capa de antes. Ahora se parte de una copia intacta y se ponen encima las
+     * hojas tal como están: lo que manda es el dibujo. Ver [PdfDelProyecto].
+     *
+     * ## Los fallos se dicen
+     *
+     * Iba envuelto en un `runCatching` mudo. Un PDF cifrado, un archivo movido o
+     * cualquier otra cosa daban el mismo resultado: nada, sin aviso y con el
+     * dibujo aparentemente guardado. Es la misma clase de silencio que escondió
+     * lo del proveedor de archivos durante dos versiones.
      */
     private fun devolverAlPdf() {
         if (!faltaDevolverAlPdf) return
         val ruta = pdfDeFondo ?: return
-        val pagina = paginaDeFondo.takeIf { it >= 0 } ?: return
-        val (ancho, alto) = medidaDeLaPagina ?: return
-        if (controller.scene.contenidoVisible.isEmpty()) {
-            faltaDevolverAlPdf = false
-            return
-        }
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val proyecto = Proyectos.deEstePdf(app.proyectos.proyectos.value, ruta) ?: return
 
-        val error = runCatching {
-            val original = File(ruta)
-            if (!original.exists()) return@runCatching R.string.pdf_no_esta
+        // El dibujo primero: es de donde se rehace el documento.
+        guardar()
+        faltaDevolverAlPdf = false
 
-            val fecha = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
-                .format(java.util.Date())
-            val salida = DrawPdf.anotarPagina(
-                this, original.readBytes(), pagina, controller.scene, ancho, alto,
-                nombreDeLaCapa = getString(R.string.capa_pixpin, fecha),
-                imageProvider = ::bitmapDe
-            ) ?: return@runCatching R.string.pdf_no_se_pudo
-
-            // Se escribe en un temporal y se cambia al final: si algo se
-            // tuerce a mitad, el PDF de alguien no puede quedarse a medias.
-            val temporal = File(original.parentFile, "${original.name}.nuevo")
-            temporal.writeBytes(salida)
-            if (temporal.length() <= 0) return@runCatching R.string.pdf_no_se_pudo
-            temporal.copyTo(original, overwrite = true)
-            temporal.delete()
-
-            // **Y a partir de aquí, la página de fondo es la nueva.** Si se
-            // siguiera anotando sobre la de antes, la siguiente capa llevaría
-            // otra vez lo mismo: dos copias del mismo trazo, una sobre otra.
-            faltaDevolverAlPdf = false
-            controller.load(controller.scene.copy(elements = emptyList()))
-            guardar()
-            null
-        }.getOrElse { R.string.pdf_no_se_pudo }
-
-        if (error != null) {
-            android.widget.Toast.makeText(this, error, android.widget.Toast.LENGTH_LONG).show()
-        } else {
-            android.widget.Toast.makeText(
-                this, R.string.pdf_anotado_ok, android.widget.Toast.LENGTH_SHORT
-            ).show()
-        }
+        val bien = PdfDelProyecto.rehacer(this, proyecto, ::bitmapDe)
+        android.widget.Toast.makeText(
+            this,
+            if (bien) R.string.pdf_anotado_ok else R.string.pdf_no_se_pudo,
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 
     override fun onPause() {

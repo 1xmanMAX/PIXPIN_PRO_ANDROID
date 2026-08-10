@@ -79,7 +79,27 @@ data class Proyecto(
      * nunca, y eso no es una precaución de más — es la diferencia entre
      * equivocarse y estropearle un documento a alguien.
      */
-    val pdfOrigen: String? = null
+    val pdfOrigen: String? = null,
+
+    /**
+     * Una copia **intacta** del PDF, guardada aparte.
+     *
+     * Es la base desde la que se rehace el documento cada vez, y su existencia
+     * cambia el modelo entero.
+     *
+     * Escribiendo cada anotación encima de la anterior, el archivo va
+     * acumulando capas: retocar la misma página tres veces deja tres capas con
+     * tres versiones del mismo trazo, una encima de otra, y no hay forma de
+     * quitar la de en medio. Y al segundo guardado ya no se sabe qué había
+     * antes de empezar.
+     *
+     * Con una copia limpia el problema desaparece: **lo que manda es el
+     * dibujo**, no lo que se escribió la última vez. Cada guardado parte del
+     * original y le pone encima las hojas tal como están ahora, así que borrar
+     * un trazo lo borra de verdad y retocar veinte veces sigue dejando una capa
+     * por página.
+     */
+    val pdfLimpio: String? = null
 )
 
 /**

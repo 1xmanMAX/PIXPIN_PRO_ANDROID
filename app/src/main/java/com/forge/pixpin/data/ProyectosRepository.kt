@@ -29,7 +29,8 @@ import kotlinx.serialization.json.Json
 class ProyectosRepository(context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val archivo = File(File(context.filesDir, "proyectos"), "proyectos.json")
+    private val carpeta = File(context.filesDir, "proyectos")
+    private val archivo = File(carpeta, "proyectos.json")
 
     private val _proyectos = MutableStateFlow(leer())
 
@@ -54,6 +55,9 @@ class ProyectosRepository(context: Context) {
     }
 
     fun borrar(id: String) {
+        // La copia limpia se va con su proyecto: sin él no la mira nadie, y son
+        // archivos del tamaño de un PDF.
+        porId(id)?.pdfLimpio?.let { runCatching { File(it).delete() } }
         _proyectos.value = _proyectos.value.filter { it.id != id }
         escribir()
     }
@@ -71,6 +75,17 @@ class ProyectosRepository(context: Context) {
      */
     fun deEstePdf(ruta: String, nombre: String, paginas: Int, ahora: Long): Proyecto {
         Proyectos.deEstePdf(_proyectos.value, ruta)?.let { return it }
+
+        // **Una copia intacta, antes de tocar nada.** Es la base desde la que se
+        // rehace el documento en cada guardado, y hay que sacarla ahora: en
+        // cuanto se anote la primera página, el archivo del pin ya no es el
+        // original y no habría de dónde volver. Ver [Proyecto.pdfLimpio].
+        val limpio = runCatching {
+            val destino = File(carpeta, "limpio-$ahora.pdf")
+            File(ruta).copyTo(destino, overwrite = true)
+            destino.path
+        }.getOrNull()
+
         val nuevo = Proyectos.dePdf(
             id = "pr-$ahora",
             nombre = nombre,
@@ -78,7 +93,7 @@ class ProyectosRepository(context: Context) {
             paginas = paginas,
             cuando = ahora,
             idDeHoja = { "h-$ahora-$it" }
-        )
+        ).copy(pdfLimpio = limpio)
         guardar(nuevo)
         return nuevo
     }
