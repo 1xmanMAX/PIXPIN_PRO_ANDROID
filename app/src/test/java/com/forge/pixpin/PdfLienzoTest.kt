@@ -186,6 +186,62 @@ class PdfLienzoTest {
         assertTrue(destino.length() > 0)
     }
 
+    // ---- Una hoja nueva al final ----
+
+    /**
+     * **Meter una lámina propia dentro del documento que se entrega.**
+     *
+     * Es lo otro que se le pide a un PDF de obra, además de anotar lo que hay.
+     * Sin esto había que mandar dos archivos y decir «mira también el otro».
+     */
+    @Test
+    fun `un dibujo entra como hoja nueva al final`() {
+        val original = pdfDeUnaPagina()
+        val salida = DrawPdf.aniadirComoPagina(context, original, croquis())
+        assertNotNull("no ha salido nada", salida)
+
+        val releido = leerPdf(salida!!)!!
+        assertEquals("no hay dos páginas", 2, releido.paginas().size)
+        // Y la de antes sigue siendo la de antes, con su texto.
+        val vieja = releido.resolver(PdfValor.Ref(4, 0)) as PdfValor.Flujo
+        assertTrue(
+            String(releido.descomprimir(vieja)!!, Charsets.ISO_8859_1).contains("Memoria tecnica")
+        )
+    }
+
+    @Test
+    fun `la hoja nueva no toca los bytes del original`() {
+        val original = pdfDeUnaPagina()
+        val salida = DrawPdf.aniadirComoPagina(context, original, croquis())!!
+        assertEquals(original.toList(), salida.copyOfRange(0, original.size).toList())
+    }
+
+    /** Y lleva el dibujo dentro, como trazos. */
+    @Test
+    fun `la hoja nueva trae el dibujo`() {
+        val salida = DrawPdf.aniadirComoPagina(context, pdfDeUnaPagina(), croquis())!!
+        val releido = leerPdf(salida)!!
+        val nueva = releido.pagina(1)!!
+        val contenido = releido.resolver(nueva.entradas["Contents"]) as PdfValor.Flujo
+        val ordenes = String(releido.descomprimir(contenido)!!, Charsets.ISO_8859_1)
+        assertTrue("la hoja sale vacía", ordenes.contains(" m"))
+        assertTrue("no traza nada", ordenes.contains("S"))
+    }
+
+    /** La deja escrita para que la mire un lector de fuera. */
+    @Test
+    fun `deja el PDF con hoja nueva para mirarlo por fuera`() {
+        val destino = java.io.File("build/pdf-con-hoja.pdf")
+        destino.parentFile?.mkdirs()
+        destino.writeBytes(DrawPdf.aniadirComoPagina(context, pdfDeUnaPagina(), croquis())!!)
+        assertTrue(destino.length() > 0)
+    }
+
+    @Test
+    fun `un dibujo vacío no añade hoja`() {
+        assertNull(DrawPdf.aniadirComoPagina(context, pdfDeUnaPagina(), Scene()))
+    }
+
     // ---- Lo que no se hace ----
 
     @Test

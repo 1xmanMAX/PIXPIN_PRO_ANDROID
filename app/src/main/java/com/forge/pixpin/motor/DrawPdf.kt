@@ -33,6 +33,58 @@ object DrawPdf {
     private const val MARGEN = 28.0
 
     /**
+     * Mete [scene] como **una hoja más** al final de un PDF.
+     *
+     * La hoja sale del tamaño de un A4 y el dibujo se encaja dentro, con su
+     * margen: es una lámina del documento, así que tiene que poder imprimirse
+     * con las demás sin que nadie ajuste nada.
+     */
+    fun aniadirComoPagina(
+        context: Context,
+        original: ByteArray,
+        scene: Scene,
+        imageProvider: (String) -> Bitmap? = { null }
+    ): ByteArray? = runCatching {
+        val archivo = leerPdf(original) ?: return null
+        if (archivo.cifrado) return null
+
+        val visible = scene.contenidoVisible
+        if (visible.isEmpty()) return null
+        val caja = scene.marco?.let { getElementBounds(it) } ?: getCommonBounds(visible)
+        if (caja.width <= 0 || caja.height <= 0) return null
+
+        // Apaisada si el dibujo lo es, como hace la exportación de siempre.
+        val apaisado = caja.width > caja.height
+        val anchoPagina = (if (apaisado) A4_ALTO else A4_ANCHO).toDouble()
+        val altoPagina = (if (apaisado) A4_ANCHO else A4_ALTO).toDouble()
+
+        // El dibujo, encajado y centrado, con la Y al revés: el papel mide de
+        // abajo arriba y la escena de arriba abajo.
+        val escala = minOf(
+            (anchoPagina - MARGEN * 2) / caja.width,
+            (altoPagina - MARGEN * 2) / caja.height
+        )
+        // La matriz: escalar, voltear la Y y centrar. `dy` sale de la esquina de
+        // abajo de la escena porque en el papel la Y crece hacia arriba y en la
+        // escena hacia abajo, así que lo que en el dibujo estaba abajo es lo que
+        // marca dónde empieza a subir.
+        val dx = (anchoPagina - caja.width * escala) / 2 - caja.x1 * escala
+        val dy = (altoPagina + caja.height * escala) / 2 + caja.y1 * escala
+
+        val dibujo = PdfLienzo.deEscena(
+            context, scene,
+            doubleArrayOf(escala, 0.0, 0.0, -escala, dx, dy),
+            primerObjeto = PdfEscritura.primerNumeroLibre(archivo),
+            imageProvider = imageProvider
+        ) ?: return null
+
+        PdfAnotado.aniadirPagina(
+            archivo, dibujo.contenido, anchoPagina, altoPagina,
+            recursos = dibujo.recursos, extra = dibujo.extra
+        )
+    }.getOrNull()
+
+    /**
      * Escribe el PDF y devuelve el archivo, o null si no había nada que pintar.
      *
      * Va a `cache/share`, que es la única carpeta que publica el `FileProvider`:

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -326,6 +327,7 @@ class DrawEditorActivity : ComponentActivity() {
 
     private fun guardar() {
         ExcalidrawStore.guardar(this, dibujoId, controller.scene)
+        if (pdfDeFondo != null) faltaDevolverAlPdf = true
     }
 
     /**
@@ -336,37 +338,83 @@ class DrawEditorActivity : ComponentActivity() {
      * PDF del pin ya lleva lo dibujado, así que **no hay que exportar nada al
      * final** — el archivo está completo en todo momento. Ver [Proyecto].
      */
+    /**
+     * Si hay algo trazado que todavía no ha vuelto al PDF.
+     *
+     * Sin esta marca, escribir al pausar **y** al cerrar metía dos capas por una
+     * sola edición: salir del editor pasa por los dos sitios.
+     */
+    private var faltaDevolverAlPdf = false
+
+    /**
+     * Devuelve lo anotado **dentro del PDF**, como una capa.
+     *
+     * ## Al pausar, no al cerrar
+     *
+     * Estaba en `finish()` y era frágil: si el sistema se lleva la actividad por
+     * delante, o si se sale por un camino que no pasa por ahí, lo dibujado se
+     * quedaba sin escribir **y sin decir nada**. `onPause` es el único momento
+     * que Android garantiza antes de que una actividad deje de verse, así que
+     * es donde tiene que estar lo que no se puede perder.
+     *
+     * ## Y los fallos se dicen
+     *
+     * Antes iba envuelto en un `runCatching` mudo. Un PDF cifrado, un archivo
+     * que ya no está o cualquier otra cosa daban el mismo resultado: nada, sin
+     * aviso, y con el dibujo aparentemente guardado. Es la misma clase de
+     * silencio que escondió lo del proveedor de archivos durante dos versiones.
+     */
     private fun devolverAlPdf() {
+        if (!faltaDevolverAlPdf) return
         val ruta = pdfDeFondo ?: return
         val pagina = paginaDeFondo.takeIf { it >= 0 } ?: return
         val (ancho, alto) = medidaDeLaPagina ?: return
-        if (controller.scene.contenidoVisible.isEmpty()) return
+        if (controller.scene.contenidoVisible.isEmpty()) {
+            faltaDevolverAlPdf = false
+            return
+        }
 
-        runCatching {
+        val error = runCatching {
             val original = File(ruta)
-            val bytes = original.readBytes()
+            if (!original.exists()) return@runCatching R.string.pdf_no_esta
+
             val fecha = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
                 .format(java.util.Date())
             val salida = DrawPdf.anotarPagina(
-                this, bytes, pagina, controller.scene, ancho, alto,
+                this, original.readBytes(), pagina, controller.scene, ancho, alto,
                 nombreDeLaCapa = getString(R.string.capa_pixpin, fecha),
                 imageProvider = ::bitmapDe
-            ) ?: return
+            ) ?: return@runCatching R.string.pdf_no_se_pudo
 
             // Se escribe en un temporal y se cambia al final: si algo se
             // tuerce a mitad, el PDF de alguien no puede quedarse a medias.
             val temporal = File(original.parentFile, "${original.name}.nuevo")
             temporal.writeBytes(salida)
-            if (temporal.length() > 0) {
-                temporal.copyTo(original, overwrite = true)
-                temporal.delete()
-            }
+            if (temporal.length() <= 0) return@runCatching R.string.pdf_no_se_pudo
+            temporal.copyTo(original, overwrite = true)
+            temporal.delete()
+
+            // **Y a partir de aquí, la página de fondo es la nueva.** Si se
+            // siguiera anotando sobre la de antes, la siguiente capa llevaría
+            // otra vez lo mismo: dos copias del mismo trazo, una sobre otra.
+            faltaDevolverAlPdf = false
+            controller.load(controller.scene.copy(elements = emptyList()))
+            guardar()
+            null
+        }.getOrElse { R.string.pdf_no_se_pudo }
+
+        if (error != null) {
+            android.widget.Toast.makeText(this, error, android.widget.Toast.LENGTH_LONG).show()
+        } else {
+            android.widget.Toast.makeText(
+                this, R.string.pdf_anotado_ok, android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
-    override fun finish() {
+    override fun onPause() {
         devolverAlPdf()
-        super.finish()
+        super.onPause()
     }
 
     private fun bitmapDe(fileId: String): Bitmap? = bitmaps.getOrPut(fileId) {
@@ -750,7 +798,75 @@ class DrawEditorActivity : ComponentActivity() {
                 Formato(Icons.Filled.PictureAsPdf, R.string.formato_pdf) { compartirPdf() }
                 Formato(Icons.Filled.Polyline, R.string.formato_svg) { compartirSvg() }
                 Formato(Icons.Filled.Edit, R.string.formato_editable) { compartir() }
+                // **Meter esta lámina en un PDF que ya existe.** No sale
+                // siempre: solo tiene sentido con un proyecto de PDF abierto, y
+                // una opción que casi nunca aplica es una opción de más.
+                if (pdfDeUnProyecto() != null) {
+                    Formato(Icons.Filled.NoteAdd, R.string.formato_hoja_del_pdf) {
+                        aniadirAlPdfDelProyecto()
+                    }
+                }
             }
+        }
+    }
+
+    /**
+     * El PDF del proyecto en curso, si lo hay.
+     *
+     * Es a lo que se le puede añadir esta lámina. Se mira el proyecto en curso
+     * —el último que se tocó— y no se pregunta a cuál: si acabas de anotar un
+     * plano, la hoja que dibujas después va con él. Ver [Proyectos.enCurso].
+     */
+    private fun pdfDeUnProyecto(): String? {
+        if (pdfDeFondo != null) return null
+        val app = application as? com.forge.pixpin.PixPinApp ?: return null
+        return Proyectos.enCurso(app.proyectos.proyectos.value)?.pdfOrigen
+    }
+
+    /**
+     * Añade el dibujo de ahora como **una hoja más** del PDF del proyecto.
+     *
+     * Es lo otro que se le pide a un documento de obra: no solo anotar lo que
+     * hay, sino meter una lámina propia dentro del mismo archivo que se va a
+     * entregar. Ver [DrawPdf.aniadirComoPagina].
+     */
+    private fun aniadirAlPdfDelProyecto() {
+        val ruta = pdfDeUnProyecto() ?: return
+        exportandoSinCompartir {
+            val original = File(ruta)
+            if (!original.exists()) return@exportandoSinCompartir R.string.pdf_no_esta
+            val salida = DrawPdf.aniadirComoPagina(
+                this, original.readBytes(), controller.scene, ::bitmapDe
+            ) ?: return@exportandoSinCompartir R.string.pdf_no_se_pudo
+            val temporal = File(original.parentFile, "${original.name}.nuevo")
+            temporal.writeBytes(salida)
+            if (temporal.length() <= 0) return@exportandoSinCompartir R.string.pdf_no_se_pudo
+            temporal.copyTo(original, overwrite = true)
+            temporal.delete()
+            null
+        }
+    }
+
+    /**
+     * Escribe algo pesado fuera del hilo de la pantalla y **dice cómo ha ido**.
+     *
+     * Como [exportando] pero sin abrir el menú de compartir: aquí el resultado
+     * se queda dentro de un archivo que ya existe, así que lo único que hay que
+     * devolver es si salió bien.
+     */
+    private fun exportandoSinCompartir(trabajo: suspend () -> Int?) {
+        if (exportando) return
+        exportando = true
+        lifecycleScope.launch {
+            val fallo = withContext(Dispatchers.IO) {
+                runCatching { trabajo() }.getOrElse { R.string.pdf_no_se_pudo }
+            }
+            exportando = false
+            android.widget.Toast.makeText(
+                this@DrawEditorActivity,
+                fallo ?: R.string.pdf_hoja_aniadida,
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 

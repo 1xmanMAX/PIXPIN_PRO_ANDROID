@@ -286,6 +286,84 @@ object PdfAnotado {
     private fun textoPdf(texto: String): ByteArray =
         byteArrayOf(0xFE.toByte(), 0xFF.toByte()) + texto.toByteArray(Charsets.UTF_16BE)
 
+    // ---------------------------------------------------------------------
+    // Una hoja nueva al final
+    // ---------------------------------------------------------------------
+
+    /**
+     * Añade [contenido] como **una página más** al final del documento.
+     *
+     * Es lo otro que se le pide a un PDF de obra: no solo anotar lo que hay,
+     * sino **meter una lámina propia** —un croquis, un detalle, una hoja de
+     * cálculos— dentro del mismo documento que se va a entregar. Sin esto había
+     * que mandar dos archivos y decir «mira también el otro».
+     *
+     * Se hace con el mismo mecanismo que todo lo demás: la página nueva es un
+     * objeto que se añade al final, y el árbol de páginas se reescribe con un
+     * hijo más y la cuenta subida. **Ni un byte del original se mueve**, así que
+     * todo lo que ya estaba sigue exactamente igual.
+     *
+     * A diferencia de anotar, aquí el dibujo **no va en una capa**: una hoja
+     * nueva es la hoja entera, y ponerla en una capa que se puede apagar
+     * dejaría una página en blanco al apagarla.
+     */
+    fun aniadirPagina(
+        archivo: PdfArchivo,
+        contenido: ByteArray,
+        ancho: Double,
+        alto: Double,
+        recursos: PdfValor.Dicc? = null,
+        extra: List<ObjetoPdf> = emptyList()
+    ): ByteArray? {
+        if (archivo.cifrado) return null
+        if (contenido.isEmpty() || ancho <= 0 || alto <= 0) return null
+
+        val raiz = archivo.diccDe(archivo.trailer.entradas["Root"]) ?: return null
+        val numeroArbol = raiz.ref("Pages")?.numero ?: return null
+        val arbol = archivo.diccDe(PdfValor.Ref(numeroArbol, 0)) ?: return null
+
+        var siguiente = maxOf(
+            PdfEscritura.primerNumeroLibre(archivo),
+            (extra.maxOfOrNull { it.numero } ?: 0) + 1
+        )
+        val flujo = siguiente++
+        val pagina = siguiente++
+
+        val objetos = ArrayList<ObjetoPdf>(extra)
+        objetos += ObjetoPdf(flujo, flujoComprimido(contenido))
+        objetos += ObjetoPdf(
+            pagina,
+            PdfValor.Dicc(
+                mapOf(
+                    "Type" to PdfValor.Nombre("Page"),
+                    "Parent" to PdfValor.Ref(numeroArbol, 0),
+                    "MediaBox" to PdfValor.Lista(
+                        listOf(0.0, 0.0, ancho, alto).map { PdfValor.Numero(it) }
+                    ),
+                    "Contents" to PdfValor.Ref(flujo, 0),
+                    "Resources" to (recursos ?: PdfValor.Dicc(emptyMap()))
+                )
+            )
+        )
+
+        val hijos = (archivo.resolver(arbol.entradas["Kids"]) as? PdfValor.Lista)?.valores.orEmpty()
+        objetos += ObjetoPdf(
+            numeroArbol,
+            PdfValor.Dicc(
+                arbol.entradas + mapOf(
+                    "Kids" to PdfValor.Lista(hijos + PdfValor.Ref(pagina, 0)),
+                    // La cuenta se saca de los hijos y no del `/Count` que
+                    // hubiera: un archivo remendado puede traerlo mal, y un
+                    // `/Count` que no cuadra con los hijos deja el documento
+                    // con páginas que unos lectores enseñan y otros no.
+                    "Count" to PdfValor.Numero((hijos.size + 1).toDouble())
+                )
+            )
+        )
+
+        return PdfEscritura.incremental(archivo, objetos)
+    }
+
     /** El `/Contents` de una página, siempre como lista de referencias. */
     private fun contenidosDe(pagina: PdfValor.Dicc): List<PdfValor> =
         when (val c = pagina.entradas["Contents"]) {

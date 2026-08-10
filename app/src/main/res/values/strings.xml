@@ -20,6 +20,9 @@
     <string name="permisos_listos">Permisos concedidos</string>
     <string name="ajustes_titulo">Ajustes</string>
     <string name="pdf_compartir">Compartir el PDF</string>
+    <string name="pdf_anotado_ok">Anotación guardada en el PDF</string>
+    <string name="pdf_no_se_pudo">No se pudo escribir en el PDF</string>
+    <string name="pdf_no_esta">El PDF ya no está donde estaba</string>
     <string name="proyectos_titulo">Proyectos</string>
     <string name="proyectos_vacio">Todavía no hay proyectos.\n\nPinea un PDF y toca una de sus páginas, o crea uno con el +.</string>
     <string name="proyecto_nuevo">Nuevo proyecto</string>
@@ -30,6 +33,9 @@
     <string name="proyecto_hoja_suelta">Hoja</string>
     <string name="proyecto_pagina">Página %1$d</string>
     <string name="proyecto_archivar">Archivar</string>
+    <string name="proyecto_pinear">Ver el PDF</string>
+    <string name="formato_hoja_del_pdf">Añadir al PDF del proyecto</string>
+    <string name="pdf_hoja_aniadida">Hoja añadida al PDF</string>
     <string name="proyecto_desarchivar">Desarchivar</string>
     <string name="ajustes_capturar">Capturar</string>
     <string name="ajustes_dibujar">Dibujar</string>

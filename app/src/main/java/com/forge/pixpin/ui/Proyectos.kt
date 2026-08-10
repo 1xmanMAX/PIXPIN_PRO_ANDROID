@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -41,6 +42,19 @@ import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.motor.Hoja
 import com.forge.pixpin.motor.Proyecto
 import com.forge.pixpin.motor.Proyectos
+
+/**
+ * Vuelve a poner en pantalla el PDF de un proyecto.
+ *
+ * Un pin cerrado no se pierde —el archivo sigue donde estaba y el proyecto
+ * sabe dónde— pero sin esto había que buscarlo otra vez con el gestor de
+ * archivos y volver a compartirlo a PixPin. El proyecto es lo que sabe de qué
+ * documento se trata, así que es desde donde tiene que poder volver.
+ */
+private fun volverAPinear(app: PixPinApp, p: Proyecto) {
+    val ruta = p.pdfOrigen ?: return
+    app.overlayManager.pinFile(ruta, p.nombre, "application/pdf")
+}
 
 /**
  * La lista de proyectos: **por dónde se vuelve a lo empezado**.
@@ -146,7 +160,24 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(
+            }
+
+            // **Con su nombre escrito.** Un icono suelto en una fila no dice lo
+            // que hace: el usuario preguntó qué era ese botón, y tenía razón —
+            // «archivar» y «borrar» se parecen lo bastante como para que
+            // adivinarlo salga caro una vez.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (p.pdfOrigen != null) {
+                    TextButton(onClick = { volverAPinear(app, p) }) {
+                        Icon(Icons.Filled.PushPin, contentDescription = null, Modifier.size(16.dp))
+                        Text(
+                            stringResourceSafe(R.string.proyecto_pinear),
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(
                     onClick = {
                         app.proyectos.guardar(
                             Proyectos.archivado(p, !p.archivado, System.currentTimeMillis())
@@ -155,17 +186,27 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
                 ) {
                     Icon(
                         if (p.archivado) Icons.Filled.Unarchive else Icons.Filled.Archive,
-                        contentDescription = stringResourceSafe(
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        stringResourceSafe(
                             if (p.archivado) R.string.proyecto_desarchivar
                             else R.string.proyecto_archivar
-                        )
+                        ),
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
-                IconButton(onClick = { app.proyectos.borrar(p.id) }) {
+                TextButton(onClick = { app.proyectos.borrar(p.id) }) {
                     Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = stringResourceSafe(R.string.cd_delete),
+                        Icons.Filled.Delete, contentDescription = null,
+                        modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.error
+                    )
+                    Text(
+                        stringResourceSafe(R.string.cd_delete),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
             }
