@@ -286,6 +286,19 @@ class DrawEditorActivity : ComponentActivity() {
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
         val zurdo = ajustes.zurdo
+        // **Los ajustes del imán llegan al controlador.** Sin esto, apagar una
+        // clase en la pantalla de ajustes no hacía nada aquí: el controlador se
+        // quedaba con los valores de fábrica.
+        controller.enganche = AjustesEnganche(
+            activo = ajustes.imanActivo,
+            esquinas = ajustes.imanEsquinas,
+            medios = ajustes.imanMedios,
+            centros = ajustes.imanCentros,
+            intersecciones = ajustes.imanIntersecciones,
+            eje = ajustes.imanEje,
+            bordeDeGuia = ajustes.imanBordeDeGuia,
+            bordeDeFigura = ajustes.imanBordeDeFigura
+        )
 
         // **El lienzo ocupa la pantalla entera y las barras flotan encima.**
         // Antes iba encajado entre la barra de arriba y las dos de abajo, y se

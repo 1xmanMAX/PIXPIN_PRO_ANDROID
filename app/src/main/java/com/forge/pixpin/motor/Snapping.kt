@@ -86,6 +86,15 @@ data class AjustesEnganche(
     /** El canto entero de una guía. Ver [TipoAnclaje.BORDE]. */
     val bordeDeGuia: Boolean = true,
     /**
+     * El canto de una figura del dibujo, no solo de una guía.
+     *
+     * Es el que permite clavar algo **sobre un lado**: el pie de una altura, un
+     * punto de tangencia, el sitio por donde cortar. Va el último de todos, así
+     * que nunca le quita el sitio a un vértice ni a un cruce — solo manda a lo
+     * largo del lado, donde no hay nada mejor.
+     */
+    val bordeDeFigura: Boolean = true,
+    /**
      * Radio de captura **en píxeles de pantalla**, no de escena.
      *
      * En pantalla es donde ocurre el problema: el dedo tapa unos 40 px mires al
@@ -109,7 +118,8 @@ data class AjustesEnganche(
          */
         val SOLO_GUIAS = AjustesEnganche(
             esquinas = false, medios = false, centros = false,
-            intersecciones = false, eje = false, bordeDeGuia = true
+            intersecciones = false, eje = false,
+            bordeDeGuia = true, bordeDeFigura = false
         )
     }
 }
@@ -239,11 +249,22 @@ fun buscarAnclaje(
     // trazo en ella. Siendo el último recurso, el canto hace lo que se espera de
     // una escuadra: manda donde no hay nada mejor, que es a lo largo del lado.
     //
-    // Solo las guías, además: pegarse al borde de algo del dibujo de verdad
-    // convertiría cada figura en un carril y no se podría trazar a su lado.
-    if (mejor == null && ajustes.bordeDeGuia) {
+    // **Y del dibujo también, si se pide.** Estuvo restringido a las guías con
+    // el argumento de que pegarse al canto de una figura de verdad convierte
+    // cada figura en un carril y no deja trazar a su lado. Es cierto, pero
+    // trazar un punto **sobre** un lado —un pie de altura, un punto de tangencia,
+    // el sitio donde cortar— es tan corriente que quitarlo dolía más de lo que
+    // ahorraba. Así que vuelve, y con su interruptor: quien lo encuentre un
+    // estorbo lo apaga y se queda como estaba.
+    if (mejor == null) {
         for (e in elementos) {
-            if (e.id == excluir || !e.reference || e.isDeleted || e.locked) continue
+            if (e.id == excluir || e.isDeleted || e.locked) continue
+            // La hoja se queda fuera: delimita hasta dónde llega el dibujo, no
+            // es algo dibujado, y pegarse a su canto convertiría los cuatro
+            // bordes del papel en carriles.
+            if (e.type == ElementType.FRAME) continue
+            val permitido = if (e.reference) ajustes.bordeDeGuia else ajustes.bordeDeFigura
+            if (!permitido) continue
             puntoEnElPerimetro(e, p, radio)?.let {
                 considerar(Anclaje(it, TipoAnclaje.BORDE, e.id))
             }

@@ -22,6 +22,16 @@
     <string name="ajustes_capturar">Capturar</string>
     <string name="ajustes_dibujar">Dibujar</string>
     <string name="ajustes_aspecto">Aspecto</string>
+    <string name="iman_titulo">Imán</string>
+    <string name="iman_desc">A qué se pega el dedo al dibujar. Apaga lo que te estorbe.</string>
+    <string name="iman_activo">Imán activo</string>
+    <string name="iman_esquinas">Esquinas y extremos</string>
+    <string name="iman_medios">Puntos medios</string>
+    <string name="iman_centros">Centros</string>
+    <string name="iman_intersecciones">Intersecciones</string>
+    <string name="iman_eje">Eje de coordenadas</string>
+    <string name="iman_borde_guia">Borde de las guías</string>
+    <string name="iman_borde_figura">Borde de las figuras</string>
     <string name="version">PixPin %1$s (%2$d)</string>
 
     <!-- Modo de captura -->

@@ -64,9 +64,23 @@ class GuiasTest {
      * ella sin quedarse pegado.
      */
     @Test
-    fun `el canto de lo que no es guia no engancha`() {
+    fun `el canto de lo que no es guia engancha, y se puede apagar`() {
+        // **Cambió a petición de quien la usa.** Estuvo restringido al canto de
+        // las guías con el argumento de que pegarse al de una figura de verdad
+        // convierte cada figura en un carril. Es cierto, pero clavar algo
+        // **sobre** un lado —el pie de una altura, un punto de tangencia, el
+        // sitio por donde cortar— resultó ser mucho más frecuente que ese
+        // estorbo. Así que engancha, y quien lo prefiera como estaba lo apaga.
         val normal = guiaCaja().copy(reference = false)
-        assertNull(buscarAnclaje(listOf(normal), Pt(250.0, 104.0), zoom = 1.0))
+        val hit = buscarAnclaje(listOf(normal), Pt(250.0, 104.0), zoom = 1.0)
+        assertEquals(TipoAnclaje.BORDE, hit?.tipo)
+
+        assertNull(
+            buscarAnclaje(
+                listOf(normal), Pt(250.0, 104.0), zoom = 1.0,
+                ajustes = AjustesEnganche(bordeDeFigura = false)
+            )
+        )
     }
 
     /**

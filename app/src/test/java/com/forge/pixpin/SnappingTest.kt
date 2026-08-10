@@ -80,7 +80,12 @@ class SnappingTest {
      */
     @Test
     fun `el radio se mide en pantalla`() {
-        val p = Pt(112.0, 100.0)
+        // **Fuera de la caja, en diagonal desde su esquina.** Antes se probaba
+        // con un punto que caía justo sobre el lado de arriba, y desde que el
+        // canto de las figuras engancha ese punto está a distancia cero del
+        // borde: engancharía a cualquier aumento y la prueba dejaría de medir
+        // lo que quiere medir, que es el radio.
+        val p = Pt(92.0, 92.0)
         assertTrue("a 1x tendría que enganchar", buscarAnclaje(listOf(caja()), p, 1.0) != null)
         assertNull("a 8x el mismo punto queda lejos", buscarAnclaje(listOf(caja()), p, 8.0))
     }
@@ -371,7 +376,21 @@ class SnappingTest {
             points = listOf(Pt(0.0, 0.0), Pt(0.0, 200.0))
         )
         val sinCruces = AjustesEnganche(intersecciones = false, esquinas = false, medios = false)
-        assertNull(buscarAnclaje(listOf(horizontal, vertical), Pt(121.0, 101.0), 1.0, sinCruces))
+        // Lo que se comprueba es que **no salga el cruce**. Que enganche al
+        // canto de una de las dos rayas es otra cosa y tiene su interruptor
+        // aparte: el punto está sobre ellas, así que ahí sigue habiendo algo.
+        val hit = buscarAnclaje(listOf(horizontal, vertical), Pt(121.0, 101.0), 1.0, sinCruces)
+        assertTrue(
+            "sigue saliendo el cruce con las intersecciones apagadas",
+            hit == null || hit.tipo != TipoAnclaje.INTERSECCION
+        )
+        // Y apagando también el canto, no queda nada.
+        assertNull(
+            buscarAnclaje(
+                listOf(horizontal, vertical), Pt(121.0, 101.0), 1.0,
+                sinCruces.copy(bordeDeFigura = false)
+            )
+        )
     }
 
     /** El centro de una elipse es el centro de la circunferencia. */

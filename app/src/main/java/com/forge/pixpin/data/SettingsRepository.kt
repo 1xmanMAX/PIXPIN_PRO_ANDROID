@@ -126,7 +126,25 @@ data class Settings(
      * puro apaga el píxel, y eso se ve y se nota en la batería. Apagado por
      * defecto porque en una pantalla LCD el negro puro se ve peor.
      */
-    val oledNegro: Boolean = false
+    val oledNegro: Boolean = false,
+
+    /**
+     * A qué se pega el dedo, punto por punto.
+     *
+     * Cada clase por separado y no un solo interruptor: **cuál estorba depende
+     * de lo que estés dibujando**. Levantando un plano, las intersecciones son
+     * lo que más falta hace; garabateando un esquema, tirar de cada cruce es un
+     * incordio. Un imán que tira cuando no quieres es peor que no tenerlo. Ver
+     * [com.forge.pixpin.motor.Iman].
+     */
+    val imanActivo: Boolean = true,
+    val imanEsquinas: Boolean = true,
+    val imanMedios: Boolean = true,
+    val imanCentros: Boolean = true,
+    val imanIntersecciones: Boolean = true,
+    val imanEje: Boolean = true,
+    val imanBordeDeGuia: Boolean = true,
+    val imanBordeDeFigura: Boolean = true
 ) {
     /** Los grupos de la barra del pin, ya resueltos contra lo permitido. */
     val pinGroupList: List<List<com.forge.pixpin.motor.Tool>>
@@ -177,6 +195,14 @@ class SettingsRepository(private val context: Context) {
         val BALL_VISIBLE = booleanPreferencesKey("ball_visible")
         val PIN_TOOLS = stringSetPreferencesKey("pin_tools")
         val PIN_FONT = intPreferencesKey("pin_font")
+        val IMAN_ACTIVO = booleanPreferencesKey("iman_activo")
+        val IMAN_ESQUINAS = booleanPreferencesKey("iman_esquinas")
+        val IMAN_MEDIOS = booleanPreferencesKey("iman_medios")
+        val IMAN_CENTROS = booleanPreferencesKey("iman_centros")
+        val IMAN_INTERSECCIONES = booleanPreferencesKey("iman_intersecciones")
+        val IMAN_EJE = booleanPreferencesKey("iman_eje")
+        val IMAN_BORDE_GUIA = booleanPreferencesKey("iman_borde_guia")
+        val IMAN_BORDE_FIGURA = booleanPreferencesKey("iman_borde_figura")
         val CAPA_TOOLS = stringSetPreferencesKey("capa_tools")
         val PIN_GROUPS = stringPreferencesKey("pin_groups")
         val CAPA_GROUPS = stringPreferencesKey("capa_groups")
@@ -204,6 +230,14 @@ class SettingsRepository(private val context: Context) {
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
+            imanActivo = prefs[Keys.IMAN_ACTIVO] ?: true,
+            imanEsquinas = prefs[Keys.IMAN_ESQUINAS] ?: true,
+            imanMedios = prefs[Keys.IMAN_MEDIOS] ?: true,
+            imanCentros = prefs[Keys.IMAN_CENTROS] ?: true,
+            imanIntersecciones = prefs[Keys.IMAN_INTERSECCIONES] ?: true,
+            imanEje = prefs[Keys.IMAN_EJE] ?: true,
+            imanBordeDeGuia = prefs[Keys.IMAN_BORDE_GUIA] ?: true,
+            imanBordeDeFigura = prefs[Keys.IMAN_BORDE_FIGURA] ?: true,
             zurdo = prefs[Keys.ZURDO] ?: false,
             pinFont = com.forge.pixpin.motor.ItemStyle.fontFamilyResuelta(prefs[Keys.PIN_FONT]),
             copyFormat = runCatching {
@@ -275,6 +309,24 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.OLED_NEGRO] = valor }
     }
 
+    /** Enciende o apaga una clase de enganche. Ver [com.forge.pixpin.motor.Iman]. */
+    suspend fun setIman(cual: ClaseDeIman, valor: Boolean) {
+        context.dataStore.edit {
+            it[
+                when (cual) {
+                    ClaseDeIman.ACTIVO -> Keys.IMAN_ACTIVO
+                    ClaseDeIman.ESQUINAS -> Keys.IMAN_ESQUINAS
+                    ClaseDeIman.MEDIOS -> Keys.IMAN_MEDIOS
+                    ClaseDeIman.CENTROS -> Keys.IMAN_CENTROS
+                    ClaseDeIman.INTERSECCIONES -> Keys.IMAN_INTERSECCIONES
+                    ClaseDeIman.EJE -> Keys.IMAN_EJE
+                    ClaseDeIman.BORDE_DE_GUIA -> Keys.IMAN_BORDE_GUIA
+                    ClaseDeIman.BORDE_DE_FIGURA -> Keys.IMAN_BORDE_FIGURA
+                }
+            ] = valor
+        }
+    }
+
     suspend fun setBarraDelEditor(grupos: List<List<com.forge.pixpin.motor.Tool>>) {
         context.dataStore.edit {
             it[Keys.EDITOR_TOOLS] = grupos.flatten().map { t -> t.name }.toSet()
@@ -317,4 +369,16 @@ class SettingsRepository(private val context: Context) {
     suspend fun setCopyFormat(format: CopyFormat) {
         context.dataStore.edit { it[Keys.COPY_FORMAT] = format.name }
     }
+}
+
+/**
+ * Las clases de enganche que se pueden apagar, para no repetir la lista.
+ *
+ * Van en un enum y no como ocho funciones porque **la pantalla de ajustes las
+ * recorre**: añadir una clase nueva al imán tiene que hacerla aparecer en los
+ * ajustes sin tocar la pantalla, que es la misma idea que hace que una
+ * herramienta nueva aparezca sola en la barra.
+ */
+enum class ClaseDeIman {
+    ACTIVO, ESQUINAS, MEDIOS, CENTROS, INTERSECCIONES, EJE, BORDE_DE_GUIA, BORDE_DE_FIGURA
 }

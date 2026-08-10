@@ -60,7 +60,9 @@ import androidx.core.content.getSystemService
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.forge.pixpin.data.CaptureMode
+import com.forge.pixpin.data.ClaseDeIman
 import com.forge.pixpin.data.CrashLog
+import com.forge.pixpin.data.Settings
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.launch
 
@@ -314,6 +316,8 @@ private fun PantallaDeAjustes(onVolver: () -> Unit) {
             }
 
             GrupoDeAjustes(stringResource(R.string.ajustes_dibujar)) {
+                ImanCard()
+                Spacer(Modifier.height(12.dp))
                 ManoCard()
                 Spacer(Modifier.height(12.dp))
                 BarraDelEditorCard()
@@ -355,6 +359,85 @@ private fun GrupoDeAjustes(titulo: String, contenido: @Composable () -> Unit) {
     )
     contenido()
     Spacer(Modifier.height(28.dp))
+}
+
+/**
+ * A qué se pega el dedo.
+ *
+ * Una fila por clase, y la lista sale del propio enum: añadir una clase al imán
+ * la hace aparecer aquí sin tocar esta pantalla. Es la misma idea que hace que
+ * una herramienta nueva aparezca sola en la barra.
+ *
+ * El interruptor de arriba apaga el imán entero, y entonces los demás dejan de
+ * poder tocarse: encender «intersecciones» con el imán apagado no haría nada, y
+ * un interruptor que no hace nada es peor que no estar.
+ */
+@Composable
+private fun ImanCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val ajustes by app.settings.settings.collectAsState(initial = Settings())
+
+    fun puesto(cual: ClaseDeIman): Boolean = when (cual) {
+        ClaseDeIman.ACTIVO -> ajustes.imanActivo
+        ClaseDeIman.ESQUINAS -> ajustes.imanEsquinas
+        ClaseDeIman.MEDIOS -> ajustes.imanMedios
+        ClaseDeIman.CENTROS -> ajustes.imanCentros
+        ClaseDeIman.INTERSECCIONES -> ajustes.imanIntersecciones
+        ClaseDeIman.EJE -> ajustes.imanEje
+        ClaseDeIman.BORDE_DE_GUIA -> ajustes.imanBordeDeGuia
+        ClaseDeIman.BORDE_DE_FIGURA -> ajustes.imanBordeDeFigura
+    }
+
+    fun nombre(cual: ClaseDeIman): Int = when (cual) {
+        ClaseDeIman.ACTIVO -> R.string.iman_activo
+        ClaseDeIman.ESQUINAS -> R.string.iman_esquinas
+        ClaseDeIman.MEDIOS -> R.string.iman_medios
+        ClaseDeIman.CENTROS -> R.string.iman_centros
+        ClaseDeIman.INTERSECCIONES -> R.string.iman_intersecciones
+        ClaseDeIman.EJE -> R.string.iman_eje
+        ClaseDeIman.BORDE_DE_GUIA -> R.string.iman_borde_guia
+        ClaseDeIman.BORDE_DE_FIGURA -> R.string.iman_borde_figura
+    }
+
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.iman_titulo),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                stringResource(R.string.iman_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+            )
+            for (cual in ClaseDeIman.entries) {
+                val esElGeneral = cual == ClaseDeIman.ACTIVO
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(nombre(cual)),
+                        style =
+                            if (esElGeneral) MaterialTheme.typography.bodyLarge
+                            else MaterialTheme.typography.bodyMedium,
+                        color =
+                            if (esElGeneral || ajustes.imanActivo) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f).padding(start = if (esElGeneral) 0.dp else 12.dp)
+                    )
+                    Switch(
+                        checked = puesto(cual),
+                        enabled = esElGeneral || ajustes.imanActivo,
+                        onCheckedChange = { scope.launch { app.settings.setIman(cual, it) } }
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**

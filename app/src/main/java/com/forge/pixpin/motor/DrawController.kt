@@ -141,18 +141,17 @@ class DrawController(initial: Scene = Scene()) {
         val threshold = DEFAULT_HIT_THRESHOLD / zoom
         // Solo se engancha al DIBUJAR. Al seleccionar, mover o encuadrar el
         // dedo tiene que ir donde va: tirar de él ahí sería un estorbo.
-        val p = if (tool.isShape || tool.isLinear || tool.isFreehand || tool == Tool.PUNTO) {
-            anclajeActivo = buscarAnclaje(
-                scene.visibleConReferencias, pRaw, zoom,
-                if (tool.isFreehand) engancheLapiz else enganche,
-                extra = if (tool.isFreehand) emptyList() else
-                    anclajesDeTablas(scene.tablas, scene.origenCoordenadas, scene.escala) +
-                        anclajesDelEje(
-                            scene.origenCoordenadas, pRaw,
-                            radio = enganche.radio / zoom.coerceAtLeast(0.0001),
-                            activo = enganche.eje
-                        )
-            )
+        // **Una sola pregunta al motor del imán.** Ver [Iman]: qué engancha con
+        // qué deja de decidirse aquí, herramienta por herramienta, y pasa a
+        // salir de la faena que se esté haciendo.
+        val faena = when {
+            tool == Tool.PUNTO -> Iman.Faena.SITIO_NOTABLE
+            tool.isFreehand -> Iman.Faena.A_MANO
+            tool.isShape || tool.isLinear -> Iman.Faena.TRAZANDO
+            else -> null
+        }
+        val p = if (faena != null) {
+            anclajeActivo = Iman.sitio(scene, pRaw, zoom, faena, enganche)
             anclajeActivo?.punto ?: pRaw
         } else {
             anclajeActivo = null
@@ -311,9 +310,9 @@ class DrawController(initial: Scene = Scene()) {
         // **O cae en un sitio notable o no cae.** Un punto de geometría a dos
         // píxeles del vértice deja de ser ese punto, y todo lo que se deduzca de
         // él a partir de ahí es falso. Ver [sitioValidoParaPunto].
-        val anclaje = buscarAnclaje(
-            editables, p, zoom, enganche.copy(radio = RADIO_PARA_PUNTOS)
-        )?.takeIf { sitioValidoParaPunto(it, editables) }
+        val anclaje = Iman.sitio(
+            scene, p, zoom, Iman.Faena.SITIO_NOTABLE, enganche, elementos = editables
+        )
         if (anclaje == null) {
             puntoSinSitio = true
             return
@@ -518,29 +517,24 @@ class DrawController(initial: Scene = Scene()) {
         val enCurso = (gesture as? Gesture.Creating)?.elementId
             ?: (gesture as? Gesture.MovingPoint)?.elementId
         val moviendoPunto = gesture is Gesture.MovingPoint
-        val engancha = enCurso != null &&
-            (moviendoPunto || tool.isShape || tool.isLinear || tool.isFreehand)
-        val p = if (engancha) {
-            // Al recolocar un punto ya dibujado mandan los ajustes de siempre,
-            // aunque la herramienta puesta sea el lápiz: lo que se está haciendo
-            // es afinar una punta, no trazar a mano.
-            val aMano = tool.isFreehand && !moviendoPunto
-            anclajeActivo = buscarAnclaje(
-                scene.visibleConReferencias, pRaw, zoom,
-                if (aMano) engancheLapiz else enganche, excluir = enCurso,
-                extra = if (aMano) emptyList() else
-                    anclajesDeTablas(scene.tablas, scene.origenCoordenadas, scene.escala) +
-                        anclajesDelEje(
-                            scene.origenCoordenadas, pRaw,
-                            radio = enganche.radio / zoom.coerceAtLeast(0.0001),
-                            activo = enganche.eje
-                        )
-            )
+        // Al recolocar un punto ya dibujado se afina, no se traza: mandan los
+        // ajustes de siempre aunque la herramienta puesta sea el lápiz, porque
+        // lo que se está haciendo es corregir una punta.
+        val faena = when {
+            enCurso == null -> null
+            moviendoPunto -> Iman.Faena.AFINANDO
+            tool.isFreehand -> Iman.Faena.A_MANO
+            tool.isShape || tool.isLinear -> Iman.Faena.TRAZANDO
+            else -> null
+        }
+        val p = if (faena != null) {
+            anclajeActivo = Iman.sitio(scene, pRaw, zoom, faena, enganche, excluir = enCurso)
             anclajeActivo?.punto ?: pRaw
         } else {
             anclajeActivo = null
             pRaw
         }
+
         when (val g = gesture) {
             is Gesture.None -> return
 
@@ -580,9 +574,9 @@ class DrawController(initial: Scene = Scene()) {
                 // excluyen las figuras que el propio clavo lleva: si no, se
                 // pegaría a sí mismo en cuanto se moviera un pelo.
                 val suyas = alfiler.agarres.map { it.elementId }.toSet()
-                val destino = buscarAnclaje(
-                    scene.visibleConReferencias.filter { it.id !in suyas },
-                    pRaw, zoom, enganche
+                val destino = Iman.sitio(
+                    scene, pRaw, zoom, Iman.Faena.AFINANDO, enganche,
+                    elementos = scene.visibleConReferencias.filter { it.id !in suyas }
                 )?.also { anclajeActivo = it }?.punto ?: p
                 scene = scene.copy(
                     elements = moverAlfiler(scene.elements, scene.alfileres, alfiler, destino),
@@ -618,8 +612,8 @@ class DrawController(initial: Scene = Scene()) {
                 // se busca sobre el punto crudo y el ángulo se saca de ahí: da
                 // igual que el anclaje no caiga exactamente sobre el óvalo,
                 // porque lo que se usa es la dirección desde su centro.
-                val destino = buscarAnclaje(
-                    scene.visibleConReferencias, pRaw, zoom, enganche, excluir = g.elementId
+                val destino = Iman.sitio(
+                    scene, pRaw, zoom, Iman.Faena.AFINANDO, enganche, excluir = g.elementId
                 )?.also { anclajeActivo = it }?.punto ?: p
                 val angulo = anguloEnElOvalo(e, destino)
                 replace(
@@ -699,11 +693,10 @@ class DrawController(initial: Scene = Scene()) {
                 val unPunto = g.originals.singleOrNull()?.takeIf { it.type == ElementType.PUNTO }
                 if (unPunto != null) {
                     val destino = Pt(unPunto.x + dx, unPunto.y + dy)
-                    val anclaje = buscarAnclaje(
-                        editables.filter { it.id != unPunto.id },
-                        destino, zoom,
-                        enganche.copy(radio = RADIO_PARA_PUNTOS),
-                        excluir = unPunto.id
+                    val anclaje = Iman.sitio(
+                        scene, destino, zoom, Iman.Faena.MOVIENDO, enganche,
+                        excluir = unPunto.id,
+                        elementos = editables.filter { it.id != unPunto.id }
                     )?.takeIf { sitioValidoParaPunto(it, editables) }
                     // Con el imán suelto se mueve libre, que es lo que hace un
                     // imán: tira cuando estás cerca y no ata cuando no lo estás.
@@ -897,20 +890,6 @@ class DrawController(initial: Scene = Scene()) {
      * cómo se coloca lo siguiente.
      */
     var enganche: AjustesEnganche = AjustesEnganche()
-
-    /**
-     * Con qué engancha el lápiz: **solo con el canto de las guías**.
-     *
-     * Se deriva de [enganche] para que apagar el imán lo apague también aquí, y
-     * respeta que las guías se puedan desactivar por su cuenta. El porqué de que
-     * el lápiz no enganche a lo demás, en [AjustesEnganche.SOLO_GUIAS].
-     */
-    private val engancheLapiz: AjustesEnganche
-        get() = AjustesEnganche.SOLO_GUIAS.copy(
-            activo = enganche.activo,
-            bordeDeGuia = enganche.bordeDeGuia,
-            radio = enganche.radio
-        )
 
     /** El punto al que se está enganchando ahora, para que la vista lo señale. */
     var anclajeActivo: Anclaje? = null

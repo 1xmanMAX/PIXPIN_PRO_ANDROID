@@ -261,16 +261,21 @@ class Renderer(
         // Los puntos tecleados van **encima de todo**: son la referencia contra
         // la que se dibuja, y tapados por lo que se acaba de trazar dejarían de
         // servir justo cuando más falta hacen.
-        // El eje es la referencia contra la que se teclean coordenadas: se ve
-        // mientras se trabaja y no sale en lo entregado.
-        if (paraExportar) { canvas.restore(); return }
         scene.origenCoordenadas?.let { origen ->
             // El eje, **una sola vez**: es del dibujo, no de cada serie. Con una
             // cruz por tabla, tres series encima del mismo punto pintaban tres
             // cruces de tres colores y parecían tres ejes distintos.
-            drawEjeDeCoordenadas(
-                canvas, origen, scene.viewport, screenWidth, screenHeight
-            )
+            //
+            // Y no sale al exportar: es la referencia contra la que se teclean
+            // coordenadas, andamio y no dibujo. **Los puntos sí salen**, que es
+            // lo que se estaba llevando por delante el atajo de antes: cortaba
+            // aquí de un tirón y con el eje se iban también las tablas, o sea
+            // justo el contenido que alguien tecleó a mano.
+            if (!paraExportar) {
+                drawEjeDeCoordenadas(
+                    canvas, origen, scene.viewport, screenWidth, screenHeight
+                )
+            }
             scene.tablas.filter { it.visible }.forEach {
                 drawTabla(canvas, it, origen, scene.escala, scene.viewport.zoom)
             }
