@@ -45,7 +45,22 @@ class Renderer(
      * A null (el lienzo infinito, que no tiene fondo) el mosaico se pinta como
      * una placa esmerilada: sigue tapando, que es para lo que está.
      */
-    private val backdrop: Bitmap? = null
+    private val backdrop: Bitmap? = null,
+    /**
+     * Si esto es una exportación y no la pantalla.
+     *
+     * **Es la diferencia entre un adorno y el dibujo.** Unas cuantas cosas se
+     * miden en píxeles de pantalla y se dividen por el aumento para verse
+     * siempre igual de grandes: los puntos de una tabla, su número, la cruz del
+     * centro de una guía. En pantalla es lo correcto —son señales para el ojo y
+     * para el dedo—, pero al exportar el aumento es otro: encajar un plano en un
+     * A4 puede dar un aumento de 0,2, y dividir por 0,2 **multiplica por cinco**.
+     * De ahí que salieran enormes en el PDF.
+     *
+     * Exportando, esas medidas se toman en píxeles de escena tal cual, y las que
+     * son puro andamio —la cruz de una guía, el eje— no se dibujan.
+     */
+    private val paraExportar: Boolean = false
 ) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -200,6 +215,15 @@ class Renderer(
      */
     private var zoomActual: Double = 1.0
 
+    /**
+     * Con qué aumento se miden los adornos.
+     *
+     * En pantalla, el de verdad: así se ven siempre del mismo tamaño mires al
+     * zoom que mires. Exportando, uno fijo: lo que sale del archivo tiene que
+     * medir lo que mide en la escena y no depender de en qué encaje.
+     */
+    private val zoomDeAdornos: Double get() = if (paraExportar) 1.0 else zoomActual
+
     /** Pinta la escena visible. */
     fun renderScene(
         canvas: Canvas, scene: Scene, screenWidth: Double, screenHeight: Double
@@ -237,6 +261,9 @@ class Renderer(
         // Los puntos tecleados van **encima de todo**: son la referencia contra
         // la que se dibuja, y tapados por lo que se acaba de trazar dejarían de
         // servir justo cuando más falta hacen.
+        // El eje es la referencia contra la que se teclean coordenadas: se ve
+        // mientras se trabaja y no sale en lo entregado.
+        if (paraExportar) { canvas.restore(); return }
         scene.origenCoordenadas?.let { origen ->
             // El eje, **una sola vez**: es del dibujo, no de cada serie. Con una
             // cruz por tabla, tres series encima del mismo punto pintaban tres
@@ -327,8 +354,8 @@ class Renderer(
         canvas: Canvas, tabla: TablaDeCoordenadas, origen: Pt, escala: Escala?, zoom: Double
     ) {
         val color = tema(parseColor(tabla.color, 255))
-        val radio = (TABLA_PUNTO / zoom).toFloat()
-        val tam = (TABLA_LETRA / zoom).toFloat()
+        val radio = (TABLA_PUNTO / zoomDeAdornos).toFloat()
+        val tam = (TABLA_LETRA / zoomDeAdornos).toFloat()
 
         for ((i, p) in puntosEnEscena(tabla, origen, escala).withIndex()) {
             // Relleno con aro blanco alrededor: sobre una foto oscura, un punto
@@ -442,7 +469,9 @@ class Renderer(
         val alpha = (opacidad * 255 / 100).coerceIn(0, 255)
         renderElementCuerpo(canvas, element, alpha)
         // La cruz del centro de una guía redonda, encima de su trazo.
-        if (element.reference && esRedonda(element)) marcarCentro(canvas, element)
+        // La cruz del centro es una señal para el dedo, no parte del dibujo: al
+        // exportar sobra, y encima salía gigante por medirse en pantalla.
+        if (!paraExportar && element.reference && esRedonda(element)) marcarCentro(canvas, element)
         canvas.restore()
     }
 
@@ -460,11 +489,11 @@ class Renderer(
      */
     private fun marcarCentro(canvas: Canvas, e: Element) {
         val c = getElementAbsoluteCoords(e)
-        val brazo = (CENTRO_BRAZO / zoomActual).toFloat()
+        val brazo = (CENTRO_BRAZO / zoomDeAdornos).toFloat()
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = (CENTRO_TRAZO / zoomActual).toFloat()
+        paint.strokeWidth = (CENTRO_TRAZO / zoomDeAdornos).toFloat()
         paint.color = tema(parseColor(e.strokeColor, 255))
         val cx = c.cx.toFloat()
         val cy = c.cy.toFloat()
@@ -852,18 +881,16 @@ class Renderer(
     /**
      * Un punto con su letra: **A, B, C sobre el dibujo**.
      *
-     * ## Negro con aro blanco, y gordo
+     * ## Negro y diminuto
      *
-     * El redondel va negro con un aro blanco alrededor, y no del color del
-     * trazo. Un punto de geometría no es decoración: es una referencia que se
-     * cita en el texto —«el triángulo ABC»— y tiene que leerse **siempre**,
-     * caiga sobre una raya, sobre un relleno o sobre la foto de un plano. El aro
-     * blanco es lo que lo despega del fondo; sin él, un punto negro sobre una
-     * línea negra desaparece justo donde más falta hace.
+     * El redondel va negro y del tamaño de la cabeza de un alfiler. Empezó
+     * gordo y con aro blanco, pensando en que se viera de lejos, y gordo
+     * **tapaba justo lo que estaba señalando**: en un vértice se comía el
+     * vértice, y ya no se veía dónde se cruzan las dos rectas. Un punto de
+     * geometría marca un sitio; si esconde el sitio, no sirve.
      *
-     * Y más gordo que los puntos de una tabla de coordenadas, que son marcas de
-     * referencia y no parte del dibujo. Este sale en la foto que alguien hace de
-     * la pizarra desde el fondo del aula.
+     * Lo que sigue siendo grande es la zona por la que se coge, que no se ve:
+     * ver [RADIO_DE_AGARRE].
      *
      * ## La letra, con halo
      *
@@ -878,9 +905,6 @@ class Renderer(
         fillPaint.reset()
         fillPaint.isAntiAlias = true
         fillPaint.style = Paint.Style.FILL
-        // El aro primero y el punto encima: al revés se comería el borde.
-        fillPaint.color = Color.argb(alpha, 255, 255, 255)
-        canvas.drawCircle(cx, cy, (RADIO_DEL_PUNTO + ARO_DEL_PUNTO).toFloat(), fillPaint)
         fillPaint.color = tema(Color.argb(alpha, 0, 0, 0))
         canvas.drawCircle(cx, cy, RADIO_DEL_PUNTO.toFloat(), fillPaint)
 
@@ -1319,8 +1343,14 @@ class Renderer(
          */
         const val TABLA_PUNTO = 6.5
 
-        /** Y el tamaño de su número, también en píxeles de pantalla. */
-        const val TABLA_LETRA = 16.0
+        /**
+         * Y el tamaño de su número, también en píxeles de pantalla.
+         *
+         * Subido de 16 a 22: con dieciséis no se leía. Un número que hay que
+         * acercarse a distinguir no sirve para lo que está — decir de qué punto
+         * de la tabla se está hablando.
+         */
+        const val TABLA_LETRA = 22.0
 
         /** Medio brazo de la cruz del origen y grosor de su trazo. */
         const val TABLA_ORIGEN = 14.0

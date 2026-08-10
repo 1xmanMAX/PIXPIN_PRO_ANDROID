@@ -117,8 +117,21 @@ fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
             if (it.size < 3) null else Contorno(girar(it), cerrado = true)
         }
 
-        ElementType.IMAGE, ElementType.TEXT, ElementType.MOSAIC, ElementType.FRAME,
+        ElementType.IMAGE, ElementType.MOSAIC, ElementType.FRAME,
         ElementType.ESCALA_GRAFICA -> cerrado(esquinasDe(c))
+
+        /**
+         * **El texto no tiene caja.**
+         *
+         * Su recuadro no se dibuja en ninguna parte, así que tratarlo como un
+         * contorno hacía aparecer cuatro puntos de enganche flotando alrededor
+         * de cada texto y cruces con una raya invisible. El dedo se pegaba a
+         * esquinas que no existen y el bote chocaba contra un muro que nadie ve.
+         *
+         * Es la misma razón por la que [esPared] ya decía que no: un borde que
+         * no se ve no puede comportarse como un borde.
+         */
+        ElementType.TEXT -> emptyList()
 
         // El foco no tiene borde: es una sombra sobre todo lo demás. Ni se cruza
         // ni encierra nada.

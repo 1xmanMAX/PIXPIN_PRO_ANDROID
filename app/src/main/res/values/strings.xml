@@ -128,6 +128,7 @@
     <string name="grupo_marcar">Marcar</string>
     <string name="grupo_tapar">Tapar</string>
     <string name="tool_punto">Punto</string>
+    <string name="punto_sin_sitio">Los puntos van en cruces, extremos, medios o el centro de un círculo</string>
     <string name="punto_serie">Serie</string>
     <string name="tool_selection">Seleccionar</string>
     <string name="tool_lasso">Lazo</string>

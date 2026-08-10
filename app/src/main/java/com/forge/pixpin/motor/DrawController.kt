@@ -141,7 +141,7 @@ class DrawController(initial: Scene = Scene()) {
         val threshold = DEFAULT_HIT_THRESHOLD / zoom
         // Solo se engancha al DIBUJAR. Al seleccionar, mover o encuadrar el
         // dedo tiene que ir donde va: tirar de él ahí sería un estorbo.
-        val p = if (tool.isShape || tool.isLinear || tool.isFreehand) {
+        val p = if (tool.isShape || tool.isLinear || tool.isFreehand || tool == Tool.PUNTO) {
             anclajeActivo = buscarAnclaje(
                 scene.visibleConReferencias, pRaw, zoom,
                 if (tool.isFreehand) engancheLapiz else enganche,
@@ -272,7 +272,7 @@ class DrawController(initial: Scene = Scene()) {
         if (kotlin.math.hypot(fin.x - inicio.x, fin.y - inicio.y) > TOQUE_QUIETO / z) return
         when (tool) {
             Tool.RELLENO -> rellenar(inicio)
-            Tool.PUNTO -> plantarPunto(inicio)
+            Tool.PUNTO -> plantarPunto(inicio, z)
             Tool.TEXT -> plantarTexto(inicio, DEFAULT_HIT_THRESHOLD / z)
             Tool.RECORTAR -> recortar(inicio, z)
             Tool.EXTENDER -> extender(inicio, z)
@@ -307,11 +307,23 @@ class DrawController(initial: Scene = Scene()) {
      * vértice y no a dos píxeles. En geometría eso no es cosmético: un punto que
      * no está en la intersección no es el punto del que habla el enunciado.
      */
-    private fun plantarPunto(p: Pt) {
+    private fun plantarPunto(p: Pt, zoom: Double) {
+        // **O cae en un sitio notable o no cae.** Un punto de geometría a dos
+        // píxeles del vértice deja de ser ese punto, y todo lo que se deduzca de
+        // él a partir de ahí es falso. Ver [sitioValidoParaPunto].
+        val anclaje = buscarAnclaje(
+            editables, p, zoom, enganche.copy(radio = RADIO_PARA_PUNTOS)
+        )?.takeIf { sitioValidoParaPunto(it, editables) }
+        if (anclaje == null) {
+            puntoSinSitio = true
+            return
+        }
+        puntoSinSitio = false
+
         val before = scene.elements
         val e = nuevoPunto(
             id = randomId(),
-            donde = p,
+            donde = anclaje.punto,
             elementos = editables,
             serie = seriePuntos,
             estilo = scene.style,
@@ -320,6 +332,20 @@ class DrawController(initial: Scene = Scene()) {
         scene = scene.copy(elements = scene.elements + e)
         selectedIds = setOf(e.id)
         history.record(before, scene.elements)
+    }
+
+    /**
+     * No había cruce, extremo ni centro donde se tocó.
+     *
+     * Se dice, por lo mismo que el bote dice cuando no encuentra hueco cerrado:
+     * callarse dejaría a alguien tocando una y otra vez sin entender por qué no
+     * aparece nada. Ver [rellenoSinCerrar].
+     */
+    var puntoSinSitio: Boolean = false
+        private set
+
+    fun limpiarAvisoDePunto() {
+        puntoSinSitio = false
     }
 
     private fun rellenar(p: Pt) {

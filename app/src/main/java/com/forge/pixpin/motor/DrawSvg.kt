@@ -789,10 +789,6 @@ object DrawSvg {
         private fun punto(e: Element, alpha: Int): String {
             val s = StringBuilder(
                 "<circle cx=\"${Svg.num(e.x)}\" cy=\"${Svg.num(e.y)}\" " +
-                    "r=\"${Svg.num(RADIO_DEL_PUNTO + ARO_DEL_PUNTO)}\" fill=\"#ffffff\"" +
-                    (if (alpha < 255) " fill-opacity=\"${Svg.num(alpha / 255.0)}\"" else "") +
-                    "/>\n" +
-                    "<circle cx=\"${Svg.num(e.x)}\" cy=\"${Svg.num(e.y)}\" " +
                     "r=\"${Svg.num(RADIO_DEL_PUNTO)}\" fill=\"#000000\"" +
                     (if (alpha < 255) " fill-opacity=\"${Svg.num(alpha / 255.0)}\"" else "") +
                     "/>\n"

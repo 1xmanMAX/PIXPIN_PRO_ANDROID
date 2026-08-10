@@ -188,6 +188,50 @@ fun nuevoPunto(
     etiquetaRadio = RADIO_DE_LA_LETRA
 )
 
+/**
+ * ¿Se puede poner un punto ahí?
+ *
+ * **Un punto de geometría no va donde caiga el dedo.** Va donde hay algo que
+ * nombrar: un cruce, el final de una recta, su punto medio, el centro de una
+ * circunferencia. Poner uno «más o menos» en un vértice no es un descuido
+ * estético — es que el punto deja de ser ese punto, y todo lo que se deduzca de
+ * él a partir de ahí es falso.
+ *
+ * Así que la herramienta no planta puntos libres: **se pega a un sitio notable o
+ * no hace nada**. Que es también lo que evita llenar el dibujo de puntos sueltos
+ * a dos píxeles de donde iban.
+ *
+ * Lo que cuenta como sitio notable:
+ *
+ * | Dónde | Qué vale |
+ * |---|---|
+ * | Cualquier figura con cualquier otra | La **intersección**: siempre, es lo que más se busca |
+ * | Rectas, flechas y trazos a mano | Sus **extremos**, sus vértices y sus **puntos medios** |
+ * | Circunferencias y arcos | Solo el **centro** |
+ * | Lo demás | Nada suyo: solo los cruces que tenga con otras |
+ *
+ * Las esquinas de un rectángulo o de un rombo se quedan fuera a propósito: son
+ * vértices de una caja, no puntos de una construcción, y ofrecerlos llenaría de
+ * candidatos justo cuando se busca el cruce que hay al lado.
+ */
+fun sitioValidoParaPunto(anclaje: Anclaje, elementos: List<Element>): Boolean {
+    // El cruce no pertenece a ninguna figura: nace de dos, y es el que más falta
+    // hace. Vale siempre.
+    if (anclaje.tipo == TipoAnclaje.INTERSECCION) return true
+
+    val dueno = elementos.firstOrNull { it.id == anclaje.elementId } ?: return false
+    return when (dueno.type) {
+        ElementType.LINE, ElementType.ARROW, ElementType.MEASURE, ElementType.FREEDRAW ->
+            anclaje.tipo == TipoAnclaje.EXTREMO ||
+                anclaje.tipo == TipoAnclaje.ESQUINA ||
+                anclaje.tipo == TipoAnclaje.MEDIO
+
+        ElementType.ELLIPSE, ElementType.ARC -> anclaje.tipo == TipoAnclaje.CENTRO
+
+        else -> false
+    }
+}
+
 /** Dónde cae el centro de la letra de [e]. */
 fun sitioDeLaEtiqueta(e: Element): Pt {
     val a = e.etiquetaAngulo ?: -PI / 4
@@ -230,17 +274,40 @@ const val RADIO_DE_LA_LETRA = 22.0
 const val RADIO_MINIMO = 14.0
 const val RADIO_MAXIMO = 60.0
 
+/**
+ * Hasta dónde busca sitio la herramienta de puntos, en píxeles de pantalla.
+ *
+ * Más generoso que el imán de siempre: aquí el dedo **tiene** que acertar en un
+ * cruce o en un extremo para que pase algo, así que apretar el radio convertiría
+ * la herramienta en un juego de puntería. Al no haber puntos libres, un radio
+ * grande no puede colocar nada donde no debía — como mucho, engancha al sitio
+ * notable de al lado.
+ */
+const val RADIO_PARA_PUNTOS = 30.0
+
 /** Hasta dónde se mira para saber qué sale del punto. */
 const val ALCANCE_DE_LA_LETRA = 6.0
 
 /**
  * Lo que mide el redondel, en píxeles de escena.
  *
- * **Más gordo que los demás puntos del programa** a propósito: este no es una
- * marca de referencia como las de una tabla de coordenadas, es parte del dibujo
- * y hay que verlo en una foto de la pizarra hecha desde el fondo del aula.
+ * **Pequeño como la cabeza de un alfiler**, y a propósito. Empezó siendo gordo
+ * pensando en que se viera de lejos, y gordo tapaba justo lo que estaba
+ * señalando: en un vértice, el redondel se comía el vértice y ya no se veía
+ * dónde se cruzaban las dos rectas. Un punto de geometría marca un sitio; si
+ * esconde el sitio, no sirve.
+ *
+ * Y **sin aro blanco**. El aro lo despegaba del fondo pero lo hacía el doble de
+ * grande, que es el problema que se venía a arreglar.
  */
-const val RADIO_DEL_PUNTO = 5.5
+const val RADIO_DEL_PUNTO = 2.8
 
-/** El aro blanco de alrededor, para que se lea sobre cualquier fondo. */
-const val ARO_DEL_PUNTO = 2.2
+/**
+ * Lo que hay que acertar con el dedo para cogerlo, en píxeles de escena.
+ *
+ * **Mucho más que lo que se ve**, que es lo que permite que el redondel sea
+ * diminuto sin volverse imposible de agarrar. Es la regla de siempre: lo que se
+ * dibuja es para el ojo y lo que se toca es para el dedo, y el dedo mide medio
+ * centímetro.
+ */
+const val RADIO_DE_AGARRE = 16.0

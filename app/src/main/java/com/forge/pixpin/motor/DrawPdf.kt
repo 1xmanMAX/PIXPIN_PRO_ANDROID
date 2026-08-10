@@ -69,7 +69,7 @@ object DrawPdf {
         if (paginas.isEmpty()) return null
 
         val documento = PdfDocument()
-        val renderizador = Renderer(imageProvider, DrawFonts.provider(context))
+        val renderizador = Renderer(imageProvider, DrawFonts.provider(context), paraExportar = true)
 
         for ((numero, hoja) in paginas.withIndex()) {
             val (caja, contenido) = hoja

@@ -325,6 +325,17 @@ class DrawEditorActivity : ComponentActivity() {
                     // El bote no ha encontrado hueco cerrado: se dice. Callarse
                     // dejaría a alguien tocando una y otra vez sin entender por
                     // qué no pasa nada.
+                    // No había cruce, extremo ni centro donde se tocó. Se dice,
+                    // por lo mismo que el bote: callarse deja a alguien tocando
+                    // una y otra vez sin entender por qué no aparece nada.
+                    if (controller.puntoSinSitio) {
+                        controller.limpiarAvisoDePunto()
+                        android.widget.Toast.makeText(
+                            this@DrawEditorActivity,
+                            R.string.punto_sin_sitio,
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                     if (controller.rellenoSinCerrar) {
                         controller.limpiarAvisoRelleno()
                         android.widget.Toast.makeText(

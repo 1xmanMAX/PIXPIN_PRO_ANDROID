@@ -250,9 +250,14 @@ class InterseccionesTest {
      */
     @Test
     fun `todos los tipos que se dibujan tienen perimetro`() {
-        // El foco es una mancha y el punto es un sitio: ninguno de los dos
-        // tiene contorno que cortar, y por eso ninguno aporta intersecciones.
-        val sinPerimetro = setOf(ElementType.SPOTLIGHT, ElementType.PUNTO)
+        // Tres que no tienen contorno, cada uno por su motivo. El foco es una
+        // mancha sobre todo lo demás; el punto es un sitio, no una figura; y la
+        // caja del texto **no se dibuja**, así que tratarla como borde hacía
+        // aparecer enganches flotando alrededor de cada texto y cruces contra
+        // una raya invisible.
+        val sinPerimetro = setOf(
+            ElementType.SPOTLIGHT, ElementType.PUNTO, ElementType.TEXT
+        )
         for (tipo in ElementType.entries) {
             val e = Element(
                 id = "x", type = tipo, x = 0.0, y = 0.0,

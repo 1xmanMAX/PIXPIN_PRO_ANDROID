@@ -70,7 +70,7 @@ object DrawExport {
 
         // Se reutiliza el renderizador de pantalla con un viewport a medida:
         // encuadrar es solo elegir desplazamiento y zoom.
-        Renderer(imageProvider).renderScene(
+        Renderer(imageProvider, paraExportar = true).renderScene(
             canvas,
             // Se pinta `contenidoVisible`, no la escena entera: así lo que
             // quedaba fuera de la hoja no aparece, y el marco tampoco se pinta

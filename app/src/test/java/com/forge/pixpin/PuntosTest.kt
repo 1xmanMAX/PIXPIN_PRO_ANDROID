@@ -209,6 +209,79 @@ class PuntosTest {
         assertEquals("B", segundo.text)
     }
 
+    // ---- Dónde se deja poner ----
+
+    private fun anclaje(tipo: TipoAnclaje, de: String) = Anclaje(Pt(0.0, 0.0), tipo, de)
+
+    private fun forma(id: String, tipo: ElementType) = Element(
+        id = id, type = tipo, x = 0.0, y = 0.0, width = 50.0, height = 50.0, seed = 1
+    )
+
+    /**
+     * **La intersección vale siempre.** Es la que más se busca y la única que no
+     * pertenece a ninguna figura: nace de la relación entre dos.
+     */
+    @Test
+    fun `una intersección siempre vale`() {
+        val escena = listOf(forma("r", ElementType.RECTANGLE))
+        assertTrue(sitioValidoParaPunto(anclaje(TipoAnclaje.INTERSECCION, "r"), escena))
+    }
+
+    /** De una recta valen sus extremos, sus vértices y sus medios. */
+    @Test
+    fun `de una recta valen extremos, vértices y medios`() {
+        val escena = listOf(linea("l", Pt(0.0, 0.0), Pt(100.0, 0.0)))
+        for (t in listOf(TipoAnclaje.EXTREMO, TipoAnclaje.ESQUINA, TipoAnclaje.MEDIO)) {
+            assertTrue("$t debería valer", sitioValidoParaPunto(anclaje(t, "l"), escena))
+        }
+        assertTrue(!sitioValidoParaPunto(anclaje(TipoAnclaje.BORDE, "l"), escena))
+    }
+
+    /** De una circunferencia, solo el centro. */
+    @Test
+    fun `de un círculo solo vale el centro`() {
+        val escena = listOf(forma("c", ElementType.ELLIPSE))
+        assertTrue(sitioValidoParaPunto(anclaje(TipoAnclaje.CENTRO, "c"), escena))
+        assertTrue(!sitioValidoParaPunto(anclaje(TipoAnclaje.ESQUINA, "c"), escena))
+        assertTrue(!sitioValidoParaPunto(anclaje(TipoAnclaje.BORDE, "c"), escena))
+    }
+
+    /**
+     * Las esquinas de un rectángulo o de un rombo se quedan fuera a propósito:
+     * son vértices de una caja, no puntos de una construcción, y ofrecerlos
+     * llenaría de candidatos justo cuando se busca la intersección de al lado.
+     */
+    @Test
+    fun `las esquinas de una caja no son sitio`() {
+        for (tipo in listOf(ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.TEXT)) {
+            val escena = listOf(forma("f", tipo))
+            assertTrue(
+                "$tipo no debería ofrecer sus esquinas",
+                !sitioValidoParaPunto(anclaje(TipoAnclaje.ESQUINA, "f"), escena)
+            )
+            assertTrue(
+                "$tipo no debería ofrecer su centro",
+                !sitioValidoParaPunto(anclaje(TipoAnclaje.CENTRO, "f"), escena)
+            )
+        }
+    }
+
+    @Test
+    fun `un anclaje de algo que ya no está no vale`() {
+        assertTrue(!sitioValidoParaPunto(anclaje(TipoAnclaje.EXTREMO, "fantasma"), emptyList()))
+    }
+
+    /** El texto ya no tiene caja: sus esquinas dejan de ser puntos de enganche. */
+    @Test
+    fun `un texto no aporta contorno`() {
+        val t = Element(
+            id = "t", type = ElementType.TEXT, x = 0.0, y = 0.0,
+            width = 80.0, height = 20.0, seed = 1, text = "hola"
+        )
+        assertTrue("el texto sigue teniendo caja", contornosDe(t).isEmpty())
+        assertTrue(segmentosDe(t).isEmpty())
+    }
+
     /** Un punto no es pared ni tiene contorno: no estorba al bote ni a los cruces. */
     @Test
     fun `un punto no interfiere con la geometría`() {

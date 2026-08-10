@@ -75,7 +75,7 @@ fun isPointInElement(p: Pt, element: Element): Boolean {
         // tamaño —es el punto y ya está—, así que preguntar si el dedo cae
         // «dentro» de ella no acertaría nunca.
         ElementType.PUNTO ->
-            hypot(p.x - element.x, p.y - element.y) <= RADIO_DEL_PUNTO + ARO_DEL_PUNTO ||
+            hypot(p.x - element.x, p.y - element.y) <= RADIO_DE_AGARRE ||
                 tocaLaEtiqueta(element, p, 0.0)
 
         // El mosaico y el foco se agarran por dentro: son manchas, no contornos,
@@ -129,7 +129,7 @@ fun isPointOnElementOutline(p: Pt, element: Element, threshold: Double): Boolean
     return when (element.type) {
         // El punto es todo trazo: no hay dentro ni fuera que distinguir.
         ElementType.PUNTO -> isPointInElement(p, element) ||
-            hypot(p.x - element.x, p.y - element.y) <= RADIO_DEL_PUNTO + threshold
+            hypot(p.x - element.x, p.y - element.y) <= RADIO_DE_AGARRE + threshold
 
         ElementType.RECTANGLE, ElementType.IMAGE, ElementType.TEXT,
         ElementType.MOSAIC, ElementType.SPOTLIGHT, ElementType.FRAME,
