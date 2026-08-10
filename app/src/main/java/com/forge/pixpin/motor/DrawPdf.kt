@@ -108,4 +108,55 @@ object DrawPdf {
     }.getOrNull()
 
     const val MIME_TYPE = "application/pdf"
+
+    /**
+     * Pega [scene] sobre la página [pagina] de un PDF **ajeno**, y devuelve el
+     * archivo entero.
+     *
+     * Es la puerta de todo el camino, y no hace casi nada por su cuenta: lee el
+     * archivo ([leerPdf]), calcula la matriz de las cuatro esquinas
+     * ([PdfAnotado.matrizDePagina]), traduce el dibujo a órdenes ([PdfLienzo]) y
+     * lo cuelga como capa ([PdfAnotado.anotar]). Que sea tan corta es la señal
+     * de que las cuatro piezas encajan.
+     *
+     * [anchoImagen] y [altoImagen] son los de la imagen de la página sobre la
+     * que se dibujó: es lo que dice a qué escala está lo anotado. Salen de
+     * `PdfDoc.render`, así que quien llame ya los tiene.
+     *
+     * Devuelve null si el PDF está cifrado, si la página no existe o si no había
+     * nada dibujado. **Nunca devuelve un archivo a medias.**
+     */
+    fun anotarPagina(
+        context: Context,
+        original: ByteArray,
+        pagina: Int,
+        scene: Scene,
+        anchoImagen: Double,
+        altoImagen: Double,
+        nombreDeLaCapa: String = "PixPin",
+        imageProvider: (String) -> Bitmap? = { null }
+    ): ByteArray? = runCatching {
+        val archivo = leerPdf(original) ?: return null
+        if (archivo.cifrado) return null
+        val matriz = PdfAnotado.matrizDePagina(archivo, pagina, anchoImagen, altoImagen)
+            ?: return null
+
+        val dibujo = PdfLienzo.deEscena(
+            context, scene, matriz,
+            // Las imágenes se numeran desde el primer libre; [PdfAnotado] pide
+            // los suyos con `max(primerLibre, elMayorDeExtra + 1)`, así que se
+            // colocan detrás solas y no hace falta apartarles sitio.
+            primerObjeto = PdfEscritura.primerNumeroLibre(archivo),
+            imageProvider = imageProvider
+        ) ?: return null
+
+        PdfAnotado.anotar(
+            archivo, pagina, dibujo.contenido,
+            recursos = dibujo.recursos,
+            extra = dibujo.extra,
+            nombre = nombreDeLaCapa
+        )
+    }.getOrNull()
+
+
 }

@@ -35,7 +35,12 @@ class MotorSeparadoTest {
     private val conAndroid = setOf(
         "Renderer.kt", "DrawCanvas.kt", "DrawToolbar.kt", "DrawEditorActivity.kt",
         "DrawExport.kt", "DrawPdf.kt", "DrawSvg.kt", "DrawTablas.kt", "DrawFonts.kt",
-        "Theme.kt", "ExcalidrawStore.kt"
+        "Theme.kt", "ExcalidrawStore.kt",
+        // Los dos de escribir un PDF: sacan el perfil de las letras y meten
+        // imágenes, y las dos cosas son de Android. La geometría que usan sí es
+        // del núcleo —[Caminos], [Rough], [Perimetros]— y por eso el PDF se
+        // comprueba casi entero sin dispositivo.
+        "Glifos.kt", "PdfLienzo.kt"
     )
 
     private fun archivos(): List<File> =
