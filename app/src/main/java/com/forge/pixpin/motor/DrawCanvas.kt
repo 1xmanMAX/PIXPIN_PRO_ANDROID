@@ -341,7 +341,12 @@ fun DrawCanvas(
             // solo añade cuatro bordes donde no hay nada dibujado. Es como se
             // ve en el original.
             val soloUnaRaya = selected.size == 1 && selected.first().isLinear
-            if (!soloUnaRaya) {
+            // **Y un punto tampoco.** Su caja mide cero, así que el rectángulo
+            // salía como un recuadro diminuto encima del propio punto: ruido
+            // justo sobre lo que se está intentando ver. Un punto seleccionado
+            // ya se distingue porque su letra es lo único que hay ahí.
+            val soloUnPunto = selected.size == 1 && selected.first().type == ElementType.PUNTO
+            if (!soloUnaRaya && !soloUnPunto) {
                 val bounds = getCommonBounds(selected)
                 val tl = vp.toScreen(Pt(bounds.x1, bounds.y1))
                 val br = vp.toScreen(Pt(bounds.x2, bounds.y2))

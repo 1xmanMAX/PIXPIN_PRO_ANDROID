@@ -454,6 +454,7 @@ class DrawController(initial: Scene = Scene()) {
      */
     fun angulosDelGesto(): List<AnguloInterno> {
         val moviendose = when (val g = gesture) {
+            is Gesture.GirandoEtiqueta -> setOf(g.elementId)
             is Gesture.MovingPoint -> setOf(g.elementId)
             is Gesture.Moving -> g.originals.map { it.id }.toSet()
             is Gesture.Rotating -> g.originals.map { it.id }.toSet()
@@ -668,6 +669,16 @@ class DrawController(initial: Scene = Scene()) {
                 }
             }
 
+            // La letra da vueltas alrededor de su punto. No se aleja de él ni
+            // se inclina: ver [conLaEtiquetaHacia].
+            is Gesture.GirandoEtiqueta -> {
+                scene = scene.copy(
+                    elements = scene.elements.map {
+                        if (it.id == g.elementId) conLaEtiquetaHacia(it, p) else it
+                    }
+                )
+            }
+
             is Gesture.Moving -> {
                 val dx = p.x - g.startPointer.x
                 val dy = p.y - g.startPointer.y
@@ -838,7 +849,8 @@ class DrawController(initial: Scene = Scene()) {
             // pasada usa la dirección que dejó la anterior, así que volver a
             // recalcular al soltar movía la punta un par de píxeles más — el
             // saltito final que se veía justo al levantar el dedo.
-            is Gesture.Moving, is Gesture.Resizing, is Gesture.Rotating -> Unit
+            is Gesture.Moving, is Gesture.Resizing, is Gesture.Rotating,
+            is Gesture.GirandoEtiqueta -> Unit
 
             else -> Unit
         }
@@ -1388,6 +1400,30 @@ class DrawController(initial: Scene = Scene()) {
             return
         }
 
+        // 0,5. ¿La letra de un punto? **Antes que la figura que tenga debajo.**
+        //    La letra vive fuera del punto, encima de la figura que se está
+        //    nombrando, así que el toque caería sobre la figura y arrastraría el
+        //    triángulo entero en vez de recolocar la letra. Y colocarla a mano
+        //    hace falta: la automática acierta casi siempre, pero «casi» no
+        //    basta cuando dos vértices están juntos y las dos letras se pisan.
+        //    Y **el propio punto gana a su letra**: la letra vive a veintidós
+        //    píxeles, y con el margen del dedo su zona y la del punto se
+        //    solapaban. Tocando el punto salía girando la letra, o sea que el
+        //    punto dejaba de poder moverse. Primero se mira si el dedo cae en el
+        //    punto; solo si no, se prueba con la letra, y sin margen extra.
+        val sobreUnPunto = editables.any {
+            it.type == ElementType.PUNTO &&
+                kotlin.math.hypot(it.x - p.x, it.y - p.y) <= RADIO_DE_AGARRE
+        }
+        val letra = if (sobreUnPunto) null else editables.lastOrNull {
+            it.type == ElementType.PUNTO && tocaLaEtiqueta(it, p, 0.0)
+        }
+        if (letra != null) {
+            gesture = Gesture.GirandoEtiqueta(letra.id)
+            selectedIds = setOf(letra.id)
+            return
+        }
+
         val selected = selectedElements()
 
         // 1. ¿Un tirador? Tiene prioridad sobre todo lo demás: está encima de
@@ -1709,6 +1745,16 @@ private sealed interface Gesture {
     data object None : Gesture
     data class Creating(val elementId: String) : Gesture
     data class Moving(val startPointer: Pt, val originals: List<Element>) : Gesture
+
+    /**
+     * La letra de un punto, dando vueltas alrededor de él.
+     *
+     * Gesto propio y no un `Moving` porque lo que se mueve **no es un
+     * elemento**: es una propiedad suya, y el punto se queda donde está. Con un
+     * `Moving` se habría arrastrado el punto entero al tirar de su letra, que es
+     * justo lo contrario de lo que se quiere.
+     */
+    data class GirandoEtiqueta(val elementId: String) : Gesture
     data class Resizing(val handle: HandleType, val originals: List<Element>) : Gesture
     /**
      * Arrastrando **una punta** de una flecha o una línea.

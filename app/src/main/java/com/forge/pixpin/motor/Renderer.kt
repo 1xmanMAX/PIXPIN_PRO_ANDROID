@@ -374,6 +374,7 @@ class Renderer(
             paint.textAlign = Paint.Align.LEFT
             paint.textSize = tam
             paint.typeface = typefaces(null)
+            paint.isFakeBoldText = true
             // Arriba a la derecha del punto: es donde menos tapa cuando los
             // puntos van seguidos formando una poligonal, que es como llegan de
             // una libreta de campo.
@@ -389,6 +390,7 @@ class Renderer(
             paint.style = Paint.Style.FILL
             paint.color = color
             canvas.drawText(etiqueta, x, y, paint)
+            paint.isFakeBoldText = false
         }
     }
 
@@ -1346,11 +1348,13 @@ class Renderer(
         /**
          * Y el tamaño de su número, también en píxeles de pantalla.
          *
-         * Subido de 16 a 22: con dieciséis no se leía. Un número que hay que
-         * acercarse a distinguir no sirve para lo que está — decir de qué punto
-         * de la tabla se está hablando.
+         * Subido dos veces: de 16 a 22 y de 22 a 30, porque seguía sin leerse.
+         * Un número que hay que acercarse a distinguir no sirve para lo que
+         * está — decir de qué punto de la tabla se está hablando. Y va en
+         * negrita por lo mismo: a este tamaño, sobre un plano lleno de rayas
+         * finas, el grosor se lee antes que el tamaño.
          */
-        const val TABLA_LETRA = 22.0
+        const val TABLA_LETRA = 30.0
 
         /** Medio brazo de la cruz del origen y grosor de su trazo. */
         const val TABLA_ORIGEN = 14.0

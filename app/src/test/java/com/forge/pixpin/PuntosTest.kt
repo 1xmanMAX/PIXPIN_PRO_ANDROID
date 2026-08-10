@@ -413,3 +413,91 @@ class PuntoEnElEditorTest {
         assertEquals(0.0, puntos(c)[0].x, 0.001)
     }
 }
+
+/**
+ * La letra del punto se coloca a mano, además de sola.
+ *
+ * La automática acierta casi siempre, pero «casi» no basta cuando dos vértices
+ * están juntos y las dos letras se pisan. Y al girarla, el punto no se mueve: es
+ * una propiedad suya lo que cambia, no él.
+ */
+class LetraDelPuntoTest {
+
+    private fun conUnPunto(): DrawController {
+        val c = DrawController()
+        c.load(
+            Scene(
+                elements = listOf(
+                    Element(
+                        id = "p", type = ElementType.PUNTO,
+                        x = 100.0, y = 100.0, width = 0.0, height = 0.0, seed = 1,
+                        text = "A", fontSize = 20.0,
+                        etiquetaAngulo = -Math.PI / 4, etiquetaRadio = RADIO_DE_LA_LETRA
+                    )
+                )
+            )
+        )
+        c.selectTool(Tool.SELECTION)
+        return c
+    }
+
+    private fun elPunto(c: DrawController) = c.scene.elements.first { it.id == "p" }
+
+    /** Se agarra la letra y gira; el punto no se mueve de donde está. */
+    @Test
+    fun `girar la letra no mueve el punto`() {
+        val c = conUnPunto()
+        val donde = sitioDeLaEtiqueta(elPunto(c))
+
+        c.pointerDown(donde)
+        c.pointerMove(Pt(60.0, 100.0))    // se la lleva a la izquierda
+        c.pointerUp(Pt(60.0, 100.0))
+
+        val p = elPunto(c)
+        assertEquals("el punto se ha movido", 100.0, p.x, 0.001)
+        assertEquals("el punto se ha movido", 100.0, p.y, 0.001)
+        // Y la letra ha acabado a la izquierda: coseno negativo.
+        assertTrue("la letra no ha girado", kotlin.math.cos(p.etiquetaAngulo!!) < 0)
+    }
+
+    /** Y sigue sin poder soltarse: el radio se topa. */
+    @Test
+    fun `la letra girada a mano sigue atada a su punto`() {
+        val c = conUnPunto()
+        c.pointerDown(sitioDeLaEtiqueta(elPunto(c)))
+        c.pointerMove(Pt(900.0, 100.0))
+        c.pointerUp(Pt(900.0, 100.0))
+        assertEquals(RADIO_MAXIMO, elPunto(c).etiquetaRadio!!, 0.001)
+    }
+
+    /**
+     * **La letra nunca se inclina.**
+     *
+     * Orbita el punto pero se lee siempre de pie: una etiqueta girada obliga a
+     * torcer la cabeza, y en un croquis con diez puntos eso es diez veces.
+     * El elemento no guarda inclinación de la letra a propósito — no hay dónde
+     * ponerla, así que no puede pasar.
+     */
+    @Test
+    fun `la letra siempre queda de pie`() {
+        val c = conUnPunto()
+        for (destino in listOf(Pt(60.0, 60.0), Pt(140.0, 140.0), Pt(60.0, 140.0))) {
+            c.pointerDown(sitioDeLaEtiqueta(elPunto(c)))
+            c.pointerMove(destino)
+            c.pointerUp(destino)
+            assertEquals("la letra se ha inclinado", 0.0, elPunto(c).angle, 0.0)
+        }
+    }
+
+    /** Tocar el propio punto lo mueve a él, no a su letra. */
+    @Test
+    fun `tocar el punto lo mueve a él`() {
+        val c = conUnPunto()
+        c.pointerDown(Pt(100.0, 100.0))
+        c.pointerMove(Pt(300.0, 300.0))
+        c.pointerUp(Pt(300.0, 300.0))
+        val p = elPunto(c)
+        assertEquals(300.0, p.x, 0.001)
+        assertEquals(300.0, p.y, 0.001)
+    }
+}
