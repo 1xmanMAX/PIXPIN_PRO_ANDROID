@@ -3,6 +3,7 @@ package com.forge.pixpin.motor
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -112,8 +113,21 @@ fun regionEn(
     if (!rejilla.derramar(p)) return null
     repeat(max(ajustes.dilatacion, 0)) { rejilla.dilatar() }
 
+    // **Primero se pegan a las paredes, después se simplifican.**
+    //
+    // El contorno que sale del derrame es una escalera: sigue los bordes de las
+    // celdas, así que allí donde la pared va en diagonal la mancha asoma por un
+    // lado y se queda corta por el otro. Es exactamente lo que se veía —«en unos
+    // sitios se sale y en otros ni llega al borde»— y no se arregla subiendo la
+    // resolución: con celdas más finas la escalera es más fina, pero sigue
+    // siendo una escalera, y cada duplicar cuesta cuatro veces más.
+    //
+    // Pegando cada vértice a la línea que tiene al lado, el contorno deja de
+    // aproximar la pared y pasa a **estar sobre ella**. El orden importa: si se
+    // simplificara antes, la simplificación elegiría vértices de la escalera y
+    // se pegarían los que quedaran, no los que había que pegar.
     val anillos = rejilla.contornos()
-        .map { simplificar(it, rejilla.celda) }
+        .map { simplificar(pegadoALasParedes(it, segmentos, rejilla.celda * ARRIME), rejilla.celda) }
         .filter { it.size >= 3 }
     if (anillos.isEmpty()) return null
 
@@ -606,4 +620,82 @@ internal fun areaDe(anillo: List<Pt>): Double {
         j = i
     }
     return suma / 2
+}
+
+/**
+ * A cuántas celdas de distancia se le permite a un vértice buscar su pared.
+ *
+ * Poco más de una: el derrame se para a una celda de la pared y la dilatación lo
+ * acerca otra, así que la distancia real es menos de dos. Más margen empezaría a
+ * pegar a la pared vértices que no eran del borde —los de un recodo hacia dentro
+ * de la mancha— y eso deforma el relleno en vez de ajustarlo.
+ */
+private const val ARRIME = 1.6
+
+/**
+ * Lleva cada vértice del contorno **hasta la pared que tiene al lado**.
+ *
+ * El contorno que sale de una rejilla va por los bordes de las celdas, así que
+ * contra una pared en diagonal describe una escalera: asoma por fuera en unos
+ * tramos y se queda corto en otros. Aquí cada punto se proyecta sobre el
+ * segmento más cercano que tenga dentro de [tolerancia] y se queda ahí.
+ *
+ * Lo que no está cerca de ninguna pared se deja intacto: son los tramos que
+ * cruzan el aire —la mancha entre dos figuras que no se tocan— y ahí no hay
+ * nada a lo que ajustarse.
+ *
+ * Los puntos que al pegarse caen unos encima de otros se funden: una escalera de
+ * cinco peldaños contra la misma recta se convierte en dos puntos, que es lo que
+ * había que dibujar desde el principio.
+ */
+internal fun pegadoALasParedes(
+    contorno: List<Pt>,
+    paredes: List<Pair<Pt, Pt>>,
+    tolerancia: Double
+): List<Pt> {
+    if (contorno.isEmpty() || paredes.isEmpty() || tolerancia <= 0) return contorno
+
+    val pegados = ArrayList<Pt>(contorno.size)
+    for (v in contorno) {
+        var mejor: Pt? = null
+        var mejorDist = tolerancia
+        for ((a, b) in paredes) {
+            val sobre = puntoMasCercanoDelTramo(v, a, b)
+            val d = hypot(sobre.x - v.x, sobre.y - v.y)
+            if (d <= mejorDist) {
+                mejorDist = d
+                mejor = sobre
+            }
+        }
+        pegados.add(mejor ?: v)
+    }
+
+    // Fundir los que han quedado encima: dos vértices de la escalera pegados a
+    // la misma recta acaban en el mismo sitio, y un camino con puntos repetidos
+    // desconcierta a todo lo que venga después.
+    val juntos = ArrayList<Pt>(pegados.size)
+    for (p in pegados) {
+        val ultimo = juntos.lastOrNull()
+        if (ultimo == null || hypot(p.x - ultimo.x, p.y - ultimo.y) > JUNTOS) juntos.add(p)
+    }
+    // Y el primero con el último, que también se tocan al cerrar el anillo.
+    while (juntos.size > 2 &&
+        hypot(juntos.first().x - juntos.last().x, juntos.first().y - juntos.last().y) <= JUNTOS
+    ) {
+        juntos.removeAt(juntos.size - 1)
+    }
+    return if (juntos.size >= 3) juntos else contorno
+}
+
+/** Dos puntos más cerca que esto son el mismo punto. */
+private const val JUNTOS = 0.01
+
+/** El punto del tramo `a`-`b` más cercano a `p`. */
+private fun puntoMasCercanoDelTramo(p: Pt, a: Pt, b: Pt): Pt {
+    val dx = b.x - a.x
+    val dy = b.y - a.y
+    val largo2 = dx * dx + dy * dy
+    if (largo2 <= 1e-12) return a
+    val t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / largo2).coerceIn(0.0, 1.0)
+    return Pt(a.x + t * dx, a.y + t * dy)
 }

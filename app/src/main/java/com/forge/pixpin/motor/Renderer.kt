@@ -224,6 +224,21 @@ class Renderer(
      */
     private val zoomDeAdornos: Double get() = if (paraExportar) 1.0 else zoomActual
 
+    /**
+     * Y cuánto encogen esos adornos al exportar.
+     *
+     * En pantalla se miden en píxeles de pantalla para verse siempre igual, y al
+     * exportar en píxeles de escena para no depender del encaje. Pero los dos
+     * números no tienen por qué ser el mismo: quien dibuja suele trabajar
+     * **acercado**, así que un punto de seis píxeles de pantalla al 200 % son
+     * tres de escena — y exportarlo a seis lo dejaba del doble de gordo que
+     * como se veía mientras se dibujaba.
+     *
+     * Este factor es esa diferencia. No sale de una fórmula: sale de que el
+     * aumento de trabajo típico ronda el doble.
+     */
+    private val encogeAlExportar: Double get() = if (paraExportar) 0.5 else 1.0
+
     /** Pinta la escena visible. */
     fun renderScene(
         canvas: Canvas, scene: Scene, screenWidth: Double, screenHeight: Double
@@ -359,8 +374,8 @@ class Renderer(
         canvas: Canvas, tabla: TablaDeCoordenadas, origen: Pt, escala: Escala?, zoom: Double
     ) {
         val color = tema(parseColor(tabla.color, 255))
-        val radio = (TABLA_PUNTO / zoomDeAdornos).toFloat()
-        val tam = (TABLA_LETRA / zoomDeAdornos).toFloat()
+        val radio = (TABLA_PUNTO / zoomDeAdornos * encogeAlExportar).toFloat()
+        val tam = (TABLA_LETRA / zoomDeAdornos * encogeAlExportar).toFloat()
 
         for ((i, p) in puntosEnEscena(tabla, origen, escala).withIndex()) {
             // Relleno con aro blanco alrededor: sobre una foto oscura, un punto

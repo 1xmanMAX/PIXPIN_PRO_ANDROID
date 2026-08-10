@@ -436,3 +436,108 @@ class RegionesTest {
         assertTrue("una recta no lleva curvas", ops.none { it is Op.CurveTo })
     }
 }
+
+/**
+ * El contorno del relleno, pegado a las paredes de verdad.
+ *
+ * Es lo que arregla «el relleno se sale del contenedor en unos sitios y en
+ * otros ni llega al borde». El derrame va por celdas, así que contra una pared
+ * en diagonal describe una escalera; aquí se comprueba que esa escalera acabe
+ * **sobre** la línea y no aproximándola.
+ */
+class RellenoPegadoTest {
+
+    private fun tramo(a: Pt, b: Pt) = a to b
+
+    /** Un vértice cerca de una recta acaba exactamente en ella. */
+    @Test
+    fun `un vértice cercano se pega a la pared`() {
+        val pared = listOf(tramo(Pt(0.0, 0.0), Pt(100.0, 0.0)))
+        // Escalera de tres peldaños por encima y por debajo de la recta.
+        val contorno = listOf(
+            Pt(10.0, 1.2), Pt(40.0, -0.9), Pt(70.0, 1.1), Pt(70.0, 40.0), Pt(10.0, 40.0)
+        )
+        val pegado = pegadoALasParedes(contorno, pared, tolerancia = 2.0)
+        // Los tres de la recta han caído en y = 0 clavados.
+        assertEquals(0.0, pegado[0].y, 1e-9)
+        assertEquals(0.0, pegado[1].y, 1e-9)
+        assertEquals(0.0, pegado[2].y, 1e-9)
+        // Y la x no se ha movido: se proyecta perpendicular, no se arrastra.
+        assertEquals(10.0, pegado[0].x, 1e-9)
+        assertEquals(40.0, pegado[1].x, 1e-9)
+    }
+
+    /** Lo que cruza el aire se deja como estaba: no hay pared a la que ajustarse. */
+    @Test
+    fun `lo que está lejos no se toca`() {
+        val pared = listOf(tramo(Pt(0.0, 0.0), Pt(100.0, 0.0)))
+        val contorno = listOf(Pt(10.0, 50.0), Pt(90.0, 50.0), Pt(50.0, 80.0))
+        assertEquals(contorno, pegadoALasParedes(contorno, pared, tolerancia = 2.0))
+    }
+
+    /**
+     * **La escalera se funde.**
+     *
+     * Cinco peldaños contra la misma recta acaban en el mismo sitio unos que
+     * otros; dejarlos daría un camino con puntos repetidos, que desconcierta a
+     * todo lo que venga después.
+     */
+    @Test
+    fun `los peldaños que caen encima se funden`() {
+        val pared = listOf(tramo(Pt(0.0, 0.0), Pt(100.0, 0.0)))
+        val contorno = listOf(
+            Pt(50.0, 0.5), Pt(50.0, -0.5), Pt(50.0, 0.3), Pt(50.0, 60.0), Pt(0.0, 60.0)
+        )
+        val pegado = pegadoALasParedes(contorno, pared, tolerancia = 2.0)
+        assertTrue("no ha fundido los repetidos: $pegado", pegado.size < contorno.size)
+    }
+
+    /** Una diagonal también: es donde peor se portaba la escalera. */
+    @Test
+    fun `contra una diagonal el contorno acaba sobre ella`() {
+        val pared = listOf(tramo(Pt(0.0, 0.0), Pt(100.0, 100.0)))
+        val escalera = listOf(
+            Pt(20.0, 21.0), Pt(21.0, 21.0), Pt(40.0, 41.0), Pt(41.0, 41.0),
+            Pt(60.0, 61.0), Pt(90.0, 10.0)
+        )
+        val pegado = pegadoALasParedes(escalera, pared, tolerancia = 2.0)
+        // Los de la diagonal cumplen y = x; el de lejos sigue donde estaba.
+        for (p in pegado.dropLast(1)) {
+            assertEquals("no ha caído sobre la diagonal: $p", p.x, p.y, 1e-9)
+        }
+        assertEquals(Pt(90.0, 10.0), pegado.last())
+    }
+
+    /**
+     * Y si al fundir se queda en nada, se devuelve lo que había.
+     *
+     * Tres puntos tan juntos que al caer sobre la recta acaban siendo uno. Un
+     * anillo de un punto no es un anillo, así que más vale el contorno tosco que
+     * ninguno.
+     */
+    @Test
+    fun `un contorno que se derrumbaría se deja como estaba`() {
+        val pared = listOf(tramo(Pt(0.0, 0.0), Pt(100.0, 0.0)))
+        val contorno = listOf(Pt(50.0, 0.1), Pt(50.005, -0.1), Pt(50.002, 0.05))
+        assertEquals(contorno, pegadoALasParedes(contorno, pared, tolerancia = 2.0))
+    }
+
+    /**
+     * Pero si sobreviven tres, se queda con los pegados aunque estén cerca: lo
+     * que se funde es lo que cae **encima**, no lo que está cerca.
+     */
+    @Test
+    fun `los que no se tocan sobreviven aunque estén cerca`() {
+        val pared = listOf(tramo(Pt(0.0, 0.0), Pt(100.0, 0.0)))
+        val contorno = listOf(Pt(50.0, 0.1), Pt(50.1, -0.1), Pt(50.05, 0.05))
+        val pegado = pegadoALasParedes(contorno, pared, tolerancia = 2.0)
+        assertEquals(3, pegado.size)
+        for (p in pegado) assertEquals(0.0, p.y, 1e-9)
+    }
+
+    @Test
+    fun `sin paredes no cambia nada`() {
+        val contorno = listOf(Pt(0.0, 0.0), Pt(10.0, 0.0), Pt(10.0, 10.0))
+        assertEquals(contorno, pegadoALasParedes(contorno, emptyList(), tolerancia = 2.0))
+    }
+}

@@ -97,15 +97,17 @@
             </intent-filter>
         </activity>
 
+        <!--
+            El proveedor propio, no el de serie: el de serie deduce el tipo por
+            la extensión y el sistema no conoce «svg», así que quien recibía el
+            archivo lo trataba como una imagen cualquiera y lo convertía en JPG.
+            Ver ProveedorDeArchivos.
+        -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".data.ProveedorDeArchivos"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
+            android:grantUriPermissions="true" />
 
         <service
             android:name=".floating.PinHostService"

@@ -18,8 +18,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 17
-        versionName = "0.5.8"
+        versionCode = 18
+        versionName = "0.5.9"
     }
 
     buildTypes {
