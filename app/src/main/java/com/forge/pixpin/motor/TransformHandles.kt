@@ -320,6 +320,18 @@ private fun handlesDe(
     elements: List<Element>, zoom: Double, handleSize: Double
 ): List<TransformHandle> {
     if (elements.isEmpty()) return emptyList()
+
+    // **Un punto no se estira: no tiene tamaño que estirar.**
+    //
+    // Su caja mide cero, así que los ocho tiradores nacían todos amontonados
+    // encima de él. Arrastrarlo agarraba uno de esos tiradores en vez del propio
+    // punto, y lo que salía era un redimensionado de una caja de tamaño cero:
+    // el punto se iba a coordenadas absurdas. Sin tiradores, el dedo lo coge a
+    // él, que es lo único que se puede hacer con un punto.
+    if (elements.size == 1 && elements.first().type == ElementType.PUNTO) {
+        return emptyList()
+    }
+
     // Una raya sola se coge por las puntas; en grupo, no: ahí lo que se mueve
     // es el conjunto, y unas puntas sueltas entre varias cajas confundirían.
     if (elements.size == 1 && elements.first().isLinear) {

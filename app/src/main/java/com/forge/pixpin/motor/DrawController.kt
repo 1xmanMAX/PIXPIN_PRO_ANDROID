@@ -671,6 +671,45 @@ class DrawController(initial: Scene = Scene()) {
             is Gesture.Moving -> {
                 val dx = p.x - g.startPointer.x
                 val dy = p.y - g.startPointer.y
+
+                // **Un punto arrastrado se imanta igual que al ponerlo.**
+                //
+                // Le faltaba, y dejaba la herramienta a medias: nacía clavado en
+                // la intersección y en cuanto había que recolocarlo —porque la
+                // figura cambió, o porque cayó en el cruce de al lado— se movía
+                // a pulso y ahí se quedaba, a dos píxeles del sitio. Un punto de
+                // geometría fuera de su sitio no es un descuido estético: deja
+                // de ser ese punto.
+                //
+                // Se imanta **el punto, no el dedo**. Al agarrarlo uno no acierta
+                // en su centro exacto, y arrastrando el puntero imantado el punto
+                // acabaría a esa misma distancia del anclaje: es el propio
+                // destino del punto el que tiene que buscar sitio.
+                val unPunto = g.originals.singleOrNull()?.takeIf { it.type == ElementType.PUNTO }
+                if (unPunto != null) {
+                    val destino = Pt(unPunto.x + dx, unPunto.y + dy)
+                    val anclaje = buscarAnclaje(
+                        editables.filter { it.id != unPunto.id },
+                        destino, zoom,
+                        enganche.copy(radio = RADIO_PARA_PUNTOS),
+                        excluir = unPunto.id
+                    )?.takeIf { sitioValidoParaPunto(it, editables) }
+                    // Con el imán suelto se mueve libre, que es lo que hace un
+                    // imán: tira cuando estás cerca y no ata cuando no lo estás.
+                    // Es la diferencia con ponerlo, donde sin sitio no se pone
+                    // nada — poner es decidir dónde va, y mover es corregirlo.
+                    anclajeActivo = anclaje
+                    val donde = anclaje?.punto ?: destino
+                    applyToOriginals(g.originals) { originales ->
+                        originales.map { it.copy(x = donde.x, y = donde.y) }
+                    }
+                    scene = scene.copy(
+                        alfileres = refrescarAlfileres(scene.elements, scene.alfileres)
+                    )
+                    seguirConLasFlechas()
+                    return
+                }
+
                 // **Cada figura se mueve según lo que sus clavos le dejen.**
                 // Sin clavos sigue al dedo; con uno gira alrededor de él; con
                 // dos no se mueve. Ver [Libertad]: es la ley entera del alfiler,

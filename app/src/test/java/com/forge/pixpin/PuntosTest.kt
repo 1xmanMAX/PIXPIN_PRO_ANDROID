@@ -290,3 +290,126 @@ class PuntosTest {
         assertTrue(contornosDe(e).isEmpty())
     }
 }
+
+/**
+ * El punto dentro del editor: ponerlo y moverlo.
+ *
+ * Lo de arriba comprueba las cuentas; esto comprueba **el gesto**, que es donde
+ * se notaba que faltaba algo: el punto nacía clavado en la intersección y en
+ * cuanto había que recolocarlo se movía a pulso y ahí se quedaba, a dos píxeles
+ * del sitio.
+ */
+class PuntoEnElEditorTest {
+
+    private fun conUnaLinea(): DrawController {
+        val c = DrawController()
+        c.load(
+            Scene(
+                elements = listOf(
+                    Element(
+                        id = "l", type = ElementType.LINE,
+                        x = 0.0, y = 0.0, width = 200.0, height = 0.0, seed = 1,
+                        points = listOf(Pt(0.0, 0.0), Pt(200.0, 0.0))
+                    )
+                )
+            )
+        )
+        return c
+    }
+
+    private fun puntos(c: DrawController) =
+        c.scene.elements.filter { it.type == ElementType.PUNTO }
+
+    /** Se pone en el extremo aunque el dedo caiga un poco al lado. */
+    @Test
+    fun `un toque cerca del extremo lo clava en el extremo`() {
+        val c = conUnaLinea()
+        c.selectTool(Tool.PUNTO)
+        c.pointerDown(Pt(196.0, 5.0))
+        c.pointerUp(Pt(196.0, 5.0))
+
+        assertEquals(1, puntos(c).size)
+        val p = puntos(c)[0]
+        assertEquals(200.0, p.x, 0.001)
+        assertEquals(0.0, p.y, 0.001)
+        assertEquals("A", p.text)
+    }
+
+    /** Y donde no hay nada que nombrar, no se pone nada — y se dice. */
+    @Test
+    fun `en medio de la nada no se planta`() {
+        val c = conUnaLinea()
+        c.selectTool(Tool.PUNTO)
+        c.pointerDown(Pt(600.0, 600.0))
+        c.pointerUp(Pt(600.0, 600.0))
+
+        assertTrue(puntos(c).isEmpty())
+        assertTrue("no ha avisado de que ahí no hay sitio", c.puntoSinSitio)
+    }
+
+    /**
+     * **Arrastrarlo también imanta.** Es lo que faltaba.
+     *
+     * Se coge el punto que está en un extremo y se lleva cerca del otro: tiene
+     * que caer clavado en él, no a la distancia a la que se soltó el dedo.
+     */
+    @Test
+    fun `al arrastrarlo se pega al extremo de al lado`() {
+        val c = conUnaLinea()
+        c.selectTool(Tool.PUNTO)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerUp(Pt(0.0, 0.0))
+        assertEquals(1, puntos(c).size)
+
+        c.selectTool(Tool.SELECTION)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerMove(Pt(194.0, 6.0))
+        c.pointerUp(Pt(194.0, 6.0))
+
+        val p = puntos(c)[0]
+        assertEquals("no se ha imantado al arrastrarlo", 200.0, p.x, 0.001)
+        assertEquals(0.0, p.y, 0.001)
+    }
+
+    /**
+     * Pero lejos de todo se mueve libre.
+     *
+     * Es la diferencia con ponerlo: poner es decidir dónde va —y sin sitio no se
+     * pone nada—, mover es corregirlo. Un imán tira cuando estás cerca y no ata
+     * cuando no lo estás.
+     */
+    @Test
+    fun `lejos de todo el punto se mueve libre`() {
+        val c = conUnaLinea()
+        c.selectTool(Tool.PUNTO)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerUp(Pt(0.0, 0.0))
+
+        c.selectTool(Tool.SELECTION)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerMove(Pt(500.0, 400.0))
+        c.pointerUp(Pt(500.0, 400.0))
+
+        val p = puntos(c)[0]
+        assertEquals(500.0, p.x, 0.001)
+        assertEquals(400.0, p.y, 0.001)
+    }
+
+    /** Y moverlo se deshace de una vez, como cualquier otra cosa. */
+    @Test
+    fun `mover un punto entra en el historial`() {
+        val c = conUnaLinea()
+        c.selectTool(Tool.PUNTO)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerUp(Pt(0.0, 0.0))
+
+        c.selectTool(Tool.SELECTION)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerMove(Pt(200.0, 0.0))
+        c.pointerUp(Pt(200.0, 0.0))
+        assertEquals(200.0, puntos(c)[0].x, 0.001)
+
+        c.undo()
+        assertEquals(0.0, puntos(c)[0].x, 0.001)
+    }
+}
