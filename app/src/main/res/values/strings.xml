@@ -19,6 +19,7 @@
     <string name="onboarding_listo">Todo listo. Pulsa Comenzar y aparecerá la bola flotante.</string>
     <string name="permisos_listos">Permisos concedidos</string>
     <string name="ajustes_titulo">Ajustes</string>
+    <string name="pdf_compartir">Compartir el PDF</string>
     <string name="proyectos_titulo">Proyectos</string>
     <string name="proyectos_vacio">Todavía no hay proyectos.\n\nPinea un PDF y toca una de sus páginas, o crea uno con el +.</string>
     <string name="proyecto_nuevo">Nuevo proyecto</string>

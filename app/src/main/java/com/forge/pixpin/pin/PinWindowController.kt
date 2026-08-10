@@ -21,6 +21,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.ScrollState
@@ -1606,9 +1609,16 @@ class PinWindowController(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                     Spacer(Modifier.weight(1f))
+                    // **Compartir el PDF, aquí.** Es donde uno está justo
+                    // después de anotar una página, y el archivo ya lleva
+                    // dentro todo lo hecho: no hay nada que montar, solo
+                    // mandarlo. Ver [Proyecto].
                     if (pages > 0) {
-                        TextButton(onClick = { extractAllPages(pages) }) {
-                            Text(context.getString(R.string.pdf_all))
+                        IconButton(onClick = { compartirElPdf() }) {
+                            Icon(
+                                Icons.Filled.Share,
+                                contentDescription = context.getString(R.string.pdf_compartir)
+                            )
                         }
                     }
                     IconButton(onClick = { closePdfViewer() }) {
@@ -1644,6 +1654,7 @@ class PinWindowController(
     }
 
     @Composable
+    @OptIn(ExperimentalFoundationApi::class)
     private fun PdfThumb(path: String, index: Int) {
         var thumb by remember(path, index) { mutableStateOf<Bitmap?>(null) }
         LaunchedEffect(path, index) {
@@ -1656,13 +1667,24 @@ class PinWindowController(
             modifier = Modifier
                 .padding(4.dp)
                 .width(96.dp)
-                .clickable {
-                    // Tocar una página la **abre para anotarla**, con la hoja de
-                    // fondo. Antes la sacaba como imagen suelta y lo dibujado se
-                    // quedaba fuera del documento para siempre.
-                    closeBoardPalette()
-                    abrirPaginaParaAnotar(index)
-                }
+                // **Un toque la anota; una pulsación larga la saca como pin.**
+                //
+                // Anotar es lo que se hace casi siempre y por eso se lleva el
+                // toque. Pero sacarla suelta sigue haciendo falta —para
+                // enseñarla encima de otra app, o para copiarla— y se había
+                // perdido al cambiar el gesto. Las dos cosas caben sin un botón
+                // más, que es lo que no hacía falta aquí.
+                .combinedClickable(
+                    onClick = {
+                        closeBoardPalette()
+                        abrirPaginaParaAnotar(index)
+                    },
+                    onLongClick = {
+                        extractPage(index)
+                        closePdfViewer()
+                        closeBoardPalette()
+                    }
+                )
         ) {
             Box(
                 modifier = Modifier
@@ -2109,6 +2131,32 @@ class PinWindowController(
         val hex = ContentClassifier.toHex(argb)
         clipboard()?.setPrimaryClip(ClipData.newPlainText("color", hex))
         toast(context.getString(R.string.copied_hex, hex))
+    }
+
+    /**
+     * Manda el PDF tal como está: con las páginas anotadas dentro.
+     *
+     * **No hay nada que exportar ni que montar.** Cada capa se escribió en el
+     * archivo en cuanto se cerró su página, así que el PDF está completo y es
+     * válido en todo momento; esto solo lo pone en el menú de compartir. Es la
+     * consecuencia buena de haberlo hecho con actualizaciones incrementales.
+     */
+    private fun compartirElPdf() {
+        val path = pin.value.filePath ?: return
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
+        }.getOrNull() ?: return
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            context.startActivity(
+                Intent.createChooser(intent, context.getString(R.string.pdf_compartir))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
     }
 
     private fun openFile(s: PinState) {

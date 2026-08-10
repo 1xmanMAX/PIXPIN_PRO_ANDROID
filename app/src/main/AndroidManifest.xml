@@ -107,7 +107,18 @@
             android:name=".data.ProveedorDeArchivos"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
-            android:grantUriPermissions="true" />
+            android:grantUriPermissions="true">
+            <!--
+                El meta-data hace falta AUNQUE la clase se configure por
+                constructor: getUriForFile es estático, no ve la instancia, y
+                busca las rutas aquí. Sin él lanza excepción y, como quien la
+                llama se la traga, dejaba de abrirse y de compartirse todo sin
+                un solo aviso. Ver ProveedorDeArchivos.
+            -->
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <service
             android:name=".floating.PinHostService"

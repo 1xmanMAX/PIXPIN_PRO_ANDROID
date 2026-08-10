@@ -2,7 +2,6 @@ package com.forge.pixpin.data
 
 import android.net.Uri
 import androidx.core.content.FileProvider
-import com.forge.pixpin.R
 
 /**
  * El proveedor de archivos, **diciendo la verdad sobre lo que entrega**.
@@ -30,8 +29,17 @@ import com.forge.pixpin.R
  *
  * Los tipos que sí conoce el sistema —PNG, JPEG, PDF— se dejan como estaban: no
  * hay nada que arreglar y una lista propia solo podría quedarse vieja.
+ *
+ * ## Y las rutas siguen en el manifiesto
+ *
+ * Podría configurarse por constructor, y así se hizo al principio: **fue un
+ * fallo**. `getUriForFile` es estático, no ve esta instancia y busca las rutas
+ * en el `meta-data` del manifiesto pase lo que pase. Al quitarlo lanzaba
+ * excepción, y como quien la llama se la traga para no reventar, dejó de
+ * abrirse y de compartirse **todo** sin un solo aviso: tocar un pin de archivo
+ * no hacía nada y no había forma de saber por qué.
  */
-class ProveedorDeArchivos : FileProvider(R.xml.file_paths) {
+class ProveedorDeArchivos : FileProvider() {
 
     override fun getType(uri: Uri): String? {
         val nombre = uri.lastPathSegment.orEmpty().lowercase()
