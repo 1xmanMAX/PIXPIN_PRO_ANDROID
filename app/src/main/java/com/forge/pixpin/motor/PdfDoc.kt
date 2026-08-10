@@ -1,4 +1,4 @@
-package com.forge.pixpin.pin
+package com.forge.pixpin.motor
 
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -9,6 +9,12 @@ import java.io.File
 /**
  * Lectura de PDFs con [PdfRenderer], que viene en el propio Android: no hace
  * falta ninguna librería.
+ *
+ * **Vive en el motor y no en el pin**, aunque naciera allí para las miniaturas.
+ * Pintar una página de un PDF es trabajo de edición —es el papel sobre el que
+ * se anota— y el motor no puede depender del pin: si lo hiciera dejaría de
+ * poder usarse en la captura y en la capa, que es justo lo que un motor tiene
+ * que poder. La prueba de la frontera lo cazó en cuanto el editor lo necesitó.
  *
  * Cada operación abre y cierra el documento. Mantenerlo abierto sería más
  * rápido, pero `PdfRenderer` **no admite dos páginas abiertas a la vez** y un

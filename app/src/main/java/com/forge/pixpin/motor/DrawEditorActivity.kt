@@ -99,6 +99,8 @@ class DrawEditorActivity : ComponentActivity() {
         private const val EXTRA_ID = "draw_id"
         private const val EXTRA_RUTA = "draw_ruta"
         private const val EXTRA_IMAGEN = "draw_imagen"
+        private const val EXTRA_PDF = "draw_pdf"
+        private const val EXTRA_PAGINA = "draw_pagina"
 
         /**
          * Abre el editor de un pin.
@@ -109,11 +111,34 @@ class DrawEditorActivity : ComponentActivity() {
          * existe mientras dibujas pero no sale en la exportación recortada.
          */
         fun abrir(context: Context, id: String, rutaDibujo: String?, imagenPath: String?) {
+            abrir(context, id, rutaDibujo, imagenPath, null, -1)
+        }
+
+        /**
+         * Abre una **página de un PDF** para anotarla.
+         *
+         * La hoja se ve de fondo, como referencia: no se puede mover ni borrar
+         * porque no es un elemento del dibujo, es el papel. Lo que se trace va
+         * encima, y al cerrar vuelve **dentro del PDF** como una capa. Ver
+         * [Proyecto] y [DrawPdf.anotarPagina].
+         */
+        fun abrirPaginaDePdf(
+            context: Context, id: String, rutaDibujo: String?, pdf: String, pagina: Int
+        ) {
+            abrir(context, id, rutaDibujo, null, pdf, pagina)
+        }
+
+        private fun abrir(
+            context: Context, id: String, rutaDibujo: String?, imagenPath: String?,
+            pdf: String?, pagina: Int
+        ) {
             context.startActivity(
                 Intent(context, DrawEditorActivity::class.java).apply {
                     putExtra(EXTRA_ID, id)
                     putExtra(EXTRA_RUTA, rutaDibujo)
                     putExtra(EXTRA_IMAGEN, imagenPath)
+                    putExtra(EXTRA_PDF, pdf)
+                    putExtra(EXTRA_PAGINA, pagina)
                     // Igual que el croquis: con su propia taskAffinity, una
                     // instancia viva se trae al frente sin pasar por `onCreate`
                     // y seguiría enseñando el dibujo del pin anterior.
@@ -125,6 +150,19 @@ class DrawEditorActivity : ComponentActivity() {
 
     private lateinit var dibujoId: String
     private val controller = DrawController()
+
+    /** El PDF que se está anotando y qué página, si es que se está anotando uno. */
+    private var pdfDeFondo: String? = null
+    private var paginaDeFondo: Int = -1
+
+    /**
+     * Lo que medía la imagen de la página sobre la que se dibujó.
+     *
+     * Hace falta al devolver la capa: es lo que dice a qué escala está lo
+     * anotado, y sin ello no habría forma de saber que un trazo de cien píxeles
+     * son dos centímetros de papel y no veinte. Ver [PdfAnotado.matrizDePagina].
+     */
+    private var medidaDeLaPagina: Pair<Double, Double>? = null
 
     /** Caché de bitmaps por `fileId`: el renderer los pide en cada fotograma. */
     private val bitmaps = HashMap<String, Bitmap?>()
@@ -160,6 +198,24 @@ class DrawEditorActivity : ComponentActivity() {
         // caso, que es el único en el que se sabe que la imagen ocupa la escena
         // desde el origen y a tamaño natural.
         if (imagenPath != null && fondo == null) fondo = ImageStore.load(imagenPath)
+
+        // **La página del PDF, de telón.**
+        //
+        // Va como fondo y no como elemento a propósito: así no es que no se
+        // exporte, es que **no puede** exportarse. Si entrara en el dibujo, al
+        // devolver la capa se estamparía una foto de la página encima de la
+        // propia página y su texto quedaría tapado por una imagen — o sea,
+        // dejaría de poder buscarse, que es justo lo que todo esto conserva.
+        pdfDeFondo = intent.getStringExtra(EXTRA_PDF)
+        paginaDeFondo = intent.getIntExtra(EXTRA_PAGINA, -1)
+        pdfDeFondo?.let { ruta ->
+            if (paginaDeFondo >= 0) {
+                fondo = com.forge.pixpin.motor.PdfDoc.render(
+                    ruta, paginaDeFondo, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH
+                )
+                fondo?.let { medidaDeLaPagina = it.width.toDouble() to it.height.toDouble() }
+            }
+        }
 
         aPantallaCompleta()
         setContent {
@@ -244,6 +300,47 @@ class DrawEditorActivity : ComponentActivity() {
      */
     private fun guardar() {
         ExcalidrawStore.guardar(this, dibujoId, controller.scene)
+    }
+
+    /**
+     * Devuelve lo anotado **dentro del PDF**, como una capa.
+     *
+     * Se hace al salir y no en cada trazo: escribir una revisión del archivo por
+     * cada raya lo llenaría de revisiones y de bytes. Al cerrar la página, el
+     * PDF del pin ya lleva lo dibujado, así que **no hay que exportar nada al
+     * final** — el archivo está completo en todo momento. Ver [Proyecto].
+     */
+    private fun devolverAlPdf() {
+        val ruta = pdfDeFondo ?: return
+        val pagina = paginaDeFondo.takeIf { it >= 0 } ?: return
+        val (ancho, alto) = medidaDeLaPagina ?: return
+        if (controller.scene.contenidoVisible.isEmpty()) return
+
+        runCatching {
+            val original = File(ruta)
+            val bytes = original.readBytes()
+            val fecha = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            val salida = DrawPdf.anotarPagina(
+                this, bytes, pagina, controller.scene, ancho, alto,
+                nombreDeLaCapa = getString(R.string.capa_pixpin, fecha),
+                imageProvider = ::bitmapDe
+            ) ?: return
+
+            // Se escribe en un temporal y se cambia al final: si algo se
+            // tuerce a mitad, el PDF de alguien no puede quedarse a medias.
+            val temporal = File(original.parentFile, "${original.name}.nuevo")
+            temporal.writeBytes(salida)
+            if (temporal.length() > 0) {
+                temporal.copyTo(original, overwrite = true)
+                temporal.delete()
+            }
+        }
+    }
+
+    override fun finish() {
+        devolverAlPdf()
+        super.finish()
     }
 
     private fun bitmapDe(fileId: String): Bitmap? = bitmaps.getOrPut(fileId) {

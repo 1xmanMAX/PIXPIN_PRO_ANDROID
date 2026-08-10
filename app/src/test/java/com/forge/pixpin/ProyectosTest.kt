@@ -5,6 +5,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /**
  * Los proyectos: varias hojas que se entregan juntas.
@@ -295,5 +299,92 @@ class ProyectosTest {
             listOf("extra"),
             (salida as SalidaDeProyecto.ElPdfConHojasDetras).hojas.map { it.id }
         )
+    }
+}
+
+/**
+ * Los proyectos guardados en disco.
+ *
+ * «El progreso es el archivo»: cada cambio se escribe en cuanto ocurre, así que
+ * cerrar la app a media obra no cuesta nada. Lo que se comprueba aquí es que de
+ * verdad sobreviva, y que reabrir el mismo PDF lleve al proyecto de ayer y no a
+ * uno nuevo — que es lo que haría perder lo anotado sin avisar.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class ProyectosRepositoryTest {
+
+    private val context get() = RuntimeEnvironment.getApplication()
+
+    private fun limpio(): com.forge.pixpin.data.ProyectosRepository {
+        java.io.File(context.filesDir, "proyectos").deleteRecursively()
+        return com.forge.pixpin.data.ProyectosRepository(context)
+    }
+
+    @Test
+    fun `lo guardado sobrevive a cerrar la app`() {
+        val uno = limpio()
+        uno.nuevo("Proyecto", 100)
+        assertEquals(1, uno.proyectos.value.size)
+
+        // Otro repositorio es como volver a abrir la aplicación.
+        val otro = com.forge.pixpin.data.ProyectosRepository(context)
+        assertEquals(1, otro.proyectos.value.size)
+        assertEquals("Proyecto 1", otro.proyectos.value[0].nombre)
+    }
+
+    /**
+     * **Reabrir el mismo plano lleva al proyecto de ayer.**
+     *
+     * Si cada vez empezara uno nuevo, las páginas anotadas no estarían — y no
+     * habría ningún aviso: uno abriría su plano y lo vería limpio.
+     */
+    @Test
+    fun `el mismo PDF lleva siempre al mismo proyecto`() {
+        val r = limpio()
+        val primera = r.deEstePdf("/planos/obra.pdf", "obra", 12, 100)
+        val segunda = r.deEstePdf("/planos/obra.pdf", "obra", 12, 200)
+        assertEquals(primera.id, segunda.id)
+        assertEquals(1, r.proyectos.value.size)
+        // Y con sus doce hojas dentro desde el primer momento.
+        assertEquals(12, primera.hojas.size)
+    }
+
+    /** Otro PDF es otro proyecto, claro. */
+    @Test
+    fun `dos PDF distintos son dos proyectos`() {
+        val r = limpio()
+        r.deEstePdf("/a.pdf", "a", 3, 100)
+        r.deEstePdf("/b.pdf", "b", 5, 200)
+        assertEquals(2, r.proyectos.value.size)
+    }
+
+    /** Añadir una hoja que ya estaba devuelve la que había, no una segunda. */
+    @Test
+    fun `una hoja repetida no se duplica`() {
+        val r = limpio()
+        val p = r.nuevo("Proyecto", 100)
+        val hoja = Hoja(id = "h1", dibujo = "d1", marco = "m1")
+        val puesta = r.conHoja(p, hoja, 200)
+        val otraVez = r.conHoja(r.porId(p.id)!!, Hoja(id = "h2", dibujo = "d1", marco = "m1"), 300)
+        assertEquals(puesta.id, otraVez.id)
+        assertEquals(1, r.porId(p.id)!!.hojas.size)
+    }
+
+    @Test
+    fun `borrar un proyecto lo quita del disco`() {
+        val r = limpio()
+        val p = r.nuevo("Proyecto", 100)
+        r.borrar(p.id)
+        assertTrue(com.forge.pixpin.data.ProyectosRepository(context).proyectos.value.isEmpty())
+    }
+
+    /** Y un archivo ilegible no se lleva por delante la lista entera. */
+    @Test
+    fun `un archivo roto deja la lista vacía en vez de reventar`() {
+        limpio().nuevo("Proyecto", 100)
+        java.io.File(java.io.File(context.filesDir, "proyectos"), "proyectos.json")
+            .writeText("{{{ esto no es json")
+        assertTrue(com.forge.pixpin.data.ProyectosRepository(context).proyectos.value.isEmpty())
     }
 }

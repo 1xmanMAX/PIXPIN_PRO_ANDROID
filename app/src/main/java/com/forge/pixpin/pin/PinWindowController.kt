@@ -123,6 +123,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.forge.pixpin.R
+import com.forge.pixpin.motor.PdfDoc
 import com.forge.pixpin.annotate.StrokeTouchReader
 import com.forge.pixpin.clipboard.ContentClassifier
 import com.forge.pixpin.floating.FloatingBallController
@@ -1510,6 +1511,50 @@ class PinWindowController(
         pdfViewer = null
     }
 
+    /**
+     * Abre una página del PDF **para anotarla**, y la deja apuntada en su
+     * proyecto.
+     *
+     * Antes esto sacaba la página como pin de imagen suelto y ahí se acababa:
+     * lo que dibujaras encima no tenía camino de vuelta al documento, porque en
+     * cuanto la página salía de él **se perdía de dónde venía**.
+     *
+     * Ahora la página se abre en el editor con la hoja de fondo, y al cerrar lo
+     * trazado vuelve dentro del PDF como una capa. El proyecto es lo que
+     * recuerda qué hojas llevas tocadas; se crea con todas las páginas la
+     * primera vez y reabrir el mismo plano lleva al de siempre. Ver [Proyecto].
+     */
+    private fun abrirPaginaParaAnotar(index: Int) {
+        val ruta = pin.value.filePath ?: return
+        closePdfViewer()
+        val app = context.applicationContext as com.forge.pixpin.PixPinApp
+        val ahora = System.currentTimeMillis()
+        val proyecto = app.proyectos.deEstePdf(
+            ruta = ruta,
+            nombre = java.io.File(ruta).nameWithoutExtension.ifBlank {
+                context.getString(R.string.pin_type_draw)
+            },
+            paginas = PdfDoc.pageCount(ruta),
+            ahora = ahora
+        )
+        val hoja = com.forge.pixpin.motor.Proyectos.hojaDePagina(proyecto, index)
+            ?: return toast(context.getString(R.string.capture_error))
+
+        // La hoja recibe su dibujo la primera vez que se abre: hasta entonces
+        // era una entrada de la lista sin nada encima.
+        val dibujo = hoja.dibujo ?: "hoja-${proyecto.id}-$index"
+        if (hoja.dibujo == null) {
+            app.proyectos.guardar(
+                com.forge.pixpin.motor.Proyectos.conDibujo(proyecto, hoja.id, dibujo, ahora)
+            )
+        }
+        com.forge.pixpin.motor.DrawEditorActivity.abrirPaginaDePdf(
+            context, dibujo,
+            com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, dibujo),
+            ruta, index
+        )
+    }
+
     /** Saca una página como pin de imagen. */
     private fun extractPage(index: Int) {
         val path = pin.value.filePath ?: return
@@ -1612,9 +1657,11 @@ class PinWindowController(
                 .padding(4.dp)
                 .width(96.dp)
                 .clickable {
-                    extractPage(index)
-                    closePdfViewer()
-        closeBoardPalette()
+                    // Tocar una página la **abre para anotarla**, con la hoja de
+                    // fondo. Antes la sacaba como imagen suelta y lo dibujado se
+                    // quedaba fuera del documento para siempre.
+                    closeBoardPalette()
+                    abrirPaginaParaAnotar(index)
                 }
         ) {
             Box(

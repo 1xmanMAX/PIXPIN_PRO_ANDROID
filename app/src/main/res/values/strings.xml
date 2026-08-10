@@ -19,6 +19,17 @@
     <string name="onboarding_listo">Todo listo. Pulsa Comenzar y aparecerá la bola flotante.</string>
     <string name="permisos_listos">Permisos concedidos</string>
     <string name="ajustes_titulo">Ajustes</string>
+    <string name="proyectos_titulo">Proyectos</string>
+    <string name="proyectos_vacio">Todavía no hay proyectos.\n\nPinea un PDF y toca una de sus páginas, o crea uno con el +.</string>
+    <string name="proyecto_nuevo">Nuevo proyecto</string>
+    <string name="proyecto_nuevo_nombre">Proyecto</string>
+    <string name="proyecto_hojas">%1$d hojas</string>
+    <string name="proyecto_hojas_de">%1$d de %2$d hojas anotadas</string>
+    <string name="proyecto_hoja_nueva">Añadir hoja</string>
+    <string name="proyecto_hoja_suelta">Hoja</string>
+    <string name="proyecto_pagina">Página %1$d</string>
+    <string name="proyecto_archivar">Archivar</string>
+    <string name="proyecto_desarchivar">Desarchivar</string>
     <string name="ajustes_capturar">Capturar</string>
     <string name="ajustes_dibujar">Dibujar</string>
     <string name="ajustes_aspecto">Aspecto</string>
@@ -137,6 +148,7 @@
     <string name="grupo_formas">Formas</string>
     <string name="grupo_marcar">Marcar</string>
     <string name="grupo_tapar">Tapar</string>
+    <string name="capa_pixpin">PixPin — %1$s</string>
     <string name="tool_punto">Punto</string>
     <string name="punto_sin_sitio">Los puntos van en cruces, extremos, medios o el centro de un círculo</string>
     <string name="punto_serie">Serie</string>

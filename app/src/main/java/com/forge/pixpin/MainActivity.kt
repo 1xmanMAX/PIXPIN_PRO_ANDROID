@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Tune
@@ -171,10 +172,18 @@ fun OnboardingScreen() {
     // Lo que uno viene a hacer aquí es **pulsar «Comenzar»**. Lo demás se toca
     // una vez y no se vuelve a mirar, así que se va detrás de una puerta.
     var enAjustes by remember { mutableStateOf(false) }
+    var enProyectos by remember { mutableStateOf(false) }
     val listo = overlayGranted && notifGranted && batteryIgnored
 
     if (enAjustes) {
         PantallaDeAjustes(onVolver = { enAjustes = false })
+        return
+    }
+    if (enProyectos) {
+        com.forge.pixpin.ui.PantallaDeProyectos(
+            app = context.applicationContext as PixPinApp,
+            onVolver = { enProyectos = false }
+        )
         return
     }
 
@@ -241,15 +250,25 @@ fun OnboardingScreen() {
             }
 
             Spacer(Modifier.height(12.dp))
-            TextButton(
-                onClick = { enAjustes = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Tune, contentDescription = null, Modifier.size(18.dp))
-                Text(
-                    stringResource(R.string.ajustes_titulo),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
+            Row(Modifier.fillMaxWidth()) {
+                // **Proyectos junto a Ajustes, y no en la bola.** Es donde se
+                // vuelve a lo empezado, así que va en la pantalla que se abre
+                // para empezar — y no roba un sitio en la bola, que es para lo
+                // que se hace cada dos minutos.
+                TextButton(onClick = { enProyectos = true }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Folder, contentDescription = null, Modifier.size(18.dp))
+                    Text(
+                        stringResource(R.string.proyectos_titulo),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                TextButton(onClick = { enAjustes = true }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Tune, contentDescription = null, Modifier.size(18.dp))
+                    Text(
+                        stringResource(R.string.ajustes_titulo),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
             }
         }
     }

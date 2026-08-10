@@ -2,6 +2,7 @@ package com.forge.pixpin
 
 import android.app.Application
 import com.forge.pixpin.data.CrashLog
+import com.forge.pixpin.data.ProyectosRepository
 import com.forge.pixpin.data.SettingsRepository
 import com.forge.pixpin.pin.OverlayManager
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -26,6 +27,16 @@ class PixPinApp : Application() {
     )
 
     val overlayManager: OverlayManager by lazy { OverlayManager(this) }
+
+    /**
+     * Los proyectos: varias hojas que se entregan juntas.
+     *
+     * Aquí y no en cada pantalla porque **hay tres sitios mirándolos a la vez**:
+     * la lista, el editor que está anotando una hoja y el pin del PDF del que
+     * salió. Con una copia por sitio, anotar una página no aparecería en la
+     * lista hasta cerrarla y volver a abrirla.
+     */
+    val proyectos: ProyectosRepository by lazy { ProyectosRepository(this) }
 
     /**
      * Los ajustes tal como estaban la última vez que cambiaron.
