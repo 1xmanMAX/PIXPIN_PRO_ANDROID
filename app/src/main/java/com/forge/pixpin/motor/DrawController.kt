@@ -376,13 +376,51 @@ class DrawController(initial: Scene = Scene()) {
      * escribiendo.
      */
     private fun plantarTexto(p: Pt, threshold: Double) {
-        val existente = getElementAtPosition(editables, p, threshold)
-            ?.takeIf { it.type == ElementType.TEXT && !it.locked }
+        val debajo = getElementAtPosition(editables, p, threshold)
+
+        // Un texto que ya está: se abre para seguir escribiendo.
+        val existente = debajo?.takeIf { it.type == ElementType.TEXT && !it.locked }
         if (existente != null) {
             selectedIds = emptySet()
             pendingTextId = existente.id
             return
         }
+
+        // **Una figura que admite texto: se escribe dentro de ella.**
+        //
+        // Es lo que convierte esto en una herramienta de diagramas. Antes el
+        // texto caía encima de la figura como un elemento suelto: se veía igual
+        // hasta que movías la caja y el texto se quedaba atrás. Ver
+        // [TextoEnFiguras].
+        //
+        // Se busca **dentro** y no con el buscador de siempre: una figura sin
+        // relleno solo se coge por su contorno —así es como se selecciona algo
+        // transparente sin robarle el toque a lo que tenga detrás— y con esa
+        // regla, tocar el centro de un rectángulo vacío no encontraba nada. Para
+        // escribir dentro, el sitio natural es justamente el centro.
+        val contenedor = editables.lastOrNull {
+            admiteTextoDentro(it.type) && !it.locked && isPointInElement(p, it)
+        }
+        if (contenedor != null) {
+            // Si ya tenía texto, se sigue escribiendo en el suyo.
+            val suyo = textoDe(contenedor, editables)
+            if (suyo != null) {
+                selectedIds = emptySet()
+                pendingTextId = suyo.id
+                return
+            }
+            val hueco = esquinaDelHueco(contenedor)
+            val texto = newElement(ElementType.TEXT, hueco.x, hueco.y, scene.style)
+                .copy(reference = contenedor.reference, textAlign = TextAlign.CENTER)
+            val (conBound, atado) = atados(contenedor, texto)
+            scene = scene.copy(
+                elements = scene.elements.map { if (it.id == contenedor.id) conBound else it } + atado
+            )
+            selectedIds = emptySet()
+            pendingTextId = atado.id
+            return
+        }
+
         val e = newElement(ElementType.TEXT, p.x, p.y, scene.style)
             .copy(reference = modoReferencia)
         scene = scene.copy(elements = scene.elements + e)
@@ -726,6 +764,7 @@ class DrawController(initial: Scene = Scene()) {
                 scene = scene.copy(
                     alfileres = refrescarAlfileres(scene.elements, scene.alfileres)
                 )
+                recolocarTextosDentro()
                 seguirConLasFlechas()
             }
 
@@ -737,6 +776,7 @@ class DrawController(initial: Scene = Scene()) {
                         resizeMultipleElements(originals, g.handle, p)
                     }
                 }
+                recolocarTextosDentro()
                 seguirConLasFlechas()
             }
 
@@ -1447,7 +1487,19 @@ class DrawController(initial: Scene = Scene()) {
         }
 
         // 2. ¿Un elemento? Se selecciona y empieza a moverse.
+        // **Tocar el texto de una caja es tocar la caja.**
+        //
+        // Un texto de dentro no se arrastra solo: es una propiedad de su figura,
+        // y su sitio se recalcula centrado cada vez que la figura se mueve. Al
+        // permitir cogerlo aparte pasaba lo previsible — se arrastraba, y al
+        // soltarlo volvía de un salto al centro de una caja que no se había
+        // movido. Cogiendo la caja, la palabra se va con ella, que es lo que uno
+        // espera al tirar de la etiqueta de un diagrama.
         val hit = getElementAtPosition(editables, p, threshold)
+            ?.let { tocado ->
+                if (tocado.type == ElementType.TEXT) contenedorDe(tocado, editables) ?: tocado
+                else tocado
+            }
         if (hit != null) {
             // Tocar algo ya seleccionado no rehace la selección: si no, mover
             // un grupo de varios sería imposible sin volver a seleccionarlo.
@@ -1472,7 +1524,20 @@ class DrawController(initial: Scene = Scene()) {
     // Acciones
     // ---------------------------------------------------------------------
 
-    fun deleteSelection() = mutate { deleteSelected(it, selectedIds).also { selectedIds = emptySet() } }
+    /**
+     * Borra lo seleccionado, **y el texto que viva dentro de lo borrado**.
+     *
+     * Sin esto, borrar el rectángulo de un diagrama dejaba su palabra flotando
+     * en el aire: un texto huérfano que ya no sabe de quién era y que hay que
+     * cazar aparte. Ver [TextoEnFiguras].
+     */
+    fun deleteSelection() = mutate { elementos ->
+        val cajas = elementos.filter { it.id in selectedIds }
+        val susTextos = cajas.flatMap { caja ->
+            elementos.filter { it.type == ElementType.TEXT && it.containerId == caja.id }
+        }.map { it.id }
+        deleteSelected(elementos, selectedIds + susTextos).also { selectedIds = emptySet() }
+    }
     fun duplicateSelection() = mutate { elements ->
         val copies = duplicateElements(elements.filter { it.id in selectedIds })
         selectedIds = copies.map { it.id }.toSet()
@@ -1552,12 +1617,67 @@ class DrawController(initial: Scene = Scene()) {
     /** Cambia el texto de un elemento de texto (lo que escribe el teclado). */
     fun updateText(id: String, text: String, measuredWidth: Double, measuredHeight: Double) {
         mutate { elements ->
+            val texto = elements.firstOrNull { it.id == id }
+            val contenedor = texto?.let { contenedorDe(it, elements) }
+            if (texto == null || contenedor == null) {
+                return@mutate elements.map {
+                    if (it.id == id) {
+                        it.copy(text = text, width = measuredWidth, height = measuredHeight)
+                            .touched()
+                    } else it
+                }
+            }
+
+            // **La caja crece si el texto no cabe, y no encoge.**
+            //
+            // Crecer hace falta o el texto se sale por abajo al llegar al
+            // borde. No encoger es igual de importante: una caja de diagrama se
+            // dibuja del tamaño que se quiere, y verla estrecharse al borrar una
+            // palabra sería el dibujo corrigiendo a quien dibuja.
+            val altoNecesario = figuraQueLoContiene(measuredHeight, contenedor.type)
+            val anchoNecesario = figuraQueLoContiene(measuredWidth, contenedor.type)
+            val caja = contenedor.copy(
+                width = kotlin.math.max(contenedor.width, anchoNecesario),
+                height = kotlin.math.max(contenedor.height, altoNecesario)
+            )
+            val donde = sitioDelTextoDentro(caja, measuredWidth to measuredHeight)
+            val nuevoTexto = texto.copy(
+                text = text, width = measuredWidth, height = measuredHeight,
+                x = donde.x, y = donde.y
+            ).touched()
+
             elements.map {
-                if (it.id == id) {
-                    it.copy(text = text, width = measuredWidth, height = measuredHeight).touched()
-                } else it
+                when (it.id) {
+                    id -> nuevoTexto
+                    contenedor.id -> if (caja == contenedor) it else caja.touched()
+                    else -> it
+                }
             }
         }
+    }
+
+    /**
+     * Recoloca el texto que vive dentro de cada figura que se haya tocado.
+     *
+     * Se llama después de mover, estirar o girar: el texto no es un elemento que
+     * se arrastre por su cuenta, **es una propiedad de su caja**, así que su
+     * sitio se vuelve a calcular en vez de desplazarse con un delta. Con el
+     * delta bastaría para mover, pero al estirar la caja el texto tiene que
+     * volver a centrarse, no seguir a una esquina.
+     */
+    private fun recolocarTextosDentro() {
+        val conTexto = scene.elements.filter {
+            it.type == ElementType.TEXT && it.containerId != null && !it.isDeleted
+        }
+        if (conTexto.isEmpty()) return
+        scene = scene.copy(
+            elements = scene.elements.map { e ->
+                if (e.type != ElementType.TEXT || e.containerId == null) return@map e
+                val caja = contenedorDe(e, scene.elements) ?: return@map e
+                val donde = sitioDelTextoDentro(caja, e.width to e.height)
+                if (donde.x == e.x && donde.y == e.y) e else e.copy(x = donde.x, y = donde.y)
+            }
+        )
     }
 
     /**

@@ -1154,8 +1154,22 @@ class DrawEditorActivity : ComponentActivity() {
                 controller.setSelection(setOf(id))
                 controller.deleteSelection()
             } else {
-                val (ancho, alto) = medirTexto(texto, familia, tam)
-                controller.updateText(id, texto, ancho, alto)
+                // **Dentro de una figura, el texto se ajusta a lo que cabe.**
+                //
+                // Escrito de corrido se saldría por los lados del rectángulo: lo
+                // que hace un diagrama es meter la palabra dentro de la caja, y
+                // para eso hay que repartirla en líneas del ancho de la caja.
+                // Fuera de una figura se deja tal cual — un texto suelto lo
+                // parte quien escribe, donde quiera.
+                val caja = controller.scene.byId(id)
+                    ?.let { contenedorDe(it, controller.scene.elements) }
+                val definitivo =
+                    if (caja == null) texto
+                    else repartirEnLineas(texto, anchoQueCabe(caja)) { trozo ->
+                        medirTexto(trozo, familia, tam).first
+                    }.joinToString("\n")
+                val (ancho, alto) = medirTexto(definitivo, familia, tam)
+                controller.updateText(id, definitivo, ancho, alto)
             }
             controller.clearPendingText()
             onCerrar(null)
