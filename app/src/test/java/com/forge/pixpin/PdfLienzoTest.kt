@@ -25,6 +25,22 @@ class PdfLienzoTest {
 
     private val context get() = RuntimeEnvironment.getApplication()
 
+    /** El objeto 4: el texto de la página, con su longitud bien contada. */
+    private fun contenidoDePrueba(): String {
+        val flujo = "BT /F1 24 Tf 72 700 Td (Memoria tecnica) Tj ET\n"
+        return "4 0 obj\n<< /Length ${flujo.length} >>\nstream\n$flujo" +
+            "endstream\nendobj\n"
+    }
+
+    /** Y el original a secas, para poder preguntarle a un lector de fuera. */
+    @Test
+    fun `deja el PDF de partida para mirarlo por fuera`() {
+        val destino = java.io.File("build/pdf-original.pdf")
+        destino.parentFile?.mkdirs()
+        destino.writeBytes(pdfDeUnaPagina())
+        assertTrue(destino.length() > 0)
+    }
+
     /** Un PDF de una página con texto de verdad, para poder comprobar que sigue. */
     private fun pdfDeUnaPagina(): ByteArray {
         val objetos = listOf(
@@ -32,8 +48,10 @@ class PdfLienzoTest {
             "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
             "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] " +
                 "/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
-            "4 0 obj\n<< /Length 42 >>\nstream\n" +
-                "BT /F1 24 Tf 72 700 Td (Memoria tecnica) Tj ET\n\nendstream\nendobj\n",
+            // El /Length calculado y no puesto a ojo: con un número inventado,
+            // el archivo de prueba ya nacía mal formado y cualquier queja de un
+            // lector de verdad sería suya y no del escritor.
+            contenidoDePrueba(),
             "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
         )
         val salida = ByteArrayOutputStream()
@@ -150,6 +168,22 @@ class PdfLienzoTest {
         val ordenes = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
         // #e03131 → 0.878 0.192 0.192
         assertTrue("no lleva el rojo del trazo", ordenes.contains("0.878"))
+    }
+
+    /**
+     * Deja el PDF anotado escrito para poder dárselo a un lector de verdad.
+     *
+     * **Comprobar un escritor con el lector de uno mismo es el error clásico**:
+     * los dos comparten las suposiciones, así que un archivo que otros rechazan
+     * pasa las pruebas. Este vuelca el resultado y quien lo mire de fuera dirá
+     * si sirve.
+     */
+    @Test
+    fun `deja el PDF anotado para mirarlo por fuera`() {
+        val destino = java.io.File("build/pdf-anotado.pdf")
+        destino.parentFile?.mkdirs()
+        destino.writeBytes(anotado()!!)
+        assertTrue(destino.length() > 0)
     }
 
     // ---- Lo que no se hace ----

@@ -213,7 +213,10 @@ class DrawEditorActivity : ComponentActivity() {
                 fondo = com.forge.pixpin.motor.PdfDoc.render(
                     ruta, paginaDeFondo, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH
                 )
-                fondo?.let { medidaDeLaPagina = it.width.toDouble() to it.height.toDouble() }
+                fondo?.let {
+                    medidaDeLaPagina = it.width.toDouble() to it.height.toDouble()
+                    encajarLaPagina(it.width.toDouble(), it.height.toDouble())
+                }
             }
         }
 
@@ -298,6 +301,29 @@ class DrawEditorActivity : ComponentActivity() {
      * En esta aplicación el proceso muere sin avisar más de lo normal: confiar
      * en `onPause` es confiar en que siempre llega.
      */
+    /**
+     * Coloca la vista para que **se vea la hoja entera** al abrirla.
+     *
+     * Una página son unos 1240 píxeles de ancho y la pantalla de un móvil, mil:
+     * sin esto se abría enseñando la esquina de arriba a la izquierda y parecía
+     * un lienzo en blanco. Lo primero que uno necesita ver de una hoja es la
+     * hoja.
+     */
+    private fun encajarLaPagina(ancho: Double, alto: Double) {
+        if (ancho <= 0 || alto <= 0) return
+        val m = resources.displayMetrics
+        val margen = 0.94
+        val zoom = minOf(m.widthPixels / ancho, m.heightPixels / alto) * margen
+        if (!zoom.isFinite() || zoom <= 0) return
+        controller.setViewport(
+            Viewport(
+                scrollX = (m.widthPixels / zoom - ancho) / 2,
+                scrollY = (m.heightPixels / zoom - alto) / 2,
+                zoom = zoom
+            )
+        )
+    }
+
     private fun guardar() {
         ExcalidrawStore.guardar(this, dibujoId, controller.scene)
     }
@@ -456,6 +482,9 @@ class DrawEditorActivity : ComponentActivity() {
                     }
                 },
                 backdrop = fondo,
+                // La hoja del PDF se ve: es el papel. Una foto de un pin no, que
+                // esa ya se coloca como elemento clavado al fondo.
+                papelALaVista = pdfDeFondo != null,
                 zurdo = zurdo
             )
 

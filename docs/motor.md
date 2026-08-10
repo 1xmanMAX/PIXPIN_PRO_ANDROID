@@ -172,5 +172,5 @@ flowchart TB
 El núcleo no importa `android.*`. Se prueba en la JVM, sin emulador.
 
 ```
-918 pruebas · todas en verde
+920 pruebas · todas en verde
 ```

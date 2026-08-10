@@ -2,7 +2,7 @@
 
 Captura, anota y **fija notas flotantes** sobre cualquier app.
 
-**Android 10+** · Kotlin + Compose · 918 pruebas · sin red, sin cuentas, sin analítica
+**Android 10+** · Kotlin + Compose · 920 pruebas · sin red, sin cuentas, sin analítica
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual completo**](docs/motor.md)
 
@@ -117,7 +117,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # APK pequeño (~4 MB, minificado)
 ./gradlew assembleDebug        # APK de depuración (~74 MB)
-./gradlew testDebugUnitTest    # 918 pruebas
+./gradlew testDebugUnitTest    # 920 pruebas
 ./gradlew lintDebug
 ```
 
@@ -162,7 +162,7 @@ com.forge.pixpin/
 | `Nudos` · `Recorte` · `Medida` · `EscalaGrafica` | Alfileres, recortar/extender, cotas y escala |
 | `PdfLectura` · `PdfLector` | El PDF por dentro, índice comprimido incluido |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **918 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **920 pruebas**
 en la JVM, en menos de un minuto. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---

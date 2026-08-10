@@ -47,6 +47,22 @@ class Renderer(
      */
     private val backdrop: Bitmap? = null,
     /**
+     * Si [backdrop] hay que **pintarlo**, y no solo mirarlo.
+     *
+     * El telón nació para el mosaico, que le saca los píxeles y los devuelve
+     * gordos; quien lo pasaba —el pin, la captura— ya pintaba su foto por su
+     * cuenta por debajo, así que aquí no había que dibujar nada.
+     *
+     * Con una página de un PDF no hay nadie debajo pintando: el editor abría la
+     * hoja y se veía **un lienzo en blanco**. Se dibujaba a ciegas y lo trazado
+     * caía donde cayera respecto de una página que no se veía — de ahí que la
+     * anotación apareciera en un rincón del papel y no donde se había puesto.
+     *
+     * Va como interruptor y no siempre encendido porque encenderlo en el pin
+     * pintaría la foto dos veces, una encima de otra.
+     */
+    private val papelALaVista: Boolean = false,
+    /**
      * Si esto es una exportación y no la pantalla.
      *
      * **Es la diferencia entre un adorno y el dibujo.** Unas cuantas cosas se
@@ -250,6 +266,18 @@ class Renderer(
         // siempre en coordenadas de escena y se olvida del zoom.
         canvas.scale(scene.viewport.zoom.toFloat(), scene.viewport.zoom.toFloat())
         canvas.translate(scene.viewport.scrollX.toFloat(), scene.viewport.scrollY.toFloat())
+
+        // **El papel, debajo de todo.** Su píxel (0,0) es el (0,0) de la escena,
+        // así que dibujar encima de él es dibujar sobre coordenadas de la
+        // página — que es exactamente lo que hace falta para devolver la capa a
+        // su sitio. Ver [papelALaVista].
+        if (papelALaVista) {
+            backdrop?.takeIf { !it.isRecycled }?.let {
+                fillPaint.reset()
+                fillPaint.isFilterBitmap = true
+                canvas.drawBitmap(it, 0f, 0f, fillPaint)
+            }
+        }
 
         val visible = getVisibleElements(
             // Escondidas no se pintan; siguen ahí, guardadas, para volver.

@@ -84,6 +84,8 @@ fun DrawCanvas(
      * pin de imagen abierto en la edición avanzada. Ver [Renderer].
      */
     backdrop: Bitmap? = null,
+    /** Si [backdrop] es el papel sobre el que se dibuja y hay que pintarlo. */
+    papelALaVista: Boolean = false,
     /**
      * Dónde se pone la lupa: en la esquina contraria a la mano que dibuja.
      *
@@ -110,8 +112,8 @@ fun DrawCanvas(
      * enseñar ese trozo aparte, ampliado, en una esquina que no tapa la mano.
      */
     var dedo by remember { mutableStateOf<Offset?>(null) }
-    val renderer = remember(imageProvider, dark, backdrop) {
-        Renderer(imageProvider, DrawFonts.provider(context), dark, backdrop)
+    val renderer = remember(imageProvider, dark, backdrop, papelALaVista) {
+        Renderer(imageProvider, DrawFonts.provider(context), dark, backdrop, papelALaVista)
     }
 
     fun touched() {
