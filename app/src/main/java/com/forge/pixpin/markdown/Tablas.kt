@@ -286,6 +286,58 @@ object Tablas {
         return tabla.copy(filas = filas)
     }
 
+    /**
+     * Un rectángulo de celdas marcado, en coordenadas de la rejilla.
+     *
+     * Es lo que hace falta para que «combinar» tenga sentido: su `mergeCells`
+     * recibe un conjunto de celdas, no una sola. Guardando las dos esquinas se
+     * dice lo mismo con dos pares de números, y de paso una celda suelta es el
+     * caso en que las dos esquinas coinciden.
+     */
+    data class Marcado(val f1: Int, val c1: Int, val f2: Int, val c2: Int) {
+        val filas: IntRange get() = minOf(f1, f2)..maxOf(f1, f2)
+        val columnas: IntRange get() = minOf(c1, c2)..maxOf(c1, c2)
+        val esUnaSola: Boolean get() = f1 == f2 && c1 == c2
+
+        operator fun contains(par: Pair<Int, Int>): Boolean =
+            par.first in filas && par.second in columnas
+
+        companion object {
+            fun celda(f: Int, c: Int) = Marcado(f, c, f, c)
+            fun fila(f: Int, columnas: Int) = Marcado(f, 0, f, (columnas - 1).coerceAtLeast(0))
+            fun columna(c: Int, filas: Int) = Marcado(0, c, (filas - 1).coerceAtLeast(0), c)
+        }
+    }
+
+    /**
+     * Aplica [cambio] a **todas las celdas ancla** que toca el marcado.
+     *
+     * Sobre las anclas y no sobre los huecos: una celda fusionada se cambia una
+     * vez, no tantas como huecos ocupe.
+     */
+    fun enElMarcado(
+        tabla: MarkdownBlock.Tabla,
+        marcado: Marcado,
+        cambio: (Celda) -> Celda
+    ): MarkdownBlock.Tabla {
+        val rejilla = rejilla(tabla)
+        val tocadas = mutableSetOf<Pair<Int, Int>>()
+        marcado.filas.forEach { f ->
+            marcado.columnas.forEach { c ->
+                val h = rejilla.getOrNull(f)?.getOrNull(c) ?: return@forEach
+                tocadas += h.filaDelAncla to h.columnaDelAncla
+            }
+        }
+
+        var salida = tabla
+        tocadas.forEach { (f, c) ->
+            val enLaLista = (0 until c)
+                .count { rejilla.getOrNull(f)?.getOrNull(it)?.esElAncla == true }
+            salida = conCeldaCambiada(salida, f, enLaLista, cambio)
+        }
+        return salida
+    }
+
     /** Su `insertRowAt`. Con [donde] fuera de rango, al final. */
     fun insertarFila(tabla: MarkdownBlock.Tabla, donde: Int): MarkdownBlock.Tabla {
         val ancho = tabla.columnas.coerceAtLeast(1)

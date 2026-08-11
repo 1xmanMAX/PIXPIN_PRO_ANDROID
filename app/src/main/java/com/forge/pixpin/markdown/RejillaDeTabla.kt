@@ -2,12 +2,40 @@ package com.forge.pixpin.markdown
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FormatAlignCenter
+import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.Highlight
+import androidx.compose.material.icons.filled.Merge
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.VerticalAlignCenter
+import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,13 +81,20 @@ import androidx.compose.ui.unit.dp
 fun RejillaDeTabla(
     tabla: MarkdownBlock.Tabla,
     modifier: Modifier = Modifier,
-    colorDelBorde: Color = MaterialTheme.colorScheme.outlineVariant,
-    fondoDeCabecera: Color = MaterialTheme.colorScheme.surfaceVariant,
+    marcado: Tablas.Marcado? = null,
+    conAsas: Boolean = false,
+    onColumna: (Int) -> Unit = {},
+    onFila: (Int) -> Unit = {},
+    onCelda: (Int, Int) -> Unit = { _, _ -> },
+    onCeldaLarga: (Int, Int) -> Unit = { _, _ -> },
     celda: @Composable (Ancla) -> Unit
 ) {
     val anclas = anclasDe(tabla)
     val columnas = tabla.columnas.coerceAtLeast(1)
     val filas = tabla.filas.size.coerceAtLeast(1)
+    val colorDelBorde = MaterialTheme.colorScheme.outlineVariant
+    val fondoDeCabecera = MaterialTheme.colorScheme.surfaceVariant
+    val marcadoColor = MaterialTheme.colorScheme.primary
 
     // El ancho de la ventana se mide **fuera** del desplazamiento: dentro es
     // infinito, y con eso las columnas nunca podrían llenar la pantalla.
@@ -69,21 +104,45 @@ fun RejillaDeTabla(
         Box(Modifier.horizontalScroll(rememberScrollState())) {
             Layout(
                 content = {
+                    // Primero las celdas, luego las asas de columna y por último
+                    // las de fila. El orden importa: la medida las reparte por
+                    // posición, que es como habla un Layout.
                     anclas.forEach { ancla ->
+                        val dentro = marcado != null &&
+                            (ancla.fila to ancla.columna) in marcado
                         Box(
                             Modifier
                                 .border(1.dp, colorDelBorde)
                                 .background(
-                                    if (ancla.celda.cabecera) {
-                                        fondoDeCabecera
-                                    } else {
-                                        Color.Transparent
+                                    when {
+                                        dentro -> marcadoColor.copy(alpha = 0.18f)
+                                        ancla.celda.cabecera -> fondoDeCabecera
+                                        else -> Color.Transparent
                                     }
                                 )
+                                .pointerInput(ancla.fila, ancla.columna) {
+                                    detectTapGestures(
+                                        onTap = { onCelda(ancla.fila, ancla.columna) },
+                                        onLongPress = { onCeldaLarga(ancla.fila, ancla.columna) }
+                                    )
+                                }
                                 .padding(horizontal = 6.dp, vertical = 5.dp),
                             contentAlignment = alineacionDeLaCelda(ancla.celda)
                         ) {
                             celda(ancla)
+                        }
+                    }
+
+                    if (conAsas) {
+                        (0 until columnas).forEach { c ->
+                            val suya = marcado != null &&
+                                c in marcado.columnas && marcado.filas.count() >= filas
+                            Asa(if (suya) marcadoColor else colorDelBorde) { onColumna(c) }
+                        }
+                        (0 until filas).forEach { f ->
+                            val suya = marcado != null &&
+                                f in marcado.filas && marcado.columnas.count() >= columnas
+                            Asa(if (suya) marcadoColor else colorDelBorde) { onFila(f) }
                         }
                     }
                 }
@@ -93,7 +152,9 @@ fun RejillaDeTabla(
                 }
 
                 val minimo = MINIMO_DE_COLUMNA.roundToPx()
-                val anchoDeColumna = maxOf(minimo, ventana / columnas)
+                val hueco = if (conAsas) ASA_DP.roundToPx() else 0
+                val libre = (ventana - hueco).coerceAtLeast(0)
+                val anchoDeColumna = maxOf(minimo, libre / columnas)
                 val anchos = IntArray(columnas) { anchoDeColumna }
 
                 fun anchoDe(a: Ancla): Int =
@@ -101,16 +162,12 @@ fun RejillaDeTabla(
                         .sumOf { anchos.getOrElse(it) { 0 } }
                         .coerceAtLeast(minimo)
 
-                // Las alturas se sacan de los **intrínsecos**, no midiendo.
-                //
-                // Su código es una View de Android y ahí se puede llamar a
-                // `measure` las veces que haga falta; su rejilla lo hace tres.
-                // En Compose medir dos veces el mismo hijo lanza, y esa fue la
-                // caída que salió en el móvil. Preguntar por el alto que
-                // necesitaría —`maxIntrinsicHeight`— da el mismo número sin
-                // gastar la única medida que hay.
+                val deCeldas = medibles.take(anclas.size)
+
+                // Las alturas se sacan de los **intrínsecos**, no midiendo: en
+                // Compose solo se puede medir una vez cada hijo.
                 val alturas = IntArray(filas)
-                medibles.forEachIndexed { i, medible ->
+                deCeldas.forEachIndexed { i, medible ->
                     val a = anclas[i]
                     if (a.celda.altoEnFilas > 1) return@forEachIndexed
                     val alto = medible.maxIntrinsicHeight(anchoDe(a))
@@ -118,10 +175,7 @@ fun RejillaDeTabla(
                         alturas[a.fila] = alto
                     }
                 }
-
-                // Las que ocupan varias filas: si no caben en la suma de las
-                // suyas, el sobrante se reparte. Es su bucle del `per + rem`.
-                medibles.forEachIndexed { i, medible ->
+                deCeldas.forEachIndexed { i, medible ->
                     val a = anclas[i]
                     if (a.celda.altoEnFilas <= 1) return@forEachIndexed
                     val alto = medible.maxIntrinsicHeight(anchoDe(a))
@@ -138,6 +192,9 @@ fun RejillaDeTabla(
                         }
                     }
                 }
+                for (f in 0 until filas) {
+                    if (alturas[f] <= 0) alturas[f] = minimo / 2
+                }
 
                 val inicioDeColumna = IntArray(columnas + 1)
                 for (c in 0 until columnas) {
@@ -146,29 +203,57 @@ fun RejillaDeTabla(
                 val inicioDeFila = IntArray(filas + 1)
                 for (f in 0 until filas) inicioDeFila[f + 1] = inicioDeFila[f] + alturas[f]
 
-                // Y ahora sí: **una sola medida** por hijo, ya con su tamaño.
-                val colocables = medibles.mapIndexed { i, medible ->
+                val colocables = deCeldas.mapIndexed { i, medible ->
                     val a = anclas[i]
-                    val ancho = anchoDe(a)
                     val alto = (a.fila until minOf(a.fila + a.celda.altoEnFilas, filas))
                         .sumOf { alturas.getOrElse(it) { 0 } }
                         .coerceAtLeast(1)
-                    medible.measure(Constraints.fixed(ancho, alto))
+                    medible.measure(Constraints.fixed(anchoDe(a), alto))
                 }
 
-                layout(inicioDeColumna[columnas], inicioDeFila[filas]) {
+                // Las asas se miden con **el mismo ancho y alto** que la columna
+                // o la fila a la que pertenecen. Ese es el arreglo: antes se
+                // dibujaban aparte con un ancho fijo y no cuadraban con nada.
+                val asasDeColumna = if (!conAsas) emptyList() else
+                    medibles.subList(anclas.size, anclas.size + columnas)
+                        .mapIndexed { c, m -> m.measure(Constraints.fixed(anchos[c], hueco)) }
+                val asasDeFila = if (!conAsas) emptyList() else
+                    medibles.subList(anclas.size + columnas, medibles.size)
+                        .mapIndexed { f, m -> m.measure(Constraints.fixed(hueco, alturas[f])) }
+
+                layout(hueco + inicioDeColumna[columnas], hueco + inicioDeFila[filas]) {
                     colocables.forEachIndexed { i, placeable ->
                         val a = anclas[i]
                         placeable.place(
-                            inicioDeColumna[a.columna.coerceIn(0, columnas)],
-                            inicioDeFila[a.fila.coerceIn(0, filas)]
+                            hueco + inicioDeColumna[a.columna.coerceIn(0, columnas)],
+                            hueco + inicioDeFila[a.fila.coerceIn(0, filas)]
                         )
+                    }
+                    asasDeColumna.forEachIndexed { c, p ->
+                        p.place(hueco + inicioDeColumna[c], 0)
+                    }
+                    asasDeFila.forEachIndexed { f, p ->
+                        p.place(0, hueco + inicioDeFila[f])
                     }
                 }
             }
         }
     }
 }
+
+/** Una asa: la barrita que marca una fila o una columna entera al tocarla. */
+@Composable
+private fun Asa(color: Color, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .padding(1.dp)
+            .background(color, RoundedCornerShape(2.dp))
+            .clickable { onClick() }
+    )
+}
+
+/** Lo que ocupan las asas. Su `HANDLE_PAD_DP`. */
+val ASA_DP = 14.dp
 
 /** Cuánto mide una columna como mínimo. Su `MIN_COL_DP`. */
 val MINIMO_DE_COLUMNA = 80.dp
@@ -221,4 +306,130 @@ fun alineacionDeLaCelda(celda: Celda): Alignment = when (celda.altura) {
         Alineacion.DERECHA -> Alignment.BottomEnd
         else -> Alignment.BottomStart
     }
+}
+
+/** Lo que se puede pedir desde el menú de la tabla. */
+enum class AccionDeTabla {
+    IZQUIERDA, CENTRO, DERECHA,
+    ARRIBA, MEDIO, ABAJO,
+    DESTACAR, COMBINAR, SEPARAR,
+    FILA_ARRIBA, FILA_ABAJO, COLUMNA_IZQUIERDA, COLUMNA_DERECHA,
+    QUITAR_FILA, QUITAR_COLUMNA
+}
+
+/**
+ * El menú de la tabla: alineación, destacar, combinar, separar y añadir.
+ *
+ * Sale al mantener pulsada una celda y al tocar un asa. Es lo que tiene su
+ * editor detrás de las asas y del menú de celda, con sus mismas acciones —
+ * `setAlign` y `setVAlign` en las seis posiciones, `setHeader`, `mergeCells`,
+ * `unmergeCell`, `insertRowAt` e `insertColumnAt`.
+ *
+ * Va **pegado a la tabla y no en una ventana flotante** a propósito: la nota
+ * también se edita desde el pin, que es una ventana del servicio y donde un
+ * menú emergente no tiene actividad que lo sostenga. Así el mismo menú vale en
+ * los dos sitios.
+ */
+@Composable
+fun MenuDeTabla(
+    puedeCombinar: Boolean,
+    puedeSeparar: Boolean,
+    onAccion: (AccionDeTabla) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = 8.dp,
+        modifier = modifier.padding(vertical = 4.dp)
+    ) {
+        Column(Modifier.padding(4.dp)) {
+            // Las seis posiciones: tres a lo ancho y tres a lo alto, como su
+            // align y su valign. Juntas y en una fila porque son la misma
+            // pregunta hecha en dos ejes.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BotonDelMenu(Icons.Filled.FormatAlignLeft, "Izquierda") {
+                    onAccion(AccionDeTabla.IZQUIERDA)
+                }
+                BotonDelMenu(Icons.Filled.FormatAlignCenter, "Centrado") {
+                    onAccion(AccionDeTabla.CENTRO)
+                }
+                BotonDelMenu(Icons.Filled.FormatAlignRight, "Derecha") {
+                    onAccion(AccionDeTabla.DERECHA)
+                }
+                Separador()
+                BotonDelMenu(Icons.Filled.VerticalAlignTop, "Arriba") {
+                    onAccion(AccionDeTabla.ARRIBA)
+                }
+                BotonDelMenu(Icons.Filled.VerticalAlignCenter, "En medio") {
+                    onAccion(AccionDeTabla.MEDIO)
+                }
+                BotonDelMenu(Icons.Filled.VerticalAlignBottom, "Abajo") {
+                    onAccion(AccionDeTabla.ABAJO)
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BotonDelMenu(Icons.Filled.Highlight, "Destacar") {
+                    onAccion(AccionDeTabla.DESTACAR)
+                }
+                if (puedeCombinar) {
+                    BotonDelMenu(Icons.Filled.Merge, "Combinar") {
+                        onAccion(AccionDeTabla.COMBINAR)
+                    }
+                }
+                if (puedeSeparar) {
+                    BotonDelMenu(Icons.Filled.CallSplit, "Separar") {
+                        onAccion(AccionDeTabla.SEPARAR)
+                    }
+                }
+                Separador()
+                BotonDelMenu(Icons.Filled.ArrowUpward, "Fila arriba") {
+                    onAccion(AccionDeTabla.FILA_ARRIBA)
+                }
+                BotonDelMenu(Icons.Filled.ArrowDownward, "Fila abajo") {
+                    onAccion(AccionDeTabla.FILA_ABAJO)
+                }
+                BotonDelMenu(Icons.AutoMirrored.Filled.ArrowBack, "Columna a la izquierda") {
+                    onAccion(AccionDeTabla.COLUMNA_IZQUIERDA)
+                }
+                BotonDelMenu(Icons.AutoMirrored.Filled.ArrowForward, "Columna a la derecha") {
+                    onAccion(AccionDeTabla.COLUMNA_DERECHA)
+                }
+                Separador()
+                BotonDelMenu(
+                    Icons.Filled.DeleteOutline,
+                    "Quitar la fila",
+                    MaterialTheme.colorScheme.error
+                ) { onAccion(AccionDeTabla.QUITAR_FILA) }
+                BotonDelMenu(
+                    Icons.Filled.DeleteSweep,
+                    "Quitar la columna",
+                    MaterialTheme.colorScheme.error
+                ) { onAccion(AccionDeTabla.QUITAR_COLUMNA) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BotonDelMenu(
+    icono: androidx.compose.ui.graphics.vector.ImageVector,
+    nombre: String,
+    tinte: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(38.dp)) {
+        Icon(icono, contentDescription = nombre, modifier = Modifier.size(19.dp), tint = tinte)
+    }
+}
+
+@Composable
+private fun Separador() {
+    Box(
+        Modifier
+            .padding(horizontal = 3.dp)
+            .width(1.dp)
+            .height(22.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant)
+    )
 }

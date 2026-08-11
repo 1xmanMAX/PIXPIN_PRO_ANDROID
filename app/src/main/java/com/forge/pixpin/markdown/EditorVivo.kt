@@ -17,7 +17,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -92,9 +95,7 @@ fun EditorVivo(
             if (activo && bloque is MarkdownBlock.Tabla) {
                 TablaEditable(
                     tabla = bloque,
-                    celda = sitio.celda,
                     baseSizeSp = baseSizeSp,
-                    onCelda = { c -> onSitio(Sitio(i, TextRange.Zero, c)) },
                     onCambio = { nueva ->
                         val t = trozosDe(texto)[i]
                         val cola = t.de(texto).takeLastWhile { it == '\n' }
@@ -174,14 +175,20 @@ fun EditorVivo(
 @Composable
 private fun TablaEditable(
     tabla: MarkdownBlock.Tabla,
-    celda: Int,
     baseSizeSp: Float,
-    onCelda: (Int) -> Unit,
     onCambio: (MarkdownBlock.Tabla) -> Unit
 ) {
-    val borde = MaterialTheme.colorScheme.outlineVariant
-    val columnas = tabla.columnas.coerceAtLeast(1)
-    val marcada = if (celda < 0) null else (celda / columnas) to (celda % columnas)
+    var marcado by remember(tabla.filas.size, tabla.columnas) {
+        mutableStateOf<Tablas.Marcado?>(null)
+    }
+    var menuAbierto by remember { mutableStateOf(false) }
+
+    val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
+    val marca = marcado
+
+    /** El ancla que manda: la esquina de arriba a la izquierda de lo marcado. */
+    fun anclaDelMarcado(): Tablas.Hueco? =
+        marca?.let { rejilla.getOrNull(it.filas.first)?.getOrNull(it.columnas.first) }
 
     Column(Modifier.fillMaxWidth()) {
         // El título, su `pageBlockTable.title`. Se escribe aquí mismo.
@@ -198,97 +205,130 @@ private fun TablaEditable(
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
         )
 
-        // Las asas de columna, su `colHandleAtGrid`.
-        Row(Modifier.padding(start = ASA)) {
-            (0 until columnas).forEach { c ->
-                Box(
-                    Modifier
-                        .width(MINIMO_DE_COLUMNA)
-                        .padding(horizontal = 1.dp)
-                        .height(ASA)
-                        .background(
-                            if (marcada?.second == c) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                borde
-                            },
-                            RoundedCornerShape(2.dp)
-                        )
-                        .clickable { onCelda(c) }
-                )
-            }
+        if (menuAbierto && marca != null) {
+            MenuDeTabla(
+                puedeCombinar = !marca.esUnaSola,
+                puedeSeparar = anclaDelMarcado()?.celda?.let {
+                    it.anchoEnColumnas > 1 || it.altoEnFilas > 1
+                } == true,
+                onAccion = { accion ->
+                    onCambio(aplicarEnLaTabla(tabla, marca, accion))
+                    menuAbierto = false
+                }
+            )
         }
-        Spacer(Modifier.height(2.dp))
 
-        Row {
-            // Las asas de fila, su `rowHandleAtGrid`.
-            Column {
-                tabla.filas.indices.forEach { f ->
-                    Box(
-                        Modifier
-                            .width(ASA)
-                            .height((baseSizeSp * 2.6f).dp)
-                            .padding(vertical = 1.dp)
-                            .background(
-                                if (marcada?.first == f) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    borde
-                                },
-                                RoundedCornerShape(2.dp)
-                            )
-                            .clickable { onCelda(f * columnas) }
+        RejillaDeTabla(
+            tabla = tabla,
+            marcado = marca,
+            conAsas = true,
+            // Tocar un asa marca la fila o la columna **entera** y abre el menú:
+            // es lo único que se quiere hacer desde ahí.
+            onColumna = { c ->
+                marcado = Tablas.Marcado.columna(c, tabla.filas.size)
+                menuAbierto = true
+            },
+            onFila = { f ->
+                marcado = Tablas.Marcado.fila(f, tabla.columnas)
+                menuAbierto = true
+            },
+            onCelda = { f, c ->
+                marcado = Tablas.Marcado.celda(f, c)
+                menuAbierto = false
+            },
+            // Mantener pulsada **estira lo marcado** hasta aquí y abre el menú.
+            // Así el mismo gesto sirve para pedir el menú de una celda y para
+            // marcar varias y combinarlas, sin arrastrar —que en una tabla
+            // dentro de una nota se pelearía con el desplazamiento.
+            onCeldaLarga = { f, c ->
+                val desde = marca
+                marcado = if (desde == null || desde.esUnaSola && desde.f1 == f &&
+                    desde.c1 == c
+                ) {
+                    Tablas.Marcado.celda(f, c)
+                } else {
+                    Tablas.Marcado(desde.filas.first, desde.columnas.first, f, c)
+                }
+                menuAbierto = true
+            }
+        ) { ancla ->
+            BasicTextField(
+                value = ancla.celda.contenido.text,
+                onValueChange = {
+                    // La fila y el índice salen del ancla: con una fusión, la
+                    // celda que se ve en la columna 2 puede ser la primera de la
+                    // lista de su fila. Ver [Ancla.indiceEnLaFila].
+                    onCambio(
+                        Tablas.conCelda(tabla, ancla.fila, ancla.indiceEnLaFila, InlineText(it))
                     )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = TextStyle(
+                    fontSize = (baseSizeSp * 0.92f).sp,
+                    fontWeight = if (ancla.celda.cabecera) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = when (ancla.celda.alineacion) {
+                        Alineacion.CENTRO -> TextAlign.Center
+                        Alineacion.DERECHA -> TextAlign.End
+                        else -> TextAlign.Start
+                    },
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+            )
+        }
+    }
+}
+
+/**
+ * Lo que hace cada acción del menú sobre lo marcado.
+ *
+ * Todo va **sobre el rectángulo**, no sobre una celda: marcar una columna y
+ * centrarla centra sus cinco celdas de una vez, que es lo que se espera al haber
+ * tocado el asa de la columna.
+ */
+private fun aplicarEnLaTabla(
+    tabla: MarkdownBlock.Tabla,
+    marcado: Tablas.Marcado,
+    accion: AccionDeTabla
+): MarkdownBlock.Tabla {
+    val f = marcado.filas.first
+    val c = marcado.columnas.first
+    return when (accion) {
+        AccionDeTabla.IZQUIERDA ->
+            Tablas.enElMarcado(tabla, marcado) { it.copy(alineacion = Alineacion.IZQUIERDA) }
+        AccionDeTabla.CENTRO ->
+            Tablas.enElMarcado(tabla, marcado) { it.copy(alineacion = Alineacion.CENTRO) }
+        AccionDeTabla.DERECHA ->
+            Tablas.enElMarcado(tabla, marcado) { it.copy(alineacion = Alineacion.DERECHA) }
+        AccionDeTabla.ARRIBA ->
+            Tablas.enElMarcado(tabla, marcado) { it.copy(altura = AlturaEnCelda.ARRIBA) }
+        AccionDeTabla.MEDIO ->
+            Tablas.enElMarcado(tabla, marcado) { it.copy(altura = AlturaEnCelda.MEDIO) }
+        AccionDeTabla.ABAJO ->
+            Tablas.enElMarcado(tabla, marcado) { it.copy(altura = AlturaEnCelda.ABAJO) }
+        // Destacar alterna: si ya lo está todo lo marcado, lo apaga.
+        AccionDeTabla.DESTACAR -> {
+            val yaLoEstan = Tablas.rejilla(tabla).let { r ->
+                marcado.filas.all { ff ->
+                    marcado.columnas.all { cc ->
+                        r.getOrNull(ff)?.getOrNull(cc)?.celda?.cabecera == true
+                    }
                 }
             }
-
-            // **La misma rejilla que en la vista.** Ver [RejillaDeTabla].
-            RejillaDeTabla(tabla) { ancla ->
-                val estaMarcada = marcada?.first == ancla.fila && marcada.second == ancla.columna
-                BasicTextField(
-                    value = ancla.celda.contenido.text,
-                    onValueChange = {
-                        // La fila y el índice salen del ancla: con una fusión, la
-                        // celda que se ve en la columna 2 puede ser la primera de
-                        // la lista de su fila. Ver [Ancla.indiceEnLaFila].
-                        onCambio(
-                            Tablas.conCelda(
-                                tabla, ancla.fila, ancla.indiceEnLaFila, InlineText(it)
-                            )
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (estaMarcada) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                Color.Transparent
-                            }
-                        )
-                        .onFocusChanged {
-                            if (it.isFocused) {
-                                onCelda(ancla.fila * columnas + ancla.columna)
-                            }
-                        },
-                    textStyle = TextStyle(
-                        fontSize = (baseSizeSp * 0.92f).sp,
-                        fontWeight = if (ancla.celda.cabecera) {
-                            FontWeight.Bold
-                        } else {
-                            FontWeight.Normal
-                        },
-                        textAlign = when (ancla.celda.alineacion) {
-                            Alineacion.CENTRO -> TextAlign.Center
-                            Alineacion.DERECHA -> TextAlign.End
-                            else -> TextAlign.Start
-                        },
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
-                )
-            }
+            Tablas.enElMarcado(tabla, marcado) { it.copy(cabecera = !yaLoEstan) }
         }
+        AccionDeTabla.COMBINAR -> Tablas.fusionar(
+            tabla, marcado.filas.first, marcado.columnas.first,
+            marcado.filas.last, marcado.columnas.last
+        )
+        AccionDeTabla.SEPARAR -> Tablas.separar(tabla, f, c)
+        AccionDeTabla.FILA_ARRIBA -> Tablas.insertarFila(tabla, f)
+        AccionDeTabla.FILA_ABAJO -> Tablas.insertarFila(tabla, marcado.filas.last + 1)
+        AccionDeTabla.COLUMNA_IZQUIERDA -> Tablas.insertarColumna(tabla, c)
+        AccionDeTabla.COLUMNA_DERECHA ->
+            Tablas.insertarColumna(tabla, marcado.columnas.last + 1)
+        AccionDeTabla.QUITAR_FILA -> Tablas.quitarFilas(tabla, marcado.filas.toSet())
+        AccionDeTabla.QUITAR_COLUMNA -> Tablas.quitarColumnas(tabla, marcado.columnas.toSet())
     }
 }
 

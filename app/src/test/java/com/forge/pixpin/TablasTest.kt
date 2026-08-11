@@ -274,6 +274,73 @@ class TablasTest {
         assertTrue(anclasDe(vuelta).any { it.fila == 1 && it.columna == 1 })
     }
 
+    // ---- Lo marcado: fila, columna o rectángulo ----
+
+    @Test
+    fun `marcar una columna la coge entera`() {
+        val t = Tablas.nueva(3, 4)
+        val m = Tablas.Marcado.columna(1, t.filas.size)
+        assertEquals(0..2, m.filas)
+        assertEquals(1..1, m.columnas)
+        assertTrue((2 to 1) in m)
+        assertFalse((2 to 0) in m)
+    }
+
+    @Test
+    fun `marcar una fila la coge entera`() {
+        val t = Tablas.nueva(3, 4)
+        val m = Tablas.Marcado.fila(2, t.columnas)
+        assertEquals(2..2, m.filas)
+        assertEquals(0..3, m.columnas)
+        assertTrue((2 to 3) in m)
+    }
+
+    /** Centrar una columna centra sus cinco celdas, no solo la de arriba. */
+    @Test
+    fun `alinear lo marcado toca todas sus celdas`() {
+        var t = Tablas.nueva(3, 2)
+        t = Tablas.enElMarcado(t, Tablas.Marcado.columna(1, 3)) {
+            it.copy(alineacion = Alineacion.CENTRO)
+        }
+        (0..2).forEach { f ->
+            assertEquals("fila $f", Alineacion.CENTRO, celda(t, f, 1)!!.alineacion)
+            assertEquals("fila $f", Alineacion.IZQUIERDA, celda(t, f, 0)!!.alineacion)
+        }
+    }
+
+    /** Una celda fusionada se cambia UNA vez, no una por cada hueco que ocupa. */
+    @Test
+    fun `lo marcado no cambia dos veces una celda fusionada`() {
+        var t = Tablas.nueva(2, 3)
+        t = Tablas.fusionar(t, 0, 0, 0, 1)
+        t = Tablas.enElMarcado(t, Tablas.Marcado(0, 0, 0, 2)) {
+            it.copy(altura = AlturaEnCelda.MEDIO)
+        }
+        assertEquals(AlturaEnCelda.MEDIO, celda(t, 0, 0)!!.altura)
+        assertEquals(AlturaEnCelda.MEDIO, celda(t, 0, 2)!!.altura)
+        // Y la fusión sigue siendo de dos columnas, no se ha tocado su tamaño.
+        assertEquals(2, celda(t, 0, 0)!!.anchoEnColumnas)
+    }
+
+    @Test
+    fun `quitar lo marcado se lleva la fila o la columna entera`() {
+        val t = Tablas.nueva(4, 3)
+        val menos = Tablas.quitarFilas(t, Tablas.Marcado.fila(1, 3).filas.toSet())
+        assertEquals(3, menos.filas.size)
+
+        val menosC = Tablas.quitarColumnas(t, Tablas.Marcado.columna(0, 4).columnas.toSet())
+        assertEquals(2, menosC.columnas)
+    }
+
+    @Test
+    fun `combinar lo marcado usa las dos esquinas`() {
+        var t = Tablas.nueva(3, 3)
+        val m = Tablas.Marcado(0, 0, 1, 1)
+        t = Tablas.fusionar(t, m.filas.first, m.columnas.first, m.filas.last, m.columnas.last)
+        assertEquals(2, celda(t, 0, 0)!!.anchoEnColumnas)
+        assertEquals(2, celda(t, 0, 0)!!.altoEnFilas)
+    }
+
     // ---- Basura ----
 
     @Test
