@@ -37,7 +37,23 @@ data class InlineSpan(
 /** Una línea ya interpretada: el texto sin marcas y los tramos que lo decoran. */
 data class InlineText(val text: String, val spans: List<InlineSpan> = emptyList())
 
+/** Cómo se alinea el contenido de una celda. Es su `TableModel.ALIGN_*`. */
+enum class Alineacion { IZQUIERDA, CENTRO, DERECHA }
+
+/** Qué clase de archivo lleva un bloque de medio, deducido por su extensión. */
+enum class ClaseDeMedio { IMAGEN, VIDEO, AUDIO, ARCHIVO }
+
+/**
+ * Las cajas que envuelven otros bloques.
+ *
+ * Cada una es uno de sus `pageBlock`: [PLEGABLE] es `pageBlockDetails`, [PIE] es
+ * `pageBlockFooter`, [DESTACADO] es `pageBlockPullquote`, y las dos alineaciones
+ * salen de que sus celdas y párrafos llevan `align_center` y `align_right`.
+ */
+enum class TipoDeCaja { PLEGABLE, PIE, DESTACADO, CENTRO, DERECHA }
+
 sealed interface MarkdownBlock {
+    /** [level] va de 1 a 6, como sus seis `ArticleHeading`. */
     data class Heading(val level: Int, val content: InlineText) : MarkdownBlock
     data class Paragraph(val content: InlineText) : MarkdownBlock
     data class Bullet(val content: InlineText) : MarkdownBlock
@@ -50,6 +66,36 @@ sealed interface MarkdownBlock {
      */
     data class Code(val text: String, val lenguaje: String = "") : MarkdownBlock
     data object Rule : MarkdownBlock
+
+    /** Una casilla. Su `ArticleListChecklist`, en sintaxis de GitHub. */
+    data class Tarea(val hecha: Boolean, val content: InlineText) : MarkdownBlock
+
+    /**
+     * Una tabla. [cabecera] dice si la primera fila es de encabezados, que es su
+     * `pageTableCell.header`, y [alineaciones] es su `align_*`, una por columna.
+     */
+    data class Tabla(
+        val filas: List<List<InlineText>>,
+        val cabecera: Boolean,
+        val alineaciones: List<Alineacion>
+    ) : MarkdownBlock
+
+    /** Una fórmula. Su `pageBlockMath`, que allí es de pago. */
+    data class Formula(val latex: String) : MarkdownBlock
+
+    /** Una imagen, un vídeo, un audio o un archivo adjunto. */
+    data class Medio(
+        val clase: ClaseDeMedio,
+        val ruta: String,
+        val alt: String = ""
+    ) : MarkdownBlock
+
+    /** Una caja con bloques dentro: plegable, pie, destacado o alineación. */
+    data class Caja(
+        val tipo: TipoDeCaja,
+        val titulo: String,
+        val dentro: List<MarkdownBlock>
+    ) : MarkdownBlock
 }
 
 /**
@@ -107,9 +153,18 @@ object Markdown {
      */
     private const val TRAILING = ".,;:!?)]}>\"'"
 
-    fun parse(source: String): List<MarkdownBlock> {
+    fun parse(source: String): List<MarkdownBlock> =
+        parseLineas(source.replace("\r\n", "\n").split('\n'))
+
+    /**
+     * El cuerpo del parser, sobre líneas ya partidas.
+     *
+     * Va aparte de [parse] porque las cajas —`:::plegable`, `:::pie`…— llevan
+     * bloques dentro y hay que volver a entrar con lo que haya entre las vallas.
+     * Una caja dentro de otra funciona por el mismo motivo.
+     */
+    private fun parseLineas(lines: List<String>): List<MarkdownBlock> {
         val blocks = mutableListOf<MarkdownBlock>()
-        val lines = source.replace("\r\n", "\n").split('\n')
         val paragraph = mutableListOf<String>()
 
         fun flushParagraph() {
@@ -142,6 +197,58 @@ object Markdown {
                 continue
             }
 
+            // Una caja: `:::plegable Título` … `:::`. Es la sintaxis de
+            // contenedor de remark, no una invención, y sirve para las cinco
+            // cosas que Markdown no tiene y su editor sí: plegables, pies,
+            // destacados y las dos alineaciones.
+            cajaQueAbre(trimmed)?.let { (tipo, titulo) ->
+                flushParagraph()
+                val dentro = mutableListOf<String>()
+                var nivel = 1
+                i++
+                while (i < lines.size) {
+                    val t = lines[i].trim()
+                    if (cajaQueAbre(t) != null) nivel++
+                    if (t == ":::") {
+                        nivel--
+                        if (nivel == 0) break
+                    }
+                    dentro += lines[i]
+                    i++
+                }
+                i++ // la valla de cierre, si la hay
+                blocks += MarkdownBlock.Caja(tipo, titulo, parseLineas(dentro))
+                continue
+            }
+
+            // Una fórmula entre `$$`, que es como se escriben en LaTeX y en
+            // cualquier sitio donde se peguen mates.
+            if (trimmed == "$$") {
+                flushParagraph()
+                val cuerpo = mutableListOf<String>()
+                i++
+                while (i < lines.size && lines[i].trim() != "$$") {
+                    cuerpo += lines[i]
+                    i++
+                }
+                i++
+                blocks += MarkdownBlock.Formula(cuerpo.joinToString("\n"))
+                continue
+            }
+
+            // Una tabla: la fila de guiones de debajo es la que la delata, y de
+            // paso trae la alineación de cada columna.
+            if (esTabla(lines, i)) {
+                flushParagraph()
+                val cuerpo = mutableListOf<String>()
+                while (i < lines.size && lines[i].trim().startsWith("|")) {
+                    cuerpo += lines[i].trim()
+                    i++
+                }
+                blocks += tablaDe(cuerpo)
+                continue
+            }
+
             // Las líneas de cita seguidas son **una sola cita**. Una por línea
             // dejaba la barra lateral partida en trozos, como si fueran citas
             // distintas de sitios distintos.
@@ -164,19 +271,30 @@ object Markdown {
                     blocks += MarkdownBlock.Rule
                 }
 
-                trimmed.startsWith("### ") -> {
+                // Los seis niveles, como sus seis ArticleHeading. Se prueban de
+                // más almohadillas a menos: `## ` empieza por `# `.
+                TITULO.matches(trimmed) -> {
                     flushParagraph()
-                    blocks += MarkdownBlock.Heading(3, parseInline(trimmed.removePrefix("### ")))
+                    val m = TITULO.find(trimmed)!!
+                    blocks += MarkdownBlock.Heading(
+                        m.groupValues[1].length,
+                        parseInline(m.groupValues[2])
+                    )
                 }
 
-                trimmed.startsWith("## ") -> {
+                // La casilla va antes que la viñeta: `- [ ] x` empieza por `- `.
+                TAREA.matches(trimmed) -> {
                     flushParagraph()
-                    blocks += MarkdownBlock.Heading(2, parseInline(trimmed.removePrefix("## ")))
+                    val m = TAREA.find(trimmed)!!
+                    blocks += MarkdownBlock.Tarea(
+                        hecha = m.groupValues[1].lowercase() == "x",
+                        content = parseInline(m.groupValues[2])
+                    )
                 }
 
-                trimmed.startsWith("# ") -> {
+                medioDe(trimmed) != null -> {
                     flushParagraph()
-                    blocks += MarkdownBlock.Heading(1, parseInline(trimmed.removePrefix("# ")))
+                    blocks += medioDe(trimmed)!!
                 }
 
                 isBullet(trimmed) -> {
@@ -209,6 +327,90 @@ object Markdown {
 
     /** El espacio tras el `>` es opcional: mucha gente pega citas sin él. */
     private fun esCita(line: String): Boolean = line.startsWith(">")
+
+    private val TITULO = Regex("""^(#{1,6})\s+(.*)$""")
+    private val TAREA = Regex("""^[-*+]\s+\[([ xX])]\s*(.*)$""")
+    private val MEDIO = Regex("""^!\[([^]]*)]\(([^)]*)\)$""")
+
+    /** `:::plegable Título` → el tipo y su título. Null si la línea no abre. */
+    private fun cajaQueAbre(line: String): Pair<TipoDeCaja, String>? {
+        if (!line.startsWith(":::") || line == ":::") return null
+        val resto = line.removePrefix(":::").trim()
+        val nombre = resto.substringBefore(' ').lowercase()
+        val titulo = resto.substringAfter(' ', "").trim()
+        val tipo = when (nombre) {
+            "plegable", "detalles" -> TipoDeCaja.PLEGABLE
+            "pie", "nota" -> TipoDeCaja.PIE
+            "destacado", "resaltado" -> TipoDeCaja.DESTACADO
+            "centro", "centrar" -> TipoDeCaja.CENTRO
+            "derecha" -> TipoDeCaja.DERECHA
+            else -> return null
+        }
+        return tipo to titulo
+    }
+
+    /**
+     * `![alt](ruta)` en una línea suya es un medio, y **la extensión decide qué
+     * clase**: así una sola marca de Markdown sirve para las cuatro que ellos
+     * tienen separadas en `pageBlockPhoto`, `Video`, `Audio` y el adjunto.
+     */
+    private fun medioDe(line: String): MarkdownBlock.Medio? {
+        val m = MEDIO.find(line) ?: return null
+        val ruta = m.groupValues[2].trim()
+        if (ruta.isEmpty()) return null
+        return MarkdownBlock.Medio(claseDeMedio(ruta), ruta, m.groupValues[1])
+    }
+
+    private fun claseDeMedio(ruta: String): ClaseDeMedio {
+        val ext = ruta.substringAfterLast('.', "").lowercase().substringBefore('?')
+        return when (ext) {
+            "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "svg" -> ClaseDeMedio.IMAGEN
+            "mp4", "mkv", "webm", "mov", "avi", "3gp" -> ClaseDeMedio.VIDEO
+            "mp3", "ogg", "oga", "m4a", "wav", "flac", "opus", "aac" -> ClaseDeMedio.AUDIO
+            else -> ClaseDeMedio.ARCHIVO
+        }
+    }
+
+    /**
+     * ¿Empieza aquí una tabla?
+     *
+     * Hace falta la fila de guiones **debajo** de la primera. Sin exigirla, una
+     * línea suelta con barras —una ruta, una expresión— se convertiría en una
+     * tabla de una fila y el texto se vería descuartizado en columnas.
+     */
+    private fun esTabla(lines: List<String>, i: Int): Boolean {
+        if (!lines[i].trim().startsWith("|")) return false
+        val siguiente = lines.getOrNull(i + 1)?.trim() ?: return false
+        if (!siguiente.startsWith("|")) return false
+        return celdasDe(siguiente).isNotEmpty() &&
+            celdasDe(siguiente).all { Regex("""^:?-{1,}:?$""").matches(it.trim()) }
+    }
+
+    private fun celdasDe(fila: String): List<String> =
+        fila.trim().removePrefix("|").removeSuffix("|").split('|').map { it.trim() }
+
+    private fun tablaDe(cuerpo: List<String>): MarkdownBlock.Tabla {
+        val separadora = cuerpo.getOrNull(1)?.let { celdasDe(it) }.orEmpty()
+        val alineaciones = separadora.map {
+            val izq = it.startsWith(":")
+            val der = it.endsWith(":")
+            when {
+                izq && der -> Alineacion.CENTRO
+                der -> Alineacion.DERECHA
+                else -> Alineacion.IZQUIERDA
+            }
+        }
+
+        // La fila de guiones no es contenido; se salta al construir las filas.
+        val filas = cuerpo.filterIndexed { idx, _ -> idx != 1 }
+            .map { fila -> celdasDe(fila).map { parseInline(it) } }
+
+        return MarkdownBlock.Tabla(
+            filas = filas,
+            cabecera = filas.size > 1,
+            alineaciones = alineaciones
+        )
+    }
 
     private fun sinMarcaDeCita(line: String): String =
         line.removePrefix(">").removePrefix(" ")

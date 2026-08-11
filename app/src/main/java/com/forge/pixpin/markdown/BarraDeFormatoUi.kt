@@ -11,6 +11,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.FormatAlignCenter
+import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.HorizontalRule
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatClear
@@ -42,6 +56,89 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/**
+ * La barra de bloques, la que sale **cuando no hay nada seleccionado**.
+ *
+ * Telegram cambia la barra entera según haya selección o no: sin selección
+ * enseña tipos de bloque (`BLOCK_TEXT`, `BLOCK_LIST`, `BLOCK_TABLE`,
+ * `BLOCK_MATH`) más un botón de adjuntar a la derecha; con selección enseña los
+ * estilos. Tiene sentido: sin texto marcado, poner negrita no significa nada, y
+ * lo que sí quieres es empezar algo nuevo.
+ *
+ * Aquí van los cuatro suyos y el catálogo entero detrás del `+`, porque nuestro
+ * catálogo tiene veintitrés bloques y en su editor cada bloque es una fila de
+ * una lista, no una línea de texto.
+ */
+@Composable
+fun BarraDeBloquesUi(
+    onBloque: (TipoDeBloque) -> Unit,
+    onCatalogo: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: @Composable RowScope.() -> Unit = {}
+) {
+    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 4.dp, vertical = 3.dp)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BLOQUES_A_MANO.forEach { tipo ->
+                IconButton(
+                    onClick = { onBloque(tipo) },
+                    modifier = Modifier.widthIn(min = 40.dp)
+                ) {
+                    Icon(
+                        imageVector = iconoDeBloque(tipo),
+                        contentDescription = Bloques.de(tipo).nombre,
+                        modifier = Modifier.size(21.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+            IconButton(onClick = onCatalogo) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = "Todos los bloques",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            trailing()
+        }
+    }
+}
+
+/** Los cuatro de su panel de bloques, más el separador, que no cuesta nada. */
+private val BLOQUES_A_MANO = listOf(
+    TipoDeBloque.TITULO_2,
+    TipoDeBloque.LISTA,
+    TipoDeBloque.TAREAS,
+    TipoDeBloque.TABLA,
+    TipoDeBloque.FORMULA
+)
+
+fun iconoDeBloque(tipo: TipoDeBloque): ImageVector = when (tipo) {
+    TipoDeBloque.TITULO_1, TipoDeBloque.TITULO_2, TipoDeBloque.TITULO_3,
+    TipoDeBloque.TITULO_4, TipoDeBloque.TITULO_5, TipoDeBloque.TITULO_6 -> Icons.Filled.Title
+    TipoDeBloque.CITA -> Icons.Filled.FormatQuote
+    TipoDeBloque.DESTACADO -> Icons.Filled.Campaign
+    TipoDeBloque.CODIGO -> Icons.Filled.Code
+    TipoDeBloque.PIE -> Icons.Filled.Notes
+    TipoDeBloque.LISTA -> Icons.Filled.FormatListBulleted
+    TipoDeBloque.NUMERADA -> Icons.Filled.FormatListNumbered
+    TipoDeBloque.TAREAS -> Icons.Filled.CheckBox
+    TipoDeBloque.PLEGABLE -> Icons.Filled.UnfoldMore
+    TipoDeBloque.TABLA -> Icons.Filled.TableChart
+    TipoDeBloque.FORMULA -> Icons.Filled.Functions
+    TipoDeBloque.SEPARADOR -> Icons.Filled.HorizontalRule
+    TipoDeBloque.IMAGEN -> Icons.Filled.Image
+    TipoDeBloque.VIDEO -> Icons.Filled.Movie
+    TipoDeBloque.AUDIO -> Icons.Filled.AudioFile
+    TipoDeBloque.ARCHIVO -> Icons.Filled.AttachFile
+    TipoDeBloque.CENTRAR -> Icons.Filled.FormatAlignCenter
+    TipoDeBloque.DERECHA -> Icons.Filled.FormatAlignRight
+}
 
 /**
  * La barra de formato, la misma en la nota flotante y en el editor avanzado.

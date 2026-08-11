@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -23,6 +24,24 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,7 +61,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -122,10 +140,55 @@ private fun Pantalla(
     onDescartar: () -> Unit
 ) {
     var valor by remember {
-        mutableStateOf(TextFieldValue(inicial, androidx.compose.ui.text.TextRange(inicial.length)))
+        mutableStateOf(TextFieldValue(inicial, TextRange(inicial.length)))
     }
     var viendo by remember { mutableStateOf(false) }
     var pidiendoUrl by remember { mutableStateOf(false) }
+    var viendoCatalogo by remember { mutableStateOf(false) }
+    var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
+
+    val contexto = LocalContext.current
+    val selector = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val tipo = pidiendoArchivo
+        pidiendoArchivo = null
+        if (uri == null || tipo == null) return@rememberLauncherForActivityResult
+        val ruta = Adjuntos.importar(contexto, uri, System.currentTimeMillis())
+        if (ruta == null) {
+            Toast.makeText(contexto, "No se pudo copiar el archivo", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        // La plantilla deja el cursor entre los paréntesis, así que la ruta se
+        // escribe justo ahí y el bloque queda entero de una vez.
+        val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
+        val conRuta = r.text.substring(0, r.selStart) + ruta + r.text.substring(r.selStart)
+        val fin = r.selStart + ruta.length
+        valor = TextFieldValue(conRuta, TextRange(fin))
+    }
+
+    LaunchedEffect(pidiendoArchivo) {
+        val tipo = pidiendoArchivo ?: return@LaunchedEffect
+        selector.launch(arrayOf(filtroDe(tipo)))
+    }
+
+    // Lo tecleado tras una barra, si es que se está tecleando un comando.
+    val consulta = remember(valor.text, valor.selection) {
+        if (valor.selection.collapsed) {
+            Comandos.consulta(valor.text, valor.selection.start)
+        } else {
+            null
+        }
+    }
+
+    fun insertarBloque(tipo: TipoDeBloque) {
+        if (Bloques.pideArchivo(tipo)) {
+            pidiendoArchivo = tipo
+            return
+        }
+        val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
+        valor = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+    }
 
     Scaffold(
         topBar = {
@@ -204,6 +267,18 @@ private fun Pantalla(
             // La barra solo mientras se escribe: en la vista no hay selección a
             // la que aplicarle nada.
             if (!viendo) {
+                // La lista de comandos va **encima** de la barra y por delante
+                // del teclado: es lo que estás mirando mientras tecleas.
+                val sugerencias = remember(consulta) {
+                    if (consulta == null) emptyList() else Bloques.buscar(consulta!!)
+                }
+                if (sugerencias.isNotEmpty()) {
+                    ListaDeComandos(sugerencias) { tipo ->
+                        val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
+                        valor = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+                    }
+                }
+
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -211,14 +286,33 @@ private fun Pantalla(
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    BarraDeFormatoUi(
-                        valor = valor,
-                        onValor = { valor = it },
-                        onPedirUrl = { pidiendoUrl = true }
-                    )
+                    // El cambio de panel es suyo: sin selección no hay nada que
+                    // poner en negrita, y lo que quieres es empezar un bloque.
+                    if (valor.selection.collapsed) {
+                        BarraDeBloquesUi(
+                            onBloque = { tipo -> insertarBloque(tipo) },
+                            onCatalogo = { viendoCatalogo = true }
+                        )
+                    } else {
+                        BarraDeFormatoUi(
+                            valor = valor,
+                            onValor = { valor = it },
+                            onPedirUrl = { pidiendoUrl = true }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (viendoCatalogo) {
+        CatalogoDeBloques(
+            onCerrar = { viendoCatalogo = false },
+            onElegir = { tipo ->
+                viendoCatalogo = false
+                insertarBloque(tipo)
+            }
+        )
     }
 
     if (pidiendoUrl) {
@@ -291,4 +385,103 @@ private fun DialogoDeEnlace(onCerrar: () -> Unit, onAceptar: (String) -> Unit) {
         },
         dismissButton = { TextButton(onClick = onCerrar) { Text("Cancelar") } }
     )
+}
+
+/** Qué se le pide al selector de archivos según el bloque. */
+private fun filtroDe(tipo: TipoDeBloque): String = when (tipo) {
+    TipoDeBloque.IMAGEN -> "image/*"
+    TipoDeBloque.VIDEO -> "video/*"
+    TipoDeBloque.AUDIO -> "audio/*"
+    else -> "*/*"
+}
+
+/**
+ * La lista que sale al teclear `/`, como su `RichCommandSuggestions`.
+ *
+ * Cada fila lleva el icono, el nombre y **el atajo a la derecha**, tal como la
+ * suya (`RichCommand.View`: icono, texto, espacio elástico, texto2). Ese atajo a
+ * la derecha es lo que hace que la lista se deje de usar: la ves tres veces,
+ * aprendes que la tabla es `/tabla`, y a la cuarta ya no miras.
+ *
+ * Va apoyada abajo y crece hacia arriba, porque nace justo encima de la barra.
+ */
+@Composable
+private fun ListaDeComandos(bloques: List<Bloque>, onElegir: (TipoDeBloque) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = 8.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .heightIn(max = 220.dp)
+    ) {
+        LazyColumn {
+            items(bloques) { bloque ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onElegir(bloque.tipo) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = iconoDeBloque(bloque.tipo),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(bloque.nombre, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = bloque.atajos.first(),
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * El catálogo entero, tras el `+`.
+ *
+ * Es la misma lista que sale tecleando, y a propósito: quien la abre por el
+ * botón ve el atajo de cada bloque a la derecha y la próxima vez ya no necesita
+ * el botón. Enseñar el atajo donde se busca la función es lo que convierte un
+ * menú en algo que se deja de usar.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CatalogoDeBloques(onCerrar: () -> Unit, onElegir: (TipoDeBloque) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onCerrar) {
+        LazyColumn(Modifier.navigationBarsPadding()) {
+            items(Bloques.todos) { bloque ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onElegir(bloque.tipo) }
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = iconoDeBloque(bloque.tipo),
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(bloque.nombre, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = bloque.atajos.first(),
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            }
+        }
+    }
 }
