@@ -145,6 +145,8 @@ private fun Pantalla(
     var valor by remember {
         mutableStateOf(TextFieldValue(inicial, TextRange(inicial.length)))
     }
+    // Dónde se está escribiendo, en coordenadas del texto limpio. Ver [Sitio].
+    var sitio by remember { mutableStateOf<Sitio?>(null) }
     var pidiendoUrl by remember { mutableStateOf(false) }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
@@ -177,10 +179,11 @@ private fun Pantalla(
         }
         // La plantilla deja el cursor entre los paréntesis, así que la ruta se
         // escribe justo ahí y el bloque queda entero de una vez.
-        val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
+        val donde = sitio?.let { trozosDe(valor.text).getOrNull(it.bloque)?.hasta }
+            ?: valor.text.length
+        val r = Comandos.elegir(valor.text, donde, tipo)
         val conRuta = r.text.substring(0, r.selStart) + ruta + r.text.substring(r.selStart)
-        val fin = r.selStart + ruta.length
-        cambia(TextFieldValue(conRuta, TextRange(fin)))
+        cambia(valor.copy(text = conRuta))
     }
 
     LaunchedEffect(pidiendoArchivo) {
@@ -197,64 +200,85 @@ private fun Pantalla(
         }
     }
 
-    /** El texto del bloque donde está el cursor. */
-    fun trozoDelCursor(v: TextFieldValue): String? {
-        val trozos = trozosDe(v.text)
-        val i = trozoEn(trozos, v.selection.start)
-        return if (i < 0) null else trozos[i].de(v.text)
-    }
-
-    /** Cambia de tipo el bloque de debajo del cursor, conservando lo escrito. */
+    /** Cambia de tipo el bloque activo, conservando lo escrito. */
     fun convertirBloque(tipo: TipoDeBloque?) {
+        val s2 = sitio ?: return
         val trozos = trozosDe(valor.text)
-        val i = trozoEn(trozos, valor.selection.start)
-        if (i < 0) return
-        val trozo = trozos[i]
+        val trozo = trozos.getOrNull(s2.bloque) ?: return
         val fuente = trozo.de(valor.text)
-        // Los saltos del final son del documento, no del bloque: si entran en
-        // la conversión, cada cambio de tipo se los va comiendo.
         val cola = fuente.takeLastWhile { it == '\n' }
         val nuevo = Menus.convertir(fuente.trimEnd('\n'), tipo) + cola
-        val entero = valor.text.substring(0, trozo.desde) + nuevo +
-            valor.text.substring(trozo.hasta)
-        cambia(TextFieldValue(entero, TextRange(trozo.desde + nuevo.trimEnd('\n').length)))
-    }
-
-    fun enLaTabla(op: OpTabla) {
-        val trozos = trozosDe(valor.text)
-        val i = trozoEn(trozos, valor.selection.start)
-        if (i < 0) return
-        val trozo = trozos[i]
-        val fuente = trozo.de(valor.text)
-        val cola = fuente.takeLastWhile { it == '\n' }
-        val tabla = fuente.trimEnd('\n')
-        val local = (valor.selection.start - trozo.desde).coerceIn(0, tabla.length)
-
-        val nueva = when (op) {
-            OpTabla.FILA_MAS -> Tablas.añadirFila(tabla, Tablas.filaDe(tabla, local))
-            OpTabla.FILA_MENOS -> Tablas.quitarFila(tabla, Tablas.filaDe(tabla, local))
-            OpTabla.COLUMNA_MAS -> Tablas.añadirColumna(tabla, Tablas.columnaDe(tabla, local))
-            OpTabla.COLUMNA_MENOS -> Tablas.quitarColumna(tabla, Tablas.columnaDe(tabla, local))
-            OpTabla.ALINEAR -> Tablas.rotarAlineacion(tabla, Tablas.columnaDe(tabla, local))
-        }
-        val entero = valor.text.substring(0, trozo.desde) + nueva + cola +
-            valor.text.substring(trozo.hasta)
         cambia(
-            TextFieldValue(
-                entero,
-                TextRange((trozo.desde + local).coerceIn(0, entero.length))
+            valor.copy(
+                text = valor.text.substring(0, trozo.desde) + nuevo +
+                    valor.text.substring(trozo.hasta)
             )
         )
     }
 
-    /** Sale de la tabla dejando un renglón nuevo detrás, listo para escribir. */
-    fun fueraDeLaTabla() {
+    /**
+     * Una operación sobre la tabla activa.
+     *
+     * La fila y la columna salen de [Sitio.celda], o sea de la última celda que
+     * se tocó. Sin celda tocada se actúa al final, que es lo que se quiere al
+     * empezar una tabla: añadir va detrás.
+     */
+    fun enLaTabla(op: OpTabla) {
+        val s2 = sitio ?: return
         val trozos = trozosDe(valor.text)
-        val i = trozoEn(trozos, valor.selection.start)
-        if (i < 0) return
-        val fin = trozos[i].hasta
-        val entero = if (fin >= valor.text.length) valor.text + "\n" else valor.text
-        cambia(TextFieldValue(entero, TextRange(entero.length.coerceAtMost(fin + 1))))
+        val trozo = trozos.getOrNull(s2.bloque) ?: return
+        val fuente = trozo.de(valor.text)
+        val cola = fuente.takeLastWhile { it == '\n' }
+        val tabla = fuente.trimEnd('\n')
+
+        val (filas, columnas) = Tablas.tamaño(tabla)
+        if (columnas == 0) return
+        val fila = if (s2.celda < 0) filas - 1 else (s2.celda / columnas).coerceIn(0, filas - 1)
+        val columna =
+            if (s2.celda < 0) columnas - 1 else (s2.celda % columnas).coerceIn(0, columnas - 1)
+
+        val nueva = when (op) {
+            OpTabla.FILA_MAS -> Tablas.añadirFila(tabla, fila)
+            OpTabla.FILA_MENOS -> Tablas.quitarFila(tabla, fila)
+            OpTabla.COLUMNA_MAS -> Tablas.añadirColumna(tabla, columna)
+            OpTabla.COLUMNA_MENOS -> Tablas.quitarColumna(tabla, columna)
+            OpTabla.ALINEAR -> Tablas.rotarAlineacion(tabla, columna)
+        }
+        cambia(
+            valor.copy(
+                text = valor.text.substring(0, trozo.desde) + nueva + cola +
+                    valor.text.substring(trozo.hasta)
+            )
+        )
+    }
+
+    /** Sale de la tabla a un bloque nuevo debajo. */
+    fun fueraDeLaTabla() {
+        val s2 = sitio ?: return
+        val (nuevo, donde) = Vivo.bloqueNuevo(valor.text, s2.bloque)
+        cambia(valor.copy(text = nuevo))
+        sitio = donde
+    }
+
+    /**
+     * Pone o quita un estilo sobre lo seleccionado, **sin escribir ni una marca**.
+     *
+     * El texto no se toca: solo cambian sus estilos, y de volverlos a Markdown se
+     * encarga [Vivo.conContenido] al guardar el bloque. Es la diferencia entre
+     * esto y la barra de la nota flotante, que sí escribe asteriscos porque allí
+     * lo que se edita es el Markdown a la vista.
+     */
+    fun aplicarEstilo(kind: SpanKind, url: String?) {
+        val s2 = sitio ?: return
+        val contenido = Vivo.contenido(valor.text, s2.bloque) ?: return
+        val spans = Inline.alternar(
+            contenido.spans, s2.seleccion.min, s2.seleccion.max, kind, url
+        )
+        cambia(
+            valor.copy(
+                text = Vivo.conContenido(valor.text, s2.bloque, InlineText(contenido.text, spans))
+            )
+        )
     }
 
     fun insertarBloque(tipo: TipoDeBloque) {
@@ -262,7 +286,22 @@ private fun Pantalla(
             pidiendoArchivo = tipo
             return
         }
-        val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
+        // El bloque activo se convierte si está vacío, y si no se abre uno
+        // nuevo detrás: meter un título en mitad de un párrafo lo partiría.
+        val s2 = sitio
+        val vacio = s2?.let { Vivo.contenido(valor.text, it.bloque)?.text.isNullOrEmpty() } == true
+        if (s2 != null && vacio) {
+            convertirBloque(tipo)
+            return
+        }
+        if (s2 != null) {
+            val (conNuevo, donde) = Vivo.bloqueNuevo(valor.text, s2.bloque)
+            cambia(valor.copy(text = conNuevo))
+            sitio = donde
+            convertirBloque(tipo)
+            return
+        }
+        val r = Comandos.elegir(valor.text, valor.text.length, tipo)
         cambia(TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)))
     }
 
@@ -330,7 +369,12 @@ private fun Pantalla(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                EditorVivo(valor = valor, onValor = { cambia(it) })
+                EditorVivo(
+                    texto = valor.text,
+                    sitio = sitio,
+                    onTexto = { cambia(valor.copy(text = it)) },
+                    onSitio = { sitio = it }
+                )
             }
 
             run {
@@ -352,8 +396,9 @@ private fun Pantalla(
                 ) {
                     // El cambio de panel es suyo: sin selección no hay nada que
                     // poner en negrita, y lo que quieres es empezar un bloque.
-                    val enTabla = remember(valor.text, valor.selection) {
-                        trozoDelCursor(valor)?.let { Tablas.esTabla(it) } == true
+                    val enTabla = remember(valor.text, sitio) {
+                        sitio?.let { trozosDe(valor.text).getOrNull(it.bloque) }
+                            ?.let { Tablas.esTabla(it.de(valor.text).trimEnd('\n')) } == true
                     }
                     if (enTabla) {
                         // Dentro de una tabla la barra es de tabla: es lo que se
@@ -362,20 +407,35 @@ private fun Pantalla(
                             onOperacion = { op -> enLaTabla(op) },
                             onSalir = { fueraDeLaTabla() }
                         )
-                    } else if (valor.selection.collapsed) {
+                    } else if (sitio != null && !sitio!!.seleccion.collapsed) {
+                        val contenido = remember(valor.text, sitio) {
+                            sitio?.let { Vivo.contenido(valor.text, it.bloque) }
+                        }
+                        BarraDeEstilosUi(
+                            activos = remember(contenido, sitio) {
+                                val c = contenido
+                                val s2 = sitio
+                                if (c == null || s2 == null) {
+                                    emptySet()
+                                } else {
+                                    Inline.estilosDe(
+                                        c.spans,
+                                        s2.seleccion.min,
+                                        s2.seleccion.max
+                                    )
+                                }
+                            },
+                            onEstilo = { kind -> aplicarEstilo(kind, null) },
+                            onEnlace = { pidiendoUrl = true }
+                        )
+                    } else {
                         BarraDeFamiliasUi(
-                            tipoActual = remember(valor.text, valor.selection) {
-                                trozoDelCursor(valor)?.let { Menus.tipoDe(it) }
+                            tipoActual = remember(valor.text, sitio) {
+                                sitio?.let { Vivo.tipo(valor.text, it.bloque) }
                             },
                             onConvertir = { tipo -> convertirBloque(tipo) },
                             onInsertar = { tipo -> insertarBloque(tipo) },
                             onCatalogo = { viendoCatalogo = true }
-                        )
-                    } else {
-                        BarraDeFormatoUi(
-                            valor = valor,
-                            onValor = { cambia(it) },
-                            onPedirUrl = { pidiendoUrl = true }
                         )
                     }
                 }
@@ -407,7 +467,7 @@ private fun Pantalla(
         DialogoDeEnlace(
             onCerrar = { pidiendoUrl = false },
             onAceptar = { url ->
-                cambia(conEnlace(valor, url))
+                aplicarEstilo(SpanKind.LINK, url)
                 pidiendoUrl = false
             }
         )

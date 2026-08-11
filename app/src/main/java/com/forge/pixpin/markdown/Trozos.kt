@@ -113,14 +113,14 @@ fun trozosDe(source: String): List<Trozo> {
             }
         }
 
-        // Las líneas en blanco de después se quedan con este bloque.
-        while (i < lines.size && lines[i].isBlank() && i < lines.size - 1) {
+        // **Una sola** línea en blanco se queda con este bloque: es la
+        // separación entre bloques. Las demás son renglones vacíos de verdad y
+        // se quedan como trozos suyos, porque si no no habría dónde poner el
+        // cursor para escribir en ellos. En un editor donde cada bloque es una
+        // fila, un renglón vacío tiene que existir.
+        if (i < lines.size && lines[i].isBlank() && t.isNotEmpty()) {
             i++
             ultima = i - 1
-        }
-        if (i == lines.size - 1 && lines[i].isBlank()) {
-            ultima = i
-            i++
         }
 
         val hasta = if (i < lines.size) inicios[i] else finDeLinea(ultima)

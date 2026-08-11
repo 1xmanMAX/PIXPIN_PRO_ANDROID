@@ -545,3 +545,89 @@ private fun BotonDeTabla(icono: ImageVector, nombre: String, onClick: () -> Unit
         )
     }
 }
+
+/**
+ * La barra de estilos del editor en vivo.
+ *
+ * Aquí no se escriben asteriscos: se ponen y se quitan estilos sobre el trozo
+ * seleccionado, como en Telegram. Por eso habla de [SpanKind] y no de [Formato],
+ * que es el de la nota flotante, donde lo que se edita sí es Markdown a la vista.
+ *
+ * Sigue encendiendo los botones que ya cubren la selección —su `getCurrentStyle`—
+ * porque la regla de alternar por cobertura es la misma.
+ */
+@Composable
+fun BarraDeEstilosUi(
+    activos: Set<SpanKind>,
+    onEstilo: (SpanKind) -> Unit,
+    onEnlace: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable RowScope.() -> Unit)? = null
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Isla {
+            ESTILOS_A_MANO.forEach { kind ->
+                IconButton(
+                    onClick = { onEstilo(kind) },
+                    modifier = Modifier.widthIn(min = 40.dp)
+                ) {
+                    Icon(
+                        imageVector = iconoDeEstilo(kind),
+                        contentDescription = nombreDeEstilo(kind),
+                        modifier = Modifier.size(21.dp),
+                        tint = if (kind in activos) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(SEPARACION))
+        Isla {
+            IconButton(onClick = onEnlace) {
+                Icon(
+                    Icons.Filled.Link,
+                    contentDescription = "Enlace",
+                    modifier = Modifier.size(21.dp),
+                    tint = if (SpanKind.LINK in activos) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            }
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(SEPARACION))
+            Isla(contenido = trailing)
+        }
+    }
+}
+
+/** Los de su panel de formato, menos el subrayado, que Markdown no tiene. */
+private val ESTILOS_A_MANO = listOf(
+    SpanKind.BOLD, SpanKind.ITALIC, SpanKind.STRIKE, SpanKind.CODE, SpanKind.SPOILER
+)
+
+private fun iconoDeEstilo(kind: SpanKind): ImageVector = when (kind) {
+    SpanKind.BOLD -> Icons.Filled.FormatBold
+    SpanKind.ITALIC -> Icons.Filled.FormatItalic
+    SpanKind.STRIKE -> Icons.Filled.FormatStrikethrough
+    SpanKind.CODE -> Icons.Filled.Code
+    SpanKind.SPOILER -> Icons.Filled.VisibilityOff
+    SpanKind.LINK -> Icons.Filled.Link
+}
+
+private fun nombreDeEstilo(kind: SpanKind): String = when (kind) {
+    SpanKind.BOLD -> "Negrita"
+    SpanKind.ITALIC -> "Cursiva"
+    SpanKind.STRIKE -> "Tachado"
+    SpanKind.CODE -> "Código"
+    SpanKind.SPOILER -> "Tapado"
+    SpanKind.LINK -> "Enlace"
+}

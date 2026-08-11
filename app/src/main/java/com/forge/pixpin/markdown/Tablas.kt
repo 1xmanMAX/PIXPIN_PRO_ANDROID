@@ -135,6 +135,28 @@ object Tablas {
         return r.filas.size to (r.filas.maxOfOrNull { it.size } ?: 0)
     }
 
+    /** Lo que hay escrito en una celda, en Markdown. */
+    fun celda(texto: String, fila: Int, columna: Int): String? {
+        val r = leer(texto) ?: return null
+        return r.filas.getOrNull(fila)?.getOrNull(columna)
+    }
+
+    /**
+     * Cambia el contenido de una celda y devuelve la tabla entera.
+     *
+     * Es lo que permite escribir en una tabla **sin ver una sola barra**: cada
+     * celda es un campo de texto y esto es lo que las vuelve a juntar.
+     */
+    fun conCelda(texto: String, fila: Int, columna: Int, contenido: String): String {
+        val r = leer(texto) ?: return texto
+        val f = r.filas.getOrNull(fila) ?: return texto
+        while (f.size <= columna) f.add("")
+        // Una barra dentro de una celda partiría la fila en dos: se cambia por
+        // su escape, que es lo que entiende cualquier lector de Markdown.
+        f[columna] = contenido.replace("|", "\\|").replace("\n", " ")
+        return escribir(r)
+    }
+
     /** ¿Es [texto] una tabla entera? */
     fun esTabla(texto: String): Boolean = leer(texto) != null
 
@@ -173,8 +195,38 @@ object Tablas {
         return if (hasta <= 1) 0 else hasta - 1
     }
 
-    private fun celdas(fila: String): List<String> =
-        fila.trim().removePrefix("|").removeSuffix("|").split('|').map { it.trim() }
+    /**
+     * Parte una fila en celdas **respetando las barras escapadas**.
+     *
+     * Escribir «x | y» dentro de una celda es normal, y sin esto esa barra
+     * partiría la fila en dos y la tabla saldría con una columna de más.
+     */
+    private fun celdas(fila: String): List<String> {
+        val cuerpo = fila.trim().removePrefix("|").removeSuffix("|")
+        val salida = mutableListOf<String>()
+        val actual = StringBuilder()
+        var i = 0
+        while (i < cuerpo.length) {
+            val c = cuerpo[i]
+            when {
+                c == '\\' && i + 1 < cuerpo.length && cuerpo[i + 1] == '|' -> {
+                    actual.append('|')
+                    i += 2
+                }
+                c == '|' -> {
+                    salida += actual.toString().trim()
+                    actual.clear()
+                    i++
+                }
+                else -> {
+                    actual.append(c)
+                    i++
+                }
+            }
+        }
+        salida += actual.toString().trim()
+        return salida
+    }
 
     private fun esGuiones(c: String): Boolean = Regex("""^:?-{1,}:?$""").matches(c)
 

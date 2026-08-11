@@ -141,7 +141,7 @@ sealed interface MarkdownBlock {
  */
 object Markdown {
 
-    private val NUMBERED = Regex("""^(\d{1,3})[.)]\s+(.*)$""")
+    private val NUMBERED = Regex("""^(\d{1,3})[.)](?:\s+(.*))?$""")
     private val RULE = Regex("""^\s*([-*_])\1{2,}\s*$""")
 
     /** Prefijos que arrancan una url suelta. Van de más largo a más corto. */
@@ -299,7 +299,9 @@ object Markdown {
 
                 isBullet(trimmed) -> {
                     flushParagraph()
-                    blocks += MarkdownBlock.Bullet(parseInline(trimmed.substring(2)))
+                    blocks += MarkdownBlock.Bullet(
+                        parseInline(trimmed.drop(2))
+                    )
                 }
 
                 NUMBERED.matches(trimmed) -> {
@@ -323,7 +325,12 @@ object Markdown {
      * empezar una línea se convertiría en viñeta y se comería el asterisco.
      */
     private fun isBullet(line: String): Boolean =
-        line.length > 2 && line[0] in "-*+" && line[1] == ' '
+        // Con contenido, o vacía. Una viñeta vacía es lo que deja pulsar intro
+        // dentro de una lista, y sin reconocerla el renglón nuevo dejaría de ser
+        // lista en cuanto se mirase.
+        (line.length > 2 && line[0] in "-*+" && line[1] == ' ') ||
+            (line.length <= 2 && line.isNotEmpty() && line[0] in "-*+" &&
+                (line.length == 1 || line[1] == ' '))
 
     /** El espacio tras el `>` es opcional: mucha gente pega citas sin él. */
     private fun esCita(line: String): Boolean = line.startsWith(">")
@@ -443,6 +450,16 @@ object Markdown {
 
         while (i < line.length) {
             val rest = line.length - i
+
+            // Una barra invertida delante de una marca la desarma: el carácter
+            // siguiente se copia tal cual y no abre nada. Es lo que permite que
+            // «2 \* 3» se guarde y vuelva sin convertirse en cursiva. Ver
+            // [Inline.escapar].
+            if (line[i] == '\\' && rest >= 2) {
+                out.append(line[i + 1])
+                i += 2
+                continue
+            }
 
             if (line[i] == '`') {
                 val close = line.indexOf('`', i + 1)
