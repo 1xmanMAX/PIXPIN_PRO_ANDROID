@@ -183,7 +183,7 @@ private fun TablaEditable(
     val columnas = tabla.columnas.coerceAtLeast(1)
     val marcada = if (celda < 0) null else (celda / columnas) to (celda % columnas)
 
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+    Column(Modifier.fillMaxWidth()) {
         // El título, su `pageBlockTable.title`. Se escribe aquí mismo.
         BasicTextField(
             value = tabla.titulo.text,

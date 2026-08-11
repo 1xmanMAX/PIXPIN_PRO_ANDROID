@@ -311,7 +311,7 @@ private fun TablaUi(
     ocultosVisibles: Set<String>,
     onLinks: (List<LinkHit>) -> Unit
 ) {
-    Column(Modifier.horizontalScroll(rememberScrollState())) {
+    Column {
         // El título de la tabla, su `pageBlockTable.title`: centrado y encima.
         if (tabla.titulo.text.isNotEmpty()) {
             Body(
