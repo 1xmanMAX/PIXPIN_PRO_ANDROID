@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -137,7 +138,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
-import com.forge.pixpin.markdown.BarraDeFormatoUi
+import com.forge.pixpin.markdown.BarraDeEstilosUi
+import com.forge.pixpin.markdown.BarraDeFamiliasUi
+import com.forge.pixpin.markdown.EditorVivo
+import com.forge.pixpin.markdown.Inline
+import com.forge.pixpin.markdown.InlineText
+import com.forge.pixpin.markdown.Menus
+import com.forge.pixpin.markdown.Sitio
+import com.forge.pixpin.markdown.SpanKind
+import com.forge.pixpin.markdown.TipoDeBloque
+import com.forge.pixpin.markdown.Vivo
+import com.forge.pixpin.markdown.trozosDe
 import com.forge.pixpin.markdown.LinkHit
 import com.forge.pixpin.markdown.Markdown
 import com.forge.pixpin.markdown.MarkdownEdit
@@ -231,6 +242,9 @@ class PinWindowController(
 
     /** La revisión de [TextoStore] que ya se recogió, para no recoger dos veces. */
     private var revisionDelTexto = TextoStore.revisionDe(initialState.id)
+
+    /** Dónde se está escribiendo dentro de la nota. Ver [Sitio]. */
+    private val sitioDelPin = mutableStateOf<Sitio?>(null)
 
     /**
      * Desplazamiento del cuadro de texto. Vive AQUÍ y no en la composición
@@ -619,6 +633,11 @@ class PinWindowController(
         closeBoardPalette()
         val body = pin.value.text.orEmpty()
         draft.value = TextFieldValue(body, TextRange(body.length))
+        sitioDelPin.value = Sitio(
+            (trozosDe(body).size - 1).coerceAtLeast(0),
+            TextRange(Vivo.contenido(body, (trozosDe(body).size - 1).coerceAtLeast(0))
+                ?.text?.length ?: 0)
+        )
         editing.value = true
         openEditBar()
         // Sin reconocedor: los toques son para el cursor y la selección.
@@ -1783,10 +1802,13 @@ class PinWindowController(
      */
     @Composable
     private fun EditBarContent() {
-        BarraDeFormatoUi(
-            valor = draft.value,
-            onValor = { draft.value = it }
-        ) {
+        val v = draft.value
+        val sitio = sitioDelPin.value
+        val contenido = remember(v.text, sitio) {
+            sitio?.let { Vivo.contenido(v.text, it.bloque) }
+        }
+
+        val botones: @Composable RowScope.() -> Unit = {
             IconButton(onClick = { abrirNotaAvanzada() }) {
                 Icon(
                     Icons.Filled.OpenInFull,
@@ -1808,6 +1830,54 @@ class PinWindowController(
                 )
             }
         }
+
+        // Con algo seleccionado, los estilos; si no, los tipos de bloque. Es el
+        // cambio de panel de su RichEditorToolbar.
+        if (sitio != null && !sitio.seleccion.collapsed && contenido != null) {
+            BarraDeEstilosUi(
+                activos = Inline.estilosDe(
+                    contenido.spans, sitio.seleccion.min, sitio.seleccion.max
+                ),
+                onEstilo = { kind -> estiloEnElPin(kind) },
+                // Sin diálogo: aquí no hay actividad que lo sostenga. El enlace
+                // se pone vacío y se pega la dirección en el editor avanzado.
+                onEnlace = { estiloEnElPin(SpanKind.LINK) },
+                trailing = botones
+            )
+        } else {
+            BarraDeFamiliasUi(
+                tipoActual = sitio?.let { Vivo.tipo(v.text, it.bloque) },
+                onConvertir = { tipo -> convertirEnElPin(tipo) },
+                onInsertar = { tipo -> convertirEnElPin(tipo) },
+                onCatalogo = { abrirNotaAvanzada() },
+                trailing = botones
+            )
+        }
+    }
+
+    private fun estiloEnElPin(kind: SpanKind) {
+        val sitio = sitioDelPin.value ?: return
+        val contenido = Vivo.contenido(draft.value.text, sitio.bloque) ?: return
+        val spans = Inline.alternar(
+            contenido.spans, sitio.seleccion.min, sitio.seleccion.max, kind
+        )
+        draft.value = draft.value.copy(
+            text = Vivo.conContenido(
+                draft.value.text, sitio.bloque, InlineText(contenido.text, spans)
+            )
+        )
+    }
+
+    private fun convertirEnElPin(tipo: TipoDeBloque?) {
+        val sitio = sitioDelPin.value ?: return
+        val trozo = trozosDe(draft.value.text).getOrNull(sitio.bloque) ?: return
+        val fuente = trozo.de(draft.value.text)
+        val cola = fuente.takeLastWhile { it == '\n' }
+        val nuevo = Menus.convertir(fuente.trimEnd('\n'), tipo) + cola
+        draft.value = draft.value.copy(
+            text = draft.value.text.substring(0, trozo.desde) + nuevo +
+                draft.value.text.substring(trozo.hasta)
+        )
     }
 
     /**
@@ -2861,24 +2931,22 @@ class PinWindowController(
      */
     @Composable
     private fun TextEditor(s: PinState) {
-        val focus = remember { FocusRequester() }
-        LaunchedEffect(Unit) { focus.requestFocus() }
-        // Sin botones aquí dentro: con texto largo quedaban empujados fuera de
-        // la vista y no había forma de cerrar la edición. Están en EditBarContent.
-        Column(Modifier.fillMaxWidth()) {
-            BasicTextField(
-                value = draft.value,
-                onValueChange = { draft.value = it },
-                textStyle = TextStyle(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
-                    .focusRequester(focus)
+        // El **mismo** editor que el avanzado: sin almohadillas, sin asteriscos y
+        // sin barras. Antes aquí se escribía el Markdown a la vista, así que
+        // tocar el pin para corregir una palabra enseñaba de golpe todas las
+        // marcas de la nota. Ver [EditorVivo].
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(textScroll)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            EditorVivo(
+                texto = draft.value.text,
+                sitio = sitioDelPin.value,
+                onTexto = { draft.value = draft.value.copy(text = it) },
+                onSitio = { sitioDelPin.value = it },
+                baseSizeSp = 14f
             )
         }
     }

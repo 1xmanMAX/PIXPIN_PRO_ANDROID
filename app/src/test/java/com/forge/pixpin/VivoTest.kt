@@ -164,6 +164,76 @@ class VivoTest {
         assertEquals(2 to 2, Tablas.tamaño(nueva))
     }
 
+    // ---- El intro parte el bloque, no mete un salto ----
+
+    @Test
+    fun `partir por el medio deja dos bloques`() {
+        val texto = "unodos"
+        val c = Vivo.contenido(texto, 0)!!
+        val (doc, donde) = Vivo.partir(texto, 0, c, 3)
+        assertEquals("uno", Vivo.contenido(doc, 0)!!.text)
+        assertEquals("dos", Vivo.contenido(doc, donde.bloque)!!.text)
+        assertEquals(TextRange(0), donde.seleccion)
+    }
+
+    @Test
+    fun `partir un titulo deja el segundo trozo como parrafo`() {
+        val texto = "# unodos"
+        val c = Vivo.contenido(texto, 0)!!
+        val (doc, donde) = Vivo.partir(texto, 0, c, 3)
+        assertEquals(TipoDeBloque.TITULO_1, Vivo.tipo(doc, 0))
+        assertEquals(null, Vivo.tipo(doc, donde.bloque))
+        assertEquals("dos", Vivo.contenido(doc, donde.bloque)!!.text)
+    }
+
+    /** Enumerando, el intro tiene que seguir dando viñetas. */
+    @Test
+    fun `partir una vinieta deja otra vinieta`() {
+        val texto = "- unodos"
+        val c = Vivo.contenido(texto, 0)!!
+        val (doc, donde) = Vivo.partir(texto, 0, c, 3)
+        assertEquals(TipoDeBloque.LISTA, Vivo.tipo(doc, 0))
+        assertEquals(TipoDeBloque.LISTA, Vivo.tipo(doc, donde.bloque))
+    }
+
+    @Test
+    fun `partir al final deja un bloque vacio detras`() {
+        val texto = "- uno"
+        val c = Vivo.contenido(texto, 0)!!
+        val (doc, donde) = Vivo.partir(texto, 0, c, c.text.length)
+        assertEquals("uno", Vivo.contenido(doc, 0)!!.text)
+        assertEquals("", Vivo.contenido(doc, donde.bloque)!!.text)
+    }
+
+    /**
+     * El espacio del final se pierde al partir, y está bien: Markdown recorta lo
+     * que sobra al final de una línea, y cualquier editor hace lo mismo. Lo que
+     * no puede perderse es el estilo, que es lo que se comprueba.
+     */
+    @Test
+    fun `al partir, cada mitad se queda con sus estilos`() {
+        val c = Markdown.parseInline("**uno** dos")
+        val (doc, donde) = Vivo.partir("**uno** dos", 0, c, 4)
+        val izq = Vivo.contenido(doc, 0)!!
+        val der = Vivo.contenido(doc, donde.bloque)!!
+        assertEquals("uno", izq.text.trimEnd())
+        assertEquals("dos", der.text)
+        assertTrue(izq.tramos().any { it.tiene(SpanKind.BOLD) })
+        assertTrue(der.tramos().none { it.tiene(SpanKind.BOLD) })
+    }
+
+    // ---- La tabla nueva sale vacía ----
+
+    @Test
+    fun `la tabla nueva no trae nada escrito`() {
+        val p = Bloques.plantilla(TipoDeBloque.TABLA)
+        val t = Markdown.parse(p.antes + p.despues).first() as MarkdownBlock.Tabla
+        t.filas.forEach { fila ->
+            fila.forEach { assertEquals("una celda venia escrita", "", it.text) }
+        }
+        assertTrue(t.filas.size >= 2)
+    }
+
     @Test
     fun `indices imposibles no revientan`() {
         Vivo.contenido(doc, 99)

@@ -110,6 +110,43 @@ object Vivo {
     }
 
     /**
+     * Parte el bloque [n] por [pos]: lo de delante se queda, lo de detrás se va
+     * a un bloque nuevo.
+     *
+     * Es lo que tiene que pasar al pulsar intro. En un editor por bloques el
+     * intro **no mete un salto de línea**: abre un bloque. Meterlo dentro del
+     * texto era lo que hacía que un título con dos renglones dejara el segundo
+     * suelto como párrafo, porque la almohadilla solo envuelve al primero.
+     *
+     * La lista, la numerada y las casillas continúan siendo lo que eran —es lo
+     * que se espera al enumerar—, y lo demás vuelve a párrafo, porque nadie
+     * quiere dos títulos seguidos.
+     */
+    fun partir(texto: String, n: Int, contenido: InlineText, pos: Int): Pair<String, Sitio> {
+        val corte = pos.coerceIn(0, contenido.text.length)
+        val izquierda = InlineText(
+            contenido.text.substring(0, corte),
+            contenido.spans.mapNotNull { recortar(it, 0, corte) }
+        )
+        val derecha = InlineText(
+            contenido.text.substring(corte),
+            contenido.spans.mapNotNull { recortar(it, corte, contenido.text.length) }
+                .map { it.copy(start = it.start - corte, end = it.end - corte) }
+        )
+
+        val conIzquierda = conContenido(texto, n, izquierda)
+        val (conHueco, donde) = bloqueNuevo(conIzquierda, n)
+        return conContenido(conHueco, donde.bloque, derecha) to
+            Sitio(donde.bloque, TextRange(0))
+    }
+
+    private fun recortar(s: InlineSpan, desde: Int, hasta: Int): InlineSpan? {
+        val a = s.start.coerceAtLeast(desde)
+        val b = s.end.coerceAtMost(hasta)
+        return if (b <= a) null else s.copy(start = a, end = b)
+    }
+
+    /**
      * Junta el bloque [n] con el de arriba. Es lo que pasa al borrar hacia atrás
      * estando al principio de un bloque.
      */

@@ -107,6 +107,17 @@ fun EditorVivo(
                     onCambio = { nuevo, sel ->
                         onTexto(Vivo.conContenido(texto, i, nuevo))
                         onSitio(Sitio(i, sel))
+                    },
+                    onIntro = { contenido, pos ->
+                        val (doc, donde) = Vivo.partir(texto, i, contenido, pos)
+                        onTexto(doc)
+                        onSitio(donde)
+                    },
+                    onJuntar = {
+                        Vivo.juntarConElDeArriba(texto, i)?.let { (doc, donde) ->
+                            onTexto(doc)
+                            onSitio(donde)
+                        }
                     }
                 )
             } else {
@@ -154,13 +165,50 @@ private fun TablaEditable(
     val borde = MaterialTheme.colorScheme.outlineVariant
     val columnas = tabla.filas.maxOfOrNull { it.size } ?: 0
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(Color.Transparent, RoundedCornerShape(6.dp))
-    ) {
+    Column(Modifier.fillMaxWidth()) {
+        // La fila de asas de columna, como su `colHandleAtGrid`: se toca una y
+        // se actúa sobre esa columna entera. Sin ellas, «quitar columna» tenía
+        // que adivinar cuál, y adivinar sobre algo que borra no vale.
+        Row(Modifier.fillMaxWidth()) {
+            Spacer(Modifier.width(ASA))
+            (0 until columnas).forEach { c ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = 1.dp)
+                        .height(ASA)
+                        .background(
+                            if (celda >= 0 && celda % columnas == c) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                borde
+                            },
+                            RoundedCornerShape(2.dp)
+                        )
+                        .clickable { onCelda(c) }
+                )
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+
         tabla.filas.forEachIndexed { f, fila ->
             Row(Modifier.fillMaxWidth()) {
+                // El asa de la fila.
+                Box(
+                    Modifier
+                        .width(ASA)
+                        .height((baseSizeSp * 2.4f).dp)
+                        .padding(vertical = 1.dp)
+                        .background(
+                            if (celda >= 0 && celda / columnas == f) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                borde
+                            },
+                            RoundedCornerShape(2.dp)
+                        )
+                        .clickable { onCelda(f * columnas) }
+                )
                 (0 until columnas).forEach { c ->
                     val esCabecera = tabla.cabecera && f == 0
                     val indice = f * columnas + c
@@ -206,6 +254,9 @@ private fun TablaEditable(
     @Suppress("UNUSED_EXPRESSION") celda
 }
 
+/** El grosor de las asas de fila y columna. */
+private val ASA = 6.dp
+
 /** Los bloques cuyo contenido se escribe a mano. Una imagen o una raya, no. */
 private fun sePuedeEscribir(bloque: MarkdownBlock?): Boolean = when (bloque) {
     null,
@@ -230,7 +281,9 @@ private fun BloqueEditable(
     contenido: InlineText,
     seleccion: TextRange,
     baseSizeSp: Float,
-    onCambio: (InlineText, TextRange) -> Unit
+    onCambio: (InlineText, TextRange) -> Unit,
+    onIntro: (InlineText, Int) -> Unit,
+    onJuntar: () -> Unit
 ) {
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
@@ -239,6 +292,22 @@ private fun BloqueEditable(
         BasicTextField(
             value = TextFieldValue(contenido.text, seleccion),
             onValueChange = { v ->
+                // El intro no mete un salto de línea: **parte el bloque**. Es lo
+                // que distingue un editor por bloques de un cuadro de texto, y
+                // sin esto un título de dos renglones dejaba el segundo suelto.
+                val salto = v.text.indexOf('\n')
+                if (salto >= 0) {
+                    val sinSalto = v.text.removeRange(salto, salto + 1)
+                    val spans = Inline.desplazar(contenido.text, sinSalto, contenido.spans)
+                    onIntro(InlineText(sinSalto, spans), salto)
+                    return@BasicTextField
+                }
+                // Borrar hacia atrás con el bloque ya vacío lo junta con el de
+                // arriba, en vez de no hacer nada, que es lo que parece roto.
+                if (v.text.isEmpty() && contenido.text.isEmpty()) {
+                    onJuntar()
+                    return@BasicTextField
+                }
                 // Los estilos se recolocan con el cambio: escribir dentro de una
                 // palabra en negrita la deja en negrita, borrarla se la lleva.
                 val spans = Inline.desplazar(contenido.text, v.text, contenido.spans)

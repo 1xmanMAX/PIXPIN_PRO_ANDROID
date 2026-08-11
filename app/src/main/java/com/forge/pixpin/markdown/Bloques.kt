@@ -112,9 +112,9 @@ object Bloques {
         TipoDeBloque.SEPARADOR -> Plantilla("---\n")
         TipoDeBloque.CODIGO -> Plantilla("```\n", "\n```")
         TipoDeBloque.FORMULA -> Plantilla("$$\n", "\n$$")
-        TipoDeBloque.TABLA -> Plantilla(
-            "| Columna | Columna |\n|---|---|\n| ", " |  |\n"
-        )
+        // Vacía. Antes venía con «Columna» escrito en la cabecera y había que
+        // borrarlo a mano cada vez, que es trabajo en vez de ayuda.
+        TipoDeBloque.TABLA -> Plantilla(Tablas.nueva(3, 2) + "\n")
         TipoDeBloque.PLEGABLE -> Plantilla(":::plegable ", "\ncontenido\n:::\n")
         TipoDeBloque.DESTACADO -> Plantilla(":::destacado\n", "\n:::\n")
         TipoDeBloque.PIE -> Plantilla(":::pie\n", "\n:::\n")
