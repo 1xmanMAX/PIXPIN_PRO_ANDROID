@@ -20,9 +20,8 @@ class FormatoTest {
     // ---- El reparto de botones ----
 
     @Test
-    fun `no se repite ningun boton entre los dos paneles`() {
-        val juntos = BarraDeFormato.principal + BarraDeFormato.desbordamiento
-        assertEquals(juntos.size, juntos.toSet().size)
+    fun `no se repite ningun boton entre las islas`() {
+        assertEquals(BarraDeFormato.todos.size, BarraDeFormato.todos.toSet().size)
     }
 
     @Test
@@ -30,19 +29,16 @@ class FormatoTest {
         assertEquals(Formato.entries.toSet(), BarraDeFormato.todos.toSet())
     }
 
-    /** El orden relativo es el de su `FloatingToolbar.STYLE_BUTTONS`. */
+    /**
+     * Cada isla es una familia: los estilos por un lado y lo que inserta por
+     * otro, como sus `formattingLayout`. Mezclarlas rompería la única pista que
+     * da la separación.
+     */
     @Test
-    fun `el panel principal lleva lo de todos los dias`() {
-        assertEquals(
-            listOf(
-                Formato.NEGRITA,
-                Formato.CURSIVA,
-                Formato.TACHADO,
-                Formato.CODIGO,
-                Formato.ENLACE
-            ),
-            BarraDeFormato.principal
-        )
+    fun `las islas agrupan por familia`() {
+        assertTrue(BarraDeFormato.estilos.all { it.esEnvolvente || it == Formato.CITA })
+        assertEquals(listOf(Formato.ENLACE, Formato.FECHA), BarraDeFormato.insertar)
+        assertTrue(BarraDeFormato.pildoras.all { it.isNotEmpty() })
     }
 
     @Test

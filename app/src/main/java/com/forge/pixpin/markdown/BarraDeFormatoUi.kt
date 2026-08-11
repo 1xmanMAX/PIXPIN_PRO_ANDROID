@@ -3,6 +3,8 @@ package com.forge.pixpin.markdown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -74,16 +76,15 @@ import java.util.Locale
 fun BarraDeBloquesUi(
     onBloque: (TipoDeBloque) -> Unit,
     onCatalogo: () -> Unit,
+    onAdjuntar: () -> Unit,
     modifier: Modifier = Modifier,
-    trailing: @Composable RowScope.() -> Unit = {}
+    trailing: (@Composable RowScope.() -> Unit)? = null
 ) {
-    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 4.dp, vertical = 3.dp)
-                .horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Isla {
             BLOQUES_A_MANO.forEach { tipo ->
                 IconButton(
                     onClick = { onBloque(tipo) },
@@ -104,7 +105,25 @@ fun BarraDeBloquesUi(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
-            trailing()
+        }
+
+        // Adjuntar va **fuera** de la píldora, como su `addButton`: no es un
+        // bloque más, es la puerta a lo que hay en el teléfono, y separarlo lo
+        // dice sin escribirlo.
+        Spacer(Modifier.width(SEPARACION))
+        Isla {
+            IconButton(onClick = onAdjuntar) {
+                Icon(
+                    Icons.Filled.AttachFile,
+                    contentDescription = "Adjuntar",
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        if (trailing != null) {
+            Spacer(Modifier.width(SEPARACION))
+            Isla(contenido = trailing)
         }
     }
 }
@@ -169,7 +188,7 @@ fun BarraDeFormatoUi(
     onValor: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
     onPedirUrl: (() -> Unit)? = null,
-    trailing: @Composable RowScope.() -> Unit = {}
+    trailing: (@Composable RowScope.() -> Unit)? = null
 ) {
     var desplegada by remember { mutableStateOf(false) }
     val activos = remember(valor.text, valor.selection) {
@@ -188,19 +207,36 @@ fun BarraDeFormatoUi(
         onValor(aplicarA(valor, f))
     }
 
-    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
-        Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp)) {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BarraDeFormato.principal.forEach { f ->
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        // El desbordamiento sale por encima, en su propia isla: así el resto no
+        // se mueve de sitio al abrirlo.
+        if (desplegada) {
+            Isla(Modifier.padding(bottom = 6.dp)) {
+                BarraDeFormato.desbordamiento.forEach { f ->
                     BotonDeFormato(f, f in activos) { pulsar(f) }
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BarraDeFormato.pildoras.forEachIndexed { i, familia ->
+                if (i > 0) Spacer(Modifier.width(SEPARACION))
+                Isla {
+                    familia.forEach { f ->
+                        BotonDeFormato(f, f in activos) { pulsar(f) }
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(SEPARACION))
+            Isla {
                 IconButton(onClick = { desplegada = !desplegada }) {
                     Icon(
                         Icons.Filled.MoreHoriz,
-                        contentDescription = descripcionDe(Formato.QUITAR),
+                        contentDescription = "Más formatos",
                         tint = if (desplegada) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -208,22 +244,35 @@ fun BarraDeFormatoUi(
                         }
                     )
                 }
-                trailing()
             }
 
-            if (desplegada) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    BarraDeFormato.desbordamiento.forEach { f ->
-                        BotonDeFormato(f, f in activos) { pulsar(f) }
-                    }
-                }
+            if (trailing != null) {
+                Spacer(Modifier.width(SEPARACION))
+                Isla(contenido = trailing)
             }
         }
     }
 }
+
+/**
+ * Una píldora de la barra: fondo redondo, sombra y lo que le metan dentro.
+ *
+ * Es su forma —44 dp de alto, esquinas de 22, sombra— y el envoltorio que
+ * convierte una fila de iconos en un grupo con sentido.
+ */
+@Composable
+private fun Isla(modifier: Modifier = Modifier, contenido: @Composable RowScope.() -> Unit) {
+    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = contenido
+        )
+    }
+}
+
+/** Los 8 dp que su barra deja entre píldora y píldora. */
+private val SEPARACION = 8.dp
 
 /**
  * Aplica el formato al valor del campo, dejando la selección donde toca.

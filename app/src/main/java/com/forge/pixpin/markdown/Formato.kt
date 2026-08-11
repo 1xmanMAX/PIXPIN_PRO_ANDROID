@@ -43,42 +43,61 @@ enum class Formato(val marca: String? = null, val prefijo: String? = null) {
 }
 
 /**
- * Cómo se reparten los botones entre lo que se ve y lo que hay que desplegar.
+ * Cómo se agrupan los botones.
  *
- * Es la idea de su `FloatingToolbarPopup`: un panel principal con lo que cabe y
- * un desbordamiento para el resto, no una fila interminable ni un menú donde
- * todo cuesta dos toques. Aquí el reparto es fijo en vez de calculado a partir
- * del ancho porque su barra flota sobre una selección y la nuestra vive sobre el
- * teclado, con un sitio que no cambia.
+ * ## Islas, no una barra
+ *
+ * Su `RichEditorToolbar` **no pone todo en una fila**. Pone varias píldoras
+ * redondas separadas, cada una con una familia dentro: los estilos en una
+ * (`formattingLayout` principal: negrita, cursiva, subrayado, tachado, tapado,
+ * código, sub, super, cita), lo que inserta en otra (`formattingLayout2`: enlace
+ * y fecha), y la fórmula en la suya (`formattingLayout3`). El botón de adjuntar
+ * y los de deshacer viven aparte, en sus propias píldoras.
+ *
+ * La separación **es** la información: el hueco entre islas dice «esto de aquí
+ * es otra cosa» sin escribir una etiqueta ni pintar una raya. Una fila de trece
+ * iconos seguidos obliga a leerlos todos cada vez; cuatro islas de tres se miran
+ * de un vistazo.
+ *
+ * La primera versión de esto copió su **otra** barra —la `FloatingToolbar`, la
+ * que flota sobre una selección de texto en un chat—, que sí es una fila con
+ * desbordamiento. Son dos barras distintas para dos sitios distintos, y la que
+ * toca en un editor de documentos es esta.
  */
 object BarraDeFormato {
 
-    /** Lo que se usa a todas horas al tomar notas. */
-    val principal = listOf(
+    /** Los estilos que se ponen sobre lo escrito. Su píldora principal. */
+    val estilos = listOf(
         Formato.NEGRITA,
         Formato.CURSIVA,
         Formato.TACHADO,
         Formato.CODIGO,
-        Formato.ENLACE
+        Formato.TAPADO,
+        Formato.CITA
     )
+
+    /** Lo que mete algo nuevo. Su `formattingLayout2`: enlace y fecha. */
+    val insertar = listOf(
+        Formato.ENLACE,
+        Formato.FECHA
+    )
+
+    /** Las islas que se ven siempre, en orden. */
+    val pildoras: List<List<Formato>> = listOf(estilos, insertar)
 
     /**
      * El resto, tras el botón de desplegar.
      *
-     * [Formato.QUITAR] va el último y no el primero como en su lista: es el
-     * único que deshace trabajo, y lo que destruye no se pone donde está el
-     * pulgar. En todo lo demás se conserva su orden relativo.
+     * [Formato.QUITAR] va el último: es el único que deshace trabajo, y lo que
+     * destruye no se pone donde está el pulgar.
      */
     val desbordamiento = listOf(
-        Formato.TAPADO,
-        Formato.CITA,
         Formato.TITULO,
         Formato.LISTA,
         Formato.NUMERADA,
         Formato.BLOQUE,
-        Formato.FECHA,
         Formato.QUITAR
     )
 
-    val todos: List<Formato> = principal + desbordamiento
+    val todos: List<Formato> = pildoras.flatten() + desbordamiento
 }

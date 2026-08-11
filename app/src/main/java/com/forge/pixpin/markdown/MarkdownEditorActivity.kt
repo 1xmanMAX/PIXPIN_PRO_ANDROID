@@ -20,6 +20,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Visibility
@@ -40,6 +42,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -146,6 +149,20 @@ private fun Pantalla(
     var pidiendoUrl by remember { mutableStateOf(false) }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
+    var viendoAdjuntar by remember { mutableStateOf(false) }
+
+    // Deshacer y rehacer, como su `historyButtons`. Se anota cada cambio y el
+    // propio historial decide qué agrupar; ver [Historial].
+    val historial = remember { Historial().also { it.empezar(inicial) } }
+    var pasos by remember { mutableIntStateOf(0) }
+
+    fun cambia(nuevo: TextFieldValue) {
+        if (nuevo.text != valor.text) {
+            historial.anota(nuevo.text)
+            pasos++
+        }
+        valor = nuevo
+    }
 
     val contexto = LocalContext.current
     val selector = rememberLauncherForActivityResult(
@@ -164,7 +181,7 @@ private fun Pantalla(
         val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
         val conRuta = r.text.substring(0, r.selStart) + ruta + r.text.substring(r.selStart)
         val fin = r.selStart + ruta.length
-        valor = TextFieldValue(conRuta, TextRange(fin))
+        cambia(TextFieldValue(conRuta, TextRange(fin)))
     }
 
     LaunchedEffect(pidiendoArchivo) {
@@ -187,7 +204,7 @@ private fun Pantalla(
             return
         }
         val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
-        valor = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
+        cambia(TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)))
     }
 
     Scaffold(
@@ -203,6 +220,34 @@ private fun Pantalla(
                     }
                 },
                 actions = {
+                    // Deshacer y rehacer arriba a la derecha, como su
+                    // `historyButtons`. `pasos` está solo para que Compose sepa
+                    // que hay que volver a mirar si están habilitados: el
+                    // historial es un objeto normal y no un estado observable.
+                    @Suppress("UNUSED_EXPRESSION") pasos
+                    IconButton(
+                        onClick = {
+                            historial.deshacer(valor.text)?.let {
+                                valor = TextFieldValue(it, TextRange(it.length))
+                                pasos++
+                            }
+                        },
+                        enabled = historial.puedeDeshacer
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Deshacer")
+                    }
+                    IconButton(
+                        onClick = {
+                            historial.rehacer(valor.text)?.let {
+                                valor = TextFieldValue(it, TextRange(it.length))
+                                pasos++
+                            }
+                        },
+                        enabled = historial.puedeRehacer
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Rehacer")
+                    }
+
                     // Un solo botón que alterna, no dos pestañas: el editor y la
                     // vista enseñan lo mismo, y dos controles para una cosa es
                     // uno de más.
@@ -243,7 +288,7 @@ private fun Pantalla(
                 } else {
                     BasicTextField(
                         value = valor,
-                        onValueChange = { valor = it },
+                        onValueChange = { cambia(it) },
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
@@ -273,10 +318,7 @@ private fun Pantalla(
                     if (consulta == null) emptyList() else Bloques.buscar(consulta!!)
                 }
                 if (sugerencias.isNotEmpty()) {
-                    ListaDeComandos(sugerencias) { tipo ->
-                        val r = Comandos.elegir(valor.text, valor.selection.start, tipo)
-                        valor = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
-                    }
+                    ListaDeComandos(sugerencias) { tipo -> insertarBloque(tipo) }
                 }
 
                 Box(
@@ -291,18 +333,29 @@ private fun Pantalla(
                     if (valor.selection.collapsed) {
                         BarraDeBloquesUi(
                             onBloque = { tipo -> insertarBloque(tipo) },
-                            onCatalogo = { viendoCatalogo = true }
+                            onCatalogo = { viendoCatalogo = true },
+                            onAdjuntar = { viendoAdjuntar = true }
                         )
                     } else {
                         BarraDeFormatoUi(
                             valor = valor,
-                            onValor = { valor = it },
+                            onValor = { cambia(it) },
                             onPedirUrl = { pidiendoUrl = true }
                         )
                     }
                 }
             }
         }
+    }
+
+    if (viendoAdjuntar) {
+        HojaDeAdjuntar(
+            onCerrar = { viendoAdjuntar = false },
+            onElegir = { tipo ->
+                viendoAdjuntar = false
+                insertarBloque(tipo)
+            }
+        )
     }
 
     if (viendoCatalogo) {
@@ -319,7 +372,7 @@ private fun Pantalla(
         DialogoDeEnlace(
             onCerrar = { pidiendoUrl = false },
             onAceptar = { url ->
-                valor = conEnlace(valor, url)
+                cambia(conEnlace(valor, url))
                 pidiendoUrl = false
             }
         )
@@ -481,6 +534,50 @@ private fun CatalogoDeBloques(onCerrar: () -> Unit, onElegir: (TipoDeBloque) -> 
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            }
+        }
+    }
+}
+
+/**
+ * La hoja de adjuntar, tras el botón propio de la barra.
+ *
+ * Telegram abre aquí su `ChatAttachAlertRichLayout`, una rejilla con la galería
+ * dentro. Esta es más sosa a propósito: son cuatro filas que llevan al selector
+ * del sistema. Enseñar la galería dentro de la nota obligaría a pedir permiso de
+ * fotos para poder adjuntar un PDF, y el selector del sistema no pide ninguno.
+ *
+ * Las cuatro son las suyas —foto, vídeo, audio— más el archivo suelto, que en un
+ * documento hace más falta que en un artículo.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HojaDeAdjuntar(onCerrar: () -> Unit, onElegir: (TipoDeBloque) -> Unit) {
+    val opciones = listOf(
+        TipoDeBloque.IMAGEN,
+        TipoDeBloque.VIDEO,
+        TipoDeBloque.AUDIO,
+        TipoDeBloque.ARCHIVO
+    )
+    ModalBottomSheet(onDismissRequest = onCerrar) {
+        Column(Modifier.navigationBarsPadding()) {
+            opciones.forEach { tipo ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onElegir(tipo) }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = iconoDeBloque(tipo),
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(Bloques.de(tipo).nombre, color = MaterialTheme.colorScheme.onSurface)
+                }
             }
         }
     }
