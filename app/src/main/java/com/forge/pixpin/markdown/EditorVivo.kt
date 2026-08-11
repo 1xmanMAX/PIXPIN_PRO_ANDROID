@@ -20,6 +20,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
@@ -113,10 +118,20 @@ fun EditorVivo(
                         onTexto(doc)
                         onSitio(donde)
                     },
-                    onJuntar = {
-                        Vivo.juntarConElDeArriba(texto, i)?.let { (doc, donde) ->
-                            onTexto(doc)
-                            onSitio(donde)
+                    onRetroceso = {
+                        // Primero se va la marca del bloque —la casilla, la
+                        // viñeta, la almohadilla—; solo después se junta con el
+                        // de arriba. Dos pasos, como en cualquier editor: así
+                        // quitar una casilla no se lleva por delante el renglón.
+                        if (Vivo.tipo(texto, i) != null) {
+                            onTexto(Vivo.quitarTipo(texto, i))
+                            onSitio(Sitio(i, TextRange(0)))
+                            true
+                        } else {
+                            Vivo.juntarConElDeArriba(texto, i)?.let { (doc, donde) ->
+                                onTexto(doc)
+                                onSitio(donde)
+                            } != null
                         }
                     }
                 )
@@ -283,7 +298,7 @@ private fun BloqueEditable(
     baseSizeSp: Float,
     onCambio: (InlineText, TextRange) -> Unit,
     onIntro: (InlineText, Int) -> Unit,
-    onJuntar: () -> Unit
+    onRetroceso: () -> Boolean
 ) {
     val foco = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
@@ -302,12 +317,6 @@ private fun BloqueEditable(
                     onIntro(InlineText(sinSalto, spans), salto)
                     return@BasicTextField
                 }
-                // Borrar hacia atrás con el bloque ya vacío lo junta con el de
-                // arriba, en vez de no hacer nada, que es lo que parece roto.
-                if (v.text.isEmpty() && contenido.text.isEmpty()) {
-                    onJuntar()
-                    return@BasicTextField
-                }
                 // Los estilos se recolocan con el cambio: escribir dentro de una
                 // palabra en negrita la deja en negrita, borrarla se la lleva.
                 val spans = Inline.desplazar(contenido.text, v.text, contenido.spans)
@@ -315,7 +324,21 @@ private fun BloqueEditable(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(foco),
+                .focusRequester(foco)
+                // El retroceso al principio del bloque hay que cazarlo por
+                // tecla: si el bloque ya está vacío, borrar no cambia el texto,
+                // así que no llega ningún aviso de cambio y el bloque se queda
+                // ahí para siempre. Era el caso de la casilla que no se podía
+                // quitar.
+                .onKeyEvent { evento ->
+                    val esRetroceso = evento.type == KeyEventType.KeyDown &&
+                        evento.key == Key.Backspace
+                    if (esRetroceso && seleccion.collapsed && seleccion.start == 0) {
+                        onRetroceso()
+                    } else {
+                        false
+                    }
+                },
             textStyle = estilo.copy(color = color),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             visualTransformation = EstilosEnVivo(

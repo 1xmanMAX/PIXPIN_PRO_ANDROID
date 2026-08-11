@@ -147,6 +147,41 @@ object Vivo {
     }
 
     /**
+     * Quita el bloque [n] entero.
+     *
+     * Hace falta porque hay bloques donde **no se puede poner el cursor**: una
+     * imagen, una raya, un vídeo. Sin esto, insertar una imagen sin querer era
+     * definitivo — no había ninguna tecla ni ningún botón que se la llevara.
+     */
+    fun borrarBloque(texto: String, n: Int): Pair<String, Sitio?> {
+        val trozos = trozosDe(texto)
+        val trozo = trozos.getOrNull(n) ?: return texto to null
+        val sinEl = texto.substring(0, trozo.desde) + texto.substring(trozo.hasta)
+        val quedan = trozosDe(sinEl)
+        if (quedan.isEmpty()) return sinEl to null
+        val donde = (n - 1).coerceIn(0, quedan.size - 1)
+        val largo = contenidoDelTrozo(quedan[donde].de(sinEl))?.text?.length ?: 0
+        return sinEl to Sitio(donde, TextRange(largo))
+    }
+
+    /**
+     * Le quita el tipo al bloque [n] y lo deja en párrafo.
+     *
+     * Es el primer paso de borrar hacia atrás desde el principio de un bloque:
+     * la casilla o la viñeta se van, el texto se queda. Un segundo retroceso ya
+     * junta con el de arriba. Es lo que hace cualquier editor, y sin ello una
+     * casilla puesta sin querer no había forma de quitarla.
+     */
+    fun quitarTipo(texto: String, n: Int): String {
+        val trozos = trozosDe(texto)
+        val trozo = trozos.getOrNull(n) ?: return texto
+        val fuente = trozo.de(texto)
+        val cola = fuente.takeLastWhile { it == '\n' }
+        val nuevo = Menus.convertir(fuente.trimEnd('\n'), null) + cola
+        return texto.substring(0, trozo.desde) + nuevo + texto.substring(trozo.hasta)
+    }
+
+    /**
      * Junta el bloque [n] con el de arriba. Es lo que pasa al borrar hacia atrás
      * estando al principio de un bloque.
      */
@@ -171,7 +206,10 @@ object Vivo {
         )
 
         val sinElDeAbajo = texto.substring(0, abajo.desde) + texto.substring(abajo.hasta)
-        return conContenido(sinElDeAbajo, n - 1, juntos) to
-            Sitio(n - 1, TextRange(textoArriba.length))
+        // Los saltos que quedan colgando al final no son un bloque: son el hueco
+        // que dejó el que se acaba de ir. Sin recortarlos, borrar el último
+        // renglón dejaba uno vacío detrás que había que volver a borrar.
+        val resultado = conContenido(sinElDeAbajo, n - 1, juntos).trimEnd('\n')
+        return resultado to Sitio(n - 1, TextRange(textoArriba.length))
     }
 }

@@ -1850,6 +1850,13 @@ class PinWindowController(
                 onConvertir = { tipo -> convertirEnElPin(tipo) },
                 onInsertar = { tipo -> convertirEnElPin(tipo) },
                 onCatalogo = { abrirNotaAvanzada() },
+                onBorrarBloque = sitio?.let {
+                    {
+                        val (doc, donde) = Vivo.borrarBloque(draft.value.text, it.bloque)
+                        draft.value = draft.value.copy(text = doc)
+                        sitioDelPin.value = donde
+                    }
+                },
                 trailing = botones
             )
         }

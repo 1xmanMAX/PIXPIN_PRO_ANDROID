@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AudioFile
@@ -305,6 +306,7 @@ fun BarraDeFamiliasUi(
     onConvertir: (TipoDeBloque?) -> Unit,
     onInsertar: (TipoDeBloque) -> Unit,
     onCatalogo: () -> Unit,
+    onBorrarBloque: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     trailing: (@Composable RowScope.() -> Unit)? = null
 ) {
@@ -367,6 +369,18 @@ fun BarraDeFamiliasUi(
                         contentDescription = "Todos los bloques",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                // Borrar el bloque entero. Es la única forma de quitar una
+                // imagen, una raya o una tabla: en esos no se puede poner el
+                // cursor, así que el retroceso no llega nunca.
+                if (onBorrarBloque != null) {
+                    IconButton(onClick = onBorrarBloque) {
+                        Icon(
+                            Icons.Filled.DeleteOutline,
+                            contentDescription = "Borrar este bloque",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
             if (trailing != null) {

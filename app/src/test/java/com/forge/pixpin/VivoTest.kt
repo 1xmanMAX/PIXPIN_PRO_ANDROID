@@ -234,6 +234,62 @@ class VivoTest {
         assertTrue(t.filas.size >= 2)
     }
 
+    // ---- Poder deshacer lo que se pone ----
+
+    /**
+     * El fallo que reportó el usuario: una casilla puesta sin querer no había
+     * forma de quitarla. El retroceso al principio del bloque le quita primero
+     * el tipo, y solo después junta con el de arriba.
+     */
+    @Test
+    fun `quitar el tipo deja el texto y se lleva la marca`() {
+        listOf("- [ ] tarea", "- vinieta", "# titulo", "> cita", "1. uno").forEach { fuente ->
+            val sinTipo = Vivo.quitarTipo(fuente, 0)
+            assertEquals("por '$fuente'", null, Vivo.tipo(sinTipo, 0))
+            assertTrue("por '$fuente' se perdio el texto", Vivo.contenido(sinTipo, 0)!!.text.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun `una casilla vacia se puede quitar del todo`() {
+        val texto = "antes\n\n- [ ] "
+        assertEquals(TipoDeBloque.TAREAS, Vivo.tipo(texto, 1))
+
+        val sinTipo = Vivo.quitarTipo(texto, 1)
+        assertEquals(null, Vivo.tipo(sinTipo, 1))
+
+        val (juntado, _) = Vivo.juntarConElDeArriba(sinTipo, 1)!!
+        assertEquals("antes", Vivo.contenido(juntado, 0)!!.text)
+        assertEquals(1, trozosDe(juntado).size)
+    }
+
+    /** Una imagen o una raya no admiten cursor: sin esto eran para siempre. */
+    @Test
+    fun `los bloques sin cursor se pueden borrar`() {
+        val texto = "antes\n\n![foto](/tmp/a.png)\n\ndespues"
+        assertTrue(Markdown.parse(texto).any { it is MarkdownBlock.Medio })
+
+        val (sinFoto, donde) = Vivo.borrarBloque(texto, 1)
+        assertTrue(Markdown.parse(sinFoto).none { it is MarkdownBlock.Medio })
+        assertTrue(sinFoto.contains("antes"))
+        assertTrue(sinFoto.contains("despues"))
+        assertNotNull(donde)
+    }
+
+    @Test
+    fun `borrar el ultimo bloque deja el documento sin sitio`() {
+        val (vacio, donde) = Vivo.borrarBloque("solo", 0)
+        assertEquals("", vacio)
+        assertEquals(null, donde)
+    }
+
+    @Test
+    fun `borrar una tabla entera funciona`() {
+        val texto = "antes\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\ndespues"
+        val (sinTabla, _) = Vivo.borrarBloque(texto, 1)
+        assertTrue(Markdown.parse(sinTabla).none { it is MarkdownBlock.Tabla })
+    }
+
     @Test
     fun `indices imposibles no revientan`() {
         Vivo.contenido(doc, 99)

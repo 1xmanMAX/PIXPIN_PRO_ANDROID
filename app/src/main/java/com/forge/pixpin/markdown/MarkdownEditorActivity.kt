@@ -435,7 +435,14 @@ private fun Pantalla(
                             },
                             onConvertir = { tipo -> convertirBloque(tipo) },
                             onInsertar = { tipo -> insertarBloque(tipo) },
-                            onCatalogo = { viendoCatalogo = true }
+                            onCatalogo = { viendoCatalogo = true },
+                            onBorrarBloque = sitio?.let {
+                                {
+                                    val (doc, donde) = Vivo.borrarBloque(valor.text, it.bloque)
+                                    cambia(valor.copy(text = doc))
+                                    sitio = donde
+                                }
+                            }
                         )
                     }
                 }
