@@ -1,6 +1,8 @@
 package com.forge.pixpin.markdown
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -177,11 +180,10 @@ private fun TablaEditable(
     onCambio: (MarkdownBlock.Tabla) -> Unit
 ) {
     val borde = MaterialTheme.colorScheme.outlineVariant
-    val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
     val columnas = tabla.columnas.coerceAtLeast(1)
     val marcada = if (celda < 0) null else (celda / columnas) to (celda % columnas)
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         // El título, su `pageBlockTable.title`. Se escribe aquí mismo.
         BasicTextField(
             value = tabla.titulo.text,
@@ -197,12 +199,11 @@ private fun TablaEditable(
         )
 
         // Las asas de columna, su `colHandleAtGrid`.
-        Row(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.width(ASA))
+        Row(Modifier.padding(start = ASA)) {
             (0 until columnas).forEach { c ->
                 Box(
                     Modifier
-                        .weight(1f)
+                        .width(MINIMO_DE_COLUMNA)
                         .padding(horizontal = 1.dp)
                         .height(ASA)
                         .background(
@@ -219,97 +220,77 @@ private fun TablaEditable(
         }
         Spacer(Modifier.height(2.dp))
 
-        rejilla.forEachIndexed { f, fila ->
-            Row(Modifier.fillMaxWidth()) {
-                // El asa de la fila, su `rowHandleAtGrid`.
-                Box(
-                    Modifier
-                        .width(ASA)
-                        .height((baseSizeSp * 2.4f).dp)
-                        .padding(vertical = 1.dp)
-                        .background(
-                            if (marcada?.first == f) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                borde
-                            },
-                            RoundedCornerShape(2.dp)
-                        )
-                        .clickable { onCelda(f * columnas) }
-                )
-
-                var c = 0
-                while (c < columnas) {
-                    val hueco = fila.getOrNull(c)
-                    // Un hueco tapado por una fusión de arriba no dibuja nada:
-                    // el ancla ya ocupa su sitio.
-                    if (hueco != null && !hueco.esElAncla) {
-                        c++
-                        continue
-                    }
-                    val cel = hueco?.celda ?: Celda()
-                    val ancho = cel.anchoEnColumnas.coerceAtLeast(1)
-                    val estaMarcada = marcada?.first == f && marcada.second == c
+        Row {
+            // Las asas de fila, su `rowHandleAtGrid`.
+            Column {
+                tabla.filas.indices.forEach { f ->
                     Box(
                         Modifier
-                            .weight(ancho.toFloat())
-                            .padding(1.dp)
+                            .width(ASA)
+                            .height((baseSizeSp * 2.6f).dp)
+                            .padding(vertical = 1.dp)
                             .background(
-                                when {
-                                    estaMarcada ->
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    cel.cabecera -> MaterialTheme.colorScheme.surfaceVariant
-                                    else -> Color.Transparent
-                                }
-                            )
-                            .clickable { onCelda(f * columnas + c) }
-                    ) {
-                        val fx = f
-                        val cx = c
-                        BasicTextField(
-                            value = cel.contenido.text,
-                            onValueChange = {
-                                onCambio(Tablas.conCelda(tabla, fx, indiceEnLaFila(rejilla, fx, cx), InlineText(it)))
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 6.dp),
-                            textStyle = TextStyle(
-                                fontSize = (baseSizeSp * 0.92f).sp,
-                                fontWeight = if (cel.cabecera) {
-                                    FontWeight.Bold
+                                if (marcada?.first == f) {
+                                    MaterialTheme.colorScheme.primary
                                 } else {
-                                    FontWeight.Normal
+                                    borde
                                 },
-                                textAlign = when (cel.alineacion) {
-                                    Alineacion.CENTRO -> TextAlign.Center
-                                    Alineacion.DERECHA -> TextAlign.End
-                                    else -> TextAlign.Start
-                                },
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                    c += ancho
+                                RoundedCornerShape(2.dp)
+                            )
+                            .clickable { onCelda(f * columnas) }
+                    )
                 }
             }
-            if (f < rejilla.size - 1) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(borde))
+
+            // **La misma rejilla que en la vista.** Ver [RejillaDeTabla].
+            RejillaDeTabla(tabla) { ancla ->
+                val estaMarcada = marcada?.first == ancla.fila && marcada.second == ancla.columna
+                BasicTextField(
+                    value = ancla.celda.contenido.text,
+                    onValueChange = {
+                        // La fila y el índice salen del ancla: con una fusión, la
+                        // celda que se ve en la columna 2 puede ser la primera de
+                        // la lista de su fila. Ver [Ancla.indiceEnLaFila].
+                        onCambio(
+                            Tablas.conCelda(
+                                tabla, ancla.fila, ancla.indiceEnLaFila, InlineText(it)
+                            )
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (estaMarcada) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                Color.Transparent
+                            }
+                        )
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                onCelda(ancla.fila * columnas + ancla.columna)
+                            }
+                        },
+                    textStyle = TextStyle(
+                        fontSize = (baseSizeSp * 0.92f).sp,
+                        fontWeight = if (ancla.celda.cabecera) {
+                            FontWeight.Bold
+                        } else {
+                            FontWeight.Normal
+                        },
+                        textAlign = when (ancla.celda.alineacion) {
+                            Alineacion.CENTRO -> TextAlign.Center
+                            Alineacion.DERECHA -> TextAlign.End
+                            else -> TextAlign.Start
+                        },
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+                )
             }
         }
     }
 }
-
-/**
- * De columna de la rejilla al número de celda dentro de su fila.
- *
- * Hacen falta las dos cuentas porque la fila guarda **solo las anclas**: con
- * una fusión de dos columnas, la celda que se ve en la columna 2 puede ser la
- * primera de la lista. Ver [Tablas.rejilla].
- */
-private fun indiceEnLaFila(rejilla: List<List<Tablas.Hueco?>>, f: Int, c: Int): Int =
-    (0 until c).count { rejilla.getOrNull(f)?.getOrNull(it)?.esElAncla == true }
 
 /** El grosor de las asas de fila y columna. */
 private val ASA = 6.dp

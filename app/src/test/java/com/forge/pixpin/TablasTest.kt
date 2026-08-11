@@ -215,6 +215,65 @@ class TablasTest {
         assertEquals(t, Tablas.quitarColumnas(t, setOf(0, 1)))
     }
 
+    // ---- El sitio de cada celda en su fila ----
+
+    /**
+     * El fallo que había: la fila guarda **solo las anclas**, así que con una
+     * fusión la celda que se ve en la columna 2 puede ser la primera de la
+     * lista. Escribiendo con el número de columna se escribía en la de al lado.
+     */
+    @Test
+    fun `el indice en la fila no es el de la rejilla`() {
+        var t = Tablas.nueva(2, 3)
+        t = Tablas.fusionar(t, 0, 0, 0, 1)
+
+        val anclas = anclasDe(t)
+        val segunda = anclas.first { it.fila == 0 && it.columna == 2 }
+        // Se ve en la columna 2, pero es la SEGUNDA de su fila.
+        assertEquals(1, segunda.indiceEnLaFila)
+    }
+
+    @Test
+    fun `escribir en una celda de una fila con fusion no toca a la vecina`() {
+        var t = Tablas.nueva(2, 3)
+        t = Tablas.fusionar(t, 0, 0, 0, 1)
+        val ancla = anclasDe(t).first { it.fila == 0 && it.columna == 2 }
+
+        t = Tablas.conCelda(t, ancla.fila, ancla.indiceEnLaFila, InlineText("tercera"))
+        assertEquals("tercera", celda(t, 0, 2)!!.contenido.text)
+        // Y la fusionada de al lado sigue vacía.
+        assertEquals("", celda(t, 0, 0)!!.contenido.text)
+    }
+
+    @Test
+    fun `las anclas cubren la tabla sin repetirse`() {
+        var t = Tablas.nueva(3, 3)
+        t = Tablas.fusionar(t, 0, 0, 1, 1)
+        val anclas = anclasDe(t)
+
+        // Una celda de 2x2 más las cinco sueltas que quedan de la esquina.
+        assertEquals(6, anclas.size)
+        assertEquals(anclas.size, anclas.map { it.fila to it.columna }.toSet().size)
+
+        val huecos = anclas.sumOf { it.celda.anchoEnColumnas * it.celda.altoEnFilas }
+        assertEquals("las anclas no cubren la rejilla entera", 9, huecos)
+    }
+
+    /** Una fusión que baja dos filas tiene que decir que ocupa dos filas. */
+    @Test
+    fun `una fusion vertical se guarda y se lee`() {
+        var t = Tablas.nueva(3, 2)
+        t = Tablas.fusionar(t, 0, 0, 1, 0)
+        assertEquals(2, celda(t, 0, 0)!!.altoEnFilas)
+
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals(2, celda(vuelta, 0, 0)!!.altoEnFilas)
+        assertEquals(1, celda(vuelta, 0, 0)!!.anchoEnColumnas)
+        // Y la fila 1 sigue teniendo su celda de la derecha.
+        assertEquals(3, vuelta.filas.size)
+        assertTrue(anclasDe(vuelta).any { it.fila == 1 && it.columna == 1 })
+    }
+
     // ---- Basura ----
 
     @Test
