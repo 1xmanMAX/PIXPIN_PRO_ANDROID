@@ -1,11 +1,31 @@
 package com.forge.pixpin.markdown
 
-/** Tipo de decoración de un tramo de texto. */
-enum class SpanKind { BOLD, ITALIC, STRIKE, CODE, LINK }
+/**
+ * Tipo de decoración de un tramo de texto.
+ *
+ * Cada uno lleva su [bandera], un bit propio, para que un trozo de texto pueda
+ * declarar **varios estilos a la vez** con un solo entero. Es lo que permite que
+ * `**muy _importante_**` salga en negrita y cursiva en lugar de tener que elegir.
+ * Ver [Tramo].
+ */
+enum class SpanKind(val bandera: Int) {
+    BOLD(1 shl 0),
+    ITALIC(1 shl 1),
+    STRIKE(1 shl 2),
+    CODE(1 shl 3),
+    LINK(1 shl 4),
+
+    /** Tapado hasta que se toca. Para una contraseña o un resultado en una nota. */
+    SPOILER(1 shl 5)
+}
 
 /**
  * Tramo con estilo dentro de un texto **ya limpio de marcas**: [start] y [end]
  * apuntan al texto sin los asteriscos, no al original.
+ *
+ * Dos de estos **pueden solaparse y anidarse**: la negrita de fuera y la cursiva
+ * de dentro son dos tramos distintos sobre las mismas letras. Para pintarlos hay
+ * que aplanarlos antes; de eso se encarga [tramos].
  */
 data class InlineSpan(
     val start: Int,
@@ -23,7 +43,12 @@ sealed interface MarkdownBlock {
     data class Bullet(val content: InlineText) : MarkdownBlock
     data class Numbered(val number: Int, val content: InlineText) : MarkdownBlock
     data class Quote(val content: InlineText) : MarkdownBlock
-    data class Code(val text: String) : MarkdownBlock
+
+    /**
+     * Un bloque de código. [lenguaje] es lo que se escribió pegado a la valla de
+     * apertura (```` ```kotlin ````); vacío si no se puso nada.
+     */
+    data class Code(val text: String, val lenguaje: String = "") : MarkdownBlock
     data object Rule : MarkdownBlock
 }
 
@@ -40,6 +65,33 @@ sealed interface MarkdownBlock {
  * cerrar se queda tal cual se escribió. El formateo está siempre activo y una
  * nota mal interpretada que se coma caracteres sería mucho peor que ver un
  * asterisco de más.
+ *
+ * ## Lo que entiende
+ *
+ * | | |
+ * |---|---|
+ * | `**x**` `__x__` | negrita |
+ * | `*x*` `_x_` | cursiva |
+ * | `~~x~~` | tachado |
+ * | `` `x` `` | código, y **dentro no se interpreta nada** |
+ * | `\|\|x\|\|` | tapado hasta que se toca |
+ * | `[t](u)`, `https://…`, `www.…` | enlace |
+ * | `#` `##` `###` | títulos |
+ * | `-` `*` `+`, `1.` | listas |
+ * | `>` | cita, y las líneas seguidas son **una sola** |
+ * | ```` ```lenguaje ```` | bloque de código |
+ *
+ * Las marcas **se anidan**: `**muy _importante_**` sale negrita y cursiva a la
+ * vez. Eso es dos tramos que se pisan, y para pintarlo hay que aplanarlos —ver
+ * [tramosDe], que es donde vive esa idea, tomada de Telegram.
+ *
+ * El tapado es de ellos también. Aquí sirve para lo mismo que el mosaico del
+ * motor pero en texto: una nota sobre una captura puede llevar una contraseña
+ * que no tiene por qué verse cada vez que se mira la pantalla.
+ *
+ * Donde sí se diverge de Telegram es en `__x__`: allí es cursiva, aquí negrita,
+ * porque es lo que dice Markdown de toda la vida y estas notas se pegan desde
+ * cualquier sitio, no se escriben en un chat de Telegram.
  */
 object Markdown {
 
@@ -73,6 +125,10 @@ object Markdown {
 
             if (trimmed.startsWith("```")) {
                 flushParagraph()
+                // Lo que va pegado a la valla es el lenguaje. Antes se tiraba; se
+                // guarda porque es lo único que dice de qué es el bloque cuando
+                // se lee la nota meses después.
+                val lenguaje = trimmed.removePrefix("```").trim()
                 // Sin valla de cierre se llega hasta el final: tragarse el resto
                 // del pin en silencio sería peor que mostrarlo como código.
                 val body = mutableListOf<String>()
@@ -82,7 +138,21 @@ object Markdown {
                     i++
                 }
                 i++ // la valla de cierre, si la hay
-                blocks += MarkdownBlock.Code(body.joinToString("\n"))
+                blocks += MarkdownBlock.Code(body.joinToString("\n"), lenguaje)
+                continue
+            }
+
+            // Las líneas de cita seguidas son **una sola cita**. Una por línea
+            // dejaba la barra lateral partida en trozos, como si fueran citas
+            // distintas de sitios distintos.
+            if (esCita(trimmed)) {
+                flushParagraph()
+                val cuerpo = mutableListOf<String>()
+                while (i < lines.size && esCita(lines[i].trim())) {
+                    cuerpo += sinMarcaDeCita(lines[i].trim())
+                    i++
+                }
+                blocks += MarkdownBlock.Quote(parseInline(cuerpo.joinToString("\n")))
                 continue
             }
 
@@ -107,11 +177,6 @@ object Markdown {
                 trimmed.startsWith("# ") -> {
                     flushParagraph()
                     blocks += MarkdownBlock.Heading(1, parseInline(trimmed.removePrefix("# ")))
-                }
-
-                trimmed.startsWith("> ") -> {
-                    flushParagraph()
-                    blocks += MarkdownBlock.Quote(parseInline(trimmed.removePrefix("> ")))
                 }
 
                 isBullet(trimmed) -> {
@@ -142,6 +207,12 @@ object Markdown {
     private fun isBullet(line: String): Boolean =
         line.length > 2 && line[0] in "-*+" && line[1] == ' '
 
+    /** El espacio tras el `>` es opcional: mucha gente pega citas sin él. */
+    private fun esCita(line: String): Boolean = line.startsWith(">")
+
+    private fun sinMarcaDeCita(line: String): String =
+        line.removePrefix(">").removePrefix(" ")
+
     /**
      * Recorre la línea de una pasada buscando aperturas de marca. Cuando
      * encuentra una, busca su cierre; si no lo hay, escribe la marca tal cual y
@@ -150,7 +221,20 @@ object Markdown {
      * El código inline va primero a propósito: dentro de un acento grave no se
      * interpreta nada, que es lo que se espera al pegar una ruta o una fórmula.
      */
-    fun parseInline(line: String): InlineText {
+    fun parseInline(line: String): InlineText = parseInline(line, 0)
+
+    /**
+     * Hasta dónde se mira dentro de una marca dentro de otra marca.
+     *
+     * El anidamiento se hace con recursión, y una nota pegada de cualquier sitio
+     * puede traer una ristra de asteriscos que no lo son de nada. Sin tope, mil
+     * asteriscos serían mil llamadas y la pila se acaba. Pasado el tope el
+     * contenido se copia tal cual: se ve un asterisco de más, que es exactamente
+     * lo que promete la regla de no perder texto nunca.
+     */
+    private const val ANIDAMIENTO_MAXIMO = 8
+
+    private fun parseInline(line: String, profundidad: Int): InlineText {
         val out = StringBuilder()
         val spans = mutableListOf<InlineSpan>()
         var i = 0
@@ -169,19 +253,20 @@ object Markdown {
                 }
             }
 
-            if (rest >= 4 && line.startsWith("**", i)) {
-                val close = line.indexOf("**", i + 2)
-                if (close > i + 1) {
-                    appendStyled(line, i + 2, close, SpanKind.BOLD, out, spans)
-                    i = close + 2
-                    continue
-                }
+            // Las marcas de dos caracteres, con su longitud mínima. El orden
+            // entre ellas da igual: empiezan por caracteres distintos.
+            val doble = when {
+                rest >= 4 && line.startsWith("**", i) -> "**" to SpanKind.BOLD
+                rest >= 4 && line.startsWith("__", i) -> "__" to SpanKind.BOLD
+                rest >= 4 && line.startsWith("~~", i) -> "~~" to SpanKind.STRIKE
+                rest >= 4 && line.startsWith("||", i) -> "||" to SpanKind.SPOILER
+                else -> null
             }
-
-            if (rest >= 4 && line.startsWith("~~", i)) {
-                val close = line.indexOf("~~", i + 2)
+            if (doble != null) {
+                val (marca, kind) = doble
+                val close = line.indexOf(marca, i + 2)
                 if (close > i + 1) {
-                    appendStyled(line, i + 2, close, SpanKind.STRIKE, out, spans)
+                    appendStyled(line, i + 2, close, kind, out, spans, profundidad)
                     i = close + 2
                     continue
                 }
@@ -192,7 +277,7 @@ object Markdown {
                 // El cierre pegado a la apertura (`**`) no es cursiva vacía: es
                 // una negrita rota, y se deja pasar como texto.
                 if (close > i + 1) {
-                    appendStyled(line, i + 1, close, SpanKind.ITALIC, out, spans)
+                    appendStyled(line, i + 1, close, SpanKind.ITALIC, out, spans, profundidad)
                     i = close + 1
                     continue
                 }
@@ -203,10 +288,8 @@ object Markdown {
                 if (closeText > i && closeText + 1 < line.length && line[closeText + 1] == '(') {
                     val closeUrl = line.indexOf(')', closeText + 2)
                     if (closeUrl > closeText) {
-                        val start = out.length
-                        out.append(line, i + 1, closeText)
-                        spans += InlineSpan(
-                            start, out.length, SpanKind.LINK,
+                        appendStyled(
+                            line, i + 1, closeText, SpanKind.LINK, out, spans, profundidad,
                             url = line.substring(closeText + 2, closeUrl)
                         )
                         i = closeUrl + 1
@@ -256,17 +339,45 @@ object Markdown {
         return Auto(end, if (prefix == "www.") "https://$raw" else raw)
     }
 
-    /** Copia el contenido entre marcas y le apunta su tramo. */
+    /**
+     * Copia el contenido entre marcas y le apunta su tramo — **mirando dentro**,
+     * para que `**muy _importante_**` salga negrita y cursiva a la vez.
+     *
+     * Telegram lo consigue de otra forma: pasa un patrón por el texto entero,
+     * borra sus marcas, y vuelve a pasar el siguiente sobre lo que queda, así que
+     * al llegar la cursiva los asteriscos de la negrita ya no están y el
+     * anidamiento le sale gratis. A cambio tiene que ir corrigiendo a mano el
+     * desplazamiento de todo lo encontrado antes, con un `-= 4` y un `-= 2` que
+     * dan por hecho que las marcas miden dos caracteres.
+     *
+     * Aquí se recorre una sola vez y se baja en recursión, que no necesita
+     * corregir nada: lo de dentro se interpreta contra su propio trozo y sus
+     * posiciones se suman a [start] al subir. El resultado es el mismo y no hay
+     * ningún número mágico atado al tamaño de las marcas.
+     *
+     * Dentro de un acento grave no se baja nunca —ver [parseInline]—, que es lo
+     * que se espera al pegar una ruta o una fórmula.
+     */
     private fun appendStyled(
         line: String,
         from: Int,
         to: Int,
         kind: SpanKind,
         out: StringBuilder,
-        spans: MutableList<InlineSpan>
+        spans: MutableList<InlineSpan>,
+        profundidad: Int,
+        url: String? = null
     ) {
         val start = out.length
-        out.append(line, from, to)
-        spans += InlineSpan(start, out.length, kind)
+        if (profundidad >= ANIDAMIENTO_MAXIMO) {
+            out.append(line, from, to)
+        } else {
+            val dentro = parseInline(line.substring(from, to), profundidad + 1)
+            out.append(dentro.text)
+            dentro.spans.forEach {
+                spans += it.copy(start = it.start + start, end = it.end + start)
+            }
+        }
+        spans += InlineSpan(start, out.length, kind, url)
     }
 }

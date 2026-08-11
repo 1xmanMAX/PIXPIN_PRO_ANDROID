@@ -155,7 +155,8 @@ com.forge.pixpin/
 | `StrokeTouchReader` · `StrokeSmoothing` | `MotionEvent` crudo: arranque, muestras históricas, presión |
 | `OverlayManager` · `PinWindowController` | Un pin = una ventana |
 | `PinZoom` · `PinGroups` · `TextBoxSize` | Matemática pura del pellizco, los grupos y el cuadro |
-| `Markdown` · `MarkdownEdit` · `TableData` · `MagicWord` | Texto: marcas, edición, tablas, palabras mágicas |
+| `Markdown` · `Tramos` · `MarkdownEdit` | Texto: marcas anidadas, aplanado a tramos pintables, edición |
+| `TableData` · `MagicWord` | Tablas y palabras mágicas |
 | `DrawController` | La máquina de estados del dedo. Sin una línea de Android |
 | `Renderer` | Pintado con caché por elemento y modo noche como filtro |
 | `Perimetros` · `Regiones` | El perímetro de cualquier figura; el bote con agujeros |

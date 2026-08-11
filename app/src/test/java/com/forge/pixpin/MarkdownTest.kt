@@ -235,4 +235,116 @@ class MarkdownTest {
         assertTrue(Markdown.parse("").isEmpty())
         assertEquals("", Markdown.parseInline("").text)
     }
+
+    // ---- Estilos anidados y combinados ----
+
+    /**
+     * El caso que no se sabía hacer antes: la marca de fuera se quedaba con el
+     * texto crudo y los guiones bajos de dentro se veían tal cual.
+     */
+    @Test
+    fun `la cursiva dentro de la negrita se interpreta`() {
+        val r = Markdown.parseInline("**muy _importante_**")
+        assertEquals("muy importante", r.text)
+
+        val t = r.tramos()
+        // "muy " solo negrita, "importante" negrita y cursiva.
+        assertEquals(2, t.size)
+        assertEquals(0, t[0].inicio)
+        assertEquals(4, t[0].fin)
+        assertTrue(t[0].tiene(SpanKind.BOLD))
+        assertTrue(!t[0].tiene(SpanKind.ITALIC))
+
+        assertEquals(4, t[1].inicio)
+        assertEquals(14, t[1].fin)
+        assertTrue(t[1].tiene(SpanKind.BOLD))
+        assertTrue(t[1].tiene(SpanKind.ITALIC))
+    }
+
+    @Test
+    fun `tres estilos a la vez sobre las mismas letras`() {
+        val r = Markdown.parseInline("**~~_todo_~~**")
+        assertEquals("todo", r.text)
+        val t = r.tramos()
+        assertEquals(1, t.size)
+        assertTrue(t[0].tiene(SpanKind.BOLD))
+        assertTrue(t[0].tiene(SpanKind.STRIKE))
+        assertTrue(t[0].tiene(SpanKind.ITALIC))
+    }
+
+    @Test
+    fun `dentro del codigo no se interpreta nada, ni anidado`() {
+        val r = Markdown.parseInline("**a `b _c_ d` e**")
+        assertEquals("a b _c_ d e", r.text)
+        val t = r.tramos()
+        assertTrue(t.none { it.tiene(SpanKind.ITALIC) })
+        assertTrue(t.any { it.tiene(SpanKind.CODE) && it.tiene(SpanKind.BOLD) })
+    }
+
+    @Test
+    fun `el doble guion bajo es negrita, como en Markdown`() {
+        val r = Markdown.parseInline("esto __pesa__ mas")
+        assertEquals("esto pesa mas", r.text)
+        assertEquals(1, r.spans.size)
+        assertEquals(SpanKind.BOLD, r.spans[0].kind)
+    }
+
+    /**
+     * Una ristra de asteriscos pegados de cualquier sitio no puede tumbar la app
+     * por recursión. Pasado el tope se copia tal cual, sin perder ni un carácter.
+     */
+    @Test
+    fun `mil asteriscos no desbordan la pila`() {
+        val bomba = "*".repeat(2000) + "x" + "*".repeat(2000)
+        val r = Markdown.parseInline(bomba)
+        assertTrue(r.text.contains("x"))
+    }
+
+    // ---- Tapado ----
+
+    @Test
+    fun `el tapado se reconoce`() {
+        val r = Markdown.parseInline("la clave es ||hunter2|| ojo")
+        assertEquals("la clave es hunter2 ojo", r.text)
+        assertEquals(1, r.spans.size)
+        assertEquals(SpanKind.SPOILER, r.spans[0].kind)
+        assertEquals("hunter2", r.text.substring(r.spans[0].start, r.spans[0].end))
+    }
+
+    @Test
+    fun `una barra suelta no es un tapado`() {
+        val r = Markdown.parseInline("a | b || c")
+        assertEquals("a | b || c", r.text)
+        assertTrue(r.spans.isEmpty())
+    }
+
+    // ---- Bloques ----
+
+    @Test
+    fun `las lineas de cita seguidas son una sola cita`() {
+        val blocks = Markdown.parse("> primera\n> segunda\n\nsuelto")
+        assertEquals(2, blocks.size)
+        assertEquals("primera\nsegunda", (blocks[0] as MarkdownBlock.Quote).content.text)
+        assertEquals("suelto", (blocks[1] as MarkdownBlock.Paragraph).content.text)
+    }
+
+    @Test
+    fun `la cita sin espacio tras el mayor que tambien vale`() {
+        val blocks = Markdown.parse(">pegado")
+        assertEquals("pegado", (blocks[0] as MarkdownBlock.Quote).content.text)
+    }
+
+    @Test
+    fun `el lenguaje del bloque de codigo se conserva`() {
+        val blocks = Markdown.parse("```kotlin\nval x = 1\n```")
+        val code = blocks[0] as MarkdownBlock.Code
+        assertEquals("kotlin", code.lenguaje)
+        assertEquals("val x = 1", code.text)
+    }
+
+    @Test
+    fun `un bloque de codigo sin lenguaje lo deja vacio`() {
+        val blocks = Markdown.parse("```\nsuelto\n```")
+        assertEquals("", (blocks[0] as MarkdownBlock.Code).lenguaje)
+    }
 }

@@ -217,6 +217,15 @@ class PinWindowController(
     private var linkHits: List<LinkHit> = emptyList()
 
     /**
+     * Los tapados (`||así||`) que ya se han destapado a base de tocarlos.
+     *
+     * Va como estado de composición y no como campo suelto porque destapar tiene
+     * que repintar, y el toque entra por el reconocedor de la ventana, fuera de
+     * Compose: sin estado, el cambio no llegaría a la pantalla.
+     */
+    private var ocultosVisibles = mutableStateOf(emptySet<String>())
+
+    /**
      * Desplazamiento del cuadro de texto. Vive AQUÍ y no en la composición
      * porque quien lo mueve es el reconocedor de gestos: la ventana del pin se
      * queda con todos los toques, así que un `verticalScroll` dentro no recibe
@@ -2122,7 +2131,17 @@ class PinWindowController(
         if (linkHits.isEmpty()) return false
         val z = zoomOrOne()
         val hit = linkHits.firstOrNull { it.contains(x / z, y / z) } ?: return false
-        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(hit.url))
+
+        // Un tapado se destapa y ahí acaba el toque. No se vuelve a tapar solo:
+        // el que lo destapó estaba leyéndolo, y esconderlo al segundo toque
+        // convertiría un despiste en un juego.
+        hit.oculto?.let {
+            ocultosVisibles.value = ocultosVisibles.value + it
+            return true
+        }
+
+        val url = hit.url ?: return false
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return runCatching { context.startActivity(intent); true }
             .getOrElse {
@@ -2669,6 +2688,7 @@ class PinWindowController(
                                     .fillMaxWidth()
                                     .verticalScroll(textScroll)
                                     .padding(14.dp),
+                                ocultosVisibles = ocultosVisibles.value,
                                 onLinks = { linkHits = it }
                             )
                             ScrollPip(textScroll)
