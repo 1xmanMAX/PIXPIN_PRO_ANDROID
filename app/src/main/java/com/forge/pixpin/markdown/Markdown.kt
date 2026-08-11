@@ -119,7 +119,25 @@ sealed interface MarkdownBlock {
                 filas.any { fila -> fila.any { it.esAvanzada } } ||
                 // Cabecera que no sea exactamente «toda la primera fila y nada
                 // más»: eso Markdown tampoco lo sabe decir.
-                filas.withIndex().any { (i, fila) -> fila.any { it.cabecera != (i == 0) } }
+                filas.withIndex().any { (i, fila) -> fila.any { it.cabecera != (i == 0) } } ||
+                alineacionDesigual
+
+        /**
+         * ¿Hay alguna columna donde no todas las celdas se alineen igual?
+         *
+         * Una tabla de Markdown guarda **una alineación por columna**, en la
+         * fila de guiones, y nada más. Así que centrar una celda suelta de la
+         * tercera fila no se puede escribir con barras: al guardar se perdía y
+         * al volver a leer la celda salía como estaba. Era el motivo de que
+         * alinear pareciera no hacer nada.
+         */
+        private val alineacionDesigual: Boolean
+            get() = filas.any { fila ->
+                fila.withIndex().any { (c, celda) ->
+                    celda.alineacion != (filas.firstOrNull()?.getOrNull(c)?.alineacion
+                        ?: Alineacion.IZQUIERDA)
+                }
+            }
     }
 
     /** Una fórmula. Su `pageBlockMath`, que allí es de pago. */

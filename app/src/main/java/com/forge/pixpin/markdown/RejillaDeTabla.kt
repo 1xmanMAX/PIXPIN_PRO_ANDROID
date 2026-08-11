@@ -3,13 +3,13 @@ package com.forge.pixpin.markdown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
-import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,6 +41,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -91,6 +93,7 @@ fun RejillaDeTabla(
     onFila: (Int) -> Unit = {},
     onCelda: (Int, Int) -> Unit = { _, _ -> },
     onCeldaLarga: (Int, Int) -> Unit = { _, _ -> },
+    onArrastre: (Int, Int) -> Unit = { _, _ -> },
     celda: @Composable (Ancla) -> Unit
 ) {
     val anclas = anclasDe(tabla)
@@ -102,11 +105,36 @@ fun RejillaDeTabla(
 
     // El ancho de la ventana se mide **fuera** del desplazamiento: dentro es
     // infinito, y con eso las columnas nunca podrían llenar la pantalla.
+    // Dónde ha quedado cada celda, para saber sobre cuál está el dedo al
+    // arrastrar. Lo apunta cada una al colocarse.
+    val sitios = remember { mutableStateMapOf<Pair<Int, Int>, LayoutCoordinates>() }
+
     BoxWithConstraints(modifier) {
         val ventana = constraints.maxWidth
 
         Box(Modifier.horizontalScroll(rememberScrollState())) {
             Layout(
+                // **Mantener pulsado y arrastrar marca el grupo.** Va en la
+                // rejilla entera y no celda a celda porque al arrastrar el dedo
+                // sale de la celda donde empezó, y esa ya no puede decir sobre
+                // cuál está ahora.
+                //
+                // `detectDragGesturesAfterLongPress` no toca nada hasta que la
+                // pulsación es larga, así que el toque normal sigue llegando al
+                // campo de texto y el desplazamiento horizontal sigue yendo.
+                modifier = Modifier.pointerInput(tabla, conAsas) {
+                    if (!conAsas) return@pointerInput
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { donde ->
+                            celdaEn(sitios, donde)?.let { onCeldaLarga(it.first, it.second) }
+                        },
+                        onDrag = { cambio, _ ->
+                            celdaEn(sitios, cambio.position)?.let {
+                                onArrastre(it.first, it.second)
+                            }
+                        }
+                    )
+                },
                 content = {
                     // Primero las celdas, luego las asas de columna y por último
                     // las de fila. El orden importa: la medida las reparte por
@@ -116,40 +144,21 @@ fun RejillaDeTabla(
                             (ancla.fila to ancla.columna) in marcado
                         Box(
                             Modifier
-                                .border(1.dp, colorDelBorde)
+                                .onGloballyPositioned { sitios[ancla.fila to ancla.columna] = it }
+                                // Marcado = **solo el borde**. Pintar el fondo
+                                // tapaba el texto de la celda justo cuando se
+                                // está mirando para decidir qué hacer con ella.
+                                .border(
+                                    if (dentro) 2.dp else 1.dp,
+                                    if (dentro) marcadoColor else colorDelBorde
+                                )
                                 .background(
-                                    when {
-                                        dentro -> marcadoColor.copy(alpha = 0.18f)
-                                        ancla.celda.cabecera -> fondoDeCabecera
-                                        else -> Color.Transparent
+                                    if (ancla.celda.cabecera) {
+                                        fondoDeCabecera
+                                    } else {
+                                        Color.Transparent
                                     }
                                 )
-                                // **Solo la pulsación larga, y sin quedarse el
-                                // toque.** Con `detectTapGestures` la celda se
-                                // comía el toque antes de que llegara al campo
-                                // de texto de dentro, así que la tabla se creaba
-                                // y luego no se podía escribir en ella.
-                                //
-                                // Mirando en la pasada inicial y sin consumir
-                                // nada, el dedo sigue su camino hasta el campo;
-                                // aquí solo se cuenta cuánto tarda en levantarse
-                                // para saber si fue larga.
-                                .pointerInput(ancla.fila, ancla.columna) {
-                                    awaitEachGesture {
-                                        awaitFirstDown(
-                                            requireUnconsumed = false,
-                                            pass = PointerEventPass.Initial
-                                        )
-                                        val seLevanto = withTimeoutOrNull(
-                                            viewConfiguration.longPressTimeoutMillis
-                                        ) {
-                                            waitForUpOrCancellation(PointerEventPass.Initial)
-                                        }
-                                        if (seLevanto == null) {
-                                            onCeldaLarga(ancla.fila, ancla.columna)
-                                        }
-                                    }
-                                }
                                 .padding(horizontal = 6.dp, vertical = 5.dp),
                             contentAlignment = alineacionDeLaCelda(ancla.celda)
                         ) {
@@ -268,6 +277,30 @@ fun RejillaDeTabla(
     }
 }
 
+/**
+ * Qué celda hay bajo [punto], en coordenadas de la rejilla.
+ *
+ * Se pregunta a cada celda dónde quedó y cuánto mide. Una celda fusionada ocupa
+ * el sitio de varias, así que el dedo sobre cualquiera de sus huecos devuelve su
+ * esquina, que es lo correcto: lo marcado se estira hasta el ancla.
+ */
+private fun celdaEn(
+    sitios: Map<Pair<Int, Int>, LayoutCoordinates>,
+    punto: Offset
+): Pair<Int, Int>? {
+    sitios.forEach { (donde, coordenadas) ->
+        if (!coordenadas.isAttached) return@forEach
+        val origen = coordenadas.positionInParent()
+        val tam = coordenadas.size
+        if (punto.x >= origen.x && punto.x < origen.x + tam.width &&
+            punto.y >= origen.y && punto.y < origen.y + tam.height
+        ) {
+            return donde
+        }
+    }
+    return null
+}
+
 /** Una asa: la barrita que marca una fila o una columna entera al tocarla. */
 @Composable
 private fun Asa(color: Color, onClick: () -> Unit) {
@@ -360,8 +393,11 @@ enum class AccionDeTabla {
  * menú emergente no tiene actividad que lo sostenga. Así el mismo menú vale en
  * los dos sitios.
  */
+enum class ClaseDeMarcado { CELDA, FILA, COLUMNA }
+
 @Composable
 fun MenuDeTabla(
+    clase: ClaseDeMarcado,
     puedeCombinar: Boolean,
     puedeSeparar: Boolean,
     onAccion: (AccionDeTabla) -> Unit,
@@ -413,29 +449,41 @@ fun MenuDeTabla(
                     }
                 }
                 Separador()
-                BotonDelMenu(Icons.Filled.ArrowUpward, "Fila arriba") {
-                    onAccion(AccionDeTabla.FILA_ARRIBA)
+                // Añadir y quitar **según lo que esté marcado**. Con una
+                // columna marcada, «fila arriba» no significa nada: la fila
+                // sería cuál. Enseñar botones que no responden a lo que se ha
+                // marcado es peor que no enseñarlos.
+                if (clase != ClaseDeMarcado.COLUMNA) {
+                    BotonDelMenu(Icons.Filled.ArrowUpward, "Fila arriba") {
+                        onAccion(AccionDeTabla.FILA_ARRIBA)
+                    }
+                    BotonDelMenu(Icons.Filled.ArrowDownward, "Fila abajo") {
+                        onAccion(AccionDeTabla.FILA_ABAJO)
+                    }
                 }
-                BotonDelMenu(Icons.Filled.ArrowDownward, "Fila abajo") {
-                    onAccion(AccionDeTabla.FILA_ABAJO)
-                }
-                BotonDelMenu(Icons.AutoMirrored.Filled.ArrowBack, "Columna a la izquierda") {
-                    onAccion(AccionDeTabla.COLUMNA_IZQUIERDA)
-                }
-                BotonDelMenu(Icons.AutoMirrored.Filled.ArrowForward, "Columna a la derecha") {
-                    onAccion(AccionDeTabla.COLUMNA_DERECHA)
+                if (clase != ClaseDeMarcado.FILA) {
+                    BotonDelMenu(Icons.AutoMirrored.Filled.ArrowBack, "Columna a la izquierda") {
+                        onAccion(AccionDeTabla.COLUMNA_IZQUIERDA)
+                    }
+                    BotonDelMenu(Icons.AutoMirrored.Filled.ArrowForward, "Columna a la derecha") {
+                        onAccion(AccionDeTabla.COLUMNA_DERECHA)
+                    }
                 }
                 Separador()
-                BotonDelMenu(
-                    Icons.Filled.DeleteOutline,
-                    "Quitar la fila",
-                    MaterialTheme.colorScheme.error
-                ) { onAccion(AccionDeTabla.QUITAR_FILA) }
-                BotonDelMenu(
-                    Icons.Filled.DeleteSweep,
-                    "Quitar la columna",
-                    MaterialTheme.colorScheme.error
-                ) { onAccion(AccionDeTabla.QUITAR_COLUMNA) }
+                if (clase != ClaseDeMarcado.COLUMNA) {
+                    BotonDelMenu(
+                        Icons.Filled.DeleteOutline,
+                        "Quitar la fila",
+                        MaterialTheme.colorScheme.error
+                    ) { onAccion(AccionDeTabla.QUITAR_FILA) }
+                }
+                if (clase != ClaseDeMarcado.FILA) {
+                    BotonDelMenu(
+                        Icons.Filled.DeleteSweep,
+                        "Quitar la columna",
+                        MaterialTheme.colorScheme.error
+                    ) { onAccion(AccionDeTabla.QUITAR_COLUMNA) }
+                }
             }
         }
     }

@@ -54,12 +54,20 @@ class TablasTest {
         assertEquals("a", vuelta.filas[0][0].contenido.text)
     }
 
+    /**
+     * La alineación se guarda **por celda**, como su `setAlign`.
+     *
+     * Antes esta prueba daba por buena la pérdida: alinear solo la cabecera
+     * arrastraba la columna entera, porque con barras la alineación vive en la
+     * fila de guiones y no hay dónde decir otra cosa. Ahora cada celda conserva
+     * la suya, y para eso la tabla pasa a HTML.
+     */
     @Test
-    fun `la alineacion sobrevive a la ida y vuelta`() {
+    fun `la alineacion sobrevive a la ida y vuelta, celda a celda`() {
         val t = Tablas.alinear(Tablas.leer(simple)!!, 0, 1, Alineacion.DERECHA)
         val vuelta = Tablas.leer(Tablas.aTexto(t))!!
         assertEquals(Alineacion.DERECHA, celda(vuelta, 0, 1)!!.alineacion)
-        assertEquals(Alineacion.DERECHA, celda(vuelta, 1, 1)!!.alineacion)
+        assertEquals(Alineacion.IZQUIERDA, celda(vuelta, 1, 1)!!.alineacion)
     }
 
     @Test
@@ -84,6 +92,36 @@ class TablasTest {
         val vuelta = Tablas.leer(escrita)!!
         assertEquals(2, celda(vuelta, 0, 0)!!.anchoEnColumnas)
         assertEquals("a\nb", celda(vuelta, 0, 0)!!.contenido.text)
+    }
+
+    /**
+     * El fallo que reportó el usuario: alinear una celda «no funcionaba». Una
+     * tabla de Markdown guarda **una alineación por columna**, en la fila de
+     * guiones, así que centrar una celda suelta de la tercera fila no se podía
+     * escribir con barras y al releerla salía como estaba.
+     */
+    @Test
+    fun `alinear una celda suelta obliga a html y no se pierde`() {
+        val t = Tablas.alinear(Tablas.leer(simple)!!, 1, 0, Alineacion.CENTRO)
+        assertTrue("no se dio cuenta de que hace falta html", t.esAvanzada)
+
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals(Alineacion.CENTRO, celda(vuelta, 1, 0)!!.alineacion)
+        assertEquals(Alineacion.IZQUIERDA, celda(vuelta, 0, 0)!!.alineacion)
+    }
+
+    /** Si toda la columna va igual, con barras basta y se queda con barras. */
+    @Test
+    fun `alinear la columna entera no obliga a html`() {
+        val t = Tablas.enElMarcado(
+            Tablas.leer(simple)!!,
+            Tablas.Marcado.columna(0, 2)
+        ) { it.copy(alineacion = Alineacion.DERECHA) }
+
+        assertFalse(t.esAvanzada)
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals(Alineacion.DERECHA, celda(vuelta, 0, 0)!!.alineacion)
+        assertEquals(Alineacion.DERECHA, celda(vuelta, 1, 0)!!.alineacion)
     }
 
     @Test

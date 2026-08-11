@@ -181,6 +181,7 @@ private fun TablaEditable(
     var marcado by remember(tabla.filas.size, tabla.columnas) {
         mutableStateOf<Tablas.Marcado?>(null)
     }
+    var clase by remember { mutableStateOf(ClaseDeMarcado.CELDA) }
     var menuAbierto by remember { mutableStateOf(false) }
 
     val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
@@ -207,6 +208,7 @@ private fun TablaEditable(
 
         if (menuAbierto && marca != null) {
             MenuDeTabla(
+                clase = clase,
                 puedeCombinar = !marca.esUnaSola,
                 puedeSeparar = anclaDelMarcado()?.celda?.let {
                     it.anchoEnColumnas > 1 || it.altoEnFilas > 1
@@ -226,30 +228,32 @@ private fun TablaEditable(
             // es lo único que se quiere hacer desde ahí.
             onColumna = { c ->
                 marcado = Tablas.Marcado.columna(c, tabla.filas.size)
+                clase = ClaseDeMarcado.COLUMNA
                 menuAbierto = true
             },
             onFila = { f ->
                 marcado = Tablas.Marcado.fila(f, tabla.columnas)
+                clase = ClaseDeMarcado.FILA
                 menuAbierto = true
             },
             onCelda = { f, c ->
                 marcado = Tablas.Marcado.celda(f, c)
+                clase = ClaseDeMarcado.CELDA
                 menuAbierto = false
             },
             // Mantener pulsada **estira lo marcado** hasta aquí y abre el menú.
             // Así el mismo gesto sirve para pedir el menú de una celda y para
             // marcar varias y combinarlas, sin arrastrar —que en una tabla
             // dentro de una nota se pelearía con el desplazamiento.
+            // Mantener pulsado empieza el grupo aquí; arrastrar lo estira.
             onCeldaLarga = { f, c ->
-                val desde = marca
-                marcado = if (desde == null || desde.esUnaSola && desde.f1 == f &&
-                    desde.c1 == c
-                ) {
-                    Tablas.Marcado.celda(f, c)
-                } else {
-                    Tablas.Marcado(desde.filas.first, desde.columnas.first, f, c)
-                }
+                marcado = Tablas.Marcado.celda(f, c)
+                clase = ClaseDeMarcado.CELDA
                 menuAbierto = true
+            },
+            onArrastre = { f, c ->
+                val desde = marca ?: return@RejillaDeTabla
+                marcado = Tablas.Marcado(desde.f1, desde.c1, f, c)
             }
         ) { ancla ->
             CeldaEscribible(
@@ -262,7 +266,10 @@ private fun TablaEditable(
                         Tablas.conCelda(tabla, ancla.fila, ancla.indiceEnLaFila, InlineText(it))
                     )
                 },
-                onFoco = { marcado = Tablas.Marcado.celda(ancla.fila, ancla.columna) },
+                onFoco = {
+                    marcado = Tablas.Marcado.celda(ancla.fila, ancla.columna)
+                    clase = ClaseDeMarcado.CELDA
+                },
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = TextStyle(
                     fontSize = (baseSizeSp * 0.92f).sp,
