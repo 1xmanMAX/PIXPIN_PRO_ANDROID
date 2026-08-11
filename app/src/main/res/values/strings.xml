@@ -116,6 +116,7 @@
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="cd_save">Guardar</string>
+    <string name="cd_advanced_edit">Editor avanzado</string>
     <string name="cd_close">Cerrar</string>
     <string name="cd_encuadrar">Encuadrar</string>
     <string name="hoja_de_documento">%1$s · hoja %2$d de %3$d</string>

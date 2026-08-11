@@ -77,6 +77,20 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
 
+        <!--
+            El editor avanzado de notas. Mismas señas que el de dibujo y por los
+            mismos motivos: tarea propia para no colarse en la pila de quien
+            estuviera delante, y sí queda en Recientes porque escribir una nota
+            larga es una sesión de trabajo, no un paso intermedio.
+        -->
+        <activity
+            android:name=".markdown.MarkdownEditorActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.markdown"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+
         <activity
             android:name=".clipboard.ShareReceiverActivity"
             android:exported="true"

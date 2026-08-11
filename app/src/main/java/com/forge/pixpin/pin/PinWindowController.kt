@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
@@ -136,10 +137,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
+import com.forge.pixpin.markdown.BarraDeFormatoUi
 import com.forge.pixpin.markdown.LinkHit
 import com.forge.pixpin.markdown.Markdown
 import com.forge.pixpin.markdown.MarkdownEdit
+import com.forge.pixpin.markdown.MarkdownEditorActivity
 import com.forge.pixpin.markdown.MarkdownText
+import com.forge.pixpin.markdown.TextoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -224,6 +228,9 @@ class PinWindowController(
      * Compose: sin estado, el cambio no llegaría a la pantalla.
      */
     private var ocultosVisibles = mutableStateOf(emptySet<String>())
+
+    /** La revisión de [TextoStore] que ya se recogió, para no recoger dos veces. */
+    private var revisionDelTexto = TextoStore.revisionDe(initialState.id)
 
     /**
      * Desplazamiento del cuadro de texto. Vive AQUÍ y no en la composición
@@ -623,19 +630,6 @@ class PinWindowController(
             p.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             applyLayoutNow()
         }
-    }
-
-    /** Aplica un formato a lo que haya seleccionado ahora mismo. */
-    private fun applyWrap(marker: String) {
-        val v = draft.value
-        val r = MarkdownEdit.wrap(v.text, v.selection.start, v.selection.end, marker)
-        draft.value = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
-    }
-
-    private fun applyPrefix(prefix: String) {
-        val v = draft.value
-        val r = MarkdownEdit.togglePrefix(v.text, v.selection.start, prefix)
-        draft.value = TextFieldValue(r.text, TextRange(r.selStart, r.selEnd))
     }
 
     private fun exitEditMode(newText: String) {
@@ -1774,59 +1768,61 @@ class PinWindowController(
     }
 
     /**
-     * Seis formatos y el botón de cerrar. Son los que se usan de verdad al
-     * tomar notas; meter subíndices y superíndices en una barra que tiene que
-     * caber sobre un teclado sería llenarla de cosas que nadie toca.
+     * La barra de formato de la nota flotante.
+     *
+     * Es **la misma** que la del editor avanzado —ver [BarraDeFormatoUi]—, con
+     * los mismos formatos en el mismo orden. Antes eran seis botones elegidos a
+     * ojo y aquí; ahora el reparto vive en un sitio y los dos sitios lo obedecen,
+     * que es lo que hace que pasar de la nota al editor no obligue a aprender
+     * nada nuevo.
+     *
+     * Sin diálogo de enlace: aquí no hay actividad que lo sostenga, solo una
+     * ventana del servicio. El enlace se escribe con los paréntesis vacíos y el
+     * cursor dentro, y quien quiera el diálogo tiene el editor avanzado a un
+     * botón.
      */
     @Composable
     private fun EditBarContent() {
-        Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                    .horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                EditBarButton("H") { applyPrefix("# ") }
-                EditBarButton("B", bold = true) { applyWrap("**") }
-                EditBarButton("I", italic = true) { applyWrap("*") }
-                EditBarButton("S", strike = true) { applyWrap("~~") }
-                EditBarButton("</>") { applyWrap("`") }
-                EditBarButton("•") { applyPrefix("- ") }
-                IconButton(onClick = { exitEditMode(pin.value.text.orEmpty()) }) {
-                    Icon(
-                        Icons.Filled.Close,
-                        contentDescription = context.getString(R.string.cancel)
-                    )
-                }
-                IconButton(onClick = { exitEditMode(draft.value.text) }) {
-                    Icon(
-                        Icons.Filled.Check,
-                        contentDescription = context.getString(R.string.cd_done),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
+        BarraDeFormatoUi(
+            valor = draft.value,
+            onValor = { draft.value = it }
+        ) {
+            IconButton(onClick = { abrirNotaAvanzada() }) {
+                Icon(
+                    Icons.Filled.OpenInFull,
+                    contentDescription = context.getString(R.string.cd_advanced_edit),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = { exitEditMode(pin.value.text.orEmpty()) }) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = context.getString(R.string.cancel)
+                )
+            }
+            IconButton(onClick = { exitEditMode(draft.value.text) }) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = context.getString(R.string.cd_done),
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
 
-    @Composable
-    private fun EditBarButton(
-        label: String,
-        bold: Boolean = false,
-        italic: Boolean = false,
-        strike: Boolean = false,
-        onClick: () -> Unit
-    ) {
-        TextButton(onClick = onClick, modifier = Modifier.widthIn(min = 40.dp)) {
-            Text(
-                text = label,
-                fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-                fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
-                textDecoration = if (strike) TextDecoration.LineThrough else null,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+    /**
+     * Se va al editor avanzado con lo que haya escrito **ahora**, sin guardar.
+     *
+     * Se cierra la edición del pin antes de salir: dejarla abierta significaría
+     * volver y encontrarse dos borradores del mismo texto, el de aquí y el de
+     * allí, y el último en cerrarse ganaría. Lo escrito se lleva por el intent y
+     * vuelve por [TextoStore].
+     */
+    private fun abrirNotaAvanzada() {
+        val texto = draft.value.text
+        exitEditMode(texto)
+        revisionDelTexto = TextoStore.revisionDe(pin.value.id)
+        MarkdownEditorActivity.abrir(context, pin.value.id, texto)
     }
 
     // ---- Pegatinas ----
@@ -2634,6 +2630,21 @@ class PinWindowController(
         // Se re-interpreta solo cuando cambia el texto, no en cada fotograma del
         // pellizco: el zoom no afecta a la sintaxis.
         val blocks = remember(s.text) { Markdown.parse(s.text.orEmpty()) }
+
+        // Lo escrito en el editor avanzado —otra actividad, mismo proceso— hay
+        // que recogerlo al volver, igual que se recoge lo dibujado. Ver
+        // [TextoStore] y el efecto gemelo de la revisión del dibujo.
+        val revisionTexto = TextoStore.revisionDe(s.id)
+        LaunchedEffect(revisionTexto) {
+            if (revisionTexto == revisionDelTexto) return@LaunchedEffect
+            revisionDelTexto = revisionTexto
+            TextoStore.recoger(s.id)?.let { nuevo ->
+                if (nuevo != pin.value.text) {
+                    pin.value = pin.value.copy(text = nuevo)
+                    callbacks.onPinChanged(this@PinWindowController)
+                }
+            }
+        }
         Box(Modifier.fillMaxSize()) {
             // El texto se compone UNA VEZ a tamaño base y se escala con una
             // transformación de GPU, igual que una imagen.
