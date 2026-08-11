@@ -25,7 +25,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoFixNormal
+import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CropSquare
@@ -319,16 +322,49 @@ class DrawEditorActivity : ComponentActivity() {
      * un lienzo en blanco. Lo primero que uno necesita ver de una hoja es la
      * hoja.
      */
+    /**
+     * Encuadra lo que haya que mirar: la hoja del PDF, o todo lo dibujado.
+     *
+     * Con una página detrás manda la página **aunque haya trazos fuera**: lo que
+     * se entrega es la hoja, y un garabato suelto a dos metros no tiene que
+     * decidir el encuadre de nadie.
+     */
+    private fun encuadrar() {
+        medidaDeLaPagina?.let { (ancho, alto) ->
+            encajarLaPagina(ancho, alto)
+            return
+        }
+        val visible = controller.scene.contenidoVisible
+        if (visible.isEmpty()) {
+            // Nada dibujado: se vuelve al origen y al tamaño natural, que es de
+            // donde se partió. Dejarlo como está sería no hacer nada, y un botón
+            // que a veces no hace nada se deja de tocar.
+            controller.setViewport(Viewport(scrollX = 0.0, scrollY = 0.0, zoom = 1.0))
+            return
+        }
+        val b = getCommonBounds(visible)
+        val margen = 40.0
+        encajarEn(
+            b.x1 - margen, b.y1 - margen,
+            b.width + margen * 2, b.height + margen * 2
+        )
+    }
+
     private fun encajarLaPagina(ancho: Double, alto: Double) {
+        encajarEn(0.0, 0.0, ancho, alto)
+    }
+
+    /** Deja esa zona de la escena centrada y a la vista. */
+    private fun encajarEn(x: Double, y: Double, ancho: Double, alto: Double) {
         if (ancho <= 0 || alto <= 0) return
         val m = resources.displayMetrics
-        val margen = 0.94
-        val zoom = minOf(m.widthPixels / ancho, m.heightPixels / alto) * margen
+        val aire = 0.94
+        val zoom = minOf(m.widthPixels / ancho, m.heightPixels / alto) * aire
         if (!zoom.isFinite() || zoom <= 0) return
         controller.setViewport(
             Viewport(
-                scrollX = (m.widthPixels / zoom - ancho) / 2,
-                scrollY = (m.heightPixels / zoom - alto) / 2,
+                scrollX = (m.widthPixels / zoom - ancho) / 2 - x,
+                scrollY = (m.heightPixels / zoom - alto) / 2 - y,
                 zoom = zoom
             )
         )
@@ -508,6 +544,13 @@ class DrawEditorActivity : ComponentActivity() {
 
             EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
 
+            // **Qué estás editando.** El editor era un lienzo sin nombre: se
+            // abría una página de un plano de doce y no había nada que dijera
+            // cuál, así que había que acordarse de qué miniatura se tocó. Solo
+            // sale anotando un PDF; en un dibujo suelto no hay nada que decir y
+            // un rótulo vacío es ruido.
+            RotuloDeLaHoja(Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
+
             // **Las islas cambian de lado con la mano.** El brazo entra por el
             // lado de su mano y tapa lo que hay debajo: lo que se toca a menudo
             // va donde llega el pulgar, y lo que se mira, al otro lado.
@@ -681,6 +724,20 @@ class DrawEditorActivity : ComponentActivity() {
                 onClick = { controller.redo(); cambiado() },
                 enabled = controller.canRedo
             ) { Icon(Icons.Filled.Redo, contentDescription = getString(R.string.cd_redo)) }
+            // **Volver a lo que estás dibujando.**
+            //
+            // Es lo que más falta hacía. El lienzo es infinito, así que
+            // apartarse de lo dibujado es un gesto de nada y volver a pulso es
+            // imposible: no hay bordes contra los que orientarse. Anotando una
+            // página de un PDF es peor todavía —te vas del papel y ves un vacío
+            // blanco sin saber hacia dónde tirar—, y ahí este botón es la única
+            // salida que no pasa por cerrar y volver a abrir.
+            IconButton(onClick = { encuadrar(); cambiado() }) {
+                Icon(
+                    Icons.Filled.CenterFocusWeak,
+                    contentDescription = getString(R.string.cd_encuadrar)
+                )
+            }
             IconButton(onClick = onTablas) {
                 Icon(
                     Icons.Filled.GridOn,
@@ -689,6 +746,100 @@ class DrawEditorActivity : ComponentActivity() {
             }
             MenuDeExportar()
         }
+    }
+
+    /**
+     * Un rótulo discreto con el documento y la página.
+     *
+     * Arriba y en el medio: es el hueco que las dos islas dejan libre, así que
+     * no le quita sitio a nada. Y translúcido, porque es una referencia y no una
+     * herramienta — se lee cuando se busca y se ignora el resto del tiempo.
+     */
+    @Composable
+    private fun RotuloDeLaHoja(modifier: Modifier = Modifier) {
+        val ruta = pdfDeFondo ?: return
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val proyecto = Proyectos.deEstePdf(app.proyectos.proyectos.value, ruta)
+        val total = proyecto?.hojas?.size ?: 0
+        val nombre = proyecto?.nombre ?: File(ruta).nameWithoutExtension
+
+        Surface(
+            modifier = modifier,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+            shadowElevation = 3.dp
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // **Y se pasa de hoja aquí mismo.**
+                //
+                // Anotar un plano es ir y venir entre páginas, y hasta ahora
+                // cada salto costaba: cerrar el editor, abrir la rejilla,
+                // buscar la miniatura. Con las flechas al lado del rótulo, la
+                // siguiente está a un toque — y al pasar se guarda lo de esta,
+                // porque cambiar de hoja pasa por el mismo sitio que salir.
+                IconButton(
+                    onClick = { irALaHoja(paginaDeFondo - 1) },
+                    enabled = paginaDeFondo > 0,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = getString(R.string.hoja_anterior),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Text(
+                    text =
+                        if (total > 0) {
+                            getString(R.string.hoja_de_documento, nombre, paginaDeFondo + 1, total)
+                        } else {
+                            getString(
+                                R.string.hoja_de_documento_sin_total, nombre, paginaDeFondo + 1
+                            )
+                        },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                )
+                IconButton(
+                    onClick = { irALaHoja(paginaDeFondo + 1) },
+                    enabled = total > 0 && paginaDeFondo < total - 1,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = getString(R.string.hoja_siguiente),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Salta a otra página del mismo documento.
+     *
+     * Se cierra esta y se abre la otra, en vez de recargar por dentro: una
+     * actividad nueva entra por `onCreate` con su hoja, su dibujo y su encuadre
+     * ya hechos, y **pasa por `onPause`**, que es donde lo anotado vuelve al
+     * PDF. Recargando a mano habría que acordarse de repetir esos cuatro pasos
+     * en el orden bueno, y olvidarse de uno solo perdería lo dibujado.
+     */
+    private fun irALaHoja(pagina: Int) {
+        val ruta = pdfDeFondo ?: return
+        if (pagina < 0) return
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val proyecto = Proyectos.deEstePdf(app.proyectos.proyectos.value, ruta) ?: return
+        val hoja = Proyectos.hojaDePagina(proyecto, pagina) ?: return
+
+        val dibujo = hoja.dibujo ?: "hoja-${proyecto.id}-$pagina"
+        if (hoja.dibujo == null) {
+            app.proyectos.guardar(
+                Proyectos.conDibujo(proyecto, hoja.id, dibujo, System.currentTimeMillis())
+            )
+        }
+        abrirPaginaDePdf(this, dibujo, ExcalidrawStore.rutaDe(this, dibujo), ruta, pagina)
+        finish()
     }
 
     /**

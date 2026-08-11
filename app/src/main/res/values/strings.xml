@@ -117,6 +117,11 @@
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="cd_save">Guardar</string>
     <string name="cd_close">Cerrar</string>
+    <string name="cd_encuadrar">Encuadrar</string>
+    <string name="hoja_de_documento">%1$s · hoja %2$d de %3$d</string>
+    <string name="hoja_de_documento_sin_total">%1$s · hoja %2$d</string>
+    <string name="hoja_anterior">Hoja anterior</string>
+    <string name="hoja_siguiente">Hoja siguiente</string>
     <string name="cd_emoji">Pegatina</string>
     <string name="cd_edit_text">Editar el texto</string>
     <string name="emoji_none">Sin pegatina</string>
