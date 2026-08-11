@@ -1,6 +1,20 @@
 package com.forge.pixpin.markdown
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.TableRows
+import androidx.compose.material.icons.filled.ViewColumn
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,84 +72,6 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-/**
- * La barra de bloques, la que sale **cuando no hay nada seleccionado**.
- *
- * Telegram cambia la barra entera según haya selección o no: sin selección
- * enseña tipos de bloque (`BLOCK_TEXT`, `BLOCK_LIST`, `BLOCK_TABLE`,
- * `BLOCK_MATH`) más un botón de adjuntar a la derecha; con selección enseña los
- * estilos. Tiene sentido: sin texto marcado, poner negrita no significa nada, y
- * lo que sí quieres es empezar algo nuevo.
- *
- * Aquí van los cuatro suyos y el catálogo entero detrás del `+`, porque nuestro
- * catálogo tiene veintitrés bloques y en su editor cada bloque es una fila de
- * una lista, no una línea de texto.
- */
-@Composable
-fun BarraDeBloquesUi(
-    onBloque: (TipoDeBloque) -> Unit,
-    onCatalogo: () -> Unit,
-    onAdjuntar: () -> Unit,
-    modifier: Modifier = Modifier,
-    trailing: (@Composable RowScope.() -> Unit)? = null
-) {
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Isla {
-            BLOQUES_A_MANO.forEach { tipo ->
-                IconButton(
-                    onClick = { onBloque(tipo) },
-                    modifier = Modifier.widthIn(min = 40.dp)
-                ) {
-                    Icon(
-                        imageVector = iconoDeBloque(tipo),
-                        contentDescription = Bloques.de(tipo).nombre,
-                        modifier = Modifier.size(21.dp),
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-            IconButton(onClick = onCatalogo) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "Todos los bloques",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
-        // Adjuntar va **fuera** de la píldora, como su `addButton`: no es un
-        // bloque más, es la puerta a lo que hay en el teléfono, y separarlo lo
-        // dice sin escribirlo.
-        Spacer(Modifier.width(SEPARACION))
-        Isla {
-            IconButton(onClick = onAdjuntar) {
-                Icon(
-                    Icons.Filled.AttachFile,
-                    contentDescription = "Adjuntar",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-
-        if (trailing != null) {
-            Spacer(Modifier.width(SEPARACION))
-            Isla(contenido = trailing)
-        }
-    }
-}
-
-/** Los cuatro de su panel de bloques, más el separador, que no cuesta nada. */
-private val BLOQUES_A_MANO = listOf(
-    TipoDeBloque.TITULO_2,
-    TipoDeBloque.LISTA,
-    TipoDeBloque.TAREAS,
-    TipoDeBloque.TABLA,
-    TipoDeBloque.FORMULA
-)
 
 fun iconoDeBloque(tipo: TipoDeBloque): ImageVector = when (tipo) {
     TipoDeBloque.TITULO_1, TipoDeBloque.TITULO_2, TipoDeBloque.TITULO_3,
@@ -349,4 +285,263 @@ private fun descripcionDe(formato: Formato): String = when (formato) {
     Formato.BLOQUE -> "Bloque de código"
     Formato.FECHA -> "Fecha de hoy"
     Formato.QUITAR -> "Quitar formato"
+}
+
+/**
+ * Los seis botones de la barra, cada uno con su menú dentro.
+ *
+ * Es la forma de su `RichEditorToolbar` + `showTextTypeMenu` / `showListMenu`:
+ * **cuatro o seis botones a la vista y todo lo demás dentro de ellos**. Un menú
+ * de veintitrés bloques no se lee; seis botones se recuerdan.
+ *
+ * Y lo que importa de sus menús: **sale marcado lo que el bloque ya es**. No es
+ * un menú de insertar, es uno de «esto qué es». Le das a cita sobre un párrafo y
+ * el párrafo se vuelve cita, conservando lo escrito; vuelves a abrir y ves que
+ * ahora la marcada es cita. Ver [Menus].
+ */
+@Composable
+fun BarraDeFamiliasUi(
+    tipoActual: TipoDeBloque?,
+    onConvertir: (TipoDeBloque?) -> Unit,
+    onInsertar: (TipoDeBloque) -> Unit,
+    onCatalogo: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable RowScope.() -> Unit)? = null
+) {
+    var abierta by remember { mutableStateOf<Familia?>(null) }
+    var submenu by remember { mutableStateOf<List<Entrada>?>(null) }
+
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        abierta?.let { familia ->
+            MenuDeFamilia(
+                entradas = submenu ?: Menus.de(familia),
+                tipoActual = tipoActual,
+                atras = if (submenu != null) ({ submenu = null }) else null,
+                onEntrada = { entrada ->
+                    when {
+                        entrada.abre -> submenu = entrada.submenu
+                        // Lo que cambia el bloque de tipo pasa por convertir;
+                        // lo que mete algo nuevo, por insertar.
+                        familia == Familia.TEXTO || familia == Familia.LISTAS ->
+                            { onConvertir(entrada.tipo); abierta = null; submenu = null }
+                        else -> {
+                            entrada.tipo?.let(onInsertar); abierta = null; submenu = null
+                        }
+                    }
+                }
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Isla {
+                Menus.familias.forEach { familia ->
+                    IconButton(
+                        onClick = {
+                            submenu = null
+                            abierta = if (abierta == familia) null else familia
+                        },
+                        modifier = Modifier.widthIn(min = 40.dp)
+                    ) {
+                        Icon(
+                            imageVector = iconoDeFamilia(familia),
+                            contentDescription = Menus.nombres[familia],
+                            modifier = Modifier.size(21.dp),
+                            tint = if (abierta == familia) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(SEPARACION))
+            Isla {
+                IconButton(onClick = onCatalogo) {
+                    Icon(
+                        Icons.Filled.MoreHoriz,
+                        contentDescription = "Todos los bloques",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (trailing != null) {
+                Spacer(Modifier.width(SEPARACION))
+                Isla(contenido = trailing)
+            }
+        }
+    }
+}
+
+/**
+ * El menú de un botón. Los encabezados se pintan **a su tamaño real y en
+ * negrita**, como en su `addHeadingItem`: la opción se enseña a sí misma y no
+ * hace falta leer «Título 3» para saber cuánto abulta.
+ */
+@Composable
+private fun MenuDeFamilia(
+    entradas: List<Entrada>,
+    tipoActual: TipoDeBloque?,
+    atras: (() -> Unit)?,
+    onEntrada: (Entrada) -> Unit
+) {
+    Surface(shape = RoundedCornerShape(14.dp), shadowElevation = 8.dp) {
+        Column(Modifier.widthIn(min = 200.dp)) {
+            if (atras != null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { atras() }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Atrás",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Atrás", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            }
+
+            entradas.forEach { entrada ->
+                val marcado = entrada.tipo == tipoActual && !entrada.abre
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onEntrada(entrada) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = entrada.tipo?.let { iconoDeBloque(it) }
+                            ?: Icons.Filled.Notes,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = entrada.nombre,
+                        fontSize = tamañoDeEntrada(entrada.tipo),
+                        fontWeight = if (esTitulo(entrada.tipo)) {
+                            FontWeight.Bold
+                        } else {
+                            FontWeight.Normal
+                        },
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (entrada.abre) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else if (marcado) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = "Puesto",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun esTitulo(tipo: TipoDeBloque?): Boolean = tipo in setOf(
+    TipoDeBloque.TITULO_1, TipoDeBloque.TITULO_2, TipoDeBloque.TITULO_3,
+    TipoDeBloque.TITULO_4, TipoDeBloque.TITULO_5, TipoDeBloque.TITULO_6
+)
+
+private fun tamañoDeEntrada(tipo: TipoDeBloque?): TextUnit = when (tipo) {
+    TipoDeBloque.TITULO_1 -> 22.sp
+    TipoDeBloque.TITULO_2 -> 20.sp
+    TipoDeBloque.TITULO_3 -> 18.sp
+    TipoDeBloque.TITULO_4 -> 17.sp
+    TipoDeBloque.TITULO_5 -> 16.sp
+    TipoDeBloque.TITULO_6 -> 15.sp
+    else -> 16.sp
+}
+
+private fun iconoDeFamilia(familia: Familia): ImageVector = when (familia) {
+    Familia.TEXTO -> Icons.Filled.Title
+    Familia.LISTAS -> Icons.Filled.FormatListBulleted
+    Familia.TABLA -> Icons.Filled.TableChart
+    Familia.FORMULA -> Icons.Filled.Functions
+    Familia.INSERTAR -> Icons.Filled.Add
+    Familia.ADJUNTAR -> Icons.Filled.AttachFile
+}
+
+/** Lo que se puede hacer con la tabla donde está el cursor. */
+enum class OpTabla { FILA_MAS, FILA_MENOS, COLUMNA_MAS, COLUMNA_MENOS, ALINEAR }
+
+/**
+ * La barra que sale **dentro de una tabla**.
+ *
+ * Es lo que hace avanzada a la suya: filas y columnas se ponen y se quitan con
+ * botones, no contando barras. Sustituye a la barra normal mientras el cursor
+ * está dentro, porque ahí no hay nada más que se quiera hacer.
+ */
+@Composable
+fun BarraDeTablaUi(
+    onOperacion: (OpTabla) -> Unit,
+    onSalir: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Isla {
+            BotonDeTabla(Icons.Filled.TableRows, "Añadir fila") {
+                onOperacion(OpTabla.FILA_MAS)
+            }
+            BotonDeTabla(Icons.Filled.Remove, "Quitar fila") {
+                onOperacion(OpTabla.FILA_MENOS)
+            }
+        }
+        Spacer(Modifier.width(SEPARACION))
+        Isla {
+            BotonDeTabla(Icons.Filled.ViewColumn, "Añadir columna") {
+                onOperacion(OpTabla.COLUMNA_MAS)
+            }
+            BotonDeTabla(Icons.Filled.Remove, "Quitar columna") {
+                onOperacion(OpTabla.COLUMNA_MENOS)
+            }
+        }
+        Spacer(Modifier.width(SEPARACION))
+        Isla {
+            BotonDeTabla(Icons.Filled.FormatAlignCenter, "Alinear la columna") {
+                onOperacion(OpTabla.ALINEAR)
+            }
+        }
+        Spacer(Modifier.width(SEPARACION))
+        Isla {
+            BotonDeTabla(Icons.Filled.Check, "Salir de la tabla", onSalir)
+        }
+    }
+}
+
+@Composable
+private fun BotonDeTabla(icono: ImageVector, nombre: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.widthIn(min = 40.dp)) {
+        Icon(
+            icono,
+            contentDescription = nombre,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurface
+        )
+    }
 }

@@ -126,6 +126,41 @@ object Bloques {
         TipoDeBloque.ARCHIVO -> Plantilla("![archivo](", ")")
     }
 
+    /**
+     * Envuelve [cuerpo] como este tipo de bloque, **sin ejemplos dentro**.
+     *
+     * Es distinto de [plantilla] a propósito. La plantilla es para insertar un
+     * bloque vacío y trae su ejemplo puesto para que se vea cómo va; esto es para
+     * cambiar de tipo un bloque que **ya tiene texto**, y ahí un ejemplo sería
+     * texto que nadie escribió. Con la plantilla del plegable, convertir un
+     * párrafo lo metía en el título y dejaba un «contenido» de relleno debajo.
+     */
+    fun envuelve(tipo: TipoDeBloque, cuerpo: String): String = when (tipo) {
+        TipoDeBloque.TITULO_1 -> "# $cuerpo"
+        TipoDeBloque.TITULO_2 -> "## $cuerpo"
+        TipoDeBloque.TITULO_3 -> "### $cuerpo"
+        TipoDeBloque.TITULO_4 -> "#### $cuerpo"
+        TipoDeBloque.TITULO_5 -> "##### $cuerpo"
+        TipoDeBloque.TITULO_6 -> "###### $cuerpo"
+        TipoDeBloque.CITA -> cuerpo.split('\n').joinToString("\n") { "> $it" }
+        TipoDeBloque.LISTA -> cuerpo.split('\n').joinToString("\n") { "- $it" }
+        TipoDeBloque.NUMERADA ->
+            cuerpo.split('\n').mapIndexed { i, l -> "${i + 1}. $l" }.joinToString("\n")
+        TipoDeBloque.TAREAS -> cuerpo.split('\n').joinToString("\n") { "- [ ] $it" }
+        TipoDeBloque.CODIGO -> "```\n$cuerpo\n```"
+        TipoDeBloque.FORMULA -> "$$\n$cuerpo\n$$"
+        TipoDeBloque.PLEGABLE -> ":::plegable\n$cuerpo\n:::"
+        TipoDeBloque.DESTACADO -> ":::destacado\n$cuerpo\n:::"
+        TipoDeBloque.PIE -> ":::pie\n$cuerpo\n:::"
+        TipoDeBloque.CENTRAR -> ":::centro\n$cuerpo\n:::"
+        TipoDeBloque.DERECHA -> ":::derecha\n$cuerpo\n:::"
+        TipoDeBloque.SEPARADOR -> "---"
+        // Un medio no envuelve texto: lo sustituye.
+        TipoDeBloque.IMAGEN, TipoDeBloque.VIDEO,
+        TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO -> cuerpo
+        TipoDeBloque.TABLA -> if (Tablas.esTabla(cuerpo)) cuerpo else Tablas.nueva(3, 2)
+    }
+
     /** ¿Este bloque necesita que se elija un archivo antes de escribirse? */
     fun pideArchivo(tipo: TipoDeBloque): Boolean = tipo in setOf(
         TipoDeBloque.IMAGEN, TipoDeBloque.VIDEO, TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO

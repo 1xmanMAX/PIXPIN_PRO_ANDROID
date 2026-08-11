@@ -145,7 +145,6 @@ private fun Pantalla(
     var valor by remember {
         mutableStateOf(TextFieldValue(inicial, TextRange(inicial.length)))
     }
-    var viendo by remember { mutableStateOf(false) }
     var pidiendoUrl by remember { mutableStateOf(false) }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
@@ -198,6 +197,66 @@ private fun Pantalla(
         }
     }
 
+    /** El texto del bloque donde está el cursor. */
+    fun trozoDelCursor(v: TextFieldValue): String? {
+        val trozos = trozosDe(v.text)
+        val i = trozoEn(trozos, v.selection.start)
+        return if (i < 0) null else trozos[i].de(v.text)
+    }
+
+    /** Cambia de tipo el bloque de debajo del cursor, conservando lo escrito. */
+    fun convertirBloque(tipo: TipoDeBloque?) {
+        val trozos = trozosDe(valor.text)
+        val i = trozoEn(trozos, valor.selection.start)
+        if (i < 0) return
+        val trozo = trozos[i]
+        val fuente = trozo.de(valor.text)
+        // Los saltos del final son del documento, no del bloque: si entran en
+        // la conversión, cada cambio de tipo se los va comiendo.
+        val cola = fuente.takeLastWhile { it == '\n' }
+        val nuevo = Menus.convertir(fuente.trimEnd('\n'), tipo) + cola
+        val entero = valor.text.substring(0, trozo.desde) + nuevo +
+            valor.text.substring(trozo.hasta)
+        cambia(TextFieldValue(entero, TextRange(trozo.desde + nuevo.trimEnd('\n').length)))
+    }
+
+    fun enLaTabla(op: OpTabla) {
+        val trozos = trozosDe(valor.text)
+        val i = trozoEn(trozos, valor.selection.start)
+        if (i < 0) return
+        val trozo = trozos[i]
+        val fuente = trozo.de(valor.text)
+        val cola = fuente.takeLastWhile { it == '\n' }
+        val tabla = fuente.trimEnd('\n')
+        val local = (valor.selection.start - trozo.desde).coerceIn(0, tabla.length)
+
+        val nueva = when (op) {
+            OpTabla.FILA_MAS -> Tablas.añadirFila(tabla, Tablas.filaDe(tabla, local))
+            OpTabla.FILA_MENOS -> Tablas.quitarFila(tabla, Tablas.filaDe(tabla, local))
+            OpTabla.COLUMNA_MAS -> Tablas.añadirColumna(tabla, Tablas.columnaDe(tabla, local))
+            OpTabla.COLUMNA_MENOS -> Tablas.quitarColumna(tabla, Tablas.columnaDe(tabla, local))
+            OpTabla.ALINEAR -> Tablas.rotarAlineacion(tabla, Tablas.columnaDe(tabla, local))
+        }
+        val entero = valor.text.substring(0, trozo.desde) + nueva + cola +
+            valor.text.substring(trozo.hasta)
+        cambia(
+            TextFieldValue(
+                entero,
+                TextRange((trozo.desde + local).coerceIn(0, entero.length))
+            )
+        )
+    }
+
+    /** Sale de la tabla dejando un renglón nuevo detrás, listo para escribir. */
+    fun fueraDeLaTabla() {
+        val trozos = trozosDe(valor.text)
+        val i = trozoEn(trozos, valor.selection.start)
+        if (i < 0) return
+        val fin = trozos[i].hasta
+        val entero = if (fin >= valor.text.length) valor.text + "\n" else valor.text
+        cambia(TextFieldValue(entero, TextRange(entero.length.coerceAtMost(fin + 1))))
+    }
+
     fun insertarBloque(tipo: TipoDeBloque) {
         if (Bloques.pideArchivo(tipo)) {
             pidiendoArchivo = tipo
@@ -210,7 +269,7 @@ private fun Pantalla(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (viendo) "Vista previa" else "Nota") },
+                title = { Text("Nota") },
                 navigationIcon = {
                     IconButton(onClick = onDescartar) {
                         Icon(
@@ -248,15 +307,6 @@ private fun Pantalla(
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Rehacer")
                     }
 
-                    // Un solo botón que alterna, no dos pestañas: el editor y la
-                    // vista enseñan lo mismo, y dos controles para una cosa es
-                    // uno de más.
-                    IconButton(onClick = { viendo = !viendo }) {
-                        Icon(
-                            if (viendo) Icons.Filled.Edit else Icons.Filled.Visibility,
-                            contentDescription = if (viendo) "Escribir" else "Ver el resultado"
-                        )
-                    }
                     IconButton(onClick = { onGuardar(valor.text) }) {
                         Icon(
                             Icons.Filled.Check,
@@ -274,44 +324,16 @@ private fun Pantalla(
                 .padding(hueco)
                 .imePadding()
         ) {
-            Box(Modifier.weight(1f)) {
-                if (viendo) {
-                    val bloques = remember(valor.text) { Markdown.parse(valor.text) }
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
-                    ) {
-                        MarkdownText(blocks = bloques, baseSizeSp = 16f)
-                    }
-                } else {
-                    BasicTextField(
-                        value = valor,
-                        onValueChange = { cambia(it) },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
-                        textStyle = TextStyle(
-                            fontSize = 16.sp,
-                            lineHeight = 24.sp,
-                            // Monoespaciada al escribir: las marcas se cuentan
-                            // con la vista y en proporcional los asteriscos se
-                            // esconden entre las letras.
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(
-                            MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                EditorVivo(valor = valor, onValor = { cambia(it) })
             }
 
-            // La barra solo mientras se escribe: en la vista no hay selección a
-            // la que aplicarle nada.
-            if (!viendo) {
+            run {
                 // La lista de comandos va **encima** de la barra y por delante
                 // del teclado: es lo que estás mirando mientras tecleas.
                 val sugerencias = remember(consulta) {
@@ -330,11 +352,24 @@ private fun Pantalla(
                 ) {
                     // El cambio de panel es suyo: sin selección no hay nada que
                     // poner en negrita, y lo que quieres es empezar un bloque.
-                    if (valor.selection.collapsed) {
-                        BarraDeBloquesUi(
-                            onBloque = { tipo -> insertarBloque(tipo) },
-                            onCatalogo = { viendoCatalogo = true },
-                            onAdjuntar = { viendoAdjuntar = true }
+                    val enTabla = remember(valor.text, valor.selection) {
+                        trozoDelCursor(valor)?.let { Tablas.esTabla(it) } == true
+                    }
+                    if (enTabla) {
+                        // Dentro de una tabla la barra es de tabla: es lo que se
+                        // necesita ahí y nada más. Su editor hace lo mismo.
+                        BarraDeTablaUi(
+                            onOperacion = { op -> enLaTabla(op) },
+                            onSalir = { fueraDeLaTabla() }
+                        )
+                    } else if (valor.selection.collapsed) {
+                        BarraDeFamiliasUi(
+                            tipoActual = remember(valor.text, valor.selection) {
+                                trozoDelCursor(valor)?.let { Menus.tipoDe(it) }
+                            },
+                            onConvertir = { tipo -> convertirBloque(tipo) },
+                            onInsertar = { tipo -> insertarBloque(tipo) },
+                            onCatalogo = { viendoCatalogo = true }
                         )
                     } else {
                         BarraDeFormatoUi(

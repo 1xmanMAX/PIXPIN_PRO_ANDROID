@@ -364,7 +364,23 @@ object MarkdownEdit {
     private fun sinMarcasDeLinea(s: String): String =
         s.split('\n').joinToString("\n") { Markdown.parseInline(it).text }
 
+    /**
+     * Quita la marca del principio de la línea —almohadillas, `>`, viñeta,
+     * número, casilla— y **solo eso**.
+     *
+     * Es lo que hace falta para cambiar un bloque de tipo sin tocar lo escrito:
+     * un título con negrita dentro que pasa a párrafo tiene que seguir teniendo
+     * su negrita. Ver [Menus.convertir].
+     */
+    fun sinPrefijoDeLinea(linea: String): String = sinPrefijoNinguno(linea)
+
+    private val CASILLA_AL_PRINCIPIO = Regex("""^[-*+]\s+\[[ xX]]\s?""")
+
     private fun sinPrefijoNinguno(linea: String): String {
+        // La casilla va antes que la viñeta: `- [ ] x` empieza por `- `, y
+        // quitando solo la viñeta se quedaría un `[ ]` suelto a la vista.
+        CASILLA_AL_PRINCIPIO.find(linea)?.let { return linea.removeRange(0, it.value.length) }
+
         Formato.entries.filter { it.esDeLinea }.forEach { f ->
             val largo = largoDelPrefijo(linea, f)
             if (largo > 0) return linea.removeRange(0, largo)
@@ -380,8 +396,10 @@ object MarkdownEdit {
     /** Cuánto ocupa la marca de línea de [formato] en [linea]; 0 si no está. */
     private fun largoDelPrefijo(linea: String, formato: Formato): Int = when (formato) {
         Formato.NUMERADA -> NUMERADA_AL_PRINCIPIO.find(linea)?.value?.length ?: 0
-        // El título cuenta con uno, dos o tres almohadillas.
-        Formato.TITULO -> Regex("""^#{1,3}\s""").find(linea)?.value?.length ?: 0
+        // Los seis niveles, como los seis del catálogo de bloques. Con tres se
+        // quedaban fuera el 4, el 5 y el 6, y convertir uno de esos a párrafo
+        // dejaba las almohadillas puestas.
+        Formato.TITULO -> Regex("""^#{1,6}\s""").find(linea)?.value?.length ?: 0
         // La viñeta admite los tres marcadores de Markdown.
         Formato.LISTA -> if (linea.length > 2 && linea[0] in "-*+" && linea[1] == ' ') 2 else 0
         else -> {
