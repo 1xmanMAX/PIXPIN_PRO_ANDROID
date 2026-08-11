@@ -72,11 +72,27 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.LineStyle
+import androidx.compose.material.icons.filled.LineWeight
+import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.material.icons.filled.RoundedCorner
+import androidx.compose.material.icons.filled.Texture
+import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1258,11 +1274,14 @@ class DrawEditorActivity : ComponentActivity() {
         val aplican = propiedadesPara(controller.tool, seleccion)
         val grupos = gruposPara(seleccion)
 
+        // **240 en vez de 300.** Los rótulos costaban 64 dp de cada fila y ya no
+        // están: lo que queda son las opciones, que es lo que se viene a tocar.
+        // Un panel más estrecho tapa menos dibujo, que es de lo que va todo esto.
         Column(
-            Modifier.width(300.dp).padding(horizontal = 8.dp, vertical = 6.dp)
+            Modifier.width(240.dp).padding(horizontal = 8.dp, vertical = 6.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            if (Propiedad.TRAZO in aplican) Fila("Trazo") {
+            if (Propiedad.TRAZO in aplican) FilaDe(Icons.Filled.Brush, "Trazo") {
                 STROKE_COLORS.forEach { hex ->
                     Muestra(hex, estilo.strokeColor == hex) {
                         controller.changeStyle(
@@ -1271,7 +1290,7 @@ class DrawEditorActivity : ComponentActivity() {
                     }
                 }
             }
-            if (Propiedad.FONDO in aplican) Fila("Fondo") {
+            if (Propiedad.FONDO in aplican) FilaDe(Icons.Filled.FormatColorFill, "Fondo") {
                 BACKGROUND_COLORS.forEach { hex ->
                     Muestra(hex, estilo.backgroundColor == hex) {
                         controller.changeStyle(
@@ -1280,48 +1299,68 @@ class DrawEditorActivity : ComponentActivity() {
                     }
                 }
             }
-            if (Propiedad.RELLENO in aplican) Fila("Relleno") {
+            if (Propiedad.RELLENO in aplican) FilaDe(Icons.Filled.Texture, "Relleno") {
                 FillStyle.entries.forEach { fs ->
-                    Opcion(FILL_GLYPHS[fs] ?: "?", estilo.fillStyle == fs) {
+                    Boceto(estilo.fillStyle == fs, nombreDelRelleno(fs), {
                         controller.changeStyle(
                             { it.copy(fillStyle = fs) }, { it.copy(fillStyle = fs) }
                         ); cambiado()
-                    }
+                    }) { tinta -> dibujarRelleno(fs, tinta) }
                 }
             }
-            if (Propiedad.LINEA in aplican) Fila("Línea") {
+            if (Propiedad.LINEA in aplican) FilaDe(Icons.Filled.LineStyle, "Línea") {
                 StrokeStyle.entries.forEach { ss ->
-                    Opcion(STROKE_GLYPHS[ss] ?: "?", estilo.strokeStyle == ss) {
+                    Boceto(estilo.strokeStyle == ss, nombreDeLaLinea(ss), {
                         controller.changeStyle(
                             { it.copy(strokeStyle = ss) }, { it.copy(strokeStyle = ss) }
                         ); cambiado()
-                    }
+                    }) { tinta -> dibujarLinea(ss, tinta) }
                 }
             }
-            if (Propiedad.GROSOR in aplican) Fila("Grosor") {
+            if (Propiedad.GROSOR in aplican) FilaDe(Icons.Filled.LineWeight, "Grosor") {
                 ItemStyle.STROKE_WIDTHS.forEachIndexed { i, w ->
-                    Opcion("${i + 1}", estilo.strokeWidth == w) {
+                    Boceto(estilo.strokeWidth == w, "Grosor ${i + 1}", {
                         controller.changeStyle(
                             { it.copy(strokeWidth = w) }, { it.copy(strokeWidth = w) }
                         ); cambiado()
+                    }) { tinta ->
+                        // El propio grosor, a escala: la raya fina se ve fina.
+                        drawLine(
+                            tinta, Offset(0f, size.height / 2), Offset(size.width, size.height / 2),
+                            strokeWidth = (1.5f + i * 2.2f).dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
                     }
                 }
             }
-            if (Propiedad.RUGOSIDAD in aplican) Fila("A mano") {
-                ROUGHNESS_GLYPHS.forEach { (r, glifo) ->
-                    Opcion(glifo, estilo.roughness == r) {
+            if (Propiedad.RUGOSIDAD in aplican) FilaDe(Icons.Filled.Gesture, "A mano") {
+                ROUGHNESS_GLYPHS.forEachIndexed { i, (r, _) ->
+                    Boceto(estilo.roughness == r, "Pulso ${i + 1}", {
                         controller.changeStyle(
                             { it.copy(roughness = r) }, { it.copy(roughness = r) }
                         ); cambiado()
-                    }
+                    }) { tinta -> dibujarPulso(i, tinta) }
                 }
             }
             // Pixelar o desenfocar. Va por elemento y no por estilo del pincel
             // porque es lo que se corrige mirando el resultado: se tapa, se ve
             // que el bloque queda feo sobre una cara, y se pasa a mancha.
-            if (Propiedad.MOSAICO in aplican) Fila("Tapar") {
-                Opcion("▦", !estilo.mosaicBlur) { aplicarMosaico(false); cambiado() }
-                Opcion("◍", estilo.mosaicBlur) { aplicarMosaico(true); cambiado() }
+            if (Propiedad.MOSAICO in aplican) FilaDe(Icons.Filled.BlurOn, "Tapar") {
+                Boceto(!estilo.mosaicBlur, "Pixelar", { aplicarMosaico(false); cambiado() }) { t ->
+                    // Cuadros duros: eso es pixelar.
+                    val lado = size.width / 4
+                    for (fx in 0..3) for (fy in 0..3) {
+                        if ((fx + fy) % 2 == 0) {
+                            drawRect(t, Offset(fx * lado, fy * lado), Size(lado, lado))
+                        }
+                    }
+                }
+                Boceto(estilo.mosaicBlur, "Desenfocar", { aplicarMosaico(true); cambiado() }) { t ->
+                    // Aros que se desvanecen: eso es desenfocar.
+                    for (i in 3 downTo 1) {
+                        drawCircle(t.copy(alpha = 0.28f * i), radius = size.minDimension / 2 * i / 3)
+                    }
+                }
             }
             if (Propiedad.FORMA_FLECHA in aplican) Fila("Flecha") {
                 // Las tres formas: recta, curva y de codos. La curva **va** de
@@ -1337,18 +1376,23 @@ class DrawEditorActivity : ComponentActivity() {
                     aplicarFlecha(elbowed = true, curva = false); cambiado()
                 }
             }
-            if (Propiedad.ESQUINAS in aplican) Fila("Esquinas") {
-                Opcion("▢", estilo.roundness != null) {
+            if (Propiedad.ESQUINAS in aplican) FilaDe(Icons.Filled.RoundedCorner, "Esquinas") {
+                Boceto(estilo.roundness != null, "Redondeadas", {
                     val r = Roundness(Roundness.ADAPTIVE_RADIUS)
                     controller.changeStyle({ it.copy(roundness = r) }, { it.copy(roundness = r) })
                     cambiado()
+                }) { t ->
+                    drawRoundRect(
+                        t, size = size, cornerRadius = CornerRadius(size.minDimension / 3),
+                        style = Stroke(width = 2.dp.toPx())
+                    )
                 }
-                Opcion("▭", estilo.roundness == null) {
+                Boceto(estilo.roundness == null, "En pico", {
                     controller.changeStyle({ it.copy(roundness = null) }, { it.copy(roundness = null) })
                     cambiado()
-                }
+                }) { t -> drawRect(t, size = size, style = Stroke(width = 2.dp.toPx())) }
             }
-            if (Propiedad.FUENTE in aplican) Fila("Letra") {
+            if (Propiedad.FUENTE in aplican) FilaDe(Icons.Filled.TextFields, "Letra") {
                 ItemStyle.FONT_FAMILIES.forEach { f ->
                     Opcion(
                         DrawFonts.nombreDe(f).take(4),
@@ -1356,9 +1400,9 @@ class DrawEditorActivity : ComponentActivity() {
                     ) { aplicarEstilo(estilo.copy(fontFamily = f)); cambiado() }
                 }
             }
-            if (Propiedad.FUENTE in aplican) Fila("Tamaño") {
+            if (Propiedad.FUENTE in aplican) FilaDe(Icons.Filled.FormatSize, "Tamaño") {
                 ItemStyle.FONT_SIZES.forEachIndexed { i, s ->
-                    Opcion("${i + 1}", estilo.fontSize == s) {
+                    OpcionLetra("A", 10 + i * 4, estilo.fontSize == s) {
                         controller.changeStyle(
                             { it.copy(fontSize = s) },
                             { if (it.type == ElementType.TEXT) it.copy(fontSize = s) else it }
@@ -1366,12 +1410,15 @@ class DrawEditorActivity : ComponentActivity() {
                     }
                 }
             }
-            if (Propiedad.OPACIDAD in aplican) Fila("Opacidad") {
+            if (Propiedad.OPACIDAD in aplican) FilaDe(Icons.Filled.Opacity, "Opacidad") {
                 listOf(30, 60, 100).forEach { o ->
-                    Opcion("$o", estilo.opacity == o) {
+                    Boceto(estilo.opacity == o, "Opacidad $o", {
                         controller.changeStyle(
                             { it.copy(opacity = o) }, { it.copy(opacity = o) }
                         ); cambiado()
+                    }) { t ->
+                        // La propia transparencia: se ve lo transparente que es.
+                        drawCircle(t.copy(alpha = o / 100f), radius = size.minDimension / 2)
                     }
                 }
             }
@@ -1429,6 +1476,75 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Una fila del panel, encabezada por **un icono y no por una palabra**.
+     *
+     * Las palabras costaban 64 dp de los 300 del panel —una quinta parte del
+     * ancho gastada en decir «Grosor»— y encima no hacían falta: una fila de
+     * rayas de distinto grosor ya dice que va de grosores. El icono queda para
+     * lo único que no se distingue solo, que es **trazo contra fondo**: los dos
+     * son una fila de colores iguales.
+     */
+    @Composable
+    private fun FilaDe(icono: ImageVector, descripcion: String, contenido: @Composable () -> Unit) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icono,
+                contentDescription = descripcion,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp).padding(end = 2.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
+            ) { contenido() }
+        }
+    }
+
+    /**
+     * Una opción que **se dibuja a sí misma**.
+     *
+     * Es el cambio de fondo del panel. Antes cada opción era un glifo —`⿴`,
+     * `⌐`, `⤓`— o un número —«1 2 3» para el grosor—, y ninguna de las dos cosas
+     * dice nada: hay que tocarlas para averiguar qué hacen, y los glifos raros
+     * ni siquiera se ven igual en todos los móviles, que en algunos salen como
+     * un cuadrado vacío.
+     *
+     * Dibujando la propia opción no hay nada que averiguar: tres rayas de
+     * distinto grosor **son** los tres grosores, y un cuadrado rayado **es** el
+     * rayado. Se entiende sin leer y sin tocar.
+     */
+    @Composable
+    private fun Boceto(
+        elegido: Boolean,
+        descripcion: String,
+        onClick: () -> Unit,
+        dibujo: androidx.compose.ui.graphics.drawscope.DrawScope.(tinta: Color) -> Unit
+    ) {
+        val tinta =
+            if (elegido) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (elegido) MaterialTheme.colorScheme.primary else Color.Transparent,
+            modifier = Modifier.padding(2.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clickable(onClick = onClick)
+                    .semantics { contentDescription = descripcion },
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.foundation.Canvas(Modifier.size(22.dp)) { dibujo(tinta) }
+            }
+        }
+    }
+
 
     /**
      * Cuánto ocupa un texto, **medido de verdad**.
@@ -1457,6 +1573,160 @@ class DrawEditorActivity : ComponentActivity() {
                 )
                 .clickable(onClick = onClick)
         )
+    }
+
+    /**
+     * Una opción que es **la letra a su tamaño**.
+     *
+     * Para el tamaño de fuente, dibujar una «A» de cada tamaño dice más que
+     * numerarlas «1 2 3 4»: se elige mirando cuál se parece a lo que quieres,
+     * no traduciendo un número.
+     */
+    @Composable
+    private fun OpcionLetra(letra: String, tam: Int, elegido: Boolean, onClick: () -> Unit) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (elegido) MaterialTheme.colorScheme.primary else Color.Transparent,
+            modifier = Modifier.padding(2.dp)
+        ) {
+            Box(
+                Modifier.size(34.dp).clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    letra,
+                    fontSize = tam.sp,
+                    color = if (elegido) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    /** El rayado, dibujado tal cual: un cuadro con su trama dentro. */
+    private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarRelleno(
+        fs: FillStyle, tinta: Color
+    ) {
+        val borde = 1.2.dp.toPx()
+        drawRect(tinta.copy(alpha = 0.45f), size = size, style = Stroke(width = borde))
+        when (fs) {
+            FillStyle.SOLID -> drawRect(tinta, size = size)
+            FillStyle.HACHURE, FillStyle.LINEAS -> {
+                // El de rayas rectas va sin temblor; el otro, torcido.
+                val torcer = if (fs == FillStyle.HACHURE) 1.5f else 0f
+                var x = -size.height
+                while (x < size.width) {
+                    drawLine(
+                        tinta, Offset(x, size.height), Offset(x + size.height + torcer, 0f),
+                        strokeWidth = borde
+                    )
+                    x += size.width / 3.2f
+                }
+            }
+            FillStyle.CROSS_HATCH -> {
+                var x = -size.height
+                while (x < size.width) {
+                    drawLine(
+                        tinta, Offset(x, size.height), Offset(x + size.height, 0f),
+                        strokeWidth = borde
+                    )
+                    drawLine(
+                        tinta, Offset(x, 0f), Offset(x + size.height, size.height),
+                        strokeWidth = borde
+                    )
+                    x += size.width / 2.4f
+                }
+            }
+            FillStyle.ZIGZAG -> {
+                val paso = size.width / 4
+                var y = paso / 2
+                while (y < size.height) {
+                    var x = 0f
+                    var arriba = true
+                    while (x < size.width) {
+                        drawLine(
+                            tinta, Offset(x, if (arriba) y else y + paso / 2),
+                            Offset(x + paso / 2, if (arriba) y + paso / 2 else y),
+                            strokeWidth = borde
+                        )
+                        x += paso / 2
+                        arriba = !arriba
+                    }
+                    y += paso
+                }
+            }
+        }
+    }
+
+    /** Continua, a trazos o de puntos: la propia raya. */
+    private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLinea(
+        ss: StrokeStyle, tinta: Color
+    ) {
+        val y = size.height / 2
+        val grosor = 2.dp.toPx()
+        when (ss) {
+            StrokeStyle.SOLID ->
+                drawLine(tinta, Offset(0f, y), Offset(size.width, y), strokeWidth = grosor)
+            StrokeStyle.DASHED -> {
+                var x = 0f
+                while (x < size.width) {
+                    drawLine(
+                        tinta, Offset(x, y),
+                        Offset(minOf(x + size.width / 5, size.width), y), strokeWidth = grosor
+                    )
+                    x += size.width / 3
+                }
+            }
+            StrokeStyle.DOTTED -> {
+                var x = grosor
+                while (x < size.width) {
+                    drawCircle(tinta, radius = grosor / 2, center = Offset(x, y))
+                    x += size.width / 5
+                }
+            }
+        }
+    }
+
+    /**
+     * El pulso: una raya cada vez más torcida.
+     *
+     * Es lo que hace la rugosidad, así que enseñarlo es enseñarla. Con glifos
+     * había que probar los tres para saber cuál era cuál.
+     */
+    private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarPulso(
+        cuanto: Int, tinta: Color
+    ) {
+        val y = size.height / 2
+        val grosor = 2.dp.toPx()
+        if (cuanto == 0) {
+            drawLine(tinta, Offset(0f, y), Offset(size.width, y), strokeWidth = grosor)
+            return
+        }
+        val vaiven = size.height / 5f * cuanto
+        val camino = Path().apply {
+            moveTo(0f, y)
+            val tramos = 4
+            for (i in 1..tramos) {
+                val x = size.width * i / tramos
+                val alto = if (i % 2 == 0) y - vaiven else y + vaiven
+                quadraticTo(x - size.width / (tramos * 2f), alto, x, y)
+            }
+        }
+        drawPath(camino, tinta, style = Stroke(width = grosor))
+    }
+
+    private fun nombreDelRelleno(fs: FillStyle): String = when (fs) {
+        FillStyle.HACHURE -> "Rayado"
+        FillStyle.CROSS_HATCH -> "Cruces"
+        FillStyle.SOLID -> "Sólido"
+        FillStyle.ZIGZAG -> "Zigzag"
+        FillStyle.LINEAS -> "Rayas rectas"
+    }
+
+    private fun nombreDeLaLinea(ss: StrokeStyle): String = when (ss) {
+        StrokeStyle.SOLID -> "Continua"
+        StrokeStyle.DASHED -> "A trazos"
+        StrokeStyle.DOTTED -> "De puntos"
     }
 
     /** Una opción del panel, representada por un glifo. */
