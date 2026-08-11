@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -181,11 +182,22 @@ private fun TablaEditable(
     var marcado by remember(tabla.filas.size, tabla.columnas) {
         mutableStateOf<Tablas.Marcado?>(null)
     }
-    var clase by remember { mutableStateOf(ClaseDeMarcado.CELDA) }
     var menuAbierto by remember { mutableStateOf(false) }
 
     val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
     val marca = marcado
+
+    // Qué es lo marcado se **deduce de lo marcado**, no de por dónde se marcó.
+    // Así arrastrar hasta cubrir una columna entera vale igual que tocar su asa,
+    // y los botones de añadir siempre responden a lo que se ve marcado.
+    val clase = when {
+        marca == null -> ClaseDeMarcado.CELDA
+        marca.filas.count() >= tabla.filas.size && marca.columnas.count() < tabla.columnas ->
+            ClaseDeMarcado.COLUMNA
+        marca.columnas.count() >= tabla.columnas && marca.filas.count() < tabla.filas.size ->
+            ClaseDeMarcado.FILA
+        else -> ClaseDeMarcado.CELDA
+    }
 
     /** El ancla que manda: la esquina de arriba a la izquierda de lo marcado. */
     fun anclaDelMarcado(): Tablas.Hueco? =
@@ -206,21 +218,11 @@ private fun TablaEditable(
             )
         )
 
-        if (menuAbierto && marca != null) {
-            MenuDeTabla(
-                clase = clase,
-                puedeCombinar = !marca.esUnaSola,
-                puedeSeparar = anclaDelMarcado()?.celda?.let {
-                    it.anchoEnColumnas > 1 || it.altoEnFilas > 1
-                } == true,
-                onAccion = { accion ->
-                    onCambio(aplicarEnLaTabla(tabla, marca, accion))
-                    menuAbierto = false
-                }
-            )
-        }
-
-        RejillaDeTabla(
+        // El menú **flota encima de la tabla**, no encima del hueco: puesto en
+        // la columna empujaba todo hacia abajo cada vez que se abría, y la
+        // tabla saltaba de sitio justo mientras se estaba mirando.
+        Box(Modifier.fillMaxWidth()) {
+            RejillaDeTabla(
             tabla = tabla,
             marcado = marca,
             conAsas = true,
@@ -228,17 +230,14 @@ private fun TablaEditable(
             // es lo único que se quiere hacer desde ahí.
             onColumna = { c ->
                 marcado = Tablas.Marcado.columna(c, tabla.filas.size)
-                clase = ClaseDeMarcado.COLUMNA
                 menuAbierto = true
             },
             onFila = { f ->
                 marcado = Tablas.Marcado.fila(f, tabla.columnas)
-                clase = ClaseDeMarcado.FILA
                 menuAbierto = true
             },
             onCelda = { f, c ->
                 marcado = Tablas.Marcado.celda(f, c)
-                clase = ClaseDeMarcado.CELDA
                 menuAbierto = false
             },
             // Mantener pulsada **estira lo marcado** hasta aquí y abre el menú.
@@ -248,7 +247,6 @@ private fun TablaEditable(
             // Mantener pulsado empieza el grupo aquí; arrastrar lo estira.
             onCeldaLarga = { f, c ->
                 marcado = Tablas.Marcado.celda(f, c)
-                clase = ClaseDeMarcado.CELDA
                 menuAbierto = true
             },
             onArrastre = { f, c ->
@@ -266,10 +264,7 @@ private fun TablaEditable(
                         Tablas.conCelda(tabla, ancla.fila, ancla.indiceEnLaFila, InlineText(it))
                     )
                 },
-                onFoco = {
-                    marcado = Tablas.Marcado.celda(ancla.fila, ancla.columna)
-                    clase = ClaseDeMarcado.CELDA
-                },
+                onFoco = { marcado = Tablas.Marcado.celda(ancla.fila, ancla.columna) },
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = TextStyle(
                     fontSize = (baseSizeSp * 0.92f).sp,
@@ -282,6 +277,25 @@ private fun TablaEditable(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             )
+            }
+
+            // Encima con `zIndex` y no en una ventana emergente porque la nota
+            // también se edita desde el pin, que es una ventana del servicio, y
+            // allí no hay actividad que sostenga una ventana nueva.
+            if (menuAbierto && marca != null) {
+                MenuDeTabla(
+                    clase = clase,
+                    puedeCombinar = !marca.esUnaSola,
+                    puedeSeparar = anclaDelMarcado()?.celda?.let {
+                        it.anchoEnColumnas > 1 || it.altoEnFilas > 1
+                    } == true,
+                    onAccion = { accion ->
+                        onCambio(aplicarEnLaTabla(tabla, marca, accion))
+                        menuAbierto = false
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).zIndex(1f)
+                )
+            }
         }
     }
 }
@@ -317,9 +331,14 @@ private fun CeldaEscribible(
     BasicTextField(
         value = valor,
         onValueChange = {
-            valor = it
-            if (it.text != texto) onTexto(it.text)
+            // Sin saltos de línea: el intro estiraba la celda y toda la tabla
+            // daba un salto hacia abajo. Es lo que hace su título de tabla con
+            // `setAllowNewlines(false)`.
+            val limpio = it.text.replace("\n", " ")
+            valor = if (limpio == it.text) it else it.copy(text = limpio)
+            if (limpio != texto) onTexto(limpio)
         },
+        singleLine = true,
         modifier = modifier.onFocusChanged {
             conFoco = it.isFocused
             if (it.isFocused) onFoco()

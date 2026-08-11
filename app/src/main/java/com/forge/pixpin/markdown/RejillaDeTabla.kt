@@ -3,13 +3,18 @@ package com.forge.pixpin.markdown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -122,18 +127,41 @@ fun RejillaDeTabla(
                 // `detectDragGesturesAfterLongPress` no toca nada hasta que la
                 // pulsación es larga, así que el toque normal sigue llegando al
                 // campo de texto y el desplazamiento horizontal sigue yendo.
-                modifier = Modifier.pointerInput(tabla, conAsas) {
+                modifier = Modifier.pointerInput(conAsas) {
                     if (!conAsas) return@pointerInput
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { donde ->
-                            celdaEn(sitios, donde)?.let { onCeldaLarga(it.first, it.second) }
-                        },
-                        onDrag = { cambio, _ ->
-                            celdaEn(sitios, cambio.position)?.let {
-                                onArrastre(it.first, it.second)
-                            }
+                    awaitEachGesture {
+                        // **En la pasada inicial**, que es la clave. El campo de
+                        // texto de la celda se queda el toque para colocar su
+                        // cursor, así que un detector normal —que exige un toque
+                        // sin consumir— no llegaba a enterarse nunca y arrastrar
+                        // no marcaba nada.
+                        //
+                        // Aquí se mira antes que nadie y sin consumir: mientras
+                        // el dedo no aguante, todo sigue su camino y escribir va
+                        // como siempre. En cuanto se pasa de la pulsación larga
+                        // el gesto pasa a ser nuestro y ya sí se consume, para
+                        // que el campo no intente además seleccionar texto.
+                        val abajo = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial
+                        )
+                        val seLevanto = withTimeoutOrNull(
+                            viewConfiguration.longPressTimeoutMillis
+                        ) {
+                            waitForUpOrCancellation(PointerEventPass.Initial)
                         }
-                    )
+                        if (seLevanto != null) return@awaitEachGesture
+
+                        celdaEn(sitios, abajo.position)?.let { onCeldaLarga(it.first, it.second) }
+
+                        while (true) {
+                            val evento = awaitPointerEvent(PointerEventPass.Initial)
+                            val dedo = evento.changes.firstOrNull { it.id == abajo.id } ?: break
+                            dedo.consume()
+                            if (!dedo.pressed) break
+                            celdaEn(sitios, dedo.position)?.let { onArrastre(it.first, it.second) }
+                        }
+                    }
                 },
                 content = {
                     // Primero las celdas, luego las asas de columna y por último
@@ -148,16 +176,19 @@ fun RejillaDeTabla(
                                 // Marcado = **solo el borde**. Pintar el fondo
                                 // tapaba el texto de la celda justo cuando se
                                 // está mirando para decidir qué hacer con ella.
-                                .border(
-                                    if (dentro) 2.dp else 1.dp,
-                                    if (dentro) marcadoColor else colorDelBorde
-                                )
+                                .padding(1.dp)
+                                .clip(ESQUINA)
                                 .background(
                                     if (ancla.celda.cabecera) {
                                         fondoDeCabecera
                                     } else {
                                         Color.Transparent
                                     }
+                                )
+                                .border(
+                                    if (dentro) 2.dp else 1.dp,
+                                    if (dentro) marcadoColor else colorDelBorde,
+                                    ESQUINA
                                 )
                                 .padding(horizontal = 6.dp, vertical = 5.dp),
                             contentAlignment = alineacionDeLaCelda(ancla.celda)
@@ -317,6 +348,9 @@ val ASA_DP = 14.dp
 
 /** Lo menos que puede medir una fila para seguir siendo tocable. */
 val ALTO_MINIMO_DE_FILA = 40.dp
+
+/** El redondeo de cada celda. */
+private val ESQUINA = RoundedCornerShape(6.dp)
 
 /** Cuánto mide una columna como mínimo. Su `MIN_COL_DP`. */
 val MINIMO_DE_COLUMNA = 80.dp
