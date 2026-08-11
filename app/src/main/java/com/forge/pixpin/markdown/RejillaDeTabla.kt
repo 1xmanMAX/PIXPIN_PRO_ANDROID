@@ -3,9 +3,13 @@ package com.forge.pixpin.markdown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -120,11 +124,31 @@ fun RejillaDeTabla(
                                         else -> Color.Transparent
                                     }
                                 )
+                                // **Solo la pulsación larga, y sin quedarse el
+                                // toque.** Con `detectTapGestures` la celda se
+                                // comía el toque antes de que llegara al campo
+                                // de texto de dentro, así que la tabla se creaba
+                                // y luego no se podía escribir en ella.
+                                //
+                                // Mirando en la pasada inicial y sin consumir
+                                // nada, el dedo sigue su camino hasta el campo;
+                                // aquí solo se cuenta cuánto tarda en levantarse
+                                // para saber si fue larga.
                                 .pointerInput(ancla.fila, ancla.columna) {
-                                    detectTapGestures(
-                                        onTap = { onCelda(ancla.fila, ancla.columna) },
-                                        onLongPress = { onCeldaLarga(ancla.fila, ancla.columna) }
-                                    )
+                                    awaitEachGesture {
+                                        awaitFirstDown(
+                                            requireUnconsumed = false,
+                                            pass = PointerEventPass.Initial
+                                        )
+                                        val seLevanto = withTimeoutOrNull(
+                                            viewConfiguration.longPressTimeoutMillis
+                                        ) {
+                                            waitForUpOrCancellation(PointerEventPass.Initial)
+                                        }
+                                        if (seLevanto == null) {
+                                            onCeldaLarga(ancla.fila, ancla.columna)
+                                        }
+                                    }
                                 }
                                 .padding(horizontal = 6.dp, vertical = 5.dp),
                             contentAlignment = alineacionDeLaCelda(ancla.celda)
@@ -192,8 +216,11 @@ fun RejillaDeTabla(
                         }
                     }
                 }
+                // Ninguna fila por debajo del alto de un dedo. Una celda de dos
+                // puntos no se puede tocar, y una tabla recién hecha está vacía.
+                val suelo = ALTO_MINIMO_DE_FILA.roundToPx()
                 for (f in 0 until filas) {
-                    if (alturas[f] <= 0) alturas[f] = minimo / 2
+                    if (alturas[f] < suelo) alturas[f] = suelo
                 }
 
                 val inicioDeColumna = IntArray(columnas + 1)
@@ -254,6 +281,9 @@ private fun Asa(color: Color, onClick: () -> Unit) {
 
 /** Lo que ocupan las asas. Su `HANDLE_PAD_DP`. */
 val ASA_DP = 14.dp
+
+/** Lo menos que puede medir una fila para seguir siendo tocable. */
+val ALTO_MINIMO_DE_FILA = 40.dp
 
 /** Cuánto mide una columna como mínimo. Su `MIN_COL_DP`. */
 val MINIMO_DE_COLUMNA = 80.dp

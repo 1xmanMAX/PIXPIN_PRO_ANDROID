@@ -192,17 +192,17 @@ private fun TablaEditable(
 
     Column(Modifier.fillMaxWidth()) {
         // El título, su `pageBlockTable.title`. Se escribe aquí mismo.
-        BasicTextField(
-            value = tabla.titulo.text,
-            onValueChange = { onCambio(Tablas.conTitulo(tabla, InlineText(it))) },
+        CeldaEscribible(
+            texto = tabla.titulo.text,
+            onTexto = { onCambio(Tablas.conTitulo(tabla, InlineText(it))) },
+            onFoco = { menuAbierto = false },
             modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp),
             textStyle = TextStyle(
                 fontSize = (baseSizeSp * 0.95f).sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+            )
         )
 
         if (menuAbierto && marca != null) {
@@ -252,9 +252,9 @@ private fun TablaEditable(
                 menuAbierto = true
             }
         ) { ancla ->
-            BasicTextField(
-                value = ancla.celda.contenido.text,
-                onValueChange = {
+            CeldaEscribible(
+                texto = ancla.celda.contenido.text,
+                onTexto = {
                     // La fila y el índice salen del ancla: con una fusión, la
                     // celda que se ve en la columna 2 puede ser la primera de la
                     // lista de su fila. Ver [Ancla.indiceEnLaFila].
@@ -262,6 +262,7 @@ private fun TablaEditable(
                         Tablas.conCelda(tabla, ancla.fila, ancla.indiceEnLaFila, InlineText(it))
                     )
                 },
+                onFoco = { marcado = Tablas.Marcado.celda(ancla.fila, ancla.columna) },
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = TextStyle(
                     fontSize = (baseSizeSp * 0.92f).sp,
@@ -272,11 +273,53 @@ private fun TablaEditable(
                         else -> TextAlign.Start
                     },
                     color = MaterialTheme.colorScheme.onSurface
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+                )
             )
         }
     }
+}
+
+/**
+ * Una celda que se puede escribir sin que el cursor salte.
+ *
+ * El texto de la tabla se guarda **en Markdown**, así que en cada tecla se
+ * escribe la tabla entera y se vuelve a leer. Pasándole al campo solo la cadena,
+ * cada vuelta lo obligaba a rehacer su estado y el cursor se iba al principio;
+ * escribir dos letras seguidas era imposible.
+ *
+ * Con la posición del cursor guardada aquí, el campo manda sobre lo que se está
+ * escribiendo y solo se rinde cuando el texto **le llega cambiado desde fuera y
+ * no lo tiene delante** —por deshacer, por combinar celdas—, que es justo cuando
+ * hay que rendirse.
+ */
+@Composable
+private fun CeldaEscribible(
+    texto: String,
+    onTexto: (String) -> Unit,
+    onFoco: () -> Unit,
+    modifier: Modifier = Modifier,
+    textStyle: TextStyle
+) {
+    var valor by remember { mutableStateOf(TextFieldValue(texto, TextRange(texto.length))) }
+    var conFoco by remember { mutableStateOf(false) }
+
+    if (!conFoco && valor.text != texto) {
+        valor = TextFieldValue(texto, TextRange(texto.length))
+    }
+
+    BasicTextField(
+        value = valor,
+        onValueChange = {
+            valor = it
+            if (it.text != texto) onTexto(it.text)
+        },
+        modifier = modifier.onFocusChanged {
+            conFoco = it.isFocused
+            if (it.isFocused) onFoco()
+        },
+        textStyle = textStyle,
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+    )
 }
 
 /**
