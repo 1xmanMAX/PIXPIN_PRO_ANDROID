@@ -106,6 +106,10 @@ object DrawSvg {
     /** Cuánto se le permite desviarse al perfil simplificado, en píxeles. */
     private const val TOLERANCIA_DEL_PERFIL = 0.12
 
+    /** El punto tecleado y su número, en píxeles de escena. Los mismos del PDF. */
+    private const val RADIO_DE_TABLA = 3.25
+    private const val LETRA_DE_TABLA = 15.0
+
     /**
      * El dibujo escrito, o null si no había nada que escribir.
      *
@@ -139,6 +143,15 @@ object DrawSvg {
             if (e.type == ElementType.SPOTLIGHT) continue
             cuerpo.append(pincel.elemento(e, pintables.subList(0, i)))
         }
+        // Los puntos tecleados, que **no son elementos**: viven en las tablas y
+        // ningún recorrido por los elementos los ve. El mismo hueco que tenía el
+        // PDF, y por el mismo motivo — no hay tipo que barrer.
+        scene.origenCoordenadas?.let { origen ->
+            for (tabla in scene.tablas.filter { it.visible }) {
+                cuerpo.append(pincel.tabla(tabla, origen, scene.escala))
+            }
+        }
+
         // El foco el último de todos y de una sola pieza, por lo mismo que en
         // pantalla: dos sombras superpuestas oscurecen el doble donde se cruzan.
         pintables.filter { it.type == ElementType.SPOTLIGHT }
@@ -533,6 +546,38 @@ object DrawSvg {
             "data:image/$tipo;base64," +
                 Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
         }.getOrNull()
+
+        /**
+         * Los puntos de una tabla de coordenadas, con su número.
+         *
+         * `1'`, `2'`, `3'`… por su posición, que es lo que los distingue de los
+         * etiquetados a mano. Del tamaño que tienen al exportar y no al de
+         * pantalla, igual que en el PDF.
+         */
+        fun tabla(t: TablaDeCoordenadas, origen: Pt, escalaDelPlano: Escala?): String {
+            val color = parseColor(t.color, 255)
+            val s = StringBuilder()
+            for ((i, p) in puntosEnEscena(t, origen, escalaDelPlano).withIndex()) {
+                s.append(
+                    "<circle cx=\"${Svg.num(p.x)}\" cy=\"${Svg.num(p.y)}\" " +
+                        "r=\"${Svg.num(RADIO_DE_TABLA * 1.55)}\" fill=\"#ffffff\"/>\n" +
+                        "<circle cx=\"${Svg.num(p.x)}\" cy=\"${Svg.num(p.y)}\" " +
+                        "r=\"${Svg.num(RADIO_DE_TABLA)}\" fill=\"${Svg.hex(color)}\"/>\n"
+                )
+                val perfil = perfilDe(
+                    "${i + 1}'",
+                    p.x + RADIO_DE_TABLA * 1.8, p.y - RADIO_DE_TABLA * 1.4,
+                    LETRA_DE_TABLA, null, Paint.Align.LEFT, negrita = true
+                )
+                if (perfil.isNotEmpty()) {
+                    s.append(
+                        "<path d=\"${Svg.caminoDeContornos(perfil)}\" " +
+                            "fill=\"${Svg.hex(color)}\"/>\n"
+                    )
+                }
+            }
+            return s.toString()
+        }
 
         // -- el foco ---------------------------------------------------------
 

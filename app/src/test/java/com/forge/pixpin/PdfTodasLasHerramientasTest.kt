@@ -201,6 +201,75 @@ class PdfTodasLasHerramientasTest {
         assertTrue("el giro no se ha escrito", ordenes.split(" cm").size > 2)
     }
 
+    /**
+     * **Los puntos tecleados también, aunque no sean elementos.**
+     *
+     * Se escaparon del barrido por tipos y del PDF entero: viven en las tablas
+     * de la escena, no en la lista de elementos, así que **no hay tipo que
+     * barrer**. Es el agujero que un barrido por enums no puede encontrar solo,
+     * y por eso lleva su propia prueba.
+     */
+    @Test
+    fun `los puntos de una tabla llegan al PDF y al SVG`() {
+        val escena = Scene(
+            origenCoordenadas = Pt(100.0, 700.0),
+            escala = Escala(unidadesPorPixel = 0.01, unidad = "m"),
+            tablas = listOf(
+                TablaDeCoordenadas(
+                    id = "t", color = "#e03131",
+                    puntos = listOf(
+                        PuntoDeTabla(0.0, 0.0),
+                        PuntoDeTabla(1.5, 0.8),
+                        PuntoDeTabla(3.0, -0.4)
+                    )
+                )
+            ),
+            elements = listOf(ejemplar(ElementType.LINE))
+        )
+
+        val pdf = PdfLienzo.deEscena(
+            context, escena, doubleArrayOf(1.0, 0.0, 0.0, -1.0, 0.0, 842.0), 20
+        )
+        assertNotNull("no ha salido nada", pdf)
+        val ordenes = String(pdf!!.contenido, Charsets.ISO_8859_1)
+        // Tres puntos, cada uno con su aro: seis círculos como polilíneas.
+        assertTrue("los puntos de la tabla no llegan al PDF", ordenes.count { it == 'm' } >= 6)
+
+        val svg = DrawSvg.aTexto(context, escena)
+        assertNotNull(svg)
+        assertTrue(
+            "los puntos de la tabla no llegan al SVG",
+            svg!!.split("<circle").size > 6
+        )
+    }
+
+    /**
+     * Y la cota **se abre para su número**, igual que en pantalla.
+     *
+     * Entera, la cifra queda encima de la propia línea y tapa justo lo que se
+     * está midiendo. Salía entera en el PDF, y por eso la cota se veía distinta
+     * de como se había dibujado.
+     */
+    @Test
+    fun `la cota se parte para dejar sitio al número`() {
+        val cota = Element(
+            id = "c", type = ElementType.MEASURE,
+            x = 50.0, y = 400.0, width = 400.0, height = 0.0, seed = 5,
+            points = listOf(Pt(0.0, 0.0), Pt(400.0, 0.0)), fontSize = 20.0
+        )
+        val escena = Scene(
+            escala = Escala(unidadesPorPixel = 0.01, unidad = "m"),
+            elements = listOf(cota)
+        )
+        val salida = PdfLienzo.deEscena(
+            context, escena, doubleArrayOf(1.0, 0.0, 0.0, -1.0, 0.0, 842.0), 20
+        )!!
+        val ordenes = String(salida.contenido, Charsets.ISO_8859_1)
+        // Partida son dos tramos, y cada tramo del generador rugoso pasa dos
+        // veces: bastantes más trazos que una raya sola.
+        assertTrue("la cota no se ha partido: $ordenes", ordenes.split("S\n").size >= 4)
+    }
+
     /** El foco sí se pinta, pero por su camino: aquí se comprueba ese. */
     @Test
     fun `el foco se escribe por su propio camino`() {

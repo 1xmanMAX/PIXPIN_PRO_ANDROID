@@ -117,6 +117,18 @@ object PdfLienzo {
             if (e.type == ElementType.SPOTLIGHT) continue
             cuerpo.write(pincel.elemento(e, pintables.subList(0, i)))
         }
+        // **Los puntos tecleados, que no son elementos.**
+        //
+        // Viven en `scene.tablas` y los pinta el renderizador aparte, así que
+        // ningún recorrido por los elementos los ve — ni este ni el del SVG. Es
+        // justo la clase de hueco que un barrido por tipos no encuentra, porque
+        // no hay tipo que barrer.
+        scene.origenCoordenadas?.let { origen ->
+            for (tabla in scene.tablas.filter { it.visible }) {
+                cuerpo.write(pincel.tabla(tabla, origen, scene.escala))
+            }
+        }
+
         pintables.filter { it.type == ElementType.SPOTLIGHT }
             .takeIf { it.isNotEmpty() }
             ?.let { cuerpo.write(pincel.focos(it, pintables)) }
@@ -510,10 +522,30 @@ object PdfLienzo {
 
             val color = parseColor(e.strokeColor, alpha)
             val salida = ByteArrayOutputStream()
-            val rough = Rough(roughOptionsFor(e).copy(preserveVertices = true))
-            salida.write(
-                trazo(e, rough.doubleLine(a.x, a.y, b.x, b.y), alpha)
-            )
+            val texto = textoDeCota(e, escala)
+            val tam = e.fontSize ?: 20.0
+
+            // **La raya se abre en el medio para dejar sitio al número**, igual
+            // que en pantalla. Entera, el número quedaba encima de la propia
+            // línea y tapaba justo lo que se está midiendo: partiéndola, la
+            // cifra va *dentro* de la cota, que es como se acota en un plano.
+            // Salía entera en el PDF, y por eso la cota se veía distinta.
+            val hueco = huecoDelRotulo(texto, tam, e.fontFamily, largo)
+            fun tramo(desde: Pt, hasta: Pt) {
+                val rough = Rough(roughOptionsFor(e).copy(preserveVertices = true))
+                salida.write(
+                    trazo(e, rough.doubleLine(desde.x, desde.y, hasta.x, hasta.y), alpha)
+                )
+            }
+            if (hueco <= 0.0) {
+                tramo(a, b)
+            } else {
+                val ux = (b.x - a.x) / largo
+                val uy = (b.y - a.y) / largo
+                val corte = (largo - hueco) / 2
+                tramo(a, Pt(a.x + ux * corte, a.y + uy * corte))
+                tramo(Pt(b.x - ux * corte, b.y - uy * corte), b)
+            }
 
             // Los banderines de los extremos.
             val nx = -(b.y - a.y) / largo
@@ -531,11 +563,7 @@ object PdfLienzo {
             salida.write(mediaPunta(a, b, e.strokeWidth, color))
             salida.write(mediaPunta(b, a, e.strokeWidth, color))
 
-            // **Y el número, que es lo que la cota viene a decir.** Faltaba: la
-            // raya salía en el PDF y la medida no, así que lo entregado decía
-            // «esto mide» sin decir cuánto.
-            val texto = textoDeCota(e, escala)
-            val tam = e.fontSize ?: 20.0
+            // **Y el número, que es lo que la cota viene a decir.**
             if (texto.isNotEmpty() && tam > 0) {
                 prepararPincel(tam, e.fontFamily, Paint.Align.CENTER)
                 val fm = medidor.fontMetrics
@@ -552,11 +580,38 @@ object PdfLienzo {
                         "1 0 0 1 ${PdfEscritura.numero(cx)} ${PdfEscritura.numero(cy)} cm"
                     )
                     salida.orden(giroSobre(Math.toRadians(giro), 0.0, 0.0))
+                    // **El halo primero y la cifra encima**, como en pantalla: sin
+                    // él, el número desaparece en cuanto cae sobre una zona de su
+                    // mismo color. Al revés se comería los perfiles.
+                    salida.orden("q")
+                    salida.write(alfa(contrastingTextColor(color, alpha)))
+                    salida.orden(colorDe(contrastingTextColor(color, alpha), "RG"))
+                    salida.orden("${PdfEscritura.numero(tam * 0.22)} w")
+                    salida.write(camino(ops))
+                    salida.orden("S")
+                    salida.orden("Q")
                     salida.write(pintado(ops, color, "f"))
                     salida.orden("Q")
                 }
             }
             return salida.toByteArray()
+        }
+
+        /**
+         * Cuánto hay que abrir la raya para que quepa su número.
+         *
+         * Cero si no cabe: en una cota corta, partirla dejaría dos muñones y el
+         * número saliéndose por los dos lados. Los mismos números que usa el
+         * renderizador, o la cota del PDF no se parecería a la de la pantalla.
+         */
+        private fun huecoDelRotulo(
+            texto: String, tam: Double, familia: Int?, largo: Double
+        ): Double {
+            if (tam <= 0.0 || texto.isEmpty()) return 0.0
+            prepararPincel(tam, familia, Paint.Align.LEFT)
+            val ancho = medidor.measureText(texto).toDouble()
+            val hueco = ancho + tam * 0.45 * 2
+            return if (hueco > largo * 0.72) 0.0 else hueco
         }
 
         /** Media punta de flecha, apuntando de [en] hacia afuera de [hacia]. */
@@ -742,6 +797,50 @@ object PdfLienzo {
             return salida.toByteArray()
         }
 
+        /**
+         * Los puntos de una tabla de coordenadas, **con su número**.
+         *
+         * `1'`, `2'`, `3'`… por su posición en la tabla. El apóstrofo es lo que
+         * los distingue de los puntos etiquetados a mano, que van A, B, C: en un
+         * croquis donde conviven los vértices de la figura y una serie de
+         * coordenadas tecleadas, poder decir «de A a 3'» sin ambigüedad es la
+         * diferencia entre explicarse y señalar con el dedo.
+         *
+         * Del tamaño que tienen al exportar, no al de pantalla: en la pantalla
+         * se miden en píxeles de pantalla para verse siempre igual, y aquí en
+         * píxeles de escena. Ver [Renderer.encogeAlExportar].
+         */
+        fun tabla(tabla: TablaDeCoordenadas, origen: Pt, escalaDelPlano: Escala?): ByteArray {
+            val color = parseColor(tabla.color, 255)
+            val salida = ByteArrayOutputStream()
+            for ((i, p) in puntosEnEscena(tabla, origen, escalaDelPlano).withIndex()) {
+                // El aro blanco primero: sobre un plano oscuro, un punto de
+                // color sin nada detrás se pierde.
+                salida.write(
+                    pintado(
+                        opsDePuntos(circulo(p, RADIO_DE_TABLA * 1.55), cerrado = true),
+                        android.graphics.Color.WHITE, "f"
+                    )
+                )
+                salida.write(
+                    pintado(
+                        opsDePuntos(circulo(p, RADIO_DE_TABLA), cerrado = true), color, "f"
+                    )
+                )
+
+                val etiqueta = "${i + 1}'"
+                prepararPincel(LETRA_DE_TABLA, null, Paint.Align.LEFT, negrita = true)
+                val perfil = Glifos.perfilDe(
+                    medidor, etiqueta,
+                    p.x + RADIO_DE_TABLA * 1.8, p.y - RADIO_DE_TABLA * 1.4
+                )
+                if (perfil.isNotEmpty()) {
+                    salida.write(pintado(opsDeAnillos(perfil, 2), color, "f"))
+                }
+            }
+            return salida.toByteArray()
+        }
+
         // -- el foco ---------------------------------------------------------
 
         fun focos(focos: List<Element>, todos: List<Element>): ByteArray {
@@ -834,6 +933,16 @@ object PdfLienzo {
     private const val REFERENCIA_OPACIDAD = 35
     private const val SPOTLIGHT_DIM = 96
     private const val SERIAL_TEXT_RATIO = 1.25
+
+    /**
+     * El punto tecleado y su número, en píxeles de escena.
+     *
+     * Son la mitad de lo que miden en pantalla porque allí se miden en píxeles
+     * de pantalla y quien dibuja suele trabajar acercado. Ver
+     * [Renderer.encogeAlExportar], que hace la misma cuenta para la imagen.
+     */
+    private const val RADIO_DE_TABLA = 3.25
+    private const val LETRA_DE_TABLA = 15.0
 }
 
 /** Escribe una orden y su salto de línea. */
