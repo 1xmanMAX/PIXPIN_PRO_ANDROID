@@ -8,6 +8,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,6 +109,7 @@ fun RejillaDeTabla(
     val colorDelBorde = MaterialTheme.colorScheme.outlineVariant
     val fondoDeCabecera = MaterialTheme.colorScheme.surfaceVariant
     val marcadoColor = MaterialTheme.colorScheme.primary
+    val vibrar = LocalHapticFeedback.current
 
     // El ancho de la ventana se mide **fuera** del desplazamiento: dentro es
     // infinito, y con eso las columnas nunca podrían llenar la pantalla.
@@ -133,25 +136,39 @@ fun RejillaDeTabla(
                         // **En la pasada inicial**, que es la clave. El campo de
                         // texto de la celda se queda el toque para colocar su
                         // cursor, así que un detector normal —que exige un toque
-                        // sin consumir— no llegaba a enterarse nunca y arrastrar
-                        // no marcaba nada.
+                        // sin consumir— no llegaba a enterarse nunca.
                         //
                         // Aquí se mira antes que nadie y sin consumir: mientras
                         // el dedo no aguante, todo sigue su camino y escribir va
-                        // como siempre. En cuanto se pasa de la pulsación larga
-                        // el gesto pasa a ser nuestro y ya sí se consume, para
-                        // que el campo no intente además seleccionar texto.
+                        // como siempre.
                         val abajo = awaitFirstDown(
                             requireUnconsumed = false,
                             pass = PointerEventPass.Initial
                         )
-                        val seLevanto = withTimeoutOrNull(
-                            viewConfiguration.longPressTimeoutMillis
-                        ) {
-                            waitForUpOrCancellation(PointerEventPass.Initial)
-                        }
-                        if (seLevanto != null) return@awaitEachGesture
 
+                        // Tiene que ser **quieto y aguantado**. Si se levanta o
+                        // se mueve antes de tiempo no es una pulsación larga: es
+                        // un toque para escribir o un desplazamiento, y el menú
+                        // saltando ahí es lo que hacía que apareciera solo.
+                        val seFue = withTimeoutOrNull(ESPERA_DE_PULSACION) {
+                            while (true) {
+                                val evento = awaitPointerEvent(PointerEventPass.Initial)
+                                val dedo = evento.changes.firstOrNull { it.id == abajo.id }
+                                    ?: return@withTimeoutOrNull true
+                                if (!dedo.pressed) return@withTimeoutOrNull true
+                                val recorrido = (dedo.position - abajo.position).getDistance()
+                                if (recorrido > viewConfiguration.touchSlop) {
+                                    return@withTimeoutOrNull true
+                                }
+                            }
+                            @Suppress("UNREACHABLE_CODE") false
+                        }
+                        if (seFue != null) return@awaitEachGesture
+
+                        // Aguantó: se avisa con un toque en la mano, como hace
+                        // cualquier selección larga, y a partir de aquí el gesto
+                        // es nuestro.
+                        vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
                         celdaEn(sitios, abajo.position)?.let { onCeldaLarga(it.first, it.second) }
 
                         while (true) {
@@ -349,6 +366,16 @@ val ASA_DP = 14.dp
 /** Lo menos que puede medir una fila para seguir siendo tocable. */
 val ALTO_MINIMO_DE_FILA = 40.dp
 
+/**
+ * Cuánto hay que aguantar para que se marque.
+ *
+ * El doble de lo que Android llama pulsación larga. Con el tiempo normal el menú
+ * salía al tocar una celda para escribir en ella, que es lo que más se hace en
+ * una tabla; aquí la pulsación larga no es un atajo, es una decisión, y conviene
+ * que cueste un poco.
+ */
+private const val ESPERA_DE_PULSACION = 800L
+
 /** El redondeo de cada celda. */
 private val ESQUINA = RoundedCornerShape(6.dp)
 
@@ -469,7 +496,7 @@ fun MenuDeTabla(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BotonDelMenu(Icons.Filled.Highlight, "Destacar") {
+                BotonDelMenu(Icons.Filled.Highlight, "Sombrear") {
                     onAccion(AccionDeTabla.DESTACAR)
                 }
                 if (puedeCombinar) {
@@ -482,11 +509,13 @@ fun MenuDeTabla(
                         onAccion(AccionDeTabla.SEPARAR)
                     }
                 }
+                // Añadir y quitar **solo con una fila o una columna entera
+                // marcada**. Sobre unas cuantas celdas sueltas, «fila arriba» no
+                // significa nada —¿arriba de cuál?—, así que ahí el menú se
+                // queda con lo que sí se puede hacer: alinear, sombrear y
+                // combinar.
+                if (clase == ClaseDeMarcado.CELDA) return@Row
                 Separador()
-                // Añadir y quitar **según lo que esté marcado**. Con una
-                // columna marcada, «fila arriba» no significa nada: la fila
-                // sería cuál. Enseñar botones que no responden a lo que se ha
-                // marcado es peor que no enseñarlos.
                 if (clase != ClaseDeMarcado.COLUMNA) {
                     BotonDelMenu(Icons.Filled.ArrowUpward, "Fila arriba") {
                         onAccion(AccionDeTabla.FILA_ARRIBA)
