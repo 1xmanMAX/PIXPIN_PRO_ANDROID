@@ -26,7 +26,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Merge
+import androidx.compose.material.icons.filled.VerticalAlignCenter
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -498,8 +501,16 @@ private fun iconoDeFamilia(familia: Familia): ImageVector = when (familia) {
     Familia.ADJUNTAR -> Icons.Filled.AttachFile
 }
 
-/** Lo que se puede hacer con la tabla donde está el cursor. */
-enum class OpTabla { FILA_MAS, FILA_MENOS, COLUMNA_MAS, COLUMNA_MENOS, ALINEAR }
+/**
+ * Lo que se puede hacer con la tabla, calcado de su `TableModel`.
+ *
+ * [FUSIONAR] y [SEPARAR] son sus `mergeCells` y `unmergeCell`; [ALTURA] es su
+ * `setVAlign`, y [CABECERA] su `setHeader`, que allí también va por celda.
+ */
+enum class OpTabla {
+    FILA_MAS, FILA_MENOS, COLUMNA_MAS, COLUMNA_MENOS,
+    ALINEAR, ALTURA, CABECERA, FUSIONAR, SEPARAR
+}
 
 /**
  * La barra que sale **dentro de una tabla**.
@@ -537,8 +548,25 @@ fun BarraDeTablaUi(
         }
         Spacer(Modifier.width(SEPARACION))
         Isla {
-            BotonDeTabla(Icons.Filled.FormatAlignCenter, "Alinear la columna") {
+            BotonDeTabla(Icons.Filled.FormatAlignCenter, "Alinear") {
                 onOperacion(OpTabla.ALINEAR)
+            }
+            BotonDeTabla(Icons.Filled.VerticalAlignCenter, "Altura del contenido") {
+                onOperacion(OpTabla.ALTURA)
+            }
+            BotonDeTabla(Icons.Filled.Title, "Cabecera") {
+                onOperacion(OpTabla.CABECERA)
+            }
+        }
+        Spacer(Modifier.width(SEPARACION))
+        Isla {
+            // Fusionar y separar, su `mergeCells` / `unmergeCell`. Fusiona desde
+            // la celda marcada hasta la que se marque después.
+            BotonDeTabla(Icons.Filled.Merge, "Fusionar celdas") {
+                onOperacion(OpTabla.FUSIONAR)
+            }
+            BotonDeTabla(Icons.Filled.CallSplit, "Separar celdas") {
+                onOperacion(OpTabla.SEPARAR)
             }
         }
         Spacer(Modifier.width(SEPARACION))

@@ -114,7 +114,7 @@ object Bloques {
         TipoDeBloque.FORMULA -> Plantilla("$$\n", "\n$$")
         // Vacía. Antes venía con «Columna» escrito en la cabecera y había que
         // borrarlo a mano cada vez, que es trabajo en vez de ayuda.
-        TipoDeBloque.TABLA -> Plantilla(Tablas.nueva(3, 2) + "\n")
+        TipoDeBloque.TABLA -> Plantilla(Tablas.aTexto(Tablas.nueva(3, 2)) + "\n")
         TipoDeBloque.PLEGABLE -> Plantilla(":::plegable ", "\ncontenido\n:::\n")
         TipoDeBloque.DESTACADO -> Plantilla(":::destacado\n", "\n:::\n")
         TipoDeBloque.PIE -> Plantilla(":::pie\n", "\n:::\n")
@@ -158,7 +158,8 @@ object Bloques {
         // Un medio no envuelve texto: lo sustituye.
         TipoDeBloque.IMAGEN, TipoDeBloque.VIDEO,
         TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO -> cuerpo
-        TipoDeBloque.TABLA -> if (Tablas.esTabla(cuerpo)) cuerpo else Tablas.nueva(3, 2)
+        TipoDeBloque.TABLA ->
+            if (Tablas.esTabla(cuerpo)) cuerpo else Tablas.aTexto(Tablas.nueva(3, 2))
     }
 
     /** ¿Este bloque necesita que se elija un archivo antes de escribirse? */

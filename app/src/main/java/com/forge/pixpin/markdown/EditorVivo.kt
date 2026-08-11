@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,17 +88,16 @@ fun EditorVivo(
 
             if (activo && bloque is MarkdownBlock.Tabla) {
                 TablaEditable(
-                    fuente = fuente,
                     tabla = bloque,
                     celda = sitio.celda,
                     baseSizeSp = baseSizeSp,
                     onCelda = { c -> onSitio(Sitio(i, TextRange.Zero, c)) },
                     onCambio = { nueva ->
-                        val trozos2 = trozosDe(texto)
-                        val t = trozos2[i]
+                        val t = trozosDe(texto)[i]
                         val cola = t.de(texto).takeLastWhile { it == '\n' }
                         onTexto(
-                            texto.substring(0, t.desde) + nueva + cola + texto.substring(t.hasta)
+                            texto.substring(0, t.desde) + Tablas.aTexto(nueva) + cola +
+                                texto.substring(t.hasta)
                         )
                     }
                 )
@@ -170,20 +170,33 @@ fun EditorVivo(
  */
 @Composable
 private fun TablaEditable(
-    fuente: String,
     tabla: MarkdownBlock.Tabla,
     celda: Int,
     baseSizeSp: Float,
     onCelda: (Int) -> Unit,
-    onCambio: (String) -> Unit
+    onCambio: (MarkdownBlock.Tabla) -> Unit
 ) {
     val borde = MaterialTheme.colorScheme.outlineVariant
-    val columnas = tabla.filas.maxOfOrNull { it.size } ?: 0
+    val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
+    val columnas = tabla.columnas.coerceAtLeast(1)
+    val marcada = if (celda < 0) null else (celda / columnas) to (celda % columnas)
 
     Column(Modifier.fillMaxWidth()) {
-        // La fila de asas de columna, como su `colHandleAtGrid`: se toca una y
-        // se actúa sobre esa columna entera. Sin ellas, «quitar columna» tenía
-        // que adivinar cuál, y adivinar sobre algo que borra no vale.
+        // El título, su `pageBlockTable.title`. Se escribe aquí mismo.
+        BasicTextField(
+            value = tabla.titulo.text,
+            onValueChange = { onCambio(Tablas.conTitulo(tabla, InlineText(it))) },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 3.dp),
+            textStyle = TextStyle(
+                fontSize = (baseSizeSp * 0.95f).sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
+        )
+
+        // Las asas de columna, su `colHandleAtGrid`.
         Row(Modifier.fillMaxWidth()) {
             Spacer(Modifier.width(ASA))
             (0 until columnas).forEach { c ->
@@ -193,7 +206,7 @@ private fun TablaEditable(
                         .padding(horizontal = 1.dp)
                         .height(ASA)
                         .background(
-                            if (celda >= 0 && celda % columnas == c) {
+                            if (marcada?.second == c) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 borde
@@ -206,16 +219,16 @@ private fun TablaEditable(
         }
         Spacer(Modifier.height(2.dp))
 
-        tabla.filas.forEachIndexed { f, fila ->
+        rejilla.forEachIndexed { f, fila ->
             Row(Modifier.fillMaxWidth()) {
-                // El asa de la fila.
+                // El asa de la fila, su `rowHandleAtGrid`.
                 Box(
                     Modifier
                         .width(ASA)
                         .height((baseSizeSp * 2.4f).dp)
                         .padding(vertical = 1.dp)
                         .background(
-                            if (celda >= 0 && celda / columnas == f) {
+                            if (marcada?.first == f) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 borde
@@ -224,50 +237,79 @@ private fun TablaEditable(
                         )
                         .clickable { onCelda(f * columnas) }
                 )
-                (0 until columnas).forEach { c ->
-                    val esCabecera = tabla.cabecera && f == 0
-                    val indice = f * columnas + c
+
+                var c = 0
+                while (c < columnas) {
+                    val hueco = fila.getOrNull(c)
+                    // Un hueco tapado por una fusión de arriba no dibuja nada:
+                    // el ancla ya ocupa su sitio.
+                    if (hueco != null && !hueco.esElAncla) {
+                        c++
+                        continue
+                    }
+                    val cel = hueco?.celda ?: Celda()
+                    val ancho = cel.anchoEnColumnas.coerceAtLeast(1)
+                    val estaMarcada = marcada?.first == f && marcada.second == c
                     Box(
                         Modifier
-                            .weight(1f)
+                            .weight(ancho.toFloat())
+                            .padding(1.dp)
                             .background(
-                                if (esCabecera) {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                } else {
-                                    Color.Transparent
+                                when {
+                                    estaMarcada ->
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    cel.cabecera -> MaterialTheme.colorScheme.surfaceVariant
+                                    else -> Color.Transparent
                                 }
                             )
-                            .padding(1.dp)
-                            .clickable { onCelda(indice) }
+                            .clickable { onCelda(f * columnas + c) }
                     ) {
-                        val contenido = fila.getOrNull(c)?.text.orEmpty()
+                        val fx = f
+                        val cx = c
                         BasicTextField(
-                            value = contenido,
-                            onValueChange = { onCambio(Tablas.conCelda(fuente, f, c, it)) },
+                            value = cel.contenido.text,
+                            onValueChange = {
+                                onCambio(Tablas.conCelda(tabla, fx, indiceEnLaFila(rejilla, fx, cx), InlineText(it)))
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 6.dp, vertical = 6.dp),
                             textStyle = TextStyle(
                                 fontSize = (baseSizeSp * 0.92f).sp,
-                                fontWeight = if (esCabecera) FontWeight.Bold else FontWeight.Normal,
+                                fontWeight = if (cel.cabecera) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Normal
+                                },
+                                textAlign = when (cel.alineacion) {
+                                    Alineacion.CENTRO -> TextAlign.Center
+                                    Alineacion.DERECHA -> TextAlign.End
+                                    else -> TextAlign.Start
+                                },
                                 color = MaterialTheme.colorScheme.onSurface
                             ),
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
                         )
                     }
-                    if (c < columnas - 1) {
-                        Box(Modifier.width(1.dp).height((baseSizeSp * 2.4f).dp).background(borde))
-                    }
+                    c += ancho
                 }
             }
-            if (f < tabla.filas.size - 1) {
+            if (f < rejilla.size - 1) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(borde))
             }
         }
     }
-    // `celda` se guarda para que la barra de tabla sepa sobre qué columna actuar.
-    @Suppress("UNUSED_EXPRESSION") celda
 }
+
+/**
+ * De columna de la rejilla al número de celda dentro de su fila.
+ *
+ * Hacen falta las dos cuentas porque la fila guarda **solo las anclas**: con
+ * una fusión de dos columnas, la celda que se ve en la columna 2 puede ser la
+ * primera de la lista. Ver [Tablas.rejilla].
+ */
+private fun indiceEnLaFila(rejilla: List<List<Tablas.Hueco?>>, f: Int, c: Int): Int =
+    (0 until c).count { rejilla.getOrNull(f)?.getOrNull(it)?.esElAncla == true }
 
 /** El grosor de las asas de fila y columna. */
 private val ASA = 6.dp

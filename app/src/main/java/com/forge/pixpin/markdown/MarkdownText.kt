@@ -312,54 +312,107 @@ private fun TablaUi(
     onLinks: (List<LinkHit>) -> Unit
 ) {
     val borde = MaterialTheme.colorScheme.outlineVariant
-    Column(
-        Modifier
-            .horizontalScroll(rememberScrollState())
-            .border(1.dp, borde, RoundedCornerShape(6.dp))
-    ) {
-        tabla.filas.forEachIndexed { f, fila ->
-            if (f > 0) HorizontalDivider(color = borde)
-            val esCabecera = tabla.cabecera && f == 0
-            Row(
-                Modifier.background(
-                    if (esCabecera) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        Color.Transparent
-                    }
-                )
-            ) {
-                fila.forEachIndexed { c, celda ->
-                    if (c > 0) {
+    val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
+    val columnas = tabla.columnas.coerceAtLeast(1)
+
+    Column(Modifier.horizontalScroll(rememberScrollState())) {
+        // El título de la tabla, su `pageBlockTable.title`: centrado y encima.
+        if (tabla.titulo.text.isNotEmpty()) {
+            Body(
+                content = tabla.titulo,
+                sizeSp = baseSizeSp * 0.95f,
+                bloque = "$clave/titulo",
+                ocultosVisibles = ocultosVisibles,
+                weight = FontWeight.Bold,
+                onLinks = onLinks
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+
+        Column(Modifier.border(1.dp, borde, RoundedCornerShape(6.dp))) {
+            rejilla.forEachIndexed { f, fila ->
+                if (f > 0) HorizontalDivider(color = borde)
+                Row {
+                    var c = 0
+                    while (c < columnas) {
+                        val hueco = fila.getOrNull(c)
+                        // Solo el ancla dibuja; los huecos que tapa se saltan, y
+                        // por eso la celda fusionada ocupa el ancho de todos.
+                        val ancho = if (hueco?.esElAncla == true) {
+                            hueco.celda.anchoEnColumnas
+                        } else {
+                            1
+                        }
+                        if (hueco != null && !hueco.esElAncla) {
+                            // Tapada por una fusión de más arriba: ni celda ni
+                            // separador, para que no se vea la costura.
+                            if (hueco.filaDelAncla == f) {
+                                c++
+                                continue
+                            }
+                            Box(Modifier.width((baseSizeSp * 7f).dp * 1))
+                            c++
+                            continue
+                        }
+                        if (c > 0) {
+                            Box(
+                                Modifier
+                                    .width(1.dp)
+                                    .height((baseSizeSp * 2.2f).dp)
+                                    .background(borde)
+                            )
+                        }
+                        val celda = hueco?.celda ?: Celda()
                         Box(
                             Modifier
-                                .width(1.dp)
-                                .height((baseSizeSp * 2.2f).dp)
-                                .background(borde)
-                        )
-                    }
-                    Box(
-                        Modifier
-                            .width((baseSizeSp * 7f).dp)
-                            .padding(horizontal = 6.dp, vertical = 5.dp),
-                        contentAlignment = when (tabla.alineaciones.getOrNull(c)) {
-                            Alineacion.CENTRO -> Alignment.Center
-                            Alineacion.DERECHA -> Alignment.CenterEnd
-                            else -> Alignment.CenterStart
+                                .width((baseSizeSp * 7f).dp * ancho)
+                                .background(
+                                    if (celda.cabecera) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        Color.Transparent
+                                    }
+                                )
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                            contentAlignment = alineacionDe(celda)
+                        ) {
+                            Body(
+                                content = celda.contenido,
+                                sizeSp = baseSizeSp * 0.92f,
+                                bloque = "$clave/$f/$c",
+                                ocultosVisibles = ocultosVisibles,
+                                weight = if (celda.cabecera) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Normal
+                                },
+                                onLinks = onLinks
+                            )
                         }
-                    ) {
-                        Body(
-                            content = celda,
-                            sizeSp = baseSizeSp * 0.92f,
-                            bloque = "$clave/$f/$c",
-                            ocultosVisibles = ocultosVisibles,
-                            weight = if (esCabecera) FontWeight.Bold else FontWeight.Normal,
-                            onLinks = onLinks
-                        )
+                        c += ancho
                     }
                 }
             }
         }
+    }
+}
+
+/** Las dos alineaciones de la celda juntas, como su `align` + `valign`. */
+private fun alineacionDe(celda: Celda): Alignment = when (celda.altura) {
+    AlturaEnCelda.ARRIBA -> when (celda.alineacion) {
+        Alineacion.CENTRO -> Alignment.TopCenter
+        Alineacion.DERECHA -> Alignment.TopEnd
+        else -> Alignment.TopStart
+    }
+    AlturaEnCelda.MEDIO -> when (celda.alineacion) {
+        Alineacion.CENTRO -> Alignment.Center
+        Alineacion.DERECHA -> Alignment.CenterEnd
+        else -> Alignment.CenterStart
+    }
+    AlturaEnCelda.ABAJO -> when (celda.alineacion) {
+        Alineacion.CENTRO -> Alignment.BottomCenter
+        Alineacion.DERECHA -> Alignment.BottomEnd
+        else -> Alignment.BottomStart
     }
 }
 

@@ -150,6 +150,8 @@ private fun Pantalla(
     var pidiendoUrl by remember { mutableStateOf(false) }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
+    // La primera esquina de una fusión a medio hacer. Ver [enLaTabla].
+    var fusionDesde by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var viendoAdjuntar by remember { mutableStateOf(false) }
 
     // Deshacer y rehacer, como su `historyButtons`. Se anota cada cambio y el
@@ -217,11 +219,13 @@ private fun Pantalla(
     }
 
     /**
-     * Una operación sobre la tabla activa.
+     * Una operación sobre la tabla activa, con el modelo de su `TableModel`.
      *
      * La fila y la columna salen de [Sitio.celda], o sea de la última celda que
-     * se tocó. Sin celda tocada se actúa al final, que es lo que se quiere al
-     * empezar una tabla: añadir va detrás.
+     * se tocó. Fusionar necesita **dos**: la primera vez marca desde dónde, la
+     * segunda hace la fusión hasta la celda de ahora. Es la forma de tener una
+     * selección de rectángulo sin arrastrar, que en una tabla dentro de una nota
+     * chocaría con el desplazamiento.
      */
     fun enLaTabla(op: OpTabla) {
         val s2 = sitio ?: return
@@ -229,24 +233,57 @@ private fun Pantalla(
         val trozo = trozos.getOrNull(s2.bloque) ?: return
         val fuente = trozo.de(valor.text)
         val cola = fuente.takeLastWhile { it == '\n' }
-        val tabla = fuente.trimEnd('\n')
+        val tabla = Tablas.leer(fuente.trimEnd('\n')) ?: return
 
-        val (filas, columnas) = Tablas.tamaño(tabla)
-        if (columnas == 0) return
-        val fila = if (s2.celda < 0) filas - 1 else (s2.celda / columnas).coerceIn(0, filas - 1)
-        val columna =
-            if (s2.celda < 0) columnas - 1 else (s2.celda % columnas).coerceIn(0, columnas - 1)
+        val columnas = tabla.columnas.coerceAtLeast(1)
+        val fila = if (s2.celda < 0) 0 else (s2.celda / columnas)
+        val columna = if (s2.celda < 0) 0 else (s2.celda % columnas)
+        val rejilla = Tablas.rejilla(tabla)
+        val enLaLista = (0 until columna)
+            .count { rejilla.getOrNull(fila)?.getOrNull(it)?.esElAncla == true }
+        val actual = tabla.filas.getOrNull(fila)?.getOrNull(enLaLista)
 
         val nueva = when (op) {
-            OpTabla.FILA_MAS -> Tablas.añadirFila(tabla, fila)
-            OpTabla.FILA_MENOS -> Tablas.quitarFila(tabla, fila)
-            OpTabla.COLUMNA_MAS -> Tablas.añadirColumna(tabla, columna)
-            OpTabla.COLUMNA_MENOS -> Tablas.quitarColumna(tabla, columna)
-            OpTabla.ALINEAR -> Tablas.rotarAlineacion(tabla, columna)
+            OpTabla.FILA_MAS -> Tablas.insertarFila(tabla, fila + 1)
+            OpTabla.FILA_MENOS -> Tablas.quitarFilas(tabla, setOf(fila))
+            OpTabla.COLUMNA_MAS -> Tablas.insertarColumna(tabla, columna + 1)
+            OpTabla.COLUMNA_MENOS -> Tablas.quitarColumnas(tabla, setOf(columna))
+            OpTabla.ALINEAR -> Tablas.alinear(
+                tabla, fila, enLaLista,
+                when (actual?.alineacion) {
+                    Alineacion.IZQUIERDA -> Alineacion.CENTRO
+                    Alineacion.CENTRO -> Alineacion.DERECHA
+                    else -> Alineacion.IZQUIERDA
+                }
+            )
+            OpTabla.ALTURA -> Tablas.aLaAltura(
+                tabla, fila, enLaLista,
+                when (actual?.altura) {
+                    AlturaEnCelda.ARRIBA -> AlturaEnCelda.MEDIO
+                    AlturaEnCelda.MEDIO -> AlturaEnCelda.ABAJO
+                    else -> AlturaEnCelda.ARRIBA
+                }
+            )
+            OpTabla.CABECERA ->
+                Tablas.comoCabecera(tabla, fila, enLaLista, actual?.cabecera != true)
+            OpTabla.FUSIONAR -> {
+                val desde = fusionDesde
+                if (desde == null) {
+                    fusionDesde = fila to columna
+                    Toast.makeText(
+                        contexto, "Marca ahora la otra esquina", Toast.LENGTH_SHORT
+                    ).show()
+                    return
+                }
+                fusionDesde = null
+                Tablas.fusionar(tabla, desde.first, desde.second, fila, columna)
+            }
+            OpTabla.SEPARAR -> Tablas.separar(tabla, fila, columna)
         }
+
         cambia(
             valor.copy(
-                text = valor.text.substring(0, trozo.desde) + nueva + cola +
+                text = valor.text.substring(0, trozo.desde) + Tablas.aTexto(nueva) + cola +
                     valor.text.substring(trozo.hasta)
             )
         )

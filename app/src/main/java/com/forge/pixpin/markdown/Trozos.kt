@@ -77,6 +77,12 @@ fun trozosDe(source: String): List<Trozo> {
                 ultima = i - 1
             }
 
+            t.startsWith("<table", ignoreCase = true) -> {
+                while (i < lines.size && !lines[i].contains("</table>", ignoreCase = true)) i++
+                if (i < lines.size) i++
+                ultima = i - 1
+            }
+
             hayTabla(lines, i) -> {
                 while (i < lines.size && lines[i].trim().startsWith("|")) i++
                 ultima = i - 1
@@ -151,7 +157,7 @@ private fun arrancaBloqueSuelto(t: String): Boolean =
 private fun arrancaBloqueLargo(lines: List<String>, i: Int): Boolean {
     val t = lines[i].trim()
     return t.startsWith("```") || abreCaja(t) || t == "$$" ||
-        t.startsWith(">") || hayTabla(lines, i)
+        t.startsWith(">") || t.startsWith("<table", ignoreCase = true) || hayTabla(lines, i)
 }
 
 private fun hayTabla(lines: List<String>, i: Int): Boolean {

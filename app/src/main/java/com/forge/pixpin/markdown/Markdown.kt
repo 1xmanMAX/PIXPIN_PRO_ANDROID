@@ -40,6 +40,33 @@ data class InlineText(val text: String, val spans: List<InlineSpan> = emptyList(
 /** Cómo se alinea el contenido de una celda. Es su `TableModel.ALIGN_*`. */
 enum class Alineacion { IZQUIERDA, CENTRO, DERECHA }
 
+/** Y a qué altura. Es su `TableModel.VALIGN_*`. */
+enum class AlturaEnCelda { ARRIBA, MEDIO, ABAJO }
+
+/**
+ * Una celda, calcada de su `TL_iv.pageTableCell`.
+ *
+ * Lleva **todo por celda**, no por columna ni por fila: si es cabecera, cómo se
+ * alinea, a qué altura, y cuántas columnas y filas ocupa. Ese último par es lo
+ * que permite fusionar, y es la razón de que el modelo tenga esta forma y no la
+ * de una simple rejilla de textos.
+ */
+data class Celda(
+    val contenido: InlineText = InlineText(""),
+    val cabecera: Boolean = false,
+    val alineacion: Alineacion = Alineacion.IZQUIERDA,
+    val altura: AlturaEnCelda = AlturaEnCelda.ARRIBA,
+    /** Cuántas columnas ocupa. 1 es lo normal; más es una fusión. */
+    val anchoEnColumnas: Int = 1,
+    /** Cuántas filas ocupa. */
+    val altoEnFilas: Int = 1
+) {
+    /** ¿Usa algo que una tabla de Markdown no sabe decir? */
+    val esAvanzada: Boolean
+        get() = anchoEnColumnas > 1 || altoEnFilas > 1 ||
+            altura != AlturaEnCelda.ARRIBA
+}
+
 /** Qué clase de archivo lleva un bloque de medio, deducido por su extensión. */
 enum class ClaseDeMedio { IMAGEN, VIDEO, AUDIO, ARCHIVO }
 
@@ -71,14 +98,29 @@ sealed interface MarkdownBlock {
     data class Tarea(val hecha: Boolean, val content: InlineText) : MarkdownBlock
 
     /**
-     * Una tabla. [cabecera] dice si la primera fila es de encabezados, que es su
-     * `pageTableCell.header`, y [alineaciones] es su `align_*`, una por columna.
+     * Una tabla, calcada de su `pageBlockTable`.
+     *
+     * [filas] guarda **solo las celdas ancla**: una celda fusionada ocupa el
+     * hueco de sus vecinas y esas ya no están en la lista, igual que en su
+     * `TableModel`, donde al fusionar se borran del `block.rows`. Por eso una
+     * fila puede tener menos celdas que columnas tiene la tabla.
+     *
+     * [titulo] es su `pageBlockTable.title`, el rótulo que va encima.
      */
     data class Tabla(
-        val filas: List<List<InlineText>>,
-        val cabecera: Boolean,
-        val alineaciones: List<Alineacion>
-    ) : MarkdownBlock
+        val filas: List<List<Celda>>,
+        val titulo: InlineText = InlineText(""),
+        /** Cuántas columnas tiene la rejilla, contando las fusiones. */
+        val columnas: Int = filas.maxOfOrNull { f -> f.sumOf { it.anchoEnColumnas } } ?: 0
+    ) : MarkdownBlock {
+        /** ¿Hace falta HTML para escribirla, o basta con Markdown? */
+        val esAvanzada: Boolean
+            get() = titulo.text.isNotEmpty() ||
+                filas.any { fila -> fila.any { it.esAvanzada } } ||
+                // Cabecera que no sea exactamente «toda la primera fila y nada
+                // más»: eso Markdown tampoco lo sabe decir.
+                filas.withIndex().any { (i, fila) -> fila.any { it.cabecera != (i == 0) } }
+    }
 
     /** Una fórmula. Su `pageBlockMath`, que allí es de pago. */
     data class Formula(val latex: String) : MarkdownBlock
@@ -236,8 +278,7 @@ object Markdown {
                 continue
             }
 
-            // Una tabla: la fila de guiones de debajo es la que la delata, y de
-            // paso trae la alineación de cada columna.
+            // Una tabla de Markdown: la fila de guiones de debajo la delata.
             if (esTabla(lines, i)) {
                 flushParagraph()
                 val cuerpo = mutableListOf<String>()
@@ -245,7 +286,25 @@ object Markdown {
                     cuerpo += lines[i].trim()
                     i++
                 }
-                blocks += tablaDe(cuerpo)
+                // De interpretarla se encarga Tablas, que es quien sabe de
+                // tablas. Tener aquí una segunda opinión era pedir que un día
+                // dijeran cosas distintas.
+                Tablas.leer(cuerpo.joinToString("\n"))?.let { blocks += it }
+                continue
+            }
+
+            // Una tabla de HTML, que es como se guardan las que fusionan celdas
+            // o llevan título. Ver [Tablas].
+            if (trimmed.startsWith("<table", ignoreCase = true)) {
+                flushParagraph()
+                val cuerpo = mutableListOf<String>()
+                while (i < lines.size) {
+                    cuerpo += lines[i]
+                    val cerro = lines[i].contains("</table>", ignoreCase = true)
+                    i++
+                    if (cerro) break
+                }
+                Tablas.leer(cuerpo.joinToString("\n"))?.let { blocks += it }
                 continue
             }
 
@@ -396,28 +455,6 @@ object Markdown {
     private fun celdasDe(fila: String): List<String> =
         fila.trim().removePrefix("|").removeSuffix("|").split('|').map { it.trim() }
 
-    private fun tablaDe(cuerpo: List<String>): MarkdownBlock.Tabla {
-        val separadora = cuerpo.getOrNull(1)?.let { celdasDe(it) }.orEmpty()
-        val alineaciones = separadora.map {
-            val izq = it.startsWith(":")
-            val der = it.endsWith(":")
-            when {
-                izq && der -> Alineacion.CENTRO
-                der -> Alineacion.DERECHA
-                else -> Alineacion.IZQUIERDA
-            }
-        }
-
-        // La fila de guiones no es contenido; se salta al construir las filas.
-        val filas = cuerpo.filterIndexed { idx, _ -> idx != 1 }
-            .map { fila -> celdasDe(fila).map { parseInline(it) } }
-
-        return MarkdownBlock.Tabla(
-            filas = filas,
-            cabecera = filas.size > 1,
-            alineaciones = alineaciones
-        )
-    }
 
     private fun sinMarcaDeCita(line: String): String =
         line.removePrefix(">").removePrefix(" ")

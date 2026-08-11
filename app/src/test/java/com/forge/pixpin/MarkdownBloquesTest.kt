@@ -66,13 +66,15 @@ class MarkdownBloquesTest {
         val t = Markdown.parse(texto)[0] as MarkdownBlock.Tabla
 
         assertEquals(3, t.filas.size)
-        assertTrue(t.cabecera)
-        assertEquals("Nombre", t.filas[0][0].text)
-        assertEquals("Tornillo", t.filas[1][0].text)
-        assertEquals("0,10", t.filas[2][2].text)
+        // La cabecera va por celda, como su `pageTableCell.header`.
+        assertTrue(t.filas[0].all { it.cabecera })
+        assertFalse(t.filas[1].any { it.cabecera })
+        assertEquals("Nombre", t.filas[0][0].contenido.text)
+        assertEquals("Tornillo", t.filas[1][0].contenido.text)
+        assertEquals("0,10", t.filas[2][2].contenido.text)
         assertEquals(
             listOf(Alineacion.IZQUIERDA, Alineacion.CENTRO, Alineacion.DERECHA),
-            t.alineaciones
+            t.filas[0].map { it.alineacion }
         )
     }
 
@@ -93,8 +95,8 @@ class MarkdownBloquesTest {
     fun `las celdas admiten formato`() {
         val texto = "| **a** | b |\n|---|---|\n| c | d |"
         val t = Markdown.parse(texto)[0] as MarkdownBlock.Tabla
-        assertEquals("a", t.filas[0][0].text)
-        assertTrue(t.filas[0][0].tramos().any { it.tiene(SpanKind.BOLD) })
+        assertEquals("a", t.filas[0][0].contenido.text)
+        assertTrue(t.filas[0][0].contenido.tramos().any { it.tiene(SpanKind.BOLD) })
     }
 
     // ---- Fórmulas ----

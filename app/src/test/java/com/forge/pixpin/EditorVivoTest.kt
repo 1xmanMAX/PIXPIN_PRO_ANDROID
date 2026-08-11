@@ -95,87 +95,6 @@ class EditorVivoTest {
         assertEquals(-1, trozoEn(emptyList(), 0))
     }
 
-    // ---- Tablas ----
-
-    private val tabla = "| a | b |\n|:---|---:|\n| 1 | 2 |"
-
-    @Test
-    fun `anadir fila deja la tabla cuadrada`() {
-        val r = Tablas.añadirFila(tabla)
-        assertEquals(3 to 2, Tablas.tamaño(r))
-        assertTrue(Tablas.esTabla(r))
-        assertEquals(listOf(Alineacion.IZQUIERDA, Alineacion.DERECHA), Tablas.alineacionesDe(r))
-    }
-
-    @Test
-    fun `anadir columna la mete en todas las filas`() {
-        val r = Tablas.añadirColumna(tabla)
-        assertEquals(2 to 3, Tablas.tamaño(r))
-        Markdown.parse(r).first().let {
-            val t = it as MarkdownBlock.Tabla
-            t.filas.forEach { fila -> assertEquals(3, fila.size) }
-        }
-    }
-
-    @Test
-    fun `quitar columna se lleva su alineacion`() {
-        val r = Tablas.quitarColumna(tabla, 0)
-        assertEquals(2 to 1, Tablas.tamaño(r))
-        assertEquals(listOf(Alineacion.DERECHA), Tablas.alineacionesDe(r))
-    }
-
-    @Test
-    fun `la ultima fila y la ultima columna no se quitan`() {
-        val minima = "| a |\n|---|"
-        assertEquals(minima, Tablas.quitarFila(minima, 0))
-        assertEquals(minima, Tablas.quitarColumna(minima, 0))
-    }
-
-    @Test
-    fun `la alineacion rota y vuelve a empezar`() {
-        var t = "| a |\n|---|\n| 1 |"
-        assertEquals(Alineacion.IZQUIERDA, Tablas.alineacionesDe(t)[0])
-        t = Tablas.rotarAlineacion(t, 0)
-        assertEquals(Alineacion.CENTRO, Tablas.alineacionesDe(t)[0])
-        t = Tablas.rotarAlineacion(t, 0)
-        assertEquals(Alineacion.DERECHA, Tablas.alineacionesDe(t)[0])
-        t = Tablas.rotarAlineacion(t, 0)
-        assertEquals(Alineacion.IZQUIERDA, Tablas.alineacionesDe(t)[0])
-    }
-
-    /** Lo más fácil de estropear a mano: una fila corta y otra larga. */
-    @Test
-    fun `una tabla torcida se endereza al tocarla`() {
-        val torcida = "| a | b | c |\n|---|---|---|\n| 1 |"
-        val r = Tablas.añadirFila(torcida)
-        val t = Markdown.parse(r).first() as MarkdownBlock.Tabla
-        t.filas.forEach { assertEquals(3, it.size) }
-    }
-
-    @Test
-    fun `lo que no es tabla se queda igual`() {
-        val texto = "un párrafo"
-        assertEquals(texto, Tablas.añadirFila(texto))
-        assertEquals(texto, Tablas.quitarColumna(texto, 0))
-        assertTrue(!Tablas.esTabla(texto))
-    }
-
-    @Test
-    fun `la columna del cursor se calcula desde el principio de su linea`() {
-        val t = "| a | b |\n|---|---|\n| 1 | 2 |"
-        assertEquals(0, Tablas.columnaDe(t, t.indexOf("a")))
-        assertEquals(1, Tablas.columnaDe(t, t.indexOf("b")))
-        assertEquals(1, Tablas.columnaDe(t, t.indexOf("2")))
-    }
-
-    @Test
-    fun `una tabla nueva sale usable`() {
-        val t = Tablas.nueva(3, 2)
-        assertTrue(Tablas.esTabla(t))
-        assertEquals(3 to 2, Tablas.tamaño(t))
-        assertTrue(Markdown.parse(t).first() is MarkdownBlock.Tabla)
-    }
-
     // ---- El menú de tipos ----
 
     @Test
@@ -189,7 +108,7 @@ class EditorVivoTest {
             "- [ ] hola" to TipoDeBloque.TAREAS,
             ":::pie\nx\n:::" to TipoDeBloque.PIE,
             "```\nx\n```" to TipoDeBloque.CODIGO,
-            tabla to TipoDeBloque.TABLA
+            "| a | b |\n|---|---|\n| 1 | 2 |" to TipoDeBloque.TABLA
         )
         casos.forEach { (texto, tipo) -> assertEquals(texto, tipo, Menus.tipoDe(texto)) }
         // Un párrafo es «ninguno», que es lo que marca «Texto» en el menú.

@@ -1,226 +1,273 @@
-package com.forge.pixpin.motor
+package com.forge.pixpin.markdown
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Puntos metidos por coordenadas.
+ * Las tablas con el modelo de Telegram: celdas fusionadas, cabecera por celda,
+ * alineación y altura por celda, y título.
  *
- * Aquí lo que puede salir mal es callado y grave: un punto colocado donde no
- * es. Quien teclea coordenadas no las va a comprobar a ojo —para eso las
- * teclea—, así que la conversión tiene que estar bien de una vez.
+ * Lo que más se vigila es que **se escriba lo mínimo**: una tabla normal tiene
+ * que seguir guardándose con barras, para que el archivo se lea a simple vista,
+ * y solo pasar a HTML cuando use algo que Markdown no sabe decir.
  */
 class TablasTest {
 
-    private fun tabla(vararg puntos: Pair<Double, Double>) =
-        TablaDeCoordenadas(id = "t1", puntos = puntos.map { PuntoDeTabla(it.first, it.second) })
+    private val simple = "| a | b |\n|---|---|\n| 1 | 2 |"
 
-    /**
-     * **La Y va hacia arriba.** En la pantalla crece hacia abajo, pero quien
-     * teclea coordenadas piensa en ejes cartesianos: meter (0, 10) y ver el
-     * punto aparecer por debajo del origen sería, con razón, un error.
-     */
+    private fun celda(t: MarkdownBlock.Tabla, f: Int, c: Int): Celda? =
+        Tablas.rejilla(t).getOrNull(f)?.getOrNull(c)?.celda
+
+    // ---- Leer y escribir ----
+
     @Test
-    fun `la Y sube, como en unos ejes de toda la vida`() {
-        val t = tabla(0.0 to 10.0)
-        val p = puntosEnEscena(t, origen = Pt(100.0, 200.0), escala = null).first()
-        assertEquals(100.0, p.x, 1e-9)
-        assertEquals("subir tiene que restar en pantalla", 190.0, p.y, 1e-9)
+    fun `una tabla de markdown se lee`() {
+        val t = Tablas.leer(simple)!!
+        assertEquals(2, t.filas.size)
+        assertEquals(2, t.columnas)
+        assertEquals("a", t.filas[0][0].contenido.text)
+        assertEquals("2", t.filas[1][1].contenido.text)
+        assertTrue(t.filas[0].all { it.cabecera })
+        assertFalse(t.filas[1].any { it.cabecera })
+    }
+
+    /** Lo normal se sigue guardando con barras, no en HTML. */
+    @Test
+    fun `una tabla normal no se convierte en html`() {
+        val t = Tablas.leer(simple)!!
+        assertFalse(t.esAvanzada)
+        val escrita = Tablas.aTexto(t)
+        assertFalse("salio en html: $escrita", escrita.contains("<table"))
+        assertTrue(escrita.startsWith("|"))
     }
 
     @Test
-    fun `sin escala, una unidad es un píxel`() {
-        val t = tabla(3.0 to -4.0)
-        val p = puntosEnEscena(t, origen = Pt(0.0, 0.0), escala = null).first()
-        assertEquals(3.0, p.x, 1e-9)
-        assertEquals(4.0, p.y, 1e-9)
-    }
-
-    /** Con el dibujo calibrado, las unidades son las suyas. */
-    @Test
-    fun `con escala, las unidades son las del dibujo`() {
-        // Medio metro por píxel: teclear 4 m son 8 px.
-        val escala = Escala(unidadesPorPixel = 0.5)
-        val t = tabla(4.0 to 0.0)
-        assertEquals(8.0, puntosEnEscena(t, Pt(0.0, 0.0), escala).first().x, 1e-9)
-    }
-
-    /** Ida y vuelta: lo que se teclea es lo que se lee de vuelta. */
-    @Test
-    fun `de coordenadas a escena y de vuelta`() {
-        val escala = Escala(unidadesPorPixel = 0.02)
-        val origen = Pt(640.0, 480.0)
-        val t = tabla(12.5 to -3.25)
-        val enEscena = puntoEnEscena(origen, t.puntos.first(), escala)
-        val devuelto = coordenadasDe(origen, enEscena, escala)
-        assertEquals(12.5, devuelto.x, 1e-9)
-        assertEquals(-3.25, devuelto.y, 1e-9)
-    }
-
-    /**
-     * **El eje es uno solo.** Dos series con las mismas coordenadas caen en el
-     * mismo sitio del papel: si no, compararlas dejaría de significar nada y el
-     * color pasaría de decir «otra serie» a decir «otro mundo».
-     */
-    @Test
-    fun `todas las series cuentan desde el mismo origen`() {
-        val origen = Pt(300.0, 300.0)
-        val a = tabla(5.0 to 0.0)
-        val b = TablaDeCoordenadas(id = "t2", color = COLORES_DE_TABLA[1], puntos = a.puntos)
-        assertEquals(
-            puntosEnEscena(a, origen, null).first(),
-            puntosEnEscena(b, origen, null).first()
-        )
-    }
-
-    // ---- Los colores ----
-
-    @Test
-    fun `dos tablas nuevas no nacen del mismo color`() {
-        val primera = colorLibreDeTabla(emptyList())
-        val segunda = colorLibreDeTabla(listOf(primera))
-        assertTrue(primera != segunda)
+    fun `escribir y volver a leer no pierde nada`() {
+        val t = Tablas.leer(simple)!!
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals(t.columnas, vuelta.columnas)
+        assertEquals(t.filas.size, vuelta.filas.size)
+        assertEquals("a", vuelta.filas[0][0].contenido.text)
     }
 
     @Test
-    fun `con todos los colores usados se reaprovecha en vez de fallar`() {
-        assertTrue(colorLibreDeTabla(COLORES_DE_TABLA) in COLORES_DE_TABLA)
-    }
-
-    // ---- El enganche ----
-
-    /**
-     * De poco sirve teclear un punto exacto si luego hay que acertarlo a pulso
-     * para trazar hasta él: los puntos de la tabla **imantan**.
-     */
-    @Test
-    fun `los puntos de la tabla enganchan como una esquina`() {
-        val t = tabla(100.0 to 0.0)
-        val anclajes = anclajesDeTablas(listOf(t), Pt(0.0, 0.0), null)
-        assertEquals(1, anclajes.size)
-        assertEquals(TipoAnclaje.ESQUINA, anclajes.first().tipo)
-
-        // Un dedo cerca del punto se pega a él.
-        val pegado = buscarAnclaje(
-            elementos = emptyList(), p = Pt(104.0, 3.0), zoom = 1.0, extra = anclajes
-        )
-        assertEquals(100.0, pegado!!.punto.x, 1e-9)
-        assertEquals(0.0, pegado.punto.y, 1e-9)
+    fun `la alineacion sobrevive a la ida y vuelta`() {
+        val t = Tablas.alinear(Tablas.leer(simple)!!, 0, 1, Alineacion.DERECHA)
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals(Alineacion.DERECHA, celda(vuelta, 0, 1)!!.alineacion)
+        assertEquals(Alineacion.DERECHA, celda(vuelta, 1, 1)!!.alineacion)
     }
 
     @Test
-    fun `una tabla oculta deja de enganchar`() {
-        val t = tabla(100.0 to 0.0).copy(visible = false)
-        assertTrue(anclajesDeTablas(listOf(t), Pt(0.0, 0.0), null).isEmpty())
+    fun `los estilos dentro de una celda sobreviven`() {
+        val t = Tablas.leer("| **a** | b |\n|---|---|\n| 1 | 2 |")!!
+        assertTrue(t.filas[0][0].contenido.tramos().any { it.tiene(SpanKind.BOLD) })
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertTrue(vuelta.filas[0][0].contenido.tramos().any { it.tiene(SpanKind.BOLD) })
+    }
+
+    // ---- Lo que obliga a pasar a HTML ----
+
+    @Test
+    fun `fusionar obliga a html y se vuelve a leer igual`() {
+        val t = Tablas.fusionar(Tablas.leer(simple)!!, 0, 0, 0, 1)
+        assertTrue(t.esAvanzada)
+
+        val escrita = Tablas.aTexto(t)
+        assertTrue("no salio en html: $escrita", escrita.contains("<table"))
+        assertTrue(escrita.contains("colspan=\"2\""))
+
+        val vuelta = Tablas.leer(escrita)!!
+        assertEquals(2, celda(vuelta, 0, 0)!!.anchoEnColumnas)
+        assertEquals("a\nb", celda(vuelta, 0, 0)!!.contenido.text)
     }
 
     @Test
-    fun `lejos del punto no engancha nada`() {
-        val anclajes = anclajesDeTablas(listOf(tabla(100.0 to 0.0)), Pt(0.0, 0.0), null)
-        assertNull(buscarAnclaje(emptyList(), Pt(400.0, 400.0), 1.0, extra = anclajes))
+    fun `el titulo obliga a html`() {
+        val t = Tablas.conTitulo(Tablas.leer(simple)!!, InlineText("Gastos"))
+        assertTrue(t.esAvanzada)
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals("Gastos", vuelta.titulo.text)
     }
 
-    // ---- El imán del eje ----
-
-    /**
-     * **Cerca del cero manda el cero.** A un paso del origen, la proyección
-     * sobre la horizontal siempre cae algo más cerca que el origen mismo —es un
-     * cateto contra su hipotenusa—, así que sin una regla explícita apuntar al
-     * cero daba «encima del eje, un poco a la derecha».
-     */
     @Test
-    fun `el origen imanta`() {
-        val origen = Pt(500.0, 500.0)
-        val pegado = buscarAnclaje(
-            elementos = emptyList(), p = Pt(504.0, 497.0), zoom = 1.0,
-            extra = anclajesDelEje(origen, Pt(504.0, 497.0), radio = 14.0)
-        )
-        assertEquals(origen, pegado!!.punto)
-        assertEquals(TipoAnclaje.EJE, pegado.tipo)
+    fun `la altura obliga a html`() {
+        val t = Tablas.aLaAltura(Tablas.leer(simple)!!, 1, 0, AlturaEnCelda.ABAJO)
+        assertTrue(t.esAvanzada)
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals(AlturaEnCelda.ABAJO, celda(vuelta, 1, 0)!!.altura)
+    }
+
+    @Test
+    fun `una cabecera que no es la primera fila obliga a html`() {
+        val t = Tablas.comoCabecera(Tablas.leer(simple)!!, 1, 0, true)
+        assertTrue(t.esAvanzada)
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertTrue(celda(vuelta, 1, 0)!!.cabecera)
+    }
+
+    // ---- Fusionar, su mergeCells ----
+
+    @Test
+    fun `fusionar junta los textos con saltos`() {
+        val t = Tablas.fusionar(Tablas.leer(simple)!!, 0, 0, 1, 1)
+        val ancla = celda(t, 0, 0)!!
+        assertEquals(2, ancla.anchoEnColumnas)
+        assertEquals(2, ancla.altoEnFilas)
+        assertEquals("a\nb\n1\n2", ancla.contenido.text)
+    }
+
+    /** Toda la rejilla queda tapada por el ancla, sin huecos sueltos. */
+    @Test
+    fun `la fusion tapa todos sus huecos`() {
+        val t = Tablas.fusionar(Tablas.leer(simple)!!, 0, 0, 1, 1)
+        val rejilla = Tablas.rejilla(t)
+        var anclas = 0
+        rejilla.forEach { fila ->
+            fila.forEach { h ->
+                assertNotNull("hay un hueco sin celda", h)
+                if (h!!.esElAncla) anclas++
+            }
+        }
+        assertEquals("deberia quedar una sola celda", 1, anclas)
+    }
+
+    @Test
+    fun `fusionar una sola celda no hace nada`() {
+        val t = Tablas.leer(simple)!!
+        assertEquals(t, Tablas.fusionar(t, 0, 0, 0, 0))
     }
 
     /**
-     * Las rectas del eje son infinitas, así que lo que se ofrece es **la
-     * proyección del dedo sobre cada una**: se conserva la coordenada por la que
-     * se va y se toma del eje la otra.
+     * Su comprobación: media celda fusionada no puede quedar dentro y media
+     * fuera. Ellos rechazan; aquí el rectángulo se agranda hasta cubrirla, que
+     * hace lo que se esperaba en vez de no hacer nada.
      */
     @Test
-    fun `pegarse a la horizontal conserva la X`() {
-        val origen = Pt(500.0, 500.0)
-        val dedo = Pt(900.0, 503.0)
-        val pegado = buscarAnclaje(
-            emptyList(), dedo, 1.0, extra = anclajesDelEje(origen, dedo, radio = 14.0)
+    fun `fusionar sobre una fusion existente la absorbe entera`() {
+        var t = Tablas.nueva(3, 3)
+        t = Tablas.fusionar(t, 0, 0, 0, 1)
+        t = Tablas.fusionar(t, 0, 1, 0, 2)
+        val ancla = celda(t, 0, 0)!!
+        assertEquals(3, ancla.anchoEnColumnas)
+    }
+
+    @Test
+    fun `separar devuelve las celdas que tapaba`() {
+        val fusionada = Tablas.fusionar(Tablas.leer(simple)!!, 0, 0, 0, 1)
+        val suelta = Tablas.separar(fusionada, 0, 0)
+        assertEquals(1, celda(suelta, 0, 0)!!.anchoEnColumnas)
+        assertEquals(2, suelta.columnas)
+        Tablas.rejilla(suelta).forEach { fila ->
+            fila.forEach { assertTrue(it!!.esElAncla) }
+        }
+        // Y al no quedar nada avanzado, vuelve a guardarse con barras.
+        assertFalse(suelta.esAvanzada)
+    }
+
+    @Test
+    fun `separar algo que no esta fusionado no hace nada`() {
+        val t = Tablas.leer(simple)!!
+        assertEquals(t, Tablas.separar(t, 0, 0))
+    }
+
+    // ---- Filas y columnas ----
+
+    @Test
+    fun `insertar fila y columna en el sitio pedido`() {
+        var t = Tablas.leer(simple)!!
+        t = Tablas.insertarFila(t, 1)
+        assertEquals(3, t.filas.size)
+        assertEquals("", t.filas[1][0].contenido.text)
+        assertEquals("1", t.filas[2][0].contenido.text)
+
+        t = Tablas.insertarColumna(t, 0)
+        assertEquals(3, t.columnas)
+        assertEquals("a", celda(t, 0, 1)!!.contenido.text)
+    }
+
+    /** Su `deleteRows` borra varias a la vez. */
+    @Test
+    fun `quitar varias filas de una vez`() {
+        var t = Tablas.nueva(4, 2)
+        t = Tablas.conCelda(t, 3, 0, InlineText("ultima"))
+        val menos = Tablas.quitarFilas(t, setOf(1, 2))
+        assertEquals(2, menos.filas.size)
+        assertEquals("ultima", menos.filas[1][0].contenido.text)
+    }
+
+    @Test
+    fun `quitar varias columnas de una vez`() {
+        val t = Tablas.nueva(2, 4)
+        val menos = Tablas.quitarColumnas(t, setOf(0, 2))
+        assertEquals(2, menos.columnas)
+        menos.filas.forEach { assertEquals(2, it.size) }
+    }
+
+    @Test
+    fun `no se puede vaciar la tabla del todo`() {
+        val t = Tablas.leer(simple)!!
+        assertEquals(t, Tablas.quitarFilas(t, setOf(0, 1)))
+        assertEquals(t, Tablas.quitarColumnas(t, setOf(0, 1)))
+    }
+
+    // ---- Basura ----
+
+    @Test
+    fun `lo que no es tabla no se lee como tabla`() {
+        assertNull(Tablas.leer("un parrafo"))
+        assertNull(Tablas.leer("| una fila sola |"))
+        assertNull(Tablas.leer("<table></table>"))
+    }
+
+    @Test
+    fun `un html raro no revienta y se aprovecha lo que se pueda`() {
+        val t = Tablas.leer("<table><tr><td colspan=\"loquesea\">x</td></tr></table>")
+        assertNotNull(t)
+        assertEquals(1, t!!.filas[0][0].anchoEnColumnas)
+        assertEquals("x", t.filas[0][0].contenido.text)
+    }
+
+    @Test
+    fun `los signos de html dentro de una celda no rompen la tabla`() {
+        val t = Tablas.conTitulo(
+            Tablas.conCelda(Tablas.leer(simple)!!, 1, 0, InlineText("a < b & c > d")),
+            InlineText("T")
         )
-        assertEquals("la X es la del dedo", 900.0, pegado!!.punto.x, 1e-9)
-        assertEquals("la Y es la del eje", 500.0, pegado.punto.y, 1e-9)
+        val vuelta = Tablas.leer(Tablas.aTexto(t))!!
+        assertEquals("a < b & c > d", celda(vuelta, 1, 0)!!.contenido.text)
     }
 
     @Test
-    fun `pegarse a la vertical conserva la Y`() {
-        val origen = Pt(500.0, 500.0)
-        val dedo = Pt(497.0, 120.0)
-        val pegado = buscarAnclaje(
-            emptyList(), dedo, 1.0, extra = anclajesDelEje(origen, dedo, radio = 14.0)
-        )
-        assertEquals(500.0, pegado!!.punto.x, 1e-9)
-        assertEquals(120.0, pegado.punto.y, 1e-9)
+    fun `indices imposibles no revientan`() {
+        val t = Tablas.leer(simple)!!
+        Tablas.alinear(t, 99, 99, Alineacion.CENTRO)
+        Tablas.fusionar(t, -5, -5, 99, 99)
+        Tablas.separar(t, 99, 99)
+        Tablas.insertarFila(t, 99)
+        Tablas.quitarColumnas(t, setOf(99))
     }
 
-    /** Lejos de las dos rectas, el dedo va donde va. */
+    // ---- El parser del documento las ve ----
+
     @Test
-    fun `fuera del eje no engancha`() {
-        val origen = Pt(500.0, 500.0)
-        val dedo = Pt(900.0, 120.0)
-        assertNull(
-            buscarAnclaje(emptyList(), dedo, 1.0, extra = anclajesDelEje(origen, dedo, 14.0))
-        )
+    fun `el parser reconoce las dos formas`() {
+        assertTrue(Markdown.parse(simple).first() is MarkdownBlock.Tabla)
+        val html = Tablas.aTexto(Tablas.fusionar(Tablas.leer(simple)!!, 0, 0, 0, 1))
+        assertTrue(Markdown.parse(html).first() is MarkdownBlock.Tabla)
     }
 
-    /** Se puede apagar, como cualquier otro enganche. */
     @Test
-    fun `el imán del eje se puede quitar`() {
-        assertTrue(anclajesDelEje(Pt(0.0, 0.0), Pt(1.0, 1.0), 14.0, activo = false).isEmpty())
-        assertTrue(anclajesDelEje(null, Pt(1.0, 1.0), 14.0).isEmpty())
-    }
-
-    // ---- Lo tecleado ----
-
-    @Test
-    fun `las coordenadas se leen con coma, con punto y con signo`() {
-        assertEquals(4.2, leerCoordenada("4,2")!!, 1e-9)
-        assertEquals(4.2, leerCoordenada("4.2")!!, 1e-9)
-        assertEquals(-3.0, leerCoordenada(" -3 ")!!, 1e-9)
-        assertNull(leerCoordenada(""))
-        assertNull(leerCoordenada("-"))
-    }
-
-    /** Las tablas viajan con el dibujo: se guardan y se releen. */
-    @Test
-    fun `las tablas se guardan con la escena`() {
-        val escena = Scene(
-            tablas = listOf(tabla(1.0 to 2.0)),
-            origenCoordenadas = Pt(10.0, 20.0)
-        )
-        val vuelta = ExcalidrawJson.decodeFromString<Scene>(
-            ExcalidrawJson.encodeToString(escena)
-        )
-        assertEquals(escena.tablas, vuelta.tablas)
-        assertEquals(escena.origenCoordenadas, vuelta.origenCoordenadas)
-    }
-
-    /** Sin eje puesto todavía, no hay puntos que colocar ni a los que pegarse. */
-    @Test
-    fun `sin origen no hay anclajes`() {
-        assertTrue(anclajesDeTablas(listOf(tabla(1.0 to 1.0)), null, null).isEmpty())
-    }
-
-    /** Y un dibujo de antes de que existieran sigue abriendo. */
-    @Test
-    fun `una escena sin tablas se lee igual`() {
-        assertTrue(
-            ExcalidrawJson.decodeFromString<Scene>("""{"elements":[]}""").tablas.isEmpty()
-        )
+    fun `una tabla html es un solo trozo del documento`() {
+        val html = Tablas.aTexto(Tablas.conTitulo(Tablas.leer(simple)!!, InlineText("T")))
+        val doc = "antes\n\n$html\n\ndespues"
+        val trozos = trozosDe(doc)
+        assertEquals(doc, trozos.joinToString("") { it.de(doc) })
+        assertTrue(trozos.any { Tablas.esTabla(it.de(doc).trim()) })
+        assertEquals(Markdown.parse(doc), trozos.flatMap { Markdown.parse(it.de(doc)) })
     }
 }
