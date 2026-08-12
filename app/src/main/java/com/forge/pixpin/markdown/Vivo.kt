@@ -147,6 +147,27 @@ object Vivo {
     }
 
     /**
+     * Dónde seguir escribiendo al tocar el hueco de debajo del documento.
+     *
+     * Si el último bloque tiene algo, se abre uno nuevo detrás; si ya está
+     * vacío, se va a él. Sin esto, tocar el espacio en blanco del final no hacía
+     * nada, que es justo donde todo el mundo toca para seguir escribiendo.
+     */
+    fun alFinal(texto: String): Pair<String, Sitio> {
+        val trozos = trozosDe(texto)
+        if (trozos.isEmpty()) return texto to Sitio(0, TextRange(0))
+
+        val ultimo = trozos.size - 1
+        val contenido = contenidoDelTrozo(trozos[ultimo].de(texto))
+        // Un bloque que no es de texto —una imagen, una raya— nunca está
+        // «vacío»: detrás de él siempre se abre uno nuevo.
+        if (contenido != null && contenido.text.isEmpty()) {
+            return texto to Sitio(ultimo, TextRange(0))
+        }
+        return bloqueNuevo(texto, ultimo)
+    }
+
+    /**
      * Quita el bloque [n] entero.
      *
      * Hace falta porque hay bloques donde **no se puede poner el cursor**: una

@@ -109,6 +109,7 @@ fun EditorVivo(
                 )
             } else if (activo && sePuedeEscribir(bloque)) {
                 BloqueEditable(
+                    clave = i,
                     bloque = bloque,
                     contenido = remember(fuente) {
                         Vivo.contenidoDelTrozo(fuente) ?: InlineText("")
@@ -164,6 +165,19 @@ fun EditorVivo(
                 }
             }
         }
+
+        // El hueco de debajo del documento. Es donde toca todo el mundo para
+        // seguir escribiendo, y hasta ahora no hacía nada.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height((baseSizeSp * 6f).dp)
+                .clickable {
+                    val (doc, donde) = Vivo.alFinal(texto)
+                    if (doc != texto) onTexto(doc)
+                    onSitio(donde)
+                }
+        )
     }
 }
 
@@ -256,9 +270,16 @@ private fun TablaEditable(
                 menuAbierto = true
             },
             onCelda = { f, c ->
-                marcado = Tablas.Marcado.celda(f, c)
+                val desde = marca
+                // Con el menú abierto, tocar otra celda **estira el grupo** en
+                // vez de empezar de cero: es la segunda forma de marcar varias,
+                // para quien no dé con la de aguantar y arrastrar.
+                marcado = if (menuAbierto && desde != null) {
+                    Tablas.Marcado(desde.f1, desde.c1, f, c)
+                } else {
+                    Tablas.Marcado.celda(f, c)
+                }
                 escribiendo = null
-                menuAbierto = false
             },
             onCeldaDoble = { f, c ->
                 marcado = Tablas.Marcado.celda(f, c)
@@ -279,7 +300,8 @@ private fun TablaEditable(
                 val desde = marca ?: return@RejillaDeTabla
                 marcado = Tablas.Marcado(desde.f1, desde.c1, f, c)
             },
-            gestos = escribiendo == null
+            gestos = escribiendo == null,
+            escribiendo = escribiendo
         ) { ancla ->
             val estilo = TextStyle(
                 fontSize = (baseSizeSp * 0.92f).sp,
@@ -450,6 +472,21 @@ private fun aplicarEnLaTabla(
 /** El grosor de las asas de fila y columna. */
 private val ASA = 6.dp
 
+/**
+ * El carácter invisible que va delante de cada bloque que se escribe.
+ *
+ * Sirve para una sola cosa: **enterarse de que se ha dado a borrar estando al
+ * principio**. Con el bloque vacío, borrar no cambia el texto, así que el campo
+ * no avisa de nada; y las teclas del teclado en pantalla no llegan como teclas,
+ * llegan como ediciones del texto. Sin este truco no había forma de saberlo, y
+ * por eso una viñeta vacía no se podía quitar ni se podía subir al bloque de
+ * arriba borrando.
+ *
+ * Con él, borrar en la posición cero **sí** cambia el texto —se lleva el
+ * centinela— y eso se ve. Nunca sale de aquí: se le quita antes de guardar nada.
+ */
+private const val CENTINELA = "\u200B"
+
 /** Los bloques cuyo contenido se escribe a mano. Una imagen o una raya, no. */
 private fun sePuedeEscribir(bloque: MarkdownBlock?): Boolean = when (bloque) {
     null,
@@ -470,6 +507,7 @@ private fun sePuedeEscribir(bloque: MarkdownBlock?): Boolean = when (bloque) {
  */
 @Composable
 private fun BloqueEditable(
+    clave: Int,
     bloque: MarkdownBlock?,
     contenido: InlineText,
     seleccion: TextRange,
@@ -479,12 +517,35 @@ private fun BloqueEditable(
     onRetroceso: () -> Boolean
 ) {
     val foco = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+    // Atado a **qué bloque** es, no a la primera vez. Al pulsar intro se abre un
+    // bloque nuevo y Compose reaprovecha el mismo hueco, así que con `Unit` el
+    // foco no se volvía a pedir: el teclado se cerraba al segundo intro.
+    LaunchedEffect(clave) { runCatching { foco.requestFocus() } }
 
     val campo = @Composable { estilo: TextStyle, color: Color ->
         BasicTextField(
-            value = TextFieldValue(contenido.text, seleccion),
-            onValueChange = { v ->
+            // Delante va un carácter invisible. Ver [CENTINELA].
+            value = TextFieldValue(
+                CENTINELA + contenido.text,
+                TextRange(seleccion.start + 1, seleccion.end + 1)
+            ),
+            onValueChange = { crudo ->
+                // Si el centinela ya no está, el dedo dio a borrar estando al
+                // principio del bloque. Es la única forma de enterarse: con el
+                // bloque vacío, borrar no cambia el texto y no llega ningún
+                // aviso, y las teclas del teclado en pantalla tampoco se pueden
+                // escuchar.
+                if (!crudo.text.startsWith(CENTINELA)) {
+                    onRetroceso()
+                    return@BasicTextField
+                }
+                val v = TextFieldValue(
+                    crudo.text.removePrefix(CENTINELA),
+                    TextRange(
+                        (crudo.selection.start - 1).coerceAtLeast(0),
+                        (crudo.selection.end - 1).coerceAtLeast(0)
+                    )
+                )
                 // El intro no mete un salto de línea: **parte el bloque**. Es lo
                 // que distingue un editor por bloques de un cuadro de texto, y
                 // sin esto un título de dos renglones dejaba el segundo suelto.
@@ -527,9 +588,12 @@ private fun BloqueEditable(
         )
     }
 
+    // Los mismos números que usa el pintado —ver MarkdownText—, o el bloque
+    // daba un salto al tocarlo y otro al salir, que es lo que se veía como que
+    // el texto «se movía».
     val normal = TextStyle(
         fontSize = baseSizeSp.sp,
-        lineHeight = (baseSizeSp * 1.5f).sp
+        lineHeight = (baseSizeSp * 1.4f).sp
     )
     val alFrente = MaterialTheme.colorScheme.onSurface
     val apagado = MaterialTheme.colorScheme.onSurfaceVariant
@@ -538,7 +602,7 @@ private fun BloqueEditable(
         is MarkdownBlock.Heading -> campo(
             normal.copy(
                 fontSize = (baseSizeSp * factorDelTitulo(bloque.level)).sp,
-                lineHeight = (baseSizeSp * factorDelTitulo(bloque.level) * 1.35f).sp,
+                lineHeight = (baseSizeSp * factorDelTitulo(bloque.level) * 1.4f).sp,
                 fontWeight = FontWeight.Bold
             ),
             alFrente

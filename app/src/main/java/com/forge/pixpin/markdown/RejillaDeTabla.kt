@@ -3,8 +3,8 @@ package com.forge.pixpin.markdown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.dp
  * La usan igual el editor y la vista, así que una tabla se ve **exactamente
  * igual** mientras se escribe y después.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun RejillaDeTabla(
     tabla: MarkdownBlock.Tabla,
@@ -103,8 +104,10 @@ fun RejillaDeTabla(
     onCeldaDoble: (Int, Int) -> Unit = { _, _ -> },
     onCeldaLarga: (Int, Int) -> Unit = { _, _ -> },
     onArrastre: (Int, Int) -> Unit = { _, _ -> },
-    /** Con false la rejilla no toca ningún gesto: está escribiéndose una celda. */
+    /** Con false no se marca por aguantar: está escribiéndose una celda. */
     gestos: Boolean = true,
+    /** Qué celda se está escribiendo, para dejarle sus toques al campo. */
+    escribiendo: Pair<Int, Int>? = null,
     celda: @Composable (Ancla) -> Unit
 ) {
     val anclas = anclasDe(tabla)
@@ -131,24 +134,10 @@ fun RejillaDeTabla(
                 // sale de la celda donde empezó, y esa ya no puede decir sobre
                 // cuál está ahora.
                 //
-                // `detectDragGesturesAfterLongPress` no toca nada hasta que la
-                // pulsación es larga, así que el toque normal sigue llegando al
-                // campo de texto y el desplazamiento horizontal sigue yendo.
+                // Este detector no toca nada hasta que la pulsación es larga y
+                // quieta, así que el toque normal sigue llegando a la celda y el
+                // desplazamiento horizontal sigue yendo.
                 modifier = Modifier
-                    // Tocar marca; tocar dos veces entra a escribir. Van en su
-                    // propio detector porque el de aguantar tiene que mirar en
-                    // otra pasada y con otro tiempo.
-                    .pointerInput(conAsas, gestos) {
-                        if (!conAsas || !gestos) return@pointerInput
-                        detectTapGestures(
-                            onTap = { donde ->
-                                celdaEn(sitios, donde)?.let { onCelda(it.first, it.second) }
-                            },
-                            onDoubleTap = { donde ->
-                                celdaEn(sitios, donde)?.let { onCeldaDoble(it.first, it.second) }
-                            }
-                        )
-                    }
                     .pointerInput(conAsas, gestos) {
                     if (!conAsas || !gestos) return@pointerInput
                     awaitEachGesture {
@@ -209,6 +198,26 @@ fun RejillaDeTabla(
                         Box(
                             Modifier
                                 .onGloballyPositioned { sitios[ancla.fila to ancla.columna] = it }
+                                // El toque va **en cada celda**, no en la
+                                // rejilla entera. Con el detector arriba había
+                                // que apagarlo mientras se escribía —o se
+                                // peleaba con el campo— y entonces no se podía
+                                // saltar a otra celda por mucho que se tocara.
+                                // Aquí la celda que se está escribiendo no lleva
+                                // toque y las demás sí, que es justo lo que hace
+                                // falta.
+                                .then(
+                                    if (escribiendo == ancla.fila to ancla.columna) {
+                                        Modifier
+                                    } else {
+                                        Modifier.combinedClickable(
+                                            onClick = { onCelda(ancla.fila, ancla.columna) },
+                                            onDoubleClick = {
+                                                onCeldaDoble(ancla.fila, ancla.columna)
+                                            }
+                                        )
+                                    }
+                                )
                                 // Marcado = **solo el borde**. Pintar el fondo
                                 // tapaba el texto de la celda justo cuando se
                                 // está mirando para decidir qué hacer con ella.
