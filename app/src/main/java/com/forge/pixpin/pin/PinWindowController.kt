@@ -1811,6 +1811,31 @@ class PinWindowController(
     @Composable
     private fun EditBarContent() {
         val v = draft.value
+        // La ruleta no lleva formato: son nombres. Solo cerrar y aceptar.
+        if (pin.value.type == PinType.RULETA) {
+            Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp) {
+                Row(
+                    Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { exitEditMode(pin.value.text.orEmpty()) }) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = context.getString(R.string.cancel)
+                        )
+                    }
+                    IconButton(onClick = { exitEditMode(draft.value.text) }) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = context.getString(R.string.cd_done),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            return
+        }
+
         val sitio = sitioDelPin.value
         val contenido = remember(v.text, sitio) {
             sitio?.let { Vivo.contenido(v.text, it.bloque) }
@@ -2755,6 +2780,11 @@ class PinWindowController(
             ) {
                 Box {
                     when {
+                        // La ruleta se escribe con un campo llano: es una lista
+                        // de nombres, no un documento. Ni títulos, ni viñetas,
+                        // ni negrita — nada de eso significa nada en un sorteo.
+                        editing.value && s.type == PinType.RULETA -> RuletaEditor()
+
                         editing.value -> TextEditor(s)
 
                         s.type == PinType.CHECKLIST -> {
@@ -2990,6 +3020,8 @@ class PinWindowController(
                     .padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // El botón de escribir es el mismo de siempre —el lápiz de la
+                // barra del pin—, así que aquí basta con enseñar lo que hay.
                 Text(
                     text = s.text.orEmpty().ifBlank {
                         context.getString(R.string.ruleta_seed)
@@ -3083,6 +3115,27 @@ class PinWindowController(
                 }
             }
         }
+    }
+
+    /** Un campo llano para la lista de nombres, uno por línea. */
+    @Composable
+    private fun RuletaEditor() {
+        val foco = remember { FocusRequester() }
+        LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+        BasicTextField(
+            value = draft.value,
+            onValueChange = { draft.value = it },
+            textStyle = TextStyle(
+                fontSize = 14.sp,
+                lineHeight = 22.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .focusRequester(foco)
+        )
     }
 
     private fun conRuleta(lista: Boolean, elegido: Int): PinState {
@@ -3244,7 +3297,7 @@ private const val ANNOTATE_BAR_DP = 76
 
 /** Tipos de pin que se escriben a mano con el mismo editor. */
 private val EDITABLE_TYPES =
-    setOf(PinType.TEXT, PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE)
+    setOf(PinType.TEXT, PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE, PinType.RULETA)
 
 /**
  * Fondos de pizarra. Cuatro y bien elegidos: blanco y negro por contraste

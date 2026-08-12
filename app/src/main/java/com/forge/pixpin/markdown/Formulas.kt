@@ -52,7 +52,7 @@ sealed interface Pieza {
  */
 object Formulas {
 
-    fun leer(latex: String): Pieza = Lector(latex).fila(null)
+    fun leer(formula: String): Pieza = Lector(formula).expresion(null)
 
     /**
      * Los símbolos que se escriben con barra invertida.
@@ -95,8 +95,171 @@ object Formulas {
         "log", "ln", "exp", "lim", "max", "min", "det", "gcd", "mod"
     )
 
+    /** Lo que se escribe de forma corriente y significa un símbolo. */
+    private val PALABRAS = mapOf(
+        "inf" to "∞", "infinito" to "∞", "infinity" to "∞",
+        "grados" to "°", "deg" to "°",
+        "sum" to "∑", "suma" to "∑", "prod" to "∏", "int" to "∫",
+        "raiz" to "√", "±" to "±"
+    )
+
+    /** Parejas de signos que se escriben con dos teclas y significan una. */
+    private val PAREJAS = listOf(
+        "<=" to "≤", ">=" to "≥", "!=" to "≠", "/=" to "≠",
+        "+-" to "±", "-+" to "∓", "==" to "≡", "~=" to "≈",
+        "->" to "→", "=>" to "⇒", "<-" to "←", "<->" to "↔"
+    )
+
     private class Lector(private val s: String) {
         private var i = 0
+
+        /**
+         * Una expresión entera: sumas, restas y comparaciones.
+         *
+         * El nivel más suelto de todos, por eso va el primero: en `1/2 + x`, lo
+         * que se suma es la fracción entera y la equis, no el 2 y la equis.
+         */
+        fun expresion(fin: Char?): Pieza {
+            val partes = mutableListOf<Pieza>()
+            partes += termino(fin)
+            while (true) {
+                // Los espacios se saltan **antes** de mirar el signo. Sin esto,
+                // `1/2 + x` se paraba en el espacio y devolvía solo la fracción:
+                // la suma se perdía entera.
+                saltarEspacios()
+                if (i >= s.length || (fin != null && s[i] == fin)) break
+                val signo = signoSuelto() ?: break
+                partes += Pieza.Texto(" $signo ")
+                partes += termino(fin)
+            }
+            return if (partes.size == 1) partes[0] else Pieza.Fila(partes)
+        }
+
+        private fun saltarEspacios() {
+            while (i < s.length && s[i] == ' ') i++
+        }
+
+        /** Los signos que separan términos, ya convertidos a su símbolo. */
+        private fun signoSuelto(): String? {
+            PAREJAS.forEach { (escrito, simbolo) ->
+                if (s.startsWith(escrito, i)) { i += escrito.length; return simbolo }
+            }
+            val c = s.getOrNull(i) ?: return null
+            if (c in "+-=<>≤≥≠≈") { i++; return c.toString() }
+            return null
+        }
+
+        /**
+         * Un término: lo que se multiplica y se divide.
+         *
+         * **La barra hace una fracción de verdad.** Es el cambio que quita el
+         * LaTeX de en medio: `1/2` se escribe en dos teclas y sale con su raya,
+         * sin `\frac{}{}` ni llaves que cuadrar en una pantalla táctil.
+         */
+        private fun termino(fin: Char?): Pieza {
+            var izquierda = factor(fin)
+            while (true) {
+                val antes = i
+                saltarEspacios()
+                if (i >= s.length || (fin != null && s[i] == fin)) { i = antes; break }
+                when {
+                    s[i] == '/' -> { i++; izquierda = Pieza.Fraccion(izquierda, factor(fin)) }
+                    s[i] == '*' -> {
+                        i++
+                        izquierda = Pieza.Fila(
+                            listOf(izquierda, Pieza.Texto("·"), factor(fin))
+                        )
+                    }
+                    // Pegado significa multiplicado: `2x`, `ab`. No se pinta
+                    // ningún signo, como en cualquier libro.
+                    esDeFactor(s[i]) ->
+                        izquierda = Pieza.Fila(listOf(izquierda, factor(fin)))
+                    else -> { i = antes; break }
+                }
+            }
+            return izquierda
+        }
+
+        private fun esDeFactor(c: Char): Boolean =
+            c.isLetterOrDigit() || c == '(' || c == '{' || c == '\\' || c == '.'
+
+        /** Un factor con sus exponentes y subíndices pegados. */
+        private fun factor(fin: Char?): Pieza {
+            var base = atomo(fin)
+            while (i < s.length && (s[i] == '^' || s[i] == '_')) {
+                val arriba = s[i] == '^'
+                i++
+                base = conIndice(base, atomo(fin), arriba)
+            }
+            return base
+        }
+
+        /** Lo más pequeño: un número, una letra, un paréntesis, un mandato. */
+        private fun atomo(fin: Char?): Pieza {
+            while (i < s.length && s[i] == ' ') i++
+            if (i >= s.length || (fin != null && s[i] == fin)) return Pieza.Texto("")
+
+            val c = s[i]
+            return when {
+                c == '\\' -> mandato()
+                c == '(' || c == '[' -> agrupado(c)
+                c == '{' -> { i++; val d = expresion('}'); if (i < s.length) i++; d }
+                c.isDigit() || c == '.' -> numero()
+                c.isLetter() -> palabra()
+                else -> { i++; Pieza.Texto(c.toString()) }
+            }
+        }
+
+        private fun numero(): Pieza {
+            val n = StringBuilder()
+            while (i < s.length && (s[i].isDigit() || s[i] == '.' || s[i] == ',')) {
+                n.append(s[i]); i++
+            }
+            return Pieza.Texto(n.toString())
+        }
+
+        /**
+         * Una palabra: puede ser un símbolo, una función o letras sueltas.
+         *
+         * `pi` sale como π sin barra invertida, `sqrt(x)` y `raiz(x)` hacen una
+         * raíz, `sin(x)` sale derecho. Y `xy`, que no es nada de eso, sale como
+         * dos letras en cursiva multiplicándose, que es lo que significa.
+         */
+        private fun palabra(): Pieza {
+            val desde = i
+            val w = StringBuilder()
+            while (i < s.length && s[i].isLetter()) { w.append(s[i]); i++ }
+            val palabra = w.toString()
+            val minus = palabra.lowercase()
+
+            if (palabra == "sqrt" || minus == "raiz" || minus == "raíz") {
+                return Pieza.Raiz(argumento())
+            }
+            if (minus in FUNCIONES) {
+                return Pieza.Fila(listOf(Pieza.Texto(minus), argumento()))
+            }
+            SIMBOLOS[palabra]?.let { return Pieza.Texto(it) }
+            PALABRAS[minus]?.let { return Pieza.Texto(it) }
+
+            // Letras sueltas: cada una es una variable. Se vuelve a la primera y
+            // se devuelve solo esa, para que `2ab` sean dos factores y no una
+            // palabra rara.
+            i = desde + 1
+            return Pieza.Texto(palabra.first().toString(), cursiva = true)
+        }
+
+        /** Lo que va detrás de una función o de una raíz. */
+        private fun argumento(): Pieza {
+            while (i < s.length && s[i] == ' ') i++
+            if (i < s.length && (s[i] == '(' || s[i] == '{')) {
+                val cierra = if (s[i] == '(') ')' else '}'
+                i++
+                val dentro = expresion(cierra)
+                if (i < s.length) i++
+                return dentro
+            }
+            return atomo(null)
+        }
 
         /**
          * Lee piezas seguidas hasta el final o hasta [fin], el carácter que
@@ -111,7 +274,7 @@ object Formulas {
          * según se leen, porque en `x^2` el 2 no es un trozo más: es parte de la
          * x. Sin eso quedaría suelto y se pintaría a su lado, del mismo tamaño.
          */
-        fun fila(fin: Char?): Pieza {
+        private fun fila(fin: Char?): Pieza {
             val partes = mutableListOf<Pieza>()
             while (i < s.length) {
                 val c = s[i]
@@ -125,7 +288,7 @@ object Formulas {
                         partes += conIndice(base, indice, arriba = c == '^')
                     }
                     c == '\\' -> partes += mandato()
-                    c == '{' -> { i++; partes += fila('}'); if (i < s.length) i++ }
+                    c == '{' -> { i++; partes += expresion('}'); if (i < s.length) i++ }
                     c == '(' || c == '[' -> partes += agrupado(c)
                     c.isWhitespace() -> { i++; if (partes.isNotEmpty()) partes += Pieza.Texto(" ") }
                     else -> partes += sueltos()
@@ -153,7 +316,7 @@ object Formulas {
             if (i >= s.length) return Pieza.Texto("")
             if (s[i] == '{') {
                 i++
-                val dentro = fila('}')
+                val dentro = expresion('}')
                 if (i < s.length) i++
                 return dentro
             }
@@ -177,7 +340,7 @@ object Formulas {
                     var indice: Pieza? = null
                     if (i < s.length && s[i] == '[') {
                         i++
-                        indice = fila(']')
+                        indice = expresion(']')
                         if (i < s.length) i++
                     }
                     Pieza.Raiz(grupo(), indice)
@@ -202,7 +365,7 @@ object Formulas {
             val cierra = if (abre == '(') ')' else ']'
             val desde = i
             i++
-            val dentro = fila(cierra)
+            val dentro = expresion(cierra)
             // Sin cierre no hay grupo: se devuelve tal cual para no perder nada.
             return if (i < s.length && s[i] == cierra) {
                 i++
