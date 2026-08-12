@@ -171,6 +171,13 @@ object Menus {
      * [tipo] en null se queda en párrafo, que es su «Texto» y su «Ninguna».
      */
     fun convertir(texto: String, tipo: TipoDeBloque?): String {
+        // **Una tabla no se convierte en otra cosa.** Su contenido es una
+        // rejilla, no una frase: al tratarla como texto y envolverla en una
+        // almohadilla, lo que salía era el HTML de la tabla escrito a la vista
+        // como si fuera un título. Antes que estropear lo que hay, no hacer
+        // nada. Para cambiar una tabla está su propio menú.
+        if (Tablas.esTabla(texto.trim()) && tipo != TipoDeBloque.TABLA) return texto
+
         val cuerpo = contenidoDe(texto)
         if (tipo == null) return cuerpo
         return Bloques.envuelve(tipo, cuerpo).trimEnd('\n')

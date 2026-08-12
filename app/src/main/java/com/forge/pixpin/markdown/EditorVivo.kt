@@ -216,6 +216,7 @@ private fun TablaEditable(
     var escribiendo by remember(tabla.filas.size, tabla.columnas) {
         mutableStateOf<Pair<Int, Int>?>(null)
     }
+    var seleccionEnCelda by remember { mutableStateOf(TextRange.Zero) }
 
     val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
     val marca = marcado
@@ -326,6 +327,7 @@ private fun TablaEditable(
             CeldaEscribible(
                 texto = ancla.celda.contenido.text,
                 conFoco = true,
+                onSeleccion = { seleccionEnCelda = it },
                 onTexto = {
                     // La fila y el índice salen del ancla: con una fusión, la
                     // celda que se ve en la columna 2 puede ser la primera de la
@@ -338,6 +340,40 @@ private fun TablaEditable(
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = estilo
             )
+            }
+
+            // **Los estilos de texto también dentro de una celda.** Es el mismo
+            // texto con los mismos estilos que en cualquier otro sitio, así que
+            // la barra es la misma; lo único que cambia es dónde se guarda lo
+            // que se marque. Sale flotando por encima, como el menú de la tabla.
+            val enEdicion = escribiendo
+            if (enEdicion != null && !seleccionEnCelda.collapsed) {
+                val ancla = anclasDe(tabla)
+                    .firstOrNull { it.fila to it.columna == enEdicion }
+                if (ancla != null) {
+                    val contenido = ancla.celda.contenido
+                    val desde = seleccionEnCelda.min.coerceIn(0, contenido.text.length)
+                    val hasta = seleccionEnCelda.max.coerceIn(desde, contenido.text.length)
+
+                    fun conEstilo(kind: SpanKind) {
+                        onCambio(
+                            Tablas.conCelda(
+                                tabla, ancla.fila, ancla.indiceEnLaFila,
+                                InlineText(
+                                    contenido.text,
+                                    Inline.alternar(contenido.spans, desde, hasta, kind)
+                                )
+                            )
+                        )
+                    }
+
+                    BarraDeEstilosUi(
+                        activos = Inline.estilosDe(contenido.spans, desde, hasta),
+                        onEstilo = { conEstilo(it) },
+                        onEnlace = { conEstilo(SpanKind.LINK) },
+                        modifier = Modifier.align(Alignment.TopCenter).zIndex(2f)
+                    )
+                }
             }
 
             // Encima con `zIndex` y no en una ventana emergente porque la nota
@@ -381,7 +417,8 @@ private fun CeldaEscribible(
     onFoco: () -> Unit,
     modifier: Modifier = Modifier,
     textStyle: TextStyle,
-    conFoco: Boolean = false
+    conFoco: Boolean = false,
+    onSeleccion: (TextRange) -> Unit = {}
 ) {
     var valor by remember { mutableStateOf(TextFieldValue(texto, TextRange(texto.length))) }
     var tieneFoco by remember { mutableStateOf(false) }

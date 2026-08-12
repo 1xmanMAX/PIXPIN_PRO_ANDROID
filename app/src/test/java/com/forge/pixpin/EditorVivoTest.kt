@@ -142,6 +142,23 @@ class EditorVivoTest {
             }
     }
 
+    /**
+     * El fallo reportado: darle a «título» estando en una tabla escribía el
+     * HTML de la tabla a la vista, como si fuera texto. Una tabla no es una
+     * frase que se pueda envolver en una almohadilla.
+     */
+    @Test
+    fun `una tabla no se convierte en titulo ni en otra cosa`() {
+        val tabla = "| a | b |\n|---|---|\n| 1 | 2 |"
+        listOf(
+            TipoDeBloque.TITULO_1, TipoDeBloque.CITA, TipoDeBloque.LISTA,
+            TipoDeBloque.TAREAS, TipoDeBloque.CODIGO, null
+        ).forEach { tipo ->
+            assertEquals("por $tipo", tabla, Menus.convertir(tabla, tipo))
+        }
+        assertTrue(Markdown.parse(Menus.convertir(tabla, null)).first() is MarkdownBlock.Tabla)
+    }
+
     @Test
     fun `todos los bloques se alcanzan desde algun boton`() {
         val fuera = TipoDeBloque.entries.toSet() - Menus.alcanzables
