@@ -40,7 +40,11 @@ class MotorSeparadoTest {
         // imágenes, y las dos cosas son de Android. La geometría que usan sí es
         // del núcleo —[Caminos], [Rough], [Perimetros]— y por eso el PDF se
         // comprueba casi entero sin dispositivo.
-        "Glifos.kt", "PdfLienzo.kt", "PdfDoc.kt", "PdfDelProyecto.kt"
+        "Glifos.kt", "PdfLienzo.kt", "PdfDoc.kt", "PdfDelProyecto.kt",
+        // Arma el PDF de lo marcado: escribe archivos y pinta imágenes, las dos
+        // de Android. Qué láminas entran y cómo se llama el archivo sí es
+        // núcleo, y por eso eso sí se comprueba sin dispositivo.
+        "ExportarProyecto.kt"
     )
 
     private fun archivos(): List<File> =

@@ -124,16 +124,7 @@ object DrawPdf {
             .ifEmpty {
                 val visible = scene.contenidoVisible
                 if (visible.isEmpty()) return null
-                // **Sin marcos manda la cuadrícula invisible de hojas A4.** El
-                // lienzo ya está paginado desde el primer día aunque no se vea;
-                // ver [HojasA4]. Así el documento sale con una página por cada
-                // zona usada, sin que nadie tenga que acordarse de encuadrar.
-                //
-                // Y es exactamente lo que enseña la vista previa: las dos piden
-                // la misma lista, así que no pueden discrepar.
-                HojasA4.paginas(visible).ifEmpty {
-                    listOf(getCommonBounds(visible) to visible)
-                }
+                listOf(getCommonBounds(visible) to visible)
             }
         if (paginas.isEmpty()) return null
 
