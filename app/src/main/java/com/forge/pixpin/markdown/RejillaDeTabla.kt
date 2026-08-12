@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -99,8 +100,11 @@ fun RejillaDeTabla(
     onColumna: (Int) -> Unit = {},
     onFila: (Int) -> Unit = {},
     onCelda: (Int, Int) -> Unit = { _, _ -> },
+    onCeldaDoble: (Int, Int) -> Unit = { _, _ -> },
     onCeldaLarga: (Int, Int) -> Unit = { _, _ -> },
     onArrastre: (Int, Int) -> Unit = { _, _ -> },
+    /** Con false la rejilla no toca ningún gesto: está escribiéndose una celda. */
+    gestos: Boolean = true,
     celda: @Composable (Ancla) -> Unit
 ) {
     val anclas = anclasDe(tabla)
@@ -130,8 +134,23 @@ fun RejillaDeTabla(
                 // `detectDragGesturesAfterLongPress` no toca nada hasta que la
                 // pulsación es larga, así que el toque normal sigue llegando al
                 // campo de texto y el desplazamiento horizontal sigue yendo.
-                modifier = Modifier.pointerInput(conAsas) {
-                    if (!conAsas) return@pointerInput
+                modifier = Modifier
+                    // Tocar marca; tocar dos veces entra a escribir. Van en su
+                    // propio detector porque el de aguantar tiene que mirar en
+                    // otra pasada y con otro tiempo.
+                    .pointerInput(conAsas, gestos) {
+                        if (!conAsas || !gestos) return@pointerInput
+                        detectTapGestures(
+                            onTap = { donde ->
+                                celdaEn(sitios, donde)?.let { onCelda(it.first, it.second) }
+                            },
+                            onDoubleTap = { donde ->
+                                celdaEn(sitios, donde)?.let { onCeldaDoble(it.first, it.second) }
+                            }
+                        )
+                    }
+                    .pointerInput(conAsas, gestos) {
+                    if (!conAsas || !gestos) return@pointerInput
                     awaitEachGesture {
                         // **En la pasada inicial**, que es la clave. El campo de
                         // texto de la celda se queda el toque para colocar su
@@ -179,7 +198,7 @@ fun RejillaDeTabla(
                             celdaEn(sitios, dedo.position)?.let { onArrastre(it.first, it.second) }
                         }
                     }
-                },
+                    },
                 content = {
                     // Primero las celdas, luego las asas de columna y por último
                     // las de fila. El orden importa: la medida las reparte por

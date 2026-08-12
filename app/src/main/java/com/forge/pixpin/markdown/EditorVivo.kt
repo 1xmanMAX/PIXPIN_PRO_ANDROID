@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -184,6 +185,24 @@ private fun TablaEditable(
     }
     var menuAbierto by remember { mutableStateOf(false) }
 
+    /**
+     * Qué celda se está escribiendo, si es que alguna.
+     *
+     * **Una celda no es un campo de texto hasta que se decide escribir en ella.**
+     * Mientras lo era, había dos gestos peleándose por el mismo dedo: al aguantar
+     * salía primero el menú de Android para seleccionar texto —que llega a los
+     * 400 ms— y después el nuestro. Y no había forma de arreglarlo desde fuera,
+     * porque los dos querían lo mismo.
+     *
+     * Siendo texto pintado, no hay con quién pelearse: tocar marca la celda,
+     * aguantar marca el grupo, y **tocar dos veces** entra a escribir. Solo
+     * entonces aparece el campo, con su teclado y su selección de texto de toda
+     * la vida, y la rejilla se aparta.
+     */
+    var escribiendo by remember(tabla.filas.size, tabla.columnas) {
+        mutableStateOf<Pair<Int, Int>?>(null)
+    }
+
     val rejilla = remember(tabla) { Tablas.rejilla(tabla) }
     val marca = marcado
 
@@ -238,6 +257,12 @@ private fun TablaEditable(
             },
             onCelda = { f, c ->
                 marcado = Tablas.Marcado.celda(f, c)
+                escribiendo = null
+                menuAbierto = false
+            },
+            onCeldaDoble = { f, c ->
+                marcado = Tablas.Marcado.celda(f, c)
+                escribiendo = f to c
                 menuAbierto = false
             },
             // Mantener pulsada **estira lo marcado** hasta aquí y abre el menú.
@@ -247,15 +272,38 @@ private fun TablaEditable(
             // Mantener pulsado empieza el grupo aquí; arrastrar lo estira.
             onCeldaLarga = { f, c ->
                 marcado = Tablas.Marcado.celda(f, c)
+                escribiendo = null
                 menuAbierto = true
             },
             onArrastre = { f, c ->
                 val desde = marca ?: return@RejillaDeTabla
                 marcado = Tablas.Marcado(desde.f1, desde.c1, f, c)
-            }
+            },
+            gestos = escribiendo == null
         ) { ancla ->
+            val estilo = TextStyle(
+                fontSize = (baseSizeSp * 0.92f).sp,
+                fontWeight = if (ancla.celda.cabecera) FontWeight.Bold else FontWeight.Normal,
+                textAlign = when (ancla.celda.alineacion) {
+                    Alineacion.CENTRO -> TextAlign.Center
+                    Alineacion.DERECHA -> TextAlign.End
+                    else -> TextAlign.Start
+                },
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            if (escribiendo != ancla.fila to ancla.columna) {
+                Text(
+                    text = ancla.celda.contenido.text,
+                    style = estilo,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                return@RejillaDeTabla
+            }
+
             CeldaEscribible(
                 texto = ancla.celda.contenido.text,
+                conFoco = true,
                 onTexto = {
                     // La fila y el índice salen del ancla: con una fusión, la
                     // celda que se ve en la columna 2 puede ser la primera de la
@@ -266,16 +314,7 @@ private fun TablaEditable(
                 },
                 onFoco = { marcado = Tablas.Marcado.celda(ancla.fila, ancla.columna) },
                 modifier = Modifier.fillMaxWidth(),
-                textStyle = TextStyle(
-                    fontSize = (baseSizeSp * 0.92f).sp,
-                    fontWeight = if (ancla.celda.cabecera) FontWeight.Bold else FontWeight.Normal,
-                    textAlign = when (ancla.celda.alineacion) {
-                        Alineacion.CENTRO -> TextAlign.Center
-                        Alineacion.DERECHA -> TextAlign.End
-                        else -> TextAlign.Start
-                    },
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                textStyle = estilo
             )
             }
 
@@ -319,12 +358,17 @@ private fun CeldaEscribible(
     onTexto: (String) -> Unit,
     onFoco: () -> Unit,
     modifier: Modifier = Modifier,
-    textStyle: TextStyle
+    textStyle: TextStyle,
+    conFoco: Boolean = false
 ) {
     var valor by remember { mutableStateOf(TextFieldValue(texto, TextRange(texto.length))) }
-    var conFoco by remember { mutableStateOf(false) }
+    var tieneFoco by remember { mutableStateOf(false) }
+    val pedirFoco = remember { FocusRequester() }
+    if (conFoco) {
+        LaunchedEffect(Unit) { runCatching { pedirFoco.requestFocus() } }
+    }
 
-    if (!conFoco && valor.text != texto) {
+    if (!tieneFoco && valor.text != texto) {
         valor = TextFieldValue(texto, TextRange(texto.length))
     }
 
@@ -339,10 +383,12 @@ private fun CeldaEscribible(
             if (limpio != texto) onTexto(limpio)
         },
         singleLine = true,
-        modifier = modifier.onFocusChanged {
-            conFoco = it.isFocused
-            if (it.isFocused) onFoco()
-        },
+        modifier = modifier
+            .focusRequester(pedirFoco)
+            .onFocusChanged {
+                tieneFoco = it.isFocused
+                if (it.isFocused) onFoco()
+            },
         textStyle = textStyle,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary)
     )
