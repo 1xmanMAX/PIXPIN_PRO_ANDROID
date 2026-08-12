@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Las tablas, con el modelo de Telegram entero.

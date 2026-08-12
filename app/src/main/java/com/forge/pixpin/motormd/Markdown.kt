@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Tipo de decoración de un tramo de texto.

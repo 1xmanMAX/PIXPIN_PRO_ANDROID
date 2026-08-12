@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Deshacer y rehacer, como su `RichEditorHistory`.

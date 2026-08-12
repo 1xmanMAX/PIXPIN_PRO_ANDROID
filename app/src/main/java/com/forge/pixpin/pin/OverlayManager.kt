@@ -357,7 +357,18 @@ class OverlayManager(private val app: PixPinApp) {
         if (esMarkdown(fileName, mimeType)) {
             val texto = runCatching { java.io.File(filePath).readText() }.getOrNull()
             if (!texto.isNullOrBlank()) {
-                createPin(newPin(PinType.TEXT).copy(text = texto.take(200_000)))
+                val contenido = texto.take(200_000)
+                // **Y si es largo, llega ya paginado**, como llegaría un PDF.
+                // Un documento que alguien comparte se lee; una nota que se
+                // escribe aquí se sigue escribiendo, y por eso esa empieza
+                // seguida. Ver [Paginado] y el visor de páginas del pin.
+                val hojas = com.forge.pixpin.motormd.Paginado.cuantasPaginas(contenido)
+                createPin(
+                    newPin(PinType.TEXT).copy(
+                        text = contenido,
+                        widget = WidgetState(notaPagina = if (hojas > 1) 0 else -1)
+                    )
+                )
                 return
             }
         }

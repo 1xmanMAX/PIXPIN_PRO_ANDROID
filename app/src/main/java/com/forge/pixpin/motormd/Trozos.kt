@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /** Un bloque del documento, dicho en posiciones del texto original. */
 data class Trozo(val desde: Int, val hasta: Int) {

@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /** Texto y selección tras aplicar un formato. */
 data class EditResult(val text: String, val selStart: Int, val selEnd: Int)

@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Los comandos que se escriben con barra, como en el editor enriquecido de

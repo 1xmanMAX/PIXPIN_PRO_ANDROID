@@ -52,6 +52,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.SquareFoot
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BlurOn
@@ -146,23 +149,24 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.drawText
 import com.forge.pixpin.mini.Ruleta
-import com.forge.pixpin.markdown.BarraDeEstilosUi
-import com.forge.pixpin.markdown.BarraDeFamiliasUi
-import com.forge.pixpin.markdown.EditorVivo
-import com.forge.pixpin.markdown.Inline
-import com.forge.pixpin.markdown.InlineText
-import com.forge.pixpin.markdown.Menus
-import com.forge.pixpin.markdown.Sitio
-import com.forge.pixpin.markdown.SpanKind
-import com.forge.pixpin.markdown.TipoDeBloque
-import com.forge.pixpin.markdown.Vivo
-import com.forge.pixpin.markdown.trozosDe
-import com.forge.pixpin.markdown.LinkHit
-import com.forge.pixpin.markdown.Markdown
-import com.forge.pixpin.markdown.MarkdownEdit
-import com.forge.pixpin.markdown.MarkdownEditorActivity
-import com.forge.pixpin.markdown.MarkdownText
-import com.forge.pixpin.markdown.TextoStore
+import com.forge.pixpin.motormd.BarraDeEstilosUi
+import com.forge.pixpin.motormd.BarraDeFamiliasUi
+import com.forge.pixpin.motormd.EditorVivo
+import com.forge.pixpin.motormd.Inline
+import com.forge.pixpin.motormd.InlineText
+import com.forge.pixpin.motormd.Menus
+import com.forge.pixpin.motormd.Sitio
+import com.forge.pixpin.motormd.SpanKind
+import com.forge.pixpin.motormd.TipoDeBloque
+import com.forge.pixpin.motormd.Vivo
+import com.forge.pixpin.motormd.trozosDe
+import com.forge.pixpin.motormd.LinkHit
+import com.forge.pixpin.motormd.Markdown
+import com.forge.pixpin.motormd.MarkdownEdit
+import com.forge.pixpin.motormd.Paginado
+import com.forge.pixpin.ui.MarkdownEditorActivity
+import com.forge.pixpin.motormd.MarkdownText
+import com.forge.pixpin.motormd.TextoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -467,6 +471,7 @@ class PinWindowController(
             closeActionBar()
             closeEmojiPicker()
         closePdfViewer()
+        cerrarPaginasDeNota()
         closeBoardPalette()
             exitAnnotateMode()
         }
@@ -496,6 +501,7 @@ class PinWindowController(
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
+        cerrarPaginasDeNota()
         closeBoardPalette()
         val w = window ?: return
         // Guarda la posición viva antes de soltar los LayoutParams.
@@ -568,6 +574,7 @@ class PinWindowController(
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
+        cerrarPaginasDeNota()
         closeBoardPalette()
         exitAnnotateMode()
         // La burbuja no se redimensiona; sin esto conservaría el rect del pin abierto.
@@ -638,6 +645,7 @@ class PinWindowController(
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
+        cerrarPaginasDeNota()
         closeBoardPalette()
         val body = pin.value.text.orEmpty()
         draft.value = TextFieldValue(body, TextRange(body.length))
@@ -1621,6 +1629,7 @@ class PinWindowController(
 
     private fun extractAllPages(count: Int) {
         closePdfViewer()
+        cerrarPaginasDeNota()
         closeBoardPalette()
         scope.launch {
             // De una en una y con respiro: veinte páginas a la vez son veinte
@@ -1733,6 +1742,7 @@ class PinWindowController(
                     onLongClick = {
                         extractPage(index)
                         closePdfViewer()
+                        cerrarPaginasDeNota()
                         closeBoardPalette()
                     }
                 )
@@ -1755,6 +1765,186 @@ class PinWindowController(
             }
             Text("${index + 1}", style = MaterialTheme.typography.labelSmall)
         }
+    }
+
+    // ---- Visor de páginas de una nota ----
+
+    private var notaViewer: OverlayComposeWindow? = null
+
+    /**
+     * La nota es lo bastante larga como para tener páginas.
+     *
+     * Se pregunta al abrir la barra, no al pintar el pin: una nota de tres
+     * líneas no tiene que enterarse nunca de que existe la paginación.
+     */
+    val esNotaLarga: Boolean
+        get() = pin.value.type == PinType.TEXT && Paginado.cuantasPaginas(pin.value.text) > 1
+
+    /**
+     * La rejilla de páginas de la nota, hermana de la del PDF.
+     *
+     * Es **la misma idea y el mismo gesto**: pulsación larga sobre el pin, botón
+     * de páginas, rejilla, y tocar una la abre. Que una nota y un PDF se manejen
+     * igual no es capricho: los dos acaban siendo hojas de un proyecto y los dos
+     * se leen igual de mal en un rollo sin fin.
+     *
+     * La diferencia es de dónde sale la miniatura. La del PDF se renderiza del
+     * archivo; esta se **compone**, con el mismo pintor que el pin pero en
+     * pequeño, porque una nota no tiene página hasta que alguien decide dónde
+     * cortarla. Ver [Paginado].
+     */
+    private fun abrirPaginasDeNota() {
+        if (notaViewer != null) return
+        closeActionBar()
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.CENTER }
+        val viewer = OverlayComposeWindow(context) { PaginasDeNotaContent() }
+        notaViewer = viewer
+        runCatching {
+            wm.addView(viewer.view, params)
+            viewer.onAttached()
+        }.onFailure { notaViewer = null }
+    }
+
+    private fun cerrarPaginasDeNota() {
+        val viewer = notaViewer ?: return
+        runCatching { wm.removeView(viewer.view) }
+        viewer.onDetached()
+        notaViewer = null
+    }
+
+    /** Deja el pin mostrando una página suelta, o seguido con -1. */
+    private fun verPagina(indice: Int) {
+        pin.value = pin.value.copy(widget = pin.value.widget.copy(notaPagina = indice))
+        callbacks.onPinChanged(this)
+    }
+
+    @Composable
+    private fun PaginasDeNotaContent() {
+        val texto = pin.value.text.orEmpty()
+        val paginas = remember(texto) { Paginado.deTexto(texto) }
+        val actual = pin.value.widget.notaPagina
+
+        Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 8.dp) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = context.getString(R.string.nota_paginas, paginas.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    // Volver al rollo seguido. Solo asoma si se está en una
+                    // página: si ya se lee seguido no hay nada que deshacer.
+                    if (actual >= 0) {
+                        TextButton(onClick = {
+                            verPagina(-1)
+                            cerrarPaginasDeNota()
+                        }) {
+                            Text(context.getString(R.string.nota_seguida))
+                        }
+                    }
+                    IconButton(onClick = { cerrarPaginasDeNota() }) {
+                        Icon(Icons.Filled.Close, contentDescription = null)
+                    }
+                }
+
+                val metrics = context.resources.displayMetrics
+                val availableDp = (metrics.widthPixels / metrics.density) - 40f
+                val columns = (availableDp / THUMB_SLOT_DP).toInt().coerceIn(2, 8)
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = (metrics.heightPixels / metrics.density * 0.6f).dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    paginas.indices.chunked(columns).forEach { fila ->
+                        Row {
+                            fila.forEach { i -> MiniaturaDeNota(paginas[i], i, i == actual) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Una hoja de la nota en pequeño.
+     *
+     * Se compone **de verdad**, con el mismo [MarkdownText] que pinta el pin,
+     * pero a un tamaño de letra diminuto y recortada por el alto de la hoja. No
+     * es un dibujo aparte ni un resumen: lo que se ve en la miniatura es lo que
+     * hay en la página, incluida la tabla que se llevó la hoja entera.
+     */
+    @Composable
+    @OptIn(ExperimentalFoundationApi::class)
+    private fun MiniaturaDeNota(
+        pagina: Paginado.PaginaDeNota,
+        indice: Int,
+        marcada: Boolean
+    ) {
+        val borde = if (marcada) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .padding(4.dp)
+                .width(96.dp)
+                // Un toque la abre en el pin; la pulsación larga la abre en el
+                // editor avanzado, por donde se estaba leyendo. Ver
+                // [abrirNotaEnElEditor].
+                .combinedClickable(
+                    onClick = {
+                        verPagina(indice)
+                        cerrarPaginasDeNota()
+                    },
+                    onLongClick = {
+                        cerrarPaginasDeNota()
+                        abrirNotaEnElEditor(pagina.desde)
+                    }
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(96.dp)
+                    .height(130.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(if (marcada) 2.dp else 1.dp, borde, RoundedCornerShape(4.dp))
+                    .padding(4.dp)
+            ) {
+                MarkdownText(
+                    blocks = pagina.bloques,
+                    baseSizeSp = 3.2f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Text("${indice + 1}", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+
+    /**
+     * Abre el editor avanzado, dejándolo **por donde se iba leyendo**.
+     *
+     * Editar sigue siendo seguido: las páginas son una forma de leer y de
+     * entregar, no de escribir. Un editor que obligara a saltar de hoja en hoja
+     * partiría un párrafo por donde no le toca en cuanto le añadieras dos
+     * líneas, porque el corte se recalcula con cada letra. Lo que sí se conserva
+     * es el sitio: entras donde estabas mirando.
+     */
+    private fun abrirNotaEnElEditor(desde: Int) {
+        closeActionBar()
+        com.forge.pixpin.ui.MarkdownEditorActivity.abrir(
+            context, pin.value.id, pin.value.text.orEmpty(), desde
+        )
     }
 
     // ---- Barra de edición de texto ----
@@ -1932,7 +2122,15 @@ class PinWindowController(
         val texto = draft.value.text
         exitEditMode(texto)
         revisionDelTexto = TextoStore.revisionDe(pin.value.id)
-        MarkdownEditorActivity.abrir(context, pin.value.id, texto)
+        // Si se venía leyendo por páginas, el editor abre por esa. Ver
+        // [abrirNotaEnElEditor] para el porqué de que allí no haya hojas.
+        val pagina = pin.value.widget.notaPagina
+        val desde = if (pagina >= 0) {
+            Paginado.deTexto(texto).getOrNull(pagina)?.desde ?: -1
+        } else {
+            -1
+        }
+        MarkdownEditorActivity.abrir(context, pin.value.id, texto, desde)
     }
 
     // ---- Pegatinas ----
@@ -1974,6 +2172,7 @@ class PinWindowController(
         applyContentSize()
         closeEmojiPicker()
         closePdfViewer()
+        cerrarPaginasDeNota()
         closeBoardPalette()
         callbacks.onPinChanged(this)
     }
@@ -2040,6 +2239,17 @@ class PinWindowController(
                         Icon(
                             Icons.Filled.PictureAsPdf,
                             contentDescription = context.getString(R.string.pdf_view)
+                        )
+                    }
+                }
+                // **Una nota larga se maneja como un PDF.** El botón solo
+                // aparece si de verdad hay más de una página: en una nota corta
+                // sería un botón que no lleva a ninguna parte.
+                if (esNotaLarga) {
+                    IconButton(onClick = { abrirPaginasDeNota() }) {
+                        Icon(
+                            Icons.Filled.AutoStories,
+                            contentDescription = context.getString(R.string.nota_ver_paginas)
                         )
                     }
                 }
@@ -2809,16 +3019,39 @@ class PinWindowController(
                         }
 
                         else -> {
-                            MarkdownText(
-                                blocks = blocks,
-                                baseSizeSp = 14f,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .verticalScroll(textScroll)
-                                    .padding(14.dp),
-                                ocultosVisibles = ocultosVisibles.value,
-                                onLinks = { linkHits = it }
-                            )
+                            // Con la nota abierta por una página se enseña
+                            // **solo esa**, con su pie para pasar de hoja. Lo
+                            // demás sigue siendo el rollo de siempre: paginar
+                            // es algo que se enciende, no el modo único.
+                            val hojas = remember(s.text, s.widget.notaPagina) {
+                                if (s.widget.notaPagina >= 0) {
+                                    Paginado.deTexto(s.text)
+                                } else {
+                                    emptyList()
+                                }
+                            }
+                            val hoja = hojas.getOrNull(s.widget.notaPagina)
+                            // Ancho y no alto: el pin sin alto fijado se mide
+                            // por lo que lleva dentro, y un `fillMaxSize` aquí
+                            // lo estiraría hasta el tope de la pantalla —que es
+                            // el alto máximo que le da [ScaledContent]— aunque
+                            // la página fueran tres líneas.
+                            Column(Modifier.fillMaxWidth()) {
+                                MarkdownText(
+                                    blocks = hoja?.bloques ?: blocks,
+                                    baseSizeSp = 14f,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f, fill = false)
+                                        .verticalScroll(textScroll)
+                                        .padding(14.dp),
+                                    ocultosVisibles = ocultosVisibles.value,
+                                    onLinks = { linkHits = it }
+                                )
+                                if (hoja != null) {
+                                    PieDePaginas(s.widget.notaPagina, hojas.size)
+                                }
+                            }
                             ScrollPip(textScroll)
                         }
                     }
@@ -2853,6 +3086,54 @@ class PinWindowController(
                         strokeWidth = stroke
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * El pie de la nota paginada: «‹ 3 / 12 ›».
+     *
+     * Va dentro de la capa escalada, como el contenido, para que crezca con el
+     * pellizco. Las flechas se apagan en los extremos en vez de desaparecer:
+     * un botón que se va deja el otro bailando de sitio.
+     */
+    @Composable
+    private fun PieDePaginas(actual: Int, total: Int) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            IconButton(
+                onClick = { verPagina(actual - 1) },
+                enabled = actual > 0,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBackIos,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Text(
+                text = "${actual + 1} / $total",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            IconButton(
+                onClick = { verPagina(actual + 1) },
+                enabled = actual < total - 1,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
     }

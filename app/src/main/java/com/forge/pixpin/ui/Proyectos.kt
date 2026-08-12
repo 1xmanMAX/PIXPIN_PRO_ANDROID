@@ -63,13 +63,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import com.forge.pixpin.markdown.Menus
+import com.forge.pixpin.motormd.Menus
 import com.forge.pixpin.motor.PdfDoc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.remember
-import com.forge.pixpin.markdown.MarkdownEditorActivity
-import com.forge.pixpin.markdown.Paginado
+import com.forge.pixpin.ui.MarkdownEditorActivity
+import com.forge.pixpin.motormd.Paginado
 import com.forge.pixpin.motor.DrawEditorActivity
 import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.motor.Hoja
@@ -110,6 +110,13 @@ private fun volverAPinear(app: PixPinApp, p: Proyecto) {
 fun PantallaDeProyectos(app: PixPinApp, onVolver: () -> Unit) {
     val proyectos by app.proyectos.proyectos.collectAsState()
     val ordenados = Proyectos.ordenados(proyectos)
+    val contexto = androidx.compose.ui.platform.LocalContext.current
+
+    // Lo marcado vive **en la pantalla**, no en cada tarjeta: el botón de
+    // exportar está arriba, y desde allí hay que saber qué hay marcado. De un
+    // proyecto a la vez, que es como se entrega: marcar en otro empieza de cero.
+    var marcado by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
+    var exportando by remember { mutableStateOf(false) }
 
     Scaffold { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
@@ -128,6 +135,19 @@ fun PantallaDeProyectos(app: PixPinApp, onVolver: () -> Unit) {
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 )
+                // Compartir lo marcado, **junto al más y solo cuando hay algo
+                // marcado**: es una acción de lo que acabas de elegir, no una
+                // opción del proyecto que esté siempre ahí ocupando sitio.
+                val hayMarcado = marcado?.second?.isNotEmpty() == true
+                if (hayMarcado) {
+                    IconButton(onClick = { exportando = true }) {
+                        Icon(
+                            Icons.Filled.Share,
+                            contentDescription = stringResourceSafe(R.string.proyecto_exportar),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
                 val plantilla = stringResourceSafe(R.string.proyecto_nuevo_nombre)
                 IconButton(
                     onClick = {
@@ -138,6 +158,30 @@ fun PantallaDeProyectos(app: PixPinApp, onVolver: () -> Unit) {
                         Icons.Filled.Add,
                         contentDescription = stringResourceSafe(R.string.proyecto_nuevo)
                     )
+                }
+            }
+
+            if (exportando) {
+                val cual = marcado
+                LaunchedEffect(cual) {
+                    val proyecto = ordenados.firstOrNull { it.id == cual?.first }
+                    val archivo = if (proyecto == null) {
+                        null
+                    } else {
+                        withContext(Dispatchers.IO) {
+                            ExportarProyecto.aArchivo(
+                                contexto, proyecto, cual!!.second,
+                                { dibujo ->
+                                    ExcalidrawStore.cargar(
+                                        ExcalidrawStore.rutaDe(contexto, dibujo)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    exportando = false
+                    if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
+                    else compartir(contexto, archivo)
                 }
             }
 
@@ -159,7 +203,18 @@ fun PantallaDeProyectos(app: PixPinApp, onVolver: () -> Unit) {
                 ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(ordenados, key = { it.id }) { p -> FilaDeProyecto(app, p) }
+                items(ordenados, key = { it.id }) { p ->
+                    FilaDeProyecto(
+                        app = app,
+                        p = p,
+                        marcadas = if (marcado?.first == p.id) marcado!!.second else emptySet(),
+                        onMarcar = { clave ->
+                            val suyas = if (marcado?.first == p.id) marcado!!.second else emptySet()
+                            val nuevas = if (clave in suyas) suyas - clave else suyas + clave
+                            marcado = if (nuevas.isEmpty()) null else p.id to nuevas
+                        }
+                    )
+                }
             }
         }
     }
@@ -167,19 +222,35 @@ fun PantallaDeProyectos(app: PixPinApp, onVolver: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
+private fun FilaDeProyecto(
+    app: PixPinApp,
+    p: Proyecto,
+    marcadas: Set<String>,
+    onMarcar: (String) -> Unit
+) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
-    // Lo marcado para exportar, por la clave de cada página. Vive aquí y no en
-    // el proyecto: es una decisión del momento, no algo que haya que guardar.
-    var marcadas by remember(p.id) { mutableStateOf(setOf<String>()) }
     var renombrando by remember { mutableStateOf(false) }
-    var exportando by remember { mutableStateOf(false) }
     val tick = remember(p) { p.tocado }
     val anotadas = Proyectos.anotadas(p).size
+
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            // **El nombre y lo que se puede hacer con él, en la misma fila.**
+            // Antes las acciones iban en un renglón aparte debajo y parecían de
+            // otra cosa; pegadas al título se lee de un vistazo de qué proyecto
+            // son.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        // **Se renombra manteniéndolo pulsado.** Un botón de
+                        // «cambiar el nombre» es un botón para algo que se hace
+                        // una vez; el nombre ya está ahí y es donde se busca.
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { renombrando = true }
+                        )
+                ) {
                     Text(
                         p.nombre,
                         style = MaterialTheme.typography.titleMedium,
@@ -189,9 +260,6 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
                             else MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        // Lo único que uno quiere saber de un vistazo: por dónde
-                        // iba. Con un PDF detrás se dice de cuántas, que es lo
-                        // que convierte «tres hojas» en «tres de doce».
                         if (p.pdfOrigen != null) {
                             stringResourceSafe(R.string.proyecto_hojas_de, anotadas, p.hojas.size)
                         } else {
@@ -201,24 +269,17 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            // **Con su nombre escrito.** Un icono suelto en una fila no dice lo
-            // que hace: el usuario preguntó qué era ese botón, y tenía razón —
-            // «archivar» y «borrar» se parecen lo bastante como para que
-            // adivinarlo salga caro una vez.
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 if (p.pdfOrigen != null) {
-                    TextButton(onClick = { volverAPinear(app, p) }) {
-                        Icon(Icons.Filled.PushPin, contentDescription = null, Modifier.size(16.dp))
-                        Text(
-                            stringResourceSafe(R.string.proyecto_pinear),
-                            modifier = Modifier.padding(start = 4.dp)
+                    IconButton(onClick = { volverAPinear(app, p) }) {
+                        Icon(
+                            Icons.Filled.PushPin,
+                            contentDescription = stringResourceSafe(R.string.proyecto_pinear),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
-                Spacer(Modifier.weight(1f))
-                TextButton(
+                IconButton(
                     onClick = {
                         app.proyectos.guardar(
                             Proyectos.archivado(p, !p.archivado, System.currentTimeMillis())
@@ -227,113 +288,23 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
                 ) {
                     Icon(
                         if (p.archivado) Icons.Filled.Unarchive else Icons.Filled.Archive,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        stringResourceSafe(
+                        contentDescription = stringResourceSafe(
                             if (p.archivado) R.string.proyecto_desarchivar
                             else R.string.proyecto_archivar
                         ),
-                        modifier = Modifier.padding(start = 4.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                TextButton(onClick = { renombrando = true }) {
+                IconButton(onClick = { app.proyectos.borrar(p.id) }) {
                     Icon(
-                        Icons.Filled.Edit, contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        stringResourceSafe(R.string.proyecto_renombrar),
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-                // Exportar solo lo marcado, con el nombre del proyecto.
-                TextButton(
-                    onClick = {
-                        if (marcadas.isEmpty()) {
-                            avisar(contexto, R.string.proyecto_nada_marcado)
-                        } else {
-                            exportando = true
-                        }
-                    }
-                ) {
-                    Icon(
-                        Icons.Filled.Share, contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        stringResourceSafe(R.string.proyecto_exportar),
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
-                }
-                TextButton(onClick = { app.proyectos.borrar(p.id) }) {
-                    Icon(
-                        Icons.Filled.Delete, contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        Icons.Filled.Delete,
+                        contentDescription = stringResourceSafe(R.string.cd_delete),
+                        modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.error
                     )
-                    Text(
-                        stringResourceSafe(R.string.cd_delete),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
                 }
             }
 
-            // Las hojas, en su orden: el mismo con el que saldrán del PDF.
-            //
-            // En **tira horizontal y con miniatura**, no en lista. Una lista de
-            // nombres de un PDF de cuarenta páginas es cuarenta renglones que
-            // dicen «página 1, página 2…» y ocupan la pantalla entera sin
-            // enseñar nada; una tira de miniaturas cabe en un dedo de alto y
-            // deja ver por dónde vas de un vistazo.
-            if (p.hojas.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                // **Las filas crecen con el documento.** Dos para un
-                // proyecto corto y hasta cuatro para un PDF largo: repartir
-                // cuarenta páginas en dos filas obliga a desplazarse veinte
-                // hojas para llegar al final, y en cuatro son diez.
-                val paginas = remember(p, tick) {
-                    HojasDelProyecto.paginas(p) { dibujo ->
-                        ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
-                    }
-                }
-                val filas = when {
-                    paginas.size <= 8 -> 2
-                    paginas.size <= 21 -> 3
-                    else -> 4
-                }
-                val porFila = (paginas.size + filas - 1) / filas
-
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                ) {
-                    (0 until filas).forEach { f ->
-                        val trozo = paginas.drop(f * porFila).take(porFila)
-                        if (trozo.isEmpty()) return@forEach
-                        Row {
-                            trozo.forEach { pagina ->
-                                HojaDelProyecto(
-                                    app = app,
-                                    p = p,
-                                    pagina = pagina,
-                                    marcada = pagina.clave in marcadas,
-                                    onMarcar = {
-                                        marcadas = if (pagina.clave in marcadas) {
-                                            marcadas - pagina.clave
-                                        } else {
-                                            marcadas + pagina.clave
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
             if (renombrando) {
                 DialogoDeNombre(p.nombre, onCerrar = { renombrando = false }) { nuevo ->
                     app.proyectos.guardar(
@@ -343,18 +314,52 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
                 }
             }
 
-            if (exportando) {
-                LaunchedEffect(marcadas) {
-                    val archivo = withContext(Dispatchers.IO) {
-                        ExportarProyecto.aArchivo(contexto, p, marcadas, { dibujo ->
-                            ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
-                        })
-                    }
-                    exportando = false
-                    if (archivo == null) {
-                        avisar(contexto, R.string.pdf_no_se_pudo)
-                    } else {
-                        compartir(contexto, archivo)
+            val paginas = remember(p, tick) {
+                HojasDelProyecto.paginas(p) { dibujo ->
+                    ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
+                }
+            }
+
+            if (paginas.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+
+                // **Las filas crecen con el documento**: dos para un proyecto
+                // corto y hasta cuatro para un PDF largo. Cuarenta páginas en
+                // dos filas son veinte hojas de desplazamiento para llegar al
+                // final; en cuatro, diez.
+                val filas = when {
+                    paginas.size <= 8 -> 2
+                    paginas.size <= 21 -> 3
+                    else -> 4
+                }
+                val porFila = (paginas.size + filas - 1) / filas
+
+                // **Una fila de columnas**, no una columna de filas. Con la
+                // primera mitad arriba y la segunda abajo, la columna número x
+                // lleva las páginas x, x+porFila, x+2·porFila… así que sale el
+                // mismo reparto y el desplazamiento horizontal es el de un
+                // contenedor normal, sin filas anidadas dentro de algo que se
+                // desplaza —que es donde se torcía y salían en vertical.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    (0 until porFila).forEach { x ->
+                        Column {
+                            (0 until filas).forEach { f ->
+                                val pagina = paginas.getOrNull(f * porFila + x)
+                                if (pagina != null) {
+                                    HojaDelProyecto(
+                                        app = app,
+                                        p = p,
+                                        pagina = pagina,
+                                        marcada = pagina.clave in marcadas,
+                                        onMarcar = { onMarcar(pagina.clave) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -378,6 +383,7 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun HojaDelProyecto(
     app: PixPinApp,
@@ -433,8 +439,7 @@ private fun HojaDelProyecto(
                         Modifier
                     }
                 )
-                // Un toque abre; una pulsación larga marca para exportar. Abrir
-                // es lo que se hace casi siempre, así que se lleva el toque.
+                // Un toque abre; una pulsación larga marca para exportar.
                 .combinedClickable(onClick = abrir, onLongClick = onMarcar),
             contentAlignment = Alignment.Center
         ) {
@@ -467,17 +472,6 @@ private fun HojaDelProyecto(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(16.dp)
                 )
-            } else if (h.dibujo != null && h.pagina != null) {
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(8.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            androidx.compose.foundation.shape.CircleShape
-                        )
-                )
             }
         }
 
@@ -507,14 +501,11 @@ private fun MiniaturaDeLienzo(
             runCatching {
                 val escena = ExcalidrawStore.cargar(ruta) ?: return@runCatching null
                 // Con marco, solo esa lámina: es la página que representa.
-                val suya = if (marco == null) {
+                val suyo = marco?.let { id -> escena.marcos.firstOrNull { it.id == id } }
+                val suya = if (suyo == null) {
                     escena
                 } else {
-                    escena.copy(elements = escena.elements.filter { e ->
-                        e.id == marco || escena.marcos.none { it.id == marco } ||
-                            escena.contenidoDe(escena.marcos.first { it.id == marco })
-                                .any { it.id == e.id }
-                    })
+                    escena.copy(elements = escena.contenidoDe(suyo) + suyo)
                 }
                 DrawExport.aBitmap(suya, 0.18)
             }.getOrNull()

@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Un trozo de texto **sin solapes** con todos sus estilos a la vez.

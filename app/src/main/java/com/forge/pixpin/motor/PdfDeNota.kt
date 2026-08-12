@@ -1,13 +1,13 @@
 package com.forge.pixpin.motor
 
-import com.forge.pixpin.markdown.Alineacion
-import com.forge.pixpin.markdown.InlineText
-import com.forge.pixpin.markdown.Markdown
-import com.forge.pixpin.markdown.MarkdownBlock
-import com.forge.pixpin.markdown.Paginado
-import com.forge.pixpin.markdown.SpanKind
-import com.forge.pixpin.markdown.Tablas
-import com.forge.pixpin.markdown.tramosDe
+import com.forge.pixpin.motormd.Alineacion
+import com.forge.pixpin.motormd.InlineText
+import com.forge.pixpin.motormd.Markdown
+import com.forge.pixpin.motormd.MarkdownBlock
+import com.forge.pixpin.motormd.Paginado
+import com.forge.pixpin.motormd.SpanKind
+import com.forge.pixpin.motormd.Tablas
+import com.forge.pixpin.motormd.tramosDe
 
 /**
  * Escribe una nota dentro de un PDF, **como texto de verdad**.

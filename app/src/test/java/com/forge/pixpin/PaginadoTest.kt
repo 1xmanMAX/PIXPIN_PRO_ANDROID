@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -116,5 +116,67 @@ class PaginadoTest {
     fun `contar paginas de un texto de verdad`() {
         val texto = (1..120).joinToString("\n\n") { "Párrafo número $it de la nota." }
         assertTrue(Paginado.cuantasPaginas(texto) >= 2)
+    }
+
+    // ---- Las páginas que saben de dónde salen ----
+
+    private fun textoLargo(cuantos: Int = 120): String =
+        (1..cuantos).joinToString("\n\n") { "Párrafo número $it de la nota." }
+
+    @Test
+    fun `un texto vacio tiene una pagina`() {
+        assertEquals(1, Paginado.deTexto("").size)
+        assertEquals(1, Paginado.deTexto(null).size)
+    }
+
+    /**
+     * La misma invariante de antes, dicha en letras: las páginas pegadas por sus
+     * extremos tienen que dar el texto entero, sin huecos ni solapes.
+     */
+    @Test
+    fun `las paginas cubren el texto entero sin pisarse`() {
+        val texto = textoLargo()
+        val paginas = Paginado.deTexto(texto)
+        assertTrue(paginas.size > 1)
+        assertEquals(0, paginas.first().desde)
+        assertEquals(texto.length, paginas.last().hasta)
+        paginas.zipWithNext { a, b -> assertEquals(a.hasta, b.desde) }
+        assertEquals(texto, paginas.joinToString("") { texto.substring(it.desde, it.hasta) })
+    }
+
+    @Test
+    fun `cada pagina empieza donde empieza un bloque`() {
+        val texto = textoLargo()
+        val inicios = trozosDe(texto).map { it.desde }.toSet()
+        Paginado.deTexto(texto).forEach { assertTrue(it.desde in inicios) }
+    }
+
+    @Test
+    fun `contar paginas coincide con las paginas que salen`() {
+        val texto = textoLargo()
+        assertEquals(Paginado.cuantasPaginas(texto), Paginado.deTexto(texto).size)
+    }
+
+    /**
+     * Lo que se pidió expresamente: una tabla grande se lleva **su** hoja, y ahí
+     * es donde se ve entera en vez de repartida entre dos.
+     */
+    @Test
+    fun `una tabla grande se lleva su propia pagina`() {
+        val tabla = Tablas.aTexto(Tablas.nueva(14, 3))
+        val texto = textoLargo(6) + "\n\n" + tabla + "\n\ncola"
+        val paginas = Paginado.deTexto(texto, porPagina = 20)
+
+        val suya = paginas.first { p -> p.bloques.any { it is MarkdownBlock.Tabla } }
+        assertTrue("la tabla no empezó página", suya.bloques.first() is MarkdownBlock.Tabla)
+    }
+
+    @Test
+    fun `los bloques de la pagina son los de su trozo de texto`() {
+        val texto = textoLargo()
+        Paginado.deTexto(texto).forEach { pagina ->
+            val suyo = Markdown.parse(texto.substring(pagina.desde, pagina.hasta))
+            assertEquals(suyo.size, pagina.bloques.size)
+        }
     }
 }

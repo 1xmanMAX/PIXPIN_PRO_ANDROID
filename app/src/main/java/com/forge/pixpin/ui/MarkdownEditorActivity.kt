@@ -1,4 +1,25 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.ui
+
+import com.forge.pixpin.motormd.Adjuntos
+import com.forge.pixpin.motormd.BarraDeEstilosUi
+import com.forge.pixpin.motormd.BarraDeFamiliasUi
+import com.forge.pixpin.motormd.Bloque
+import com.forge.pixpin.motormd.Bloques
+import com.forge.pixpin.motormd.Comandos
+import com.forge.pixpin.motormd.EditorVivo
+import com.forge.pixpin.motormd.Historial
+import com.forge.pixpin.motormd.Inline
+import com.forge.pixpin.motormd.InlineText
+import com.forge.pixpin.motormd.Menus
+import com.forge.pixpin.motormd.Sitio
+import com.forge.pixpin.motormd.SpanKind
+import com.forge.pixpin.motormd.TextoStore
+import com.forge.pixpin.motormd.TipoDeBloque
+import com.forge.pixpin.motormd.Vivo
+import com.forge.pixpin.motormd.conEnlace
+import com.forge.pixpin.motormd.iconoDeBloque
+import com.forge.pixpin.motormd.trozoEn
+import com.forge.pixpin.motormd.trozosDe
 
 import android.content.ClipboardManager
 import android.content.Context
@@ -77,6 +98,11 @@ import com.forge.pixpin.ui.theme.PixPinTheme
 /**
  * El editor avanzado de notas, hermano del editor avanzado de dibujo.
  *
+ * Vive **fuera del motor MD** a propósito: una actividad sabe de proyectos, de
+ * temas y de la aplicación entera, y el motor no tiene por qué. Esto es la
+ * carcasa —abre, guarda, manda a un proyecto— y todo lo que interpreta, compone
+ * y edita Markdown está en `motormd`, que se puede sacar y usar en otro sitio.
+ *
  * ## Qué se copia de Telegram y qué no
  *
  * Se copia **toda la organización**: los mismos formatos, en el orden de su
@@ -103,11 +129,13 @@ class MarkdownEditorActivity : ComponentActivity() {
 
         val id = intent.getStringExtra(EXTRA_ID).orEmpty()
         val inicial = intent.getStringExtra(EXTRA_TEXTO).orEmpty()
+        val desde = intent.getIntExtra(EXTRA_DESDE, -1)
 
         setContent {
             PixPinTheme {
                 Pantalla(
                     inicial = inicial,
+                    desde = desde,
                     onGuardar = { texto ->
                         if (id.isNotEmpty()) TextoStore.guardar(id, texto)
                         finish()
@@ -150,19 +178,25 @@ class MarkdownEditorActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_ID = "md_id"
         private const val EXTRA_TEXTO = "md_texto"
+        private const val EXTRA_DESDE = "md_desde"
 
         /**
-         * Abre la nota [id] con [texto].
+         * Abre la nota [id] con [texto], opcionalmente por la letra [desde].
          *
          * El texto va en el intent y no se lee de disco porque el pin puede
          * tener cambios sin guardar en el momento de abrir, y empezar a editar
          * perdiendo lo último escrito es el peor estreno posible. Al cerrar
          * vuelve por [TextoStore].
+         *
+         * [desde] es por dónde se estaba leyendo —el principio de una página—
+         * y solo sirve para **empezar ahí**: el editor sigue siendo un rollo
+         * seguido, sin hojas. Ver el visor de páginas de la nota flotante.
          */
-        fun abrir(context: Context, id: String, texto: String) {
+        fun abrir(context: Context, id: String, texto: String, desde: Int = -1) {
             val i = Intent(context, MarkdownEditorActivity::class.java)
                 .putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_TEXTO, texto)
+                .putExtra(EXTRA_DESDE, desde)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             runCatching { context.startActivity(i) }
         }
@@ -175,13 +209,28 @@ private fun Pantalla(
     inicial: String,
     onGuardar: (String) -> Unit,
     onDescartar: () -> Unit,
-    onAProyecto: (String) -> Unit = {}
+    onAProyecto: (String) -> Unit = {},
+    desde: Int = -1
 ) {
     var valor by remember {
         mutableStateOf(TextFieldValue(inicial, TextRange(inicial.length)))
     }
     // Dónde se está escribiendo, en coordenadas del texto limpio. Ver [Sitio].
-    var sitio by remember { mutableStateOf<Sitio?>(null) }
+    //
+    // Si se entró desde una página de la nota, se empieza **en su primer
+    // bloque**: al quedar activo pide el foco, y un campo con el foco se trae
+    // solo a la vista. Así el editor abre por donde se estaba leyendo sin tener
+    // que saber nada de páginas ni medir la pantalla.
+    var sitio by remember {
+        mutableStateOf(
+            if (desde >= 0) {
+                trozosDe(inicial).takeIf { it.isNotEmpty() }
+                    ?.let { Sitio(bloque = trozoEn(it, desde)) }
+            } else {
+                null
+            }
+        )
+    }
     var pidiendoUrl by remember { mutableStateOf(false) }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }

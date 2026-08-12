@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

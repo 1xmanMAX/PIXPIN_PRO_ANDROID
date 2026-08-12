@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 import androidx.compose.ui.text.TextRange
 import org.junit.Assert.assertEquals

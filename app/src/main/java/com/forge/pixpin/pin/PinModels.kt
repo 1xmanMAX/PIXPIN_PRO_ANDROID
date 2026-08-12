@@ -41,6 +41,14 @@ data class WidgetState(
     val ruletaLista: Boolean = false,
     /** A quién le tocó en el último giro, o -1 si aún no se ha girado. */
     val ruletaElegido: Int = -1,
+    /**
+     * Qué página de la nota se está mirando, o -1 para verla seguida.
+     *
+     * Una nota corta se lee de un tirón y paginarla sería estorbo; una larga
+     * se maneja como un PDF. Por eso la vista por páginas se enciende, no es
+     * el modo único.
+     */
+    val notaPagina: Int = -1,
     /** Minutos configurados en el temporizador; 0 = solo reloj. */
     val timerMinutes: Int = 0,
     /**

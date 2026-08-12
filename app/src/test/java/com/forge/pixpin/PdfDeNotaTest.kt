@@ -1,6 +1,6 @@
 package com.forge.pixpin.motor
 
-import com.forge.pixpin.markdown.Markdown
+import com.forge.pixpin.motormd.Markdown
 import java.io.File
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

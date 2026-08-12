@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box

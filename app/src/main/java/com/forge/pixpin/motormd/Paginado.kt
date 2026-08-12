@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Parte una nota en páginas, como las de un PDF.
@@ -51,6 +51,17 @@ object Paginado {
 
         bloques.forEach { bloque ->
             val suyo = renglones(bloque)
+
+            // **Una tabla grande empieza página.** Aunque quepan sus últimas
+            // dos filas al pie de la anterior, partirla ahí deja la cabecera en
+            // una hoja y los datos en otra, que es justo lo que hace ilegible
+            // una tabla. Con media página de alto ya vale la pena bajarla.
+            val mandaSola = bloque is MarkdownBlock.Tabla && suyo > tope / 2
+            if (mandaSola && actual.isNotEmpty()) {
+                paginas += actual
+                actual = mutableListOf()
+                altura = 0
+            }
             // Cabe justo o no cabe: si ya hay algo en la página, se cierra y se
             // empieza otra. Si está vacía, este bloque se queda solo en ella
             // aunque se pase, porque no hay dónde ponerlo mejor.
@@ -66,9 +77,67 @@ object Paginado {
         return paginas
     }
 
+    /**
+     * Una página **con su sitio en el texto**.
+     *
+     * [paginas] devuelve bloques ya interpretados, que sirven para pintar y para
+     * escribir el PDF. Pero para llevar al editor a la página que se estaba
+     * leyendo hace falta lo otro: por qué letra empieza. Un bloque no lo sabe
+     * —es el resultado de interpretar, no el original—, así que aquí se pagina
+     * sobre los **trozos** del documento, que sí llevan sus dos extremos.
+     */
+    data class PaginaDeNota(
+        val desde: Int,
+        val hasta: Int,
+        val bloques: List<MarkdownBlock>
+    )
+
+    /**
+     * Las páginas de una nota sin interpretar, cada una sabiendo de dónde sale.
+     *
+     * El corte es el mismo que el de [paginas] y por el mismo motivo: se cuentan
+     * renglones y un bloque no se parte. La diferencia es la unidad, que aquí es
+     * el trozo del documento —lo que el editor considera un bloque editable— en
+     * vez del bloque ya interpretado.
+     */
+    fun deTexto(texto: String?, porPagina: Int = RENGLONES_POR_PAGINA): List<PaginaDeNota> {
+        val fuente = texto.orEmpty()
+        val trozos = trozosDe(fuente)
+        if (trozos.isEmpty()) return listOf(PaginaDeNota(0, fuente.length, emptyList()))
+        val tope = porPagina.coerceAtLeast(4)
+
+        val paginas = mutableListOf<PaginaDeNota>()
+        var desde = trozos.first().desde
+        var hasta = desde
+        var bloques = mutableListOf<MarkdownBlock>()
+        var altura = 0
+
+        fun cerrar() {
+            paginas += PaginaDeNota(desde, hasta, bloques)
+            bloques = mutableListOf()
+            altura = 0
+        }
+
+        trozos.forEach { trozo ->
+            val suyos = Markdown.parse(trozo.de(fuente))
+            val suyo = suyos.sumOf { renglones(it) }
+
+            // Mismo criterio que en [paginas]: una tabla grande baja entera.
+            val mandaSola = suyos.any { it is MarkdownBlock.Tabla } && suyo > tope / 2
+            if ((mandaSola || altura + suyo > tope) && bloques.isNotEmpty()) {
+                cerrar()
+                desde = trozo.desde
+            }
+            bloques += suyos
+            altura += suyo
+            hasta = trozo.hasta
+        }
+        if (bloques.isNotEmpty() || paginas.isEmpty()) cerrar()
+        return paginas
+    }
+
     /** Cuántas páginas tiene una nota. */
-    fun cuantasPaginas(texto: String?): Int =
-        paginas(Markdown.parse(texto.orEmpty())).size
+    fun cuantasPaginas(texto: String?): Int = deTexto(texto).size
 
     /**
      * Cuántos renglones ocupa un bloque, más o menos.

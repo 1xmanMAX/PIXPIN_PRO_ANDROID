@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * El camino de vuelta: de texto limpio con estilos **a Markdown**.

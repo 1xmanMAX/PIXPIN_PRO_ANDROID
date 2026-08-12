@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * Los formatos que ofrece la barra, **en el orden de Telegram**.

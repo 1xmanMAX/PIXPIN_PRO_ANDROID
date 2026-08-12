@@ -1,4 +1,4 @@
-package com.forge.pixpin.markdown
+package com.forge.pixpin.motormd
 
 /**
  * El catálogo de bloques que se pueden insertar, portado de `RichCommand.get()`

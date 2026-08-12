@@ -84,7 +84,7 @@
             larga es una sesión de trabajo, no un paso intermedio.
         -->
         <activity
-            android:name=".markdown.MarkdownEditorActivity"
+            android:name=".ui.MarkdownEditorActivity"
             android:exported="false"
             android:taskAffinity="${applicationId}.markdown"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
