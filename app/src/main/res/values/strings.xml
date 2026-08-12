@@ -118,6 +118,7 @@
     <string name="cd_save">Guardar</string>
     <string name="cd_advanced_edit">Editor avanzado</string>
     <string name="pin_type_ruleta">Ruleta</string>
+    <string name="nota_a_proyecto">Nota añadida al proyecto</string>
     <string name="ruleta_seed">Escribe un nombre por línea</string>
     <string name="ruleta_girar">Girar</string>
     <string name="ruleta_listo">Sortear</string>

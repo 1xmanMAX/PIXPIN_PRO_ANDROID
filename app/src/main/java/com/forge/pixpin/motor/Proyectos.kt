@@ -131,6 +131,16 @@ data class Hoja(
      */
     val marco: String? = null,
     /**
+     * El texto de una nota, si esta hoja es una nota y no un dibujo.
+     *
+     * Va el **texto entero**, no una referencia al pin. Una hoja de un proyecto
+     * es lo que se va a entregar, como una página impresa: si fuera una
+     * referencia, seguir escribiendo en la nota cambiaría lo ya montado sin que
+     * nadie lo pidiera, y una hoja añadida hace un mes podría desaparecer al
+     * borrar su pin. Ocupa poco y el proyecto se vuelve autosuficiente.
+     */
+    val nota: String? = null,
+    /**
      * Qué página del PDF es, contando desde cero, o null si no viene de uno.
      *
      * Es lo que hoy no se guarda en ninguna parte: al sacar una página de un
@@ -139,9 +149,17 @@ data class Hoja(
      */
     val pagina: Int? = null
 ) {
-    /** Dos hojas son la misma si señalan al mismo sitio. */
+    /**
+     * Dos hojas son la misma si señalan al mismo sitio.
+     *
+     * Una nota señala **a sí misma**, por su identificador, y no a un sitio
+     * compartido: dos notas distintas son dos hojas, aunque las dos sean texto y
+     * ninguna tenga dibujo ni página. Sin esto, la segunda nota que se añadía a
+     * un proyecto se tomaba por repetida de la primera y no entraba.
+     */
     val señal: String
         get() = when {
+            nota != null -> "nota:$id"
             pagina != null -> "pagina:$pagina"
             marco != null -> "marco:$dibujo/$marco"
             else -> "dibujo:$dibujo"
@@ -254,6 +272,9 @@ object Proyectos {
 
     /** Las hojas que ya tienen algo dibujado encima. */
     fun anotadas(proyecto: Proyecto): List<Hoja> = proyecto.hojas.filter { it.dibujo != null }
+
+    /** Las hojas que son notas escritas. */
+    fun notas(proyecto: Proyecto): List<Hoja> = proyecto.hojas.filter { it.nota != null }
 
     fun sinHoja(proyecto: Proyecto, hojaId: String, cuando: Long): Proyecto =
         proyecto.copy(hojas = proyecto.hojas.filter { it.id != hojaId }, tocado = cuando)

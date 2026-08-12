@@ -67,6 +67,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.LibraryAdd
+import com.forge.pixpin.PixPinApp
+import com.forge.pixpin.R
+import com.forge.pixpin.motor.Hoja
+import com.forge.pixpin.motor.Proyectos
 import com.forge.pixpin.ui.theme.PixPinTheme
 
 /**
@@ -107,10 +112,39 @@ class MarkdownEditorActivity : ComponentActivity() {
                         if (id.isNotEmpty()) TextoStore.guardar(id, texto)
                         finish()
                     },
-                    onDescartar = { finish() }
+                    onDescartar = { finish() },
+                    onAProyecto = { texto -> aUnProyecto(texto) }
                 )
             }
         }
+    }
+
+    /**
+     * Mete la nota como una hoja del proyecto en curso.
+     *
+     * Va al que se esté usando —el mismo criterio que sigue una hoja dibujada—,
+     * y si no hay ninguno se abre uno. Así mandar una nota a un proyecto es un
+     * toque y no un paseo por una lista.
+     */
+    private fun aUnProyecto(texto: String) {
+        val app = application as? PixPinApp ?: return
+        val ahora = System.currentTimeMillis()
+        val proyecto = Proyectos.enCurso(app.proyectos.proyectos.value)
+            ?: app.proyectos.nuevo(getString(R.string.proyecto_nuevo_nombre), ahora)
+
+        val titulo = texto.lineSequence().firstOrNull { it.isNotBlank() }
+            ?.let { Menus.convertir(it, null) }
+            ?.take(40)
+            .orEmpty()
+
+        app.proyectos.guardar(
+            Proyectos.conHoja(
+                proyecto,
+                Hoja(id = "n-$ahora", nombre = titulo, nota = texto),
+                ahora
+            )
+        )
+        Toast.makeText(this, R.string.nota_a_proyecto, Toast.LENGTH_SHORT).show()
     }
 
     companion object {
@@ -140,7 +174,8 @@ class MarkdownEditorActivity : ComponentActivity() {
 private fun Pantalla(
     inicial: String,
     onGuardar: (String) -> Unit,
-    onDescartar: () -> Unit
+    onDescartar: () -> Unit,
+    onAProyecto: (String) -> Unit = {}
 ) {
     var valor by remember {
         mutableStateOf(TextFieldValue(inicial, TextRange(inicial.length)))
@@ -310,6 +345,14 @@ private fun Pantalla(
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Rehacer")
                     }
 
+                    // Mandar la nota a un proyecto: se queda como una hoja
+                    // más, con sus páginas, junto a los dibujos y las del PDF.
+                    IconButton(onClick = { onAProyecto(valor.text) }) {
+                        Icon(
+                            Icons.Filled.LibraryAdd,
+                            contentDescription = "Añadir a un proyecto"
+                        )
+                    }
                     IconButton(onClick = { onGuardar(valor.text) }) {
                         Icon(
                             Icons.Filled.Check,

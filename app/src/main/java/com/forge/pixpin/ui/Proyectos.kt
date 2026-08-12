@@ -37,6 +37,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.runtime.remember
+import com.forge.pixpin.markdown.MarkdownEditorActivity
+import com.forge.pixpin.markdown.Paginado
 import com.forge.pixpin.motor.DrawEditorActivity
 import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.motor.Hoja
@@ -238,6 +242,41 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
 @Composable
 private fun HojaDelProyecto(app: PixPinApp, p: Proyecto, h: Hoja) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
+
+    // Una hoja escrita se abre en el editor de notas, no en el de dibujo, y
+    // dice cuántas páginas ocupa —igual que una del PDF dice cuál es—, porque
+    // eso es lo que hace falta saber para entregar el proyecto.
+    if (h.nota != null) {
+        val paginas = remember(h.nota) { Paginado.cuantasPaginas(h.nota) }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable { MarkdownEditorActivity.abrir(contexto, h.id, h.nota!!) }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.Notes,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = h.nombre.ifBlank {
+                    h.nota!!.lineSequence().firstOrNull { it.isNotBlank() }?.take(40).orEmpty()
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f).padding(start = 8.dp)
+            )
+            Text(
+                text = if (paginas == 1) "1 pág." else "$paginas págs.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
     val tocada = h.dibujo != null
     Row(
         Modifier

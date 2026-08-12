@@ -387,4 +387,51 @@ class ProyectosRepositoryTest {
             .writeText("{{{ esto no es json")
         assertTrue(com.forge.pixpin.data.ProyectosRepository(context).proyectos.value.isEmpty())
     }
+
+    // ---- Notas como hojas ----
+
+    @Test
+    fun `una nota es una hoja mas del proyecto`() {
+        var p = Proyecto(id = "p1", nombre = "Obra")
+        p = Proyectos.conHoja(p, Hoja(id = "n1", nota = "# Acta\n\nlo hablado"), 100L)
+
+        assertEquals(1, p.hojas.size)
+        assertEquals(1, Proyectos.notas(p).size)
+        // Y no cuenta como hoja dibujada: son cosas distintas.
+        assertTrue(Proyectos.anotadas(p).isEmpty())
+    }
+
+    /**
+     * La nota guarda **su texto**, no una referencia. Una hoja de un proyecto es
+     * lo que se va a entregar: si apuntara al pin, seguir escribiendo cambiaría
+     * lo ya montado y borrar el pin se llevaría la hoja.
+     */
+    @Test
+    fun `la nota se guarda entera y no depende de nadie`() {
+        val texto = "# Acta\n\n- un punto\n- otro"
+        var p = Proyecto(id = "p1", nombre = "Obra")
+        p = Proyectos.conHoja(p, Hoja(id = "n1", nota = texto), 100L)
+        assertEquals(texto, p.hojas[0].nota)
+    }
+
+    @Test
+    fun `notas y dibujos conviven en orden`() {
+        var p = Proyecto(id = "p1", nombre = "Obra")
+        p = Proyectos.conHoja(p, Hoja(id = "n1", nota = "nota"), 100L)
+        p = Proyectos.conHoja(p, Hoja(id = "d1", dibujo = "dib1"), 101L)
+        p = Proyectos.conHoja(p, Hoja(id = "n2", nota = "otra"), 102L)
+
+        assertEquals(listOf("n1", "d1", "n2"), p.hojas.map { it.id })
+        assertEquals(listOf("n1", "n2"), Proyectos.notas(p).map { it.id })
+        assertEquals(listOf("d1"), Proyectos.anotadas(p).map { it.id })
+    }
+
+    @Test
+    fun `una nota tambien sale al exportar un proyecto sin pdf`() {
+        var p = Proyecto(id = "p1", nombre = "Obra")
+        p = Proyectos.conHoja(p, Hoja(id = "n1", nota = "nota"), 100L)
+        val salida = Proyectos.salidaDe(p)
+        assertTrue(salida is SalidaDeProyecto.PdfNuevo)
+        assertEquals(1, (salida as SalidaDeProyecto.PdfNuevo).hojas.size)
+    }
 }
