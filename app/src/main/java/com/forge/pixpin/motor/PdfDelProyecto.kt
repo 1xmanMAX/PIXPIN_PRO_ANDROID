@@ -78,6 +78,19 @@ object PdfDelProyecto {
             algo = true
         }
 
+        // **Las notas van detrás**, en el orden en que están en el proyecto.
+        // Se escriben al rehacer, como las anotaciones: así el archivo es
+        // siempre exactamente lo que dice el proyecto, y quitar una nota la
+        // quita de verdad en vez de dejarla dentro para siempre.
+        proyecto.hojas.forEach { hoja ->
+            val nota = hoja.nota ?: return@forEach
+            if (nota.isBlank()) return@forEach
+            PdfDeNota.aniadir(bytes, nota)?.let {
+                bytes = it
+                algo = true
+            }
+        }
+
         if (!algo) {
             // Nada anotado: el documento vuelve a ser el original. Es lo
             // correcto — si has borrado todo lo que habías dibujado, lo que

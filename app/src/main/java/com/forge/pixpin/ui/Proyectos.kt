@@ -241,12 +241,25 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
             // deja ver por dónde vas de un vistazo.
             if (p.hojas.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Row(
+                // **En dos filas: la primera mitad arriba y la segunda
+                // abajo.** Caben el doble de hojas sin gastar más ancho, y con
+                // un PDF de cuarenta páginas eso es la mitad de desplazamiento
+                // para llegar al final.
+                //
+                // Las dos filas van dentro del mismo desplazamiento para que se
+                // muevan a la vez: si cada una fuera por su lado, la página 3 y
+                // la 23 dejarían de estar una encima de la otra en cuanto se
+                // tocara una, y ya no se sabría por dónde va ninguna.
+                Column(
                     Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                 ) {
-                    for (h in p.hojas) HojaDelProyecto(app, p, h)
+                    val mitad = (p.hojas.size + 1) / 2
+                    Row { p.hojas.take(mitad).forEach { HojaDelProyecto(app, p, it) } }
+                    if (p.hojas.size > mitad) {
+                        Row { p.hojas.drop(mitad).forEach { HojaDelProyecto(app, p, it) } }
+                    }
                 }
             }
             if (p.pdfOrigen == null) {
@@ -295,7 +308,7 @@ private fun HojaDelProyecto(app: PixPinApp, p: Proyecto, h: Hoja) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .padding(end = 8.dp)
+            .padding(end = 8.dp, bottom = 6.dp)
             .width(ANCHO_DE_HOJA)
             .clickable { abrir() }
     ) {

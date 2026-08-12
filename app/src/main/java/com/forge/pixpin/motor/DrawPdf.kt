@@ -85,6 +85,14 @@ object DrawPdf {
     }.getOrNull()
 
     /**
+     * Mete una nota escrita al final del PDF, como texto de verdad.
+     *
+     * Ver [PdfDeNota]: sale seleccionable y buscable, no dibujada.
+     */
+    fun aniadirNota(original: ByteArray, texto: String): ByteArray? =
+        PdfDeNota.aniadir(original, texto)
+
+    /**
      * Escribe el PDF y devuelve el archivo, o null si no había nada que pintar.
      *
      * Va a `cache/share`, que es la única carpeta que publica el `FileProvider`:

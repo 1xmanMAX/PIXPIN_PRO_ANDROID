@@ -342,14 +342,38 @@ class OverlayManager(private val app: PixPinApp) {
         createPin(state)
     }
 
-    /** Crea un pin de archivo (documento compartido a PixPin). */
+    /**
+     * Crea un pin de archivo (documento compartido a PixPin).
+     *
+     * **Un `.md` no llega como archivo: llega como nota.** Un Markdown compartido
+     * a PixPin es texto que alguien quiere leer y seguir escribiendo, no un
+     * adjunto que abrir con otra app. Como nota se ve compuesto, se edita, se
+     * parte en páginas y puede irse a un proyecto; como archivo sería un icono
+     * con un nombre.
+     */
     fun pinFile(filePath: String, fileName: String, mimeType: String) {
         if (!Settings.canDrawOverlays(app)) return
+
+        if (esMarkdown(fileName, mimeType)) {
+            val texto = runCatching { java.io.File(filePath).readText() }.getOrNull()
+            if (!texto.isNullOrBlank()) {
+                createPin(newPin(PinType.TEXT).copy(text = texto.take(200_000)))
+                return
+            }
+        }
+
         createPin(
             newPin(PinType.FILE).copy(
                 filePath = filePath, fileName = fileName, mimeType = mimeType
             )
         )
+    }
+
+    /** Las extensiones con las que se guarda un Markdown por ahí. */
+    private fun esMarkdown(nombre: String, mime: String): Boolean {
+        val ext = nombre.substringAfterLast('.', "").lowercase()
+        return ext in setOf("md", "markdown", "mdown", "mkd") ||
+            mime.equals("text/markdown", ignoreCase = true)
     }
 
     /**
