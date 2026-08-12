@@ -37,7 +37,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
-import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import com.forge.pixpin.markdown.Menus
+import com.forge.pixpin.motor.PdfDoc
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.remember
 import com.forge.pixpin.markdown.MarkdownEditorActivity
 import com.forge.pixpin.markdown.Paginado
@@ -216,9 +233,21 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
             }
 
             // Las hojas, en su orden: el mismo con el que saldrán del PDF.
+            //
+            // En **tira horizontal y con miniatura**, no en lista. Una lista de
+            // nombres de un PDF de cuarenta páginas es cuarenta renglones que
+            // dicen «página 1, página 2…» y ocupan la pantalla entera sin
+            // enseñar nada; una tira de miniaturas cabe en un dedo de alto y
+            // deja ver por dónde vas de un vistazo.
             if (p.hojas.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                for (h in p.hojas) HojaDelProyecto(app, p, h)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    for (h in p.hojas) HojaDelProyecto(app, p, h)
+                }
             }
             if (p.pdfOrigen == null) {
                 TextButton(
@@ -243,83 +272,126 @@ private fun FilaDeProyecto(app: PixPinApp, p: Proyecto) {
 private fun HojaDelProyecto(app: PixPinApp, p: Proyecto, h: Hoja) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
 
-    // Una hoja escrita se abre en el editor de notas, no en el de dibujo, y
-    // dice cuántas páginas ocupa —igual que una del PDF dice cuál es—, porque
-    // eso es lo que hace falta saber para entregar el proyecto.
-    if (h.nota != null) {
-        val paginas = remember(h.nota) { Paginado.cuantasPaginas(h.nota) }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clickable { MarkdownEditorActivity.abrir(contexto, h.id, h.nota!!) }
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.AutoMirrored.Filled.Notes,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = h.nombre.ifBlank {
-                    h.nota!!.lineSequence().firstOrNull { it.isNotBlank() }?.take(40).orEmpty()
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f).padding(start = 8.dp)
-            )
-            Text(
-                text = if (paginas == 1) "1 pág." else "$paginas págs.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        return
+    val abrir: () -> Unit = when {
+        h.nota != null -> ({ MarkdownEditorActivity.abrir(contexto, h.id, h.nota!!) })
+        else -> ({
+            val dibujo = h.dibujo ?: "dib-${System.currentTimeMillis()}"
+            if (h.dibujo == null) {
+                app.proyectos.guardar(
+                    Proyectos.conDibujo(p, h.id, dibujo, System.currentTimeMillis())
+                )
+            }
+            val ruta = ExcalidrawStore.rutaDe(contexto, dibujo)
+            if (p.pdfOrigen != null && h.pagina != null) {
+                DrawEditorActivity.abrirPaginaDePdf(
+                    contexto, dibujo, ruta, p.pdfOrigen!!, h.pagina!!
+                )
+            } else {
+                DrawEditorActivity.abrir(contexto, dibujo, ruta, null)
+            }
+        })
     }
 
-    val tocada = h.dibujo != null
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable {
-                val dibujo = h.dibujo ?: "dib-${System.currentTimeMillis()}"
-                if (h.dibujo == null) {
-                    app.proyectos.guardar(
-                        Proyectos.conDibujo(p, h.id, dibujo, System.currentTimeMillis())
-                    )
-                }
-                val ruta = ExcalidrawStore.rutaDe(contexto, dibujo)
-                if (p.pdfOrigen != null && h.pagina != null) {
-                    DrawEditorActivity.abrirPaginaDePdf(
-                        contexto, dibujo, ruta, p.pdfOrigen!!, h.pagina!!
-                    )
-                } else {
-                    DrawEditorActivity.abrir(contexto, dibujo, ruta, null)
-                }
-            }
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .padding(end = 8.dp)
+            .width(ANCHO_DE_HOJA)
+            .clickable { abrir() }
     ) {
-        Text(
-            if (h.pagina != null) {
-                stringResourceSafe(R.string.proyecto_pagina, h.pagina!! + 1)
-            } else {
-                h.nombre.ifBlank { stringResourceSafe(R.string.proyecto_hoja_suelta) }
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
-        )
-        // Un punto y ya: lo que hace falta saber es cuáles llevas tocadas.
-        if (tocada) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .background(
-                        MaterialTheme.colorScheme.primary,
-                        androidx.compose.foundation.shape.CircleShape
-                    )
-            )
+        Box(
+            Modifier
+                .width(ANCHO_DE_HOJA)
+                .height(ALTO_DE_HOJA)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                // La página del PDF, dibujada de verdad: es lo que se quiere ver.
+                p.pdfOrigen != null && h.pagina != null ->
+                    MiniaturaDePagina(p.pdfOrigen!!, h.pagina!!)
+
+                // Una nota enseña sus primeras líneas. No es la página compuesta
+                // —eso obligaría a pintarla entera para una miniatura— pero dice
+                // de qué va, que es para lo que se mira.
+                h.nota != null -> Text(
+                    text = h.nota!!.lineSequence()
+                        .filter { it.isNotBlank() }
+                        .take(6)
+                        .joinToString("\n") { Menus.convertir(it, null).take(24) },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(6.dp)
+                )
+
+                else -> Icon(
+                    Icons.Filled.Draw,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // El punto de «esta ya la has tocado», arriba a la derecha para que
+            // no tape la miniatura.
+            if (h.dibujo != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(8.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary,
+                            androidx.compose.foundation.shape.CircleShape
+                        )
+                )
+            }
         }
+
+        Text(
+            text = when {
+                h.pagina != null -> "${h.pagina!! + 1}"
+                h.nota != null -> {
+                    val paginas = remember(h.nota) { Paginado.cuantasPaginas(h.nota) }
+                    if (paginas == 1) "1 pág." else "$paginas págs."
+                }
+                else -> h.nombre.ifBlank { stringResourceSafe(R.string.proyecto_hoja_suelta) }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+    }
+}
+
+/** Lo que mide cada hoja en la tira. Un folio en pequeño. */
+private val ANCHO_DE_HOJA = 76.dp
+private val ALTO_DE_HOJA = 104.dp
+
+/**
+ * La miniatura de una página del PDF.
+ *
+ * Se dibuja fuera del hilo de la interfaz y **con la fecha del archivo en la
+ * clave**: sin ella, anotar una página y volver aquí seguiría enseñando la de
+ * antes, y parecería que no se guardó nada.
+ */
+@Composable
+private fun MiniaturaDePagina(pdf: String, pagina: Int) {
+    var mapa by remember(pdf, pagina) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val version = remember(pdf) { java.io.File(pdf).lastModified() }
+    LaunchedEffect(pdf, pagina, version) {
+        mapa = withContext(Dispatchers.IO) {
+            runCatching { PdfDoc.render(pdf, pagina, PdfDoc.THUMB_WIDTH) }.getOrNull()
+        }
+    }
+    mapa?.let {
+        Image(
+            bitmap = it.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
