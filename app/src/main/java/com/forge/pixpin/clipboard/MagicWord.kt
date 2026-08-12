@@ -2,7 +2,7 @@ package com.forge.pixpin.clipboard
 
 /** Mini-aplicaciones que se abren pineando una palabra. */
 enum class MiniApp {
-    TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD,
+    TIMER, STOPWATCH, CHECKLIST, COUNTER, LEDGER, BOARD, RULETA,
 
     /** El lienzo infinito. */
     DRAW,
@@ -58,6 +58,15 @@ object MagicWord {
 
         "board" to MiniApp.BOARD,
         "pizarra" to MiniApp.BOARD,
+
+        // El sorteo. «random» y «azar» se quedan fuera por lo de siempre: se
+        // copian solas demasiado a menudo dentro de un texto cualquiera.
+        "ruleta" to MiniApp.RULETA,
+        "roulette" to MiniApp.RULETA,
+        "choose" to MiniApp.RULETA,
+        "sorteo" to MiniApp.RULETA,
+        "sortear" to MiniApp.RULETA,
+        "elegir" to MiniApp.RULETA,
 
         // «plano» se quedó fuera a propósito: se copia solo demasiado a menudo
         // en un texto de obra, y perderlo como pin de texto costaría más de lo

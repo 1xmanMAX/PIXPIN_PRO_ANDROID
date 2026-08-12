@@ -257,20 +257,13 @@ private fun Bloque(
             )
         }
 
-        // La fórmula se enseña tal cual, centrada y en monoespaciada. Componer
-        // LaTeX de verdad es un motor entero; enseñarla sin tocarla es honesto y
-        // se copia y se pega donde haga falta.
-        is MarkdownBlock.Formula -> Text(
-            text = block.latex,
-            fontSize = (baseSizeSp * 1.05f).sp,
-            lineHeight = (baseSizeSp * 1.5f).sp,
-            fontFamily = FontFamily.Serif,
-            fontStyle = FontStyle.Italic,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
+        // La fórmula **se compone**, no se enseña tal cual: la raya de la
+        // fracción, el exponente arriba y pequeño, el signo de la raíz. Ver
+        // [FormulaUi].
+        is MarkdownBlock.Formula -> FormulaUi(
+            latex = block.latex,
+            tamanoSp = baseSizeSp * 1.05f,
+            modifier = Modifier.padding(vertical = 4.dp)
         )
 
         is MarkdownBlock.Tabla -> TablaUi(block, baseSizeSp, clave, ocultosVisibles, recoge)

@@ -138,6 +138,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.Button
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.drawText
+import com.forge.pixpin.mini.Ruleta
 import com.forge.pixpin.markdown.BarraDeEstilosUi
 import com.forge.pixpin.markdown.BarraDeFamiliasUi
 import com.forge.pixpin.markdown.EditorVivo
@@ -2364,6 +2372,7 @@ class PinWindowController(
         when (s.type) {
             PinType.IMAGE -> ImagePinBody(s)
             PinType.TEXT -> TextPinBody(s)
+            PinType.RULETA -> RuletaBody(s)
             PinType.COLOR -> ColorPinBody(s)
             PinType.FILE -> FilePinBody(s)
             PinType.TIMER -> TimerBody(
@@ -2525,6 +2534,7 @@ class PinWindowController(
             contentAlignment = Alignment.Center
         ) {
             when (s.type) {
+                PinType.RULETA -> Text("🎯", fontSize = 20.sp)
                 PinType.IMAGE -> {
                     val bitmap = rememberPinBitmap(s.imagePath).value
                     if (bitmap != null) {
@@ -2955,6 +2965,170 @@ class PinWindowController(
                 onSitio = { sitioDelPin.value = it },
                 baseSizeSp = 14f
             )
+        }
+    }
+
+    /**
+     * La ruleta: primero la lista, después el sorteo.
+     *
+     * Dos pantallas y no una a propósito. Escribir a quiénes se sortea necesita
+     * teclado, y el teclado tapa media pantalla: justo la mitad donde estaría la
+     * rueda. Con el botón de sortear en medio, cada momento tiene la pantalla
+     * entera para lo suyo.
+     *
+     * Todo lo que decide algo está en [Ruleta], probado aparte. Aquí solo se
+     * pinta y se gira.
+     */
+    @Composable
+    private fun RuletaBody(s: PinState) {
+        val nombres = remember(s.text) { Ruleta.nombres(s.text) }
+
+        if (!s.widget.ruletaLista) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = s.text.orEmpty().ifBlank {
+                        context.getString(R.string.ruleta_seed)
+                    },
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = if (s.text.isNullOrBlank()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { pin.value = conRuleta(lista = true, elegido = -1) },
+                    enabled = Ruleta.sePuedeGirar(s.text)
+                ) {
+                    Text(context.getString(R.string.ruleta_listo))
+                }
+            }
+            return
+        }
+
+        val elegido = s.widget.ruletaElegido
+        // El giro es una animación hasta el ángulo que ya está decidido: quien
+        // elige es Ruleta, no el reloj. Así lo que se ve y lo que se guarda no
+        // pueden discrepar por mucho que se corte la animación a la mitad.
+        val destino = remember(elegido, nombres.size) {
+            if (elegido < 0) 0f else Ruleta.anguloFinal(elegido, nombres.size)
+        }
+        val giro by animateFloatAsState(
+            targetValue = destino,
+            animationSpec = tween(durationMillis = if (elegido < 0) 0 else 2200),
+            label = "ruleta"
+        )
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(contentAlignment = Alignment.TopCenter) {
+                RuedaDeRuleta(nombres, giro)
+                // La aguja, quieta y arriba: lo que gira es la rueda.
+                Text("▼", fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = nombres.getOrNull(elegido).orEmpty(),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = {
+                    val cual = Ruleta.elegir(nombres) { Math.random() }
+                    pin.value = conRuleta(lista = true, elegido = cual)
+                }, enabled = nombres.size >= 2) {
+                    Text(
+                        context.getString(
+                            if (elegido < 0) R.string.ruleta_girar else R.string.ruleta_otra
+                        )
+                    )
+                }
+                if (elegido >= 0) {
+                    Spacer(Modifier.width(6.dp))
+                    TextButton(onClick = {
+                        val quedan = Ruleta.sinElNombre(s.text, elegido)
+                        pin.value = pin.value.copy(
+                            text = quedan,
+                            widget = pin.value.widget.copy(
+                                // Al quitar a uno se deja de señalar a nadie: el
+                                // índice de antes ya apunta a otra persona.
+                                ruletaElegido = -1,
+                                ruletaLista = Ruleta.sePuedeGirar(quedan)
+                            )
+                        )
+                        callbacks.onPinChanged(this@PinWindowController)
+                    }) {
+                        Text(context.getString(R.string.ruleta_quitar))
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+                TextButton(onClick = { pin.value = conRuleta(lista = false, elegido = -1) }) {
+                    Text(context.getString(R.string.ruleta_editar))
+                }
+            }
+        }
+    }
+
+    private fun conRuleta(lista: Boolean, elegido: Int): PinState {
+        val nuevo = pin.value.copy(
+            widget = pin.value.widget.copy(ruletaLista = lista, ruletaElegido = elegido)
+        )
+        callbacks.onPinChanged(this)
+        return nuevo
+    }
+
+    /** La rueda: una porción por nombre, girada al ángulo que toque. */
+    @Composable
+    private fun RuedaDeRuleta(nombres: List<String>, giro: Float) {
+        val colores = MaterialTheme.colorScheme
+        val medidor = rememberTextMeasurer()
+        val porcion = Ruleta.anguloDePorcion(nombres.size)
+
+        Canvas(Modifier.size(190.dp)) {
+            val radio = size.minDimension / 2f
+            val centro = androidx.compose.ui.geometry.Offset(radio, radio)
+            nombres.forEachIndexed { i, nombre ->
+                // Se empieza a las doce y se gira todo junto. Restar 90 grados
+                // es lo que lleva el cero de los ángulos —que en pantalla mira a
+                // la derecha— hasta arriba, que es donde está la aguja.
+                val desde = porcion * i + giro - 90f - porcion / 2f
+                drawArc(
+                    color = if (i % 2 == 0) colores.primaryContainer else colores.surfaceVariant,
+                    startAngle = desde,
+                    sweepAngle = porcion,
+                    useCenter = true
+                )
+                val medio = Math.toRadians((desde + porcion / 2f).toDouble())
+                val texto = medidor.measure(
+                    nombre.take(12),
+                    style = TextStyle(fontSize = 11.sp, color = colores.onSurface)
+                )
+                drawText(
+                    textLayoutResult = texto,
+                    topLeft = androidx.compose.ui.geometry.Offset(
+                        centro.x + (radio * 0.55f * kotlin.math.cos(medio)).toFloat() -
+                            texto.size.width / 2f,
+                        centro.y + (radio * 0.55f * kotlin.math.sin(medio)).toFloat() -
+                            texto.size.height / 2f
+                    )
+                )
+            }
         }
     }
 

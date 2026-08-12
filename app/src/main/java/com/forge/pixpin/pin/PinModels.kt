@@ -12,7 +12,10 @@ import kotlinx.serialization.Serializable
  * quitarlo haría que la lista entera fallara al leerse. Los pines de ese tipo
  * se descartan al cargar; ver `PinRepository.read`.
  */
-enum class PinType { IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE, CROQUIS, DRAW }
+enum class PinType {
+    IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE, CROQUIS, DRAW,
+    RULETA
+}
 
 /**
  * Estado de las mini-aplicaciones.
@@ -28,6 +31,16 @@ data class WidgetState(
     val checked: List<Boolean> = emptyList(),
     /** Valor del contador. */
     val count: Int = 0,
+    /**
+     * La ruleta ya está lista para girar: se acabó de escribir la lista.
+     *
+     * Hacen falta las dos fases porque son dos cosas distintas —escribir a
+     * quiénes se sortea y sortear—, y mezclarlas dejaría el teclado encima de la
+     * rueda justo cuando se quiere mirar.
+     */
+    val ruletaLista: Boolean = false,
+    /** A quién le tocó en el último giro, o -1 si aún no se ha girado. */
+    val ruletaElegido: Int = -1,
     /** Minutos configurados en el temporizador; 0 = solo reloj. */
     val timerMinutes: Int = 0,
     /**

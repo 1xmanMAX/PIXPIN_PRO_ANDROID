@@ -419,11 +419,15 @@ class OverlayManager(private val app: PixPinApp) {
             MiniApp.CHECKLIST -> PinType.CHECKLIST
             MiniApp.COUNTER -> PinType.COUNTER
             MiniApp.LEDGER -> PinType.LEDGER
+            MiniApp.RULETA -> PinType.RULETA
             MiniApp.BOARD, MiniApp.DRAW -> return
         }
         val seed = when (app) {
             MiniApp.CHECKLIST -> appString(R.string.checklist_seed)
             MiniApp.LEDGER -> appString(R.string.ledger_seed)
+            // La ruleta arranca vacía y con el teclado puesto: lo primero es
+            // escribir a quiénes se sortea, y un ejemplo habría que borrarlo.
+            MiniApp.RULETA -> ""
             else -> null
         }
         createPin(
@@ -820,6 +824,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COLOR -> "🎨 " + app.getString(R.string.pin_type_color_plural)
         PinType.FILE -> "📁 " + app.getString(R.string.pin_type_file_plural)
         PinType.TIMER -> "⏱ " + app.getString(R.string.pin_type_timer)
+        PinType.RULETA -> "🎯 " + app.getString(R.string.pin_type_ruleta)
         PinType.CHECKLIST -> "☑ " + app.getString(R.string.pin_type_checklist)
         PinType.COUNTER -> "🔢 " + app.getString(R.string.pin_type_counter)
         PinType.LEDGER -> "💶 " + app.getString(R.string.pin_type_ledger)
@@ -1074,6 +1079,7 @@ class OverlayManager(private val app: PixPinApp) {
         )
         PinType.COLOR -> pin.colorArgb?.let { ContentClassifier.toHex(it) } ?: "Color"
         PinType.TEXT -> pin.text.orEmpty().replace('\n', ' ').take(30)
+        PinType.RULETA -> app.getString(R.string.pin_type_ruleta)
         PinType.FILE -> pin.fileName ?: app.getString(R.string.pin_type_file)
         PinType.TIMER -> app.getString(R.string.pin_type_timer)
         PinType.CHECKLIST -> app.getString(R.string.pin_type_checklist)

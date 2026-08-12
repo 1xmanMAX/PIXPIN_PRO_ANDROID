@@ -211,6 +211,9 @@ object PinExporter {
     private fun render(
         context: Context, state: com.forge.pixpin.pin.PinState
     ): Bitmap? = when (state.type) {
+        // La ruleta no se exporta como imagen: lo que vale de ella es a quién le
+        // tocó, y eso ya está en su texto.
+        com.forge.pixpin.pin.PinType.RULETA -> null
         com.forge.pixpin.pin.PinType.IMAGE ->
             state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }?.let { bmp ->
                 // Lo dibujado sobre el pin se hornea al exportar: hasta aquí eran

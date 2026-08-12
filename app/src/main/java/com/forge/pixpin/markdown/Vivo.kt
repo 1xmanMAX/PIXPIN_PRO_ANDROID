@@ -123,6 +123,20 @@ object Vivo {
      * quiere dos títulos seguidos.
      */
     fun partir(texto: String, n: Int, contenido: InlineText, pos: Int): Pair<String, Sitio> {
+        // **Intro en una viñeta vacía la quita.** Es como se sale de una lista
+        // en cualquier editor, y aquí hacía más falta que en ninguno: era la
+        // única forma segura de deshacerse de una viñeta, porque el retroceso
+        // del teclado en pantalla no siempre llega cuando no hay nada que
+        // borrar. Con esto siempre hay una salida que depende solo de nosotros.
+        if (contenido.text.isEmpty()) {
+            val tipo = tipo(texto, n)
+            if (tipo == TipoDeBloque.LISTA || tipo == TipoDeBloque.NUMERADA ||
+                tipo == TipoDeBloque.TAREAS
+            ) {
+                return quitarTipo(texto, n) to Sitio(n, TextRange(0))
+            }
+        }
+
         val corte = pos.coerceIn(0, contenido.text.length)
         val izquierda = InlineText(
             contenido.text.substring(0, corte),
