@@ -21,10 +21,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -510,19 +514,64 @@ private fun aplicarEnLaTabla(
 private val ASA = 6.dp
 
 /**
- * El carácter invisible que va delante de cada bloque que se escribe.
+ * Escucha el borrado que llega por la conexión de entrada del teclado.
  *
- * Sirve para una sola cosa: **enterarse de que se ha dado a borrar estando al
- * principio**. Con el bloque vacío, borrar no cambia el texto, así que el campo
- * no avisa de nada; y las teclas del teclado en pantalla no llegan como teclas,
- * llegan como ediciones del texto. Sin este truco no había forma de saberlo, y
- * por eso una viñeta vacía no se podía quitar ni se podía subir al bloque de
- * arriba borrando.
+ * Un teclado en pantalla no borra mandando la tecla: le pide al campo que quite
+ * los caracteres de antes del cursor, con `deleteSurroundingText`. Cuando no hay
+ * ninguno que quitar —el cursor está al principio— el campo no hace nada y nadie
+ * se entera de que se ha pulsado borrar.
  *
- * Con él, borrar en la posición cero **sí** cambia el texto —se lleva el
- * centinela— y eso se ve. Nunca sale de aquí: se le quita antes de guardar nada.
+ * Aquí se mira esa petición antes de que llegue al campo: si el cursor está al
+ * principio y [activo] lo permite, se atiende con [onRetroceso] y no se deja
+ * pasar. En cualquier otro caso sigue su camino y el campo borra como siempre.
+ *
+ * Es lo mismo que hace `deleteMarkupBackward` de CodeMirror —el motor de
+ * Obsidian— pero por el conducto por el que llega en Android, que allí no
+ * existe.
  */
-private const val CENTINELA = "\u200B"
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun RetrocesoAlPrincipio(
+    activo: Boolean,
+    onRetroceso: () -> Boolean,
+    contenido: @Composable () -> Unit
+) {
+    val alDia by rememberUpdatedState(activo)
+    val atender by rememberUpdatedState(onRetroceso)
+
+    InterceptPlatformTextInput({ peticion, siguiente ->
+        val envuelta = object : PlatformTextInputMethodRequest {
+            override fun createInputConnection(
+                outAttributes: android.view.inputmethod.EditorInfo
+            ): android.view.inputmethod.InputConnection {
+                val original = peticion.createInputConnection(outAttributes)
+                return object : android.view.inputmethod.InputConnectionWrapper(original, false) {
+                    override fun deleteSurroundingText(antes: Int, despues: Int): Boolean {
+                        if (alDia && antes > 0 && despues == 0 && atender()) return true
+                        return super.deleteSurroundingText(antes, despues)
+                    }
+
+                    override fun deleteSurroundingTextInCodePoints(
+                        antes: Int,
+                        despues: Int
+                    ): Boolean {
+                        if (alDia && antes > 0 && despues == 0 && atender()) return true
+                        return super.deleteSurroundingTextInCodePoints(antes, despues)
+                    }
+
+                    // Algunos teclados sí mandan la tecla; se atiende igual.
+                    override fun sendKeyEvent(evento: android.view.KeyEvent): Boolean {
+                        val esBorrar = evento.action == android.view.KeyEvent.ACTION_DOWN &&
+                            evento.keyCode == android.view.KeyEvent.KEYCODE_DEL
+                        if (esBorrar && alDia && atender()) return true
+                        return super.sendKeyEvent(evento)
+                    }
+                }
+            }
+        }
+        siguiente.startInputMethod(envuelta)
+    }, contenido)
+}
 
 /** Los bloques cuyo contenido se escribe a mano. Una imagen o una raya, no. */
 private fun sePuedeEscribir(bloque: MarkdownBlock?): Boolean = when (bloque) {
@@ -560,38 +609,25 @@ private fun BloqueEditable(
     LaunchedEffect(clave) { runCatching { foco.requestFocus() } }
 
     val campo = @Composable { estilo: TextStyle, color: Color ->
+        // **Interceptando la conexión de entrada**, que es por donde el teclado
+        // en pantalla manda el borrado de verdad.
+        //
+        // CodeMirror —el motor sobre el que está hecho Obsidian— ata esto a la
+        // tecla, con su `deleteMarkupBackward`. En un ordenador basta; en
+        // Android no: la mayoría de teclados en pantalla no mandan la tecla de
+        // borrar, mandan un `deleteSurroundingText` por la conexión de entrada.
+        // Y si el bloque está vacío, borrar tampoco cambia el texto, así que
+        // tampoco llega un aviso de cambio.
+        //
+        // Escuchando aquí se cazan los dos caminos, que es lo que llevaba tres
+        // intentos sin funcionar.
+        RetrocesoAlPrincipio(
+            activo = seleccion.collapsed && seleccion.start == 0,
+            onRetroceso = onRetroceso
+        ) {
         BasicTextField(
-            // Delante va un carácter invisible. Ver [CENTINELA].
-            value = TextFieldValue(
-                CENTINELA + contenido.text,
-                TextRange(seleccion.start + 1, seleccion.end + 1)
-            ),
-            onValueChange = { crudo ->
-                val sinCentinela = crudo.text.removePrefix(CENTINELA)
-                val perdioElCentinela = !crudo.text.startsWith(CENTINELA)
-
-                // Si **lo único** que ha desaparecido es el centinela, el dedo
-                // dio a borrar estando al principio del bloque. Es la única
-                // forma de enterarse: con el bloque vacío, borrar no cambia el
-                // texto y no llega ningún aviso, y las teclas del teclado en
-                // pantalla tampoco se pueden escuchar.
-                //
-                // Hay que mirar que el resto siga igual. Seleccionar todo y
-                // borrar también se lleva el centinela, y eso es vaciar el
-                // bloque, no volver al de arriba.
-                if (perdioElCentinela && sinCentinela == contenido.text) {
-                    onRetroceso()
-                    return@BasicTextField
-                }
-
-                val corrimiento = if (perdioElCentinela) 0 else 1
-                val v = TextFieldValue(
-                    sinCentinela,
-                    TextRange(
-                        (crudo.selection.start - corrimiento).coerceAtLeast(0),
-                        (crudo.selection.end - corrimiento).coerceAtLeast(0)
-                    )
-                )
+            value = TextFieldValue(contenido.text, seleccion),
+            onValueChange = { v ->
                 // El intro no mete un salto de línea: **parte el bloque**. Es lo
                 // que distingue un editor por bloques de un cuadro de texto, y
                 // sin esto un título de dos renglones dejaba el segundo suelto.
@@ -615,6 +651,7 @@ private fun BloqueEditable(
                 // así que no llega ningún aviso de cambio y el bloque se queda
                 // ahí para siempre. Era el caso de la casilla que no se podía
                 // quitar.
+                // El teclado físico sí manda la tecla, y por ahí llega antes.
                 .onKeyEvent { evento ->
                     val esRetroceso = evento.type == KeyEventType.KeyDown &&
                         evento.key == Key.Backspace
@@ -632,6 +669,7 @@ private fun BloqueEditable(
                 MaterialTheme.colorScheme.onSurfaceVariant
             )
         )
+        }
     }
 
     // Los mismos números que usa el pintado —ver MarkdownText—, o el bloque
