@@ -119,6 +119,10 @@
     <string name="cd_advanced_edit">Editor avanzado</string>
     <string name="pin_type_ruleta">Ruleta</string>
     <string name="nota_a_proyecto">Nota añadida al proyecto</string>
+    <string name="hojas_vista">Ver las hojas</string>
+    <string name="hojas_una">1 hoja</string>
+    <string name="hojas_varias">%1$d hojas</string>
+    <string name="hojas_vacio">Dibuja algo y aquí aparecerán las hojas que ocupe.</string>
     <string name="ruleta_seed">Escribe un nombre por línea</string>
     <string name="ruleta_girar">Girar</string>
     <string name="ruleta_listo">Sortear</string>

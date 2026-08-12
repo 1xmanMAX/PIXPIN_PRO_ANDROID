@@ -24,6 +24,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -475,6 +484,7 @@ class DrawEditorActivity : ComponentActivity() {
 
         var panelAbierto by remember { mutableStateOf(false) }
         var tablaAbierta by remember { mutableStateOf<String?>(null) }
+        var hojasALaVista by remember { mutableStateOf(false) }
         val ajustes by (application as? com.forge.pixpin.PixPinApp)?.settings?.settings
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
@@ -575,10 +585,14 @@ class DrawEditorActivity : ComponentActivity() {
                     .align(if (zurdo) Alignment.TopEnd else Alignment.TopStart)
                     .padding(8.dp)
             ) {
-                BotonesNavegacion(tick, { cambiado() }) {
+                BotonesNavegacion(tick, { cambiado() }, { hojasALaVista = true }) {
                     tablaAbierta = controller.scene.tablas.firstOrNull()?.id
                         ?: controller.addTabla(centroDeLaVista()).also { cambiado() }.id
                 }
+            }
+
+            if (hojasALaVista) {
+                HojasDelLienzo { hojasALaVista = false }
             }
 
             // El botón de ajustes solo existe si hay algo que ajustar: con la
@@ -725,12 +739,130 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     /** Salir, deshacer, rehacer y compartir. Lo que no depende de la selección. */
+    /**
+     * Las hojas del lienzo, como las páginas de un PDF.
+     *
+     * El lienzo está partido en folios A4 invisibles —ver [HojasA4]— y aquí se
+     * ven **las que tienen algo**, en el mismo orden en que saldrán al exportar.
+     * Es la misma lista que consume la exportación, así que lo que se ve aquí es
+     * literalmente lo que va a salir.
+     */
     @Composable
-    private fun BotonesNavegacion(tick: Int, cambiado: () -> Unit, onTablas: () -> Unit) {
+    private fun HojasDelLienzo(onCerrar: () -> Unit) {
+        val escena = controller.scene
+        val celdas = remember(escena) { HojasA4.ocupadas(escena.contenidoVisible) }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onCerrar) {
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = getString(R.string.cd_close)
+                        )
+                    }
+                    Text(
+                        text = if (celdas.size == 1) {
+                            getString(R.string.hojas_una)
+                        } else {
+                            getString(R.string.hojas_varias, celdas.size)
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+
+                if (celdas.isEmpty()) {
+                    Text(
+                        text = getString(R.string.hojas_vacio),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(24.dp)
+                    )
+                    return@Column
+                }
+
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(120.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp)
+                ) {
+                    itemsIndexed(celdas) { i, celda ->
+                        HojaDelLienzo(escena, celda, i + 1) {
+                            onCerrar()
+                            // Llevar la vista a esa hoja: para eso se mira.
+                            val caja = HojasA4.cajaDe(celda)
+                            encajarEn(caja.x1, caja.y1, caja.width, caja.height)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun HojaDelLienzo(
+        escena: Scene,
+        celda: HojasA4.Celda,
+        numero: Int,
+        onIr: () -> Unit
+    ) {
+        var mapa by remember(escena, celda) { mutableStateOf<Bitmap?>(null) }
+        LaunchedEffect(escena, celda) {
+            mapa = withContext(Dispatchers.Default) {
+                runCatching {
+                    DrawExport.aBitmap(HojasA4.escenaDe(escena, celda), 0.22, ::bitmapDe)
+                }.getOrNull()
+            }
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(6.dp).clickable { onIr() }
+        ) {
+            Box(
+                Modifier
+                    .width(112.dp)
+                    .height(158.dp)
+                    .background(androidx.compose.ui.graphics.Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                mapa?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+            Text("$numero", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+
+    @Composable
+    private fun BotonesNavegacion(
+        tick: Int,
+        cambiado: () -> Unit,
+        onHojas: () -> Unit,
+        onTablas: () -> Unit
+    ) {
         @Suppress("UNUSED_EXPRESSION") tick
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { finish() }) {
                 Icon(Icons.Filled.Close, contentDescription = getString(R.string.cd_close))
+            }
+            // Ver las hojas del lienzo como si ya fuera el documento.
+            IconButton(onClick = onHojas) {
+                Icon(
+                    Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = getString(R.string.hojas_vista)
+                )
             }
             IconButton(
                 onClick = { controller.undo(); cambiado() },
