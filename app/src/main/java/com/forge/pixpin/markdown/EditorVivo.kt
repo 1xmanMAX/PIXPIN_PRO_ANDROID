@@ -530,20 +530,29 @@ private fun BloqueEditable(
                 TextRange(seleccion.start + 1, seleccion.end + 1)
             ),
             onValueChange = { crudo ->
-                // Si el centinela ya no está, el dedo dio a borrar estando al
-                // principio del bloque. Es la única forma de enterarse: con el
-                // bloque vacío, borrar no cambia el texto y no llega ningún
-                // aviso, y las teclas del teclado en pantalla tampoco se pueden
-                // escuchar.
-                if (!crudo.text.startsWith(CENTINELA)) {
+                val sinCentinela = crudo.text.removePrefix(CENTINELA)
+                val perdioElCentinela = !crudo.text.startsWith(CENTINELA)
+
+                // Si **lo único** que ha desaparecido es el centinela, el dedo
+                // dio a borrar estando al principio del bloque. Es la única
+                // forma de enterarse: con el bloque vacío, borrar no cambia el
+                // texto y no llega ningún aviso, y las teclas del teclado en
+                // pantalla tampoco se pueden escuchar.
+                //
+                // Hay que mirar que el resto siga igual. Seleccionar todo y
+                // borrar también se lleva el centinela, y eso es vaciar el
+                // bloque, no volver al de arriba.
+                if (perdioElCentinela && sinCentinela == contenido.text) {
                     onRetroceso()
                     return@BasicTextField
                 }
+
+                val corrimiento = if (perdioElCentinela) 0 else 1
                 val v = TextFieldValue(
-                    crudo.text.removePrefix(CENTINELA),
+                    sinCentinela,
                     TextRange(
-                        (crudo.selection.start - 1).coerceAtLeast(0),
-                        (crudo.selection.end - 1).coerceAtLeast(0)
+                        (crudo.selection.start - corrimiento).coerceAtLeast(0),
+                        (crudo.selection.end - corrimiento).coerceAtLeast(0)
                     )
                 )
                 // El intro no mete un salto de línea: **parte el bloque**. Es lo

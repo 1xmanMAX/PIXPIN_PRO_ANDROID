@@ -164,8 +164,14 @@ fun RejillaDeTabla(
                                 val dedo = evento.changes.firstOrNull { it.id == abajo.id }
                                     ?: return@withTimeoutOrNull true
                                 if (!dedo.pressed) return@withTimeoutOrNull true
+                                // Un dedo aguantando medio segundo se mueve
+                                // solo. Con el margen justo de un temblor la
+                                // pulsación larga se cancelaba casi siempre y el
+                                // menú no llegaba a salir nunca; con tres veces
+                                // ese margen sigue distinguiéndose de un
+                                // arrastre, que recorre mucho más.
                                 val recorrido = (dedo.position - abajo.position).getDistance()
-                                if (recorrido > viewConfiguration.touchSlop) {
+                                if (recorrido > viewConfiguration.touchSlop * 3) {
                                     return@withTimeoutOrNull true
                                 }
                             }
@@ -207,7 +213,14 @@ fun RejillaDeTabla(
                                 // toque y las demás sí, que es justo lo que hace
                                 // falta.
                                 .then(
-                                    if (escribiendo == ancla.fila to ancla.columna) {
+                                    // **Solo cuando la tabla se está editando.**
+                                    // Sin esta condición, las celdas de una tabla
+                                    // solo pintada también se quedaban el toque
+                                    // —para no hacer nada, porque no hay a quién
+                                    // avisar— y entonces el toque no llegaba a
+                                    // quien la activa. Se salía de una tabla y ya
+                                    // no había forma de volver a entrar.
+                                    if (!conAsas || escribiendo == ancla.fila to ancla.columna) {
                                         Modifier
                                     } else {
                                         Modifier.combinedClickable(
@@ -397,12 +410,12 @@ val ALTO_MINIMO_DE_FILA = 40.dp
 /**
  * Cuánto hay que aguantar para que se marque.
  *
- * El doble de lo que Android llama pulsación larga. Con el tiempo normal el menú
- * salía al tocar una celda para escribir en ella, que es lo que más se hace en
- * una tabla; aquí la pulsación larga no es un atajo, es una decisión, y conviene
- * que cueste un poco.
+ * Algo más de lo que Android llama pulsación larga —que son unos 400 ms—, para
+ * que no salte al tocar una celda, pero no tanto como para tener que pensar si
+ * el dedo ya lleva bastante. Con el doble se hacía eterno y encima daba tiempo a
+ * que el dedo se moviera y se cancelara.
  */
-private const val ESPERA_DE_PULSACION = 800L
+private const val ESPERA_DE_PULSACION = 550L
 
 /** El redondeo de cada celda. */
 private val ESQUINA = RoundedCornerShape(6.dp)
