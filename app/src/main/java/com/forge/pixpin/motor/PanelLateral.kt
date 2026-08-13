@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,15 +14,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -107,13 +105,14 @@ fun PanelLateralDeEstilo(
     val tintaDelTrazo = colorDeEstilo(estilo.strokeColor, neutro)
     val tintaDelFondo = colorDeEstilo(estilo.backgroundColor, tintaDelTrazo)
 
+    // **Sin desplazamiento.** Un contenedor que se desplaza recorta lo que se
+    // sale de él, y de aquí se sale justo lo que hay que ver: la fila de
+    // opciones que sale de la bolita salía cortada por el borde del panel. Antes
+    // que eso, los controles van pequeños y apretados para que quepan.
     Column(
-        modifier = modifier
-            .padding(6.dp)
-            .heightIn(max = ALTO_MAXIMO)
-            .verticalScroll(rememberScrollState()),
+        modifier = modifier.padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(SEPARACION)
     ) {
         if (Propiedad.TRAZO in aplican) {
             SelectorArrastrable(
@@ -136,16 +135,50 @@ fun PanelLateralDeEstilo(
         }
 
         if (Propiedad.RELLENO in aplican) {
-            val rellenos = FillStyle.entries
+            // **La primera opción es «sin relleno», y es la que faltaba.** Un
+            // garabato que se cierra sobre sí mismo se rellena solo, y si el
+            // selector solo ofrece tramas no hay ninguna forma de decir «ninguna»:
+            // la trama se queda puesta y no hay interruptor. Apagarlo es poner el
+            // fondo en transparente, así que se hace desde aquí, que es donde
+            // aparece el problema.
+            val rellenos: List<FillStyle?> = listOf(null) + FillStyle.entries
+            val puesto =
+                if (isTransparent(estilo.backgroundColor)) 0
+                else rellenos.indexOf(estilo.fillStyle).coerceAtLeast(1)
             SelectorArrastrable(
                 opciones = rellenos,
-                actual = rellenos.indexOf(estilo.fillStyle),
+                actual = puesto,
                 haciaLaIzquierda = haciaLaIzquierda,
                 descripcion = "Relleno",
                 // Con el color del fondo, que es con el que se va a rellenar.
                 tinta = tintaDelFondo,
-                onElegir = { onEstilo(estilo.copy(fillStyle = rellenos[it])) }
-            ) { fs, tinta -> Canvas(Modifier.size(20.dp)) { dibujarRelleno(fs, tinta) } }
+                onElegir = { i ->
+                    val fs = rellenos[i]
+                    onEstilo(
+                        if (fs == null) {
+                            estilo.copy(backgroundColor = "transparent")
+                        } else {
+                            // Al encender un relleno estando en transparente hay
+                            // que darle un color, o se elegiría una trama que no
+                            // se ve y parecería que el botón no hace nada.
+                            val fondo =
+                                if (isTransparent(estilo.backgroundColor)) {
+                                    coloresDeFondo.firstOrNull { !isTransparent(it) }
+                                        ?: estilo.backgroundColor
+                                } else {
+                                    estilo.backgroundColor
+                                }
+                            estilo.copy(fillStyle = fs, backgroundColor = fondo)
+                        }
+                    )
+                }
+            ) { fs, tinta ->
+                if (fs == null) {
+                    Text("∅", fontSize = 15.sp, color = tinta)
+                } else {
+                    Canvas(Modifier.size(20.dp)) { dibujarRelleno(fs, tinta) }
+                }
+            }
         }
 
         if (Propiedad.LINEA in aplican) {
@@ -158,20 +191,6 @@ fun PanelLateralDeEstilo(
                 tinta = tintaDelTrazo,
                 onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it])) }
             ) { ss, tinta -> Canvas(Modifier.size(22.dp)) { dibujarLinea(ss, tinta) } }
-        }
-
-        if (Propiedad.RUGOSIDAD in aplican) {
-            val pulsos = PULSOS
-            SelectorArrastrable(
-                opciones = pulsos,
-                actual = pulsos.indexOf(estilo.roughness).coerceAtLeast(0),
-                haciaLaIzquierda = haciaLaIzquierda,
-                descripcion = "Pulso",
-                tinta = tintaDelTrazo,
-                onElegir = { onEstilo(estilo.copy(roughness = pulsos[it])) }
-            ) { r, tinta ->
-                Canvas(Modifier.size(22.dp)) { dibujarPulso(pulsos.indexOf(r), tinta) }
-            }
         }
 
         if (Propiedad.ESQUINAS in aplican) {
@@ -271,15 +290,17 @@ fun PanelLateralDeEstilo(
         }
 
         if (Propiedad.GROSOR in aplican) {
-            val anchos = ItemStyle.STROKE_WIDTHS
-            val puesto = masCercano(estilo.strokeWidth, anchos)
+            // **Cualquier grosor, no cuatro.** Los cuatro de siempre son los del
+            // original y están bien para elegir a dedo entre botones, pero un
+            // deslizador puede dar todos los de en medio sin costar nada: el
+            // trazo que hace falta para tachar no es ninguno de los cuatro.
             DeslizadorVertical(
-                fraccion = fraccionDeLaCasilla(puesto, anchos.size),
+                fraccion = fraccionDelGrosor(estilo.strokeWidth),
                 descripcion = "Grosor",
                 tinta = tintaDelTrazo,
                 onFraccion = { f ->
-                    val i = casillaDe(f, anchos.size)
-                    if (i != puesto) onEstilo(estilo.copy(strokeWidth = anchos[i]))
+                    val g = grosorDeLaFraccion(f)
+                    if (g != estilo.strokeWidth) onEstilo(estilo.copy(strokeWidth = g))
                 }
             ) { tinta, avance ->
                 // La propia raya, del grosor que se está eligiendo y **del color
@@ -336,8 +357,44 @@ fun PanelLateralDeEstilo(
                 )
             }
         }
+
+        // **El pulso, desplegado y debajo de los deslizadores.** Son tres y se
+        // cambia entre ellos a cada rato mientras se dibuja —una guía va recta,
+        // lo que se enseña va a mano—, así que meterlos en una bolita que hay
+        // que arrastrar costaba más que enseñarlos. Con tres opciones, verlas
+        // ocupa lo mismo que esconderlas.
+        if (Propiedad.RUGOSIDAD in aplican) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                PULSOS.forEachIndexed { i, r ->
+                    val puesto = estilo.roughness == r
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shadowElevation = if (puesto) 6.dp else 2.dp,
+                        border = if (puesto) {
+                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.size(BOLA)
+                    ) {
+                        Box(
+                            Modifier.clickable { onEstilo(estilo.copy(roughness = r)) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(Modifier.size(20.dp)) { dibujarPulso(i, tintaDelTrazo) }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
+
+
 
 /**
  * El color de un estilo, listo para pintar con él.
@@ -378,9 +435,6 @@ private enum class FormaDeFlecha(val glifo: String) {
         }
     }
 }
-
-/** Lo más alto que se deja crecer al panel antes de dejarlo desplazarse. */
-private val ALTO_MAXIMO: Dp = 460.dp
 
 /** Lo menos transparente que se deja llegar: a cero no habría nada que ver. */
 private const val MINIMA_OPACIDAD = 10
@@ -655,10 +709,20 @@ private fun MuestraDeColor(hex: String) {
     }
 }
 
-private val ANCHO: Dp = 32.dp
-private val MANGO: Dp = 30.dp
-private val ALTO_DEL_DESLIZADOR: Dp = 116.dp
-private val BOLA: Dp = 32.dp
+private val ANCHO: Dp = 30.dp
+private val MANGO: Dp = 28.dp
+
+/**
+ * Lo que miden los controles.
+ *
+ * Van justos a propósito: **el panel no se desplaza** —desplazarse recortaría
+ * el desplegable de la bolita— así que todo lo que salga tiene que caber de una
+ * vez. Con una figura seleccionada salen ocho controles, y esa es la cuenta que
+ * manda estos números.
+ */
+private val ALTO_DEL_DESLIZADOR: Dp = 92.dp
+private val BOLA: Dp = 30.dp
+private val SEPARACION: Dp = 5.dp
 
 /** Cuánto hay que arrastrar para pasar de una opción a la siguiente. */
 private val PASO_ENTRE_OPCIONES: Dp = 40.dp

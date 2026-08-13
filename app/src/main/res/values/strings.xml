@@ -98,6 +98,7 @@
     <!-- Pines -->
     <string name="search_pins">Buscar pines…</string>
     <string name="saved_pins_section">⭐ Guardados</string>
+    <string name="pins_closed_section">🕘 Cerrados</string>
     <string name="pin_type_text_plural">Textos</string>
     <string name="pin_type_color_plural">Colores</string>
     <string name="pin_type_file_plural">Archivos</string>

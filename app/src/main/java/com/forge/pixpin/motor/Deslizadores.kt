@@ -122,3 +122,33 @@ fun masCercano(valor: Double, valores: List<Double>): Int {
     }
     return mejor
 }
+
+/**
+ * De dónde está el mango a qué grosor sale, y al revés.
+ *
+ * **No es lineal**: la diferencia entre uno y dos puntos se ve muchísimo, y la
+ * que hay entre dieciocho y diecinueve no se ve. Con un reparto lineal, la
+ * mitad útil del recorrido queda apelotonada abajo y afinar un trazo fino es
+ * imposible. Con el cuadrado, esa parte se estira.
+ *
+ * Y sale **a cuartos de punto**: un grosor de 3,8172 no lo ha pedido nadie,
+ * ensucia el archivo y hace que el mismo sitio del dedo dé dos valores
+ * distintos según el píxel exacto.
+ */
+fun grosorDeLaFraccion(f: Float): Double {
+    val x = f.coerceIn(0f, 1f)
+    val crudo = GROSOR_MINIMO + (GROSOR_MAXIMO - GROSOR_MINIMO) * x * x
+    return kotlin.math.round(crudo * 4.0) / 4.0
+}
+
+/** Y la vuelta: en qué punto del recorrido queda un grosor. */
+fun fraccionDelGrosor(g: Double): Float {
+    val d = GROSOR_MAXIMO - GROSOR_MINIMO
+    if (d <= 0.0) return 0f
+    val x = ((g - GROSOR_MINIMO) / d).coerceIn(0.0, 1.0)
+    return kotlin.math.sqrt(x).toFloat()
+}
+
+/** Lo más fino y lo más gordo que se puede poner un trazo. */
+const val GROSOR_MINIMO = 0.5
+const val GROSOR_MAXIMO = 24.0

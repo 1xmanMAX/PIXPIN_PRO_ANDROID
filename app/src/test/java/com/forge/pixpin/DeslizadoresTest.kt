@@ -168,4 +168,63 @@ class DeslizadoresTest {
     fun `sin valores no hay ninguno cercano`() {
         assertEquals(-1, masCercano(3.0, emptyList()))
     }
+
+    // ---- El grosor, ya continuo ----
+
+    @Test
+    fun `los extremos del deslizador son los extremos del grosor`() {
+        assertEquals(GROSOR_MINIMO, grosorDeLaFraccion(0f), 0.001)
+        assertEquals(GROSOR_MAXIMO, grosorDeLaFraccion(1f), 0.001)
+    }
+
+    @Test
+    fun `el grosor nunca se sale de sus topes`() {
+        (-5..15).forEach { i ->
+            val g = grosorDeLaFraccion(i / 10f)
+            assertTrue("$g fuera de rango", g in GROSOR_MINIMO..GROSOR_MAXIMO)
+        }
+    }
+
+    @Test
+    fun `subir el mango siempre engorda el trazo`() {
+        var anterior = 0.0
+        (0..20).forEach { i ->
+            val g = grosorDeLaFraccion(i / 20f)
+            assertTrue("$g no es mayor que $anterior", g >= anterior)
+            anterior = g
+        }
+    }
+
+    /** A cuartos: ni un grosor de 3,8172 ni dos valores para el mismo sitio. */
+    @Test
+    fun `el grosor sale a cuartos de punto`() {
+        (0..40).forEach { i ->
+            val g = grosorDeLaFraccion(i / 40f)
+            assertEquals("$g no es un cuarto", 0.0, (g * 4) % 1, 0.0001)
+        }
+    }
+
+    /**
+     * La mitad de abajo del recorrido se lleva los finos, que son los que hay
+     * que poder afinar: con un reparto lineal, medio deslizador daría grosores
+     * que a ojo son el mismo.
+     */
+    @Test
+    fun `los grosores finos ocupan mas recorrido que los gordos`() {
+        val mitad = grosorDeLaFraccion(0.5f)
+        assertTrue("la mitad da $mitad", mitad < (GROSOR_MINIMO + GROSOR_MAXIMO) / 2)
+    }
+
+    @Test
+    fun `de grosor a mango y de vuelta`() {
+        listOf(0.5, 1.0, 2.0, 4.0, 8.0, 24.0).forEach { g ->
+            assertEquals(g, grosorDeLaFraccion(fraccionDelGrosor(g)), 0.26)
+        }
+    }
+
+    @Test
+    fun `un grosor imposible se queda en el tope`() {
+        assertEquals(0f, fraccionDelGrosor(-3.0), 0.001f)
+        assertEquals(1f, fraccionDelGrosor(999.0), 0.001f)
+    }
 }

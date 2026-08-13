@@ -1213,6 +1213,9 @@ class DrawEditorActivity : ComponentActivity() {
             DrawToolbar(
                 permitidas = ajustes.editorToolSet,
                 grupos = ajustes.editorGroupList,
+                // El estilo se toca en el lateral; aquí sería el mismo control
+                // dos veces. Ver [PanelLateralDeEstilo].
+                mostrarEstilo = false,
                 tool = controller.tool,
                 onTool = { controller.selectTool(it); cambiado() },
                 style = controller.scene.style,

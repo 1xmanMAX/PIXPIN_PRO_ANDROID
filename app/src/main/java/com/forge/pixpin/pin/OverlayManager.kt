@@ -100,6 +100,16 @@ class OverlayManager(private val app: PixPinApp) {
     /** Lista de pines guardados (isPinned = true) para mostrar en la sección de guardados. */
     private val savedPinsState = mutableStateOf<List<PinState>>(emptyList())
 
+    /**
+     * Los cerrados, para que la lista los enseñe.
+     *
+     * El historial ya existía, pero **solo se salía de él por el botón de
+     * deshacer**, de uno en uno y a ciegas: si cerraste tres y querías el
+     * primero, había que restaurar los tres. Y si el que querías era de antes de
+     * reiniciar, no había forma de saber siquiera que seguía ahí. Ahora se ven.
+     */
+    private val historyState = mutableStateOf<List<PinState>>(emptyList())
+
     /** Selección de la lista de pines, para agrupar y desagrupar. */
     private val selection = mutableStateOf<Set<String>>(emptySet())
 
@@ -561,6 +571,20 @@ class OverlayManager(private val app: PixPinApp) {
 
     // ---- Historial ----
 
+    /**
+     * Trae de vuelta uno concreto del historial, no el último.
+     *
+     * Es lo que hacía falta para que la lista de cerrados sirva de algo: con
+     * solo [restoreLastClosed], recuperar el de hace tres obligaba a sacar los
+     * tres y volver a cerrar dos.
+     */
+    fun restoreClosed(id: String) {
+        val state = history.firstOrNull { it.id == id } ?: return
+        history.removeAll { it.id == id }
+        scope.launch(Dispatchers.IO) { repo.saveHistory(history.toList()) }
+        createPin(state)
+    }
+
     fun restoreLastClosed() {
         val state = history.removeLastOrNull() ?: run {
             toast(R.string.pin_history_empty)
@@ -772,6 +796,8 @@ class OverlayManager(private val app: PixPinApp) {
 
     private fun refreshPinList() {
         listState.value = pins.values.map { it.snapshot() }
+        // El más reciente arriba: es el que más probablemente cerraste sin querer.
+        historyState.value = history.reversed()
         // Carga los pines guardados del disco para la sección de guardados.
         scope.launch(Dispatchers.IO) {
             val saved = repo.loadSavedPins()
@@ -787,6 +813,7 @@ class OverlayManager(private val app: PixPinApp) {
     private fun PinListContent() {
         val items = listState.value
         val savedItems = savedPinsState.value
+        val cerrados = historyState.value
 
         // Agrupar por tipo.
         //
@@ -817,7 +844,7 @@ class OverlayManager(private val app: PixPinApp) {
                     }
                 }
 
-                if (items.isEmpty() && savedItems.isEmpty()) {
+                if (items.isEmpty() && savedItems.isEmpty() && cerrados.isEmpty()) {
                     Text(
                         app.getString(R.string.pins_empty),
                         style = MaterialTheme.typography.bodySmall,
@@ -862,6 +889,21 @@ class OverlayManager(private val app: PixPinApp) {
                                     PinListRow(pin)
                                 }
                             }
+                        }
+
+                        // --- Los cerrados, que también son pines ---
+                        //
+                        // Estaban solo detrás del botón de deshacer, de uno en
+                        // uno y sin verse: para recuperar el de hace tres había
+                        // que sacar los tres. Aquí se ve la lista y se elige.
+                        if (cerrados.isNotEmpty()) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            SectionHeader(
+                                title = app.getString(R.string.pins_closed_section),
+                                count = cerrados.size,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            cerrados.forEach { pin -> ClosedPinRow(pin) }
                         }
                     }
                     GroupActions(items)
@@ -1027,6 +1069,50 @@ class OverlayManager(private val app: PixPinApp) {
                 IconButton(onClick = { pins[pin.id]?.close() }) {
                     Icon(Icons.Filled.Close, contentDescription = null)
                 }
+            }
+        }
+    }
+
+    /**
+     * Un pin cerrado: se ve qué era y se puede traer de vuelta.
+     *
+     * Sin botón de borrar a propósito. El historial ya se vacía solo por el otro
+     * extremo —ver [pushHistory]— y un botón de borrar aquí sería una forma de
+     * perder para siempre, con un toque, lo único que quedaba de algo cerrado.
+     */
+    @Composable
+    private fun ClosedPinRow(pin: PinState) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp, horizontal = 4.dp)
+        ) {
+            Icon(
+                when (pin.type) {
+                    PinType.IMAGE -> Icons.Filled.Image
+                    PinType.TEXT -> Icons.Filled.TextFields
+                    PinType.COLOR -> Icons.Filled.Palette
+                    PinType.FILE -> Icons.Filled.InsertDriveFile
+                    else -> Icons.Filled.Widgets
+                },
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            PinLabel(
+                pin = pin,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+            )
+            IconButton(onClick = { restoreClosed(pin.id) }) {
+                Icon(
+                    Icons.Filled.Restore,
+                    contentDescription = app.getString(R.string.cd_restore_pin),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

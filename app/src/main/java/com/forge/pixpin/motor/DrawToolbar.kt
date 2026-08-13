@@ -151,6 +151,15 @@ fun DrawToolbar(
      */
     mostrarFuente: Boolean = true,
     /**
+     * Si los estilos —color, grosor y letra— salen en esta barra.
+     *
+     * El editor a pantalla completa dice que no: allí el estilo se toca en el
+     * panel lateral, con muestra de lo que va a salir, y tenerlo también aquí
+     * sería la misma opción en dos sitios. El pin y la capa dicen que sí,
+     * porque allí esta barra es lo único que hay. Ver [PanelLateralDeEstilo].
+     */
+    mostrarEstilo: Boolean = true,
+    /**
      * El reparto en grupos, si este sitio lo usa.
      *
      * Con grupos la barra enseña **un botón por grupo** —la herramienta que
@@ -366,36 +375,60 @@ fun DrawToolbar(
                         }
                     }
                 }
+
+                // **El día y la noche, al final de la fila de herramientas.**
+                // Estaba abajo entre el color y el deshacer, que es donde uno
+                // busca lo que cambia el dibujo; y esto no cambia el dibujo,
+                // cambia la luz con la que se mira. Al final de las
+                // herramientas es donde estorba menos y donde se encuentra.
+                if (dark != null && onToggleDark != null) {
+                    Separador()
+                    ToolButton(
+                        if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                        stringResource(if (dark) R.string.cd_modo_dia else R.string.cd_modo_noche),
+                        false,
+                        onToggleDark
+                    )
+                }
             }
 
-            Separador(horizontal = true)
+            // La segunda fila **solo si lleva algo**: sin los estilos puede
+            // quedarse en el deshacer y poco más, y una fila vacía es un hueco
+            // que no dice nada.
+            if (mostrarEstilo || canUndo || onDone != null) {
+                Separador(horizontal = true)
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                ColorDots(palette, style.strokeColor) { onStyle(style.copy(strokeColor = it)) }
-                Separador()
-                StrokeWidthButton(style.strokeWidth) { onStyle(style.copy(strokeWidth = it)) }
-                if (mostrarFuente) {
-                    FontButton(style.fontFamily) { onStyle(style.copy(fontFamily = it)) }
-                }
-                Separador()
-                IconButton(onClick = onUndo, enabled = canUndo) {
-                    Icon(Icons.Filled.Undo, stringResource(R.string.cd_undo))
-                }
-                if (dark != null && onToggleDark != null) {
-                    IconButton(onClick = onToggleDark) {
-                        Icon(
-                            if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                            stringResource(if (dark) R.string.cd_modo_dia else R.string.cd_modo_noche)
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // **Los estilos no salen donde ya hay un panel de estilos.**
+                    // El editor a pantalla completa los tiene en el lateral, a
+                    // un gesto y con muestra de lo que va a salir; repetirlos
+                    // aquí es tener la misma opción en dos sitios, con la duda
+                    // de si son la misma. Donde no hay panel —el pin, la capa—
+                    // siguen estando, que allí son la única forma de tocarlos.
+                    if (mostrarEstilo) {
+                        ColorDots(palette, style.strokeColor) {
+                            onStyle(style.copy(strokeColor = it))
+                        }
+                        Separador()
+                        StrokeWidthButton(style.strokeWidth) {
+                            onStyle(style.copy(strokeWidth = it))
+                        }
+                        if (mostrarFuente) {
+                            FontButton(style.fontFamily) { onStyle(style.copy(fontFamily = it)) }
+                        }
+                        Separador()
                     }
-                }
-                onDone?.let {
-                    IconButton(onClick = it) {
-                        Icon(
-                            Icons.Filled.Check,
-                            stringResource(R.string.cd_done),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    IconButton(onClick = onUndo, enabled = canUndo) {
+                        Icon(Icons.Filled.Undo, stringResource(R.string.cd_undo))
+                    }
+                    onDone?.let {
+                        IconButton(onClick = it) {
+                            Icon(
+                                Icons.Filled.Check,
+                                stringResource(R.string.cd_done),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }

@@ -43,18 +43,19 @@ class DrawPropertiesTest {
     /**
      * El lápiz no pasa por rough.js: ofrecerle rugosidad es un botón muerto.
      *
-     * Fondo y relleno **no**: el modelo los admite y el original los ofrece,
-     * pero escribiendo a mano casi nada se cierra, así que eran dos controles
-     * que la mayor parte del tiempo no cambiaban nada de lo que se ve.
+     * Fondo y relleno **sí**, y no por completismo: un garabato cerrado se
+     * rellena solo, así que sin estos dos controles no hay forma de quitarle la
+     * trama. Quitarlos dejó la trama puesta y sin interruptor.
      */
     @Test
-    fun `el lapiz ofrece color grosor y opacidad, y nada de relleno`() {
+    fun `el lapiz ofrece color fondo relleno grosor y opacidad`() {
         assertEquals(
-            setOf(Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.OPACIDAD),
+            setOf(
+                Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
+                Propiedad.GROSOR, Propiedad.OPACIDAD
+            ),
             propiedadesPara(Tool.FREEDRAW, emptyList())
         )
-        assertTrue(Propiedad.RELLENO !in propiedadesPara(Tool.FREEDRAW, emptyList()))
-        assertTrue(Propiedad.FONDO !in propiedadesPara(Tool.FREEDRAW, emptyList()))
         assertTrue(Propiedad.RUGOSIDAD !in propiedadesPara(Tool.FREEDRAW, emptyList()))
         assertEquals(
             propiedadesPara(Tool.FREEDRAW, emptyList()),
