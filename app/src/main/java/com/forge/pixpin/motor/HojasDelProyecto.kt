@@ -27,15 +27,21 @@ object HojasDelProyecto {
         /** El marco, si sale de uno. */
         val marco: String? = null,
         /** Su nombre, para la etiqueta de debajo. */
-        val nombre: String = ""
+        val nombre: String = "",
+        /** Qué página de la nota es, o -1 si la hoja no es una nota partida. */
+        val nota: Int = -1,
+        /** El texto de **esta** página, cuando la hoja es una nota. */
+        val texto: String? = null
     ) {
         /**
          * Con qué se distingue de las demás **y se recuerda si está marcada**.
          *
          * Lleva el marco dentro a propósito: dos páginas del mismo lienzo son la
          * misma hoja del proyecto, y sin el marco marcar una marcaría las dos.
+         * Con las páginas de una nota pasa lo mismo, y por eso va también el
+         * número de página.
          */
-        val clave: String get() = "${hoja.id}/${marco.orEmpty()}"
+        val clave: String get() = "${hoja.id}/${marco.orEmpty()}/${if (nota >= 0) nota else ""}"
     }
 
     /**
@@ -48,9 +54,32 @@ object HojasDelProyecto {
     fun paginas(proyecto: Proyecto, escenaDe: (String) -> Scene?): List<Pagina> =
         proyecto.hojas.flatMap { hoja ->
             when {
-                hoja.nota != null -> listOf(
-                    Pagina(hoja, nombre = hoja.nombre.ifBlank { "Nota" })
-                )
+                // **Una nota larga son varias páginas**, igual que un PDF. Se
+                // parte con el mismo criterio que se lee en el pin, así que la
+                // hoja 3 del proyecto es la misma hoja 3 que se leía allí. Ver
+                // [Paginado].
+                hoja.nota != null -> {
+                    val texto = hoja.nota!!
+                    val hojas = com.forge.pixpin.motormd.Paginado.deTexto(texto)
+                    if (hojas.size <= 1) {
+                        listOf(
+                            Pagina(
+                                hoja,
+                                nombre = hoja.nombre.ifBlank { "Nota" },
+                                texto = texto
+                            )
+                        )
+                    } else {
+                        hojas.mapIndexed { i, p ->
+                            Pagina(
+                                hoja,
+                                nombre = "${i + 1}",
+                                nota = i,
+                                texto = texto.substring(p.desde, p.hasta)
+                            )
+                        }
+                    }
+                }
 
                 hoja.pagina != null -> listOf(
                     Pagina(hoja, nombre = "${hoja.pagina!! + 1}")

@@ -58,6 +58,15 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * El tamaño de letra al que se leen las notas de tamaño natural.
+ *
+ * Sirve de referencia para saber si lo que se está pintando es una nota o una
+ * miniatura: lo que se mide en puntos —los mínimos de una tabla, sus bordes—
+ * encoge en la misma proporción que la letra. Ver [RejillaDeTabla].
+ */
+private const val TAMANIO_NORMAL_SP = 14f
+
 /** Cuánto crece cada nivel de título respecto al tamaño base. */
 private const val H1 = 1.6f
 private const val H2 = 1.35f
@@ -318,8 +327,11 @@ private fun TablaUi(
             Spacer(Modifier.height(4.dp))
         }
 
-        // **La misma rejilla que en el editor.** Ver [RejillaDeTabla].
-        RejillaDeTabla(tabla) { ancla ->
+        // **La misma rejilla que en el editor.** Ver [RejillaDeTabla]. La
+        // escala sale del tamaño de letra pedido: a tamaño normal es 1 y no
+        // cambia nada, y en una miniatura encoge la tabla entera con la letra
+        // en vez de dejar unos bordes enormes alrededor de nada.
+        RejillaDeTabla(tabla, escala = baseSizeSp / TAMANIO_NORMAL_SP) { ancla ->
             Body(
                 content = ancla.celda.contenido,
                 sizeSp = baseSizeSp * 0.92f,

@@ -51,7 +51,10 @@ object ExportarProyecto {
         paginas.forEach { pagina ->
             val hoja = pagina.hoja
             if (hoja.nota != null) {
-                notas += hoja.nota!!
+                // **La página marcada, no la nota entera.** Con una nota de
+                // doce hojas de la que se eligen dos, entregar las doce es
+                // exactamente lo que se estaba evitando al elegir.
+                notas += pagina.texto ?: hoja.nota!!
                 return@forEach
             }
             val escena = hoja.dibujo?.let(escenaDe) ?: return@forEach

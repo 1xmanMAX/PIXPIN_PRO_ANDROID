@@ -24,6 +24,29 @@ class HojasDelProyectoTest {
         assertNull(paginas[0].marco)
     }
 
+    /** Una nota larga son varias hojas, igual que un PDF. */
+    @Test
+    fun `una nota larga se abre en sus paginas`() {
+        val texto = (1..120).joinToString("\n\n") { "Párrafo número $it de la nota." }
+        val p = Proyecto(id = "p", nombre = "Obra", hojas = listOf(Hoja(id = "n1", nota = texto)))
+        val paginas = HojasDelProyecto.paginas(p) { null }
+
+        assertTrue("salió una sola hoja", paginas.size > 1)
+        assertEquals(listOf("1", "2"), paginas.take(2).map { it.nombre })
+        // Cada una con su clave, o marcar una marcaría toda la nota.
+        assertEquals(paginas.size, paginas.map { it.clave }.toSet().size)
+        // Y pegadas dan la nota entera, sin perder ni repetir nada.
+        assertEquals(texto, paginas.joinToString("") { it.texto.orEmpty() })
+    }
+
+    @Test
+    fun `una nota corta sigue siendo una sola hoja`() {
+        val p = Proyecto(id = "p", nombre = "Obra", hojas = listOf(Hoja(id = "n1", nota = "algo")))
+        val paginas = HojasDelProyecto.paginas(p) { null }
+        assertEquals(1, paginas.size)
+        assertEquals("algo", paginas[0].texto)
+    }
+
     @Test
     fun `una pagina del pdf se numera`() {
         val p = Proyecto(id = "p", nombre = "Obra", hojas = listOf(Hoja(id = "h1", pagina = 4)))

@@ -90,6 +90,16 @@ import androidx.compose.ui.unit.dp
  *
  * La usan igual el editor y la vista, así que una tabla se ve **exactamente
  * igual** mientras se escribe y después.
+ *
+ * ## Lo que no está en la suya: la escala
+ *
+ * Sus medidas mínimas —ochenta puntos de columna, cuarenta de fila— son medidas
+ * **de dedo**: lo que hace falta para poder tocar una celda. En una miniatura no
+ * hay dedo que valga, y esos mínimos convertían una tabla de tres columnas en
+ * algo cinco veces más ancho que la hoja, con unos bordes enormes alrededor de
+ * una letra de tres puntos. Con [escala] los mínimos, los bordes, el redondeo y
+ * el aire encogen a la vez que la letra, y la miniatura sale siendo la tabla en
+ * pequeño en vez de un trozo suyo.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -106,11 +116,21 @@ fun RejillaDeTabla(
     onArrastre: (Int, Int) -> Unit = { _, _ -> },
     /** Con false no se marca por aguantar: está escribiéndose una celda. */
     gestos: Boolean = true,
+    /**
+     * Cuánto encoge todo lo que se mide en puntos: 1 es el tamaño de siempre.
+     * Va con el tamaño de la letra, así que una tabla en una miniatura sale
+     * proporcionada en vez de reventada. Ver la nota de arriba.
+     */
+    escala: Float = 1f,
     /** Qué celda se está escribiendo, para dejarle sus toques al campo. */
     escribiendo: Pair<Int, Int>? = null,
     celda: @Composable (Ancla) -> Unit
 ) {
     val anclas = anclasDe(tabla)
+    // Ni negativa ni más grande que el original: lo primero rompería la medida y
+    // lo segundo haría tablas gigantes por un descuido de quien la llama.
+    val z = escala.coerceIn(0.15f, 1f)
+    val esquina = RoundedCornerShape(6.dp * z)
     val columnas = tabla.columnas.coerceAtLeast(1)
     val filas = tabla.filas.size.coerceAtLeast(1)
     val colorDelBorde = MaterialTheme.colorScheme.outlineVariant
@@ -234,8 +254,8 @@ fun RejillaDeTabla(
                                 // Marcado = **solo el borde**. Pintar el fondo
                                 // tapaba el texto de la celda justo cuando se
                                 // está mirando para decidir qué hacer con ella.
-                                .padding(1.dp)
-                                .clip(ESQUINA)
+                                .padding(1.dp * z)
+                                .clip(esquina)
                                 .background(
                                     if (ancla.celda.cabecera) {
                                         fondoDeCabecera
@@ -243,12 +263,16 @@ fun RejillaDeTabla(
                                         Color.Transparent
                                     }
                                 )
+                                // Con suelo: un borde de menos de medio punto no
+                                // se dibuja, y una tabla sin líneas deja de
+                                // parecer una tabla.
                                 .border(
-                                    if (dentro) 2.dp else 1.dp,
+                                    ((if (dentro) 2.dp else 1.dp) * z)
+                                        .coerceAtLeast(if (dentro) 1.dp else 0.5.dp),
                                     if (dentro) marcadoColor else colorDelBorde,
-                                    ESQUINA
+                                    esquina
                                 )
-                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                                .padding(horizontal = 6.dp * z, vertical = 5.dp * z),
                             contentAlignment = alineacionDeLaCelda(ancla.celda)
                         ) {
                             celda(ancla)
@@ -273,8 +297,8 @@ fun RejillaDeTabla(
                     return@Layout layout(0, 0) {}
                 }
 
-                val minimo = MINIMO_DE_COLUMNA.roundToPx()
-                val hueco = if (conAsas) ASA_DP.roundToPx() else 0
+                val minimo = (MINIMO_DE_COLUMNA * z).roundToPx().coerceAtLeast(1)
+                val hueco = if (conAsas) (ASA_DP * z).roundToPx() else 0
                 val libre = (ventana - hueco).coerceAtLeast(0)
                 val anchoDeColumna = maxOf(minimo, libre / columnas)
                 val anchos = IntArray(columnas) { anchoDeColumna }
@@ -316,7 +340,7 @@ fun RejillaDeTabla(
                 }
                 // Ninguna fila por debajo del alto de un dedo. Una celda de dos
                 // puntos no se puede tocar, y una tabla recién hecha está vacía.
-                val suelo = ALTO_MINIMO_DE_FILA.roundToPx()
+                val suelo = (ALTO_MINIMO_DE_FILA * z).roundToPx().coerceAtLeast(1)
                 for (f in 0 until filas) {
                     if (alturas[f] < suelo) alturas[f] = suelo
                 }
@@ -416,9 +440,6 @@ val ALTO_MINIMO_DE_FILA = 40.dp
  * que el dedo se moviera y se cancelara.
  */
 private const val ESPERA_DE_PULSACION = 550L
-
-/** El redondeo de cada celda. */
-private val ESQUINA = RoundedCornerShape(6.dp)
 
 /** Cuánto mide una columna como mínimo. Su `MIN_COL_DP`. */
 val MINIMO_DE_COLUMNA = 80.dp

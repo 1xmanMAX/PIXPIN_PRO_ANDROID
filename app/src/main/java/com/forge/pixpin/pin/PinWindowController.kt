@@ -1065,6 +1065,9 @@ class PinWindowController(
             when {
                 minimized.value -> restore()
                 actionBar != null -> closeActionBar()
+                // El pie de páginas, antes que nada: es un control, y encima
+                // cae justo donde el resto del pin copia el texto.
+                s.type == PinType.TEXT && pasarPaginaEn(x, y) -> Unit
                 // Un enlace tocado abre el navegador; el resto del pin sigue
                 // copiando el texto entero, como siempre.
                 s.type == PinType.TEXT && openLinkAt(x, y) -> Unit
@@ -3091,51 +3094,113 @@ class PinWindowController(
     }
 
     /**
-     * El pie de la nota paginada: «‹ 3 / 12 ›».
+     * El pie de la nota paginada: dos círculos y la cuenta. « ‹ 3/12 › »
      *
-     * Va dentro de la capa escalada, como el contenido, para que crezca con el
-     * pellizco. Las flechas se apagan en los extremos en vez de desaparecer:
-     * un botón que se va deja el otro bailando de sitio.
+     * ## Por qué los botones no son botones
+     *
+     * En un pin **ningún `IconButton` recibe un toque**. La ventana del pin se
+     * queda con todos los eventos para poder arrastrarlo, redimensionarlo y
+     * distinguir el toque de la pulsación larga; a Compose solo le llegan los
+     * dedos que caen dentro de un rectángulo declarado a mano —así funcionan la
+     * pastilla de desplazamiento y el asa de la esquina. Por eso la primera
+     * versión de este pie se veía perfecta y no pasaba de página.
+     *
+     * Así que aquí se pinta y ya, y el toque lo reparte [pasarPaginaEn] desde el
+     * mismo sitio que reparte los de la lista de tareas: mitad izquierda,
+     * página anterior; mitad derecha, siguiente. Es más generoso que dos
+     * círculos de veinte puntos, que en un pin pequeño no se aciertan.
      */
     @Composable
     private fun PieDePaginas(actual: Int, total: Int) {
+        val apagado = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+        val vivo = MaterialTheme.colorScheme.onSurfaceVariant
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
+                .onGloballyPositioned { coords ->
+                    val origen = coords.positionInRoot()
+                    pieDePaginas = FloatArray(4).also {
+                        it[0] = origen.x
+                        it[1] = origen.y
+                        it[2] = coords.size.width.toFloat()
+                        it[3] = coords.size.height.toFloat()
+                    }
+                }
+                .padding(horizontal = 10.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            IconButton(
-                onClick = { verPagina(actual - 1) },
-                enabled = actual > 0,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBackIos,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
+            CirculoDePagina(Icons.AutoMirrored.Filled.ArrowBackIos, actual > 0, apagado, vivo)
             Text(
-                text = "${actual + 1} / $total",
+                text = "${actual + 1}/$total",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                color = vivo,
+                modifier = Modifier.padding(horizontal = 14.dp)
             )
-            IconButton(
-                onClick = { verPagina(actual + 1) },
-                enabled = actual < total - 1,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForwardIos,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
+            CirculoDePagina(
+                Icons.AutoMirrored.Filled.ArrowForwardIos, actual < total - 1, apagado, vivo
+            )
         }
+    }
+
+    /** Uno de los dos círculos del pie. Se apaga en el extremo, no desaparece. */
+    @Composable
+    private fun CirculoDePagina(
+        icono: androidx.compose.ui.graphics.vector.ImageVector,
+        hay: Boolean,
+        apagado: Color,
+        vivo: Color
+    ) {
+        val tinte = if (hay) vivo else apagado
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .border(1.dp, tinte.copy(alpha = 0.5f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icono,
+                contentDescription = null,
+                tint = tinte,
+                modifier = Modifier.size(9.dp)
+            )
+        }
+    }
+
+    /**
+     * Dónde ha quedado el pie: esquina ya escalada y tamaño sin escalar.
+     *
+     * Mismo trato que las filas de la lista de tareas —ver [rowAt]—: la esquina
+     * viene de `positionInRoot`, que ya trae el zoom aplicado, y el tamaño sale
+     * de la disposición, que no, así que el zoom entra aquí una sola vez.
+     */
+    private var pieDePaginas: FloatArray? = null
+
+    /**
+     * Reparte un toque caído en el pie. Devuelve true si era suyo.
+     *
+     * Se queda el toque **aunque no haya página a la que ir**: en el extremo el
+     * círculo está apagado, y que tocarlo copiara la nota entera sería el peor
+     * premio de consolación.
+     */
+    private fun pasarPaginaEn(x: Float, y: Float): Boolean {
+        val pagina = pin.value.widget.notaPagina
+        if (pagina < 0) return false
+        val r = pieDePaginas ?: return false
+        val z = zoomOrOne()
+        val ancho = r[2] * z
+        val alto = r[3] * z
+        if (x < r[0] || x > r[0] + ancho || y < r[1] || y > r[1] + alto) return false
+
+        val total = Paginado.cuantasPaginas(pin.value.text)
+        val destino = if (x < r[0] + ancho / 2f) pagina - 1 else pagina + 1
+        if (destino in 0 until total) {
+            window?.view?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            verPagina(destino)
+        }
+        return true
     }
 
     /**

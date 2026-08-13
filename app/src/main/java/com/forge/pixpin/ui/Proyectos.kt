@@ -63,7 +63,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import com.forge.pixpin.motormd.Menus
+import com.forge.pixpin.motormd.Markdown
+import com.forge.pixpin.motormd.MarkdownText
 import com.forge.pixpin.motor.PdfDoc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -398,7 +399,19 @@ private fun HojaDelProyecto(
 
     val abrir: () -> Unit = {
         when {
-            h.nota != null -> MarkdownEditorActivity.abrir(contexto, h.id, h.nota!!)
+            // La nota abre **por la hoja que se ha tocado**: el editor no tiene
+            // páginas —el corte cambiaría con cada letra— pero sí sabe empezar
+            // por donde estabas. Ver [MarkdownEditorActivity.abrir].
+            h.nota != null -> MarkdownEditorActivity.abrir(
+                contexto,
+                h.id,
+                h.nota!!,
+                if (pagina.nota >= 0) {
+                    Paginado.deTexto(h.nota!!).getOrNull(pagina.nota)?.desde ?: -1
+                } else {
+                    -1
+                }
+            )
             else -> {
                 val dibujo = h.dibujo ?: "dib-${System.currentTimeMillis()}"
                 if (h.dibujo == null) {
@@ -447,15 +460,12 @@ private fun HojaDelProyecto(
                 p.pdfOrigen != null && h.pagina != null ->
                     MiniaturaDePagina(p.pdfOrigen!!, h.pagina!!)
 
-                h.nota != null -> Text(
-                    text = h.nota!!.lineSequence()
-                        .filter { it.isNotBlank() }
-                        .take(6)
-                        .joinToString("\n") { Menus.convertir(it, null).take(24) },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(6.dp)
-                )
+                // **La hoja de la nota, compuesta en pequeño.** Antes esto era
+                // un recorte de las seis primeras líneas en crudo, que no se
+                // parecía a lo que luego salía en el PDF. Ahora es el mismo
+                // pintor que el pin y el mismo corte en páginas: lo que se ve
+                // aquí es la hoja que se va a entregar.
+                h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!)
 
                 else -> MiniaturaDeLienzo(contexto, h.dibujo, pagina.marco)
             }
@@ -482,6 +492,24 @@ private fun HojaDelProyecto(
             modifier = Modifier.padding(top = 2.dp)
         )
     }
+}
+
+/**
+ * La miniatura de una hoja de nota.
+ *
+ * Se compone de verdad, con el pintor de siempre a letra diminuta: la tabla se
+ * ve como tabla y el título como título. La rejilla encoge sus mínimos con la
+ * letra —ver [RejillaDeTabla]—, que es lo que evita que una tabla de tres
+ * columnas se salga cinco veces de la hoja.
+ */
+@Composable
+private fun MiniaturaDeNota(texto: String) {
+    val bloques = remember(texto) { Markdown.parse(texto) }
+    MarkdownText(
+        blocks = bloques,
+        baseSizeSp = 3.2f,
+        modifier = Modifier.fillMaxSize().padding(4.dp)
+    )
 }
 
 /** La miniatura de un lienzo, o de uno de sus marcos. */
