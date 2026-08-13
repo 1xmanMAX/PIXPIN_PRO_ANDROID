@@ -105,13 +105,15 @@ private fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     )
 
     // El lápiz no pasa por rough.js ni lleva línea discontinua: ni rugosidad ni
-    // esquinas, que serían botones muertos. **Fondo y relleno sí**: un garabato
-    // que se cierra sobre sí mismo se rellena como cualquier otra forma, igual
-    // que en el original. Antes no se ofrecían, y el modelo lo admitía desde el
-    // primer día — era una herramienta a medias, no una decisión.
+    // esquinas, que serían botones muertos.
+    //
+    // **Ni fondo ni relleno.** El modelo los admite —un garabato cerrado sobre
+    // sí mismo se rellena, y el original lo ofrece— pero escribiendo a mano no
+    // se cierra casi nada, así que eran dos controles que la mayor parte del
+    // tiempo no cambiaban nada de lo que se ve. Quien quiera una mancha tiene la
+    // forma, o el bote sobre el hueco cerrado. Ver [Tool.RELLENO].
     ElementType.FREEDRAW -> setOf(
-        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-        Propiedad.GROSOR, Propiedad.OPACIDAD
+        Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.OPACIDAD
     )
 
     ElementType.TEXT -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)

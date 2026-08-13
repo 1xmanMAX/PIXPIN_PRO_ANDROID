@@ -18,6 +18,28 @@ enum class PinType {
 }
 
 /**
+ * En qué orden se agrupan los tipos en la lista de pines.
+ *
+ * ## Por qué esto es una función y no una lista escrita a mano
+ *
+ * Era una lista escrita a mano —imagen, texto, color, archivo— y la lista se
+ * recorría **ella**, así que hacía de filtro sin querer: un temporizador, una
+ * ruleta o un lienzo no aparecían nunca. Y la lista de pines no es un lujo: es
+ * la única salida cuando dejas un pin atravesable, porque desde ese momento el
+ * pin ya no responde al dedo. Un tipo que no salía aquí era un pin que se
+ * quedaba en la pantalla para siempre.
+ *
+ * Ahora el que manda es [PinType.entries] y [preferidos] solo dice cuáles van
+ * primero. Un tipo nuevo aparece solo, al final, sin tocar nada.
+ */
+fun ordenDeTipos(
+    preferidos: List<PinType> = listOf(PinType.IMAGE, PinType.TEXT, PinType.COLOR, PinType.FILE)
+): List<PinType> {
+    val primeros = preferidos.distinct().filter { it in PinType.entries }
+    return primeros + PinType.entries.filter { it !in primeros }
+}
+
+/**
  * Estado de las mini-aplicaciones.
  *
  * Va todo en una sola clase, con un campo por herramienta, en vez de una

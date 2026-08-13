@@ -2,6 +2,7 @@ package com.forge.pixpin.motor
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,9 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -92,8 +98,20 @@ fun PanelLateralDeEstilo(
     // que vive el panel. Ver la nota de arriba.
     val haciaLaIzquierda = zurdo
 
+    // **Los controles se pintan con el color que hay puesto.** La raya del
+    // grosor sale del color del trazo, la trama del relleno sale del color de
+    // fondo: así el panel no dice «grosor» en gris, dice *esta* raya, la que va
+    // a salir. Cambiar el color cambia el panel entero, que es lo que hace que
+    // parezca una sola cosa y no una lista de ajustes sueltos.
+    val neutro = MaterialTheme.colorScheme.onSurface
+    val tintaDelTrazo = colorDeEstilo(estilo.strokeColor, neutro)
+    val tintaDelFondo = colorDeEstilo(estilo.backgroundColor, tintaDelTrazo)
+
     Column(
-        modifier = modifier.padding(6.dp),
+        modifier = modifier
+            .padding(6.dp)
+            .heightIn(max = ALTO_MAXIMO)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -124,6 +142,8 @@ fun PanelLateralDeEstilo(
                 actual = rellenos.indexOf(estilo.fillStyle),
                 haciaLaIzquierda = haciaLaIzquierda,
                 descripcion = "Relleno",
+                // Con el color del fondo, que es con el que se va a rellenar.
+                tinta = tintaDelFondo,
                 onElegir = { onEstilo(estilo.copy(fillStyle = rellenos[it])) }
             ) { fs, tinta -> Canvas(Modifier.size(20.dp)) { dibujarRelleno(fs, tinta) } }
         }
@@ -135,8 +155,119 @@ fun PanelLateralDeEstilo(
                 actual = lineas.indexOf(estilo.strokeStyle),
                 haciaLaIzquierda = haciaLaIzquierda,
                 descripcion = "Tipo de línea",
+                tinta = tintaDelTrazo,
                 onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it])) }
             ) { ss, tinta -> Canvas(Modifier.size(22.dp)) { dibujarLinea(ss, tinta) } }
+        }
+
+        if (Propiedad.RUGOSIDAD in aplican) {
+            val pulsos = PULSOS
+            SelectorArrastrable(
+                opciones = pulsos,
+                actual = pulsos.indexOf(estilo.roughness).coerceAtLeast(0),
+                haciaLaIzquierda = haciaLaIzquierda,
+                descripcion = "Pulso",
+                tinta = tintaDelTrazo,
+                onElegir = { onEstilo(estilo.copy(roughness = pulsos[it])) }
+            ) { r, tinta ->
+                Canvas(Modifier.size(22.dp)) { dibujarPulso(pulsos.indexOf(r), tinta) }
+            }
+        }
+
+        if (Propiedad.ESQUINAS in aplican) {
+            // Dos: en pico o redondeadas. La bolita vale igual para dos que
+            // para cinco, y así todo se toca de la misma manera.
+            val redondas = listOf(false, true)
+            SelectorArrastrable(
+                opciones = redondas,
+                actual = if (estilo.roundness != null) 1 else 0,
+                haciaLaIzquierda = haciaLaIzquierda,
+                descripcion = "Esquinas",
+                tinta = tintaDelTrazo,
+                onElegir = { i ->
+                    val r = if (redondas[i]) Roundness(Roundness.ADAPTIVE_RADIUS) else null
+                    onEstilo(estilo.copy(roundness = r))
+                }
+            ) { redonda, tinta ->
+                Canvas(Modifier.size(20.dp)) {
+                    if (redonda) {
+                        drawRoundRect(
+                            tinta, size = size,
+                            cornerRadius = CornerRadius(size.minDimension / 3),
+                            style = Stroke(width = 2.dp.toPx())
+                        )
+                    } else {
+                        drawRect(tinta, size = size, style = Stroke(width = 2.dp.toPx()))
+                    }
+                }
+            }
+        }
+
+        if (Propiedad.FORMA_FLECHA in aplican) {
+            SelectorArrastrable(
+                opciones = FormaDeFlecha.entries,
+                actual = FormaDeFlecha.de(estilo).ordinal,
+                haciaLaIzquierda = haciaLaIzquierda,
+                descripcion = "Forma de la flecha",
+                tinta = tintaDelTrazo,
+                onElegir = { i -> onEstilo(FormaDeFlecha.entries[i].aplicadaA(estilo)) }
+            ) { forma, tinta ->
+                Text(forma.glifo, fontSize = 15.sp, color = tinta)
+            }
+        }
+
+        if (Propiedad.MOSAICO in aplican) {
+            val modos = listOf(false, true)
+            SelectorArrastrable(
+                opciones = modos,
+                actual = if (estilo.mosaicBlur) 1 else 0,
+                haciaLaIzquierda = haciaLaIzquierda,
+                descripcion = "Tapar",
+                tinta = tintaDelTrazo,
+                onElegir = { i -> onEstilo(estilo.copy(mosaicBlur = modos[i])) }
+            ) { desenfocar, tinta ->
+                Canvas(Modifier.size(20.dp)) {
+                    if (desenfocar) {
+                        // Aros que se desvanecen: eso es desenfocar.
+                        for (i in 3 downTo 1) {
+                            drawCircle(
+                                tinta.copy(alpha = 0.28f * i),
+                                radius = size.minDimension / 2 * i / 3
+                            )
+                        }
+                    } else {
+                        // Cuadros duros: eso es pixelar.
+                        val lado = size.width / 4
+                        for (fx in 0..3) for (fy in 0..3) {
+                            if ((fx + fy) % 2 == 0) {
+                                drawRect(tinta, Offset(fx * lado, fy * lado), Size(lado, lado))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (Propiedad.FUENTE in aplican) {
+            val familias = ItemStyle.FONT_FAMILIES
+            SelectorArrastrable(
+                opciones = familias,
+                actual = familias.indexOf(ItemStyle.fontFamilyResuelta(estilo.fontFamily))
+                    .coerceAtLeast(0),
+                haciaLaIzquierda = haciaLaIzquierda,
+                descripcion = "Letra",
+                tinta = tintaDelTrazo,
+                onElegir = { onEstilo(estilo.copy(fontFamily = familias[it])) }
+            ) { familia, tinta ->
+                // **La propia letra**, escrita con su fuente: se elige mirando
+                // cuál se parece a lo que quieres, no leyendo su nombre.
+                Text(
+                    "Aa",
+                    fontSize = 13.sp,
+                    color = tinta,
+                    fontFamily = composeFontFamily(familia)
+                )
+            }
         }
 
         if (Propiedad.GROSOR in aplican) {
@@ -145,13 +276,15 @@ fun PanelLateralDeEstilo(
             DeslizadorVertical(
                 fraccion = fraccionDeLaCasilla(puesto, anchos.size),
                 descripcion = "Grosor",
+                tinta = tintaDelTrazo,
                 onFraccion = { f ->
                     val i = casillaDe(f, anchos.size)
                     if (i != puesto) onEstilo(estilo.copy(strokeWidth = anchos[i]))
                 }
             ) { tinta, avance ->
-                // La propia raya, del grosor que se está eligiendo: se ve gorda
-                // cuando es gorda. Es lo que se viene a mirar.
+                // La propia raya, del grosor que se está eligiendo y **del color
+                // que hay puesto**: se ve gorda cuando es gorda y roja cuando es
+                // roja. Es lo que se viene a mirar.
                 drawLine(
                     tinta,
                     Offset(size.width * 0.2f, size.height / 2),
@@ -162,10 +295,35 @@ fun PanelLateralDeEstilo(
             }
         }
 
+        if (Propiedad.FUENTE in aplican) {
+            val tamanos = ItemStyle.FONT_SIZES
+            val puesto = masCercano(estilo.fontSize, tamanos)
+            DeslizadorVertical(
+                fraccion = fraccionDeLaCasilla(puesto, tamanos.size),
+                descripcion = "Tamaño de la letra",
+                tinta = tintaDelTrazo,
+                onFraccion = { f ->
+                    val i = casillaDe(f, tamanos.size)
+                    if (i != puesto) onEstilo(estilo.copy(fontSize = tamanos[i]))
+                },
+                // La «A» va como texto y no como dibujo: una letra dibujada a
+                // mano no diría de qué tamaño sale la de verdad.
+                dentro = {
+                    Text(
+                        "A",
+                        fontSize = (10 + puesto * 4).sp,
+                        color = tintaDelTrazo,
+                        fontFamily = composeFontFamily(estilo.fontFamily)
+                    )
+                }
+            )
+        }
+
         if (Propiedad.OPACIDAD in aplican) {
             DeslizadorVertical(
                 fraccion = fraccionDelValor(estilo.opacity, MINIMA_OPACIDAD, 100),
                 descripcion = "Opacidad",
+                tinta = tintaDelTrazo,
                 onFraccion = { f ->
                     val v = valorConPaso(f, MINIMA_OPACIDAD, 100, PASO_DE_OPACIDAD)
                     if (v != estilo.opacity) onEstilo(estilo.copy(opacity = v))
@@ -180,6 +338,49 @@ fun PanelLateralDeEstilo(
         }
     }
 }
+
+/**
+ * El color de un estilo, listo para pintar con él.
+ *
+ * «transparent» no es un color con el que se pueda dibujar una muestra, así que
+ * en ese caso manda [siNoHay]: enseñar la trama del relleno en transparente
+ * sería enseñar un hueco, y lo que se quiere saber es qué trama es.
+ */
+private fun colorDeEstilo(hex: String, siNoHay: Color): Color =
+    if (isTransparent(hex)) siNoHay else Color(parseColor(hex))
+
+/** Los tres pulsos del original, de recto a temblón. */
+private val PULSOS = listOf(
+    Element.ROUGHNESS_ARCHITECT, Element.ROUGHNESS_ARTIST, Element.ROUGHNESS_CARTOONIST
+)
+
+/**
+ * Las tres formas de una flecha, como **una sola cosa que se elige**.
+ *
+ * En el modelo son dos campos sueltos —`elbowed` y `roundness`— y eso deja
+ * estados que no significan nada, como «de codos y curva a la vez». Aquí se
+ * vuelven tres opciones, que es como se piensan: recta, curva o de codos.
+ */
+private enum class FormaDeFlecha(val glifo: String) {
+    RECTA("╱"), CURVA("⌒"), CODOS("⌐");
+
+    fun aplicadaA(estilo: ItemStyle): ItemStyle = when (this) {
+        RECTA -> estilo.copy(elbowed = false, roundness = null)
+        CURVA -> estilo.copy(elbowed = false, roundness = Roundness(Roundness.PROPORTIONAL_RADIUS))
+        CODOS -> estilo.copy(elbowed = true, roundness = null)
+    }
+
+    companion object {
+        fun de(estilo: ItemStyle): FormaDeFlecha = when {
+            estilo.elbowed -> CODOS
+            estilo.roundness != null -> CURVA
+            else -> RECTA
+        }
+    }
+}
+
+/** Lo más alto que se deja crecer al panel antes de dejarlo desplazarse. */
+private val ALTO_MAXIMO: Dp = 460.dp
 
 /** Lo menos transparente que se deja llegar: a cero no habría nada que ver. */
 private const val MINIMA_OPACIDAD = 10
@@ -201,13 +402,16 @@ private fun DeslizadorVertical(
     fraccion: Float,
     descripcion: String,
     onFraccion: (Float) -> Unit,
-    dibujo: DrawScope.(tinta: Color, avance: Float) -> Unit
+    tinta: Color? = null,
+    /** Lo que va dentro del mango si no es un dibujo, como una letra de verdad. */
+    dentro: (@Composable () -> Unit)? = null,
+    dibujo: DrawScope.(tinta: Color, avance: Float) -> Unit = { _, _ -> }
 ) {
     val densidad = LocalDensity.current
     val vibrar = LocalHapticFeedback.current
     val fondo = MaterialTheme.colorScheme.surfaceVariant
     val relleno = MaterialTheme.colorScheme.primary
-    val tinta = MaterialTheme.colorScheme.onSurface
+    val tintaDelMango = tinta ?: MaterialTheme.colorScheme.onSurface
     var altoPx by remember { mutableFloatStateOf(0f) }
     val recorrido = ALTO_DEL_DESLIZADOR - MANGO
 
@@ -265,9 +469,14 @@ private fun DeslizadorVertical(
                     .size(MANGO - 4.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, relleno, CircleShape)
+                    .border(1.dp, relleno, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Canvas(Modifier.size(MANGO - 4.dp)) { dibujo(tinta, fraccion) }
+                if (dentro != null) {
+                    dentro()
+                } else {
+                    Canvas(Modifier.size(MANGO - 4.dp)) { dibujo(tintaDelMango, fraccion) }
+                }
             }
         }
     }
@@ -297,6 +506,8 @@ private fun <T> SelectorArrastrable(
     haciaLaIzquierda: Boolean,
     descripcion: String,
     onElegir: (Int) -> Unit,
+    /** Con qué color se pintan las muestras. Null = el del tema. */
+    tinta: Color? = null,
     contenido: @Composable (T, Color) -> Unit
 ) {
     val densidad = LocalDensity.current
@@ -310,7 +521,7 @@ private fun <T> SelectorArrastrable(
     val corrimiento = remember { Animatable(0f) }
     var marcada by remember { mutableStateOf(actual) }
 
-    val tinta = MaterialTheme.colorScheme.onSurface
+    val tintaDeLaMuestra = tinta ?: MaterialTheme.colorScheme.onSurface
 
     // **Del tamaño de la bolita y nada más.** La fila de opciones se mide
     // aparte —`unbounded`— y se coloca por encima sin contar para el tamaño: si
@@ -343,21 +554,23 @@ private fun <T> SelectorArrastrable(
                         Modifier.width(PASO_ENTRE_OPCIONES),
                         contentAlignment = Alignment.Center
                     ) {
+                        // **La marcada se señala con un aro, no pintándola de
+                        // otro color.** Si el fondo cambiara, la muestra dejaría
+                        // de verse del color que va a salir — que es justo lo
+                        // que se está mirando para elegir.
                         Surface(
                             shape = CircleShape,
-                            color = if (elegida) {
-                                MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.surface,
+                            shadowElevation = if (elegida) 8.dp else 3.dp,
+                            border = if (elegida) {
+                                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                             } else {
-                                MaterialTheme.colorScheme.surface
+                                null
                             },
-                            shadowElevation = 4.dp,
                             modifier = Modifier.size(if (elegida) BOLA + 6.dp else BOLA)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                contenido(
-                                    opciones[i],
-                                    if (elegida) MaterialTheme.colorScheme.onPrimary else tinta
-                                )
+                                contenido(opciones[i], tintaDeLaMuestra)
                             }
                         }
                     }
@@ -416,7 +629,7 @@ private fun <T> SelectorArrastrable(
                 },
                 contentAlignment = Alignment.Center
             ) {
-                opciones.getOrNull(actual)?.let { contenido(it, tinta) }
+                opciones.getOrNull(actual)?.let { contenido(it, tintaDeLaMuestra) }
             }
         }
     }
@@ -534,4 +747,30 @@ fun DrawScope.dibujarLinea(ss: StrokeStyle, tinta: Color) {
             }
         }
     }
+}
+
+/**
+ * El pulso: una raya cada vez más torcida.
+ *
+ * Es lo que hace la rugosidad, así que enseñarlo es enseñarla. Con glifos había
+ * que probar los tres para saber cuál era cuál.
+ */
+fun DrawScope.dibujarPulso(cuanto: Int, tinta: Color) {
+    val y = size.height / 2
+    val grosor = 2.dp.toPx()
+    if (cuanto <= 0) {
+        drawLine(tinta, Offset(0f, y), Offset(size.width, y), strokeWidth = grosor)
+        return
+    }
+    val vaiven = size.height / 5f * cuanto
+    val camino = Path().apply {
+        moveTo(0f, y)
+        val tramos = 4
+        for (i in 1..tramos) {
+            val x = size.width * i / tramos
+            val alto = if (i % 2 == 0) y - vaiven else y + vaiven
+            quadraticTo(x - size.width / (tramos * 2f), alto, x, y)
+        }
+    }
+    drawPath(camino, tinta, style = Stroke(width = grosor))
 }

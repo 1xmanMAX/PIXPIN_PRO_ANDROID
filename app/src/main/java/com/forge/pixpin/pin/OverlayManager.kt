@@ -478,9 +478,19 @@ class OverlayManager(private val app: PixPinApp) {
     private fun appString(resId: Int): String = app.getString(resId)
 
     private fun createPin(state: PinState) {
+        // **Pinear algo deshace el ocultar-todo.** Un pin nuevo siempre lo pide
+        // alguien —del portapapeles, de una captura, de una palabra mágica— y no
+        // ver nada al pedirlo es indistinguible de que la app esté rota. Antes
+        // el pin se creaba sin ventana y se quedaba así: no aparecía ni al
+        // volver a enseñarlo todo, porque a un pin sin ventana no hay nada que
+        // enseñarle. Ver [volverAEnseñar].
+        if (hiddenAll) {
+            hiddenAll = false
+            pins.values.forEach { volverAEnseñar(it) }
+        }
         val controller = PinWindowController(app, state, callbacks)
         pins[state.id] = controller
-        if (!hiddenAll) controller.show()
+        controller.show()
         saveNow()
         refreshPinList()
     }
@@ -505,7 +515,9 @@ class OverlayManager(private val app: PixPinApp) {
 
     fun setOverlaysVisible(visible: Boolean) {
         if (!visible) closePinList()
-        pins.values.forEach { it.setViewVisible(visible && !hiddenAll) }
+        // Al volver, por el mismo camino que el ocultar-todo: puede haber
+        // quedado algún pin sin ventana. Ver [volverAEnseñar].
+        pins.values.forEach { if (visible) volverAEnseñar(it) else it.setViewVisible(false) }
         FloatingBallController.active?.setVisible(visible)
         // Si no, la capa saldría fotografiada dentro de la propia captura: una
         // vez pintada de verdad y otra en la foto, con la barra en medio.
@@ -519,13 +531,30 @@ class OverlayManager(private val app: PixPinApp) {
      */
     fun recoverVisibility() {
         if (hiddenAll) return
-        pins.values.forEach { it.setViewVisible(true) }
+        pins.values.forEach { volverAEnseñar(it) }
     }
 
     fun toggleHideAll() {
         hiddenAll = !hiddenAll
-        pins.values.forEach { it.setViewVisible(!hiddenAll) }
+        pins.values.forEach { volverAEnseñar(it) }
         toast(if (hiddenAll) R.string.pins_hidden else R.string.pins_shown)
+    }
+
+    /**
+     * Deja un pin como toque según el ocultar-todo.
+     *
+     * **No basta con `setViewVisible`.** Un pin creado mientras todo estaba
+     * oculto no llega a tener ventana —ver [createPin]—, y a un pin sin ventana
+     * esa llamada no le hace nada: al volver a enseñar todo, el que habías
+     * pineado mientras tanto no aparecía. Estaba en la lista, ocupaba memoria y
+     * no había forma de verlo. Aquí se le crea la ventana si le falta.
+     */
+    private fun volverAEnseñar(controller: PinWindowController) {
+        when {
+            hiddenAll -> controller.setViewVisible(false)
+            !controller.isShowing -> controller.show()
+            else -> controller.setViewVisible(true)
+        }
     }
 
     val isHiddenAll: Boolean get() = hiddenAll
@@ -759,9 +788,17 @@ class OverlayManager(private val app: PixPinApp) {
         val items = listState.value
         val savedItems = savedPinsState.value
 
-        // Agrupar por tipo
+        // Agrupar por tipo.
+        //
+        // **El orden es una preferencia, no un filtro.** Antes esta lista tenía
+        // cuatro tipos y se recorría ella: un temporizador, una lista, una
+        // ruleta o un lienzo no salían en la lista **nunca**. Y como la lista es
+        // el único sitio desde el que se puede cerrar un pin que dejaste
+        // atravesable —ya no responde al dedo—, esos pines se quedaban en la
+        // pantalla para siempre. Ahora manda [PinType.entries] y esto solo dice
+        // cuáles van primero; un tipo nuevo aparece solo, al final.
         val groupedByType: Map<PinType, List<PinState>> = items.groupBy { it.type }
-        val typeOrder = listOf(PinType.IMAGE, PinType.TEXT, PinType.COLOR, PinType.FILE)
+        val typeOrder = ordenDeTipos()
 
         Card(modifier = Modifier.width(360.dp)) {
             Column(modifier = Modifier.padding(12.dp)) {
