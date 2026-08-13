@@ -217,9 +217,27 @@ class DeslizadoresTest {
 
     @Test
     fun `de grosor a mango y de vuelta`() {
-        listOf(0.5, 1.0, 2.0, 4.0, 8.0, 24.0).forEach { g ->
-            assertEquals(g, grosorDeLaFraccion(fraccionDelGrosor(g)), 0.26)
+        listOf(0.5, 1.0, 2.0, 4.0, 8.0, GROSOR_MAXIMO).forEach { g ->
+            // La tolerancia es el redondeo a cuartos y nada más.
+            assertEquals(g, grosorDeLaFraccion(fraccionDelGrosor(g)), 0.13)
         }
+    }
+
+    /**
+     * Lo que se pidió al probarlo: que no se dispare. A medio recorrido tiene
+     * que salir un grosor de escribir, no uno de rotulador gordo.
+     */
+    @Test
+    fun `a medio recorrido sale un grosor fino`() {
+        assertTrue(grosorDeLaFraccion(0.5f) <= 4.0)
+        assertTrue(grosorDeLaFraccion(0.25f) <= 1.5)
+    }
+
+    @Test
+    fun `el grosor se escribe sin decimales de mas`() {
+        assertEquals("4", grosorEscrito(4.0))
+        assertEquals("0,5", grosorEscrito(0.5))
+        assertEquals("2,25", grosorEscrito(2.25))
     }
 
     @Test

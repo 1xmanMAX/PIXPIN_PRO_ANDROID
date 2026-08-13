@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.NorthEast
@@ -489,6 +491,7 @@ class DrawEditorActivity : ComponentActivity() {
         // barra porque las hermanas salen **fuera** de ella, pegadas al lateral
         // de la pantalla, y una barra no puede pintar fuera de sí misma.
         var grupoDesplegado by remember { mutableStateOf<List<Tool>?>(null) }
+        var zoomBloqueado by remember { mutableStateOf(false) }
         val ajustes by (application as? com.forge.pixpin.PixPinApp)?.settings?.settings
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
@@ -575,7 +578,8 @@ class DrawEditorActivity : ComponentActivity() {
                 // La hoja del PDF se ve: es el papel. Una foto de un pin no, que
                 // esa ya se coloca como elemento clavado al fondo.
                 papelALaVista = pdfDeFondo != null,
-                zurdo = zurdo
+                zurdo = zurdo,
+                zoomBloqueado = zoomBloqueado
             )
 
             EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
@@ -649,12 +653,30 @@ class DrawEditorActivity : ComponentActivity() {
                     colores = STROKE_COLORS,
                     coloresDeFondo = BACKGROUND_COLORS,
                     onEstilo = { nuevo -> aplicarEstilo(nuevo); cambiado() },
+                    zoom = controller.scene.viewport.zoom.toFloat(),
                     modifier = Modifier
                         .align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart)
                 )
             }
 
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)) {
+            // **A qué zoom se está mirando, y el candado.**
+            //
+            // El zoom era invisible: se llegaba al 340 % sin saberlo y el trazo
+            // salía «raro» sin motivo aparente, porque cuatro puntos a ese zoom
+            // no son cuatro píxeles. Y el candado hace falta trabajando de
+            // cerca: la mano apoya, el segundo dedo roza, y el encuadre que
+            // costó encontrar se va sin querer.
+            Column(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                VisorDeZoom(
+                    tick = tick,
+                    bloqueado = zoomBloqueado,
+                    onBloquear = { zoomBloqueado = !zoomBloqueado },
+                    onCien = { alZoomCien(); cambiado() }
+                )
+                Spacer(Modifier.height(6.dp))
                 BarraHerramientas(
                     tick,
                     onImagen = { selectorImagen() },
@@ -1145,6 +1167,74 @@ class DrawEditorActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * A qué zoom se está mirando, y el candado para clavarlo.
+     *
+     * Va pegado encima de la barra y pequeño: es un dato, no un mando. El número
+     * **es** el botón de volver al cien por cien, que es lo único que se le pide
+     * a un indicador de zoom aparte de mirarlo.
+     */
+    @Composable
+    private fun VisorDeZoom(
+        tick: Int,
+        bloqueado: Boolean,
+        onBloquear: () -> Unit,
+        onCien: () -> Unit
+    ) {
+        @Suppress("UNUSED_EXPRESSION") tick
+        val porcentaje = (controller.scene.viewport.zoom * 100).toInt()
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            shadowElevation = 4.dp,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$porcentaje %",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .clickable(onClick = onCien)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+                Box(
+                    Modifier
+                        .clickable(onClick = onBloquear)
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        if (bloqueado) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                        contentDescription = getString(
+                            if (bloqueado) R.string.zoom_desbloquear else R.string.zoom_bloquear
+                        ),
+                        tint = if (bloqueado) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Vuelve al cien por cien **sin moverse de sitio**.
+     *
+     * Se ancla en el centro de la pantalla: lo que estabas mirando se queda
+     * donde está y solo cambia el tamaño. Anclando en una esquina, volver al
+     * cien por cien desde un zoom alto te deja mirando a otra parte del dibujo.
+     */
+    private fun alZoomCien() {
+        val v = controller.scene.viewport
+        if (v.zoom <= 0.0) return
+        val m = resources.displayMetrics
+        val centro = androidx.compose.ui.geometry.Offset(
+            m.widthPixels / 2f, m.heightPixels / 2f
+        )
+        controller.setViewport(
+            zoomAnchored(v, factor = (1.0 / v.zoom).toFloat(), from = centro, to = centro)
+        )
     }
 
     /**

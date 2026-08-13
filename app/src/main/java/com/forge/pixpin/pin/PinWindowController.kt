@@ -1658,6 +1658,19 @@ class PinWindowController(
             if (path != null) java.io.File(path).lastModified() else 0L
         }
         val pages = remember(path, version) { if (path != null) PdfDoc.pageCount(path) else 0 }
+        // **Qué páginas llevan algo encima**, para marcarlas con un punto. Sale
+        // del proyecto del documento, que es quien recuerda lo anotado; si aún
+        // no se ha abierto ninguna, no hay proyecto y no hay nada que marcar.
+        val anotadas = remember(path, pdfViewerTick) {
+            val app = context.applicationContext as com.forge.pixpin.PixPinApp
+            val proyecto = path?.let {
+                com.forge.pixpin.motor.Proyectos.deEstePdf(app.proyectos.proyectos.value, it)
+            }
+            proyecto?.hojas.orEmpty()
+                .filter { it.dibujo != null }
+                .mapNotNull { it.pagina }
+                .toSet()
+        }
         Surface(shape = RoundedCornerShape(18.dp), shadowElevation = 8.dp) {
             Column(modifier = Modifier.padding(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1703,7 +1716,9 @@ class PinWindowController(
                 ) {
                     (0 until pages).chunked(columns).forEach { row ->
                         Row {
-                            row.forEach { index -> PdfThumb(path!!, index) }
+                            row.forEach { index ->
+                                PdfThumb(path!!, index, index in anotadas)
+                            }
                         }
                     }
                 }
@@ -1713,7 +1728,7 @@ class PinWindowController(
 
     @Composable
     @OptIn(ExperimentalFoundationApi::class)
-    private fun PdfThumb(path: String, index: Int) {
+    private fun PdfThumb(path: String, index: Int, anotada: Boolean = false) {
         var thumb by remember(path, index) { mutableStateOf<Bitmap?>(null) }
         // **Con la fecha del archivo en la clave.** Sin ella la miniatura se
         // dibuja una vez y se queda: anotabas una página, volvías a la rejilla y
@@ -1763,6 +1778,21 @@ class PinWindowController(
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()
+                    )
+                }
+                // **El punto de «esta ya la tocaste».** Doce páginas de un plano
+                // se parecen todas, y la anotación son cuatro trazos sobre un
+                // dibujo lleno de líneas: sin el punto hay que abrirlas una a
+                // una para saber por dónde ibas.
+                if (anotada) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(4.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
                     )
                 }
             }

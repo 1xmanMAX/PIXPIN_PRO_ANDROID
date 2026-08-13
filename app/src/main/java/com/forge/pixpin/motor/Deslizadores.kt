@@ -126,18 +126,24 @@ fun masCercano(valor: Double, valores: List<Double>): Int {
 /**
  * De dónde está el mango a qué grosor sale, y al revés.
  *
- * **No es lineal**: la diferencia entre uno y dos puntos se ve muchísimo, y la
- * que hay entre dieciocho y diecinueve no se ve. Con un reparto lineal, la
- * mitad útil del recorrido queda apelotonada abajo y afinar un trazo fino es
- * imposible. Con el cuadrado, esa parte se estira.
+ * **No es lineal, y con razón**: la diferencia entre uno y dos puntos se ve
+ * muchísimo, y la que hay entre dieciocho y diecinueve no se ve. Repartido a
+ * partes iguales, medio deslizador daría grosores que a ojo son el mismo y el
+ * primer centímetro de recorrido se saltaría todos los finos de golpe.
+ *
+ * Va **al cubo**: a medio recorrido salen unos tres puntos, y los dos primeros
+ * tercios se los reparten los grosores de escribir y subrayar, que son los que
+ * de verdad se afinan. Los gordos siguen estando, arriba del todo, donde se
+ * llega de un empujón porque tampoco hace falta puntería para pedir «muy
+ * gordo».
  *
  * Y sale **a cuartos de punto**: un grosor de 3,8172 no lo ha pedido nadie,
  * ensucia el archivo y hace que el mismo sitio del dedo dé dos valores
  * distintos según el píxel exacto.
  */
 fun grosorDeLaFraccion(f: Float): Double {
-    val x = f.coerceIn(0f, 1f)
-    val crudo = GROSOR_MINIMO + (GROSOR_MAXIMO - GROSOR_MINIMO) * x * x
+    val x = f.coerceIn(0f, 1f).toDouble()
+    val crudo = GROSOR_MINIMO + (GROSOR_MAXIMO - GROSOR_MINIMO) * x * x * x
     return kotlin.math.round(crudo * 4.0) / 4.0
 }
 
@@ -146,9 +152,19 @@ fun fraccionDelGrosor(g: Double): Float {
     val d = GROSOR_MAXIMO - GROSOR_MINIMO
     if (d <= 0.0) return 0f
     val x = ((g - GROSOR_MINIMO) / d).coerceIn(0.0, 1.0)
-    return kotlin.math.sqrt(x).toFloat()
+    return Math.cbrt(x).toFloat()
 }
+
+/**
+ * El grosor, escrito para enseñarlo mientras se arrastra.
+ *
+ * Sin decimales cuando no hacen falta: «4» y no «4,00». Lo que se busca es
+ * saber en qué número vas, no un informe.
+ */
+fun grosorEscrito(g: Double): String =
+    if (g == kotlin.math.floor(g)) g.toInt().toString()
+    else String.format(java.util.Locale.US, "%.2f", g).trimEnd('0').replace('.', ',')
 
 /** Lo más fino y lo más gordo que se puede poner un trazo. */
 const val GROSOR_MINIMO = 0.5
-const val GROSOR_MAXIMO = 24.0
+const val GROSOR_MAXIMO = 20.0

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -90,6 +91,15 @@ fun PanelLateralDeEstilo(
     colores: List<String>,
     coloresDeFondo: List<String>,
     onEstilo: (ItemStyle) -> Unit,
+    /**
+     * A qué zoom se está mirando el lienzo.
+     *
+     * Hace falta para enseñar **el grosor de verdad**: cuatro puntos de escena
+     * son cuatro píxeles al cien por cien y cuarenta al mil por cien. Sin esto,
+     * la muestra del deslizador mentiría justo cuando más se mira, que es
+     * trabajando de cerca.
+     */
+    zoom: Float = 1f,
     modifier: Modifier = Modifier
 ) {
     // Las opciones salen **hacia el lienzo**, o sea al contrario del lado en el
@@ -319,6 +329,14 @@ fun PanelLateralDeEstilo(
                 descripcion = "Grosor",
                 alto = altoDeslizador,
                 tinta = tintaDelTrazo,
+                haciaLaIzquierda = haciaLaIzquierda,
+                // **La muestra a tamaño real, como en cualquier app de dibujo.**
+                // Mientras se arrastra sale al lado un punto del grosor exacto
+                // con el que va a salir el trazo **a este zoom**, y su número.
+                // Un deslizador que solo se dibuja a sí mismo obliga a soltar,
+                // mirar el trazo, y volver.
+                muestra = { grosorEscrito(estilo.strokeWidth) to
+                    (estilo.strokeWidth * zoom).toFloat() },
                 onFraccion = { f ->
                     val g = grosorDeLaFraccion(f)
                     if (g != estilo.strokeWidth) onEstilo(estilo.copy(strokeWidth = g))
@@ -345,6 +363,8 @@ fun PanelLateralDeEstilo(
                 descripcion = "Tamaño de la letra",
                 alto = altoDeslizador,
                 tinta = tintaDelTrazo,
+                haciaLaIzquierda = haciaLaIzquierda,
+                muestra = { estilo.fontSize.toInt().toString() to 0f },
                 onFraccion = { f ->
                     val i = casillaDe(f, tamanos.size)
                     if (i != puesto) onEstilo(estilo.copy(fontSize = tamanos[i]))
@@ -368,6 +388,8 @@ fun PanelLateralDeEstilo(
                 descripcion = "Opacidad",
                 alto = altoDeslizador,
                 tinta = tintaDelTrazo,
+                haciaLaIzquierda = haciaLaIzquierda,
+                muestra = { "${estilo.opacity} %" to 0f },
                 onFraccion = { f ->
                     val v = valorConPaso(f, MINIMA_OPACIDAD, 100, PASO_DE_OPACIDAD)
                     if (v != estilo.opacity) onEstilo(estilo.copy(opacity = v))
@@ -491,6 +513,14 @@ private fun DeslizadorVertical(
     tinta: Color? = null,
     /** Lo que va dentro del mango si no es un dibujo, como una letra de verdad. */
     dentro: (@Composable () -> Unit)? = null,
+    /** Hacia dónde sale la muestra: al lado del lienzo, no al del borde. */
+    haciaLaIzquierda: Boolean = false,
+    /**
+     * Qué enseñar mientras se arrastra: el número y, si tiene sentido, el
+     * tamaño **real en píxeles de pantalla** de lo que se está eligiendo. A cero
+     * el segundo, solo sale el número.
+     */
+    muestra: (() -> Pair<String, Float>)? = null,
     dibujo: DrawScope.(tinta: Color, avance: Float) -> Unit = { _, _ -> }
 ) {
     val densidad = LocalDensity.current
@@ -499,7 +529,50 @@ private fun DeslizadorVertical(
     val relleno = MaterialTheme.colorScheme.primary
     val tintaDelMango = tinta ?: MaterialTheme.colorScheme.onSurface
     var altoPx by remember { mutableFloatStateOf(0f) }
+    var arrastrando by remember { mutableStateOf(false) }
     val recorrido = alto - MANGO
+
+    Box(contentAlignment = Alignment.Center) {
+    if (arrastrando && muestra != null) {
+        val (texto, tamPx) = muestra()
+        // Fuera del deslizador y hacia el lienzo. Va en un Box aparte para que
+        // no cuente en la medida: si contara, el panel se ensancharía al tocar.
+        Box(
+            Modifier
+                .wrapContentSize(unbounded = true)
+                .offset(x = if (haciaLaIzquierda) -SEPARACION_DE_LA_MUESTRA else SEPARACION_DE_LA_MUESTRA)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (tamPx > 0f) {
+                        // **El punto, del tamaño exacto que va a salir.** Con
+                        // tope: a mucho zoom un trazo de veinte puntos ocupa
+                        // media pantalla y la muestra dejaría de caber.
+                        val lado = with(densidad) { tamPx.toDp() }.coerceIn(1.dp, 44.dp)
+                        Box(
+                            Modifier
+                                .size(lado)
+                                .clip(CircleShape)
+                                .background(tintaDelMango)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(
+                        texto,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
 
     Surface(
         shape = RoundedCornerShape(ANCHO / 2),
@@ -527,8 +600,11 @@ private fun DeslizadorVertical(
                     detectVerticalDragGestures(
                         onDragStart = { inicio ->
                             y = inicio.y
+                            arrastrando = true
                             vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         },
+                        onDragEnd = { arrastrando = false },
+                        onDragCancel = { arrastrando = false },
                         onVerticalDrag = { cambio, delta ->
                             cambio.consume()
                             y += delta
@@ -565,6 +641,7 @@ private fun DeslizadorVertical(
                 }
             }
         }
+    }
     }
 }
 
@@ -757,6 +834,9 @@ private val MANGO: Dp = 28.dp
 private val ALTO_DEL_DESLIZADOR: Dp = 92.dp
 private val BOLA: Dp = 30.dp
 private val SEPARACION: Dp = 5.dp
+
+/** Cuánto se separa de su control la muestra que sale al arrastrar. */
+private val SEPARACION_DE_LA_MUESTRA: Dp = 92.dp
 
 /** Cuánto hay que arrastrar para pasar de una opción a la siguiente. */
 private val PASO_ENTRE_OPCIONES: Dp = 40.dp

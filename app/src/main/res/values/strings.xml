@@ -31,6 +31,8 @@
     <string name="proyecto_hojas_de">%1$d de %2$d hojas anotadas</string>
     <string name="proyecto_hoja_nueva">Añadir hoja</string>
     <string name="proyecto_nota_nueva">Añadir nota</string>
+    <string name="zoom_bloquear">Clavar el zoom</string>
+    <string name="zoom_desbloquear">Soltar el zoom</string>
     <string name="proyecto_hoja_suelta">Hoja</string>
     <string name="proyecto_pagina">Página %1$d</string>
     <string name="proyecto_archivar">Archivar</string>

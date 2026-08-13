@@ -54,6 +54,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -494,6 +495,26 @@ private fun HojaDelProyecto(
                 h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!)
 
                 else -> MiniaturaDeLienzo(contexto, h.dibujo, pagina.marco)
+            }
+
+            // **Un puntito si esa hoja lleva algo encima.**
+            //
+            // Una página anotada y una en blanco se ven casi iguales en una
+            // miniatura de sesenta puntos: la anotación son cuatro trazos sobre
+            // un plano lleno de líneas. Así se sabe por dónde ibas sin abrirlas
+            // una a una, que es la pregunta que se le hace a esta pantalla.
+            //
+            // Solo en las páginas de un PDF: en un lienzo, tener dibujo no
+            // significa nada —todos lo tienen— y el punto estaría siempre.
+            if (h.pagina != null && h.dibujo != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .size(7.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                )
             }
 
             if (marcada) {

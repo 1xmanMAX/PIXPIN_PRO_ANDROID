@@ -58,6 +58,15 @@ fun DrawCanvas(
     onTwoFingerTap: () -> Unit = {},
     onChange: () -> Unit = {},
     /**
+     * El zoom está clavado: dos dedos siguen desplazando, pero no acercan.
+     *
+     * Hace falta trabajando de cerca sobre un detalle: la mano que dibuja apoya,
+     * el segundo dedo roza, y el acercamiento se va sin querer. Se pierde el
+     * encuadre que costó encontrar. Panear se deja porque eso no se pierde: se
+     * vuelve arrastrando lo mismo que se fue.
+     */
+    zoomBloqueado: Boolean = false,
+    /**
      * El contador de cambios de quien la hospeda. **Sin esto el lienzo se queda
      * congelado ante todo lo que no venga del dedo.**
      *
@@ -251,7 +260,7 @@ fun DrawCanvas(
                         }
                         huboDosDedos = true
                         pointers = active.size
-                        val zoom = event.calculateZoom()
+                        val zoom = if (zoomBloqueado) 1f else event.calculateZoom()
                         if (zoom != 1f || event.calculatePan() != Offset.Zero) {
                             huboEncuadre = true
                             controller.setViewport(
