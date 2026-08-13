@@ -1,6 +1,7 @@
 package com.forge.pixpin.motor
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,6 +62,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,6 +70,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -213,7 +216,14 @@ fun DrawToolbar(
     val principales = MAIN_TOOLS.filter { permitidas == null || it in permitidas }
     val extras = EXTRA_TOOLS.filter { permitidas == null || it in permitidas }
 
-    Surface(shape = RoundedCornerShape(14.dp), shadowElevation = 6.dp, modifier = modifier) {
+    // Misma isla que las demás: esquina de 12, sombra suave y el filo de un
+    // punto de su `--shadow-island`. Ver la nota de `Isla` en el editor.
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        shadowElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier
+    ) {
         Column(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -831,22 +841,62 @@ private fun ToolButton(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        modifier = Modifier.padding(horizontal = 1.dp)
-    ) {
-        IconButton(onClick = onClick, modifier = Modifier.size(38.dp)) {
-            Icon(
-                icon,
-                contentDescription = label,
-                modifier = Modifier.size(20.dp),
-                tint = if (selected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant
+    // **Los números son los suyos**, de `theme.scss`: botón de 2,25 rem —36 dp—
+    // y esquina de `--border-radius-lg`, 8 dp. Se toma también su forma de
+    // marcar el activo, que es la que aquí estaba peor: ellos usan el color
+    // **contenedor** con un borde del color de marca; aquí se pintaba el botón
+    // entero del color primario a saco, que a pantalla completa es un bloque de
+    // color gritando al lado del dibujo.
+    val fondo by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            Color.Transparent
+        },
+        label = "fondo"
+    )
+    val tinta by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        label = "tinta"
+    )
+    Box(
+        modifier = Modifier
+            .padding(horizontal = 1.dp)
+            .size(BOTON)
+            .clip(RoundedCornerShape(ESQUINA_DEL_BOTON))
+            .background(fondo)
+            .then(
+                if (selected) {
+                    Modifier.border(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary,
+                        RoundedCornerShape(ESQUINA_DEL_BOTON)
+                    )
+                } else {
+                    Modifier
+                }
             )
-        }
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = label, modifier = Modifier.size(ICONO), tint = tinta)
     }
 }
+
+/**
+ * Las medidas de un botón de herramienta, **las de Excalidraw**.
+ *
+ * `--lg-button-size: 2.25rem` y `--border-radius-lg: 0.5rem` de su `theme.scss`.
+ * El icono va algo mayor que su `--lg-icon-size` porque el suyo es para ratón y
+ * este es para un dedo.
+ */
+private val BOTON = 36.dp
+private val ICONO = 20.dp
+private val ESQUINA_DEL_BOTON = 8.dp
 
 @Composable
 private fun Separador(horizontal: Boolean = false) {

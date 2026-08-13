@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -128,6 +129,15 @@ import java.io.File
 class DrawEditorActivity : ComponentActivity() {
 
     companion object {
+        /**
+         * Cuánto se espera a que la mano pare antes de escribir a disco.
+         *
+         * Corto de sobra para que no se pierda nada —al salir se fuerza— y
+         * largo de sobra para que un arrastre entero sea **una** escritura y no
+         * cuarenta. Ver [guardar].
+         */
+        private const val ESPERA_PARA_GUARDAR = 350L
+
         private const val EXTRA_ID = "draw_id"
         private const val EXTRA_RUTA = "draw_ruta"
         private const val EXTRA_IMAGEN = "draw_imagen"
@@ -398,9 +408,34 @@ class DrawEditorActivity : ComponentActivity() {
         )
     }
 
+    /**
+     * Guarda el dibujo, pero **no en cada fotograma**.
+     *
+     * Guardar es serializar la escena entera a JSON y comprimirla a disco, y
+     * eso pasaba en cada cambio. Mientras se dibuja apenas se nota —un cambio
+     * por trazo— pero arrastrando un deslizador de estilo hay un cambio por
+     * píxel recorrido: treinta o cuarenta escrituras por segundo en el mismo
+     * hilo que pinta. Ahí es donde la interfaz se volvía pastosa.
+     *
+     * Se espera a que la mano pare. Y si la actividad se va antes, [onPause] lo
+     * fuerza: es el único momento que Android garantiza.
+     */
     private fun guardar() {
-        ExcalidrawStore.guardar(this, dibujoId, controller.scene)
         if (pdfDeFondo != null) faltaDevolverAlPdf = true
+        guardadoPendiente?.cancel()
+        guardadoPendiente = lifecycleScope.launch {
+            kotlinx.coroutines.delay(ESPERA_PARA_GUARDAR)
+            guardarYa()
+        }
+    }
+
+    private var guardadoPendiente: kotlinx.coroutines.Job? = null
+
+    /** Escribe ahora, sin esperar. */
+    private fun guardarYa() {
+        guardadoPendiente?.cancel()
+        guardadoPendiente = null
+        ExcalidrawStore.guardar(this, dibujoId, controller.scene)
     }
 
     /**
@@ -447,6 +482,8 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        // Primero lo escrito, que es de lo que se saca todo lo demás.
+        guardarYa()
         devolverAlPdf()
         super.onPause()
     }
@@ -701,7 +738,11 @@ class DrawEditorActivity : ComponentActivity() {
                 Isla(
                     Modifier
                         .align(if (zurdo) Alignment.CenterStart else Alignment.CenterEnd)
-                        .padding(horizontal = 8.dp)
+                        // Igual que el panel de estilo: separada del canto y
+                        // fuera del gesto de «atrás» de Android, que si no se
+                        // queda el arrastre y cierra el editor.
+                        .padding(horizontal = 14.dp)
+                        .systemGestureExclusion()
                 ) {
                     Column(
                         Modifier
@@ -818,10 +859,17 @@ class DrawEditorActivity : ComponentActivity() {
     /** Una barra flotante: el recurso que usa el original para no comer lienzo. */
     @Composable
     private fun Isla(modifier: Modifier = Modifier, contenido: @Composable () -> Unit) {
+        // La sombra de su `--shadow-island` es de tres capas muy suaves; en
+        // Compose solo hay una, así que se baja y se le añade el filo de un
+        // punto que ellos ponen con `0 0 0 1px`. Una sombra dura sobre un
+        // lienzo blanco se ve como un recorte pegado encima.
         Surface(
             modifier = modifier,
-            shape = RoundedCornerShape(14.dp),
-            shadowElevation = 6.dp
+            shape = RoundedCornerShape(12.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            ),
+            shadowElevation = 3.dp
         ) {
             Box(Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) { contenido() }
         }

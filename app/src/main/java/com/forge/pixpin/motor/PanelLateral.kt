@@ -1,9 +1,22 @@
 package com.forge.pixpin.motor
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -132,7 +145,17 @@ fun PanelLateralDeEstilo(
     // opciones que sale de la bolita salía cortada por el borde del panel. Antes
     // que eso, los controles van pequeños y apretados para que quepan.
     Column(
-        modifier = modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        modifier = modifier
+            // **Separado del borde y fuera del gesto del sistema.**
+            //
+            // Pegado al canto, arrastrar la bolita hacia el lienzo era empezar
+            // un deslizamiento desde el borde: Android se lo quedaba como el
+            // gesto de «atrás» y el editor se cerraba en mitad de un cambio de
+            // color. El hueco lo separa del canto, y `systemGestureExclusion`
+            // le dice al sistema que esta franja es nuestra —lo mismo que hace
+            // cualquier app con un menú lateral.
+            .padding(start = SEPARACION_DEL_BORDE, end = SEPARACION_DEL_BORDE, top = 6.dp, bottom = 6.dp)
+            .systemGestureExclusion(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(SEPARACION)
     ) {
@@ -523,76 +546,50 @@ private fun DeslizadorVertical(
     muestra: (() -> Pair<String, Float>)? = null,
     dibujo: DrawScope.(tinta: Color, avance: Float) -> Unit = { _, _ -> }
 ) {
-    val densidad = LocalDensity.current
     val vibrar = LocalHapticFeedback.current
-    val fondo = MaterialTheme.colorScheme.surfaceVariant
     val relleno = MaterialTheme.colorScheme.primary
     val tintaDelMango = tinta ?: MaterialTheme.colorScheme.onSurface
-    var altoPx by remember { mutableFloatStateOf(0f) }
     var arrastrando by remember { mutableStateOf(false) }
-    val recorrido = alto - MANGO
 
-    Box(contentAlignment = Alignment.Center) {
-    if (arrastrando && muestra != null) {
-        val (texto, tamPx) = muestra()
-        // Fuera del deslizador y hacia el lienzo. Va en un Box aparte para que
-        // no cuente en la medida: si contara, el panel se ensancharía al tocar.
+    // **El relleno persigue al dedo en vez de saltar.** Con el valor a pelo, el
+    // deslizador da brincos de casilla en casilla; con el muelle, la barra va
+    // detrás del dedo y el control se siente continuo aunque el valor no lo sea.
+    val suave by animateFloatAsState(
+        targetValue = fraccion,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "relleno"
+    )
+    // Y engorda un pelo al agarrarlo, como cualquier deslizador de hoy. Va en la
+    // capa de dibujo —`graphicsLayer`— y no en el tamaño: si cambiara el tamaño
+    // movería a sus vecinos, que es justo el temblor que había que quitar.
+    val engorde by animateFloatAsState(
+        targetValue = if (arrastrando) 1.14f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "engorde"
+    )
+
+    // **De tamaño fijo, pase lo que pase.** Aquí dentro va también la pastilla
+    // de la muestra, que es ancha y aparece y desaparece; sin fijar el tamaño,
+    // el panel entero se ensanchaba al agarrar el deslizador y volvía a
+    // encogerse al soltar, y cada cambio de cifra lo movía otra vez. Eso era el
+    // temblor de la barra.
+    Box(Modifier.size(ANCHO, alto), contentAlignment = Alignment.Center) {
+        MuestraAlArrastrar(arrastrando, muestra, haciaLaIzquierda, tintaDelMango)
+
         Box(
             Modifier
-                .wrapContentSize(unbounded = true)
-                .offset(x = if (haciaLaIzquierda) -SEPARACION_DE_LA_MUESTRA else SEPARACION_DE_LA_MUESTRA)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (tamPx > 0f) {
-                        // **El punto, del tamaño exacto que va a salir.** Con
-                        // tope: a mucho zoom un trazo de veinte puntos ocupa
-                        // media pantalla y la muestra dejaría de caber.
-                        val lado = with(densidad) { tamPx.toDp() }.coerceIn(1.dp, 44.dp)
-                        Box(
-                            Modifier
-                                .size(lado)
-                                .clip(CircleShape)
-                                .background(tintaDelMango)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(
-                        texto,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-    }
-
-    Surface(
-        shape = RoundedCornerShape(ANCHO / 2),
-        color = fondo,
-        shadowElevation = 3.dp
-    ) {
-        Box(
-            Modifier
-                .width(ANCHO)
-                .height(alto)
+                .fillMaxSize()
+                .graphicsLayer { scaleX = engorde }
+                .clip(RoundedCornerShape(ANCHO / 2))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .semantics { contentDescription = descripcion }
                 .pointerInput(Unit) {
-                    altoPx = size.height.toFloat()
                     detectTapGestures { pos ->
                         vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onFraccion(fraccionVertical(pos.y, size.height.toFloat()))
                     }
                 }
                 .pointerInput(Unit) {
-                    altoPx = size.height.toFloat()
                     // Se sigue **la posición**, no el incremento: así el mango
                     // va donde está el dedo y no se va quedando atrás al llegar
                     // a los topes, que es lo que pasa acumulando deltas.
@@ -613,35 +610,99 @@ private fun DeslizadorVertical(
                     )
                 }
         ) {
-            // La barra llena, de abajo hasta donde va el valor.
-            Canvas(Modifier.size(ANCHO, alto)) {
-                val alto = size.height * fraccion
+            // La barra llena, de abajo hasta donde va el valor, con el color
+            // que hay puesto: el deslizador **es** una muestra más.
+            Canvas(Modifier.fillMaxSize()) {
+                val altoLleno = size.height * suave
                 drawRect(
-                    relleno.copy(alpha = 0.25f),
-                    topLeft = Offset(0f, size.height - alto),
-                    size = Size(size.width, alto)
+                    relleno.copy(alpha = 0.30f),
+                    topLeft = Offset(0f, size.height - altoLleno),
+                    size = Size(size.width, altoLleno)
                 )
             }
-            // Y el mango, que es la muestra.
-            val arriba = with(densidad) { (recorrido * (1f - fraccion)).toPx() }
-            Box(
-                Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(0, arriba.toInt()) }
-                    .padding(2.dp)
-                    .size(MANGO - 4.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, relleno, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (dentro != null) {
-                    dentro()
-                } else {
-                    Canvas(Modifier.size(MANGO - 4.dp)) { dibujo(tintaDelMango, fraccion) }
-                }
+        }
+
+        // El mango, fuera de la capa que engorda para que no se deforme.
+        val recorrido = alto - MANGO
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = recorrido * (1f - suave))
+                .size(MANGO)
+                .shadow(4.dp, CircleShape)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            if (dentro != null) {
+                dentro()
+            } else {
+                Canvas(Modifier.size(MANGO - 8.dp)) { dibujo(tintaDelMango, suave) }
             }
         }
     }
+}
+
+/**
+ * La pastilla que sale al lado mientras se arrastra un deslizador.
+ *
+ * Va **fuera de la medida**: se dibuja sin ocupar sitio, porque el sitio que
+ * ocuparía se lo quitaría a sus vecinos cada vez que aparece o cambia de cifra.
+ */
+@Composable
+private fun MuestraAlArrastrar(
+    arrastrando: Boolean,
+    muestra: (() -> Pair<String, Float>)?,
+    haciaLaIzquierda: Boolean,
+    tinta: Color
+) {
+    if (muestra == null) return
+    val densidad = LocalDensity.current
+    AnimatedVisibility(
+        visible = arrastrando,
+        enter = fadeIn(spring()) + scaleIn(spring(), initialScale = 0.85f),
+        exit = fadeOut(spring())
+    ) {
+        val (texto, tamPx) = muestra()
+        Box(
+            Modifier
+                .wrapContentSize(unbounded = true)
+                .offset(
+                    x = if (haciaLaIzquierda) -SEPARACION_DE_LA_MUESTRA
+                    else SEPARACION_DE_LA_MUESTRA
+                )
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 10.dp
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (tamPx > 0f) {
+                        // **El punto, del tamaño exacto que va a salir.** Con
+                        // tope: a mucho zoom un trazo de veinte puntos ocupa
+                        // media pantalla y la muestra dejaría de caber.
+                        val lado = with(densidad) { tamPx.toDp() }.coerceIn(2.dp, 44.dp)
+                        Box(
+                            Modifier
+                                .size(lado)
+                                .clip(CircleShape)
+                                .background(tinta)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    Text(
+                        texto,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -696,7 +757,11 @@ private fun <T> SelectorArrastrable(
         // **Las opciones, saliendo de la bolita hacia el lienzo.** Van fuera de
         // cualquier Surface con forma: una superficie redondeada recorta a sus
         // hijos, y esta fila tiene que poder salirse del panel.
-        if (abierto) {
+        AnimatedVisibility(
+            visible = abierto,
+            enter = fadeIn(spring()) + scaleIn(spring(), initialScale = 0.7f),
+            exit = fadeOut(spring())
+        ) {
             // Cada opción ocupa **exactamente un paso**, que es lo mismo que hay
             // que arrastrar para llegar a ella. Así lo que se ve y lo que cuenta
             // [opcionArrastrada] son la misma cosa; con el ancho suelto, el dedo
@@ -715,6 +780,13 @@ private fun <T> SelectorArrastrable(
                 val enOrden = if (haciaLaIzquierda) opciones.indices.reversed() else opciones.indices
                 enOrden.forEach { i ->
                     val elegida = i == marcada
+                    // El crecer de la marcada, con muelle: saltando de tamaño
+                    // se ve como un parpadeo y no como que la has cogido.
+                    val tamDeLaOpcion by animateDpAsState(
+                        targetValue = if (elegida) bola + 8.dp else bola,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                        label = "opcion"
+                    )
                     Box(
                         Modifier.width(PASO_ENTRE_OPCIONES),
                         contentAlignment = Alignment.Center
@@ -732,7 +804,7 @@ private fun <T> SelectorArrastrable(
                             } else {
                                 null
                             },
-                            modifier = Modifier.size(if (elegida) bola + 6.dp else bola)
+                            modifier = Modifier.size(tamDeLaOpcion)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 contenido(opciones[i], tintaDeLaMuestra)
@@ -743,12 +815,18 @@ private fun <T> SelectorArrastrable(
             }
         }
 
+        val engorde by animateFloatAsState(
+            targetValue = if (abierto) 1.2f else 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+            label = "bolita"
+        )
         Surface(
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceVariant,
-            shadowElevation = 3.dp,
+            shadowElevation = if (abierto) 10.dp else 3.dp,
             modifier = Modifier
                 .offset { androidx.compose.ui.unit.IntOffset(corrimiento.value.toInt(), 0) }
+                .graphicsLayer { scaleX = engorde; scaleY = engorde }
                 .size(bola)
                 .semantics { contentDescription = descripcion }
         ) {
@@ -834,6 +912,14 @@ private val MANGO: Dp = 28.dp
 private val ALTO_DEL_DESLIZADOR: Dp = 92.dp
 private val BOLA: Dp = 30.dp
 private val SEPARACION: Dp = 5.dp
+
+/**
+ * Cuánto se separa el panel del canto de la pantalla.
+ *
+ * No es estética: los primeros milímetros del borde son de Android, que los usa
+ * para el gesto de «atrás». Ver la nota de [PanelLateralDeEstilo].
+ */
+private val SEPARACION_DEL_BORDE: Dp = 14.dp
 
 /** Cuánto se separa de su control la muestra que sale al arrastrar. */
 private val SEPARACION_DE_LA_MUESTRA: Dp = 92.dp
