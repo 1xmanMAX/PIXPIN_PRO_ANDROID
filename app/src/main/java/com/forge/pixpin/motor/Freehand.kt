@@ -101,6 +101,27 @@ object FreedrawTuning {
      * Si aun así se quiere más crudo, este es el único número que hay que tocar.
      */
     const val STREAMLINE = 0.2
+
+    /**
+     * Cuánto se corrige el pulso **según el nivel de imperfección elegido**.
+     *
+     * Es lo que hace que el lápiz tenga los mismos tres niveles «a mano» que
+     * las figuras, y que hagan algo de verdad. En una figura la imperfección la
+     * pone rough.js temblando la línea; aquí no hay nada que temblar —el trazo
+     * ya es el de tu mano— así que lo que se gradúa es **cuánto se te corrige**:
+     *
+     * - Recto: se corrige mucho, la letra sale enderezada.
+     * - Medio: lo que trae el original para dibujar con detalle.
+     * - Temblón: entra tu pulso casi entero.
+     *
+     * No se llega a cero a propósito: a cero entra también el ruido del
+     * digitalizador y el trazo sale dentado, que no es tu pulso, es un defecto.
+     */
+    fun streamlineDe(roughness: Int): Double = when (roughness) {
+        Element.ROUGHNESS_ARCHITECT -> 0.55
+        Element.ROUGHNESS_CARTOONIST -> 0.05
+        else -> STREAMLINE
+    }
 }
 
 /** Opciones resueltas del trazo. */
@@ -123,7 +144,7 @@ fun strokeOptionsFor(e: Element): StrokeOptions = StrokeOptions(
     size = e.strokeWidth * FreedrawTuning.SIZE_FACTOR,
     thinning = FreedrawTuning.THINNING,
     smoothing = FreedrawTuning.SMOOTHING,
-    streamline = FreedrawTuning.STREAMLINE,
+    streamline = FreedrawTuning.streamlineDe(e.roughness),
     simulatePressure = e.simulatePressure,
     last = true
 )

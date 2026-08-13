@@ -1213,9 +1213,12 @@ class DrawEditorActivity : ComponentActivity() {
             DrawToolbar(
                 permitidas = ajustes.editorToolSet,
                 grupos = ajustes.editorGroupList,
-                // El estilo se toca en el lateral; aquí sería el mismo control
-                // dos veces. Ver [PanelLateralDeEstilo].
+                // El estilo se toca en el lateral y el deshacer está arriba con
+                // el rehacer: los dos aquí serían el mismo control dos veces, y
+                // entre ambos se llevaban una fila entera de barra sobre el
+                // dibujo. Ver [PanelLateralDeEstilo] y [BotonesNavegacion].
                 mostrarEstilo = false,
+                mostrarDeshacer = false,
                 tool = controller.tool,
                 onTool = { controller.selectTool(it); cambiado() },
                 style = controller.scene.style,

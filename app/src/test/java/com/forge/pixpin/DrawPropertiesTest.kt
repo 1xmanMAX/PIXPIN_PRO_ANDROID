@@ -41,22 +41,23 @@ class DrawPropertiesTest {
     }
 
     /**
-     * El lápiz no pasa por rough.js: ofrecerle rugosidad es un botón muerto.
-     *
      * Fondo y relleno **sí**, y no por completismo: un garabato cerrado se
      * rellena solo, así que sin estos dos controles no hay forma de quitarle la
      * trama. Quitarlos dejó la trama puesta y sin interruptor.
+     *
+     * Y la imperfección también. El lápiz no pasa por rough.js, pero ahí los
+     * tres niveles gradúan cuánto se corrige el pulso —ver
+     * `FreedrawTuning.streamlineDe`—, que se nota igual y es la misma idea.
      */
     @Test
-    fun `el lapiz ofrece color fondo relleno grosor y opacidad`() {
+    fun `el lapiz ofrece color fondo relleno grosor imperfeccion y opacidad`() {
         assertEquals(
             setOf(
                 Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-                Propiedad.GROSOR, Propiedad.OPACIDAD
+                Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
             ),
             propiedadesPara(Tool.FREEDRAW, emptyList())
         )
-        assertTrue(Propiedad.RUGOSIDAD !in propiedadesPara(Tool.FREEDRAW, emptyList()))
         assertEquals(
             propiedadesPara(Tool.FREEDRAW, emptyList()),
             propiedadesPara(Tool.HIGHLIGHTER, emptyList())

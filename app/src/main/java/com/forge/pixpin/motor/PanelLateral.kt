@@ -105,6 +105,18 @@ fun PanelLateralDeEstilo(
     val tintaDelTrazo = colorDeEstilo(estilo.strokeColor, neutro)
     val tintaDelFondo = colorDeEstilo(estilo.backgroundColor, tintaDelTrazo)
 
+    // **Los controles encogen si son muchos.** El panel no se desplaza —eso
+    // recortaría el desplegable de la bolita— así que lo que salga tiene que
+    // caber de una vez. Con una figura seleccionada salen ocho, y en un móvil
+    // corto el último se quedaba fuera de la pantalla: justo el pulso, que es
+    // el que va al final. Antes que perder un control, todos un poco menores.
+    val cuantos = aplican.count { it in EN_EL_LATERAL } +
+        (if (Propiedad.FUENTE in aplican) 1 else 0) +
+        (if (Propiedad.RUGOSIDAD in aplican) 2 else 0)
+    val apretado = cuantos >= 7
+    val bola = if (apretado) 26.dp else BOLA
+    val altoDeslizador = if (apretado) 76.dp else ALTO_DEL_DESLIZADOR
+
     // **Sin desplazamiento.** Un contenedor que se desplaza recorta lo que se
     // sale de él, y de aquí se sale justo lo que hay que ver: la fila de
     // opciones que sale de la bolita salía cortada por el borde del panel. Antes
@@ -119,6 +131,7 @@ fun PanelLateralDeEstilo(
                 opciones = colores,
                 actual = colores.indexOf(estilo.strokeColor).coerceAtLeast(0),
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Color del trazo",
                 onElegir = { onEstilo(estilo.copy(strokeColor = colores[it])) }
             ) { hex, _ -> MuestraDeColor(hex) }
@@ -129,6 +142,7 @@ fun PanelLateralDeEstilo(
                 opciones = coloresDeFondo,
                 actual = coloresDeFondo.indexOf(estilo.backgroundColor).coerceAtLeast(0),
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Color de fondo",
                 onElegir = { onEstilo(estilo.copy(backgroundColor = coloresDeFondo[it])) }
             ) { hex, _ -> MuestraDeColor(hex) }
@@ -149,6 +163,7 @@ fun PanelLateralDeEstilo(
                 opciones = rellenos,
                 actual = puesto,
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Relleno",
                 // Con el color del fondo, que es con el que se va a rellenar.
                 tinta = tintaDelFondo,
@@ -187,6 +202,7 @@ fun PanelLateralDeEstilo(
                 opciones = lineas,
                 actual = lineas.indexOf(estilo.strokeStyle),
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Tipo de línea",
                 tinta = tintaDelTrazo,
                 onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it])) }
@@ -201,6 +217,7 @@ fun PanelLateralDeEstilo(
                 opciones = redondas,
                 actual = if (estilo.roundness != null) 1 else 0,
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Esquinas",
                 tinta = tintaDelTrazo,
                 onElegir = { i ->
@@ -227,6 +244,7 @@ fun PanelLateralDeEstilo(
                 opciones = FormaDeFlecha.entries,
                 actual = FormaDeFlecha.de(estilo).ordinal,
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Forma de la flecha",
                 tinta = tintaDelTrazo,
                 onElegir = { i -> onEstilo(FormaDeFlecha.entries[i].aplicadaA(estilo)) }
@@ -241,6 +259,7 @@ fun PanelLateralDeEstilo(
                 opciones = modos,
                 actual = if (estilo.mosaicBlur) 1 else 0,
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Tapar",
                 tinta = tintaDelTrazo,
                 onElegir = { i -> onEstilo(estilo.copy(mosaicBlur = modos[i])) }
@@ -274,6 +293,7 @@ fun PanelLateralDeEstilo(
                 actual = familias.indexOf(ItemStyle.fontFamilyResuelta(estilo.fontFamily))
                     .coerceAtLeast(0),
                 haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
                 descripcion = "Letra",
                 tinta = tintaDelTrazo,
                 onElegir = { onEstilo(estilo.copy(fontFamily = familias[it])) }
@@ -297,6 +317,7 @@ fun PanelLateralDeEstilo(
             DeslizadorVertical(
                 fraccion = fraccionDelGrosor(estilo.strokeWidth),
                 descripcion = "Grosor",
+                alto = altoDeslizador,
                 tinta = tintaDelTrazo,
                 onFraccion = { f ->
                     val g = grosorDeLaFraccion(f)
@@ -322,6 +343,7 @@ fun PanelLateralDeEstilo(
             DeslizadorVertical(
                 fraccion = fraccionDeLaCasilla(puesto, tamanos.size),
                 descripcion = "Tamaño de la letra",
+                alto = altoDeslizador,
                 tinta = tintaDelTrazo,
                 onFraccion = { f ->
                     val i = casillaDe(f, tamanos.size)
@@ -344,6 +366,7 @@ fun PanelLateralDeEstilo(
             DeslizadorVertical(
                 fraccion = fraccionDelValor(estilo.opacity, MINIMA_OPACIDAD, 100),
                 descripcion = "Opacidad",
+                alto = altoDeslizador,
                 tinta = tintaDelTrazo,
                 onFraccion = { f ->
                     val v = valorConPaso(f, MINIMA_OPACIDAD, 100, PASO_DE_OPACIDAD)
@@ -379,7 +402,7 @@ fun PanelLateralDeEstilo(
                         } else {
                             null
                         },
-                        modifier = Modifier.size(BOLA)
+                        modifier = Modifier.size(bola)
                     ) {
                         Box(
                             Modifier.clickable { onEstilo(estilo.copy(roughness = r)) },
@@ -436,6 +459,13 @@ private enum class FormaDeFlecha(val glifo: String) {
     }
 }
 
+/** Qué propiedades tienen un control en este panel, para contarlas. */
+private val EN_EL_LATERAL = setOf(
+    Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
+    Propiedad.ESQUINAS, Propiedad.FORMA_FLECHA, Propiedad.MOSAICO,
+    Propiedad.GROSOR, Propiedad.OPACIDAD, Propiedad.FUENTE
+)
+
 /** Lo menos transparente que se deja llegar: a cero no habría nada que ver. */
 private const val MINIMA_OPACIDAD = 10
 private const val PASO_DE_OPACIDAD = 5
@@ -456,6 +486,8 @@ private fun DeslizadorVertical(
     fraccion: Float,
     descripcion: String,
     onFraccion: (Float) -> Unit,
+    /** Lo que mide de alto. Encoge cuando hay muchos controles. */
+    alto: Dp = ALTO_DEL_DESLIZADOR,
     tinta: Color? = null,
     /** Lo que va dentro del mango si no es un dibujo, como una letra de verdad. */
     dentro: (@Composable () -> Unit)? = null,
@@ -467,7 +499,7 @@ private fun DeslizadorVertical(
     val relleno = MaterialTheme.colorScheme.primary
     val tintaDelMango = tinta ?: MaterialTheme.colorScheme.onSurface
     var altoPx by remember { mutableFloatStateOf(0f) }
-    val recorrido = ALTO_DEL_DESLIZADOR - MANGO
+    val recorrido = alto - MANGO
 
     Surface(
         shape = RoundedCornerShape(ANCHO / 2),
@@ -477,7 +509,7 @@ private fun DeslizadorVertical(
         Box(
             Modifier
                 .width(ANCHO)
-                .height(ALTO_DEL_DESLIZADOR)
+                .height(alto)
                 .semantics { contentDescription = descripcion }
                 .pointerInput(Unit) {
                     altoPx = size.height.toFloat()
@@ -506,7 +538,7 @@ private fun DeslizadorVertical(
                 }
         ) {
             // La barra llena, de abajo hasta donde va el valor.
-            Canvas(Modifier.size(ANCHO, ALTO_DEL_DESLIZADOR)) {
+            Canvas(Modifier.size(ANCHO, alto)) {
                 val alto = size.height * fraccion
                 drawRect(
                     relleno.copy(alpha = 0.25f),
@@ -560,6 +592,8 @@ private fun <T> SelectorArrastrable(
     haciaLaIzquierda: Boolean,
     descripcion: String,
     onElegir: (Int) -> Unit,
+    /** Lo que mide la bolita. Encoge cuando hay muchos controles. */
+    bola: Dp = BOLA,
     /** Con qué color se pintan las muestras. Null = el del tema. */
     tinta: Color? = null,
     contenido: @Composable (T, Color) -> Unit
@@ -581,7 +615,7 @@ private fun <T> SelectorArrastrable(
     // aparte —`unbounded`— y se coloca por encima sin contar para el tamaño: si
     // contara, el panel entero se ensancharía de golpe al empezar a arrastrar y
     // todo lo de al lado daría un salto.
-    Box(Modifier.size(BOLA), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(bola), contentAlignment = Alignment.Center) {
         // **Las opciones, saliendo de la bolita hacia el lienzo.** Van fuera de
         // cualquier Surface con forma: una superficie redondeada recorta a sus
         // hijos, y esta fila tiene que poder salirse del panel.
@@ -621,7 +655,7 @@ private fun <T> SelectorArrastrable(
                             } else {
                                 null
                             },
-                            modifier = Modifier.size(if (elegida) BOLA + 6.dp else BOLA)
+                            modifier = Modifier.size(if (elegida) bola + 6.dp else bola)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 contenido(opciones[i], tintaDeLaMuestra)
@@ -638,7 +672,7 @@ private fun <T> SelectorArrastrable(
             shadowElevation = 3.dp,
             modifier = Modifier
                 .offset { androidx.compose.ui.unit.IntOffset(corrimiento.value.toInt(), 0) }
-                .size(BOLA)
+                .size(bola)
                 .semantics { contentDescription = descripcion }
         ) {
             Box(

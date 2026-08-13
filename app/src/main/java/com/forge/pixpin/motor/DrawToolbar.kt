@@ -160,6 +160,15 @@ fun DrawToolbar(
      */
     mostrarEstilo: Boolean = true,
     /**
+     * Si el deshacer sale en esta barra.
+     *
+     * El editor a pantalla completa dice que no: **ya lo tiene arriba**, con el
+     * rehacer al lado, y tenerlo también aquí era el mismo botón dos veces
+     * costando una fila entera de barra sobre el dibujo. El pin y la capa dicen
+     * que sí, que ahí no hay otro sitio donde ponerlo.
+     */
+    mostrarDeshacer: Boolean = true,
+    /**
      * El reparto en grupos, si este sitio lo usa.
      *
      * Con grupos la barra enseña **un botón por grupo** —la herramienta que
@@ -392,10 +401,10 @@ fun DrawToolbar(
                 }
             }
 
-            // La segunda fila **solo si lleva algo**: sin los estilos puede
-            // quedarse en el deshacer y poco más, y una fila vacía es un hueco
-            // que no dice nada.
-            if (mostrarEstilo || canUndo || onDone != null) {
+            // La segunda fila **solo si lleva algo**. Sin estilos y sin
+            // deshacer puede quedarse vacía del todo, y entonces no es una fila
+            // sosa: es una franja de dibujo que deja de verse para nada.
+            if (mostrarEstilo || mostrarDeshacer || onDone != null) {
                 Separador(horizontal = true)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -418,8 +427,10 @@ fun DrawToolbar(
                         }
                         Separador()
                     }
-                    IconButton(onClick = onUndo, enabled = canUndo) {
-                        Icon(Icons.Filled.Undo, stringResource(R.string.cd_undo))
+                    if (mostrarDeshacer) {
+                        IconButton(onClick = onUndo, enabled = canUndo) {
+                            Icon(Icons.Filled.Undo, stringResource(R.string.cd_undo))
+                        }
                     }
                     onDone?.let {
                         IconButton(onClick = it) {

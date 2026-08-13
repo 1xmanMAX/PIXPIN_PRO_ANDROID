@@ -104,17 +104,23 @@ private fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
         Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD
     )
 
-    // El lápiz no pasa por rough.js ni lleva línea discontinua: ni rugosidad ni
-    // esquinas, que serían botones muertos.
+    // El lápiz no lleva línea discontinua ni esquinas, que serían botones
+    // muertos.
     //
     // **Fondo y relleno sí**, y hacen falta justamente para poder apagarlos: un
     // garabato que se cierra sobre sí mismo se rellena solo —lo hace el
     // original— y sin estos dos controles no había forma de quitarle la trama.
     // Se quitaron una vez por eso mismo, por creer que sobraban, y lo que se
     // consiguió fue dejar la trama puesta y sin interruptor.
+    //
+    // **Y la imperfección también**, aunque el lápiz no pase por rough.js.
+    // Escribiendo a mano no hay nada que temblar —el trazo ya es el de tu
+    // mano— así que ahí los tres niveles gradúan **cuánto se te corrige el
+    // pulso**, que es la misma idea dicha al revés y se nota igual. Ver
+    // [FreedrawTuning.streamlineDe].
     ElementType.FREEDRAW -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-        Propiedad.GROSOR, Propiedad.OPACIDAD
+        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
     )
 
     ElementType.TEXT -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)

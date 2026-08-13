@@ -192,9 +192,58 @@ class FreehandTest {
         assertEquals(0.5, o.smoothing, 1e-9)
         // El alisado NO es el 0,5 del original: a ese valor una letra sale
         // enderezada y deja de parecerse a tu escritura. Se usa el «preciso»
-        // que el propio Excalidraw define para dibujar con detalle.
+        // que el propio Excalidraw define para dibujar con detalle. Es el que
+        // corresponde a la imperfección media, que es la de fábrica.
         assertEquals(0.2, o.streamline, 1e-9)
         assertTrue("el trazo guardado está terminado", o.last)
+    }
+
+    /**
+     * Los tres niveles de imperfección del lápiz.
+     *
+     * En una figura la imperfección la pone rough.js temblando la línea; en el
+     * lápiz no hay nada que temblar —el trazo ya es el de tu mano— así que lo
+     * que gradúan es **cuánto se te corrige el pulso**. Más corrección, letra
+     * más enderezada; menos, más tuya.
+     */
+    @Test
+    fun `la imperfeccion del lapiz gradua cuanto se corrige el pulso`() {
+        val recto = FreedrawTuning.streamlineDe(Element.ROUGHNESS_ARCHITECT)
+        val medio = FreedrawTuning.streamlineDe(Element.ROUGHNESS_ARTIST)
+        val temblon = FreedrawTuning.streamlineDe(Element.ROUGHNESS_CARTOONIST)
+
+        assertTrue("el recto tiene que corregir más que el medio", recto > medio)
+        assertTrue("el temblón tiene que corregir menos que el medio", temblon < medio)
+        // El de en medio es el de siempre: los dibujos hechos hasta ahora no
+        // pueden cambiar de aspecto por esto.
+        assertEquals(FreedrawTuning.STREAMLINE, medio, 1e-9)
+        // Y nunca cero: a cero entra el ruido del digitalizador y el trazo sale
+        // dentado, que no es tu pulso sino un defecto.
+        assertTrue("el temblón no puede llegar a cero", temblon > 0.0)
+        listOf(recto, medio, temblon).forEach {
+            assertTrue("$it fuera de rango", it in 0.0..1.0)
+        }
+    }
+
+    /** Un valor raro guardado en un archivo no puede tumbar el trazo. */
+    @Test
+    fun `una imperfeccion desconocida usa la de siempre`() {
+        assertEquals(FreedrawTuning.STREAMLINE, FreedrawTuning.streamlineDe(99), 1e-9)
+        assertEquals(FreedrawTuning.STREAMLINE, FreedrawTuning.streamlineDe(-4), 1e-9)
+    }
+
+    @Test
+    fun `el elemento lleva su imperfeccion a las opciones`() {
+        val e = Element(
+            id = "x", type = ElementType.FREEDRAW, x = 0.0, y = 0.0,
+            width = 10.0, height = 10.0, seed = 1,
+            roughness = Element.ROUGHNESS_CARTOONIST
+        )
+        assertEquals(
+            FreedrawTuning.streamlineDe(Element.ROUGHNESS_CARTOONIST),
+            strokeOptionsFor(e).streamline,
+            1e-9
+        )
     }
 
     /** El lápiz tiene su propia escala: la de las formas lo haría enorme. */
