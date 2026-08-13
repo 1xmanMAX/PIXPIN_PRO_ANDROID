@@ -138,6 +138,7 @@ class MarkdownEditorActivity : ComponentActivity() {
                     desde = desde,
                     onGuardar = { texto ->
                         if (id.isNotEmpty()) TextoStore.guardar(id, texto)
+                        guardarEnSuProyecto(id, texto)
                         finish()
                     },
                     onDescartar = { finish() },
@@ -145,6 +146,24 @@ class MarkdownEditorActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Si esta nota **es** una hoja de un proyecto, deja lo escrito dentro.
+     *
+     * El editor no sabe de dónde le abrieron —recibe un identificador y un
+     * texto—, así que se busca por identificador. Es barato: son unos pocos
+     * proyectos con unas pocas hojas, y a cambio da igual desde dónde se haya
+     * entrado. Sin esto, abrir una nota desde el proyecto y guardarla escribía
+     * en el almacén del pin y el proyecto seguía enseñando lo de antes.
+     */
+    private fun guardarEnSuProyecto(id: String, texto: String) {
+        if (id.isEmpty()) return
+        val app = application as? PixPinApp ?: return
+        val ahora = System.currentTimeMillis()
+        app.proyectos.proyectos.value
+            .filter { p -> p.hojas.any { it.id == id && it.nota != null } }
+            .forEach { p -> app.proyectos.guardar(Proyectos.conNota(p, id, texto, ahora)) }
     }
 
     /**

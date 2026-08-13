@@ -25,12 +25,15 @@ object ContentClassifier {
     )
     private val tripleRegex = Regex("^(\\d{1,3})\\s*,\\s*(\\d{1,3})\\s*,\\s*(\\d{1,3})$")
 
-    fun classify(text: String?): PinContent {
+    fun classify(
+        text: String?,
+        palabras: Map<String, MiniApp> = MagicWord.POR_DEFECTO
+    ): PinContent {
         val t = text?.trim().orEmpty()
         if (t.isEmpty()) return PinContent.Empty
         // Antes que el color: ninguna palabra mágica es un nombre de color CSS,
         // pero si algún día lo fuera, mandaría la herramienta.
-        MagicWord.detect(t)?.let { return PinContent.MiniAppPin(it) }
+        MagicWord.detect(t, palabras)?.let { return PinContent.MiniAppPin(it) }
         parseColor(t)?.let { return PinContent.ColorPin(it, t) }
         // Lo pegado de una hoja de cálculo llega como texto con tabuladores:
         // mostrarlo en crudo lo vuelve ilegible justo cuando más importa la

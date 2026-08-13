@@ -30,6 +30,7 @@
     <string name="proyecto_hojas">%1$d hojas</string>
     <string name="proyecto_hojas_de">%1$d de %2$d hojas anotadas</string>
     <string name="proyecto_hoja_nueva">Añadir hoja</string>
+    <string name="proyecto_nota_nueva">Añadir nota</string>
     <string name="proyecto_hoja_suelta">Hoja</string>
     <string name="proyecto_pagina">Página %1$d</string>
     <string name="proyecto_archivar">Archivar</string>
@@ -40,6 +41,7 @@
     <string name="ajustes_capturar">Capturar</string>
     <string name="ajustes_dibujar">Dibujar</string>
     <string name="ajustes_aspecto">Aspecto</string>
+    <string name="ajustes_pinear">Pinear</string>
     <string name="iman_titulo">Imán</string>
     <string name="iman_desc">A qué se pega el dedo al dibujar. Apaga lo que te estorbe.</string>
     <string name="iman_activo">Imán activo</string>
@@ -296,6 +298,20 @@
     <string name="pdf_pages">%1$d páginas</string>
     <string name="pdf_all">Todas</string>
     <string name="pdf_unreadable">No se pudo leer el PDF</string>
+    <string name="palabras_title">Palabras mágicas</string>
+    <string name="palabras_desc">Pineando una de estas palabras sola se abre su herramienta en vez de un pin de texto. Toca una fila para cambiar las suyas: van separadas por comas y no pueden llevar espacios.</string>
+    <string name="palabras_reset">Volver a las de fábrica</string>
+    <string name="palabras_ninguna">ninguna</string>
+    <string name="palabras_ayuda">Separadas por comas. Una palabra que se copie a menudo dentro de un texto es mala candidata: dejarías de poder pinearla como texto.</string>
+    <string name="palabras_timer">Temporizador</string>
+    <string name="palabras_stopwatch">Cronómetro</string>
+    <string name="palabras_checklist">Lista de tareas</string>
+    <string name="palabras_counter">Contador</string>
+    <string name="palabras_ledger">Cuentas</string>
+    <string name="palabras_board">Pizarra</string>
+    <string name="palabras_ruleta">Ruleta</string>
+    <string name="palabras_draw">Lienzo</string>
+    <string name="palabras_sheet">Hoja</string>
     <string name="nota_ver_paginas">Ver las páginas</string>
     <string name="nota_paginas">%1$d páginas</string>
     <string name="nota_seguida">Seguida</string>

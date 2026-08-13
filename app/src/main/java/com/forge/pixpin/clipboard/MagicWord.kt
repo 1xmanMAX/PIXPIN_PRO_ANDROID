@@ -33,7 +33,14 @@ enum class MiniApp {
  */
 object MagicWord {
 
-    private val WORDS: Map<String, MiniApp> = mapOf(
+    /**
+     * Las de fábrica.
+     *
+     * Se quedan públicas porque los ajustes las enseñan y hay que poder volver a
+     * ellas: «restablecer» tiene que dar exactamente esto, no una copia escrita
+     * a mano en otro sitio que se quede vieja a la primera.
+     */
+    val POR_DEFECTO: Map<String, MiniApp> = mapOf(
         "time" to MiniApp.TIMER,
         "timer" to MiniApp.TIMER,
         "pomodoro" to MiniApp.TIMER,
@@ -92,14 +99,90 @@ object MagicWord {
      *
      * Mayúsculas, minúsculas o mezcla dan igual; espacios alrededor también.
      * Cualquier otra cosa acompañando la descarta.
+     *
+     * [palabras] son las que manda el usuario. Se pasan y no se leen de aquí
+     * dentro porque leerlas exigiría un disco y un contexto, y entonces esto
+     * dejaría de ser una función que se puede comprobar sin móvil.
      */
-    fun detect(text: String?): MiniApp? {
+    fun detect(text: String?, palabras: Map<String, MiniApp> = POR_DEFECTO): MiniApp? {
         val t = text?.trim().orEmpty()
-        if (t.isEmpty() || t.length > LONGEST) return null
+        if (t.isEmpty() || palabras.isEmpty()) return null
+        if (t.length > palabras.keys.maxOf { it.length }) return null
         // Sin espacios por dentro: «el time es oro» es una frase, no una orden.
         if (t.any { it.isWhitespace() }) return null
-        return WORDS[t.lowercase()]
+        return palabras[t.lowercase()]
     }
 
-    private val LONGEST = WORDS.keys.maxOf { it.length }
+    /**
+     * Una palabra tal como se guarda, o null si no puede serlo.
+     *
+     * Se cae lo que **nunca podría dispararse**: lo vacío, lo que lleva espacios
+     * —`detect` descarta cualquier cosa con un hueco— y lo larguísimo. Vale más
+     * no dejarla escribir que guardarla y que no haga nada nunca.
+     */
+    fun normalizar(palabra: String): String? {
+        val limpia = palabra.trim().lowercase()
+        if (limpia.isEmpty() || limpia.length > MAXIMO) return null
+        if (limpia.any { it.isWhitespace() }) return null
+        return limpia
+    }
+
+    /**
+     * Lee las palabras guardadas. **null es «no lo he tocado»** y entonces
+     * mandan las de fábrica; una cadena vacía es «no quiero ninguna», que es
+     * una respuesta distinta y se respeta.
+     *
+     * Formato: una por línea, `palabra=APP`. Lo que no se entienda se salta en
+     * silencio —una herramienta que ya no existe, una línea a medias— porque
+     * tirar los ajustes enteros por una línea rota sería mucho peor. Si la
+     * misma palabra sale dos veces manda la primera, que es lo que se lee al
+     * mirar la lista de arriba abajo.
+     */
+    fun leer(guardadas: String?): Map<String, MiniApp> {
+        if (guardadas == null) return POR_DEFECTO
+        val salida = LinkedHashMap<String, MiniApp>()
+        guardadas.lineSequence().forEach { linea ->
+            val corte = linea.indexOf('=')
+            if (corte <= 0) return@forEach
+            val palabra = normalizar(linea.substring(0, corte)) ?: return@forEach
+            val app = runCatching {
+                MiniApp.valueOf(linea.substring(corte + 1).trim().uppercase())
+            }.getOrNull() ?: return@forEach
+            salida.putIfAbsent(palabra, app)
+        }
+        return salida
+    }
+
+    /** Cómo se guardan. Ver [leer]. */
+    fun escribir(palabras: Map<String, MiniApp>): String =
+        palabras.entries.joinToString("\n") { "${it.key}=${it.value.name}" }
+
+    /** Las palabras de una herramienta, en orden. */
+    fun deLaApp(palabras: Map<String, MiniApp>, app: MiniApp): List<String> =
+        palabras.filterValues { it == app }.keys.toList()
+
+    /**
+     * Cambia de golpe las palabras de una herramienta, dejando las demás.
+     *
+     * Una palabra solo puede abrir una cosa —es una clave del mapa—, así que
+     * dársela a esta se la quita a la que la tuviera. Es lo que uno espera al
+     * moverla de sitio, y lo contrario —que se quedara en las dos y ganara una
+     * al azar— sería un misterio.
+     */
+    fun conLasDe(
+        palabras: Map<String, MiniApp>,
+        app: MiniApp,
+        nuevas: List<String>
+    ): Map<String, MiniApp> {
+        val limpias = nuevas.mapNotNull { normalizar(it) }.distinct()
+        val salida = LinkedHashMap<String, MiniApp>()
+        palabras.forEach { (palabra, suya) ->
+            if (suya != app && palabra !in limpias) salida[palabra] = suya
+        }
+        limpias.forEach { salida[it] = app }
+        return salida
+    }
+
+    /** Lo más larga que puede ser una palabra mágica. */
+    private const val MAXIMO = 24
 }

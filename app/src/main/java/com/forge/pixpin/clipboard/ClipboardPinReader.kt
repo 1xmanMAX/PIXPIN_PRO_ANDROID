@@ -8,7 +8,11 @@ import android.content.Context
  * IMPORTANTE: en Android 10+ solo se puede leer con la app en primer plano;
  * por eso quien invoca esto es ClipboardPinActivity (actividad transparente).
  */
-class ClipboardPinReader(private val context: Context) {
+class ClipboardPinReader(
+    private val context: Context,
+    /** Las palabras mágicas que manda el usuario. Ver [MagicWord.leer]. */
+    private val palabras: Map<String, MiniApp> = MagicWord.POR_DEFECTO
+) {
 
     fun read(): PinContent {
         val cm = context.getSystemService(ClipboardManager::class.java) ?: return PinContent.Empty
@@ -27,7 +31,7 @@ class ClipboardPinReader(private val context: Context) {
             // siendo un pin de archivo y el texto no lo veía nadie.
             val uriIsRichTextOfTheSameThing = type == null || type.startsWith("text/")
             if (uriIsRichTextOfTheSameThing && !text.isNullOrBlank()) {
-                return ContentClassifier.classify(text)
+                return ContentClassifier.classify(text, palabras)
             }
 
             return when {
@@ -39,6 +43,6 @@ class ClipboardPinReader(private val context: Context) {
 
         val body = text
             ?: runCatching { item.coerceToText(context)?.toString() }.getOrNull()
-        return ContentClassifier.classify(body)
+        return ContentClassifier.classify(body, palabras)
     }
 }

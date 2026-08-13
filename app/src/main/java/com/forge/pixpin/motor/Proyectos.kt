@@ -270,6 +270,27 @@ object Proyectos {
         )
     }
 
+    /**
+     * Cambia el texto de una hoja de nota.
+     *
+     * Hace falta porque una hoja de proyecto guarda **el texto entero** y no una
+     * referencia al pin (ver [Hoja.nota]): sin esto, editar la nota desde el
+     * proyecto escribía en el almacén de textos del editor y el proyecto seguía
+     * enseñando —y entregando— lo de antes.
+     *
+     * Solo toca hojas que ya sean notas: convertir un dibujo en nota por
+     * escribirle encima no es lo que nadie pediría.
+     */
+    fun conNota(proyecto: Proyecto, hojaId: String, texto: String, cuando: Long): Proyecto {
+        if (proyecto.hojas.none { it.id == hojaId && it.nota != null }) return proyecto
+        return proyecto.copy(
+            hojas = proyecto.hojas.map {
+                if (it.id == hojaId && it.nota != null) it.copy(nota = texto) else it
+            },
+            tocado = cuando
+        )
+    }
+
     /** Las hojas que ya tienen algo dibujado encima. */
     fun anotadas(proyecto: Proyecto): List<Hoja> = proyecto.hojas.filter { it.dibujo != null }
 

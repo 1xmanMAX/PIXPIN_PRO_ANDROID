@@ -275,7 +275,9 @@ class OverlayManager(private val app: PixPinApp) {
             toast(R.string.need_overlay_toast)
             return false
         }
-        return when (val content = ClipboardPinReader(app).read()) {
+        // Las palabras que manda el usuario, no las de fábrica. Ver [MagicWord].
+        val palabras = app.settings.settings.first().palabras
+        return when (val content = ClipboardPinReader(app, palabras).read()) {
             is PinContent.Empty -> {
                 toast(R.string.nothing_to_pin)
                 false

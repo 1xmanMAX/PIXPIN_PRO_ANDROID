@@ -163,6 +163,25 @@ class ProyectosTest {
         assertEquals(9L, p.tocado)
     }
 
+    /**
+     * Editar la nota desde el proyecto tiene que cambiar **la hoja**, no solo el
+     * almacén del editor: la hoja lleva el texto dentro y es lo que se entrega.
+     */
+    @Test
+    fun `una hoja de nota recibe lo escrito`() {
+        var p = Proyecto(id = "p", nombre = "Obra", hojas = listOf(Hoja(id = "n1", nota = "viejo")))
+        p = Proyectos.conNota(p, "n1", "nuevo", 9)
+        assertEquals("nuevo", p.hojas[0].nota)
+        assertEquals(9L, p.tocado)
+    }
+
+    @Test
+    fun `escribir en una hoja que no es nota no la convierte en una`() {
+        val p = Proyecto(id = "p", nombre = "Obra", hojas = listOf(Hoja(id = "h1", dibujo = "d")))
+        assertSame(p, Proyectos.conNota(p, "h1", "texto", 9))
+        assertSame(p, Proyectos.conNota(p, "no-existe", "texto", 9))
+    }
+
     @Test
     fun `poner dibujo a una hoja que no existe no toca nada`() {
         val p = Proyectos.dePdf("p", "Plano", "plano.pdf", 2, 1) { "h$it" }

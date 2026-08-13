@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -366,18 +367,43 @@ private fun FilaDeProyecto(
             }
 
             if (p.pdfOrigen == null) {
-                TextButton(
-                    onClick = {
-                        val ahora = System.currentTimeMillis()
-                        val hoja = Hoja(id = "h-$ahora", dibujo = "dib-$ahora")
-                        app.proyectos.guardar(Proyectos.conHoja(p, hoja, ahora))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = {
+                            val ahora = System.currentTimeMillis()
+                            val hoja = Hoja(id = "h-$ahora", dibujo = "dib-$ahora")
+                            app.proyectos.guardar(Proyectos.conHoja(p, hoja, ahora))
+                        }
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, Modifier.size(16.dp))
+                        Text(
+                            stringResourceSafe(R.string.proyecto_hoja_nueva),
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
                     }
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, Modifier.size(16.dp))
-                    Text(
-                        stringResourceSafe(R.string.proyecto_hoja_nueva),
-                        modifier = Modifier.padding(start = 6.dp)
-                    )
+                    // **Y una nota, aquí mismo.** Un proyecto se entrega con
+                    // texto dentro —la portada, la explicación de un plano, el
+                    // presupuesto— y hasta ahora la única forma de meterlo era
+                    // abrir el editor por otro sitio y mandarlo «al proyecto en
+                    // curso», que es adivinar. Nace vacía y abre el editor: lo
+                    // que se escriba vuelve a la hoja al guardar. Ver
+                    // [MarkdownEditorActivity].
+                    TextButton(
+                        onClick = {
+                            val ahora = System.currentTimeMillis()
+                            val id = "n-$ahora"
+                            app.proyectos.guardar(
+                                Proyectos.conHoja(p, Hoja(id = id, nota = ""), ahora)
+                            )
+                            MarkdownEditorActivity.abrir(contexto, id, "")
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null, Modifier.size(16.dp))
+                        Text(
+                            stringResourceSafe(R.string.proyecto_nota_nueva),
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    }
                 }
             }
         }

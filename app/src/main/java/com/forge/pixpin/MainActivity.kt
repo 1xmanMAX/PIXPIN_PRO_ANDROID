@@ -41,11 +41,16 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.forge.pixpin.clipboard.MagicWord
+import com.forge.pixpin.clipboard.MiniApp
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -344,6 +349,10 @@ private fun PantallaDeAjustes(onVolver: () -> Unit) {
                 BarraDelPinCard()
                 Spacer(Modifier.height(12.dp))
                 BarraDeLaCapaCard()
+            }
+
+            GrupoDeAjustes(stringResource(R.string.ajustes_pinear)) {
+                PalabrasMagicasCard()
             }
 
             GrupoDeAjustes(stringResource(R.string.ajustes_aspecto)) {
@@ -679,6 +688,139 @@ private fun OledCard() {
             )
         }
     }
+}
+
+/**
+ * Qué palabra abre qué herramienta.
+ *
+ * ## Por qué se edita por herramienta y en un diálogo
+ *
+ * Lo que uno quiere cambiar es «qué palabras abren la ruleta», no «a qué apunta
+ * la palabra *sorteo*»: se piensa desde la herramienta. Por eso hay una fila por
+ * mini-aplicación con sus palabras, y no una lista de palabras sueltas.
+ *
+ * Y va en un diálogo en vez de un campo escribible en la propia fila porque el
+ * campo tendría que guardar en cada letra, y guardar significa releer y volver a
+ * pintar la lista: el cursor saltaría al final a mitad de palabra. Escribiendo
+ * en el diálogo, lo tecleado es del diálogo hasta que se acepta.
+ *
+ * La lista de filas sale del propio enum: una mini-aplicación nueva aparece aquí
+ * sola, como pasa con las clases del imán y con las herramientas de la barra.
+ */
+@Composable
+private fun PalabrasMagicasCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val ajustes by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    val palabras = ajustes.palabras
+    var editando by remember { mutableStateOf<MiniApp?>(null) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.palabras_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.palabras_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+
+            MiniApp.entries.forEach { cual ->
+                val suyas = MagicWord.deLaApp(palabras, cual)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { editando = cual }
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        stringResource(nombreDe(cual)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.width(120.dp)
+                    )
+                    Text(
+                        text = suyas.joinToString(", ")
+                            .ifEmpty { stringResource(R.string.palabras_ninguna) },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (suyas.isEmpty()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            }
+
+            TextButton(
+                onClick = { scope.launch { app.settings.resetPalabras() } },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text(stringResource(R.string.palabras_reset))
+            }
+        }
+    }
+
+    editando?.let { cual ->
+        DialogoDePalabras(
+            titulo = stringResource(nombreDe(cual)),
+            inicial = MagicWord.deLaApp(palabras, cual).joinToString(", "),
+            onCerrar = { editando = null },
+            onAceptar = { escrito ->
+                val nuevas = escrito.split(',', '\n')
+                scope.launch { app.settings.setPalabras(MagicWord.conLasDe(palabras, cual, nuevas)) }
+                editando = null
+            }
+        )
+    }
+}
+
+/** Cómo se llama cada mini-aplicación en los ajustes. */
+private fun nombreDe(app: MiniApp): Int = when (app) {
+    MiniApp.TIMER -> R.string.palabras_timer
+    MiniApp.STOPWATCH -> R.string.palabras_stopwatch
+    MiniApp.CHECKLIST -> R.string.palabras_checklist
+    MiniApp.COUNTER -> R.string.palabras_counter
+    MiniApp.LEDGER -> R.string.palabras_ledger
+    MiniApp.BOARD -> R.string.palabras_board
+    MiniApp.RULETA -> R.string.palabras_ruleta
+    MiniApp.DRAW -> R.string.palabras_draw
+    MiniApp.SHEET -> R.string.palabras_sheet
+}
+
+@Composable
+private fun DialogoDePalabras(
+    titulo: String,
+    inicial: String,
+    onCerrar: () -> Unit,
+    onAceptar: (String) -> Unit
+) {
+    var texto by remember { mutableStateOf(inicial) }
+    AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text(titulo) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = texto,
+                    onValueChange = { texto = it },
+                    singleLine = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    stringResource(R.string.palabras_ayuda),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onAceptar(texto) }) { Text("Aceptar") } },
+        dismissButton = { TextButton(onClick = onCerrar) { Text("Cancelar") } }
+    )
 }
 
 @Composable

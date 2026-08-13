@@ -144,8 +144,21 @@ data class Settings(
     val imanIntersecciones: Boolean = true,
     val imanEje: Boolean = true,
     val imanBordeDeGuia: Boolean = true,
-    val imanBordeDeFigura: Boolean = true
+    val imanBordeDeFigura: Boolean = true,
+    /**
+     * Qué palabra abre qué mini-aplicación, escrito.
+     *
+     * Mismo trato que [pinTools]: **null es «no lo he tocado»** y mandan las de
+     * fábrica, mientras que una cadena vacía es «no quiero ninguna». El formato
+     * lo pone y lo lee [com.forge.pixpin.clipboard.MagicWord].
+     */
+    val palabrasMagicas: String? = null
 ) {
+
+    /** Las palabras mágicas ya resueltas contra las de fábrica. */
+    val palabras: Map<String, com.forge.pixpin.clipboard.MiniApp>
+        get() = com.forge.pixpin.clipboard.MagicWord.leer(palabrasMagicas)
+
     /** Los grupos de la barra del pin, ya resueltos contra lo permitido. */
     val pinGroupList: List<List<com.forge.pixpin.motor.Tool>>
         get() = com.forge.pixpin.motor.gruposDe(pinGroups, pinToolSet)
@@ -211,6 +224,7 @@ class SettingsRepository(private val context: Context) {
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
         val ZURDO = booleanPreferencesKey("zurdo")
         val COPY_FORMAT = stringPreferencesKey("copy_format")
+        val PALABRAS = stringPreferencesKey("palabras_magicas")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
@@ -242,7 +256,8 @@ class SettingsRepository(private val context: Context) {
             pinFont = com.forge.pixpin.motor.ItemStyle.fontFamilyResuelta(prefs[Keys.PIN_FONT]),
             copyFormat = runCatching {
                 CopyFormat.valueOf(prefs[Keys.COPY_FORMAT] ?: CopyFormat.PNG.name)
-            }.getOrDefault(CopyFormat.PNG)
+            }.getOrDefault(CopyFormat.PNG),
+            palabrasMagicas = prefs[Keys.PALABRAS]
         )
     }
 
@@ -364,6 +379,18 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setZurdo(valor: Boolean) {
         context.dataStore.edit { it[Keys.ZURDO] = valor }
+    }
+
+    /** Fija las palabras mágicas. Ver [Settings.palabrasMagicas]. */
+    suspend fun setPalabras(palabras: Map<String, com.forge.pixpin.clipboard.MiniApp>) {
+        context.dataStore.edit {
+            it[Keys.PALABRAS] = com.forge.pixpin.clipboard.MagicWord.escribir(palabras)
+        }
+    }
+
+    /** Vuelve a las de fábrica, que no es lo mismo que guardarlas: ver [resetPinTools]. */
+    suspend fun resetPalabras() {
+        context.dataStore.edit { it.remove(Keys.PALABRAS) }
     }
 
     suspend fun setCopyFormat(format: CopyFormat) {
