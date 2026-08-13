@@ -174,7 +174,21 @@ fun DrawToolbar(
     onModoReferencia: (() -> Unit)? = null,
     referenciasVisibles: Boolean = true,
     onAlternarReferencias: (() -> Unit)? = null,
-    hayReferencias: Boolean = false
+    hayReferencias: Boolean = false,
+    /**
+     * Qué grupo está desplegado, **cuando lo pinta otro**.
+     *
+     * Con [onDesplegarGrupo] puesto, la barra deja de enseñar las hermanas ella
+     * misma y solo avisa de cuál se ha abierto. Es lo que permite sacarlas al
+     * lateral de la pantalla y en vertical: una barra no puede pintar fuera de
+     * sí misma —su superficie redondeada recorta— y encima de ella, en
+     * horizontal, seis hermanas tapan justo la parte del dibujo en la que se
+     * está trabajando.
+     *
+     * A null se queda el reparto de siempre: se despliegan aquí dentro.
+     */
+    grupoDesplegado: List<Tool>? = null,
+    onDesplegarGrupo: ((List<Tool>?) -> Unit)? = null
 ) {
     var extrasAbiertas by remember { mutableStateOf(false) }
     var grupoAbierto by remember { mutableStateOf(-1) }
@@ -232,7 +246,11 @@ fun DrawToolbar(
             // Lo que hay dentro del grupo abierto, ENCIMA de la fila: así la
             // fila no se mueve de sitio al desplegarlo y el botón que acabas de
             // tocar sigue debajo del dedo.
-            val abierto = grupos?.getOrNull(grupoAbierto)
+            //
+            // Salvo que las pinte otro, que es lo que hace el editor a pantalla
+            // completa: allí salen en el lateral y en vertical. Ver
+            // [onDesplegarGrupo].
+            val abierto = if (onDesplegarGrupo != null) null else grupos?.getOrNull(grupoAbierto)
             if (abierto != null) {
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()),
@@ -275,14 +293,25 @@ fun DrawToolbar(
             ) {
                 if (grupos != null) {
                     // **Un botón por grupo.** Enseña la herramienta que tengas
-                    // puesta de ese grupo, y al volver a tocarlo despliega las
-                    // hermanas: el primer toque coge, el segundo elige. Así la
-                    // que usas está siempre a un toque y ninguna a más de dos.
+                    // puesta de ese grupo.
+                    //
+                    // El toque hace **las dos cosas a la vez**: coge esa
+                    // herramienta y enseña las hermanas. Antes hacía falta un
+                    // segundo toque para ver las hermanas, y eso obligaba a
+                    // saber de memoria qué hay dentro de cada grupo para decidir
+                    // si merecía la pena tocar otra vez. Enseñándolas de entrada
+                    // se puede seguir dibujando sin más —la herramienta ya está
+                    // cogida— o cambiar de hermana sin un toque de vuelta.
                     grupos.forEachIndexed { i, grupo ->
                         val cara = caraDelGrupo(grupo, tool) ?: return@forEachIndexed
                         val activo = tool in grupo
                         ToolButton(iconFor(cara), stringResource(labelFor(cara)), activo) {
-                            if (activo && grupo.size > 1) {
+                            if (onDesplegarGrupo != null) {
+                                if (!activo) onTool(cara)
+                                onDesplegarGrupo(
+                                    if (grupo == grupoDesplegado || grupo.size <= 1) null else grupo
+                                )
+                            } else if (activo && grupo.size > 1) {
                                 grupoAbierto = if (grupoAbierto == i) -1 else i
                             } else {
                                 onTool(cara)

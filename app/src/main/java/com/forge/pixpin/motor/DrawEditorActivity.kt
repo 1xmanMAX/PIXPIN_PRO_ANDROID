@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -484,6 +485,10 @@ class DrawEditorActivity : ComponentActivity() {
 
         var panelAbierto by remember { mutableStateOf(false) }
         var tablaAbierta by remember { mutableStateOf<String?>(null) }
+        // Qué grupo de la barra está desplegado. Vive aquí y no dentro de la
+        // barra porque las hermanas salen **fuera** de ella, pegadas al lateral
+        // de la pantalla, y una barra no puede pintar fuera de sí misma.
+        var grupoDesplegado by remember { mutableStateOf<List<Tool>?>(null) }
         val ajustes by (application as? com.forge.pixpin.PixPinApp)?.settings?.settings
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
@@ -617,14 +622,71 @@ class DrawEditorActivity : ComponentActivity() {
                 }
             }
 
+            // **Lo que más se toca, en el lateral y a un gesto.** El grosor y la
+            // opacidad se recorren con el pulgar sin abrir nada, y el color, el
+            // relleno y la línea se eligen arrastrando su bolita hacia el
+            // lienzo. Va **sin isla**: una superficie con forma recorta a sus
+            // hijos, y las opciones tienen que poder salirse del panel. Ver
+            // [PanelLateralDeEstilo].
+            //
+            // Al lado contrario de la mano, que es hacia donde salen: bajo la
+            // mano, el brazo taparía justo lo que acaba de aparecer.
+            if (!panelAbierto && hayQueAjustar && editandoTexto == null) {
+                PanelLateralDeEstilo(
+                    aplican = propiedadesPara(controller.tool, controller.selectedElements()),
+                    estilo = controller.scene.style,
+                    zurdo = zurdo,
+                    colores = STROKE_COLORS,
+                    coloresDeFondo = BACKGROUND_COLORS,
+                    onEstilo = { nuevo -> aplicarEstilo(nuevo); cambiado() },
+                    modifier = Modifier
+                        .align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart)
+                )
+            }
+
             Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)) {
                 BarraHerramientas(
                     tick,
                     onImagen = { selectorImagen() },
                     noche = noche,
                     onAlternarNoche = { noche = !noche },
-                    cambiado = { cambiado() }
+                    cambiado = { cambiado() },
+                    grupoDesplegado = grupoDesplegado,
+                    onDesplegarGrupo = { grupoDesplegado = it }
                 )
+            }
+
+            // **Las hermanas del grupo, en vertical y al lado de la mano.**
+            //
+            // Salen del primer toque, no del segundo: tocar el grupo coge su
+            // herramienta *y* enseña las demás, así que se puede seguir
+            // dibujando sin más o cambiar de hermana sin un toque de vuelta.
+            //
+            // En vertical y pegadas al lateral porque en horizontal, encima de
+            // la barra, una fila de seis hermanas se comía la parte de abajo del
+            // dibujo — que es donde uno está trabajando cuando toca la barra.
+            grupoDesplegado?.let { grupo ->
+                Isla(
+                    Modifier
+                        .align(if (zurdo) Alignment.CenterStart else Alignment.CenterEnd)
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Column(
+                        Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        grupo.forEach { t ->
+                            HermanaDelGrupo(t, t == controller.tool) {
+                                controller.selectTool(t)
+                                grupoDesplegado = null
+                                cambiado()
+                            }
+                        }
+                    }
+                }
             }
 
             // La tabla de coordenadas, encima de todo y con velo detrás:
@@ -1075,6 +1137,44 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Una herramienta del grupo desplegado, en la columna del lateral.
+     *
+     * Lleva su nombre al lado del icono a propósito: en vertical hay sitio para
+     * el rótulo, y con seis hermanas parecidas —las cuatro formas, las dos de
+     * medir— el icono solo obliga a probar.
+     */
+    @Composable
+    private fun HermanaDelGrupo(t: Tool, activa: Boolean, onClick: () -> Unit) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (activa) MaterialTheme.colorScheme.primary else Color.Transparent,
+            modifier = Modifier.padding(2.dp)
+        ) {
+            Row(
+                Modifier.clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val tinta =
+                    if (activa) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurface
+                Icon(
+                    iconFor(t),
+                    contentDescription = null,
+                    tint = tinta,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    getString(labelFor(t)),
+                    fontSize = 12.sp,
+                    color = tinta,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+    }
+
     /** La barra de abajo: la misma [DrawToolbar] que el pin y la captura. */
     @Composable
     private fun BarraHerramientas(
@@ -1082,7 +1182,9 @@ class DrawEditorActivity : ComponentActivity() {
         onImagen: () -> Unit,
         noche: Boolean,
         onAlternarNoche: () -> Unit,
-        cambiado: () -> Unit
+        cambiado: () -> Unit,
+        grupoDesplegado: List<Tool>? = null,
+        onDesplegarGrupo: ((List<Tool>?) -> Unit)? = null
     ) {
         @Suppress("UNUSED_EXPRESSION") tick
         // El reparto se elige en los ajustes, igual que el del pin y el de la
@@ -1136,7 +1238,11 @@ class DrawEditorActivity : ComponentActivity() {
                 },
                 referenciasVisibles = controller.referenciasVisibles,
                 onAlternarReferencias = { controller.alternarReferencias(); cambiado() },
-                hayReferencias = controller.hayReferencias
+                hayReferencias = controller.hayReferencias,
+                // Las hermanas del grupo las pinta el editor, en el lateral y en
+                // vertical: aquí dentro no cabrían sin comerse el dibujo.
+                grupoDesplegado = grupoDesplegado,
+                onDesplegarGrupo = onDesplegarGrupo
             )
         }
     }
@@ -1608,90 +1714,6 @@ class DrawEditorActivity : ComponentActivity() {
                     color = if (elegido) MaterialTheme.colorScheme.onPrimary
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
-    }
-
-    /** El rayado, dibujado tal cual: un cuadro con su trama dentro. */
-    private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarRelleno(
-        fs: FillStyle, tinta: Color
-    ) {
-        val borde = 1.2.dp.toPx()
-        drawRect(tinta.copy(alpha = 0.45f), size = size, style = Stroke(width = borde))
-        when (fs) {
-            FillStyle.SOLID -> drawRect(tinta, size = size)
-            FillStyle.HACHURE, FillStyle.LINEAS -> {
-                // El de rayas rectas va sin temblor; el otro, torcido.
-                val torcer = if (fs == FillStyle.HACHURE) 1.5f else 0f
-                var x = -size.height
-                while (x < size.width) {
-                    drawLine(
-                        tinta, Offset(x, size.height), Offset(x + size.height + torcer, 0f),
-                        strokeWidth = borde
-                    )
-                    x += size.width / 3.2f
-                }
-            }
-            FillStyle.CROSS_HATCH -> {
-                var x = -size.height
-                while (x < size.width) {
-                    drawLine(
-                        tinta, Offset(x, size.height), Offset(x + size.height, 0f),
-                        strokeWidth = borde
-                    )
-                    drawLine(
-                        tinta, Offset(x, 0f), Offset(x + size.height, size.height),
-                        strokeWidth = borde
-                    )
-                    x += size.width / 2.4f
-                }
-            }
-            FillStyle.ZIGZAG -> {
-                val paso = size.width / 4
-                var y = paso / 2
-                while (y < size.height) {
-                    var x = 0f
-                    var arriba = true
-                    while (x < size.width) {
-                        drawLine(
-                            tinta, Offset(x, if (arriba) y else y + paso / 2),
-                            Offset(x + paso / 2, if (arriba) y + paso / 2 else y),
-                            strokeWidth = borde
-                        )
-                        x += paso / 2
-                        arriba = !arriba
-                    }
-                    y += paso
-                }
-            }
-        }
-    }
-
-    /** Continua, a trazos o de puntos: la propia raya. */
-    private fun androidx.compose.ui.graphics.drawscope.DrawScope.dibujarLinea(
-        ss: StrokeStyle, tinta: Color
-    ) {
-        val y = size.height / 2
-        val grosor = 2.dp.toPx()
-        when (ss) {
-            StrokeStyle.SOLID ->
-                drawLine(tinta, Offset(0f, y), Offset(size.width, y), strokeWidth = grosor)
-            StrokeStyle.DASHED -> {
-                var x = 0f
-                while (x < size.width) {
-                    drawLine(
-                        tinta, Offset(x, y),
-                        Offset(minOf(x + size.width / 5, size.width), y), strokeWidth = grosor
-                    )
-                    x += size.width / 3
-                }
-            }
-            StrokeStyle.DOTTED -> {
-                var x = grosor
-                while (x < size.width) {
-                    drawCircle(tinta, radius = grosor / 2, center = Offset(x, y))
-                    x += size.width / 5
-                }
             }
         }
     }

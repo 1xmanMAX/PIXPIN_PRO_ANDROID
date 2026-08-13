@@ -44,7 +44,11 @@ class MotorSeparadoTest {
         // Arma el PDF de lo marcado: escribe archivos y pinta imágenes, las dos
         // de Android. Qué láminas entran y cómo se llama el archivo sí es
         // núcleo, y por eso eso sí se comprueba sin dispositivo.
-        "ExportarProyecto.kt"
+        "ExportarProyecto.kt",
+        // El panel lateral es interfaz entera. Sus cuentas —de dónde está el
+        // dedo a qué valor sale— viven aparte en `Deslizadores.kt`, que sí es
+        // núcleo y sí se comprueba sin dispositivo.
+        "PanelLateral.kt"
     )
 
     private fun archivos(): List<File> =
