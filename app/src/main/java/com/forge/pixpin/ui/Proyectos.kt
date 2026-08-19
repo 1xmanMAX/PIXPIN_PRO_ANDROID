@@ -1425,7 +1425,11 @@ private fun MiniaturaDeLienzo(
     if (dibujo == null) return
     var mapa by remember(dibujo, marco, escala) { mutableStateOf<android.graphics.Bitmap?>(null) }
     val ruta = remember(dibujo) { ExcalidrawStore.rutaDe(contexto, dibujo) }
-    val version = remember(ruta) { java.io.File(ruta).lastModified() }
+    // Igual que en las páginas: la revisión del almacén es lo que hace que al cerrar el
+    // editor la hoja se vuelva a componer sin tener que salir de la pantalla.
+    val version = remember(ruta, ExcalidrawStore.revision.intValue) {
+        java.io.File(ruta).lastModified()
+    }
 
     LaunchedEffect(ruta, marco, version, escala) {
         mapa = withContext(Dispatchers.IO) {
@@ -1639,9 +1643,14 @@ private fun MiniaturaDePagina(
     val rutaDelDibujo = remember(dibujo) {
         dibujo?.let { ExcalidrawStore.rutaDe(contexto, it) }
     }
-    // La fecha del dibujo entra en la cuenta: al volver del editor, la miniatura se
-    // recompone con lo que se acaba de anotar en vez de con lo de antes.
-    val version = remember(pdf, rutaDelDibujo) {
+    // **La revisión del almacén, no solo la fecha del archivo.**
+    //
+    // Mirando solo la fecha, esto se leía **una vez** al componer: al volver del editor
+    // la miniatura seguía siendo la de antes hasta que la fila se reciclaba o se salía y
+    // se entraba otra vez. `ExcalidrawStore.revision` sube en cada guardado —el editor es
+    // otra pantalla, pero el mismo proceso—, así que con ella en la clave la miniatura se
+    // rehace sola en cuanto se guarda, y sin preguntarle al disco en cada fotograma.
+    val version = remember(pdf, rutaDelDibujo, ExcalidrawStore.revision.intValue) {
         java.io.File(pdf).lastModified() +
             (rutaDelDibujo?.let { java.io.File(it).lastModified() } ?: 0L)
     }

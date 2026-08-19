@@ -187,7 +187,14 @@ fun deSeccion(mensajes: List<Mensaje>, seccion: Seccion): List<Mensaje> {
     // El buzón tampoco es conversación: lo más nuevo arriba. Lo de abajo es lo que está a
     // punto de irse solo, y ahí es donde hay que mirar antes de que se vaya.
     if (seccion == Seccion.BUZON) {
-        return mensajes.filter { it.enBuzon }.sortedByDescending { it.cuando }
+        // **También hacia abajo, como el resto.**
+        //
+        // Estaba al revés —lo más nuevo arriba, como una bandeja de correo— y era la
+        // única sección que se leía en otra dirección. En una pantalla con forma de
+        // conversación eso desorienta: se abre por el final, así que lo más nuevo tiene
+        // que estar donde el dedo ya está. Lo que está a punto de irse se ve subiendo,
+        // que es hacia donde uno mira cuando busca lo viejo.
+        return mensajes.filter { it.enBuzon }.sortedBy { it.cuando }
     }
     val clases = clasesDe(seccion)
     // **Lo del buzón no se mezcla con lo demás, y esto faltaba.**

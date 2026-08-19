@@ -1641,7 +1641,13 @@ class MensajesActivity : ComponentActivity() {
         }
 
         paginasDe?.let { pr ->
-            val hojas = remember(pr) { pr.hojas.filter { it.pagina != null } }
+            // **Todas sus hojas, no solo las que vienen de un PDF.**
+            //
+            // Se filtraba por «tiene número de página», y las hojas creadas en el lienzo
+            // no lo tienen: en un proyecto sin PDF la lista salía vacía y parecía que el
+            // proyecto no tuviera páginas que adjuntar. Son páginas igual, y se adjuntan
+            // igual — solo que como dibujo en vez de como hoja de un documento.
+            val hojas = remember(pr) { pr.hojas }
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { paginasDe = null },
                 title = { Text(pr.nombre) },
@@ -1673,9 +1679,13 @@ class MensajesActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    getString(
+                                    hoja.pagina?.let {
+                                        getString(
+                                            com.forge.pixpin.R.string.proyecto_pagina, it + 1
+                                        )
+                                    } ?: getString(
                                         com.forge.pixpin.R.string.proyecto_pagina,
-                                        (hoja.pagina ?: 0) + 1
+                                        pr.hojas.indexOf(hoja) + 1
                                     ),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -2486,7 +2496,13 @@ class MensajesActivity : ComponentActivity() {
             }
             // La fecha del fichero se vuelve a mirar en cada vuelta a la pantalla: es
             // lo que hace que lo dibujado en el editor aparezca aquí al salir de él.
-            val version = remember(rutaDelDibujo, recarga) {
+            // La revisión del almacén entra en la clave: al guardar el editor —otra
+            // pantalla, el mismo proceso— la foto se recompone sin esperar a que la
+            // conversación se recargue entera.
+            val version = remember(
+                rutaDelDibujo, recarga,
+                com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
+            ) {
                 File(rutaDelDibujo).lastModified()
             }
             LaunchedEffect(rutaDelDibujo, version) {
@@ -2801,7 +2817,10 @@ class MensajesActivity : ComponentActivity() {
         }
         // La fecha del dibujo entra en la clave: al volver del editor, la hoja se
         // vuelve a componer con lo que se acaba de anotar en vez de con lo de antes.
-        val version = remember(rutaDelDibujo, recarga) {
+        val version = remember(
+            rutaDelDibujo, recarga,
+            com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
+        ) {
             rutaDelDibujo?.let { File(it).lastModified() } ?: 0L
         }
         var mapa by remember(pdf, pagina) { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -3826,7 +3845,26 @@ class MensajesActivity : ComponentActivity() {
 
     /** Y una página suelta, con lo justo para poder volver a ella: el PDF y el número. */
     private fun guardarPagina(p: com.forge.pixpin.motor.Proyecto, hoja: com.forge.pixpin.motor.Hoja) {
-        val pagina = hoja.pagina ?: return
+        // **Una hoja de lienzo se adjunta como dibujo.** No tiene página de un documento
+        // detrás, así que guardarla como página la dejaría apuntando a un PDF que no
+        // existe; como dibujo se abre en el editor, que es donde se hizo.
+        val pagina = hoja.pagina ?: run {
+            val dibujo = hoja.dibujo ?: return
+            almacen.anadir(
+                Mensaje(
+                    id = UUID.randomUUID().toString(),
+                    cuando = System.currentTimeMillis(),
+                    clase = Clase.DIBUJO,
+                    proyecto = chatDe,
+                    nombre = p.nombre + " · " + getString(
+                        com.forge.pixpin.R.string.proyecto_pagina,
+                        p.hojas.indexOf(hoja) + 1
+                    ),
+                    referencia = dibujo
+                )
+            )
+            return
+        }
         almacen.anadir(
             Mensaje(
                 id = UUID.randomUUID().toString(),
