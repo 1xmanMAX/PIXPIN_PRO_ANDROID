@@ -132,6 +132,7 @@
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="cd_clickthrough_off">Volver a recibir toques</string>
+    <string name="pin_transparente_aviso">Los toques pasan de largo. Usa el botón de la esquina para volver.</string>
     <string name="cd_mas">Más opciones</string>
     <string name="cd_save">Guardar</string>
     <string name="cd_advanced_edit">Editor avanzado</string>
@@ -290,6 +291,8 @@
     <string name="guardados_pineado">Puesto en la pantalla</string>
     <string name="guardados_ya_no_esta">Este archivo ya no está</string>
     <string name="guardados_compartir">Compartir</string>
+    <string name="guardados_como_imagen">Compartir como imagen</string>
+    <string name="guardados_como_pdf">Compartir como PDF</string>
     <string name="guardados_volver_al_salto">Volver a donde estabas</string>
     <string name="guardados_foto_de">Foto guardada a las %1$s</string>
     <string name="voz_oir">Oír la nota</string>

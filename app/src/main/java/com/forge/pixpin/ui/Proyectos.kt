@@ -991,7 +991,7 @@ private fun PortadaDelProyecto(
 
         when {
             p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
-                p.pdfOrigen!!, h.pagina!!, ancho, ampliada
+                p.pdfOrigen!!, h.pagina!!, ancho, ampliada, dibujo = h.dibujo
             )
             // A tamaño grande la nota se compone con letra de leer, no con la
             // de tres puntos y medio de la tira.
@@ -1323,7 +1323,7 @@ private fun HojaDelProyecto(
                 // es donde una hoja ocupa lo bastante como para cogerla.
                 p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
                     p.pdfOrigen!!, h.pagina!!, PdfDoc.THUMB_WIDTH,
-                    ampliada = null, pedir = pedirMiniatura
+                    ampliada = null, pedir = pedirMiniatura, dibujo = h.dibujo
                 )
 
                 // **La hoja de la nota, compuesta en pequeño.** Antes esto era un
@@ -1615,7 +1615,15 @@ private fun MiniaturaDePagina(
     pagina: Int,
     ancho: Int = PdfDoc.THUMB_WIDTH,
     ampliada: ZoomDeHoja? = null,
-    pedir: Boolean = true
+    pedir: Boolean = true,
+    /**
+     * El dibujo anotado sobre esta página, si lo tiene.
+     *
+     * Sin él la miniatura enseñaba **la página limpia**: uno anotaba doce hojas y el
+     * proyecto seguía pareciendo intacto, que es justo lo contrario de para qué sirve
+     * una previsualización. La conversación ya lo hacía bien; esto lo iguala.
+     */
+    dibujo: String? = null
 ) {
     val contexto = LocalContext.current
     // **Se arranca con lo que ya hubiera en memoria**, aunque sea la miniatura
@@ -1628,7 +1636,15 @@ private fun MiniaturaDePagina(
                 ?: PdfMiniaturas.enMemoria(pdf, pagina, PdfDoc.THUMB_WIDTH)
         )
     }
-    val version = remember(pdf) { java.io.File(pdf).lastModified() }
+    val rutaDelDibujo = remember(dibujo) {
+        dibujo?.let { ExcalidrawStore.rutaDe(contexto, it) }
+    }
+    // La fecha del dibujo entra en la cuenta: al volver del editor, la miniatura se
+    // recompone con lo que se acaba de anotar en vez de con lo de antes.
+    val version = remember(pdf, rutaDelDibujo) {
+        java.io.File(pdf).lastModified() +
+            (rutaDelDibujo?.let { java.io.File(it).lastModified() } ?: 0L)
+    }
     LaunchedEffect(pdf, pagina, ancho, version, pedir) {
         if (!pedir) return@LaunchedEffect
         // **Pasar hojas deprisa no puede encargar cuarenta páginas grandes.**
@@ -1644,8 +1660,15 @@ private fun MiniaturaDePagina(
         if (ancho > PdfDoc.THUMB_WIDTH) kotlinx.coroutines.delay(90)
         // [PdfMiniaturas.de] ya se va sola al hilo de disco, así que aquí no
         // hace falta envolver nada: memoria, disco y solo en último caso el PDF.
-        runCatching { PdfMiniaturas.de(contexto, pdf, pagina, ancho) }
-            .getOrNull()?.let { mapa = it }
+        runCatching {
+            if (rutaDelDibujo != null) {
+                com.forge.pixpin.guardados.paginaAnotada(
+                    contexto, pdf, pagina, dibujo, rutaDelDibujo, ancho
+                )
+            } else {
+                PdfMiniaturas.de(contexto, pdf, pagina, ancho)
+            }
+        }.getOrNull()?.let { mapa = it }
     }
 
     val actual = mapa ?: return

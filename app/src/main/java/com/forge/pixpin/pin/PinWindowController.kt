@@ -532,6 +532,7 @@ class PinWindowController(
     }
 
     fun close() {
+        cerrarTirador()
         hideView()
         imagenesDelDibujo.clear()
         callbacks.onPinClosed(this)
@@ -579,7 +580,74 @@ class PinWindowController(
             p.flags = computeFlags(value)
             applyLayout()
         }
+        // **Y con él, la puerta de vuelta.**
+        //
+        // Este modo pone `FLAG_NOT_TOUCHABLE` en la ventana, o sea que el pin **deja de
+        // recibir un solo toque**: ni de un dedo ni de dos. Por eso la forma de salir no
+        // puede vivir en el propio pin —no hay gesto que valga, porque no llega ninguno—
+        // y hasta ahora la única salida era la lista de pines, que nadie encuentra
+        // cuando lo que ve es un pin que ya no responde.
+        //
+        // El tirador es una ventana suya, diminuta y aparte, que sí recibe toques.
+        if (value) abrirTirador() else cerrarTirador()
         callbacks.onPinChanged(this)
+    }
+
+    private var tirador: OverlayComposeWindow? = null
+
+    /**
+     * El tirador para volver a tocar el pin.
+     *
+     * Va pegado a su esquina de arriba a la izquierda y ocupa lo justo para el dedo. Se
+     * ve poco a propósito: mientras dura el modo, lo que uno quiere mirar es lo que hay
+     * debajo, no el pin — pero tiene que estar ahí, porque es la única salida.
+     */
+    private fun abrirTirador() {
+        if (tirador != null) return
+        val p = lp ?: return
+        val d = context.resources.displayMetrics.density
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = p.x
+            y = p.y
+        }
+        val ventana = OverlayComposeWindow(context) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.tertiary,
+                shadowElevation = 4.dp,
+                modifier = Modifier.size(32.dp)
+            ) {
+                IconButton(onClick = { setClickThrough(false) }) {
+                    Icon(
+                        Icons.Filled.TouchApp,
+                        contentDescription = context.getString(R.string.cd_clickthrough_off),
+                        tint = MaterialTheme.colorScheme.onTertiary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        tirador = ventana
+        runCatching {
+            wm.addView(ventana.view, params)
+            ventana.onAttached()
+        }
+        Toast.makeText(
+            context, R.string.pin_transparente_aviso, Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun cerrarTirador() {
+        tirador?.let { runCatching { wm.removeView(it.view) }; it.onDetached() }
+        tirador = null
     }
 
     val isMinimized: Boolean get() = minimized.value

@@ -79,6 +79,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
@@ -306,6 +308,7 @@ class MensajesActivity : ComponentActivity() {
         }
         var reenviando by remember { mutableStateOf<List<Mensaje>>(emptyList()) }
         var etiquetando by remember { mutableStateOf<Mensaje?>(null) }
+        var compartiendo by remember { mutableStateOf<Mensaje?>(null) }
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
 
         fun refrescar() { recargar++ }
@@ -1060,6 +1063,7 @@ class MensajesActivity : ComponentActivity() {
                             acciones = remember(m, mensajes) { Acciones(
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
+                                compartirComo = { compartiendo = m },
                                 cambiarTexto = { nuevo ->
                                     guardarAparte(mensajes.map {
                                         if (it.id == m.id) it.copy(texto = nuevo) else it
@@ -1351,6 +1355,41 @@ class MensajesActivity : ComponentActivity() {
                         }
                     }
                 }
+                }
+            }
+        }
+
+        compartiendo?.let { cual ->
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { compartiendo = null }
+            ) {
+                Column(Modifier.padding(bottom = 28.dp)) {
+                    listOf(
+                        false to com.forge.pixpin.R.string.guardados_como_imagen,
+                        true to com.forge.pixpin.R.string.guardados_como_pdf
+                    ).forEach { (pdf, texto) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    compartiendo = null
+                                    compartirCompuesto(cual, pdf)
+                                }
+                                .padding(horizontal = 24.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (pdf) Icons.Filled.PictureAsPdf else Icons.Filled.Image,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                getString(texto),
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(start = 14.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1772,6 +1811,7 @@ class MensajesActivity : ComponentActivity() {
     private class Acciones(
         /** Cambia el documento de una mini-app sin salir de la conversación. */
         val cambiarTexto: (String) -> Unit,
+        val compartirComo: () -> Unit,
         val etiquetar: () -> Unit,
         val reenviar: () -> Unit,
         val responder: () -> Unit,
@@ -1892,7 +1932,9 @@ class MensajesActivity : ComponentActivity() {
                     else com.forge.pixpin.R.string.guardados_fijar
                 ) { menuAbierto = false; acciones.fijar() }
                 DelMenu(com.forge.pixpin.R.string.guardados_compartir, Icons.Filled.Share) {
-                    menuAbierto = false; acciones.compartir()
+                    menuAbierto = false
+                    // Con algo que componer, primero se pregunta con qué cara sale.
+                    if (sePuedeComponer(m)) acciones.compartirComo() else acciones.compartir()
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
                     menuAbierto = false; acciones.pinear()
@@ -3775,7 +3817,15 @@ class MensajesActivity : ComponentActivity() {
                 cuando = System.currentTimeMillis(),
                 clase = Clase.PAGINA,
                 proyecto = chatDe,
-                nombre = p.nombre,
+                // **El número de página, en el propio nombre.**
+                //
+                // Adjuntando tres hojas del mismo documento salían tres mensajes que
+                // decían exactamente lo mismo —el nombre del proyecto— y no había forma
+                // de saber cuál era cuál sin abrirlas. El número va aquí y no solo debajo
+                // porque es lo que viaja: se ve en la cita, en la lista de
+                // conversaciones, al reenviarla y en el nombre del archivo al compartir.
+                nombre = p.nombre + " · " +
+                    getString(com.forge.pixpin.R.string.proyecto_pagina, pagina + 1),
                 ruta = p.pdfOrigen,
                 pagina = pagina,
                 // El dibujo de la hoja: es lo que hace que al abrirla salga **con lo que
@@ -4125,6 +4175,81 @@ class MensajesActivity : ComponentActivity() {
         ).show()
     }
 
+    /**
+     * Comparte un mensaje **componiendo lo que se ve**, no mandando su archivo.
+     *
+     * Lo que se ve y el archivo no son lo mismo en dos casos, que son justo los dos que
+     * fallaban: una foto anotada guarda la foto por un lado y lo dibujado por otro —así
+     * que se mandaba la foto limpia, o no se mandaba nada—, y una página de un PDF es una
+     * de doce, así que se mandaba el documento entero cuando se pedía una hoja.
+     *
+     * @param comoPdf con qué cara sale. Lo elige quien comparte; ver [ETIQUETAS] de la
+     *  hoja de compartir.
+     */
+    private fun compartirCompuesto(m: Mensaje, comoPdf: Boolean) {
+        lifecycleScope.launch {
+            val archivo = withContext(Dispatchers.IO) {
+                val rutaDelDibujo = m.referencia?.let {
+                    com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, it)
+                }
+                val mapa = when {
+                    m.clase == Clase.PAGINA && m.ruta != null && m.pagina != null ->
+                        paginaAnotada(
+                            this@MensajesActivity, m.ruta!!, m.pagina!!,
+                            m.referencia, rutaDelDibujo, ANCHO_AMPLIADO
+                        )
+                    rutaDelDibujo != null && File(rutaDelDibujo).exists() ->
+                        com.forge.pixpin.motor.ExcalidrawStore.cargar(rutaDelDibujo)?.let { e ->
+                            com.forge.pixpin.motor.DrawExport.aBitmap(e, ESCALA_COMPARTIDA) { id ->
+                                e.files[id]?.path?.let {
+                                    com.forge.pixpin.pin.ImageStore.load(it)
+                                }
+                            }
+                        }
+                    m.ruta != null ->
+                        com.forge.pixpin.pin.ImageStore.load(m.ruta!!, ANCHO_AMPLIADO)
+                    else -> null
+                } ?: return@withContext null
+                val nombre = nombreDeLoCompartido(m)
+                if (comoPdf) Compartir.comoPdf(this@MensajesActivity, mapa, nombre)
+                else Compartir.comoImagen(this@MensajesActivity, mapa, nombre)
+            }
+            if (archivo == null) {
+                avisarDeQueNoHay()
+                return@launch
+            }
+            runCatching {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    this@MensajesActivity, "$packageName.fileprovider", archivo
+                )
+                startActivity(
+                    Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = if (comoPdf) "application/pdf" else "image/png"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        },
+                        null
+                    )
+                )
+            }
+        }
+    }
+
+    /** Cómo se llama lo que sale, con su página si viene de un documento. */
+    private fun nombreDeLoCompartido(m: Mensaje): String {
+        val base = m.nombre.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) }
+        val pagina = m.pagina ?: return base
+        return "${base.substringBeforeLast('.')} - " +
+            getString(com.forge.pixpin.R.string.proyecto_pagina, pagina + 1)
+    }
+
+    /** Lo que se puede componer: una foto anotada o una página. Lo demás va tal cual. */
+    private fun sePuedeComponer(m: Mensaje): Boolean =
+        m.clase == Clase.PAGINA ||
+            (m.clase == Clase.IMAGEN && m.referencia != null) ||
+            m.clase == Clase.DIBUJO
+
     private fun compartir(m: Mensaje) {
         runCatching {
             val envio = Intent(Intent.ACTION_SEND)
@@ -4444,6 +4569,9 @@ private const val ALFA_DE_LA_PILDORA = 0.6f
  * —importante, hecho, pendiente, idea, dinero, sitio— y con mil opciones se tarda más en
  * elegir la etiqueta que en releer el mensaje.
  */
+/** A qué escala se compone un dibujo para mandarlo fuera. */
+private const val ESCALA_COMPARTIDA = 2.0
+
 /** A qué escala se compone el sello de una cita. */
 private const val ESCALA_DEL_SELLO = 0.12
 
