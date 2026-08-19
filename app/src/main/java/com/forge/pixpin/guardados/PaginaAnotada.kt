@@ -63,6 +63,25 @@ private fun clave(pdf: String, pagina: Int, ancho: Int, rutaDelDibujo: String?):
  * `suspend` y **no se puede llamar desde la composición**. Lo compuesto se guarda en una
  * caché en memoria, porque la lista pasa por delante de la misma hoja muchas veces.
  */
+/**
+ * La caja de la foto dentro de un dibujo, para recortar a ella.
+ *
+ * Cuando un dibujo nació de una foto —se anota una captura— la foto es el elemento de
+ * imagen que hay dentro. Encuadrar por el contenido hace que un trazo que se sale la
+ * agrande y aparezca con bandas alrededor; encuadrar por ella deja exactamente la foto,
+ * con lo dibujado encima recortado a su borde, que es lo que se ve en el editor.
+ *
+ * Devuelve null si el dibujo no tiene ninguna foto dentro: entonces no hay nada a lo que
+ * recortar y manda el contenido, como siempre.
+ */
+fun cajaDeLaFoto(escena: com.forge.pixpin.motor.Scene): com.forge.pixpin.motor.Bounds? {
+    val fotos = escena.contenidoVisible.filter {
+        it.type == com.forge.pixpin.motor.ElementType.IMAGE
+    }
+    if (fotos.isEmpty()) return null
+    return com.forge.pixpin.motor.getCommonBounds(fotos)
+}
+
 suspend fun paginaAnotada(
     context: Context,
     pdf: String,

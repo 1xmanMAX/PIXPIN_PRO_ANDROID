@@ -1427,7 +1427,7 @@ private fun MiniaturaDeLienzo(
     val ruta = remember(dibujo) { ExcalidrawStore.rutaDe(contexto, dibujo) }
     // Igual que en las páginas: la revisión del almacén es lo que hace que al cerrar el
     // editor la hoja se vuelva a componer sin tener que salir de la pantalla.
-    val version = remember(ruta, ExcalidrawStore.revision.intValue) {
+    val version = remember(ruta, ExcalidrawStore.revisionDe(dibujo)) {
         java.io.File(ruta).lastModified()
     }
 
@@ -1650,7 +1650,12 @@ private fun MiniaturaDePagina(
     // se entraba otra vez. `ExcalidrawStore.revision` sube en cada guardado —el editor es
     // otra pantalla, pero el mismo proceso—, así que con ella en la clave la miniatura se
     // rehace sola en cuanto se guarda, y sin preguntarle al disco en cada fotograma.
-    val version = remember(pdf, rutaDelDibujo, ExcalidrawStore.revision.intValue) {
+    // **La revisión de este dibujo, no la del almacén entero.**
+    //
+    // Con la global, guardar una hoja invalidaba la miniatura de todas las demás y el
+    // proyecto entero se volvía a dibujar por una sola página tocada. Se edita de una en
+    // una: la que cambia es la que se rehace.
+    val version = remember(pdf, rutaDelDibujo, ExcalidrawStore.revisionDe(dibujo.orEmpty())) {
         java.io.File(pdf).lastModified() +
             (rutaDelDibujo?.let { java.io.File(it).lastModified() } ?: 0L)
     }

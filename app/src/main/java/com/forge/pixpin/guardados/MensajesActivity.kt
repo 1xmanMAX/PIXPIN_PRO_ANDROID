@@ -81,6 +81,7 @@ import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
@@ -1064,6 +1065,12 @@ class MensajesActivity : ComponentActivity() {
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
                                 compartirComo = { compartiendo = m },
+                                alternarRecorte = {
+                                    guardarAparte(mensajes.map {
+                                        if (it.id == m.id) it.copy(soloLaFoto = !it.soloLaFoto)
+                                        else it
+                                    }) { refrescar() }
+                                },
                                 cambiarTexto = { nuevo ->
                                     guardarAparte(mensajes.map {
                                         if (it.id == m.id) it.copy(texto = nuevo) else it
@@ -1838,6 +1845,7 @@ class MensajesActivity : ComponentActivity() {
         /** Cambia el documento de una mini-app sin salir de la conversación. */
         val cambiarTexto: (String) -> Unit,
         val compartirComo: () -> Unit,
+        val alternarRecorte: () -> Unit,
         val etiquetar: () -> Unit,
         val reenviar: () -> Unit,
         val responder: () -> Unit,
@@ -1969,6 +1977,16 @@ class MensajesActivity : ComponentActivity() {
                     DelMenu(com.forge.pixpin.R.string.guardados_rescatar,
                             Icons.Filled.BookmarkBorder) {
                         menuAbierto = false; rescatar()
+                    }
+                }
+                if (m.clase == Clase.IMAGEN && m.referencia != null) {
+                    DelMenu(
+                        if (m.soloLaFoto) com.forge.pixpin.R.string.guardados_ver_todo
+                        else com.forge.pixpin.R.string.guardados_solo_la_foto,
+                        Icons.Filled.Crop
+                    ) {
+                        menuAbierto = false
+                        acciones.alternarRecorte()
                     }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_etiquetar,
@@ -2147,12 +2165,18 @@ class MensajesActivity : ComponentActivity() {
             // notas seguidas se lean como un bloque y no como cuatro cajas sueltas
             // (`ChatMessageCell.java:10978`). Las demás van a 17, el radio de Telegram.
             val r = radios(sitio)
+            val colorDelLienzo = remember(m.referencia) { colorDelDibujo(m.referencia) }
             Surface(
                 shape = RoundedCornerShape(
                     topStart = r.arribaIzq.dp, topEnd = r.arribaDer.dp,
                     bottomEnd = r.abajoDer.dp, bottomStart = r.abajoIzq.dp
                 ),
                 color = MaterialTheme.colorScheme.surfaceVariant,
+                // El color del lienzo del que viene, si viene de uno: es lo que en
+                // proyectos separa las hojas de un lienzo de las de otro.
+                border = colorDelLienzo?.let {
+                    androidx.compose.foundation.BorderStroke(2.dp, it)
+                },
                 modifier = Modifier
                     .widthIn(max = anchoMaximo)
                     // **Se mira dónde cae el dedo sin quedarse con el toque.**
@@ -2501,7 +2525,7 @@ class MensajesActivity : ComponentActivity() {
             // conversación se recargue entera.
             val version = remember(
                 rutaDelDibujo, recarga,
-                com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
+                com.forge.pixpin.motor.ExcalidrawStore.revisionDe(m.referencia.orEmpty())
             ) {
                 File(rutaDelDibujo).lastModified()
             }
@@ -2517,7 +2541,12 @@ class MensajesActivity : ComponentActivity() {
                         // lambda se pintaba lo dibujado encima de nada, y la foto
                         // desaparecía justo al anotarla, que es cuando más importa.
                         com.forge.pixpin.motor.DrawExport.aBitmap(
-                            escena, ESCALA_DE_LA_FOTO
+                            escena, ESCALA_DE_LA_FOTO,
+                            // **Recortada a la foto.** Dibujando fuera de su borde, el
+                            // encuadre por contenido la encogía y la rodeaba de blanco:
+                            // en la conversación parecía otra foto, más pequeña. Con el
+                            // recorte se ve lo mismo que en el editor.
+                            recorte = if (m.soloLaFoto) cajaDeLaFoto(escena) else null
                         ) { id ->
                             escena.files[id]?.path?.let {
                                 com.forge.pixpin.pin.ImageStore.load(it)
@@ -2819,7 +2848,7 @@ class MensajesActivity : ComponentActivity() {
         // vuelve a componer con lo que se acaba de anotar en vez de con lo de antes.
         val version = remember(
             rutaDelDibujo, recarga,
-            com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
+            com.forge.pixpin.motor.ExcalidrawStore.revisionDe(m.referencia.orEmpty())
         ) {
             rutaDelDibujo?.let { File(it).lastModified() } ?: 0L
         }
@@ -2845,6 +2874,7 @@ class MensajesActivity : ComponentActivity() {
         val ventana = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
         val alcance = androidx.compose.runtime.rememberCoroutineScope()
         Column {
+            Box {
             androidx.compose.foundation.Image(
                 bitmap = hoja.asImageBitmap(),
                 contentDescription = null,
@@ -2880,11 +2910,26 @@ class MensajesActivity : ComponentActivity() {
                         )
                     )
             )
+            // **El número, encima de la hoja.**
+            //
+            // Adjuntando varias hojas del mismo plano las miniaturas se parecen entre sí,
+            // y el pie hay que leerlo. En la esquina se ve de un golpe cuál es cuál.
             Text(
-                listOfNotNull(
-                    m.nombre.ifBlank { null },
-                    "pág. ${pagina + 1}"
-                ).joinToString(" · "),
+                getString(com.forge.pixpin.R.string.proyecto_pagina, pagina + 1),
+                fontSize = TAMANO_DE_LA_HORA,
+                color = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Color.Black.copy(alpha = ALFA_DE_LA_PILDORA),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+            }
+            Text(
+                m.nombre.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -2902,6 +2947,23 @@ class MensajesActivity : ComponentActivity() {
      * al pasar por delante; con «3 de 7» y su barrita, la conversación ya lo cuenta. En
      * los gastos, ese sitio lo ocupa el total, que es el número por el que existen.
      */
+    /**
+     * El color con el que un proyecto marca sus lienzos, aquí también.
+     *
+     * En proyectos, cada lienzo tiene su color de borde y con él se distinguen sus hojas
+     * de un vistazo. Adjuntando dos hojas de dos lienzos distintos, en la conversación
+     * eran dos rectángulos iguales: el mismo dato que allí distingue, aquí faltaba. Sale
+     * del mismo sitio (`HojasDelProyecto.colorDe`), así que una hoja lleva su color esté
+     * donde esté.
+     */
+    private fun colorDelDibujo(referencia: String?): androidx.compose.ui.graphics.Color? {
+        val dibujo = referencia ?: return null
+        val color = com.forge.pixpin.motor.HojasDelProyecto.colorDe(
+            com.forge.pixpin.motor.Hoja(id = dibujo, dibujo = dibujo)
+        ) ?: return null
+        return androidx.compose.ui.graphics.Color(color)
+    }
+
     @Composable
     private fun FilaDeMiniApp(m: Mensaje, onCambiar: (String) -> Unit) {
         val cual = remember(m.miniapp) { com.forge.pixpin.mini.MiniApp.de(m.miniapp) }

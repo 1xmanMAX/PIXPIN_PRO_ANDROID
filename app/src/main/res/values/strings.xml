@@ -259,6 +259,8 @@
     <string name="guardados_toca_mandar">Toca el micro para mandar</string>
     <string name="guardados_elegir">Elegir</string>
     <string name="guardados_etiquetar">Poner una etiqueta</string>
+    <string name="guardados_ver_todo">Ver el dibujo entero</string>
+    <string name="guardados_solo_la_foto">Ver solo la foto</string>
     <string name="guardados_reenviar">Reenviar</string>
     <string name="guardados_reenviar_a">Reenviar a…</string>
     <string name="guardados_reenviado">Reenviado</string>

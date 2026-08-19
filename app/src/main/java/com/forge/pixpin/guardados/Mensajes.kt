@@ -132,6 +132,17 @@ data class Mensaje(
      * exactamente el trabajo que esto viene a quitar.
      */
     val emoji: String? = null,
+
+    /**
+     * Si de una foto anotada se enseña **solo la foto** o el dibujo entero.
+     *
+     * Dibujando fuera del borde de la foto, encuadrar el dibujo entero la encoge y la
+     * rodea de blanco: parece otra foto. Por eso lo normal es recortar a la foto, como se
+     * ve en el editor. Pero a veces el trazo de fuera **es** lo que importa —una flecha
+     * que señala desde el margen, una nota al lado— y entonces hay que poder verlo todo.
+     * Va por mensaje y no en los ajustes: es una decisión de esa foto, no de la app.
+     */
+    val soloLaFoto: Boolean = true,
     /** Fijado arriba del todo. Lo que uno consulta cada día. */
     val fijado: Boolean = false,
     /** A qué mensaje contesta, si es un comentario sobre otro. */

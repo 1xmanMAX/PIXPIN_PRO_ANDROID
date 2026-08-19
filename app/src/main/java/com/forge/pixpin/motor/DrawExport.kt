@@ -38,6 +38,16 @@ object DrawExport {
         // ella y no a `scale`. Con el orden contrario, `aBitmap(escena) { ... }`
         // compilaba el bloque como si fuera el `Double` y el error que salía no
         // señalaba a la causa.
+        /**
+         * Un encuadre a medida, si se quiere uno concreto.
+         *
+         * Existe por un caso muy real: una foto anotada con un trazo que se sale de ella.
+         * Encuadrando el contenido —lo de siempre— el resultado crece para que quepa el
+         * trazo, y en la conversación la foto sale más pequeña y con bandas alrededor,
+         * como si se hubiera encogido. Pasando aquí la caja de la propia foto se recorta
+         * a lo que hay dentro de ella, que es lo que uno espera ver.
+         */
+        recorte: Bounds? = null,
         imageProvider: (String) -> Bitmap? = { null }
     ): Bitmap? = runCatching {
         val visible = scene.contenidoVisible
@@ -47,8 +57,9 @@ object DrawExport {
         // que es lo de siempre. Y con hoja no se añade margen: el margen ya lo
         // decides tú al colocar el marco.
         val marco = scene.marco
-        val b = if (marco != null) getElementBounds(marco) else getCommonBounds(visible)
-        val margen = if (marco != null) 0.0 else EXPORT_PADDING
+        val b = recorte
+            ?: if (marco != null) getElementBounds(marco) else getCommonBounds(visible)
+        val margen = if (marco != null || recorte != null) 0.0 else EXPORT_PADDING
         val anchoEscena = b.width + margen * 2
         val altoEscena = b.height + margen * 2
         if (anchoEscena <= 0 || altoEscena <= 0) return null
