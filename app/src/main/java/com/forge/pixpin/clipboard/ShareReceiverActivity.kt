@@ -31,6 +31,18 @@ class ShareReceiverActivity : ComponentActivity() {
             Intent.ACTION_SEND_MULTIPLE -> intent.streamUris()
             else -> emptyList()
         }
+        // **El texto compartido también es un pin.** Antes solo se miraba el archivo
+        // adjunto, así que compartir un enlace desde otra aplicación no hacía nada: ni
+        // pin ni aviso. Y un enlace es lo que más se comparte.
+        val texto = intent?.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        if (uris.isEmpty() && texto.isNotBlank()) {
+            PinHostService.start(this)
+            app.overlayManager.pinTexto(texto.trim())
+            finishAndRemoveTask()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+            return
+        }
         if (uris.isEmpty()) {
             finish()
             return

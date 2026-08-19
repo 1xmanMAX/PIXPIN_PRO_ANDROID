@@ -60,7 +60,21 @@ private const val MIN_MUESTRAS = 24
  * **su caja**: es lo que se ve de ellas y por tanto lo que uno espera cruzar o
  * usar de pared.
  */
-fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
+fun contornosDe(
+    e: Element,
+    paso: Double = PASO_PERIMETRO,
+    /**
+     * Desde dónde se mira, **solo para el sólido**.
+     *
+     * Es el único tipo cuyo contorno depende de la cámara, y la cámara vive en
+     * la escena y no en el elemento (ver [Scene.vista]). El valor por defecto es
+     * la vista de partida para no obligar a los treinta sitios que preguntan por
+     * un contorno y no dibujan sólidos a arrastrar un dato que no usan; quien
+     * tenga la escena a mano **debe** pasar la suya, o el sólido se cruzaría y se
+     * rellenaría por donde estaba antes de girar.
+     */
+    vista: Vista = Vista.CERO
+): List<Contorno> {
     if (e.isDeleted) return emptyList()
     val c = getElementAbsoluteCoords(e)
     val centro = Pt(c.cx, c.cy)
@@ -89,12 +103,12 @@ fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
         ElementType.ELLIPSE, ElementType.SERIAL ->
             cerrado(puntosDeElipse(c, paso))
 
-        // El arco ya viene girado de fábrica: sus puntos salen de la caja del
-        // óvalo aplicándole la rotación del elemento. Girarlo otra vez lo
-        // mandaría al doble de ángulo.
+        // El arco se gira aquí como todos los demás: sus puntos salen de la caja
+        // del óvalo **sin** inclinación, que es como los guarda cualquier
+        // elemento de puntos. Ver [puntosDelArco].
         ElementType.ARC -> {
             val pts = puntosDelArco(e).map { Pt(e.x + it.x, e.y + it.y) }
-            if (pts.size < 2) emptyList() else listOf(Contorno(pts, cerrado = false))
+            if (pts.size < 2) emptyList() else listOf(Contorno(girar(pts), cerrado = false))
         }
 
         // La raya: se cierra sola si el trazo vuelve a su punto de partida, que
@@ -118,7 +132,7 @@ fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
         }
 
         ElementType.IMAGE, ElementType.MOSAIC, ElementType.FRAME,
-        ElementType.ESCALA_GRAFICA -> cerrado(esquinasDe(c))
+        ElementType.ESCALA_GRAFICA, ElementType.PLANO -> cerrado(esquinasDe(c))
 
         /**
          * **El texto no tiene caja.**
@@ -136,6 +150,39 @@ fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
         // El foco no tiene borde: es una sombra sobre todo lo demás. Ni se cruza
         // ni encierra nada.
         ElementType.SPOTLIGHT -> emptyList()
+
+        // La lupa sí es una caja con borde: el cristal. Se cruza y se rodea
+        // como cualquier recuadro, que es lo que hace que una flecha pueda
+        // apuntarle y que el bote de relleno se pare en su canto.
+        ElementType.LUPA -> cerrado(esquinasDe(c))
+
+        /**
+         * **El sólido da los polígonos de sus caras visibles, uno por cara.**
+         *
+         * Es la decisión que hace que el volumen no necesite ni una línea de
+         * código propia en media docena de sitios. Lo que se ve de una caja son
+         * exactamente esos tres cuadriláteros; declarándolos aquí, el sólido
+         * hereda de golpe:
+         *
+         * - **las intersecciones**, así que se puede enganchar donde una arista
+         *   corta a una raya del dibujo plano;
+         * - **la escuadra** ([puntoEnElPerimetro]), o sea poder recorrer una
+         *   arista con el lápiz apoyándose en ella;
+         * - **el bote de relleno**, porque las aristas pasan a ser pared y el
+         *   hueco entre dos cajas se puede pintar.
+         *
+         * Van **sin girar por [Element.angle]**: el resto de tipos aplica ahí la
+         * inclinación del elemento, pero una caja isométrica no se inclina —lo
+         * que la orienta es la [Vista], que es de la escena entera— y girar sus
+         * caras alrededor del centro de la huella las sacaría de la retícula sin
+         * que nada las hubiera devuelto a ella.
+         *
+         * Y son las **visibles** y no las seis: las tres de detrás no se ven, y
+         * darlas como pared dejaría al bote de relleno chocando contra bordes
+         * que nadie ha dibujado.
+         */
+        ElementType.SOLIDO -> carasDeElemento(e, vista)
+            .mapNotNull { if (it.poligono.size < 3) null else Contorno(it.poligono, true) }
     }
 }
 
@@ -145,8 +192,12 @@ fun contornosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Contorno> {
  * Es la forma en que lo consumen tanto el enganche como el relleno: a los dos
  * les da igual de qué figura venía cada tramo.
  */
-fun segmentosDe(e: Element, paso: Double = PASO_PERIMETRO): List<Pair<Pt, Pt>> =
-    contornosDe(e, paso).flatMap { contorno ->
+fun segmentosDe(
+    e: Element,
+    paso: Double = PASO_PERIMETRO,
+    vista: Vista = Vista.CERO
+): List<Pair<Pt, Pt>> =
+    contornosDe(e, paso, vista).flatMap { contorno ->
         val pts = if (contorno.cerrado && contorno.puntos.size > 2) {
             contorno.puntos + contorno.puntos.first()
         } else contorno.puntos

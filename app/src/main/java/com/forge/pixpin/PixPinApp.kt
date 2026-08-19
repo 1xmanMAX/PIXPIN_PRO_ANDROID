@@ -58,5 +58,20 @@ class PixPinApp : Application() {
         CrashLog.install(this)
         settings = SettingsRepository(this)
         scope.launch { settings.settings.collect { ajustes = it } }
+        // **Reponer los PDF que se hayan quedado sin archivo.**
+        //
+        // Esto estaba escrito, probado y documentado —el propio comentario de
+        // `reponerLosPdf` dice «lo llama PixPinApp al arrancar»— pero **no lo llamaba
+        // nadie**: la única mención estaba dentro de ese comentario. El resultado era que
+        // un proyecto cuyo PDF se hubiera borrado se quedaba sin documento para siempre,
+        // aunque su copia limpia siguiera ahí al lado: sin portada, sin miniaturas de
+        // página y sin poder volver a pinearlo. Se notaba como «solo me sale la miniatura
+        // de uno», que es el que todavía conservaba su archivo.
+        //
+        // Va en el hilo de disco porque copia documentos enteros, y sin esperar a nadie:
+        // si tarda, la lista aparece primero y las portadas después.
+        scope.launch(Dispatchers.IO) {
+            runCatching { proyectos.reponerLosPdf() }
+        }
     }
 }

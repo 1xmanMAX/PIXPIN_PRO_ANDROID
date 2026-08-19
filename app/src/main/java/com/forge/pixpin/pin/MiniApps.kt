@@ -84,11 +84,25 @@ fun TimerBody(
     onFinished: () -> Unit
 ) {
     var now by remember { mutableLongStateOf(nowProvider()) }
-    LaunchedEffect(widget.timerEndsAt, widget.runningSince) {
+    /**
+     * **Se late solo lo que hay que latir.**
+     *
+     * Esto era un `while (true)` con una espera fija de 250 ms —60 en el
+     * cronómetro— que **no miraba si algo estaba corriendo**. Un pin de
+     * temporizador parado en una esquina despertaba la CPU cuatro veces por
+     * segundo para siempre, y el reloj, que enseña `HH:MM`, se refrescaba
+     * doscientas cuarenta veces por cada minuto que cambia. Ahora:
+     *
+     * - cronómetro en marcha, 60 ms, que es donde se ven las décimas;
+     * - cuenta atrás, 250 ms, hasta que llega a cero y **para**;
+     * - parado, ni una vez: lo que se enseña ya no cambia;
+     * - el reloj duerme **hasta el minuto siguiente**, exacto. Una vez por
+     *   minuto en vez de doscientas cuarenta.
+     */
+    LaunchedEffect(widget.timerEndsAt, widget.runningSince, widget.stopwatch) {
         while (true) {
             now = nowProvider()
-            // El cronómetro enseña décimas, así que necesita ir más fino.
-            delay(if (widget.stopwatch) 60L else 250L)
+            delay(esperaDelReloj(widget, now) ?: return@LaunchedEffect)
         }
     }
 

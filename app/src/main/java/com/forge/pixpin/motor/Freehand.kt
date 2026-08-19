@@ -58,6 +58,15 @@ private const val END_NOISE_THRESHOLD = 3.0
 private const val MIN_STREAMLINE_T = 0.15
 private const val STREAMLINE_T_RANGE = 0.85
 
+/**
+ * Lo más que se pueden separar dos puntos guardados del trazo.
+ *
+ * En píxeles de escena. Bajo a propósito: es el detalle más fino que se quiere
+ * conservar, y escribir pequeño es justo eso. Guardar de más cuesta muy poco —
+ * son puntos, no figuras— y se nota en cuanto la letra baja de un centímetro.
+ */
+private const val TOPE_ENTRE_PUNTOS = 2.2
+
 /** Radio mínimo: por debajo el trazo desaparecería. */
 private const val MIN_RADIUS = 0.01
 
@@ -142,12 +151,47 @@ data class StrokeOptions(
 /** Las opciones con las que Excalidraw dibuja un elemento de lápiz. */
 fun strokeOptionsFor(e: Element): StrokeOptions = StrokeOptions(
     size = e.strokeWidth * FreedrawTuning.SIZE_FACTOR,
-    thinning = FreedrawTuning.THINNING,
+    // **A cero, el trazo sale del mismo grosor de punta a punta.** Es lo que
+    // pide quien escribe: con presión, una letra pequeña adelgaza en las curvas
+    // rápidas y se queda a medio ver. Con lápiz y dibujando sí se quiere.
+    thinning = if (e.presionFirme) 0.0 else FreedrawTuning.THINNING,
     smoothing = FreedrawTuning.SMOOTHING,
     streamline = FreedrawTuning.streamlineDe(e.roughness),
     simulatePressure = e.simulatePressure,
     last = true
 )
+
+/**
+ * Lo ancho que sale de verdad un trazo de lápiz de grosor [strokeWidth] —el del
+ * elemento, ya corregido—, en píxeles de escena.
+ *
+ * **No es `strokeWidth`.** El lápiz no pinta una línea de ese grosor: pinta una
+ * mancha, y lo ancha que sale la decide el generador a partir de `size` y de la
+ * presión (ver [getStrokeOutlinePoints]). Salen alrededor de tres veces el
+ * número elegido, así que enseñar el número como si fuera el trazo decía una
+ * cosa y se dibujaba otra.
+ *
+ * Existe para que la muestra del panel enseñe **el trazo que va a salir**, y se
+ * calcula llamando al propio generador en vez de con una constante a mano: si
+ * algún día se toca [FreedrawTuning], la muestra va detrás sola.
+ */
+fun anchoPintadoDelLapiz(strokeWidth: Double): Double {
+    val opciones = StrokeOptions(
+        size = strokeWidth * FreedrawTuning.SIZE_FACTOR,
+        thinning = FreedrawTuning.THINNING
+    )
+    return 2 * strokeRadius(opciones.size, opciones.thinning, PRESION_TIPICA, opciones.easing)
+}
+
+/**
+ * La presión con la que se mide el trazo para enseñarlo.
+ *
+ * Ni la mínima ni la máxima. Con el dedo la presión no llega del digitalizador
+ * —se simula a partir de la velocidad— y `simulatePressure` la deja rondando el
+ * medio en cuanto la mano coge un ritmo normal, así que es la que representa el
+ * trazo que uno ve.
+ */
+private const val PRESION_TIPICA = 0.5
 
 /** Un punto ya procesado, con su vector, distancia y recorrido acumulado. */
 data class StrokePoint(
@@ -264,7 +308,15 @@ fun getStrokeOutlinePoints(points: List<StrokePoint>, o: StrokeOptions): List<Pt
 
     // Distancia mínima entre puntos guardados, al cuadrado: por debajo de esto
     // el punto no aporta forma y solo engorda el camino.
-    val minDistancia = (o.size * o.smoothing).pow(2)
+    //
+    // **Con un tope, y aquí estaba lo de la letra pequeña.** La distancia salía
+    // del grosor del trazo, así que con el lápiz de dos puntos se tiraban los
+    // puntos que estuvieran a menos de cuatro píxeles: perfecto dibujando
+    // grande, y demoledor escribiendo pequeño —una letra de veinte píxeles se
+    // queda en cinco puntos y sale como una garabato tembloroso, que es
+    // exactamente lo que se veía—. El tamaño del trazo no dice nada de lo
+    // grande que se está escribiendo, así que por encima de este tope no manda.
+    val minDistancia = minOf(o.size * o.smoothing, TOPE_ENTRE_PUNTOS).pow(2)
 
     val izquierda = mutableListOf<Pt>()
     val derecha = mutableListOf<Pt>()

@@ -64,13 +64,28 @@ fun barridoAcumulado(barridoPrevio: Double, anguloPrevio: Double, anguloNuevo: D
 }
 
 /**
- * Los puntos del arco, **relativos a `x`/`y`** como cualquier elemento de
- * puntos.
+ * Los puntos del arco, **relativos a `x`/`y` y sin girar**, como cualquier
+ * elemento de puntos.
  *
  * Devolverlos así no es un detalle: el renderizador los pasa por el mismo
  * generador de trazo rugoso que una línea, y por eso un arco sale con el mismo
  * pulso tembloroso que el resto del dibujo en vez de con una curva de compás
  * que cantaría al lado de un rectángulo a mano alzada.
+ *
+ * ## Sin girar, y esto costó un fallo
+ *
+ * Antes salían **ya girados**, y parecía lo cómodo. Pero en este motor la
+ * inclinación no vive en la geometría: la aplica quien pinta, con una matriz —el
+ * lienzo, el `<g transform>` del SVG y el flujo del PDF hacen los tres lo mismo,
+ * y lo hacen para todos los elementos por igual. Un arco que ya venía girado se
+ * giraba **dos veces**, así que aparecía en un sitio distinto del que decía su
+ * geometría: se picaba donde no se veía, y recortar un óvalo girado dejaba el
+ * trozo bueno en otra parte.
+ *
+ * Girando aquí lo que había que hacer era acordarse de **no** girar en los otros
+ * cuatro sitios. Sin girar, el arco es un elemento más y no hay nada que
+ * recordar. Quien necesite sus puntos en el mundo —cruzarlos con otra figura—
+ * los gira, como haría con cualquier otro. Ver [contornosDe].
  */
 fun puntosDelArco(element: Element, pasosPorVuelta: Int = ARCO_PASOS): List<Pt> {
     val c = getElementAbsoluteCoords(element)
@@ -87,13 +102,8 @@ fun puntosDelArco(element: Element, pasosPorVuelta: Int = ARCO_PASOS): List<Pt> 
     val pasos = (pasosPorVuelta * abs(barrido) / (2 * PI)).toInt().coerceAtLeast(2)
     return (0..pasos).map { i ->
         val t = inicio + barrido * i / pasos
-        // El punto sobre el óvalo, girado con el elemento y llevado a relativo.
-        val enEscena = pointRotateRads(
-            Pt(c.cx + rx * cos(t), c.cy + ry * sin(t)),
-            Pt(c.cx, c.cy),
-            element.angle
-        )
-        Pt(enEscena.x - element.x, enEscena.y - element.y)
+        // El punto sobre el óvalo, llevado a relativo. Sin girar: ver arriba.
+        Pt(c.cx + rx * cos(t) - element.x, c.cy + ry * sin(t) - element.y)
     }
 }
 

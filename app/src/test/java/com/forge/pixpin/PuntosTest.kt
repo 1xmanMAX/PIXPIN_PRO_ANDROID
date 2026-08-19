@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -411,6 +412,28 @@ class PuntoEnElEditorTest {
 
         c.undo()
         assertEquals(0.0, puntos(c)[0].x, 0.001)
+    }
+
+    /**
+     * **Un toque, un paso de historial.**
+     *
+     * Las herramientas de un toque se cierran al levantar el dedo, así que
+     * anotaban lo suyo y acto seguido el cierre del gesto volvía a anotar el
+     * mismo cambio: quedaban dos entradas para una acción. El primer deshacer
+     * quitaba el punto y el segundo no hacía nada visible — para quien dibuja,
+     * un botón que se traga un toque.
+     */
+    @Test
+    fun `plantar un punto deja un solo paso de historial`() {
+        val c = conUnaLinea()
+        c.selectTool(Tool.PUNTO)
+        c.pointerDown(Pt(0.0, 0.0))
+        c.pointerUp(Pt(0.0, 0.0))
+        assertEquals(1, puntos(c).size)
+
+        c.undo()
+        assertTrue("un solo deshacer tiene que quitarlo", puntos(c).isEmpty())
+        assertFalse("ha quedado un deshacer de sobra", c.canUndo)
     }
 }
 

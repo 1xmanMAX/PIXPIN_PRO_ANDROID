@@ -446,9 +446,9 @@ class CapaPantalla(private val app: PixPinApp) {
                 DrawToolbar(
                     tool = controller.tool,
                     onTool = { controller.selectTool(it); repintar() },
-                    style = controller.scene.style,
+                    style = controller.estiloActivo(),
                     onStyle = { nuevo ->
-                        controller.changeStyle({ nuevo }, { estiloAplicado(it, nuevo) })
+                        controller.cambiarEstilo(nuevo)
                         repintar()
                     },
                     canUndo = controller.canUndo,
@@ -456,13 +456,16 @@ class CapaPantalla(private val app: PixPinApp) {
                     modifier = Modifier.padding(top = 4.dp),
                     escala = controller.scene.escala,
                     onQuitarEscala = { controller.clearScale(); repintar() },
-                    modoReferencia = controller.modoReferencia,
-                    onModoReferencia = { controller.modoReferencia = !controller.modoReferencia; repintar() },
+                    modoReferencia = if (ajustes.guiaEnCapa) controller.modoReferencia else null,
+                    onModoReferencia = if (!ajustes.guiaEnCapa) null else {
+                        { controller.modoReferencia = !controller.modoReferencia; repintar() }
+                    },
                     referenciasVisibles = controller.referenciasVisibles,
                     onAlternarReferencias = { controller.alternarReferencias(); repintar() },
                     hayReferencias = controller.hayReferencias,
                     permitidas = permitidas,
                     mostrarFuente = false,
+                mostrarTamano = true,
                     grupos = ajustes.capaGroupList
                 )
             }

@@ -63,6 +63,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -585,6 +586,10 @@ private fun BarraDeAnotar(
 ) {
     @Suppress("UNUSED_EXPRESSION") tick.intValue
     val context = LocalContext.current
+    // Los ajustes: de aquí sale si el modo guía tiene botón en esta barra. Ver
+    // [Settings.guiaEnCaptura].
+    val ajustes by (context.applicationContext as com.forge.pixpin.PixPinApp)
+        .settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
 
     fun cambiado() {
         tick.intValue++
@@ -606,9 +611,9 @@ private fun BarraDeAnotar(
         DrawToolbar(
             tool = controller.tool,
             onTool = { controller.selectTool(it); cambiado() },
-            style = controller.scene.style,
+            style = controller.estiloActivo(),
             onStyle = { nuevo ->
-                controller.changeStyle({ nuevo }, { estiloAplicado(it, nuevo) })
+                controller.cambiarEstilo(nuevo)
                 cambiado()
             },
             canUndo = controller.canUndo,
@@ -620,10 +625,12 @@ private fun BarraDeAnotar(
             // faltaban, y es donde más falta hacen: sobre una captura se traza
             // encima de algo que ya está, así que apoyar el trazo en una guía es
             // el caso normal, no el raro.
-            modoReferencia = controller.modoReferencia,
-            onModoReferencia = {
-                controller.modoReferencia = !controller.modoReferencia
-                cambiado()
+            modoReferencia = if (ajustes.guiaEnCaptura) controller.modoReferencia else null,
+            onModoReferencia = if (!ajustes.guiaEnCaptura) null else {
+                {
+                    controller.modoReferencia = !controller.modoReferencia
+                    cambiado()
+                }
             },
             referenciasVisibles = controller.referenciasVisibles,
             onAlternarReferencias = { controller.alternarReferencias(); cambiado() },

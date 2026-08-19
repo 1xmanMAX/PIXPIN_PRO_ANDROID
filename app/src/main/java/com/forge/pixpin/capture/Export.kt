@@ -214,6 +214,10 @@ object PinExporter {
         // La ruleta no se exporta como imagen: lo que vale de ella es a quién le
         // tocó, y eso ya está en su texto.
         com.forge.pixpin.pin.PinType.RULETA -> null
+        // Una nota de voz tampoco: lo que dice está en el audio, y una captura
+        // de un botón de reproducir no lo cuenta. Compartirla es compartir el
+        // archivo, que es otro camino.
+        com.forge.pixpin.pin.PinType.VOZ -> null
         com.forge.pixpin.pin.PinType.IMAGE ->
             state.imagePath?.let { com.forge.pixpin.pin.ImageStore.load(it) }?.let { bmp ->
                 // Lo dibujado sobre el pin se hornea al exportar: hasta aquí eran

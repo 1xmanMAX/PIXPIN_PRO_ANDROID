@@ -109,11 +109,33 @@ const val BASE_BINDING_GAP = 5.0
 /** Hueco real para una forma concreta (`getBindingGap`). */
 fun getBindingGap(target: Element): Double = BASE_BINDING_GAP + target.strokeWidth / 2
 
-/** Distancia máxima a la que una forma «atrae» a la punta. */
-fun maxBindingDistance(zoom: Double): Double {
-    val base = max(BASE_BINDING_GAP, 15.0)
+/**
+ * Hasta dónde atrae [target] a una punta que se suelta **por fuera** de él.
+ *
+ * **Es el propio hueco del anclaje, y ni un píxel más.** La regla: si la punta
+ * ya está donde el anclaje la dejaría —rozando el borde—, atarla no la mueve de
+ * sitio y se gana que la flecha siga a la caja para siempre. Un poco más lejos,
+ * atarla significa **llevársela**, y ahí deja de ser una ayuda.
+ *
+ * Y no es un salto perpendicular de unos píxeles, que se perdonaría: el sitio
+ * donde se posa la punta lo decide un rayo trazado desde el otro extremo (ver
+ * [bindingPointOn]), así que además se corre a lo largo del contorno. Sueltas la
+ * punta señalando un sitio y aparece señalando otro.
+ *
+ * Estuvo en quince píxeles, que es el número del original —pensado para un ratón
+ * y una pantalla grande— y con el dedo resultaba que media pantalla alrededor de
+ * cada caja era zona de captura. Lo que hay a una distancia razonable se queda
+ * donde se puso, que es lo que uno acaba de decidir al soltarlo.
+ *
+ * Se relaja al alejar la vista, hasta el doble: alejado, el mismo hueco son
+ * menos píxeles de pantalla y no se acertaría nunca. Al acercar no se aprieta —
+ * `z` se topa en uno—, porque trabajando de cerca ya se coloca la punta con
+ * precisión de sobra y encoger el roce dejaría el anclaje inalcanzable.
+ */
+fun maxBindingDistance(target: Element, zoom: Double): Double {
+    val roce = getBindingGap(target)
     val z = if (zoom < 1.0) zoom else 1.0
-    return (base / (z * 1.5)).coerceIn(base, base * 2)
+    return (roce / z).coerceIn(roce, roce * 2)
 }
 
 /**
@@ -136,17 +158,22 @@ fun maxBindingDistance(zoom: Double): Double {
  *    lo que queda tapado detrás de ella no es candidato, porque no se ve.
  * 3. Entre los candidatos gana **el más pequeño**. Con una caja dentro de otra,
  *    anclar a la de fuera nunca es lo que se quiere.
+ *
+ * Por fuera, en cambio, se ancla **solo rozando**: lo que se suelta a una
+ * distancia razonable de la forma se queda donde se soltó. Ver
+ * [maxBindingDistance].
  */
 fun getHoveredElementForBinding(
     elements: List<Element>, p: Pt, zoom: Double = 1.0
 ): Element? {
-    val threshold = maxBindingDistance(zoom)
     val candidatos = mutableListOf<Element>()
 
     for (i in elements.indices.reversed()) {
         val e = elements[i]
         if (e.isDeleted || e.locked || !e.isBindable) continue
-        if (!bindingBorderTest(p, e, threshold)) continue
+        // El roce se mide contra cada forma: depende de su grosor de trazo, que
+        // es lo que decide dónde queda el borde de verdad.
+        if (!bindingBorderTest(p, e, maxBindingDistance(e, zoom))) continue
         candidatos += e
         // Una forma con fondo opaco tapa lo de detrás: ahí se corta.
         if (e.hasBackground && !isTransparent(e.backgroundColor)) break

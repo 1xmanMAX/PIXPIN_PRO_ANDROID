@@ -18,6 +18,15 @@ package com.forge.pixpin.motor
 enum class Propiedad {
     TRAZO, FONDO, RELLENO, LINEA, GROSOR, RUGOSIDAD, ESQUINAS, PUNTAS, FUENTE, OPACIDAD,
 
+    /**
+     * Negrita, cursiva y tachado. **Solo el texto.**
+     *
+     * Va aparte de [FUENTE] —que es la familia y el tamaño— porque son cosas
+     * distintas: la letra se elige una vez y esto se enciende y se apaga sobre
+     * la marcha, resaltando una palabra de un esquema.
+     */
+    ESTILO_DE_TEXTO,
+
     /** Recta, curva o de codos. Solo la flecha. */
     FORMA_FLECHA,
 
@@ -28,7 +37,37 @@ enum class Propiedad {
      * había forma de tocarlo**: era un campo que se guardaba, se serializaba y
      * se pintaba, y ninguna interfaz lo ponía nunca a true. Se pixelaba y punto.
      */
-    MOSAICO
+    MOSAICO,
+
+    /**
+     * Cuánto agranda la lupa, de qué forma es el cristal y si lleva flecha.
+     *
+     * Las tres van juntas en una sola propiedad porque son **la misma decisión
+     * repartida**: qué enseña esta lupa y cómo. Separadas, el panel se llenaría
+     * de mandos que solo salen para un tipo de elemento.
+     */
+    LUPA,
+
+    /** Cuánto oscurece un foco lo que queda fuera. Solo el foco. */
+    OSCURECER,
+
+    /**
+     * Lo grande que es la zona iluminada dentro de su marco. Solo el foco.
+     *
+     * Es el gemelo del aumento de la lupa: allí el mando mueve la ventana
+     * dejando la zona, y aquí mueve la zona dejando el marco — que es lo que se
+     * quiere de un foco, porque el marco es hasta dónde llega la sombra.
+     */
+    ZONA,
+
+    /**
+     * El trazo a mano sale firme, sin adelgazar por la presión.
+     *
+     * No tiene mando en el lateral: es un ajuste de cómo escribe uno, no algo
+     * que se cambie figura a figura, así que vive en la configuración. Está aquí
+     * para que el motor sepa a qué elementos se le escribe. Ver [conEstilo].
+     */
+    PRESION
 }
 
 /**
@@ -42,10 +81,26 @@ enum class Propiedad {
  */
 fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
     if (seleccion.isNotEmpty()) {
-        return seleccion.flatMap { propiedadesDeTipo(it.type) }.toSet()
+        return seleccion.flatMap { propiedadesDe(it) }.toSet()
     }
     val tipo = tipoQueCrea(tool) ?: return emptySet()
     return propiedadesDeTipo(tipo)
+}
+
+/**
+ * Lo que se le puede tocar **a este elemento en concreto**.
+ *
+ * Casi siempre es lo mismo que a los de su tipo, con una excepción que se veía
+ * rara: una raya **abierta** no se puede rellenar. El tipo dice que sí —una
+ * línea cerrada sobre sí misma sí se rellena, y es el mismo tipo— pero mientras
+ * esté abierta no hay dentro que pintar. Y ahí estaban los mandos de relleno,
+ * ofreciendo algo que no iba a pasar: se elegía un color y no cambiaba nada.
+ */
+fun propiedadesDe(e: Element): Set<Propiedad> {
+    val base = propiedadesDeTipo(e.type)
+    val abierta = (e.type == ElementType.LINE || e.type == ElementType.FREEDRAW) &&
+        !isPathALoop(e.points)
+    return if (!abierta) base else base - Propiedad.FONDO - Propiedad.RELLENO
 }
 
 /**
@@ -65,19 +120,29 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     Tool.TEXT -> ElementType.TEXT
     Tool.IMAGE -> ElementType.IMAGE
     Tool.MOSAIC -> ElementType.MOSAIC
+    Tool.LUPA -> ElementType.LUPA
     Tool.SPOTLIGHT -> ElementType.SPOTLIGHT
     Tool.SERIAL -> ElementType.SERIAL
     Tool.FRAME -> ElementType.FRAME
     Tool.MEASURE, Tool.SCALE -> ElementType.MEASURE
     Tool.RELLENO -> ElementType.REGION
     Tool.ESCALA_GRAFICA -> ElementType.ESCALA_GRAFICA
+    Tool.SOLIDO -> ElementType.SOLIDO
     // Recortar y extender no crean nada: arreglan lo que ya hay, y lo que
     // hacen no depende de ningún color ni de ningún grosor.
     Tool.SELECTION, Tool.LASSO, Tool.HAND, Tool.ERASER,
     Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO -> null
 }
 
-private fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
+/**
+ * Qué se le puede tocar a un tipo de elemento.
+ *
+ * Es pública porque además de decidir qué controles salen, **decide qué se le
+ * escribe encima** al aplicar un estilo: la misma tabla para las dos cosas, o un
+ * panel acabaría ofreciendo algo que no se guarda, o guardando algo que no se
+ * ofrece. Ver [conEstilo].
+ */
+fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // El punto se ve en negro sobre blanco siempre —para eso está— así que de
     // color solo manda el de su letra, y del tamaño, el de la letra también.
     ElementType.PUNTO -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)
@@ -120,18 +185,28 @@ private fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // [FreedrawTuning.streamlineDe].
     ElementType.FREEDRAW -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
+        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD, Propiedad.PRESION
     )
 
-    ElementType.TEXT -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)
+    ElementType.TEXT -> setOf(
+        Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.ESTILO_DE_TEXTO, Propiedad.OPACIDAD
+    )
 
     ElementType.IMAGE -> setOf(Propiedad.ESQUINAS, Propiedad.OPACIDAD)
 
     // En el mosaico el grosor hace de tamaño de grano.
     ElementType.MOSAIC -> setOf(Propiedad.GROSOR, Propiedad.MOSAICO, Propiedad.OPACIDAD)
 
-    // El foco solo gradúa cuánto oscurece, y eso es su opacidad.
-    ElementType.SPOTLIGHT -> setOf(Propiedad.OPACIDAD)
+    // El foco solo gradúa **cuánto oscurece lo de fuera**, que es lo único que
+    // hace. Su opacidad no pinta nada: no dibuja tinta, apaga lo de alrededor.
+    ElementType.SPOTLIGHT -> setOf(Propiedad.OSCURECER, Propiedad.ZONA)
+
+    // La lupa: cuánto agranda, de qué forma es el cristal y si lleva flecha —eso
+    // es [Propiedad.LUPA]— más el color y el grosor de su montura, que es un
+    // borde como cualquier otro.
+    ElementType.LUPA -> setOf(
+        Propiedad.LUPA, Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.OPACIDAD
+    )
 
     ElementType.SERIAL -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)
 
@@ -157,6 +232,29 @@ private fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // Ni relleno ni rugosidad — una escala temblorosa no se lee.
     ElementType.ESCALA_GRAFICA -> setOf(
         Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD
+    )
+
+    // El plano: el color de sus rayas y el tamaño de sus cifras. Ni relleno
+    // —no encierra nada— ni imperfección: unos ejes temblorosos no se leen, y
+    // menos con números encima.
+    ElementType.PLANO -> setOf(
+        Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.FUENTE, Propiedad.OPACIDAD
+    )
+
+    /**
+     * La caja en volumen: **trazo, fondo, relleno, grosor e imperfección**.
+     *
+     * El fondo no es un adorno aquí, es el volumen: de él salen las tres
+     * claridades de las caras (ver [aclarar]), y sin fondo la caja se queda en un
+     * alambre que no se lee como bulto. Por eso [Propiedad.FONDO] es el mando más
+     * importante que tiene.
+     *
+     * **Ni esquinas ni puntas**: no hay nada que redondear —una arista redondeada
+     * dejaría de encajar con la de al lado— y no es una raya con extremos.
+     */
+    ElementType.SOLIDO -> setOf(
+        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
+        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
     )
 
     // La hoja no tiene estilo: es un límite, no un dibujo. Solo se estira.

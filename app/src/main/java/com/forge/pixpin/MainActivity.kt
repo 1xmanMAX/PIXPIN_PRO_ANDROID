@@ -67,20 +67,52 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.forge.pixpin.data.CaptureMode
 import com.forge.pixpin.data.ClaseDeIman
+import com.forge.pixpin.data.DondeSeDibuja
 import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.data.Settings
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.launch
 
+/** Pide abrir directamente la pantalla de proyectos. */
+const val EXTRA_PROYECTOS = "abrir_proyectos"
+
+/**
+ * Qué proyecto abrir, si es que se viene a por uno concreto.
+ *
+ * Un acceso directo a un proyecto tiene que llevar **a ese proyecto**, no a la lista
+ * donde está entre otros veinte. Con la lista entera, quien lo toca acaba buscando a mano
+ * lo que acababa de pedir por su nombre.
+ */
+const val EXTRA_PROYECTO = "abrir_proyecto"
+
 class MainActivity : ComponentActivity() {
+
+    /**
+     * Con qué se ha entrado esta vez.
+     *
+     * Esta pantalla es `singleTask`, así que **volver a abrirla no vuelve a crearla**: el
+     * intento nuevo llega por [onNewIntent] y el `intent` que se leyó al componer se
+     * queda con lo de la vez anterior. Sin esto, pedir un proyecto después de haber
+     * pedido otro abría el primero. Guardarlo en estado es lo que hace que la pantalla se
+     * entere.
+     */
+    private val loQuePiden = mutableStateOf<Intent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        loQuePiden.value = intent
         setContent {
             PixPinTheme {
-                OnboardingScreen()
+                OnboardingScreen(loQuePiden.value)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        loQuePiden.value = intent
     }
 }
 
@@ -93,7 +125,7 @@ private data class PermissionItem(
 )
 
 @Composable
-fun OnboardingScreen() {
+fun OnboardingScreen(loQuePiden: Intent? = null) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -177,8 +209,28 @@ fun OnboardingScreen() {
     // Lo que uno viene a hacer aquí es **pulsar «Comenzar»**. Lo demás se toca
     // una vez y no se vuelve a mirar, así que se va detrás de una puerta.
     var enAjustes by remember { mutableStateOf(false) }
-    var enProyectos by remember { mutableStateOf(false) }
+    // Se puede entrar **directamente en proyectos** desde fuera: es lo que hace que un
+    // acceso directo guardado abra lo que promete en vez de la portada. Ver [Clase.PROYECTO].
+    val actividad = context as? android.app.Activity
+    val proyectoPedido = loQuePiden?.getStringExtra(EXTRA_PROYECTO)
+    var enProyectos by remember(loQuePiden) {
+        mutableStateOf(
+            loQuePiden?.getBooleanExtra(EXTRA_PROYECTOS, false) == true ||
+                proyectoPedido != null
+        )
+    }
     val listo = overlayGranted && notifGranted && batteryIgnored
+
+    // **Con todo concedido, la aplicación abre en los proyectos.**
+    //
+    // La portada es una lista de permisos y un botón de arrancar: se toca una vez en la
+    // vida y luego estorba cada vez. Lo que uno viene a hacer es seguir con lo que tenía
+    // a medias, y eso son los proyectos. Mientras falte algún permiso sigue mandando la
+    // portada, porque sin ellos la mitad de la aplicación no funciona y una pantalla de
+    // proyectos no explicaría por qué.
+    androidx.compose.runtime.LaunchedEffect(listo) {
+        if (listo) enProyectos = true
+    }
 
     if (enAjustes) {
         PantallaDeAjustes(onVolver = { enAjustes = false })
@@ -187,7 +239,13 @@ fun OnboardingScreen() {
     if (enProyectos) {
         com.forge.pixpin.ui.PantallaDeProyectos(
             app = context.applicationContext as PixPinApp,
-            onVolver = { enProyectos = false }
+            soloEste = proyectoPedido,
+            onVolver = {
+                // Viniendo a por un proyecto concreto, atrás devuelve **a donde
+                // estabas** —el chat— y no a la lista de proyectos, que es un sitio
+                // por el que no has pasado.
+                if (proyectoPedido != null) actividad?.finish() else enProyectos = false
+            }
         )
         return
     }
@@ -340,6 +398,8 @@ private fun PantallaDeAjustes(onVolver: () -> Unit) {
             }
 
             GrupoDeAjustes(stringResource(R.string.ajustes_dibujar)) {
+                ModoGuiaCard()
+                Spacer(Modifier.height(12.dp))
                 ImanCard()
                 Spacer(Modifier.height(12.dp))
                 ManoCard()
@@ -400,6 +460,68 @@ private fun GrupoDeAjustes(titulo: String, contenido: @Composable () -> Unit) {
  * poder tocarse: encender «intersecciones» con el imán apagado no haría nada, y
  * un interruptor que no hace nada es peor que no estar.
  */
+/**
+ * Dónde sale el **modo guía**.
+ *
+ * Es una opción y no una herramienta —no dibuja nada, decide de qué clase sale
+ * lo que se trace— así que su sitio son los ajustes y no la barra. Y va uno por
+ * cada edición porque la misma función estorba en unas y hace falta en otras:
+ * anotando una captura de paso, un andamio que luego hay que esconder es un
+ * botón de más; levantando un plano en el editor, es la mitad del trabajo.
+ */
+@Composable
+private fun ModoGuiaCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val ajustes by app.settings.settings.collectAsState(initial = Settings())
+
+    fun puesto(donde: DondeSeDibuja): Boolean = when (donde) {
+        DondeSeDibuja.EDITOR -> ajustes.guiaEnEditor
+        DondeSeDibuja.PIN -> ajustes.guiaEnPin
+        DondeSeDibuja.CAPA -> ajustes.guiaEnCapa
+        DondeSeDibuja.CAPTURA -> ajustes.guiaEnCaptura
+    }
+
+    fun nombre(donde: DondeSeDibuja): Int = when (donde) {
+        DondeSeDibuja.EDITOR -> R.string.ajustes_dibujar
+        DondeSeDibuja.PIN -> R.string.ajustes_pinear
+        DondeSeDibuja.CAPA -> R.string.ajustes_capa_nombre
+        DondeSeDibuja.CAPTURA -> R.string.ajustes_capturar
+    }
+
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.ajustes_modo_guia),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                stringResource(R.string.ajustes_modo_guia_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+            )
+            for (donde in DondeSeDibuja.entries) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(nombre(donde)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = puesto(donde),
+                        onCheckedChange = { scope.launch { app.settings.setGuia(donde, it) } }
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ImanCard() {
     val context = LocalContext.current

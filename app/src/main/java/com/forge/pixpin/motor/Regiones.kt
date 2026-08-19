@@ -151,9 +151,15 @@ fun regionEn(
 fun esPared(e: Element): Boolean = when (e.type) {
     // El punto tampoco: es una marca sobre el dibujo, no encierra nada, y un
     // redondel de cinco píxeles no puede detener un derrame.
+    // El plano tampoco: es el papel pautado sobre el que se grafica, y contarlo
+    // como pared dejaría cada cuadro suyo como un hueco cerrado que rellenar.
     ElementType.IMAGE, ElementType.FRAME, ElementType.SPOTLIGHT,
     ElementType.MOSAIC, ElementType.TEXT, ElementType.ESCALA_GRAFICA,
-    ElementType.PUNTO -> false
+    ElementType.PUNTO, ElementType.PLANO -> false
+
+    // La lupa **sí** para el bote: es una placa opaca apoyada encima, y un
+    // derrame que se colara por debajo saldría pintando dentro del cristal.
+    ElementType.LUPA -> true
 
     /**
      * **Un relleno no es pared, y esto costó descubrirlo.**
@@ -168,6 +174,13 @@ fun esPared(e: Element): Boolean = when (e.type) {
      * se veía.
      */
     ElementType.REGION -> false
+
+    // **El sólido sí es pared**, y con sus tres caras. Sus aristas están
+    // dibujadas y son opacas: un derrame que las atravesara saldría pintando por
+    // dentro del volumen, que es justo lo que no se ha tocado. Y al serlo, el
+    // hueco entre dos cajas —el sitio donde uno quiere meter una sombra o un
+    // color de fondo en un croquis— se rellena de un toque. Ver [contornosDe].
+    ElementType.SOLIDO -> true
 
     ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
     ElementType.ARROW, ElementType.LINE, ElementType.FREEDRAW,

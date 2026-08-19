@@ -102,6 +102,14 @@ data class Settings(
      */
     val zurdo: Boolean = false,
     /**
+     * Las marcas guardadas de cada deslizador, en un texto.
+     *
+     * Se guarda como `grosor:0.2,0.55|opacidad:0.8` y no como estructura porque son
+     * cuatro números por mando y esto va a un almacén de preferencias, no a una base de
+     * datos. Ver [com.forge.pixpin.motor.marcasDeTexto].
+     */
+    val marcasDeDeslizadores: String = "",
+    /**
      * Cómo se agrupan las herramientas en cada barra, escrito.
      *
      * Es cosa aparte de **cuáles** salen: se puede tener la misma lista repartida
@@ -137,6 +145,21 @@ data class Settings(
      * incordio. Un imán que tira cuando no quieres es peor que no tenerlo. Ver
      * [com.forge.pixpin.motor.Iman].
      */
+    /**
+     * Si el **modo guía** sale en la barra de cada sitio donde se dibuja.
+     *
+     * Es una opción y no una herramienta: no dibuja nada por sí misma, decide de
+     * qué clase sale lo que se trace. Y hace falta en unos sitios y en otros no
+     * —anotando una captura de paso, un andamio que luego hay que esconder es
+     * un botón de más— así que se enciende por separado en cada edición.
+     *
+     * En el editor a pantalla completa viene puesto y en las barras flotantes
+     * no: allí cada botón le quita sitio a los que se usan a cada trazo.
+     */
+    val guiaEnEditor: Boolean = true,
+    val guiaEnPin: Boolean = false,
+    val guiaEnCapa: Boolean = false,
+    val guiaEnCaptura: Boolean = false,
     val imanActivo: Boolean = true,
     val imanEsquinas: Boolean = true,
     val imanMedios: Boolean = true,
@@ -209,6 +232,11 @@ class SettingsRepository(private val context: Context) {
         val PIN_TOOLS = stringSetPreferencesKey("pin_tools")
         val PIN_FONT = intPreferencesKey("pin_font")
         val IMAN_ACTIVO = booleanPreferencesKey("iman_activo")
+        val MARCAS_DESLIZADORES = stringPreferencesKey("marcas_deslizadores")
+        val GUIA_EDITOR = booleanPreferencesKey("guia_editor")
+        val GUIA_PIN = booleanPreferencesKey("guia_pin")
+        val GUIA_CAPA = booleanPreferencesKey("guia_capa")
+        val GUIA_CAPTURA = booleanPreferencesKey("guia_captura")
         val IMAN_ESQUINAS = booleanPreferencesKey("iman_esquinas")
         val IMAN_MEDIOS = booleanPreferencesKey("iman_medios")
         val IMAN_CENTROS = booleanPreferencesKey("iman_centros")
@@ -244,7 +272,12 @@ class SettingsRepository(private val context: Context) {
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
+            guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
+            guiaEnPin = prefs[Keys.GUIA_PIN] ?: false,
+            guiaEnCapa = prefs[Keys.GUIA_CAPA] ?: false,
+            guiaEnCaptura = prefs[Keys.GUIA_CAPTURA] ?: false,
             imanActivo = prefs[Keys.IMAN_ACTIVO] ?: true,
+            marcasDeDeslizadores = prefs[Keys.MARCAS_DESLIZADORES] ?: "",
             imanEsquinas = prefs[Keys.IMAN_ESQUINAS] ?: true,
             imanMedios = prefs[Keys.IMAN_MEDIOS] ?: true,
             imanCentros = prefs[Keys.IMAN_CENTROS] ?: true,
@@ -325,6 +358,30 @@ class SettingsRepository(private val context: Context) {
     }
 
     /** Enciende o apaga una clase de enganche. Ver [com.forge.pixpin.motor.Iman]. */
+    /**
+     * Enciende o apaga el modo guía en un sitio.
+     *
+     * Uno por sitio y no uno global: la misma función estorba en la barra del
+     * pin y hace falta en el editor. Ver [Settings.guiaEnEditor].
+     */
+    suspend fun setGuia(donde: DondeSeDibuja, valor: Boolean) {
+        context.dataStore.edit {
+            it[
+                when (donde) {
+                    DondeSeDibuja.EDITOR -> Keys.GUIA_EDITOR
+                    DondeSeDibuja.PIN -> Keys.GUIA_PIN
+                    DondeSeDibuja.CAPA -> Keys.GUIA_CAPA
+                    DondeSeDibuja.CAPTURA -> Keys.GUIA_CAPTURA
+                }
+            ] = valor
+        }
+    }
+
+    /** Guarda las marcas de los deslizadores. Ver [Settings.marcasDeDeslizadores]. */
+    suspend fun setMarcas(texto: String) {
+        context.dataStore.edit { it[Keys.MARCAS_DESLIZADORES] = texto }
+    }
+
     suspend fun setIman(cual: ClaseDeIman, valor: Boolean) {
         context.dataStore.edit {
             it[
@@ -409,3 +466,7 @@ class SettingsRepository(private val context: Context) {
 enum class ClaseDeIman {
     ACTIVO, ESQUINAS, MEDIOS, CENTROS, INTERSECCIONES, EJE, BORDE_DE_GUIA, BORDE_DE_FIGURA
 }
+
+
+/** Los cuatro sitios donde se dibuja, cada uno con su barra. */
+enum class DondeSeDibuja { EDITOR, PIN, CAPA, CAPTURA }

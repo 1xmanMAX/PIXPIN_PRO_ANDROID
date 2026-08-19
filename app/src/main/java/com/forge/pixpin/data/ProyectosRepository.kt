@@ -2,6 +2,7 @@ package com.forge.pixpin.data
 
 import android.content.Context
 import com.forge.pixpin.motor.Hoja
+import com.forge.pixpin.motor.PdfDelProyecto
 import com.forge.pixpin.motor.Proyecto
 import com.forge.pixpin.motor.Proyectos
 import java.io.File
@@ -29,6 +30,15 @@ import kotlinx.serialization.json.Json
 class ProyectosRepository(context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+    /**
+     * El contexto de la aplicación, para reponer el PDF de un proyecto.
+     *
+     * Se guarda el de la aplicación **a propósito**: este repositorio vive
+     * mientras vive el proceso, y quedarse con el de una pantalla sería
+     * quedarse con una pantalla que se cerró hace rato. Ver [reponerLosPdf].
+     */
+    private val app = context.applicationContext
     private val carpeta = File(context.filesDir, "proyectos")
     private val archivo = File(carpeta, "proyectos.json")
 
@@ -96,6 +106,68 @@ class ProyectosRepository(context: Context) {
         ).copy(pdfLimpio = limpio)
         guardar(nuevo)
         return nuevo
+    }
+
+    /**
+     * Si este archivo es el documento de algún proyecto.
+     *
+     * Lo pregunta el gestor de pines antes de borrar el archivo de uno que se
+     * cae del historial: un PDF que se convirtió en proyecto **ya no es del
+     * pin**. Ver [Proyectos.usanElArchivo].
+     *
+     * Es un recorrido de unas decenas de entradas que ya están en memoria, así
+     * que se puede preguntar sin pensárselo.
+     */
+    fun esDeUnProyecto(ruta: String?): Boolean =
+        Proyectos.usanElArchivo(_proyectos.value, ruta)
+
+    /**
+     * Repone el PDF de los proyectos a los que se les borró **desde la copia
+     * limpia**.
+     *
+     * ## Qué avería arregla
+     *
+     * El PDF de un proyecto entraba como archivo de un pin y se borraba con él
+     * —al cerrarse y caer del historial, o al tirar el pin—, pero el proyecto
+     * seguía en la lista señalando a esa ruta. Desde fuera se veía así: **las
+     * miniaturas de casi todos los PDF salían en blanco y las de uno sí**, el
+     * del único pin que seguía vivo. Y no era solo la foto: sin archivo tampoco
+     * se puede abrir una página para anotarla ni entregar el documento.
+     *
+     * Que no vuelva a pasar lo arregla [esDeUnProyecto]; esto es para los que ya
+     * se quedaron sin él.
+     *
+     * ## Por qué se puede reponer
+     *
+     * Porque **lo que manda es el dibujo**, no el archivo: las anotaciones viven
+     * en sus escenas y el documento se rehace desde la copia limpia cada vez que
+     * se guarda una hoja. Ver [Proyecto.pdfLimpio] y [PdfDelProyecto.rehacer].
+     * Por eso se rehace aquí mismo en vez de dejar el PDF pelado esperando al
+     * próximo guardado: el archivo es lo que se entrega, y tiene que llevar
+     * dentro lo anotado desde el primer momento.
+     *
+     * **Fuera del hilo de la interfaz**, que copia un PDF entero y le vuelve a
+     * pintar sus páginas. Lo llama [PixPinApp] al arrancar, en el hilo de disco.
+     * Cuando no hay nada roto —lo normal— son un par de preguntas al sistema de
+     * archivos y ya.
+     *
+     * @return cuántos se repusieron.
+     */
+    fun reponerLosPdf(): Int {
+        val rotos = Proyectos.sinSuPdf(_proyectos.value) { File(it).exists() }
+        var repuestos = 0
+        for (p in rotos) {
+            val hecho = runCatching {
+                File(p.pdfLimpio!!).copyTo(File(p.pdfOrigen!!), overwrite = true)
+                // Y con lo anotado dentro otra vez. Si esto falla, el documento
+                // queda como el original: mejor el PDF de partida que ninguno,
+                // y el próximo guardado de cualquier hoja lo vuelve a intentar.
+                runCatching { PdfDelProyecto.rehacer(app, p) }
+                true
+            }.getOrDefault(false)
+            if (hecho) repuestos++
+        }
+        return repuestos
     }
 
     /** Un proyecto vacío con un nombre que no repita. */

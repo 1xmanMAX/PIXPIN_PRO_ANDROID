@@ -101,7 +101,8 @@ object PdfLienzo {
         if (pintables.isEmpty()) return null
 
         val pincel = Pincel(
-            DrawFonts.provider(context), imageProvider, primerObjeto, fondo, scene.escala
+            DrawFonts.provider(context), imageProvider, primerObjeto, fondo, scene.escala,
+            scene.vista
         )
         val cuerpo = ByteArrayOutputStream()
         cuerpo.orden("q")
@@ -147,7 +148,15 @@ object PdfLienzo {
         private var siguienteObjeto: Int,
         private val fondo: Bitmap?,
         /** La vara con la que se miden las cotas y la escala gráfica. */
-        private val escala: Escala?
+        private val escala: Escala?,
+        /**
+         * Desde dónde se mira lo que está en volumen.
+         *
+         * Va como parámetro por lo mismo que [escala]: es una propiedad del
+         * dibujo entero y no del elemento, así que el sólido no la lleva encima
+         * y aquí hay que traerla de la escena. Ver [Scene.vista].
+         */
+        private val vista: Vista
     ) {
         /**
          * El renderizador, **solo para reducir los mosaicos**.
@@ -204,9 +213,23 @@ object PdfLienzo {
                 ElementType.IMAGE -> imagen(e, alpha)
                 ElementType.MOSAIC -> mosaico(e, alpha, debajo)
                 ElementType.ESCALA_GRAFICA -> escalaGrafica(e, alpha)
+                ElementType.PLANO -> plano(e, alpha)
+                // **El volumen sale como polígonos rellenos, uno por cara**, que
+                // es exactamente lo que es: no se pierde nada por el camino y el
+                // PDF queda en vectores, no en píxeles. Es lo mismo que hace el
+                // SVG.
+                ElementType.SOLIDO -> volumen(e, alpha)
                 // El marco es la hoja, no una raya: decide el encuadre y no se
-                // dibuja. El foco va aparte, el último de todos.
-                ElementType.FRAME, ElementType.SPOTLIGHT -> ByteArray(0)
+                // dibuja.
+                ElementType.FRAME -> ByteArray(0)
+                // El foco sí: su sombra vive dentro de un marco, así que es
+                // dibujo. Se pinta con relleno par-impar (`f*`), que es lo que
+                // deja el hueco de la figura sin pintar.
+                ElementType.SPOTLIGHT -> foco(e)
+                // La lupa se pinta como el mosaico —con los píxeles de lo que
+                // mira— porque lo que enseña no son trazos, es un trozo del
+                // dibujo a otra escala.
+                ElementType.LUPA -> lupa(e, alpha, debajo)
             }
             if (dentro.isEmpty()) return dentro
 
@@ -251,6 +274,58 @@ object PdfLienzo {
             val g = buildShapeGeometry(e) ?: return ByteArray(0)
             salida.write(relleno(e, g, alpha))
             salida.write(trazo(e, g.stroke, alpha))
+            return salida.toByteArray()
+        }
+
+        /**
+         * La caja en volumen: la sombra y sus caras, de atrás hacia delante.
+         *
+         * Se reusan [solido], [rayado] y [trazo] pasándoles **un elemento con el
+         * fondo ya aclarado** en vez de repetir aquí el cálculo del color: es una
+         * copia barata de un `data class` y asegura que una cara lleve el mismo
+         * relleno, el mismo rayado y la misma transparencia que cualquier otra
+         * figura del documento.
+         *
+         * Un solo generador rugoso para las tres y recorridas en orden, igual que
+         * en pantalla, para que el papel salga con el mismo garabato que se veía.
+         */
+        private fun volumen(e: Element, alpha: Int): ByteArray {
+            val caras = carasDeElemento(e, vista)
+            if (caras.isEmpty()) return ByteArray(0)
+            val salida = ByteArrayOutputStream()
+
+            val sombra = sombraDeElemento(e, vista)
+            if (sombra.size >= 3) {
+                salida.write(
+                    pintado(
+                        opsDePuntos(sombra, cerrado = true),
+                        parseColor(e.strokeColor, alpha * OPACIDAD_DE_LA_SOMBRA / 100),
+                        "f"
+                    )
+                )
+            }
+
+            val rough = Rough(roughOptionsFor(e))
+            val rugoso = needsRoughFill(e)
+            val hayFondo = !isTransparent(e.backgroundColor)
+            for (cara in caras) {
+                val silueta = opsDePuntos(cara.poligono, cerrado = true)
+                if (hayFondo && silueta.isNotEmpty()) {
+                    val conTono =
+                        e.copy(backgroundColor = aclarar(e.backgroundColor, cara.claridad))
+                    salida.write(
+                        if (rugoso) {
+                            rayado(
+                                conTono, silueta, rough.fillPolygon(cara.poligono),
+                                alpha, false
+                            )
+                        } else {
+                            solido(conTono, silueta, alpha, false)
+                        }
+                    )
+                }
+                salida.write(trazo(e, rough.polygon(cara.poligono), alpha))
+            }
             return salida.toByteArray()
         }
 
@@ -700,6 +775,69 @@ object PdfLienzo {
          * lado— y el PDF la estira, igual que hace la pantalla. Un mosaico que
          * tapa media página ocupa en el archivo lo que un icono.
          */
+        /**
+         * La lupa, con sus píxeles dentro. Mismo motivo que en el SVG.
+         *
+         * El cristal se usa **como máscara**: se traza, se declara recorte con
+         * `W n` —que es como se recorta en PDF— y lo que se pinte después queda
+         * dentro. Así el cristal redondo lo es de verdad en el archivo.
+         */
+        private fun lupa(e: Element, alpha: Int, debajo: List<Element>): ByteArray {
+            val c = getElementAbsoluteCoords(e)
+            val ancho = c.x2 - c.x1
+            val alto = c.y2 - c.y1
+            if (ancho < 1 || alto < 1) return ByteArray(0)
+
+            val salida = ByteArrayOutputStream()
+            val ops = opsDePuntos(puntosDelCristal(e, c), cerrado = true)
+
+            reductor.contenidoDeLaLupa(e, debajo)?.let { mini ->
+                incrustar(mini, ancho, alto)?.let { nombre ->
+                    salida.orden("q")
+                    if (alpha < 255) {
+                        salida.write(alfa(android.graphics.Color.argb(alpha, 0, 0, 0)))
+                    }
+                    salida.write(camino(ops))
+                    salida.orden("W n")
+                    salida.orden(
+                        listOf(ancho, 0.0, 0.0, -alto, c.x1, c.y1 + alto)
+                            .joinToString(" ") { PdfEscritura.numero(it) } + " cm"
+                    )
+                    salida.orden("/$nombre Do")
+                    salida.orden("Q")
+                }
+            }
+
+            salida.write(trazo(e, ops, alpha))
+            if (lineasDeLaGuia(e).isNotEmpty()) {
+                salida.write(
+                    trazo(e, opsDePuntos(puntosDelFoco(e), cerrado = true), alpha * 3 / 4)
+                )
+                for ((a, b) in lineasDeLaGuia(e)) {
+                    salida.write(raya(b, a, parseColor(e.strokeColor, alpha), e.strokeWidth))
+                }
+            }
+            return salida.toByteArray()
+        }
+
+        /** El anillo del foco: el marco menos la figura, en par-impar. */
+        private fun foco(e: Element): ByteArray {
+            val c = getElementAbsoluteCoords(e)
+            val salida = ByteArrayOutputStream()
+            val negro = android.graphics.Color.argb(
+                (oscurecimientoDe(e) * 255 / 100).coerceIn(0, 255), 0, 0, 0
+            )
+            salida.orden("q")
+            salida.write(alfa(negro))
+            salida.orden(colorDe(negro, "rg"))
+            salida.write(camino(opsDePuntos(esquinasDeCaja(Bounds(c.x1, c.y1, c.x2, c.y2)), true)))
+            val dentro = puntosDelFoco(e)
+            if (dentro.size >= 3) salida.write(camino(opsDePuntos(dentro, cerrado = true)))
+            salida.orden("f*")
+            salida.orden("Q")
+            return salida.toByteArray()
+        }
+
         private fun mosaico(e: Element, alpha: Int, debajo: List<Element>): ByteArray {
             val c = getElementAbsoluteCoords(e)
             val ancho = c.x2 - c.x1
@@ -734,6 +872,45 @@ object PdfLienzo {
         }
 
         /** La reglita a cuadros: los tramos, el marco y las cifras. */
+        /** El plano cartesiano. Ver [Plano]: aquí solo se pasa a PDF. */
+        private fun plano(e: Element, alpha: Int): ByteArray {
+            if (e.width <= 0 || e.height <= 0) return ByteArray(0)
+            val tinta = parseColor(e.strokeColor, alpha)
+            val grosor = e.strokeWidth.coerceAtLeast(0.5)
+            val salida = ByteArrayOutputStream()
+            for (trazo in trazosDelPlano(e)) {
+                val ancho = if (trazo.eje) grosor else GROSOR_DE_LA_REJILLA
+                // La rejilla se aclara bajándole la opacidad al propio color,
+                // que en un PDF es más barato que un estado de transparencia.
+                val color = if (trazo.eje) tinta else parseColor(
+                    e.strokeColor, (alpha * ALFA_DE_LA_REJILLA).toInt().coerceIn(0, 255)
+                )
+                salida.write(
+                    raya(
+                        Pt(e.x + trazo.a.x, e.y + trazo.a.y),
+                        Pt(e.x + trazo.b.x, e.y + trazo.b.y),
+                        color, ancho
+                    )
+                )
+            }
+            val tam = (e.fontSize ?: 11.0).coerceAtLeast(1.0)
+            for (n in numerosDelPlano(e)) {
+                val x = if (n.horizontal) e.x + n.donde.x else e.x + n.donde.x - tam * 0.3
+                val y =
+                    if (n.horizontal) e.y + n.donde.y + tam * 1.15
+                    else e.y + n.donde.y + tam * 0.35
+                prepararPincel(
+                    tam, e.fontFamily,
+                    if (n.horizontal) Paint.Align.CENTER else Paint.Align.RIGHT
+                )
+                val perfil = Glifos.perfilDe(medidor, n.texto, x, y)
+                if (perfil.isNotEmpty()) {
+                    salida.write(pintado(opsDeAnillos(perfil, 2), tinta, "f"))
+                }
+            }
+            return salida.toByteArray()
+        }
+
         private fun escalaGrafica(e: Element, alpha: Int): ByteArray {
             val c = getElementAbsoluteCoords(e)
             val ancho = c.x2 - c.x1

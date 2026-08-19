@@ -42,9 +42,9 @@ class BindingTest {
         assertEquals("a", getHoveredElementForBinding(listOf(r), Pt(100.0, 175.0))?.id)
     }
 
-    /** Cerca por fuera también, que es lo que da el imán. */
+    /** Rozando el borde por fuera también: es el hueco que el anclaje deja. */
     @Test
-    fun `la punta un poco fuera sigue anclando`() {
+    fun `la punta rozando el borde sigue anclando`() {
         val r = caja("a", 100.0, 100.0, 200.0, 150.0)
         assertEquals("a", getHoveredElementForBinding(listOf(r), Pt(95.0, 175.0))?.id)
     }
@@ -53,6 +53,24 @@ class BindingTest {
     fun `lejos no ancla`() {
         val r = caja("a", 100.0, 100.0, 200.0, 150.0)
         assertNull(getHoveredElementForBinding(listOf(r), Pt(20.0, 175.0)))
+    }
+
+    /**
+     * **Y a una distancia razonable tampoco, que es lo que se pedía.**
+     *
+     * Anclar no es marcar una forma: es **llevarse la punta** al contorno, y
+     * además corrida a lo largo de él. A veinte píxeles de la caja la punta se
+     * puso ahí a propósito y ahí se tiene que quedar. Ver [maxBindingDistance].
+     */
+    @Test
+    fun `a una distancia razonable la punta se queda donde se soltó`() {
+        val r = caja("a", 100.0, 100.0, 200.0, 150.0)
+        for (fuera in listOf(Pt(80.0, 175.0), Pt(320.0, 175.0), Pt(200.0, 80.0))) {
+            assertNull(
+                "se ha imantado desde $fuera",
+                getHoveredElementForBinding(listOf(r), fuera)
+            )
+        }
     }
 
     // ---- Y sin volver a romper lo de antes ----
@@ -132,13 +150,21 @@ class BindingTest {
         assertNull(getHoveredElementForBinding(listOf(flecha), p))
     }
 
-    /** El umbral se relaja al alejar la vista, para que el imán se note igual. */
+    /** El umbral se relaja al alejar la vista, para que el roce se note igual. */
     @Test
     fun `el alcance del iman crece al alejar la vista`() {
-        val cerca = maxBindingDistance(1.0)
-        val lejos = maxBindingDistance(0.25)
+        val r = caja("a", 100.0, 100.0, 200.0, 150.0)
+        val cerca = maxBindingDistance(r, 1.0)
+        val lejos = maxBindingDistance(r, 0.25)
         assert(lejos > cerca) { "alejando ($lejos) tendría que atraer más que a 1× ($cerca)" }
-        assertEquals(cerca * 2, maxBindingDistance(0.05), 0.001)
+        assertEquals(cerca * 2, maxBindingDistance(r, 0.05), 0.001)
+    }
+
+    /** Y a un solo aumento es el hueco que el anclaje deja: rozando y ya. */
+    @Test
+    fun `el roce es el hueco del propio anclaje`() {
+        val r = caja("a", 100.0, 100.0, 200.0, 150.0)
+        assertEquals(getBindingGap(r), maxBindingDistance(r, 1.0), 1e-9)
     }
 
     // ---- Los dos modos de anclaje ----

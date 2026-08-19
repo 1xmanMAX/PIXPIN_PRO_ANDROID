@@ -55,6 +55,10 @@ class PdfTodasLasHerramientasTest {
         huecos = emptyList(),
         arcStart = 0.0,
         arcSweep = Math.PI,
+        // Levantada de verdad: con la altura a nulo el sólido sería una plancha
+        // y se escribiría una sola cara, así que las otras dos —y con ellas el
+        // orden de pintado y el aclarado— se quedarían sin recorrer.
+        altura = 90.0,
         etiquetaAngulo = -Math.PI / 4,
         etiquetaRadio = 22.0
     )

@@ -34,7 +34,7 @@ val ExcalidrawJson: Json = Json {
  * Herramientas. Quedan fuera frame, embeddable, láser y bote.
  *
  * Las últimas no son de Excalidraw: [HIGHLIGHTER] es el lápiz con otro ajuste;
- * [MOSAIC], [SPOTLIGHT] y [SERIAL] vienen del motor de anotación viejo, donde
+ * [MOSAIC], [LUPA] y [SERIAL] vienen del motor de anotación viejo, donde
  * eran lo más útil sobre una captura; y [MEASURE] y [SCALE] vienen del croquis,
  * que era una aplicación entera dedicada a medir. Ver [ElementType] y [Escala].
  */
@@ -42,7 +42,7 @@ enum class Tool {
     SELECTION, LASSO, HAND,
     RECTANGLE, DIAMOND, ELLIPSE, ARROW, LINE, FREEDRAW, TEXT, IMAGE,
     ERASER,
-    HIGHLIGHTER, MOSAIC, SPOTLIGHT, SERIAL, FRAME,
+    HIGHLIGHTER, MOSAIC, LUPA, SPOTLIGHT, SERIAL, FRAME,
 
 
     /** La cota: se arrastra sobre lo que se quiere medir y se rotula sola. */
@@ -93,12 +93,23 @@ enum class Tool {
      * herramienta de las matemáticas: un croquis de geometría se explica
      * nombrando los puntos, no señalándolos con el dedo. Ver [Puntos].
      */
-    PUNTO;
+    PUNTO,
+
+    /**
+     * La caja en volumen: **el boceto 3D del motor**.
+     *
+     * Se arrastra la huella por el suelo isométrico y luego se levanta. Son dos
+     * fases y no una, y el porqué está en [DrawController]: en isométrica un
+     * arrastre vertical puro no se distingue de una diagonal por el suelo, así
+     * que separarlas es la única forma de que la ambigüedad no exista. Ver
+     * [Solido] y [ElementType.SOLIDO].
+     */
+    SOLIDO;
 
     /** Las que crean una forma con caja al arrastrar. */
     val isShape: Boolean
         get() = this == RECTANGLE || this == DIAMOND || this == ELLIPSE ||
-            this == MOSAIC || this == SPOTLIGHT || this == FRAME ||
+            this == MOSAIC || this == LUPA || this == FRAME ||
             this == ESCALA_GRAFICA
 
     /** Las que crean un elemento de puntos. */
@@ -141,7 +152,22 @@ data class ItemStyle(
      */
     val mosaicBlur: Boolean = false,
     val textAlign: TextAlign = TextAlign.LEFT,
-    val verticalAlign: VerticalAlign = VerticalAlign.TOP
+    val verticalAlign: VerticalAlign = VerticalAlign.TOP,
+    /** Negrita, cursiva y tachado del texto. Ver [Propiedad.ESTILO_DE_TEXTO]. */
+    val negrita: Boolean = false,
+    val cursiva: Boolean = false,
+    val tachado: Boolean = false,
+    /** Lo que agranda la lupa, y de qué forma es. Ver [Propiedad.LUPA]. */
+    val aumento: Double = AUMENTO_POR_DEFECTO,
+    val lupaRedonda: Boolean = true,
+    /** Con qué se señala de dónde sale lo que se ve. Ver [GuiaDeLupa]. */
+    val guia: GuiaDeLupa = GuiaDeLupa.FLECHA,
+    /** Cuánto oscurece un foco lo de fuera, de 10 a 90 por ciento. */
+    val oscurecer: Int = OSCURECER_POR_DEFECTO,
+    /** Qué parte del marco de un foco ocupa su zona iluminada. Ver [conZona]. */
+    val zona: Double = ZONA_POR_DEFECTO,
+    /** El trazo a mano sale firme, sin adelgazar. Ver [Element.presionFirme]. */
+    val presionFirme: Boolean = false
 ) {
     companion object {
         /** Los cuatro grosores del original (`STROKE_WIDTH`). */
@@ -157,11 +183,30 @@ data class ItemStyle(
          */
         val FREEDRAW_STROKE_WIDTHS = listOf(0.5, 1.0, 2.0, 4.0)
 
-        /** El grosor de lápiz que corresponde a [ancho] en la escala de formas. */
-        fun freedrawWidthFor(ancho: Double): Double {
-            val i = STROKE_WIDTHS.indexOfFirst { it >= ancho }
-            return FREEDRAW_STROKE_WIDTHS[if (i < 0) FREEDRAW_STROKE_WIDTHS.lastIndex else i]
-        }
+        /**
+         * El grosor de lápiz que corresponde a [ancho] en la escala de formas.
+         *
+         * **Es la mitad, y sin escalones.** Las dos listas de arriba son una la
+         * mitad de la otra en las cuatro posiciones, así que dividir entre dos
+         * da exactamente los mismos cuatro valores **y además todos los de en
+         * medio**.
+         *
+         * Antes se buscaba la posición en [STROKE_WIDTHS] y se devolvía la de
+         * [FREEDRAW_STROKE_WIDTHS], que era lo correcto cuando el grosor se
+         * elegía entre cuatro botones. Con el deslizador —que da cualquier
+         * grosor de 0,5 a 20— eso dejaba el lápiz en cuatro escalones, y de 4
+         * en adelante, más de la mitad del recorrido, salía siempre lo mismo:
+         * el mando se movía y el trazo no cambiaba.
+         */
+        fun freedrawWidthFor(ancho: Double): Double = ancho / 2
+
+        /**
+         * Cuánto engorda el marcador respecto al lápiz.
+         *
+         * Vive aquí y no en el controlador porque hacen falta los dos: quien
+         * traza el subrayado y quien tiene que enseñar de qué ancho va a salir.
+         */
+        const val ENGORDE_DEL_MARCADOR = 5.0
 
         /** Los cuatro tamaños de fuente (`FONT_SIZE`). */
         val FONT_SIZES = listOf(16.0, 20.0, 28.0, 36.0)
@@ -347,7 +392,24 @@ data class Scene(
      * varios**: metidos en uno habría que mantenerlos al día en los dos, y
      * bastaría con borrar uno para dejar al otro apuntando al vacío.
      */
-    val alfileres: List<Alfiler> = emptyList()
+    val alfileres: List<Alfiler> = emptyList(),
+    /**
+     * Desde dónde se mira lo que está en volumen. **Una para todo el dibujo.**
+     *
+     * Va aquí y no en cada caja, y esa es la decisión: una vista por sólido sería
+     * un dibujo imposible, con cada volumen mirado desde un sitio distinto y sin
+     * ninguna relación espacial entre ellos —dos cajas apoyadas una junto a otra
+     * dejarían de estar apoyadas—. La cámara es del dibujo, como lo es la
+     * [escala], y girarla gira **todo** a la vez, que es lo que conserva el
+     * croquis.
+     *
+     * Con valor por defecto para que un dibujo guardado antes de que esto
+     * existiera siga abriéndose: el campo ausente en el JSON toma [Vista.CERO],
+     * que es exactamente la vista con la que se dibujó. Al `.excalidraw` de
+     * intercambio no sale —ese archivo se arma aparte en [ExcalidrawStore]— por
+     * lo mismo que la escala: es un campo propio y el otro no sabría leerlo.
+     */
+    val vista: Vista = Vista.CERO
 ) {
 
     /** Lo que se ve de verdad: sin borrar y, si están escondidas, sin referencias. */
@@ -445,6 +507,9 @@ fun newElement(
     startArrowhead = if (type == ElementType.ARROW) style.startArrowhead else null,
     endArrowhead = if (type == ElementType.ARROW) style.endArrowhead else null,
     text = if (type == ElementType.TEXT) "" else null,
+    negrita = type == ElementType.TEXT && style.negrita,
+    cursiva = type == ElementType.TEXT && style.cursiva,
+    tachado = type == ElementType.TEXT && style.tachado,
     // La cota también lleva letra: su rótulo se calcula al pintar, pero con qué
     // tamaño y con qué familia sale se elige como en cualquier texto.
     fontSize = if (type == ElementType.TEXT || type == ElementType.MEASURE) {
@@ -574,7 +639,7 @@ fun Element.withPointRemoved(index: Int): Element {
  * que es la forma en que Excalidraw guarda un elemento de puntos. Centralizarlo
  * es lo que evita el error de mover uno y arrastrar los demás con él.
  */
-private fun Element.conPuntosAbsolutos(absolutos: List<Pt>): Element {
+internal fun Element.conPuntosAbsolutos(absolutos: List<Pt>): Element {
     if (absolutos.isEmpty()) return this
     val origen = absolutos.first()
     val relativos = absolutos.map { Pt(it.x - origen.x, it.y - origen.y) }
@@ -632,7 +697,155 @@ fun applyStyle(
 }
 
 /**
- * El estilo nuevo llevado a un elemento, en lo que le aplique.
+ * El estilo que tiene [e] ahora mismo, leído del propio elemento.
+ *
+ * Hace falta para que los mandos **enseñen lo que hay marcado** en vez del
+ * pincel. Sin esto el panel decía siempre lo del pincel: marcabas una raya roja
+ * y fina y los mandos seguían en negro y gordo, así que tocar cualquiera de
+ * ellos —la opacidad, por ejemplo— le encajaba a la raya el color y el grosor
+ * del pincel de paso. Es el fallo de «cambio la opacidad y se me cambia el
+ * color».
+ */
+fun estiloDe(e: Element): ItemStyle {
+    val base = ItemStyle()
+    return ItemStyle(
+        strokeColor = e.strokeColor,
+        backgroundColor = e.backgroundColor,
+        fillStyle = e.fillStyle,
+        // El lápiz guarda **la mitad** del número del mando (ver
+        // [ItemStyle.freedrawWidthFor]), así que al leerlo se deshace la cuenta:
+        // si no, marcar un garabato bajaría el deslizador a la mitad solo.
+        strokeWidth = if (e.isFreeDraw) e.strokeWidth * 2 else e.strokeWidth,
+        strokeStyle = e.strokeStyle,
+        roughness = e.roughness,
+        opacity = e.opacity,
+        roundness = e.roundness,
+        startArrowhead = e.startArrowhead,
+        endArrowhead = e.endArrowhead,
+        elbowed = e.elbowed,
+        fontSize = e.fontSize ?: base.fontSize,
+        fontFamily = e.fontFamily ?: base.fontFamily,
+        mosaicBlur = e.mosaicBlur,
+        textAlign = e.textAlign ?: base.textAlign,
+        verticalAlign = e.verticalAlign ?: base.verticalAlign,
+        negrita = e.negrita,
+        cursiva = e.cursiva,
+        tachado = e.tachado,
+        aumento = aumentoDe(e),
+        lupaRedonda = e.lupaRedonda,
+        guia = guiaDe(e),
+        // El aumento sale de la geometría, no del campo: ver [aumentoDe].
+        oscurecer = oscurecimientoDe(e),
+        zona = zonaDe(e),
+        presionFirme = e.presionFirme
+    )
+}
+
+/**
+ * [e] con el estilo [s] puesto, **en lo que le aplique y solo en eso**.
+ *
+ * Quién puede llevar qué lo decide [propiedadesDeTipo], que es la misma tabla
+ * con la que el panel decide qué mandos enseñar. Volcar el estilo entero
+ * escribiría en un texto un tipo de línea que no se pinta y en una hoja un color
+ * que no tiene.
+ */
+fun conEstilo(e: Element, s: ItemStyle): Element {
+    val aplican = propiedadesDeTipo(e.type)
+    var out = e
+    if (Propiedad.TRAZO in aplican) out = out.copy(strokeColor = s.strokeColor)
+    if (Propiedad.FONDO in aplican) out = out.copy(backgroundColor = s.backgroundColor)
+    if (Propiedad.RELLENO in aplican) out = out.copy(fillStyle = s.fillStyle)
+    if (Propiedad.LINEA in aplican) out = out.copy(strokeStyle = s.strokeStyle)
+    if (Propiedad.GROSOR in aplican) {
+        out = out.copy(
+            strokeWidth =
+                if (e.isFreeDraw) ItemStyle.freedrawWidthFor(s.strokeWidth) else s.strokeWidth
+        )
+    }
+    if (Propiedad.RUGOSIDAD in aplican) out = out.copy(roughness = s.roughness)
+    if (Propiedad.ESQUINAS in aplican) out = out.copy(roundness = s.roundness)
+    if (Propiedad.PUNTAS in aplican) {
+        out = out.copy(startArrowhead = s.startArrowhead, endArrowhead = s.endArrowhead)
+    }
+    if (Propiedad.FORMA_FLECHA in aplican) out = out.copy(elbowed = s.elbowed)
+    if (Propiedad.MOSAICO in aplican) out = out.copy(mosaicBlur = s.mosaicBlur)
+    if (Propiedad.OPACIDAD in aplican) out = out.copy(opacity = s.opacity)
+    if (Propiedad.FUENTE in aplican) {
+        out = out.copy(fontSize = s.fontSize, fontFamily = s.fontFamily)
+    }
+    if (Propiedad.ESTILO_DE_TEXTO in aplican) {
+        out = out.copy(negrita = s.negrita, cursiva = s.cursiva, tachado = s.tachado)
+    }
+    if (Propiedad.LUPA in aplican) {
+        out = out.copy(lupaRedonda = s.lupaRedonda, guia = s.guia)
+        // **El aumento cambia el tamaño del cristal, no un número.** Ver
+        // [conAumento]: la zona mirada se queda como está y la ventana crece.
+        if (out.type == ElementType.LUPA) out = conAumento(out, s.aumento)
+    }
+    if (Propiedad.OSCURECER in aplican) out = out.copy(oscurecer = s.oscurecer)
+    if (Propiedad.ZONA in aplican) out = conZona(out, s.zona)
+    if (Propiedad.PRESION in aplican) out = out.copy(presionFirme = s.presionFirme)
+    return out
+}
+
+/**
+ * [destino] con **solo lo que cambió** entre [anterior] y [nuevo].
+ *
+ * Es la pieza que hacía falta. Un panel de estilos no dice «ponle este estilo»,
+ * dice «súbele la opacidad»: lo que llega es el estilo entero con un campo
+ * distinto, y volcarlo tal cual escribe los otros quince encima. Con algo
+ * marcado eso se veía enseguida —subías la opacidad y la figura cambiaba de
+ * color y de grosor—, porque lo que se volcaba era el pincel.
+ *
+ * Comparando campo a campo, tocar un mando toca **ese** mando. Es tedioso de
+ * escribir y no hay atajo: el estilo es una clase de datos y el lenguaje no dice
+ * cuál de sus campos acaba de cambiar.
+ */
+fun conCambios(destino: ItemStyle, anterior: ItemStyle, nuevo: ItemStyle): ItemStyle {
+    var out = destino
+    if (nuevo.strokeColor != anterior.strokeColor) out = out.copy(strokeColor = nuevo.strokeColor)
+    if (nuevo.backgroundColor != anterior.backgroundColor) {
+        out = out.copy(backgroundColor = nuevo.backgroundColor)
+    }
+    if (nuevo.fillStyle != anterior.fillStyle) out = out.copy(fillStyle = nuevo.fillStyle)
+    if (nuevo.strokeWidth != anterior.strokeWidth) out = out.copy(strokeWidth = nuevo.strokeWidth)
+    if (nuevo.strokeStyle != anterior.strokeStyle) out = out.copy(strokeStyle = nuevo.strokeStyle)
+    if (nuevo.roughness != anterior.roughness) out = out.copy(roughness = nuevo.roughness)
+    if (nuevo.opacity != anterior.opacity) out = out.copy(opacity = nuevo.opacity)
+    if (nuevo.roundness != anterior.roundness) out = out.copy(roundness = nuevo.roundness)
+    if (nuevo.startArrowhead != anterior.startArrowhead) {
+        out = out.copy(startArrowhead = nuevo.startArrowhead)
+    }
+    if (nuevo.endArrowhead != anterior.endArrowhead) {
+        out = out.copy(endArrowhead = nuevo.endArrowhead)
+    }
+    if (nuevo.elbowed != anterior.elbowed) out = out.copy(elbowed = nuevo.elbowed)
+    if (nuevo.fontSize != anterior.fontSize) out = out.copy(fontSize = nuevo.fontSize)
+    if (nuevo.fontFamily != anterior.fontFamily) out = out.copy(fontFamily = nuevo.fontFamily)
+    if (nuevo.mosaicBlur != anterior.mosaicBlur) out = out.copy(mosaicBlur = nuevo.mosaicBlur)
+    if (nuevo.textAlign != anterior.textAlign) out = out.copy(textAlign = nuevo.textAlign)
+    if (nuevo.verticalAlign != anterior.verticalAlign) {
+        out = out.copy(verticalAlign = nuevo.verticalAlign)
+    }
+    if (nuevo.negrita != anterior.negrita) out = out.copy(negrita = nuevo.negrita)
+    if (nuevo.cursiva != anterior.cursiva) out = out.copy(cursiva = nuevo.cursiva)
+    if (nuevo.tachado != anterior.tachado) out = out.copy(tachado = nuevo.tachado)
+    if (nuevo.aumento != anterior.aumento) out = out.copy(aumento = nuevo.aumento)
+    if (nuevo.lupaRedonda != anterior.lupaRedonda) {
+        out = out.copy(lupaRedonda = nuevo.lupaRedonda)
+    }
+    if (nuevo.guia != anterior.guia) out = out.copy(guia = nuevo.guia)
+    if (nuevo.oscurecer != anterior.oscurecer) out = out.copy(oscurecer = nuevo.oscurecer)
+    if (nuevo.zona != anterior.zona) out = out.copy(zona = nuevo.zona)
+    if (nuevo.presionFirme != anterior.presionFirme) {
+        out = out.copy(presionFirme = nuevo.presionFirme)
+    }
+    return out
+}
+
+/**
+ * El cambio de estilo llevado a un elemento: **solo lo que se tocó, y solo si le
+ * aplica**.
  *
  * Existe para que no haya tres versiones de esto. La barra vive en tres sitios
  * —el pin, la captura y el editor— y cada uno traía su propia lambda de «qué
@@ -640,16 +853,16 @@ fun applyStyle(
  * letra, y el resultado era que cambiar el tamaño del número de una cota
  * funcionaba en un sitio y en otro no.
  *
- * El texto se queda fuera a propósito: cambiarle la letra obliga a **volver a
- * medir su caja**, y eso necesita Android. Lo hace quien tenga contexto. La
- * cota no: su rótulo se calcula al pintar y no guarda caja ninguna.
+ * Son las tres piezas de arriba en fila: se lee el estilo que tiene el elemento
+ * ([estiloDe]), se le mete encima lo que haya cambiado en el panel
+ * ([conCambios]) y se vuelca a los campos que su tipo admita ([conEstilo]).
+ *
+ * El texto se queda a medias a propósito: cambiarle la letra obliga a **volver a
+ * medir su caja**, y eso necesita Android. La medida la pone quien tenga
+ * contexto. La cota no: su rótulo se calcula al pintar y no guarda caja ninguna.
  */
-fun estiloAplicado(e: Element, nuevo: ItemStyle): Element {
-    val base = e.copy(strokeColor = nuevo.strokeColor, strokeWidth = nuevo.strokeWidth)
-    return if (e.isMeasure) {
-        base.copy(fontSize = nuevo.fontSize, fontFamily = nuevo.fontFamily)
-    } else base
-}
+fun estiloAplicado(e: Element, anterior: ItemStyle, nuevo: ItemStyle): Element =
+    conEstilo(e, conCambios(estiloDe(e), anterior, nuevo))
 
 /**
  * Borra la selección (`actionDeleteSelected`).
@@ -685,16 +898,33 @@ fun eraseAt(
     elements: List<Element>, p: Pt, threshold: Double = DEFAULT_HIT_THRESHOLD,
     alcanza: (Element) -> Boolean = { true }
 ): List<Element> {
-    val hit = getElementAtPosition(elements.filter(alcanza), p, threshold) ?: return elements
+    // **El borrador atraviesa lo que no puede borrar.** Descartándolas antes de
+    // buscar, y no después, pasar por encima de una foto borra lo que hay
+    // dibujado debajo en vez de no hacer nada: si la foto ganase el toque, el
+    // borrador se quedaría muerto sobre toda la superficie que ella tapa.
+    val candidatos = elements.filter { alcanza(it) && !intocableParaElBorrador(it) }
+    val hit = getElementAtPosition(candidatos, p, threshold) ?: return elements
     // Borrar un miembro borra el grupo entero, igual que seleccionarlo.
     val victims = getElementsInGroupOf(elements, hit).map { it.id }.toSet()
     return elements.map {
-        // Lo bloqueado no se borra, igual que en `deleteSelected`. Es lo que
-        // impide que el borrador se lleve por delante la foto sobre la que se
-        // está anotando al pasar por un hueco donde no había nada dibujado.
-        if (it.id in victims && !it.locked) it.copy(isDeleted = true).touched() else it
+        if (it.id in victims && !intocableParaElBorrador(it)) {
+            it.copy(isDeleted = true).touched()
+        } else it
     }
 }
+
+/**
+ * Lo que el borrador nunca se lleva.
+ *
+ * Lo bloqueado, porque para eso se bloquea. Y **las imágenes**, aunque estén
+ * sueltas: se meten para dibujar encima de ellas, así que el borrador las
+ * recorre entero y a la mínima se llevaba la foto en vez de la línea que se
+ * quería quitar —y con ella, la referencia de todo lo demás—. Una foto sobra
+ * pocas veces, y para esas está seleccionarla y tirarla a la papelera, que es
+ * un gesto que se hace a propósito y no de refilón.
+ */
+fun intocableParaElBorrador(e: Element): Boolean =
+    e.locked || e.type == ElementType.IMAGE
 
 /** Quita de verdad lo marcado como borrado. Solo al guardar, no al editar. */
 fun purgeDeleted(elements: List<Element>): List<Element> = elements.filter { !it.isDeleted }
@@ -729,5 +959,31 @@ fun getVisibleElements(
     val topLeft = viewport.toScene(0.0, 0.0)
     val bottomRight = viewport.toScene(screenWidth, screenHeight)
     val view = Bounds(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y)
-    return elements.filter { !it.isDeleted && boundsOverlap(view, getElementBounds(it)) }
+    return elements.filter { !it.isDeleted && boundsOverlap(view, cajaConLoQueDibuja(it)) }
+}
+
+/**
+ * Lo que ocupa un elemento **contando lo que dibuja fuera de su caja**.
+ *
+ * Casi todo cabe en la suya, pero una lupa no: su guía sale hasta la zona que
+ * mira, que puede estar en la otra punta del dibujo. Recortando por la caja, al
+ * alejarse un poco se salía de pantalla y con ella **desaparecían su marco y su
+ * raya**, aunque la raya cruzara justo por delante de los ojos. Lo mismo con un
+ * foco, que oscurece un anillo alrededor de una zona que puede quedar lejos.
+ */
+fun cajaConLoQueDibuja(e: Element): Bounds {
+    val caja = getElementBounds(e)
+    // **Y un sólido tampoco cabe en la suya.** Su caja es la huella en el suelo,
+    // y lo que se dibuja se levanta por encima de ella tanto como mida de alto.
+    // Recortando por la huella, una caja alta desaparecía de golpe al bajar la
+    // vista un poco: seguía habiendo volumen delante de los ojos y la huella ya
+    // había salido de pantalla. Se devuelve lo que ocupa **desde cualquier
+    // vista** porque aquí no se sabe cuál es la puesta, y pasarse es gratis.
+    if (e.isSolido) return envolturaDeSolido(e)
+    if (e.type != ElementType.LUPA && e.type != ElementType.SPOTLIGHT) return caja
+    val zona = regionDeLaLupa(e)
+    return Bounds(
+        minOf(caja.x1, zona.x1), minOf(caja.y1, zona.y1),
+        maxOf(caja.x2, zona.x2), maxOf(caja.y2, zona.y2)
+    )
 }

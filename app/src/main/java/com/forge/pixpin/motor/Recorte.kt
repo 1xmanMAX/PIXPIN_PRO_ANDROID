@@ -29,8 +29,29 @@ import kotlin.math.hypot
  * Ordenados y sin repetidos: dos figuras que se cruzan en el mismo punto dan un
  * solo corte, y una tangente que roza dos veces el mismo sitio también.
  */
+/**
+ * El recorrido de [e] **en coordenadas de escena**, con su inclinación puesta.
+ *
+ * Los puntos de un elemento se guardan sin girar y el ángulo va aparte, así que
+ * `puntosDeTrazado` devuelve el trazo **como si la figura estuviera recta**. Con
+ * eso se recortaba en un sistema y las paredes se cruzaban en otro: el trozo
+ * salía por donde no era y, sobre todo, lo que quedaba volvía a girarse al
+ * pintarlo —el ángulo seguía puesto en el elemento nuevo—, así que recortar una
+ * figura girada la giraba otra vez.
+ *
+ * Aquí se trabaja en el mundo de principio a fin, que es donde está el dedo y
+ * donde están las paredes. Ver [conPuntos], que por eso deja el ángulo a cero.
+ */
+private fun trazadoEnElMundo(e: Element): List<Pt> {
+    val pts = puntosDeTrazado(e)
+    if (e.angle == 0.0 || pts.isEmpty()) return pts
+    val c = getElementAbsoluteCoords(e)
+    val centro = Pt(c.cx, c.cy)
+    return pts.map { pointRotateRads(it, centro, e.angle) }
+}
+
 fun cortesDe(e: Element, otros: List<Element>): List<Double> {
-    val camino = puntosDeTrazado(e)
+    val camino = trazadoEnElMundo(e)
     if (camino.size < 2) return emptyList()
     val paredes = otros.filter { !it.isDeleted }.flatMap { segmentosDe(it) }
     if (paredes.isEmpty()) return emptyList()
@@ -91,7 +112,7 @@ fun recortarEn(e: Element, otros: List<Element>, p: Pt): List<Element>? = when {
 }
 
 private fun recortarLineal(e: Element, otros: List<Element>, p: Pt): List<Element>? {
-    val camino = puntosDeTrazado(e)
+    val camino = trazadoEnElMundo(e)
     if (camino.size < 2) return null
     val total = largoDe(camino)
     if (total <= 0.0) return null
@@ -185,7 +206,13 @@ private fun recortarArco(e: Element, otros: List<Element>, p: Pt): List<Element>
         puntosDelArco(e.copy(arcStart = 0.0, arcSweep = 2 * Math.PI))
     } else puntosDelArco(e)
     if (muestreo.size < 2) return null
-    val camino = muestreo.map { Pt(e.x + it.x, e.y + it.y) }
+    // **Al mundo antes de cruzar.** Los puntos del arco salen sin girar, como
+    // los de cualquier elemento, y las paredes contra las que hay que cortarlo
+    // están en la escena. Ver [puntosDelArco].
+    val centro = Pt(c.cx, c.cy)
+    val camino = muestreo.map {
+        pointRotateRads(Pt(e.x + it.x, e.y + it.y), centro, e.angle)
+    }
 
     val cortes = cruces(camino, otros).map { avance(it) }
         .filter { cerrado || (it > MISMO_CORTE && it < largo - MISMO_CORTE) }
@@ -303,7 +330,7 @@ private fun cortesEnCamino(camino: List<Pt>, otros: List<Element>): List<Double>
 fun extenderEn(
     e: Element, otros: List<Element>, p: Pt, alcance: Double = ALCANCE_EXTENDER
 ): Element? {
-    val camino = puntosDeTrazado(e)
+    val camino = trazadoEnElMundo(e)
     if (camino.size < 2) return null
 
     val porElPrincipio = hypot(p.x - camino.first().x, p.y - camino.first().y) <
@@ -405,6 +432,12 @@ private fun enElTramo(a: Pt, b: Pt, t: Double) =
  * Los puntos se guardan relativos a `x`/`y`, así que cambiar el recorrido sin
  * mover el origen desplazaría la raya entera. Es el mismo cuidado que hay que
  * tener al arrastrar el primer punto de una flecha.
+ *
+ * **Y el ángulo se queda a cero.** [absolutos] llega ya en coordenadas de
+ * escena, con la inclinación de la figura vieja aplicada; dejarle además el
+ * ángulo puesto sería girar dos veces lo mismo, y eso es lo que hacía que
+ * recortar una figura girada la mandara a otro sitio dando una vuelta. Ver
+ * [trazadoEnElMundo].
  */
 private fun conPuntos(e: Element, absolutos: List<Pt>): Element {
     val origen = absolutos.first()
@@ -416,6 +449,7 @@ private fun conPuntos(e: Element, absolutos: List<Pt>): Element {
         points = relativos,
         width = caja.width,
         height = caja.height,
+        angle = 0.0,
         // Recortar rompe cualquier anclaje: la punta ya no está donde estaba.
         startBinding = null,
         endBinding = null

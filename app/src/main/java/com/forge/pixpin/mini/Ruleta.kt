@@ -17,7 +17,13 @@ object Ruleta {
     const val MAXIMO = 40
 
     /**
-     * Los nombres de la lista, uno por línea.
+     * Los nombres de la lista: **uno por línea, o separados por comas**.
+     *
+     * Aceptar las comas y el punto y coma no es un capricho. Escribiendo «ana,
+     * luis, marta» salía **un solo nombre**, y con uno solo no hay sorteo: el
+     * botón de girar se quedaba apagado y no pasaba nada al tocarlo, sin decir
+     * por qué. Uno escribe una lista como le sale, y las tres formas son la
+     * misma lista.
      *
      * Se quitan las líneas en blanco y los espacios de los lados, que es lo que
      * sobra al pegar una lista de cualquier sitio. Los repetidos **se quedan**:
@@ -26,7 +32,7 @@ object Ruleta {
      */
     fun nombres(texto: String?): List<String> =
         texto.orEmpty()
-            .split('\n')
+            .split('\n', ',', ';')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .take(MAXIMO)

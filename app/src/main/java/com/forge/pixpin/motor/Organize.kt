@@ -158,7 +158,22 @@ fun getElementsInGroupOf(elements: List<Element>, element: Element): List<Elemen
     return elements.filter { groupId in it.groupIds }
 }
 
-/** La selección partida por grupos: cada grupo cuenta como una unidad. */
+/**
+ * La selección partida por grupos: cada grupo cuenta como una unidad.
+ *
+ * **Y si todo lo marcado es un solo grupo, se parte en elementos.**
+ *
+ * Ese era el fallo de «alinear a veces no hace nada»: los grupos se mueven
+ * enteros para no deshacerlos —alinear a la izquierda apilaría sus miembros en
+ * una columna— pero cuando lo marcado **es** un único grupo, esa regla deja una
+ * sola unidad que alinear consigo misma: o sea, nada. Y es el caso corriente,
+ * no el raro: tocar un miembro selecciona el grupo entero, y una figura estampada
+ * de la lista viene agrupada de fábrica.
+ *
+ * Con un solo grupo, lo que se quiere alinear es lo de dentro; con varios, los
+ * grupos entre sí. Es la misma regla —«alinea las unidades que haya»— y lo único
+ * que cambia es qué cuenta como unidad.
+ */
 internal fun selectedElementsByGroup(
     selected: List<Element>
 ): List<List<Element>> {
@@ -169,7 +184,9 @@ internal fun selectedElementsByGroup(
         if (gid == null) loose += listOf(e)
         else grouped.getOrPut(gid) { mutableListOf() } += e
     }
-    return grouped.values.map { it.toList() } + loose
+    val unidades = grouped.values.map { it.toList() } + loose
+    if (unidades.size == 1 && selected.size > 1) return selected.map { listOf(it) }
+    return unidades
 }
 
 // -------------------------------------------------------------------------

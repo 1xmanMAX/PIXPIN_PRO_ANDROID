@@ -246,8 +246,12 @@ class OverlayManager(private val app: PixPinApp) {
             }
         }
 
-        override fun onPinImageExtracted(controller: PinWindowController, imagePath: String) {
-            pinImage(imagePath)
+        override fun onPinImageExtracted(
+            controller: PinWindowController,
+            imagePath: String,
+            comoVentana: Boolean
+        ) {
+            pinImage(imagePath, comoVentana = comoVentana)
         }
 
         override fun onPinToggleSave(controller: PinWindowController) {
@@ -337,7 +341,14 @@ class OverlayManager(private val app: PixPinApp) {
     }
 
     /** Crea un pin de imagen (desde la captura o desde un archivo importado). */
-    fun pinImage(imagePath: String, x: Int? = null, y: Int? = null, scale: Float? = null) {
+    fun pinImage(
+        imagePath: String,
+        x: Int? = null,
+        y: Int? = null,
+        scale: Float? = null,
+        /** Nace en modo ventana: marco fijo y la imagen se mueve dentro. */
+        comoVentana: Boolean = false
+    ) {
         if (!Settings.canDrawOverlays(app)) return
         val state = if (x != null && y != null && scale != null) {
             PinState(
@@ -351,7 +362,7 @@ class OverlayManager(private val app: PixPinApp) {
         } else {
             newPin(PinType.IMAGE).copy(imagePath = imagePath)
         }
-        createPin(state)
+        createPin(state.copy(ventana = comoVentana))
     }
 
     /**
@@ -363,6 +374,42 @@ class OverlayManager(private val app: PixPinApp) {
      * parte en páginas y puede irse a un proyecto; como archivo sería un icono
      * con un nombre.
      */
+    /**
+     * Pinea una nota de voz recién grabada.
+     *
+     * Nace **sin hora**: primero se graba y luego, si hace falta, se le pone. Grabar es lo
+     * urgente —uno tiene la idea en la cabeza— y preguntar la hora antes de dejar hablar
+     * es la forma segura de que la idea se pierda.
+     */
+    /** Pinea un texto suelto. Lo usa lo guardado al sacar una nota a la pantalla. */
+    /**
+     * Saca a la pantalla **un dibujo que ya existe**, sin copiarlo.
+     *
+     * El pin apunta al mismo archivo del dibujo, así que lo que se trace en el pin es lo
+     * que hay en la conversación y al revés: son la misma cosa vista en dos sitios.
+     * Copiarlo daría dos dibujos que divergen, que es la forma de perder trabajo que no
+     * se nota hasta que ya has dibujado en el equivocado.
+     */
+    fun pinDibujo(rutaDelDibujo: String) {
+        createPin(newPin(PinType.DRAW).copy(drawPath = rutaDelDibujo))
+    }
+
+    fun pinTexto(texto: String) {
+        if (!Settings.canDrawOverlays(app) || texto.isBlank()) return
+        createPin(newPin(PinType.TEXT).copy(text = texto))
+    }
+
+    fun pinVoz(audioPath: String) {
+        if (!Settings.canDrawOverlays(app)) return
+        createPin(
+            PinState(
+                id = UUID.randomUUID().toString(),
+                type = PinType.VOZ,
+                audioPath = audioPath
+            )
+        )
+    }
+
     fun pinFile(filePath: String, fileName: String, mimeType: String) {
         if (!Settings.canDrawOverlays(app)) return
 
@@ -498,6 +545,7 @@ class OverlayManager(private val app: PixPinApp) {
             hiddenAll = false
             pins.values.forEach { volverAEnseñar(it) }
         }
+        alBuzon(state)
         val controller = PinWindowController(app, state, callbacks)
         pins[state.id] = controller
         controller.show()
@@ -673,6 +721,94 @@ class OverlayManager(private val app: PixPinApp) {
         controller.show()
         saveNow()
         refreshPinList()
+    }
+
+    /**
+     * Trae de vuelta un pin de voz y **lo reproduce**: ha llegado su hora.
+     *
+     * Se busca donde esté: puede seguir en pantalla, estar cerrado en el historial o
+     * guardado con estrella. Un recordatorio que no encuentra su nota porque el pin se
+     * cerró es justo el caso que la gente teme al confiar en un recordatorio.
+     *
+     * Y **se le quita la hora al sonar**. Un recordatorio suena una vez; dejarlo puesto
+     * haría que volviera a sonar mañana a la misma hora sin que nadie lo pidiera.
+     */
+    fun sonarRecordatorio(pinId: String) {
+        val vivo = pins[pinId]
+        if (vivo == null) {
+            // Cerrado: se rescata del historial o de los guardados. Un
+            // recordatorio que no encuentra su nota porque el pin se cerró es
+            // justo el caso que hace que uno deje de confiar en los avisos.
+            val estado = history.firstOrNull { it.id == pinId }
+                ?: savedPinsState.value.firstOrNull { it.id == pinId }
+                ?: return
+            restoreSavedPin(estado.copy(recordarA = null))
+        }
+        pins[pinId]?.sonarLaNota()
+        saveNow()
+        refreshPinList()
+    }
+
+    /** Le pone al pin la hora que se eligió en el reloj del sistema. */
+    fun ponerHoraDeRecordatorio(pinId: String, hora: Int, minuto: Int) {
+        val cuando = proximaVezQueSean(
+            System.currentTimeMillis(), hora, minuto, java.util.TimeZone.getDefault()
+        )
+        pins[pinId]?.aceptarLaHora(cuando)
+        saveNow()
+        refreshPinList()
+    }
+
+    /**
+     * Todo lo que se pinea cae también en **la bandeja de entrada**.
+     *
+     * La regla, tal cual: lo que se pinea o se edita y **no vive ya en un proyecto** pasa
+     * por el buzón, y se borra solo si nadie lo toca en una semana. Es capturar ahora y
+     * decidir después — la única forma de que uno no tenga que pararse a ordenar justo
+     * cuando está haciendo otra cosa.
+     *
+     * Se escribe **una línea al final de un archivo**, no se reescribe nada: por eso se
+     * puede hacer en cada pin sin que se note. Ver [MensajesStore].
+     *
+     * Y no entra lo que no tiene contenido —un color, un contador— ni lo que ya tiene un
+     * sitio propio. Ver [delPin].
+     */
+    private fun alBuzon(state: PinState) {
+        val clase = when (state.type) {
+            PinType.IMAGE -> com.forge.pixpin.guardados.Clase.IMAGEN
+            PinType.FILE -> com.forge.pixpin.guardados.Clase.ARCHIVO
+            PinType.VOZ -> com.forge.pixpin.guardados.Clase.VOZ
+            PinType.DRAW -> com.forge.pixpin.guardados.Clase.DIBUJO
+            PinType.TEXT, PinType.CHECKLIST, PinType.LEDGER, PinType.TABLE ->
+                com.forge.pixpin.guardados.Clase.NOTA
+            // Un color, un contador, un temporizador o una ruleta no tienen contenido
+            // que salvar: son trastos que se rehacen en dos segundos. Llenar con ellos
+            // la bandeja es lo que hace que uno deje de mirarla.
+            else -> null
+        } ?: return
+
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val almacen = com.forge.pixpin.guardados.MensajesStore(app)
+                val nuevo = com.forge.pixpin.guardados.delPin(
+                    id = "pin-" + state.id,
+                    cuando = System.currentTimeMillis(),
+                    clase = clase,
+                    texto = state.text,
+                    ruta = state.imagePath ?: state.filePath ?: state.audioPath,
+                    nombre = state.fileName.orEmpty(),
+                    referencia = if (clase == com.forge.pixpin.guardados.Clase.DIBUJO) {
+                        state.id
+                    } else {
+                        null
+                    }
+                ) ?: return@runCatching
+                // Y no dos veces lo mismo: el pin puede volver a crearse al
+                // restaurarlo del historial, y eso no es contenido nuevo.
+                if (almacen.leer().any { it.id == nuevo.id }) return@runCatching
+                almacen.anadir(nuevo)
+            }
+        }
     }
 
     // ---- Grupos ----
@@ -941,6 +1077,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.FILE -> "📁 " + app.getString(R.string.pin_type_file_plural)
         PinType.TIMER -> "⏱ " + app.getString(R.string.pin_type_timer)
         PinType.RULETA -> "🎯 " + app.getString(R.string.pin_type_ruleta)
+        PinType.VOZ -> "\uD83C\uDF99 " + app.getString(R.string.pin_type_voz)
         PinType.CHECKLIST -> "☑ " + app.getString(R.string.pin_type_checklist)
         PinType.COUNTER -> "🔢 " + app.getString(R.string.pin_type_counter)
         PinType.LEDGER -> "💶 " + app.getString(R.string.pin_type_ledger)
@@ -1240,6 +1377,7 @@ class OverlayManager(private val app: PixPinApp) {
         PinType.COLOR -> pin.colorArgb?.let { ContentClassifier.toHex(it) } ?: "Color"
         PinType.TEXT -> pin.text.orEmpty().replace('\n', ' ').take(30)
         PinType.RULETA -> app.getString(R.string.pin_type_ruleta)
+        PinType.VOZ -> app.getString(R.string.pin_type_voz)
         PinType.FILE -> pin.fileName ?: app.getString(R.string.pin_type_file)
         PinType.TIMER -> app.getString(R.string.pin_type_timer)
         PinType.CHECKLIST -> app.getString(R.string.pin_type_checklist)

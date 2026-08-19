@@ -349,6 +349,65 @@ object Proyectos {
     fun deEstePdf(proyectos: List<Proyecto>, pdf: String): Proyecto? =
         proyectos.firstOrNull { it.pdfOrigen == pdf }
 
+    /**
+     * Si este archivo **es de algún proyecto**.
+     *
+     * El PDF de un proyecto entra en la aplicación como archivo de un pin, y
+     * durante un tiempo fue solo eso: al cerrarse el pin, su archivo se iba con
+     * él en cuanto el historial daba la vuelta. Pero en el momento en que se
+     * crea el proyecto la propiedad cambia de manos —[Proyecto.pdfOrigen] es
+     * **el documento que se está anotando y el que se va a entregar**—, y un
+     * pin cerrado no puede llevárselo por delante: el proyecto sigue en la lista
+     * meses después, señalando a un archivo que ya no está.
+     *
+     * Se pregunta también por la copia limpia porque es de lo que se rehace el
+     * documento: perderla es perder la posibilidad de reponerlo.
+     */
+    fun usanElArchivo(proyectos: List<Proyecto>, ruta: String?): Boolean {
+        if (ruta.isNullOrBlank()) return false
+        return proyectos.any { it.pdfOrigen == ruta || it.pdfLimpio == ruta }
+    }
+
+    /**
+     * Los proyectos que se han quedado **sin su PDF** y tienen de dónde
+     * reponerlo.
+     *
+     * Es la avería que dejó la propiedad mal repartida: el archivo se borró con
+     * el pin y el proyecto se quedó enseñando hojas en blanco, porque una página
+     * de un documento que no existe no se puede dibujar. La copia limpia sí
+     * sobrevive —vive en la carpeta del proyecto y solo se borra con él—, así
+     * que hay con qué volver.
+     *
+     * [existe] entra como función para que esto no sepa nada de discos y se
+     * pueda comprobar entero en la JVM.
+     */
+    /**
+     * De qué archivo hay que leer el documento de un proyecto.
+     *
+     * El original primero, y **la copia limpia si el original ya no está**. Reponerlo es
+     * copiar un PDF entero y ocurre al arrancar, en el hilo de disco: hasta que termina
+     * —y si falla, para siempre— la copia limpia sigue siendo un documento perfectamente
+     * legible. Sin esto, el proyecto se quedaba sin portada y sin miniaturas teniendo su
+     * documento intacto a un palmo.
+     *
+     * Devuelve null cuando no hay ninguno de los dos, que es el único caso en el que de
+     * verdad no hay nada que enseñar. Quien pinte que lo diga, en vez de dejar un hueco.
+     */
+    fun rutaDelDocumento(proyecto: Proyecto, existe: (String) -> Boolean): String? {
+        proyecto.pdfOrigen?.let { if (existe(it)) return it }
+        proyecto.pdfLimpio?.let { if (existe(it)) return it }
+        return null
+    }
+
+    fun sinSuPdf(proyectos: List<Proyecto>, existe: (String) -> Boolean): List<Proyecto> =
+        proyectos.filter { p ->
+            val origen = p.pdfOrigen ?: return@filter false
+            val limpio = p.pdfLimpio ?: return@filter false
+            // Sin copia limpia no hay nada que hacer: son los proyectos de antes
+            // de que existiera, y de esos el documento se perdió de verdad.
+            !existe(origen) && existe(limpio)
+        }
+
     /** Qué sale al exportar. Ver la tabla de [Proyecto]. */
     fun salidaDe(proyecto: Proyecto): SalidaDeProyecto {
         val enBlanco = proyecto.hojas.filter { it.pagina == null }

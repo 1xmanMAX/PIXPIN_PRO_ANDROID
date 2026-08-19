@@ -48,6 +48,20 @@ object ImageStore {
             if (bounds.outWidth <= 0) return null
             val opts = BitmapFactory.Options().apply {
                 inSampleSize = sampleFor(bounds.outWidth, bounds.outHeight, maxDim)
+                // **Medio píxel cuando no hay transparencia que guardar.**
+                //
+                // Un JPEG no tiene canal alfa por definición, así que el cuarto
+                // byte de cada píxel es relleno: en 565 la misma foto ocupa **la
+                // mitad**. Una imagen de 2048 pasa de 16 MB a 8, y las fotos de
+                // la galería —que es de donde sale casi todo lo que se pinea—
+                // son justo eso.
+                //
+                // Solo con el JPEG: un PNG o un WEBP **pueden** llevar alfa, y
+                // aplanarlo pondría fondo negro donde había transparencia. No se
+                // adivina por el nombre; se mira lo que dice el propio archivo.
+                if (bounds.outMimeType == "image/jpeg") {
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
             }
             BitmapFactory.decodeFile(path, opts)
         }.getOrNull()

@@ -31,10 +31,25 @@
     <string name="proyecto_hojas_de">%1$d de %2$d hojas anotadas</string>
     <string name="proyecto_hoja_nueva">Añadir hoja</string>
     <string name="proyecto_nota_nueva">Añadir nota</string>
+    <!--
+      Los nombres cortos son los de la fila de botones del pie de la tarjeta,
+      donde no caben cuatro etiquetas largas. El nombre entero sigue estando en
+      la descripción del icono, que es lo que lee quien no ve la pantalla.
+    -->
+    <string name="proyecto_hoja_corta">Hoja</string>
+    <string name="proyecto_nota_corta">Nota</string>
+    <string name="proyecto_pdf_corto">PDF</string>
+    <string name="proyecto_chat">Chat</string>
+    <string name="proyecto_mas">Más opciones</string>
+    <!-- Por qué proyecto vas, de cuántos. Es lo que dice que esto sigue bajando. -->
+    <string name="proyecto_posicion">%1$d / %2$d</string>
+    <string name="proyecto_exportar_n">Exportar (%1$d)</string>
     <string name="zoom_bloquear">Clavar el zoom</string>
     <string name="zoom_desbloquear">Soltar el zoom</string>
     <string name="proyecto_hoja_suelta">Hoja</string>
     <string name="proyecto_pagina">Página %1$d</string>
+    <string name="proyecto_vista_rejilla">Rejilla</string>
+    <string name="proyecto_vista_carrusel">Una página</string>
     <string name="proyecto_archivar">Archivar</string>
     <string name="proyecto_pinear">Ver el PDF</string>
     <string name="formato_hoja_del_pdf">Añadir al PDF del proyecto</string>
@@ -120,6 +135,8 @@
     <string name="copied_text">Texto copiado</string>
     <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
+    <string name="cd_clickthrough_off">Volver a recibir toques</string>
+    <string name="cd_mas">Más opciones</string>
     <string name="cd_save">Guardar</string>
     <string name="cd_advanced_edit">Editor avanzado</string>
     <string name="pin_type_ruleta">Ruleta</string>
@@ -128,7 +145,7 @@
     <string name="proyecto_exportar">Exportar lo marcado</string>
     <string name="proyecto_exportado">PDF listo</string>
     <string name="proyecto_nada_marcado">Marca alguna hoja primero</string>
-    <string name="ruleta_seed">Escribe un nombre por línea</string>
+    <string name="ruleta_seed">Un nombre por línea, o separados por comas</string>
     <string name="ruleta_girar">Girar</string>
     <string name="ruleta_listo">Sortear</string>
     <string name="ruleta_quitar">Quitar</string>
@@ -197,6 +214,114 @@
     <string name="tool_serial">Numerar</string>
     <string name="tool_image">Imagen</string>
     <string name="tool_mosaic">Pixelar</string>
+    <string name="guardados_adj_archivo">Un archivo</string>
+    <string name="guardados_adj_pagina">Una página de un proyecto</string>
+    <string name="guardados_adj_proyecto">Un proyecto entero</string>
+    <string name="guardados_adj_bloque">Un instrumento</string>
+    <string name="guardados_adj_miniapp">Una mini-app</string>
+    <string name="miniapp_tareas">Lista de tareas</string>
+    <string name="miniapp_gastos">Gastos</string>
+    <string name="miniapp_cronometro">Cronómetro</string>
+    <string name="miniapp_temporizador">Temporizador</string>
+    <string name="miniapp_alarma">Alarma</string>
+    <string name="miniapp_contador">Contador</string>
+    <string name="miniapp_ruleta">Ruleta</string>
+    <string name="miniapp_sortear">Sortear</string>
+    <string name="miniapp_paso">Paso</string>
+    <plurals name="miniapp_nombres">
+        <item quantity="one">%d nombre</item>
+        <item quantity="other">%d nombres</item>
+    </plurals>
+    <string name="miniapp_arrancar">Poner en marcha</string>
+    <string name="miniapp_parar">Parar</string>
+    <string name="miniapp_reiniciar">Reiniciar</string>
+    <string name="miniapp_vuelta">Vuelta</string>
+    <string name="miniapp_activa">Puesta</string>
+    <string name="miniapp_anadir">Añadir</string>
+    <string name="miniapp_concepto">Concepto</string>
+    <string name="miniapp_importe">Importe</string>
+    <string name="miniapp_total">Total</string>
+    <plurals name="miniapp_y_mas">
+        <item quantity="one">y %d más</item>
+        <item quantity="other">y %d más</item>
+    </plurals>
+    <string name="miniapp_sin_nada">Todavía no hay nada. Escribe abajo y añade.</string>
+    <string name="miniapp_titulo_nuevo">Sin título</string>
+    <string name="guardados_sin_proyectos">No hay proyectos todavía</string>
+    <string name="guardados_al_final">Ir al final</string>
+    <string name="guardados_buzon">Buzón</string>
+    <string name="guardados_buzon_vacio">Nada de paso ahora mismo</string>
+    <string name="guardados_rescatar">Guardar esto</string>
+    <string name="guardados_responder">Comentar esto</string>
+    <string name="cd_clavar">Clavar en su sitio</string>
+    <string name="cd_soltar">Soltar</string>
+    <string name="ruleta_faltan">Hacen falta al menos dos nombres, uno por línea o separados por comas</string>
+    <string name="cd_sonar">Reproducir</string>
+    <string name="cd_parar">Parar</string>
+    <string name="cd_recordar">Recordarme a una hora</string>
+    <string name="voz_grabar">Grabar nota de voz</string>
+    <string name="voz_muy_corta">Muy corta: mantén para grabar</string>
+    <string name="pin_type_voz">Notas de voz</string>
+    <string name="voz_sin_permiso">Sin permiso de micrófono no se puede grabar</string>
+    <string name="voz_sin_microfono">No se pudo abrir el micrófono</string>
+    <string name="voz_tocar_para_grabar">Toca para grabar</string>
+    <string name="voz_tocar_para_parar">Toca para parar</string>
+    <string name="hoja_a_proyecto">Añadido al proyecto</string>
+    <string name="hoja_ya_esta">Ya estaba en el proyecto</string>
+    <string name="guardados_mas">Más cosas que hacer</string>
+    <string name="guardados_en_contexto">Ver en contexto</string>
+    <string name="guardados_copiar">Copiar</string>
+    <string name="guardados_desliza_cancelar">‹ Desliza para cancelar</string>
+    <string name="guardados_toca_mandar">Toca el micro para mandar</string>
+    <string name="guardados_elegir">Elegir</string>
+    <string name="guardados_etiquetar">Poner una etiqueta</string>
+    <string name="guardados_reenviar">Reenviar</string>
+    <string name="guardados_reenviar_a">Reenviar a…</string>
+    <string name="guardados_reenviado">Reenviado</string>
+    <plurals name="guardados_cuantos">
+        <item quantity="one">%d cosa</item>
+        <item quantity="other">%d cosas</item>
+    </plurals>
+    <plurals name="guardados_resultados">
+        <item quantity="one">%d resultado</item>
+        <item quantity="other">%d resultados</item>
+    </plurals>
+    <plurals name="guardados_elegidos">
+        <item quantity="one">%d elegido</item>
+        <item quantity="other">%d elegidos</item>
+    </plurals>
+    <string name="guardados_titulo">Mensajes guardados</string>
+    <string name="guardados_buscar">Buscar</string>
+    <string name="guardados_escribe">Escribe algo…</string>
+    <string name="guardados_adjuntar">Adjuntar</string>
+    <string name="guardados_mandar">Mandar</string>
+    <string name="guardados_todo">Todo</string>
+    <string name="guardados_fotos">Fotos</string>
+    <string name="guardados_archivos">Archivos</string>
+    <string name="guardados_voz">Voz</string>
+    <string name="guardados_dibujos">Dibujos</string>
+    <string name="guardados_fijados">Fijados</string>
+    <string name="guardados_fijar">Fijar arriba</string>
+    <string name="guardados_soltar">Quitar de arriba</string>
+    <string name="guardados_pinear">Sacar a la pantalla</string>
+    <string name="guardados_pineado">Puesto en la pantalla</string>
+    <string name="guardados_ya_no_esta">Este archivo ya no está</string>
+    <string name="guardados_compartir">Compartir</string>
+    <string name="guardados_volver_al_salto">Volver a donde estabas</string>
+    <string name="guardados_foto_de">Foto guardada a las %1$s</string>
+    <string name="voz_oir">Oír la nota</string>
+    <string name="voz_pausar">Pausar</string>
+    <string name="guardados_compartido_ok">Guardado en Mensajes guardados</string>
+    <string name="guardados_compartido_no">No se pudo guardar</string>
+    <string name="guardados_chats">Conversaciones de proyectos</string>
+    <string name="guardados_hoy">Hoy</string>
+    <string name="guardados_ayer">Ayer</string>
+    <string name="guardados_vacio">Aquí va lo que quieras volver a encontrar</string>
+    <string name="guardados_vacio_pista">Escribe una nota, o toca el clip para guardar un archivo, una página o un proyecto.</string>
+    <string name="guardados_buzon_aviso">Esto se borra solo si no lo tocas. Guárdalo para conservarlo.</string>
+    <string name="guardados_seccion_vacia">Nada de este tipo todavía</string>
+    <string name="guardados_sin_resultados">Nada con eso</string>
+    <string name="tool_lupa">Lupa</string>
     <string name="tool_spotlight">Foco</string>
     <string name="tool_relleno">Rellenar</string>
     <string name="tool_recortar">Recortar</string>
@@ -204,6 +329,7 @@
     <string name="oled_title">Negro puro en modo noche</string>
     <string name="oled_desc">En pantallas OLED el negro apaga el píxel: se ve más negro y gasta menos. En una pantalla LCD se ve gris lavado, así que déjalo apagado.</string>
     <string name="tool_nudo">Soldar vértices</string>
+    <string name="tool_solido">Caja en volumen</string>
     <string name="cota_titulo">¿Cuánto mide y hacia dónde va?</string>
     <string name="cota_dictar">La cota se dicta: se teclea cuánto mide</string>
     <string name="cota_medir">La cota mide: dice lo que hay</string>
@@ -269,6 +395,41 @@
     <string name="tabla_ver">Ver u ocultar los puntos</string>
     <string name="tabla_nueva">Nueva tabla de coordenadas</string>
     <string name="tabla_abrir">Tablas de coordenadas</string>
+
+    <!-- La lista de figuras y la tabla pegada -->
+    <string name="figuras_abrir">Figuras</string>
+    <string name="girar_vista">Girar la vista</string>
+    <string name="figuras_perfectas">Figuras perfectas</string>
+    <string name="cd_anotar_aqui">Anotar aquí mismo</string>
+    <string name="cd_modo_ventana">Modo ventana: mover la imagen dentro</string>
+    <string name="ventana_puesta">Modo ventana: arrastra para mover la imagen dentro; toca para colocar el marco</string>
+    <string name="ventana_quitada">Modo ventana quitado</string>
+    <string name="ajustes_modo_guia">Modo guía</string>
+    <string name="ajustes_capa_nombre">Capa sobre la pantalla</string>
+    <string name="ajustes_modo_guia_desc">El botón del lápiz azul en la barra: trazar líneas de referencia que luego se esconden o se borran sin tocar el dibujo. En una anotación rápida no hace falta.</string>
+    <string name="pagina_como_pin">Sacar la página como pin</string>
+    <string name="pagina_como_ventana">Sacar la página como ventana</string>
+    <string name="plano_titulo">Plano de funciones</string>
+    <string name="plano_numeros">Un número cada</string>
+    <string name="plano_cuadros">Una raya cada</string>
+    <string name="figuras_titulo">Figuras</string>
+    <string name="figuras_ayuda">Toca una y aparece en el centro de la vista.</string>
+    <string name="figuras_de_fabrica">De fábrica</string>
+    <string name="figuras_mias">Mías</string>
+    <string name="figuras_guardar">Guardar la selección</string>
+    <string name="figuras_guardar_ayuda">Marca algo en el dibujo y quedará aquí para siempre.</string>
+    <string name="figuras_nombre">Nombre de la figura</string>
+    <string name="figuras_quitar">Quitar la figura</string>
+    <string name="figuras_guardada">Guardada «%1$s»</string>
+    <string name="figuras_sin_mias">Todavía no has guardado ninguna.</string>
+
+    <string name="tabla_pegada_abrir">Pegar una tabla</string>
+    <string name="tabla_pegada_titulo">Tabla del portapapeles</string>
+    <string name="tabla_pegada_ayuda">Copia las celdas en Excel o Sheets y vuelve aquí. Puedes corregir lo que haga falta antes de insertarla.</string>
+    <string name="tabla_pegada_vacia">En el portapapeles no hay una tabla. Copia unas celdas y vuelve a tocar «Pegar».</string>
+    <string name="tabla_pegada_cabecera">La primera fila son títulos</string>
+    <string name="tabla_pegada_insertar">Insertar</string>
+    <string name="tabla_pegada_columna">Añadir columna</string>
 
     <string name="barra_fuera">Fuera de la barra</string>
     <string name="barra_ayuda">Mantén pulsada una herramienta y arrástrala: a otra fila para juntarla con ese grupo, o abajo del todo para sacarla de la barra.</string>

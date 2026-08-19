@@ -165,6 +165,18 @@ fun grosorEscrito(g: Double): String =
     if (g == kotlin.math.floor(g)) g.toInt().toString()
     else String.format(java.util.Locale.US, "%.2f", g).trimEnd('0').replace('.', ',')
 
+/**
+ * El grosor dicho **en tanto por ciento del recorrido**.
+ *
+ * El número crudo no dice nada: «3,25» no se compara con nada y no se recuerda,
+ * y encima el recorrido no es lineal —va al cubo, ver [grosorDeLaFraccion]— así
+ * que el mismo salto de número vale distinto según por dónde vayas. El
+ * porcentaje sí: dice **dónde está el mando**, que es lo que se está mirando, y
+ * es la misma escala que la del deslizador de al lado.
+ */
+fun porcentajeDelGrosor(g: Double): Int =
+    (fraccionDelGrosor(g) * 100).toDouble().roundToInt().coerceIn(0, 100)
+
 /** Lo más fino y lo más gordo que se puede poner un trazo. */
 const val GROSOR_MINIMO = 0.5
 const val GROSOR_MAXIMO = 20.0

@@ -7,6 +7,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Para las notas de voz. Se pide al grabar la primera, no al instalar. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!--
+        Alarmas a la hora exacta, para los recordatorios.
+
+        USE_EXACT_ALARM y no SCHEDULE_EXACT_ALARM porque esto **es** un despertador: el
+        usuario pone una hora y espera esa hora. La otra obliga a mandarlo a los ajustes
+        del sistema a conceder un permiso que él no ha entendido que hacía falta.
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
 
     <application
         android:name=".PixPinApp"
@@ -20,6 +33,12 @@
             android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
             android:value="Floating overlay pins and quick capture entry points" />
 
+        <!--
+            La portada ya no es lo que se abre: se llega a ella desde el menú de
+            Mensajes guardados, y sola cuando faltan permisos por conceder. Sigue
+            siendo `singleTask` porque los accesos directos a proyectos entran por
+            aquí y no deben apilar copias.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -112,6 +131,38 @@
         </activity>
 
         <!--
+            **Mensajes guardados como destino propio del menú de compartir.**
+
+            Es lo que hace Telegram: al compartir desde WhatsApp, Telegram o el
+            navegador, salen dos entradas de PixPin —«poner un pin» y «guardar aquí»— en
+            vez de una sola que decide por ti. La etiqueta es la del cajón, para que se
+            reconozca en la fila de destinos sin leer.
+
+            Acepta texto además de archivos: compartir un enlace era lo más común y era
+            justo lo único que no funcionaba.
+        -->
+        <activity
+            android:name=".guardados.GuardarCompartidoActivity"
+            android:exported="true"
+            android:label="@string/guardados_titulo"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.guardar"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <!--
             El proveedor propio, no el de serie: el de serie deduce el tipo por
             la extensión y el sistema no conoce «svg», así que quien recibía el
             archivo lo trataba como una imagen cualquiera y lo convertía en JPG.
@@ -162,6 +213,58 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
-    </application>
+    
+        <!-- Grabar una nota de voz. Transparente: es un botón, no una pantalla. -->
+        <activity
+            android:name=".pin.GrabadoraActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- El reloj del sistema para elegir la hora del recordatorio. -->
+        <activity
+            android:name=".pin.HoraDelRecordatorioActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Lo que despierta al pin cuando llega su hora. -->
+        <receiver
+            android:name=".pin.RecordatorioReceiver"
+            android:exported="false" />
+
+        <!-- Las mini-apps: la lista de tareas y los gastos, cada una en su pantalla. -->
+        <activity
+            android:name=".mini.MiniActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!--
+            Mensajes guardados: el cajón de documentos con forma de conversación.
+
+            Ya no es lo que se abre al tocar el icono —eso son los proyectos—, sino que
+            se llega **desde la bola**, que es lo único que está siempre a mano, y desde
+            el menú de proyectos. Cada proyecto tiene además su propia conversación.
+
+            `singleTop` y no `singleTask` desde que dejó de ser la pantalla de arranque:
+            `singleTask` se lleva la pantalla **a una tarea propia**, así que al abrir el
+            chat de un proyecto desde su tarjeta y volver atrás no se volvía a proyectos
+            sino al escritorio. Con `singleTop` se queda en la pila de quien la abrió, que
+            es donde tiene que estar, y sigue sin apilar copias de sí misma.
+
+            Antes se abría una portada de permisos y botones de configuración, que
+            es lo que uno toca una vez en la vida; lo que se hace a diario es dejar
+            algo aquí o volver a buscarlo. La portada no desaparece —se llega desde
+            el menú, y sale sola cuando falta algún permiso—, pero deja de ser el
+            peaje de cada arranque.
+        -->
+        <activity
+            android:name=".guardados.MensajesActivity"
+            android:exported="true"
+            android:label="@string/guardados_titulo"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
+</application>
 
 </manifest>

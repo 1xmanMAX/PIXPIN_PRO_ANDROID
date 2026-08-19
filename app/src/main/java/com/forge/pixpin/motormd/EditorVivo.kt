@@ -80,6 +80,9 @@ import androidx.compose.ui.unit.sp
  * **fuera** del campo de texto, no dentro. Así no se puede borrar sin querer y no
  * ocupa sitio en lo escrito.
  */
+/** Cuántos bloques ya analizados se guardan antes de vaciar. Ver [EditorVivo]. */
+private const val MAXIMO_ANALIZADO = 500
+
 @Composable
 fun EditorVivo(
     texto: String,
@@ -92,10 +95,37 @@ fun EditorVivo(
 ) {
     val trozos = remember(texto) { trozosDe(texto) }
 
+    /**
+     * Lo ya analizado, **por su texto y no por su sitio**.
+     *
+     * `remember` guarda por posición, y las posiciones de una lista se corren:
+     * al meter un bloque en medio, el hueco del cuarto pasa a ver el texto del
+     * tercero, no coincide, y se vuelve a analizar. Y el del quinto, y el del
+     * sexto — meter un renglón costaba volver a analizar **todo lo que había
+     * debajo**. Guardando por el propio texto da igual en qué sitio acabe: ya
+     * estaba hecho.
+     */
+    val analizados = remember { HashMap<String, List<MarkdownBlock>>() }
+    // Se vacía cuando se llena: cada tecla deja una versión intermedia del
+    // bloque que se está escribiendo, así que sin tope crecería mientras dure
+    // la sesión. Vaciar del todo es de perogrullo y basta: lo que se ve en
+    // pantalla se vuelve a analizar una vez y a correr.
+    if (analizados.size > MAXIMO_ANALIZADO) analizados.clear()
+
     Column(modifier) {
         trozos.forEachIndexed { i, trozo ->
             val fuente = trozo.de(texto).trimEnd('\n')
-            val bloque = remember(fuente) { Markdown.parse(fuente).firstOrNull() }
+            // **La lista se guarda, no se rehace en cada tecla.**
+            //
+            // Antes se guardaba el bloque suelto y se envolvía en un `listOf`
+            // nuevo al pintarlo. Un envoltorio distinto cada vez es, para
+            // Compose, un dato distinto: **ningún** bloque del documento podía
+            // saltarse el repintado, así que teclear una letra recomponía los
+            // doscientos bloques de una nota larga —y con ellos, doscientas
+            // corrutinas de las que recogen los enlaces, ver [MarkdownText]—.
+            // Guardando la lista, lo que no ha cambiado no se toca.
+            val bloques = analizados.getOrPut(fuente) { Markdown.parse(fuente).take(1) }
+            val bloque = bloques.firstOrNull()
             val activo = sitio?.bloque == i
 
             if (activo && bloque is MarkdownBlock.Tabla) {
@@ -161,7 +191,7 @@ fun EditorVivo(
                         Spacer(Modifier.fillMaxWidth().height((baseSizeSp * 1.5f).dp))
                     } else {
                         MarkdownText(
-                            blocks = listOf(bloque),
+                            blocks = bloques,
                             baseSizeSp = baseSizeSp,
                             ocultosVisibles = ocultosVisibles
                         )

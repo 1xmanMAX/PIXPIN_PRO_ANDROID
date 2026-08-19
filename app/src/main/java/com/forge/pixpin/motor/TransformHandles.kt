@@ -337,14 +337,24 @@ private fun handlesDe(
     if (elements.size == 1 && elements.first().isLinear) {
         return getLinearHandles(elements.first(), zoom, handleSize)
     }
+    // **El plano enseña los ocho.** Los del medio no son un adorno en él: son
+    // los que extienden el intervalo en vez de escalarlo, y sin ellos la mitad
+    // de lo que sabe hacer no tendría por dónde tocarse. Ver [Plano].
+    if (elements.size == 1 && elements.first().isPlano) {
+        return getTransformHandles(elements.first(), zoom, handleSize, OmitSides.NONE)
+    }
     if (elements.size == 1) return getTransformHandles(elements.first(), zoom, handleSize)
     val b = getCommonBounds(elements)
+    // **Los ocho, también con varios elementos.** Solo salían las esquinas, y con
+    // ellas la selección únicamente crece en proporción: una figura estampada de
+    // la lista no se podía estrechar para meterla en un hueco. Los del medio son
+    // los que aplastan un eje. Ver [resizeMultipleElements].
     return getTransformHandlesFromCoords(
         AbsoluteCoords(b.x1, b.y1, b.x2, b.y2, b.midX, b.midY),
         angle = 0.0,
         zoom = zoom,
         handleSize = handleSize,
-        omit = OmitSides.MULTIPLE_ELEMENTS
+        omit = OmitSides.NONE
     )
 }
 

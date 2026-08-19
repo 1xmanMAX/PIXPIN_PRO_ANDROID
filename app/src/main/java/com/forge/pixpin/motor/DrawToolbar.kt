@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.HighlightAlt
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.LightMode
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material.icons.filled.SquareFoot
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.outlined.Diamond
 import androidx.compose.material.icons.outlined.NearMe
@@ -153,6 +155,8 @@ fun DrawToolbar(
      * dos veces. En el editor y en la captura sigue estando a mano.
      */
     mostrarFuente: Boolean = true,
+    /** Enseñar el mando del tamaño de letra. Ver [TamanoDeLetraButton]. */
+    mostrarTamano: Boolean = false,
     /**
      * Si los estilos —color, grosor y letra— salen en esta barra.
      *
@@ -431,6 +435,19 @@ fun DrawToolbar(
                         Separador()
                         StrokeWidthButton(style.strokeWidth) {
                             onStyle(style.copy(strokeWidth = it))
+                        }
+                        // **El tamaño de la letra, donde no hay panel lateral.**
+                        //
+                        // En el pin no había forma de tocarlo: el numerito de
+                        // serie y el texto salían siempre del tamaño de fábrica,
+                        // que sobre una captura de mil cuatrocientos píxeles es
+                        // una mota. Va como el grosor —un toque pasa al
+                        // siguiente— porque en una barra flotante no cabe un
+                        // deslizador y porque cuatro tamaños son los que se usan.
+                        if (mostrarTamano) {
+                            TamanoDeLetraButton(style.fontSize) {
+                                onStyle(style.copy(fontSize = it))
+                            }
                         }
                         if (mostrarFuente) {
                             FontButton(style.fontFamily) { onStyle(style.copy(fontFamily = it)) }
@@ -951,6 +968,28 @@ private fun StrokeWidthButton(current: Double, onPick: (Double) -> Unit) {
     }
 }
 
+/**
+ * Los cuatro tamaños de letra, en rotación y **enseñando el que va a salir**.
+ *
+ * La «A» del botón se dibuja del tamaño elegido, así que el botón es la muestra: no hay
+ * que acordarse de qué significaba cada número ni abrir nada para verlo.
+ */
+@Composable
+private fun TamanoDeLetraButton(current: Double, onPick: (Double) -> Unit) {
+    IconButton(onClick = {
+        val i = ItemStyle.FONT_SIZES.indexOfFirst { it >= current }
+        onPick(ItemStyle.FONT_SIZES[(if (i < 0) 0 else i + 1) % ItemStyle.FONT_SIZES.size])
+    }) {
+        androidx.compose.material3.Text(
+            text = "A",
+            // Del tamaño de verdad pero acotada: la barra no puede crecer con
+            // la letra, así que se enseña la proporción, no el tamaño exacto.
+            fontSize = (11 + current / 4).sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 /** Las tres letras, en rotación y **escritas con su propia letra**. */
 @Composable
 private fun FontButton(current: Int, onPick: (Int) -> Unit) {
@@ -1025,6 +1064,7 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.RECORTAR,
     Tool.EXTENDER,
     Tool.MOSAIC,
+    Tool.LUPA,
     Tool.SPOTLIGHT,
     Tool.SERIAL,
     Tool.FRAME,
@@ -1032,7 +1072,8 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.MEASURE,
     Tool.ESCALA_GRAFICA,
     Tool.NUDO,
-    Tool.PUNTO
+    Tool.PUNTO,
+    Tool.SOLIDO
 )
 
 /**
@@ -1089,6 +1130,7 @@ val CAPA_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
     Tool.TEXT,
     Tool.ERASER,
     Tool.MOSAIC,
+    Tool.LUPA,
     Tool.SPOTLIGHT,
     Tool.SERIAL
 )
@@ -1108,6 +1150,7 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.TEXT -> Icons.Filled.TextFields
     Tool.SERIAL -> Icons.Filled.FormatListNumbered
     Tool.MOSAIC -> Icons.Filled.BlurOn
+    Tool.LUPA -> Icons.Filled.ZoomIn
     Tool.SPOTLIGHT -> Icons.Filled.CenterFocusStrong
     Tool.IMAGE -> Icons.Filled.Image
     Tool.FRAME -> Icons.Filled.CropFree
@@ -1119,6 +1162,7 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.RECORTAR -> Icons.Filled.ContentCut
     Tool.EXTENDER -> Icons.Filled.OpenInFull
     Tool.PUNTO -> Icons.Filled.Adjust
+    Tool.SOLIDO -> Icons.Filled.ViewInAr
 }
 
 @StringRes
@@ -1138,6 +1182,7 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.TEXT -> R.string.tool_text
     Tool.SERIAL -> R.string.tool_serial
     Tool.MOSAIC -> R.string.tool_mosaic
+    Tool.LUPA -> R.string.tool_lupa
     Tool.SPOTLIGHT -> R.string.tool_spotlight
     Tool.IMAGE -> R.string.tool_image
     Tool.FRAME -> R.string.tool_frame
@@ -1148,6 +1193,7 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.NUDO -> R.string.tool_nudo
     Tool.RECORTAR -> R.string.tool_recortar
     Tool.EXTENDER -> R.string.tool_extender
+    Tool.SOLIDO -> R.string.tool_solido
 }
 
 /**

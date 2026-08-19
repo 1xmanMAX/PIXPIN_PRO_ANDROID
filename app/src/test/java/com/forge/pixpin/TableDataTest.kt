@@ -93,4 +93,34 @@ class TableDataTest {
         assertTrue(TableData.looksLikeTable("a\tb\r\nc\td"))
         assertEquals(listOf("c", "d"), TableData.parse("a\tb\r\nc\td")[1])
     }
+
+    /**
+     * **Una celda vacía en un extremo no corre los datos.**
+     *
+     * Es el fallo que hacía que una tabla pegada dijera otra cosa: `trim()` se
+     * llevaba los tabuladores de los extremos, que es justo donde vive una celda
+     * en blanco, así que esa fila llegaba con una columna menos y todos sus datos
+     * se corrían un sitio. La tabla salía cuadrada **y mintiendo**, que es peor
+     * que salir descuadrada.
+     */
+    @Test
+    fun `una celda vacia al principio no corre la fila`() {
+        val rejilla = TableData.parse("Mes\tAlta\tBaja\n\t120\t14")
+        assertEquals(2, rejilla.size)
+        assertEquals(listOf("Mes", "Alta", "Baja"), rejilla[0])
+        assertEquals(listOf("", "120", "14"), rejilla[1])
+    }
+
+    @Test
+    fun `una celda vacia al final tampoco`() {
+        val rejilla = TableData.parse("Mes\tAlta\tBaja\nEne\t120\t")
+        assertEquals(listOf("Ene", "120", ""), rejilla[1])
+    }
+
+    /** Y en medio, que ya funcionaba, sigue funcionando. */
+    @Test
+    fun `una celda vacia en medio se conserva`() {
+        val rejilla = TableData.parse("Mes\tAlta\tBaja\nEne\t\t14")
+        assertEquals(listOf("Ene", "", "14"), rejilla[1])
+    }
 }

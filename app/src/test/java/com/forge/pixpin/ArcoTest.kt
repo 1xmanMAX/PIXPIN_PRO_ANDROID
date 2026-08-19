@@ -251,6 +251,37 @@ class ArcoTest {
         assertEquals(0.0, puntos.last().x, 1e-6)
     }
 
+    /**
+     * **Un arco girado se gira una vez, no dos.**
+     *
+     * La inclinación no vive en la geometría de este motor: la aplica quien
+     * pinta, con una matriz, y lo hace igual para todos los elementos. Los
+     * puntos del arco salían **ya girados**, así que la matriz los volvía a
+     * girar: el arco se dibujaba en un sitio y su geometría decía otro. Se
+     * picaba donde no se veía, y recortar un óvalo girado dejaba el trozo bueno
+     * en otra parte — que es como se descubrió.
+     *
+     * Se comprueba con el cuarto de vuelta: sin girar, el arco empieza a la
+     * derecha del centro; su contorno en el mundo, girado 90°, tiene que
+     * empezar **abajo**, y no de vuelta a la derecha.
+     */
+    @Test
+    fun `los puntos del arco salen sin girar y el contorno sí gira`() {
+        val c = controller()
+        val e = c.ponOvalo(0.0, 0.0, 200.0, 200.0)
+            .copy(arcStart = 0.0, arcSweep = PI, angle = PI / 2)
+
+        // Sin girar: el primer punto es el de la derecha del óvalo.
+        val crudos = puntosDelArco(e).map { Pt(e.x + it.x, e.y + it.y) }
+        assertEquals(200.0, crudos.first().x, 1e-6)
+        assertEquals(100.0, crudos.first().y, 1e-6)
+
+        // Y en el mundo, con el cuarto de vuelta puesto, cae abajo del centro.
+        val enElMundo = contornosDe(e).single().puntos
+        assertEquals(100.0, enElMundo.first().x, 1e-6)
+        assertEquals(200.0, enElMundo.first().y, 1e-6)
+    }
+
     /** Media vuelta gasta la mitad de tramos que la vuelta entera. */
     @Test
     fun `un arco corto no gasta los tramos de una vuelta entera`() {

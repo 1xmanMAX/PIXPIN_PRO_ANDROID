@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,12 +19,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
@@ -39,11 +42,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoFixNormal
+import androidx.compose.material.icons.filled.AlignHorizontalCenter
+import androidx.compose.material.icons.filled.AlignHorizontalLeft
+import androidx.compose.material.icons.filled.AlignHorizontalRight
+import androidx.compose.material.icons.filled.AlignVerticalBottom
+import androidx.compose.material.icons.filled.AlignVerticalCenter
+import androidx.compose.material.icons.filled.AlignVerticalTop
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.HorizontalDistribute
+import androidx.compose.material.icons.filled.VerticalDistribute
 import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Lock
@@ -59,11 +73,13 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Polyline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SquareFoot
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Rotate90DegreesCcw
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -220,6 +236,16 @@ class DrawEditorActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // **Fuera la escritura a mano del sistema.**
+        //
+        // Android 14 trae el «scribble»: con un stylus, tocar un campo de texto
+        // abre su propio reconocedor de escritura a mano y se traga el lápiz.
+        // Aquí eso es justo lo contrario de lo que se quiere —el lápiz es para
+        // dibujar, y el texto se teclea— así que el cuadro de escribir se
+        // quedaba secuestrado en cuanto se acercaba la punta.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            window.decorView.isAutoHandwritingEnabled = false
+        }
         dibujoId = intent.getStringExtra(EXTRA_ID) ?: System.currentTimeMillis().toString()
 
         val cargada = ExcalidrawStore.cargar(intent.getStringExtra(EXTRA_RUTA)) ?: Scene()
@@ -243,7 +269,7 @@ class DrawEditorActivity : ComponentActivity() {
         //
         // Se hace aquí y no solo al colocarla porque los pines de antes ya
         // llevan su imagen guardada suelta: al abrirlos hay que clavarla igual.
-        fijarLaFoto()
+        fijarLaFoto(imagenPath != null)
         // La foto del pin ya estaba puesta de una vez anterior: se carga igual
         // para que el mosaico tenga de dónde sacar sus píxeles. Solo en este
         // caso, que es el único en el que se sabe que la imagen ocupa la escena
@@ -271,6 +297,7 @@ class DrawEditorActivity : ComponentActivity() {
             }
         }
 
+        ensenarAMedirElTexto()
         aPantallaCompleta()
         setContent {
             // El negro de verdad tiñe **todo el editor**, no solo el lienzo: con
@@ -291,6 +318,19 @@ class DrawEditorActivity : ComponentActivity() {
      * se bloquean: siguen saliendo si deslizas desde el borde, que es lo que
      * espera cualquiera que quiera mirar la hora un momento.
      */
+    /**
+     * Y **se vuelve a esconder al recuperar el foco**.
+     *
+     * Se escondían una sola vez, al arrancar. Cualquier cosa que le quite el
+     * foco a la pantalla —bajar el panel de notificaciones, ir a elegir una
+     * imagen y volver— las devuelve, y ya no se iban: se dibujaba con la hora y
+     * la batería encima del lienzo el resto de la sesión.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) aPantallaCompleta()
+    }
+
     private fun aPantallaCompleta() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         val controlador =
@@ -330,10 +370,15 @@ class DrawEditorActivity : ComponentActivity() {
      * sobre lo que estás dibujando. Lo que sí se puede es dibujar encima y, si
      * hace falta más sitio, estirar la hoja.
      */
-    private fun fijarLaFoto() {
-        val fotos = controller.scene.elements.filter { it.type == ElementType.IMAGE }
-        if (fotos.none { !it.locked }) return
-        controller.fijarAlFondo(fotos.map { it.id }.toSet())
+    private fun fijarLaFoto(hayFoto: Boolean) {
+        // **Solo la del fondo, no todas.** Clavando cualquier imagen se clavaban
+        // también las que uno mete encima a mano, y al volver a abrir el dibujo
+        // ya no había forma de moverlas ni de quitarlas. La del pin es la
+        // primera del montón: entra antes que nada, por debajo de lo dibujado.
+        if (!hayFoto) return
+        val foto = controller.scene.elements.firstOrNull { it.type == ElementType.IMAGE } ?: return
+        if (foto.locked) return
+        controller.fijarAlFondo(setOf(foto.id))
         guardar()
     }
 
@@ -517,6 +562,14 @@ class DrawEditorActivity : ComponentActivity() {
             guardar()
         }
 
+        // La imagen que se está copiando, si se ha traído alguna. Ver
+        // [VentanaDeReferencia].
+        var referencia by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+        // El de la imagen de referencia: mismo selector, otro destino. La que se
+        // elige aquí **no entra en el dibujo**, se queda en su ventanita.
+        val selectorDeReferencia = rememberImagePicker { uri ->
+            cargarReferencia(uri)?.let { referencia = it }
+        }
         val selectorImagen = rememberImagePicker { uri ->
             colocarImagenElegida(uri)
             cambiado()
@@ -524,6 +577,22 @@ class DrawEditorActivity : ComponentActivity() {
 
         var panelAbierto by remember { mutableStateOf(false) }
         var tablaAbierta by remember { mutableStateOf<String?>(null) }
+        // La lista de figuras y el diálogo de la tabla pegada. Van juntas
+        // porque se llega a la segunda desde la primera. Ver [PanelDeFiguras].
+        var figurasAbiertas by remember { mutableStateOf(false) }
+        var tablaPegadaAbierta by remember { mutableStateOf(false) }
+        // La paleta de combinaciones, y si se ha dejado clavada. Clavada no se
+        // cierra al elegir y flota sobre el lienzo. Ver [PaletaDeColores].
+        var paletaAbierta by remember { mutableStateOf(false) }
+        var paletaClavada by remember { mutableStateOf(false) }
+        var tinta by remember { mutableStateOf(Tinta.LAPIZ) }
+        // La ventana de ajustes, el fondo pautado y la imagen de referencia.
+        var ajustesAbiertos by remember { mutableStateOf(false) }
+        var cuadricula by remember { mutableStateOf(Cuadricula.NINGUNA) }
+        // Las mías se leen del disco una vez y se refrescan al guardar o quitar;
+        // las de fábrica se arman con el estilo puesto, para que salgan del
+        // color y del grosor que se está usando. Ver [figurasDeFabrica].
+        var misFiguras by remember { mutableStateOf(BibliotecaStore.cargar(this)) }
         // Qué grupo de la barra está desplegado. Vive aquí y no dentro de la
         // barra porque las hermanas salen **fuera** de ella, pegadas al lateral
         // de la pantalla, y una barra no puede pintar fuera de sí misma.
@@ -536,6 +605,9 @@ class DrawEditorActivity : ComponentActivity() {
         // **Los ajustes del imán llegan al controlador.** Sin esto, apagar una
         // clase en la pantalla de ajustes no hacía nada aquí: el controlador se
         // quedaba con los valores de fábrica.
+        // El interruptor de figura perfecta llega al controlador igual que los
+        // ajustes del imán: es estado del editor, no del dibujo.
+        controller.keepAspectRatio = figurasPerfectas
         controller.enganche = AjustesEnganche(
             activo = ajustes.imanActivo,
             esquinas = ajustes.imanEsquinas,
@@ -616,7 +688,11 @@ class DrawEditorActivity : ComponentActivity() {
                 // esa ya se coloca como elemento clavado al fondo.
                 papelALaVista = pdfDeFondo != null,
                 zurdo = zurdo,
-                zoomBloqueado = zoomBloqueado
+                zoomBloqueado = zoomBloqueado,
+                figurasPerfectas = figurasPerfectas,
+                cuadricula = cuadricula,
+                modoLapiz = modoLapiz,
+                onLapizDetectado = { if (lapizAutomatico) modoLapiz = true }
             )
 
             EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
@@ -631,31 +707,88 @@ class DrawEditorActivity : ComponentActivity() {
             // **Las islas cambian de lado con la mano.** El brazo entra por el
             // lado de su mano y tapa lo que hay debajo: lo que se toca a menudo
             // va donde llega el pulgar, y lo que se mira, al otro lado.
-            Isla(
-                Modifier
-                    .align(if (zurdo) Alignment.TopEnd else Alignment.TopStart)
-                    .padding(8.dp)
-            ) {
-                BotonesNavegacion(tick, { cambiado() }) {
-                    tablaAbierta = controller.scene.tablas.firstOrNull()?.id
-                        ?: controller.addTabla(centroDeLaVista()).also { cambiado() }.id
-                }
-            }
-
             val seleccionado = controller.selectedElements()
             val aplican = propiedadesPara(controller.tool, seleccionado)
-            // **El botón de arriba es de las acciones, no del estilo.** Desde
-            // que el estilo vive en el lateral, aquí dentro solo quedan ordenar,
+            // **El botón del otro lado es de las acciones, no del estilo.** Desde
+            // que el estilo vive en el lateral, ahí dentro solo quedan ordenar,
             // voltear, agrupar, alinear y los números de una raya —y todo eso
             // necesita algo seleccionado—. Sin nada marcado el botón abriría un
             // panel vacío, así que no sale.
             val hayQueAjustar = gruposPara(seleccionado).isNotEmpty() ||
                 seleccionado.singleOrNull()?.isLinear == true
+
+            // **Dos cajas y no una.** Pegada al canto lo que se pulsa a ciegas
+            // —salir, deshacer, rehacer—, que no se puede mover de sitio; al
+            // lado, el resto en un carrusel que se desplaza y que puede crecer.
+            // Ver [CajaDeNavegacion] y [CarruselDeFunciones].
+            //
+            // La fila **ocupa todo el ancho** y solo le deja sitio a la isla de
+            // enfrente cuando esa isla existe. Estaba fija en dos tercios, y el
+            // tercio reservado se lo quitaba al carrusel siempre — incluso sin
+            // nada marcado, que es cuando no hay nada enfrente.
+            val carrusel: @Composable RowScope.() -> Unit = {
+                Isla(Modifier.weight(1f)) {
+                    CarruselDeFunciones(
+                        tick = tick,
+                        cambiado = { cambiado() },
+                        onColor = { paletaAbierta = true },
+                        onFiguras = { figurasAbiertas = true },
+                        onTablas = {
+                            tablaAbierta = controller.scene.tablas.firstOrNull()?.id
+                                ?: controller.addTabla(centroDeLaVista()).also { cambiado() }.id
+                        },
+                        onAjustes = { ajustesAbiertos = true }
+                    )
+                }
+            }
+            Row(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxWidth()
+                    // **Pegada al canto por su lado.** Contra el borde de la
+                    // pantalla hay un tope físico: el pulgar llega hasta el final
+                    // y ahí está el botón. Separada, hay que apuntar.
+                    //
+                    // Y se lleva **la franja entera**: lo de la selección ya no
+                    // le disputa el sitio, porque va debajo. Ver abajo.
+                    .padding(top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // **El orden se invierte con la mano.** La caja va siempre
+                // pegada al canto de su lado, así que tiene que ir la última
+                // cuando ese canto es el derecho: puesta la primera dentro de
+                // una fila anclada a la derecha, quedaba en mitad de la pantalla.
+                //
+                // Y las dos han cambiado de lado: la caja de salir se va al canto
+                // contrario a la mano y el carrusel ocupa el de la mano. Lo que
+                // se busca con la vista queda debajo del pulgar, y lo que se
+                // pulsa a ciegas —cerrar, deshacer— lejos de él, que además es
+                // donde menos se toca sin querer.
+                if (zurdo) {
+                    Isla { CajaDeNavegacion(tick) { cambiado() } }
+                    Spacer(Modifier.width(6.dp))
+                    carrusel()
+                } else {
+                    carrusel()
+                    Spacer(Modifier.width(6.dp))
+                    Isla { CajaDeNavegacion(tick) { cambiado() } }
+                }
+            }
+
+            // **Lo de la selección va en su propia fila, debajo.**
+            //
+            // Compartía franja con la barra de arriba y se le montaba encima:
+            // duplicar y borrar caían sobre el carrusel, y con la mano zurda
+            // sobre la caja de salir. Reservarle un hueco a lo ancho tampoco
+            // valía —se lo quitaba al carrusel el resto del tiempo, que es
+            // cuando no hay nada marcado—. Debajo no se estorban nunca y cada
+            // una se lleva su ancho entero.
             if (hayQueAjustar) {
                 Isla(
                     Modifier
                         .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
-                        .padding(8.dp)
+                        .padding(horizontal = 8.dp)
+                        .padding(top = BAJO_LA_BARRA)
                 ) {
                     BotonesAjustes(tick, panelAbierto, { cambiado() }) { panelAbierto = !panelAbierto }
                 }
@@ -667,7 +800,8 @@ class DrawEditorActivity : ComponentActivity() {
                 Isla(
                     Modifier
                         .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
-                        .padding(top = 56.dp, end = 8.dp, start = 8.dp)
+                        .padding(horizontal = 8.dp)
+                        .padding(top = BAJO_LA_BARRA + ALTO_DE_UNA_ISLA)
                 ) {
                     PanelAjustes(tick) { cambiado() }
                 }
@@ -685,12 +819,31 @@ class DrawEditorActivity : ComponentActivity() {
             if (aplican.isNotEmpty() && editandoTexto == null) {
                 PanelLateralDeEstilo(
                     aplican = aplican,
-                    estilo = controller.scene.style,
+                    // **Los mandos enseñan lo que hay marcado**, y si no hay
+                    // nada, el pincel. Enseñando siempre el pincel, tocar uno
+                    // le encajaba a la figura marcada todo lo demás de paso.
+                    // Ver [DrawController.estiloActivo].
+                    estilo = controller.estiloActivo(),
+                    // El bote y las regiones ya puestas: ahí la trama manda siempre.
+                    rellenoObligatorio = controller.tool == Tool.RELLENO ||
+                        seleccionado.any { it.isRegion },
                     zurdo = zurdo,
-                    colores = STROKE_COLORS,
-                    coloresDeFondo = BACKGROUND_COLORS,
+                    // Las marcas se guardan **fuera del dibujo**: son de quien
+                    // dibuja, no del dibujo. El mismo grosor de siempre tiene que
+                    // estar ahí al abrir otra lámina.
+                    marcas = remember(ajustes.marcasDeDeslizadores) {
+                        marcasDeTexto(ajustes.marcasDeDeslizadores)
+                    },
+                    onMarcas = { cual, valores ->
+                        val todas = marcasDeTexto(ajustes.marcasDeDeslizadores) + (cual to valores)
+                        lifecycleScope.launch {
+                            (application as? com.forge.pixpin.PixPinApp)?.settings
+                                ?.setMarcas(marcasATexto(todas))
+                        }
+                    },
                     onEstilo = { nuevo -> aplicarEstilo(nuevo); cambiado() },
                     zoom = controller.scene.viewport.zoom.toFloat(),
+                    anchoPintado = anchoDelTrazoAMano(seleccionado),
                     modifier = Modifier
                         .align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart)
                 )
@@ -802,6 +955,173 @@ class DrawEditorActivity : ComponentActivity() {
                 }
             }
 
+            // La lista de figuras, con el mismo velo: mientras se elige una no
+            // se está dibujando. Ver [PanelDeFiguras].
+            if (figurasAbiertas) {
+                val estiloDeLasFiguras = controller.scene.style
+                // Las de fábrica se arman con el pincel que haya puesto, así que
+                // se rehacen cuando cambia. Es barato y evita una lista de
+                // figuras negras sobre un dibujo hecho en rojo.
+                val deFabrica = remember(estiloDeLasFiguras) {
+                    figurasDeFabrica(estiloDeLasFiguras) { texto, tamano ->
+                        medirTexto(texto, estiloDeLasFiguras.fontFamily, tamano)
+                    }
+                }
+                Velo {
+                    PanelDeFiguras(
+                        figuras = deFabrica + misFiguras,
+                        onInsertar = { figura ->
+                            controller.insertar(estampar(figura, centroDeLaVista()))
+                            figurasAbiertas = false
+                            guardar()
+                            cambiado()
+                        },
+                        onQuitar = { figura ->
+                            misFiguras = BibliotecaStore.quitar(this@DrawEditorActivity, figura.id)
+                        },
+                        puedeGuardar = seleccionado.isNotEmpty(),
+                        onGuardarSeleccion = { nombre ->
+                            figuraDeLaSeleccion(nombre, seleccionado)?.let {
+                                misFiguras =
+                                    BibliotecaStore.anadir(this@DrawEditorActivity, it)
+                            }
+                        },
+                        onPegarTabla = {
+                            figurasAbiertas = false
+                            tablaPegadaAbierta = true
+                        },
+                        onCerrar = { figurasAbiertas = false }
+                    )
+                }
+            }
+
+            // **La paleta.** Suelta va con velo, como cualquier desplegable, y
+            // se cierra al elegir. Clavada **no lleva velo**: se queda flotando
+            // encima del lienzo y se sigue dibujando con ella puesta, que es
+            // para lo que se clava. Ver [PaletaDeColores].
+            if (paletaAbierta) {
+                // Qué tintas se pueden tocar ahora: la del lápiz siempre, la del
+                // relleno solo si lo que se va a dibujar admite fondo. Es la
+                // misma tabla que decide los mandos del lateral.
+                val tintas = buildSet {
+                    if (Propiedad.TRAZO in aplican) add(Tinta.LAPIZ)
+                    if (Propiedad.FONDO in aplican) add(Tinta.RELLENO)
+                    // **Siempre queda al menos la del lápiz.** Con el borrador o
+                    // la mano puestos no aplica ninguna propiedad, y sin esto la
+                    // paleta se cerraba a sí misma en el mismo fotograma en que
+                    // se abría: pulsabas el color y no pasaba nada, hasta que
+                    // abrías otro menú y cambiaba la herramienta. Elegir color
+                    // sin nada que pintar tiene sentido de sobra — es el color
+                    // con el que se va a dibujar a continuación.
+                    if (isEmpty()) add(Tinta.LAPIZ)
+                }
+                // Y si la tinta que estaba puesta deja de aplicar —se cambia de
+                // herramienta con la paleta clavada— se vuelve a la del lápiz en
+                // vez de dejar unas pestañas señalando a algo que ya no está.
+                val laTinta = if (tinta in tintas) tinta else Tinta.LAPIZ
+                val estilo = controller.estiloActivo()
+                val elegir: (String) -> Unit = { hex ->
+                    aplicarEstilo(
+                        if (laTinta == Tinta.RELLENO) estilo.copy(backgroundColor = hex)
+                        else estilo.copy(strokeColor = hex)
+                    )
+                    if (!paletaClavada) paletaAbierta = false
+                    cambiado()
+                }
+                val paleta: @Composable (Modifier) -> Unit = { m ->
+                    PaletaDeColores(
+                        actual =
+                            if (laTinta == Tinta.RELLENO) estilo.backgroundColor
+                            else estilo.strokeColor,
+                        tinta = laTinta,
+                        tintas = tintas,
+                        clavada = paletaClavada,
+                        onTinta = { tinta = it },
+                        onElegir = elegir,
+                        onClavar = { paletaClavada = it },
+                        onCerrar = { paletaAbierta = false },
+                        noche = noche,
+                        modifier = m
+                    )
+                }
+                // El velo va **detrás y aparte**, no envolviéndola: la paleta
+                // se ancla siempre en la misma esquina —para que estirarla
+                // crezca hacia donde va el dedo— y centrada dentro del velo
+                // no podría. Sin clavar, el velo se sigue comiendo los toques
+                // que fallan; clavada no hay velo y se dibuja con ella puesta.
+                if (!paletaClavada) Velo { }
+                paleta(Modifier.align(Alignment.TopStart))
+            }
+
+            // **La imagen de referencia**, encima del lienzo y sin velo: se
+            // dibuja mirándola, así que estorbar lo mínimo es todo su trabajo.
+            referencia?.let { mapa ->
+                // **Anclada arriba a la izquierda**, y colocada con su propio
+                // desplazamiento. Estaba centrada a la derecha, y ahí crecer de
+                // ancho la empujaba hacia la izquierda: se estiraba de la esquina
+                // de abajo a la derecha y la ventana se iba en la dirección
+                // contraria. Con el ancla en una esquina fija, estirar la hace
+                // crecer hacia donde va el dedo.
+                VentanaDeReferencia(
+                    imagen = mapa,
+                    onOtraImagen = { referencia = null; selectorDeReferencia() },
+                    onCerrar = { referencia = null },
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
+            }
+
+            // La ventana de ajustes: también sin velo, que se deja abierta a un
+            // lado mientras se sigue dibujando.
+            if (ajustesAbiertos) {
+                VentanaDeAjustes(
+                    cuadricula = cuadricula,
+                    onCuadricula = { cuadricula = it; cambiado() },
+                    zoomBloqueado = zoomBloqueado,
+                    onZoomBloqueado = { zoomBloqueado = it },
+                    modoDedo = controller.modoDedo,
+                    onModoDedo = { controller.modoDedo = it; cambiado() },
+                    presionFirme = controller.estiloActivo().presionFirme,
+                    onPresionFirme = { firme ->
+                        aplicarEstilo(controller.estiloActivo().copy(presionFirme = firme))
+                        cambiado()
+                    },
+                    onPapel = { alZoomDeHoja(it); cambiado() },
+                    onAProyecto = { aUnProyecto() },
+                    // Lo clavado no se puede seleccionar, así que soltarlo no
+                    // puede depender de tenerlo marcado: iría aquí o no iría.
+                    onSoltarClavados = if (!controller.hayClavados) null else {
+                        { controller.soltarTodo(); guardar(); cambiado() }
+                    },
+                    referenciasVisibles =
+                        if (controller.hayReferencias) controller.referenciasVisibles else null,
+                    onReferencias = { controller.alternarReferencias(); cambiado() },
+                    modoLapiz = modoLapiz,
+                    onModoLapiz = { modoLapiz = it; lapizAutomatico = false },
+                    onImagenDeReferencia = { selectorDeReferencia() },
+                    formatos = formatosDeSalida(),
+                    exportando = exportando,
+                    onCerrar = { ajustesAbiertos = false },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp)
+                )
+            }
+
+            // Y la tabla que se acaba de copiar de la hoja de cálculo.
+            if (tablaPegadaAbierta) {
+                Velo {
+                    EditorDeTablaPegada(
+                        leerPortapapeles = {
+                            com.forge.pixpin.clipboard.TableData.parse(textoDelPortapapeles())
+                        },
+                        onInsertar = { filas, conCabecera ->
+                            insertarTablaPegada(filas, conCabecera)
+                            tablaPegadaAbierta = false
+                            cambiado()
+                        },
+                        onCancelar = { tablaPegadaAbierta = false }
+                    )
+                }
+            }
+
             // Al soltar la raya de escalar hay que decir cuánto mide. Va lo
             // último de la pila —encima de las barras— y con el velo detrás:
             // mientras se teclea la medida no se puede estar dibujando.
@@ -876,8 +1196,38 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     /** Salir, deshacer, rehacer y compartir. Lo que no depende de la selección. */
+    /**
+     * El velo que se pone detrás de un diálogo.
+     *
+     * Oscurece y —esto es lo que importa— **se come los toques**: sin el
+     * `clickable` vacío, el dedo que iba al diálogo y falla por poco cae en el
+     * lienzo de detrás y deja una raya debajo de lo que estabas rellenando.
+     */
     @Composable
-    private fun BotonesNavegacion(tick: Int, cambiado: () -> Unit, onTablas: () -> Unit) {
+    private fun Velo(contenido: @Composable () -> Unit) {
+        Box(
+            Modifier.fillMaxSize()
+                .background(Color(0x66000000))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { },
+            contentAlignment = Alignment.Center
+        ) { contenido() }
+    }
+
+    /**
+     * Salir, deshacer y rehacer: **en su propia caja**.
+     *
+     * Iban en la misma fila que todo lo demás y no son lo mismo. Estos tres se
+     * tocan a ciegas, cada pocos segundos y sin mirar —deshacer es el botón más
+     * pulsado de cualquier editor—, así que tienen que estar **siempre en el
+     * mismo sitio**. El resto se busca con la vista y aguanta ir en un carrusel
+     * que se desplaza; estos no: si se corrieran, deshacer dejaría de poder
+     * pulsarse sin mirar y esa es toda su gracia.
+     */
+    @Composable
+    private fun CajaDeNavegacion(tick: Int, cambiado: () -> Unit) {
         @Suppress("UNUSED_EXPRESSION") tick
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { finish() }) {
@@ -891,6 +1241,34 @@ class DrawEditorActivity : ComponentActivity() {
                 onClick = { controller.redo(); cambiado() },
                 enabled = controller.canRedo
             ) { Icon(Icons.Filled.Redo, contentDescription = getString(R.string.cd_redo)) }
+        }
+    }
+
+    /**
+     * El resto de funciones, **en un carrusel**.
+     *
+     * Son las que se buscan con la vista y las que van a seguir creciendo —cada
+     * cosa nueva del editor acaba pidiendo su botón aquí—, así que la fila tiene
+     * que poder desbordarse sin empujar a nadie ni encogerse hasta que no se
+     * acierte. Se desplaza, y lo que no cabe está a un dedo de distancia.
+     *
+     * Va en `LazyRow` y no en un `Row` que se desplaza: solo se compone lo que
+     * se ve. Con cinco botones da igual, pero es la lista que va a crecer y la
+     * regla de la casa es esa.
+     */
+    @Composable
+    private fun CarruselDeFunciones(
+        tick: Int,
+        cambiado: () -> Unit,
+        onColor: () -> Unit,
+        onFiguras: () -> Unit,
+        onTablas: () -> Unit,
+        onAjustes: () -> Unit
+    ) {
+        @Suppress("UNUSED_EXPRESSION") tick
+        androidx.compose.foundation.lazy.LazyRow(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             // **Volver a lo que estás dibujando.**
             //
             // Es lo que más falta hacía. El lienzo es infinito, así que
@@ -899,19 +1277,106 @@ class DrawEditorActivity : ComponentActivity() {
             // página de un PDF es peor todavía —te vas del papel y ves un vacío
             // blanco sin saber hacia dónde tirar—, y ahí este botón es la única
             // salida que no pasa por cerrar y volver a abrir.
-            IconButton(onClick = { encuadrar(); cambiado() }) {
-                Icon(
-                    Icons.Filled.CenterFocusWeak,
-                    contentDescription = getString(R.string.cd_encuadrar)
-                )
+            item {
+                IconButton(onClick = { encuadrar(); cambiado() }) {
+                    Icon(
+                        Icons.Filled.CenterFocusWeak,
+                        contentDescription = getString(R.string.cd_encuadrar)
+                    )
+                }
             }
-            IconButton(onClick = onTablas) {
-                Icon(
-                    Icons.Filled.GridOn,
-                    contentDescription = getString(R.string.tabla_abrir)
-                )
+            // **Girar la vista, y solo cuando hay algo en volumen que girar.**
+            //
+            // Son cuatro cuartos de vuelta y no una órbita libre, que es la
+            // decisión de diseño del lienzo en volumen: con órbita el punto
+            // sobre el que se gira acaba fuera de la pantalla, el giro empieza
+            // a sentirse como un zoom y quien se pierde no sabe volver. Cuatro
+            // posiciones fijas dan el segundo punto de vista que hace falta
+            // para comprobar dónde está apoyada una caja, y siempre se puede
+            // volver dando la vuelta entera.
+            //
+            // El botón aparece solo con alguna caja en el dibujo: en un
+            // esquema plano, girar no haría absolutamente nada y sería un
+            // botón más que estorba.
+            if (controller.scene.elements.any { it.type == ElementType.SOLIDO }) {
+                item {
+                    IconButton(onClick = { controller.girarVista(); cambiado() }) {
+                        Icon(
+                            Icons.Filled.Rotate90DegreesCcw,
+                            contentDescription = getString(R.string.girar_vista)
+                        )
+                    }
+                }
             }
-            MenuDeExportar()
+            // **Figuras perfectas, con interruptor.**
+            //
+            // Ya se podía —apoyando el segundo dedo mientras se traza— y ese
+            // gesto se queda, que es el bueno para un círculo suelto. Pero
+            // dibujando un diagrama entero son todos los círculos redondos y
+            // todas las rectas al eje, y ahí apoyar el segundo dedo cada vez
+            // cansa y falla: si se mueve un pelo, el trazo se cancela y pasa a
+            // encuadrar. Con el interruptor puesto no hay que sujetar nada.
+            item {
+                IconButton(onClick = { figurasPerfectas = !figurasPerfectas }) {
+                    Icon(
+                        Icons.Filled.SquareFoot,
+                        contentDescription = getString(R.string.figuras_perfectas),
+                        tint = if (figurasPerfectas) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            // **El color, aquí arriba y no solo en el lateral.** La bolita del
+            // lateral es para ir rápido entre cinco; esto abre la paleta entera,
+            // que es a donde se va cuando el dibujo pasa de tres colores. La
+            // muestra enseña el que hay puesto, para no tener que abrirla solo
+            // para mirar. Ver [PaletaDeColores].
+            item {
+                IconButton(onClick = onColor) {
+                    Box(
+                        Modifier
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(Color(parseColor(controller.estiloActivo().strokeColor)))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline,
+                                CircleShape
+                            )
+                    )
+                }
+            }
+            // **La lista de figuras.** Va aquí, al lado de encuadrar, porque es
+            // de lo mismo: cosas que se hacen antes de ponerse a dibujar y no
+            // mientras se dibuja. Ver [PanelDeFiguras].
+            item {
+                IconButton(onClick = onFiguras) {
+                    Icon(
+                        Icons.Filled.Category,
+                        contentDescription = getString(R.string.figuras_abrir)
+                    )
+                }
+            }
+            item {
+                IconButton(onClick = onTablas) {
+                    Icon(
+                        Icons.Filled.GridOn,
+                        contentDescription = getString(R.string.tabla_abrir)
+                    )
+                }
+            }
+            // **Exportar ya no tiene botón propio.** Es una pestaña de la
+            // ventana de ajustes: se toca al terminar, no dibujando, y tenerlo
+            // en dos sitios era justo lo que había que quitar. Ver
+            // [VentanaDeAjustes].
+            item {
+                IconButton(onClick = onAjustes) {
+                    Icon(
+                        Icons.Filled.Tune,
+                        contentDescription = getString(R.string.ajustes_titulo)
+                    )
+                }
+            }
         }
     }
 
@@ -1051,53 +1516,6 @@ class DrawEditorActivity : ComponentActivity() {
      * merece sitio permanente por triplicado; y agrupados se entiende de un
      * vistazo que son tres formas de lo mismo, en vez de tres cosas distintas.
      */
-    @Composable
-    private fun MenuDeExportar() {
-        var abierto by remember { mutableStateOf(false) }
-        Box {
-            IconButton(onClick = { abierto = true }, enabled = !exportando) {
-                // Mientras se escribe el archivo, la ruedecita. Es lo único que
-                // distingue «está trabajando» de «no ha hecho nada al tocarlo»,
-                // y ahora que el trabajo va por detrás hace falta decirlo.
-                if (exportando) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.Share,
-                        contentDescription = getString(R.string.cd_draw_export)
-                    )
-                }
-            }
-            androidx.compose.material3.DropdownMenu(
-                expanded = abierto,
-                onDismissRequest = { abierto = false }
-            ) {
-                // **Una palabra por línea, y un icono delante.**
-                //
-                // Eran cuatro líneas que empezaban por «Compartir como…», así
-                // que para elegir había que leerse las cuatro enteras y llegar
-                // al final de cada una. Lo que cambia entre ellas es la última
-                // palabra: pues esa es la que se enseña. El verbo ya lo dice el
-                // botón que abrió el menú.
-                Formato(Icons.Filled.Image, R.string.formato_imagen) { compartirImagen() }
-                Formato(Icons.Filled.PictureAsPdf, R.string.formato_pdf) { compartirPdf() }
-                Formato(Icons.Filled.Polyline, R.string.formato_svg) { compartirSvg() }
-                Formato(Icons.Filled.Edit, R.string.formato_editable) { compartir() }
-                // **Meter esta lámina en un PDF que ya existe.** No sale
-                // siempre: solo tiene sentido con un proyecto de PDF abierto, y
-                // una opción que casi nunca aplica es una opción de más.
-                if (pdfDeUnProyecto() != null) {
-                    Formato(Icons.Filled.NoteAdd, R.string.formato_hoja_del_pdf) {
-                        aniadirAlPdfDelProyecto()
-                    }
-                }
-            }
-        }
-    }
-
     /**
      * El PDF del proyecto en curso, si lo hay.
      *
@@ -1105,6 +1523,40 @@ class DrawEditorActivity : ComponentActivity() {
      * —el último que se tocó— y no se pregunta a cuál: si acabas de anotar un
      * plano, la hoja que dibujas después va con él. Ver [Proyectos.enCurso].
      */
+    /**
+     * Las formas de sacar el dibujo de aquí, para la pestaña de exportar.
+     *
+     * Se arma aquí y no en la ventana porque **cuáles hay depende de la
+     * escena**: la de añadir al PDF del proyecto solo tiene sentido con uno
+     * abierto, y ofrecerla siempre sería un botón que a veces no hace nada.
+     */
+    @Composable
+    private fun formatosDeSalida(): List<FormatoDeSalida> {
+        val delProyecto = pdfDeUnProyecto()
+        return buildList {
+            add(FormatoDeSalida(Icons.Filled.Image, getString(R.string.formato_imagen)) {
+                compartirImagen()
+            })
+            add(FormatoDeSalida(Icons.Filled.PictureAsPdf, getString(R.string.formato_pdf)) {
+                compartirPdf()
+            })
+            add(FormatoDeSalida(Icons.Filled.Polyline, getString(R.string.formato_svg)) {
+                compartirSvg()
+            })
+            add(FormatoDeSalida(Icons.Filled.Edit, getString(R.string.formato_editable)) {
+                compartir()
+            })
+            if (delProyecto != null) {
+                add(
+                    FormatoDeSalida(
+                        Icons.Filled.NoteAdd,
+                        getString(R.string.formato_hoja_del_pdf)
+                    ) { aniadirAlPdfDelProyecto() }
+                )
+            }
+        }
+    }
+
     private fun pdfDeUnProyecto(): String? {
         if (pdfDeFondo != null) return null
         val app = application as? com.forge.pixpin.PixPinApp ?: return null
@@ -1158,20 +1610,6 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
-    /** Una línea del menú de exportar: icono, una palabra y ya. */
-    @Composable
-    private fun Formato(
-        icono: androidx.compose.ui.graphics.vector.ImageVector,
-        texto: Int,
-        alTocar: () -> Unit
-    ) {
-        androidx.compose.material3.DropdownMenuItem(
-            leadingIcon = { Icon(icono, contentDescription = null) },
-            text = { Text(getString(texto)) },
-            onClick = alTocar
-        )
-    }
-
     /**
      * El botón que abre los ajustes, más lo que hay que tener a un toque.
      *
@@ -1199,6 +1637,36 @@ class DrawEditorActivity : ComponentActivity() {
                 }
                 IconButton(onClick = { controller.deleteSelection(); guardar(); cambiado() }) {
                     Icon(Icons.Filled.Delete, getString(R.string.cd_delete))
+                }
+                // **El candado, y sale solo con imágenes.**
+                //
+                // Una foto en el lienzo está casi siempre para dibujar encima, y
+                // entonces lo único que hace es estorbar: se arrastra al apoyar
+                // la mano y el borrador se la lleva al pasar por un hueco. Con
+                // esto se clava donde está y deja de existir para el dedo. Para
+                // el resto de figuras no hace falta —se mueven porque uno las
+                // está colocando— y un botón más en la fila sería ruido.
+                if (controller.selectedElements().all { it.type == ElementType.IMAGE } &&
+                    controller.selectedIds.isNotEmpty()
+                ) {
+                    // **Y el mismo botón lo suelta.** Clavado se enseña abierto:
+                    // el candado es un interruptor, no un viaje de ida.
+                    val clavada = controller.seleccionClavada
+                    IconButton(
+                        onClick = {
+                            if (clavada) controller.soltarSeleccion()
+                            else controller.clavarSeleccion()
+                            guardar()
+                            cambiado()
+                        }
+                    ) {
+                        Icon(
+                            if (clavada) Icons.Filled.LockOpen else Icons.Filled.Lock,
+                            getString(if (clavada) R.string.cd_soltar else R.string.cd_clavar),
+                            tint = if (clavada) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
             Surface(
@@ -1273,6 +1741,66 @@ class DrawEditorActivity : ComponentActivity() {
      * donde está y solo cambia el tamaño. Anclando en una esquina, volver al
      * cien por cien desde un zoom alto te deja mirando a otra parte del dibujo.
      */
+    /**
+     * Pone el zoom a la escala de una hoja, centrado en lo que se está mirando.
+     *
+     * Se recoloca alrededor del centro de la pantalla, igual que el botón del
+     * cien por cien: cambiar de escala saltando a otro sitio del lienzo deja
+     * buscando dónde estaba uno.
+     */
+    /**
+     * Manda lo que hay en el lienzo **al proyecto en curso**, como una hoja más.
+     *
+     * Es lo que faltaba para que editar una imagen sirviera de algo más que de rato: se
+     * anota una captura, se guarda, y al día siguiente está en el proyecto con las demás,
+     * lista para entrar en el PDF. Antes lo editado se quedaba dentro del propio pin y no
+     * había manera de llevarlo a ninguna parte sin exportarlo a mano.
+     *
+     * Va al proyecto en curso —el mismo criterio que una nota— y si no hay ninguno se abre
+     * uno: elegir proyecto en una lista antes de poder guardar es la clase de paso que
+     * hace que uno no guarde nada.
+     *
+     * **La hoja apunta al dibujo, no copia nada.** Es el mismo identificador con el que se
+     * está editando, así que lo que se siga dibujando después también queda dentro; una
+     * copia se habría quedado congelada en el momento de darle al botón.
+     */
+    private fun aUnProyecto() {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        guardarYa()
+        val ahora = System.currentTimeMillis()
+        val proyecto = Proyectos.enCurso(app.proyectos.proyectos.value)
+            ?: app.proyectos.nuevo(getString(R.string.proyecto_nuevo_nombre), ahora)
+
+        // Si esta hoja ya está en el proyecto no se mete otra vez: el botón se toca dos
+        // veces sin querer, y dos hojas iguales apuntando al mismo dibujo se editan a la
+        // vez y confunden a cualquiera.
+        if (proyecto.hojas.any { it.dibujo == dibujoId }) {
+            android.widget.Toast.makeText(this, R.string.hoja_ya_esta, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        app.proyectos.guardar(
+            Proyectos.conHoja(
+                proyecto,
+                com.forge.pixpin.motor.Hoja(id = "h-$ahora", dibujo = dibujoId),
+                ahora
+            )
+        )
+        android.widget.Toast.makeText(this, R.string.hoja_a_proyecto, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun alZoomDeHoja(papel: Papel) {
+        val v = controller.scene.viewport
+        if (v.zoom <= 0.0) return
+        val m = resources.displayMetrics
+        val destino = papel.zoomPara(m.widthPixels.toDouble(), m.heightPixels.toDouble())
+        val centro = androidx.compose.ui.geometry.Offset(
+            m.widthPixels / 2f, m.heightPixels / 2f
+        )
+        controller.setViewport(
+            zoomAnchored(v, factor = (destino / v.zoom).toFloat(), from = centro, to = centro)
+        )
+    }
+
     private fun alZoomCien() {
         val v = controller.scene.viewport
         if (v.zoom <= 0.0) return
@@ -1385,10 +1913,12 @@ class DrawEditorActivity : ComponentActivity() {
                     controller.pedirLaMedida = !controller.pedirLaMedida
                     cambiado()
                 },
-                modoReferencia = controller.modoReferencia,
-                onModoReferencia = {
-                    controller.modoReferencia = !controller.modoReferencia
-                    cambiado()
+                modoReferencia = if (ajustes.guiaEnEditor) controller.modoReferencia else null,
+                onModoReferencia = if (!ajustes.guiaEnEditor) null else {
+                    {
+                        controller.modoReferencia = !controller.modoReferencia
+                        cambiado()
+                    }
                 },
                 referenciasVisibles = controller.referenciasVisibles,
                 onAlternarReferencias = { controller.alternarReferencias(); cambiado() },
@@ -1429,27 +1959,186 @@ class DrawEditorActivity : ComponentActivity() {
         )
     }
 
-    private fun aplicarEstilo(nuevo: ItemStyle) {
-        controller.changeStyle(
-            change = { nuevo },
-            toElement = { e ->
-                // Lo que aplica a cada tipo lo decide el motor, en un solo
-                // sitio; aquí solo queda lo que necesita Android: re-medir la
-                // caja de un texto al que se le cambia la letra.
-                var cambiado = estiloAplicado(e, nuevo)
-                // Cambiar de letra con un texto seleccionado tiene que re-medir
-                // su caja: si no, el elemento se queda con las medidas de la
-                // fuente anterior y la selección deja de cuadrar con lo pintado.
-                if (e.type == ElementType.TEXT && e.fontFamily != nuevo.fontFamily) {
-                    val tam = e.fontSize ?: nuevo.fontSize
-                    val (ancho, alto) = medirTexto(e.text.orEmpty(), nuevo.fontFamily, tam)
-                    cambiado = cambiado.copy(
-                        fontFamily = nuevo.fontFamily, width = ancho, height = alto
+    /**
+     * Mete en el dibujo la tabla que se acaba de corregir en el diálogo.
+     *
+     * Se dibuja en el origen y se traslada después, porque hasta que no está
+     * construida no se sabe lo que ocupa: el ancho sale del texto más largo de
+     * cada columna, y eso hay que medirlo. Ver [elementosDeTabla].
+     */
+    private fun insertarTablaPegada(filas: List<List<String>>, conCabecera: Boolean) {
+        val estilo = controller.scene.style
+        val elementos = elementosDeTabla(
+            filas = filas,
+            estilo = estilo,
+            origen = Pt(0.0, 0.0),
+            medir = { texto, tamano -> medirTexto(texto, estilo.fontFamily, tamano) },
+            conCabecera = conCabecera
+        )
+        if (elementos.isEmpty()) return
+        val caja = getCommonBounds(elementos)
+        val centro = centroDeLaVista()
+        controller.insertar(
+            dragElements(elementos, centro.x - caja.midX, centro.y - caja.midY)
+        )
+        guardar()
+    }
+
+    /**
+     * Lo ancho que va a salir el trazo si lo que se está ajustando es el lápiz,
+     * o null si es cualquier otra cosa.
+     *
+     * Se pregunta por lo que hay marcado y, si no hay nada, por la herramienta
+     * puesta — que es el mismo criterio con el que [propiedadesPara] decide qué
+     * controles salen, así que la muestra y el panel hablan siempre de lo mismo.
+     */
+    private fun anchoDelTrazoAMano(seleccion: List<Element>): Double? {
+        if (seleccion.isNotEmpty()) {
+            val trazo = seleccion.singleOrNull()?.takeIf { it.isFreeDraw } ?: return null
+            return anchoPintadoDelLapiz(trazo.strokeWidth)
+        }
+        if (!controller.tool.isFreehand) return null
+        val grosor = ItemStyle.freedrawWidthFor(controller.scene.style.strokeWidth)
+        val engorde =
+            if (controller.tool == Tool.HIGHLIGHTER) ItemStyle.ENGORDE_DEL_MARCADOR else 1.0
+        return anchoPintadoDelLapiz(grosor * engorde)
+    }
+
+    /**
+     * Las figuras salen perfectas sin tener que sujetar nada.
+     *
+     * Vive en la actividad y no dentro de la pantalla porque lo leen dos: el
+     * botón que lo enciende y el lienzo, que tiene que volver a **este** valor
+     * cuando se levanta el segundo dedo en vez de volver a apagado.
+     */
+    private var figurasPerfectas by mutableStateOf(false)
+
+    /**
+     * Solo el lápiz dibuja y el dedo mueve el papel.
+     *
+     * Se enciende **solo** al ver el primer toque de stylus, que es lo cómodo:
+     * quien saca el lápiz no tiene que ir a buscar un ajuste. Pero se puede
+     * apagar, y hace falta — se pierde el lápiz, se acaba la batería, o
+     * simplemente se quiere seguir con el dedo, y sin interruptor el lienzo se
+     * quedaba bloqueado sin decir por qué.
+     */
+    private var modoLapiz by mutableStateOf(false)
+
+    /**
+     * Si el modo lápiz sigue decidiéndose solo.
+     *
+     * En cuanto se toca el interruptor deja de hacerlo: apagarlo y que el
+     * siguiente roce del lápiz volviera a encenderlo sería un ajuste que no
+     * obedece, que es peor que no tenerlo.
+     */
+    private var lapizAutomatico = true
+
+    /**
+     * Trae una imagen del carrete para tenerla delante mientras se dibuja.
+     *
+     * Se descodifica **reducida**: una foto de doce megapíxeles metida entera en
+     * una ventanita de dos dedos es memoria tirada y un tirón al abrirla. Se pide
+     * al descodificador que la baje de golpe, que es lo único que no obliga a
+     * cargarla antes de encogerla. Ver [VentanaDeReferencia].
+     */
+    private fun cargarReferencia(uri: Uri): android.graphics.Bitmap? = runCatching {
+        val medida = android.graphics.BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, medida)
+        }
+        val mayor = maxOf(medida.outWidth, medida.outHeight)
+        var recorte = 1
+        while (mayor / recorte > LADO_DE_LA_REFERENCIA) recorte *= 2
+        val opciones = android.graphics.BitmapFactory.Options().apply {
+            inSampleSize = recorte
+        }
+        contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, opciones)
+        }
+    }.getOrNull()
+
+    /**
+     * Los dos intervalos del plano: cada cuánto un número y cada cuánto una raya.
+     *
+     * Son **su configuración**, no su estilo: no dicen de qué color va sino qué
+     * está midiendo. Con paso 1 salen los enteros, con 0,5 los medios y con 10
+     * las decenas, y la rejilla puede ir más fina que los números —cinco cuadros
+     * por unidad es lo de un papel milimetrado—. Ver [Plano].
+     */
+    @Composable
+    private fun AjustesDelPlano(plano: Element, cambiado: () -> Unit) {
+        Text(
+            getString(R.string.plano_titulo),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        PasoDelPlano(
+            getString(R.string.plano_numeros),
+            plano.pasoDeNumerosDelPlano
+        ) { nuevo ->
+            controller.mutarSeleccion { it.copy(pasoDeNumeros = nuevo).touched() }
+            cambiado()
+        }
+        PasoDelPlano(
+            getString(R.string.plano_cuadros),
+            plano.pasoDeCuadrosDelPlano
+        ) { nuevo ->
+            controller.mutarSeleccion { it.copy(pasoDeCuadros = nuevo).touched() }
+            cambiado()
+        }
+    }
+
+    /**
+     * Un intervalo, elegido entre los que se usan.
+     *
+     * Botones y no un campo de teclear: los intervalos que se usan de verdad son
+     * media docena —décimas, medios, unidades, cincos, decenas— y teclearlos
+     * abriría el teclado numérico encima del plano que se está mirando para
+     * decidir.
+     */
+    @Composable
+    private fun PasoDelPlano(titulo: String, actual: Double, onPaso: (Double) -> Unit) {
+        Text(titulo, style = MaterialTheme.typography.labelSmall)
+        Row(Modifier.padding(bottom = 4.dp)) {
+            PASOS_DEL_PLANO.forEach { paso ->
+                val puesto = kotlin.math.abs(paso - actual) < 1e-9
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (puesto) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .clickable { if (!puesto) onPaso(paso) }
+                ) {
+                    Text(
+                        escrito(paso),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (puesto) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     )
                 }
-                cambiado
             }
-        )
+        }
+    }
+
+    private fun aplicarEstilo(nuevo: ItemStyle) {
+        // Qué campos se tocan y a quién le aplican lo decide el motor, en un
+        // solo sitio; aquí solo queda lo que necesita Android: volver a medir la
+        // caja de un texto al que se le ha cambiado la letra. Sin eso el
+        // elemento se queda con las medidas de la fuente anterior y la selección
+        // deja de cuadrar con lo que se ve pintado.
+        controller.cambiarEstilo(nuevo) { e ->
+            if (e.type != ElementType.TEXT) return@cambiarEstilo e
+            val (ancho, alto) = medirTexto(
+                e.text.orEmpty(),
+                e.fontFamily ?: nuevo.fontFamily,
+                e.fontSize ?: nuevo.fontSize
+            )
+            e.copy(width = ancho, height = alto)
+        }
     }
 
     /**
@@ -1518,6 +2207,30 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Un botón de icono del panel, del tamaño del dedo y con su nombre.
+     *
+     * Sustituye a los glifos de texto: «⤓⤒» hay que descifrarlo, y encima cada
+     * fuente lo dibuja a su manera. Un icono de Material dice lo mismo igual en
+     * todas partes, y su descripción lo cuenta al lector de pantalla, que con un
+     * glifo se quedaba mudo.
+     */
+    @Composable
+    private fun IconoBoton(
+        icono: androidx.compose.ui.graphics.vector.ImageVector,
+        descripcion: String,
+        onClick: () -> Unit
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.size(38.dp)) {
+            Icon(
+                icono,
+                contentDescription = descripcion,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+    }
+
     @Composable
     private fun Separador() {
         Box(
@@ -1556,6 +2269,13 @@ class DrawEditorActivity : ComponentActivity() {
                 LargoYAngulo(raya) { cambiado() }
             }
 
+            // ---- Y la del plano: cada cuánto un número y cada cuánto una raya ----
+            val plano = seleccion.singleOrNull()?.takeIf { it.isPlano }
+            if (plano != null) {
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                AjustesDelPlano(plano) { cambiado() }
+            }
+
             // ---- Las acciones, agrupadas por lo que hacen ----
             if (grupos.isNotEmpty()) HorizontalDivider(Modifier.padding(vertical = 4.dp))
             if (GrupoAcciones.ORDEN in grupos) Fila("Orden") {
@@ -1572,12 +2292,44 @@ class DrawEditorActivity : ComponentActivity() {
                 GlifoBoton("⧉") { controller.group(); cambiado() }
                 GlifoBoton("⿴") { controller.ungroup(); cambiado() }
             }
-            if (GrupoAcciones.ALINEAR in grupos) Fila("Alinear") {
-                GlifoBoton("⇤") { controller.align(AlignAxis.X, AlignPosition.START); cambiado() }
-                GlifoBoton("⇹") { controller.align(AlignAxis.X, AlignPosition.CENTER); cambiado() }
-                GlifoBoton("⇥") { controller.align(AlignAxis.X, AlignPosition.END); cambiado() }
-                GlifoBoton("⤄") { controller.distribute(AlignAxis.X); cambiado() }
-                GlifoBoton("⤓⤒") { controller.distribute(AlignAxis.Y); cambiado() }
+            // **Alinear, en dos filas y con iconos de verdad.**
+            //
+            // Estaba en una sola con cinco glifos de texto —«⇤ ⇹ ⇥ ⤄ ⤓⤒»— y
+            // faltaban **las tres verticales**: no había forma de alinear arriba,
+            // al medio o abajo, que es la mitad de para lo que sirve esto.
+            // Partido por ejes se lee de un vistazo: una fila para lo horizontal
+            // y otra para lo vertical, cada una con sus tres y su repartir.
+            if (GrupoAcciones.ALINEAR in grupos) {
+                Fila("Horizontal") {
+                    IconoBoton(Icons.Filled.AlignHorizontalLeft, "Alinear a la izquierda") {
+                        controller.align(AlignAxis.X, AlignPosition.START); cambiado()
+                    }
+                    IconoBoton(Icons.Filled.AlignHorizontalCenter, "Centrar en horizontal") {
+                        controller.align(AlignAxis.X, AlignPosition.CENTER); cambiado()
+                    }
+                    IconoBoton(Icons.Filled.AlignHorizontalRight, "Alinear a la derecha") {
+                        controller.align(AlignAxis.X, AlignPosition.END); cambiado()
+                    }
+                    Separador()
+                    IconoBoton(Icons.Filled.HorizontalDistribute, "Repartir en horizontal") {
+                        controller.distribute(AlignAxis.X); cambiado()
+                    }
+                }
+                Fila("Vertical") {
+                    IconoBoton(Icons.Filled.AlignVerticalTop, "Alinear arriba") {
+                        controller.align(AlignAxis.Y, AlignPosition.START); cambiado()
+                    }
+                    IconoBoton(Icons.Filled.AlignVerticalCenter, "Centrar en vertical") {
+                        controller.align(AlignAxis.Y, AlignPosition.CENTER); cambiado()
+                    }
+                    IconoBoton(Icons.Filled.AlignVerticalBottom, "Alinear abajo") {
+                        controller.align(AlignAxis.Y, AlignPosition.END); cambiado()
+                    }
+                    Separador()
+                    IconoBoton(Icons.Filled.VerticalDistribute, "Repartir en vertical") {
+                        controller.distribute(AlignAxis.Y); cambiado()
+                    }
+                }
             }
         }
     }
@@ -1855,15 +2607,37 @@ class DrawEditorActivity : ComponentActivity() {
             cursorBrush = androidx.compose.ui.graphics.SolidColor(
                 MaterialTheme.colorScheme.primary
             ),
+            // **El intro hace otra línea; no cierra.**
+            //
+            // Estaba puesto para aceptar, y el resultado era que **desde el teclado del
+            // móvil no se podía escribir un segundo renglón**: un texto de dos líneas solo
+            // existía pegándolo del portapapeles. Aceptar ya se hace tocando fuera, que es
+            // el gesto de todas las demás cosas del lienzo.
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                imeAction = androidx.compose.ui.text.input.ImeAction.Default,
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences
             ),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { cerrar() }),
             modifier = Modifier
                 .offset { IntOffset(esquina.x.toInt(), esquina.y.toInt()) }
                 .widthIn(min = 120.dp)
                 .focusRequester(foco)
         )
+    }
+
+    /**
+     * Le enseña al motor a medir renglones.
+     *
+     * El motor no puede: medir letras es de Android. Con esto, estrechar la caja de un
+     * texto lo reparte en más renglones y la caja crece de alto sola, que es lo que hace
+     * cualquier caja de texto. Ver [DrawController.altoDelTexto].
+     */
+    private fun ensenarAMedirElTexto() {
+        controller.altoDelTexto = { e, ancho ->
+            val tam = e.fontSize ?: com.forge.pixpin.motor.ItemStyle().fontSize
+            val regla = DrawFonts.reglaDeAnchos(this, e.fontFamily, tam)
+            val renglones = renglonesQueCaben(e.text.orEmpty(), ancho, regla)
+            altoDeRenglones(renglones.size, tam)
+        }
     }
 
     private fun medirTexto(texto: String, familia: Int, tamano: Double): Pair<Double, Double> =
@@ -2042,6 +2816,44 @@ class DrawEditorActivity : ComponentActivity() {
 private val STROKE_COLORS = listOf(
     "#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00"
 )
+
+/**
+ * Cuánto de ancho se lleva la barra de arriba a la izquierda.
+ *
+ * Dos tercios: el otro tercio es donde salen los ajustes de lo que haya
+ * marcado, y las dos cosas no se pueden pisar. El carrusel se desplaza, así que
+ * quedarse con menos ancho no le quita ninguna función — solo hace falta un dedo
+ * más para llegar a la última.
+ */
+/**
+ * Dónde empieza la segunda fila: **justo debajo de la barra de arriba**.
+ *
+ * Los ocho de la barra más su aire. Va como número y no como una columna que
+ * las apile porque las dos filas se anclan a lados distintos según la mano, y
+ * apilarlas obligaría a que las dos vivieran en el mismo contenedor.
+ */
+private val BAJO_LA_BARRA = 60.dp
+
+/** Lo que ocupa una isla de botones, para colgar la siguiente debajo. */
+private val ALTO_DE_UNA_ISLA = 52.dp
+
+/**
+ * Lo grande que se descodifica la imagen de referencia, en píxeles.
+ *
+ * La ventanita mide dos dedos, así que mil doscientos dan de sobra para
+ * acercarse a mirar un detalle. Una foto entera de doce megapíxeles ahí dentro
+ * son cuarenta megas de memoria para no ver ni un píxel más.
+ */
+private const val LADO_DE_LA_REFERENCIA = 1200
+
+/**
+ * Los intervalos que se ofrecen para el plano.
+ *
+ * Media docena, que son los que se usan: décimas para una función que se mueve
+ * poco, medios y unidades para lo corriente, cincos y decenas para lo que crece
+ * deprisa. Ver [Plano].
+ */
+private val PASOS_DEL_PLANO = listOf(0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0)
 
 private val BACKGROUND_COLORS = listOf(
     "transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", "#ffec99"

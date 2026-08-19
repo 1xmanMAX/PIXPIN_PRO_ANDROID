@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,27 @@ fun DrawCanvas(
      */
     zoomBloqueado: Boolean = false,
     /**
+     * Las figuras salen perfectas sin apoyar el segundo dedo.
+     *
+     * El gesto de los dos dedos se queda —es el bueno para un círculo suelto—,
+     * pero con esto puesto el modificador **no se apaga al levantarlos**: se
+     * vuelve aquí, y no a falso. Sin eso, el primer trazo con el segundo dedo
+     * apagaba el interruptor sin que nadie lo hubiera tocado.
+     */
+    figurasPerfectas: Boolean = false,
+    /**
+     * **Solo el lápiz dibuja**; el dedo mueve el papel.
+     *
+     * Se enciende solo al ver el primer toque de stylus —quien tiene lápiz
+     * dibuja con el lápiz— pero **se puede apagar**, y ese era el fallo: sin
+     * interruptor, perder el lápiz dejaba el lienzo bloqueado para siempre, sin
+     * forma de volver a anotar con el dedo. Lo decide quien hospeda; aquí solo
+     * se obedece. Ver [onLapizDetectado].
+     */
+    modoLapiz: Boolean = false,
+    /** Ha entrado un toque de lápiz: quien hospeda decide si enciende el modo. */
+    onLapizDetectado: () -> Unit = {},
+    /**
      * El contador de cambios de quien la hospeda. **Sin esto el lienzo se queda
      * congelado ante todo lo que no venga del dedo.**
      *
@@ -102,7 +124,9 @@ fun DrawCanvas(
      * izquierda… y viceversa. Poner la lupa en el lado por donde entra la mano
      * sería taparla con el brazo.
      */
-    zurdo: Boolean = false
+    zurdo: Boolean = false,
+    /** El fondo pautado. Solo aquí: no viaja en el archivo. Ver [Cuadricula]. */
+    cuadricula: Cuadricula = Cuadricula.NINGUNA
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // El controlador es estado mutable corriente, no estado de Compose. Este
@@ -121,8 +145,12 @@ fun DrawCanvas(
      * enseñar ese trozo aparte, ampliado, en una esquina que no tapa la mano.
      */
     var dedo by remember { mutableStateOf<Offset?>(null) }
-    val renderer = remember(imageProvider, dark, backdrop, papelALaVista) {
-        Renderer(imageProvider, DrawFonts.provider(context), dark, backdrop, papelALaVista)
+
+
+    val renderer = remember(imageProvider, dark, backdrop, papelALaVista, cuadricula) {
+        Renderer(
+            imageProvider, DrawFonts.provider(context), dark, backdrop, papelALaVista, cuadricula
+        )
     }
 
     fun touched() {
@@ -131,14 +159,92 @@ fun DrawCanvas(
     }
 
     Canvas(
-        modifier = modifier.pointerInput(controller) {
+        // **El candado del zoom va en la llave, y por eso no funcionaba.**
+        //
+        // `pointerInput` no se reinicia al recomponer: se reinicia cuando cambia
+        // una de sus llaves. Con `controller` como única llave, el bloque de
+        // abajo seguía corriendo con el valor de `zoomBloqueado` que tenía
+        // cuando arrancó —falso, siempre— y el candado no se enteraba nunca de
+        // que lo habían echado. Se veía como un botón que se enciende y no hace
+        // nada, que es lo peor que puede hacer un botón.
+        modifier = modifier.pointerInput(controller, zoomBloqueado, figurasPerfectas, modoLapiz) {
             awaitEachGesture {
                 val first = awaitFirstDown(requireUnconsumed = false)
                 var pointers = 1
                 var gestureStarted = false
 
+                if (first.type == PointerType.Stylus) onLapizDetectado()
+                val esLapiz = first.type == PointerType.Stylus
+
+                // **Con lápiz a la vista, el dedo mueve el papel.**
+                //
+                // Un dedo solo panea y dos siguen haciendo pellizco, pero
+                // ninguno de los dos dibuja: dibuja el lápiz. Así se puede
+                // apoyar la mano, recolocar el dibujo y seguir trazando sin
+                // cambiar de modo ni tocar ningún botón.
+                // **El texto se escribe con el dedo, aunque haya lápiz.**
+                //
+                // Poner un texto no es trazar: es tocar un sitio y teclear, y con
+                // el modo lápiz puesto ese toque se lo comía el paneo — no había
+                // forma de colocar un texto sin sacar el lápiz. La herramienta de
+                // texto es la excepción, y solo ella.
+                val elDedoEscribe = controller.tool == Tool.TEXT
+                if (modoLapiz && !esLapiz && !elDedoEscribe) {
+                    var previo = first.position
+                    var dedos = 1
+                    first.consume()
+                    while (true) {
+                        val evento = awaitPointerEvent()
+                        val activos = evento.changes.filter { it.pressed }
+                        if (activos.isEmpty()) break
+                        // Si el lápiz se posa en mitad del paneo, manda él: se
+                        // suelta esto y el siguiente gesto ya será suyo.
+                        if (activos.any { it.type == PointerType.Stylus }) {
+                            evento.changes.forEach { it.consume() }
+                            break
+                        }
+                        val v = controller.scene.viewport
+                        // Igual que arriba: el fotograma en que entra o sale un
+                        // dedo no mueve nada, o el lienzo pega un brinco.
+                        if (activos.size != dedos) {
+                            dedos = activos.size
+                            previo = activos.first().position
+                            evento.changes.forEach { it.consume() }
+                            continue
+                        }
+                        if (activos.size > 1) {
+                            val factor = if (zoomBloqueado) 1f else evento.calculateZoom()
+                            controller.setViewport(
+                                zoomAnchored(
+                                    v,
+                                    factor = factor,
+                                    from = evento.calculateCentroid(useCurrent = false),
+                                    to = evento.calculateCentroid(useCurrent = true)
+                                )
+                            )
+                        } else {
+                            val ahora = activos.first().position
+                            controller.setViewport(
+                                v.copy(
+                                    scrollX = v.scrollX + (ahora.x - previo.x) / v.zoom,
+                                    scrollY = v.scrollY + (ahora.y - previo.y) / v.zoom
+                                )
+                            )
+                            previo = ahora
+                        }
+                        evento.changes.forEach { it.consume() }
+                        touched()
+                    }
+                    dedo = null
+                    return@awaitEachGesture
+                }
+
                 val vp = controller.scene.viewport
                 val start = vp.toScene(first.position.x.toDouble(), first.position.y.toDouble())
+                // Cuándo y dónde empezó, para saber luego si fue una pulsación
+                // larga: es la puerta de atrás de lo clavado. Ver más abajo.
+                val cuandoEmpezo = first.uptimeMillis
+                var seMovio = false
                 controller.pointerDown(start, first.pressure.toDouble(), vp.zoom)
                 gestureStarted = true
                 dedo = first.position
@@ -157,9 +263,22 @@ fun DrawCanvas(
                 var segundoDedo: PointerId? = null
                 var dondeSePuso = Offset.Zero
 
+                var ultimoToque = cuandoEmpezo
                 while (true) {
                     val event = awaitPointerEvent()
+                    event.changes.firstOrNull()?.let { c ->
+                        ultimoToque = c.uptimeMillis
+                        if ((c.position - first.position).getDistance() > viewConfiguration.touchSlop) {
+                            seMovio = true
+                        }
+                    }
+                    // **Rechazo de palma.** Trazando con el lápiz, la mano
+                    // apoyada entra como un dedo más, y hasta ahora eso se leía
+                    // como el segundo dedo del pellizco: el trazo se cancelaba
+                    // solo por apoyar la mano, que es como se escribe. Con el
+                    // lápiz en la pantalla, los dedos no existen.
                     val active = event.changes.filter { it.pressed }
+                        .let { if (esLapiz) it.filter { c -> c.type == PointerType.Stylus } else it }
                     if (active.isEmpty()) break
 
                     if (active.size > 1) {
@@ -249,7 +368,7 @@ fun DrawCanvas(
                             // él. Un trozo de raya suelto porque el usuario
                             // quería mirar de cerca no es un dibujo.
                             perfecta = false
-                            controller.keepAspectRatio = false
+                            controller.keepAspectRatio = figurasPerfectas
                         }
                         // Ha aparecido un segundo dedo: lo que llevara empezado
                         // el controlador se cancela, porque el usuario no quería
@@ -259,8 +378,27 @@ fun DrawCanvas(
                             gestureStarted = false
                         }
                         huboDosDedos = true
+                        // **El fotograma en que cambia el número de dedos no
+                        // mueve nada.**
+                        //
+                        // El centroide de «antes» se calcula con los dedos que
+                        // había y el de «ahora» con los que hay: al levantar uno,
+                        // el punto de referencia salta del medio de los dos a la
+                        // yema del que queda, y esa diferencia se aplicaba tal
+                        // cual como si fuera un desplazamiento. Era el brinco del
+                        // dibujo justo al soltar el pellizco, y pasaba también al
+                        // apoyar el segundo dedo, solo que ahí no se notaba
+                        // porque el gesto acababa de empezar.
+                        //
+                        // Con los dedos entrando y saliendo no hay movimiento que
+                        // medir: se anota cuántos hay y se espera al siguiente.
+                        val cambiaronLosDedos = active.size != pointers
                         pointers = active.size
                         val zoom = if (zoomBloqueado) 1f else event.calculateZoom()
+                        if (cambiaronLosDedos) {
+                            event.changes.forEach { it.consume() }
+                            continue
+                        }
                         if (zoom != 1f || event.calculatePan() != Offset.Zero) {
                             huboEncuadre = true
                             controller.setViewport(
@@ -282,7 +420,7 @@ fun DrawCanvas(
                     // enderezar un tramo y seguir, que es como se usa.
                     if (perfecta) {
                         perfecta = false
-                        controller.keepAspectRatio = false
+                        controller.keepAspectRatio = figurasPerfectas
                         touched()
                     }
 
@@ -318,10 +456,26 @@ fun DrawCanvas(
                 dedo = null
                 // El modificador no sobrevive al gesto: si no, la siguiente
                 // forma nacería cuadrada sin que nadie lo haya pedido.
-                if (perfecta) controller.keepAspectRatio = false
+                if (perfecta) controller.keepAspectRatio = figurasPerfectas
                 if (gestureStarted) {
                     controller.pointerUp(last, controller.scene.viewport.zoom)
                     touched()
+                }
+
+                // **La pulsación larga rescata lo clavado.**
+                //
+                // Una imagen con el candado no responde al toque —para eso se
+                // clava— así que ponerlo era una decisión sin vuelta: no había
+                // forma de volver a cogerla ni de quitárselo. Aguantar el dedo
+                // encima la marca igualmente, que es el gesto de «sé lo que
+                // estoy haciendo» de siempre, y con ella marcada el botón del
+                // candado abierto ya la suelta.
+                val fueLarga = !seMovio && !huboDosDedos &&
+                    (ultimoToque - cuandoEmpezo) >= MILIS_DE_PULSACION_LARGA
+                if (fueLarga && controller.tool == Tool.SELECTION &&
+                    controller.selectedIds.isEmpty()
+                ) {
+                    if (controller.marcarClavadoEn(start, UMBRAL_DEL_DEDO / vp.zoom)) touched()
                 }
                 // Dos dedos que se posan y se levantan sin mover nada: atajo.
                 if (huboDosDedos && !huboEncuadre) onTwoFingerTap()
@@ -333,6 +487,9 @@ fun DrawCanvas(
         @Suppress("UNUSED_EXPRESSION") cambios
 
         val scene = controller.scene
+        // Lo marcado, para lo que solo tiene sentido mientras se toca: el
+        // contorno de lo que mira una lupa. Ver [Renderer.marcados].
+        renderer.marcados = controller.selectedIds
         drawIntoCanvas { canvas ->
             renderer.renderScene(
                 canvas.nativeCanvas, scene,
@@ -676,3 +833,9 @@ private val LUPA_FONDO = Color.White
  * mucho menos de lo que se abre la mano al pellizcar de verdad.
  */
 private const val DERIVA_ENCUADRE = 20
+
+/** Cuánto hay que aguantar el dedo para que cuente como pulsación larga. */
+private const val MILIS_DE_PULSACION_LARGA = 450L
+
+/** El margen del dedo al buscar algo clavado, en píxeles de escena. */
+private const val UMBRAL_DEL_DEDO = 24.0

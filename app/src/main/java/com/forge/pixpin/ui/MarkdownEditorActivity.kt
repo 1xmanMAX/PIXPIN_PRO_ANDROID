@@ -259,6 +259,33 @@ private fun Pantalla(
     // propio historial decide qué agrupar; ver [Historial].
     val historial = remember { Historial().also { it.empezar(inicial) } }
     var pasos by remember { mutableIntStateOf(0) }
+    var confirmandoDescarte by remember { mutableStateOf(false) }
+    val hayCambios = valor.text != inicial
+
+    /**
+     * Vuelve a poner el cursor en un sitio que exista.
+     *
+     * Deshacer cambiaba el texto y **dejaba el sitio como estaba**: si lo
+     * deshecho era un bloque, el sitio señalaba a uno que ya no existe, y el
+     * editor se quedaba escribiendo en un hueco. Se conserva el bloque si sigue
+     * habiendo, y si no, el último.
+     */
+    fun recolocar(nuevoTexto: String) {
+        val cuantos = trozosDe(nuevoTexto).size
+        if (cuantos == 0) {
+            sitio = null
+            return
+        }
+        val bloque = (sitio?.bloque ?: (cuantos - 1)).coerceIn(0, cuantos - 1)
+        val largo = Vivo.contenido(nuevoTexto, bloque)?.text?.length ?: 0
+        sitio = Sitio(bloque, TextRange(largo))
+    }
+
+    // **El botón de atrás guarda.** No lo tocaba nadie, así que hacía lo de por
+    // defecto —cerrar la pantalla— y una nota entera escrita se perdía sin un
+    // aviso. Una nota se guarda al salir, como en cualquier libreta; para tirar
+    // lo escrito está la flecha, que ahora pregunta.
+    androidx.activity.compose.BackHandler { onGuardar(valor.text) }
 
     fun cambia(nuevo: TextFieldValue) {
         if (nuevo.text != valor.text) {
@@ -377,7 +404,11 @@ private fun Pantalla(
             TopAppBar(
                 title = { Text("Nota") },
                 navigationIcon = {
-                    IconButton(onClick = onDescartar) {
+                    // Con algo escrito se pregunta: la flecha está pegada al
+                    // borde y se toca sin querer más de lo que parece.
+                    IconButton(
+                        onClick = { if (hayCambios) confirmandoDescarte = true else onDescartar() }
+                    ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Descartar"
@@ -394,6 +425,7 @@ private fun Pantalla(
                         onClick = {
                             historial.deshacer(valor.text)?.let {
                                 valor = TextFieldValue(it, TextRange(it.length))
+                                recolocar(it)
                                 pasos++
                             }
                         },
@@ -405,6 +437,7 @@ private fun Pantalla(
                         onClick = {
                             historial.rehacer(valor.text)?.let {
                                 valor = TextFieldValue(it, TextRange(it.length))
+                                recolocar(it)
                                 pasos++
                             }
                         },
@@ -512,6 +545,26 @@ private fun Pantalla(
                 }
             }
         }
+    }
+
+    // **Preguntar antes de tirar lo escrito.** Es lo único que separa un toque
+    // sin querer de perder una nota entera.
+    if (confirmandoDescarte) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmandoDescarte = false },
+            title = { Text("¿Descartar lo escrito?") },
+            text = { Text("Se perderá lo que has escrito desde que abriste la nota.") },
+            confirmButton = {
+                TextButton(onClick = { confirmandoDescarte = false; onDescartar() }) {
+                    Text("Descartar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmandoDescarte = false }) {
+                    Text("Seguir escribiendo")
+                }
+            }
+        )
     }
 
     if (viendoAdjuntar) {

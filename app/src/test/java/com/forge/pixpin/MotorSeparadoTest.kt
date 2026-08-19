@@ -36,6 +36,9 @@ class MotorSeparadoTest {
         "Renderer.kt", "DrawCanvas.kt", "DrawToolbar.kt", "DrawEditorActivity.kt",
         "DrawExport.kt", "DrawPdf.kt", "DrawSvg.kt", "DrawTablas.kt", "DrawFonts.kt",
         "Theme.kt", "ExcalidrawStore.kt",
+        // Abre archivos para saber qué hoja lleva algo dibujado. Ver el porqué
+        // en el propio archivo: el criterio de «anotada» necesita leer la escena.
+        "CapaDeAnotacion.kt",
         // Los dos de escribir un PDF: sacan el perfil de las letras y meten
         // imágenes, y las dos cosas son de Android. La geometría que usan sí es
         // del núcleo —[Caminos], [Rough], [Perimetros]— y por eso el PDF se
@@ -48,7 +51,26 @@ class MotorSeparadoTest {
         // El panel lateral es interfaz entera. Sus cuentas —de dónde está el
         // dedo a qué valor sale— viven aparte en `Deslizadores.kt`, que sí es
         // núcleo y sí se comprueba sin dispositivo.
-        "PanelLateral.kt"
+        "PanelLateral.kt",
+        // La lista de figuras: el archivo donde se guardan y las dos pantallas
+        // desde las que se tocan. Qué es una figura, cómo se estampa y cómo se
+        // dibuja una tabla pegada sí son núcleo —`Biblioteca.kt` y
+        // `TablaDibujada.kt`— y por eso eso se comprueba sin dispositivo.
+        "BibliotecaStore.kt", "DrawFiguras.kt", "DrawTablaPegada.kt",
+        // La caché de miniaturas: un `Bitmap`, un `LruCache` y la carpeta de
+        // caché de la aplicación son las tres de Android. Cuánto se abre el
+        // documento y en qué orden sí es del núcleo, pero eso vive en
+        // `PdfDoc.porTandas`, que ya estaba en esta lista.
+        "PdfMiniaturas.kt",
+        // La paleta de combinaciones es interfaz entera; qué colores la
+        // forman es una lista de textos y vive en el mismo archivo porque
+        // separarla dejaría un archivo de núcleo con seis constantes.
+        "PaletaDeColores.kt",
+        // Las dos ventanas flotantes: interfaz entera. Dónde caen las rayas
+        // de la cuadrícula sí es núcleo y vive en `Cuadricula.kt`.
+        "VentanaDeReferencia.kt", "VentanaDeAjustes.kt",
+        // La cabecera que comparten las tres ventanitas flotantes.
+        "BarraDeVentana.kt"
     )
 
     private fun archivos(): List<File> =

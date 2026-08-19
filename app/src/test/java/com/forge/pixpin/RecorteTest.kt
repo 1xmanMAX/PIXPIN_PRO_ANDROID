@@ -102,6 +102,41 @@ class RecorteTest {
         assertEquals(110.0, cortes[1], 0.001)
     }
 
+    /**
+     * **Un óvalo girado se recorta por donde se ve.**
+     *
+     * Es el mismo fallo que el de las rayas, pero por el otro camino: un círculo
+     * se recorta en arcos, y los puntos del arco venían ya girados mientras el
+     * dedo y las paredes hablaban en coordenadas del mundo. El trozo que se iba
+     * no era el que se tocaba.
+     *
+     * Se usa un óvalo achatado y girado un cuarto de vuelta —así queda alto y
+     * estrecho— cortado por dos horizontales. Tocando por abajo tiene que
+     * quedarse la mitad de arriba.
+     */
+    @Test
+    fun `un ovalo girado se recorta por donde se toca`() {
+        val ovalo = Element(
+            id = "o", type = ElementType.ELLIPSE, x = 0.0, y = 50.0,
+            width = 200.0, height = 100.0, seed = 1, angle = Math.PI / 2
+        )
+        // Girado, el óvalo va de (50,0) a (150,200) en el mundo.
+        val corte = linea("h", Pt(0.0, 100.0), Pt(200.0, 100.0))
+
+        val trozos = recortarEn(ovalo, listOf(corte), Pt(100.0, 195.0))
+        assertNotNull(trozos)
+        val arco = trozos!!.single()
+        assertEquals(ElementType.ARC, arco.type)
+
+        // Lo que queda tiene que estar **por encima** del corte, que es lo que
+        // no se tocó. Se mira en el mundo, que es donde está el dedo.
+        val puntos = contornosDe(arco).single().puntos
+        assertTrue(
+            "ha quedado el trozo que se tocó: ${puntos.map { it.y }}",
+            puntos.all { it.y <= 100.5 }
+        )
+    }
+
     /** Y una curva corta como cualquier otra cosa: es el perímetro de siempre. */
     @Test
     fun `una circunferencia tambien corta`() {
@@ -114,6 +149,54 @@ class RecorteTest {
         assertEquals(1, trozos!!.size)
         // Se corta donde el círculo cruza el eje: en x = 150.
         assertEquals(150.0, extremos(trozos.first()).second.x, 0.5)
+    }
+
+    /**
+     * **Una figura girada se recorta donde se ve, y no se gira otra vez.**
+     *
+     * Los puntos se guardan sin girar y el ángulo va aparte, así que recortar
+     * sobre ellos era trabajar en un sistema mientras el dedo y las paredes
+     * estaban en otro. Lo que quedaba, además, conservaba el ángulo: se volvía a
+     * girar al pintarlo y el trozo aparecía en otro sitio dando una vuelta.
+     *
+     * Se comprueba con una raya girada un cuarto de vuelta —queda vertical, de
+     * (100,0) a (100,200) en el mundo— cortada por una horizontal.
+     */
+    @Test
+    fun `una figura girada se recorta sin volver a girarse`() {
+        val raya = linea("l", Pt(0.0, 100.0), Pt(200.0, 100.0))
+            .copy(angle = Math.PI / 2)
+        // Girada sobre su centro (100,100), la raya va de (100,0) a (100,200).
+        val pared = linea("h", Pt(0.0, 150.0), Pt(200.0, 150.0))
+
+        val trozos = recortarEn(raya, listOf(pared), Pt(100.0, 190.0))
+        assertNotNull(trozos)
+        val trozo = trozos!!.single()
+
+        assertEquals("el trozo se ha quedado girado", 0.0, trozo.angle, 1e-9)
+        val (a, b) = extremos(trozo)
+        assertEquals(100.0, a.x, 0.001)
+        assertEquals(0.0, a.y, 0.001)
+        assertEquals(100.0, b.x, 0.001)
+        assertEquals(150.0, b.y, 0.001)
+    }
+
+    /** Y extender tampoco puede girar lo que estira. */
+    @Test
+    fun `extender una figura girada no la gira`() {
+        val raya = linea("l", Pt(0.0, 100.0), Pt(100.0, 100.0))
+            .copy(angle = Math.PI / 2)
+        // Girada sobre su centro (50,100), va de (50,50) a (50,150).
+        val tope = linea("h", Pt(0.0, 200.0), Pt(100.0, 200.0))
+
+        val estirada = extenderEn(raya, listOf(tope), Pt(50.0, 148.0))
+        assertNotNull(estirada)
+        assertEquals(0.0, estirada!!.angle, 1e-9)
+        val (a, b) = extremos(estirada)
+        assertEquals(50.0, a.x, 0.001)
+        assertEquals(50.0, a.y, 0.001)
+        assertEquals(50.0, b.x, 0.001)
+        assertEquals(200.0, b.y, 0.001)
     }
 
     /** Los dobleces de una polilínea se conservan al recortar. */

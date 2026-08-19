@@ -256,6 +256,59 @@ class FreehandTest {
     }
 
     /**
+     * **Y sin escalones.** El deslizador da cualquier grosor de 0,5 a 20;
+     * mientras la escala se resolvía buscando la posición en la lista de las
+     * formas, de 4 en adelante —más de la mitad del recorrido— salía siempre lo
+     * mismo, así que el mando se movía y el trazo no cambiaba.
+     */
+    @Test
+    fun `el grosor del lapiz es continuo en todo el recorrido`() {
+        var previo = ItemStyle.freedrawWidthFor(GROSOR_MINIMO)
+        var paso = GROSOR_MINIMO + 0.25
+        while (paso <= GROSOR_MAXIMO) {
+            val actual = ItemStyle.freedrawWidthFor(paso)
+            assertTrue("el grosor se ha quedado clavado en $paso", actual > previo)
+            previo = actual
+            paso += 0.25
+        }
+    }
+
+    /**
+     * **Dibujar y retocar tienen que dar el mismo trazo.**
+     *
+     * La corrección de la escala del lápiz se hacía solo al nacer el trazo, así
+     * que con un garabato seleccionado el mismo sitio del mando lo dejaba del
+     * doble de gordo que uno recién dibujado.
+     */
+    @Test
+    fun `retocar un garabato le aplica la escala del lapiz`() {
+        val estilo = ItemStyle(strokeWidth = 4.0)
+        val garabato = newElement(ElementType.FREEDRAW, 0.0, 0.0, estilo)
+        assertEquals(
+            ItemStyle.freedrawWidthFor(4.0),
+            estiloAplicado(garabato, ItemStyle(), estilo).strokeWidth,
+            1e-9
+        )
+        // Y a una figura no: una raya de cuatro sale de cuatro.
+        val caja = newElement(ElementType.RECTANGLE, 0.0, 0.0, estilo)
+        assertEquals(4.0, estiloAplicado(caja, ItemStyle(), estilo).strokeWidth, 1e-9)
+    }
+
+    /**
+     * El trazo que sale es bastante más ancho que el número elegido, y la
+     * muestra del panel tiene que enseñar eso y no el número: con el mando en
+     * tres salía un punto de tres píxeles y un trazo de nueve.
+     */
+    @Test
+    fun `el ancho pintado del lapiz no es su grosor`() {
+        val grosor = ItemStyle.freedrawWidthFor(3.0)
+        val pintado = anchoPintadoDelLapiz(grosor)
+        assertTrue("el trazo no puede salir más fino que su grosor", pintado > grosor)
+        // Y crece con él, que es lo que hace que la muestra sirva para comparar.
+        assertTrue(anchoPintadoDelLapiz(ItemStyle.freedrawWidthFor(6.0)) > pintado)
+    }
+
+    /**
      * El alisado tiene que dejar pasar el pulso.
      *
      * Se compara el trazo alisado contra la entrada: con la corrección alta el

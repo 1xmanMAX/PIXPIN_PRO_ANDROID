@@ -31,7 +31,22 @@ fun Element.touched(): Element = copy(
 
 /** Desplaza elementos (`dragElements`). */
 fun dragElements(elements: List<Element>, dx: Double, dy: Double): List<Element> =
-    elements.map { if (it.locked) it else it.copy(x = it.x + dx, y = it.y + dy).touched() }
+    elements.map {
+        if (it.locked) it
+        // **La lupa deja su foco donde estaba.** Apartar el cristal es
+        // precisamente lo que convierte una lupa apoyada en una lupa de lámina:
+        // el detalle se ve al lado, con su guía, sin taparlo. Si el foco fuera
+        // detrás no habría forma de conseguir eso.
+        //
+        // Se fija **aquí**, al empezar a moverla, porque hasta entonces valía
+        // null —«miro lo que tengo debajo»— y con null puesto el foco seguiría
+        // al cristal para siempre. Ver [focoDe].
+        else if (it.type == ElementType.LUPA) {
+            it.copy(foco = focoDe(it), x = it.x + dx, y = it.y + dy).touched()
+        } else {
+            it.copy(x = it.x + dx, y = it.y + dy).touched()
+        }
+    }
 
 /**
  * Redimensiona un elemento arrastrando [handle] hasta [pointer].
@@ -119,16 +134,56 @@ fun resizeSingleElement(
     val scaleX = if (c.x2 - c.x1 != 0.0) newWidth / (c.x2 - c.x1) else 1.0
     val scaleY = if (c.y2 - c.y1 != 0.0) newHeight / (c.y2 - c.y1) else 1.0
 
+    // Los puntos van en relativo, así que se escalan con la caja; si no, el
+    // trazo se quedaría del tamaño viejo dentro de una caja nueva.
+    val puntos = element.points?.map { Pt(it.x * scaleX, it.y * scaleY) }
+
+    /**
+     * **El origen de una raya o de un garabato no es la esquina de su caja.**
+     *
+     * Sus puntos van relativos al primero, y el primero no tiene por qué ser el
+     * de más arriba a la izquierda: un trazo hecho hacia la izquierda los tiene
+     * negativos, así que su borde cae en `x + minX` y no en `x` — es lo que
+     * calcula [getElementAbsoluteCoords], de donde salen `c.x1` y `c.y1`.
+     *
+     * Colocando el origen en `nx1` a secas, el trazo se iba justo esos `minX` ya
+     * escalados: un salto de cien píxeles nada más agarrar el tirador. Se
+     * descuentan aquí, que es donde se sabe cuánto han crecido.
+     */
+    val sangria = if (!puntos.isNullOrEmpty() && (element.isFreeDraw || element.isLinear)) {
+        boundsOfPoints(puntos).let { Pt(it.x1, it.y1) }
+    } else Pt(0.0, 0.0)
+
+    /**
+     * **El plano se estira de dos maneras, y las dos son «agrandar».**
+     *
+     * Por una **esquina** crecen la caja y la unidad a la vez: los números que
+     * había siguen siendo los mismos, repartidos en más sitio. Es lo que se hace
+     * cuando el plano no se lee.
+     *
+     * Por un **lado** crece solo la caja y la unidad se queda como está: cabe
+     * más intervalo, así que **aparecen más números**. Es lo que se hace cuando
+     * la función se sale por la derecha.
+     *
+     * Lo que las separa es de dónde se tira, y por eso el plano es de los pocos
+     * que enseña los tiradores del medio. Ver [Plano].
+     */
+    val unidadNueva = if (element.isPlano) {
+        if (handle.esEsquina) element.unidadDelPlano * escalaDeLaEsquina(scaleX, scaleY)
+        else element.unidadDelPlano
+    } else element.unidad
+
     return element.copy(
-        x = nx1 + offsetX,
-        y = ny1 + offsetY,
+        x = nx1 + offsetX - sangria.x,
+        y = ny1 + offsetY - sangria.y,
         width = newWidth,
         height = newHeight,
-        // Los puntos van en relativo, así que se escalan con la caja; si no, el
-        // trazo se quedaría del tamaño viejo dentro de una caja nueva. Los
-        // agujeros de un relleno son puntos como los demás y se escalan igual:
-        // dejarlos fuera los desplazaría respecto de su propia mancha.
-        points = element.points?.map { Pt(it.x * scaleX, it.y * scaleY) },
+        unidad = unidadNueva,
+        points = puntos,
+        // Los agujeros de un relleno son puntos como los demás y se escalan
+        // igual: dejarlos fuera los desplazaría respecto de su propia mancha.
+        // No llevan sangría porque un relleno **sí** tiene su origen en la
+        // esquina de su caja. Ver [nuevaRegion].
         huecos = element.huecos?.map { anillo ->
             anillo.map { Pt(it.x * scaleX, it.y * scaleY) }
         },
@@ -136,12 +191,27 @@ fun resizeSingleElement(
     ).touched()
 }
 
-/** Redimensiona una selección entera como un bloque (`resizeMultipleElements`). */
+/**
+ * Redimensiona una selección entera como un bloque (`resizeMultipleElements`).
+ *
+ * **Por una esquina en proporción; por un lado, aplastando ese eje.**
+ *
+ * Antes forzaba la proporción siempre y solo aceptaba las esquinas, así que una
+ * figura estampada de la lista —que llega agrupada, o sea, varios elementos— no
+ * había forma de estrecharla: o crecía entera o no cambiaba. Y eso es justo lo
+ * que hace falta para meter algo grande en un hueco pequeño, que es la mitad de
+ * para lo que se guarda una figura.
+ *
+ * La regla es la de cualquier programa de dibujo, y no hay que explicarla: la
+ * esquina conserva la forma, el lado la estruja. [keepAspectRatio] a null deja
+ * que la decida el tirador; con true se fuerza la proporción, que es lo que pide
+ * el segundo dedo apoyado o el interruptor de figuras perfectas.
+ */
 fun resizeMultipleElements(
     elements: List<Element>,
     handle: HandleType,
     pointer: Pt,
-    keepAspectRatio: Boolean = true
+    keepAspectRatio: Boolean? = null
 ): List<Element> {
     if (elements.size < 2) return elements
     val b = getCommonBounds(elements)
@@ -153,19 +223,26 @@ fun resizeMultipleElements(
         HandleType.NE -> { nx2 = pointer.x; ny1 = pointer.y }
         HandleType.SW -> { nx1 = pointer.x; ny2 = pointer.y }
         HandleType.SE -> { nx2 = pointer.x; ny2 = pointer.y }
+        HandleType.N -> ny1 = pointer.y
+        HandleType.S -> ny2 = pointer.y
+        HandleType.W -> nx1 = pointer.x
+        HandleType.E -> nx2 = pointer.x
         else -> return elements
     }
 
-    var scaleX = max(nx2 - nx1, MIN_SIZE) / b.width
-    var scaleY = max(ny2 - ny1, MIN_SIZE) / b.height
-    if (keepAspectRatio) {
-        // Con varios elementos la proporción se fuerza siempre: escalar en un
-        // solo eje deformaría los círculos y el texto de la selección.
+    // El eje que el tirador no toca no se escala: un tirador del lado derecho
+    // no puede cambiar el alto, por mucho que el dedo suba y baje.
+    var scaleX = if (handle.affectsX) max(nx2 - nx1, MIN_SIZE) / b.width else 1.0
+    var scaleY = if (handle.affectsY) max(ny2 - ny1, MIN_SIZE) / b.height else 1.0
+
+    if (keepAspectRatio ?: handle.esEsquina) {
+        // Manda el eje que más ha cambiado: si no, la selección «resbala»
+        // cuando el dedo va casi en diagonal.
         val s = if (abs(scaleX - 1) > abs(scaleY - 1)) scaleX else scaleY
         scaleX = s; scaleY = s
     }
 
-    // El ancla es la esquina opuesta de la caja común.
+    // El ancla es el borde opuesto al que se arrastra.
     val ax = if (handle.anchorsRight) b.x2 else b.x1
     val ay = if (handle.anchorsBottom) b.y2 else b.y1
 
@@ -180,7 +257,11 @@ fun resizeMultipleElements(
             huecos = e.huecos?.map { anillo ->
                 anillo.map { Pt(it.x * scaleX, it.y * scaleY) }
             },
-            fontSize = e.fontSize?.let { it * scaleY }
+            // La unidad de un plano acompaña al eje que se escala; aplastado en
+            // uno solo se queda como estaba, que es lo que deja el plano de ser
+            // cuadrado sin mentir sobre lo que mide. Ver [Plano].
+            unidad = e.unidad?.let { if (scaleX == scaleY) it * scaleX else it },
+            fontSize = e.fontSize?.let { it * minOf(scaleX, scaleY) }
         ).touched()
     }
 }
@@ -255,36 +336,49 @@ fun flipVertical(elements: List<Element>): List<Element> =
 private fun flip(elements: List<Element>, horizontal: Boolean): List<Element> {
     if (elements.isEmpty()) return elements
     val b = getCommonBounds(elements)
-    val axis = if (horizontal) b.midX else b.midY
+    val eje = if (horizontal) b.midX else b.midY
+
+    fun espejo(p: Pt): Pt =
+        if (horizontal) Pt(2 * eje - p.x, p.y) else Pt(p.x, 2 * eje - p.y)
 
     return elements.map { e ->
         if (e.locked) return@map e
-        val c = getElementAbsoluteCoords(e)
-        val newX = if (horizontal) 2 * axis - c.x2 else e.x
-        val newY = if (horizontal) e.y else 2 * axis - c.y2
 
-        // Los puntos se reflejan sobre el eje de su propia caja; la imagen usa
-        // el signo de `scale`, que es como Excalidraw guarda el volteo para no
-        // tener que reescribir el archivo.
-        val newPoints = e.points?.map {
-            if (horizontal) Pt(e.width - it.x, it.y) else Pt(it.x, e.height - it.y)
+        // **Las rayas y el lápiz se reflejan por sus puntos, no por su caja.**
+        //
+        // Su caja sale de los puntos —no de `x`/`y`—, así que espejar la caja
+        // por un lado y los puntos por otro los descoloca entre sí en cuanto el
+        // primer punto no es el de arriba a la izquierda: un garabato trazado
+        // hacia la izquierda tiene puntos negativos y salía disparado en vez de
+        // quedarse donde estaba. Reflejando en la escena y rehaciendo el
+        // elemento con [conPuntosAbsolutos] las dos cosas no pueden discrepar.
+        val reflejado = if ((e.isFreeDraw || e.isLinear) && !e.points.isNullOrEmpty()) {
+            e.conPuntosAbsolutos(absolutePoints(e).map { espejo(it) })
+        } else {
+            val c = getElementAbsoluteCoords(e)
+            e.copy(
+                x = if (horizontal) 2 * eje - c.x2 else e.x,
+                y = if (horizontal) e.y else 2 * eje - c.y2,
+                // Aquí sí valen las cuentas sobre la caja: el relleno guarda su
+                // contorno y sus agujeros relativos a la esquina de la suya.
+                points = e.points?.map {
+                    if (horizontal) Pt(e.width - it.x, it.y) else Pt(it.x, e.height - it.y)
+                },
+                huecos = e.huecos?.map { anillo ->
+                    anillo.map {
+                        if (horizontal) Pt(e.width - it.x, it.y) else Pt(it.x, e.height - it.y)
+                    }
+                }
+            )
         }
-        val newHuecos = e.huecos?.map { anillo ->
-            anillo.map {
-                if (horizontal) Pt(e.width - it.x, it.y) else Pt(it.x, e.height - it.y)
-            }
-        }
-        val newScale = if (e.type == ElementType.IMAGE) {
-            if (horizontal) listOf(-e.scale[0], e.scale[1])
-            else listOf(e.scale[0], -e.scale[1])
-        } else e.scale
 
-        e.copy(
-            x = newX,
-            y = newY,
-            points = newPoints,
-            huecos = newHuecos,
-            scale = newScale,
+        reflejado.copy(
+            // La imagen usa el signo de `scale`, que es como Excalidraw guarda
+            // el volteo para no tener que reescribir el archivo.
+            scale = if (e.type == ElementType.IMAGE) {
+                if (horizontal) listOf(-e.scale[0], e.scale[1])
+                else listOf(e.scale[0], -e.scale[1])
+            } else e.scale,
             // Reflejar invierte el sentido de giro.
             angle = normalizeAngle(-e.angle),
             startArrowhead = if (horizontal) e.endArrowhead else e.startArrowhead,
@@ -319,6 +413,21 @@ fun duplicateElements(elements: List<Element>, offset: Double = 10.0): List<Elem
 // -------------------------------------------------------------------------
 // Qué esquina ancla cada tirador
 // -------------------------------------------------------------------------
+
+/** Las cuatro esquinas: las que escalan en vez de extender. Ver [Plano]. */
+internal val HandleType.esEsquina: Boolean
+    get() = this == HandleType.NW || this == HandleType.NE ||
+        this == HandleType.SW || this == HandleType.SE
+
+/**
+ * Cuánto se agranda al tirar de una esquina.
+ *
+ * La menor de las dos escalas, no la media: con la mayor, arrastrar en diagonal
+ * hacia fuera agranda más de lo que se ha tirado por el lado corto y el plano se
+ * sale de su propia caja.
+ */
+private fun escalaDeLaEsquina(sx: Double, sy: Double): Double =
+    minOf(sx, sy).takeIf { it.isFinite() && it > 0.0 } ?: 1.0
 
 private val HandleType.anchorsRight: Boolean
     get() = this == HandleType.NW || this == HandleType.SW || this == HandleType.W

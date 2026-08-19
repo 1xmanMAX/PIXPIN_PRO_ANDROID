@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +65,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign as ComposeTextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -101,8 +104,6 @@ fun PanelLateralDeEstilo(
     aplican: Set<Propiedad>,
     estilo: ItemStyle,
     zurdo: Boolean,
-    colores: List<String>,
-    coloresDeFondo: List<String>,
     onEstilo: (ItemStyle) -> Unit,
     /**
      * A qué zoom se está mirando el lienzo.
@@ -113,6 +114,27 @@ fun PanelLateralDeEstilo(
      * trabajando de cerca.
      */
     zoom: Float = 1f,
+    /**
+     * Lo ancho que se pinta de verdad el trazo con el grosor que hay puesto, en
+     * píxeles de escena.
+     *
+     * Casi siempre es el propio grosor —una raya de cuatro sale de cuatro— y por
+     * eso a null se usa ese. El lápiz no: pinta una mancha de alrededor del
+     * triple, y el marcador todavía más, así que quien lo sepa lo dice y la
+     * muestra enseña el trazo que va a salir en vez del número elegido. Ver
+     * [anchoPintadoDelLapiz].
+     */
+    anchoPintado: Double? = null,
+    /** Las marcas guardadas de cada deslizador. Ver [MarcasDelDeslizador]. */
+    marcas: Map<Deslizador, List<Float>> = emptyMap(),
+    onMarcas: ((Deslizador, List<Float>) -> Unit)? = null,
+    /**
+     * La trama se enseña aunque no haya fondo puesto.
+     *
+     * Lo pide quien sabe qué se está dibujando: una región **es** relleno, así que su
+     * trama es la mitad de la decisión. Ver [rellenoALaVista].
+     */
+    rellenoObligatorio: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // Las opciones salen **hacia el lienzo**, o sea al contrario del lado en el
@@ -133,12 +155,24 @@ fun PanelLateralDeEstilo(
     // caber de una vez. Con una figura seleccionada salen ocho, y en un móvil
     // corto el último se quedaba fuera de la pantalla: justo el pulso, que es
     // el que va al final. Antes que perder un control, todos un poco menores.
+    // La trama solo sale con un fondo puesto: sin él no hay nada que tramar y
+    // apagar el relleno es cosa del color de fondo. Ver más abajo.
+    // **Con el bote, la trama sale siempre.**
+    //
+    // La regla de «solo con un fondo puesto» está bien para un rectángulo —sin fondo no
+    // hay nada que tramar— pero con el bote de relleno **no hay figura sin fondo**: lo
+    // único que hace esa herramienta es rellenar, y el mando de con qué trama rellenar
+    // desaparecía justo ahí. Se elegía el color y no había forma de decir si iba macizo o
+    // a rayas hasta después de haber pintado algo.
+    val rellenoALaVista = Propiedad.RELLENO in aplican &&
+        (rellenoObligatorio || !isTransparent(estilo.backgroundColor))
     val cuantos = aplican.count { it in EN_EL_LATERAL } +
+        (if (Propiedad.RELLENO in aplican && !rellenoALaVista) -1 else 0) +
         (if (Propiedad.FUENTE in aplican) 1 else 0) +
         (if (Propiedad.RUGOSIDAD in aplican) 2 else 0)
     val apretado = cuantos >= 7
     val bola = if (apretado) 26.dp else BOLA
-    val altoDeslizador = if (apretado) 76.dp else ALTO_DEL_DESLIZADOR
+    val altoDeslizador = if (apretado) ALTO_APRETADO else ALTO_DEL_DESLIZADOR
 
     // **Sin desplazamiento.** Un contenedor que se desplaza recorta lo que se
     // sale de él, y de aquí se sale justo lo que hay que ver: la fila de
@@ -155,78 +189,57 @@ fun PanelLateralDeEstilo(
             // le dice al sistema que esta franja es nuestra —lo mismo que hace
             // cualquier app con un menú lateral.
             .padding(start = SEPARACION_DEL_BORDE, end = SEPARACION_DEL_BORDE, top = 6.dp, bottom = 6.dp)
-            .systemGestureExclusion(),
+            .systemGestureExclusion()
+            // **Y todos dentro de una misma cápsula.**
+            //
+            // Sueltos sobre el dibujo se leían como seis cosas que casualmente
+            // están en fila; con el fondo detrás son **un mando**, y además se
+            // ven: una bolita blanca sobre un dibujo claro no se distinguía.
+            //
+            // Va con `background` y no con una `Surface`: una superficie con
+            // forma **recorta a sus hijos**, y de aquí tiene que poder salirse
+            // la fila de opciones de la bolita, que es lo que hace que elegir un
+            // color sea un solo gesto. `background` solo pinta detrás.
+            .background(
+                MaterialTheme.colorScheme.surface.copy(alpha = FONDO_DEL_PANEL),
+                RoundedCornerShape(CANTO_DEL_PANEL)
+            )
+            .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(SEPARACION)
     ) {
-        if (Propiedad.TRAZO in aplican) {
-            SelectorArrastrable(
-                opciones = colores,
-                actual = colores.indexOf(estilo.strokeColor).coerceAtLeast(0),
-                haciaLaIzquierda = haciaLaIzquierda,
-                bola = bola,
-                descripcion = "Color del trazo",
-                onElegir = { onEstilo(estilo.copy(strokeColor = colores[it])) }
-            ) { hex, _ -> MuestraDeColor(hex) }
-        }
+        // **El color ya no está aquí, y es a propósito.**
+        //
+        // Estuvieron las dos bolitas —trazo y fondo— y desde que el color vive
+        // en la barra de arriba eran la misma decisión en dos sitios. Peor que
+        // redundante: la bolita solo conocía sus cinco colores, así que al coger
+        // uno de la paleta se quedaba señalando el primero de su lista, y tocarla
+        // deshacía lo que acababas de elegir. Un mando que miente sobre lo que
+        // hay puesto es peor que no tenerlo. Ver [PaletaDeColores].
 
-        if (Propiedad.FONDO in aplican) {
-            SelectorArrastrable(
-                opciones = coloresDeFondo,
-                actual = coloresDeFondo.indexOf(estilo.backgroundColor).coerceAtLeast(0),
-                haciaLaIzquierda = haciaLaIzquierda,
-                bola = bola,
-                descripcion = "Color de fondo",
-                onElegir = { onEstilo(estilo.copy(backgroundColor = coloresDeFondo[it])) }
-            ) { hex, _ -> MuestraDeColor(hex) }
-        }
-
-        if (Propiedad.RELLENO in aplican) {
-            // **La primera opción es «sin relleno», y es la que faltaba.** Un
-            // garabato que se cierra sobre sí mismo se rellena solo, y si el
-            // selector solo ofrece tramas no hay ninguna forma de decir «ninguna»:
-            // la trama se queda puesta y no hay interruptor. Apagarlo es poner el
-            // fondo en transparente, así que se hace desde aquí, que es donde
-            // aparece el problema.
-            val rellenos: List<FillStyle?> = listOf(null) + FillStyle.entries
-            val puesto =
-                if (isTransparent(estilo.backgroundColor)) 0
-                else rellenos.indexOf(estilo.fillStyle).coerceAtLeast(1)
+        // **La trama solo sale si hay algo que tramar.**
+        //
+        // Tenía una opción de más, y de las que confunden: un ∅ de «sin relleno»
+        // que hacía exactamente lo mismo que la primera muestra del color de
+        // fondo —poner el fondo en transparente—. La misma decisión desde dos
+        // sitios, y encima uno de ellos, al encenderse, se inventaba un color de
+        // fondo que nadie había pedido.
+        //
+        // Ahora el relleno se apaga donde siempre estuvo, en el color de fondo,
+        // y la trama aparece cuando hay fondo que tramar. Es como lo hace el
+        // original y deja cada control con una sola cosa que decir.
+        if (rellenoALaVista) {
+            val rellenos = RELLENOS_QUE_SE_OFRECEN
             SelectorArrastrable(
                 opciones = rellenos,
-                actual = puesto,
+                actual = rellenos.indexOf(estilo.fillStyle).coerceAtLeast(0),
                 haciaLaIzquierda = haciaLaIzquierda,
                 bola = bola,
                 descripcion = "Relleno",
                 // Con el color del fondo, que es con el que se va a rellenar.
                 tinta = tintaDelFondo,
-                onElegir = { i ->
-                    val fs = rellenos[i]
-                    onEstilo(
-                        if (fs == null) {
-                            estilo.copy(backgroundColor = "transparent")
-                        } else {
-                            // Al encender un relleno estando en transparente hay
-                            // que darle un color, o se elegiría una trama que no
-                            // se ve y parecería que el botón no hace nada.
-                            val fondo =
-                                if (isTransparent(estilo.backgroundColor)) {
-                                    coloresDeFondo.firstOrNull { !isTransparent(it) }
-                                        ?: estilo.backgroundColor
-                                } else {
-                                    estilo.backgroundColor
-                                }
-                            estilo.copy(fillStyle = fs, backgroundColor = fondo)
-                        }
-                    )
-                }
-            ) { fs, tinta ->
-                if (fs == null) {
-                    Text("∅", fontSize = 15.sp, color = tinta)
-                } else {
-                    Canvas(Modifier.size(20.dp)) { dibujarRelleno(fs, tinta) }
-                }
-            }
+                onElegir = { onEstilo(estilo.copy(fillStyle = rellenos[it])) }
+            ) { fs, tinta -> Canvas(Modifier.size(20.dp)) { dibujarRelleno(fs, tinta) } }
         }
 
         if (Propiedad.LINEA in aplican) {
@@ -283,6 +296,56 @@ fun PanelLateralDeEstilo(
                 onElegir = { i -> onEstilo(FormaDeFlecha.entries[i].aplicadaA(estilo)) }
             ) { forma, tinta ->
                 Text(forma.glifo, fontSize = 15.sp, color = tinta)
+            }
+        }
+
+        // **La lupa: tres mandos y ninguno más.** Cuánto agranda, de qué forma
+        // es el cristal y si lleva guía. Todo lo demás de una lupa —a dónde
+        // mira, dónde se ve— se hace con el dedo encima del dibujo, que es donde
+        // se entiende: un mando para las coordenadas del foco sería pedirle a
+        // alguien que apunte una lupa escribiendo números.
+        if (Propiedad.LUPA in aplican) {
+            // Tres formas de señalar: nada, flecha o el cono de dos rayas —el
+            // de los planos de toda la vida—. Cada icono **es** lo que dibuja.
+            val guias = GuiaDeLupa.entries
+            SelectorArrastrable(
+                opciones = guias,
+                actual = guias.indexOf(estilo.guia),
+                haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
+                descripcion = "Guía",
+                tinta = tintaDelTrazo,
+                onElegir = { i -> onEstilo(estilo.copy(guia = guias[i])) }
+            ) { cual, tinta ->
+                Canvas(Modifier.size(18.dp)) {
+                    val lado = size.width / 2.6f
+                    drawRect(tinta, Offset(0f, 0f), Size(lado, lado), style = Stroke(1.5f))
+                    when (cual) {
+                        GuiaDeLupa.NINGUNA -> Unit
+                        GuiaDeLupa.FLECHA -> drawLine(
+                            tinta, Offset(lado, lado), Offset(size.width, size.height),
+                            strokeWidth = 1.5f
+                        )
+                        GuiaDeLupa.DOS_LINEAS -> {
+                            drawLine(
+                                tinta, Offset(lado, 0f), Offset(size.width, size.height - lado),
+                                strokeWidth = 1.5f
+                            )
+                            drawLine(
+                                tinta, Offset(0f, lado), Offset(size.width - lado, size.height),
+                                strokeWidth = 1.5f
+                            )
+                        }
+                        // El punto gordo, que es literalmente lo que dibuja.
+                        GuiaDeLupa.PUNTO -> {
+                            drawCircle(tinta, radius = lado / 2.2f, center = Offset(lado / 2, lado / 2))
+                            drawLine(
+                                tinta, Offset(lado, lado), Offset(size.width, size.height),
+                                strokeWidth = 1.5f
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -349,6 +412,8 @@ fun PanelLateralDeEstilo(
             // trazo que hace falta para tachar no es ninguno de los cuatro.
             DeslizadorVertical(
                 fraccion = fraccionDelGrosor(estilo.strokeWidth),
+                marcas = marcas[Deslizador.GROSOR].orEmpty(),
+                onMarcas = onMarcas?.let { f -> { m: List<Float> -> f(Deslizador.GROSOR, m) } },
                 descripcion = "Grosor",
                 alto = altoDeslizador,
                 tinta = tintaDelTrazo,
@@ -358,8 +423,11 @@ fun PanelLateralDeEstilo(
                 // con el que va a salir el trazo **a este zoom**, y su número.
                 // Un deslizador que solo se dibuja a sí mismo obliga a soltar,
                 // mirar el trazo, y volver.
-                muestra = { grosorEscrito(estilo.strokeWidth) to
-                    (estilo.strokeWidth * zoom).toFloat() },
+                // El número va en tanto por ciento del recorrido, como el de la
+                // opacidad; el punto de al lado sigue siendo el trazo de verdad,
+                // que es lo que se mira para decidir. Ver [porcentajeDelGrosor].
+                muestra = { "${porcentajeDelGrosor(estilo.strokeWidth)} %" to
+                    ((anchoPintado ?: estilo.strokeWidth) * zoom).toFloat() },
                 onFraccion = { f ->
                     val g = grosorDeLaFraccion(f)
                     if (g != estilo.strokeWidth) onEstilo(estilo.copy(strokeWidth = g))
@@ -405,9 +473,93 @@ fun PanelLateralDeEstilo(
             )
         }
 
+        // **El aumento se arrastra, no se elige de una lista.**
+        //
+        // Buscar cuánto agrandar es exactamente lo que se hace mirando: se sube
+        // hasta que el detalle se lee y ahí se para. Con siete opciones sueltas
+        // había que probarlas una a una, y ninguna caía donde hacía falta. Va
+        // con los otros dos deslizadores porque se usa igual que ellos.
+        if (Propiedad.LUPA in aplican) {
+            DeslizadorVertical(
+                fraccion = fraccionDelAumento(estilo.aumento),
+                marcas = marcas[Deslizador.AUMENTO].orEmpty(),
+                onMarcas = onMarcas?.let { f -> { m: List<Float> -> f(Deslizador.AUMENTO, m) } },
+                descripcion = "Aumento",
+                alto = altoDeslizador,
+                tinta = tintaDelTrazo,
+                haciaLaIzquierda = haciaLaIzquierda,
+                muestra = { "×" + redondeoDelAumento(estilo.aumento) to 0f },
+                onFraccion = { f ->
+                    val a = aumentoDeLaFraccion(f)
+                    if (a != estilo.aumento) onEstilo(estilo.copy(aumento = a))
+                }
+            ) { tinta, avance ->
+                // Dos aros: el pequeño es lo que se mira y el grande lo que se
+                // ve. Cuanto más avanza el mando, más se separan.
+                drawCircle(tinta, radius = size.minDimension / 6f, style = Stroke(1.5f))
+                drawCircle(
+                    tinta,
+                    radius = size.minDimension / 6f + avance * size.minDimension / 3f,
+                    style = Stroke(1.5f)
+                )
+            }
+        }
+
+        // **Cuánto se apaga lo de fuera del foco.** De 10 a 90: por debajo no se
+        // nota que hay foco y por encima lo de alrededor deja de verse, y
+        // entonces ya no está resaltando nada — está tapando.
+        if (Propiedad.OSCURECER in aplican) {
+            DeslizadorVertical(
+                fraccion = fraccionDelValor(estilo.oscurecer, OSCURECER_MINIMO, OSCURECER_MAXIMO),
+                descripcion = "Oscurecer",
+                alto = altoDeslizador,
+                tinta = tintaDelTrazo,
+                haciaLaIzquierda = haciaLaIzquierda,
+                muestra = { "${estilo.oscurecer} %" to 0f },
+                onFraccion = { f ->
+                    val v = valorConPaso(f, OSCURECER_MINIMO, OSCURECER_MAXIMO, PASO_DE_OPACIDAD)
+                    if (v != estilo.oscurecer) onEstilo(estilo.copy(oscurecer = v))
+                }
+            ) { tinta, avance ->
+                // Un disco que se va llenando de sombra: lo que se está haciendo.
+                drawCircle(tinta.copy(alpha = 0.25f), radius = size.minDimension / 2.6f)
+                drawCircle(
+                    tinta.copy(alpha = 0.25f + avance * 0.75f),
+                    radius = size.minDimension / 2.6f * avance
+                )
+            }
+        }
+
+        // La zona iluminada de un foco: cuánto del marco queda a la vista.
+        if (Propiedad.ZONA in aplican) {
+            DeslizadorVertical(
+                fraccion = ((estilo.zona - ZONA_MINIMA) / (ZONA_MAXIMA - ZONA_MINIMA))
+                    .toFloat().coerceIn(0f, 1f),
+                marcas = marcas[Deslizador.ZONA].orEmpty(),
+                onMarcas = onMarcas?.let { f -> { m: List<Float> -> f(Deslizador.ZONA, m) } },
+                descripcion = "Zona",
+                alto = altoDeslizador,
+                tinta = tintaDelTrazo,
+                haciaLaIzquierda = haciaLaIzquierda,
+                muestra = { "${Math.round(estilo.zona * 100)} %" to 0f },
+                onFraccion = { f ->
+                    val z = ZONA_MINIMA + (ZONA_MAXIMA - ZONA_MINIMA) * f
+                    val redondo = Math.round(z * 100) / 100.0
+                    if (redondo != estilo.zona) onEstilo(estilo.copy(zona = redondo))
+                }
+            ) { tinta, avance ->
+                // Un aro fijo —el marco— y dentro un disco que crece: es
+                // exactamente lo que hace el mando.
+                drawCircle(tinta, radius = size.minDimension / 2.4f, style = Stroke(1.5f))
+                drawCircle(tinta, radius = size.minDimension / 2.4f * (0.15f + avance * 0.85f))
+            }
+        }
+
         if (Propiedad.OPACIDAD in aplican) {
             DeslizadorVertical(
                 fraccion = fraccionDelValor(estilo.opacity, MINIMA_OPACIDAD, 100),
+                marcas = marcas[Deslizador.OPACIDAD].orEmpty(),
+                onMarcas = onMarcas?.let { f -> { m: List<Float> -> f(Deslizador.OPACIDAD, m) } },
                 descripcion = "Opacidad",
                 alto = altoDeslizador,
                 tinta = tintaDelTrazo,
@@ -423,6 +575,30 @@ fun PanelLateralDeEstilo(
                     tinta.copy(alpha = (0.12f + avance * 0.88f)),
                     radius = size.minDimension / 2.6f
                 )
+            }
+        }
+
+        // **Negrita, cursiva y tachado: los tres a la vista.**
+        //
+        // Son tres interruptores independientes y se combinan, así que una
+        // bolita que se arrastra no vale —esa elige *una* de varias— y un
+        // desplegable tampoco: se encienden y se apagan sobre la marcha, mientras
+        // se escribe. Tres botones que se quedan pulsados es lo que hace
+        // cualquier editor de texto, y se lee sin explicación.
+        if (Propiedad.ESTILO_DE_TEXTO in aplican) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                BotonDeTexto("B", estilo.negrita, bola, FontWeight.Bold) {
+                    onEstilo(estilo.copy(negrita = !estilo.negrita))
+                }
+                BotonDeTexto("I", estilo.cursiva, bola, cursiva = true) {
+                    onEstilo(estilo.copy(cursiva = !estilo.cursiva))
+                }
+                BotonDeTexto("S", estilo.tachado, bola, tachado = true) {
+                    onEstilo(estilo.copy(tachado = !estilo.tachado))
+                }
             }
         }
 
@@ -474,6 +650,19 @@ fun PanelLateralDeEstilo(
 private fun colorDeEstilo(hex: String, siNoHay: Color): Color =
     if (isTransparent(hex)) siNoHay else Color(parseColor(hex))
 
+/**
+ * Las tramas que se ofrecen: **cuatro, no cinco**.
+ *
+ * `FillStyle` tiene cinco, pero dos de ellas son rayas diagonales —el rayado a
+ * mano y el de tiralíneas— y en una muestra de veinte píxeles se leen como la
+ * misma opción repetida. La de tiralíneas se queda en el modelo, porque hay
+ * dibujos guardados con ella y tiene que seguir pintándose; lo que se quita es
+ * de la lista de elegir, que es donde molestaba.
+ */
+private val RELLENOS_QUE_SE_OFRECEN = listOf(
+    FillStyle.HACHURE, FillStyle.CROSS_HATCH, FillStyle.ZIGZAG, FillStyle.SOLID
+)
+
 /** Los tres pulsos del original, de recto a temblón. */
 private val PULSOS = listOf(
     Element.ROUGHNESS_ARCHITECT, Element.ROUGHNESS_ARTIST, Element.ROUGHNESS_CARTOONIST
@@ -506,13 +695,24 @@ private enum class FormaDeFlecha(val glifo: String) {
 
 /** Qué propiedades tienen un control en este panel, para contarlas. */
 private val EN_EL_LATERAL = setOf(
-    Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
-    Propiedad.ESQUINAS, Propiedad.FORMA_FLECHA, Propiedad.MOSAICO,
-    Propiedad.GROSOR, Propiedad.OPACIDAD, Propiedad.FUENTE
+    Propiedad.ESTILO_DE_TEXTO,
+    // El trazo y el fondo **no están**: el color se elige en la paleta de
+    // arriba. Ver la nota del principio de la lista de controles.
+    Propiedad.RELLENO, Propiedad.LINEA,
+    Propiedad.ESQUINAS, Propiedad.FORMA_FLECHA, Propiedad.MOSAICO, Propiedad.LUPA,
+    Propiedad.GROSOR, Propiedad.LUPA, Propiedad.ZONA, Propiedad.OSCURECER,
+    Propiedad.OPACIDAD, Propiedad.FUENTE
 )
 
-/** Lo menos transparente que se deja llegar: a cero no habría nada que ver. */
-private const val MINIMA_OPACIDAD = 10
+/**
+ * Lo menos opaco que se deja llegar.
+ *
+ * **Cero.** Estuvo en diez, con el argumento de que a cero no queda nada que
+ * ver; pero un deslizador que no llega a su tope de abajo se nota —el mango se
+ * planta antes de la raya— y la vuelta atrás es inmediata: se sube y ahí sigue
+ * todo. Con el recorrido entero, lo que dice el mando y lo que hay es lo mismo.
+ */
+private const val MINIMA_OPACIDAD = 0
 private const val PASO_DE_OPACIDAD = 5
 
 /**
@@ -526,11 +726,53 @@ private const val PASO_DE_OPACIDAD = 5
  * mango **es** la muestra: la raya gorda si el grosor es gordo. `avance` va de 0
  * a 1 y es lo mismo que [fraccion], pasado por comodidad de quien pinta.
  */
+/**
+ * El aumento, de 0 a 1 y al revés.
+ *
+ * No lineal: **por su logaritmo**. De ×2 a ×3 se nota muchísimo y de ×10 a ×11
+ * casi nada, así que un recorrido lineal deja media barra para diferencias que
+ * nadie ve y aprieta al principio justo donde se decide. Con el logaritmo, el
+ * mismo trozo de recorrido dobla el aumento en cualquier punto de la barra.
+ */
+internal fun fraccionDelAumento(aumento: Double): Float {
+    val a = aumento.coerceIn(AUMENTO_MINIMO, AUMENTO_MAXIMO)
+    val lo = kotlin.math.ln(AUMENTO_MINIMO)
+    val hi = kotlin.math.ln(AUMENTO_MAXIMO)
+    return ((kotlin.math.ln(a) - lo) / (hi - lo)).toFloat().coerceIn(0f, 1f)
+}
+
+internal fun aumentoDeLaFraccion(f: Float): Double {
+    val lo = kotlin.math.ln(AUMENTO_MINIMO)
+    val hi = kotlin.math.ln(AUMENTO_MAXIMO)
+    val bruto = kotlin.math.exp(lo + (hi - lo) * f.coerceIn(0f, 1f).toDouble())
+    // A un decimal: los números redondos son los que uno quiere apuntar en una
+    // lámina, y ×2,4 y ×2,41 no se distinguen mirando.
+    return (Math.round(bruto * 10) / 10.0).coerceIn(AUMENTO_MINIMO, AUMENTO_MAXIMO)
+}
+
+/** El aumento como se escribe: sin decimal si no hace falta. */
+internal fun redondeoDelAumento(aumento: Double): String {
+    // **Un decimal como mucho.** El aumento sale de una división —lo que mide el
+    // cristal partido por lo que mide la zona— y eso da números como
+    // 3.7142857142857144. Nadie apunta eso en una lámina, y encima no cabía.
+    val redondo = Math.round(aumento * 10) / 10.0
+    return if (redondo % 1.0 == 0.0) redondo.toInt().toString() else "$redondo"
+}
+
 @Composable
 private fun DeslizadorVertical(
     fraccion: Float,
     descripcion: String,
     onFraccion: (Float) -> Unit,
+    /**
+     * Los valores guardados de este deslizador, de 0 a 1.
+     *
+     * Se pintan en la barra y **tiran del mango** al pasar cerca. Ver
+     * [MarcasDelDeslizador]: lo que resuelven es volver al grosor con el que uno
+     * escribe, que a ojo nunca sale el mismo dos veces.
+     */
+    marcas: List<Float> = emptyList(),
+    onMarcas: ((List<Float>) -> Unit)? = null,
     /** Lo que mide de alto. Encoge cuando hay muchos controles. */
     alto: Dp = ALTO_DEL_DESLIZADOR,
     tinta: Color? = null,
@@ -576,6 +818,24 @@ private fun DeslizadorVertical(
     Box(Modifier.size(ANCHO, alto), contentAlignment = Alignment.Center) {
         MuestraAlArrastrar(arrastrando, muestra, haciaLaIzquierda, tintaDelMango)
 
+        // **La función se relee en cada arrastre, y aquí había un fallo feo.**
+        //
+        // `pointerInput(Unit)` no se reinicia al recomponer: se queda con las
+        // funciones de la **primera** vez y las llama siempre. Y esta función
+        // lleva dentro el estilo que el panel estaba enseñando entonces, así que
+        // cambiar el color de una figura y tocar después cualquier deslizador
+        // le volvía a escribir **el color de antes** — se veía como si el color
+        // se deshiciera solo. Pasaba en los tres: grosor, opacidad y aumento.
+        val avisar by rememberUpdatedState(onFraccion)
+        val guardar by rememberUpdatedState(onMarcas)
+        val lasMarcas by rememberUpdatedState(marcas)
+        // Si está abierto el botoncito de poner o quitar marca. Se abre tocando
+        // **el propio mango**, que es donde uno mira cuando piensa «este valor».
+        var menuDeMarca by remember { mutableStateOf(false) }
+
+        /** Lo que se avisa ya imantado a las marcas. */
+        val avisarConIman: (Float) -> Unit = { f -> avisar(conIman(f, lasMarcas)) }
+
         Box(
             Modifier
                 .fillMaxSize()
@@ -585,8 +845,21 @@ private fun DeslizadorVertical(
                 .semantics { contentDescription = descripcion }
                 .pointerInput(Unit) {
                     detectTapGestures { pos ->
+                        val donde = fraccionVertical(pos.y, size.height.toFloat())
+                        // **Tocar el mango no lo mueve: abre el guardar.** Es el
+                        // único sitio de la barra donde tocar ya no significaba
+                        // nada —el mango ya está ahí— así que es el que queda
+                        // libre para esto, y además es donde se está mirando.
+                        if (guardar != null &&
+                            tocaElMango(pos.y, size.height.toFloat(), fraccion, MANGO.toPx())
+                        ) {
+                            menuDeMarca = !menuDeMarca
+                            vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
+                            return@detectTapGestures
+                        }
+                        menuDeMarca = false
                         vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onFraccion(fraccionVertical(pos.y, size.height.toFloat()))
+                        avisarConIman(donde)
                     }
                 }
                 .pointerInput(Unit) {
@@ -605,7 +878,7 @@ private fun DeslizadorVertical(
                         onVerticalDrag = { cambio, delta ->
                             cambio.consume()
                             y += delta
-                            onFraccion(fraccionVertical(y, size.height.toFloat()))
+                            avisarConIman(fraccionVertical(y, size.height.toFloat()))
                         }
                     )
                 }
@@ -619,10 +892,31 @@ private fun DeslizadorVertical(
                     topLeft = Offset(0f, size.height - altoLleno),
                     size = Size(size.width, altoLleno)
                 )
+                // Las marcas guardadas: una rayita cruzando la barra. Se pintan
+                // **dentro** de la barra y no fuera para que no le roben sitio
+                // al lienzo, que es lo que hay al otro lado.
+                for (m in lasMarcas) {
+                    // Con la cuenta del mango, no con la corta: ver [yDelMango].
+                    val y = yDelMango(m, size.height, MANGO.toPx())
+                    drawLine(
+                        relleno.copy(alpha = 0.9f),
+                        Offset(size.width * 0.15f, y),
+                        Offset(size.width * 0.85f, y),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
             }
         }
 
         // El mango, fuera de la capa que engorda para que no se deforme.
+        //
+        // **En reposo va limpio, sin nada dentro.** Llevaba siempre la muestra
+        // —la rayita del grosor, el disco de la opacidad— y en un deslizador que
+        // está ahí todo el rato eso es una manchita permanente encima del
+        // dibujo, justo en el borde por el que se mira. La muestra sigue
+        // estando, pero **donde hace falta**: mientras se arrastra, y en la
+        // pastilla de al lado, que es grande y se lee. Ver [MuestraAlArrastrar].
         val recorrido = alto - MANGO
         Box(
             Modifier
@@ -631,13 +925,59 @@ private fun DeslizadorVertical(
                 .size(MANGO)
                 .shadow(4.dp, CircleShape)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface),
+                // **Blanco, y no el color del tema.** El mango se mira contra el
+                // dibujo, no contra la aplicación: en modo noche el `surface` es
+                // casi negro y el mango desaparecía dentro de su propia barra,
+                // que es justo lo que no puede pasarle a la pieza que se agarra.
+                .background(BLANCO_DEL_MANGO),
             contentAlignment = Alignment.Center
         ) {
-            if (dentro != null) {
-                dentro()
-            } else {
-                Canvas(Modifier.size(MANGO - 8.dp)) { dibujo(tintaDelMango, suave) }
+            if (arrastrando) {
+                if (dentro != null) {
+                    dentro()
+                } else {
+                    Canvas(Modifier.size(MANGO - 8.dp)) { dibujo(tintaDelMango, suave) }
+                }
+            }
+        }
+
+        // **Poner o quitar la marca, al lado del mango.**
+        //
+        // Sale al tocar el mango y se va al elegir o al tocar cualquier otra
+        // parte de la barra: es un gesto de dos toques y no un modo. Va hacia el
+        // lienzo, como todo lo que sale de este panel, porque hacia el otro lado
+        // está el borde de la pantalla.
+        val puesta = marcaEn(lasMarcas, fraccion)
+        if (menuDeMarca && guardar != null) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(
+                        x = if (haciaLaIzquierda) -BOTON_DE_MARCA else BOTON_DE_MARCA,
+                        y = recorrido * (1f - suave)
+                    )
+                    .size(MANGO)
+                    .clickable {
+                        val nuevas = if (puesta != null) {
+                            sinMarca(lasMarcas, fraccion)
+                        } else {
+                            conMarca(lasMarcas, fraccion)
+                        }
+                        guardar?.invoke(nuevas)
+                        menuDeMarca = false
+                        vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        if (puesta != null) "×" else "+",
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -648,6 +988,21 @@ private fun DeslizadorVertical(
  *
  * Va **fuera de la medida**: se dibuja sin ocupar sitio, porque el sitio que
  * ocuparía se lo quitaría a sus vecinos cada vez que aparece o cambia de cifra.
+ *
+ * ## Y de tamaño fijo, que es lo que faltaba
+ *
+ * Fijar el hueco del deslizador impidió que **el panel** se ensanchara, pero la
+ * pastilla seguía creciendo con el valor: el punto de muestra va del tamaño del
+ * trazo, así que de un grosor fino a uno gordo pasaba de dos píxeles a cuarenta
+ * y cuatro. Y como se centra sobre el deslizador, cada píxel que crecía la
+ * estiraba **medio píxel hacia cada lado**: la pastilla se iba corriendo sobre
+ * el panel según se subía el grosor, en proporción exacta al cambio. Se veía
+ * como que la barra entera se desplazaba, y el sitio que ocupa una cosa no puede
+ * depender de lo que dice.
+ *
+ * Así que el punto vive en un hueco del tamaño del punto **más gordo posible** y
+ * crece dentro de él, y la cifra tiene un ancho mínimo para que «2» y «12,25` no
+ * midan distinto. La pastilla mide siempre lo mismo y no se mueve de su sitio.
  */
 @Composable
 private fun MuestraAlArrastrar(
@@ -682,23 +1037,35 @@ private fun MuestraAlArrastrar(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (tamPx > 0f) {
-                        // **El punto, del tamaño exacto que va a salir.** Con
-                        // tope: a mucho zoom un trazo de veinte puntos ocupa
-                        // media pantalla y la muestra dejaría de caber.
-                        val lado = with(densidad) { tamPx.toDp() }.coerceIn(2.dp, 44.dp)
+                        // **El punto, del tamaño exacto que va a salir**, dentro
+                        // de un hueco que mide siempre lo mismo. Con tope: a
+                        // mucho zoom un trazo de veinte puntos ocupa media
+                        // pantalla y la muestra dejaría de caber.
+                        val lado = with(densidad) { tamPx.toDp() }
+                            .coerceIn(2.dp, PUNTO_DE_LA_MUESTRA)
                         Box(
-                            Modifier
-                                .size(lado)
-                                .clip(CircleShape)
-                                .background(tinta)
-                        )
+                            Modifier.size(PUNTO_DE_LA_MUESTRA),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(lado)
+                                    .clip(CircleShape)
+                                    .background(tinta)
+                            )
+                        }
                         Spacer(Modifier.width(10.dp))
                     }
                     Text(
                         texto,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        // Ancho mínimo y centrada: sin esto la pastilla se
+                        // encoge y se estira a cada cifra, que es el mismo baile
+                        // en pequeño.
+                        textAlign = ComposeTextAlign.Center,
+                        modifier = Modifier.widthIn(min = CIFRA_DE_LA_MUESTRA)
                     )
                 }
             }
@@ -746,6 +1113,7 @@ private fun <T> SelectorArrastrable(
     var abierto by remember { mutableStateOf(false) }
     val corrimiento = remember { Animatable(0f) }
     var marcada by remember { mutableStateOf(actual) }
+    val elegir by rememberUpdatedState(onElegir)
 
     val tintaDeLaMuestra = tinta ?: MaterialTheme.colorScheme.onSurface
 
@@ -831,6 +1199,9 @@ private fun <T> SelectorArrastrable(
                 .semantics { contentDescription = descripcion }
         ) {
             Box(
+                // Lo mismo que en el deslizador: el gesto se queda con la
+                // función de cuando arrancó, y esa lleva dentro el estilo de
+                // entonces. Ver [DeslizadorVertical].
                 Modifier.pointerInput(opciones, haciaLaIzquierda, actual) {
                     detectDragGestures(
                         onDragStart = {
@@ -856,7 +1227,7 @@ private fun <T> SelectorArrastrable(
                             }
                         },
                         onDragEnd = {
-                            if (abierto) onElegir(marcada)
+                            if (abierto) elegir(marcada)
                             abierto = false
                             arrastre = 0f
                             // **Y vuelve a su sitio**, con animación: si saltara
@@ -878,26 +1249,6 @@ private fun <T> SelectorArrastrable(
     }
 }
 
-/** Una muestra de color, con su hueco a cuadros si es transparente. */
-@Composable
-private fun MuestraDeColor(hex: String) {
-    val transparente = isTransparent(hex)
-    Box(
-        Modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .background(
-                if (transparente) Color.Transparent else Color(parseColor(hex))
-            )
-            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        if (transparente) {
-            Text("∅", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
 private val ANCHO: Dp = 30.dp
 private val MANGO: Dp = 28.dp
 
@@ -908,8 +1259,35 @@ private val MANGO: Dp = 28.dp
  * el desplegable de la bolita— así que todo lo que salga tiene que caber de una
  * vez. Con una figura seleccionada salen ocho controles, y esa es la cuenta que
  * manda estos números.
+ *
+ * Los deslizadores son **lo más largo que cabe**: son los dos únicos controles
+ * que se recorren, y en noventa píxeles el pulgar elegía entre cuatro grosores
+ * de un empujón. Alargarlos no cuesta sitio a los demás —las bolitas miden
+ * treinta— y es la diferencia entre afinar y acertar de casualidad.
  */
-private val ALTO_DEL_DESLIZADOR: Dp = 92.dp
+private val ALTO_DEL_DESLIZADOR: Dp = 150.dp
+
+/**
+ * El blanco del mango, el mismo de día y de noche.
+ *
+ * Es la pieza que se agarra, así que tiene que verse contra **el dibujo** —que
+ * puede ser cualquier cosa— y no contra el tema de la aplicación.
+ */
+private val BLANCO_DEL_MANGO = Color.White
+
+/** Y con el panel lleno, lo que quede: sigue siendo más que los noventa de antes. */
+private val ALTO_APRETADO: Dp = 112.dp
+
+/**
+ * La cápsula que agrupa los mandos: cuánto se transparenta y cuánto se redondea.
+ *
+ * Translúcida y no opaca porque está **encima del dibujo**: lo que hay debajo se
+ * tiene que seguir intuyendo, o el panel deja de ser un mando al borde y pasa a
+ * ser una franja que tapa. Con este valor se ve el trazo de detrás sin que las
+ * bolitas pierdan su contorno.
+ */
+private const val FONDO_DEL_PANEL = 0.72f
+private val CANTO_DEL_PANEL: Dp = 26.dp
 private val BOLA: Dp = 30.dp
 private val SEPARACION: Dp = 5.dp
 
@@ -923,6 +1301,16 @@ private val SEPARACION_DEL_BORDE: Dp = 14.dp
 
 /** Cuánto se separa de su control la muestra que sale al arrastrar. */
 private val SEPARACION_DE_LA_MUESTRA: Dp = 92.dp
+
+/**
+ * El hueco del punto de muestra y el ancho mínimo de su cifra.
+ *
+ * Los dos existen para lo mismo: que la pastilla mida **siempre igual**. El
+ * punto crece dentro de su hueco en vez de empujarlo, y la cifra tiene sitio
+ * reservado para cuatro caracteres. Ver [MuestraAlArrastrar].
+ */
+private val PUNTO_DE_LA_MUESTRA: Dp = 44.dp
+private val CIFRA_DE_LA_MUESTRA: Dp = 44.dp
 
 /** Cuánto hay que arrastrar para pasar de una opción a la siguiente. */
 private val PASO_ENTRE_OPCIONES: Dp = 40.dp
@@ -940,14 +1328,31 @@ fun DrawScope.dibujarRelleno(fs: FillStyle, tinta: Color) {
     when (fs) {
         FillStyle.SOLID -> drawRect(tinta, size = size)
         FillStyle.HACHURE, FillStyle.LINEAS -> {
-            // El de rayas rectas va sin temblor; el otro, torcido.
-            val torcer = if (fs == FillStyle.HACHURE) 1.5f else 0f
+            // El de rayas rectas va a tiralíneas; el otro, con el pulso puesto.
+            //
+            // **Y la diferencia tiene que verse en una muestra de veinte
+            // píxeles.** Estaba hecha torciendo el final de la raya un píxel y
+            // medio, que a ese tamaño no se aprecia: salían dos dibujos
+            // idénticos, y dos muestras iguales se leen como una opción
+            // repetida. Ahora el rayado a mano se quiebra por el medio, que es
+            // lo que se nota.
+            val tiemblo = if (fs == FillStyle.HACHURE) borde * 2.5f else 0f
             var x = -size.height
             while (x < size.width) {
-                drawLine(
-                    tinta, Offset(x, size.height), Offset(x + size.height + torcer, 0f),
-                    strokeWidth = borde
-                )
+                val desde = Offset(x, size.height)
+                val hasta = Offset(x + size.height, 0f)
+                if (tiemblo == 0f) {
+                    drawLine(tinta, desde, hasta, strokeWidth = borde)
+                } else {
+                    // El quiebro va perpendicular a la raya, que en una diagonal
+                    // a 45° es sumar lo mismo en las dos coordenadas.
+                    val medio = Offset(
+                        (desde.x + hasta.x) / 2 + tiemblo,
+                        (desde.y + hasta.y) / 2 + tiemblo
+                    )
+                    drawLine(tinta, desde, medio, strokeWidth = borde)
+                    drawLine(tinta, medio, hasta, strokeWidth = borde)
+                }
                 x += size.width / 3.2f
             }
         }
@@ -1038,3 +1443,49 @@ fun DrawScope.dibujarPulso(cuanto: Int, tinta: Color) {
     }
     drawPath(camino, tinta, style = Stroke(width = grosor))
 }
+
+/**
+ * Un interruptor de estilo de texto: la propia letra, con su estilo puesto.
+ *
+ * La muestra **es** lo que hace: la B sale en negrita, la I inclinada y la S
+ * tachada. Un icono dibujado diría lo mismo con un dibujo que hay que aprender.
+ */
+@Composable
+private fun BotonDeTexto(
+    letra: String,
+    puesto: Boolean,
+    bola: Dp,
+    peso: FontWeight = FontWeight.Normal,
+    cursiva: Boolean = false,
+    tachado: Boolean = false,
+    onTocar: () -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shadowElevation = if (puesto) 6.dp else 2.dp,
+        border = if (puesto) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        modifier = Modifier.size(bola)
+    ) {
+        Box(Modifier.clickable { onTocar() }, contentAlignment = Alignment.Center) {
+            Text(
+                letra,
+                fontSize = 14.sp,
+                fontWeight = peso,
+                fontStyle = if (cursiva) androidx.compose.ui.text.font.FontStyle.Italic
+                else androidx.compose.ui.text.font.FontStyle.Normal,
+                textDecoration = if (tachado) {
+                    androidx.compose.ui.text.style.TextDecoration.LineThrough
+                } else null,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+
+/** Lo cerca del mango que hay que tocar para que cuente como tocarlo a él. */
+private const val EL_MANGO = 0.07f
+
+/** Lo lejos del mango que sale el botón de poner o quitar marca. */
+private val BOTON_DE_MARCA = 40.dp

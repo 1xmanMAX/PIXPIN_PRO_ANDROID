@@ -109,6 +109,38 @@ object HojasDelProyecto {
         }
 
     /**
+     * Qué páginas caen en las columnas [desde]..[hasta) de la rejilla, **en el
+     * orden en que se ven**.
+     *
+     * La rejilla se dibuja **por columnas**: con [filas] filas y [porFila]
+     * columnas, la columna x lleva las páginas x, x+[porFila], x+2·[porFila]…
+     * Quien vaya a dejar hechas las miniaturas de lo que se está mirando tiene
+     * que preguntar por esos números, y no por un tramo seguido de la lista:
+     * pidiendo `[desde·filas, hasta·filas)` lo que se preparaba era la primera
+     * fila entera y páginas del final que no se ven, mientras las filas de abajo
+     * —que sí están delante de los ojos— se quedaban fuera de la tanda y tenían
+     * que ir pidiéndose de una en una, cada una abriendo el PDF por su cuenta.
+     *
+     * Sale de aquí y no de la pantalla porque es aritmética pura y así se puede
+     * comprobar sin dispositivo, que es justo lo que no se estaba haciendo.
+     *
+     * @return índices dentro de la lista de páginas, nunca fuera de [total].
+     */
+    fun enColumnas(total: Int, filas: Int, porFila: Int, desde: Int, hasta: Int): List<Int> {
+        if (total <= 0 || filas <= 0 || porFila <= 0) return emptyList()
+        val primera = desde.coerceAtLeast(0)
+        val ultima = hasta.coerceAtMost(porFila)
+        val out = ArrayList<Int>()
+        for (x in primera until ultima) {
+            for (f in 0 until filas) {
+                val i = f * porFila + x
+                if (i < total) out += i
+            }
+        }
+        return out
+    }
+
+    /**
      * De qué color se enmarca cada lienzo.
      *
      * **Un color por lienzo**, para que se vea de un vistazo qué láminas vienen

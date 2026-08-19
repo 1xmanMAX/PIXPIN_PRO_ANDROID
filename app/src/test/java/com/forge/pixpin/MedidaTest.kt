@@ -197,9 +197,10 @@ class MedidaTest {
      */
     @Test
     fun `el estilo lleva el tamaño de letra a la cota y no al resto`() {
+        val anterior = ItemStyle()
         val nuevo = ItemStyle(strokeColor = "#e03131", strokeWidth = 4.0, fontSize = 64.0)
 
-        val c = estiloAplicado(cota(0.0, 0.0, 10.0, 0.0), nuevo)
+        val c = estiloAplicado(cota(0.0, 0.0, 10.0, 0.0), anterior, nuevo)
         assertEquals(64.0, c.fontSize!!, 1e-9)
         assertEquals("#e03131", c.strokeColor)
         assertEquals(4.0, c.strokeWidth, 1e-9)
@@ -207,7 +208,9 @@ class MedidaTest {
         // Un rectángulo no tiene letra que cambiar; y el texto se queda igual
         // aquí porque cambiarle la fuente obliga a re-medir su caja, y eso lo
         // hace quien tiene contexto de Android.
-        val r = estiloAplicado(newElement(ElementType.RECTANGLE, 0.0, 0.0, ItemStyle()), nuevo)
+        val r = estiloAplicado(
+            newElement(ElementType.RECTANGLE, 0.0, 0.0, ItemStyle()), anterior, nuevo
+        )
         assertEquals(null, r.fontSize)
         assertEquals("#e03131", r.strokeColor)
     }

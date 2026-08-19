@@ -59,10 +59,22 @@ object TableData {
         var bestScore = 0
 
         for (sep in SEPARATORS) {
+            val porTabulador = sep === SEPARATORS.first()
             val rows = lines.map { line ->
-                // Las tablas de Markdown vienen con barra al principio y al
-                // final: separar sin quitarlas deja una celda vacía a cada lado.
-                line.trim().trim('|').split(sep).map { it.trim() }
+                // **Con tabuladores no se recorta la línea, y esto importa.**
+                //
+                // `trim()` se lleva los tabuladores de los extremos, que es
+                // exactamente donde vive una celda vacía: una fila que empieza
+                // por una celda en blanco llegaba con una columna menos, y a
+                // partir de ahí **todos sus datos se corrían un sitio a la
+                // izquierda**. La tabla salía cuadrada y diciendo otra cosa, que
+                // es peor que salir descuadrada.
+                //
+                // Con los demás separadores sí se recorta: las tablas de
+                // Markdown vienen con barra al principio y al final, y separar
+                // sin quitarlas deja una celda vacía a cada lado que no existe.
+                val limpia = if (porTabulador) line.trim(' ', '\r') else line.trim().trim('|')
+                limpia.split(sep).map { it.trim() }
             }
             // Fuera la línea de guiones que separa cabecera y cuerpo en Markdown.
             val useful = rows.filterNot { row ->

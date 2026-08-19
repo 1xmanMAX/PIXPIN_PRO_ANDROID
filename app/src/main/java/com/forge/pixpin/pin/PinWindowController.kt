@@ -61,9 +61,17 @@ import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.FormatListNumbered
@@ -209,7 +217,18 @@ class PinWindowController(
         fun onPinToggleSave(controller: PinWindowController)
 
         /** Se ha extraído una página de un PDF: el gestor la convierte en pin. */
-        fun onPinImageExtracted(controller: PinWindowController, imagePath: String) {}
+        /**
+         * Una página sacada como pin.
+         *
+         * [comoVentana] la saca en modo ventana —marco fijo, imagen que se
+         * mueve dentro— que es lo que se quiere con una página entera: cabe
+         * asomada a un hueco pequeño en vez de ocupar media pantalla.
+         */
+        fun onPinImageExtracted(
+            controller: PinWindowController,
+            imagePath: String,
+            comoVentana: Boolean = false
+        ) {}
 
         /**
          * Arrastre en curso. El gestor es quien sabe qué pines forman grupo, así
@@ -514,12 +533,43 @@ class PinWindowController(
 
     fun close() {
         hideView()
+        imagenesDelDibujo.clear()
         callbacks.onPinClosed(this)
     }
 
     fun destroy() {
         hideView()
+        imagenesDelDibujo.clear()
         callbacks.onPinDestroyed(this)
+    }
+
+    /**
+     * Las imágenes que salen **dentro** del dibujo del pin, ya descodificadas.
+     *
+     * ## Por qué existe
+     *
+     * El renderizador pide la imagen **cada vez que dibuja** —así puede pintar
+     * un elemento sin saber de dónde salen sus píxeles— y aquí eso se resolvía
+     * con un `ImageStore.load(ruta)` pelado. O sea: **descodificar el archivo
+     * entero del disco en cada fotograma**. Un pin con una foto pegada dentro
+     * del dibujo hacía sesenta descodificaciones por segundo al pellizcarlo, con
+     * su reserva de memoria y su recogida de basura detrás.
+     *
+     * El editor avanzado ya lo hacía bien (`bitmapDe`); al pin se le había
+     * quedado la versión sin caché.
+     *
+     * Se vacía al cerrar el pin: mientras vive son unas pocas imágenes, las que
+     * uno mismo ha pegado en su dibujo.
+     */
+    private val imagenesDelDibujo = HashMap<String, Bitmap>()
+
+    private fun imagenDelDibujo(
+        id: String,
+        archivos: Map<String, com.forge.pixpin.motor.SceneFile>
+    ): Bitmap? {
+        imagenesDelDibujo[id]?.takeIf { !it.isRecycled }?.let { return it }
+        val ruta = archivos[id]?.path ?: return null
+        return ImageStore.load(ruta)?.also { imagenesDelDibujo[id] = it }
     }
 
     fun setClickThrough(value: Boolean) {
@@ -674,6 +724,15 @@ class PinWindowController(
         if (newText != pin.value.text) {
             pin.value = pin.value.copy(text = newText)
         }
+        // **Una ruleta sin a quién sortear vuelve a su lista.** Quitando nombres
+        // hasta dejar uno, la rueda se quedaba puesta girando sobre una sola
+        // porción: no hay sorteo posible y no había forma de volver a escribir
+        // sin buscar el botón de editar debajo de la rueda.
+        if (pin.value.type == PinType.RULETA && !Ruleta.sePuedeGirar(pin.value.text)) {
+            pin.value = pin.value.copy(
+                widget = pin.value.widget.copy(ruletaLista = false, ruletaElegido = -1)
+            )
+        }
         window?.setTouchHandler(newTouchHandler())
         lp?.let { p ->
             p.flags = computeFlags(pin.value.clickThrough)
@@ -718,6 +777,17 @@ class PinWindowController(
      * corresponde por proporción.
      */
     private fun measureNatural(bitmap: Bitmap) {
+        // **En una ventana manda el marco, no la foto.** Es lo que le da forma
+        // propia: una tira ancha o un cuadrado, con la imagen moviéndose dentro.
+        // Ver [PinState.ventanaAncho].
+        pin.value.let { s ->
+            if (s.ventana && s.ventanaAncho != null && s.ventanaAlto != null) {
+                naturalW = s.ventanaAncho!!.coerceAtLeast(MARCO_MINIMO)
+                naturalH = s.ventanaAlto!!.coerceAtLeast(MARCO_MINIMO)
+                applyContentSize()
+                return
+            }
+        }
         if (naturalW > 0) return
         val screenW = context.resources.displayMetrics.widthPixels
         naturalW = minOf(bitmap.width, (screenW * 0.6f).toInt()).coerceAtLeast(1)
@@ -829,6 +899,33 @@ class PinWindowController(
      * anotación y sin esto el cuadro de texto dejaba de poder redimensionarse
      * hasta la siguiente recomposición.
      */
+    /**
+     * En una ventana, si el dedo mueve **el contenido** o **el marco**.
+     *
+     * Las dos cosas son arrastrar dentro del mismo recuadro, así que no pueden
+     * convivir: se alternan con un toque, igual que en la ventana de referencia
+     * del lienzo. Nace en falso —lo primero que se hace con una ventana recién
+     * puesta es colocarla— y no se guarda: es del momento, no del pin.
+     */
+    private val moviendoElContenido = androidx.compose.runtime.mutableStateOf(false)
+
+    /** El encuadre mientras dura el gesto, para no realimentar el delta. */
+    private var encuadreAlEmpezar = Triple(0f, 0f, 1f)
+    private var giroAlEmpezar = 0f
+    /** Lo que medía el marco al empezar a estirarlo. */
+    private var marcoAlEmpezar = 0 to 0
+
+    /**
+     * ¿El gesto va al contenido de la ventana?
+     *
+     * Solo en un pin de imagen puesto en ventana, con el modo de contenido
+     * activo y sin estar anotando ni minimizado — dibujar encima y mirar dentro
+     * son dos cosas distintas y no pueden repartirse el mismo dedo.
+     */
+    private fun enModoContenido(): Boolean =
+        pin.value.ventana && pin.value.type == PinType.IMAGE &&
+            moviendoElContenido.value && !annotating.value && !minimized.value
+
     private fun newTouchHandler(): OverlayTouchHandler =
         OverlayTouchHandler(context, GestureListener()).also {
             it.handleRect = resizeHandle
@@ -850,12 +947,33 @@ class PinWindowController(
 
         override fun onDragStart() {
             closeActionBar()
+            pin.value.let { encuadreAlEmpezar = Triple(it.encuadreX, it.encuadreY, it.encuadreZoom) }
             dragStartX = lp?.x ?: 0
             dragStartY = lp?.y ?: 0
             callbacks.onPinDragStarted(this@PinWindowController)
         }
 
         override fun onDrag(dxFromDown: Float, dyFromDown: Float) {
+            // **En una ventana, el dedo corre la imagen y el marco no se mueve.**
+            // Ver [PinState.ventana] y el toque que cambia de modo.
+            if (enModoContenido()) {
+                // **El desplazamiento se guarda en unidades base, no en
+                // píxeles de pantalla.**
+                //
+                // Guardado en píxeles, al ampliar la ventana el marco crecía y
+                // el desplazamiento se quedaba igual: en proporción se hacía más
+                // pequeño, así que **la imagen se corría dentro** y lo que
+                // estabas mirando se iba del hueco. El zoom del marco dejaba de
+                // servir para nada, que es justo lo que se veía. Dividiendo por
+                // el aumento aquí y multiplicando al pintar, el recorte se queda
+                // donde está mida lo que mida la ventana.
+                val z = zoomOrOne()
+                pin.value = pin.value.copy(
+                    encuadreX = encuadreAlEmpezar.first + dxFromDown / z,
+                    encuadreY = encuadreAlEmpezar.second + dyFromDown / z
+                )
+                return
+            }
             val p = lp ?: return
             p.x = dragStartX + dxFromDown.toInt()
             p.y = dragStartY + dyFromDown.toInt()
@@ -878,7 +996,25 @@ class PinWindowController(
             callbacks.onPinChanged(this@PinWindowController)
         }
 
+        override fun onFocoLocal(x: Float, y: Float) {
+            focoLocal = Offset(x, y)
+        }
+
+        override fun onRotate(gradosFromDown: Float) {
+            // Solo dentro de una ventana: girar un pin entero no significa nada,
+            // pero girar la foto que se está mirando por él sí — una captura
+            // hecha de lado se endereza aquí y no en otra aplicación.
+            if (!enModoContenido()) return
+            pin.value = pin.value.copy(encuadreGiro = giroAlEmpezar + gradosFromDown)
+            // Girar también pivota sobre los dedos, no sobre el centro: es el
+            // mismo gesto y sería raro que cada mitad girase de una manera.
+            reencuadrar()
+        }
+
         override fun onScaleStart(focusX: Float, focusY: Float) {
+            giroAlEmpezar = pin.value.encuadreGiro
+            if (enModoContenido()) anclarEncuadre()
+            pin.value.let { encuadreAlEmpezar = Triple(it.encuadreX, it.encuadreY, it.encuadreZoom) }
             closeActionBar()
             scaleStart = scale.floatValue
             val v = window?.view
@@ -926,6 +1062,19 @@ class PinWindowController(
         }
 
         override fun onScale(factorFromDown: Float, focusX: Float, focusY: Float) {
+            // En una ventana el pellizco amplía **lo que se ve**, no el marco:
+            // el marco se estira por su esquina, como cualquier ventana.
+            if (enModoContenido()) {
+                // Los dedos se siguen mientras dura: se puede ampliar y deslizar
+                // a la vez, como en cualquier mapa.
+                focoDelEncuadre = focoEnLaCaja()
+                pin.value = pin.value.copy(
+                    encuadreZoom = (encuadreAlEmpezar.third * factorFromDown)
+                        .coerceIn(MENOS_ZOOM_DE_VENTANA, MAS_ZOOM_DE_VENTANA)
+                )
+                reencuadrar()
+                return
+            }
             if (minimized.value) return
             val v = window?.view ?: return
             val p = lp ?: return
@@ -992,6 +1141,7 @@ class PinWindowController(
 
         override fun onResizeStart() {
             closeActionBar()
+            marcoAlEmpezar = naturalW to naturalH
             val density = context.resources.displayMetrics.density
             resizeStartW = pin.value.textBoxWidth
             // Sin alto fijado aún, se parte del que tenga el pin ahora mismo:
@@ -1003,6 +1153,20 @@ class PinWindowController(
         }
 
         override fun onResize(dxFromDown: Float, dyFromDown: Float) {
+            // **En una ventana, la esquina cambia la forma del marco.** Los dos
+            // ejes por separado: es justo lo que hace falta para meter algo
+            // grande en un hueco estrecho, y la foto de dentro no se deforma
+            // porque se mueve, no se estira.
+            if (pin.value.ventana && pin.value.type == PinType.IMAGE) {
+                val z = zoomOrOne()
+                naturalW = (marcoAlEmpezar.first + (dxFromDown / z).toInt())
+                    .coerceIn(MARCO_MINIMO, MARCO_MAXIMO)
+                naturalH = (marcoAlEmpezar.second + (dyFromDown / z).toInt())
+                    .coerceIn(MARCO_MINIMO, MARCO_MAXIMO)
+                pin.value = pin.value.copy(ventanaAncho = naturalW, ventanaAlto = naturalH)
+                applyContentSize()
+                return
+            }
             val density = context.resources.displayMetrics.density
             // Se divide TAMBIÉN por el zoom: lo que se guarda es el tamaño base,
             // y sin esto un dedo que recorre 100 px sobre un pin al triple
@@ -1078,6 +1242,14 @@ class PinWindowController(
                 s.type == PinType.CHECKLIST -> rowAt(y).takeIf { it >= 0 }?.let { toggleCheck(it) }
                 s.type == PinType.COLOR -> s.colorArgb?.let { copyColor(it) }
                 s.type == PinType.FILE -> openFile(s)
+                // **En una ventana, el toque cambia de modo**: colocar el
+                // marco o mirar dentro de él. Son las dos cosas que se hacen con
+                // una ventana y las dos son «arrastrar aquí», así que se turnan.
+                // Copiar sigue estando en la barra de acciones.
+                s.type == PinType.IMAGE && s.ventana -> {
+                    moviendoElContenido.value = !moviendoElContenido.value
+                    window?.view?.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                }
                 s.type == PinType.IMAGE -> copyImage(s)
                 // Tocar copia, el botón edita: así copiar es lo barato.
                 s.type == PinType.DRAW -> {
@@ -1266,6 +1438,35 @@ class PinWindowController(
      * estuviera dibujado en el pin y sin persistir se perdería justo al ir a
      * seguir editándolo, que es el peor momento posible.
      */
+    /**
+     * Pone o quita el modo ventana.
+     *
+     * Al apagarlo se devuelve el encuadre a su sitio: un pin normal enseña la
+     * foto entera, y dejarlo con el recorte guardado haría que al volver a
+     * encenderlo apareciera movido sin que nadie lo hubiera tocado.
+     */
+    private fun alternarVentana() {
+        closeActionBar()
+        val puesta = !pin.value.ventana
+        // **Encendido, se entra directo a mover el contenido.**
+        //
+        // Encendiéndolo «en frío» no pasaba nada visible: el encuadre nace en
+        // cero, así que la imagen se veía idéntica y había que descubrir que
+        // además hay que tocarla. Un interruptor que no hace nada al pulsarlo
+        // parece roto, y eso fue exactamente lo que pasó.
+        moviendoElContenido.value = puesta
+        pin.value = pin.value.copy(
+            ventana = puesta,
+            encuadreX = 0f, encuadreY = 0f, encuadreZoom = 1f
+        )
+        toast(
+            context.getString(
+                if (puesta) R.string.ventana_puesta else R.string.ventana_quitada
+            )
+        )
+        callbacks.onPinChanged(this)
+    }
+
     private fun abrirEdicionAvanzada(s: PinState) {
         closeActionBar()
         exitAnnotateMode()
@@ -1319,6 +1520,22 @@ class PinWindowController(
         val size = imageSize.value
         val origin = imageOrigin.value
         if (size.width <= 0 || bmp.width <= 0) return null
+
+        // **En una ventana la foto no llena el marco: hay que deshacer el
+        // encuadre.** El marco tiene su propia forma, así que la foto va
+        // encajada dentro (con bandas si las proporciones no coinciden) y encima
+        // movida, ampliada y girada. Suponiendo que llenaba la caja, el trazo
+        // salía a un palmo del dedo en cuanto cambiabas el tamaño de la ventana.
+        val s = pin.value
+        if (s.ventana) {
+            val encaje = encajeDeLaFoto(size, bmp) ?: return null
+            val base = sinEncuadre(x - origin.x, y - origin.y, size)
+            return com.forge.pixpin.motor.Pt(
+                ((base.x - encaje.izquierda) / encaje.escala).toDouble(),
+                ((base.y - encaje.arriba) / encaje.escala).toDouble()
+            ).also { ultimoPuntoEscena = it }
+        }
+
         val mostradoX = size.width.toFloat() / bmp.width
         val mostradoY = size.height.toFloat() / bmp.height
         if (mostradoX <= 0f || mostradoY <= 0f) return null
@@ -1326,6 +1543,118 @@ class PinWindowController(
             ((x - origin.x) / mostradoX).toDouble(),
             ((y - origin.y) / mostradoY).toDouble()
         ).also { ultimoPuntoEscena = it }
+    }
+
+    /**
+     * De un punto del marco al mismo punto **antes** de encuadrar.
+     *
+     * Deshace, al revés y en orden, lo que hace la capa de la GPU: se le quita
+     * el desplazamiento, se mira desde el centro —que es sobre lo que gira y
+     * crece— y se deshacen giro y ampliación. Lo usan el toque y el anclaje del
+     * pellizco, para que no puedan discrepar.
+     */
+    private fun sinEncuadre(fx: Float, fy: Float, caja: IntSize): Offset {
+        val s = pin.value
+        val cx = caja.width / 2f
+        val cy = caja.height / 2f
+        val zPin = scale.floatValue.takeIf { it > 0f } ?: 1f
+        val dx = fx - s.encuadreX * zPin - cx
+        val dy = fy - s.encuadreY * zPin - cy
+        val r = Math.toRadians(-s.encuadreGiro.toDouble())
+        val cos = kotlin.math.cos(r).toFloat()
+        val sen = kotlin.math.sin(r).toFloat()
+        val ez = s.encuadreZoom.takeIf { it > 0f } ?: 1f
+        return Offset(
+            (dx * cos - dy * sen) / ez + cx,
+            (dx * sen + dy * cos) / ez + cy
+        )
+    }
+
+    /** El punto de la foto que hay que dejar clavado bajo los dedos. */
+    private var anclaDelEncuadre = Offset.Zero
+
+    /** Dónde están los dedos ahora, dentro del marco. */
+    private var focoDelEncuadre = Offset.Zero
+
+    /** Dónde están los dedos, en coordenadas de la ventana. */
+    private var focoLocal = Offset.Zero
+
+    /**
+     * Pasa el punto entre los dedos al hueco de la imagen.
+     *
+     * **En coordenadas de la ventana, no de pantalla.** Restando la posición de
+     * la ventana a un punto de pantalla se colaba el alto de la barra de estado
+     * —la ventana se sitúa por debajo de ella— y el ancla quedaba desplazada un
+     * palmo hacia arriba. Como el error se multiplica por lo que amplías, el
+     * agarre se despegaba justo al ampliar: parecía seguir a un dedo y al otro
+     * no. Estas son las mismas coordenadas con las que ya cae bien el trazo.
+     */
+    private fun focoEnLaCaja(): Offset {
+        val org = imageOrigin.value
+        return Offset(focoLocal.x - org.x, focoLocal.y - org.y)
+    }
+
+    /** Apunta qué trozo de foto hay bajo los dedos al empezar el pellizco. */
+    private fun anclarEncuadre() {
+        val caja = imageSize.value
+        if (caja.width <= 0 || caja.height <= 0) return
+        focoDelEncuadre = focoEnLaCaja()
+        anclaDelEncuadre = sinEncuadre(focoDelEncuadre.x, focoDelEncuadre.y, caja)
+    }
+
+    /**
+     * Recoloca la foto para que lo anclado siga bajo los dedos.
+     *
+     * **Sin esto el pellizco ampliaba desde el centro del marco**, que es donde
+     * la capa de la GPU tiene su origen. Daba igual dónde pusieras los dedos: lo
+     * que querías mirar se iba de lado en cuanto agrandabas, justo lo que hace
+     * inútil un zoom. Ahora se despeja el desplazamiento que hace falta para que
+     * el punto de partida caiga donde están los dedos ahora, con el giro y la
+     * ampliación que haya en este momento.
+     */
+    private fun reencuadrar() {
+        val caja = imageSize.value
+        if (caja.width <= 0 || caja.height <= 0) return
+        val s = pin.value
+        val cx = caja.width / 2f
+        val cy = caja.height / 2f
+        val zPin = scale.floatValue.takeIf { it > 0f } ?: 1f
+        val r = Math.toRadians(s.encuadreGiro.toDouble())
+        val cos = kotlin.math.cos(r).toFloat()
+        val sen = kotlin.math.sin(r).toFloat()
+        val dx = (anclaDelEncuadre.x - cx) * s.encuadreZoom
+        val dy = (anclaDelEncuadre.y - cy) * s.encuadreZoom
+        pin.value = s.copy(
+            encuadreX = (focoDelEncuadre.x - cx - (dx * cos - dy * sen)) / zPin,
+            encuadreY = (focoDelEncuadre.y - cy - (dx * sen + dy * cos)) / zPin
+        )
+    }
+
+    /** Dónde y de qué tamaño queda la foto encajada dentro del marco. */
+    private data class EncajeDeLaFoto(
+        val escala: Float,
+        val izquierda: Float,
+        val arriba: Float
+    )
+
+    /**
+     * El encaje de `ContentScale.Fit`: cabe entera y centrada, con bandas donde
+     * sobre sitio. Lo calculan **el toque y el dibujo a partir de aquí**, para
+     * que no puedan discrepar: cuando cada uno se lo calculaba por su cuenta era
+     * exactamente cuando el trazo se despegaba del dedo.
+     */
+    private fun encajeDeLaFoto(caja: IntSize, bmp: Bitmap): EncajeDeLaFoto? {
+        if (caja.width <= 0 || caja.height <= 0 || bmp.width <= 0 || bmp.height <= 0) return null
+        val escala = minOf(
+            caja.width.toFloat() / bmp.width,
+            caja.height.toFloat() / bmp.height
+        )
+        if (escala <= 0f) return null
+        return EncajeDeLaFoto(
+            escala = escala,
+            izquierda = (caja.width - bmp.width * escala) / 2f,
+            arriba = (caja.height - bmp.height * escala) / 2f
+        )
     }
 
     /**
@@ -1339,6 +1668,14 @@ class PinWindowController(
         val bmp = bitmapState.value ?: return 1.0
         val size = imageSize.value
         if (size.width <= 0 || bmp.width <= 0) return 1.0
+        val s = pin.value
+        if (s.ventana) {
+            val encaje = encajeDeLaFoto(size, bmp) ?: return 1.0
+            // Lo que ocupa un píxel de la foto es el encaje por la ampliación del
+            // encuadre; si no, los umbrales de picar y engancharse medirían otra
+            // cosa que lo que se está viendo.
+            return (encaje.escala * (s.encuadreZoom.takeIf { it > 0f } ?: 1f)).toDouble()
+        }
         return size.width.toDouble() / bmp.width
     }
 
@@ -1611,7 +1948,7 @@ class PinWindowController(
     }
 
     /** Saca una página como pin de imagen. */
-    private fun extractPage(index: Int) {
+    private fun extractPage(index: Int, comoVentana: Boolean = false) {
         val path = pin.value.filePath ?: return
         scope.launch {
             val saved = withContext(Dispatchers.IO) {
@@ -1623,7 +1960,7 @@ class PinWindowController(
                 out
             }
             if (saved != null) {
-                callbacks.onPinImageExtracted(this@PinWindowController, saved)
+                callbacks.onPinImageExtracted(this@PinWindowController, saved, comoVentana)
             } else {
                 toast(context.getString(R.string.capture_error))
             }
@@ -1796,7 +2133,42 @@ class PinWindowController(
                     )
                 }
             }
-            Text("${index + 1}", style = MaterialTheme.typography.labelSmall)
+            // **Las dos formas de sacar la página, con su botón.**
+            //
+            // Sacarla como pin estaba solo en la pulsación larga —un gesto que no
+            // se ve— y el toque se iba al editor a pantalla completa: para
+            // asomar una página encima de otra app había que adivinar el gesto.
+            // Aquí caben los dos sin quitarle sitio a la miniatura, y el número
+            // de página sigue leyéndose entre ellos.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        extractPage(index)
+                        closePdfViewer(); cerrarPaginasDeNota(); closeBoardPalette()
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = context.getString(R.string.pagina_como_pin),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Text("${index + 1}", style = MaterialTheme.typography.labelSmall)
+                IconButton(
+                    onClick = {
+                        extractPage(index, comoVentana = true)
+                        closePdfViewer(); cerrarPaginasDeNota(); closeBoardPalette()
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Crop,
+                        contentDescription = context.getString(R.string.pagina_como_ventana),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
         }
     }
 
@@ -2213,52 +2585,37 @@ class PinWindowController(
     @Composable
     private fun ActionBarContent() {
         val s by pin
+        // **Cuatro botones a la vista y el resto detrás de los tres puntos.**
+        //
+        // La barra tenía hasta doce iconos según el tipo de pin, y doce iconos sin nombre
+        // no son doce opciones: son un muro que hay que descifrar cada vez, justo cuando
+        // uno venía a hacer una cosa concreta. Lo de todos los días se queda fuera —lo
+        // propio del tipo de pin, guardar y cerrar— y lo que se toca de uvas a peras baja
+        // al menú, **con su nombre escrito**, que es lo que de verdad hace falta para lo
+        // que no se usa a diario.
+        var mas by remember { mutableStateOf(false) }
         Surface(shape = RoundedCornerShape(24.dp), shadowElevation = 6.dp) {
             Row(
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = {
-                    setClickThrough(!s.clickThrough)
-                    closeActionBar()
-                }) {
-                    Icon(
-                        if (s.clickThrough) Icons.Filled.DoNotTouch else Icons.Filled.TouchApp,
-                        contentDescription = context.getString(R.string.cd_clickthrough),
-                        tint = if (s.clickThrough) MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                // **El lápiz abre la edición avanzada**, la de pantalla
-                // completa. Antes entraba al modo de dibujar dentro del pin, y
-                // eso ahora se hace con dos dedos y doble toque sobre la foto:
-                // el gesto rápido para lo rápido, y el botón para cuando hace
-                // falta sitio de verdad. Dibujar encima solo tiene sentido
-                // sobre una imagen.
-                if (s.type == PinType.IMAGE) {
-                    IconButton(onClick = { abrirEdicionAvanzada(s) }) {
+                // **Lo principal de cada tipo, y solo uno.** En una imagen es dibujar
+                // encima; en un dibujo o una nota, editarlo; en un PDF, abrirlo. Es lo
+                // que se viene a hacer con ese pin el noventa por ciento de las veces.
+                when {
+                    s.type == PinType.IMAGE -> IconButton(onClick = { enterAnnotateMode() }) {
                         Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = context.getString(R.string.cd_edicion_avanzada)
+                            Icons.Filled.Brush,
+                            contentDescription = context.getString(R.string.cd_anotar_aqui)
                         )
                     }
-                }
-                // Aquí vivía la puerta al croquis, el editor de tipo CAD que
-                // servía para medir sobre la captura de un plano. Ya no hace
-                // falta: escalar y acotar son dos herramientas del motor, y se
-                // usan en la misma edición que todo lo demás. Ver `Medida`.
-
-                // El dibujo se sigue haciendo donde se dejó: el editor guarda
-                // en cada cambio y relee del archivo nombrado por el id del
-                // pin, así que basta con abrirlo.
-                if (s.type == PinType.DRAW) {
-                    IconButton(onClick = {
+                    s.type == PinType.DRAW -> IconButton(onClick = {
+                        // Con el id del dibujo y no el del pin: si no, el editor
+                        // guardaría lo dibujado en un archivo nuevo y lo que se ve en la
+                        // conversación se quedaría como estaba.
                         com.forge.pixpin.motor.DrawEditorActivity.abrir(
-                            context,
-                            s.id,
-                            com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id),
-                            null
+                            context, idDelDibujo(s), rutaDelDibujo(s), null
                         )
                     }) {
                         Icon(
@@ -2266,63 +2623,94 @@ class PinWindowController(
                             contentDescription = context.getString(R.string.cd_draw_edit)
                         )
                     }
-                }
-                if (isPdf) {
-                    IconButton(onClick = { openPdfViewer() }) {
+                    isPdf -> IconButton(onClick = { openPdfViewer() }) {
                         Icon(
                             Icons.Filled.PictureAsPdf,
                             contentDescription = context.getString(R.string.pdf_view)
                         )
                     }
-                }
-                // **Una nota larga se maneja como un PDF.** El botón solo
-                // aparece si de verdad hay más de una página: en una nota corta
-                // sería un botón que no lleva a ninguna parte.
-                if (esNotaLarga) {
-                    IconButton(onClick = { abrirPaginasDeNota() }) {
-                        Icon(
-                            Icons.Filled.AutoStories,
-                            contentDescription = context.getString(R.string.nota_ver_paginas)
-                        )
-                    }
-                }
-                if (isBoard) {
-                    IconButton(onClick = { openBoardPalette() }) {
-                        Icon(
-                            Icons.Filled.Palette,
-                            contentDescription = context.getString(R.string.board_color)
-                        )
-                    }
-                }
-                if (isEditable) {
-                    IconButton(onClick = { enterEditMode() }) {
+                    isEditable -> IconButton(onClick = { enterEditMode() }) {
                         Icon(
                             Icons.Filled.Edit,
                             contentDescription = context.getString(R.string.cd_edit_text)
                         )
                     }
                 }
-                IconButton(onClick = { openEmojiPicker() }) {
-                    Icon(
-                        Icons.Filled.EmojiEmotions,
-                        contentDescription = context.getString(R.string.cd_emoji),
-                        tint = if (s.emoji != null) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                IconButton(onClick = { callbacks.onPinToggleSave(this@PinWindowController) }) {
-                    Icon(
-                        if (s.isPinned) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                        contentDescription = context.getString(R.string.cd_bookmark),
-                        tint = if (s.isPinned) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface
-                    )
+                // Aquí estaba el marcador, y se ha ido: **Mensajes guardados lo
+                // sustituye entero**. Todo lo que se pinea entra ya en el buzón, así que
+                // guardar era decir dos veces lo mismo con dos listas distintas —y dos
+                // sitios donde buscar algo es peor que uno, aunque los dos funcionen.
+                Box {
+                    IconButton(onClick = { mas = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = context.getString(R.string.cd_mas)
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = mas,
+                        onDismissRequest = { mas = false }
+                    ) {
+                        DelMenuDelPin(
+                            if (s.clickThrough) R.string.cd_clickthrough_off
+                            else R.string.cd_clickthrough
+                        ) {
+                            mas = false
+                            setClickThrough(!s.clickThrough)
+                            closeActionBar()
+                        }
+                        if (s.type == PinType.IMAGE) {
+                            // El modo ventana va aquí y no al pinear: al pinear todavía
+                            // no se sabe si esa captura va a estorbar, se sabe cuando ya
+                            // la tienes delante ocupando media pantalla.
+                            DelMenuDelPin(R.string.cd_modo_ventana) {
+                                mas = false; alternarVentana()
+                            }
+                            DelMenuDelPin(R.string.cd_edicion_avanzada) {
+                                mas = false; abrirEdicionAvanzada(s)
+                            }
+                        }
+                        // Una nota larga se maneja como un PDF, y solo si de verdad tiene
+                        // más de una página.
+                        if (esNotaLarga) {
+                            DelMenuDelPin(R.string.nota_ver_paginas) {
+                                mas = false; abrirPaginasDeNota()
+                            }
+                        }
+                        if (isBoard) {
+                            DelMenuDelPin(R.string.board_color) {
+                                mas = false; openBoardPalette()
+                            }
+                        }
+                        // Editar sigue en el menú cuando el botón principal ya lo ocupa
+                        // otra cosa: en un PDF con nota, por ejemplo.
+                        if (isEditable && isPdf) {
+                            DelMenuDelPin(R.string.cd_edit_text) {
+                                mas = false; enterEditMode()
+                            }
+                        }
+                        DelMenuDelPin(R.string.cd_emoji) {
+                            mas = false; openEmojiPicker()
+                        }
+                    }
                 }
                 IconButton(onClick = { close() }) {
-                    Icon(Icons.Filled.Close, contentDescription = context.getString(R.string.cd_close))
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = context.getString(R.string.cd_close)
+                    )
                 }
             }
         }
+    }
+
+    /** Una línea del menú del pin. Con su nombre: lo que no se usa a diario se lee. */
+    @Composable
+    private fun DelMenuDelPin(texto: Int, onClick: () -> Unit) {
+        androidx.compose.material3.DropdownMenuItem(
+            text = { Text(context.getString(texto)) },
+            onClick = onClick
+        )
     }
 
     /**
@@ -2391,11 +2779,9 @@ class PinWindowController(
             com.forge.pixpin.motor.DrawToolbar(
                 tool = annotator.tool,
                 onTool = { annotator.selectTool(it); annotChanged() },
-                style = annotator.scene.style,
+                style = annotator.estiloActivo(),
                 onStyle = { nuevo ->
-                    annotator.changeStyle({ nuevo }, {
-                        com.forge.pixpin.motor.estiloAplicado(it, nuevo)
-                    })
+                    annotator.cambiarEstilo(nuevo)
                     annotChanged()
                 },
                 canUndo = annotator.canUndo,
@@ -2403,13 +2789,21 @@ class PinWindowController(
                 onDone = { exitAnnotateMode() },
                 escala = annotator.scene.escala,
                 onQuitarEscala = { annotator.clearScale(); annotChanged() },
-                modoReferencia = annotator.modoReferencia,
-                onModoReferencia = { annotator.modoReferencia = !annotator.modoReferencia; annotChanged() },
+                // **El modo guía solo si se ha pedido aquí.** Es una opción, no
+                // una herramienta: no dibuja nada, decide de qué clase sale lo
+                // que se trace. En una anotación de paso sobra, y cada botón de
+                // la barra flotante le quita sitio a los que sí se usan. Ver
+                // [Settings.guiaEnPin].
+                modoReferencia = if (ajustes.guiaEnPin) annotator.modoReferencia else null,
+                onModoReferencia = if (!ajustes.guiaEnPin) null else {
+                    { annotator.modoReferencia = !annotator.modoReferencia; annotChanged() }
+                },
                 referenciasVisibles = annotator.referenciasVisibles,
                 onAlternarReferencias = { annotator.alternarReferencias(); annotChanged() },
                 hayReferencias = annotator.hayReferencias,
                 permitidas = permitidas,
                 mostrarFuente = false,
+                mostrarTamano = true,
                 grupos = ajustes.pinGroupList
             )
         }
@@ -2641,6 +3035,7 @@ class PinWindowController(
             PinType.IMAGE -> ImagePinBody(s)
             PinType.TEXT -> TextPinBody(s)
             PinType.RULETA -> RuletaBody(s)
+            PinType.VOZ -> VozBody(s)
             PinType.COLOR -> ColorPinBody(s)
             PinType.FILE -> FilePinBody(s)
             PinType.TIMER -> TimerBody(
@@ -2668,16 +3063,35 @@ class PinWindowController(
      * infinito y no hay hoja que encuadrar. El toque lo sigue repartiendo el
      * manejador del pin, para que copiar funcione como con una imagen.
      */
+    /**
+     * De qué archivo lee este pin su dibujo.
+     *
+     * El suyo propio si lo tiene apuntado, y si no el que lleva su nombre — que es lo que
+     * pasa con los dibujos que nacen del propio pin.
+     */
+    private fun rutaDelDibujo(s: PinState): String =
+        s.drawPath ?: com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id)
+
+    /** Y con qué nombre lo guarda el editor: el del archivo, no el del pin. */
+    private fun idDelDibujo(s: PinState): String =
+        s.drawPath?.let { java.io.File(it).name.substringBefore(".excalidraw") } ?: s.id
+
     @Composable
     private fun DrawPinBody(s: PinState) {
         // Clave en la revisión del almacén: al guardar el editor —otra
         // actividad, mismo proceso— esto se recompone solo.
+        // **Se lee de `drawPath`, no del id del pin.**
+        //
+        // Un pin de dibujo normal guarda en el archivo que lleva su propio nombre, y
+        // mirar por el id bastaba. Pero un dibujo que **ya existía** —una foto anotada
+        // sacada desde la conversación— vive en su archivo de siempre, y el pin nuevo
+        // solo apunta a él: buscándolo por el id del pin no se encontraba nada y salía un
+        // pin en blanco con un lapicito. Ver [OverlayManager.pinDibujo].
+        val ruta = rutaDelDibujo(s)
         val escena = androidx.compose.runtime.remember(
-            s.id, com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
+            ruta, com.forge.pixpin.motor.ExcalidrawStore.revision.intValue
         ) {
-            com.forge.pixpin.motor.ExcalidrawStore.cargar(
-                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, s.id)
-            )
+            com.forge.pixpin.motor.ExcalidrawStore.cargar(ruta)
         }
 
         // **La hoja manda el tamaño del pin.** Si el dibujo lleva marco, el pin
@@ -2697,7 +3111,7 @@ class PinWindowController(
                 com.forge.pixpin.motor.DrawPreview(
                     scene = escena,
                     modifier = Modifier.fillMaxSize(),
-                    imageProvider = { id -> escena.files[id]?.path?.let { ImageStore.load(it) } }
+                    imageProvider = { id -> imagenDelDibujo(id, escena.files) }
                 )
             }
         }
@@ -2803,6 +3217,7 @@ class PinWindowController(
         ) {
             when (s.type) {
                 PinType.RULETA -> Text("🎯", fontSize = 20.sp)
+                PinType.VOZ -> Text("🎙", fontSize = 18.sp)
                 PinType.IMAGE -> {
                     val bitmap = rememberPinBitmap(s.imagePath).value
                     if (bitmap != null) {
@@ -2885,12 +3300,91 @@ class PinWindowController(
                     imageSize.value = coords.size
                 }
         ) {
+            // **En una ventana la imagen se pinta movida y ampliada dentro del
+            // marco**, y recortada por él. En un pin normal llena el hueco, que
+            // es lo de siempre y no cuesta nada comprobar: el encuadre nace en
+            // cero y en uno.
+            val enVentana = s.ventana
+            // Fuera del modo ventana no hay esquina que estirar: dejarla puesta
+            // se quedaría comiendo los toques de una zona que ya no hace nada.
+            androidx.compose.runtime.LaunchedEffect(enVentana) {
+                if (!enVentana) setResizeHandle(null)
+            }
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.fillMaxSize()
+                // Dentro de una ventana la foto conserva su proporción: es un
+                // recorte de la imagen de verdad, y estirarla para llenar el
+                // marco sería enseñar algo que no existe.
+                contentScale = if (enVentana) ContentScale.Fit else ContentScale.FillBounds,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (!enVentana) Modifier else Modifier.graphicsLayer {
+                            scaleX = s.encuadreZoom
+                            scaleY = s.encuadreZoom
+                            rotationZ = s.encuadreGiro
+                            // De unidades base a píxeles: ver la nota del
+                            // arrastre. Con el marco al doble, el mismo recorte
+                            // tiene que quedarse en el mismo sitio.
+                            // El zoom se lee **aquí dentro**, en la capa. Leído
+                            // al componer, cada fotograma del pellizco recomponía
+                            // el cuerpo del pin entero para acabar cambiando dos
+                            // números que la GPU ya sabe leer sola.
+                            val zPin = scale.floatValue.takeIf { it > 0f } ?: 1f
+                            translationX = s.encuadreX * zPin
+                            translationY = s.encuadreY * zPin
+                            clip = true
+                        }
+                    )
             )
+            // **Se ve en qué modo está.** Sin marca, tocar la ventana cambiaba
+            // algo invisible: el siguiente arrastre movía el marco o la imagen
+            // según un estado que no se veía por ninguna parte.
+            if (enVentana && moviendoElContenido.value) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .border(2.dp, MaterialTheme.colorScheme.tertiary)
+                )
+            }
+
+            // **La esquina de estirar, y sin ella no había forma de dar forma
+            // al marco.** El gesto estaba escrito pero no existía la zona que lo
+            // dispara —la tenía solo el pin de texto— así que la esquina no
+            // respondía. Va fuera de lo que se amplía, como allí: es un control,
+            // no contenido, y así su zona táctil sale medida sin corregir nada.
+            if (enVentana) {
+                Canvas(
+                    modifier = Modifier
+                        .size(HANDLE_DP.dp)
+                        .align(Alignment.BottomEnd)
+                        .onGloballyPositioned { coords ->
+                            val origen = coords.positionInRoot()
+                            setResizeHandle(
+                                android.graphics.Rect(
+                                    origen.x.toInt(),
+                                    origen.y.toInt(),
+                                    (origen.x + coords.size.width).toInt(),
+                                    (origen.y + coords.size.height).toInt()
+                                )
+                            )
+                        }
+                ) {
+                    // Las mismas tres rayas del pin de texto: el gesto universal
+                    // de «estírame», y aquí además dice que la esquina se toca.
+                    val trazo = 1.5.dp.toPx()
+                    for (i in 1..3) {
+                        val dentro = size.width * (i / 4f)
+                        drawLine(
+                            color = Color.White,
+                            start = Offset(size.width - dentro, size.height),
+                            end = Offset(size.width, size.height - dentro),
+                            strokeWidth = trazo
+                        )
+                    }
+                }
+            }
             if (annotating.value || annotator.scene.visible.isNotEmpty()) {
                 CapaDeDibujo(bmp)
             }
@@ -2907,14 +3401,15 @@ class PinWindowController(
      */
     @Composable
     private fun CapaDeDibujo(bmp: Bitmap) {
-        val zoom by scale
+        // Ni el zoom ni el contador se leen al componer: los dos se miran dentro
+        // de la lambda de dibujo, así que cambiarlos **repinta sin recomponer**.
+        // Leyéndolos aquí, pellizcar recomponía esta capa sesenta veces por
+        // segundo para volver a dibujar exactamente lo mismo.
         val tick by annotTick
         val contexto = context
         val renderer = androidx.compose.runtime.remember(bmp) {
             com.forge.pixpin.motor.Renderer(
-                imageProvider = { id ->
-                    annotator.scene.files[id]?.path?.let { ImageStore.load(it) }
-                },
+                imageProvider = { id -> imagenDelDibujo(id, annotator.scene.files) },
                 typefaces = com.forge.pixpin.motor.DrawFonts.provider(contexto),
                 // El fondo del que el mosaico saca sus píxeles es la propia foto.
                 backdrop = bmp
@@ -2925,11 +3420,57 @@ class PinWindowController(
         // que no está en el `BoxScope` del cuerpo de la imagen. Las restricciones
         // que le llegan ya son las del Box, de modo que llena lo mismo. Mismo
         // caso que la capa de dibujo.
-        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val s = pin.value
+        val enVentana = s.ventana
+        androidx.compose.foundation.Canvas(
+            Modifier
+                .fillMaxSize()
+                // **Lo dibujado viaja con la foto, no con el marco.** Va en la
+                // misma capa y con la misma transformación que la imagen, de
+                // modo que mover o girar el encuadre lo lleva pegado —que es lo
+                // suyo: la escena se mide en píxeles de la foto, no del hueco—.
+                // Y sale gratis: lo mueve la GPU, sin recalcular un solo trazo.
+                .then(
+                    if (!enVentana) Modifier else Modifier.graphicsLayer {
+                        scaleX = s.encuadreZoom
+                        scaleY = s.encuadreZoom
+                        rotationZ = s.encuadreGiro
+                        val z = scale.floatValue.takeIf { it > 0f } ?: 1f
+                        translationX = s.encuadreX * z
+                        translationY = s.encuadreY * z
+                        clip = true
+                    }
+                )
+        ) {
             @Suppress("UNUSED_EXPRESSION") tick
+            val zoom = scale.floatValue
+            if (bmp.width < 1) return@Canvas
+            if (enVentana) {
+                // Encajada como la foto, y por el mismo cálculo: ver
+                // [encajeDeLaFoto].
+                val caja = IntSize(size.width.toInt(), size.height.toInt())
+                val encaje = encajeDeLaFoto(caja, bmp) ?: return@Canvas
+                drawIntoCanvas { lienzo ->
+                    val lona = lienzo.nativeCanvas
+                    val guardado = lona.save()
+                    lona.translate(encaje.izquierda, encaje.arriba)
+                    renderer.renderScene(
+                        lona,
+                        annotator.scene.copy(
+                            viewport = com.forge.pixpin.motor.Viewport(
+                                zoom = encaje.escala.toDouble()
+                            )
+                        ),
+                        (bmp.width * encaje.escala).toDouble(),
+                        (bmp.height * encaje.escala).toDouble()
+                    )
+                    lona.restoreToCount(guardado)
+                }
+                return@Canvas
+            }
             val w = (naturalW * zoom).toInt().toDouble()
             val h = (naturalH * zoom).toInt().toDouble()
-            if (w < 1 || h < 1 || bmp.width < 1) return@Canvas
+            if (w < 1 || h < 1) return@Canvas
             // La escena está en píxeles de la foto: para verla encima basta con
             // escalar por lo que la foto ocupa ahora. Sin desplazamiento, porque
             // el origen de la escena es la esquina de la imagen.
@@ -2943,6 +3484,42 @@ class PinWindowController(
                     w, h
                 )
             }
+            dibujarLosTiradores(this, escala)
+        }
+    }
+
+    /**
+     * Los tiradores de lo que hay marcado, **también en el pin**.
+     *
+     * Existían para el dedo pero no para el ojo: el controlador es el mismo que el del
+     * editor grande, así que acertando a ciegas el extremo de una raya se enderezaba —
+     * pero no se veía dónde estaba. Enderezar una raya torcida a ciegas no es una función.
+     *
+     * Se pintan aquí y no en el motor por lo de siempre: **el motor no sabe de
+     * selecciones**, las pinta quien tenga el lienzo delante. Y se usa la misma función
+     * que el editor grande, [getSelectionTransformHandles], para que un tirador esté donde
+     * el dedo lo busca; el zoom que se le pasa es el de la escena sobre la foto.
+     */
+    private fun dibujarLosTiradores(
+        ambito: androidx.compose.ui.graphics.drawscope.DrawScope, escala: Double
+    ) {
+        if (!annotating.value) return
+        val marcados = annotator.selectedElements()
+        if (marcados.isEmpty()) return
+        val tiradores = com.forge.pixpin.motor.getSelectionTransformHandles(
+            marcados, escala, alfileres = annotator.scene.alfileres.map { it.punto }
+        )
+        for (tirador in tiradores) {
+            val centro = androidx.compose.ui.geometry.Offset(
+                (tirador.centerX * escala).toFloat(), (tirador.centerY * escala).toFloat()
+            )
+            val radio = (tirador.width * escala / 2).toFloat()
+            if (radio <= 0f) continue
+            ambito.drawCircle(Color.White, radio, centro)
+            ambito.drawCircle(
+                Color(0xFF6965DB), radio, centro,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = radio / 4f)
+            )
         }
     }
 
@@ -2952,8 +3529,32 @@ class PinWindowController(
      */
     @Composable
     private fun rememberPinBitmap(path: String?): State<Bitmap?> {
-        LaunchedEffect(path) {
-            if (path != null && bitmapState.value == null) {
+        val burbuja by minimized
+        LaunchedEffect(path, burbuja) {
+            if (path == null) return@LaunchedEffect
+            if (burbuja) {
+                // **Minimizado se suelta la foto entera.**
+                //
+                // Una burbuja es un círculo de 46 puntos y estaba sujetando la
+                // imagen a tamaño completo: hasta 16 MB por un pin **que ni
+                // siquiera se está mirando**. Con cinco o seis minimizados eso
+                // es la memoria del proceso entera, y es exactamente el montón
+                // que uno deja acumulado a un lado de la pantalla.
+                //
+                // En su lugar se guarda una miniatura del tamaño del círculo,
+                // que son unos kilobytes. Al restaurarlo se vuelve a leer la
+                // grande —fuera del hilo de la interfaz, como siempre—: es lo
+                // mismo que ya pasaba al crear el pin.
+                if (miniaturaDeLaBurbuja.value == null) {
+                    miniaturaDeLaBurbuja.value = withContext(Dispatchers.IO) {
+                        ImageStore.load(path, LADO_DE_LA_MINIATURA)
+                    }
+                }
+                bitmapState.value = null
+                bitmapLoadTried.value = false
+                return@LaunchedEffect
+            }
+            if (bitmapState.value == null) {
                 val loaded = withContext(Dispatchers.IO) { ImageStore.load(path) }
                 // Primero se le da tamaño a la ventana y después se publica la
                 // imagen: al revés, la composición se encontraría un instante
@@ -2963,8 +3564,11 @@ class PinWindowController(
                 bitmapLoadTried.value = true
             }
         }
-        return bitmapState
+        return if (burbuja) miniaturaDeLaBurbuja else bitmapState
     }
+
+    /** La foto en tamaño de burbuja. Ver [rememberPinBitmap]. */
+    private val miniaturaDeLaBurbuja = mutableStateOf<Bitmap?>(null)
 
     /**
      * El ancho y el alto los manda el estado, no la medida del texto: es lo que
@@ -3023,11 +3627,8 @@ class PinWindowController(
             ) {
                 Box {
                     when {
-                        // La ruleta se escribe con un campo llano: es una lista
-                        // de nombres, no un documento. Ni títulos, ni viñetas,
-                        // ni negrita — nada de eso significa nada en un sorteo.
-                        editing.value && s.type == PinType.RULETA -> RuletaEditor()
-
+                        // (La ruleta no pasa por aquí: tiene su propio cuerpo, y
+                        // es él quien enseña su campo. Ver [RuletaBody].)
                         editing.value -> TextEditor(s)
 
                         s.type == PinType.CHECKLIST -> {
@@ -3389,6 +3990,20 @@ class PinWindowController(
     private fun RuletaBody(s: PinState) {
         val nombres = remember(s.text) { Ruleta.nombres(s.text) }
 
+        // **Aquí faltaba el campo de escribir, y por eso no se podían meter los
+        // nombres.**
+        //
+        // El editor existía —[RuletaEditor]—, el lápiz de la barra encendía el
+        // modo de escritura, la ventana cogía el foco y salía el teclado. Lo que
+        // pasaba es que el cuerpo del pin manda a la ruleta aquí, y aquí solo se
+        // enseñaba el texto: la rama que pintaba el campo estaba dentro del
+        // cuerpo del pin de texto, a donde una ruleta no llega nunca. Se escribía
+        // en un cuadro que no existía.
+        if (editing.value) {
+            RuletaEditor()
+            return
+        }
+
         if (!s.widget.ruletaLista) {
             Column(
                 Modifier
@@ -3413,10 +4028,20 @@ class PinWindowController(
                 )
                 Spacer(Modifier.height(10.dp))
                 Button(
-                    onClick = { pin.value = conRuleta(lista = true, elegido = -1) },
+                    onClick = { ponerRuleta(lista = true, elegido = -1) },
                     enabled = Ruleta.sePuedeGirar(s.text)
                 ) {
                     Text(context.getString(R.string.ruleta_listo))
+                }
+                // **Y se dice por qué no se puede.** Un botón apagado que no
+                // explica nada se lee como que la aplicación está rota.
+                if (!Ruleta.sePuedeGirar(s.text)) {
+                    Text(
+                        context.getString(R.string.ruleta_faltan),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
             }
             return
@@ -3459,7 +4084,7 @@ class PinWindowController(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = {
                     val cual = Ruleta.elegir(nombres) { Math.random() }
-                    pin.value = conRuleta(lista = true, elegido = cual)
+                    ponerRuleta(lista = true, elegido = cual)
                 }, enabled = nombres.size >= 2) {
                     Text(
                         context.getString(
@@ -3486,7 +4111,7 @@ class PinWindowController(
                     }
                 }
                 Spacer(Modifier.width(6.dp))
-                TextButton(onClick = { pin.value = conRuleta(lista = false, elegido = -1) }) {
+                TextButton(onClick = { ponerRuleta(lista = false, elegido = -1) }) {
                     Text(context.getString(R.string.ruleta_editar))
                 }
             }
@@ -3498,28 +4123,160 @@ class PinWindowController(
     private fun RuletaEditor() {
         val foco = remember { FocusRequester() }
         LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
-        BasicTextField(
-            value = draft.value,
-            onValueChange = { draft.value = it },
-            textStyle = TextStyle(
-                fontSize = 14.sp,
-                lineHeight = 22.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
-                .focusRequester(foco)
+        Box(Modifier.fillMaxWidth()) {
+            // Un sorteo son varios nombres, así que el campo nace con sitio para
+            // varios: abierto sobre una línea, cada nombre nuevo empuja el pin y
+            // el teclado acaba tapando lo que se acaba de escribir.
+            BasicTextField(
+                value = draft.value,
+                onValueChange = { draft.value = it },
+                textStyle = TextStyle(
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = ALTO_MINIMO_DE_LA_RULETA.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .focusRequester(foco)
+            )
+            // La pista de cómo se escribe, solo con el campo vacío: uno por
+            // línea no se adivina, y con algo escrito ya sobra.
+            if (draft.value.text.isBlank()) {
+                Text(
+                    text = context.getString(R.string.ruleta_seed),
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+        }
+    }
+
+    /**
+     * Cambia en qué fase está la ruleta y **lo guarda ya cambiado**.
+     *
+     * Antes esto devolvía el estado nuevo y avisaba de camino, así que el aviso
+     * salía **con el estado viejo todavía puesto**: lo que se guardaba en disco
+     * era la fase de antes. Al recargar, la rueda volvía a la lista de nombres y
+     * parecía que el botón de sortear no hacía nada.
+     */
+    /**
+     * La nota de voz: **oírla, y decirle a qué hora hay que acordarse**.
+     *
+     * Nada más. Un reproductor con barra de avance, velocidad y recorte sería otra
+     * aplicación; lo que se pidió es apretar y oír lo que uno dijo.
+     */
+    @Composable
+    private fun VozBody(s: PinState) {
+        val duracion = androidx.compose.runtime.remember(s.audioPath) { Voz.duracion(s.audioPath) }
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { if (sonando.value) pararLaNota() else sonarLaNota() }) {
+                Icon(
+                    if (sonando.value) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    contentDescription = context.getString(
+                        if (sonando.value) R.string.cd_parar else R.string.cd_sonar
+                    ),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Column(Modifier.padding(start = 4.dp)) {
+                Text(duracionLegible(duracion), fontSize = 15.sp)
+                // La hora puesta se ve **sin abrir nada**: un recordatorio que no dice
+                // cuándo va a saltar obliga a fiarse de memoria, que es justo de lo que
+                // uno quería librarse al ponerlo.
+                s.recordarA?.let { cuando ->
+                    Text(
+                        text = "\u23F0 " + android.text.format.DateFormat
+                            .getTimeFormat(context).format(java.util.Date(cuando)),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            IconButton(onClick = { ponerLaHora() }) {
+                Icon(
+                    Icons.Filled.Alarm,
+                    contentDescription = context.getString(R.string.cd_recordar),
+                    tint = if (s.recordarA != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    private val sonando = androidx.compose.runtime.mutableStateOf(false)
+    private var reproductor: android.media.MediaPlayer? = null
+
+    /**
+     * Pide la hora del recordatorio con el reloj del sistema.
+     *
+     * El de Android y no uno propio: es el que la gente ya sabe usar, respeta el formato de
+     * 12 o 24 horas del móvil y no hay que mantenerlo. Va en una ventana aparte porque el
+     * pin es un overlay sin foco y un diálogo dentro no recibiría los toques del teclado.
+     *
+     * Con hora ya puesta, volver a tocar **la quita**: es el mismo botón, como el candado.
+     */
+    private fun ponerLaHora() {
+        val yaTiene = pin.value.recordarA != null
+        if (yaTiene) {
+            Recordatorios.quitar(context, pin.value.id)
+            pin.value = pin.value.copy(recordarA = null)
+            callbacks.onPinChanged(this)
+            return
+        }
+        context.startActivity(
+            android.content.Intent(context, HoraDelRecordatorioActivity::class.java)
+                .putExtra(HoraDelRecordatorioActivity.EXTRA_PIN, pin.value.id)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 
-    private fun conRuleta(lista: Boolean, elegido: Int): PinState {
-        val nuevo = pin.value.copy(
+    /** Le pone la hora que ha elegido el usuario en el reloj del sistema. */
+    fun aceptarLaHora(cuando: Long) {
+        Recordatorios.poner(context, pin.value.id, cuando)
+        pin.value = pin.value.copy(recordarA = cuando)
+        callbacks.onPinChanged(this)
+    }
+
+    /**
+     * Reproduce la nota.
+     *
+     * Público porque lo llama también el despertador: al llegar la hora el pin vuelve a la
+     * pantalla **y suena**, que es lo que se pidió. Ver [Recordatorios].
+     */
+    fun sonarLaNota() {
+        val ruta = pin.value.audioPath ?: return
+        pararLaNota()
+        reproductor = runCatching {
+            android.media.MediaPlayer().apply {
+                setDataSource(ruta)
+                setOnCompletionListener { pararLaNota() }
+                prepare()
+                start()
+            }
+        }.getOrNull()
+        sonando.value = reproductor != null
+    }
+
+    private fun pararLaNota() {
+        runCatching { reproductor?.stop() }
+        runCatching { reproductor?.release() }
+        reproductor = null
+        sonando.value = false
+    }
+
+    private fun ponerRuleta(lista: Boolean, elegido: Int) {
+        pin.value = pin.value.copy(
             widget = pin.value.widget.copy(ruletaLista = lista, ruletaElegido = elegido)
         )
         callbacks.onPinChanged(this)
-        return nuevo
     }
 
     /** La rueda: una porción por nombre, girada al ángulo que toque. */
@@ -3616,6 +4373,15 @@ class PinWindowController(
         /** Diámetro de la burbuja minimizada, en dp. */
         const val BUBBLE_DP = 46
 
+        /**
+         * A cuántos píxeles se lee la foto para la burbuja.
+         *
+         * El círculo son 46 puntos, o sea 138 píxeles en una pantalla de tres
+         * veces. Con 160 va sobrado en cualquier móvil y ocupa unos 50 kB en vez
+         * de los megas de la foto entera.
+         */
+        const val LADO_DE_LA_MINIATURA = 160
+
         /** Lado de la esquina agarrable del cuadro de texto, en dp. */
         const val HANDLE_DP = 30
 
@@ -3668,6 +4434,9 @@ class PinWindowController(
 
 
 
+/** Lo que mide de alto el campo de la ruleta al abrirlo, en puntos. */
+private const val ALTO_MINIMO_DE_LA_RULETA = 120
+
 /** Alto aproximado de la barrita, para decidir a qué borde se pega. */
 private const val ANNOTATE_BAR_DP = 76
 
@@ -3706,3 +4475,12 @@ private val PIN_EMOJIS = listOf(
     "❤️", "👀", "🔔", "📅", "✏️", "🧠",
     "🚀", "🐛", "☕", "🎵", "📷", "🗑️"
 )
+
+/** Hasta dónde se puede acercar y alejar la imagen dentro de una ventana. */
+private const val MENOS_ZOOM_DE_VENTANA = 0.3f
+private const val MAS_ZOOM_DE_VENTANA = 8f
+
+
+/** Lo que puede medir el marco de una ventana, en píxeles base. */
+private const val MARCO_MINIMO = 80
+private const val MARCO_MAXIMO = 2400

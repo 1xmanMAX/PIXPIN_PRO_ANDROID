@@ -14,7 +14,15 @@ import kotlinx.serialization.Serializable
  */
 enum class PinType {
     IMAGE, TEXT, COLOR, FILE, TIMER, CHECKLIST, COUNTER, LEDGER, TABLE, CROQUIS, DRAW,
-    RULETA
+    RULETA,
+
+    /**
+     * Una nota de voz, con o sin hora.
+     *
+     * Hay cosas que se dicen en tres segundos y no se escriben en tres minutos. Y con hora
+     * puesta, el pin vuelve solo a la pantalla y se reproduce: ver [Recordatorios].
+     */
+    VOZ
 }
 
 /**
@@ -92,6 +100,26 @@ data class WidgetState(
     val accumulatedMs: Long = 0
 )
 
+/**
+ * Cada cuánto hay que volver a mirar la hora, o **null si no hace falta**.
+ *
+ * Vive aquí, suelto y sin nada de Compose, para poder comprobarse: es una
+ * decisión de cuánta batería se gasta y no se puede confiar a mirarla a ojo.
+ *
+ * - Cronómetro en marcha: 60 ms, que es donde se ven las décimas.
+ * - Cuenta atrás: 250 ms, y **null en cuanto llega a cero**.
+ * - Parado: null. Lo que se enseña ya no cambia.
+ * - Reloj: lo que falte **hasta el minuto siguiente**, exacto. Enseña `HH:MM`,
+ *   así que una vez por minuto es toda la frecuencia que necesita; antes se
+ *   refrescaba doscientas cuarenta veces por cada una que servía de algo.
+ */
+fun esperaDelReloj(widget: WidgetState, ahora: Long): Long? {
+    if (widget.stopwatch) return if (widget.runningSince == null) null else 60L
+    val hasta = widget.timerEndsAt ?: return 60_000L - (ahora % 60_000L)
+    return if (hasta - ahora <= 0L) null else 250L
+}
+
+
 /** Estado serializable de un pin: todo lo necesario para restaurarlo. */
 @Serializable
 data class PinState(
@@ -130,6 +158,42 @@ data class PinState(
     val priority: Boolean = false,
     /** Emoji pegado en la esquina, a modo de pegatina; null = sin pegatina. */
     val emoji: String? = null,
+    /**
+     * El pin de imagen es una **ventana**: un marco por el que se mira la foto.
+     *
+     * La diferencia con el pin de siempre es dónde va lo que se arrastra. En un
+     * pin normal la foto está fija dentro y lo que se mueve es el pin; en una
+     * ventana el marco se queda donde está y **lo que se mueve es la imagen**,
+     * que es lo que hace falta para tener una captura enorme asomada a un hueco
+     * pequeño: se deja el recorte que interesa y se sigue trabajando.
+     *
+     * Es la misma idea que la imagen de referencia del lienzo. Ver
+     * `VentanaDeReferencia`.
+     */
+    val ventana: Boolean = false,
+    /**
+     * El encuadre de la imagen dentro del marco: cuánto se ha corrido y cuánto
+     * se ha ampliado. Solo significa algo con [ventana] puesto.
+     */
+    val encuadreX: Float = 0f,
+    val encuadreY: Float = 0f,
+    val encuadreZoom: Float = 1f,
+    /** Cuánto se ha girado la imagen dentro del marco, en grados. */
+    val encuadreGiro: Float = 0f,
+    /**
+     * Lo que mide el marco de una ventana, en píxeles base.
+     *
+     * Con null lo decide la propia foto, como en un pin normal. Puesto, el marco
+     * **deja de tener la forma de la imagen**: se le puede dar la que haga falta
+     * —una tira ancha, un cuadrado— y la foto se mueve dentro. Es lo que permite
+     * asomar algo grande por un hueco de la forma que sea.
+     */
+    /** El audio de una nota de voz. Ver [Voz]. */
+    val audioPath: String? = null,
+    /** Cuándo tiene que volver a sonar, o null si no hay hora puesta. */
+    val recordarA: Long? = null,
+    val ventanaAncho: Int? = null,
+    val ventanaAlto: Int? = null,
     /** Estado de la mini-aplicación, si el pin es una. */
     val widget: WidgetState = WidgetState(),
     /**

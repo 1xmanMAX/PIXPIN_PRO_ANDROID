@@ -134,6 +134,53 @@ class FotoDeFondoTest {
         assertTrue(!c.canUndo)
     }
 
+    /**
+     * **Ni las fotos sueltas**, las que uno mete encima a mano.
+     *
+     * El borrador recorre la imagen entera, así que a la mínima se llevaba la
+     * foto en vez de la línea que se quería quitar. Una foto sobra pocas veces,
+     * y para esas está seleccionarla y tirarla, que se hace a propósito.
+     */
+    @Test
+    fun `el borrador tampoco se lleva una foto sin bloquear`() {
+        val c = DrawController(escenaConFoto())
+        c.selectTool(Tool.ERASER)
+        c.pointerDown(Pt(300.0, 250.0))
+        c.pointerUp(Pt(300.0, 250.0))
+
+        assertTrue(c.scene.visible.any { it.id == "foto" })
+    }
+
+    /**
+     * Y **lo atraviesa**: borra lo de debajo en vez de quedarse muerto.
+     *
+     * Si la foto ganase el toque sin poder borrarse, el borrador no haría nada
+     * en toda la superficie que ella tapa, que suele ser justo donde se dibuja.
+     */
+    @Test
+    fun `el borrador atraviesa la foto y borra lo de debajo`() {
+        val c = DrawController(escenaConFoto())
+        c.selectTool(Tool.ERASER)
+        c.pointerDown(Pt(150.0, 100.0))
+        c.pointerUp(Pt(150.0, 100.0))
+
+        assertTrue("no ha borrado el trazo", c.scene.visible.none { it.id == "t" })
+        assertTrue("se ha llevado la foto", c.scene.visible.any { it.id == "foto" })
+    }
+
+    /** Pero la papelera sí se la lleva: es el gesto que se hace queriendo. */
+    @Test
+    fun `seleccionada y borrada si desaparece`() {
+        val c = DrawController(escenaConFoto())
+        c.selectTool(Tool.SELECTION)
+        c.pointerDown(Pt(300.0, 250.0))
+        c.pointerUp(Pt(300.0, 250.0))
+        assertEquals(setOf("foto"), c.selectedIds)
+
+        c.deleteSelection()
+        assertTrue(c.scene.visible.none { it.id == "foto" })
+    }
+
     /** Fijar lo que ya estaba fijado no descoloca nada. */
     @Test
     fun `fijar dos veces es lo mismo que fijar una`() {

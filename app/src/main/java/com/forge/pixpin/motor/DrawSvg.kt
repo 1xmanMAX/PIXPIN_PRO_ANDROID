@@ -230,9 +230,24 @@ object DrawSvg {
                 ElementType.PUNTO -> punto(e, alpha)
                 ElementType.MEASURE -> cota(e, alpha)
                 ElementType.ESCALA_GRAFICA -> escalaGrafica(e, alpha)
+                ElementType.PLANO -> plano(e, alpha)
+                // **El volumen se escribe como lo que es: polígonos rellenos.**
+                // No hay nada que perder por el camino —una caja isométrica *son*
+                // tres cuadriláteros con su color— así que sale idéntica a como
+                // se ve, y sin ninguna de las cosas que un SVG no sabe hacer.
+                ElementType.SOLIDO -> volumen(e, alpha)
                 // El marco es la hoja, no una raya: decide el encuadre y no se
-                // dibuja. El foco va aparte, el último de todos.
-                ElementType.FRAME, ElementType.SPOTLIGHT -> ""
+                // dibuja.
+                ElementType.FRAME -> ""
+                // **El foco sí se guarda.** Desde que su sombra vive dentro de
+                // un marco es dibujo como cualquier otro: el anillo entre el
+                // marco y la figura señalada, pintado. Antes oscurecía la
+                // pantalla entera y eso no se podía escribir en un archivo.
+                ElementType.SPOTLIGHT -> foco(e)
+                // La lupa se guarda **con sus píxeles dentro**, como el mosaico:
+                // lo que enseña no son trazos sino un trozo del dibujo a otra
+                // escala, y describirlo con figuras sería volver a dibujarlo.
+                ElementType.LUPA -> lupa(e, alpha, debajo)
             }
             if (dentro.isBlank()) return ""
 
@@ -275,6 +290,59 @@ object DrawSvg {
 
             val g = buildShapeGeometry(e) ?: return ""
             return relleno(e, g, alpha) + trazoDe(e, Svg.camino(g.stroke), alpha)
+        }
+
+        /**
+         * La caja en volumen: la sombra y sus caras, de atrás hacia delante.
+         *
+         * Se reusan [solido], [rayado] y [trazoDe] pasándoles **un elemento con
+         * el fondo ya aclarado** en vez de duplicar aquí el cálculo del color.
+         * Es una copia barata —el elemento es un `data class`— y garantiza que
+         * una cara exportada lleve exactamente el mismo relleno, el mismo rayado
+         * y la misma opacidad que cualquier otra figura del archivo.
+         *
+         * Un solo generador rugoso para las tres caras y recorridas en orden,
+         * igual que en pantalla: es lo que hace que el SVG salga con el mismo
+         * garabato que se estaba viendo.
+         */
+        private fun volumen(e: Element, alpha: Int): String {
+            val caras = carasDeElemento(e, scene.vista)
+            if (caras.isEmpty()) return ""
+            val salida = StringBuilder()
+
+            val sombra = sombraDeElemento(e, scene.vista)
+            if (sombra.size >= 3) {
+                val color =
+                    parseColor(e.strokeColor, alpha * OPACIDAD_DE_LA_SOMBRA / 100)
+                salida.append(
+                    "<path d=\"${Svg.caminoCerrado(sombra)}\"" +
+                        " fill=\"${Svg.hex(color)}\"${opacidad(color)}/>\n"
+                )
+            }
+
+            val rough = Rough(roughOptionsFor(e))
+            val rugoso = needsRoughFill(e)
+            val hayFondo = !isTransparent(e.backgroundColor)
+            for (cara in caras) {
+                val silueta = Svg.caminoCerrado(cara.poligono)
+                if (hayFondo && silueta.isNotEmpty()) {
+                    val conTono =
+                        e.copy(backgroundColor = aclarar(e.backgroundColor, cara.claridad))
+                    salida.append(
+                        if (rugoso) {
+                            rayado(
+                                conTono, silueta,
+                                Svg.camino(rough.fillPolygon(cara.poligono)),
+                                alpha, evenOdd = false
+                            )
+                        } else {
+                            solido(conTono, silueta, alpha, evenOdd = false)
+                        }
+                    )
+                }
+                salida.append(trazoDe(e, Svg.camino(rough.polygon(cara.poligono)), alpha))
+            }
+            return salida.toString()
         }
 
         private fun lineal(e: Element, alpha: Int): String {
@@ -500,6 +568,69 @@ object DrawSvg {
                 " xlink:href=\"$datos\"/>\n"
         }
 
+        /**
+         * La lupa, como una imagen incrustada.
+         *
+         * En pantalla vuelve a dibujar la escena dentro del cristal; en un
+         * archivo eso serían todos esos trazos otra vez, recortados a mano y a
+         * otra escala. Un trozo de imagen dice lo mismo, se abre en cualquier
+         * visor y ocupa lo que ocupa un icono. La montura y la guía sí van como
+         * figuras: son dibujo, no contenido.
+         */
+        private fun lupa(e: Element, alpha: Int, debajo: List<Element>): String {
+            val c = getElementAbsoluteCoords(e)
+            val ancho = c.x2 - c.x1
+            val alto = c.y2 - c.y1
+            if (ancho < 1 || alto < 1) return ""
+
+            val cuerpo = StringBuilder()
+            val cristal = Svg.camino(opsDePuntos(puntosDelCristal(e, c), cerrado = true))
+
+            renderizador.contenidoDeLaLupa(e, debajo)?.let { mini ->
+                comoDatos(mini)?.let { datos ->
+                    // El recorte: es lo que hace que un cristal redondo lo sea
+                    // también en el archivo y no un cuadro con un aro pintado.
+                    val id = "lupa" + e.id.hashCode().toUInt().toString(16)
+                    cuerpo.append("<defs><clipPath id=\"$id\">")
+                    cuerpo.append("<path d=\"$cristal\"/>")
+                    cuerpo.append("</clipPath></defs>\n")
+                    cuerpo.append(
+                        "<image x=\"${Svg.num(c.x1)}\" y=\"${Svg.num(c.y1)}\" " +
+                            "width=\"${Svg.num(ancho)}\" height=\"${Svg.num(alto)}\" " +
+                            "preserveAspectRatio=\"none\" clip-path=\"url(#$id)\"" +
+                            (if (alpha < 255) " opacity=\"${Svg.num(alpha / 255.0)}\"" else "") +
+                            " xlink:href=\"$datos\"/>\n"
+                    )
+                }
+            }
+
+            cuerpo.append(trazoDe(e, cristal, alpha))
+            if (lineasDeLaGuia(e).isNotEmpty()) {
+                cuerpo.append(
+                    trazoDe(
+                        e,
+                        Svg.camino(opsDePuntos(puntosDelFoco(e), cerrado = true)),
+                        alpha * 3 / 4
+                    )
+                )
+                for ((a, b) in lineasDeLaGuia(e)) {
+                    cuerpo.append(raya(b, a, parseColor(e.strokeColor, alpha), e.strokeWidth))
+                }
+            }
+            return cuerpo.toString()
+        }
+
+        /** El anillo del foco: el marco menos la figura, con regla par-impar. */
+        private fun foco(e: Element): String {
+            val c = getElementAbsoluteCoords(e)
+            val marco = Svg.camino(opsDePuntos(esquinasDeCaja(Bounds(c.x1, c.y1, c.x2, c.y2)), true))
+            val dentro = puntosDelFoco(e)
+            val hueco = if (dentro.size >= 3) Svg.camino(opsDePuntos(dentro, cerrado = true)) else ""
+            val negro = (oscurecimientoDe(e) / 100.0)
+            return "<path d=\"$marco $hueco\" fill=\"#000000\" " +
+                "fill-opacity=\"${Svg.num(negro)}\" fill-rule=\"evenodd\"/>\n"
+        }
+
         private fun recortar(bmp: Bitmap, crop: Crop?): Bitmap? {
             if (crop == null) return bmp
             return runCatching {
@@ -674,6 +805,36 @@ object DrawSvg {
                 s.append(
                     enCurvas(etiqueta, x, base, tam, e.fontFamily, alineado, tinta, false)
                 )
+            }
+            return s.toString()
+        }
+
+        /** El plano cartesiano. Ver [Plano]: aquí solo se pasa a SVG. */
+        private fun plano(e: Element, alpha: Int): String {
+            if (e.width <= 0 || e.height <= 0) return ""
+            val tinta = parseColor(e.strokeColor, alpha)
+            val grosor = e.strokeWidth.coerceAtLeast(0.5)
+            val s = StringBuilder()
+            for (trazo in trazosDelPlano(e)) {
+                // El mismo pelo y la misma transparencia que en pantalla: ver
+                // [GROSOR_DE_LA_REJILLA]. Estaban escritos a mano en los tres sitios.
+                val ancho = if (trazo.eje) grosor else GROSOR_DE_LA_REJILLA
+                val opaco = if (trazo.eje) 1.0 else ALFA_DE_LA_REJILLA
+                s.append(
+                    "<line x1=\"${Svg.num(e.x + trazo.a.x)}\" y1=\"${Svg.num(e.y + trazo.a.y)}\" " +
+                        "x2=\"${Svg.num(e.x + trazo.b.x)}\" y2=\"${Svg.num(e.y + trazo.b.y)}\" " +
+                        "stroke=\"${Svg.hex(tinta)}\" stroke-width=\"${Svg.num(ancho)}\" " +
+                        "stroke-opacity=\"$opaco\"/>\n"
+                )
+            }
+            val tam = (e.fontSize ?: 11.0).coerceAtLeast(1.0)
+            for (n in numerosDelPlano(e)) {
+                val x = if (n.horizontal) e.x + n.donde.x else e.x + n.donde.x - tam * 0.3
+                val y =
+                    if (n.horizontal) e.y + n.donde.y + tam * 1.15
+                    else e.y + n.donde.y + tam * 0.35
+                val alineado = if (n.horizontal) Paint.Align.CENTER else Paint.Align.RIGHT
+                s.append(enCurvas(n.texto, x, y, tam, e.fontFamily, alineado, tinta, false))
             }
             return s.toString()
         }

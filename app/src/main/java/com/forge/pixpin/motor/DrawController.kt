@@ -58,6 +58,12 @@ class DrawController(initial: Scene = Scene()) {
      * quedarían encima mientras dibujas y robarían el primer toque.
      */
     fun selectTool(next: Tool) {
+        // **La caja a medio hacer se cierra al irse.** El gesto del volumen deja
+        // una caja esperando altura entre fase y fase, y cambiar de herramienta
+        // ahí la dejaría pendiente para siempre: el siguiente toque con el sólido
+        // —a lo mejor media hora después y en la otra punta del dibujo— habría
+        // levantado aquella. Se fija con lo que tenga, que es lo que se ve.
+        if (tool == Tool.SOLIDO && next != Tool.SOLIDO) fijarSolido()
         tool = next
         if (next != Tool.SELECTION && next != Tool.LASSO) selectedIds = emptySet()
     }
@@ -136,9 +142,39 @@ class DrawController(initial: Scene = Scene()) {
      * [pressure] solo la usa el lápiz. [zoom] hace falta para que los umbrales
      * de toque midan lo mismo en pantalla a cualquier aumento.
      */
+    /**
+     * **Modo dedo: todo se coge más fácil.**
+     *
+     * Un dedo no es un lápiz. Los umbrales de toque están pensados para acertar
+     * con punta fina, y con el dedo se falla constantemente: se pica al lado de
+     * la raya, se coge la figura de detrás, no se agarra el tirador. Con esto
+     * puesto, todas las zonas de toque se ensanchan de golpe — no una a una, que
+     * es como se olvida siempre alguna.
+     *
+     * No cambia **nada** de lo que se dibuja: solo hasta dónde llega el dedo.
+     */
+    var modoDedo: Boolean = false
+
+    /**
+     * Cuánto alto necesita un texto para caber en un ancho dado.
+     *
+     * Lo pone quien tenga Android delante —medir letras depende de la fuente— y sirve para
+     * lo que el usuario espera de una caja de texto: **estrecharla reparte el texto en más
+     * renglones y la caja se hace más alta sola**. Sin esto, estrechar dejaba el texto
+     * saliéndose por un lado o el alto mintiendo sobre lo que hay dentro.
+     *
+     * Nulo quiere decir «aquí no hay quien mida»: entonces la caja se estira a pelo, que es
+     * lo que hacía siempre.
+     */
+    var altoDelTexto: ((Element, Double) -> Double)? = null
+
+    /** Lo que se ensancha cada zona de toque con el modo dedo puesto. */
+    private fun margenDelDedo(zoom: Double): Double =
+        DEFAULT_HIT_THRESHOLD * (if (modoDedo) ENSANCHE_DEL_DEDO else 1.0) / zoom
+
     fun pointerDown(pRaw: Pt, pressure: Double = 1.0, zoom: Double = 1.0) {
         sceneAtGestureStart = scene.elements
-        val threshold = DEFAULT_HIT_THRESHOLD / zoom
+        val threshold = margenDelDedo(zoom)
         // Solo se engancha al DIBUJAR. Al seleccionar, mover o encuadrar el
         // dedo tiene que ir donde va: tirar de él ahí sería un estorbo.
         // **Una sola pregunta al motor del imán.** Ver [Iman]: qué engancha con
@@ -196,8 +232,22 @@ class DrawController(initial: Scene = Scene()) {
                 else beginCreate(elementTypeOf(tool), p)
             }
 
-            Tool.RECTANGLE, Tool.DIAMOND, Tool.MOSAIC, Tool.SPOTLIGHT,
+            // **La lupa es una varita: lo que toca lo convierte.**
+            //
+            // No traza nada ni pregunta de qué forma la quieres. Se dibuja lo
+            // que sea con las herramientas de siempre —un círculo, un rombo, un
+            // garabato cerrado a pulso— y se toca con la lupa: ese mismo
+            // contorno pasa a enseñar en grande lo que hay debajo. Sobre el
+            // hueco no hace nada, porque no hay nada que convertir.
+            Tool.LUPA, Tool.SPOTLIGHT -> {
+                editables.lastOrNull { sirveDeLupa(it) && isPointInElement(p, it) }
+                    ?.let { deLaFigura(it, tool) }
+            }
+
+            Tool.RECTANGLE, Tool.DIAMOND, Tool.MOSAIC,
             Tool.FRAME, Tool.ESCALA_GRAFICA -> beginCreate(elementTypeOf(tool), p)
+
+            Tool.SOLIDO -> empezarSolido(p)
 
             Tool.ARROW, Tool.LINE, Tool.MEASURE, Tool.SCALE ->
                 beginCreateLinear(elementTypeOf(tool), p)
@@ -217,7 +267,7 @@ class DrawController(initial: Scene = Scene()) {
                 if (tool == Tool.HIGHLIGHTER) {
                     e = e.copy(
                         opacity = HIGHLIGHTER_OPACITY,
-                        strokeWidth = e.strokeWidth * HIGHLIGHTER_WIDTH
+                        strokeWidth = e.strokeWidth * ItemStyle.ENGORDE_DEL_MARCADOR
                     )
                 }
                 scene = scene.copy(elements = scene.elements + e)
@@ -272,7 +322,7 @@ class DrawController(initial: Scene = Scene()) {
         when (tool) {
             Tool.RELLENO -> rellenar(inicio)
             Tool.PUNTO -> plantarPunto(inicio, z)
-            Tool.TEXT -> plantarTexto(inicio, DEFAULT_HIT_THRESHOLD / z)
+            Tool.TEXT -> plantarTexto(inicio, margenDelDedo(z))
             Tool.RECORTAR -> recortar(inicio, z)
             Tool.EXTENDER -> extender(inicio, z)
             Tool.NUDO -> soldar(inicio, z)
@@ -330,7 +380,7 @@ class DrawController(initial: Scene = Scene()) {
         ).copy(reference = modoReferencia)
         scene = scene.copy(elements = scene.elements + e)
         selectedIds = setOf(e.id)
-        history.record(before, scene.elements)
+        anotar(before)
     }
 
     /**
@@ -376,7 +426,7 @@ class DrawController(initial: Scene = Scene()) {
      * escribiendo.
      */
     private fun plantarTexto(p: Pt, threshold: Double) {
-        val debajo = getElementAtPosition(editables, p, threshold)
+        val debajo = getElementAtPosition(editables, p, threshold, scene.vista)
 
         // Un texto que ya está: se abre para seguir escribiendo.
         val existente = debajo?.takeIf { it.type == ElementType.TEXT && !it.locked }
@@ -641,6 +691,27 @@ class DrawController(initial: Scene = Scene()) {
 
             is Gesture.Creating -> updateCreating(g.elementId, p, pressure)
 
+            // Primera fase: la huella, siempre sobre el suelo. Ver [empezarSolido].
+            is Gesture.Huella -> {
+                val e = scene.byId(g.elementId) ?: return
+                val h = huellaArrastrada(g.origen, p, scene.vista)
+                replace(e.copy(x = h.x, y = h.y, width = h.ancho, height = h.fondo))
+            }
+
+            // Segunda fase: **solo el desplazamiento vertical**.
+            //
+            // De `p` se lee la `y` y nada más. No es una simplificación: es lo
+            // que hace imposible la ambigüedad de la isométrica (ver
+            // [empezarSolido]) y por eso la `x` no aparece en esta cuenta.
+            //
+            // Se resta porque en pantalla la `y` crece hacia abajo: subir el dedo
+            // tiene que subir la caja.
+            is Gesture.Levantando -> {
+                val e = scene.byId(g.elementId) ?: return
+                val subido = g.alturaDePartida + (g.inicio.y - p.y)
+                replace(e.copy(altura = alturaImantada(subido)))
+            }
+
             is Gesture.Arcoing -> {
                 val e = scene.byId(g.elementId) ?: return
                 // **El arco también se imanta.** Un arco se traza casi siempre
@@ -768,14 +839,34 @@ class DrawController(initial: Scene = Scene()) {
                 seguirConLasFlechas()
             }
 
+            is Gesture.MoviendoElFoco -> {
+                val lupa = scene.byId(g.elementId) ?: return
+                replace(
+                    conFoco(
+                        lupa,
+                        Pt(
+                            g.focoInicial.x + (p.x - g.start.x),
+                            g.focoInicial.y + (p.y - g.start.y)
+                        )
+                    )
+                )
+            }
+
             is Gesture.Resizing -> {
                 applyToOriginals(g.originals) { originals ->
                     if (originals.size == 1) {
                         listOf(resizeSingleElement(originals[0], g.handle, p, keepAspectRatio, resizeFromCenter))
                     } else {
-                        resizeMultipleElements(originals, g.handle, p)
+                        // Con el segundo dedo apoyado —o con las figuras
+                        // perfectas puestas— manda la proporción; si no, la
+                        // decide el tirador. Ver [resizeMultipleElements].
+                        resizeMultipleElements(
+                            originals, g.handle, p,
+                            if (keepAspectRatio) true else null
+                        )
                     }
                 }
+                ajustarAltoDeTextos()
                 recolocarTextosDentro()
                 seguirConLasFlechas()
             }
@@ -817,7 +908,9 @@ class DrawController(initial: Scene = Scene()) {
             is Gesture.Tocando -> terminarToque(g.punto, p, zoom)
 
             is Gesture.Lassoing -> {
-                selectedIds = getElementsWithinLasso(editables, g.points, DEFAULT_HIT_THRESHOLD / zoom)
+                selectedIds = getElementsWithinLasso(
+                    editables, g.points, DEFAULT_HIT_THRESHOLD / zoom, scene.vista
+                )
                     .map { it.id }.toSet()
                 lassoPath = emptyList()
             }
@@ -825,6 +918,32 @@ class DrawController(initial: Scene = Scene()) {
             is Gesture.BoxSelecting -> selectionBox = null
 
             is Gesture.Creating -> finishCreating(g.elementId, zoom)
+
+            // Se levanta el dedo de la huella: la caja queda **pendiente de
+            // altura**, que es el estado que espera al segundo arrastre. Una
+            // huella de nada es un toque y no un dibujo: se descarta entera, como
+            // cualquier otra forma de tamaño cero.
+            is Gesture.Huella -> {
+                val e = scene.byId(g.elementId)
+                if (e == null || (e.width < MIN_CREATED_SIZE && e.height < MIN_CREATED_SIZE)) {
+                    scene = scene.copy(elements = scene.elements.filter { it.id != g.elementId })
+                    solidoPendiente = null
+                } else {
+                    solidoPendiente = e.id
+                }
+            }
+
+            // **Un toque la fija; un arrastre no.** Soltar después de levantar
+            // deja la caja pendiente a propósito: acertar la altura de un vistazo
+            // no sale a la primera, y así se puede corregir tantas veces como haga
+            // falta sin volver a empezar. El toque es el «ya está», y es el mismo
+            // gesto que cierra las demás herramientas de un toque.
+            is Gesture.Levantando -> {
+                val z = zoom.coerceAtLeast(0.0001)
+                val quieto = kotlin.math.hypot(p.x - g.inicio.x, p.y - g.inicio.y) <=
+                    TOQUE_QUIETO / z
+                if (quieto) fijarSolido()
+            }
 
             // Se levanta el lápiz del transportador: el arco queda hecho y el
             // óvalo guía deja de estar pendiente. Un barrido de nada es no haber
@@ -895,6 +1014,12 @@ class DrawController(initial: Scene = Scene()) {
     /** Cancela el gesto en curso y deshace lo que llevaba hecho. */
     fun cancel() {
         if (gesture !is Gesture.None) scene = scene.copy(elements = sceneAtGestureStart)
+        // La caja a medio hacer se va con el gesto: la escena vuelve a como
+        // estaba, así que dejar apuntado un id que ya no existe haría que el
+        // siguiente toque con el sólido intentara levantar un fantasma.
+        if (gesture is Gesture.Huella || gesture is Gesture.Levantando) {
+            solidoPendiente = null
+        }
         gesture = Gesture.None
         selectionBox = null
         lassoPath = emptyList()
@@ -1197,6 +1322,129 @@ class DrawController(initial: Scene = Scene()) {
     /** ¿La forma en curso crece desde el centro? */
     private var desdeElCentro: Boolean = false
 
+    /**
+     * Saca una lupa de una figura ya dibujada, con su misma forma.
+     *
+     * Nace **encima de ella y marcada**: así se ve al momento que ha aparecido
+     * un duplicado —lo primero que se hace es apartarlo—, y con la flecha puesta
+     * el arrastre siguiente ya lo mueve. La figura de origen no se toca; queda
+     * marcando el sitio, que es lo que le da sentido a la lupa.
+     */
+    private fun deLaFigura(fuente: Element, herramienta: Tool) {
+        val estilo = estiloActivo()
+        val id = randomId()
+        val semilla = (0..999_999).random()
+        val nueva = if (herramienta == Tool.SPOTLIGHT) {
+            focoDesdeFigura(fuente, estilo, id, semilla)
+        } else {
+            lupaDesdeFigura(fuente, estilo, id, semilla)
+        } ?: return
+        val before = scene.elements
+        // **La figura de origen se va con ella.** Se ha convertido, no
+        // duplicado: dejándola puesta quedaban dos contornos idénticos uno
+        // encima de otro, y al apartar la lupa el de abajo parecía un dibujo
+        // suelto que nadie había hecho. Lo que marcaba el sitio ahora es la
+        // propia zona mirada, que sale al tocar la lupa.
+        //
+        // Se borra marcándola, no quitándola: así deshacer la devuelve **a su
+        // sitio** en el montón y no al final.
+        scene = scene.copy(
+            elements = scene.elements.map {
+                if (it.id == fuente.id) it.copy(isDeleted = true).touched() else it
+            } + nueva
+        )
+        selectTool(Tool.SELECTION)
+        selectedIds = setOf(nueva.id)
+        anotar(before)
+    }
+
+    // ---------------------------------------------------------------------
+    // La caja en volumen: un gesto en dos fases
+    // ---------------------------------------------------------------------
+
+    /**
+     * La caja que está esperando a que se le dé altura, si hay alguna.
+     *
+     * Es el estado que separa las dos fases del gesto, y va público porque la
+     * interfaz lo necesita para decir «ahora levántala»: sin un aviso, quien
+     * suelta el dedo después de dibujar la huella cree que la herramienta ha
+     * fallado —ve una plancha en el suelo y nada más— y vuelve a arrastrar sin
+     * saber que eso ya es la segunda fase.
+     */
+    var solidoPendiente: String? = null
+        private set
+
+    /**
+     * Empieza —o continúa— la caja en volumen.
+     *
+     * ## Por qué el gesto va en dos fases, y no en una
+     *
+     * **Es la decisión de diseño de toda la herramienta, y no es una comodidad:
+     * es que en una fase no se puede.** En isométrica, arrastrar el dedo en
+     * vertical puro hacia arriba tiene dos lecturas que dan **exactamente el
+     * mismo movimiento en pantalla**: subir en `z`, o avanzar en diagonal por el
+     * suelo hacia `(k, k, 0)`. Las dos suben el punto los mismos píxeles y
+     * ninguna lo mueve de lado. No hay forma de saber cuál quería el usuario, y
+     * adivinar mal es peor que no adivinar — una caja que se levanta cuando
+     * querías moverla es un fallo que hay que deshacer, y pasa una de cada dos
+     * veces justo porque nadie arrastra perfectamente en diagonal. El porqué
+     * geométrico está entero en [desproyectar].
+     *
+     * Partiéndolo, la ambigüedad **no puede aparecer**:
+     *
+     * 1. El primer arrastre dibuja la huella **sobre el suelo**, imantada a la
+     *    retícula isométrica. Todo lo que hace el dedo se interpreta como suelo,
+     *    así que no hay nada que confundir.
+     * 2. Se suelta, y el siguiente arrastre **solo lee el desplazamiento vertical
+     *    de la pantalla** y con él levanta la caja. Lo que se mueva de lado se
+     *    ignora del todo — no se descarta por pequeño ni se reparte entre los dos
+     *    ejes: sencillamente no se mira. Al no leerse el eje horizontal, la
+     *    lectura «es una diagonal por el suelo» no existe.
+     *
+     * Un toque la fija; se puede seguir arrastrando tantas veces como haga falta
+     * hasta que quede a la altura que se quería.
+     */
+    private fun empezarSolido(p: Pt) {
+        val pendiente = solidoPendiente?.let { scene.byId(it) }
+        if (pendiente != null && !pendiente.isDeleted) {
+            gesture = Gesture.Levantando(pendiente.id, p, pendiente.altura ?: 0.0)
+            return
+        }
+        // La altura nace **nula y no cero**: es el estado real «todavía no se ha
+        // levantado», y lo que hace que mientras se dibuja la huella se pinte solo
+        // la sombra y la planta. Ver [Element.altura].
+        val e = newElement(ElementType.SOLIDO, p.x, p.y, scene.style)
+            .copy(reference = modoReferencia, altura = null)
+        scene = scene.copy(elements = scene.elements + e)
+        solidoPendiente = null
+        gesture = Gesture.Huella(e.id, p)
+    }
+
+    /**
+     * Da por buena la caja pendiente y cierra el gesto.
+     *
+     * Una caja que se fija sin haberse levantado nunca se queda con **un cuadro
+     * de alto** en vez de con cero: un sólido de altura nula es una plancha, y
+     * como se pinta con el mismo tono que la tapa no se distingue de un
+     * rectángulo cualquiera. Quien toca la herramienta del volumen quiere volumen;
+     * si de verdad quería una plancha, tiene el rectángulo.
+     */
+    fun fijarSolido() {
+        val e = solidoPendiente?.let { scene.byId(it) }
+        solidoPendiente = null
+        if (e == null || e.isDeleted) return
+        if ((e.altura ?: 0.0) > 0.0) return
+
+        val before = scene.elements
+        replace(e.copy(altura = PASO_ISO).touched())
+        // **Solo se anota si no hay gesto en marcha.** Con el dedo todavía
+        // apoyado —el toque que fija la altura— quien anota es el `commit` del
+        // final de `pointerUp`, y hacerlo también aquí metería dos entradas en el
+        // historial para un solo gesto: habría que deshacer dos veces para
+        // quitar una caja.
+        if (gesture is Gesture.None) anotar(before)
+    }
+
     private fun beginCreate(type: ElementType, p: Pt) {
         origenCreacion = p
         // La hoja siempre de esquina a esquina: se coloca mirando dónde caen
@@ -1334,8 +1582,11 @@ class DrawController(initial: Scene = Scene()) {
     private fun finishCreating(id: String, zoom: Double) {
         val e = scene.byId(id) ?: return
 
-        val tooSmall = !e.isFreeDraw && !e.isLinear && e.width < MIN_CREATED_SIZE &&
-            e.height < MIN_CREATED_SIZE
+        // La lupa no se descarta por pequeña: se le da el tamaño mínimo. Un
+        // toque suelto con la lupa puesta es «quiero una lupa aquí», y borrarla
+        // por no haber arrastrado lo suficiente parece que la herramienta falla.
+        val tooSmall = !e.isFreeDraw && !e.isLinear && e.type != ElementType.LUPA &&
+            e.width < MIN_CREATED_SIZE && e.height < MIN_CREATED_SIZE
         val degenerate = e.isLinear && absolutePoints(e).let { pts ->
             pts.size < 2 ||
                 kotlin.math.hypot(pts.last().x - pts.first().x, pts.last().y - pts.first().y) <
@@ -1347,6 +1598,14 @@ class DrawController(initial: Scene = Scene()) {
         }
 
         var finished = e
+        // **La lupa nace con su foco escrito**, aunque sea el centro del cristal.
+        // Con el foco a nulo, «a dónde miro» se calcula del cristal cada vez, así
+        // que la lupa se lo llevaría detrás al moverla por cualquier camino que
+        // no sea el de siempre —arrastrar con clavos puestos, por ejemplo—.
+        // Escribiéndolo aquí, apartar el cristal siempre deja el foco donde está.
+        if (e.type == ElementType.LUPA) {
+            finished = lupaNueva(finished).let { it.copy(foco = focoDe(it)) }
+        }
         if (e.type == ElementType.ARROW) {
             val pts = absolutePoints(e)
             val others = scene.visible.filter { it.id != id }
@@ -1445,6 +1704,29 @@ class DrawController(initial: Scene = Scene()) {
 
         val selected = selectedElements()
 
+        // 0,75. ¿El recuadro de una lupa? **Antes que la figura de debajo.**
+        //    Lo que se mira suele caer encima de algo dibujado, así que el toque
+        //    se lo llevaría ese algo y no habría forma de apuntar la lupa a otro
+        //    sitio. Solo cuenta **fuera del cristal**: donde los dos se solapan
+        //    —una lupa recién puesta está encima de lo que mira— arrastrar
+        //    significa apartar la lupa, que es el gesto que se hace primero.
+        // **El foco también tiene zona que mover.** Es la figura que se resalta,
+        // y hasta ahora solo se podía estirar el marco de fuera: lo de dentro
+        // —que es lo que de verdad se está señalando— no había forma de tocarlo.
+        val laLupa = selected.singleOrNull()?.takeIf {
+            it.type == ElementType.LUPA || it.type == ElementType.SPOTLIGHT
+        }
+        if (laLupa != null) {
+            // Con `hitElementItself` y no comparando la caja a pelo: esa
+            // comparación ignora el giro, así que con la lupa girada el dedo
+            // caía «fuera del cristal» estando dentro y se ponía a mover el foco.
+            val dentroDelCristal = hitElementItself(p, laLupa, UMBRAL_GUIA / zoom, scene.vista)
+            if (!dentroDelCristal && tocaElFoco(laLupa, p, UMBRAL_GUIA / zoom)) {
+                gesture = Gesture.MoviendoElFoco(laLupa.id, p, focoDe(laLupa))
+                return
+            }
+        }
+
         // 1. ¿Un tirador? Tiene prioridad sobre todo lo demás: está encima de
         //    la forma y si perdiera, redimensionar sería imposible.
         if (selected.isNotEmpty()) {
@@ -1495,7 +1777,7 @@ class DrawController(initial: Scene = Scene()) {
         // soltarlo volvía de un salto al centro de una caja que no se había
         // movido. Cogiendo la caja, la palabra se va con ella, que es lo que uno
         // espera al tirar de la etiqueta de un diagrama.
-        val hit = getElementAtPosition(editables, p, threshold)
+        val hit = getElementAtPosition(editables, p, threshold, scene.vista)
             ?.let { tocado ->
                 if (tocado.type == ElementType.TEXT) contenedorDe(tocado, editables) ?: tocado
                 else tocado
@@ -1592,7 +1874,28 @@ class DrawController(initial: Scene = Scene()) {
             selectedIds = setOf(e.id)
             selectTool(Tool.SELECTION)
         }
-        history.record(before, scene.elements)
+        anotar(before)
+    }
+
+    /**
+     * Mete elementos ya hechos en el dibujo y los deja marcados.
+     *
+     * Es la puerta por la que entra lo que no se traza con el dedo: una figura
+     * de la lista, una tabla pegada de la hoja de cálculo. Llegan colocados —
+     * quien los estampa ya sabe dónde los quiere— así que aquí solo se añaden.
+     *
+     * **Se quedan seleccionados y con la flecha puesta.** Lo primero que se hace
+     * con algo recién estampado es moverlo un poco, y encontrárselo ya cogido
+     * ahorra el toque de buscarlo; dejar la herramienta anterior activa sería
+     * dibujar encima al primer intento.
+     */
+    fun insertar(elementos: List<Element>) {
+        if (elementos.isEmpty()) return
+        val before = scene.elements
+        scene = scene.copy(elements = scene.elements + elementos)
+        selectTool(Tool.SELECTION)
+        selectedIds = elementos.map { it.id }.toSet()
+        anotar(before)
     }
 
     /**
@@ -1613,6 +1916,84 @@ class DrawController(initial: Scene = Scene()) {
         scene = scene.copy(elements = fijados + scene.elements.filter { it.id !in ids })
         selectedIds = selectedIds - ids
     }
+
+    /**
+     * Clava lo que hay marcado **en su sitio**.
+     *
+     * Clavado no se mueve, no se estira y el borrador no se lo lleva: es lo que
+     * se le pide a una foto que está ahí para dibujar encima de ella. Se hace
+     * por elemento y no de golpe porque en el mismo dibujo suele haber una que
+     * hace de fondo y otras que todavía se están colocando.
+     *
+     * **Se anota en el historial**, al contrario que [fijarAlFondo]: aquello es
+     * cómo está montada la escena y esto es algo que el usuario acaba de hacer,
+     * así que deshacer tiene que devolverlo.
+     */
+    /**
+     * Marca lo clavado que haya en [p], para poder soltarlo.
+     *
+     * **Lo clavado no responde al toque** —para eso se clava— así que sin una
+     * puerta de atrás, poner el candado era una decisión sin vuelta: la foto
+     * quedaba intocable para siempre. Esta es la puerta: la pulsación larga, que
+     * es el gesto de «sé lo que estoy haciendo» de toda la vida.
+     */
+    fun marcarClavadoEn(p: Pt, threshold: Double): Boolean {
+        val clavado = scene.visible.lastOrNull {
+            it.locked && hitElementItself(p, it, threshold, scene.vista)
+        } ?: return false
+        selectTool(Tool.SELECTION)
+        selectedIds = setOf(clavado.id)
+        return true
+    }
+
+    /** Suelta lo marcado, aunque esté clavado. El botón del candado abierto. */
+    fun soltarSeleccion() {
+        val ids = selectedIds
+        if (ids.isEmpty()) return
+        val before = scene.elements
+        scene = scene.copy(
+            elements = scene.elements.map {
+                if (it.id in ids) it.copy(locked = false).touched() else it
+            }
+        )
+        anotar(before)
+    }
+
+    /** Si lo marcado está clavado. Decide qué candado enseñar. */
+    val seleccionClavada: Boolean
+        get() = selectedIds.isNotEmpty() &&
+            scene.elements.filter { it.id in selectedIds }.all { it.locked }
+
+    fun clavarSeleccion() {
+        val ids = selectedIds
+        if (ids.isEmpty()) return
+        val before = scene.elements
+        scene = scene.copy(
+            elements = scene.elements.map {
+                if (it.id in ids) it.copy(locked = true).touched() else it
+            }
+        )
+        anotar(before)
+    }
+
+    /**
+     * Suelta todo lo clavado.
+     *
+     * Va sin selección a propósito: **lo clavado no se puede seleccionar**, así
+     * que si soltar dependiera de tenerlo marcado no habría forma de volver
+     * atrás. Es el botón que rescata una foto que se clavó sin querer.
+     */
+    fun soltarTodo() {
+        if (scene.elements.none { it.locked }) return
+        val before = scene.elements
+        scene = scene.copy(
+            elements = scene.elements.map { if (it.locked) it.copy(locked = false).touched() else it }
+        )
+        anotar(before)
+    }
+
+    /** Si hay algo clavado en el dibujo. Para saber si ofrecer soltarlo. */
+    val hayClavados: Boolean get() = scene.elements.any { it.locked && !it.isDeleted }
 
     /** Cambia el texto de un elemento de texto (lo que escribe el teclado). */
     fun updateText(id: String, text: String, measuredWidth: Double, measuredHeight: Double) {
@@ -1689,7 +2070,97 @@ class DrawController(initial: Scene = Scene()) {
     fun changeStyle(change: (ItemStyle) -> ItemStyle, toElement: (Element) -> Element) {
         val before = scene.elements
         scene = applyStyle(scene, selectedIds, change, toElement)
-        history.record(before, scene.elements)
+        anotar(before)
+    }
+
+    /**
+     * El estilo que hay que **enseñar** en los mandos.
+     *
+     * El de lo marcado si hay algo marcado, y si no, el del pincel. Los mandos
+     * enseñaban siempre el del pincel, y eso es lo que hacía que tocar uno se
+     * llevara por delante los demás: el panel decía negro y gordo mientras la
+     * figura marcada era roja y fina, así que subir la opacidad le encajaba de
+     * paso el negro y el gordo. Ver [estiloDe].
+     *
+     * Con varios marcados manda el primero. No hay respuesta buena ahí —tienen
+     * estilos distintos por definición— y la del primero al menos es una que se
+     * ve en la pantalla.
+     */
+    /**
+     * El estilo que enseñan los mandos.
+     *
+     * **Manda el primero de lo marcado, salvo en la letra.** Una tabla del lienzo son
+     * muchos elementos —los rectángulos del marco, los de la cabecera y los textos de las
+     * celdas— y el primero del montón es un rectángulo, que no tiene tamaño de letra. El
+     * mando leía entonces el de fábrica y se quedaba clavado a media barra por muchas
+     * veces que se moviera: subía la letra de verdad, pero el mango no seguía a nada.
+     *
+     * Así que para la letra se busca **el primero que tenga letra**. Es el único campo con
+     * este problema porque es el único que solo llevan algunos tipos de elemento.
+     */
+    fun estiloActivo(): ItemStyle {
+        val marcados = selectedElements()
+        val base = marcados.firstOrNull()?.let { estiloDe(it) } ?: return scene.style
+        val conLetra = marcados.firstOrNull { it.fontSize != null } ?: return base
+        return base.copy(
+            fontSize = conLetra.fontSize ?: base.fontSize,
+            fontFamily = conLetra.fontFamily ?: base.fontFamily
+        )
+    }
+
+    /**
+     * Cambia el estilo tocando **solo el mando que se ha movido**.
+     *
+     * Lo que llega de un panel de estilos no es «ponle este estilo» sino «súbele
+     * la opacidad»: el estilo entero con un campo distinto. Volcarlo tal cual
+     * escribía los otros quince encima. Aquí se compara con [estiloActivo] —lo
+     * que el panel estaba enseñando— y se aplica la diferencia, a lo marcado y
+     * al pincel.
+     *
+     * [remedir] es para el texto: cambiarle la letra obliga a volver a medir su
+     * caja, y eso necesita Android. Quien tenga contexto lo pone.
+     */
+    fun cambiarEstilo(nuevo: ItemStyle, remedir: (Element) -> Element = { it }) {
+        val anterior = estiloActivo()
+        if (nuevo == anterior) return
+        val before = scene.elements
+        val elementos = scene.elements.map {
+            if (it.id in selectedIds && !it.locked) {
+                remedir(estiloAplicado(it, anterior, nuevo)).touched()
+            } else it
+        }
+        scene = scene.copy(
+            elements = elementos,
+            // **Y el pincel también, pero solo en lo que se tocó.** Si se
+            // volcara entero, marcar una figura roja y subirle la opacidad
+            // dejaría el pincel en rojo sin que nadie lo haya pedido.
+            style = conCambios(scene.style, anterior, nuevo)
+        )
+        anotar(before)
+    }
+
+    /**
+     * Le da a cada texto marcado el alto que pide su ancho.
+     *
+     * Se hace **mientras se arrastra**, no al soltar: la caja tiene que crecer a la vez que
+     * el texto se reparte, que es lo que deja ver lo que está pasando. Y solo cuando el
+     * texto no está dentro de otra figura —ahí manda el contenedor, no el texto—.
+     */
+    private fun ajustarAltoDeTextos() {
+        val medir = altoDelTexto ?: return
+        val textos = scene.elements.filter {
+            it.id in selectedIds && it.type == ElementType.TEXT && it.containerId == null
+        }
+        if (textos.isEmpty()) return
+        scene = scene.copy(
+            elements = scene.elements.map { e ->
+                if (e.id !in selectedIds || e.type != ElementType.TEXT || e.containerId != null) {
+                    return@map e
+                }
+                val alto = medir(e, e.width)
+                if (kotlin.math.abs(alto - e.height) < 0.5) e else e.copy(height = alto).touched()
+            }
+        )
     }
 
     fun undo() {
@@ -1712,6 +2183,25 @@ class DrawController(initial: Scene = Scene()) {
         scene = scene.copy(viewport = v)
     }
 
+    /**
+     * Gira la cámara un cuarto de vuelta. Cuatro veces devuelve a la de partida.
+     *
+     * **No entra en el historial**, y eso es a propósito: mirar desde otro lado
+     * no cambia el dibujo, así que deshacer no tiene por qué devolver la vista —
+     * sería como si deshacer también deshiciera el zoom. Va por el mismo camino
+     * que [setViewport], que es el encuadre, y no por el de las modificaciones.
+     */
+    fun girarVista(atras: Boolean = false) {
+        // La caja a medio hacer se cierra antes de girar: la altura se levanta
+        // leyendo el desplazamiento vertical, y si la vista cambiara a mitad del
+        // gesto la caja seguiría subiendo desde una cámara que ya no es la que
+        // había cuando se apoyó el dedo.
+        fijarSolido()
+        scene = scene.copy(
+            vista = if (atras) scene.vista.anterior() else scene.vista.siguiente()
+        )
+    }
+
     /** Reemplaza la escena entera (al cargar de disco). Vacía el historial. */
     fun load(next: Scene) {
         scene = next
@@ -1720,6 +2210,9 @@ class DrawController(initial: Scene = Scene()) {
         pendingTextId = null
         pendingScaleId = null
         pendingCotaId = null
+        // El id de la caja a medio hacer es de la escena que se va; en la que
+        // llega no significa nada.
+        solidoPendiente = null
         history.clear()
     }
 
@@ -1744,7 +2237,23 @@ class DrawController(initial: Scene = Scene()) {
     private inline fun mutate(block: (List<Element>) -> List<Element>) {
         val before = scene.elements
         scene = scene.copy(elements = block(before))
+        anotar(before)
+    }
+
+    /**
+     * Anota un cambio ya hecho **y mueve con él la base del gesto**.
+     *
+     * Lo segundo es lo que impide que el mismo cambio entre dos veces en el
+     * historial. Las herramientas de un toque —el punto, recortar, extender— se
+     * cierran desde `pointerUp`, así que anotaban lo suyo y acto seguido
+     * [commit] volvía a comparar contra los elementos de cuando bajó el dedo y
+     * anotaba el mismo delta otra vez. Para quien dibuja eso es un deshacer que
+     * no hace nada: el primero devuelve el punto y el segundo se come el gesto
+     * sin que se mueva nada en la pantalla.
+     */
+    private fun anotar(before: List<Element>) {
         history.record(before, scene.elements)
+        sceneAtGestureStart = scene.elements
     }
 
     private inline fun mutateSelected(block: (List<Element>) -> List<Element>) {
@@ -1755,10 +2264,7 @@ class DrawController(initial: Scene = Scene()) {
     }
 
     /** Anota en el historial lo ocurrido durante el gesto. */
-    private fun commit() {
-        history.record(sceneAtGestureStart, scene.elements)
-        sceneAtGestureStart = scene.elements
-    }
+    private fun commit() = anotar(sceneAtGestureStart)
 
     private companion object {
         /**
@@ -1772,9 +2278,6 @@ class DrawController(initial: Scene = Scene()) {
 
         /** Opacidad del marcador: se tiene que ver lo subrayado por debajo. */
         const val HIGHLIGHTER_OPACITY = 40
-
-        /** Cuánto engorda el marcador respecto al lápiz. */
-        const val HIGHLIGHTER_WIDTH = 5.0
 
         /** Por debajo de esto no se ha trazado nada sobre el transportador. */
         const val MIN_ARCO_BARRIDO = 0.05
@@ -1813,10 +2316,11 @@ class DrawController(initial: Scene = Scene()) {
         Tool.TEXT -> ElementType.TEXT
         Tool.IMAGE -> ElementType.IMAGE
         Tool.MOSAIC -> ElementType.MOSAIC
-        Tool.SPOTLIGHT -> ElementType.SPOTLIGHT
+        Tool.LUPA -> ElementType.LUPA
         Tool.SERIAL -> ElementType.SERIAL
         Tool.FRAME -> ElementType.FRAME
         Tool.ESCALA_GRAFICA -> ElementType.ESCALA_GRAFICA
+        Tool.SOLIDO -> ElementType.SOLIDO
         // Escalar dibuja una cota como cualquier otra: la diferencia no está en
         // lo que se traza, sino en que al soltarla se pregunta cuánto mide.
         Tool.MEASURE, Tool.SCALE -> ElementType.MEASURE
@@ -1840,6 +2344,9 @@ class DrawController(initial: Scene = Scene()) {
 }
 
 /** Qué se está haciendo con el dedo apoyado. */
+/** Cuánto se ensancha el toque con el modo dedo. Ver [DrawController.modoDedo]. */
+private const val ENSANCHE_DEL_DEDO = 2.6
+
 private sealed interface Gesture {
     data object None : Gesture
     data class Creating(val elementId: String) : Gesture
@@ -1854,6 +2361,18 @@ private sealed interface Gesture {
      * justo lo contrario de lo que se quiere.
      */
     data class GirandoEtiqueta(val elementId: String) : Gesture
+
+    /**
+     * Arrastrando **a dónde mira** una lupa.
+     *
+     * Gesto propio por lo mismo que la letra del punto: lo que se mueve no es el
+     * elemento sino una propiedad suya, y el cristal se tiene que quedar
+     * exactamente donde está. Con un `Moving` se habría llevado la lupa entera.
+     */
+    data class MoviendoElFoco(
+        val elementId: String, val start: Pt, val focoInicial: Pt
+    ) : Gesture
+
     data class Resizing(val handle: HandleType, val originals: List<Element>) : Gesture
     /**
      * Arrastrando **una punta** de una flecha o una línea.
@@ -1894,6 +2413,32 @@ private sealed interface Gesture {
      * empiezan exactamente igual — con un dedo posándose en la pantalla.
      */
     data class Tocando(val punto: Pt) : Gesture
+
+    /**
+     * Primera fase de la caja en volumen: **la huella, sobre el suelo**.
+     *
+     * Guarda dónde bajó el dedo porque ese punto es el ancla de la retícula
+     * isométrica y el elemento no sirve para recordarlo: su `x`/`y` se recolocan
+     * en cada fotograma según hacia dónde se arrastre. Es lo mismo que le pasa a
+     * [DrawController.origenCreacion] con las formas planas.
+     */
+    data class Huella(val elementId: String, val origen: Pt) : Gesture
+
+    /**
+     * Segunda fase: **levantando la caja**.
+     *
+     * De [inicio] solo se usa la `y` para la altura —el porqué está en
+     * `empezarSolido`— pero se guarda el punto entero porque la `x` sí hace falta
+     * para lo otro: decidir si al soltar hubo arrastre o fue un toque, que es lo
+     * que fija la altura.
+     *
+     * [alturaDePartida] es la que ya tenía, no cero: sin ella cada arrastre
+     * empezaría desde el suelo y no se podría corregir una altura, solo volver a
+     * ponerla desde el principio.
+     */
+    data class Levantando(
+        val elementId: String, val inicio: Pt, val alturaDePartida: Double
+    ) : Gesture
 
     /**
      * Arrancando un clavo para volver a clavarlo en otro sitio.

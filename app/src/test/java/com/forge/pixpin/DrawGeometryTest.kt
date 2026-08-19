@@ -225,6 +225,60 @@ class DrawGeometryTest {
         assertEquals(0.0, nb.x, 1e-6)
     }
 
+    /**
+     * Un garabato trazado hacia la izquierda y hacia arriba: **puntos
+     * negativos**, que es el caso que se sale de la cuenta ingenua.
+     */
+    private fun garabato() = Element(
+        id = "f", type = ElementType.FREEDRAW, x = 100.0, y = 100.0,
+        width = 50.0, height = 30.0, seed = 1,
+        points = listOf(Pt(0.0, 0.0), Pt(-50.0, 0.0), Pt(-50.0, -30.0)),
+        pressures = listOf(1.0, 1.0, 1.0)
+    )
+
+    /**
+     * El mismo invariante de arriba, pero en lo que no tiene su origen en la
+     * esquina de su caja: el origen de un garabato es su **primer punto**, y
+     * colocándolo en `x1` a secas el trazo pegaba un salto nada más agarrar el
+     * tirador.
+     */
+    @Test
+    fun `redimensionar un garabato con puntos negativos deja clavada el ancla`() {
+        val e = garabato()
+        val antes = getElementAbsoluteCoords(e)
+        val despues = getElementAbsoluteCoords(
+            resizeSingleElement(e, HandleType.SE, Pt(antes.x2 + 50, antes.y2 + 50))
+        )
+        assertEquals(antes.x1, despues.x1, 1e-6)
+        assertEquals(antes.y1, despues.y1, 1e-6)
+        assertEquals(antes.x2 + 50, despues.x2, 1e-6)
+        assertEquals(antes.y2 + 50, despues.y2, 1e-6)
+    }
+
+    /** Y voltearlo sobre su propio centro tiene que dejarlo donde estaba. */
+    @Test
+    fun `voltear un garabato con puntos negativos no lo desplaza`() {
+        val e = garabato()
+        val antes = getElementAbsoluteCoords(e)
+        val despues = getElementAbsoluteCoords(flipHorizontal(listOf(e)).first())
+        assertEquals(antes.x1, despues.x1, 1e-6)
+        assertEquals(antes.x2, despues.x2, 1e-6)
+        assertEquals(antes.y1, despues.y1, 1e-6)
+        assertEquals(antes.y2, despues.y2, 1e-6)
+    }
+
+    /** Y el trazo se refleja de verdad: lo que iba a la izquierda va a la derecha. */
+    @Test
+    fun `voltear un garabato refleja su recorrido`() {
+        val e = garabato()
+        val pts = absolutePoints(flipHorizontal(listOf(e)).first())
+        val eje = getElementAbsoluteCoords(e).let { (it.x1 + it.x2) / 2 }
+        absolutePoints(e).forEachIndexed { i, p ->
+            assertEquals(2 * eje - p.x, pts[i].x, 1e-6)
+            assertEquals(p.y, pts[i].y, 1e-6)
+        }
+    }
+
     @Test
     fun `duplicar cambia id y semilla pero no la forma`() {
         val e = rect(5.0, 5.0)

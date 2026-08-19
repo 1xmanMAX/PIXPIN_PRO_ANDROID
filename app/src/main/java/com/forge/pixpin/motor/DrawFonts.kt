@@ -61,6 +61,21 @@ object DrawFonts {
      * selecciona por donde no es y se recorta al exportar, así que medirlo de
      * dos maneras distintas es garantía de que una de las dos esté mal.
      */
+    /**
+     * Una regla de medir renglones, ya preparada.
+     *
+     * [medirTexto] monta una brocha nueva en cada llamada, y ajustar un texto al ancho de
+     * su caja pregunta **una vez por palabra**: con un párrafo y el dedo arrastrando, eso
+     * son cientos de brochas por segundo. Aquí la brocha se monta una vez y lo que se
+     * devuelve es la función de medir. Ver [renglonesQueCaben].
+     */
+    fun reglaDeAnchos(context: Context, familia: Int?, tamano: Double): (String) -> Double {
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.textSize = tamano.toFloat()
+        p.typeface = typefaceFor(context, familia)
+        return { texto -> p.measureText(texto).toDouble() }
+    }
+
     fun medirTexto(
         context: Context, texto: String, familia: Int?, tamano: Double
     ): Pair<Double, Double> {
@@ -68,7 +83,26 @@ object DrawFonts {
         p.textSize = tamano.toFloat()
         p.typeface = typefaceFor(context, familia)
         val lineas = texto.split('\n')
-        val ancho = lineas.maxOfOrNull { p.measureText(it).toDouble() } ?: 0.0
+        val tinta = android.graphics.Rect()
+        val ancho = lineas.maxOfOrNull { linea ->
+            // **El avance no es lo que ocupa la letra.**
+            //
+            // `measureText` devuelve cuánto hay que correrse para escribir la
+            // siguiente letra, y la tinta de la última puede salirse de ahí: en
+            // una letra manuscrita como Excalifont los rabos y las curvas se
+            // pasan del avance casi siempre. Midiendo solo el avance, la caja
+            // quedaba un pelo corta y el final del texto se salía por la
+            // derecha — de alto sobraba sitio, porque el interlineado es
+            // generoso, y por eso solo se notaba a lo ancho.
+            //
+            // Se mide también la caja de tinta y manda la mayor de las dos. Y
+            // si la tinta empieza a la izquierda del origen —`left` negativo—
+            // eso también es ancho que hay que reservar.
+            val avance = p.measureText(linea).toDouble()
+            p.getTextBounds(linea, 0, linea.length, tinta)
+            val loQueOcupa = tinta.right.toDouble() - minOf(0, tinta.left).toDouble()
+            maxOf(avance, loQueOcupa)
+        } ?: 0.0
         // El interlineado de Excalidraw es 1,25 del tamaño de fuente.
         return ancho to lineas.size * tamano * 1.25
     }

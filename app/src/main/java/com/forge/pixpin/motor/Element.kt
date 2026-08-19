@@ -37,8 +37,33 @@ enum class ElementType {
     /** Tapa lo que hay debajo, pixelado o desenfocado. */
     @SerialName("pixpin-mosaic") MOSAIC,
 
-    /** Oscurece todo MENOS su caja. Se pinta siempre el último. */
+    /**
+     * Oscurece todo MENOS su caja. Se pinta siempre el último.
+     *
+     * **Ya no se puede crear**: la sustituyó [LUPA], que hace lo mismo —señalar
+     * un sitio— pero enseñándolo en vez de escondiendo el resto. El tipo se
+     * queda porque los dibujos guardados lo llevan dentro, y quitarlo del todo
+     * haría que un archivo de antes no se pudiera ni abrir.
+     */
     @SerialName("pixpin-spotlight") SPOTLIGHT,
+
+    /**
+     * La lupa: **un trozo del dibujo, enseñado en grande en otro sitio**.
+     *
+     * Son dos rectángulos y no uno, y ahí está toda la idea:
+     *
+     * - **La caja del elemento** (`x`, `y`, `width`, `height`) es el cristal:
+     *   dónde se ve el resultado.
+     * - **[foco]** es a dónde mira, en coordenadas del dibujo. Lo que se recoge
+     *   es un recuadro centrado ahí, [aumento] veces más pequeño que el cristal
+     *   — por eso lo que entra sale agrandado justo ese tanto.
+     *
+     * Guardar el foco **en absoluto y no relativo al cristal** es lo que permite
+     * apartar el resultado sin mover lo que se está mirando, que es para lo que
+     * sirve una lupa en una lámina: el detalle se ve al lado, con su flecha, sin
+     * taparlo.
+     */
+    @SerialName("pixpin-lupa") LUPA,
 
     /** Un círculo con un número dentro: 1, 2, 3… El número va en `text`. */
     @SerialName("pixpin-serial") SERIAL,
@@ -114,7 +139,50 @@ enum class ElementType {
      * y la letra se dibujan alrededor, como el rótulo de una cota, para que
      * arrastrarlo lo mueva en vez de estirarlo. Ver [Puntos].
      */
-    @SerialName("pixpin-point") PUNTO
+    @SerialName("pixpin-point") PUNTO,
+
+    /**
+     * El plano cartesiano: **los ejes para graficar una función**.
+     *
+     * No es «unos ejes dibujados»: es un instrumento que sabe cuánto vale una
+     * unidad, así que puede decir dónde cae el (3, −2) y seguir sabiéndolo
+     * después de estirarlo. De ahí sale su comportamiento raro al redimensionar
+     * —por un lado aparecen más números, por una esquina los mismos más
+     * grandes— que es lo que no podría hacer un dibujo. Ver [Plano].
+     */
+    @SerialName("pixpin-axes") PLANO,
+
+    /**
+     * La caja del boceto en volumen: **la única pieza 3D del motor**.
+     *
+     * Es un rectángulo apoyado en el suelo isométrico más lo que levanta. Se
+     * pinta como tres caras —la tapa y dos paredes— con el mismo color base a
+     * tres claridades, y se apoya con su sombra. Ver [Solido] y [Proyeccion].
+     *
+     * ## Por qué la huella reutiliza `x`, `y`, `width` y `height`
+     *
+     * Un sólido necesita cinco números, y cuatro de ellos **ya son exactamente
+     * los de siempre**: la huella es un rectángulo, igual que la caja de un
+     * rectángulo o de una imagen. Guardándola ahí, mover la caja, estirarla por
+     * un tirador, meterla en un grupo, alinearla, duplicarla, contarla para el
+     * encuadre o serializarla es el camino de siempre, sin una sola rama nueva.
+     * Un centro y tres semilados serían más «3D» y no servirían para ninguna de
+     * esas cosas.
+     *
+     * Lo único que no cabía es **cuánto levanta**, y eso va en [Element.altura].
+     *
+     * El convenio es que `x` e `y` son el punto de la escena donde se apoya el
+     * origen de la huella —la esquina `(0, 0, 0)` ya proyectada— y que `width`,
+     * `height` y `altura` van en **píxeles de escena**, es decir con una unidad
+     * del mundo por píxel. Ver [solidoDe].
+     *
+     * Consecuencia asumida y documentada: lo que se dibuja **sobresale de su
+     * caja** hacia arriba y hacia la izquierda, porque la proyección lleva los
+     * vértices donde los lleva. La caja sigue siendo la huella —que es lo que se
+     * estira y lo que se mueve— y quien necesita lo que ocupa de verdad pregunta
+     * por [cajaConLoQueDibuja].
+     */
+    @SerialName("pixpin-solid") SOLIDO
 }
 
 @Serializable
@@ -270,6 +338,15 @@ data class Element(
     /** Solo FREEDRAW: presión por punto, 0..1. Con el dedo llega siempre 1. */
     val pressures: List<Double>? = null,
     val simulatePressure: Boolean = true,
+    /**
+     * El trazo va **firme**: mismo grosor de punta a punta.
+     *
+     * La presión adelgaza el trazo donde la mano va rápida, que dibujando queda
+     * bien y escribiendo no: una letra pequeña se queda a medio ver en las
+     * curvas. Se apaga desde la configuración y solo afecta a lo que se trace a
+     * partir de entonces, como cualquier otro ajuste del pincel.
+     */
+    val presionFirme: Boolean = false,
     val lastCommittedPoint: Pt? = null,
 
     // --- Solo REGION ---
@@ -318,6 +395,18 @@ data class Element(
     val verticalAlign: VerticalAlign? = null,
     /** Id de la forma que contiene este texto, si está dentro de una. */
     val containerId: String? = null,
+    /**
+     * Negrita, cursiva y tachado.
+     *
+     * Van como tres marcas y no como un solo campo de «estilo» porque se
+     * combinan: negrita **y** cursiva a la vez es corriente. No existen en
+     * Excalidraw —de ahí que sean tres campos propios— y al exportar a
+     * `.excalidraw` se pierden, que es lo mismo que le pasa a cualquier tipo de
+     * los de PixPin: el archivo de intercambio guarda lo que el otro sabe leer.
+     */
+    val negrita: Boolean = false,
+    val cursiva: Boolean = false,
+    val tachado: Boolean = false,
 
     // --- Solo FRAME ---
     /** Nombre del marco, el que el original enseña sobre su esquina. */
@@ -345,9 +434,106 @@ data class Element(
     val etiquetaAngulo: Double? = null,
     val etiquetaRadio: Double? = null,
 
+    // --- Solo PLANO ---
+    /**
+     * Cuántos píxeles de escena mide **una unidad** del plano.
+     *
+     * Es el campo del que sale todo lo demás: el intervalo que se ve es la caja
+     * dividida por esto. Estirando por una esquina crece con la caja —el plano
+     * se ve más grande— y estirando por un lado se queda como está, que es lo
+     * que hace que aparezcan más números. Ver [Plano].
+     */
+    val unidad: Double? = null,
+    /** Cada cuántas unidades se escribe un número en las reglas. */
+    val pasoDeNumeros: Double? = null,
+    /** Cada cuántas unidades va una raya fina de la rejilla. */
+    val pasoDeCuadros: Double? = null,
+
+    // --- Solo SOLIDO ---
+    /**
+     * Lo que levanta del suelo la caja del boceto en volumen, en píxeles de
+     * escena. Solo [ElementType.SOLIDO].
+     *
+     * Es el **único** número que no cabía en los campos de siempre: la huella ya
+     * va en `x`/`y`/`width`/`height` (el porqué, en [ElementType.SOLIDO]) y lo
+     * que falta es la tercera medida.
+     *
+     * Nulo —y no cero— quiere decir «todavía no se ha levantado»: es el estado
+     * real en el que queda la caja entre la primera fase del gesto y la segunda,
+     * mientras solo se ha dibujado la huella en el suelo. Distinguirlo de una
+     * altura de cero es lo que permite pintar solo la sombra mientras tanto en
+     * vez de una caja aplastada. Ver [DrawController] y [sombraEnElSuelo].
+     */
+    val altura: Double? = null,
+
     // --- Solo MOSAIC ---
     /** Desenfocar en vez de pixelar. Son las dos formas de tapar de PixPin. */
     val mosaicBlur: Boolean = false,
+
+    // --- Solo LUPA ---
+    /**
+     * A dónde mira la lupa, en coordenadas del dibujo.
+     *
+     * Nulo quiere decir «a lo que tengo debajo»: una lupa recién puesta se
+     * comporta como una lupa de verdad apoyada sobre el papel, y solo cuando se
+     * aparta el cristal —o se arrastra el foco— pasan a ser dos sitios
+     * distintos. Ver [ElementType.LUPA].
+     */
+    val foco: Pt? = null,
+    /**
+     * Cuántas veces se agranda lo que se mira.
+     *
+     * Es una **pista de partida**, no la verdad: lo que manda es la geometría
+     * —lo que mide el cristal dividido por lo que mide el foco— porque si no,
+     * estirar el cristal con los tiradores dejaría un número que ya no
+     * corresponde con lo que se ve. Ver [aumentoDe].
+     */
+    val aumento: Double? = null,
+    /**
+     * Lo que mide la zona que se mira.
+     *
+     * **Se guarda, no se calcula.** Antes salía del cristal dividido por el
+     * aumento, y eso ataba las dos cosas: agrandar la ventana agrandaba también
+     * la zona mirada, así que por mucho que se estirara se seguía viendo lo
+     * mismo de grande. Guardándola, la zona se queda donde y como se puso —solo
+     * se cambia arrastrando su contorno— y el cristal crece por su cuenta.
+     */
+    val focoAncho: Double? = null,
+    val focoAlto: Double? = null,
+    /**
+     * Cuánto se oscurece lo de fuera de un foco, de 10 a 90 por ciento.
+     *
+     * Del propio elemento y no un ajuste global: en la misma lámina puede haber
+     * un foco suave que solo insinúa y otro fuerte que aísla del todo.
+     */
+    val oscurecer: Int? = null,
+
+    /** El cristal es redondo. En cuadrado sirve para recuadrar un detalle. */
+    val lupaRedonda: Boolean = true,
+    /** Se dibuja la línea que dice de dónde sale lo que se está viendo. */
+    val lupaFlecha: Boolean = true,
+    /** Con qué se señala de dónde sale lo que se ve. Ver [GuiaDeLupa]. */
+    val guia: GuiaDeLupa? = null,
+    /**
+     * La guía va con **dos líneas** en vez de con una flecha.
+     *
+     * Es la forma de toda la vida en un plano: dos rayas que salen de los
+     * costados del detalle y se abren hasta los del cristal, como un cono. Dice
+     * lo mismo que la flecha y encima dice **cuánto** se ha ampliado, porque se
+     * ve de un vistazo lo que se abre.
+     */
+    val lupaDosLineas: Boolean = false,
+    /**
+     * El contorno del cristal, **en proporción de su caja** (de 0 a 1).
+     *
+     * Es lo que permite que una lupa tenga la forma que uno quiera: se traza un
+     * círculo, un rombo o un garabato cerrado, se toca con la lupa y ese mismo
+     * contorno pasa a ser el cristal. Guardado en proporción y no en píxeles, la
+     * forma aguanta que la lupa se estire y se gire sin deformarse por su cuenta.
+     *
+     * Nulo es el cristal de siempre: redondo o recuadro, según [lupaRedonda].
+     */
+    val forma: List<Pt>? = null,
 
     // --- Solo IMAGE ---
     val fileId: String? = null,
@@ -439,6 +625,10 @@ val Element.hasBackground: Boolean
     get() = when (type) {
         ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
         ElementType.LINE, ElementType.FREEDRAW, ElementType.REGION -> true
+        // El sólido tiene relleno **y es lo que más lo necesita**: sin fondo, la
+        // caja es un alambre y las tres claridades no tienen sobre qué actuar,
+        // así que el volumen no se lee. Ver [aclarar].
+        ElementType.SOLIDO -> true
         else -> false
     }
 
@@ -454,7 +644,8 @@ val Element.isRegion: Boolean get() = type == ElementType.REGION
 val Element.isPixPinTool: Boolean
     get() = type == ElementType.MOSAIC || type == ElementType.SPOTLIGHT ||
         type == ElementType.SERIAL || type == ElementType.MEASURE ||
-        type == ElementType.ARC || type == ElementType.REGION
+        type == ElementType.ARC || type == ElementType.REGION ||
+        type == ElementType.SOLIDO
 
 /** La cota, que se rotula sola con su medida. */
 val Element.isMeasure: Boolean get() = type == ElementType.MEASURE
@@ -494,8 +685,14 @@ fun mosaicoGrano(strokeWidth: Double): Double = when {
     else -> 64.0
 }
 
+/** El plano cartesiano, que es un instrumento y no un dibujo. Ver [Plano]. */
+val Element.isPlano: Boolean get() = type == ElementType.PLANO
+
 /** El marco: la hoja que decide qué se ve fuera del editor. */
 val Element.isFrame: Boolean get() = type == ElementType.FRAME
+
+/** La caja del boceto en volumen. Ver [ElementType.SOLIDO] y [Solido]. */
+val Element.isSolido: Boolean get() = type == ElementType.SOLIDO
 
 /** Los que admiten punta de flecha. */
 val Element.hasArrowheads: Boolean

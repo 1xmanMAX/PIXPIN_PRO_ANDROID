@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Card
@@ -396,6 +398,19 @@ class FloatingBallController(private val context: Context) {
             // Dibujar encima de lo que haya, sin capturar nada: la capa se abre
             // y se cierra desde el mismo botón.
             BallAction.CAPA -> app.overlayManager.capa.alternar()
+            // Grabar necesita micrófono, y el micrófono no se abre desde un
+            // servicio que arrancó solo: hace falta una pantalla en primer plano.
+            // Ver [GrabadoraActivity].
+            BallAction.VOZ -> context.startActivity(
+                Intent(context, com.forge.pixpin.pin.GrabadoraActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            // El cajón de lo guardado. Va aquí porque es donde se busca «aquello
+            // que guardé», y la bolita es lo único que está siempre a mano.
+            BallAction.GUARDADOS -> context.startActivity(
+                Intent(context, com.forge.pixpin.guardados.MensajesActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
             BallAction.PIN_CLIPBOARD -> context.startActivity(
                 Intent(context, ClipboardPinActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -440,6 +455,12 @@ class FloatingBallController(private val context: Context) {
             ) {
                 MenuButton(BallAction.CAPTURE) { Icon(Icons.Filled.Crop, contentDescription = null) }
                 MenuButton(BallAction.CAPA) { Icon(Icons.Filled.Gesture, contentDescription = null) }
+                // La voz va junto a la captura y la capa: las tres son «coge esto
+                // que está pasando ahora», y esas son las que se buscan sin mirar.
+                MenuButton(BallAction.VOZ) { Icon(Icons.Filled.Mic, contentDescription = null) }
+                MenuButton(BallAction.GUARDADOS) {
+                    Icon(Icons.Filled.Bookmark, contentDescription = null)
+                }
                 MenuButton(BallAction.PIN_CLIPBOARD) { Icon(Icons.Filled.PushPin, contentDescription = null) }
                 MenuButton(BallAction.HIDE_ALL) { Icon(Icons.Filled.VisibilityOff, contentDescription = null) }
                 MenuButton(BallAction.PIN_LIST) { Icon(Icons.Filled.FormatListBulleted, contentDescription = null) }
@@ -453,4 +474,4 @@ class FloatingBallController(private val context: Context) {
     }
 }
 
-private enum class BallAction { CAPTURE, CAPA, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }
+private enum class BallAction { CAPTURE, CAPA, VOZ, GUARDADOS, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }

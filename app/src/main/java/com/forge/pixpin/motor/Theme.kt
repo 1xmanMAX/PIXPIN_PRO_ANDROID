@@ -1,7 +1,5 @@
 package com.forge.pixpin.motor
 
-import android.graphics.Color
-
 /**
  * Modo día y modo noche del lienzo.
  *
@@ -12,10 +10,16 @@ import android.graphics.Color
  * de modo reescribiría el dibujo entero y exportarlo daría un resultado
  * distinto según cómo lo estuvieras mirando.
  *
- * El filtro es el del original (`applyDarkModeFilter`), que en CSS se escribe
- * `invert(93%) hue-rotate(180deg)`. Las dos piezas hacen falta: invertir solo
- * pondría el negro en blanco pero también giraría los colores a su complementario
- * —el rojo saldría cian—, y el giro de tono los devuelve a su sitio.
+ * El filtro **no es el del original**. Excalidraw hace `invert(93%)
+ * hue-rotate(180deg)`, y eso tiene dos pegas que se ven a la primera: el negro
+ * sale gris claro —invertir al 93 y no al 100 lo deja en 237, y a nadie le
+ * cuadra que su rotulador negro se vuelva plomo— y los colores salen de una
+ * matriz de giro de tono, que no es una decisión sobre cómo se lee un color
+ * sobre fondo oscuro, es una fórmula.
+ *
+ * Aquí se distinguen los dos casos, que de verdad son dos: **un gris es tinta**
+ * y se invierte del todo, y **un color es un color**, que conserva su tono y
+ * solo se aclara lo justo para leerse. Ver [filtrar].
  */
 object DrawTheme {
 
@@ -37,8 +41,15 @@ object DrawTheme {
      */
     const val FONDO_OLED = "#000000"
 
-    /** Cuánto invierte el filtro del original. */
-    private const val INVERT = 0.93
+    /** Por debajo de esta saturación, un color es un gris: tinta, no color. */
+    private const val ES_GRIS = 0.14
+
+    /** Lo claro que se pone un color para leerse sobre el fondo oscuro. */
+    private const val CLARIDAD_BASE = 0.62
+    private const val CLARIDAD_EXTRA = 0.28
+
+    /** Tope de saturación de noche: lo muy saturado vibra sobre oscuro. */
+    private const val SATURACION_MAXIMA = 0.85
 
     /**
      * El color con el que hay que pintar [argb] en modo noche.
@@ -47,25 +58,81 @@ object DrawTheme {
      */
     fun filtrar(argb: Int, noche: Boolean): Int {
         if (!noche) return argb
-        val a = Color.alpha(argb)
-        var r = Color.red(argb) / 255.0
-        var g = Color.green(argb) / 255.0
-        var b = Color.blue(argb) / 255.0
+        // **Sin `android.graphics.Color`**, a propósito: son cuatro bytes en un
+        // entero y desempaquetarlos a mano deja este filtro comprobable en la
+        // JVM. Decidir cómo se ve un color de noche es de las cosas que hay que
+        // poder comprobar sin un móvil delante.
+        val a = (argb ushr 24) and 0xFF
+        val (h, s, l) = aHsl(
+            ((argb shr 16) and 0xFF) / 255.0,
+            ((argb shr 8) and 0xFF) / 255.0,
+            (argb and 0xFF) / 255.0
+        )
 
-        // invert(0.93): c' = c·(1 − 2a) + a
-        val k = 1 - 2 * INVERT
-        r = r * k + INVERT
-        g = g * k + INVERT
-        b = b * k + INVERT
+        // **La tinta se da la vuelta; el color solo se aclara.**
+        //
+        // El filtro de antes era el del original: invertir al 93 % y girar el
+        // tono media vuelta. Tenía dos pegas que se veían enseguida. El negro
+        // salía **gris claro** —invertir al 93 y no al 100 lo deja en 237— y a
+        // nadie le cuadra que su rotulador negro se vuelva plomo. Y los colores
+        // salían de la matriz de giro de tono, que no es una decisión sobre cómo
+        // se lee un color sobre fondo oscuro: es una fórmula.
+        //
+        // Aquí se separan los dos casos, que de verdad son dos:
+        //
+        // - **Un gris es tinta.** Se dibujó pensando en papel blanco, así que se
+        //   invierte del todo: el negro es blanco y el blanco es negro.
+        // - **Un color es un color.** Se le respeta el tono —el rojo tiene que
+        //   seguir siendo rojo, no rosa ni naranja— y se le sube la claridad
+        //   hasta donde se lee sobre oscuro, bajándole un punto de saturación
+        //   porque un color a tope vibra sobre negro y cansa la vista.
+        val gris = s < ES_GRIS
+        val claridad = if (gris) 1.0 - l else CLARIDAD_BASE + CLARIDAD_EXTRA * (1.0 - l)
+        val saturacion = if (gris) s else minOf(s, SATURACION_MAXIMA)
 
-        // hue-rotate(180°). La matriz de la especificación de filtros SVG
-        // depende del seno y el coseno del ángulo; a media vuelta valen 0 y −1,
-        // así que se reduce a estos nueve números y no hace falta recalcularla.
-        val fr = (-0.574 * r + 1.430 * g + 0.144 * b).coerceIn(0.0, 1.0)
-        val fg = (0.426 * r + 0.430 * g + 0.144 * b).coerceIn(0.0, 1.0)
-        val fb = (0.426 * r + 1.430 * g - 0.856 * b).coerceIn(0.0, 1.0)
+        val (r, g, b) = deHsl(h, saturacion, claridad)
+        return (a shl 24) or
+            (redondear(r) shl 16) or
+            (redondear(g) shl 8) or
+            redondear(b)
+    }
 
-        return Color.argb(a, (fr * 255).toInt(), (fg * 255).toInt(), (fb * 255).toInt())
+    /** De 0..1 a un byte, redondeando: truncar dejaba el blanco en 254. */
+    private fun redondear(v: Double): Int = Math.round(v * 255).toInt().coerceIn(0, 255)
+
+    /** De rojo, verde y azul a tono, saturación y claridad. Todo de 0 a 1. */
+    private fun aHsl(r: Double, g: Double, b: Double): Triple<Double, Double, Double> {
+        val alto = maxOf(r, g, b)
+        val bajo = minOf(r, g, b)
+        val l = (alto + bajo) / 2
+        if (alto == bajo) return Triple(0.0, 0.0, l)
+        val d = alto - bajo
+        val s = if (l > 0.5) d / (2 - alto - bajo) else d / (alto + bajo)
+        val h = when (alto) {
+            r -> (g - b) / d + (if (g < b) 6 else 0)
+            g -> (b - r) / d + 2
+            else -> (r - g) / d + 4
+        } / 6
+        return Triple(h, s, l)
+    }
+
+    /** Y de vuelta. */
+    private fun deHsl(h: Double, s: Double, l: Double): Triple<Double, Double, Double> {
+        if (s == 0.0) return Triple(l, l, l)
+        val q = if (l < 0.5) l * (1 + s) else l + s - l * s
+        val p = 2 * l - q
+        fun canal(t0: Double): Double {
+            var t = t0
+            if (t < 0) t += 1
+            if (t > 1) t -= 1
+            return when {
+                t < 1.0 / 6 -> p + (q - p) * 6 * t
+                t < 1.0 / 2 -> q
+                t < 2.0 / 3 -> p + (q - p) * (2.0 / 3 - t) * 6
+                else -> p
+            }
+        }
+        return Triple(canal(h + 1.0 / 3), canal(h), canal(h - 1.0 / 3))
     }
 
     /** El fondo que le toca a la escena según el modo. */

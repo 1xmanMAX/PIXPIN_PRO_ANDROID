@@ -33,7 +33,10 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     // Lo que pinta: el lápiz, el marcador y el bote. El bote no traza, pero lo
     // que se hace con él es dar color, que es de lo que va este grupo.
     listOf(Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.RELLENO),
-    listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND),
+    // La caja en volumen va con las formas planas y no en un grupo aparte: es la
+    // misma faena —poner un bulto donde uno quiere— y quien busca «un cuadrado»
+    // mira ahí. En un grupo propio sería una herramienta más que nadie encuentra.
+    listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND, Tool.SOLIDO),
     listOf(Tool.ARROW, Tool.LINE),
     // Las dos que arreglan una raya ya trazada, juntas: se traza de largo y
     // luego se recorta lo que sobra y se estira lo que falta.
@@ -41,7 +44,7 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     // El punto va con el texto y el numerito: los tres son para nombrar
     // cosas del dibujo, no para dibujarlas.
     listOf(Tool.TEXT, Tool.SERIAL, Tool.PUNTO),
-    listOf(Tool.MOSAIC, Tool.SPOTLIGHT),
+    listOf(Tool.MOSAIC, Tool.LUPA, Tool.SPOTLIGHT),
     listOf(Tool.MEASURE, Tool.SCALE, Tool.ESCALA_GRAFICA),
     listOf(Tool.FRAME, Tool.IMAGE),
     listOf(Tool.ERASER)

@@ -61,7 +61,7 @@ class DrawToolbarTest {
     /** Las tres propias de PixPin viven en el desplegable, no en la fila. */
     @Test
     fun `las herramientas propias van al desplegable`() {
-        for (t in listOf(Tool.MOSAIC, Tool.SPOTLIGHT, Tool.SERIAL)) {
+        for (t in listOf(Tool.MOSAIC, Tool.LUPA, Tool.SERIAL)) {
             assertTrue("$t no debería estar a la vista", t !in MAIN_TOOLS)
             assertTrue("$t tiene que estar en el desplegable", t in EXTRA_TOOLS)
         }

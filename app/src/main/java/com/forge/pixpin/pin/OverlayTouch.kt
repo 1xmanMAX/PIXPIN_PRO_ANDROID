@@ -33,6 +33,18 @@ class OverlayTouchHandler(
         /** focusX/focusY: punto medio entre los dedos, en coordenadas de pantalla. */
         fun onScaleStart(focusX: Float, focusY: Float) {}
         fun onScale(factorFromDown: Float, focusX: Float, focusY: Float) {}
+        /**
+         * Cuánto han girado los dos dedos desde que se posaron, en grados.
+         *
+         * Llega **junto al pellizco**, no en un modo aparte: abrir y girar es un
+         * solo gesto de la mano, y separarlos obligaría a elegir cuál se está
+         * haciendo. Casi nadie lo escucha —girar un pin no significa nada— así
+         * que por defecto no hace nada.
+         */
+        fun onRotate(gradosFromDown: Float) {}
+
+        /** Dónde están los dedos, en coordenadas de la ventana. Ver [midLocalX]. */
+        fun onFocoLocal(x: Float, y: Float) {}
         fun onScaleEnd() {}
         fun onOpacityStart() {}
         fun onOpacity(dyFromDown: Float) {}
@@ -90,6 +102,7 @@ class OverlayTouchHandler(
     private var downX = 0f
     private var downY = 0f
     private var startSpan = 0f
+    private var startAngle = 0f
     private var startMidY = 0f
     private var twoFingerDecided = false
 
@@ -177,6 +190,7 @@ class OverlayTouchHandler(
                     multiTouch = true
                     dosDedos = true
                     startSpan = span(event)
+                    startAngle = angulo(event)
                     startMidY = midRawY(event)
                     twoFingerDecided = false
                 }
@@ -221,6 +235,7 @@ class OverlayTouchHandler(
                     huboGesto = true
                     if (spanDelta > midDelta) {
                         mode = Mode.SCALE
+                        listener.onFocoLocal(midLocalX(event), midLocalY(event))
                         listener.onScaleStart(midRawX(event), currentMid)
                     } else {
                         mode = Mode.OPACITY
@@ -230,7 +245,12 @@ class OverlayTouchHandler(
             }
             when (mode) {
                 Mode.SCALE -> if (startSpan > 0f) {
+                    listener.onFocoLocal(midLocalX(event), midLocalY(event))
                     listener.onScale(currentSpan / startSpan, midRawX(event), currentMid)
+                    // El giro viaja con el pellizco: abrir y girar es un solo
+                    // gesto de la mano y separarlos obligaría a elegir cuál se
+                    // está haciendo. Quien no lo escuche no se entera.
+                    listener.onRotate(diferenciaDeAngulo(angulo(event), startAngle))
                 }
                 Mode.OPACITY -> listener.onOpacity(currentMid - startMidY)
                 else -> Unit
@@ -286,8 +306,43 @@ class OverlayTouchHandler(
         twoFingerDecided = false
     }
 
+    /** Hacia dónde apunta la línea entre los dos dedos, en grados. */
+    private fun angulo(event: MotionEvent): Float {
+        if (event.pointerCount < 2) return 0f
+        val dx = event.getX(1) - event.getX(0)
+        val dy = event.getY(1) - event.getY(0)
+        return Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+    }
+
+    /**
+     * Cuánto se ha girado, por el lado corto.
+     *
+     * Sin esto, pasar por los 180° daba un salto de media vuelta: la resta cruda
+     * salta de +179 a −179 y lo que se está girando pegaba un volantazo.
+     */
+    private fun diferenciaDeAngulo(ahora: Float, antes: Float): Float {
+        var d = ahora - antes
+        while (d > 180f) d -= 360f
+        while (d < -180f) d += 360f
+        return d
+    }
+
     private fun span(event: MotionEvent): Float =
         hypot(event.getX(0) - event.getX(1), event.getY(0) - event.getY(1))
+
+    /**
+     * El punto entre los dedos **en coordenadas de la ventana**.
+     *
+     * Los de pantalla no sirven para anclar nada dentro del contenido: habría
+     * que restarles dónde está la ventana, y esa cuenta se equivoca en cuanto
+     * hay una barra de estado de por medio. Estos son los mismos que usa el
+     * trazo, que es lo que hace que ambos caigan en el mismo sitio.
+     */
+    private fun midLocalX(event: MotionEvent): Float =
+        (event.getX(0) + event.getX(1)) / 2f
+
+    private fun midLocalY(event: MotionEvent): Float =
+        (event.getY(0) + event.getY(1)) / 2f
 
     private fun midRawX(event: MotionEvent): Float =
         (event.getRawX(0) + event.getRawX(1)) / 2f
