@@ -1937,28 +1937,9 @@ class DrawEditorActivity : ComponentActivity() {
      * deja cargado ese color para lo siguiente que se dibuje.
      */
     /** Pixelar o desenfocar, en el pincel y en lo seleccionado. */
-    private fun aplicarMosaico(desenfocar: Boolean) {
-        controller.changeStyle(
-            change = { it.copy(mosaicBlur = desenfocar) },
-            toElement = {
-                if (it.type == ElementType.MOSAIC) it.copy(mosaicBlur = desenfocar) else it
-            }
-        )
-    }
-
+    
     /** Cambia la forma de la flecha, en el pincel y en lo seleccionado. */
-    private fun aplicarFlecha(elbowed: Boolean, curva: Boolean) {
-        val redondeo = if (curva) Roundness(Roundness.PROPORTIONAL_RADIUS) else null
-        controller.changeStyle(
-            change = { it.copy(elbowed = elbowed, roundness = redondeo) },
-            toElement = {
-                if (it.type == ElementType.ARROW) {
-                    it.copy(elbowed = elbowed, roundness = redondeo)
-                } else it
-            }
-        )
-    }
-
+    
     /**
      * Mete en el dibujo la tabla que se acaba de corregir en el diálogo.
      *
@@ -2363,26 +2344,6 @@ class DrawEditorActivity : ComponentActivity() {
      * lo único que no se distingue solo, que es **trazo contra fondo**: los dos
      * son una fila de colores iguales.
      */
-    @Composable
-    private fun FilaDe(icono: ImageVector, descripcion: String, contenido: @Composable () -> Unit) {
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                icono,
-                contentDescription = descripcion,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp).padding(end = 2.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Row(
-                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically
-            ) { contenido() }
-        }
-    }
-
     /**
      * Una opción que **se dibuja a sí misma**.
      *
@@ -2396,34 +2357,6 @@ class DrawEditorActivity : ComponentActivity() {
      * distinto grosor **son** los tres grosores, y un cuadrado rayado **es** el
      * rayado. Se entiende sin leer y sin tocar.
      */
-    @Composable
-    private fun Boceto(
-        elegido: Boolean,
-        descripcion: String,
-        onClick: () -> Unit,
-        dibujo: androidx.compose.ui.graphics.drawscope.DrawScope.(tinta: Color) -> Unit
-    ) {
-        val tinta =
-            if (elegido) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = if (elegido) MaterialTheme.colorScheme.primary else Color.Transparent,
-            modifier = Modifier.padding(2.dp)
-        ) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clickable(onClick = onClick)
-                    .semantics { contentDescription = descripcion },
-                contentAlignment = Alignment.Center
-            ) {
-                androidx.compose.foundation.Canvas(Modifier.size(22.dp)) { dibujo(tinta) }
-            }
-        }
-    }
-
-
     /**
      * Cuánto ocupa un texto, **medido de verdad**.
      *
@@ -2434,25 +2367,6 @@ class DrawEditorActivity : ComponentActivity() {
      * luego dibuja, así que la caja es exacta.
      */
     /** Una muestra de color del panel. */
-    @Composable
-    private fun Muestra(hex: String, elegido: Boolean, onClick: () -> Unit) {
-        Box(
-            Modifier
-                .padding(2.dp)
-                .size(if (elegido) 24.dp else 20.dp)
-                .background(
-                    if (isTransparent(hex)) Color.Transparent else Color(parseColor(hex)),
-                    CircleShape
-                )
-                .border(
-                    width = if (elegido) 3.dp else 1.dp,
-                    color = if (elegido) MaterialTheme.colorScheme.primary else Color.Gray,
-                    shape = CircleShape
-                )
-                .clickable(onClick = onClick)
-        )
-    }
-
     /**
      * Una opción que es **la letra a su tamaño**.
      *
@@ -2460,60 +2374,7 @@ class DrawEditorActivity : ComponentActivity() {
      * numerarlas «1 2 3 4»: se elige mirando cuál se parece a lo que quieres,
      * no traduciendo un número.
      */
-    @Composable
-    private fun OpcionLetra(letra: String, tam: Int, elegido: Boolean, onClick: () -> Unit) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = if (elegido) MaterialTheme.colorScheme.primary else Color.Transparent,
-            modifier = Modifier.padding(2.dp)
-        ) {
-            Box(
-                Modifier.size(34.dp).clickable(onClick = onClick),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    letra,
-                    fontSize = tam.sp,
-                    color = if (elegido) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-
-    private fun nombreDelRelleno(fs: FillStyle): String = when (fs) {
-        FillStyle.HACHURE -> "Rayado"
-        FillStyle.CROSS_HATCH -> "Cruces"
-        FillStyle.SOLID -> "Sólido"
-        FillStyle.ZIGZAG -> "Zigzag"
-        FillStyle.LINEAS -> "Rayas rectas"
-    }
-
-    private fun nombreDeLaLinea(ss: StrokeStyle): String = when (ss) {
-        StrokeStyle.SOLID -> "Continua"
-        StrokeStyle.DASHED -> "A trazos"
-        StrokeStyle.DOTTED -> "De puntos"
-    }
-
     /** Una opción del panel, representada por un glifo. */
-    @Composable
-    private fun Opcion(glifo: String, elegido: Boolean, onClick: () -> Unit) {
-        Surface(
-            shape = RoundedCornerShape(6.dp),
-            color = if (elegido) MaterialTheme.colorScheme.primary else Color.Transparent,
-            modifier = Modifier.padding(1.dp)
-        ) {
-            TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(6.dp)) {
-                Text(
-                    glifo,
-                    fontSize = 14.sp,
-                    color = if (elegido) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-
     /**
      * Escribir **encima del dibujo**, donde va a quedar el texto.
      *
@@ -2813,9 +2674,6 @@ class DrawEditorActivity : ComponentActivity() {
 // allí —o al revés— tiene que verse igual, y los colores forman parte de eso.
 // -------------------------------------------------------------------------
 
-private val STROKE_COLORS = listOf(
-    "#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00"
-)
 
 /**
  * Cuánto de ancho se lleva la barra de arriba a la izquierda.
@@ -2855,9 +2713,6 @@ private const val LADO_DE_LA_REFERENCIA = 1200
  */
 private val PASOS_DEL_PLANO = listOf(0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0)
 
-private val BACKGROUND_COLORS = listOf(
-    "transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", "#ffec99"
-)
 
 private val FILL_GLYPHS = mapOf(
     FillStyle.HACHURE to "╱",
@@ -2873,8 +2728,3 @@ private val STROKE_GLYPHS = mapOf(
     StrokeStyle.DOTTED to "┈┈"
 )
 
-private val ROUGHNESS_GLYPHS = listOf(
-    Element.ROUGHNESS_ARCHITECT to "▁",
-    Element.ROUGHNESS_ARTIST to "▂",
-    Element.ROUGHNESS_CARTOONIST to "▃"
-)

@@ -1,6 +1,5 @@
 package com.forge.pixpin.pin
 
-import com.forge.pixpin.annotate.Annotation
 import kotlinx.serialization.Serializable
 
 /**
@@ -144,7 +143,6 @@ data class PinState(
      * se ve igual de bien con el pin diminuto o a pantalla completa, y sigue
      * siendo re-editable. Vacío en los pines que no son de imagen.
      */
-    val annotations: List<Annotation> = emptyList(),
     /** Marca el pin como guardado: sobrevive al cierre y se muestra en la lista de guardados. */
     val isPinned: Boolean = false,
     /** Ancho del cuadro de texto en dp (solo para TEXT pins). */

@@ -65,12 +65,10 @@ enum class CopyFormat {
 
 /** Ajustes de la app. Se amplía con nuevas claves a medida que crecen las fases. */
 data class Settings(
-    val defaultPinAlpha: Float = 1f,
     val historySize: Int = 10,
     val ballX: Int = -1,
     val ballY: Int = -1,
     val captureMode: CaptureMode = CaptureMode.FAST,
-    val ballVisible: Boolean = true,
     /**
      * Qué herramientas del motor se quedan en la barra del pin, por su nombre.
      *
@@ -257,14 +255,12 @@ class SettingsRepository(private val context: Context) {
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
         Settings(
-            defaultPinAlpha = prefs[Keys.DEFAULT_PIN_ALPHA] ?: 1f,
             historySize = prefs[Keys.HISTORY_SIZE] ?: 10,
             ballX = prefs[Keys.BALL_X] ?: -1,
             ballY = prefs[Keys.BALL_Y] ?: -1,
             captureMode = runCatching {
                 CaptureMode.valueOf(prefs[Keys.CAPTURE_MODE] ?: CaptureMode.FAST.name)
             }.getOrDefault(CaptureMode.FAST),
-            ballVisible = prefs[Keys.BALL_VISIBLE] ?: true,
             pinTools = prefs[Keys.PIN_TOOLS],
             capaTools = prefs[Keys.CAPA_TOOLS],
             pinGroups = prefs[Keys.PIN_GROUPS],
@@ -317,19 +313,8 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.BALL_VISIBLE] = visible }
     }
 
-    /** Fija qué herramientas se quedan en el pin. */
-    suspend fun setPinTools(tools: Set<com.forge.pixpin.motor.Tool>) {
-        context.dataStore.edit { it[Keys.PIN_TOOLS] = tools.map { t -> t.name }.toSet() }
-    }
-
-    /** Lo mismo, para la capa sobre la pantalla. */
-    suspend fun setCapaTools(tools: Set<com.forge.pixpin.motor.Tool>) {
-        context.dataStore.edit { it[Keys.CAPA_TOOLS] = tools.map { t -> t.name }.toSet() }
-    }
-
-    suspend fun resetCapaTools() {
-        context.dataStore.edit { it.remove(Keys.CAPA_TOOLS) }
-    }
+    
+    
 
     /**
      * Guarda de una vez el reparto de una barra: qué sale y cómo se agrupa.

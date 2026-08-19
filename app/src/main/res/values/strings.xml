@@ -46,7 +46,6 @@
     <string name="proyecto_exportar_n">Exportar (%1$d)</string>
     <string name="zoom_bloquear">Clavar el zoom</string>
     <string name="zoom_desbloquear">Soltar el zoom</string>
-    <string name="proyecto_hoja_suelta">Hoja</string>
     <string name="proyecto_pagina">Página %1$d</string>
     <string name="proyecto_vista_rejilla">Rejilla</string>
     <string name="proyecto_vista_carrusel">Una página</string>
@@ -91,11 +90,9 @@
     <string name="notif_title">PixPin activo</string>
     <string name="notif_text">Captura y fija notas sobre cualquier app</string>
     <string name="action_capture">Capturar</string>
-    <string name="action_open">Abrir</string>
     <string name="action_pin">Pin</string>
     <string name="action_done">Listo</string>
     <string name="action_cancel">Cancelar</string>
-    <string name="action_scroll">Scroll</string>
     <string name="scroll_hint">Desplaza despacio con el dedo. PixPin va cosiendo.</string>
     <string name="scroll_progress">%.1f pantallas</string>
     <string name="scroll_slower">Vas muy rápido: desplaza más despacio</string>
@@ -113,7 +110,6 @@
     <string name="capture_hint">Arrastra para recortar · toca para la pantalla entera</string>
 
     <!-- Pines -->
-    <string name="search_pins">Buscar pines…</string>
     <string name="saved_pins_section">⭐ Guardados</string>
     <string name="pins_closed_section">🕘 Cerrados</string>
     <string name="pin_type_text_plural">Textos</string>
@@ -143,8 +139,6 @@
     <string name="nota_a_proyecto">Nota añadida al proyecto</string>
     <string name="proyecto_renombrar">Cambiar el nombre</string>
     <string name="proyecto_exportar">Exportar lo marcado</string>
-    <string name="proyecto_exportado">PDF listo</string>
-    <string name="proyecto_nada_marcado">Marca alguna hoja primero</string>
     <string name="ruleta_seed">Un nombre por línea, o separados por comas</string>
     <string name="ruleta_girar">Girar</string>
     <string name="ruleta_listo">Sortear</string>
@@ -167,11 +161,9 @@
     <string name="cd_undo">Deshacer</string>
     <string name="cd_tools">Herramientas</string>
     <string name="cd_done">Listo</string>
-    <string name="cd_destroy">Eliminar</string>
     <string name="priority_chip">PRIORIDAD</string>
     <string name="pin_image_default">PixPin</string>
     <string name="pin_image_priority">Prioridad</string>
-    <string name="cd_toggle_priority">Alternar prioridad</string>
     <string name="checklist_seed">Primera tarea\nSegunda tarea</string>
     <string name="ledger_seed">+1000 Sueldo\n-250 Compra</string>
     <string name="pin_type_timer">Temporizador</string>
@@ -182,7 +174,6 @@
     <string name="pin_type_draw">Dibujo</string>
     <string name="cd_draw_edit">Seguir dibujando</string>
     <string name="cd_draw_export">Compartir como .excalidraw</string>
-    <string name="cd_draw_image">Insertar una imagen</string>
     <string name="cd_redo">Rehacer</string>
     <string name="cd_duplicate">Duplicar</string>
     <string name="cd_delete">Borrar</string>
@@ -190,15 +181,8 @@
     <string name="pin_draw_empty">El dibujo está vacío</string>
 
     <!-- Barra de dibujo: los cinco grupos y las herramientas de cada uno -->
-    <string name="grupo_mover">Mover</string>
-    <string name="grupo_trazar">Trazar</string>
-    <string name="grupo_formas">Formas</string>
-    <string name="grupo_marcar">Marcar</string>
-    <string name="grupo_tapar">Tapar</string>
-    <string name="capa_pixpin">PixPin — %1$s</string>
     <string name="tool_punto">Punto</string>
     <string name="punto_sin_sitio">Los puntos van en cruces, extremos, medios o el centro de un círculo</string>
-    <string name="punto_serie">Serie</string>
     <string name="tool_selection">Seleccionar</string>
     <string name="tool_lasso">Lazo</string>
     <string name="tool_hand">Mano</string>
@@ -217,7 +201,6 @@
     <string name="guardados_adj_archivo">Un archivo</string>
     <string name="guardados_adj_pagina">Una página de un proyecto</string>
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
-    <string name="guardados_adj_bloque">Un instrumento</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
     <string name="miniapp_tareas">Lista de tareas</string>
     <string name="miniapp_gastos">Gastos</string>
@@ -338,11 +321,8 @@
     <string name="medida_aplicar">Aplicar</string>
     <string name="tool_extender">Extender</string>
     <string name="relleno_sin_cerrar">Ese espacio no está cerrado: el relleno se escapa por algún lado</string>
-    <string name="cd_color">Color</string>
-    <string name="cd_stroke_width">Grosor</string>
     <string name="cd_modo_dia">Modo día</string>
     <string name="cd_modo_noche">Modo noche</string>
-    <string name="draw_text_hint">Escribe aquí</string>
     <string name="cd_ajustes">Ajustes</string>
     <string name="tool_frame">Hoja</string>
     <string name="hoja_nombre">Hoja</string>
@@ -355,7 +335,6 @@
     <string name="escala_titulo">¿Cuánto mide de verdad?</string>
     <string name="escala_ayuda">Traza la raya sobre algo cuya medida sepas y escríbela. A partir de ahí, las cotas salen en esa unidad.</string>
     <string name="escala_aceptar">Calibrar</string>
-    <string name="escala_borrar">Borrar la última cifra</string>
     <string name="escala_puesta">Escala: 100 px = %1$s</string>
     <string name="escala_quitar">Quitar la escala</string>
     <string name="escala_sin">Sin escala: las cotas salen en píxeles</string>
@@ -371,7 +350,6 @@
     <string name="cd_edicion_avanzada">Edición avanzada</string>
 
     <!-- La capa para dibujar encima de la pantalla -->
-    <string name="capa_abrir">Dibujar sobre la pantalla</string>
     <string name="capa_atravesar">Dejar pasar los toques</string>
     <string name="capa_limpiar">Borrar todo</string>
     <string name="capa_copiar">Copiar la pantalla con lo dibujado</string>
@@ -393,7 +371,6 @@
     <string name="tabla_pegadas">Pegados %1$d puntos</string>
     <string name="tabla_nada_que_pegar">En el portapapeles no hay una tabla de coordenadas</string>
     <string name="tabla_ver">Ver u ocultar los puntos</string>
-    <string name="tabla_nueva">Nueva tabla de coordenadas</string>
     <string name="tabla_abrir">Tablas de coordenadas</string>
 
     <!-- La lista de figuras y la tabla pegada -->
@@ -420,7 +397,6 @@
     <string name="figuras_guardar_ayuda">Marca algo en el dibujo y quedará aquí para siempre.</string>
     <string name="figuras_nombre">Nombre de la figura</string>
     <string name="figuras_quitar">Quitar la figura</string>
-    <string name="figuras_guardada">Guardada «%1$s»</string>
     <string name="figuras_sin_mias">Todavía no has guardado ninguna.</string>
 
     <string name="tabla_pegada_abrir">Pegar una tabla</string>
@@ -487,10 +463,6 @@
     <string name="saved_to_gallery">Guardado en Pictures/PixPin</string>
     <string name="copied_image">Imagen copiada al portapapeles</string>
     <string name="add_text_title">Texto de la anotación</string>
-    <string name="text_size">Tamaño</string>
-    <string name="text_box_width">Ancho</string>
-    <string name="text_no_box">Sin cuadro</string>
-    <string name="text_preview">Vista previa</string>
     <string name="add">Añadir</string>
     <string name="cancel">Cancelar</string>
 </resources>
