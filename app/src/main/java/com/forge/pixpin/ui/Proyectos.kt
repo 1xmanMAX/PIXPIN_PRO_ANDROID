@@ -1691,8 +1691,20 @@ private fun MiniaturaDePagina(
                             // La versión nítida se pide **solo de la que se está
                             // sujetando**: es la única página del documento que
                             // se va a ver a pantalla completa.
+                            //
+                            // **Y compuesta, no la hoja limpia.** Pidiendo la página a
+                            // secas, al ampliar entraba encima la versión sin anotar y
+                            // lo dibujado desaparecía justo al hacer zoom — que es
+                            // cuando uno amplía precisamente para leer lo que anotó.
                             alcance.launch {
-                                PdfMiniaturas.de(contexto, pdf, pagina, PdfDoc.ZOOM_WIDTH)
+                                (if (rutaDelDibujo != null) {
+                                    com.forge.pixpin.guardados.paginaAnotada(
+                                        contexto, pdf, pagina, dibujo, rutaDelDibujo,
+                                        PdfDoc.ZOOM_WIDTH
+                                    )
+                                } else {
+                                    PdfMiniaturas.de(contexto, pdf, pagina, PdfDoc.ZOOM_WIDTH)
+                                })
                                     ?.let { ampliada.afinar(it.asImageBitmap()) }
                             }
                         }

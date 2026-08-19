@@ -1652,6 +1652,22 @@ class MensajesActivity : ComponentActivity() {
                                 onClick = {
                                     paginasDe = null
                                     guardarPagina(pr, hoja)
+                                    // **Se dice dónde ha caído.** Lo adjuntado va a la
+                                    // conversación en la que estás, y desde el chat de
+                                    // un proyecto eso no es la general — quien lo busque
+                                    // allí no lo encuentra y parece que no se guardó.
+                                    Toast.makeText(
+                                        this@MensajesActivity,
+                                        getString(
+                                            com.forge.pixpin.R.string.guardados_anadido_a,
+                                            nombreDelChat.ifBlank {
+                                                getString(
+                                                    com.forge.pixpin.R.string.guardados_titulo
+                                                )
+                                            }
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                     refrescar()
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -3826,7 +3842,13 @@ class MensajesActivity : ComponentActivity() {
                 // conversaciones, al reenviarla y en el nombre del archivo al compartir.
                 nombre = p.nombre + " · " +
                     getString(com.forge.pixpin.R.string.proyecto_pagina, pagina + 1),
-                ruta = p.pdfOrigen,
+                // **Por dónde se lee el documento, no por dónde se leía.** Si el
+                // archivo original se movió o se perdió, la copia limpia sigue siendo
+                // legible; con `pdfOrigen` a secas, la página adjunta apuntaba a un
+                // hueco y en la conversación no salía ni la hoja ni nada.
+                ruta = com.forge.pixpin.motor.Proyectos.rutaDelDocumento(p) {
+                    File(it).exists()
+                },
                 pagina = pagina,
                 // El dibujo de la hoja: es lo que hace que al abrirla salga **con lo que
                 // ya habías anotado encima** y no la página en blanco.

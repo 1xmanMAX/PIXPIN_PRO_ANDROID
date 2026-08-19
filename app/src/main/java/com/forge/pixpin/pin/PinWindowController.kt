@@ -480,12 +480,27 @@ class PinWindowController(
             window = null
             lp = null
         }
+        // **Y su tirador, si el pin ya venía en transparente.**
+        //
+        // El modo se guarda con el pin, así que al arrancar la aplicación vuelve a nacer
+        // sin recibir toques. Creando el tirador solo al activarlo, un pin guardado así
+        // reaparecía intocable y sin salida — que es exactamente el problema que el
+        // tirador venía a resolver, solo que un arranque más tarde.
+        if (pin.value.clickThrough) abrirTirador(conAviso = false)
     }
 
     /** Oculta la ventana conservando su posición y estado (ocultar todo / captura). */
     fun setViewVisible(visible: Boolean) {
         visibleByGlobal = visible
         applyVisibility()
+        // El tirador es una ventana aparte, así que ocultar todo no se lo llevaba: se
+        // escondían los pines y quedaban los tiradores flotando, que es exactamente la
+        // sensación de «el botón de ocultar no funciona».
+        if (visible) {
+            if (pin.value.clickThrough) abrirTirador(conAviso = false)
+        } else {
+            cerrarTirador()
+        }
         if (!visible) {
             closeActionBar()
             closeEmojiPicker()
@@ -517,6 +532,7 @@ class PinWindowController(
 
     fun hideView() {
         exitAnnotateMode()
+        cerrarTirador()
         closeActionBar()
         closeEmojiPicker()
         closePdfViewer()
@@ -602,7 +618,7 @@ class PinWindowController(
      * ve poco a propósito: mientras dura el modo, lo que uno quiere mirar es lo que hay
      * debajo, no el pin — pero tiene que estar ahí, porque es la única salida.
      */
-    private fun abrirTirador() {
+    private fun abrirTirador(conAviso: Boolean = true) {
         if (tirador != null) return
         val p = lp ?: return
         val d = context.resources.displayMetrics.density
@@ -640,9 +656,11 @@ class PinWindowController(
             wm.addView(ventana.view, params)
             ventana.onAttached()
         }
-        Toast.makeText(
-            context, R.string.pin_transparente_aviso, Toast.LENGTH_LONG
-        ).show()
+        // El aviso solo al activarlo a mano: repetirlo en cada arranque sería una
+        // tostada por pin cada vez que se abre la aplicación.
+        if (conAviso) {
+            Toast.makeText(context, R.string.pin_transparente_aviso, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun cerrarTirador() {
