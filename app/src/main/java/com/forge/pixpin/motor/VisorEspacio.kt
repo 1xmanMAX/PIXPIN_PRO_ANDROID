@@ -728,8 +728,14 @@ return {
  herramientas:['girar','mover','medir'].filter(function(h){
   return (document.body.dataset.herramientas||'girar mover medir').split(' ').indexOf(h)>=0; }),
  vistas:function(){
+  // Las vistas de siempre —planta, alzado, perfil, isométrica— además de las guardadas: es
+  // lo primero que se busca al abrir un croquis ajeno, y no dependen de que quien lo exportó
+  // las guardara.
+  function fija(n,g,i){ return {n:n,ir:function(){cam.g=g;cam.i=i;cam.b=0;encajar(D.cj);}}; }
   var l=[{n:'Como se exportó',ir:function(){cam=clonar(inicial);refrescarPivote();repintar();}},
-         {n:'Encajar todo',ir:function(){encajar(D.cj);}}];
+         {n:'Encajar todo',ir:function(){encajar(D.cj);}},
+         fija('Planta',0,Math.PI/2-0.03), fija('Alzado',0,0), fija('Perfil',Math.PI/2,0),
+         fija('Isométrica',Math.PI/4,Math.atan(1/Math.sqrt(2)))];
   D.vi.forEach(function(v){l.push({n:v.n,ir:function(){cam=clonar(v.c);refrescarPivote();repintar();}});});
   return l;
  },

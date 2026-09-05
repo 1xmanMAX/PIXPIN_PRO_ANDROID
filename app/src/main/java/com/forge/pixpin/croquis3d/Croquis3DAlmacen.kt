@@ -45,5 +45,15 @@ object Croquis3DAlmacen {
     }.getOrNull()
 
     /** El de siempre: mientras no haya varios croquis, hay uno y se llama así. */
+    /** El JSON de un croquis tal cual está guardado, para meterlo en un `.pixpin`. */
+    fun jsonDe(context: Context, id: String): String? =
+        com.forge.pixpin.motor.PaquetePixpin.textoDeGz(File(dir(context), "$id.croquis.gz"))
+
+    /** Guarda un croquis que llega como JSON —de un `.pixpin`— comprobando antes que se lee. */
+    fun guardarJson(context: Context, id: String, texto: String): Boolean = runCatching {
+        val croquis = json.decodeFromString(Croquis.serializer(), texto)
+        guardar(context, id, croquis) != null
+    }.getOrDefault(false)
+
     const val EL_DE_SIEMPRE = "croquis"
 }

@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -120,6 +121,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -194,12 +196,16 @@ fun PantallaDeProyectos(
     // Lo marcado vive **en la pantalla**, no en cada tarjeta: sobrevive a que la
     // página se recomponga y se sabe desde arriba qué hay que exportar. De un
     // proyecto a la vez, que es como se entrega: marcar en otro empieza de cero.
-    var marcado by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
+    // **Y de varios proyectos a la vez**: la página uno de este y las siete a diez de aquel,
+    // juntas en un PDF o en una página web. Lo pidió el usuario (5-sep-2026).
+    var marcado by remember { mutableStateOf<Map<String, Set<String>>>(emptyMap()) }
     var exportando by remember { mutableStateOf(false) }
     // Exportar a página web es lo mismo marcado, otro formato: el PDF se imprime y se firma;
     // la página se abre en el teléfono de quien la recibe, se pasea, se gira y se anota.
     // Ver [ExportarProyectoWeb].
     var exportandoWeb by remember { mutableStateOf(false) }
+    // El proyecto que se está empaquetando como `.pixpin`, o null.
+    var exportandoPaquete by remember { mutableStateOf<String?>(null) }
 
     // Se recuerda aquí y no dentro del paginador porque la cabecera enseña por
     // cuál se va, y esa cuenta es lo que dice que hay más debajo.
@@ -312,29 +318,28 @@ fun PantallaDeProyectos(
             if (exportando) {
                 val cual = marcado
                 LaunchedEffect(cual) {
-                    val proyecto = ordenados.firstOrNull { it.id == cual?.first }
-                    val archivo = if (proyecto == null) {
-                        null
-                    } else {
-                        withContext(Dispatchers.IO) {
-                            // **Las escenas se recuerdan al cargarlas**, y de ellas sale dónde
-                            // está cada imagen: el dibujante pide el id del archivo y la ruta
-                            // la sabe la escena. Sin esto las fotos se perdían al exportar.
-                            val vistas = mutableMapOf<String, Scene?>()
-                            val escenaDe: (String) -> Scene? = { dibujo ->
-                                vistas.getOrPut(dibujo) {
-                                    ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
-                                }
+                    // Lo marcado de cada proyecto, en el orden de la lista.
+                    val seleccion = ordenados.mapNotNull { p -> cual[p.id]?.let { p to it } }
+                    val archivo = if (seleccion.isEmpty()) null else withContext(Dispatchers.IO) {
+                        // **Las escenas se recuerdan al cargarlas**, y de ellas sale dónde
+                        // está cada imagen: el dibujante pide el id del archivo y la ruta
+                        // la sabe la escena. Sin esto las fotos se perdían al exportar.
+                        val vistas = mutableMapOf<String, Scene?>()
+                        val escenaDe: (String) -> Scene? = { dibujo ->
+                            vistas.getOrPut(dibujo) {
+                                ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
                             }
-                            ExportarProyecto.aArchivo(
-                                contexto, proyecto, cual!!.second, escenaDe,
-                                { id ->
-                                    vistas.values.asSequence().filterNotNull()
-                                        .mapNotNull { it.files[id]?.path }
-                                        .firstOrNull()?.let { ImageStore.load(it) }
-                                }
-                            )
                         }
+                        val nombre = if (seleccion.size == 1) seleccion[0].first.nombre
+                        else seleccion.joinToString(" + ") { it.first.nombre }
+                        ExportarProyecto.aArchivo(
+                            contexto, seleccion, nombre, escenaDe,
+                            { id ->
+                                vistas.values.asSequence().filterNotNull()
+                                    .mapNotNull { it.files[id]?.path }
+                                    .firstOrNull()?.let { ImageStore.load(it) }
+                            }
+                        )
                     }
                     exportando = false
                     if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
@@ -343,14 +348,32 @@ fun PantallaDeProyectos(
             }
 
             val oscuroDelSistema = androidx.compose.foundation.isSystemInDarkTheme()
+            exportandoPaquete?.let { cualId ->
+                LaunchedEffect(cualId) {
+                    val proyecto = ordenados.firstOrNull { it.id == cualId }
+                    val archivo = if (proyecto == null) null else withContext(Dispatchers.IO) {
+                        val carpeta = java.io.File(contexto.cacheDir, "share").apply { mkdirs() }
+                        com.forge.pixpin.motor.PaquetePixpin.escribir(
+                            contexto, proyecto,
+                            java.io.File(carpeta, ExportarProyecto.nombreDeArchivo(proyecto.nombre) + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION),
+                            croquisDe = { id -> Croquis3DAlmacen.jsonDe(contexto, id) }
+                        )
+                    }
+                    exportandoPaquete = null
+                    if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
+                    else compartir(contexto, archivo, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE)
+                }
+            }
             if (exportandoWeb) {
                 val cual = marcado
                 LaunchedEffect(cual) {
-                    val proyecto = ordenados.firstOrNull { it.id == cual?.first }
-                    val archivo = if (proyecto == null) null else withContext(Dispatchers.IO) {
-                        val pdf = Proyectos.rutaDelDocumento(proyecto) { java.io.File(it).exists() }
-                        ExportarProyectoWeb.aArchivo(
-                            contexto, proyecto, cual!!.second,
+                    val seleccion = ordenados.mapNotNull { p -> cual[p.id]?.let { p to it } }
+                    val archivo = if (seleccion.isEmpty()) null else withContext(Dispatchers.IO) {
+                        // Las hojas de cada proyecto marcado, una tras otra, en un solo documento.
+                        val hojas = seleccion.flatMap { (proyecto, claves) ->
+                            val pdf = Proyectos.rutaDelDocumento(proyecto) { java.io.File(it).exists() }
+                            ExportarProyectoWeb.paginas(
+                            contexto, proyecto, claves,
                             escenaDe = { dibujo ->
                                 ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
                             },
@@ -391,6 +414,21 @@ fun PantallaDeProyectos(
                                 }
                             }
                         )
+                        }
+                        if (hojas.isEmpty()) null else runCatching {
+                            val nombre = if (seleccion.size == 1) seleccion[0].first.nombre
+                            else seleccion.joinToString(" + ") { it.first.nombre }
+                            val opciones = ExportarHtml.Opciones.de(
+                                app.settings.settings.first().funcionesWeb
+                            )
+                            val pagina = ExportarHtml.paginas(
+                                hojas, titulo = nombre.ifBlank { "Proyecto" },
+                                nombre = ExportarProyecto.nombreDeArchivo(nombre), opciones = opciones
+                            )
+                            val carpeta = java.io.File(contexto.cacheDir, "share").apply { mkdirs() }
+                            java.io.File(carpeta, ExportarProyecto.nombreDeArchivo(nombre) + ".html")
+                                .also { it.writeText(pagina) }
+                        }.getOrNull()
                     }
                     exportandoWeb = false
                     if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
@@ -413,9 +451,9 @@ fun PantallaDeProyectos(
             // Cómo se marca y se desmarca una hoja, igual para el proyecto suelto
             // que para los del paginador.
             val marcarEn: (Proyecto, String) -> Unit = { p, clave ->
-                val suyas = if (marcado?.first == p.id) marcado!!.second else emptySet()
+                val suyas = marcado[p.id] ?: emptySet()
                 val nuevas = if (clave in suyas) suyas - clave else suyas + clave
-                marcado = if (nuevas.isEmpty()) null else p.id to nuevas
+                marcado = if (nuevas.isEmpty()) marcado - p.id else marcado + (p.id to nuevas)
             }
 
             // **Con uno solo no hay nada que paginar.** Se enseña la misma
@@ -427,10 +465,11 @@ fun PantallaDeProyectos(
                     app = app,
                     p = unico,
                     enPrimerPlano = true,
-                    marcadas = if (marcado?.first == unico.id) marcado!!.second else emptySet(),
+                    marcadas = marcado[unico.id] ?: emptySet(),
                     onMarcar = { clave -> marcarEn(unico, clave) },
                     onExportar = { exportando = true },
                     onExportarWeb = { exportandoWeb = true },
+                    onExportarPaquete = { exportandoPaquete = unico.id },
                     modifier = Modifier.fillMaxSize().padding(10.dp)
                 )
                 return@Column
@@ -481,10 +520,11 @@ fun PantallaDeProyectos(
                     // delante**. El que asoma por abajo enseña lo que ya
                     // estuviera en memoria y no pide nada.
                     enPrimerPlano = paginador.settledPage == indice,
-                    marcadas = if (marcado?.first == p.id) marcado!!.second else emptySet(),
+                    marcadas = marcado[p.id] ?: emptySet(),
                     onMarcar = { clave -> marcarEn(p, clave) },
                     onExportar = { exportando = true },
                     onExportarWeb = { exportandoWeb = true },
+                    onExportarPaquete = { exportandoPaquete = p.id },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -539,6 +579,7 @@ private fun PaginaDeProyecto(
     onMarcar: (String) -> Unit,
     onExportar: () -> Unit,
     onExportarWeb: () -> Unit,
+    onExportarPaquete: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val contexto = LocalContext.current
@@ -784,7 +825,8 @@ private fun PaginaDeProyecto(
                     marcadas = marcadas.size,
                     onChat = alChat,
                     onExportar = onExportar,
-                    onExportarWeb = onExportarWeb
+                    onExportarWeb = onExportarWeb,
+                    onExportarPaquete = onExportarPaquete
                 )
                 }
                 if (apaisado) {
@@ -954,7 +996,9 @@ private fun BarraDeAcciones(
     marcadas: Int,
     onChat: () -> Unit,
     onExportar: () -> Unit,
-    onExportarWeb: () -> Unit
+    onExportarWeb: () -> Unit,
+    /** El proyecto entero como `.pixpin`, para seguir editándolo en otro aparato. */
+    onExportarPaquete: () -> Unit = {}
 ) {
     val contexto = LocalContext.current
     Row(
@@ -964,6 +1008,11 @@ private fun BarraDeAcciones(
     ) {
         BotonDeAccion(
             Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onChat
+        )
+        // **Editable.** Un `.pixpin` con todo lo del proyecto: se abre en otro PixPin —el del
+        // escritorio también— y se sigue editando. Ver [PaquetePixpin].
+        BotonDeAccion(
+            Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete, onExportarPaquete
         )
         if (p.pdfOrigen != null) {
             BotonDeAccion(

@@ -164,6 +164,35 @@
             justo lo único que no funcionaba.
         -->
         <activity
+            android:name=".guardados.NuevoProyectoCompartidoActivity"
+            android:exported="true"
+            android:label="@string/proyecto_desde_compartido"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.proyecto"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.pixpin" />
+            </intent-filter>
+        </activity>
+        <activity
             android:name=".guardados.GuardarCompartidoActivity"
             android:exported="true"
             android:label="@string/guardados_titulo"

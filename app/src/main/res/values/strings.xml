@@ -372,6 +372,13 @@
     <string name="guardados_reenviar_a">Reenviar a…</string>
     <string name="guardados_reenviado">Reenviado</string>
     <string name="guardados_anadido_a">Añadido a %1$s</string>
+    <string name="guardados_unir_al_proyecto">Unir al proyecto</string>
+    <string name="guardados_unir_a">Unir a un proyecto…</string>
+    <string name="guardados_nada_que_unir">No hay nada que se pueda unir: solo fotos, dibujos, notas y PDF</string>
+    <plurals name="guardados_unidas">
+        <item quantity="one">Una hoja añadida a %2$s</item>
+        <item quantity="other">%1$d hojas añadidas a %2$s</item>
+    </plurals>
     <plurals name="guardados_cuantos">
         <item quantity="one">%d cosa</item>
         <item quantity="other">%d cosas</item>
@@ -570,6 +577,12 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Página web</string>
+    <string name="formato_pixpin">Editable (.pixpin)</string>
+    <string name="proyecto_paquete_corto">Editable</string>
+    <string name="proyecto_paquete">Compartir editable (.pixpin)</string>
+    <string name="croquis_exportar_paquete">Editable (.pixpin)</string>
+    <string name="proyecto_desde_compartido">Nuevo proyecto en PixPin</string>
+    <string name="proyecto_desde_compartido_ok">Proyecto creado</string>
     <string name="formato_html_titulo">Dibujo de PixPin</string>
     <string name="formato_editable">Archivo editable</string>
 

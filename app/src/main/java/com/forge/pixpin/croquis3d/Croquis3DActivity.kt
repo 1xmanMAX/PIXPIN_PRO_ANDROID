@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.DonutLarge
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.filled.Circle
@@ -1980,6 +1981,13 @@ class Croquis3DActivity : ComponentActivity() {
                 icono = Icons.Filled.Public,
                 descripcion = getString(R.string.croquis_exportar_html)
             ) { exportarLaPagina() }
+            // **Y editable**: un `.pixpin` con el croquis, para seguirlo en otro aparato o en
+            // el escritorio. Ver [PaquetePixpin].
+            Alternable(
+                encendido = false,
+                icono = Icons.Filled.FolderZip,
+                descripcion = getString(R.string.croquis_exportar_paquete)
+            ) { exportarElPaquete() }
         }
     }
 
@@ -2005,6 +2013,38 @@ class Croquis3DActivity : ComponentActivity() {
      * **El croquis como página web**: un archivo que se abre en cualquier navegador, sin
      * internet y sin instalar nada. Ver [ExportarCroquisHtml].
      */
+    /** El croquis como `.pixpin`: un proyecto de una hoja con él dentro. Ver [PaquetePixpin]. */
+    private fun exportarElPaquete() {
+        Croquis3DAlmacen.guardar(this, elCroquis, controlador.croquis)
+        val ahora = System.currentTimeMillis()
+        val suelto = com.forge.pixpin.motor.Proyecto(
+            id = "suelto-$elCroquis", nombre = elCroquis, tocado = ahora,
+            hojas = listOf(com.forge.pixpin.motor.Hoja(id = "hoja-$elCroquis", nombre = elCroquis, croquis = elCroquis)),
+            croquis = listOf(elCroquis)
+        )
+        val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
+        val archivo = com.forge.pixpin.motor.PaquetePixpin.escribir(
+            this, suelto,
+            java.io.File(carpeta, "$elCroquis.${com.forge.pixpin.motor.PaquetePixpin.EXTENSION}"),
+            croquisDe = { id -> Croquis3DAlmacen.jsonDe(this, id) }
+        )
+        if (archivo == null) {
+            Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", archivo)
+        startActivity(
+            android.content.Intent.createChooser(
+                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                },
+                getString(R.string.croquis_exportar_paquete)
+            )
+        )
+    }
+
     private fun exportarLaPagina() {
         // Las imágenes puestas en el espacio viajan dentro del archivo: sin eso, el croquis
         // exportado sale sin sus texturas. Ver [ExportarCroquisHtml.datos].

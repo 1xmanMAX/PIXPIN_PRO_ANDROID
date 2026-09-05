@@ -87,6 +87,9 @@ object ExcalidrawStore {
     }
 
     /** Copia un archivo de imagen al almacén de la escena y lo registra. */
+    /** Dónde se guarda una foto de los lienzos por su id. Lo usa el paquete `.pixpin`. */
+    fun rutaDeImagen(context: Context, id: String): File = File(filesDir(context), id)
+
     fun guardarImagen(context: Context, origen: File, mimeType: String): SceneFile? =
         runCatching {
             val id = randomId()

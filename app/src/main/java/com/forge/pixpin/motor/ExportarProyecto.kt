@@ -33,9 +33,23 @@ object ExportarProyecto {
         marcadas: Set<String>,
         escenaDe: (String) -> Scene?,
         imageProvider: (String) -> Bitmap? = { null }
+    ): File? = aArchivo(context, listOf(proyecto to marcadas), proyecto.nombre, escenaDe, imageProvider)
+
+    /**
+     * **Páginas de varios proyectos en un solo PDF**, en el orden de la lista. Es lo que deja
+     * juntar la página uno de un proyecto con las siete a diez de otro y mandarlas como una
+     * sola cosa. Lo pidió el usuario (5-sep-2026).
+     */
+    fun aArchivo(
+        context: Context,
+        seleccion: List<Pair<Proyecto, Set<String>>>,
+        nombreDelConjunto: String,
+        escenaDe: (String) -> Scene?,
+        imageProvider: (String) -> Bitmap? = { null }
     ): File? = runCatching {
-        val paginas = HojasDelProyecto.paginas(proyecto, escenaDe)
-            .filter { it.clave in marcadas }
+        val paginas = seleccion.flatMap { (proyecto, marcadas) ->
+            HojasDelProyecto.paginas(proyecto, escenaDe).filter { it.clave in marcadas }
+        }
         if (paginas.isEmpty()) return null
 
         // **Una sola escena con un marco por lámina**, y que la exportación de
@@ -81,7 +95,7 @@ object ExportarProyecto {
             )
         }
 
-        val nombre = nombreDeArchivo(proyecto.nombre)
+        val nombre = nombreDeArchivo(nombreDelConjunto)
         var archivo: File? = null
 
         if (elementos.isNotEmpty()) {

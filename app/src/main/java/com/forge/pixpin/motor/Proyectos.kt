@@ -204,6 +204,10 @@ data class Hoja(
  */
 object Proyectos {
 
+    /** El JSON de los proyectos, el mismo dentro y fuera del aparato. */
+    val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+
     /** Tope de hojas por proyecto. Un PDF de doscientas páginas no es un proyecto. */
     const val MAX_HOJAS = 200
 

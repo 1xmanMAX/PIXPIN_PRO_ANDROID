@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -327,6 +328,31 @@ class MensajesActivity : ComponentActivity() {
             mutableStateOf<String?>(null)
         }
         var reenviando by remember { mutableStateOf<List<Mensaje>>(emptyList()) }
+        // Lo que se está uniendo a un proyecto y aún no se sabe a cuál: desde la
+        // conversación general hay que elegirlo; en la de un proyecto va derecho.
+        var uniendo by remember { mutableStateOf<List<Mensaje>>(emptyList()) }
+        val unirA: (String, List<Mensaje>) -> Unit = { proyectoId, lista ->
+            val app = application as? PixPinApp
+            if (app != null) lifecycleScope.launch(Dispatchers.IO) {
+                val cuantas = UnirAlProyecto.unir(
+                    this@MensajesActivity, app.proyectos, proyectoId, lista, System.currentTimeMillis()
+                )
+                val nombre = app.proyectos.porId(proyectoId)?.nombre.orEmpty()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@MensajesActivity,
+                        if (cuantas > 0) resources.getQuantityString(
+                            com.forge.pixpin.R.plurals.guardados_unidas, cuantas, cuantas, nombre
+                        ) else getString(com.forge.pixpin.R.string.guardados_nada_que_unir),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        val unirAlProyecto: (List<Mensaje>) -> Unit = { lista ->
+            val destino = chatDe
+            if (destino != null) unirA(destino, lista) else uniendo = lista
+        }
         /** El mensaje cuyo hilo se está mirando, si hay alguno. Ver [HojaDelHilo]. */
         var hiloDe by remember { mutableStateOf<Mensaje?>(null) }
         // Cuántos comentarios cuelgan de cada uno. Se cuenta una vez por lista y no una
@@ -504,6 +530,19 @@ class MensajesActivity : ComponentActivity() {
                                             com.forge.pixpin.R.string.guardados_reenviar
                                         )
                                     )
+                                }
+                                if (loMarcado.any { UnirAlProyecto.sePuedeUnir(it) }) {
+                                    IconButton(onClick = {
+                                        unirAlProyecto(loMarcado.sortedBy { it.cuando })
+                                        marcados = emptySet()
+                                    }) {
+                                        Icon(
+                                            Icons.Filled.LibraryAdd,
+                                            contentDescription = getString(
+                                                com.forge.pixpin.R.string.guardados_unir_al_proyecto
+                                            )
+                                        )
+                                    }
                                 }
                                 IconButton(onClick = {
                                     loMarcado.forEach { almacen.borrarAdjunto(it.ruta) }
@@ -1105,6 +1144,7 @@ class MensajesActivity : ComponentActivity() {
                             acciones = remember(m, mensajes) { Acciones(
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
+                                unir = if (UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
                                 compartirComo = { compartiendo = m },
                                 verHilo = { hiloDe = m },
                                 cuantosComentarios = comentariosPorMensaje[m.id] ?: 0,
@@ -1704,6 +1744,40 @@ class MensajesActivity : ComponentActivity() {
             }
         }
 
+        if (uniendo.isNotEmpty()) {
+            val todos = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
+                .filterNot { it.archivado }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { uniendo = emptyList() },
+                title = { Text(getString(com.forge.pixpin.R.string.guardados_unir_a)) },
+                text = {
+                    if (todos.isEmpty()) {
+                        Text(getString(com.forge.pixpin.R.string.guardados_sin_proyectos))
+                    } else {
+                        LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                            items(todos, key = { it.id }) { pr ->
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        val lista = uniendo
+                                        uniendo = emptyList()
+                                        unirA(pr.id, lista)
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(pr.nombre, modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { uniendo = emptyList() }) {
+                        Text(getString(com.forge.pixpin.R.string.cancel))
+                    }
+                }
+            )
+        }
+
         eligiendoProyecto?.let { paraPagina ->
             val todos = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
             // Para una página solo valen los que tienen PDF: en un proyecto de lienzos no
@@ -1952,6 +2026,8 @@ class MensajesActivity : ComponentActivity() {
         val cuantosComentarios: Int,
         val etiquetar: () -> Unit,
         val reenviar: () -> Unit,
+        /** Lo mete en las hojas de un proyecto; nulo si no hay hoja que hacer con él. */
+        val unir: (() -> Unit)?,
         val responder: () -> Unit,
         val copiar: (() -> Unit)?,
         val fijar: () -> Unit,
@@ -2125,6 +2201,15 @@ class MensajesActivity : ComponentActivity() {
                 DelMenu(com.forge.pixpin.R.string.guardados_reenviar,
                         Icons.AutoMirrored.Filled.Forward) {
                     menuAbierto = false; acciones.reenviar()
+                }
+                // **Unir al proyecto.** Lo que se guardó en la conversación de una obra
+                // acaba siendo parte de la obra: una foto es una hoja, una nota es una
+                // nota, y el PDF del cliente es el documento.
+                acciones.unir?.let { unir ->
+                    DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto,
+                            Icons.Filled.LibraryAdd) {
+                        menuAbierto = false; unir()
+                    }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) {
                     menuAbierto = false; acciones.seleccionar()

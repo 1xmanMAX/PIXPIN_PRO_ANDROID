@@ -48,6 +48,8 @@ class MotorSeparadoTest {
         // `Matrix`. Lo que **lee** el PDF —[PlanoDePdf]— sí es núcleo y sí se comprueba sin
         // dispositivo, que es donde está toda la dificultad.
         "PlanoEnPantalla.kt",
+        // El paquete `.pixpin`: escribe y lee archivos del aparato con su `Context`.
+        "PaquetePixpin.kt",
         // Arma el PDF de lo marcado: escribe archivos y pinta imágenes, las dos
         // de Android. Qué láminas entran y cómo se llama el archivo sí es
         // núcleo, y por eso eso sí se comprueba sin dispositivo.

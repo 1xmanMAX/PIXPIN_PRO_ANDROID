@@ -3564,14 +3564,24 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
-    private fun compartir() = exportando(ExcalidrawStore.MIME_TYPE) {
+    /**
+     * **Editable: un `.pixpin` con este lienzo.** Es el formato único de PixPin —un ZIP con el
+     * lienzo en JSON de Excalidraw, sus fotos y, si lo hay, la nota— que se abre y se sigue
+     * editando en otro aparato o en la versión de escritorio. Ver [PaquetePixpin].
+     */
+    private fun compartir() = exportando(PaquetePixpin.MIME_TYPE) {
+        guardarYa()
         // En `share/` y no en la raíz de la caché: el FileProvider solo publica
         // esa subcarpeta (`res/xml/file_paths.xml`), y desde fuera el archivo
         // daría un fallo de permisos.
         val carpeta = File(cacheDir, "share").apply { mkdirs() }
-        File(carpeta, "$dibujoId.excalidraw").also {
-            it.writeText(ExcalidrawStore.exportar(controller.scene))
-        }
+        val nombre = dibujoId.ifBlank { "dibujo" }
+        val suelto = Proyecto(
+            id = "suelto-$dibujoId", nombre = nombre, tocado = System.currentTimeMillis(),
+            hojas = listOf(Hoja(id = "hoja-$dibujoId", nombre = nombre, dibujo = dibujoId, pagina = paginaDeFondo.takeIf { it >= 0 })),
+            pdfOrigen = pdfDeFondo, pdfLimpio = null
+        )
+        PaquetePixpin.escribir(this, suelto, File(carpeta, "${ExportarProyecto.nombreDeArchivo(nombre)}.${PaquetePixpin.EXTENSION}"))
     }
 }
 
