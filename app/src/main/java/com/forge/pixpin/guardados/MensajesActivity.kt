@@ -37,6 +37,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Subtitles
+import kotlinx.coroutines.flow.drop
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -366,6 +368,11 @@ class MensajesActivity : ComponentActivity() {
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
 
         fun refrescar() { recargar++ }
+        // Lo que el almacén escribe por su cuenta —una transcripción que llega, algo que
+        // entra compartido desde otra aplicación— tiene que verse sin salir y entrar.
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            MensajesStore.cambios.drop(1).collect { recargar++ }
+        }
         androidx.compose.runtime.DisposableEffect(Unit) {
             recargarLaLista = { recargar++ }
             onDispose { recargarLaLista = null }
@@ -1145,6 +1152,12 @@ class MensajesActivity : ComponentActivity() {
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
+                                transcribir = if (m.clase == Clase.VOZ && m.ruta != null && Transcriptor.disponible(this@MensajesActivity)) {
+                                    {
+                                        Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.guardados_transcribiendo), Toast.LENGTH_SHORT).show()
+                                        almacen.transcribir(m)
+                                    }
+                                } else null,
                                 compartirComo = { compartiendo = m },
                                 verHilo = { hiloDe = m },
                                 cuantosComentarios = comentariosPorMensaje[m.id] ?: 0,
@@ -2028,6 +2041,8 @@ class MensajesActivity : ComponentActivity() {
         val reenviar: () -> Unit,
         /** Lo mete en las hojas de un proyecto; nulo si no hay hoja que hacer con él. */
         val unir: (() -> Unit)?,
+        /** Pasa una nota de voz a texto; nulo si no es de voz o el aparato no sabe. */
+        val transcribir: (() -> Unit)?,
         val responder: () -> Unit,
         val copiar: (() -> Unit)?,
         val fijar: () -> Unit,
@@ -2209,6 +2224,12 @@ class MensajesActivity : ComponentActivity() {
                     DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto,
                             Icons.Filled.LibraryAdd) {
                         menuAbierto = false; unir()
+                    }
+                }
+                acciones.transcribir?.let { transcribir ->
+                    DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
+                            Icons.Filled.Subtitles) {
+                        menuAbierto = false; transcribir()
                     }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) {
@@ -4741,7 +4762,8 @@ class MensajesActivity : ComponentActivity() {
             // apunte, cada apertura sería una hoja en blanco sobre la misma foto.
             Clase.IMAGEN -> m.ruta?.let { foto ->
                 val yaTenia = m.referencia
-                val dibujo = yaTenia ?: UUID.randomUUID().toString()
+                // El mismo dibujo que la hoja del proyecto. Ver [dibujoDeLaFoto].
+                val dibujo = yaTenia ?: m.dibujoDeLaFoto
                 if (yaTenia == null) {
                     // El apunte se guarda **después de abrir el editor**, no antes: leer
                     // y reescribir el archivo entero aquí dejaba el toque congelado justo

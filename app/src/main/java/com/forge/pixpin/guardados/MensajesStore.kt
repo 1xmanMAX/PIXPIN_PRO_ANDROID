@@ -28,6 +28,16 @@ import kotlinx.serialization.json.Json
  */
 class MensajesStore(private val context: Context) {
 
+    companion object {
+        /**
+         * Sube cada vez que cualquier almacén escribe. La pantalla del chat lo mira para
+         * recargar la lista cuando algo entra por otro sitio: una transcripción que llega,
+         * una foto compartida desde otra aplicación.
+         */
+        val cambios = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    }
+
+
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private val archivo: File get() = File(context.filesDir, "guardados.jsonl")
@@ -60,6 +70,48 @@ class MensajesStore(private val context: Context) {
             archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
         }
         if (seUne) unirAlProyecto(apuntado)
+        // **Una nota de voz se pasa a texto** en cuanto se guarda. Ver [transcribir].
+        if (apuntado.clase == Clase.VOZ && apuntado.ruta != null) transcribir(apuntado)
+        cambios.value = cambios.value + 1
+    }
+
+    /**
+     * De la nota de voz a una nota de texto en Markdown, **en el propio teléfono**. Ver
+     * [Transcriptor]. El texto entra como una nota que contesta a la de voz —así se ve
+     * debajo de ella— y, en el chat de un proyecto, además como hoja de notas del proyecto,
+     * que es donde se puede seguir escribiendo en el editor de Markdown.
+     */
+    fun transcribir(m: Mensaje) {
+        val ruta = m.ruta ?: return
+        if (!Transcriptor.disponible(context)) return
+        Transcriptor.transcribir(context, File(ruta)) { r ->
+            when (r) {
+                is Transcriptor.Resultado.Texto -> {
+                    val cuando = System.currentTimeMillis()
+                    val titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion)
+                    val texto = "# $titulo\n\n" + r.texto
+                    anadir(
+                        Mensaje(
+                            id = java.util.UUID.randomUUID().toString(), cuando = cuando, clase = Clase.NOTA,
+                            texto = texto, respondeA = m.id, proyecto = m.proyecto, unido = m.proyecto != null
+                        )
+                    )
+                    val app = context.applicationContext as? com.forge.pixpin.PixPinApp
+                    val proyecto = m.proyecto?.let { app?.proyectos?.porId(it) }
+                    if (app != null && proyecto != null) {
+                        app.proyectos.conHoja(proyecto, com.forge.pixpin.motor.Hoja(id = "nota-$cuando", nombre = titulo, nota = texto), cuando)
+                    }
+                }
+                is Transcriptor.Resultado.DescargandoIdioma -> avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_idioma))
+                is Transcriptor.Resultado.Fallo -> avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
+            }
+        }
+    }
+
+    private fun avisar(texto: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(context, texto, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun unirAlProyecto(m: Mensaje) {
@@ -92,6 +144,7 @@ class MensajesStore(private val context: Context) {
      * por cerrar la aplicación en mal momento.
      */
     fun reescribir(mensajes: List<Mensaje>) {
+        cambios.value = cambios.value + 1
         runCatching {
             val temporal = File(context.filesDir, "guardados.jsonl.nuevo")
             temporal.writeText(

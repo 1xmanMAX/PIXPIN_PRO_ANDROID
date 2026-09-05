@@ -53,8 +53,10 @@ class UnirAlProyectoTest {
         assertEquals("# Pendiente\nLlamar al fontanero", hojas[0].nota)
         assertEquals("Pendiente", hojas[0].nombre)
         assertEquals("foto", hojas[1].nombre)
+        assertEquals("el mismo dibujo que abre el chat", mensajes[1].dibujoDeLaFoto, hojas[1].dibujo)
         val conFoto = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(context, hojas[1].dibujo!!))!!
         assertEquals(ElementType.IMAGE, conFoto.elements.single().type)
+        assertTrue("la foto va clavada, como en el chat", conFoto.elements.single().locked)
         assertTrue(File(conFoto.files.values.single().path!!).exists())
         assertNotEquals("el dibujo se copia, no se enlaza", "dib-chat", hojas[2].dibujo)
         assertEquals(1, ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(context, hojas[2].dibujo!!))!!.elements.size)

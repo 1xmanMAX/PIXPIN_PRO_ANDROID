@@ -450,3 +450,13 @@ fun yaEnBuzon(mensajes: List<Mensaje>, referencia: String?): Mensaje? {
     if (referencia == null) return null
     return mensajes.firstOrNull { it.enBuzon && it.referencia == referencia }
 }
+
+/**
+ * **El dibujo de una foto del chat**, el mismo desde el chat y desde el proyecto.
+ *
+ * Antes el chat le ponía un identificador al azar la primera vez que se abría la foto, y
+ * la hoja del proyecto se hacía con otro: dos dibujos de la misma foto. Ahora sale del
+ * identificador del mensaje, que ya es único: quien llegue primero lo crea y el otro lo
+ * encuentra. El [Mensaje.referencia] guardado sigue mandando si lo hay (fotos de antes).
+ */
+val Mensaje.dibujoDeLaFoto: String get() = referencia ?: "foto-$id"

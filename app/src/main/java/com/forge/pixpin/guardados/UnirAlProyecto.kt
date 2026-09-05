@@ -79,10 +79,13 @@ object UnirAlProyecto {
             Clase.NOTA -> listOf(Hoja(id = "hoja-$ahora-$n", nombre = nombre, nota = m.texto))
             Clase.DIBUJO -> listOfNotNull(copiaDelDibujo(context, m.referencia, "hoja-$ahora-$n", nombre, ahora, n))
             Clase.IMAGEN -> {
-                // Anotada en el chat: se lleva el apunte entero, que es lo que uno ve.
-                copiaDelDibujo(context, m.referencia, "hoja-$ahora-$n", nombre, ahora, n)?.let { return listOf(it) }
+                // **El mismo dibujo que abre el chat, no una copia.** Desde el chat la foto
+                // se abre con su apunte encima y la foto clavada al fondo; la hoja del
+                // proyecto tiene que ser exactamente eso, y si fuera una copia lo anotado en
+                // un sitio no se vería en el otro y la foto de la copia se podía mover (lo
+                // reportó el usuario el 5-sep-2026). Ver [dibujoDeLaFoto].
                 val ruta = m.ruta ?: return emptyList()
-                listOfNotNull(hojaConFoto(context, File(ruta), mimeDe(ruta), "hoja-$ahora-$n", nombre, ahora, n))
+                listOfNotNull(hojaDeLaFotoDelChat(context, File(ruta), mimeDe(ruta), m.dibujoDeLaFoto, "hoja-$ahora-$n", nombre, ahora, n))
             }
             Clase.ARCHIVO -> when {
                 esMarkdown(m) -> {
@@ -129,6 +132,32 @@ object UnirAlProyecto {
             if (hoja != null) hojas += hoja
         }
         return hojas
+    }
+
+    /**
+     * La hoja de una foto del chat: apunta al dibujo de la foto ([dibujoDeLaFoto]) y, si el
+     * chat aún no lo había abierto, lo crea **como lo crearía el editor**: la foto a su
+     * tamaño, al fondo y clavada. Ver `DrawEditorActivity.colocarImagenInicial` y `fijarLaFoto`.
+     */
+    private fun hojaDeLaFotoDelChat(context: Context, archivo: File, mime: String, dibujo: String, id: String, nombre: String, ahora: Long, n: Int): Hoja? {
+        if (File(ExcalidrawStore.rutaDe(context, dibujo)).exists()) return Hoja(id = id, nombre = nombre, dibujo = dibujo)
+        if (!archivo.exists()) return null
+        val foto = ExcalidrawStore.guardarImagen(context, archivo, mime) ?: return null
+        val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(archivo.absolutePath, medidas)
+        val ancho = medidas.outWidth.coerceAtLeast(1).toDouble()
+        val alto = medidas.outHeight.coerceAtLeast(1).toDouble()
+        val escena = Scene(
+            elements = listOf(
+                Element(
+                    id = "foto-$ahora-$n", type = ElementType.IMAGE, x = 0.0, y = 0.0,
+                    width = ancho, height = alto, seed = 1, fileId = foto.id, locked = true
+                )
+            ),
+            files = mapOf(foto.id to foto)
+        )
+        ExcalidrawStore.guardar(context, dibujo, escena) ?: return null
+        return Hoja(id = id, nombre = nombre, dibujo = dibujo)
     }
 
     private fun copiaDelDibujo(context: Context, dibujo: String?, id: String, nombre: String, ahora: Long, n: Int): Hoja? {
