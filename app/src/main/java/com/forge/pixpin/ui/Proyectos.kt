@@ -204,6 +204,25 @@ fun PantallaDeProyectos(
     // la página se abre en el teléfono de quien la recibe, se pasea, se gira y se anota.
     // Ver [ExportarProyectoWeb].
     var exportandoWeb by remember { mutableStateOf(false) }
+    // **Antes de exportar la web se pregunta qué lleva.** Desde el editor ya se preguntaba;
+    // desde aquí salía con lo que quedó marcado la última vez, y el usuario no sabía por
+    // qué su página traía o dejaba de traer el lápiz (5-sep-2026). Ver [DialogoDeFuncionesWeb].
+    var pidiendoFuncionesWeb by remember { mutableStateOf(false) }
+    val ajustesWeb by app.settings.settings.collectAsState(initial = null)
+    val alcanceDeAjustes = rememberCoroutineScope()
+    if (pidiendoFuncionesWeb) {
+        val marcadas = ajustesWeb?.funcionesWeb ?: ExportarHtml.Opciones.NOMBRES.toSet()
+        com.forge.pixpin.motor.DialogoDeFuncionesWeb(
+            marcadas = marcadas,
+            onCambio = { clave, puesta ->
+                val ahora = marcadas.toMutableSet()
+                if (puesta) ahora += clave else ahora -= clave
+                alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ahora) }
+            },
+            onCompartir = { pidiendoFuncionesWeb = false; exportandoWeb = true },
+            onCerrar = { pidiendoFuncionesWeb = false }
+        )
+    }
     // El proyecto que se está empaquetando como `.pixpin`, o null.
     var exportandoPaquete by remember { mutableStateOf<String?>(null) }
 
@@ -468,7 +487,7 @@ fun PantallaDeProyectos(
                     marcadas = marcado[unico.id] ?: emptySet(),
                     onMarcar = { clave -> marcarEn(unico, clave) },
                     onExportar = { exportando = true },
-                    onExportarWeb = { exportandoWeb = true },
+                    onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = unico.id },
                     modifier = Modifier.fillMaxSize().padding(10.dp)
                 )
@@ -523,7 +542,7 @@ fun PantallaDeProyectos(
                     marcadas = marcado[p.id] ?: emptySet(),
                     onMarcar = { clave -> marcarEn(p, clave) },
                     onExportar = { exportando = true },
-                    onExportarWeb = { exportandoWeb = true },
+                    onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = p.id },
                     modifier = Modifier.fillMaxSize()
                 )

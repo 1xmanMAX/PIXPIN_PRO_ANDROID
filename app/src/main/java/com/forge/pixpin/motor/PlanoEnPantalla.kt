@@ -60,6 +60,23 @@ class PlanoEnPantalla private constructor(
     /** Las capas del PDF, por si algún día se encienden y apagan también aquí. */
     val capas: List<PlanoDePdf.Capa>
 ) {
+    /**
+     * Si hay rayas de sobra como para que pintarlas todas de lejos se note. Ver [nivelDeLejos].
+     */
+    private val muchasRayas: Boolean by lazy { tandas.sumOf { it.puntos.size / 4 } > MUCHAS_RAYAS }
+
+    /**
+     * **Cuándo se pasa al nivel basto.** [pixel] es lo que mide un píxel en unidades del dibujo.
+     *
+     * Antes bastaba con que una unidad bajara de un píxel, y eso es «la página cabe en la
+     * pantalla»: en una hoja de texto, donde casi todo son trazos de letra de menos de una
+     * unidad, se iba el 90 % del dibujo de golpe al alejarse y volvía al acercarse. Ahora las
+     * cortas se dejan solo cuando de verdad no llegan a un tercio de píxel, y en un plano
+     * enorme —donde pintarlas todas cuesta— con el criterio de antes.
+     */
+    private fun nivelDeLejos(pixel: Float): Boolean =
+        pixel * 0.3f > LARGO_QUE_SE_VE || (muchasRayas && pixel > LARGO_QUE_SE_VE)
+
 
     /**
      * **Quién pinta la lámina y a quién se avisa cuando está.**
@@ -289,7 +306,7 @@ class PlanoEnPantalla private constructor(
      * que pida el aumento, y los rótulos. Ver [Grabados].
      */
     private fun pintarGrabado(canvas: Canvas, vista: Bounds, zoom: Double, g: Grabados) {
-        val lejos = (1.0 / max(zoom, 1e-6)).toFloat() > LARGO_QUE_SE_VE
+        val lejos = nivelDeLejos((1.0 / max(zoom, 1e-6)).toFloat())
         canvas.save()
         canvas.clipRect(0f, 0f, ancho.toFloat(), alto.toFloat())
         canvas.drawRenderNode(g.fondo)
@@ -414,7 +431,7 @@ class PlanoEnPantalla private constructor(
         // Un píxel de pantalla, medido en unidades del dibujo: es el tamaño de lo que ya no
         // se distingue.
         val pixel = (1.0 / max(zoom, 1e-6)).toFloat()
-        val lejos = soloGordas || pixel > LARGO_QUE_SE_VE
+        val lejos = soloGordas || nivelDeLejos(pixel)
 
         if (que != QUE_ROTULOS) {
         // El papel, blanco: un PDF no trae fondo, y la aplicación pinta el suyo antes de
@@ -498,6 +515,9 @@ class PlanoEnPantalla private constructor(
 
         /** Rayas más cortas que esto (en píxeles) no se pintan de lejos: no se pueden ver. */
         private const val LARGO_QUE_SE_VE = 1.0f
+
+        /** A partir de aquí un plano es «enorme» y de lejos se recorta como antes. */
+        private const val MUCHAS_RAYAS = 300_000
 
         /** Cuántas rayas van en una tanda: la caja de una tanda es lo que permite saltársela. */
         private const val POR_TANDA = 8192

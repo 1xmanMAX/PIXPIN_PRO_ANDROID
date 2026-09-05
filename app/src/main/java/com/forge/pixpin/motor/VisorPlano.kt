@@ -296,6 +296,7 @@ function subirRayas(){
   buffer=gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, datos.subarray(0,n), gl.STATIC_DRAW);
+  rayasSubidas=n/4;
   var pos=gl.getAttribLocation(programa,'p');
   gl.enableVertexAttribArray(pos);
   gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
@@ -391,8 +392,14 @@ function pintarGl(v, e, m){
   // De unidades del dibujo a la pantalla de la tarjeta, con el mismo encuadre que el SVG.
   gl.uniform2f(uA, 2/(e.k*an), -2/(e.k*al));
   gl.uniform2f(uB, e.ox*2/an-1-v.x*2/(e.k*an), 1-e.oy*2/al+v.y*2/(e.k*al));
-  // De lejos, solo las largas: las que no llegan a un píxel no se pueden ver.
-  var soloLargas=(e.k*1.0)>LARGA;
+  // **De lejos, solo las largas — pero solo si hay muchísimas.** Antes se dejaban de pintar
+  // las cortas en cuanto una unidad del dibujo bajaba de un píxel, y eso es «la página cabe
+  // en la pantalla»: en una hoja de texto, donde casi todo son trazos de letras de menos de
+  // una unidad, desaparecía el 90 % del dibujo de golpe al alejarse y volvía al acercarse
+  // (lo reportó el usuario el 5-sep-2026). La tarjeta pinta un millón de rayas sin
+  // inmutarse, así que el recorte queda para los planos enormes, y solo cuando una raya
+  // corta ya no llega a un tercio de píxel del aparato: ahí sí que no se ve.
+  var soloLargas=rayasSubidas>MUCHAS_RAYAS && e.k*0.3>LARGA*dpr;
   var margen=e.k*8;
   var vx0=v.x-margen, vy0=v.y-margen, vx1=v.x+v.w+margen, vy1=v.y+v.h+margen;
   for(var i=0;i<tramos.length;i++){
@@ -433,7 +440,7 @@ function encuadre(v, an, al){
 var MARGEN=2.0;
 // En cuántos trozos se parte una curva al subirla a la tarjeta, y qué raya cuenta como larga
 // (en unidades del dibujo).
-var CACHOS=8, LARGA=1.0, POR_BLOQUE=8192;
+var CACHOS=8, LARGA=1.0, POR_BLOQUE=8192, MUCHAS_RAYAS=1500000, rayasSubidas=0;
 function medir(){
   var r=caja.getBoundingClientRect();
   var an=Math.round(r.width), al=Math.round(r.height);
