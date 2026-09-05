@@ -2,6 +2,7 @@ package com.forge.pixpin.guardados
 
 import android.content.Context
 import java.io.File
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 /**
@@ -47,8 +48,39 @@ class MensajesStore(private val context: Context) {
 
     /** Añade uno. Es una línea al final del archivo: no toca lo que ya había. */
     fun anadir(mensaje: Mensaje) {
+        // **Lo que entra en el chat de un proyecto entra en el proyecto.** Una foto de la
+        // obra o el PDF del cliente se guardan en la conversación del proyecto porque es lo
+        // que está a mano, y de ahí a las hojas iba un menú: ahora van solos, como hoja, sin
+        // tocar nada (lo pidió el usuario el 5-sep-2026). Se hace **fuera del hilo** que
+        // guarda —un PDF de cuarenta páginas se rasteriza— y se apunta el mensaje ya como
+        // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
+        val seUne = mensaje.proyecto != null && UnirAlProyecto.seUneSolo(mensaje)
+        val apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
         runCatching {
-            archivo.appendText(json.encodeToString(Mensaje.serializer(), mensaje) + "\n")
+            archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
+        }
+        if (seUne) unirAlProyecto(apuntado)
+    }
+
+    private fun unirAlProyecto(m: Mensaje) {
+        val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return
+        val proyecto = m.proyecto ?: return
+        app.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val cuantas = runCatching {
+                UnirAlProyecto.unir(context, app.proyectos, proyecto, listOf(m), System.currentTimeMillis())
+            }.getOrDefault(0)
+            if (cuantas > 0) {
+                val nombre = app.proyectos.porId(proyecto)?.nombre.orEmpty()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        context,
+                        context.resources.getQuantityString(
+                            com.forge.pixpin.R.plurals.guardados_unidas, cuantas, cuantas, nombre
+                        ),
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
         }
     }
 

@@ -638,7 +638,9 @@ private fun PaginaDeProyecto(
         produceState(emptyList<HojasDelProyecto.Pagina>(), p, tick) {
             value = withContext(Dispatchers.IO) {
                 HojasDelProyecto.paginas(p) { dibujo ->
-                    ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
+                    // Solo los marcos, y recordados: la lista no necesita el dibujo entero.
+                    // Ver [ExcalidrawStore.resumenDe].
+                    ExcalidrawStore.resumenDe(ExcalidrawStore.rutaDe(contexto, dibujo))?.soloMarcos
                 }
             }
         }.value

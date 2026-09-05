@@ -656,7 +656,21 @@ class DrawEditorActivity : ComponentActivity() {
         // negro. Ahora hay una sola decisión, el color del papel, y de ella salen las otras
         // dos: con qué filtro se pinta la tinta y de qué color va la cuadrícula. Ver
         // [DrawTheme.esDeNoche].
-        val papel = controller.scene.backgroundColor
+        //
+        // **Y el modo noche de la aplicación pone el papel oscuro** cuando el dibujo lleva
+        // el blanco de fábrica: un dibujo se guarda siempre con sus colores de día —eso no
+        // cambia—, pero mirarlo a oscuras con el papel blanco a tope es justo lo que el
+        // ajuste «Modo noche» viene a evitar. Solo el blanco de fábrica: un papel hueso o
+        // gris es una elección, y se respeta. El botón del papel sigue mandando: tocarlo
+        // deja el papel claro **en esta sesión** aunque la aplicación esté de noche.
+        val nocheDeLaApp = com.forge.pixpin.ui.theme.deNoche()
+        var papelClaroForzado by remember { mutableStateOf(false) }
+        val papelGuardado = controller.scene.backgroundColor
+        val papel =
+            if (nocheDeLaApp && !papelClaroForzado &&
+                papelGuardado.equals(DrawTheme.FONDO_DIA, ignoreCase = true)
+            ) DrawTheme.fondoDe(true, (application as? com.forge.pixpin.PixPinApp)?.ajustes?.oledNegro ?: false)
+            else papelGuardado
         val noche = DrawTheme.esDeNoche(papel)
 
         /**
@@ -1270,6 +1284,8 @@ class DrawEditorActivity : ComponentActivity() {
                                 if (noche) DrawTheme.FONDO_DIA
                                 else DrawTheme.fondoDe(true, ajustes.oledNegro)
                             )
+                            // Pedir el claro de noche es pedirlo de verdad: ver [papel].
+                            papelClaroForzado = noche
                             cambiado()
                         },
                         cambiado = { cambiado() },

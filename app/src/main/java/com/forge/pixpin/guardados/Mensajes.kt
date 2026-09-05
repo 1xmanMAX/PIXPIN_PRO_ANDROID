@@ -175,7 +175,15 @@ data class Mensaje(
      * Lo que llega solo —una captura, algo compartido desde otra aplicación— entra aquí en
      * vez de mezclarse con lo que uno guardó a mano. Ver [caducados].
      */
-    val enBuzon: Boolean = false
+    val enBuzon: Boolean = false,
+
+    /**
+     * Ya está metido en las hojas de su proyecto. Lo que entra en el chat de un proyecto
+     * —fotos, PDF, notas en `.md`— se une solo al proyecto al guardarse (ver
+     * [MensajesStore.anadir] y [UnirAlProyecto]); con esto el menú no vuelve a ofrecer
+     * «unir» lo que ya está unido, que daría la hoja dos veces.
+     */
+    val unido: Boolean = false
 )
 
 /** Las secciones de la cabecera, en su orden. */

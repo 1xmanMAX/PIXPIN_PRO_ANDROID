@@ -74,6 +74,41 @@ object ExcalidrawStore {
         destino.absolutePath
     }.getOrNull()
 
+    /**
+     * **Lo poco que hace falta para listar un lienzo, recordado.** Ver [Resumen].
+     *
+     * La lista de hojas de un proyecto solo necesita saber de cada lienzo **qué marcos
+     * tiene** y **si hay algo dibujado**, y para eso cargaba el archivo entero —gzip y
+     * JSON— de cada hoja cada vez que el proyecto cambiaba. Con las fotos del chat entrando
+     * solas como hojas eso son decenas de archivos por cada toque. Aquí se recuerda el
+     * resumen por archivo y solo se vuelve a leer el que ha cambiado (fecha o tamaño).
+     */
+    fun resumenDe(path: String?): Resumen? {
+        if (path == null) return null
+        val file = File(path)
+        if (!file.exists()) return null
+        val sello = file.lastModified() to file.length()
+        synchronized(resumenes) {
+            resumenes[path]?.let { if (it.first == sello) return it.second }
+        }
+        val escena = cargar(path) ?: return null
+        val resumen = Resumen(marcos = escena.marcos, vacio = escena.elements.none { !it.isDeleted })
+        synchronized(resumenes) {
+            if (resumenes.size > TOPE_DE_RESUMENES) resumenes.clear()
+            resumenes[path] = sello to resumen
+        }
+        return resumen
+    }
+
+    /** Lo que se sabe de un lienzo sin abrirlo del todo: sus marcos y si está en blanco. */
+    class Resumen(val marcos: List<Element>, val vacio: Boolean) {
+        /** Una escena con solo los marcos, para quien pregunta por [Scene.marcos]. */
+        val soloMarcos: Scene get() = Scene(elements = marcos)
+    }
+
+    private val resumenes = HashMap<String, Pair<Pair<Long, Long>, Resumen>>()
+    private const val TOPE_DE_RESUMENES = 2000
+
     fun cargar(path: String?): Scene? = runCatching {
         if (path == null) return null
         val file = File(path)

@@ -531,9 +531,9 @@ class MensajesActivity : ComponentActivity() {
                                         )
                                     )
                                 }
-                                if (loMarcado.any { UnirAlProyecto.sePuedeUnir(it) }) {
+                                if (loMarcado.any { !it.unido && UnirAlProyecto.sePuedeUnir(it) }) {
                                     IconButton(onClick = {
-                                        unirAlProyecto(loMarcado.sortedBy { it.cuando })
+                                        unirAlProyecto(loMarcado.filterNot { it.unido }.sortedBy { it.cuando })
                                         marcados = emptySet()
                                     }) {
                                         Icon(
@@ -1144,7 +1144,7 @@ class MensajesActivity : ComponentActivity() {
                             acciones = remember(m, mensajes) { Acciones(
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
-                                unir = if (UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
+                                unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
                                 compartirComo = { compartiendo = m },
                                 verHilo = { hiloDe = m },
                                 cuantosComentarios = comentariosPorMensaje[m.id] ?: 0,

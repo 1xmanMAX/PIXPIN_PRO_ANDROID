@@ -44,12 +44,25 @@ object DrawTheme {
     /** Por debajo de esta saturación, un color es un gris: tinta, no color. */
     private const val ES_GRIS = 0.14
 
-    /** Lo claro que se pone un color para leerse sobre el fondo oscuro. */
-    private const val CLARIDAD_BASE = 0.62
-    private const val CLARIDAD_EXTRA = 0.28
+    /**
+     * Lo claro que se pone un color de noche: `BASE + POR_CLARIDAD × claridad de día`, entre
+     * [CLARIDAD_MINIMA] y [CLARIDAD_MAXIMA]. Un rojo puro (0,5) queda en 0,675; un granate
+     * (0,25) en 0,59; un rosa pastel (0,85) en 0,80. Es la regla del estudio de logotipos en
+     * modo oscuro (PLOS One, 2025): los oscuros suben bastante, los claros bajan un poco, y
+     * todos acaban en la franja en la que una tinta se lee sobre negro sin deslumbrar.
+     */
+    private const val CLARIDAD_BASE = 0.5
+    private const val CLARIDAD_POR_CLARIDAD = 0.35
+    private const val CLARIDAD_MINIMA = 0.55
+    private const val CLARIDAD_MAXIMA = 0.85
 
-    /** Tope de saturación de noche: lo muy saturado vibra sobre oscuro. */
-    private const val SATURACION_MAXIMA = 0.85
+    /**
+     * Cuánto se le sube la saturación a un color de noche. Es el **contraste simultáneo**:
+     * el mismo rojo sobre casi negro se ve más apagado que sobre blanco, y para que se
+     * perciba igual hay que darle un 15–25 % más. Antes se le *quitaba*, y por eso las
+     * tintas de noche salían pálidas.
+     */
+    private const val MAS_SATURACION = 1.15
 
     /**
      * El color con el que hay que pintar [argb] en modo noche.
@@ -80,15 +93,21 @@ object DrawTheme {
         //
         // Aquí se separan los dos casos, que de verdad son dos:
         //
-        // - **Un gris es tinta.** Se dibujó pensando en papel blanco, así que se
-        //   invierte del todo: el negro es blanco y el blanco es negro.
-        // - **Un color es un color.** Se le respeta el tono —el rojo tiene que
-        //   seguir siendo rojo, no rosa ni naranja— y se le sube la claridad
-        //   hasta donde se lee sobre oscuro, bajándole un punto de saturación
-        //   porque un color a tope vibra sobre negro y cansa la vista.
+        // - **Un gris es tinta, y de noche toda tinta es clara.** El negro se dibujó
+        //   pensando en papel blanco, así que se invierte: sale blanco. Pero el blanco
+        //   **no se vuelve negro**: quien elige tinta blanca quiere tinta blanca, y sobre
+        //   un papel oscuro un trazo negro es un trazo que no está (lo reportó el usuario
+        //   el 5-sep-2026: «selecciono un trazo en blanco y sale negro»). La regla es
+        //   quedarse con la más clara de las dos: el gris oscuro se aclara y el claro se
+        //   queda como está.
+        // - **Un color es un color.** Se le respeta el tono —el rojo tiene que seguir
+        //   siendo rojo, no rosa ni naranja—, se le lleva la claridad a la franja en que se
+        //   lee sobre oscuro y se le **sube** un punto la saturación, porque sobre negro
+        //   el mismo color se percibe más apagado. Ver [MAS_SATURACION].
         val gris = s < ES_GRIS
-        val claridad = if (gris) 1.0 - l else CLARIDAD_BASE + CLARIDAD_EXTRA * (1.0 - l)
-        val saturacion = if (gris) s else minOf(s, SATURACION_MAXIMA)
+        val claridad = if (gris) maxOf(l, 1.0 - l)
+            else (CLARIDAD_BASE + CLARIDAD_POR_CLARIDAD * l).coerceIn(CLARIDAD_MINIMA, CLARIDAD_MAXIMA)
+        val saturacion = if (gris) s else minOf(1.0, s * MAS_SATURACION)
 
         val (r, g, b) = deHsl(h, saturacion, claridad)
         return (a shl 24) or

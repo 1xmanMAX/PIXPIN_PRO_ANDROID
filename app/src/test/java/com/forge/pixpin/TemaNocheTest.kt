@@ -38,9 +38,10 @@ class TemaNocheTest {
 
     /** Y el blanco, negro: es tinta pensada para papel. */
     @Test
-    fun `el blanco se vuelve negro`() {
+    fun `el blanco sigue siendo blanco`() {
+        // Tinta blanca sobre papel oscuro es tinta blanca: invertirla la hacía desaparecer.
         val c = DrawTheme.filtrar(rgb(255, 255, 255), noche = true)
-        assertEquals(0, rojoDe(c))
+        assertEquals(255, rojoDe(c))
     }
 
     /** Un rojo sigue siendo rojo, **no cian ni rosa**: solo se aclara. */

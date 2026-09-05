@@ -61,6 +61,21 @@ class UnirAlProyectoTest {
     }
 
     @Test
+    fun `solo entra solo lo que viene de fuera`() {
+        val foto = Mensaje(id = "f", cuando = 1, clase = Clase.IMAGEN, ruta = "/x/foto.jpg", nombre = "foto.jpg")
+        val pdf = Mensaje(id = "p", cuando = 2, clase = Clase.ARCHIVO, ruta = "/x/planos.pdf", nombre = "planos.pdf")
+        val nota = Mensaje(id = "n", cuando = 3, clase = Clase.NOTA, texto = "hola, ¿a qué hora?")
+        val dibujo = Mensaje(id = "d", cuando = 4, clase = Clase.DIBUJO, referencia = "dib")
+        val zip = Mensaje(id = "z", cuando = 5, clase = Clase.ARCHIVO, ruta = "/x/cosa.zip", nombre = "cosa.zip")
+        assertTrue(UnirAlProyecto.seUneSolo(foto))
+        assertTrue(UnirAlProyecto.seUneSolo(pdf))
+        assertFalse("una nota del chat no es una hoja", UnirAlProyecto.seUneSolo(nota))
+        assertFalse("un dibujo se une a mano", UnirAlProyecto.seUneSolo(dibujo))
+        assertFalse(UnirAlProyecto.seUneSolo(zip))
+        assertTrue("pero a mano sí", UnirAlProyecto.sePuedeUnir(nota) && UnirAlProyecto.sePuedeUnir(dibujo))
+    }
+
+    @Test
     fun `un pdf se vuelve el documento del proyecto que no tenia`() {
         val proyectos = ProyectosRepository(context)
         val proyecto = proyectos.nuevo("Reforma", 20)

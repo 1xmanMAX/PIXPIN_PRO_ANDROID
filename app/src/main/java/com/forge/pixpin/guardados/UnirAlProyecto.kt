@@ -49,6 +49,15 @@ object UnirAlProyecto {
         else -> false
     }
 
+    /**
+     * Lo que **entra solo** en el proyecto al caer en su chat: lo que viene de fuera —una
+     * foto, un PDF, un archivo de notas—. Una nota escrita en el chat o un dibujo adjunto
+     * no: «hola, ¿a qué hora?» no es una hoja, y un dibujo del propio proyecto pegado en su
+     * chat ya está en el proyecto. Esos se unen a mano, desde el menú.
+     */
+    fun seUneSolo(m: Mensaje): Boolean =
+        sePuedeUnir(m) && (m.clase == Clase.IMAGEN || m.clase == Clase.ARCHIVO)
+
     fun unir(context: Context, proyectos: ProyectosRepository, proyectoId: String, mensajes: List<Mensaje>, ahora: Long): Int {
         val antes = proyectos.porId(proyectoId)?.hojas?.size ?: return 0
         var n = 0

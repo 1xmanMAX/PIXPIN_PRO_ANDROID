@@ -911,8 +911,10 @@ class Renderer(
         // cuadrícula. Lo que tiene que leerse es la retícula **contra el papel que hay**, así
         // que sale de él: sobre papel claro, un gris que no compite con el dibujo; sobre papel
         // oscuro, un gris que aclara.
+        // Y «el papel que hay» es el que se está viendo —[dark]—, que de noche puede ser
+        // oscuro aunque el archivo guarde papel blanco. Ver el editor.
         paint.color =
-            if (DrawTheme.esDeNoche(scene.backgroundColor)) {
+            if (dark) {
                 android.graphics.Color.argb(255, 0x4A, 0x50, 0x5C)
             } else {
                 android.graphics.Color.argb(255, 0xC8, 0xCC, 0xD4)
