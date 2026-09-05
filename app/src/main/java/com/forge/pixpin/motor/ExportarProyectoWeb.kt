@@ -202,13 +202,15 @@ object ExportarProyectoWeb {
         }
         if (calidad == AudioLigero.SIN_AUDIO) return null
         val archivo = java.io.File(ruta)
-        if (!archivo.exists()) return null
+        if (!archivo.exists()) { android.util.Log.w("PixPinWeb", "audio no encontrado: $ruta"); return null }
         val ligero = if (AudioLigero.bitsPorSegundo(calidad) != null) {
             val destino = java.io.File(context.cacheDir, "web-audio-${ruta.hashCode()}-$calidad.m4a")
-            AudioLigero.comprimir(archivo, destino, calidad)
+            AudioLigero.comprimir(archivo, destino, calidad).also {
+                if (it == null) android.util.Log.w("PixPinWeb", "no se pudo aligerar $ruta; va el original")
+            }
         } else null
         val (elArchivo, elMime) = if (ligero != null) ligero to "audio/mp4" else archivo to mime
-        if (elArchivo.length() > TOPE_DE_AUDIO) return null
+        if (elArchivo.length() > TOPE_DE_AUDIO) { android.util.Log.w("PixPinWeb", "audio demasiado grande: ${elArchivo.length()}"); return null }
         return runCatching {
             "data:$elMime;base64," + android.util.Base64.encodeToString(elArchivo.readBytes(), android.util.Base64.NO_WRAP)
         }.getOrNull().also { ligero?.delete() }

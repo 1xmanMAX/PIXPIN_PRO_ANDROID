@@ -59,6 +59,26 @@ object ExportarWebDe {
         )
     }
 
+    /**
+     * Qué lleva la página, para decirlo al compartirla: hojas, audios, imágenes y peso.
+     * Es lo que permite saber, sin abrir el archivo, si el audio de una nota viajó o no.
+     */
+    fun resumenDe(archivo: File): String {
+        val html = runCatching { archivo.readText() }.getOrDefault("")
+        val hojas = Regex("<div class=\"hoja\"").findAll(html).count()
+        val audios = Regex("<audio ").findAll(html).count()
+        val imagenes = Regex("<img ").findAll(html).count()
+        val adjuntos = Regex("class=\"adjunto\"").findAll(html).count()
+        val peso = com.forge.pixpin.motor.Detalle.legible(archivo.length())
+        return buildString {
+            append("Página web: ").append(hojas).append(if (hojas == 1) " hoja" else " hojas")
+            if (audios > 0) append(" · ").append(audios).append(if (audios == 1) " audio" else " audios")
+            if (imagenes > 0) append(" · ").append(imagenes).append(if (imagenes == 1) " imagen" else " imágenes")
+            if (adjuntos > 0) append(" · ").append(adjuntos).append(if (adjuntos == 1) " adjunto" else " adjuntos")
+            append(" · ").append(peso)
+        }
+    }
+
     /** El `.html` listo para compartir, en la carpeta que publica el FileProvider. Null si no hay nada. */
     fun archivo(contexto: Context, seleccion: List<Pair<Proyecto, Set<String>>>, opciones: ExportarHtml.Opciones, deNoche: Boolean, calidadDeAudio: String = com.forge.pixpin.motor.AudioLigero.LIGERO): File? {
         val hojas = seleccion.flatMap { (p, claves) -> hojas(contexto, p, claves, deNoche, calidadDeAudio) }

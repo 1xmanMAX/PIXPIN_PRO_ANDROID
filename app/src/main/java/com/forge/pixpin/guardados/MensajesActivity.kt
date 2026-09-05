@@ -4900,7 +4900,10 @@ class MensajesActivity : ComponentActivity() {
                 val (p, claves) = proyectoDe(m) ?: return@withContext null
                 com.forge.pixpin.ui.ExportarWebDe.archivo(this@MensajesActivity, listOf(p to claves), opciones, deNoche, calidadDeAudio)
             }
-            if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
+            if (archivo == null) avisarDeQueNoHay() else {
+                Toast.makeText(this@MensajesActivity, com.forge.pixpin.ui.ExportarWebDe.resumenDe(archivo), Toast.LENGTH_LONG).show()
+                compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
+            }
         }
     }
 
