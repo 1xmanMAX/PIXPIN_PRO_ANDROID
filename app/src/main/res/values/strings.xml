@@ -70,6 +70,12 @@
     <!-- Por qué proyecto vas, de cuántos. Es lo que dice que esto sigue bajando. -->
     <string name="proyecto_posicion">%1$d / %2$d</string>
     <string name="proyecto_exportar_n">Exportar (%1$d)</string>
+    <string name="proyecto_anadir">Añadir</string>
+    <string name="proyecto_web_corto">Web</string>
+    <string name="proyecto_desmarcar_corto">Soltar</string>
+    <string name="proyecto_desmarcar">Quitar las marcas</string>
+    <string name="proyecto_exportar_todo_web">Página web de todo el proyecto</string>
+    <string name="proyecto_exportar_todo_pdf">PDF de todo el proyecto</string>
     <string name="zoom_bloquear">Clavar el zoom</string>
     <string name="zoom_desbloquear">Soltar el zoom</string>
     <string name="proyecto_pagina">Página %1$d</string>
@@ -436,6 +442,12 @@
     <string name="tool_relleno">Rellenar</string>
     <string name="tool_recortar">Recortar</string>
     <string name="tool_escala_grafica">Escala gráfica</string>
+    <string name="modo_noche_title">Modo noche</string>
+    <string name="modo_noche_desc">«Automático» lo pone de noche de ocho de la tarde a siete de la mañana, y también de día si la habitación está a oscuras: lo dice el sensor de luz del teléfono.</string>
+    <string name="modo_noche_sistema">Sistema</string>
+    <string name="modo_noche_claro">Claro</string>
+    <string name="modo_noche_oscuro">Oscuro</string>
+    <string name="modo_noche_auto">Automático</string>
     <string name="oled_title">Negro puro en modo noche</string>
     <string name="oled_desc">En pantallas OLED el negro apaga el píxel: se ve más negro y gasta menos. En una pantalla LCD se ve gris lavado, así que déjalo apagado.</string>
     <string name="tool_nudo">Soldar vértices</string>

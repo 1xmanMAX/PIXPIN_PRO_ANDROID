@@ -142,6 +142,13 @@ data class Settings(
     val oledNegro: Boolean = false,
 
     /**
+     * Cuándo se pone el modo noche: con el sistema, nunca, siempre, o solo (automático)
+     * cuando es de noche de verdad —por la hora o porque el sensor de luz dice que la
+     * habitación está a oscuras—. Ver [com.forge.pixpin.ui.theme.rememberAOscuras].
+     */
+    val modoNoche: ModoNoche = ModoNoche.SISTEMA,
+
+    /**
      * **Cómo se trae un plano en PDF: como líneas o como imagen.**
      *
      * Con esto puesto, al abrir un PDF vectorial se lee su geometría y se pinta como rayas
@@ -274,6 +281,7 @@ class SettingsRepository(private val context: Context) {
         val EDITOR_TOOLS = stringSetPreferencesKey("editor_tools")
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
+        val MODO_NOCHE = stringPreferencesKey("modo_noche")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
@@ -296,6 +304,8 @@ class SettingsRepository(private val context: Context) {
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
+            modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
+                .getOrDefault(ModoNoche.SISTEMA),
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
@@ -371,6 +381,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOledNegro(valor: Boolean) {
         context.dataStore.edit { it[Keys.OLED_NEGRO] = valor }
+    }
+
+    suspend fun setModoNoche(valor: ModoNoche) {
+        context.dataStore.edit { it[Keys.MODO_NOCHE] = valor.name }
     }
 
     /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */
@@ -501,3 +515,6 @@ enum class ClaseDeIman {
 
 /** Los cuatro sitios donde se dibuja, cada uno con su barra. */
 enum class DondeSeDibuja { EDITOR, PIN, CAPA, CAPTURA }
+
+/** Cuándo va la interfaz en modo noche. Ver [Settings.modoNoche]. */
+enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO }

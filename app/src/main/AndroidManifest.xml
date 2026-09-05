@@ -98,6 +98,13 @@
             propia, como el resto de lo que se lanza desde el overlay. Aquí
             además interesa que SÍ quede en Recientes: es una sesión de trabajo
             larga, no un paso intermedio como el consentimiento o la captura.
+
+            **Y cada documento en su propia tarea** (`documentLaunchMode="intoExisting"`,
+            en los tres editores): dos dibujos, dos croquis o dos notas abiertos a la vez
+            son dos entradas en Recientes que se pueden poner a pantalla partida, como dos
+            ventanas. El intent lleva de `data` la seña del documento (`pixpin://dibujo/id`):
+            es por lo que Android decide si vuelve a la tarea que ya estaba —el mismo
+            dibujo— o abre otra. Lo pidió el usuario (5-sep-2026).
         -->
         <!--
             El croquis en el espacio. Mismas señas que el editor del lienzo: sesión de
@@ -107,6 +114,7 @@
             android:name=".croquis3d.Croquis3DActivity"
             android:exported="false"
             android:taskAffinity="${applicationId}.croquis"
+            android:documentLaunchMode="intoExisting"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/Theme.PixPin" />
 
@@ -114,6 +122,7 @@
             android:name=".motor.DrawEditorActivity"
             android:exported="false"
             android:taskAffinity="${applicationId}.draw"
+            android:documentLaunchMode="intoExisting"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
@@ -128,6 +137,7 @@
             android:name=".ui.MarkdownEditorActivity"
             android:exported="false"
             android:taskAffinity="${applicationId}.markdown"
+            android:documentLaunchMode="intoExisting"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />

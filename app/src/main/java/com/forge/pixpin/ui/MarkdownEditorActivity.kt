@@ -230,6 +230,8 @@ class MarkdownEditorActivity : ComponentActivity() {
             desdeProyecto: String? = null
         ) {
             val i = Intent(context, MarkdownEditorActivity::class.java)
+                // Cada nota en su tarea. Ver el manifiesto.
+                .setData(android.net.Uri.parse("pixpin://nota/" + android.net.Uri.encode(id.ifBlank { "suelta" })))
                 .putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_TEXTO, texto)
                 .putExtra(EXTRA_DESDE, desde)

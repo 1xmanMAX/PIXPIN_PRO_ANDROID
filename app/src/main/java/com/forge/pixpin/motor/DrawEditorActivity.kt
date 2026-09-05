@@ -202,6 +202,9 @@ class DrawEditorActivity : ComponentActivity() {
         ) {
             context.startActivity(
                 Intent(context, DrawEditorActivity::class.java).apply {
+                    // La seña de este documento: con `documentLaunchMode`, el mismo dibujo
+                    // vuelve a su tarea y otro dibujo abre la suya. Ver el manifiesto.
+                    data = android.net.Uri.parse("pixpin://dibujo/" + android.net.Uri.encode(id))
                     putExtra(EXTRA_ID, id)
                     putExtra(EXTRA_RUTA, rutaDibujo)
                     putExtra(EXTRA_IMAGEN, imagenPath)
@@ -333,7 +336,7 @@ class DrawEditorActivity : ComponentActivity() {
             val ajustes by (application as? com.forge.pixpin.PixPinApp)?.settings?.settings
                 ?.collectAsState(initial = com.forge.pixpin.data.Settings())
                 ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
-            PixPinTheme(oled = ajustes.oledNegro) { Editor() }
+            PixPinTheme { Editor() }
         }
     }
 

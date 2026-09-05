@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
@@ -366,7 +367,7 @@ fun PantallaDeProyectos(
                 }
             }
 
-            val oscuroDelSistema = androidx.compose.foundation.isSystemInDarkTheme()
+            val oscuroDelSistema = com.forge.pixpin.ui.theme.deNoche()
             exportandoPaquete?.let { cualId ->
                 LaunchedEffect(cualId) {
                     val proyecto = ordenados.firstOrNull { it.id == cualId }
@@ -489,6 +490,7 @@ fun PantallaDeProyectos(
                     onExportar = { exportando = true },
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = unico.id },
+                    onDesmarcar = { marcado = marcado - unico.id },
                     modifier = Modifier.fillMaxSize().padding(10.dp)
                 )
                 return@Column
@@ -544,6 +546,7 @@ fun PantallaDeProyectos(
                     onExportar = { exportando = true },
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = p.id },
+                    onDesmarcar = { marcado = marcado - p.id },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -599,6 +602,7 @@ private fun PaginaDeProyecto(
     onExportar: () -> Unit,
     onExportarWeb: () -> Unit,
     onExportarPaquete: () -> Unit = {},
+    onDesmarcar: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val contexto = LocalContext.current
@@ -768,6 +772,25 @@ private fun PaginaDeProyecto(
                                     )
                                 }
                             )
+                            // **Exportar sin marcar nada: todo el proyecto.** Se marcan
+                            // todas las hojas y se sigue por el camino de siempre, así lo
+                            // que sale es lo mismo que marcando una a una.
+                            val todas = { paginas.forEach { if (it.clave !in marcadas) onMarcar(it.clave) } }
+                            DropdownMenuItem(
+                                text = { Text(stringResourceSafe(R.string.proyecto_exportar_todo_web)) },
+                                leadingIcon = { Icon(Icons.Filled.Language, contentDescription = null) },
+                                onClick = { menu = false; todas(); onExportarWeb() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResourceSafe(R.string.proyecto_exportar_todo_pdf)) },
+                                leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                                onClick = { menu = false; todas(); onExportar() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResourceSafe(R.string.proyecto_paquete)) },
+                                leadingIcon = { Icon(Icons.Filled.FolderZip, contentDescription = null) },
+                                onClick = { menu = false; onExportarPaquete() }
+                            )
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -845,7 +868,8 @@ private fun PaginaDeProyecto(
                     onChat = alChat,
                     onExportar = onExportar,
                     onExportarWeb = onExportarWeb,
-                    onExportarPaquete = onExportarPaquete
+                    onExportarPaquete = onExportarPaquete,
+                    onDesmarcar = onDesmarcar
                 )
                 }
                 if (apaisado) {
@@ -1003,10 +1027,18 @@ private fun PistaDeChat(desplazamiento: Animatable<Float, AnimationVector1D>) {
 /**
  * Lo que se hace con el proyecto a diario, en una fila al pie.
  *
- * Entrar al chat y volver a poner el PDF en pantalla son las dos cosas de todos
- * los días, y por eso están a mano. Exportar aparece **solo cuando hay algo
- * marcado**: es una acción de lo que acabas de elegir, no una opción del
- * proyecto que esté siempre ahí ocupando sitio.
+ * Dos caras, según haya algo marcado o no:
+ *
+ * - **Sin nada marcado**: el chat, volver a poner el PDF en pantalla, y **una caja con lo
+ *   que se añade** —hoja del lienzo, nota y croquis 3D—. Van juntas dentro de un borde
+ *   porque son la misma pregunta («¿qué le meto al proyecto?») con tres respuestas, y
+ *   sueltas entre las demás se leían como cinco botones sin relación (lo pidió el usuario
+ *   el 5-sep-2026).
+ * - **Con algo marcado**: solo **la caja de exportar** —página web, PDF y el editable
+ *   `.pixpin`— con la cuenta de lo marcado, y un botón para soltar las marcas. Exportar es
+ *   lo que se hace con lo que acabas de elegir, no una opción del proyecto que esté
+ *   siempre ahí ocupando sitio; y para exportarlo todo sin marcar nada están los tres
+ *   puntos de la cabecera.
  */
 @Composable
 private fun BarraDeAcciones(
@@ -1017,7 +1049,9 @@ private fun BarraDeAcciones(
     onExportar: () -> Unit,
     onExportarWeb: () -> Unit,
     /** El proyecto entero como `.pixpin`, para seguir editándolo en otro aparato. */
-    onExportarPaquete: () -> Unit = {}
+    onExportarPaquete: () -> Unit = {},
+    /** Suelta todo lo marcado de este proyecto. */
+    onDesmarcar: () -> Unit = {}
 ) {
     val contexto = LocalContext.current
     Row(
@@ -1025,128 +1059,143 @@ private fun BarraDeAcciones(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
+        if (marcadas > 0) {
+            CajaDeAcciones(stringResourceSafe(R.string.proyecto_exportar_n, marcadas)) {
+                BotonDeAccion(
+                    Icons.Filled.Language, R.string.proyecto_web_corto, R.string.proyecto_exportar_web,
+                    ancho = ANCHO_EN_CAJA, onClick = onExportarWeb
+                )
+                BotonDeAccion(
+                    Icons.Filled.Share, R.string.proyecto_pdf_corto, R.string.proyecto_exportar,
+                    ancho = ANCHO_EN_CAJA, onClick = onExportar
+                )
+                BotonDeAccion(
+                    Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete,
+                    ancho = ANCHO_EN_CAJA, onClick = onExportarPaquete
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            BotonDeAccion(
+                Icons.Filled.Close, R.string.proyecto_desmarcar_corto, R.string.proyecto_desmarcar,
+                onClick = onDesmarcar
+            )
+            return@Row
+        }
         BotonDeAccion(
-            Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onChat
-        )
-        // **Editable.** Un `.pixpin` con todo lo del proyecto: se abre en otro PixPin —el del
-        // escritorio también— y se sigue editando. Ver [PaquetePixpin].
-        BotonDeAccion(
-            Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete, onExportarPaquete
+            Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onClick = onChat
         )
         if (p.pdfOrigen != null) {
             BotonDeAccion(
                 Icons.Filled.PushPin, R.string.proyecto_pdf_corto, R.string.proyecto_pinear
             ) { volverAPinear(app, p) }
-        } else {
-            // En un proyecto de lienzos, añadir hoja y añadir nota **son** el
-            // trabajo diario: no pueden estar detrás de un menú.
+        }
+        CajaDeAcciones(stringResourceSafe(R.string.proyecto_anadir)) {
+            // Una hoja del lienzo. En un proyecto con PDF también: una hoja en blanco al
+            // lado de las páginas es donde se hace el detalle que el plano no trae.
             BotonDeAccion(
-                Icons.Filled.Add, R.string.proyecto_hoja_corta, R.string.proyecto_hoja_nueva
+                Icons.Filled.Add, R.string.proyecto_hoja_corta, R.string.proyecto_hoja_nueva,
+                ancho = ANCHO_EN_CAJA
             ) {
                 val ahora = System.currentTimeMillis()
                 val hoja = Hoja(id = "h-$ahora", dibujo = "dib-$ahora")
                 app.proyectos.guardar(Proyectos.conHoja(p, hoja, ahora))
             }
             // Un proyecto se entrega con texto dentro —la portada, la explicación
-            // de un plano, el presupuesto— y hasta que esto estuvo aquí la única
-            // forma de meterlo era abrir el editor por otro sitio y mandarlo «al
-            // proyecto en curso», que es adivinar. Nace vacía y abre el editor:
-            // lo que se escriba vuelve a la hoja al guardar.
+            // de un plano, el presupuesto—. Nace vacía y abre el editor: lo que se
+            // escriba vuelve a la hoja al guardar.
             BotonDeAccion(
                 Icons.AutoMirrored.Filled.Notes,
                 R.string.proyecto_nota_corta,
-                R.string.proyecto_nota_nueva
+                R.string.proyecto_nota_nueva,
+                ancho = ANCHO_EN_CAJA
             ) {
                 val ahora = System.currentTimeMillis()
                 val id = "n-$ahora"
                 app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = id, nota = ""), ahora))
                 MarkdownEditorActivity.abrir(contexto, id, "", desdeProyecto = p.id)
             }
-        }
-        // **Los croquis en el espacio del proyecto.**
-        //
-        // Van en todos los proyectos, tengan plano de origen o no: croquizar en tres
-        // dimensiones es lo que uno hace *antes* de dibujar el plano —el volumen, el
-        // encaje, cómo se cruzan dos piezas— y también encima de un PDF que ya existe.
-        // Cada vista que se congele ahí entra aquí como una lámina, así que se marca y se
-        // exporta con las otras sin nada aparte. Ver [Croquis3DActivity].
-        //
-        // **Y son varios, como los lienzos.** Con ninguno, el botón crea el primero y lo
-        // abre —preguntar «¿cuál?» cuando no hay ninguno es preguntar por preguntar—; con
-        // alguno, enseña los que hay, cada uno con **su color**, que es el mismo con el que
-        // salen enmarcadas sus láminas en la lista de abajo.
-        var croquis by remember { mutableStateOf(false) }
-        Box {
-            BotonDeAccion(
-                Icons.Filled.ViewInAr,
-                R.string.proyecto_croquis_corto,
-                R.string.proyecto_croquis
-            ) {
-                if (p.croquis.isEmpty()) abrirUnCroquisNuevo(contexto, app, p) else croquis = true
-            }
-            DropdownMenu(expanded = croquis, onDismissRequest = { croquis = false }) {
-                p.croquis.forEachIndexed { i, id ->
-                    DropdownMenuItem(
-                        text = { Text(stringResourceSafe(R.string.proyecto_croquis_n, i + 1)) },
-                        leadingIcon = {
-                            Box(
-                                Modifier
-                                    .size(12.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Color(
-                                            HojasDelProyecto.colorDe(Hoja(id = "", croquis = id))
-                                                ?: 0
+            // **Los croquis en el espacio del proyecto.**
+            //
+            // Cada vista que se congele ahí entra aquí como una lámina, así que se marca y
+            // se exporta con las otras sin nada aparte. Ver [Croquis3DActivity].
+            //
+            // **Y son varios, como los lienzos.** Con ninguno, el botón crea el primero y
+            // lo abre; con alguno, enseña los que hay, cada uno con **su color**, que es el
+            // mismo con el que salen enmarcadas sus láminas en la lista de abajo.
+            var croquis by remember { mutableStateOf(false) }
+            Box {
+                BotonDeAccion(
+                    Icons.Filled.ViewInAr,
+                    R.string.proyecto_croquis_corto,
+                    R.string.proyecto_croquis,
+                    ancho = ANCHO_EN_CAJA
+                ) {
+                    if (p.croquis.isEmpty()) abrirUnCroquisNuevo(contexto, app, p) else croquis = true
+                }
+                DropdownMenu(expanded = croquis, onDismissRequest = { croquis = false }) {
+                    p.croquis.forEachIndexed { i, id ->
+                        DropdownMenuItem(
+                            text = { Text(stringResourceSafe(R.string.proyecto_croquis_n, i + 1)) },
+                            leadingIcon = {
+                                Box(
+                                    Modifier
+                                        .size(12.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            Color(
+                                                HojasDelProyecto.colorDe(Hoja(id = "", croquis = id))
+                                                    ?: 0
+                                            )
                                         )
-                                    )
-                            )
-                        },
-                        onClick = {
-                            croquis = false
-                            com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
-                                contexto, p.id, id, desdeProyectos = true
-                            )
-                        }
+                                )
+                            },
+                            onClick = {
+                                croquis = false
+                                com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
+                                    contexto, p.id, id, desdeProyectos = true
+                                )
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResourceSafe(R.string.proyecto_croquis_nuevo)) },
+                        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                        onClick = { croquis = false; abrirUnCroquisNuevo(contexto, app, p) }
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text(stringResourceSafe(R.string.proyecto_croquis_nuevo)) },
-                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    onClick = { croquis = false; abrirUnCroquisNuevo(contexto, app, p) }
-                )
             }
         }
-        Spacer(Modifier.weight(1f))
-        // Exportar no tiene la forma de los demás **a propósito**: no es una cosa
-        // que el proyecto sepa hacer siempre, es lo que hay que hacer con lo que
-        // acabas de marcar, y lleva la cuenta dentro para que no haya que ir a
-        // contar las hojas con el tic.
-        if (marcadas > 0) {
-            // La web va antes y sin texto: el número de al lado es de lo marcado, y decirlo
-            // dos veces sobra.
-            TextButton(onClick = onExportarWeb, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Icon(
-                    Icons.Filled.Language,
-                    contentDescription = stringResourceSafe(R.string.proyecto_exportar_web),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            TextButton(onClick = onExportar, contentPadding = PaddingValues(horizontal = 10.dp)) {
-                Icon(
-                    Icons.Filled.Share,
-                    // El texto de al lado lleva la cuenta; la frase entera se
-                    // queda aquí, para quien no ve la pantalla.
-                    contentDescription = stringResourceSafe(R.string.proyecto_exportar),
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    stringResourceSafe(R.string.proyecto_exportar_n, marcadas),
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                    modifier = Modifier.padding(start = 6.dp)
-                )
-            }
-        }
+    }
+}
+
+/** Lo que mide un botón dentro de una [CajaDeAcciones]: tres caben junto al chat y el PDF. */
+private val ANCHO_EN_CAJA = 56.dp
+
+/**
+ * Un grupo de botones con su rótulo, dentro de un borde.
+ *
+ * El borde es lo que dice «estos van juntos»; el rótulo, de qué van. Sin las dos cosas la
+ * fila del pie era una ristra de iconos del mismo tamaño en la que añadir una hoja y
+ * exportar el proyecto parecían la misma clase de cosa.
+ */
+@Composable
+private fun CajaDeAcciones(
+    rotulo: String,
+    contenido: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
+) {
+    Column(
+        Modifier
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .padding(horizontal = 3.dp, vertical = 2.dp)
+    ) {
+        Text(
+            rotulo,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.padding(start = 6.dp, top = 1.dp)
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, content = contenido)
     }
 }
 
@@ -1164,12 +1213,13 @@ private fun BotonDeAccion(
     icono: androidx.compose.ui.graphics.vector.ImageVector,
     etiqueta: Int,
     descripcion: Int,
+    ancho: androidx.compose.ui.unit.Dp = 66.dp,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(66.dp)
+            .width(ancho)
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp)

@@ -493,6 +493,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             }
 
             GrupoDeAjustes(stringResource(R.string.ajustes_aspecto)) {
+                ModoNocheCard()
                 OledCard()
                 Spacer(Modifier.height(12.dp))
                 LetraDelPinCard()
@@ -857,6 +858,47 @@ private fun BarraCard(
  * marco del móvil y gasta menos. En un LCD se ve gris lavado, así que va
  * apagado de fábrica y lo enciende quien lo quiera.
  */
+/**
+ * Cuándo se pone el modo noche. Ver [com.forge.pixpin.data.ModoNoche]: la opción que
+ * importa es la automática, que mira la hora **y** el sensor de luz del aparato.
+ */
+@Composable
+private fun ModoNocheCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(stringResource(R.string.modo_noche_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.modo_noche_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val opciones = listOf(
+                    com.forge.pixpin.data.ModoNoche.SISTEMA to R.string.modo_noche_sistema,
+                    com.forge.pixpin.data.ModoNoche.CLARO to R.string.modo_noche_claro,
+                    com.forge.pixpin.data.ModoNoche.OSCURO to R.string.modo_noche_oscuro,
+                    com.forge.pixpin.data.ModoNoche.AUTO to R.string.modo_noche_auto
+                )
+                for ((modo, texto) in opciones) {
+                    androidx.compose.material3.FilterChip(
+                        selected = settings.modoNoche == modo,
+                        onClick = { scope.launch { app.settings.setModoNoche(modo) } },
+                        label = { Text(stringResource(texto)) }
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun OledCard() {
     val context = LocalContext.current

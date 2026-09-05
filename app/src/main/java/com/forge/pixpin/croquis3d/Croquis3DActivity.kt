@@ -417,7 +417,7 @@ class Croquis3DActivity : ComponentActivity() {
         // croquis que ya venía con ellas subidas. Ver [ajustarElBrilloDeMas].
         LaunchedEffect(controlador.croquis.luces) { ajustarElBrilloDeMas() }
 
-        val deNoche = androidx.compose.foundation.isSystemInDarkTheme()
+        val deNoche = com.forge.pixpin.ui.theme.deNoche()
         LaunchedEffect(deNoche) {
             val deFabrica = Croquis3DControlador.tintaDeFabrica(!deNoche)
             if (controlador.color == deFabrica) {
@@ -2993,6 +2993,8 @@ private val RECORRIDO_DE_LA_LUZ = 180f
         ) {
             context.startActivity(
                 Intent(context, Croquis3DActivity::class.java)
+                    // Cada croquis en su tarea; uno nuevo, en una nueva. Ver el manifiesto.
+                    .setData(android.net.Uri.parse("pixpin://croquis/" + android.net.Uri.encode(croquis ?: "nuevo-${System.currentTimeMillis()}")))
                     .putExtra(EL_PROYECTO, proyecto)
                     // De dónde se vino, para volver ahí al cerrar. Ver [EXTRA_DESDE_PROYECTO].
                     .also { if (desdeProyectos) it.putExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO, proyecto ?: "") }
