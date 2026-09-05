@@ -142,6 +142,14 @@ class MarkdownEditorActivity : ComponentActivity() {
                     onGuardar = { texto ->
                         if (id.isNotEmpty()) TextoStore.guardar(id, texto)
                         guardarEnSuProyecto(id, texto)
+                        // La letra de una canción o el texto de un audio: vuelve a su mensaje.
+                        intent.getStringExtra(EXTRA_MENSAJE)?.let { mensaje ->
+                            Thread {
+                                com.forge.pixpin.guardados.MensajesStore(this).actualizar(mensaje) {
+                                    it.copy(transcripcion = texto, estadoDelTexto = it.estadoDelTexto ?: com.forge.pixpin.guardados.TEXTO_LETRA)
+                                }
+                            }.start()
+                        }
                         cerrarYVolver()
                     },
                     onDescartar = { cerrarYVolver() },
@@ -231,6 +239,8 @@ class MarkdownEditorActivity : ComponentActivity() {
         private const val EXTRA_ID = "md_id"
         private const val EXTRA_TEXTO = "md_texto"
         private const val EXTRA_DESDE = "md_desde"
+        /** El mensaje de audio cuya letra o texto se está escribiendo; lo guardado vuelve a él. */
+        private const val EXTRA_MENSAJE = "md_mensaje"
 
         /**
          * Abre la nota [id] con [texto], opcionalmente por la letra [desde].
@@ -247,9 +257,12 @@ class MarkdownEditorActivity : ComponentActivity() {
         fun abrir(
             context: Context, id: String, texto: String, desde: Int = -1,
             /** Si se viene de la zona de proyectos: cerrar tiene que devolver ahí. */
-            desdeProyecto: String? = null
+            desdeProyecto: String? = null,
+            /** El mensaje de audio al que pertenece esta letra o texto, si es el caso. */
+            mensaje: String? = null
         ) {
             val i = Intent(context, MarkdownEditorActivity::class.java)
+                .also { if (mensaje != null) it.putExtra(EXTRA_MENSAJE, mensaje) }
                 // Cada nota en su tarea. Ver el manifiesto.
                 .setData(android.net.Uri.parse("pixpin://nota/" + android.net.Uri.encode(id.ifBlank { "suelta" })))
                 .putExtra(EXTRA_ID, id)

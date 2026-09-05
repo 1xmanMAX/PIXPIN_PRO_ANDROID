@@ -324,6 +324,15 @@
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
     <string name="guardados_adj_conversacion">Una conversación</string>
+    <string name="biblioteca_audio">Biblioteca de audio</string>
+    <string name="biblioteca_vacia">Aún no hay audios ni música guardados.</string>
+    <string name="biblioteca_musica">Música</string>
+    <string name="biblioteca_notas">Notas de voz</string>
+    <string name="letra_ver">Letra o texto</string>
+    <string name="letra_editar">Editar la letra</string>
+    <string name="letra_vacia">Esta canción no tiene letra todavía.</string>
+    <string name="letra_pegar">Pegar la letra</string>
+    <string name="letra_anadir">♪ Añadir la letra</string>
     <string name="conversacion_titulo">Conversación</string>
     <string name="conversacion_explicacion">Un micrófono por persona. Cada uno mantiene pulsado el suyo mientras habla y lo suelta al terminar; la transcripción sale con los nombres.</string>
     <string name="conversacion_cuantos">¿Cuántas personas hablan?</string>

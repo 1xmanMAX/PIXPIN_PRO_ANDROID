@@ -121,6 +121,11 @@ object UnirAlProyecto {
             // Ya están puestas: se devuelven vacías para que [unir] no las repita.
             return emptyList()
         }
+        // **Con documento, las páginas nuevas se pegan al documento**: así son páginas de
+        // verdad —estáticas, vectoriales, las mismas que las que vienen de un pin— y no
+        // fotos movibles en un lienzo. Ver [com.forge.pixpin.motor.PdfUnion]. Solo si no se
+        // puede (un PDF cifrado) se cae a las fotos de abajo.
+        pegarAlDocumento(context, proyectos, proyecto, pdf, paginas, ahora)?.let { return it }
         val hojas = ArrayList<Hoja>()
         for (i in 0 until paginas.coerceAtMost(TOPE_DE_PAGINAS_COMO_FOTO)) {
             val bmp = PdfDoc.render(pdf.absolutePath, i, ANCHO_DE_PAGINA) ?: continue
@@ -158,6 +163,25 @@ object UnirAlProyecto {
         )
         ExcalidrawStore.guardar(context, dibujo, escena) ?: return null
         return Hoja(id = id, nombre = nombre, dibujo = dibujo)
+    }
+
+    /**
+     * Las páginas de [pdf] detrás de las del documento del proyecto —en el original y en
+     * la copia limpia, que van a la par— y una hoja por página nueva. Null si no se pudo.
+     */
+    private fun pegarAlDocumento(context: Context, proyectos: ProyectosRepository, proyecto: Proyecto, pdf: File, paginas: Int, ahora: Long): List<Hoja>? {
+        val origen = proyecto.pdfOrigen?.let { File(it) }?.takeIf { it.exists() } ?: return null
+        val nuevas = runCatching { pdf.readBytes() }.getOrNull() ?: return null
+        val antes = PdfDoc.pageCount(origen.absolutePath)
+        if (antes <= 0) return null
+        val unidos = com.forge.pixpin.motor.PdfUnion.anadirPaginas(origen.readBytes(), nuevas) ?: return null
+        // La copia limpia primero: si algo falla a medias, el original sigue entero.
+        proyecto.pdfLimpio?.let { File(it) }?.takeIf { it.exists() }?.let { limpio ->
+            com.forge.pixpin.motor.PdfUnion.anadirPaginas(limpio.readBytes(), nuevas)?.let { limpio.writeBytes(it) }
+        }
+        runCatching { origen.writeBytes(unidos) }.getOrElse { return null }
+        val cuantas = paginas.coerceAtMost((Proyectos.MAX_HOJAS - proyecto.hojas.size).coerceAtLeast(0))
+        return (0 until cuantas).map { Hoja(id = "h-$ahora-${antes + it}", pagina = antes + it) }
     }
 
     private fun copiaDelDibujo(context: Context, dibujo: String?, id: String, nombre: String, ahora: Long, n: Int): Hoja? {

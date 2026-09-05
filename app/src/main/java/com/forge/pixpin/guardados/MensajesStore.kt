@@ -70,13 +70,15 @@ class MensajesStore(private val context: Context) {
         // guarda —un PDF de cuarenta páginas se rasteriza— y se apunta el mensaje ya como
         // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
         val seUne = mensaje.proyecto != null && UnirAlProyecto.seUneSolo(mensaje)
-        val apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
+        var apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
+        // La música no se pasa a texto: se le pega la letra a mano. Ver [esMusica].
+        if (apuntado.esMusica && apuntado.estadoDelTexto == null) apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
         runCatching {
             archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
         }
         if (seUne) unirAlProyecto(apuntado)
         // **Una nota de voz se pasa a texto** en cuanto se guarda. Ver [transcribir].
-        if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null) transcribir(apuntado)
+        if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null && !apuntado.esMusica) transcribir(apuntado)
         cambios.value = cambios.value + 1
     }
 

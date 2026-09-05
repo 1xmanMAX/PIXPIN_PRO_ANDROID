@@ -37,6 +37,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.animation.animateContentSize
@@ -808,6 +810,10 @@ class MensajesActivity : ComponentActivity() {
                                     // que esto sea el sitio desde el que se llega a todo
                                     // y no una conversación más entre otras.
                                     if (chatDe == null) {
+                                        DelMenu(com.forge.pixpin.R.string.biblioteca_audio, Icons.Filled.LibraryMusic) {
+                                            masOpciones = false
+                                            BibliotecaDeAudioActivity.abrir(this@MensajesActivity)
+                                        }
                                         DelMenu(com.forge.pixpin.R.string.guardados_chats) {
                                             masOpciones = false
                                             eligiendoChat = true
@@ -1179,7 +1185,8 @@ class MensajesActivity : ComponentActivity() {
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
-                                transcribir = if (m.clase == Clase.VOZ && m.ruta != null && Transcriptor.disponible(this@MensajesActivity)) {
+                                letra = if (m.clase == Clase.VOZ && m.ruta != null) { { LetraActivity.abrir(this@MensajesActivity, m.id) } } else null,
+                                transcribir = if (m.clase == Clase.VOZ && m.ruta != null && !m.esMusica && Transcriptor.disponible(this@MensajesActivity)) {
                                     {
                                         Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.guardados_transcribiendo), Toast.LENGTH_SHORT).show()
                                         almacen.transcribir(m)
@@ -1420,6 +1427,12 @@ class MensajesActivity : ComponentActivity() {
                 }
             }
 
+            // **La barra de lo que suena**, arriba, como en Telegram: sigue mientras se
+            // lee, y tocar el título abre la letra o el texto. Ver [BarraDelReproductor].
+            BarraDelReproductor(alTocarElTitulo = {
+                val ruta = Reproductor.estado.value.ruta
+                mensajes.firstOrNull { it.ruta == ruta }?.let { LetraActivity.abrir(this@MensajesActivity, it.id) }
+            })
             // La foto sujetada, por encima de todo lo demás. Se pone una vez y no hace
             // nada mientras no haya ninguna cogida.
             CapaDeAmpliacion(ampliada)
@@ -2086,6 +2099,8 @@ class MensajesActivity : ComponentActivity() {
         val unir: (() -> Unit)?,
         /** Pasa una nota de voz a texto; nulo si no es de voz o el aparato no sabe. */
         val transcribir: (() -> Unit)?,
+        /** La letra o el texto de un audio, a pantalla completa; nulo si no es un audio. */
+        val letra: (() -> Unit)?,
         val responder: () -> Unit,
         val copiar: (() -> Unit)?,
         val fijar: () -> Unit,
@@ -2273,6 +2288,11 @@ class MensajesActivity : ComponentActivity() {
                     DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
                             Icons.Filled.Subtitles) {
                         menuAbierto = false; transcribir()
+                    }
+                }
+                acciones.letra?.let { letra ->
+                    DelMenu(com.forge.pixpin.R.string.letra_ver, Icons.Filled.Lyrics) {
+                        menuAbierto = false; letra()
                     }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) {
@@ -3598,17 +3618,13 @@ class MensajesActivity : ComponentActivity() {
         //
         // Los números son los de Telegram (`SeekBarWaveform.java:385, :418-424`):
         // barras de 2 puntos cada 3, sobre una franja de 14, y el botón redondo de 44.
-        val activo = sonando == m.ruta
-        var avance by remember(m.id) { androidx.compose.runtime.mutableFloatStateOf(0f) }
-        // Solo se pregunta por la posición **mientras suena esta**: un bucle por fila
-        // en una lista de cien notas sería cien relojes despertando a la vez.
-        LaunchedEffect(activo) {
-            while (activo) {
-                avance = porDondeVa()
-                delay(LATIDO_DE_LA_ONDA)
-            }
-            if (!activo) avance = 0f
-        }
+        // El reproductor es el de toda la aplicación —ver [Reproductor]—: por dónde va
+        // llega por su flujo, y los mandos de adelantar, atrasar y velocidad están en la
+        // barra de arriba ([BarraDelReproductor]).
+        val estado by Reproductor.estado.collectAsState()
+        val activo = estado.ruta == m.ruta
+        val avance = if (activo) Reproductor.fraccion() else 0f
+        val titulo = tituloDeAudio(this@MensajesActivity, m)
         val barras = remember(m.picos) { aBarras(m.picos) }
         val acento = MaterialTheme.colorScheme.primary
         val apagado = acento.copy(alpha = ALFA_DE_LO_NO_OIDO)
@@ -3620,11 +3636,11 @@ class MensajesActivity : ComponentActivity() {
                         MaterialTheme.colorScheme.primaryContainer,
                         androidx.compose.foundation.shape.CircleShape
                     )
-                    .clickable { m.ruta?.let { sonar(it) } },
+                    .clickable { m.ruta?.let { Reproductor.alternar(it, titulo) } },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    if (activo) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (activo && estado.sonando) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = getString(
                         if (activo) com.forge.pixpin.R.string.voz_pausar
                         else com.forge.pixpin.R.string.voz_oir
@@ -3647,10 +3663,8 @@ class MensajesActivity : ComponentActivity() {
                             .pointerInput(m.id) {
                                 detectTapGestures { d ->
                                     if (activo) {
-                                        val f = d.x / size.width
-                                        saltarA(f)
-                                        avance = f.coerceIn(0f, 1f)
-                                    } else m.ruta?.let { sonar(it) }
+                                        Reproductor.irA(d.x / size.width)
+                                    } else m.ruta?.let { Reproductor.alternar(it, titulo) }
                                 }
                             }
                     ) {
@@ -3709,8 +3723,20 @@ class MensajesActivity : ComponentActivity() {
         }
         val estado = m.estadoDelTexto ?: return
         var desplegado by remember(m.id) { mutableStateOf(false) }
+        // Música sin letra todavía: la invitación a pegarla.
+        if (estado == TEXTO_LETRA && m.transcripcion.isNullOrBlank()) {
+            Text(
+                getString(com.forge.pixpin.R.string.letra_anadir),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp).clickable {
+                    com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this@MensajesActivity, "letra-${m.id}", "", mensaje = m.id)
+                }
+            )
+            return
+        }
         val color = when (estado) {
-            TEXTO_BIEN -> VERDE_DEL_TEXTO
+            TEXTO_BIEN, TEXTO_LETRA -> VERDE_DEL_TEXTO
             TEXTO_CON_AVISOS -> NARANJA_DEL_TEXTO
             else -> ROJO_DEL_TEXTO
         }
@@ -3751,20 +3777,12 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
-    /** Dos toques en la transcripción: su `.md`, en el editor de notas. */
+    /**
+     * Dos toques en la transcripción o la letra: la pantalla para leerla o cantarla con
+     * el reproductor debajo; desde allí, el lápiz abre su `.md`. Ver [LetraActivity].
+     */
     private fun abrirLaTranscripcion(m: Mensaje) {
-        val texto = m.transcripcion ?: return
-        val app = application as? PixPinApp
-        val hoja = m.hojaDelTexto
-        val proyecto = m.proyecto
-        if (hoja != null && proyecto != null && app?.proyectos?.porId(proyecto)?.hojas?.any { it.id == hoja } == true) {
-            val nota = app.proyectos.porId(proyecto)!!.hojas.first { it.id == hoja }.nota ?: texto
-            com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this, hoja, nota, desdeProyecto = proyecto)
-        } else {
-            com.forge.pixpin.ui.MarkdownEditorActivity.abrir(
-                this, "trans-${m.id}", "# " + getString(com.forge.pixpin.R.string.guardados_transcripcion) + "\n\n" + texto
-            )
-        }
+        LetraActivity.abrir(this, m.id)
     }
 
     @Composable
@@ -4934,7 +4952,7 @@ class MensajesActivity : ComponentActivity() {
     /** Abrir: cada clase se abre donde vive. Un dibujo en el lienzo, un PDF en su visor. */
     private fun abrir(m: Mensaje) {
         when (m.clase) {
-            Clase.VOZ -> m.ruta?.let { sonar(it) }
+            Clase.VOZ -> m.ruta?.let { Reproductor.alternar(it, tituloDeAudio(this, m)) }
             // Una nota con un enlace dentro se abre en el navegador al tocarla: es lo que
             // espera cualquiera que se manda una dirección a sí mismo para leerla luego.
             // Sin enlace no hay nada que abrir, y tocarla no hace nada — que es correcto:
@@ -5007,58 +5025,6 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
-    private var reproductor: android.media.MediaPlayer? = null
-
-    /**
-     * Qué nota está sonando ahora mismo, si es que suena alguna.
-     *
-     * Es estado de Compose y no un campo a secas porque la fila tiene que enterarse:
-     * sin esto el botón se queda en «reproducir» mientras suena, y con dos notas
-     * seguidas uno acaba tocando la segunda para parar la primera.
-     */
-    private var sonando by mutableStateOf<String?>(null)
-
-    /**
-     * Pone o quita una nota de voz. El mismo botón hace las dos cosas.
-     *
-     * Tocar la que ya suena la para, como en cualquier reproductor; tocar otra corta la
-     * anterior, porque dos voces a la vez no se entienden y nadie quiere eso.
-     */
-    private fun sonar(ruta: String) {
-        if (sonando == ruta) {
-            runCatching { reproductor?.release() }
-            reproductor = null
-            sonando = null
-            return
-        }
-        runCatching { reproductor?.release() }
-        reproductor = runCatching {
-            android.media.MediaPlayer().apply {
-                setDataSource(ruta)
-                prepare()
-                setOnCompletionListener { sonando = null }
-                start()
-            }
-        }.getOrNull()
-        sonando = if (reproductor != null) ruta else null
-    }
-
-    /** Por dónde va la nota que suena, de 0 a 1. */
-    private fun porDondeVa(): Float {
-        val p = reproductor ?: return 0f
-        val total = runCatching { p.duration }.getOrDefault(0)
-        if (total <= 0) return 0f
-        val donde = runCatching { p.currentPosition }.getOrDefault(0)
-        return (donde.toFloat() / total).coerceIn(0f, 1f)
-    }
-
-    /** Salta a un punto de la nota que suena. */
-    private fun saltarA(fraccion: Float) {
-        val p = reproductor ?: return
-        val total = runCatching { p.duration }.getOrDefault(0)
-        if (total > 0) runCatching { p.seekTo((total * fraccion.coerceIn(0f, 1f)).toInt()) }
-    }
-
     /** El tipo de un archivo por su extensión, o «cualquiera» si Android no lo conoce. */
     private fun tipoDe(ruta: String): String =
         android.webkit.MimeTypeMap.getSingleton()
@@ -5079,8 +5045,6 @@ class MensajesActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        runCatching { reproductor?.release() }
-        reproductor = null
         if (grabador != null) {
             midiendoPicos?.cancel()
             midiendoPicos = null

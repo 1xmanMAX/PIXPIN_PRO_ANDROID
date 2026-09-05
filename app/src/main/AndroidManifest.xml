@@ -275,6 +275,16 @@
             </intent-filter>
         </receiver>
     
+        <!-- La letra o el texto de un audio con el reproductor, y la biblioteca de audio. -->
+        <activity
+            android:name=".guardados.LetraActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
+        <activity
+            android:name=".guardados.BibliotecaDeAudioActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
+
         <!-- Una conversación por turnos: un micrófono por persona. Ver ConversacionActivity. -->
         <activity
             android:name=".guardados.ConversacionActivity"

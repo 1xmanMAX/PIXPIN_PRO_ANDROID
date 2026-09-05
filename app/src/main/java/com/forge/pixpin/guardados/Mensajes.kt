@@ -484,3 +484,16 @@ val Mensaje.dibujoDeLaFoto: String get() = referencia ?: "foto-$id"
 const val TEXTO_BIEN = "bien"
 const val TEXTO_CON_AVISOS = "aviso"
 const val TEXTO_MAL = "mal"
+/** El audio lleva letra (pegada a mano), no transcripción: es música. */
+const val TEXTO_LETRA = "letra"
+
+/**
+ * **Si un audio es música y no una nota de voz.** Lo dice el archivo —un `.mp3`, `.flac`…
+ * no sale de nuestro micrófono— o lo dice el largo: nadie dicta notas de más de tres
+ * minutos. La música no se transcribe (saldría basura): se le pega la letra a mano.
+ */
+val Mensaje.esMusica: Boolean
+    get() = clase == Clase.VOZ && (
+        (nombre.ifBlank { ruta.orEmpty() }).substringAfterLast('.', "").lowercase() in setOf("mp3", "flac", "wav", "aac", "m4b", "wma") ||
+            duracionMs > 3 * 60_000
+        )
