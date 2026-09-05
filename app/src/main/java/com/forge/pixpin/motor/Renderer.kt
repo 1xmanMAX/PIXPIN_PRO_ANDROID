@@ -1,12 +1,16 @@
 package com.forge.pixpin.motor
 
 import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
+import android.graphics.Shader
+import kotlin.math.roundToInt
 import android.graphics.RectF
 
 /**
@@ -46,6 +50,38 @@ class Renderer(
      * una placa esmerilada: sigue tapando, que es para lo que está.
      */
     private val backdrop: Bitmap? = null,
+    /**
+     * **El plano grande por trozos**, si lo hay. Ver [ElMosaicoDelPapel].
+     *
+     * Con un plano de los de verdad, [backdrop] es una imagen de una sola pieza que sirve
+     * para verlo entero y no para leerlo: acercarse a una cota devuelve una mancha. Con esto
+     * puesto se pintan en su lugar los cuadros que tapan lo que se está mirando, a la
+     * resolución que hace falta.
+     *
+     * **O lo uno o lo otro, nunca los dos.** Dos capas de papel no se ven las dos —se ve la
+     * de encima— así que tener la imagen debajo solo servía para que en algún momento se
+     * estuviera mirando la peor. La imagen vuelve cuando los cuadros no valen para esta
+     * vista: ver [ElMosaicoDelPapel.tapaLaVista] y [ElMosaicoDelPapel.fallo].
+     */
+    private val mosaico: ElMosaicoDelPapel? = null,
+    /**
+     * **El PDF rasterizado a la resolución de la pantalla**, para leerlo de cerca.
+     *
+     * El mosaico es una imagen fija y tiene los píxeles que tiene; pasado su aumento, lo que
+     * se ve es esa imagen estirada. Esto vuelve al PDF a por el pedazo que se está mirando y
+     * se pinta **encima** de los cuadros, que es lo único que deja leer una letra a cincuenta
+     * aumentos. Ver [LaminaDeCerca].
+     */
+    private val laminaFina: LaminaDeCerca? = null,
+    /**
+     * **El plano leído como líneas**, si se abrió así. Ver [PlanoEnPantalla].
+     *
+     * Es la otra manera de tener el papel debajo, y **manda sobre todas las demás**: con esto
+     * puesto no se pinta ni la imagen de una pieza, ni los cuadros, ni la lámina de cerca,
+     * porque no hacen falta — no hay aumento que lo desdibuje y no hay nada que cargar al
+     * acercarse.
+     */
+    private val planoVectorial: PlanoEnPantalla? = null,
     /**
      * Si [backdrop] hay que **pintarlo**, y no solo mirarlo.
      *
@@ -102,6 +138,84 @@ class Renderer(
      * pelos. Un pincel aparte hace que eso no pueda volver a pasar.
      */
     private val medidor = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /** El destino de cada trozo del mosaico, uno y no uno por trozo y fotograma. */
+    private val huecoDelTrozo = android.graphics.RectF()
+
+    /**
+     * **Los trozos del plano que tapan lo que se ve**, a la escala a la que se ven.
+     *
+     * Se piden en unidades del dibujo —la vista, convertida— y se pintan en su sitio.
+     * Devuelve `false` solo si no hay aumento con el que trabajar; el papel sin cuadros que
+     * pintar lo resuelve quien llama con la imagen de una pieza.
+     */
+    private fun pintarElMosaico(
+        canvas: Canvas,
+        mosaico: ElMosaicoDelPapel,
+        scene: Scene,
+        anchoDePantalla: Double,
+        altoDePantalla: Double
+    ): Boolean {
+        val vp = scene.viewport
+        if (vp.zoom <= 0.0) return false
+        val vista = vistaDeLaEscena(scene, anchoDePantalla, altoDePantalla)
+        // Se le dice por dónde se está mirando y **a qué aumento**: el plano se rasteriza
+        // entero al abrir, y los cuadros se descomprimen a la escala que se está viendo. Ver
+        // [ElMosaicoDelPapel.aTrabajar].
+        mosaico.aTrabajar(vista, vp.zoom)
+        for (puesto in mosaico.loQueHaya(vista, vp.zoom)) {
+            if (puesto.bitmap.isRecycled) continue
+            val donde = puesto.donde
+            huecoDelTrozo.set(
+                donde.x1.toFloat(), donde.y1.toFloat(), donde.x2.toFloat(), donde.y2.toFloat()
+            )
+            canvas.drawBitmap(puesto.bitmap, null, huecoDelTrozo, fillPaint)
+        }
+        return true
+    }
+
+    /**
+     * **La lámina de cerca, encima de los cuadros.**
+     *
+     * Se pide al PDF cuando el mosaico ya no da más de sí —pasado su aumento, lo que se ve es
+     * su imagen estirada— y también mientras sus cuadros no tapan la vista, que es el rato de
+     * después de abrir un plano grande. Y se pinta **solo si aporta**: una lámina más gorda
+     * que los cuadros que hay debajo empeoraría lo que se ve.
+     *
+     * Ver [LaminaDeCerca] y [MosaicoDePdf.haceFaltaLamina].
+     */
+    private fun pintarLaLamina(
+        canvas: Canvas,
+        scene: Scene,
+        vista: Bounds,
+        cubierto: Boolean,
+        finezaDelMosaico: Double
+    ): Boolean {
+        val fina = laminaFina ?: return false
+        val zoom = scene.viewport.zoom
+        if (zoom <= 0.0) return false
+        if (!cubierto || MosaicoDePdf.haceFaltaLamina(finezaDelMosaico, zoom)) {
+            fina.aTrabajar(vista, zoom)
+        }
+        val puesta = fina.loQueHaya(vista) ?: return false
+        if (puesta.bitmap.isRecycled) return false
+        // Con los cuadros puestos y más finos que la lámina, la lámina sobra: sería cambiar
+        // lo que se ve por algo más gordo. Sin cuadros, cualquier cosa es mejor que nada.
+        if (cubierto && puesta.fineza <= finezaDelMosaico) return false
+        val donde = puesta.donde
+        huecoDelTrozo.set(
+            donde.x1.toFloat(), donde.y1.toFloat(), donde.x2.toFloat(), donde.y2.toFloat()
+        )
+        canvas.drawBitmap(puesta.bitmap, null, huecoDelTrozo, fillPaint)
+        return true
+    }
+
+    /** El rectángulo del dibujo que se está viendo, en unidades de la escena. */
+    private fun vistaDeLaEscena(scene: Scene, ancho: Double, alto: Double): Bounds {
+        val vp = scene.viewport
+        val zoom = vp.zoom.coerceAtLeast(1e-6)
+        return Bounds(-vp.scrollX, -vp.scrollY, -vp.scrollX + ancho / zoom, -vp.scrollY + alto / zoom)
+    }
 
     /** Pasa un color por el filtro del modo noche. En modo día no toca nada. */
     private fun tema(argb: Int): Int = DrawTheme.filtrar(argb, dark)
@@ -223,24 +337,74 @@ class Renderer(
         // Las caras vienen ya ordenadas de atrás hacia delante, así que pintarlas
         // en este orden es el algoritmo del pintor y no hay más que hacer.
         if (e.isSolido) {
-            val caras = carasDeElemento(e, vistaActual)
+            // **En esqueleto no hay caras que repartir: hay aristas.** Se dibujan las
+            // doce —también las de detrás—, que es de lo que sirve el alambre: ver por
+            // dónde entra una pieza en otra. Un solo generador rugoso recorrido en orden,
+            // igual que con las caras, para que el temblor no cambie entre repintados.
+            // **El esqueleto no lleva sombra.** Un alambre es una figura de líneas: la
+            // mancha del suelo lo convertiría en medio volumen macizo y medio no, que es
+            // lo contrario de lo que se pide un alambre —ver dónde está todo, también lo
+            // de detrás—. Y las líneas van rectas, sin el temblor de rough: en un croquis
+            // de alambre las aristas de atrás y las de delante tienen que coincidir en los
+            // vértices, y el garabato las separa justo ahí.
+            // **Todo lo del volumen se guarda relativo a su propio origen**, y al pintar
+            // se traslada el lienzo. No es un capricho de estilo: el rasterizador tiene un
+            // tope de coordenadas, y un camino relleno cuyos puntos se salen de él **no
+            // se dibuja, sin avisar**. A zoom 30 —el tope— un dibujo a tres mil de la
+            // esquina son noventa mil píxeles de pantalla, y las caras de un sólido son
+            // justo lo primero que lo cruza porque son polígonos grandes y llenos. Se veía
+            // como «pasado cierto zoom la figura desaparece sin más». En local, los puntos
+            // valen lo que mide la pieza y el sitio lo pone la matriz, que no tiene tope.
+            if (e.esqueleto) {
+                val aristas = aristasDeSolido(solidoDe(e), vistaActual, PASO_DEL_SOLIDO)
+                if (aristas.isEmpty()) return null
+                val alambre = Path()
+                for ((a, b) in aristas) {
+                    alambre.moveTo(a.x.toFloat(), a.y.toFloat())
+                    alambre.lineTo(b.x.toFloat(), b.y.toFloat())
+                }
+                return CachedShape(e, Path(), Path(), null, null, alambre)
+            }
+            // **Sin sombra.** Estaba para desambiguar la altura en isométrica, pero en un
+            // dibujo con varias piezas son manchas por todas partes y encima estorban
+            // para dibujar encima, que es de lo que va esto. Quien quiera apoyarla en
+            // algo tiene el imán entre piezas.
+            //
+            // El reparto de caras se hace **una vez** y se le pasa a las aristas: sin
+            // esto se repartía dos veces por pieza y por recomposición, y girando con el
+            // dedo eso se notaba.
+            val todas = carasDeSolido(
+                solidoDe(e), vistaActual, PASO_DEL_SOLIDO, soloVisibles = false
+            )
+            val caras = todas.filter { it.visible }.sortedBy { it.profundidad }
             if (caras.isEmpty()) return null
-            // **Un solo generador para las tres**, y en orden: rough.js sortea su
-            // ruido de una secuencia con la semilla del elemento, así que
-            // recorrerla siempre igual es lo que hace que la caja no tiemble al
-            // repintarse. Uno por cara les daría a las tres el mismo temblor y se
-            // notaría: las aristas que se juntan en un vértice se separarían.
-            val rough = Rough(roughOptionsFor(e))
-            val rugoso = needsRoughFill(e)
+            // **Macizo quiere decir macizo.** Las caras son planos, no contornos: se
+            // pintan llenas y se marcan sus bordes con una raya fina del mismo color un
+            // punto más oscura, lo justo para que dos caras vecinas no se fundan en una
+            // mancha. Con el trazo rugoso de las figuras planas, un volumen se leía como
+            // un alambre relleno — y encima costaba: un cilindro son trece garabatos por
+            // fotograma, y una pieza torneada, ciento y pico.
             val pintadas = caras.map { cara ->
+                val camino = cara.poligono.toClosedPath()
                 CaraPintada(
-                    silueta = cara.poligono.toClosedPath(),
-                    rayado = if (rugoso) rough.fillPolygon(cara.poligono).toPath() else null,
-                    trazo = rough.polygon(cara.poligono).toPath(),
+                    silueta = camino,
+                    rayado = null,
+                    trazo = camino,
                     claridad = cara.claridad
                 )
             }
-            return CachedShape(e, Path(), Path(), null, pintadas)
+            // **Y las aristas que de verdad hay que dibujar**, en un solo camino: la
+            // silueta y los quiebros. Antes se repasaba el borde de cada cara, y en un
+            // cuerpo redondo eso son veinticuatro rayas verticales sobre una superficie
+            // que no tiene ninguna. Ver [aristasMarcadasDeSolido].
+            val marcadas = Path()
+            for ((a, b) in aristasMarcadasDeSolido(
+                solidoDe(e), vistaActual, PASO_DEL_SOLIDO, todas
+            )) {
+                marcadas.moveTo(a.x.toFloat(), a.y.toFloat())
+                marcadas.lineTo(b.x.toFloat(), b.y.toFloat())
+            }
+            return CachedShape(e, Path(), Path(), null, pintadas, null, marcadas)
         }
 
         if (e.type == ElementType.FREEDRAW) {
@@ -297,6 +461,35 @@ class Renderer(
      */
     private var zoomActual: Double = 1.0
 
+    // El trozo de escena a la vista, en coordenadas de escena. Lo pone
+    // [renderScene] y lo usa el pintado recortado de lo enorme.
+    private var vistaEscenaX1 = 0.0
+    private var vistaEscenaY1 = 0.0
+    private var vistaEscenaX2 = 0.0
+    private var vistaEscenaY2 = 0.0
+
+    // Reaprovechados por el pintado recortado: corren por fotograma.
+    private val caminoRecortado = Path()
+    private val segmentoRecortado = DoubleArray(4)
+
+    /**
+     * Pintando dentro del cristal de una lupa no se recorta a la vista: la
+     * lupa enseña justo un trozo que **no** es el que se está mirando, y el
+     * recorte lo dejaría vacío. Ahí siguen mandando su recorte y su capa.
+     */
+    private var pintandoLupa = false
+
+    /**
+     * Cuánto alumbran las luces de este dibujo, de cero a dos. Ver [LucesDelDibujo].
+     *
+     * Apagadas —cero— una tinta de luz se pinta **como una tinta lisa**: ni resplandor, ni
+     * capas claras encima, ni nada. Es lo que promete el mando.
+     */
+    private var lasLuces: Double = LucesDelDibujo().cuanto
+
+    /** Qué número le toca a cada hoja. Ver [hojasEnOrden]. */
+    private var ordenDeHojas: Map<String, Int> = emptyMap()
+
     /**
      * Desde dónde se está mirando lo que está en volumen.
      *
@@ -337,8 +530,20 @@ class Renderer(
         canvas: Canvas, scene: Scene, screenWidth: Double, screenHeight: Double
     ) {
         escalaActual = scene.escala
+        // La llave de paso de las luces, para todo este pintado. Ver [LucesDelDibujo].
+        lasLuces = scene.luces.cuanto
         zoomActual = scene.viewport.zoom.coerceAtLeast(0.0001)
         vistaActual = scene.vista
+        // El rectángulo de escena que se está mirando, para el pintado
+        // recortado de lo enorme. Ver [pintarRecortadoALaVista].
+        vistaEscenaX1 = -scene.viewport.scrollX
+        vistaEscenaY1 = -scene.viewport.scrollY
+        vistaEscenaX2 = vistaEscenaX1 + screenWidth / zoomActual
+        vistaEscenaY2 = vistaEscenaY1 + screenHeight / zoomActual
+        // **El número de cada hoja, calculado una vez.** Sale de su sitio —ver
+        // [hojasEnOrden]— así que hay que mirar todas para saber el de una: hacerlo por
+        // hoja sería recorrer la lista tantas veces como hojas haya.
+        ordenDeHojas = hojasEnOrden(scene).withIndex().associate { (i, h) -> h.id to i + 1 }
         canvas.save()
         // Un único cambio de matriz para todo: el resto del código dibuja
         // siempre en coordenadas de escena y se olvida del zoom.
@@ -349,12 +554,41 @@ class Renderer(
         // así que dibujar encima de él es dibujar sobre coordenadas de la
         // página — que es exactamente lo que hace falta para devolver la capa a
         // su sitio. Ver [papelALaVista].
-        if (papelALaVista) {
-            backdrop?.takeIf { !it.isRecycled }?.let {
-                fillPaint.reset()
-                fillPaint.isFilterBitmap = true
-                canvas.drawBitmap(it, 0f, 0f, fillPaint)
+        if (papelALaVista && planoVectorial != null) {
+            // **El plano como líneas.** Ver [PlanoEnPantalla] y [planoVectorial].
+            planoVectorial.pintar(
+                canvas, vistaDeLaEscena(scene, screenWidth, screenHeight), scene.viewport.zoom
+            )
+        } else if (papelALaVista) {
+            fillPaint.reset()
+            fillPaint.isFilterBitmap = true
+            // **Una sola capa de papel: o los cuadros o la imagen de una pieza, nunca las
+            // dos.**
+            //
+            // Estuvo la imagen debajo para tapar el hueco mientras los cuadros se hacían, y
+            // el usuario lo dijo con razón (3-sep-2026): dos capas de papel no se ven las dos,
+            // se ve la de encima, así que la de abajo solo servía para que en algún momento
+            // se estuviera mirando la mala. Y no hace falta: los cuadros se hacen **empezando
+            // por lo que se está mirando**, así que lo que uno tiene delante se llena
+            // enseguida. Ver [ElMosaicoDelPapel.aTrabajar].
+            val trozos = mosaico
+            val vale = trozos != null && !trozos.fallo
+            val vista = vistaDeLaEscena(scene, screenWidth, screenHeight)
+            val cubierto = vale && trozos!!.cubre(vista)
+            // **La imagen de una pieza, solo mientras los cuadros no tapan lo que se ve.**
+            // Pasa al abrir un plano por primera vez, mientras se rasterizan sus franjas, y
+            // si el PDF no se deja rasterizar del todo ([ElMosaicoDelPapel.fallo]). Se ve con
+            // grano un rato —pero se ve— y en cuanto los cuadros tapan, se quita y no vuelve:
+            // mirando el plano entero **también** se pintan cuadros, descomprimidos a la
+            // escala a la que se ven. Ver [MosaicoDePdf.muestraPara].
+            if (!cubierto) {
+                backdrop?.takeIf { !it.isRecycled }?.let {
+                    canvas.drawBitmap(it, 0f, 0f, fillPaint)
+                }
             }
+            if (vale) pintarElMosaico(canvas, trozos!!, scene, screenWidth, screenHeight)
+            // **Y encima de todo, lo que se está mirando pedido al PDF.** Ver [pintarLaLamina].
+            pintarLaLamina(canvas, scene, vista, cubierto, trozos?.fineza ?: 0.0)
         }
 
         // La rejilla, justo encima del papel y debajo de todo lo demás.
@@ -399,6 +633,19 @@ class Renderer(
         // dibujado después se quedaría fuera de la sombra y el efecto se rompía.
         for ((i, element) in visible.withIndex()) {
             if (element.type == ElementType.SPOTLIGHT) continue
+            // **Lo más pequeño que un píxel no se dibuja entero: se apunta.**
+            //
+            // Con un dibujo denso, alejarse deja muchas
+            // formas de tamaño subpíxel —la manilla de cada puerta, cada letra
+            // de cota— y generar el camino rugoso de cada una cuesta lo mismo
+            // que si midiera media pantalla. A ese tamaño un trazo ES una raya
+            // de un píxel, así que se pinta esa raya y ya: el dibujo se ve
+            // igual y el paneo deja de arrastrarse. Al exportar no: ahí el
+            // aumento de salida no es el de la pantalla.
+            if (!paraExportar && sePierdeDePequeno(element)) {
+                pintarComoRaya(canvas, element)
+                continue
+            }
             // Lo que hay debajo de este elemento, por si es un mosaico o una
             // lupa y tiene que sacar de ahí sus píxeles. Ver [fondoDelDibujo].
             capaDebajo = if (element.type == ElementType.MOSAIC || element.type == ElementType.LUPA) {
@@ -447,7 +694,9 @@ class Renderer(
             }
         }
         canvas.restore()
+
     }
+
 
     /**
      * Los puntos de una tabla de coordenadas, con su origen.
@@ -654,7 +903,20 @@ class Renderer(
 
         paint.reset()
         paint.isAntiAlias = true
-        paint.color = tema(android.graphics.Color.argb(255, 0xC8, 0xCC, 0xD4))
+        // **Del contrario del papel, no de un gris fijo.**
+        //
+        // Iba de un gris claro pasado por el filtro de noche, y eso es mirar la cosa
+        // equivocada: el filtro invierte los grises, así que sobre un papel oscuro la
+        // cuadrícula salía **más oscura todavía** — rayas negras sobre negro, o sea ninguna
+        // cuadrícula. Lo que tiene que leerse es la retícula **contra el papel que hay**, así
+        // que sale de él: sobre papel claro, un gris que no compite con el dibujo; sobre papel
+        // oscuro, un gris que aclara.
+        paint.color =
+            if (DrawTheme.esDeNoche(scene.backgroundColor)) {
+                android.graphics.Color.argb(255, 0x4A, 0x50, 0x5C)
+            } else {
+                android.graphics.Color.argb(255, 0xC8, 0xCC, 0xD4)
+            }
 
         if (cuadricula == Cuadricula.PUNTOS) {
             // Un punto en cada cruce: dice lo mismo que la rejilla ensuciando la
@@ -693,7 +955,7 @@ class Renderer(
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        for (trazo in trazosDelPlano(e)) {
+        for (trazo in trazosDelInstrumento(e)) {
             paint.color =
                 if (trazo.eje) tinta else conAlfa(tinta, ALFA_DE_LA_REJILLA.toFloat())
             paint.strokeWidth =
@@ -710,7 +972,7 @@ class Renderer(
         paint.color = tinta
         paint.textSize = tam.toFloat()
         paint.typeface = typefaces(e.fontFamily)
-        for (n in numerosDelPlano(e)) {
+        for (n in numerosDelInstrumento(e)) {
             // La cifra se aparta de su eje lo justo para no pisarlo: debajo en
             // la regla de abajo, a la izquierda en la de la izquierda.
             if (n.horizontal) {
@@ -790,12 +1052,243 @@ class Renderer(
     private fun esRedonda(e: Element): Boolean =
         e.type == ElementType.ELLIPSE || e.type == ElementType.ARC
 
+    /**
+     * Si a este aumento el elemento cabe en un píxel y pico. Solo para las
+     * formas corrientes: las ventanas (mosaico, lupa), los marcos y los
+     * volúmenes dibujan cosas cuyo tamaño no es el de su caja.
+     */
+    private fun sePierdeDePequeno(e: Element): Boolean = when (e.type) {
+        ElementType.LINE, ElementType.ARROW, ElementType.FREEDRAW,
+        ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
+        ElementType.ARC, ElementType.TEXT, ElementType.REGION ->
+            (e.width + e.height) * zoomActual < UMBRAL_DE_CHIQUITO
+        else -> false
+    }
+
+    /**
+     * **Lo enorme, pintado solo por donde se ve.**
+     *
+     * El otro extremo de [sePierdeDePequeno], y la misma lección que el pintado
+     * local de los sólidos: el rasterizador tiene un tope de coordenadas de
+     * dispositivo, y pasado el tope lo relleno desaparece sin avisar — o la
+     * aplicación revienta, según el aparato. A 400 aumentos, una cadena del
+     * plano que cruza la pantalla son cientos de miles de píxeles de
+     * dispositivo: justo eso.
+     *
+     * Así que cuando un elemento mide en pantalla más que [LIMITE_DEL_RASTERIZADOR],
+     * no se le da su camino entero al lienzo: se recorren sus tramos, se podan
+     * con [recortarSegmento] al rectángulo mirado (con margen) y se dibuja solo
+     * eso. Las coordenadas que llegan al rasterizador quedan acotadas por la
+     * pantalla, mire uno al aumento que mire.
+     *
+     * Lo que se pierde a ese tamaño no se echa de menos: el temblor rugoso (a
+     * cientos de miles de píxeles sería ruido gigante), el compás de los guiones
+     * entre tramos, y el relleno de una forma cerrada — el trazo sigue diciendo
+     * dónde está todo. Devuelve false para lo que no sabe recortar, que sigue
+     * por el camino de siempre.
+     */
+    private fun pintarRecortadoALaVista(canvas: Canvas, e: Element, alpha: Int): Boolean {
+        if (pintandoLupa) return false
+        if (maxOf(e.width, e.height) * zoomActual <= LIMITE_DEL_RASTERIZADOR) return false
+
+        // La vista, llevada al mundo sin girar del elemento: el lienzo ya viene
+        // rotado por [renderElement], así que aquí se dibuja sin girar y lo que
+        // hay que girar (al revés) es el rectángulo mirado. Su caja envolvente
+        // sobra un poco en las esquinas, que para una criba está bien.
+        var x1 = vistaEscenaX1
+        var y1 = vistaEscenaY1
+        var x2 = vistaEscenaX2
+        var y2 = vistaEscenaY2
+        if (e.angle != 0.0) {
+            val c = getElementAbsoluteCoords(e)
+            val centro = Pt(c.cx, c.cy)
+            var minX = Double.MAX_VALUE
+            var minY = Double.MAX_VALUE
+            var maxX = -Double.MAX_VALUE
+            var maxY = -Double.MAX_VALUE
+            for (esquina in arrayOf(Pt(x1, y1), Pt(x2, y1), Pt(x2, y2), Pt(x1, y2))) {
+                val g = pointRotateRads(esquina, centro, -e.angle)
+                minX = minOf(minX, g.x); minY = minOf(minY, g.y)
+                maxX = maxOf(maxX, g.x); maxY = maxOf(maxY, g.y)
+            }
+            x1 = minX; y1 = minY; x2 = maxX; y2 = maxY
+        }
+        val margen = e.strokeWidth + 32.0 / zoomActual
+        x1 -= margen; y1 -= margen; x2 += margen; y2 += margen
+
+        val camino = caminoRecortado
+        camino.reset()
+        var alguno = false
+        var puntaX = Double.NaN
+        var puntaY = Double.NaN
+
+        fun tramo(ax: Double, ay: Double, bx: Double, by: Double) {
+            if (!recortarSegmento(ax, ay, bx, by, x1, y1, x2, y2, segmentoRecortado)) return
+            val s = segmentoRecortado
+            if (!alguno || s[0] != puntaX || s[1] != puntaY) {
+                camino.moveTo(s[0].toFloat(), s[1].toFloat())
+            }
+            camino.lineTo(s[2].toFloat(), s[3].toFloat())
+            puntaX = s[2]
+            puntaY = s[3]
+            alguno = true
+        }
+
+        when (e.type) {
+            ElementType.LINE, ElementType.ARROW, ElementType.FREEDRAW -> {
+                val pts = e.points ?: return false
+                if (pts.size < 2) return false
+                var ax = e.x + pts[0].x
+                var ay = e.y + pts[0].y
+                for (i in 1 until pts.size) {
+                    val bx = e.x + pts[i].x
+                    val by = e.y + pts[i].y
+                    tramo(ax, ay, bx, by)
+                    ax = bx
+                    ay = by
+                }
+                // El lazo casi cerrado también cierra aquí, como al pintar entero.
+                if (pts.size > 2 && pts.first() != pts.last() && isPathALoop(pts)) {
+                    tramo(ax, ay, e.x + pts[0].x, e.y + pts[0].y)
+                }
+            }
+
+            ElementType.ELLIPSE -> {
+                val rx = e.width / 2
+                val ry = e.height / 2
+                if (rx <= 0.0 || ry <= 0.0) return false
+                val cx = e.x + rx
+                val cy = e.y + ry
+                // La cuerda que deja la comba por debajo de un píxel de
+                // pantalla, con tope: solo los tramos que pasan por la vista
+                // llegan a dibujarse, así que muestrear fino sale barato.
+                val cuerda = kotlin.math.sqrt(8.0 * maxOf(rx, ry) / zoomActual)
+                val pasos = (Math.PI * (rx + ry) / cuerda.coerceAtLeast(1e-6))
+                    .toInt().coerceIn(64, 4096)
+                var ax = cx + rx
+                var ay = cy
+                for (i in 1..pasos) {
+                    val t = 2 * Math.PI * i / pasos
+                    val bx = cx + rx * kotlin.math.cos(t)
+                    val by = cy + ry * kotlin.math.sin(t)
+                    tramo(ax, ay, bx, by)
+                    ax = bx
+                    ay = by
+                }
+            }
+
+            ElementType.ARC -> {
+                // Muestreado fino como el óvalo: la comba por debajo del píxel.
+                val cuerda = kotlin.math.sqrt(8.0 * maxOf(e.width, e.height) / 2 / zoomActual)
+                val porVuelta = (Math.PI * (e.width + e.height) / 2 / cuerda.coerceAtLeast(1e-6))
+                    .toInt().coerceIn(64, 4096)
+                val pts = puntosDelArco(e, porVuelta)
+                if (pts.size < 2) return false
+                var ax = e.x + pts[0].x
+                var ay = e.y + pts[0].y
+                for (i in 1 until pts.size) {
+                    val bx = e.x + pts[i].x
+                    val by = e.y + pts[i].y
+                    tramo(ax, ay, bx, by)
+                    ax = bx
+                    ay = by
+                }
+            }
+
+            ElementType.RECTANGLE, ElementType.DIAMOND -> {
+                // Sin girar: el giro ya lo lleva el lienzo. Los contornos traen
+                // las esquinas redondeadas muestreadas si las hay.
+                for (contorno in contornosDe(e.copy(angle = 0.0))) {
+                    val pts = contorno.puntos
+                    if (pts.size < 2) continue
+                    for (i in 0 until pts.size - 1) {
+                        tramo(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y)
+                    }
+                    if (contorno.cerrado) {
+                        tramo(pts.last().x, pts.last().y, pts[0].x, pts[0].y)
+                    }
+                }
+            }
+
+            else -> return false
+        }
+
+        if (alguno) {
+            val pincel = strokePaint(e, alpha)
+            if (e.isFreeDraw) {
+                // El lápiz no pinta aquí su mancha de presión: a este tamaño la
+                // mancha es un camino relleno enorme, que es justo lo prohibido.
+                pincel.strokeWidth = anchoPintadoDelLapiz(
+                    e.strokeWidth, firme = e.presionFirme
+                ).toFloat().coerceAtLeast(1f)
+            }
+            canvas.drawPath(camino, pincel)
+        }
+
+        // Las puntas de una flecha, solo si su vértice está a la vista: son
+        // geometría chica alrededor de la punta y se pintan como siempre.
+        if (e.type == ElementType.ARROW) {
+            val pts = e.points
+            if (pts != null && pts.size >= 2) {
+                fun aLaVista(p: Pt): Boolean {
+                    val px = e.x + p.x
+                    val py = e.y + p.y
+                    return px in x1..x2 && py in y1..y2
+                }
+                e.startArrowhead?.let {
+                    if (aLaVista(pts.first())) drawArrowhead(canvas, e, ArrowEnd.START, it, alpha)
+                }
+                e.endArrowhead?.let {
+                    if (aLaVista(pts.last())) drawArrowhead(canvas, e, ArrowEnd.END, it, alpha)
+                }
+            }
+        }
+        return true
+    }
+
+    /**
+     * El elemento entero, como la raya de un píxel que es a este aumento.
+     *
+     * Para los de puntos se une la primera punta con la última —a tamaño
+     * subpíxel, la cuerda ES el trazo—; para el resto, un punto en el centro
+     * de su caja. El grosor va dividido por el zoom porque el lienzo ya viene
+     * escalado: se quiere un píxel de pantalla, no un píxel de escena.
+     */
+    private fun pintarComoRaya(canvas: Canvas, e: Element) {
+        paint.reset()
+        paint.style = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.ROUND
+        paint.strokeWidth = (1.0 / zoomActual).toFloat()
+        val alpha = (e.opacity * 255 / 100).coerceIn(0, 255)
+        paint.color = tema(parseColor(e.strokeColor, alpha))
+        val puntos = e.points
+        if (puntos != null && puntos.size >= 2) {
+            val u = puntos.last()
+            canvas.drawLine(
+                e.x.toFloat(), e.y.toFloat(),
+                (e.x + u.x).toFloat(), (e.y + u.y).toFloat(), paint
+            )
+        } else {
+            canvas.drawPoint(
+                (e.x + e.width / 2).toFloat(), (e.y + e.height / 2).toFloat(), paint
+            )
+        }
+    }
+
     /** Lo de siempre, para no repetir el `when` entero. */
     private fun renderElementCuerpo(canvas: Canvas, element: Element, alpha: Int) {
+        // **Lo enorme se recorta a la vista antes de llegar al rasterizador.**
+        // Es la misma lección que los sólidos: el rasterizador tiene un tope de
+        // coordenadas de dispositivo, y a mucho aumento una cadena del plano
+        // que cruza la pantalla mete cientos de miles de píxeles — lo relleno
+        // desaparece o la app revienta, según el aparato. Al exportar no: ahí
+        // la salida es un archivo a escala uno. Ver [pintarRecortadoALaVista].
+        if (!paraExportar && pintarRecortadoALaVista(canvas, element, alpha)) return
         when (element.type) {
             ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
             ElementType.REGION -> drawCachedShape(canvas, element, alpha)
             ElementType.SOLIDO -> drawSolido(canvas, element, alpha)
+            ElementType.CRONOGRAMA -> drawCronograma(canvas, element, alpha)
             ElementType.LINE, ElementType.ARROW -> drawLinear(canvas, element, alpha)
             ElementType.FREEDRAW -> drawFreeDraw(canvas, element, alpha)
             ElementType.IMAGE -> drawImage(canvas, element, alpha)
@@ -809,7 +1302,8 @@ class Renderer(
             ElementType.ARC -> drawCachedShape(canvas, element, alpha)
             ElementType.FRAME -> drawFrame(canvas, element)
             ElementType.ESCALA_GRAFICA -> drawEscalaGrafica(canvas, element, alpha)
-            ElementType.PLANO -> drawPlano(canvas, element, alpha)
+            ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO ->
+                drawPlano(canvas, element, alpha)
             // El foco no se pinta aquí: va el último de todos, en renderScene.
             ElementType.SPOTLIGHT -> Unit
             ElementType.LUPA -> drawLupa(canvas, element, alpha)
@@ -1106,6 +1600,123 @@ class Renderer(
     }
 
     /**
+     * El cronograma: **rejilla, nombres y barras**.
+     *
+     * Se pinta liso y no con el trazo rugoso del resto. Un plan es un instrumento de
+     * lectura —se mira para saber qué va antes que qué— y una rejilla temblorosa hace que
+     * dos columnas no parezcan la misma anchura, que es justo lo que la rejilla viene a
+     * decir. Es la misma razón por la que el papel pautado del plano tampoco tiembla.
+     */
+    private fun drawCronograma(canvas: Canvas, e: Element, alpha: Int) {
+        val c = getElementAbsoluteCoords(e)
+        if (c.x2 - c.x1 <= 1.0 || c.y2 - c.y1 <= 1.0) return
+        val tinta = tema(parseColor(e.strokeColor, alpha))
+        val relleno = if (isTransparent(e.backgroundColor)) tinta
+        else tema(parseColor(e.backgroundColor, alpha))
+
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.strokeWidth = e.strokeWidth.toFloat().coerceAtLeast(1f)
+
+        // La rejilla: las columnas de la escala, finas, y la raya que separa los nombres.
+        paint.style = Paint.Style.STROKE
+        paint.color = (tinta and 0x00FFFFFF) or (((alpha * 45) / 100) shl 24)
+        val filas = yDeLasFilas(e)
+        for (x in columnasDelCronograma(e)) {
+            canvas.drawLine(x.toFloat(), c.y1.toFloat(), x.toFloat(), c.y2.toFloat(), paint)
+        }
+        val alto = altoDeFila(e)
+        for (i in 0..e.tareas.size) {
+            val y = (filas + i * alto).toFloat()
+            canvas.drawLine(c.x1.toFloat(), y, c.x2.toFloat(), y, paint)
+        }
+
+        // El marco, ya con el trazo entero.
+        paint.color = tinta
+        canvas.drawRect(
+            c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(), paint
+        )
+
+        val tam = letraDelCronograma(e, alto)
+        paint.style = Paint.Style.FILL
+        paint.textSize = tam.toFloat()
+        paint.typeface = typefaces(e.fontFamily)
+
+        // Los números de la escala, uno por columna y centrados en ella.
+        paint.textAlign = Paint.Align.CENTER
+        val anchoCol = anchoDeColumna(e)
+        val baseEscala = (c.y1 + (filas - c.y1) * 0.72).toFloat()
+        for (k in 0 until kotlin.math.max(1, e.periodos)) {
+            val x = xDeLaEscala(e) + (k + 0.5) * anchoCol
+            canvas.drawText("${k + 1}", x.toFloat(), baseEscala, paint)
+        }
+
+        // Y cada fila: su nombre a la izquierda y su barra sobre la rejilla.
+        paint.textAlign = Paint.Align.LEFT
+        for ((i, t) in e.tareas.withIndex()) {
+            val barra = barraDeTarea(e, i) ?: continue
+            fillPaint.reset()
+            fillPaint.isAntiAlias = true
+            fillPaint.style = Paint.Style.FILL
+            fillPaint.color = t.color?.let { tema(parseColor(it, alpha)) } ?: relleno
+            val redondeo = (barra.height / 3).toFloat()
+            canvas.drawRoundRect(
+                barra.x1.toFloat(), barra.y1.toFloat(),
+                barra.x2.toFloat(), barra.y2.toFloat(),
+                redondeo, redondeo, fillPaint
+            )
+            // Sin nombre puesto se rotula el número de fila: una figura recién nacida
+            // tiene que decir algo, y «3» es lo mínimo que hace que la fila se pueda
+            // señalar en voz alta mientras se dibuja.
+            val rotulo = t.nombre.ifBlank { "${i + 1}" }
+            paint.color = tinta
+            val y = (barra.y1 + barra.height * 0.5 + tam * 0.36).toFloat()
+            val hueco = xDeLaEscala(e) - c.x1 - tam * 0.6
+            canvas.drawText(
+                recortarAlAncho(rotulo, hueco, paint),
+                (c.x1 + tam * 0.3).toFloat(), y, paint
+            )
+        }
+    }
+
+    /**
+     * El color de una cara, **sin volver a formatear cadenas en cada fotograma**.
+     *
+     * [aclarar] trabaja con `#rrggbb` de principio a fin —es núcleo del motor y tiene que
+     * poder comprobarse sin dispositivo— así que resolver el tono de una cara son un
+     * `substring`, un `toLong` y un `toString(16)`. Con una caja son tres veces por
+     * fotograma y no se nota; con un cilindro son trece, y con una pieza torneada,
+     * ciento y pico — todas idénticas fotograma tras fotograma, y todas reservando
+     * memoria. Eso es lo que se sentía al hacer zoom sobre un dibujo con volúmenes.
+     *
+     * Se memoriza por claridad. La memoria se tira entera en cuanto cambia el color base o
+     * la opacidad, que es lo único de lo que depende además: son dos comparaciones por
+     * cara y ahorran todo lo demás.
+     */
+    private var tonoBase: String? = null
+    private var tonoAlfa: Int = -1
+    private val tonos = HashMap<Long, Int>()
+
+    private fun tonoDeCara(base: String, claridad: Double, alpha: Int): Int {
+        if (base != tonoBase || alpha != tonoAlfa) {
+            tonoBase = base
+            tonoAlfa = alpha
+            tonos.clear()
+        }
+        val clave = Math.round(claridad * 10000)
+        return tonos.getOrPut(clave) { tema(parseColor(aclarar(base, claridad), alpha)) }
+    }
+
+    /** El texto que quepa en [ancho], con puntos suspensivos si sobra. */
+    private fun recortarAlAncho(texto: String, ancho: Double, pincel: Paint): String {
+        if (ancho <= 0.0) return ""
+        if (pincel.measureText(texto) <= ancho) return texto
+        var n = texto.length
+        while (n > 1 && pincel.measureText(texto.take(n) + "…") > ancho) n--
+        return texto.take(n) + "…"
+    }
+
+    /**
      * El marco: **la hoja**.
      *
      * Se dibuja como un contorno fino y liso, sin rugosidad: no es parte del
@@ -1114,6 +1725,61 @@ class Renderer(
      */
     private fun drawFrame(canvas: Canvas, e: Element) {
         val c = getElementAbsoluteCoords(e)
+
+        // **Con tamaño de papel, se pinta como papel.** Es lo que convierte el lienzo
+        // infinito en un cuaderno: la hoja tiene fondo, canto y pauta, y lo de fuera pasa
+        // a ser la mesa. Sin tamaño sigue siendo el marco de siempre —un recuadro que
+        // dice hasta dónde llega el dibujo— y no se pinta nada debajo. Ver [Cuaderno].
+        if (e.papel != null) {
+            // **Al imprimir, de la hoja solo sale su pauta.** El papel de verdad ya es el
+            // papel: pintarle debajo un rectángulo del color del lienzo y un canto sería
+            // dibujar una hoja encima de una hoja. Lo que sí tiene que salir son las
+            // rayas o los puntos, porque **eso es parte de la página** —es lo que uno
+            // esperaba al elegir papel pautado— y no un andamio del editor.
+            if (!paraExportar) {
+                fillPaint.reset()
+                fillPaint.isAntiAlias = true
+                fillPaint.style = Paint.Style.FILL
+                // El canto, primero y desplazado: es lo que despega la hoja de la mesa.
+                // Una sombra de verdad costaría una capa aparte y esto dice lo mismo.
+                fillPaint.color = tema(SOMBRA_DE_LA_HOJA)
+                canvas.drawRoundRect(
+                    (c.x1 + CANTO_DE_LA_HOJA).toFloat(), (c.y1 + CANTO_DE_LA_HOJA).toFloat(),
+                    (c.x2 + CANTO_DE_LA_HOJA).toFloat(), (c.y2 + CANTO_DE_LA_HOJA).toFloat(),
+                    FRAME_RADIUS, FRAME_RADIUS, fillPaint
+                )
+                fillPaint.color = tema(parseColor(DrawTheme.fondoDe(dark)))
+                canvas.drawRoundRect(
+                    c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(),
+                    FRAME_RADIUS, FRAME_RADIUS, fillPaint
+                )
+            }
+
+            // Y la pauta impresa, dentro. Ver [rayasDeLaPauta].
+            val rayas = rayasDeLaPauta(e)
+            if (rayas.isNotEmpty()) {
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.color = tema(PAUTA_DE_LA_HOJA)
+                if (e.pauta == PautaDeHoja.PUNTOS) {
+                    paint.style = Paint.Style.FILL
+                    for ((a, _) in rayas) {
+                        canvas.drawCircle(a.x.toFloat(), a.y.toFloat(), RADIO_DEL_PUNTILLO, paint)
+                    }
+                } else {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = GROSOR_DE_LA_PAUTA
+                    for ((a, b) in rayas) {
+                        canvas.drawLine(
+                            a.x.toFloat(), a.y.toFloat(), b.x.toFloat(), b.y.toFloat(), paint
+                        )
+                    }
+                }
+            }
+        }
+
+        if (paraExportar) return
+
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
@@ -1123,6 +1789,25 @@ class Renderer(
             c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(),
             FRAME_RADIUS, FRAME_RADIUS, paint
         )
+
+        // **El número de página, dentro y abajo a la derecha**, donde lo lleva un libro.
+        //
+        // Dentro y no fuera con el nombre: con seis hojas seguidas, los rótulos de fuera
+        // caen todos en el hueco entre dos y no se sabe de cuál es cada uno. Y abajo a la
+        // derecha porque es donde el ojo lo busca sin tener que buscarlo.
+        ordenDeHojas[e.id]?.let { numero ->
+            paint.style = Paint.Style.FILL
+            paint.textSize = FRAME_LABEL_SIZE
+            paint.textAlign = Paint.Align.RIGHT
+            paint.typeface = typefaces(null)
+            canvas.drawText(
+                numero.toString(),
+                (c.x2 - MARGEN_DEL_FOLIO).toFloat(),
+                (c.y2 - MARGEN_DEL_FOLIO).toFloat(),
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+        }
 
         // El nombre va FUERA, encima de la esquina: dentro se comería el sitio
         // útil de la hoja, que es justo lo que el marco existe para dar.
@@ -1283,18 +1968,24 @@ class Renderer(
         // Los banderines de los extremos: la perpendicular que marca dónde
         // empieza y dónde acaba la medida. Sin ellos, una cota corta no se
         // distingue de una raya cualquiera.
+        //
+        // **Y por el mismo trazo que la raya, no con una línea suelta.** Iban con un
+        // `drawLine` de una sola pasada mientras la raya de la cota pasa dos veces —el
+        // trazo rugoso las dobla—, así que los banderines y las puntas salían **de la mitad
+        // de gordas** que la línea de la que cuelgan. Se ve a la primera en cuanto el grosor
+        // sube: una cota de trazo grueso rematada con dos pelos. La misma raya para todo, y
+        // de paso las puntas salen dibujadas a mano como el resto.
         val nx = -dy / largo
         val ny = dx / largo
         val ala = (e.strokeWidth * MEASURE_TICK).coerceAtLeast(MEASURE_TICK_MIN)
         for (extremo in listOf(a, b)) {
-            canvas.drawLine(
-                (extremo.x - nx * ala).toFloat(), (extremo.y - ny * ala).toFloat(),
-                (extremo.x + nx * ala).toFloat(), (extremo.y + ny * ala).toFloat(),
-                paint
+            trazo(
+                Pt(extremo.x - nx * ala, extremo.y - ny * ala),
+                Pt(extremo.x + nx * ala, extremo.y + ny * ala)
             )
         }
-        puntaDeCota(canvas, a, b, e.strokeWidth)
-        puntaDeCota(canvas, b, a, e.strokeWidth)
+        puntaDeCota(a, b, e.strokeWidth, ::trazo)
+        puntaDeCota(b, a, e.strokeWidth, ::trazo)
 
         dibujarRotulo(canvas, e, a, b, dx, dy, nx, ny, color, alpha)
     }
@@ -1318,17 +2009,20 @@ class Renderer(
         return if (hueco > largo * MAXIMO_HUECO) 0.0 else hueco
     }
 
-    /** Media punta de flecha, apuntando de [en] hacia afuera de [hacia]. */
-    private fun puntaDeCota(canvas: Canvas, en: Pt, hacia: Pt, grosor: Double) {
+    /**
+     * Media punta de flecha, apuntando de [en] hacia afuera de [hacia].
+     *
+     * La pinta [trazo], que es el mismo con el que se dibuja la raya de la cota: así la
+     * punta pesa lo que pesa la línea. Ver [drawMeasure].
+     */
+    private fun puntaDeCota(en: Pt, hacia: Pt, grosor: Double, trazo: (Pt, Pt) -> Unit) {
         val ang = kotlin.math.atan2(hacia.y - en.y, hacia.x - en.x)
         val largo = (grosor * MEASURE_HEAD).coerceAtLeast(MEASURE_HEAD_MIN)
         for (s in listOf(-1, 1)) {
             val giro = ang + s * MEASURE_HEAD_ANGLE
-            canvas.drawLine(
-                en.x.toFloat(), en.y.toFloat(),
-                (en.x + largo * kotlin.math.cos(giro)).toFloat(),
-                (en.y + largo * kotlin.math.sin(giro)).toFloat(),
-                paint
+            trazo(
+                en,
+                Pt(en.x + largo * kotlin.math.cos(giro), en.y + largo * kotlin.math.sin(giro))
             )
         }
     }
@@ -1391,85 +2085,396 @@ class Renderer(
     private fun drawCachedShape(canvas: Canvas, e: Element, alpha: Int) {
         val shape = geometryOf(e) ?: return
         drawFill(canvas, e, shape, alpha)
-        canvas.drawPath(shape.strokePath, strokePaint(e, alpha))
-    }
-
-    /**
-     * La caja en volumen: **la sombra, y luego las caras de atrás hacia delante**.
-     *
-     * ## La sombra primero, y siempre
-     *
-     * No es un adorno. En isométrica, subir una caja y alejarla se ven
-     * **exactamente igual** —las dos la mueven hacia arriba en la pantalla y nada
-     * más—, así que sin la huella marcada en el suelo no hay forma de saber dónde
-     * está apoyada ni cuánto levanta. Es el canal de profundidad más barato que
-     * existe y el que más dice; el porqué largo, en [sombraEnElSuelo].
-     *
-     * Se pinta con el color del trazo y muy translúcida: es un calco de la
-     * huella, como el que hace un dibujante a mano, no una sombra proyectada de
-     * verdad. Y va debajo de todo, porque el sólido se apoya encima.
-     *
-     * ## Y las caras, en el orden en que vienen
-     *
-     * [carasDeElemento] las devuelve ya ordenadas de atrás hacia delante, así que
-     * pintarlas en ese orden **es** el algoritmo del pintor. Cada una con su
-     * relleno —el color base movido por su claridad— y su trazo encima, que es el
-     * orden de siempre en este motor: al revés, el relleno rugoso se comería el
-     * borde por dentro.
-     */
-    private fun drawSolido(canvas: Canvas, e: Element, alpha: Int) {
-        val shape = geometryOf(e) ?: return
-        val caras = shape.caras ?: return
-
-        dibujarSombra(canvas, e, alpha)
-
-        val fondo = !isTransparent(e.backgroundColor)
-        val pincelDeTrazo = strokePaint(e, alpha)
-        for (cara in caras) {
-            if (fondo) {
-                val color = tema(parseColor(aclarar(e.backgroundColor, cara.claridad), alpha))
-                fillPaint.reset()
-                fillPaint.isAntiAlias = true
-                fillPaint.color = color
-                if (cara.rayado == null) {
-                    // Liso a propósito, como el resto del motor: con ruido el
-                    // relleno dejaría huecos blancos justo por dentro del borde,
-                    // y en una caja eso rompe la continuidad entre dos caras que
-                    // comparten arista.
-                    fillPaint.style = Paint.Style.FILL
-                    canvas.drawPath(cara.silueta, fillPaint)
-                } else {
-                    fillPaint.style = Paint.Style.STROKE
-                    fillPaint.strokeWidth = (e.strokeWidth / 2).toFloat()
-                    fillPaint.strokeCap = Paint.Cap.ROUND
-                    canvas.save()
-                    canvas.clipPath(cara.silueta)
-                    canvas.drawPath(cara.rayado, fillPaint)
-                    canvas.restore()
-                }
-            }
-            canvas.drawPath(cara.trazo, pincelDeTrazo)
+        conMaterial(canvas, e, shape.strokePath, alpha, relleno = false) { a, color ->
+            canvas.drawPath(shape.strokePath, strokePaint(e, a, color))
         }
     }
 
     /**
-     * La huella de un sólido marcada en el suelo.
+     * **El trazo, hecho de su material.** Ver [MaterialDeTinta].
      *
-     * Va translúcida y del color del trazo —no de un gris fijo— para que sobre un
-     * fondo oscuro siga viéndose: un calco tenue del color con el que se dibuja
-     * se lee en cualquier papel, y un gris de fábrica desaparece en la mitad de
-     * ellos.
+     * Es la misma idea que el material de la tinta del croquis en el espacio, y se resuelve
+     * de la única forma que vale para cualquier figura: **sin tocar la geometría**. La ruta
+     * que hay que pintar ya está hecha —la de un óvalo, la de una raya, la mancha de un
+     * lápiz— y lo único que cambia es cuántas veces y con qué se pasa por encima. Así una
+     * figura cambia de material sin moverse ni un píxel, y el material vale igual para un
+     * rectángulo que para un garabato.
+     *
+     * - **Encendida** son tres pasadas: el resplandor ancho y flojo, el cuerpo de siempre y
+     *   el filamento casi blanco por el medio. Es lo que hace un tubo de verdad y lo que en
+     *   una pantalla buena se lee como que brilla, en vez de como un color más claro.
+     * - **El grano** —rayado, cruzado, punteado— se pinta **dentro del propio trazo**: se
+     *   saca el contorno de la raya, se recorta a él y se raya lo de dentro. Recortando, el
+     *   grano no se sale por ningún lado por retorcida que sea la figura, que es lo que
+     *   permite rayar una sección hecha a pulso.
+     *
+     * [relleno] dice si [camino] ya es una mancha cerrada —la del lápiz— en vez de una raya
+     * que hay que engordar para saber qué zona ocupa.
      */
-    private fun dibujarSombra(canvas: Canvas, e: Element, alpha: Int) {
-        val sombra = sombraDeElemento(e, vistaActual)
-        if (sombra.size < 3) return
-        fillPaint.reset()
-        fillPaint.isAntiAlias = true
-        fillPaint.style = Paint.Style.FILL
-        fillPaint.color =
-            tema(parseColor(e.strokeColor, alpha * OPACIDAD_DE_LA_SOMBRA / 100))
-        canvas.drawPath(sombra.toClosedPath(), fillPaint)
+    private fun conMaterial(
+        canvas: Canvas,
+        e: Element,
+        camino: Path,
+        alpha: Int,
+        relleno: Boolean,
+        pintarElTrazo: (alfa: Int, color: Int?) -> Unit
+    ) {
+        when (e.material) {
+            MaterialDeTinta.LISA -> pintarElTrazo(alpha, null)
+
+            MaterialDeTinta.LUZ, MaterialDeTinta.HDR ->
+                comoUnTubo(canvas, e, alpha, pintarElTrazo)
+
+            else -> {
+                pintarElTrazo(alpha, null)
+                elGrano(canvas, e, camino, alpha, relleno)
+            }
+        }
     }
+
+    /**
+     * **La tinta encendida: la misma raya, encendida.** Es la misma del croquis en el espacio.
+     *
+     * ## Ni halo ni capas
+     *
+     * Se pintaba como un tubo de neón: una escalera de pasadas cada vez más anchas alrededor
+     * del trazo, con el cuerpo apagándose conforme subía la llave. Eso da un resplandor
+     * bonito y **no es lo que hace falta aquí**: la raya cambiaba de grosor al subir la luz,
+     * se veían las capas alrededor, y lo dibujado dejaba de medir lo que decía medir. Una
+     * cota de un milímetro con la luz alta ocupaba tres.
+     *
+     * Ahora la tinta encendida **ocupa exactamente lo mismo que apagada**: la misma ruta, el
+     * mismo grueso, el mismo contorno. Lo único que cambia es el color con que se pinta, que
+     * se va hacia su tono vivo y hacia el blanco conforme sube la llave — que es lo que hace
+     * una tinta cuando se ilumina, y no un tubo de neón.
+     *
+     * ## Por encima del blanco, si la pantalla lo da
+     *
+     * Con margen HDR el color se escribe en rango extendido: uno es el blanco de la interfaz
+     * y de ahí para arriba se sigue, así que la tinta **deslumbra** en vez de quedarse en un
+     * color claro. Sin margen se pinta el mismo color acotado al blanco, que es lo que sabe
+     * dar la pantalla. Ver [ElBrilloDeMas].
+     */
+    private fun comoUnTubo(
+        canvas: Canvas,
+        e: Element,
+        alpha: Int,
+        pintarElTrazo: (alfa: Int, color: Int?) -> Unit
+    ) {
+        // **La llave de paso llega al doble.** Hasta uno, la luz se enciende: el color se va
+        // hacia su tono vivo y hacia el blanco. De uno para arriba ya no queda color al que
+        // ir y lo que sube es **cuánto se sale del blanco**. Ver [LucesDelDibujo].
+        val mando = lasLuces.toFloat().coerceAtLeast(0f)
+        // **Apagada, la luz es tinta lisa.** Ni una capa encima: el color que se eligió.
+        if (mando <= 0.005f) {
+            pintarElTrazo(alpha, null)
+            return
+        }
+        val cuanta = mando.coerceAtMost(1f)
+        val tinta = tema(parseColor(e.strokeColor, alpha))
+        // Encendida: hacia su tono vivo, y de ahí hacia el blanco por dentro.
+        val encendida = aclarado(haciaElBrillo(tinta, cuanta), cuanta * HACIA_EL_BLANCO, alpha)
+        // **Solo la HDR se sale del blanco.** La otra es la de siempre, acotada a lo que la
+        // pantalla sabe dar.
+        val deMas = if (e.material == MaterialDeTinta.HDR) mando else 0f
+        if (deMas <= 0.005f || !ElBrilloDeMas.hay) {
+            pintarElTrazo(alpha, encendida)
+            return
+        }
+        pintarElTrazo(alpha, porEncimaDelBlanco(encendida, deMas))
+    }
+
+    /**
+     * El mismo color, **escrito por encima del blanco**: uno es el blanco de la interfaz y de
+     * ahí para arriba lo que la luz pida. Solo tiene sentido con margen; ver [ElBrilloDeMas].
+     */
+    private fun porEncimaDelBlanco(argb: Int, cuantaLuz: Float): Int {
+        val sube = 1f + (VECES_EL_BLANCO - 1f) * cuantaLuz.coerceIn(0f, 1f)
+        val r = (((argb shr 16) and 0xFF) / 255f * sube)
+        val g = (((argb shr 8) and 0xFF) / 255f * sube)
+        val b = ((argb and 0xFF) / 255f * sube)
+        // `Color.pack` en rango extendido devuelve un `long`; quien lo pinta lo pasa por
+        // `Paint.setColor(long)`. Aquí se devuelve el ARGB acotado y el extendido se escribe
+        // en [pintarEnRangoExtendido], que es donde hay un `Paint` al que dárselo.
+        elUltimoExtendido = android.graphics.Color.pack(
+            r, g, b, ((argb ushr 24) and 0xFF) / 255f,
+            android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.EXTENDED_SRGB)
+        )
+        return android.graphics.Color.argb(
+            (argb ushr 24) and 0xFF,
+            (r * 255f).toInt().coerceIn(0, 255),
+            (g * 255f).toInt().coerceIn(0, 255),
+            (b * 255f).toInt().coerceIn(0, 255)
+        )
+    }
+
+    /** Lo último que [porEncimaDelBlanco] preparó en rango extendido. Ver [ElBrilloDeMas]. */
+    private var elUltimoExtendido: Long = 0L
+
+    /** Un peldaño del tubo, escrito por encima del blanco si hay dónde. */
+    private fun encendido(
+        canvas: Canvas,
+        camino: Path,
+        ancho: Float,
+        argb: Int,
+        cuantaLuz: Float
+    ) {
+        val pincel = ELPINCEL_ENCENDIDO
+        pincel.strokeWidth = ancho
+        if (!ElBrilloDeMas.hay) {
+            // Sin margen ni se intenta: el sistema lo recortaría igual y un color en otro
+            // espacio hay que convertirlo en cada pasada. Suma igual, que es lo que hace el
+            // resplandor.
+            pincel.color = argb
+            canvas.drawPath(camino, pincel)
+            return
+        }
+        val alfa = ((argb ushr 24) and 0xFF) / 255f
+        val r = ((argb shr 16) and 0xFF) / 255f
+        val g = ((argb shr 8) and 0xFF) / 255f
+        val b = (argb and 0xFF) / 255f
+        // Uno es el blanco de la interfaz; de ahí para arriba, lo que la luz pida.
+        val sube = 1f + (VECES_EL_BLANCO - 1f) * cuantaLuz.coerceIn(0f, 1f)
+        pincel.setColor(
+            android.graphics.Color.pack(
+                r * sube, g * sube, b * sube, alfa,
+                android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.EXTENDED_SRGB)
+            )
+        )
+        canvas.drawPath(camino, pincel)
+    }
+
+    /**
+     * **Lo ancho que sale de verdad la tinta**, que no siempre es su `strokeWidth`.
+     *
+     * Aquí estaba lo de «la tinta de luz no hace nada». El resplandor se mide en veces el
+     * ancho del trazo, y para el ancho se cogía el número guardado. Con una figura vale; con
+     * **el lápiz, no**: el lápiz guarda la mitad del número del mando y encima se pinta como
+     * una mancha de unas cuatro veces ese valor (ver [anchoPintadoDelLapiz]). O sea que el
+     * resplandor salía **más estrecho que el propio trazo** y quedaba entero debajo de él:
+     * invisible, y subir el brillo no cambiaba nada porque lo que crecía seguía tapado.
+     *
+     * Con el ancho de verdad, el resplandor sale por fuera —que es donde tiene que estar— y
+     * el grano se reparte a la escala del trazo que se ve.
+     */
+    private fun anchoDeLaTinta(e: Element, alpha: Int): Float =
+        if (e.isFreeDraw) {
+            anchoPintadoDelLapiz(e.strokeWidth, firme = e.presionFirme).toFloat()
+                .coerceAtLeast(1f)
+        } else {
+            strokePaint(e, alpha).strokeWidth.coerceAtLeast(1f)
+        }
+
+    /**
+     * El grano de una tinta: **una tela clavada en el dibujo, que el trazo destapa**.
+     *
+     * Se rayaba a mano —recortar el lienzo al contorno y pintar rayas una a una por toda su
+     * caja— y eso son decenas de líneas por figura y por fotograma: con media docena de trazos
+     * rayados el dibujo se arrastraba. Y no hacía falta ninguna: lo que se pinta aquí no es un
+     * dibujo vectorial, es **una textura**. Ahora es un mosaico que se repite puesto como
+     * brocha, o sea **un solo relleno**, el mismo que pintar de un color liso.
+     *
+     * Y una brocha de mosaico se ancla al **lienzo**, no a la figura: la trama está quieta en
+     * el papel y lo que el trazo hace es **destaparla**, que es lo que hace un rayado en un
+     * plano de verdad. Antes cada trazo empezaba su rayado en la esquina de su propia caja, así
+     * que dos secciones pegadas enseñaban dos tramas descolocadas y mover una se llevaba su
+     * plano con ella. Ver [laTelaDelGrano].
+     */
+    private fun elGrano(canvas: Canvas, e: Element, camino: Path, alpha: Int, relleno: Boolean) {
+        // Reaprovechado: se arma por cada figura con grano **y por fotograma**, y un `Path`
+        // nuevo por ahí es basura que hay que recoger justo mientras se dibuja.
+        val contorno = elContornoDelGrano
+        contorno.reset()
+        if (relleno) {
+            contorno.set(camino)
+        } else {
+            strokePaint(e, alpha).apply { pathEffect = null }.getFillPath(camino, contorno)
+        }
+        if (contorno.isEmpty) return
+
+        val gordo = anchoDeLaTinta(e, alpha)
+        // **El paso sale del ancho del trazo y de nada más. Del aumento, no.**
+        //
+        // Dependía del aumento por las dos puntas —un suelo y un techo en píxeles de pantalla—
+        // y eso rompía lo único que una textura tiene que cumplir: **ser la misma siempre**.
+        // Acercándose, el techo apretaba el mosaico y aparecían más cuadros dentro del mismo
+        // trazo. Y de paso los dos llegaban a cruzarse —a mucho aumento el máximo bajaba por
+        // debajo del mínimo— y ahí `coerceIn` reventaba la aplicación.
+        //
+        // Clavado al trazo, el mosaico vive en el dibujo: acercarse lo agranda —se pixela, que
+        // es lo que hace cualquier textura al ampliarla— pero **son siempre los mismos
+        // cuadros**. Que no desaparezca al alejarse lo resuelve el filtrado, no el tamaño.
+        val paso = (gordo * PASO_DEL_GRANO)
+            .coerceIn(PASO_MINIMO_DEL_GRANO, PASO_MAXIMO_DEL_GRANO)
+        val tinta = parseColor(e.strokeColor, alpha)
+        val oscuro = tema(
+            Color.argb(
+                alpha,
+                (Color.red(tinta) * (1 - CUANTO_OSCURECE_EL_GRANO)).toInt(),
+                (Color.green(tinta) * (1 - CUANTO_OSCURECE_EL_GRANO)).toInt(),
+                (Color.blue(tinta) * (1 - CUANTO_OSCURECE_EL_GRANO)).toInt()
+            )
+        )
+
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.isFilterBitmap = true
+        paint.shader = laTelaDelGrano(e.material, oscuro, paso)
+        canvas.drawPath(contorno, paint)
+        paint.shader = null
+    }
+
+    /**
+     * **El mosaico del grano, tejido una vez y guardado.**
+     *
+     * Es un cuadradito de `paso × paso` con lo justo dentro —una raya, una cruz o un punto— y
+     * se repite en las dos direcciones. Lo delicado es que **case consigo mismo**: con las
+     * rayas dibujadas en diagonal dentro del cuadro, el corte se nota en cada junta. Así que
+     * se dibujan rectas —una horizontal y otra vertical, que casan solas— y **se gira la
+     * brocha**, no el dibujo: `setLocalMatrix` inclina el mosaico entero cuarenta y cinco
+     * grados sin tocar una junta.
+     *
+     * Se guarda por material, color y paso, que son las tres cosas de las que depende. Un
+     * croquis entero rayado del mismo color y del mismo grueso teje **un** mosaico.
+     */
+    private fun laTelaDelGrano(cual: MaterialDeTinta, color: Int, paso: Float): Shader {
+        // **Cada brocha se guarda ya montada, y no se le vuelve a tocar la matriz.**
+        //
+        // Se guardaba una por material y color y se le ponía la escala en cada llamada. Eso
+        // es escribir sobre un objeto que ya se le ha entregado a otro: dos figuras del mismo
+        // color y distinto grueso, en el mismo fotograma, comparten brocha, y la segunda le
+        // cambia la matriz a la primera **antes de que se haya pintado** —lo que se dibuja no
+        // se pinta cuando se manda, se apunta en una lista y se pinta después—. El resultado
+        // sería todo el croquis con el grano del último trazo. Con el paso dentro de la llave,
+        // cada una es suya y nadie la toca.
+        //
+        // El mosaico sí se comparte: es lo único que ocupa memoria de verdad, y depende solo
+        // del material y del color. Las brochas son cuatro bytes y una matriz.
+        val redondo = paso.toInt().coerceAtLeast(1)
+        val llaveDeLaTela = (cual.ordinal.toLong() shl 40) xor (color.toLong() and 0xFFFFFFFFL)
+        val llave = (llaveDeLaTela shl 8) xor redondo.toLong()
+        losGranos[llave]?.let { return it }
+
+        val tela = lasTelas.getOrPut(llaveDeLaTela) {
+            // **El mosaico se teje siempre del mismo tamaño en píxeles.**
+            //
+            // Se tejía del tamaño del paso, así que cada grueso de trazo pedía su propio mapa
+            // de bits: un croquis con seis grosores rayados eran seis texturas en memoria, y a
+            // grosores grandes, grandes. Con un tamaño fijo hay **una por material y color** —
+            // un kilobyte cada una— y lo grande o pequeña que sale la dice la matriz de la
+            // brocha, que no cuesta memoria ninguna.
+            val lado = LADO_DEL_MOSAICO
+            val mapa = Bitmap.createBitmap(lado, lado, Bitmap.Config.ARGB_8888)
+            val enTela = Canvas(mapa)
+            val pincel = Paint().apply {
+                isAntiAlias = true
+                this.color = color
+            }
+            if (cual == MaterialDeTinta.PUNTOS) {
+                pincel.style = Paint.Style.FILL
+                enTela.drawCircle(lado / 2f, lado / 2f, lado * GORDO_DEL_GRANO * 2.4f, pincel)
+            } else {
+                pincel.style = Paint.Style.STROKE
+                pincel.strokeWidth = lado * GORDO_DEL_GRANO * 2f
+                // Por el medio y repetida al otro lado: así la raya cae entera en la junta en
+                // vez de partirse por la mitad.
+                enTela.drawLine(0f, lado / 2f, lado.toFloat(), lado / 2f, pincel)
+                if (cual == MaterialDeTinta.CRUZADO) {
+                    enTela.drawLine(lado / 2f, 0f, lado / 2f, lado.toFloat(), pincel)
+                }
+            }
+            mapa
+        }
+
+        // La matriz dice de qué tamaño sale el cuadro y, en el rayado, de través: **la brocha
+        // se gira, no el dibujo**, así que las juntas siguen casando.
+        val brocha = BitmapShader(tela, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        brocha.setLocalMatrix(
+            Matrix().apply {
+                val cuanto = redondo / LADO_DEL_MOSAICO.toFloat()
+                setScale(cuanto, cuanto)
+                if (cual != MaterialDeTinta.PUNTOS) postRotate(GRADOS_DEL_GRANO)
+            }
+        )
+        if (losGranos.size > TELARES_GUARDADOS) {
+            losGranos.clear()
+            lasTelas.clear()
+        }
+        losGranos[llave] = brocha
+        return brocha
+    }
+
+    /** El contorno del trazo, reaprovechado entre figuras. Ver [elGrano]. */
+    private val elContornoDelGrano = Path()
+
+    /** Las brochas ya montadas, por material, color y paso. Ver [laTelaDelGrano]. */
+    private val losGranos = HashMap<Long, Shader>()
+
+    /** Y los mosaicos que comparten, por material y color: es lo único que pesa. */
+    private val lasTelas = HashMap<Long, Bitmap>()
+
+    /**
+     * El volumen: **las caras de atrás hacia delante, y encima sus aristas**.
+     *
+     * ## Sin sombra
+     *
+     * La tuvo, y por un motivo bueno: en isométrica, subir una caja y alejarla se ven
+     * exactamente igual, y la huella marcada en el suelo deshacía esa ambigüedad. Pero en
+     * un dibujo con varias piezas son manchas por todas partes, y sobre todo **estorban
+     * para dibujar encima**, que es de lo que va esto. Para apoyar una pieza en otra está
+     * el imán entre volúmenes, que además lo hace exacto en vez de a ojo.
+     *
+     * ## Las caras, en el orden en que vienen
+     *
+     * [carasDeSolido] las devuelve ya ordenadas de atrás hacia delante, así que pintarlas
+     * en ese orden **es** el algoritmo del pintor. Cada una con su tono, y ese salto de
+     * tono es lo único que hace que se lea el volumen.
+     *
+     * ## Y solo las aristas que existen
+     *
+     * La silueta y los quiebros, no el borde de cada cara: ver [aristasMarcadasDeSolido].
+     */
+    private fun drawSolido(canvas: Canvas, e: Element, alpha: Int) {
+        val shape = geometryOf(e) ?: return
+        // La geometría viene **relativa al origen de la pieza**: aquí se la lleva a su
+        // sitio con la matriz. Ver el porqué en [buildGeometry].
+        canvas.save()
+        canvas.translate(e.x.toFloat(), e.y.toFloat())
+        try {
+            pintarVolumen(canvas, e, alpha, shape)
+        } finally {
+            canvas.restore()
+        }
+    }
+
+    private fun pintarVolumen(canvas: Canvas, e: Element, alpha: Int, shape: CachedShape) {
+        // El alambre: sin relleno y con todas las aristas, también las de detrás, y sin
+        // sombra. Ver [Element.esqueleto].
+        shape.alambre?.let {
+            canvas.drawPath(it, strokePaint(e, alpha))
+            return
+        }
+        val caras = shape.caras ?: return
+
+        // **Primero los planos, macizos y sin borde.** Cada cara lleva su tono, y ese
+        // salto de tono es lo que hace que se lea el volumen.
+        if (!isTransparent(e.backgroundColor)) {
+            fillPaint.reset()
+            fillPaint.isAntiAlias = true
+            fillPaint.style = Paint.Style.FILL
+            for (cara in caras) {
+                fillPaint.color = tonoDeCara(e.backgroundColor, cara.claridad, alpha)
+                canvas.drawPath(cara.silueta, fillPaint)
+            }
+        }
+
+        // Y encima, **solo las aristas que existen**: la silueta y los quiebros. Un cubo
+        // conserva las suyas y un cilindro se queda con su contorno y sus dos bocas, que
+        // es lo que uno dibujaría a mano. Ver [aristasMarcadasDeSolido].
+        shape.alambreMarcado?.let { canvas.drawPath(it, strokePaint(e, alpha)) }
+    }
+
 
     /** El fondo de una forma: liso o rayado, siempre recortado a su silueta. */
     private fun drawFill(canvas: Canvas, e: Element, shape: CachedShape, alpha: Int) {
@@ -1526,11 +2531,13 @@ class Renderer(
         // forma: encima le comería el borde por dentro.
         if (rellenaSuLazo(e)) drawFill(canvas, e, shape, alpha)
 
-        fillPaint.reset()
-        fillPaint.isAntiAlias = true
-        fillPaint.style = Paint.Style.FILL
-        fillPaint.color = tema(parseColor(e.strokeColor, alpha))
-        canvas.drawPath(shape.strokePath, fillPaint)
+        conMaterial(canvas, e, shape.strokePath, alpha, relleno = true) { a, color ->
+            fillPaint.reset()
+            fillPaint.isAntiAlias = true
+            fillPaint.style = Paint.Style.FILL
+            fillPaint.color = color ?: tema(parseColor(e.strokeColor, a))
+            canvas.drawPath(shape.strokePath, fillPaint)
+        }
     }
 
     /**
@@ -1614,9 +2621,11 @@ class Renderer(
         }.orEmpty()
         val guardado = capaDebajo
         capaDebajo = null
+        pintandoLupa = true
         for (el in debajo) {
             if (boundsOverlap(getElementBounds(el), region)) renderElement(canvas, el)
         }
+        pintandoLupa = false
         capaDebajo = guardado
         canvas.restore()
         canvas.restore()
@@ -1844,10 +2853,12 @@ class Renderer(
             backdrop?.takeIf { !it.isRecycled }?.let { lienzo.drawBitmap(it, 0f, 0f, null) }
             val guardado = capaDebajo
             capaDebajo = null
+            pintandoLupa = true
             for (el in debajo) {
                 if (el.type == ElementType.LUPA || el.type == ElementType.SPOTLIGHT) continue
                 renderElement(lienzo, el)
             }
+            pintandoLupa = false
             capaDebajo = guardado
             bmp
         }.getOrNull()
@@ -1889,6 +2900,34 @@ class Renderer(
             )
         } ?: Rect(0, 0, bitmap.width, bitmap.height)
 
+        // **Tumbada en el suelo**, si se ha pedido: es lo que permite meter un plano de
+        // planta debajo de un croquis en volumen y levantar las cajas encima, a escala.
+        // La proyección isométrica del suelo es **afín** —dos multiplicaciones por punto,
+        // sin punto de fuga—, así que llevar la imagen a él es exactamente una matriz: se
+        // mandan las esquinas de la foto a las de su huella proyectada y se pinta. Con
+        // perspectiva no se podría, que es otra cosa que se gana con la isométrica.
+        if (e.enElSuelo) {
+            val suelo = imagenEnElSuelo(e, vistaActual)
+            val matriz = Matrix()
+            val origen = floatArrayOf(
+                src.left.toFloat(), src.top.toFloat(),
+                src.right.toFloat(), src.top.toFloat(),
+                src.right.toFloat(), src.bottom.toFloat(),
+                src.left.toFloat(), src.bottom.toFloat()
+            )
+            val destino = FloatArray(8)
+            for (i in 0 until 4) {
+                destino[i * 2] = suelo[i].x.toFloat()
+                destino[i * 2 + 1] = suelo[i].y.toFloat()
+            }
+            if (matriz.setPolyToPoly(origen, 0, destino, 0, 4)) {
+                imagePaint.alpha = alpha
+                canvas.drawBitmap(bitmap, matriz, imagePaint)
+                canvas.restore()
+                return
+            }
+        }
+
         val dst = RectF(c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat())
         // **La brocha se reutiliza.** Creada aquí, era una reserva de memoria
         // por imagen y por fotograma: con tres fotos en el lienzo y el dedo
@@ -1903,6 +2942,15 @@ class Renderer(
     private fun drawText(canvas: Canvas, e: Element, alpha: Int) {
         val content = e.text ?: return
         val size = e.fontSize ?: 20.0
+        // **Letras más grandes que la pantalla no se dibujan.** A tantos
+        // aumentos una letra ya no cabe entera, y el renderizador de texto no
+        // tiene caché para glifos de miles de píxeles: los teselaba como
+        // caminos EN CADA FOTOGRAMA y la aplicación se quedaba tiesa justo al
+        // ampliar mucho sobre un rótulo. Al exportar no aplica: ahí la escala
+        // es la del archivo.
+        if (!paraExportar && !pintandoLupa && size * zoomActual > LETRA_MAXIMA_EN_PANTALLA) {
+            return
+        }
         val c = getElementAbsoluteCoords(e)
 
         paint.reset()
@@ -1944,10 +2992,29 @@ class Renderer(
         // derecha por encima de lo que hubiera al lado. Una caja de texto que no contiene
         // el texto no es una caja.
         val ancho = c.x2 - c.x1
-        for (line in renglonesQueCaben(content, ancho) { paint.measureText(it).toDouble() }) {
+        // **Partir en renglones se recuerda, no se rehace.** Es medir palabra a
+        // palabra, y corría por texto visible y por fotograma: con los rótulos
+        // de un plano importado —cientos— era la mitad del coste de panear.
+        // La firma recoge todo lo que cambia el partido; el id es la llave y el
+        // LRU tira lo que lleve tiempo sin verse.
+        val firma = RenglonesCacheados.firmaDe(content, ancho, paint.textSize, e.fontFamily, e.negrita)
+        val entrada = renglonesCache[e.id]
+        val renglones = if (entrada != null && entrada.firma == firma) entrada.renglones else {
+            val partidos = renglonesQueCaben(content, ancho) { paint.measureText(it).toDouble() }
+            renglonesCache[e.id] = RenglonesCacheados(firma, partidos)
+            partidos
+        }
+        for (line in renglones) {
             canvas.drawText(line, originX.toFloat(), y.toFloat(), paint)
             y += lineHeight
         }
+    }
+
+    private val renglonesCache = object : LinkedHashMap<String, RenglonesCacheados>(
+        64, 0.75f, true
+    ) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, RenglonesCacheados>) =
+            size > MAX_CACHED_SHAPES
     }
 
     // ---------------------------------------------------------------------
@@ -1975,11 +3042,15 @@ class Renderer(
         return nuevo
     }
 
-    private fun strokePaint(e: Element, alpha: Int): Paint {
+    /**
+     * El pincel del trazo. Con [color] ya decidido cuando quien llama sabe cuál toca —la
+     * tinta encendida, que es la misma raya con otro color. Ver [comoUnTubo].
+     */
+    private fun strokePaint(e: Element, alpha: Int, color: Int? = null): Paint {
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        paint.color = tema(parseColor(e.strokeColor, alpha))
+        paint.color = color ?: tema(parseColor(e.strokeColor, alpha))
         paint.strokeCap = Paint.Cap.ROUND
         paint.strokeJoin = Paint.Join.ROUND
         // Con trazo no continuo el original engorda medio punto, porque al
@@ -2144,6 +3215,69 @@ class Renderer(
         // ---- La cota ----
 
         /** Por debajo de esto no hay dirección fiable que rotular. */
+        /**
+         * El tubo: hasta cuántas veces su grueso llega el resplandor, lo fino que va el
+         * filamento, cuántos peldaños tiene la escalera y lo cargado que va cada uno.
+         *
+         * Son los mismos números del croquis en el espacio, y a propósito: es la misma tinta.
+         */
+        const val RESPLANDOR_DEL_TUBO = 2.6f
+        const val FILAMENTO_DEL_TUBO = 0.28f
+        const val PIXELES_POR_PELDANO = 7f
+        const val PELDANOS_MINIMOS = 3
+        const val PELDANOS_MAXIMOS = 6
+        const val ALFA_DEL_PELDANO = 118f
+
+        /** Lo que queda del cristal con la luz a tope: poco, pero no cero. */
+        const val CRISTAL_QUE_QUEDA = 0.25f
+
+        /** El grano: cada cuánto se repite y lo gordo que va, en veces el grueso del trazo. */
+        const val PASO_DEL_GRANO = 0.8f
+        const val PASO_MINIMO_DEL_GRANO = 3.5f
+
+        /**
+         * Y hasta dónde crece el paso.
+         *
+         * Un tope hace falta porque el mosaico se teje del tamaño del paso: sin él, un trazo
+         * de doscientos píxeles pediría un mapa de bits de doscientos por doscientos por cada
+         * color, y eso es tejer una alfombra para pintar una raya.
+         */
+        const val PASO_MAXIMO_DEL_GRANO = 24f
+
+        /**
+         * Lo que mide el mosaico que se teje, en píxeles.
+         *
+         * Fijo y pequeño: dieciséis por dieciséis son un kilobyte, y de ahí sale cualquier
+         * tamaño de grano estirando la brocha. Ver [laTelaDelGrano].
+         */
+        const val LADO_DEL_MOSAICO = 16
+        const val GORDO_DEL_GRANO = 0.13f
+
+        /** De través, que es como se raya una sección a mano. */
+        const val GRADOS_DEL_GRANO = 45f
+
+        /** Cuántos mosaicos se guardan antes de tirarlos y empezar de nuevo. */
+        const val TELARES_GUARDADOS = 24
+
+        /** Cuánto más se abre el resplandor del HDR con el brillo. Ver [conMaterial]. */
+        const val APERTURA_DEL_HDR = 2.4f
+
+        /**
+         * Y cuánto se va al blanco el propio trazo, a brillo lleno.
+         *
+         * Alto: a tope tiene que ser blanco. Un tubo encendido no conserva su color por
+         * dentro —el color se le sale por arriba y lo que queda es blanco— y ese es el único
+         * sitio del que puede salir la sensación de que alumbra en una pantalla que no puede
+         * pasar del blanco. Ver [conMaterial].
+         */
+        const val BLANQUEO_DEL_HDR = 0.85f
+
+        /** Sumar en vez de tapar: es lo que hace que una luz sea una luz. */
+        val SUMANDO = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.ADD)
+
+        /** Cuánto más oscuro que su tinta va el grano. */
+        const val CUANTO_OSCURECE_EL_GRANO = 0.42f
+
         const val MIN_MEASURE_LENGTH = 0.5
 
         /** Medio banderín de extremo, en múltiplos del grosor de trazo. */
@@ -2185,8 +3319,32 @@ class Renderer(
          * Un `Path` pesa poco, pero la escena es infinita y sin tope la caché
          * crecería con cada elemento que se llegue a ver. Con este número entra
          * de sobra todo lo visible en pantalla más un buen margen alrededor.
+         *
+         * **El número lo fija el plano importado, no el dibujo a mano.** Con 512
+         * bastaba dibujando, pero un plano DXF mete de una vez miles de formas,
+         * y una caché más pequeña que lo visible es peor que ninguna: al mirar
+         * el plano entero, cada fotograma expulsa justo lo que el siguiente va
+         * a pedir y se regenera TODO, todo el rato. Son `Path` en coordenadas
+         * de escena —puntos, no píxeles—, así que subir el tope cuesta poca
+         * memoria y devuelve el paneo fluido sobre un plano grande.
          */
-        const val MAX_CACHED_SHAPES = 512
+        const val MAX_CACHED_SHAPES = 4096
+
+        /**
+         * Por debajo de cuántos píxeles de pantalla (ancho más alto) una forma
+         * se pinta como raya y no como forma. Dos: a ese tamaño el camino
+         * rugoso y la raya pelada pintan los mismos píxeles.
+         */
+        const val UMBRAL_DE_CHIQUITO = 2.0
+    }
+}
+
+/** Un texto ya partido en renglones, con la firma de lo que decidió el partido. */
+private class RenglonesCacheados(val firma: String, val renglones: List<String>) {
+    companion object {
+        fun firmaDe(
+            texto: String, ancho: Double, tamano: Float, familia: Int?, negrita: Boolean
+        ): String = "${texto.hashCode()}/${texto.length}/$ancho/$tamano/$familia/$negrita"
     }
 }
 
@@ -2206,7 +3364,23 @@ private class CachedShape(
      * cada cara lleva **su color**, y un `Path` no guarda color: fundirlas en un
      * solo camino perdería justo el dato que hace que se lea el volumen.
      */
-    val caras: List<CaraPintada>? = null
+    val caras: List<CaraPintada>? = null,
+    /**
+     * Las aristas de un volumen en esqueleto, **todas**, incluidas las de detrás.
+     *
+     * Va aparte de [caras] porque es lo contrario que ellas: allí lo que manda es el
+     * relleno de cada plano y aquí no hay relleno ninguno, solo alambre. Un croquis de
+     * alambre es lo que sirve para explicar cómo encaja una pieza dentro de otra, que con
+     * las caras macizas no se ve porque lo de dentro queda tapado.
+     */
+    val alambre: Path? = null,
+    /**
+     * Las aristas que se dibujan en un volumen macizo: **la silueta y los quiebros**.
+     *
+     * No es el borde de cada cara. Ver [aristasMarcadasDeSolido] para por qué esa
+     * diferencia es la que separa un cilindro de una persiana.
+     */
+    val alambreMarcado: Path? = null,
 )
 
 /** Una cara de un sólido, ya en caminos de Android y con su tono. */
@@ -2243,8 +3417,13 @@ internal fun hasSameGeometry(a: Element, b: Element): Boolean =
         a.fillStyle == b.fillStyle &&
         a.roundness == b.roundness &&
         isTransparent(a.backgroundColor) == isTransparent(b.backgroundColor) &&
-        a.points == b.points &&
-        a.huecos == b.huecos &&
+        // Identidad primero: `List.equals` compara punto a punto SIN atajo de
+        // identidad, y esto corre por elemento visible y por fotograma. Un
+        // elemento quieto conserva su misma lista, así que la identidad
+        // responde en nada; la comparación entera queda para el caso raro de
+        // una lista regenerada igual.
+        (a.points === b.points || a.points == b.points) &&
+        (a.huecos === b.huecos || a.huecos == b.huecos) &&
         // **El arco no guarda sus puntos: guarda cuánto barre.** Al faltar estos
         // dos, un arco que se está trazando tenía la misma huella en cada
         // fotograma —su caja es la del óvalo guía y no se mueve— así que la
@@ -2261,11 +3440,60 @@ internal fun hasSameGeometry(a: Element, b: Element): Boolean =
         //
         // Lo que **no** puede entrar aquí es la vista, porque no es un campo del
         // elemento. Esa va en la clave de la caché: ver [claveDeCache].
-        a.altura == b.altura
+        a.altura == b.altura &&
+        // **Y lo demás que decide la forma de un volumen**, por lo mismo: la cota, los
+        // dos ángulos, qué pieza es y si va en alambre no están en `width`/`height`, así
+        // que sin ellos la caché devolvería la primera versión generada y la pieza se
+        // quedaría clavada mientras se la gira o se la vuelca.
+        a.cota == b.cota &&
+        a.giroEnPlanta == b.giroEnPlanta &&
+        a.inclinacion == b.inclinacion &&
+        a.formaSolida == b.formaSolida &&
+        a.esqueleto == b.esqueleto &&
+        a.enElSuelo == b.enElSuelo
 
 // -------------------------------------------------------------------------
 // Utilidades de dibujo
 // -------------------------------------------------------------------------
+
+/**
+ * El canto que despega la hoja de la mesa: color y cuánto se desplaza.
+ *
+ * **En hexadecimal y no con `Color.argb`.** Estas dos constantes viven arriba del archivo,
+ * así que se evalúan al inicializar la clase — y en una prueba de JVM `android.graphics`
+ * es un esqueleto que revienta al tocarlo. Se llevó por delante media docena de pruebas
+ * que no tenían nada que ver con esto: el error no dice «color», dice
+ * `NoClassDefFoundError` del archivo entero.
+ */
+private const val SOMBRA_DE_LA_HOJA = 0x1E000000
+private const val CANTO_DE_LA_HOJA = 3.0
+
+/** La pauta impresa: fina y tenue, que es papel y no dibujo. */
+private const val PAUTA_DE_LA_HOJA = 0x26305080
+
+/** Lo que se separa del canto el número de página. */
+private const val MARGEN_DEL_FOLIO = 10.0
+private const val GROSOR_DE_LA_PAUTA = 1f
+
+/**
+ * Del tamaño en pantalla para arriba, un elemento no se pinta entero: se
+ * recorta a la vista. Ver [Renderer.pintarRecortadoALaVista].
+ *
+ * Veinte mil, con margen respecto del tope real: a zoom 30 —el tope de toda la
+ * vida— un dibujo de tres mil píxeles de escena ya perdía sus rellenos a
+ * noventa mil de dispositivo, y por debajo de cuarenta y ocho mil (1600 × 30)
+ * nunca se vio fallar.
+ */
+private const val LIMITE_DEL_RASTERIZADOR = 20_000.0
+
+/**
+ * Lo alto que puede salir una letra en pantalla antes de dejar de dibujarse.
+ * Cuatro mil píxeles es el doble de una pantalla: para cuando se llega ahí ya
+ * se está DENTRO de la letra y lo que se mira es el trazo del plano, no el
+ * rótulo. Ver el porqué en [Renderer.drawText].
+ */
+private const val LETRA_MAXIMA_EN_PANTALLA = 4_000.0
+private const val RADIO_DEL_PUNTILLO = 1.2f
 
 /** Convierte las órdenes de rough.js en un `Path` de Android. */
 fun List<Op>.toPath(): Path {
@@ -2407,3 +3635,188 @@ private fun conAlfa(color: Int, factor: Float): Int = Color.argb(
     (Color.alpha(color) * factor).toInt().coerceIn(0, 255),
     Color.red(color), Color.green(color), Color.blue(color)
 )
+
+/**
+ * Cuántas veces el blanco de la interfaz llega a dar una luz a tope.
+ *
+ * **Dos, y no cuatro.** Es lo que se le pide a la ventana y lo que se escribe, que tienen que
+ * ser el mismo número: pedir más de lo que se va a usar deja margen sin aprovechar, y escribir
+ * más de lo que se pide lo recorta el sistema.
+ *
+ * Y dos y no más por una razón que se ve: **el margen sale de algún sitio**. Un panel tiene un
+ * techo de brillo, así que si se le pide mucho hueco por encima del blanco y la pantalla ya va
+ * cerca de su tope, la única forma de dárselo es **bajar el blanco** — y entonces el papel
+ * deja de ser papel y lo que parecía una luz es todo lo demás apagado. Pidiendo un paso, un
+ * OLED casi siempre puede darlo **subiendo él**, que es lo que se quiere: que unos píxeles
+ * suban sin que baje ninguno. Ver [ajustarElBrilloDeMas].
+ */
+const val VECES_EL_BLANCO = 2f
+
+/**
+ * Cuánto se va hacia el blanco una tinta encendida a tope.
+ *
+ * No hasta el blanco del todo: una luz que llega a blanco puro pierde su color, y lo que
+ * distingue una luz azul de una roja es justo eso. Tres cuartos de camino deja el tono a la
+ * vista y el trazo deslumbrando.
+ */
+private const val HACIA_EL_BLANCO = 0.75f
+
+/**
+ * **Si la ventana tiene margen para brillar por encima del blanco.**
+ *
+ * Lo dice la pantalla al abrirse y lo miran las tintas que alumbran. No es un adorno saberlo:
+ * **una luz se pinta de dos maneras distintas según lo haya o no**.
+ *
+ * Habiéndolo, el filamento se escribe por encima del blanco de la interfaz y la pantalla lo
+ * enciende de verdad — eso es lo que hace que un tubo deslumbre al lado del papel. Sin él
+ * —Android 14 para abajo, o un panel sin margen— por arriba no se puede pasar del blanco, así
+ * que lo que separa una luz de una raya clara tiene que salir de otro sitio: **del contraste
+ * dentro del propio trazo**. Se le carga más el resplandor y se le lleva el centro al blanco
+ * antes, que es como se pinta una luz en un cuadro desde que existe la pintura: no puedes
+ * hacer el sol más brillante que el lienzo, lo haces más brillante que lo que tiene al lado.
+ *
+ * Vive en el motor y no en una de las dos pantallas porque **lo usan las dos**: el croquis en
+ * el espacio y el lienzo plano pintan su tinta de luz con la misma cuenta, y dos copias de
+ * esto se separarían en cuanto una de las dos cambiara de idea.
+ */
+object ElBrilloDeMas {
+    /** Puesto por la pantalla al abrirse. De fábrica, no: lo raro es tenerlo. */
+    var hay = false
+
+    /** Cuánto se carga el resplandor cuando no hay margen. Ver arriba. */
+    val cargaDelResplandor: Float get() = if (hay) 1f else SIN_MARGEN_SE_CARGA_MAS
+
+    /** Y cuánto antes se le va el centro al blanco. */
+    val prisaHaciaElBlanco: Float get() = if (hay) 1f else SIN_MARGEN_MAS_BLANCO
+}
+
+/**
+ * **Pide —o suelta— el margen para brillar por encima del blanco.**
+ *
+ * ## Por qué no se pide siempre
+ *
+ * Porque **pedir margen oscurece todo lo demás**, y no es un efecto secundario: es cómo
+ * funciona. Una pantalla tiene un techo de brillo y ya; para que unos píxeles pasen del blanco
+ * de la interfaz, el sistema **baja el blanco de la interfaz** y deja el hueco de arriba para
+ * ellos. Pedido al abrir y para siempre, lo que se consigue es un lienzo que ya no es blanco
+ * sino gris claro, con una capa apagada encima — y una luz que parece brillar solo porque todo
+ * lo demás se ha apagado. Que es exactamente lo que pasaba.
+ *
+ * ## Así que se pide cuando hace falta y lo que haga falta
+ *
+ * Solo cuando las luces del dibujo **se pasan del cien por cien**, que es cuando de verdad hay
+ * algo que escribir por encima del blanco; por debajo, la luz se enciende dentro del rango de
+ * siempre y no hay nada que pedir. Y se pide **en proporción**: pasarse un poco cuesta un poco
+ * de blanco, no dos pasos enteros.
+ *
+ * Eso pone el precio donde se puede ver y decidir: la marca del cien por cien de la tira es
+ * justo donde el lienzo empieza a apagarse. Quien quiera el papel blanco se queda por debajo;
+ * quien quiera que el rótulo deslumbre, sube y paga con el fondo. Ver [LucesDelDibujo].
+ *
+ * [cuantoSePasa] es de cero a uno: cuánto se ha pasado del cien por cien la llave de las luces.
+ */
+fun ajustarElBrilloDeMas(
+    ventana: android.view.Window,
+    pantalla: android.view.Display?,
+    cuantoSePasa: Float
+) {
+    // **La comprobación de versión, a la vista y no escondida en un booleano.** Metida en un
+    // `val quiere`, ni el lint ni quien lee esto sabe que las dos llamadas de abajo son de
+    // Android 15: el lint lo daba por error y `lintDebug` no pasaba. El código ya hacía lo
+    // correcto —las llamadas nunca se alcanzaban antes de 35—; lo que faltaba era decirlo
+    // donde se ve, con una salida temprana que el análisis de flujo sí sigue.
+    if (cuantoSePasa <= 0.01f || android.os.Build.VERSION.SDK_INT < 35) {
+        // **Y se suelta.** Bajando la llave, el blanco tiene que volver a ser blanco en el
+        // mismo gesto: un margen que se queda pedido es un lienzo apagado sin motivo.
+        runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 35) ventana.desiredHdrHeadroom = 0f
+            ventana.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_DEFAULT
+        }
+        // Sin margen pedido no hay margen que haya, se mire la pantalla que se mire.
+        ElBrilloDeMas.hay = false
+        return
+    }
+    // El modo HDR es lo que hace que un color escrito por encima de uno **signifique algo** en
+    // vez de recortarse.
+    runCatching { ventana.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_HDR }
+    runCatching {
+        ventana.desiredHdrHeadroom = 1f + (VECES_EL_BLANCO - 1f) * cuantoSePasa.coerceAtMost(1f)
+    }
+    // Y se comprueba de verdad: pedir margen a una pantalla que no lo tiene no es un error,
+    // sencillamente no pasa nada. Dándolo por bueno se escriben colores que el sistema recorta
+    // **y encima se pierde la compensación** — la luz sale peor que si no se hubiera
+    // intentado. Ver [ElBrilloDeMas].
+    ElBrilloDeMas.hay = runCatching {
+        pantalla != null && pantalla.isHdrSdrRatioAvailable
+    }.getOrDefault(false)
+}
+
+/** Ver [ElBrilloDeMas]. */
+private const val SIN_MARGEN_SE_CARGA_MAS = 1.45f
+private const val SIN_MARGEN_MAS_BLANCO = 1.6f
+
+/**
+ * El mismo color, **a todo lo que da la pantalla**: el canal más alto puesto a tope.
+ *
+ * Mantiene el tono y sube el brillo hasta el techo, que es lo que uno espera de una luz: un
+ * azul encendido es el azul más azul que la pantalla sabe dar, no un azul a media luz.
+ */
+private fun aTodoBrillo(argb: Int): Int {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    val techo = maxOf(r, g, b)
+    if (techo == 0) return (argb.toLong() or 0xFFFFFFL).toInt()
+    val cuanto = 255.0 / techo
+    fun sube(v: Int) = (v * cuanto).toInt().coerceIn(0, 255)
+    return (argb.toLong() and 0xFF000000L).toInt() or
+        (sube(r) shl 16) or (sube(g) shl 8) or sube(b)
+}
+
+/** El color, llevado hacia su tono vivo. */
+private fun haciaElBrillo(argb: Int, cuanto: Float): Int {
+    if (cuanto <= 0f) return argb
+    val techo = aTodoBrillo(argb)
+    fun canal(desplazamiento: Int): Int {
+        val a = (argb shr desplazamiento) and 0xFF
+        val b = (techo shr desplazamiento) and 0xFF
+        return (a + (b - a) * cuanto).toInt().coerceIn(0, 255)
+    }
+    return (argb.toLong() and 0xFF000000L).toInt() or
+        (canal(16) shl 16) or (canal(8) shl 8) or canal(0)
+}
+
+/** Un color acercado al blanco, con el alfa que se pida. */
+private fun aclarado(argb: Int, cuanto: Float, alfa: Int): Int {
+    fun canal(desplazamiento: Int): Int {
+        val v = (argb shr desplazamiento) and 0xFF
+        return (v + (255 - v) * cuanto).toInt().coerceIn(0, 255)
+    }
+    return (alfa.coerceIn(0, 255) shl 24) or
+        (canal(16) shl 16) or (canal(8) shl 8) or canal(0)
+}
+
+/**
+ * **El pincel de lo encendido, con el color escrito en sesenta y cuatro bits.**
+ *
+ * Aquí está lo que hace que el brillo de más se note. Un color de ocho bits por canal se
+ * recorta en el blanco por definición: se escriba lo que se escriba, al cristal llega como
+ * mucho el blanco de la interfaz. El lienzo de Android sí sabe más: `Paint.setColor(long)`
+ * toma un color empaquetado con su espacio, y en `EXTENDED_SRGB` **uno es el blanco de la
+ * interfaz y de ahí para arriba se sigue**.
+ *
+ * Suma en vez de tapar, que es lo que hace que donde una luz se cruza consigo misma brille más
+ * y que lo de debajo se aclare en vez de desaparecer.
+ *
+ * Se fabrica al usarlo y no al cargar el archivo: un `Paint` es de Android, y montarlo en la
+ * inicialización dejaría sin poder cargarse fuera de un dispositivo todo lo que hay aquí.
+ */
+private val ELPINCEL_ENCENDIDO by lazy {
+    Paint().also {
+        it.isAntiAlias = true
+        it.style = Paint.Style.STROKE
+        it.strokeCap = Paint.Cap.ROUND
+        it.strokeJoin = Paint.Join.ROUND
+        it.blendMode = android.graphics.BlendMode.PLUS
+    }
+}

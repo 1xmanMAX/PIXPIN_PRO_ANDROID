@@ -79,21 +79,6 @@ fun puntosEnEscena(tabla: TablaDeCoordenadas, origen: Pt, escala: Escala?): List
     tabla.puntos.map { puntoEnEscena(origen, it, escala) }
 
 /**
- * El camino inverso: qué coordenadas tendría un punto de la escena.
- *
- * Hace falta para colocar el origen con el dedo y seguir viendo números que
- * cuadran, y para decir en qué coordenadas ha caído algo que se dibujó a mano.
- */
-fun coordenadasDe(origen: Pt, escena: Pt, escala: Escala?): PuntoDeTabla {
-    val porUnidad = if (escala != null && escala.valida) 1.0 / escala.unidadesPorPixel else 1.0
-    if (porUnidad == 0.0) return PuntoDeTabla(0.0, 0.0)
-    return PuntoDeTabla(
-        (escena.x - origen.x) / porUnidad,
-        (origen.y - escena.y) / porUnidad
-    )
-}
-
-/**
  * Los anclajes que aportan las tablas.
  *
  * Van con prioridad de [TipoAnclaje.ESQUINA] porque son exactamente igual de

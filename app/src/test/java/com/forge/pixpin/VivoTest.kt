@@ -132,6 +132,91 @@ class VivoTest {
         assertEquals(null, Vivo.tipo(nuevo, donde.bloque))
     }
 
+    /**
+     * **La viñeta vacía se puede quitar.** Intro dentro de una lista abre «- »,
+     * y de ahí se sale con intro otra vez o con retroceso: las dos pasan por
+     * quitarle el tipo, y a la vacía no se lo quitaba — el prefijo solo se
+     * reconocía con algo detrás. Era la viñeta que no había forma de borrar.
+     */
+    @Test
+    fun `intro en una vineta vacia la quita`() {
+        val (conVineta, donde) = Vivo.bloqueNuevo("- uno", 0)
+        assertEquals("- uno\n\n- \n", conVineta)
+        val (doc, sitio) = Vivo.partir(conVineta, donde.bloque, InlineText(""), 0)
+        assertEquals(null, Vivo.tipo(doc, sitio.bloque))
+        assertEquals("", Vivo.contenido(doc, sitio.bloque)?.text)
+        // Y no queda un renglón vacío de más detrás.
+        assertEquals(2, trozosDe(doc).size)
+        // Se puede seguir escribiendo ahí como párrafo.
+        assertEquals("- uno\n\nhola", Vivo.conContenido(doc, sitio.bloque, InlineText("hola")))
+    }
+
+    @Test
+    fun `retroceso en una vineta vacia la deja en parrafo`() {
+        val doc = "- uno\n\n- \n"
+        assertEquals(TipoDeBloque.LISTA, Vivo.tipo(doc, 1))
+        val sinTipo = Vivo.quitarTipo(doc, 1)
+        assertEquals(null, Vivo.tipo(sinTipo, 1))
+        assertEquals("", Vivo.contenido(sinTipo, 1)?.text)
+        // Y un segundo retroceso ya se junta con la de arriba.
+        val (juntos, sitio) = Vivo.juntarConElDeArriba(sinTipo, 1)!!
+        assertEquals("- uno", juntos)
+        assertEquals(0, sitio.bloque)
+    }
+
+    /** Las tres marcas de viñeta, vacías, se reconocen igual. */
+    @Test
+    fun `las tres vinetas vacias se quitan`() {
+        for (marca in listOf("-", "*", "+")) {
+            val doc = "$marca uno\n\n$marca \n"
+            val sinTipo = Vivo.quitarTipo(doc, 1)
+            assertEquals("con «$marca»", null, Vivo.tipo(sinTipo, 1))
+        }
+    }
+
+    /** En medio del documento, quitar la viñeta vacía conserva el bloque de abajo. */
+    @Test
+    fun `quitar una vineta vacia en medio no toca lo de abajo`() {
+        val doc = "- uno\n\n- \n\n- tres"
+        val sinTipo = Vivo.quitarTipo(doc, 1)
+        // El renglón vacío se queda como párrafo vacío (más su separador, que en el
+        // modelo de trozos es otro renglón) y lo de abajo sigue siendo la misma viñeta.
+        assertEquals(null, Vivo.tipo(sinTipo, 1))
+        assertEquals("", Vivo.contenido(sinTipo, 1)?.text)
+        val ultimo = trozosDe(sinTipo).size - 1
+        assertEquals("tres", Vivo.contenido(sinTipo, ultimo)?.text)
+        assertEquals(TipoDeBloque.LISTA, Vivo.tipo(sinTipo, ultimo))
+        // Y escribir en el hueco no se come la viñeta de abajo.
+        val escrito = Vivo.conContenido(sinTipo, 1, InlineText("x"))
+        assertEquals("tres", Vivo.contenido(escrito, trozosDe(escrito).size - 1)?.text)
+    }
+
+    /**
+     * **Una nota vacía se puede escribir.** El documento vacío no tenía ningún
+     * bloque, así que no había campo ni teclado: era «no puedo escribir».
+     */
+    @Test
+    fun `un documento vacio es un bloque vacio donde escribir`() {
+        assertEquals(1, Vivo.trozos("").size)
+        assertEquals("", Vivo.contenido("", 0)?.text)
+        assertEquals(null, Vivo.tipo("", 0))
+        assertEquals("hola", Vivo.conContenido("", 0, InlineText("hola")))
+        // Se le puede dar tipo directamente.
+        val titulo = Vivo.conContenido(Menus.convertir("", TipoDeBloque.TITULO_1), 0, InlineText("Mi nota"))
+        assertEquals("# Mi nota", titulo)
+        // E intro abre el segundo renglón sin fabricar tres vacíos.
+        val (doc, sitio) = Vivo.bloqueNuevo("", 0)
+        assertEquals(1, sitio.bloque)
+        assertEquals(2, Vivo.trozos(doc).size)
+        assertEquals("", Vivo.contenido(doc, 1)?.text)
+    }
+
+    /** Y lo que ya existía sigue igual: con texto, los trozos son los de siempre. */
+    @Test
+    fun `con texto los trozos de editar son los de leer`() {
+        assertEquals(trozosDe(doc), Vivo.trozos(doc))
+    }
+
     @Test
     fun `juntar con el de arriba conserva los dos textos`() {
         val texto = "uno\n\ndos"

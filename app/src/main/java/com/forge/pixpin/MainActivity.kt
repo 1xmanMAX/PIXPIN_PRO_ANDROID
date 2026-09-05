@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -85,6 +86,48 @@ const val EXTRA_PROYECTOS = "abrir_proyectos"
  */
 const val EXTRA_PROYECTO = "abrir_proyecto"
 
+/**
+ * **Volver a un proyecto dentro del montón**, no a él solo.
+ *
+ * Al cerrar un lienzo, un croquis o una nota, lo que se espera es la pantalla de siempre
+ * —el paginador de proyectos— puesta en el proyecto del que se venía, y no la vista de un
+ * proyecto suelto que es para los accesos directos. Lo pidió el usuario (5-sep-2026).
+ */
+const val EXTRA_IR_A = "ir_a_proyecto"
+
+/**
+ * **De dónde se vino, para saber a dónde volver.**
+ *
+ * Los editores —el lienzo, el croquis en el espacio y el de notas— viven **en su propia
+ * tarea de Android**. Tiene que ser así: si compartieran tarea con la pantalla principal,
+ * abrirlos desde la bola flotante traería toda la aplicación al frente y uno acabaría
+ * capturando PixPin en vez de lo suyo. Pero eso tiene un precio: al cerrarlos, atrás no es
+ * de donde se vino, es lo que hubiera debajo de su tarea —o sea la pantalla principal, o el
+ * escritorio—. Abriendo una hoja desde un proyecto y cerrándola, uno acababa en la portada
+ * de la aplicación en vez de en el proyecto que estaba mirando.
+ *
+ * Con esto puesto, el editor sabe que se vino de un proyecto y al cerrarse vuelve a él. El
+ * valor es el id del proyecto, o vacío para la lista. Ver [volverALosProyectos].
+ */
+const val EXTRA_DESDE_PROYECTO = "desde_proyecto"
+
+/**
+ * Vuelve a la zona de proyectos. [proyecto] vacío es la lista; con id, ese proyecto.
+ *
+ * La pantalla principal es `singleTask`, así que esto no crea otra: trae al frente la que
+ * ya hay y le llega por `onNewIntent`, que es justo lo que se quiere.
+ */
+fun volverALosProyectos(context: android.content.Context, proyecto: String?) {
+    runCatching {
+        context.startActivity(
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_PROYECTOS, true)
+                .also { if (!proyecto.isNullOrBlank()) it.putExtra(EXTRA_IR_A, proyecto) }
+        )
+    }
+}
+
 class MainActivity : ComponentActivity() {
 
     /**
@@ -124,8 +167,64 @@ private data class PermissionItem(
     val onGrant: () -> Unit
 )
 
+/**
+ * Por dónde se entra: **directamente a los proyectos**.
+ *
+ * Antes había una portada —los permisos, «Comenzar», y dos botones para irse a otro
+ * sitio— que se miraba una vez en la vida y luego estorbaba: en cuanto los tres permisos
+ * estaban dados, la pantalla se saltaba sola y lo que ponía en ella no había forma de
+ * volver a verlo sin retroceder a propósito.
+ *
+ * Eso mismo es ahora [TarjetaDeConfiguracion], la **primera tarjeta** del montón de
+ * proyectos. Ahí no es una puerta que hay que cruzar, es una tarjeta más: se llega
+ * deslizando, se lee de un vistazo si la bola está en marcha y se sigue bajando a lo que
+ * uno venía a hacer. Y quien acaba de instalar la aplicación se la encuentra delante, que
+ * es lo mismo que hacía la portada.
+ */
 @Composable
 fun OnboardingScreen(loQuePiden: Intent? = null) {
+    val context = LocalContext.current
+    val actividad = context as? android.app.Activity
+    // Se puede entrar **directamente en un proyecto** desde fuera: es lo que hace que un
+    // acceso directo guardado abra lo que promete. Ver [Clase.PROYECTO].
+    val proyectoPedido = loQuePiden?.getStringExtra(EXTRA_PROYECTO)
+    // Y a cuál ir dentro del montón, al volver de un lienzo, un croquis o una nota.
+    val irA = loQuePiden?.getStringExtra(EXTRA_IR_A)
+    var enAjustes by remember { mutableStateOf(false) }
+
+    if (enAjustes) {
+        PantallaDeAjustes(onVolver = { enAjustes = false })
+        return
+    }
+    com.forge.pixpin.ui.PantallaDeProyectos(
+        app = context.applicationContext as PixPinApp,
+        soloEste = proyectoPedido,
+        irA = irA,
+        onAjustes = { enAjustes = true },
+        // Atrás sale de la aplicación: ya no hay ninguna pantalla detrás de esta a la
+        // que volver, la portada **es** la primera tarjeta de aquí dentro.
+        onVolver = { actividad?.finish() }
+    )
+}
+
+/**
+ * La configuración inicial, hecha una tarjeta más del montón de proyectos.
+ *
+ * Lleva lo que llevaba la portada —los permisos que falten, arrancar la bola, el informe
+ * de fallo si lo hay y la puerta a los ajustes— y va **siempre la primera**, encima del
+ * primer proyecto. Que esté en el mismo sitio y con la misma forma que lo demás es lo que
+ * la hace útil pasado el primer día: se comprueba de un vistazo que la bola sigue en
+ * marcha sin salir de donde uno estaba, y se vuelve a bajar.
+ *
+ * @param sinProyectos si no hay ningún proyecto todavía, para decirlo aquí: es la única
+ *   tarjeta que hay, y una pantalla que solo enseña permisos no cuenta qué falta.
+ */
+@Composable
+fun TarjetaDeConfiguracion(
+    onAjustes: () -> Unit,
+    sinProyectos: Boolean,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -198,65 +297,19 @@ fun OnboardingScreen(loQuePiden: Intent? = null) {
         )
     }
 
-    // **La portada enseña lo que hace falta para empezar, y nada más.**
-    //
-    // Antes eran trece bloques uno detrás de otro: los tres permisos, el modo de
-    // captura, el formato de copia, tres barras configurables, el negro OLED, la
-    // mano, la letra del pin y el informe de fallo. Todo abierto a la vez y todo
-    // con el mismo peso, así que abrir la app era enfrentarse a un formulario en
-    // vez de a un botón.
-    //
-    // Lo que uno viene a hacer aquí es **pulsar «Comenzar»**. Lo demás se toca
-    // una vez y no se vuelve a mirar, así que se va detrás de una puerta.
-    var enAjustes by remember { mutableStateOf(false) }
-    // Se puede entrar **directamente en proyectos** desde fuera: es lo que hace que un
-    // acceso directo guardado abra lo que promete en vez de la portada. Ver [Clase.PROYECTO].
-    val actividad = context as? android.app.Activity
-    val proyectoPedido = loQuePiden?.getStringExtra(EXTRA_PROYECTO)
-    var enProyectos by remember(loQuePiden) {
-        mutableStateOf(
-            loQuePiden?.getBooleanExtra(EXTRA_PROYECTOS, false) == true ||
-                proyectoPedido != null
-        )
-    }
     val listo = overlayGranted && notifGranted && batteryIgnored
+    // **Si la bola ya está puesta, el botón lo dice.** Un «Comenzar» que se puede pulsar
+    // veinte veces no cuenta nada; lo que uno viene a mirar aquí pasado el primer día es
+    // justo si el servicio sigue vivo, y eso antes había que adivinarlo asomándose a la
+    // pantalla a ver si estaba la bola.
+    val enMarcha = com.forge.pixpin.floating.PinHostService.enMarcha
 
-    // **Con todo concedido, la aplicación abre en los proyectos.**
-    //
-    // La portada es una lista de permisos y un botón de arrancar: se toca una vez en la
-    // vida y luego estorba cada vez. Lo que uno viene a hacer es seguir con lo que tenía
-    // a medias, y eso son los proyectos. Mientras falte algún permiso sigue mandando la
-    // portada, porque sin ellos la mitad de la aplicación no funciona y una pantalla de
-    // proyectos no explicaría por qué.
-    androidx.compose.runtime.LaunchedEffect(listo) {
-        if (listo) enProyectos = true
-    }
-
-    if (enAjustes) {
-        PantallaDeAjustes(onVolver = { enAjustes = false })
-        return
-    }
-    if (enProyectos) {
-        com.forge.pixpin.ui.PantallaDeProyectos(
-            app = context.applicationContext as PixPinApp,
-            soloEste = proyectoPedido,
-            onVolver = {
-                // Viniendo a por un proyecto concreto, atrás devuelve **a donde
-                // estabas** —el chat— y no a la lista de proyectos, que es un sitio
-                // por el que no has pasado.
-                if (proyectoPedido != null) actividad?.finish() else enProyectos = false
-            }
-        )
-        return
-    }
-
-    Scaffold { innerPadding ->
+    Card(modifier) {
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp)
+                .padding(20.dp)
         ) {
             Text(
                 text = stringResource(R.string.onboarding_title),
@@ -270,7 +323,7 @@ fun OnboardingScreen(loQuePiden: Intent? = null) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
 
             // **Un permiso concedido deja de ocupar sitio.** Su tarjeta ya no
             // dice nada que haga falta: si está dado, está dado. Lo que queda a
@@ -289,7 +342,7 @@ fun OnboardingScreen(loQuePiden: Intent? = null) {
             // ver, porque hasta descartarlo los pines no vuelven.
             CrashReportCard()
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
 
             Button(
                 onClick = {
@@ -298,10 +351,18 @@ fun OnboardingScreen(loQuePiden: Intent? = null) {
                         context, R.string.app_started, android.widget.Toast.LENGTH_LONG
                     ).show()
                 },
-                enabled = overlayGranted,
+                enabled = overlayGranted && !enMarcha,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text(stringResource(R.string.start_app))
+                if (enMarcha) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, Modifier.size(18.dp))
+                    Text(
+                        stringResource(R.string.app_en_marcha),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                } else {
+                    Text(stringResource(R.string.start_app))
+                }
             }
             if (!overlayGranted) {
                 Text(
@@ -313,25 +374,41 @@ fun OnboardingScreen(loQuePiden: Intent? = null) {
             }
 
             Spacer(Modifier.height(12.dp))
+            // Ya no hace falta un botón de «Proyectos»: se está en ellos, a una
+            // deslizada de aquí. Queda la puerta a los ajustes, que sigue siendo otra
+            // pantalla porque son cuarenta interruptores y no una tarjeta.
             Row(Modifier.fillMaxWidth()) {
-                // **Proyectos junto a Ajustes, y no en la bola.** Es donde se
-                // vuelve a lo empezado, así que va en la pantalla que se abre
-                // para empezar — y no roba un sitio en la bola, que es para lo
-                // que se hace cada dos minutos.
-                TextButton(onClick = { enProyectos = true }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Folder, contentDescription = null, Modifier.size(18.dp))
+                // **El croquis en el espacio, desde aquí.** Es una aplicación aparte —otra
+                // forma de dibujar, no una herramienta más del lienzo— así que necesita su
+                // propia puerta, y esta tarjeta es la portada.
+                TextButton(
+                    onClick = {
+                        com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(context)
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.ViewInAr, contentDescription = null, Modifier.size(18.dp))
                     Text(
-                        stringResource(R.string.proyectos_titulo),
+                        stringResource(R.string.croquis_titulo),
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }
-                TextButton(onClick = { enAjustes = true }, modifier = Modifier.weight(1f)) {
+                TextButton(onClick = onAjustes, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Filled.Tune, contentDescription = null, Modifier.size(18.dp))
                     Text(
                         stringResource(R.string.ajustes_titulo),
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }
+            }
+
+            if (sinProyectos) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.proyectos_vacio),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -368,7 +445,7 @@ private fun TodoConcedido() {
  * busca sin recorrerlos todos.
  */
 @Composable
-private fun PantallaDeAjustes(onVolver: () -> Unit) {
+fun PantallaDeAjustes(onVolver: () -> Unit) {
     Scaffold { innerPadding ->
         Column(
             modifier = Modifier

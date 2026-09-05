@@ -89,8 +89,11 @@ class MensajesStore(private val context: Context) {
      * de un mes, y una ruta a la galería o a descargas se rompe en cuanto el usuario
      * ordena su móvil. Guardar una referencia que se puede evaporar es no guardar nada.
      */
-    fun copiarAdjunto(origen: File, nombre: String): String? = runCatching {
-        val destino = File(carpetaDeAdjuntos(), "${System.currentTimeMillis()}_$nombre")
+    fun copiarAdjunto(origen: File, nombre: String, deSuTipo: String? = null): String? = runCatching {
+        // Con su extensión: sin ella, al abrirlo después Android no sabe de qué es. Ver
+        // [nombreConExtension].
+        val comoSeLlama = nombreConExtension(nombre, deSuTipo)
+        val destino = File(carpetaDeAdjuntos(), "${System.currentTimeMillis()}_$comoSeLlama")
         origen.copyTo(destino, overwrite = true)
         destino.absolutePath
     }.getOrNull()

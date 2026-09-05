@@ -9,6 +9,17 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Para las notas de voz. Se pide al grabar la primera, no al instalar. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+      Para ver el croquis puesto encima de lo que hay delante. Ver [Croquis3DCamara].
+      La cámara **no es requisito**: sin ella la aplicación entera funciona igual y solo
+      falta ese modo, así que se declara como opcional para no dejar fuera a ningún aparato
+      en la tienda. Lo mismo el sensor de postura.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <!--
         Alarmas a la hora exacta, para los recordatorios.
 
@@ -88,6 +99,17 @@
             además interesa que SÍ quede en Recientes: es una sesión de trabajo
             larga, no un paso intermedio como el consentimiento o la captura.
         -->
+        <!--
+            El croquis en el espacio. Mismas señas que el editor del lienzo: sesión de
+            trabajo larga, así que se queda en Recientes y aguanta el giro sin recrearse.
+        -->
+        <activity
+            android:name=".croquis3d.Croquis3DActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.croquis"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.PixPin" />
+
         <activity
             android:name=".motor.DrawEditorActivity"
             android:exported="false"

@@ -31,9 +31,30 @@ private val compuestas = object : LruCache<String, Bitmap>(
  * La fecha del dibujo dentro de la clave es lo que hace que anotar algo y volver enseñe
  * lo nuevo: la entrada vieja deja de encontrarse sola, sin tener que ir a borrarla.
  */
-private fun clave(pdf: String, pagina: Int, ancho: Int, rutaDelDibujo: String?): String {
-    val cuando = rutaDelDibujo?.let { java.io.File(it).lastModified() } ?: 0L
-    return "${pdf.hashCode()}-$pagina-$ancho-$cuando"
+private fun clave(
+    pdf: String,
+    pagina: Int,
+    ancho: Int,
+    rutaDelDibujo: String?,
+    dibujo: String?
+): String {
+    val archivo = rutaDelDibujo?.let { java.io.File(it) }
+    val cuando = archivo?.lastModified() ?: 0L
+    // **Y lo que ocupa, y la revisión del almacén.**
+    //
+    // La llave colgaba solo de `lastModified()`, y ese número **no cambia siempre**: hay
+    // versiones de Android y sistemas de ficheros donde se queda igual —o en cero— al
+    // reescribir un archivo pequeño. Cuando eso pasa, la llave no cambia, la composición que
+    // se hizo **antes** de que existiera la anotación se queda cacheada para siempre y la
+    // página se enseña limpia por mucho que se dibuje encima. Se veía en un móvil sí y en
+    // otro no, que es la firma de este tipo de fallo.
+    //
+    // Con tres cosas en la llave hace falta que fallen las tres a la vez: la hora, el tamaño
+    // del archivo y la revisión que el propio almacén lleva en memoria. Ver
+    // [ExcalidrawStore.revisionDe], que es lo que ya usan las miniaturas de lienzo.
+    val cuanto = archivo?.length() ?: 0L
+    val revision = dibujo?.let { com.forge.pixpin.motor.ExcalidrawStore.revisionDe(it) } ?: 0
+    return "${pdf.hashCode()}-$pagina-$ancho-$cuando-$cuanto-$revision"
 }
 
 /**
@@ -90,7 +111,7 @@ suspend fun paginaAnotada(
     rutaDelDibujo: String?,
     ancho: Int
 ): Bitmap? {
-    val k = clave(pdf, pagina, ancho, rutaDelDibujo)
+    val k = clave(pdf, pagina, ancho, rutaDelDibujo, dibujo)
     compuestas.get(k)?.let { return it }
 
     // **La hoja se pide por la caché de miniaturas del proyecto**, no dibujando el PDF a

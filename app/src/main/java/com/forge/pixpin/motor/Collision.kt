@@ -41,6 +41,12 @@ fun shouldTestInside(element: Element): Boolean {
     // La reglita se coge por dentro: es una placa, no un contorno.
     if (element.isEscalaGrafica) return true
 
+    // **Los instrumentos —plano, recta, espacio— se cogen por dentro.** Son una
+    // lámina con sus reglas: solo respondían por el borde de su caja, que no
+    // está dibujado, y tocar los ejes o la rejilla no los movía. El usuario lo
+    // pidió así (2-sep-2026): tocar cualquier parte de sus trazos los coge.
+    if (element.esInstrumento) return true
+
     // **El sólido se coge por dentro aunque no tenga relleno**, al contrario que
     // un rectángulo vacío. Un rectángulo sin fondo es un aro y hay que dejar ver
     // y tocar lo que encierra; una caja en volumen no encierra nada que esté
@@ -75,13 +81,30 @@ fun hitElementItself(
     // dibuja se sale de ella por arriba y por un lado —lo lleva la proyección—,
     // así que este descarte le habría comido el toque en toda la parte alta de
     // la caja: se veía el volumen y no se podía coger. Ver [envolturaDeSolido].
-    val dentro = if (element.isSolido) {
-        envolturaDeSolido(element).let {
+    val dentro = when {
+        element.isSolido -> envolturaDeSolido(element, vista).let {
             p.x >= it.x1 - threshold && p.x <= it.x2 + threshold &&
                 p.y >= it.y1 - threshold && p.y <= it.y2 + threshold
         }
-    } else {
-        isPointInRotatedBounds(p, element, threshold)
+        // **El arco se descarta contra el trozo que pinta**, no contra el óvalo del
+        // que salió. Con la caja del óvalo, una uña de arco se quedaba con el toque de
+        // todo el círculo: acercabas el dedo al centro, donde no hay nada dibujado, y
+        // agarrabas el arco en vez de lo que hubiera debajo. Ver [cajaDelArco].
+        element.type == ElementType.IMAGE && element.enElSuelo ->
+            envolturaVisible(element, vista).let {
+                p.x >= it.x1 - threshold && p.x <= it.x2 + threshold &&
+                    p.y >= it.y1 - threshold && p.y <= it.y2 + threshold
+            }
+
+        element.type == ElementType.ARC -> {
+            val c = getElementAbsoluteCoords(element)
+            val local = pointRotateRads(p, Pt(c.cx, c.cy), -element.angle)
+            cajaDelArco(element).let {
+                local.x >= it.x1 - threshold && local.x <= it.x2 + threshold &&
+                    local.y >= it.y1 - threshold && local.y <= it.y2 + threshold
+            }
+        }
+        else -> isPointInRotatedBounds(p, element, threshold)
     }
     if (!dentro) return false
 
@@ -115,11 +138,18 @@ fun isPointInElement(p: Pt, element: Element, vista: Vista = Vista.CERO): Boolea
         // y buscarles el borde con el dedo sería absurdo.
         // El plano se coge **por dentro**: es una lámina con sus reglas, y
         // buscarle el borde con el dedo para moverlo sería absurdo.
+        // El cronograma se coge **por dentro**, como una tabla: es una lámina con datos,
+        // y buscarle el borde con el dedo para moverla sería absurdo.
         ElementType.RECTANGLE, ElementType.IMAGE, ElementType.TEXT,
         ElementType.MOSAIC, ElementType.LUPA,
         ElementType.ESCALA_GRAFICA,
-        ElementType.PLANO ->
-            local.x in c.x1..c.x2 && local.y in c.y1..c.y2
+        ElementType.CRONOGRAMA,
+        ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO ->
+            if (element.type == ElementType.IMAGE && element.enElSuelo) {
+                isPointInPolygon(local, imagenEnElSuelo(element, vista))
+            } else {
+                local.x in c.x1..c.x2 && local.y in c.y1..c.y2
+            }
 
         // **El foco es un anillo: el hueco no cuenta.** Lo que hay dentro es
         // justo lo que se está resaltando, y comerse su toque dejaría sin poder
@@ -206,10 +236,14 @@ fun isPointOnElementOutline(
 
         ElementType.RECTANGLE, ElementType.IMAGE, ElementType.TEXT,
         ElementType.MOSAIC, ElementType.SPOTLIGHT, ElementType.LUPA, ElementType.FRAME,
-        ElementType.ESCALA_GRAFICA, ElementType.PLANO -> {
-            val corners = listOf(
-                Pt(c.x1, c.y1), Pt(c.x2, c.y1), Pt(c.x2, c.y2), Pt(c.x1, c.y2)
-            )
+        ElementType.ESCALA_GRAFICA, ElementType.CRONOGRAMA,
+        ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO -> {
+            // La imagen del suelo no es un rectángulo en pantalla: es su paralelogramo.
+            val corners = if (element.type == ElementType.IMAGE && element.enElSuelo) {
+                imagenEnElSuelo(element, vista)
+            } else {
+                listOf(Pt(c.x1, c.y1), Pt(c.x2, c.y1), Pt(c.x2, c.y2), Pt(c.x1, c.y2))
+            }
             hitsPolyline(local, corners + corners.first(), threshold)
         }
 
@@ -331,13 +365,17 @@ enum class BoxSelectionMode { CONTAIN, OVERLAP }
 fun getElementsWithinSelection(
     elements: List<Element>,
     selection: Bounds,
-    mode: BoxSelectionMode = BoxSelectionMode.CONTAIN
+    mode: BoxSelectionMode = BoxSelectionMode.CONTAIN,
+    /** Desde dónde se mira, que es lo que decide qué ocupa un sólido en la pantalla. */
+    vista: Vista = Vista.CERO
 ): List<Element> = elements.filter { e ->
     if (e.isDeleted || e.locked) return@filter false
-    // Del sólido, lo que ocupa dibujado y no su huella: encerrarlo con el
-    // recuadro pide encerrar **lo que se ve**, que es lo que sobresale por
-    // arriba. Ver [envolturaDeSolido].
-    val b = if (e.isSolido) envolturaDeSolido(e) else getElementBounds(e)
+    // **Lo que se ve, no la caja del elemento.** Encerrar algo con el recuadro pide
+    // encerrar lo que hay dibujado: del sólido, lo que sobresale de su huella; del arco,
+    // el trozo que pinta y no el óvalo entero —recortar un círculo dejaba una uña que no
+    // había forma de encerrar, porque el recuadro tenía que contener el círculo de antes.
+    // Ver [envolturaVisible].
+    val b = envolturaVisible(e, vista)
     when (mode) {
         BoxSelectionMode.CONTAIN -> boundsContains(selection, b)
         BoxSelectionMode.OVERLAP -> boundsOverlap(selection, b)
@@ -361,9 +399,9 @@ fun getElementsWithinLasso(
     val lassoBounds = boundsOfPoints(lasso)
     return elements.filter { e ->
         if (e.isDeleted || e.locked) return@filter false
-        // Del sólido, lo que ocupa dibujado: con su huella a secas, un lazo
-        // trazado alrededor de la caja que se ve no la cogía.
-        val b = if (e.isSolido) envolturaDeSolido(e) else getElementBounds(e)
+        // Lo que se ve, por lo mismo que en el recuadro: un lazo trazado alrededor de
+        // lo dibujado tiene que cogerlo. Ver [envolturaVisible].
+        val b = envolturaVisible(e, vista)
         if (!boundsOverlap(lassoBounds, b)) return@filter false
         if (isPointInPolygon(Pt(b.midX, b.midY), lasso)) return@filter true
         lasso.any { hitElementItself(it, e, threshold, vista) }

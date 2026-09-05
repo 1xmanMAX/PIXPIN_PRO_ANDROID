@@ -3,7 +3,10 @@ package com.forge.pixpin.motor
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 
 /**
@@ -105,6 +108,58 @@ fun puntosDelArco(element: Element, pasosPorVuelta: Int = ARCO_PASOS): List<Pt> 
         // El punto sobre el óvalo, llevado a relativo. Sin girar: ver arriba.
         Pt(c.cx + rx * cos(t) - element.x, c.cy + ry * sin(t) - element.y)
     }
+}
+
+/**
+ * La caja del **trozo que se ve**, no la del óvalo del que salió.
+ *
+ * Un arco guarda el óvalo entero —`x`, `y`, `width`, `height`— y aparte por dónde empieza
+ * y cuánto barre: eso es lo que le permite seguir creciendo con el compás sin degenerar en
+ * cien rayas. Pero significa que `getElementAbsoluteCoords` de un arco devuelve **el
+ * círculo completo**, y recortar un círculo dejaba una uña de trazo con la caja del
+ * círculo entero puesta: el recuadro de selección salía enorme y vacío, y encerrar la uña
+ * con el dedo no la cogía nunca, porque el recuadro tenía que contener una caja que no se
+ * veía por ninguna parte.
+ *
+ * Aquí sale la caja de verdad, y sale exacta en vez de muestreando: de un arco solo pueden
+ * asomar sus dos puntas y los cuatro puntos donde el óvalo toca sus ejes, así que basta
+ * mirar los que caigan dentro del barrido. Sin rotar —como todo lo demás en este mundo—,
+ * que el ángulo se pone después y alrededor del centro del óvalo.
+ */
+fun cajaDelArco(element: Element): Bounds {
+    val c = getElementAbsoluteCoords(element)
+    val rx = (c.x2 - c.x1) / 2
+    val ry = (c.y2 - c.y1) / 2
+    if (rx <= 0.0 || ry <= 0.0) return c.toBounds()
+
+    val inicio = element.arcStart ?: 0.0
+    val barrido = element.arcSweep ?: (2 * PI)
+    // La vuelta entera ya es el óvalo: no hay nada que recortar de su caja.
+    if (abs(barrido) >= 2 * PI - 1e-9) return c.toBounds()
+
+    val desde = min(inicio, inicio + barrido)
+    val hasta = max(inicio, inicio + barrido)
+
+    var minX = Double.MAX_VALUE
+    var minY = Double.MAX_VALUE
+    var maxX = -Double.MAX_VALUE
+    var maxY = -Double.MAX_VALUE
+    fun mete(t: Double) {
+        val x = c.cx + rx * cos(t)
+        val y = c.cy + ry * sin(t)
+        minX = min(minX, x); minY = min(minY, y)
+        maxX = max(maxX, x); maxY = max(maxY, y)
+    }
+    mete(desde)
+    mete(hasta)
+    // Los cuatro extremos del óvalo, los que caigan dentro del barrido: son los
+    // únicos sitios donde la curva puede sobresalir de sus propias puntas.
+    var k = ceil(desde / (PI / 2))
+    while (k * (PI / 2) <= hasta) {
+        mete(k * (PI / 2))
+        k += 1
+    }
+    return Bounds(minX, minY, maxX, maxY)
 }
 
 /**

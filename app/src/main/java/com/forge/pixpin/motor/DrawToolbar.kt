@@ -36,7 +36,10 @@ import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.HighlightAlt
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Upgrade
+import androidx.compose.material.icons.filled.Cyclone
 import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.ViewTimeline
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.LightMode
@@ -54,6 +57,7 @@ import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material.icons.filled.SquareFoot
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.outlined.Diamond
@@ -1059,6 +1063,10 @@ val MAIN_TOOLS: List<Tool> = listOf(
  */
 val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.LASSO,
+    // La flecha libre va en el desplegable y no en la fila: es la flecha de anotar, se usa
+    // menos que la recta y la fila de arriba es sitio caro. Ver [Tool.FLECHA_LIBRE].
+    Tool.FLECHA_LIBRE,
+    Tool.BOLITA,
     Tool.HIGHLIGHTER,
     Tool.RELLENO,
     Tool.RECORTAR,
@@ -1073,7 +1081,10 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.ESCALA_GRAFICA,
     Tool.NUDO,
     Tool.PUNTO,
-    Tool.SOLIDO
+    Tool.SOLIDO,
+    Tool.CRONOGRAMA,
+    Tool.EXTRUIR,
+    Tool.REVOLUCION
 )
 
 /**
@@ -1138,6 +1149,7 @@ val CAPA_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
 fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.SELECTION -> Icons.Outlined.NearMe
     Tool.LASSO -> Icons.Filled.HighlightAlt
+    Tool.BOLITA -> Icons.Filled.Adjust
     Tool.HAND -> Icons.Filled.PanTool
     Tool.FREEDRAW -> Icons.Filled.Gesture
     Tool.HIGHLIGHTER -> Icons.Filled.Highlight
@@ -1146,6 +1158,7 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.ELLIPSE -> Icons.Filled.RadioButtonUnchecked
     Tool.DIAMOND -> Icons.Outlined.Diamond
     Tool.ARROW -> Icons.Filled.NorthEast
+    Tool.FLECHA_LIBRE -> Icons.Filled.TrendingUp
     Tool.LINE -> Icons.Filled.Remove
     Tool.TEXT -> Icons.Filled.TextFields
     Tool.SERIAL -> Icons.Filled.FormatListNumbered
@@ -1163,6 +1176,9 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.EXTENDER -> Icons.Filled.OpenInFull
     Tool.PUNTO -> Icons.Filled.Adjust
     Tool.SOLIDO -> Icons.Filled.ViewInAr
+    Tool.CRONOGRAMA -> Icons.Filled.ViewTimeline
+    Tool.EXTRUIR -> Icons.Filled.Upgrade
+    Tool.REVOLUCION -> Icons.Filled.Cyclone
 }
 
 @StringRes
@@ -1170,6 +1186,7 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.PUNTO -> R.string.tool_punto
     Tool.SELECTION -> R.string.tool_selection
     Tool.LASSO -> R.string.tool_lasso
+    Tool.BOLITA -> R.string.tool_bolita
     Tool.HAND -> R.string.tool_hand
     Tool.FREEDRAW -> R.string.tool_freedraw
     Tool.HIGHLIGHTER -> R.string.tool_highlighter
@@ -1179,6 +1196,7 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.DIAMOND -> R.string.tool_diamond
     Tool.ARROW -> R.string.tool_arrow
     Tool.LINE -> R.string.tool_line
+    Tool.FLECHA_LIBRE -> R.string.tool_flecha_libre
     Tool.TEXT -> R.string.tool_text
     Tool.SERIAL -> R.string.tool_serial
     Tool.MOSAIC -> R.string.tool_mosaic
@@ -1194,6 +1212,9 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.RECORTAR -> R.string.tool_recortar
     Tool.EXTENDER -> R.string.tool_extender
     Tool.SOLIDO -> R.string.tool_solido
+    Tool.CRONOGRAMA -> R.string.tool_cronograma
+    Tool.EXTRUIR -> R.string.tool_extruir
+    Tool.REVOLUCION -> R.string.tool_revolucion
 }
 
 /**

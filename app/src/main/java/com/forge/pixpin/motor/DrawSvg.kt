@@ -94,6 +94,17 @@ object DrawSvg {
     private const val CALIDAD_JPEG = 88
 
     /**
+     * Cuánto puede desviarse el contorno del lápiz al aligerarlo, en píxeles de escena.
+     *
+     * Un tercio de píxel no se ve ni ampliando: el trazo de un lápiz mide varios píxeles de
+     * ancho y su borde está suavizado. Con eso se queda con menos de la mitad de los puntos.
+     */
+    private const val TOLERANCIA_DEL_CONTORNO = 0.3
+
+    /** Calidad del WEBP de las imágenes con transparencia. Ver [Lapicero.comoDatos]. */
+    private const val CALIDAD_WEBP = 85
+
+    /**
      * Cada cuántos píxeles se toma un punto al seguir el perfil de una letra.
      *
      * Es el paso del muestreo, no el resultado: después pasa por
@@ -121,24 +132,91 @@ object DrawSvg {
     fun aTexto(
         context: Context,
         scene: Scene,
-        imageProvider: (String) -> Bitmap? = { null }
+        imageProvider: (String) -> Bitmap? = { null },
+        /**
+         * La página sobre la que se dibujó, si la hay.
+         *
+         * Es el papel que en pantalla se ve de fondo al anotar un PDF: su
+         * píxel (0,0) es el (0,0) de la escena. **No es un elemento**, así que
+         * ningún recorrido por los elementos lo encuentra — aquí estaba el
+         * fallo de que la página no salía en lo exportado: se exportaban las
+         * anotaciones flotando sobre nada.
+         */
+        papel: Bitmap? = null,
+        /**
+         * **El mismo papel, pero con todos los píxeles que se puedan.**
+         *
+         * [papel] manda en la geometría —su tamaño **son** las unidades de la escena, porque
+         * sobre él se dibujó— y por eso no se puede cambiar por uno más grande sin descolocar
+         * lo anotado. Pero en la página web el papel es una imagen, y una imagen se puede
+         * poner con más resolución de la que ocupa: aquí entra la página rasterizada al
+         * detalle, colocada en el sitio y el tamaño de [papel]. Al ampliar en el navegador se
+         * lee, en vez de verse la mancha de mil cuatrocientos píxeles que salía antes.
+         */
+        papelFino: Bitmap? = null,
+        /**
+         * **Qué hoja del dibujo se escribe**, cuando el dibujo tiene varias.
+         *
+         * Nula, sale lo de siempre: el dibujo entero, o la primera hoja si hay marcos. Con
+         * una puesta, sale **esa**, encuadrada en ella y con lo que cae dentro —y con su
+         * pauta debajo, que es parte del papel y no un trazo—. Es lo que convierte un
+         * lienzo con tres láminas en un documento web de tres páginas, igual que el PDF
+         * saca una página por marco. Ver [ExportarHtml.paginas] y [DrawPdf].
+         */
+        soloEstaHoja: Element? = null,
+        /**
+         * **El papel va aparte y no como imagen dentro del SVG.**
+         *
+         * Con un plano leído como geometría (ver `PlanoWeb`), el papel lo pinta el visor en su
+         * propio lienzo: aquí [papel] sigue mandando en el encuadre —el tamaño de la página
+         * **son** las unidades de la escena— pero no se incrusta la fotografía, que es
+         * justamente lo que se quería quitar de encima.
+         */
+        papelAparte: Boolean = false
     ): String? = runCatching {
-        val contenido = scene.contenidoVisible
+        val contenido =
+            if (soloEstaHoja != null)
+                listOfNotNull(soloEstaHoja.takeIf { it.papel != null }) + scene.contenidoDe(soloEstaHoja)
+            else scene.contenidoVisible
         // Las guías se pintan o no según el mismo interruptor que en pantalla:
         // el SVG tiene que parecerse a lo que se está viendo, no a otra cosa.
         val pintables =
             if (scene.referenciasVisibles) contenido
             else contenido.filter { !it.reference }
-        if (pintables.isEmpty()) return null
+        if (pintables.isEmpty() && papel == null) return null
 
-        val marco = scene.marco
-        val b = if (marco != null) getElementBounds(marco) else getCommonBounds(pintables)
-        val margen = if (marco != null) 0.0 else MARGEN
+        val marco = soloEstaHoja ?: scene.marco
+        // Con página, el encuadre es la página (y lo que se salga de ella):
+        // exportar la anotación de una hoja recortando la hoja dejaría el
+        // resultado sin el contexto que le da sentido.
+        val b = when {
+            marco != null -> getElementBounds(marco)
+            papel != null -> {
+                val pagina = Bounds(0.0, 0.0, papel.width.toDouble(), papel.height.toDouble())
+                if (pintables.isEmpty()) pagina else {
+                    val c = getCommonBounds(pintables)
+                    Bounds(
+                        min(pagina.x1, c.x1), min(pagina.y1, c.y1),
+                        max(pagina.x2, c.x2), max(pagina.y2, c.y2)
+                    )
+                }
+            }
+            else -> getCommonBounds(pintables)
+        }
+        val margen = if (marco != null || papel != null) 0.0 else MARGEN
         val caja = Bounds(b.x1 - margen, b.y1 - margen, b.x2 + margen, b.y2 + margen)
         if (caja.width <= 0 || caja.height <= 0) return null
 
-        val pincel = Lapicero(DrawFonts.provider(context), imageProvider, scene, caja)
+        // **De noche, la tinta se da la vuelta.** En la aplicación el modo noche es un filtro
+        // de pintado —los colores guardados siguen siendo los del día— y el SVG no lo pasaba:
+        // un dibujo hecho sobre papel de pizarra se exportaba con su tinta negra original, o
+        // sea negro sobre negro. Ver [DrawTheme.filtrar].
+        val pincel = Lapicero(
+            DrawFonts.provider(context), imageProvider, scene, caja, papel,
+            DrawTheme.esDeNoche(scene.backgroundColor)
+        )
         val cuerpo = StringBuilder()
+        if (!papelAparte) papel?.let { cuerpo.append(pincel.papel(papelFino ?: it, it.width, it.height)) }
         for ((i, e) in pintables.withIndex()) {
             if (e.type == ElementType.SPOTLIGHT) continue
             cuerpo.append(pincel.elemento(e, pintables.subList(0, i)))
@@ -158,7 +236,14 @@ object DrawSvg {
             .takeIf { it.isNotEmpty() }
             ?.let { cuerpo.append(pincel.focos(it)) }
 
-        Svg.documento(caja, Svg.hex(parseColor(scene.backgroundColor)), cuerpo.toString())
+        // **Sin papel dentro, tampoco fondo.** El SVG empieza siempre por un rectángulo del
+        // color del lienzo que lo tapa todo; con el papel aparte —el plano pintado debajo, en
+        // su propio lienzo— ese rectángulo tapaba justo el plano, y la página exportada salía
+        // en blanco con solo las anotaciones encima. Ver [papelAparte] y `VisorPlano`.
+        val fondo = if (papelAparte) null else Svg.hex(parseColor(scene.backgroundColor))
+        // Los glifos, delante: un `<use>` puede apuntar a algo que venga después, pero hay
+        // lectores de SVG que agradecen encontrarlo antes.
+        Svg.documento(caja, fondo, pincel.defs() + cuerpo.toString())
     }.getOrNull()
 
     /**
@@ -172,9 +257,12 @@ object DrawSvg {
         context: Context,
         scene: Scene,
         nombre: String,
-        imageProvider: (String) -> Bitmap? = { null }
+        imageProvider: (String) -> Bitmap? = { null },
+        papel: Bitmap? = null,
+        /** El mismo papel con más píxeles, si se tiene. Ver [aTexto]. */
+        papelFino: Bitmap? = null
     ): File? = runCatching {
-        val texto = aTexto(context, scene, imageProvider) ?: return null
+        val texto = aTexto(context, scene, imageProvider, papel, papelFino) ?: return null
         val carpeta = File(context.cacheDir, "share").apply { mkdirs() }
         val archivo = File(carpeta, if (nombre.endsWith(".svg")) nombre else "$nombre.svg")
         archivo.writeText(texto)
@@ -196,21 +284,59 @@ object DrawSvg {
         private val typefaces: (Int?) -> android.graphics.Typeface?,
         private val imageProvider: (String) -> Bitmap?,
         private val scene: Scene,
-        private val caja: Bounds
+        private val caja: Bounds,
+        /** La página de fondo, si la hay. Ver [aTexto]. */
+        private val papel: Bitmap? = null,
+        /** Si el papel es oscuro. Ver [DrawTheme.filtrar]. */
+        private val noche: Boolean = false
     ) {
+
+        /**
+         * **El color tal como se ve**, no como está guardado: pasado por el filtro del modo
+         * noche, igual que hace el renderizador de la pantalla.
+         *
+         * Tapa a propósito a la función del mismo nombre del paquete, que es la que se llama
+         * en las dos docenas de sitios donde este escritor pone un color. Un solo punto por
+         * el que pasan todos, en vez de acordarse en cada uno.
+         */
+        private fun parseColor(color: String, alpha: Int = 255): Int =
+            DrawTheme.filtrar(com.forge.pixpin.motor.parseColor(color, alpha), noche)
 
         /** Solo para medir y para sacar perfiles; no pinta nunca. */
         private val medidor = Paint(Paint.ANTI_ALIAS_FLAG)
 
         /**
-         * El renderizador, **solo para los mosaicos**.
+         * **Cada letra, definida una sola vez.**
+         *
+         * Una página de texto son miles de letras y cada una, como perfil, son decenas de
+         * puntos: escribiéndolas todas seguidas, un documento con cuatro notas pesaba dos
+         * megas (lo reportó el usuario). El perfil de una letra no depende de dónde esté
+         * —solo de la fuente, el tamaño y la letra—, así que se define una vez en `<defs>` y
+         * cada aparición es un `<use>` de cuarenta bytes. Sigue sin haber ninguna fuente:
+         * son los mismos perfiles, guardados una vez en vez de mil.
+         */
+        private val glifos = LinkedHashMap<String, String>()
+        private val definiciones = StringBuilder()
+
+        /** Las definiciones de los glifos, para poner delante del cuerpo. */
+        fun defs(): String =
+            if (definiciones.isEmpty()) "" else "<defs>\n$definiciones</defs>\n"
+
+        /**
+         * El renderizador, **solo para los mosaicos y las lupas**.
          *
          * Un mosaico no se puede escribir como trazos: lo que hace es coger los
          * píxeles de debajo. Quien sabe sacarlos es el renderizador, así que se
          * le piden a él en vez de reimplementar la reducción aquí y arriesgarse
          * a que las dos versiones se separen.
+         *
+         * **Con la página debajo.** Se construía sin telón, y de ahí que en lo
+         * exportado la lupa enseñara un cristal en blanco y el mosaico una
+         * placa esmerilada: para el renderizador no había nada debajo que
+         * ampliar ni que pixelar. La página es lo que en pantalla ve la lupa,
+         * así que aquí tiene que verla igual.
          */
-        private val renderizador by lazy { Renderer(imageProvider) }
+        private val renderizador by lazy { Renderer(imageProvider, backdrop = papel) }
 
         fun elemento(e: Element, debajo: List<Element>): String {
             if (e.isDeleted) return ""
@@ -230,15 +356,18 @@ object DrawSvg {
                 ElementType.PUNTO -> punto(e, alpha)
                 ElementType.MEASURE -> cota(e, alpha)
                 ElementType.ESCALA_GRAFICA -> escalaGrafica(e, alpha)
-                ElementType.PLANO -> plano(e, alpha)
+                ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO -> plano(e, alpha)
                 // **El volumen se escribe como lo que es: polígonos rellenos.**
                 // No hay nada que perder por el camino —una caja isométrica *son*
                 // tres cuadriláteros con su color— así que sale idéntica a como
                 // se ve, y sin ninguna de las cosas que un SVG no sabe hacer.
                 ElementType.SOLIDO -> volumen(e, alpha)
+                ElementType.CRONOGRAMA -> cronograma(e, alpha)
                 // El marco es la hoja, no una raya: decide el encuadre y no se
                 // dibuja.
-                ElementType.FRAME -> ""
+                // El marco no se dibuja —es el encuadre— salvo su pauta, que sí es
+                // parte de la hoja: se eligió papel rayado para que salga rayado.
+                ElementType.FRAME -> pautaDeLaHoja(e, alpha)
                 // **El foco sí se guarda.** Desde que su sombra vive dentro de
                 // un marco es dibujo como cualquier otro: el anillo entre el
                 // marco y la figura señalada, pintado. Antes oscurecía la
@@ -310,16 +439,7 @@ object DrawSvg {
             if (caras.isEmpty()) return ""
             val salida = StringBuilder()
 
-            val sombra = sombraDeElemento(e, scene.vista)
-            if (sombra.size >= 3) {
-                val color =
-                    parseColor(e.strokeColor, alpha * OPACIDAD_DE_LA_SOMBRA / 100)
-                salida.append(
-                    "<path d=\"${Svg.caminoCerrado(sombra)}\"" +
-                        " fill=\"${Svg.hex(color)}\"${opacidad(color)}/>\n"
-                )
-            }
-
+            // Sin sombra, igual que en pantalla: lo exportado tiene que ser lo dibujado.
             val rough = Rough(roughOptionsFor(e))
             val rugoso = needsRoughFill(e)
             val hayFondo = !isTransparent(e.backgroundColor)
@@ -382,8 +502,14 @@ object DrawSvg {
                 )
             }
             val tinta = parseColor(e.strokeColor, alpha)
+            // **Aligerado antes de escribirlo.** El contorno que da el lápiz es densísimo —un
+            // punto cada píxel, por los dos lados— y escrito tal cual, un cuaderno de letra
+            // manuscrita pesaba tres megas y medio (lo trajo el usuario). Se tiran los puntos
+            // que no cambian la forma en más de un tercio de píxel y se escribe compacto:
+            // el mismo trazo, diez veces menos bytes. Ver [Svg.caminoDelLapiz].
+            val fino = douglasPeucker(contorno, TOLERANCIA_DEL_CONTORNO)
             cuerpo.append(
-                "<path d=\"${Svg.caminoSuaveCerrado(contorno)}\" " +
+                "<path d=\"${Svg.caminoDelLapiz(fino)}\" " +
                     "fill=\"${Svg.hex(tinta)}\"${opacidad(tinta)}/>\n"
             )
             return cuerpo.toString()
@@ -665,18 +791,70 @@ object DrawSvg {
          * JPEG rellenaría de negro lo transparente, y el PNG de una foto pesa
          * varias veces más para verse igual.
          */
-        private fun comoDatos(bmp: Bitmap): String? = runCatching {
-            val opaco = !bmp.hasAlpha()
-            val salida = ByteArrayOutputStream()
-            if (opaco) {
-                bmp.compress(Bitmap.CompressFormat.JPEG, CALIDAD_JPEG, salida)
-            } else {
-                bmp.compress(Bitmap.CompressFormat.PNG, 100, salida)
+        /**
+         * La página de fondo, incrustada **debajo de todo** y en su sitio: su
+         * píxel (0,0) es el (0,0) de la escena, igual que la pinta la pantalla.
+         */
+        fun papel(bmp: Bitmap, ancho: Int, alto: Int): String {
+            // **Siempre JPEG.** La página se dibuja sobre blanco —no tiene nada
+            // transparente— pero el mapa de bits sigue declarando canal alfa, y
+            // por ese camino salía en PNG: una hoja escaneada eran varios megas
+            // en base64 dentro de la página web, que el navegador del móvil
+            // tardaba en abrir o directamente no abría. En JPEG pesa diez veces
+            // menos y se ve igual.
+            val datos = comoDatos(bmp, opaco = true) ?: return ""
+            // El tamaño es el del papel en unidades de la escena, no el del mapa de bits: si
+            // viene uno más fino, se coloca aquí mismo y el navegador lo enseña al ampliar.
+            return "<image x=\"0\" y=\"0\" width=\"$ancho\" height=\"$alto\" " +
+                "xlink:href=\"$datos\"/>\n"
+        }
+
+        private fun comoDatos(bmp: Bitmap, opaco: Boolean = !tieneTransparencia(bmp)): String? =
+            runCatching {
+                val salida = ByteArrayOutputStream()
+                val tipo = if (opaco) {
+                    bmp.compress(Bitmap.CompressFormat.JPEG, CALIDAD_JPEG, salida)
+                    "jpeg"
+                } else {
+                    // Con transparencia, WEBP y no PNG: pesa una fracción y todos los
+                    // navegadores lo abren desde hace años. En Android 10 el WEBP a calidad
+                    // menor de cien ya es con pérdida; desde el 11 se pide por su nombre.
+                    val formato =
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+                            Bitmap.CompressFormat.WEBP_LOSSY
+                        else Bitmap.CompressFormat.WEBP
+                    bmp.compress(formato, CALIDAD_WEBP, salida)
+                    "webp"
+                }
+                "data:image/$tipo;base64," +
+                    Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
+            }.getOrNull()
+
+        /**
+         * **Si la imagen tiene de verdad algún píxel transparente.**
+         *
+         * `Bitmap.hasAlpha()` no lo dice: dice si el mapa de bits *podría* tenerla, y en
+         * Android toda captura y toda foto pegada viene en ARGB, así que decía que sí siempre
+         * y **todas** las imágenes iban en PNG a calidad cien. Ahí estaba el documento de dos
+         * megas con cuatro notas. Se mira el alfa de los píxeles, a saltos: una imagen con
+         * transparencia la tiene por zonas, no en un píxel suelto.
+         */
+        private fun tieneTransparencia(bmp: Bitmap): Boolean {
+            if (!bmp.hasAlpha()) return false
+            val paso = maxOf(1, maxOf(bmp.width, bmp.height) / 256)
+            val fila = IntArray(bmp.width)
+            var y = 0
+            while (y < bmp.height) {
+                bmp.getPixels(fila, 0, bmp.width, 0, y, bmp.width, 1)
+                var x = 0
+                while (x < bmp.width) {
+                    if ((fila[x] ushr 24) < 250) return true
+                    x += paso
+                }
+                y += paso
             }
-            val tipo = if (opaco) "jpeg" else "png"
-            "data:image/$tipo;base64," +
-                Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
-        }.getOrNull()
+            return false
+        }
 
         /**
          * Los puntos de una tabla de coordenadas, con su número.
@@ -720,46 +898,137 @@ object DrawSvg {
          * puede meter dentro de un camino par/impar, y sin par/impar el agujero
          * no es un agujero.
          */
-        fun focos(focos: List<Element>): String {
-            val d = StringBuilder(
-                Svg.caminoCerrado(
-                    listOf(
-                        Pt(caja.x1, caja.y1), Pt(caja.x2, caja.y1),
-                        Pt(caja.x2, caja.y2), Pt(caja.x1, caja.y2)
+        /**
+         * Los focos, **como los pinta la pantalla** y no como los pintaba el
+         * foco antiguo. La sombra es la caja del propio foco —no el dibujo
+         * entero—, el hueco es la figura que se marcó ([puntosDelFoco], con su
+         * forma: redonda, de caja o a pulso), y cuánto oscurece lo dice el
+         * mando del foco ([oscurecimientoDe]). Aquí estaba el fallo de que en
+         * lo exportado lo oscuro tapaba toda la zona anotada: este escritor se
+         * quedó con el diseño viejo cuando el de pantalla cambió.
+         */
+        fun focos(focos: List<Element>): String = buildString {
+            for (f in focos) {
+                val c = getElementAbsoluteCoords(f)
+                val d = StringBuilder(
+                    Svg.caminoCerrado(
+                        listOf(
+                            Pt(c.x1, c.y1), Pt(c.x2, c.y1),
+                            Pt(c.x2, c.y2), Pt(c.x1, c.y2)
+                        )
                     )
                 )
-            )
-            for (f in focos) d.append(Svg.caminoCerrado(huecoDelFoco(f)))
+                val dentro = puntosDelFoco(f)
+                if (dentro.size >= 3) d.append(Svg.caminoCerrado(dentro))
 
-            val opacidad = (focos.maxOf { it.opacity } * 255 / 100).coerceIn(0, 255)
-            val negro = opacidad * SPOTLIGHT_DIM / 255 / 255.0
-            return "<path d=\"$d\" fill=\"#000000\" fill-rule=\"evenodd\" " +
-                "fill-opacity=\"${Svg.num(negro)}\"/>\n"
-        }
-
-        private fun huecoDelFoco(f: Element): List<Pt> {
-            val c = getElementAbsoluteCoords(f)
-            val r = min(c.x2 - c.x1, c.y2 - c.y1) * SPOTLIGHT_REDONDEO
-            val pts = ArrayList<Pt>(4 * PASOS_DE_ESQUINA + 4)
-            // Las cuatro esquinas, en el sentido contrario al del marco: es lo
-            // que hace que par/impar lo lea como agujero y no como otra mancha.
-            val esquinas = listOf(
-                Triple(c.x2 - r, c.y2 - r, 0.0),
-                Triple(c.x1 + r, c.y2 - r, 90.0),
-                Triple(c.x1 + r, c.y1 + r, 180.0),
-                Triple(c.x2 - r, c.y1 + r, 270.0)
-            )
-            for ((cx, cy, desde) in esquinas) {
-                for (i in 0..PASOS_DE_ESQUINA) {
-                    val a = Math.toRadians(desde + 90.0 * i / PASOS_DE_ESQUINA)
-                    pts.add(Pt(cx + r * cos(a), cy + r * sin(a)))
+                val negro = oscurecimientoDe(f) / 100.0
+                // El giro va en el grupo, como en pantalla se gira el camino
+                // entero: así el hueco no se despega del marco al torcerlo.
+                val giro = if (f.angle == 0.0) "" else {
+                    " transform=\"rotate(${Svg.num(Math.toDegrees(f.angle))} " +
+                        "${Svg.num(c.cx)} ${Svg.num(c.cy)})\""
                 }
+                append("<path d=\"$d\" fill=\"#000000\" fill-rule=\"evenodd\" ")
+                append("fill-opacity=\"${Svg.num(negro)}\"$giro/>\n")
             }
-            if (f.angle == 0.0) return pts
-            return pts.map { pointRotateRads(it, Pt(c.cx, c.cy), f.angle) }
         }
 
         // -- la escala gráfica -----------------------------------------------
+
+        /**
+         * El cronograma, **tal como se ve**: rejilla, barras y nombres.
+         *
+         * Sin nada que perder por el camino: son rectángulos, rayas y texto, y de eso el
+         * SVG sabe todo. Se escribe con las mismas cuentas que lo pintan en pantalla —las
+         * de [barraDeTarea] y compañía— para que lo exportado y lo dibujado no puedan
+         * separarse el día que se toque el reparto de la rejilla.
+         */
+        private fun cronograma(e: Element, alpha: Int): String {
+            val c = getElementAbsoluteCoords(e)
+            if (c.x2 - c.x1 <= 1.0 || c.y2 - c.y1 <= 1.0) return ""
+            val tinta = parseColor(e.strokeColor, alpha)
+            val relleno = if (isTransparent(e.backgroundColor)) tinta
+            else parseColor(e.backgroundColor, alpha)
+            val grosor = e.strokeWidth.coerceAtLeast(1.0)
+            val s = StringBuilder()
+
+            fun raya(x1: Double, y1: Double, x2: Double, y2: Double, suave: Boolean) {
+                s.append(
+                    "<line x1=\"${Svg.num(x1)}\" y1=\"${Svg.num(y1)}\" " +
+                        "x2=\"${Svg.num(x2)}\" y2=\"${Svg.num(y2)}\" " +
+                        "stroke=\"${Svg.hex(tinta)}\" stroke-width=\"${Svg.num(grosor)}\"" +
+                        (if (suave) " stroke-opacity=\"0.45\"" else "") + "/>\n"
+                )
+            }
+
+            for (x in columnasDelCronograma(e)) raya(x, c.y1, x, c.y2, true)
+            val alto = altoDeFila(e)
+            val filas = yDeLasFilas(e)
+            for (i in 0..e.tareas.size) {
+                val y = filas + i * alto
+                raya(c.x1, y, c.x2, y, true)
+            }
+            s.append(
+                "<rect x=\"${Svg.num(c.x1)}\" y=\"${Svg.num(c.y1)}\" " +
+                    "width=\"${Svg.num(c.x2 - c.x1)}\" height=\"${Svg.num(c.y2 - c.y1)}\" " +
+                    "fill=\"none\" stroke=\"${Svg.hex(tinta)}\" " +
+                    "stroke-width=\"${Svg.num(grosor)}\"/>\n"
+            )
+
+            val tam = letraDelCronograma(e, alto)
+            val anchoCol = anchoDeColumna(e)
+            for (k in 0 until kotlin.math.max(1, e.periodos)) {
+                val x = xDeLaEscala(e) + (k + 0.5) * anchoCol
+                s.append(
+                    "<text x=\"${Svg.num(x)}\" y=\"${Svg.num(c.y1 + (filas - c.y1) * 0.72)}\" " +
+                        "text-anchor=\"middle\" font-size=\"${Svg.num(tam)}\" " +
+                        "fill=\"${Svg.hex(tinta)}\">${Svg.escapar("${k + 1}")}</text>\n"
+                )
+            }
+            for ((i, t) in e.tareas.withIndex()) {
+                val b = barraDeTarea(e, i) ?: continue
+                val color = t.color?.let { parseColor(it, alpha) } ?: relleno
+                s.append(
+                    "<rect x=\"${Svg.num(b.x1)}\" y=\"${Svg.num(b.y1)}\" " +
+                        "width=\"${Svg.num(b.width)}\" height=\"${Svg.num(b.height)}\" " +
+                        "rx=\"${Svg.num(b.height / 3)}\" fill=\"${Svg.hex(color)}\"" +
+                        opacidad(color) + "/>\n"
+                )
+                if (t.nombre.isNotBlank()) {
+                    s.append(
+                        "<text x=\"${Svg.num(c.x1 + tam * 0.3)}\" " +
+                            "y=\"${Svg.num(b.y1 + b.height * 0.5 + tam * 0.36)}\" " +
+                            "font-size=\"${Svg.num(tam)}\" fill=\"${Svg.hex(tinta)}\">" +
+                            Svg.escapar(t.nombre) + "</text>\n"
+                    )
+                }
+            }
+            return s.toString()
+        }
+
+        /** Las rayas o los puntos que trae impresa una hoja. Ver [rayasDeLaPauta]. */
+        private fun pautaDeLaHoja(e: Element, alpha: Int): String {
+            if (e.papel == null) return ""
+            val rayas = rayasDeLaPauta(e)
+            if (rayas.isEmpty()) return ""
+            val tinta = parseColor(e.strokeColor, alpha * OPACIDAD_DE_LA_PAUTA / 100)
+            val s = StringBuilder()
+            for ((a, b) in rayas) {
+                if (a == b) {
+                    s.append(
+                        "<circle cx=\"${Svg.num(a.x)}\" cy=\"${Svg.num(a.y)}\" r=\"1\" " +
+                            "fill=\"${Svg.hex(tinta)}\"/>\n"
+                    )
+                } else {
+                    s.append(
+                        "<line x1=\"${Svg.num(a.x)}\" y1=\"${Svg.num(a.y)}\" " +
+                            "x2=\"${Svg.num(b.x)}\" y2=\"${Svg.num(b.y)}\" " +
+                            "stroke=\"${Svg.hex(tinta)}\" stroke-width=\"1\"/>\n"
+                    )
+                }
+            }
+            return s.toString()
+        }
 
         private fun escalaGrafica(e: Element, alpha: Int): String {
             val c = getElementAbsoluteCoords(e)
@@ -815,7 +1084,7 @@ object DrawSvg {
             val tinta = parseColor(e.strokeColor, alpha)
             val grosor = e.strokeWidth.coerceAtLeast(0.5)
             val s = StringBuilder()
-            for (trazo in trazosDelPlano(e)) {
+            for (trazo in trazosDelInstrumento(e)) {
                 // El mismo pelo y la misma transparencia que en pantalla: ver
                 // [GROSOR_DE_LA_REJILLA]. Estaban escritos a mano en los tres sitios.
                 val ancho = if (trazo.eje) grosor else GROSOR_DE_LA_REJILLA
@@ -828,7 +1097,7 @@ object DrawSvg {
                 )
             }
             val tam = (e.fontSize ?: 11.0).coerceAtLeast(1.0)
-            for (n in numerosDelPlano(e)) {
+            for (n in numerosDelInstrumento(e)) {
                 val x = if (n.horizontal) e.x + n.donde.x else e.x + n.donde.x - tam * 0.3
                 val y =
                     if (n.horizontal) e.y + n.donde.y + tam * 1.15
@@ -1068,10 +1337,51 @@ object DrawSvg {
             texto: String, x: Double, y: Double, tam: Double, familia: Int?,
             alineado: Paint.Align, color: Int, negrita: Boolean
         ): String {
-            val perfil = perfilDe(texto, x, y, tam, familia, alineado, negrita)
-            if (perfil.isEmpty()) return ""
-            return "<path d=\"${Svg.caminoDeContornos(perfil)}\" " +
-                "fill=\"${Svg.hex(color)}\"${opacidad(color)}/>\n"
+            medidor.reset()
+            medidor.isAntiAlias = true
+            medidor.textSize = tam.toFloat()
+            medidor.typeface = typefaces(familia)
+            medidor.isFakeBoldText = negrita
+            medidor.textAlign = Paint.Align.LEFT
+            val anchos = FloatArray(texto.length)
+            medidor.getTextWidths(texto, anchos)
+            val total = anchos.sum().toDouble()
+            // La alineación se resuelve aquí, letra a letra desde la izquierda.
+            var cx = when (alineado) {
+                Paint.Align.CENTER -> x - total / 2
+                Paint.Align.RIGHT -> x - total
+                else -> x
+            }
+            val s = StringBuilder()
+            s.append("<g fill=\"").append(Svg.hex(color)).append('"').append(opacidad(color)).append(">")
+            var i = 0
+            while (i < texto.length) {
+                val c = texto[i]
+                if (!c.isWhitespace() && anchos[i] > 0f) {
+                    val id = glifo(c, tam, familia, negrita)
+                    if (id != null) {
+                        s.append("<use href=\"#").append(id).append("\" x=\"").append(Svg.num(cx))
+                            .append("\" y=\"").append(Svg.num(y)).append("\"/>")
+                    }
+                }
+                cx += anchos[i]
+                i++
+            }
+            s.append("</g>\n")
+            return s.toString()
+        }
+
+        /** El id del glifo de esta letra a este tamaño, definiéndolo si es la primera vez. */
+        private fun glifo(letra: Char, tam: Double, familia: Int?, negrita: Boolean): String? {
+            val clave = "${familia ?: -1}|${Svg.num(tam)}|${if (negrita) 1 else 0}|$letra"
+            glifos[clave]?.let { return it }
+            val perfil = perfilDe(letra.toString(), 0.0, 0.0, tam, familia, Paint.Align.LEFT, negrita)
+            if (perfil.isEmpty()) return null
+            val id = "g${glifos.size + 1}"
+            glifos[clave] = id
+            definiciones.append("<path id=\"").append(id).append("\" d=\"")
+                .append(Svg.caminoDeContornos(perfil)).append("\"/>\n")
+            return id
         }
 
         /**
@@ -1135,9 +1445,6 @@ object DrawSvg {
     // día que cambien en pantalla hay que venir aquí a mirar si el SVG las
     // quiere igual. Un valor compartido escondería esa decisión.
     private const val REFERENCIA_OPACIDAD = 35
-    private const val SPOTLIGHT_DIM = 96
-    private const val SPOTLIGHT_REDONDEO = 0.35
-    private const val PASOS_DE_ESQUINA = 6
     private const val SERIAL_TEXT_RATIO = 1.25
     private const val MIN_MEASURE_LENGTH = 0.5
     private const val MEASURE_TICK = 3.0

@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.provider.Settings
@@ -34,12 +36,24 @@ class PinHostService : Service() {
         fun start(context: Context) {
             context.startForegroundService(Intent(context, PinHostService::class.java))
         }
+
+        /**
+         * Si el servicio está vivo ahora mismo.
+         *
+         * Lo lee la tarjeta de configuración para decir «en marcha» en vez de ofrecer
+         * un «Comenzar» que ya no comienza nada. Es estado de Compose a propósito: se
+         * enciende y se apaga en `onCreate`/`onDestroy`, y la tarjeta se entera sola
+         * sin tener que preguntar al sistema por la lista de servicios.
+         */
+        var enMarcha by androidx.compose.runtime.mutableStateOf(false)
+            private set
     }
 
     private var ball: FloatingBallController? = null
 
     override fun onCreate() {
         super.onCreate()
+        enMarcha = true
         createChannel()
         startForeground(
             NOTIF_ID,
@@ -58,6 +72,7 @@ class PinHostService : Service() {
     }
 
     override fun onDestroy() {
+        enMarcha = false
         ball?.hide()
         ball = null
         super.onDestroy()

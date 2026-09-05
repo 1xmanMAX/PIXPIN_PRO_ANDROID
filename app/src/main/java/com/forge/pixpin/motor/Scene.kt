@@ -41,6 +41,18 @@ val ExcalidrawJson: Json = Json {
 enum class Tool {
     SELECTION, LASSO, HAND,
     RECTANGLE, DIAMOND, ELLIPSE, ARROW, LINE, FREEDRAW, TEXT, IMAGE,
+
+    /**
+     * **La flecha libre**: se traza a pulso como el lápiz y acaba en punta.
+     *
+     * La flecha de siempre va de un punto a otro en línea recta, y eso sirve para señalar
+     * pero no para rodear: lo que uno hace a mano al anotar es una raya que da la vuelta a
+     * algo y termina apuntándolo. Por dentro **es una flecha** —el mismo tipo de elemento,
+     * con su punta— con todos los puntos por los que pasó la mano en vez de dos, así que se
+     * edita, se colorea, se exporta y se le cambia la punta por el mismo camino que a las
+     * demás. Ver [DrawController.pointerDown].
+     */
+    FLECHA_LIBRE,
     ERASER,
     HIGHLIGHTER, MOSAIC, LUPA, SPOTLIGHT, SERIAL, FRAME,
 
@@ -53,6 +65,21 @@ enum class Tool {
      * mide. Es lo que le da unidades a todas las cotas de la escena.
      */
     SCALE,
+
+    /**
+     * **La bolita**: se pasa por encima de lo que se quiera y va entrando en la selección.
+     *
+     * No hay rectángulo que encuadrar ni tecla que mantener. Se pasa por algo y entra; se
+     * vuelve a pasar por algo que ya estaba dentro y sale. Es la forma de seleccionar que
+     * no obliga a pensar en la selección: sirve igual para coger cuatro figuras de un
+     * barrido que para quitar la que sobra, con el mismo gesto y sin cambiar de modo.
+     *
+     * Es la misma que la del croquis en el espacio, y a propósito: allí nació porque con la
+     * vista girada un recuadro de selección no encuadra lo que uno cree, y aquí hace falta
+     * por otra razón —con el dedo, un recuadro sobre un dibujo apretado coge de más y coge
+     * de menos, y hay que repetirlo—.
+     */
+    BOLITA,
 
     /**
      * El bote: **rellena el hueco que se toque**, sea de quien sea.
@@ -104,7 +131,36 @@ enum class Tool {
      * que separarlas es la única forma de que la ambigüedad no exista. Ver
      * [Solido] y [ElementType.SOLIDO].
      */
-    SOLIDO;
+    SOLIDO,
+
+    /**
+     * El **cronograma**: se arrastra la caja y nace un plan con tres filas dentro.
+     *
+     * Nace con filas y no vacío a propósito: una figura que aparece en blanco obliga a
+     * descubrir dónde se le añaden cosas antes de que enseñe nada, y lo que uno quiere al
+     * poner un cronograma es ver ya la rejilla y empezar a arrastrar barras.
+     * Ver [Cronograma].
+     */
+    CRONOGRAMA,
+
+    /**
+     * **Levantar**: se toca una figura cerrada y se convierte en volumen.
+     *
+     * Estaba escondida en el panel de acciones, que es donde se guarda lo que se toca una
+     * vez al mes — y esto es la puerta de entrada al 3D. Como herramienta se ve, y sobre
+     * todo se usa igual que las demás: se elige y se toca lo que se quiere levantar.
+     */
+    EXTRUIR,
+
+    /**
+     * **Torno**: se toca la figura y después el eje, y sale el cuerpo de revolución.
+     *
+     * En dos tiempos y no marcando las dos cosas a la vez: hay que decir **cuál es cuál**,
+     * y con una selección normal no hay forma —la figura y el eje son dos elementos y el
+     * orden se pierde—. Tocando primero lo que se tornea y después la raya, no hay nada
+     * que explicar. Ver [DrawController.figuraATornear].
+     */
+    REVOLUCION;
 
     /** Las que crean una forma con caja al arrastrar. */
     val isShape: Boolean
@@ -137,6 +193,8 @@ data class ItemStyle(
     val strokeStyle: StrokeStyle = StrokeStyle.SOLID,
     val roughness: Int = Element.ROUGHNESS_ARTIST,
     val opacity: Int = 100,
+    /** De qué está hecha la tinta: lisa, encendida o con grano. Ver [MaterialDeTinta]. */
+    val material: MaterialDeTinta = MaterialDeTinta.LISA,
     val roundness: Roundness? = Roundness(Roundness.ADAPTIVE_RADIUS),
     val startArrowhead: Arrowhead? = null,
     val endArrowhead: Arrowhead? = Arrowhead.ARROW,
@@ -167,7 +225,16 @@ data class ItemStyle(
     /** Qué parte del marco de un foco ocupa su zona iluminada. Ver [conZona]. */
     val zona: Double = ZONA_POR_DEFECTO,
     /** El trazo a mano sale firme, sin adelgazar. Ver [Element.presionFirme]. */
-    val presionFirme: Boolean = false
+    val presionFirme: Boolean = false,
+    /**
+     * Qué pieza es un volumen y si va macizo o de alambre. Ver [Propiedad.VOLUMEN].
+     *
+     * Estaban solo en el panel de acciones —detrás de un botón que hay que abrir— y ahí
+     * no los encontraba nadie: son las dos decisiones que más se tocan de una caja y
+     * estaban donde se guarda lo que se toca una vez. En el estilo van al lateral, que es
+     * donde uno mira, y además se quedan cargadas para la siguiente pieza.
+     */
+    val esqueleto: Boolean = false
 ) {
     companion object {
         /** Los cuatro grosores del original (`STROKE_WIDTH`). */
@@ -271,7 +338,19 @@ data class Viewport(
 
     companion object {
         const val MIN_ZOOM = 0.1
-        const val MAX_ZOOM = 30.0
+
+        /**
+         * Subido de 30 a 400 por los planos importados: con el lado mayor de un
+         * plano en 1600 px de escena, un detalle de centímetros necesita cientos
+         * de aumentos para ocupar la pantalla, y con la tinta de plano a un pelo
+         * los trazos siguen finos hasta el fondo. Lo que se pinta se recorta
+         * antes por la vista (getVisibleElements) y los sólidos ya se pintan en
+         * local (ver Renderer), así que las coordenadas de dispositivo de lo
+         * visible se mantienen chicas; más allá de esto, la precisión del
+         * `float` del rasterizador empieza a comerse fracciones de píxel en las
+         * cadenas que cruzan la pantalla de punta a punta.
+         */
+        const val MAX_ZOOM = 400.0
     }
 }
 
@@ -340,6 +419,46 @@ data class SceneFile(
  * que hace que el historial por deltas sea trivial de calcular y que no haga
  * falta clonar nada a mano antes de modificar.
  */
+/**
+ * **La llave de paso de las luces**: si están encendidas y cuánto alumbran.
+ *
+ * ## Por qué es una sola para todo el dibujo
+ *
+ * Porque es lo que uno quiere tocar. Lo que se hace con las luces de un plano es **subirlas
+ * todas o apagarlas todas** —se enseña el dibujo, se apagan; se mira de noche, se suben— y
+ * con un mando por trazo eso son veinte gestos para una decisión. Es la misma llave que la
+ * del croquis en el espacio, y por lo mismo.
+ *
+ * ## Y apagada, la tinta de luz es tinta lisa
+ *
+ * No es un caso raro: es lo que promete el mando. En cero sale el color que se eligió, ni más
+ * ni menos —ni resplandor, ni capas blancas encima, ni nada—, y de ahí para arriba se va
+ * encendiendo. Sin esto, una tinta de luz apagada seguía siendo una raya lavada que no era el
+ * color de nadie.
+ *
+ * ## Hasta el doble
+ *
+ * Hasta uno, la luz **se enciende**: el color se va hacia su tono vivo y el centro hacia el
+ * blanco. De uno para arriba ya no queda color al que ir, y lo que sube es **cuánto se sale
+ * del blanco de la pantalla** — que es lo que hace una fuente cuando le subes la corriente
+ * estando ya encendida. Eso último solo se ve de verdad en una pantalla con margen: ver
+ * [ElBrilloDeMas].
+ */
+@Serializable
+data class LucesDelDibujo(
+    val encendidas: Boolean = true,
+    /** Cuánto alumbran, de cero a dos. Uno es como se dibujó cada trazo. */
+    val fuerza: Double = 1.0
+) {
+    /** Lo que multiplica a la luz de cada trazo. Cero es apagado, y apagado es tinta lisa. */
+    val cuanto: Double get() = if (encendidas) fuerza.coerceIn(0.0, LO_MAS_QUE_ALUMBRAN) else 0.0
+
+    companion object {
+        /** Hasta dónde llega la llave. Ver arriba. */
+        const val LO_MAS_QUE_ALUMBRAN = 2.0
+    }
+}
+
 @Serializable
 data class Scene(
     val elements: List<Element> = emptyList(),
@@ -347,6 +466,14 @@ data class Scene(
     val viewport: Viewport = Viewport(),
     val style: ItemStyle = ItemStyle(),
     val backgroundColor: String = "#ffffff",
+    /**
+     * **La llave de paso de las luces del dibujo.** Ver [LucesDelDibujo].
+     *
+     * Va en la escena y no en cada trazo porque **es una decisión del dibujo entero**: las
+     * luces se encienden y se apagan a la vez, como las de una habitación. Es la misma que la
+     * del croquis en el espacio.
+     */
+    val luces: LucesDelDibujo = LucesDelDibujo(),
     /**
      * Cuánto mide de verdad un píxel, si se ha calibrado alguna vez.
      *
@@ -492,6 +619,7 @@ fun newElement(
     strokeStyle = style.strokeStyle,
     roughness = style.roughness,
     opacity = style.opacity,
+    material = style.material,
     // El redondeo solo se aplica a quien lo admite; ponerlo en una elipse
     // ensuciaría el JSON con un campo que nadie lee.
     roundness = if (type.acceptsRoundness) style.roundness else null,
@@ -519,8 +647,21 @@ fun newElement(
         style.fontFamily
     } else null,
     textAlign = if (type == ElementType.TEXT) style.textAlign else null,
-    verticalAlign = if (type == ElementType.TEXT) style.verticalAlign else null
+    verticalAlign = if (type == ElementType.TEXT) style.verticalAlign else null,
+    // **El cronograma nace con filas.** Una figura que aparece en blanco obliga a
+    // descubrir dónde se le añaden cosas antes de enseñar nada, y lo que uno quiere al
+    // poner un cronograma es ver la rejilla y empezar a arrastrar barras. Las tres nacen
+    // escalonadas —cada una detrás de la anterior— porque es lo que es un plan.
+    tareas = if (type == ElementType.CRONOGRAMA) {
+        List(FILAS_DE_FABRICA) { TareaDelCronograma(desde = it.toDouble(), cuanto = 1.0) }
+    } else emptyList(),
+    // La pieza que se dibuja con la herramienta es siempre una caja: la forma de un
+    // volumen sale de levantar una figura, no de una lista. Ver [extruido].
+    esqueleto = type == ElementType.SOLIDO && style.esqueleto
 )
+
+/** Con cuántas filas nace un cronograma: las justas para que se entienda de qué va. */
+private const val FILAS_DE_FABRICA = 3
 
 private val ElementType.acceptsRoundness: Boolean
     get() = this == ElementType.RECTANGLE || this == ElementType.DIAMOND ||
@@ -719,6 +860,7 @@ fun estiloDe(e: Element): ItemStyle {
         strokeStyle = e.strokeStyle,
         roughness = e.roughness,
         opacity = e.opacity,
+        material = e.material,
         roundness = e.roundness,
         startArrowhead = e.startArrowhead,
         endArrowhead = e.endArrowhead,
@@ -737,7 +879,16 @@ fun estiloDe(e: Element): ItemStyle {
         // El aumento sale de la geometría, no del campo: ver [aumentoDe].
         oscurecer = oscurecimientoDe(e),
         zona = zonaDe(e),
-        presionFirme = e.presionFirme
+        presionFirme = e.presionFirme,
+        // **Y qué pieza es un volumen, que faltaba y rompía el mando.**
+        //
+        // El panel enseña [estiloActivo], que sale de aquí. Sin estos dos campos, con una
+        // caja marcada el mando leía siempre «caja» y «macizo» — daba igual lo que fuera
+        // la pieza— y, peor, [cambiarEstilo] comparaba contra ese «caja» de mentira: pedir
+        // caja no cambiaba nada porque creía que ya lo era, y pedir cualquier otra cosa se
+        // aplicaba pero el mando volvía a saltar a caja al recomponerse. Desde fuera se
+        // veía exactamente como lo que se veía: que solo se podía poner la cúbica.
+        esqueleto = e.esqueleto
     )
 }
 
@@ -770,6 +921,7 @@ fun conEstilo(e: Element, s: ItemStyle): Element {
     if (Propiedad.FORMA_FLECHA in aplican) out = out.copy(elbowed = s.elbowed)
     if (Propiedad.MOSAICO in aplican) out = out.copy(mosaicBlur = s.mosaicBlur)
     if (Propiedad.OPACIDAD in aplican) out = out.copy(opacity = s.opacity)
+    if (Propiedad.MATERIAL in aplican) out = out.copy(material = s.material)
     if (Propiedad.FUENTE in aplican) {
         out = out.copy(fontSize = s.fontSize, fontFamily = s.fontFamily)
     }
@@ -785,6 +937,7 @@ fun conEstilo(e: Element, s: ItemStyle): Element {
     if (Propiedad.OSCURECER in aplican) out = out.copy(oscurecer = s.oscurecer)
     if (Propiedad.ZONA in aplican) out = conZona(out, s.zona)
     if (Propiedad.PRESION in aplican) out = out.copy(presionFirme = s.presionFirme)
+    if (Propiedad.VOLUMEN in aplican) out = out.copy(esqueleto = s.esqueleto)
     return out
 }
 
@@ -812,6 +965,7 @@ fun conCambios(destino: ItemStyle, anterior: ItemStyle, nuevo: ItemStyle): ItemS
     if (nuevo.strokeStyle != anterior.strokeStyle) out = out.copy(strokeStyle = nuevo.strokeStyle)
     if (nuevo.roughness != anterior.roughness) out = out.copy(roughness = nuevo.roughness)
     if (nuevo.opacity != anterior.opacity) out = out.copy(opacity = nuevo.opacity)
+    if (nuevo.material != anterior.material) out = out.copy(material = nuevo.material)
     if (nuevo.roundness != anterior.roundness) out = out.copy(roundness = nuevo.roundness)
     if (nuevo.startArrowhead != anterior.startArrowhead) {
         out = out.copy(startArrowhead = nuevo.startArrowhead)
@@ -840,6 +994,13 @@ fun conCambios(destino: ItemStyle, anterior: ItemStyle, nuevo: ItemStyle): ItemS
     if (nuevo.presionFirme != anterior.presionFirme) {
         out = out.copy(presionFirme = nuevo.presionFirme)
     }
+    // **Y el alambre, que faltaba aquí y por eso el modo esqueleto no hacía nada.**
+    //
+    // Esta función es la que decide qué mando se ha movido: lo que no aparece en esta
+    // lista no llega nunca al elemento. El interruptor del lateral cambiaba el pincel
+    // —lo siguiente que se dibujara sí salía en alambre— pero la pieza ya marcada se
+    // quedaba exactamente igual, que es lo que se veía: «el esqueleto no funciona».
+    if (nuevo.esqueleto != anterior.esqueleto) out = out.copy(esqueleto = nuevo.esqueleto)
     return out
 }
 
@@ -979,7 +1140,7 @@ fun cajaConLoQueDibuja(e: Element): Bounds {
     // vista un poco: seguía habiendo volumen delante de los ojos y la huella ya
     // había salido de pantalla. Se devuelve lo que ocupa **desde cualquier
     // vista** porque aquí no se sabe cuál es la puesta, y pasarse es gratis.
-    if (e.isSolido) return envolturaDeSolido(e)
+    if (e.isSolido) return envolturaDeSolidoSinVista(e)
     if (e.type != ElementType.LUPA && e.type != ElementType.SPOTLIGHT) return caja
     val zona = regionDeLaLupa(e)
     return Bounds(

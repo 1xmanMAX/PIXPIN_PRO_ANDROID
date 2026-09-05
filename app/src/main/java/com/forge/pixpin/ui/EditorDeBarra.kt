@@ -26,7 +26,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.R
@@ -190,7 +189,6 @@ private fun Ficha(
     onArrastreFin: () -> Unit,
     onCancelado: () -> Unit
 ) {
-    val contexto = LocalContext.current
     // La posición absoluta de la ficha: los desplazamientos del arrastre llegan
     // relativos a ella, y lo que hay que comparar contra las filas es dónde
     // está el dedo en la pantalla.
@@ -235,7 +233,11 @@ private fun Ficha(
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                contexto.getString(labelFor(tool)),
+                // **`stringResource` y no `contexto.getString`.** Leyendo por el contexto,
+                // la composición no se entera de un cambio de idioma o de configuración:
+                // el rótulo se quedaba con la palabra de antes hasta que algo aparte
+                // obligara a recomponer. Es el único error que marcaba el lint.
+                androidx.compose.ui.res.stringResource(labelFor(tool)),
                 style = MaterialTheme.typography.labelMedium,
                 color = if (levantada) MaterialTheme.colorScheme.onPrimary
                 else if (atenuada) MaterialTheme.colorScheme.outline

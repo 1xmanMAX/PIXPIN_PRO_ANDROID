@@ -55,6 +55,9 @@ object ExcalidrawStore {
         File(dir(context), "$id.excalidraw.gz").absolutePath
 
     /** Escribe la escena y devuelve su ruta, o null si no se pudo. */
+    // Sincronizado porque escribe también un hilo de trabajo (el guardado
+    // aplazado del editor): dos escrituras a la vez compartirían el temporal.
+    @Synchronized
     fun guardar(context: Context, id: String, scene: Scene): String? = runCatching {
         val destino = File(dir(context), "$id.excalidraw.gz")
         val temporal = File(dir(context), "$id.excalidraw.gz.tmp")

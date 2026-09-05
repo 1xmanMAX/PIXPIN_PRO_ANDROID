@@ -175,12 +175,18 @@ fun strokeOptionsFor(e: Element): StrokeOptions = StrokeOptions(
  * calcula llamando al propio generador en vez de con una constante a mano: si
  * algún día se toca [FreedrawTuning], la muestra va detrás sola.
  */
-fun anchoPintadoDelLapiz(strokeWidth: Double): Double {
+fun anchoPintadoDelLapiz(
+    strokeWidth: Double,
+    /** Con cuánta presión se mide. De fábrica, la típica. */
+    presion: Double = PRESION_TIPICA,
+    /** Si el trazo va de ancho parejo: entonces la presión no lo estrecha. */
+    firme: Boolean = false
+): Double {
     val opciones = StrokeOptions(
         size = strokeWidth * FreedrawTuning.SIZE_FACTOR,
-        thinning = FreedrawTuning.THINNING
+        thinning = if (firme) 0.0 else FreedrawTuning.THINNING
     )
-    return 2 * strokeRadius(opciones.size, opciones.thinning, PRESION_TIPICA, opciones.easing)
+    return 2 * strokeRadius(opciones.size, opciones.thinning, presion, opciones.easing)
 }
 
 /**

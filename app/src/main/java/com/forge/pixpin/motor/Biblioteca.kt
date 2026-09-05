@@ -103,114 +103,43 @@ const val NOMBRE_POR_DEFECTO = "Figura"
 /**
  * Las figuras que vienen puestas.
  *
- * **Son las del cuaderno de matemáticas**, y esa es la elección: unos ejes, un
- * plano cuadriculado, una recta numérica, el triángulo con su ángulo recto
- * marcado, la circunferencia con su radio y una tabla en blanco. Es el andamiaje
- * que aparece en el noventa por ciento de los problemas, el que no dice nada por
- * sí mismo y hay que dibujar igualmente antes de poder empezar.
+ * **Son las del cuaderno de matemáticas**, y esa es la elección: el plano de
+ * funciones, la recta numérica, el espacio de tres ejes y una tabla en blanco.
+ * Es el andamiaje que aparece en el noventa por ciento de los problemas, el
+ * que no dice nada por sí mismo y hay que dibujar igualmente antes de poder
+ * empezar.
+ *
+ * Los tres primeros son **instrumentos**, no dibujos (ver [Plano] y
+ * [Espacio]): saben cuánto vale una unidad y al alargarlos por un lado
+ * enseñan más números en vez de estirar las puntas y las cifras. Hubo antes
+ * unos «Ejes», una «Cuadrícula» y una «Recta numérica» dibujados con flechas y
+ * letras sueltas, y un triángulo rectángulo y una circunferencia con su radio;
+ * el usuario los quitó (2-sep-2026): los primeros se deformaban al alargarlos
+ * y los instrumentos hacen lo mismo bien, y los otros dos se dibujan igual de
+ * rápido con las herramientas de siempre.
  *
  * Van **a tiralíneas** ([Element.ROUGHNESS_ARCHITECT]): un eje tembloroso no se
  * lee como un eje. El color y el grosor sí salen del pincel que haya puesto,
  * para que la figura pegue con el resto del dibujo.
  */
 fun figurasDeFabrica(estilo: ItemStyle, medir: MedidaDeTexto): List<FiguraGuardada> {
-    val trazo = estilo.copy(
-        roughness = Element.ROUGHNESS_ARCHITECT,
-        roundness = null,
-        backgroundColor = Element.TRANSPARENT,
-        startArrowhead = null,
-        endArrowhead = Arrowhead.ARROW
-    )
     return listOf(
-        figura(ID_EJES, "Ejes", ejes(trazo, medir)),
-        figura(ID_CUADRICULA, "Cuadrícula", cuadricula(trazo, medir)),
-        figura(ID_RECTA, "Recta numérica", rectaNumerica(trazo, medir)),
-        figura(ID_TRIANGULO, "Triángulo rectángulo", trianguloRectangulo(trazo)),
-        figura(ID_CIRCUNFERENCIA, "Circunferencia y radio", circunferencia(trazo, medir)),
-        figura(ID_TABLA, "Tabla en blanco", tablaEnBlanco(estilo, medir)),
-        figura(ID_PLANO, "Plano de funciones", listOf(planoDeFunciones(estilo)))
+        figura(ID_PLANO, "Plano de funciones", listOf(planoDeFunciones(estilo))),
+        figura(ID_RECTA, "Recta de funciones", listOf(rectaDeFunciones(estilo))),
+        figura(ID_ESPACIO, "Espacio xyz", listOf(espacioDeFunciones(estilo))),
+        figura(ID_TABLA, "Tabla en blanco", tablaEnBlanco(estilo, medir))
     ).filter { it.elementos.isNotEmpty() }
 }
 
-const val ID_EJES = "fabrica-ejes"
-const val ID_CUADRICULA = "fabrica-cuadricula"
 const val ID_RECTA = "fabrica-recta"
-const val ID_TRIANGULO = "fabrica-triangulo"
-const val ID_CIRCUNFERENCIA = "fabrica-circunferencia"
+const val ID_ESPACIO = "fabrica-espacio"
 const val ID_TABLA = "fabrica-tabla"
 const val ID_PLANO = "fabrica-plano"
 
 private fun figura(id: String, nombre: String, elementos: List<Element>) =
     FiguraGuardada(id, nombre, normalizarFigura(elementos), propia = false)
 
-/**
- * Los ejes, con sus letras.
- *
- * La Y va **hacia arriba**, que en coordenadas de escena es hacia el menos: es
- * lo único que se puede hacer aquí y hay que tenerlo presente, porque escrito
- * parece del revés.
- */
-private fun ejes(estilo: ItemStyle, medir: MedidaDeTexto): List<Element> = listOf(
-    flecha(Pt(-BRAZO, 0.0), Pt(BRAZO, 0.0), estilo),
-    flecha(Pt(0.0, BRAZO), Pt(0.0, -BRAZO), estilo),
-    rotulo("X", Pt(BRAZO + 10, 0.0), estilo, medir),
-    rotulo("Y", Pt(14.0, -BRAZO - 10), estilo, medir),
-    rotulo("O", Pt(-14.0, 14.0), estilo, medir)
-)
-
-/** El plano cuadriculado: la rejilla en gris claro y los ejes encima. */
-private fun cuadricula(estilo: ItemStyle, medir: MedidaDeTexto): List<Element> {
-    val fino = estilo.copy(strokeColor = GRIS_DE_REJILLA, strokeWidth = 1.0)
-    val pasos = (-CELDAS..CELDAS).map { it * CELDA }
-    val rejilla = pasos.flatMap { p ->
-        listOf(
-            raya(Pt(-BRAZO, p), Pt(BRAZO, p), fino),
-            raya(Pt(p, -BRAZO), Pt(p, BRAZO), fino)
-        )
-    }
-    // La rejilla primero: el orden de la lista es el orden de pintado y los ejes
-    // tienen que verse por encima de ella.
-    return rejilla + ejes(estilo, medir)
-}
-
-/** La recta numérica, con sus marcas y sus números. */
-private fun rectaNumerica(estilo: ItemStyle, medir: MedidaDeTexto): List<Element> {
-    val doble = estilo.copy(startArrowhead = Arrowhead.ARROW, endArrowhead = Arrowhead.ARROW)
-    val marcas = (-2..2).flatMap { n ->
-        val x = n * PASO_DE_RECTA
-        listOf(
-            raya(Pt(x, -6.0), Pt(x, 6.0), estilo),
-            rotulo(n.toString(), Pt(x, 22.0), estilo, medir, centrado = true)
-        )
-    }
-    return listOf(flecha(Pt(-BRAZO, 0.0), Pt(BRAZO, 0.0), doble)) + marcas
-}
-
-/**
- * El triángulo rectángulo, **con el cuadradito del ángulo recto**.
- *
- * Sin esa marca es un triángulo cualquiera, y el enunciado deja de estar
- * dibujado: hay que decir aparte cuál es el ángulo recto.
- */
-private fun trianguloRectangulo(estilo: ItemStyle): List<Element> {
-    val a = Pt(0.0, 0.0)
-    val b = Pt(160.0, 0.0)
-    val c = Pt(0.0, -120.0)
-    return listOf(
-        camino(listOf(a, b, c, a), estilo),
-        camino(listOf(Pt(16.0, 0.0), Pt(16.0, -16.0), Pt(0.0, -16.0)), estilo)
-    )
-}
-
 /** La circunferencia con su radio marcado. */
-private fun circunferencia(estilo: ItemStyle, medir: MedidaDeTexto): List<Element> {
-    val r = 80.0
-    return listOf(
-        newElement(ElementType.ELLIPSE, -r, -r, estilo, width = r * 2, height = r * 2),
-        raya(Pt(0.0, 0.0), Pt(r, 0.0), estilo),
-        rotulo("r", Pt(r / 2, -22.0), estilo, medir, centrado = true)
-    )
-}
 
 /**
  * El plano cartesiano: **un instrumento, no un dibujo**.
@@ -239,6 +168,44 @@ fun planoDeFunciones(estilo: ItemStyle, lado: Double = UNIDAD_POR_DEFECTO * 8): 
         )
 }
 
+/**
+ * La recta numérica: **el plano en una dimensión**, y por eso instrumento.
+ *
+ * Nace con la misma unidad y los mismos pasos que el plano. [ancho] es lo que
+ * enseña; [alto] solo da sitio a las marcas y a las cifras de debajo. Al
+ * alargarla por un lado salen más números, y las puntas y las cifras se
+ * quedan como estaban: es lo que no hacía la recta dibujada. Ver [Plano].
+ */
+fun rectaDeFunciones(
+    estilo: ItemStyle,
+    ancho: Double = UNIDAD_POR_DEFECTO * 8,
+    alto: Double = ALTO_DE_LA_RECTA
+): Element {
+    return newElement(ElementType.RECTA, 0.0, 0.0, estilo, width = ancho, height = alto)
+        .copy(
+            roughness = Element.ROUGHNESS_ARCHITECT,
+            unidad = UNIDAD_POR_DEFECTO,
+            pasoDeNumeros = PASO_POR_DEFECTO,
+            pasoDeCuadros = PASO_POR_DEFECTO
+        )
+}
+
+/**
+ * El espacio de tres ejes, en la vista del cuaderno y con su unidad puesta.
+ * Se gira con el tirador de giro y se estira como el plano. Ver [Espacio].
+ */
+fun espacioDeFunciones(estilo: ItemStyle, lado: Double = UNIDAD_POR_DEFECTO * 8): Element {
+    return newElement(ElementType.ESPACIO, 0.0, 0.0, estilo, width = lado, height = lado)
+        .copy(
+            roughness = Element.ROUGHNESS_ARCHITECT,
+            unidad = UNIDAD_POR_DEFECTO,
+            pasoDeNumeros = PASO_POR_DEFECTO,
+            pasoDeCuadros = PASO_POR_DEFECTO,
+            azimut = 0.0,
+            elevacion = ELEVACION_POR_DEFECTO
+        )
+}
+
 /** Una tabla vacía, para rellenarla escribiendo encima. Ver [elementosDeTabla]. */
 private fun tablaEnBlanco(estilo: ItemStyle, medir: MedidaDeTexto): List<Element> =
     elementosDeTabla(
@@ -251,54 +218,5 @@ private fun tablaEnBlanco(estilo: ItemStyle, medir: MedidaDeTexto): List<Element
 
 // ---- Piezas ----
 
-private fun flecha(desde: Pt, hasta: Pt, estilo: ItemStyle): Element =
-    newElement(ElementType.ARROW, desde.x, desde.y, estilo).copy(
-        points = listOf(Pt(0.0, 0.0), Pt(hasta.x - desde.x, hasta.y - desde.y)),
-        width = kotlin.math.abs(hasta.x - desde.x),
-        height = kotlin.math.abs(hasta.y - desde.y)
-    )
-
-private fun raya(desde: Pt, hasta: Pt, estilo: ItemStyle): Element =
-    camino(listOf(desde, hasta), estilo)
-
-private fun camino(puntos: List<Pt>, estilo: ItemStyle): Element {
-    val origen = puntos.first()
-    val relativos = puntos.map { Pt(it.x - origen.x, it.y - origen.y) }
-    val caja = boundsOfPoints(relativos)
-    return newElement(ElementType.LINE, origen.x, origen.y, estilo).copy(
-        points = relativos, width = caja.width, height = caja.height
-    )
-}
-
-/**
- * Una letra suelta, colocada por su centro o por su esquina.
- *
- * Por el centro cuando hay que dejarla debajo de una marca —los números de la
- * recta— y por la esquina cuando lo que importa es de qué lado del eje cae.
- */
-private fun rotulo(
-    texto: String,
-    donde: Pt,
-    estilo: ItemStyle,
-    medir: MedidaDeTexto,
-    centrado: Boolean = false
-): Element {
-    val (ancho, alto) = medir(texto, estilo.fontSize)
-    val x = if (centrado) donde.x - ancho / 2 else donde.x
-    val y = if (centrado) donde.y - alto / 2 else donde.y - alto / 2
-    return newElement(ElementType.TEXT, x, y, estilo, width = ancho, height = alto)
-        .copy(text = texto)
-}
-
-/** Lo que miden los ejes de largo, en px de escena. */
-private const val BRAZO = 150.0
-
-/** El lado de un cuadro de la rejilla, y cuántos caben a cada lado del cero. */
-private const val CELDA = 25.0
-private const val CELDAS = 5
-
-/** Lo que separa dos números de la recta numérica. */
-private const val PASO_DE_RECTA = 55.0
-
-/** El gris de la rejilla: se tiene que ver sin competir con lo que se dibuje. */
-private const val GRIS_DE_REJILLA = "#ced4da"
+/** Lo que mide de alto la recta de funciones: sitio para las marcas y las cifras. */
+const val ALTO_DE_LA_RECTA = 56.0

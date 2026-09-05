@@ -64,8 +64,16 @@ class DrawController(initial: Scene = Scene()) {
         // —a lo mejor media hora después y en la otra punta del dibujo— habría
         // levantado aquella. Se fija con lo que tenga, que es lo que se ve.
         if (tool == Tool.SOLIDO && next != Tool.SOLIDO) fijarSolido()
+        // Un gesto de dos tiempos no sobrevive a cambiar de herramienta: dejarlo a medias
+        // haría que el siguiente toque, tres minutos después, torneara algo por sorpresa.
+        if (next != Tool.REVOLUCION) figuraATornear = null
         tool = next
-        if (next != Tool.SELECTION && next != Tool.LASSO) selectedIds = emptySet()
+        // La bolita también conserva lo elegido: es una forma de seleccionar más, y su
+        // gesto es justo ir sumando — cambiar a ella para seguir cogiendo y perder lo que se
+        // llevaba sería lo contrario de para lo que está.
+        if (next != Tool.SELECTION && next != Tool.LASSO && next != Tool.BOLITA) {
+            selectedIds = emptySet()
+        }
     }
 
     /**
@@ -172,7 +180,20 @@ class DrawController(initial: Scene = Scene()) {
     private fun margenDelDedo(zoom: Double): Double =
         DEFAULT_HIT_THRESHOLD * (if (modoDedo) ENSANCHE_DEL_DEDO else 1.0) / zoom
 
-    fun pointerDown(pRaw: Pt, pressure: Double = 1.0, zoom: Double = 1.0) {
+    fun pointerDown(
+        pRaw: Pt,
+        pressure: Double = 1.0,
+        zoom: Double = 1.0,
+        /**
+         * La hora que trae el evento, **no la del reloj de la pared**.
+         *
+         * Con la de la pared, la resta entre esta y la del latido son las horas que lleva
+         * encendido el aparato: el gesto se cumplía en el primer fotograma y cualquier
+         * raya salía recta nada más empezarla. Ver [latido].
+         */
+        cuando: Long = 0L
+    ) {
+        zoomDelTrazo = zoom
         sceneAtGestureStart = scene.elements
         val threshold = margenDelDedo(zoom)
         // Solo se engancha al DIBUJAR. Al seleccionar, mover o encuadrar el
@@ -180,19 +201,8 @@ class DrawController(initial: Scene = Scene()) {
         // **Una sola pregunta al motor del imán.** Ver [Iman]: qué engancha con
         // qué deja de decidirse aquí, herramienta por herramienta, y pasa a
         // salir de la faena que se esté haciendo.
-        val faena = when {
-            tool == Tool.PUNTO -> Iman.Faena.SITIO_NOTABLE
-            tool.isFreehand -> Iman.Faena.A_MANO
-            tool.isShape || tool.isLinear -> Iman.Faena.TRAZANDO
-            else -> null
-        }
-        val p = if (faena != null) {
-            anclajeActivo = Iman.sitio(scene, pRaw, zoom, faena, enganche)
-            anclajeActivo?.punto ?: pRaw
-        } else {
-            anclajeActivo = null
-            pRaw
-        }
+        // Una sola tabla de faenas y una sola puerta al imán. Ver [faenaDeAhora] e [imantado].
+        val p = imantado(pRaw, faenaDeAhora(hayAlgoEnLaMano = true), zoom)
 
         when (tool) {
             // **El punto de partida se guarda en coordenadas de PANTALLA.** En
@@ -245,12 +255,87 @@ class DrawController(initial: Scene = Scene()) {
             }
 
             Tool.RECTANGLE, Tool.DIAMOND, Tool.MOSAIC,
-            Tool.FRAME, Tool.ESCALA_GRAFICA -> beginCreate(elementTypeOf(tool), p)
+            Tool.FRAME, Tool.ESCALA_GRAFICA,
+            // El cronograma se pone como cualquier lámina: se arrastra su caja y dentro
+            // aparece la rejilla ya repartida, con sus tres filas. Ver [Cronograma].
+            Tool.CRONOGRAMA -> beginCreate(elementTypeOf(tool), p)
+
+            // La bolita: un barrido, y lo que toque entra o sale. No crea nada, así que no
+            // hay elemento en curso ni nada que soltar al levantar.
+            Tool.BOLITA -> {
+                yaTocados = emptySet()
+                gesture = Gesture.PasandoLaBolita
+                pasarLaBolita(p, zoom)
+            }
 
             Tool.SOLIDO -> empezarSolido(p)
 
+            // **Se toca la figura y se sube.**
+            //
+            // El mismo gesto que la segunda fase de dibujar una caja: el dedo se apoya en
+            // lo que se quiere levantar y **arrastrando hacia arriba se le da altura**,
+            // viéndola crecer. Antes salía de un toque con una altura adivinada, y
+            // adivinar la altura de algo es justo lo que no se puede hacer por el otro.
+            //
+            // Un toque seco, sin arrastre, la deja en un cuadro de alto: es lo mismo que
+            // hace la herramienta de la caja, y evita que un dedo torpe deje una plancha.
+            Tool.EXTRUIR -> {
+                // Nace **sin altura**: mientras no se suba, lo que se ve es su huella en
+                // el suelo, que es la señal de que falta la segunda mitad del gesto.
+                getElementAtPosition(editables, p, threshold, scene.vista)
+                    ?.let { extruirTocando(it, p) }
+            }
+
+            // **El torno, en dos tiempos**: primero la figura, después el eje.
+            Tool.REVOLUCION -> {
+                val tocado = getElementAtPosition(editables, p, threshold, scene.vista)
+                val pendiente = figuraATornear?.let { scene.byId(it) }
+                when {
+                    tocado == null -> figuraATornear = null
+                    // Segundo tiempo: la raya que hace de eje. Se admite tocar la misma
+                    // figura otra vez para desdecirse sin cambiar de herramienta.
+                    pendiente != null && tocado.id != pendiente.id -> {
+                        // **El eje es la raya, se haya tocado primero o después.** Iba
+                        // por orden y tocando antes la raya salía al revés: la raya hacía
+                        // de figura y la figura de eje, y el cuerpo era cualquier cosa.
+                        val eje = if (tocado.isLinear) tocado
+                        else if (pendiente.isLinear) pendiente else tocado
+                        val figura = if (eje.id == tocado.id) pendiente else tocado
+                        val cuerpo = revolucionado(figura, eje, scene.vista)
+                        if (cuerpo != null) {
+                            val fuera = setOf(figura.id, eje.id)
+                            mutate { lista -> lista.filterNot { it.id in fuera } + cuerpo }
+                            selectedIds = setOf(cuerpo.id)
+                        }
+                        figuraATornear = null
+                    }
+                    pendiente != null -> figuraATornear = null
+                    else -> figuraATornear = tocado.id
+                }
+            }
+
             Tool.ARROW, Tool.LINE, Tool.MEASURE, Tool.SCALE ->
                 beginCreateLinear(elementTypeOf(tool), p)
+
+            // **La flecha libre**: nace como flecha —con su punta— pero se traza a pulso.
+            // Ver [Tool.FLECHA_LIBRE].
+            Tool.FLECHA_LIBRE -> {
+                val e = newElement(ElementType.ARROW, p.x, p.y, scene.style).copy(
+                    points = listOf(Pt(0.0, 0.0)),
+                    endArrowhead = Arrowhead.ARROW,
+                    // **Y lisa, no rugosa.** El trazado a mano alzada de las figuras dibuja
+                    // cada tramo dos veces y algo torcido, que es lo que le da el aire de
+                    // boceto a un rectángulo de cuatro tramos. Una flecha trazada a pulso
+                    // tiene **cientos** de tramos de un píxel, así que ese mismo adorno la
+                    // convierte en una maraña de rayas que además tiembla al moverla. Lo que
+                    // uno traza a pulso ya lleva su temblor: no hay que añadirle otro.
+                    roughness = Element.ROUGHNESS_ARCHITECT,
+                    reference = modoReferencia
+                )
+                scene = scene.copy(elements = scene.elements + e)
+                gesture = Gesture.Creating(e.id)
+                olvidarElDedoParado()
+            }
 
             Tool.FREEDRAW, Tool.HIGHLIGHTER -> {
                 // El lápiz tiene su propia escala de grosores: la mancha se
@@ -272,6 +357,11 @@ class DrawController(initial: Scene = Scene()) {
                 }
                 scene = scene.copy(elements = scene.elements + e)
                 gesture = Gesture.Creating(e.id)
+                // El dedo acaba de posarse: desde aquí se cuenta lo que lleva quieto, que
+                // es lo que decide si esto acaba en recta o en compás. Ver [latido].
+                olvidarElDedoParado()
+                quietoEn = p
+                quietoDesde = cuando
             }
 
             // Un toque = un número. No se arrastra, igual que el texto.
@@ -597,7 +687,24 @@ class DrawController(initial: Scene = Scene()) {
         scene.visibleConReferencias.filter { it.id != e.id && !it.isFrame }
 
     /** El dedo se mueve. */
-    fun pointerMove(pRaw: Pt, pressure: Double = 1.0, zoom: Double = 1.0) {
+    fun pointerMove(
+        pRaw: Pt,
+        pressure: Double = 1.0,
+        zoom: Double = 1.0,
+        /** La hora del evento. Ver [pointerDown]. */
+        cuando: Long = 0L
+    ) {
+        zoomDelTrazo = zoom
+        // **Lo quieto que está el dedo se mide en pantalla.** A un aumento pequeño, un
+        // temblor de dos píxeles son metros de la escena: midiéndolo en unidades del
+        // dibujo, el gesto saldría a un aumento y no saldría a otro.
+        val anclado = quietoEn
+        if (anclado == null ||
+            kotlin.math.hypot(pRaw.x - anclado.x, pRaw.y - anclado.y) * zoom > TEMBLOR_DEL_DEDO
+        ) {
+            quietoEn = pRaw
+            quietoDesde = cuando
+        }
         // **También al recolocar un punto de algo ya dibujado.** El imán servía
         // solo mientras se trazaba, y corregir después la punta de una flecha
         // para que cayera justo en una esquina había que hacerlo a pulso, que
@@ -608,20 +715,12 @@ class DrawController(initial: Scene = Scene()) {
         // Al recolocar un punto ya dibujado se afina, no se traza: mandan los
         // ajustes de siempre aunque la herramienta puesta sea el lápiz, porque
         // lo que se está haciendo es corregir una punta.
-        val faena = when {
-            enCurso == null -> null
-            moviendoPunto -> Iman.Faena.AFINANDO
-            tool.isFreehand -> Iman.Faena.A_MANO
-            tool.isShape || tool.isLinear -> Iman.Faena.TRAZANDO
-            else -> null
-        }
-        val p = if (faena != null) {
-            anclajeActivo = Iman.sitio(scene, pRaw, zoom, faena, enganche, excluir = enCurso)
-            anclajeActivo?.punto ?: pRaw
-        } else {
-            anclajeActivo = null
-            pRaw
-        }
+        val p = imantado(
+            pRaw,
+            faenaDeAhora(hayAlgoEnLaMano = enCurso != null, moviendoPunto = moviendoPunto),
+            zoom,
+            excluir = enCurso
+        )
 
         when (val g = gesture) {
             is Gesture.None -> return
@@ -674,6 +773,8 @@ class DrawController(initial: Scene = Scene()) {
                 )
             }
 
+            is Gesture.PasandoLaBolita -> pasarLaBolita(p, zoom)
+
             is Gesture.Lassoing -> {
                 g.points += p
                 lassoPath = g.points.toList()
@@ -685,7 +786,7 @@ class DrawController(initial: Scene = Scene()) {
                     maxOf(g.origin.x, p.x), maxOf(g.origin.y, p.y)
                 )
                 selectionBox = b
-                selectedIds = getElementsWithinSelection(editables, b, g.mode)
+                selectedIds = getElementsWithinSelection(editables, b, g.mode, scene.vista)
                     .map { it.id }.toSet()
             }
 
@@ -710,6 +811,66 @@ class DrawController(initial: Scene = Scene()) {
                 val e = scene.byId(g.elementId) ?: return
                 val subido = g.alturaDePartida + (g.inicio.y - p.y)
                 replace(e.copy(altura = alturaImantada(subido)))
+            }
+
+            // La caja ya hecha, por sus tiradores. El del alto lee **solo la `y`**, por
+            // lo mismo que la segunda fase de dibujarla; los del suelo llevan el dedo al
+            // suelo y lo imantan, como la primera.
+            is Gesture.MoldeandoSolido -> {
+                val e = scene.byId(g.elementId) ?: return
+                when (g.tirador) {
+                    // Los dos de la arista de atrás leen **solo la `y`**, por lo mismo
+                    // que la segunda fase de dibujarla: en isométrica un arrastre en
+                    // diagonal vale para subir y para alejarse, y la `x` es la que
+                    // introduce esa ambigüedad. El de arriba pone la cima —lo que mide
+                    // sale de restarle la cota—, y el de abajo, dónde apoya.
+                    HandleType.SOLIDO_ALTURA -> {
+                        val cima = alturaImantada((e.y - p.y) / PASO_DEL_SOLIDO)
+                        replace(e.copy(altura = kotlin.math.max(cima - e.cota, 0.0)))
+                    }
+
+                    HandleType.SOLIDO_COTA ->
+                        replace(e.copy(cota = alturaImantada((e.y - p.y) / PASO_DEL_SOLIDO)))
+
+                    HandleType.SOLIDO_GIRO ->
+                        replace(e.copy(giroEnPlanta = giroPedido(e, p, scene.vista)))
+
+                    // Y los del suelo llevan el dedo al suelo y lo imantan, como la
+                    // primera fase. El tirador va a la altura a la que la caja apoya, así
+                    // que se le descuenta esa subida antes de desproyectar: si no, una
+                    // caja apoyada en alto crecería sola al agarrarla.
+                    else -> {
+                        val enElSuelo = Pt(p.x, p.y + e.cota * PASO_DEL_SOLIDO)
+                        val h = huellaMoldeada(
+                            Pt(e.x, e.y), enElSuelo, e.width, e.height, g.tirador,
+                            scene.vista, giro = e.giroEnPlanta
+                        )
+                        replace(e.copy(x = h.x, y = h.y, width = h.ancho, height = h.fondo))
+                    }
+                }
+            }
+
+            is Gesture.BarraDelPlan -> {
+                val e = scene.byId(g.elementId) ?: return
+                val nueva = tareaArrastrada(e, g.indice, g.mano, p, g.agarre) ?: return
+                replace(
+                    e.copy(
+                        tareas = e.tareas.mapIndexed { i, t -> if (i == g.indice) nueva else t }
+                    ).touched()
+                )
+            }
+
+            is Gesture.GirandoVolumen -> {
+                val ahora = anguloEnElAnillo(g.centro, g.eje, p, scene.vista)
+                if (ahora != null) {
+                    val bruto = ahora - g.anguloInicial
+                    // A quince grados, como el giro en planta por su tirador: es lo que
+                    // hace que dos piezas torcidas queden torcidas lo mismo.
+                    val delta = Math.round(bruto / ESCALON_DEL_GIRO) * ESCALON_DEL_GIRO
+                    applyToOriginals(g.originals) { originales ->
+                        originales.map { giradoEnElEspacio(it, g.centro, delta, g.eje, scene.vista) }
+                    }
+                }
             }
 
             is Gesture.Arcoing -> {
@@ -832,6 +993,28 @@ class DrawController(initial: Scene = Scene()) {
                     if (scene.alfileres.isEmpty()) dragElements(it, dx, dy)
                     else arrastrarConAlfileres(it, scene.alfileres, g.startPointer, p)
                 }
+
+                // **Una caja arrimada a otra se apoya en ella.**
+                //
+                // Es el imán que hace que apilar sea un gesto y no puntería: en
+                // isométrica, subir un volumen y alejarlo se ven exactamente igual, así
+                // que dejar una caja *encima* de otra a ojo es imposible de acertar y de
+                // comprobar. Enganchando a los vértices de las vecinas, arrimarla la deja
+                // apoyada y con la cota puesta. Ver [imanEntreSolidos].
+                val unSolido = g.originals.singleOrNull()?.takeIf { it.isSolido }
+                if (unSolido != null) {
+                    val movida = scene.byId(unSolido.id)
+                    val apoyo = movida?.let {
+                        imanEntreSolidos(
+                            it, editables.filter { o -> o.id != it.id },
+                            scene.vista, UMBRAL_GUIA / zoom.coerceAtLeast(0.0001)
+                        )
+                    }
+                    apoyoActivo = apoyo?.punto
+                    if (movida != null && apoyo != null) {
+                        replace(movida.copy(x = apoyo.x, y = apoyo.y, cota = apoyo.cota))
+                    }
+                }
                 scene = scene.copy(
                     alfileres = refrescarAlfileres(scene.elements, scene.alfileres)
                 )
@@ -862,7 +1045,8 @@ class DrawController(initial: Scene = Scene()) {
                         // decide el tirador. Ver [resizeMultipleElements].
                         resizeMultipleElements(
                             originals, g.handle, p,
-                            if (keepAspectRatio) true else null
+                            if (keepAspectRatio) true else null,
+                            scene.vista
                         )
                     }
                 }
@@ -904,6 +1088,12 @@ class DrawController(initial: Scene = Scene()) {
     /** El dedo se levanta: se cierra el gesto y se anota en el historial. */
     fun pointerUp(p: Pt, zoom: Double = 1.0) {
         anclajeActivo = null
+        apoyoActivo = null
+        olvidarElDedoParado()
+        // La bolita se va con el dedo, pero **lo elegido se queda**: es lo que se acaba de
+        // seleccionar, y perderlo al levantar sería lo contrario de lo que se pretendía.
+        bolita = null
+        yaTocados = emptySet()
         when (val g = gesture) {
             is Gesture.Tocando -> terminarToque(g.punto, p, zoom)
 
@@ -1021,6 +1211,11 @@ class DrawController(initial: Scene = Scene()) {
             solidoPendiente = null
         }
         gesture = Gesture.None
+        // **Y el gesto del dedo parado también se va.** Sin esto, cancelar —que es lo que
+        // hace el segundo dedo al ir a encuadrar— dejaba puesto el enderezado hasta el
+        // siguiente lápiz: enderezar una raya, apoyar el segundo dedo y dibujar después un
+        // rectángulo lo sacaba convertido en óvalo.
+        olvidarElDedoParado()
         selectionBox = null
         lassoPath = emptyList()
         bindingHighlight = null
@@ -1031,6 +1226,284 @@ class DrawController(initial: Scene = Scene()) {
     // ---------------------------------------------------------------------
 
     /** Conservar proporción al redimensionar y trazar recto al dibujar. */
+    // ---------------------------------------------------------------------
+    // El mando de lo elegido
+    // ---------------------------------------------------------------------
+
+    /**
+     * Cómo estaba la escena cuando se agarró el mando.
+     *
+     * **Todo el arrastre entra en un solo deshacer.** Anotando cada pellizco del dedo, un
+     * gesto de dos segundos deja doscientas entradas en el historial y deshacer una vez no
+     * deshace nada: hay que darle doscientas para volver a donde se estaba. Se guarda el
+     * antes al agarrar y se anota una sola vez al soltar.
+     */
+    private var antesDeManejar: List<Element>? = null
+
+    /** Se agarra el mando: de aquí al soltar, todo es un solo cambio. */
+    fun empezarAManejar() {
+        if (antesDeManejar == null) antesDeManejar = scene.elements
+    }
+
+    /** Se suelta el mando: lo que haya pasado entre medias se anota de una vez. */
+    fun terminarDeManejar() {
+        val antes = antesDeManejar ?: return
+        antesDeManejar = null
+        if (antes !== scene.elements) anotar(antes)
+    }
+
+    /** Lo elegido, cambiado sin anotar: lo anota [terminarDeManejar] al soltar. */
+    private fun manejar(transformar: (List<Element>) -> List<Element>) {
+        val elegidos = scene.elements.filter { it.id in selectedIds && !it.locked }
+        if (elegidos.isEmpty()) return
+        val cambiados = transformar(elegidos).associateBy { it.id }
+        scene = scene.copy(
+            elements = updateBoundElements(
+                scene.elements.map { cambiados[it.id] ?: it }, selectedIds
+            )
+        )
+    }
+
+    /**
+     * Mueve lo elegido lo que se ha corrido el dedo. **En píxeles de pantalla.**
+     *
+     * Lo que se mueve el dedo es lo que se mueve el dibujo, y por eso hay que dividir por el
+     * aumento: un mando que moviera unidades de la escena se arrastraría un palmo estando de
+     * cerca y no se movería estando de lejos.
+     */
+    fun moverLaSeleccion(dx: Double, dy: Double, zoom: Double) {
+        val z = zoom.coerceAtLeast(0.0001)
+        manejar { dragElements(it, dx / z, dy / z) }
+    }
+
+    /** Lo mismo, pero **por un solo eje**: es lo que promete una flecha. */
+    fun moverLaSeleccionPorElEje(enHorizontal: Boolean, cuanto: Double, zoom: Double) {
+        if (enHorizontal) moverLaSeleccion(cuanto, 0.0, zoom)
+        else moverLaSeleccion(0.0, cuanto, zoom)
+    }
+
+    /** Gira lo elegido un poco más, alrededor de su centro. */
+    fun girarLaSeleccion(cuanto: Double) =
+        manejar { giradasAlrededorDelCentro(it, cuanto) }
+
+    /** Agranda o encoge lo elegido, sin cambiarle la proporción. */
+    fun escalarLaSeleccion(razon: Double) =
+        manejar { escaladasAlrededorDelCentro(it, razon, razon) }
+
+    /** Estira lo elegido, **cada lado por su cuenta**. */
+    fun deformarLaSeleccion(aLoAncho: Double, aLoAlto: Double) =
+        manejar { escaladasAlrededorDelCentro(it, aLoAncho, aLoAlto) }
+
+    /** Una copia de lo elegido, y la copia queda elegida. */
+    fun copiarLaSeleccion() = duplicateSelection()
+
+    // ---------------------------------------------------------------------
+    // La bolita de seleccionar
+    // ---------------------------------------------------------------------
+
+    /**
+     * Dónde está la bolita mientras se pasa por el dibujo, o nada si no hay nadie tocando.
+     *
+     * Lo lee el lienzo para pintarla: sin verla, uno no sabe cuánto coge el gesto y acaba
+     * seleccionando de más. Ver [Tool.BOLITA].
+     */
+    var bolita: Pt? = null
+        private set
+
+    /**
+     * Por lo que ya ha pasado la bolita **en este barrido**.
+     *
+     * Sin esto, un dedo que se para encima de una figura la enciende y la apaga sesenta
+     * veces por segundo: lo que se ve es una figura parpadeando y una selección que depende
+     * de en qué fotograma se levantó el dedo. Cada cosa se decide **una vez por barrido**, y
+     * la lista se vacía al levantar.
+     */
+    private var yaTocados: Set<String> = emptySet()
+
+    /**
+     * La bolita, pasada por [p]: **enciende y apaga lo que toca**.
+     *
+     * El radio va en píxeles de pantalla y se pasa a unidades de la escena, porque es lo
+     * que uno ve: en unidades del dibujo, la misma bolita cogería media escena estando
+     * lejos y no cogería nada estando cerca.
+     */
+    private fun pasarLaBolita(p: Pt, zoom: Double) {
+        bolita = p
+        val radio = RADIO_DE_LA_BOLITA / zoom.coerceAtLeast(0.0001)
+        var nueva = selectedIds
+        for (e in getElementsAtPosition(editables, p, radio, scene.vista)) {
+            if (e.id in yaTocados) continue
+            // **Tocar uno de un grupo los coge a todos.** Para eso está el grupo: si hubiera
+            // que pasar la bolita por las catorce piezas de un despiece cada vez, agruparlas
+            // no habría servido de nada.
+            val suyos = getElementsInGroupOf(editables, e).ifEmpty { listOf(e) }
+            val ids = suyos.mapTo(HashSet()) { it.id }
+            yaTocados = yaTocados + ids
+            nueva = if (e.id in nueva) nueva - ids else nueva + ids
+        }
+        if (nueva != selectedIds) selectedIds = nueva
+    }
+
+    // ---------------------------------------------------------------------
+    // El dedo parado: la recta y el compás
+    // ---------------------------------------------------------------------
+
+    /**
+     * **Se para y sale recta; se clava y sale redonda.**
+     *
+     * Los dos gestos que tiene el croquis en el espacio, aquí también. Son los que hacen
+     * que un lienzo se pueda usar a pulso: a mano alzada, sobre un cristal y con el brazo
+     * en el aire, una raya recta no sale ni queriendo y un círculo sale patata. La salida
+     * de siempre —un interruptor de «figuras perfectas»— obliga a decidir **antes** de
+     * empezar, y uno se entera de que quería una raya justo cuando la está trazando.
+     *
+     * Parándose se decide **durante**: se traza, se ve que iba a ser una raya, y se para.
+     * A partir de ahí el trazo es la punta y el dedo, y sigue siéndolo hasta levantarlo:
+     * se puede estirar hasta donde se quiera sin volver a empezar.
+     *
+     * Y parándose **sin haber ido a ningún sitio** no hay nada que enderezar: ahí está el
+     * centro. Es el compás de toda la vida —se clava la punta y se abre—, y evita lo que
+     * no funciona nunca, que es reconocer un lazo dibujado a pulso: dibujar la vuelta
+     * entera es justo lo que uno no quiere hacer, y el reconocimiento acierta unas veces
+     * sí y otras no, así que el gesto no se puede aprender.
+     *
+     * Ver [latido], que es quien los dispara.
+     */
+    var enderezandoSolo: Boolean = false
+        private set
+
+    /** Si el trazo en curso se ha convertido en compás. Ver [enderezandoSolo]. */
+    var redondeandoSolo: Boolean = false
+        private set
+
+    /** Dónde se clavó el compás, en coordenadas de la escena. */
+    private var centroDelCompas: Pt? = null
+
+    /** Dónde arrancó el trazo que se está enderezando. */
+    private var arranqueDelTrazo: Pt? = null
+
+    /** Desde cuándo el dedo no se mueve, y desde dónde —en pantalla—. */
+    private var quietoDesde = 0L
+    private var quietoEn: Pt? = null
+
+    /** Se olvida todo lo del gesto: al bajar el dedo y al levantarlo. */
+    private fun olvidarElDedoParado() {
+        enderezandoSolo = false
+        redondeandoSolo = false
+        centroDelCompas = null
+        arranqueDelTrazo = null
+        quietoEn = null
+    }
+
+    /**
+     * **Le llega la hora al dedo apoyado**, fotograma a fotograma mientras dura el trazo.
+     *
+     * No se mide dentro del movimiento del dedo porque un dedo quieto de verdad **no manda
+     * movimientos**: el gesto no salía justo cuando se hacía bien. Devuelve si algo ha
+     * cambiado, para que el lienzo repinte solo entonces y no sesenta veces por segundo
+     * porque sí. Ver [DrawCanvas].
+     */
+    fun latido(cuando: Long): Boolean {
+        if (enderezandoSolo || redondeandoSolo) return false
+        val g = gesture as? Gesture.Creating ?: return false
+        val e = scene.byId(g.elementId)?.takeIf { it.isFreeDraw } ?: return false
+        if (quietoEn == null || cuando - quietoDesde < ESPERA_PARA_LA_RECTA) return false
+        return pararseYQueSalgaLimpio(e)
+    }
+
+    /**
+     * El dedo se ha parado: lo trazado se pone limpio. Recta o compás, según lo que lleve.
+     *
+     * Se hace **ya**, sin esperar a que el dedo se vuelva a mover: si no, la raya seguiría
+     * torcida a la vista mientras el dedo aguanta, que es cuando se está mirando.
+     */
+    private fun pararseYQueSalgaLimpio(e: Element): Boolean {
+        val puntos = absolutePoints(e)
+        val arranque = puntos.firstOrNull() ?: return false
+        val dedo = puntos.lastOrNull() ?: return false
+        val z = zoomDelTrazo.coerceAtLeast(0.0001)
+        // **Parado sin haber ido a ningún sitio: eso es un compás.** Se mide en pantalla y
+        // no en unidades de la escena, porque lo que decide si uno ha querido dibujar o ha
+        // querido clavar la punta es cuánto se le ha movido el dedo — a cualquier aumento.
+        val esUnPunto = puntos.all {
+            kotlin.math.hypot(it.x - arranque.x, it.y - arranque.y) * z <= LO_QUE_ES_UN_TOQUE
+        }
+        // **Y al saltar el gesto, las dos puntas buscan sitio.**
+        //
+        // Lo trazado nació a mano alzada, así que sus puntos solo se habían pegado al canto de
+        // las guías. Desde este instante ya no es un trazo de lápiz: el arranque de la raya y
+        // el centro del compás son los de una figura y se enganchan como los de una figura.
+        // Sin esto, la punta sí se imantaba —ver [faenaDeAhora]— pero el origen se quedaba a
+        // dos píxeles del vértice del que uno creía estar saliendo. Es lo mismo que hace el
+        // croquis en el espacio al enderezar.
+        val enSuSitio = imantado(arranque, Iman.Faena.TRAZANDO, excluir = e.id)
+        val puntaEnSuSitio = imantado(dedo, Iman.Faena.TRAZANDO, excluir = e.id)
+        arranqueDelTrazo = enSuSitio
+        if (esUnPunto) {
+            centroDelCompas = enSuSitio
+            redondeandoSolo = true
+            replace(comoUnOvalo(e, enSuSitio, puntaEnSuSitio))
+        } else {
+            enderezandoSolo = true
+            replace(comoUnaRaya(e, enSuSitio, puntaEnSuSitio))
+        }
+        return true
+    }
+
+    /**
+     * **Y lo que sale es una raya de verdad, no un trazo a mano con forma de raya.**
+     *
+     * Salía un elemento de lápiz con dos puntos, y eso se parece a una raya sin serlo: no
+     * admite el estilo de línea —a trazos, de puntos—, no se puede agarrar por sus dos
+     * extremos para recolocarla, no engancha una flecha, se pinta con la mancha del lápiz
+     * en vez de con el trazo de una figura, y **sale de otro grosor**: el lápiz mide en su
+     * propia escala, la mitad que las figuras (ver [ItemStyle.freedrawWidthFor]). Es decir,
+     * la raya del gesto y la de la herramienta de línea eran dos cosas distintas con la
+     * misma pinta.
+     *
+     * Ahora es **exactamente** lo que deja la herramienta de línea, y por eso se le pone
+     * también su grosor: el del estilo, no el del lápiz.
+     */
+    private fun comoUnaRaya(e: Element, arranque: Pt, dedo: Pt): Element =
+        e.copy(
+            type = ElementType.LINE,
+            pressures = null,
+            strokeWidth = scene.style.strokeWidth,
+            roundness = null
+        ).conPuntosAbsolutos(listOf(arranque, dedo))
+
+    /**
+     * **Y la rueda es un óvalo de verdad**, no un polígono de cuarenta y ocho lados.
+     *
+     * Por lo mismo que la raya: un polígono se ve redondo y no lo es. No se puede rellenar
+     * como un óvalo, no se le puede cambiar la proporción tirando de su caja, sale de la
+     * mitad de gordo que el de la herramienta y en cuanto se amplía se le ven los lados.
+     * Aquí sale la misma figura que deja la herramienta de círculo: clavada en su centro
+     * —que es donde se clavó la punta del compás— y abierta hasta donde va el dedo.
+     */
+    private fun comoUnOvalo(e: Element, centro: Pt, dedo: Pt): Element {
+        val radio = kotlin.math.hypot(dedo.x - centro.x, dedo.y - centro.y)
+        if (radio < 1e-9) return e
+        return e.copy(
+            type = ElementType.ELLIPSE,
+            points = null,
+            pressures = null,
+            x = centro.x - radio,
+            y = centro.y - radio,
+            width = radio * 2,
+            height = radio * 2,
+            strokeWidth = scene.style.strokeWidth,
+            // Lo que se rellena y con qué trama lo dice el estilo, como en cualquier
+            // figura: un trazo de lápiz no llevaba fondo porque no puede tenerlo.
+            backgroundColor = scene.style.backgroundColor,
+            fillStyle = scene.style.fillStyle,
+            roundness = null
+        )
+    }
+
+    /** El aumento del último toque, para medir en pantalla lo que llega en escena. */
+    private var zoomDelTrazo = 1.0
+
     var keepAspectRatio: Boolean = false
 
     /**
@@ -1058,6 +1531,80 @@ class DrawController(initial: Scene = Scene()) {
 
     /** El punto al que se está enganchando ahora, para que la vista lo señale. */
     var anclajeActivo: Anclaje? = null
+
+    /**
+     * **Qué faena es esta, decidido en un solo sitio.**
+     *
+     * Estaba escrita dos veces —una al bajar el dedo y otra al moverlo— y las dos listas se
+     * separaron solas, que es lo que hacen siempre dos copias de una decisión: la de mover no
+     * conocía el punto etiquetado, y **ninguna de las dos conocía el atajo del dedo parado**.
+     * Eso se notaba: se trazaba con el lápiz, se mantenía pulsado, salía la recta… y esa recta
+     * seguía imantando como un garabato —solo al canto de las guías— en vez de como la raya
+     * que ya es. Ver [Iman.Faena].
+     */
+    private fun faenaDeAhora(
+        /** Si hay algo en la mano a lo que aplicarle el imán. */
+        hayAlgoEnLaMano: Boolean,
+        /** Si lo agarrado es un punto de algo ya dibujado y no una figura naciendo. */
+        moviendoPunto: Boolean = false
+    ): Iman.Faena? = when {
+        !hayAlgoEnLaMano -> null
+
+        // **El atajo imanta como lo que ha salido, no como lo que se estaba haciendo.**
+        // Desde que el gesto salta, lo que hay ya no es un trazo de lápiz sino una raya o un
+        // óvalo de verdad —ver [comoUnaRaya] y [comoUnOvalo]—, y una raya se traza casi
+        // siempre para que acabe donde acaba otra cosa. El motivo por el que el lápiz engancha
+        // poco tampoco vale aquí: lo que rompe un garabato es saltar a un vértice **en mitad
+        // del recorrido**, y en la raya del gesto no hay recorrido, hay dos puntos. Es lo que
+        // el croquis en el espacio hace desde el primer día.
+        enderezandoSolo || redondeandoSolo -> Iman.Faena.TRAZANDO
+
+        moviendoPunto -> Iman.Faena.AFINANDO
+        tool == Tool.PUNTO -> Iman.Faena.SITIO_NOTABLE
+        tool.isFreehand -> Iman.Faena.A_MANO
+        tool.isShape || tool.isLinear -> Iman.Faena.TRAZANDO
+        else -> null
+    }
+
+    /**
+     * **La única puerta del imán dentro del controlador.**
+     *
+     * Deja apuntado a qué se ha enganchado —[anclajeActivo], que es lo que la vista señala— y
+     * devuelve el punto crudo si no había nada cerca: es lo que hace un imán, tirar cuando
+     * estás cerca y no atar cuando no lo estás.
+     */
+    private fun imantado(
+        p: Pt,
+        faena: Iman.Faena?,
+        zoom: Double = zoomDelTrazo,
+        excluir: String? = null
+    ): Pt {
+        if (faena == null) {
+            anclajeActivo = null
+            return p
+        }
+        anclajeActivo = Iman.sitio(scene, p, zoom, faena, enganche, excluir)
+        return anclajeActivo?.punto ?: p
+    }
+
+    /**
+     * La figura que espera eje, con el torno en la mano.
+     *
+     * Es la mitad de un gesto de dos tiempos: se ha dicho **qué** se tornea y falta decir
+     * **alrededor de qué**. Se señala en pantalla mientras espera, porque un gesto a
+     * medias sin marca es una aplicación que no responde. Ver [Tool.REVOLUCION].
+     */
+    var figuraATornear: String? = null
+        private set
+
+    /**
+     * El vértice de otra caja al que se está apoyando la que se mueve, para señalarlo.
+     *
+     * Va aparte de [anclajeActivo] porque no es lo mismo: aquel es el imán de la
+     * geometría plana —cruces, medios, vértices de figuras— y este es el de los volúmenes,
+     * que engancha en tres dimensiones y además cambia la cota. Ver [imanEntreSolidos].
+     */
+    var apoyoActivo: Pt? = null
         private set
 
     /**
@@ -1466,6 +2013,21 @@ class DrawController(initial: Scene = Scene()) {
     private fun updateCreating(id: String, p: Pt, pressure: Double) {
         val e = scene.byId(id) ?: return
         val updated = when {
+            // **Clavado el compás, el dedo abre la rueda**; enderezado, el trazo es la
+            // punta y el dedo. En los dos casos se **sustituye** lo trazado en vez de
+            // acumular: añadiendo puntos y limpiando solo al soltar, el rastro torcido se
+            // queda a la vista y la figura buena solo aparece al final, que es tarde.
+            // Y sin mirar de qué tipo es: desde que el gesto salta, lo que hay ya no es un
+            // trazo de lápiz sino un óvalo o una raya. Ver [comoUnOvalo] y [comoUnaRaya].
+            // La flecha libre no se endereza ni se redondea sola: **es libre**, y lo que se
+            // traza a pulso para rodear algo no puede convertirse en una recta al pararse
+            // la mano. Va antes que los dos gestos, que es lo que los desactiva.
+            tool == Tool.FLECHA_LIBRE -> e.withPoint(p)
+
+            redondeandoSolo -> centroDelCompas?.let { comoUnOvalo(e, it, p) } ?: e
+
+            enderezandoSolo -> arranqueDelTrazo?.let { comoUnaRaya(e, it, p) } ?: e
+
             e.isFreeDraw -> e.withPoint(p, pressure)
 
             e.isLinear -> {
@@ -1579,6 +2141,15 @@ class DrawController(initial: Scene = Scene()) {
      * Una forma de tamaño cero es un toque, no un dibujo: se descarta en vez de
      * dejar un elemento invisible que luego estorba al picar.
      */
+    /** Lo que recorre una polilínea de punta a punta, pasando por todo. */
+    private fun loQueRecorre(pts: List<Pt>): Double {
+        var largo = 0.0
+        for (i in 1 until pts.size) {
+            largo += kotlin.math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+        }
+        return largo
+    }
+
     private fun finishCreating(id: String, zoom: Double) {
         val e = scene.byId(id) ?: return
 
@@ -1587,10 +2158,15 @@ class DrawController(initial: Scene = Scene()) {
         // por no haber arrastrado lo suficiente parece que la herramienta falla.
         val tooSmall = !e.isFreeDraw && !e.isLinear && e.type != ElementType.LUPA &&
             e.width < MIN_CREATED_SIZE && e.height < MIN_CREATED_SIZE
+        // **Lo que mide una raya es lo que recorre, no lo que separa sus puntas.**
+        //
+        // Con la distancia de la primera punta a la última, una flecha libre que rodea algo
+        // y vuelve a apuntarlo **se borraba al soltar**: sus dos puntas acaban juntas, así
+        // que la cuenta decía que no tenía tamaño. Con dos puntos —una raya o una flecha de
+        // las de siempre— las dos cuentas dan lo mismo, así que esto no cambia nada de lo de
+        // antes. Ver [Tool.FLECHA_LIBRE].
         val degenerate = e.isLinear && absolutePoints(e).let { pts ->
-            pts.size < 2 ||
-                kotlin.math.hypot(pts.last().x - pts.first().x, pts.last().y - pts.first().y) <
-                MIN_CREATED_SIZE
+            pts.size < 2 || loQueRecorre(pts) < MIN_CREATED_SIZE
         }
         if (tooSmall || degenerate) {
             scene = scene.copy(elements = scene.elements.filter { it.id != id })
@@ -1606,7 +2182,10 @@ class DrawController(initial: Scene = Scene()) {
         if (e.type == ElementType.LUPA) {
             finished = lupaNueva(finished).let { it.copy(foco = focoDe(it)) }
         }
-        if (e.type == ElementType.ARROW) {
+        // **Una flecha libre no se ata a nada.** Atar es de las flechas que unen dos cosas,
+        // y atarla reescribiría sus puntos como una recta entre los dos extremos: se perdería
+        // justo lo que se acaba de trazar a pulso. Ver [updateBoundPoints].
+        if (e.type == ElementType.ARROW && absolutePoints(e).size <= 2) {
             val pts = absolutePoints(e)
             val others = scene.visible.filter { it.id != id }
 
@@ -1731,7 +2310,8 @@ class DrawController(initial: Scene = Scene()) {
         //    la forma y si perdiera, redimensionar sería imposible.
         if (selected.isNotEmpty()) {
             val handles = getSelectionTransformHandles(
-                selected, zoom, alfileres = scene.alfileres.map { it.punto }
+                selected, zoom, vista = scene.vista,
+                alfileres = scene.alfileres.map { it.punto }
             )
             val center = if (selected.size == 1) {
                 getElementAbsoluteCoords(selected[0]).let { Pt(it.cx, it.cy) }
@@ -1757,6 +2337,12 @@ class DrawController(initial: Scene = Scene()) {
 
                     // Un punto se mueve solo; la caja de redimensionar
                     // escalaría el recorrido entero.
+                    // La caja no se estira por un rectangulo: cada tirador suyo cambia
+                    // una cosa. Ver [HandleType.SOLIDO_HUELLA].
+                    hit.type.esDeSolido -> Gesture.MoldeandoSolido(
+                        selected.first().id, hit.type
+                    )
+
                     hit.type.esPunto -> Gesture.MovingPoint(
                         selected.first().id,
                         hit.indice ?: 0
@@ -1765,6 +2351,42 @@ class DrawController(initial: Scene = Scene()) {
                     else -> Gesture.Resizing(hit.type, selected)
                 }
                 return
+            }
+        }
+
+        // 1.a ¿La barra de un cronograma? Va antes que mover la figura: dentro de un
+        //     plan, lo que uno quiere arrastrar casi siempre es una barra, no la lámina.
+        //     La lámina se sigue moviendo agarrándola por cualquier otro sitio.
+        val plan = selected.singleOrNull()
+            ?.takeIf { it.type == ElementType.CRONOGRAMA && !it.locked }
+        if (plan != null) {
+            val toque = toqueEnBarra(plan, p, UMBRAL_GUIA / zoom.coerceAtLeast(0.0001) / 2)
+            if (toque != null) {
+                val col = anchoDeColumna(plan)
+                val t = plan.tareas[toque.indice]
+                val agarre = if (col <= 0.0) 0.0
+                else (p.x - xDeLaEscala(plan)) / col - t.desde
+                gesture = Gesture.BarraDelPlan(plan.id, toque.indice, toque.mano, agarre)
+                return
+            }
+        }
+
+        // 1.b ¿Uno de los dos anillos? Van alrededor de lo seleccionado y por debajo de
+        //     los tiradores en prioridad: los tiradores son pequeños y concretos, y los
+        //     anillos ocupan media pantalla — al revés, no se podría agarrar ninguno.
+        val volumenes = selected.filter { it.isSolido && !it.locked }
+        if (volumenes.isNotEmpty()) {
+            val anillos = centroDeVolumenes(volumenes, scene.vista)
+            if (anillos != null) {
+                val (centro, radio) = anillos
+                val margen = UMBRAL_GUIA / zoom.coerceAtLeast(0.0001)
+                for (eje in EjeDeGiro.entries) {
+                    val aro = anilloDelVolumen(centro, radio, eje, scene.vista)
+                    if (!tocaElAnillo(p, aro, margen)) continue
+                    val angulo = anguloEnElAnillo(centro, eje, p, scene.vista) ?: continue
+                    gesture = Gesture.GirandoVolumen(centro, eje, angulo, volumenes)
+                    return
+                }
             }
         }
 
@@ -1847,6 +2469,293 @@ class DrawController(initial: Scene = Scene()) {
         elementos.map { if (it.id in selectedIds && !it.locked) transformar(it) else it }
     }
 
+    /**
+     * Repite la caja seleccionada **pegada a sí misma**, una vez por toque.
+     *
+     * Una vez y no cinco de golpe: pulsar tres veces son tres módulos y se ve crecer la
+     * fila, que es más fácil de acertar que decidir un número por adelantado y luego
+     * corregirlo. Ver [repetirSolido].
+     */
+    fun repetirLaCaja(eje: EjeDeRepeticion) {
+        val caja = selectedElements().singleOrNull()?.takeIf { it.isSolido && !it.locked }
+            ?: return
+        val copias = repetirSolido(caja, 1, eje, scene.vista)
+        if (copias.isEmpty()) return
+        mutate { it + copias }
+        // Lo nuevo queda seleccionado: así se sigue repitiendo desde la última y la fila
+        // crece por la punta en vez de volver a nacer de la primera.
+        selectedIds = copias.map { it.id }.toSet()
+    }
+
+    /**
+     * Lo que mide la caja que se está tocando, y dónde escribirlo.
+     *
+     * **En cuadros y no en píxeles.** Lo que uno quiere decir en un croquis conceptual es
+     * «esta es el doble de alta que aquella», y eso solo se lee si los números son
+     * pequeños y redondos —que lo son, porque el imán engancha al cuadro—. Un `120 × 80 ×
+     * 160` obliga a dividir mentalmente para ver la misma proporción que dice `6 × 4 × 8`.
+     *
+     * Solo mientras dura el gesto: un dibujo con todas sus cajas acotadas no se lee, y
+     * cuando importa la medida es justo mientras se está poniendo. Es la misma regla que
+     * siguen los ángulos internos.
+     */
+    fun medidasDeLaCaja(): Pair<Pt, String>? {
+        val id = when (val g = gesture) {
+            is Gesture.Huella -> g.elementId
+            is Gesture.Levantando -> g.elementId
+            is Gesture.MoldeandoSolido -> g.elementId
+            else -> null
+        } ?: return null
+        val e = scene.byId(id)?.takeIf { it.isSolido } ?: return null
+        val s = solidoDe(e).normalizado()
+        fun cuadros(v: Double): String {
+            val n = v / PASO_ISO
+            return if (kotlin.math.abs(n - Math.round(n)) < 0.05) "${Math.round(n)}"
+            else String.format(java.util.Locale.US, "%.1f", n)
+        }
+        val texto = buildString {
+            append(cuadros(s.ancho)).append(" × ").append(cuadros(s.fondo))
+            if (s.altura > 0.0) append(" × ").append(cuadros(s.altura))
+            if (s.base > 0.0) append("  ↑").append(cuadros(s.base))
+        }
+        val caja = envolturaDeSolido(e, scene.vista)
+        return Pt(caja.midX, caja.y1) to texto
+    }
+
+    /**
+     * Los dos anillos que hay que pintar ahora mismo, si los hay.
+     *
+     * Salen de lo seleccionado y no del gesto: son un mando, y un mando se ve **antes**
+     * de tocarlo. Con varias piezas seleccionadas hay unos solos, alrededor de todas, que
+     * es lo que dice que van a girar juntas.
+     */
+    fun anillosDelVolumen(): List<Pair<EjeDeGiro, List<Pt>>> = adornosDelVolumen().anillos
+
+    /** Las aristas de detrás de lo seleccionado, a trazos. Ver [aristasOcultasDeElemento]. */
+    fun aristasOcultasDeLaSeleccion(): List<Pair<Pt, Pt>> = adornosDelVolumen().aristas
+
+    /** Los adornos que la vista pinta alrededor de un volumen seleccionado. */
+    class AdornosDelVolumen(
+        val anillos: List<Pair<EjeDeGiro, List<Pt>>>,
+        val aristas: List<Pair<Pt, Pt>>
+    )
+
+    private var claveDeAdornos: String? = null
+    private var adornosGuardados = AdornosDelVolumen(emptyList(), emptyList())
+
+    /**
+     * Los aros y las aristas ocultas, **calculados una vez y no en cada fotograma**.
+     *
+     * Los dos salen de repartir las caras del volumen y de proyectar un centenar de
+     * puntos, y los dos se piden mientras se dibuja la pantalla: al hacer zoom sobre un
+     * dibujo con una pieza seleccionada, eso era rehacer el reparto de caras sesenta veces
+     * por segundo para dar exactamente el mismo resultado. No dependen del zoom —van en
+     * coordenadas de escena— así que basta rehacerlos cuando cambia la pieza o la vista.
+     */
+    private fun adornosDelVolumen(): AdornosDelVolumen {
+        val volumenes = selectedElements().filter { it.isSolido }
+        if (volumenes.isEmpty()) {
+            claveDeAdornos = null
+            adornosGuardados = AdornosDelVolumen(emptyList(), emptyList())
+            return adornosGuardados
+        }
+        // **La clave es la geometría, no la versión.** Al girar con el anillo, cada
+        // fotograma se recalcula desde los originales del gesto, así que la versión sale
+        // siempre la misma —original + 1— y los adornos se quedaban congelados en la
+        // primera posición: se veía como que el recuadro y los aros no acompañaban a la
+        // pieza. Con lo que de verdad los mueve dentro de la clave, acompañan.
+        val clave = buildString {
+            append(scene.vista.cuartos)
+            for (v in volumenes) {
+                append('|').append(v.id)
+                append(':').append(v.x).append(',').append(v.y)
+                append(',').append(v.width).append(',').append(v.height)
+                append(',').append(v.altura).append(',').append(v.cota)
+                append(',').append(v.giroEnPlanta).append(',').append(v.inclinacion)
+                append(',').append(v.formaSolida)
+            }
+        }
+        if (clave == claveDeAdornos) return adornosGuardados
+
+        val anillos = centroDeVolumenes(volumenes, scene.vista)?.let { (centro, radio) ->
+            EjeDeGiro.entries.map { it to anilloDelVolumen(centro, radio, it, scene.vista) }
+        } ?: emptyList()
+        val aristas = volumenes.flatMap { aristasOcultasDeElemento(it, scene.vista) }
+        claveDeAdornos = clave
+        adornosGuardados = AdornosDelVolumen(anillos, aristas)
+        return adornosGuardados
+    }
+
+    /**
+     * Levanta lo plano y lo convierte en volumen. Ver [extruido].
+     *
+     * Es la puerta de entrada al 3D desde donde uno ya está: se dibuja la planta con las
+     * herramientas de siempre y se levanta, sin aprender otro gesto.
+     */
+    fun extruirSeleccion() {
+        val marcados = selectedElements().filter { !it.locked }
+        if (marcados.isEmpty()) return
+
+        // **Varias rayas que cierran un contorno se levantan como una sola pieza.**
+        //
+        // Es como se dibuja una planta en cualquier programa de ingeniería: cuatro rectas
+        // que se tocan en las puntas, no una figura de catálogo. Antes había que
+        // redibujarla con la herramienta de rectángulo para poder extruirla, que es justo
+        // el trabajo que uno venía a evitar. Ver [aroDeRayas].
+        if (marcados.size > 1 && marcados.all { it.isLinear || it.isFreeDraw }) {
+            val cuerpo = extruidoDeRayas(marcados, scene.vista)
+            if (cuerpo != null) {
+                val fuera = marcados.map { it.id }.toSet()
+                mutate { lista -> lista.filterNot { it.id in fuera } + cuerpo }
+                selectedIds = setOf(cuerpo.id)
+                return
+            }
+        }
+
+        val nuevos = marcados.mapNotNull { extruido(it, scene.vista) }
+        if (nuevos.isEmpty()) return
+        val viejos = marcados.filter { extruido(it, scene.vista) != null }.map { it.id }.toSet()
+        mutate { lista -> lista.filterNot { it.id in viejos } + nuevos }
+        selectedIds = nuevos.map { it.id }.toSet()
+    }
+
+    /**
+     * Levanta lo que se toque con la herramienta, o **el aro que forme con lo marcado**.
+     *
+     * Con varias rayas marcadas, tocar una de ellas levanta el contorno entero: es lo que
+     * uno espera después de haberse molestado en marcarlas.
+     */
+    private fun extruirTocando(victima: Element, p: Pt) {
+        val marcados = selectedElements().filter { !it.locked }
+        val enGrupo = marcados.size > 1 && victima.id in marcados.map { it.id } &&
+            marcados.all { it.isLinear || it.isFreeDraw }
+        val cuerpo = if (enGrupo) extruidoDeRayas(marcados, scene.vista)
+        else extruido(victima, scene.vista)?.copy(altura = null)
+        if (cuerpo == null) return
+        val fuera = if (enGrupo) marcados.map { it.id }.toSet() else setOf(victima.id)
+        mutate { lista -> lista.filterNot { it.id in fuera } + cuerpo }
+        selectedIds = setOf(cuerpo.id)
+        if (cuerpo.altura == null) {
+            solidoPendiente = cuerpo.id
+            gesture = Gesture.Levantando(cuerpo.id, p, 0.0)
+        }
+    }
+
+    /**
+     * Da la vuelta a una figura alrededor de una raya. Ver [revolucionado].
+     *
+     * **Se seleccionan las dos cosas**: lo que se tornea y el eje. Con dos elementos
+     * marcados, la raya hace de eje y la otra de figura; con uno solo se conserva lo de
+     * antes —el propio trazo es el perfil— para que revolucionar un perfil suelto siga
+     * funcionando.
+     */
+    fun revolucionarSeleccion() {
+        val marcados = selectedElements().filter { !it.locked }
+        if (marcados.isEmpty()) return
+        val eje = if (marcados.size >= 2) marcados.firstOrNull { it.isLinear } else null
+        val figura = marcados.firstOrNull { it.id != eje?.id } ?: return
+        val cuerpo = revolucionado(figura, eje, scene.vista) ?: return
+        val viejos = listOfNotNull(figura.id, eje?.id).toSet()
+        mutate { lista -> lista.filterNot { it.id in viejos } + cuerpo }
+        selectedIds = setOf(cuerpo.id)
+    }
+
+    /**
+     * Una hoja más en el cuaderno, **debajo de la última**. Ver [Cuaderno].
+     *
+     * [dondeSiNoHay] es el centro de lo que se está mirando, para que la primera hoja
+     * aparezca delante y no en el origen del lienzo — que puede estar a media pantalla.
+     */
+    fun anadirHoja(tamano: TamanoDePapel, dondeSiNoHay: Pt) {
+        val hoja = sitioDeLaHojaSiguiente(scene, tamano, dondeSiNoHay)
+        mutate { it + hoja }
+        selectedIds = setOf(hoja.id)
+    }
+
+    /** El tamaño y la pauta de las hojas marcadas. */
+    fun cambiarPapel(tamano: TamanoDePapel) = mutarSeleccion { e ->
+        if (!e.isFrame) e
+        // Se conserva el ancho y se recalcula el alto: cambiar de tamaño es cambiar de
+        // proporción, no encoger la hoja. Ver [TamanoDePapel].
+        else e.copy(papel = tamano, height = e.width * tamano.proporcion).touched()
+    }
+
+    fun cambiarPauta(pauta: PautaDeHoja) =
+        mutarSeleccion { if (it.isFrame) it.copy(pauta = pauta).touched() else it }
+
+    /**
+     * Va a la hoja de al lado y **la encuadra**.
+     *
+     * Pasar página en un cuaderno es que la hoja siguiente ocupe la pantalla, no
+     * desplazarse un poco hacia abajo y quedarse a medias entre dos.
+     */
+    fun pasarDeHoja(delta: Int, ancho: Double, alto: Double) {
+        val hojas = hojasEnOrden(scene)
+        if (hojas.isEmpty()) return
+        val actual = hojas.indexOfFirst { it.id in selectedIds }
+            .takeIf { it >= 0 }
+            ?: hojaMasCentrada(hojas, ancho, alto)
+        val destino = hojas.getOrNull((actual + delta).coerceIn(hojas.indices)) ?: return
+        scene = scene.copy(
+            viewport = fitToContent(listOf(destino), ancho, alto, padding = MARGEN_DE_LA_HOJA)
+        )
+        selectedIds = setOf(destino.id)
+    }
+
+    /** Cuál de las hojas está más cerca del centro de lo que se ve ahora mismo. */
+    private fun hojaMasCentrada(hojas: List<Element>, ancho: Double, alto: Double): Int {
+        val centro = scene.viewport.toScene(ancho / 2, alto / 2)
+        return hojas.indices.minByOrNull {
+            val b = getElementBounds(hojas[it])
+            kotlin.math.hypot(b.midX - centro.x, b.midY - centro.y)
+        } ?: 0
+    }
+
+    /** Una fila más en el cronograma, detrás de la última. Ver [conTareaNueva]. */
+    fun anadirTarea() =
+        mutarSeleccion { if (it.type == ElementType.CRONOGRAMA) conTareaNueva(it, "") else it }
+
+    /** Una fila menos. */
+    fun quitarTarea() =
+        mutarSeleccion { if (it.type == ElementType.CRONOGRAMA) sinLaUltimaTarea(it) else it }
+
+    /** Una columna más o menos en la escala. */
+    fun cambiarPeriodos(delta: Int) = mutarSeleccion {
+        if (it.type == ElementType.CRONOGRAMA) conPeriodos(it, it.periodos + delta) else it
+    }
+
+    /** Le pone nombre a una fila. */
+    fun renombrarTarea(indice: Int, nombre: String) = mutarSeleccion { e ->
+        if (e.type != ElementType.CRONOGRAMA) e
+        else e.copy(
+            tareas = e.tareas.mapIndexed { i, t -> if (i == indice) t.copy(nombre = nombre) else t }
+        ).touched()
+    }
+
+    /** Macizo o de alambre. Ver [Element.esqueleto]. */
+    fun cambiarEsqueleto(esqueleto: Boolean) =
+        mutarSeleccion { if (it.isSolido) it.copy(esqueleto = esqueleto).touched() else it }
+
+    /**
+     * Tumba una imagen en el suelo, o la vuelve a poner de cara.
+     *
+     * **Y la deja donde estaba.** Al tumbarla, `x`/`y` pasan a querer decir otra cosa —el
+     * origen de su huella ya proyectado, como en un volumen— así que cambiando solo la
+     * bandera la imagen pegaría un salto. Se recoloca para que su centro siga en el mismo
+     * punto de la pantalla, que es lo que uno espera de un interruptor.
+     */
+    fun tumbarImagen(enElSuelo: Boolean) = mutarSeleccion { e ->
+        if (e.type != ElementType.IMAGE || e.enElSuelo == enElSuelo) return@mutarSeleccion e
+        val centro = Pt(e.x + e.width / 2, e.y + e.height / 2)
+        val desvio = proyectar(e.width / 2, e.height / 2, 0.0, scene.vista, PASO_DEL_SOLIDO)
+        val sitio = if (enElSuelo) {
+            Pt(centro.x - desvio.x, centro.y - desvio.y)
+        } else {
+            Pt(centro.x + desvio.x - e.width / 2, centro.y + desvio.y - e.height / 2)
+        }
+        e.copy(x = sitio.x, y = sitio.y, enElSuelo = enElSuelo).touched()
+    }
+
     fun flipSelectionHorizontal() = mutateSelected { flipHorizontal(it) }
     fun flipSelectionVertical() = mutateSelected { flipVertical(it) }
 
@@ -1889,12 +2798,20 @@ class DrawController(initial: Scene = Scene()) {
      * ahorra el toque de buscarlo; dejar la herramienta anterior activa sería
      * dibujar encima al primer intento.
      */
-    fun insertar(elementos: List<Element>) {
+    /**
+     * Añade [elementos] a la escena, y de normal los deja marcados para
+     * colocarlos. Con [marcar] apagado solo entran: es lo que pide un plano
+     * importado — miles de trazos marcados son miles de adornos de selección
+     * por fotograma, y el grupo se marca igual con un toque cuando haga falta.
+     */
+    fun insertar(elementos: List<Element>, marcar: Boolean = true) {
         if (elementos.isEmpty()) return
         val before = scene.elements
         scene = scene.copy(elements = scene.elements + elementos)
-        selectTool(Tool.SELECTION)
-        selectedIds = elementos.map { it.id }.toSet()
+        if (marcar) {
+            selectTool(Tool.SELECTION)
+            selectedIds = elementos.map { it.id }.toSet()
+        }
         anotar(before)
     }
 
@@ -2179,6 +3096,34 @@ class DrawController(initial: Scene = Scene()) {
         }
     }
 
+    /**
+     * **La llave de paso de las luces del dibujo.**
+     *
+     * No entra en el historial, y es a propósito: subir la luz de un plano es mirarlo de otra
+     * manera, no cambiarlo. Deshacer tiene que devolver el último trazo, no el brillo — por el
+     * mismo camino que el encuadre. Ver [LucesDelDibujo].
+     */
+    fun ponerLasLuces(nuevas: LucesDelDibujo) {
+        // Se acota aquí y no solo al leerlas: lo que se guarda en el dibujo tiene que ser un
+        // número que signifique algo, no uno que solo se porte bien al mirarlo.
+        scene = scene.copy(
+            luces = nuevas.copy(
+                fuerza = nuevas.fuerza.coerceIn(0.0, LucesDelDibujo.LO_MAS_QUE_ALUMBRAN)
+            )
+        )
+    }
+
+    /**
+     * **El color del papel.**
+     *
+     * No entra en el historial, por lo mismo que las luces y que el encuadre: cambiar el papel
+     * es mirar el dibujo de otra manera, no cambiarlo. Deshacer tiene que devolver el último
+     * trazo, no el fondo. Ver [DrawTheme.esDeNoche].
+     */
+    fun ponerElPapel(hex: String) {
+        scene = scene.copy(backgroundColor = hex)
+    }
+
     fun setViewport(v: Viewport) {
         scene = scene.copy(viewport = v)
     }
@@ -2276,6 +3221,9 @@ class DrawController(initial: Scene = Scene()) {
          */
         const val MIN_CREATED_SIZE = 2.0
 
+        /** Lo que se deja alrededor de una hoja al encuadrarla. Ver [pasarDeHoja]. */
+        const val MARGEN_DE_LA_HOJA = 24.0
+
         /** Opacidad del marcador: se tiene que ver lo subrayado por debajo. */
         const val HIGHLIGHTER_OPACITY = 40
 
@@ -2310,7 +3258,7 @@ class DrawController(initial: Scene = Scene()) {
         Tool.RECTANGLE -> ElementType.RECTANGLE
         Tool.DIAMOND -> ElementType.DIAMOND
         Tool.ELLIPSE -> ElementType.ELLIPSE
-        Tool.ARROW -> ElementType.ARROW
+        Tool.ARROW, Tool.FLECHA_LIBRE -> ElementType.ARROW
         Tool.LINE -> ElementType.LINE
         Tool.FREEDRAW, Tool.HIGHLIGHTER -> ElementType.FREEDRAW
         Tool.TEXT -> ElementType.TEXT
@@ -2321,6 +3269,7 @@ class DrawController(initial: Scene = Scene()) {
         Tool.FRAME -> ElementType.FRAME
         Tool.ESCALA_GRAFICA -> ElementType.ESCALA_GRAFICA
         Tool.SOLIDO -> ElementType.SOLIDO
+        Tool.CRONOGRAMA -> ElementType.CRONOGRAMA
         // Escalar dibuja una cota como cualquier otra: la diferencia no está en
         // lo que se traza, sino en que al soltarla se pregunta cuánto mide.
         Tool.MEASURE, Tool.SCALE -> ElementType.MEASURE
@@ -2441,6 +3390,43 @@ private sealed interface Gesture {
     ) : Gesture
 
     /**
+     * Corrigiendo una caja **ya hecha**, por uno de sus tiradores.
+     *
+     * Las dos fases de arriba son las de dibujarla y se acaban al soltar; esta es la de
+     * despues, la que faltaba: cambiarle la planta o el alto sin volver a trazarla. Ver
+     * [tiradoresDelSolido].
+     */
+    data class MoldeandoSolido(val elementId: String, val tirador: HandleType) : Gesture
+
+    /**
+     * Orientando volúmenes con uno de los dos anillos.
+     *
+     * Guarda el ángulo con el que empezó y los elementos tal como estaban: lo que se
+     * aplica en cada fotograma es **el giro total desde que bajó el dedo**, no el de ese
+     * fotograma. Acumulando paso a paso, el redondeo a quince grados se comería el resto
+     * en cada vuelta y la pieza se quedaría corta. Ver [giradoEnElEspacio].
+     */
+    /**
+     * Arrastrando una barra de un cronograma: se mueve o se estira.
+     *
+     * [agarre] es por dónde se cogió, en columnas desde su principio: sin él, la barra
+     * pega un salto al empezar a moverla para ponerse con su origen bajo el dedo.
+     */
+    data class BarraDelPlan(
+        val elementId: String,
+        val indice: Int,
+        val mano: ManoEnLaBarra,
+        val agarre: Double
+    ) : Gesture
+
+    data class GirandoVolumen(
+        val centro: Pt3,
+        val eje: EjeDeGiro,
+        val anguloInicial: Double,
+        val originals: List<Element>
+    ) : Gesture
+
+    /**
      * Arrancando un clavo para volver a clavarlo en otro sitio.
      *
      * Va por índice y no por objeto porque el clavo se reescribe en cada
@@ -2448,4 +3434,49 @@ private sealed interface Gesture {
      * dejaría clavado donde estaba.
      */
     data class MovingPin(val indice: Int) : Gesture
+
+    /** Pasando la bolita de seleccionar. Ver [Tool.BOLITA]. */
+    data object PasandoLaBolita : Gesture
 }
+
+// -------------------------------------------------------------------------
+// El dedo parado: la recta y el compás. Ver [DrawController.latido].
+// -------------------------------------------------------------------------
+
+/**
+ * Cuánto hay que tener el dedo parado para que lo trazado salga limpio, en milisegundos.
+ *
+ * Medio segundo largo. Menos, y una raya trazada despacio se endereza sola en mitad de una
+ * curva —que es peor que no tener el gesto—; más, y hay que esperar mirando el dedo.
+ *
+ * Es el mismo número que en el boceto en el espacio a propósito: **el gesto es el mismo**,
+ * y un gesto que se cumple a distinto ritmo en dos sitios de la misma aplicación es dos
+ * gestos que aprender.
+ */
+const val ESPERA_PARA_LA_RECTA = 550L
+
+/**
+ * Cuánto puede temblar el dedo, en píxeles de pantalla, sin dejar de estar parado.
+ *
+ * Ocho: un dedo apoyado nunca está quieto del todo, y con dos o tres el contador no llega a
+ * cumplirse nunca en una mano normal.
+ */
+const val TEMBLOR_DEL_DEDO = 8.0
+
+/**
+ * Cuánto se le deja moverse al trazo, en píxeles de pantalla, para que siga siendo un
+ * punto y no un recorrido — y por tanto un compás y no una recta.
+ *
+ * Lo que cabe en la yema: por debajo de eso nadie ha querido dibujar nada, ha querido
+ * clavar la punta.
+ */
+const val LO_QUE_ES_UN_TOQUE = 14.0
+
+/**
+ * Lo gorda que es la bolita de seleccionar, en píxeles de pantalla.
+ *
+ * Treinta: lo que abarca la yema de un dedo. Más pequeña habría que apuntar, que es lo que
+ * el gesto existe para no tener que hacer; más grande coge lo de al lado. Es el mismo
+ * número que en el croquis en el espacio, porque es el mismo dedo.
+ */
+const val RADIO_DE_LA_BOLITA = 30.0

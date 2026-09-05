@@ -213,7 +213,8 @@ object PdfLienzo {
                 ElementType.IMAGE -> imagen(e, alpha)
                 ElementType.MOSAIC -> mosaico(e, alpha, debajo)
                 ElementType.ESCALA_GRAFICA -> escalaGrafica(e, alpha)
-                ElementType.PLANO -> plano(e, alpha)
+                ElementType.CRONOGRAMA -> cronograma(e, alpha)
+                ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO -> plano(e, alpha)
                 // **El volumen sale como polígonos rellenos, uno por cara**, que
                 // es exactamente lo que es: no se pierde nada por el camino y el
                 // PDF queda en vectores, no en píxeles. Es lo mismo que hace el
@@ -294,17 +295,7 @@ object PdfLienzo {
             if (caras.isEmpty()) return ByteArray(0)
             val salida = ByteArrayOutputStream()
 
-            val sombra = sombraDeElemento(e, vista)
-            if (sombra.size >= 3) {
-                salida.write(
-                    pintado(
-                        opsDePuntos(sombra, cerrado = true),
-                        parseColor(e.strokeColor, alpha * OPACIDAD_DE_LA_SOMBRA / 100),
-                        "f"
-                    )
-                )
-            }
-
+            // Sin sombra, igual que en pantalla: lo exportado tiene que ser lo dibujado.
             val rough = Rough(roughOptionsFor(e))
             val rugoso = needsRoughFill(e)
             val hayFondo = !isTransparent(e.backgroundColor)
@@ -878,7 +869,7 @@ object PdfLienzo {
             val tinta = parseColor(e.strokeColor, alpha)
             val grosor = e.strokeWidth.coerceAtLeast(0.5)
             val salida = ByteArrayOutputStream()
-            for (trazo in trazosDelPlano(e)) {
+            for (trazo in trazosDelInstrumento(e)) {
                 val ancho = if (trazo.eje) grosor else GROSOR_DE_LA_REJILLA
                 // La rejilla se aclara bajándole la opacidad al propio color,
                 // que en un PDF es más barato que un estado de transparencia.
@@ -894,7 +885,7 @@ object PdfLienzo {
                 )
             }
             val tam = (e.fontSize ?: 11.0).coerceAtLeast(1.0)
-            for (n in numerosDelPlano(e)) {
+            for (n in numerosDelInstrumento(e)) {
                 val x = if (n.horizontal) e.x + n.donde.x else e.x + n.donde.x - tam * 0.3
                 val y =
                     if (n.horizontal) e.y + n.donde.y + tam * 1.15
@@ -907,6 +898,87 @@ object PdfLienzo {
                 if (perfil.isNotEmpty()) {
                     salida.write(pintado(opsDeAnillos(perfil, 2), tinta, "f"))
                 }
+            }
+            return salida.toByteArray()
+        }
+
+        /**
+         * El cronograma en PDF: **las mismas cuentas que en pantalla**.
+         *
+         * Rejilla, barras y nombres, calculados con [barraDeTarea] y compañía y no con
+         * una copia de esa aritmética: es lo que impide que un día se toque el reparto de
+         * la rejilla y lo entregado deje de parecerse a lo dibujado.
+         */
+        private fun cronograma(e: Element, alpha: Int): ByteArray {
+            val c = getElementAbsoluteCoords(e)
+            if (c.x2 - c.x1 <= 1.0 || c.y2 - c.y1 <= 1.0) return ByteArray(0)
+            val tinta = parseColor(e.strokeColor, alpha)
+            val suave = android.graphics.Color.argb(
+                (alpha * 45 / 100).coerceIn(0, 255),
+                android.graphics.Color.red(tinta),
+                android.graphics.Color.green(tinta),
+                android.graphics.Color.blue(tinta)
+            )
+            val relleno = if (isTransparent(e.backgroundColor)) tinta
+            else parseColor(e.backgroundColor, alpha)
+            val marco = e.copy(strokeWidth = e.strokeWidth.coerceAtLeast(1.0))
+            val salida = ByteArrayOutputStream()
+
+            fun raya(a: Pt, b: Pt, color: Int) {
+                salida.write(
+                    trazo(marco.copy(strokeColor = Svg.hex(color)), opsDePuntos(listOf(a, b), false), alpha)
+                )
+            }
+
+            for (x in columnasDelCronograma(e)) raya(Pt(x, c.y1), Pt(x, c.y2), suave)
+            val alto = altoDeFila(e)
+            val filas = yDeLasFilas(e)
+            for (i in 0..e.tareas.size) {
+                val y = filas + i * alto
+                raya(Pt(c.x1, y), Pt(c.x2, y), suave)
+            }
+            salida.write(
+                trazo(
+                    marco,
+                    opsDePuntos(
+                        listOf(
+                            Pt(c.x1, c.y1), Pt(c.x2, c.y1), Pt(c.x2, c.y2), Pt(c.x1, c.y2)
+                        ),
+                        cerrado = true
+                    ),
+                    alpha
+                )
+            )
+
+            val tam = letraDelCronograma(e, alto)
+            val anchoCol = anchoDeColumna(e)
+            prepararPincel(tam, e.fontFamily, Paint.Align.CENTER)
+            for (k in 0 until kotlin.math.max(1, e.periodos)) {
+                val x = xDeLaEscala(e) + (k + 0.5) * anchoCol
+                val perfil = Glifos.perfilDe(medidor, "${k + 1}", x, c.y1 + (filas - c.y1) * 0.72)
+                if (perfil.isNotEmpty()) salida.write(pintado(opsDeAnillos(perfil, 2), tinta, "f"))
+            }
+
+            for ((i, t) in e.tareas.withIndex()) {
+                val b = barraDeTarea(e, i) ?: continue
+                val color = t.color?.let { parseColor(it, alpha) } ?: relleno
+                salida.write(
+                    pintado(
+                        opsDePuntos(
+                            listOf(
+                                Pt(b.x1, b.y1), Pt(b.x2, b.y1), Pt(b.x2, b.y2), Pt(b.x1, b.y2)
+                            ),
+                            cerrado = true
+                        ),
+                        color, "f"
+                    )
+                )
+                if (t.nombre.isBlank()) continue
+                prepararPincel(tam, e.fontFamily, Paint.Align.LEFT)
+                val perfil = Glifos.perfilDe(
+                    medidor, t.nombre, c.x1 + tam * 0.3, b.y1 + b.height * 0.5 + tam * 0.36
+                )
+                if (perfil.isNotEmpty()) salida.write(pintado(opsDeAnillos(perfil, 2), tinta, "f"))
             }
             return salida.toByteArray()
         }
@@ -1020,25 +1092,32 @@ object PdfLienzo {
 
         // -- el foco ---------------------------------------------------------
 
-        fun focos(focos: List<Element>, todos: List<Element>): ByteArray {
-            val caja = getCommonBounds(todos)
-            val marco = listOf(
-                Pt(caja.x1, caja.y1), Pt(caja.x2, caja.y1),
-                Pt(caja.x2, caja.y2), Pt(caja.x1, caja.y2)
-            )
-            val ops = ArrayList(opsDePuntos(marco, cerrado = true))
+        /**
+         * Los focos, **como los pinta la pantalla**: la sombra es la caja del
+         * propio foco, el hueco es la figura marcada ([puntosDelFoco]) y la
+         * intensidad la dice su mando ([oscurecimientoDe]). Cada foco va en su
+         * camino —girado entero, como el `Path` de pantalla— para que dos
+         * focos oscurezcan cada uno lo suyo.
+         */
+        fun focos(focos: List<Element>, @Suppress("UNUSED_PARAMETER") todos: List<Element>): ByteArray {
+            val fuera = ByteArrayOutputStream()
             for (f in focos) {
                 val c = getElementAbsoluteCoords(f)
-                val hueco = listOf(
+                val centro = Pt(c.cx, c.cy)
+                fun girado(p: Pt) =
+                    if (f.angle == 0.0) p else pointRotateRads(p, centro, f.angle)
+                val marco = listOf(
                     Pt(c.x1, c.y1), Pt(c.x2, c.y1), Pt(c.x2, c.y2), Pt(c.x1, c.y2)
-                ).map { if (f.angle == 0.0) it else pointRotateRads(it, Pt(c.cx, c.cy), f.angle) }
-                ops += opsDePuntos(hueco, cerrado = true)
+                ).map(::girado)
+                val ops = ArrayList(opsDePuntos(marco, cerrado = true))
+                val dentro = puntosDelFoco(f)
+                if (dentro.size >= 3) ops += opsDePuntos(dentro.map(::girado), cerrado = true)
+                val negro = android.graphics.Color.argb(
+                    (oscurecimientoDe(f) * 255 / 100).coerceIn(0, 255), 0, 0, 0
+                )
+                fuera.write(pintado(ops, negro, "f*"))
             }
-            val opacidad = (focos.maxOf { it.opacity } * 255 / 100).coerceIn(0, 255)
-            val negro = android.graphics.Color.argb(
-                (opacidad * SPOTLIGHT_DIM / 255), 0, 0, 0
-            )
-            return pintado(ops, negro, "f*")
+            return fuera.toByteArray()
         }
 
         // -- utilidades ------------------------------------------------------
@@ -1108,7 +1187,6 @@ object PdfLienzo {
     }
 
     private const val REFERENCIA_OPACIDAD = 35
-    private const val SPOTLIGHT_DIM = 96
     private const val SERIAL_TEXT_RATIO = 1.25
 
     /**

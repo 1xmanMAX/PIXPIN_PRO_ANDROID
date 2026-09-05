@@ -91,6 +91,12 @@ fun contornosDe(
         // a lo que se engancha el dedo, y de eso se encarga el imán aparte.
         ElementType.PUNTO -> emptyList()
 
+        // El cronograma es una lámina con datos: su contorno es su marco, y lo de dentro
+        // —la rejilla, las barras— no son paredes contra las que recortar ni derramar.
+        ElementType.CRONOGRAMA -> cerrado(
+            listOf(Pt(c.x1, c.y1), Pt(c.x2, c.y1), Pt(c.x2, c.y2), Pt(c.x1, c.y2))
+        )
+
         // El redondeo cambia el contorno de verdad: una esquina redondeada no
         // corta donde cortaría el pico. Se reusa el mismo muestreo que dibuja.
         ElementType.RECTANGLE ->
@@ -132,7 +138,18 @@ fun contornosDe(
         }
 
         ElementType.IMAGE, ElementType.MOSAIC, ElementType.FRAME,
-        ElementType.ESCALA_GRAFICA, ElementType.PLANO -> cerrado(esquinasDe(c))
+        ElementType.ESCALA_GRAFICA -> cerrado(esquinasDe(c))
+
+        // **Los instrumentos dan sus ejes**, no su caja: es a lo que se pega el
+        // dedo con el «borde de las figuras» —trazar sobre el eje x, subir por
+        // el eje y— y la caja de un plano no está dibujada.
+        ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO ->
+            trazosDelInstrumento(e).filter { it.eje }.map {
+                Contorno(
+                    girar(listOf(Pt(e.x + it.a.x, e.y + it.a.y), Pt(e.x + it.b.x, e.y + it.b.y))),
+                    cerrado = false
+                )
+            }
 
         /**
          * **El texto no tiene caja.**
@@ -283,7 +300,7 @@ fun interseccionesCerca(
 
     // Cada figura, reducida a los tramos que rozan el entorno del dedo.
     val cerca = candidatos
-        .map { e -> e.id to tramosIndexados(e).filter { it.cerca(p, radio) } }
+        .map { e -> e.id to tramosCerca(e, p, radio) }
         .filter { it.second.isNotEmpty() }
 
     val out = mutableListOf<Anclaje>()
@@ -360,6 +377,64 @@ private fun tramosIndexados(e: Element): List<TramoIndexado> =
     }
 
 /**
+ * Solo los tramos de [e] que rozan el entorno del dedo, **sin fabricar los
+ * demás**.
+ *
+ * Es la pareja de [puntoEnElPerimetro] y por el mismo motivo: esto corre por
+ * cada movimiento del dedo, y con las cadenas de un plano importado montar
+ * todos los tramos para tirar casi todos era el grueso del coste — y de la
+ * basura. La cadena sin girar se recorre con cuentas puras y solo lo cercano
+ * llega a ser objeto; el resto de figuras siguen por el camino de siempre.
+ */
+private fun tramosCerca(e: Element, p: Pt, radio: Double): List<TramoIndexado> {
+    val pts = e.points
+    if (pts != null && pts.size >= 2 && e.angle == 0.0 && !e.elbowed &&
+        (e.type == ElementType.LINE || e.type == ElementType.ARROW || e.isFreeDraw)
+    ) {
+        val lazo = esLazoAbierto(e)
+        // Cerrado también si el trazo repite su primer punto (las polilíneas
+        // cerradas de un plano vienen así): sin la marca, el tramo primero y el
+        // último —que comparten ese vértice— fabricarían un «cruce» en la
+        // juntura que no es tal.
+        val cerrado = lazo || pts.first() == pts.last()
+        val total = pts.size - 1 + if (lazo) 1 else 0
+        var out: MutableList<TramoIndexado>? = null
+        var ax = e.x + pts[0].x
+        var ay = e.y + pts[0].y
+        for (i in 1..total) {
+            val punto = pts[i % pts.size]
+            val bx = e.x + punto.x
+            val by = e.y + punto.y
+            val dx = bx - ax
+            val dy = by - ay
+            val largoSq = dx * dx + dy * dy
+            val t = if (largoSq == 0.0) 0.0 else {
+                (((p.x - ax) * dx + (p.y - ay) * dy) / largoSq).coerceIn(0.0, 1.0)
+            }
+            val qx = ax + t * dx - p.x
+            val qy = ay + t * dy - p.y
+            if (hypot(qx, qy) <= radio) {
+                val lista = out ?: ArrayList<TramoIndexado>(4).also { out = it }
+                lista += TramoIndexado(
+                    Pt(ax, ay), Pt(bx, by), 0, i - 1, cerrado = cerrado, total = total
+                )
+            }
+            ax = bx
+            ay = by
+        }
+        return out ?: emptyList()
+    }
+    return tramosIndexados(e).filter { it.cerca(p, radio) }
+}
+
+/** ¿El trazo vuelve a su punto de partida sin repetirlo? Entonces hay un tramo de cierre. */
+private fun esLazoAbierto(e: Element): Boolean {
+    if (e.type != ElementType.LINE && !e.isFreeDraw) return false
+    val pts = e.points ?: return false
+    return pts.size > 2 && pts.first() != pts.last() && isPathALoop(pts)
+}
+
+/**
  * El punto del perímetro de [e] más cercano a [p], si cae a menos de [radio].
  *
  * **Es la escuadra.** Los demás enganches llevan a puntos sueltos —un vértice,
@@ -373,6 +448,50 @@ private fun tramosIndexados(e: Element): List<TramoIndexado> =
  * canto, no por donde tiembla la mano.
  */
 fun puntoEnElPerimetro(e: Element, p: Pt, radio: Double): Pt? {
+    // **El camino rápido de los planos: sin alocar nada.** Esto corre por cada
+    // elemento y cada movimiento del dedo, y un plano importado son miles de
+    // cadenas de cientos de puntos. Sacarles el contorno «bonito» —listas de
+    // puntos absolutos, parejas, proyecciones— era fabricar millones de objetos
+    // por segundo mientras se dibuja: el recolector no daba abasto y la app se
+    // moría. Una cadena sin girar se recorre aquí con cuentas puras.
+    val pts = e.points
+    if (pts != null && pts.size >= 2 && e.angle == 0.0 && !e.elbowed &&
+        (e.type == ElementType.LINE || e.type == ElementType.ARROW || e.isFreeDraw)
+    ) {
+        var mejorX = 0.0
+        var mejorY = 0.0
+        var hay = false
+        var mejorDistancia = radio
+        var ax = e.x + pts[0].x
+        var ay = e.y + pts[0].y
+        // El lazo casi cerrado también tiene su tramo de cierre, como en
+        // [contornosDe]: sin él, la juntura de un contorno no engancharía.
+        val vueltas = pts.size - 1 + if (esLazoAbierto(e)) 1 else 0
+        for (i in 1..vueltas) {
+            val punto = pts[i % pts.size]
+            val bx = e.x + punto.x
+            val by = e.y + punto.y
+            val dx = bx - ax
+            val dy = by - ay
+            val largoSq = dx * dx + dy * dy
+            val t = if (largoSq == 0.0) 0.0 else {
+                (((p.x - ax) * dx + (p.y - ay) * dy) / largoSq).coerceIn(0.0, 1.0)
+            }
+            val qx = ax + t * dx
+            val qy = ay + t * dy
+            val d = hypot(qx - p.x, qy - p.y)
+            if (d < mejorDistancia) {
+                mejorDistancia = d
+                mejorX = qx
+                mejorY = qy
+                hay = true
+            }
+            ax = bx
+            ay = by
+        }
+        return if (hay) Pt(mejorX, mejorY) else null
+    }
+
     var mejor: Pt? = null
     var mejorDistancia = radio
     for ((a, b) in segmentosDe(e)) {

@@ -117,9 +117,19 @@ object DrawPdf {
         // forzarlas a la misma orientación dejaría una de las dos a media
         // escala con medio folio en blanco.
         val paginas: List<Pair<Bounds, List<Element>>> = scene.marcos
-            .map { getElementBounds(it) to scene.contenidoDe(it) }
-            .filter { (caja, contenido) ->
-                caja.width > 0 && caja.height > 0 && contenido.isNotEmpty()
+            .filter { marco ->
+                val caja = getElementBounds(marco)
+                caja.width > 0 && caja.height > 0 && scene.contenidoDe(marco).isNotEmpty()
+            }
+            .map { marco ->
+                // **La hoja pautada entra en su propia página, la primera de la lista.**
+                //
+                // El marco no se dibuja al exportar —es el encuadre, no un trazo— pero si
+                // trae pauta, esa pauta **es parte de la página**: uno eligió papel
+                // rayado para que salga rayado. El renderizador sabe imprimir solo eso y
+                // no el recuadro; ver `drawFrame`. Va delante para quedar debajo de todo.
+                val fondo = listOfNotNull(marco.takeIf { it.papel != null })
+                getElementBounds(marco) to (fondo + scene.contenidoDe(marco))
             }
             .ifEmpty {
                 val visible = scene.contenidoVisible

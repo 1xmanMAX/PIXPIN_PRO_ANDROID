@@ -31,9 +31,21 @@ data class Sitio(
  */
 object Vivo {
 
+    /**
+     * Los trozos del documento **para editar**: un documento vacío es **un bloque
+     * vacío**, no ninguno.
+     *
+     * [trozosDe] devuelve la lista vacía con el texto vacío, y para leer está
+     * bien: no hay nada. Para escribir no: sin ningún bloque no hay ningún campo
+     * donde poner el cursor, y **una nota recién creada no se podía escribir** —
+     * se abría en blanco y ni tocando el hueco de abajo salía el teclado. Aquí
+     * el vacío es un bloque de cero a cero, y todo lo demás sale solo.
+     */
+    fun trozos(texto: String): List<Trozo> = trozosDe(texto).ifEmpty { listOf(Trozo(0, 0)) }
+
     /** El contenido editable del bloque [n], ya limpio de marcas. */
     fun contenido(texto: String, n: Int): InlineText? {
-        val trozo = trozosDe(texto).getOrNull(n) ?: return null
+        val trozo = trozos(texto).getOrNull(n) ?: return null
         return contenidoDelTrozo(trozo.de(texto))
     }
 
@@ -55,7 +67,7 @@ object Vivo {
 
     /** El tipo del bloque [n], para saber con qué envolverlo al escribirlo. */
     fun tipo(texto: String, n: Int): TipoDeBloque? {
-        val trozo = trozosDe(texto).getOrNull(n) ?: return null
+        val trozo = trozos(texto).getOrNull(n) ?: return null
         return Menus.tipoDe(trozo.de(texto))
     }
 
@@ -67,7 +79,7 @@ object Vivo {
      * pulsación se iría comiendo uno.
      */
     fun conContenido(texto: String, n: Int, nuevo: InlineText): String {
-        val trozos = trozosDe(texto)
+        val trozos = trozos(texto)
         val trozo = trozos.getOrNull(n) ?: return texto
         val fuente = trozo.de(texto)
         val cola = fuente.takeLastWhile { it == '\n' }
@@ -94,7 +106,7 @@ object Vivo {
      * vuelve a párrafo, porque nadie quiere dos títulos seguidos.
      */
     fun bloqueNuevo(texto: String, n: Int): Pair<String, Sitio> {
-        val trozos = trozosDe(texto)
+        val trozos = trozos(texto)
         val trozo = trozos.getOrNull(n) ?: return texto to Sitio(n)
         val tipo = Menus.tipoDe(trozo.de(texto).trimEnd('\n'))
 
@@ -103,7 +115,12 @@ object Vivo {
             else -> null
         }
         val vacio = if (sigue == null) "" else Bloques.envuelve(sigue, "")
-        val nuevo = texto.substring(0, trozo.hasta).trimEnd('\n') + "\n\n" + vacio +
+        val delante = texto.substring(0, trozo.hasta)
+        // Con nada delante —el documento vacío— no hay separador que poner: el
+        // renglón nuevo va justo debajo del vacío, sin fabricar dos de más.
+        if (delante.isBlank()) return "\n" + vacio + texto.substring(trozo.hasta).trimStart('\n') to
+            Sitio(1, TextRange(0))
+        val nuevo = delante.trimEnd('\n') + "\n\n" + vacio +
             "\n" + texto.substring(trozo.hasta).trimStart('\n')
 
         return nuevo to Sitio(n + 1, TextRange(0))
@@ -168,7 +185,7 @@ object Vivo {
      * nada, que es justo donde todo el mundo toca para seguir escribiendo.
      */
     fun alFinal(texto: String): Pair<String, Sitio> {
-        val trozos = trozosDe(texto)
+        val trozos = trozos(texto)
         if (trozos.isEmpty()) return texto to Sitio(0, TextRange(0))
 
         val ultimo = trozos.size - 1
@@ -189,10 +206,10 @@ object Vivo {
      * definitivo — no había ninguna tecla ni ningún botón que se la llevara.
      */
     fun borrarBloque(texto: String, n: Int): Pair<String, Sitio?> {
-        val trozos = trozosDe(texto)
+        val trozos = trozos(texto)
         val trozo = trozos.getOrNull(n) ?: return texto to null
         val sinEl = texto.substring(0, trozo.desde) + texto.substring(trozo.hasta)
-        val quedan = trozosDe(sinEl)
+        val quedan = trozos(sinEl)
         if (quedan.isEmpty()) return sinEl to null
         val donde = (n - 1).coerceIn(0, quedan.size - 1)
         val largo = contenidoDelTrozo(quedan[donde].de(sinEl))?.text?.length ?: 0
@@ -208,12 +225,17 @@ object Vivo {
      * casilla puesta sin querer no había forma de quitarla.
      */
     fun quitarTipo(texto: String, n: Int): String {
-        val trozos = trozosDe(texto)
+        val trozos = trozos(texto)
         val trozo = trozos.getOrNull(n) ?: return texto
         val fuente = trozo.de(texto)
-        val cola = fuente.takeLastWhile { it == '\n' }
-        val nuevo = Menus.convertir(fuente.trimEnd('\n'), null) + cola
-        return texto.substring(0, trozo.desde) + nuevo + texto.substring(trozo.hasta)
+        val resto = texto.substring(trozo.hasta)
+        val cuerpo = Menus.convertir(fuente.trimEnd('\n'), null)
+        // Los saltos del final se conservan porque separan del bloque de
+        // abajo. Salvo cuando **no hay bloque de abajo y no queda nada**: ahí
+        // solo fabricaban un renglón vacío de más detrás del que se acaba de
+        // vaciar, y había que borrar dos veces.
+        val cola = if (resto.isEmpty() && cuerpo.isEmpty()) "" else fuente.takeLastWhile { it == '\n' }
+        return texto.substring(0, trozo.desde) + cuerpo + cola + resto
     }
 
     /**
@@ -222,7 +244,7 @@ object Vivo {
      */
     fun juntarConElDeArriba(texto: String, n: Int): Pair<String, Sitio>? {
         if (n <= 0) return null
-        val trozos = trozosDe(texto)
+        val trozos = trozos(texto)
         val arriba = trozos.getOrNull(n - 1) ?: return null
         val abajo = trozos.getOrNull(n) ?: return null
 

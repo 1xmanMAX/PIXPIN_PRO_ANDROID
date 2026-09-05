@@ -99,10 +99,11 @@ class GuardarCompartidoActivity : ComponentActivity() {
             contentResolver.openInputStream(uri)?.use { entrada ->
                 temporal.outputStream().use { entrada.copyTo(it) }
             } ?: return false
-            val ruta = almacen.copiarAdjunto(temporal, nombre) ?: return false
+            val tipo = contentResolver.getType(uri)
+            val ruta = almacen.copiarAdjunto(temporal, nombre, extensionDe(tipo)) ?: return false
             val bytes = temporal.length()
             temporal.delete()
-            val esImagen = contentResolver.getType(uri)?.startsWith("image/") == true
+            val esImagen = tipo?.startsWith("image/") == true
             almacen.anadir(
                 Mensaje(
                     id = UUID.randomUUID().toString(),
@@ -115,6 +116,10 @@ class GuardarCompartidoActivity : ComponentActivity() {
             )
             true
         }.getOrDefault(false)
+
+    /** La extensión que le toca a un tipo, si Android la conoce. */
+    private fun extensionDe(mime: String?): String? =
+        mime?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
 
     /** El nombre con el que lo llama quien lo comparte, si es que lo dice. */
     private fun nombreDe(uri: Uri): String = runCatching {

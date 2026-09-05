@@ -172,21 +172,6 @@ fun elementosDeTabla(
 }
 
 /**
- * Lo que va a ocupar la tabla, sin llegar a construirla.
- *
- * Lo pregunta quien tiene que colocarla —para centrarla en la vista— antes de
- * saber si va a caber.
- */
-fun tamanoDeTabla(
-    filas: List<List<String>>, estilo: ItemStyle, medir: MedidaDeTexto
-): Pair<Double, Double> {
-    val elementos = elementosDeTabla(filas, estilo, Pt(0.0, 0.0), medir)
-    if (elementos.isEmpty()) return 0.0 to 0.0
-    val caja = getCommonBounds(elementos)
-    return caja.width to caja.height
-}
-
-/**
  * La rejilla con todas las filas del mismo ancho y sin filas vacías al final.
  *
  * Lo que llega del portapapeles no viene cuadrado: una fila con una celda vacía

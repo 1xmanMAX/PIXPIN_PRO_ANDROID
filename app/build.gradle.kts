@@ -18,8 +18,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 71
-        versionName = "0.23.0"
+        versionCode = 81
+        versionName = "0.28.3"
     }
 
     buildTypes {
@@ -88,6 +88,17 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("androidx.datastore:datastore-preferences:1.2.0")
+
+    // **La cámara de atrás, para ver el croquis puesto en el sitio.** Ver [Croquis3DCamara].
+    //
+    // CameraX y no `camera2` a pelo: lo que hay que acertar aquí es justo lo que `camera2`
+    // deja en manos de quien llama —la orientación del sensor contra la de la pantalla, el
+    // recorte del formato, abrir y cerrar al ritmo del ciclo de vida— y equivocarse en eso
+    // es una vista negra o torcida en el teléfono de alguien. Son un par de megas y evitan
+    // el problema entero.
+    implementation("androidx.camera:camera-camera2:1.5.0")
+    implementation("androidx.camera:camera-lifecycle:1.5.0")
+    implementation("androidx.camera:camera-view:1.5.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

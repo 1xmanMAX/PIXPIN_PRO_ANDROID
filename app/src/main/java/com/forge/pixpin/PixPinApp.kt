@@ -56,6 +56,9 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        // Y lo que el capturador no ve —crashes nativos, ANR—, que Android sí
+        // apunta: se recoge al arrancar y acaba en el mismo informe.
+        scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
         settings = SettingsRepository(this)
         scope.launch { settings.settings.collect { ajustes = it } }
         // **Reponer los PDF que se hayan quedado sin archivo.**

@@ -1,6 +1,5 @@
 package com.forge.pixpin.motor
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +50,8 @@ import androidx.compose.ui.unit.dp
 fun BarraDeVentana(
     onArrastrar: (Float, Float) -> Unit,
     onAmpliar: (() -> Unit)?,
-    onCerrar: () -> Unit,
+    /** Ya no hay botón de cerrar en la barra; se conserva para quien lo llame. */
+    @Suppress("UNUSED_PARAMETER") onCerrar: () -> Unit,
     modifier: Modifier = Modifier,
     /** El color de los iconos. Sobre una imagen hace falta que sea claro. */
     tinta: Color = Color.Unspecified,
@@ -73,7 +72,10 @@ fun BarraDeVentana(
         }
 
         // **El asa: toda la franja del medio.** Se arrastra desde cualquier
-        // punto de ella, y la pastillita solo dice dónde está.
+        // punto de ella. Iba con una pastillita que decía dónde estaba, y con
+        // el botón de cerrar en la punta; el usuario pidió quitar las dos cosas
+        // (2-sep-2026): la franja se agarra igual sin verla, y las ventanas se
+        // cierran tocando el dibujo o volviendo a pulsar el botón que las abrió.
         Box(
             Modifier
                 .weight(1f)
@@ -83,22 +85,10 @@ fun BarraDeVentana(
                         cambio.consume()
                         onArrastrar(arrastre.x, arrastre.y)
                     }
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier
-                    .size(width = 26.dp, height = 3.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(color.copy(alpha = 0.55f))
-            )
-        }
+                }
+        )
 
         extras()
-        BotonMinimo(
-            Icons.Filled.Close,
-            "Cerrar la ventana", color, onCerrar
-        )
     }
 }
 

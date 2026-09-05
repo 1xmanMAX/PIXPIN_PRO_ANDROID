@@ -99,7 +99,18 @@ data class Proyecto(
      * un trazo lo borra de verdad y retocar veinte veces sigue dejando una capa
      * por página.
      */
-    val pdfLimpio: String? = null
+    val pdfLimpio: String? = null,
+    /**
+     * Los croquis en el espacio de este proyecto, en el orden en que se crearon.
+     *
+     * **Varios, como varios lienzos.** Un proyecto junta la planta, el alzado y
+     * el detalle, y en tres dimensiones pasa lo mismo: el encaje del volumen
+     * por un lado y el nudo de dos piezas por otro no se dibujan encima. Cada
+     * uno guarda su dibujo aparte y sus vistas entran aquí como hojas, y como
+     * cada uno tiene su color, en la lista se ve de un vistazo qué lámina viene
+     * de cuál. Ver [Hoja.croquis].
+     */
+    val croquis: List<String> = emptyList()
 )
 
 /**
@@ -147,7 +158,26 @@ data class Hoja(
      * PDF se creaba un pin de imagen suelto y **se perdía de dónde venía**, así
      * que lo dibujado no tenía camino de vuelta. Con esto lo tiene.
      */
-    val pagina: Int? = null
+    val pagina: Int? = null,
+    /**
+     * De qué croquis en el espacio salió, si salió de uno.
+     *
+     * Una vista congelada se guarda como lámina —una imagen dentro de un marco,
+     * que es lo que un proyecto ya entiende— y cada vista tiene su propia
+     * escena. Sin esto, dos vistas del mismo croquis parecerían venir de dos
+     * sitios distintos y se pintarían de dos colores. Con esto, **el color lo
+     * pone el croquis**, que es de donde vienen de verdad. Ver
+     * [HojasDelProyecto.colorDe].
+     */
+    val croquis: String? = null,
+    /**
+     * Y de qué vista suya.
+     *
+     * Es lo que hace que la lámina sepa volver: tocarla no abre una imagen, abre **el
+     * croquis en el espacio puesto en esa vista**. La lámina es lo que se entrega; el
+     * croquis es donde se trabaja.
+     */
+    val vista: String? = null
 ) {
     /**
      * Dos hojas son la misma si señalan al mismo sitio.
@@ -207,6 +237,18 @@ object Proyectos {
                 .thenByDescending { it.tocado }
                 .thenBy { it.nombre.lowercase() }
         )
+
+    /**
+     * Le añade un croquis en el espacio.
+     *
+     * **Varios, como varios lienzos.** El encaje del volumen por un lado y el
+     * nudo de dos piezas por otro no se dibujan encima; cada uno guarda su
+     * dibujo aparte, tiene su color y sus vistas entran como hojas.
+     */
+    fun conCroquis(proyecto: Proyecto, croquis: String, cuando: Long): Proyecto {
+        if (croquis in proyecto.croquis) return proyecto
+        return proyecto.copy(croquis = proyecto.croquis + croquis, tocado = cuando)
+    }
 
     fun conHoja(proyecto: Proyecto, hoja: Hoja, cuando: Long): Proyecto {
         // **Lo mismo no entra dos veces.** Guardar otra vez el mismo marco, o

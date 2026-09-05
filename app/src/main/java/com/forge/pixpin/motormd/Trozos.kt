@@ -147,7 +147,7 @@ private fun abreCaja(linea: String): Boolean =
     linea.startsWith(":::") && linea != ":::"
 
 private fun arrancaBloqueSuelto(t: String): Boolean =
-    Regex("""^#{1,6}\s""").containsMatchIn(t) ||
+    Regex("""^#{1,6}(\s|$)""").containsMatchIn(t) ||
         Regex("""^[-*+]\s+\[[ xX]]""").containsMatchIn(t) ||
         Regex("""^!\[[^]]*]\([^)]+\)$""").matches(t) ||
         Regex("""^\s*([-*_])\1{2,}\s*$""").matches(t) ||

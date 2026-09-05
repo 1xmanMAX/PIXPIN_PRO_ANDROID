@@ -74,6 +74,7 @@ const val AVANCE_V: Double = 0.5
 // -------------------------------------------------------------------------
 
 /** Un punto del mundo. `x`, `y` en el suelo; `z` hacia arriba. */
+@kotlinx.serialization.Serializable
 data class Pt3(val x: Double, val y: Double, val z: Double)
 
 /**

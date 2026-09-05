@@ -236,19 +236,69 @@ class PdfArchivo internal constructor(
      * devuelve null, y quien llame decide qué hacer con eso.
      */
     fun descomprimir(flujo: PdfValor.Flujo): ByteArray? {
-        val filtro = when (val f = resolver(flujo.dicc.entradas["Filter"])) {
-            null -> null
-            is PdfValor.Nombre -> f.valor
-            is PdfValor.Lista -> (f.valores.firstOrNull() as? PdfValor.Nombre)?.valor
+        val filtros = when (val f = resolver(flujo.dicc.entradas["Filter"])) {
+            null -> emptyList()
+            is PdfValor.Nombre -> listOf(f.valor)
+            is PdfValor.Lista -> f.valores.map {
+                (resolver(it) as? PdfValor.Nombre)?.valor ?: return null
+            }
             else -> return null
         }
-        val crudo = when (filtro) {
-            null -> flujo.datos
-            "FlateDecode", "Fl" -> inflar(flujo.datos) ?: return null
+        // Los parámetros van uno por filtro, y en la cadena corriente —`[/ASCII85Decode
+        // /FlateDecode]`— solo el segundo los gasta.
+        val parms = when (val p = resolver(flujo.dicc.entradas["DecodeParms"])) {
+            is PdfValor.Dicc -> listOf<PdfValor.Dicc?>(p)
+            is PdfValor.Lista -> p.valores.map { diccDe(it) }
+            else -> emptyList()
+        }
+
+        return pasar(flujo.datos, filtros, parms, filtros.size)
+    }
+
+    /**
+     * Lo mismo pero **dejando el último filtro sin deshacer**, y diciendo cuál es.
+     *
+     * Es lo que hace falta para sacar una imagen: un JPEG dentro de un PDF está guardado tal
+     * cual, y lo único que hay que hacer con él es quitarle los envoltorios de encima —si los
+     * tiene— y entregarlo. Ver `PlanoDePdf`, que las pasa así a la página web.
+     */
+    fun sinElUltimoFiltro(flujo: PdfValor.Flujo): Pair<String, ByteArray>? {
+        val filtros = when (val f = resolver(flujo.dicc.entradas["Filter"])) {
+            is PdfValor.Nombre -> listOf(f.valor)
+            is PdfValor.Lista -> f.valores.map { (resolver(it) as? PdfValor.Nombre)?.valor ?: return null }
             else -> return null
         }
-        val parms = diccDe(flujo.dicc.entradas["DecodeParms"]) ?: return crudo
-        return deshacerPredictor(crudo, parms)
+        if (filtros.isEmpty()) return null
+        val parms = when (val p = resolver(flujo.dicc.entradas["DecodeParms"])) {
+            is PdfValor.Dicc -> listOf<PdfValor.Dicc?>(p)
+            is PdfValor.Lista -> p.valores.map { diccDe(it) }
+            else -> emptyList()
+        }
+        val datos = pasar(flujo.datos, filtros, parms, filtros.size - 1) ?: return null
+        return filtros.last() to datos
+    }
+
+    private fun pasar(
+        crudos: ByteArray,
+        filtros: List<String>,
+        parms: List<PdfValor.Dicc?>,
+        hasta: Int
+    ): ByteArray? {
+        var datos = crudos
+        for (i in 0 until hasta) {
+            datos = when (filtros[i]) {
+                "FlateDecode", "Fl" -> inflar(datos) ?: return null
+                // El texto en base 85 y en hexadecimal: los mete ReportLab y los generadores
+                // que evitan escribir bytes crudos dentro del archivo.
+                "ASCII85Decode", "A85" -> deAscii85(datos) ?: return null
+                "ASCIIHexDecode", "AHx" -> deAsciiHex(datos)
+                "RunLengthDecode", "RL" -> deRunLength(datos)
+                // Imágenes y compresiones que aquí no se usan: quien llame decide.
+                else -> return null
+            }
+            parms.getOrNull(i)?.let { datos = deshacerPredictor(datos, it) ?: return null }
+        }
+        return datos
     }
 
     private fun deshacerPredictor(datos: ByteArray, parms: PdfValor.Dicc): ByteArray? {
@@ -536,6 +586,81 @@ private fun paeth(a: Int, b: Int, c: Int): Int {
     val pb = kotlin.math.abs(p - b)
     val pc = kotlin.math.abs(p - c)
     return if (pa <= pb && pa <= pc) a else if (pb <= pc) b else c
+}
+
+/**
+ * ASCII85: cinco letras imprimibles por cada cuatro bytes.
+ *
+ * Está para poder leer el contenido de los PDF que lo usan —ReportLab y compañía—: sin esto,
+ * su página no se puede ni mirar por dentro.
+ */
+internal fun deAscii85(datos: ByteArray): ByteArray? {
+    val salida = java.io.ByteArrayOutputStream(datos.size)
+    var grupo = 0L
+    var cuantos = 0
+    var i = 0
+    // Puede venir con `<~` delante.
+    if (datos.size >= 2 && datos[0] == '<'.code.toByte() && datos[1] == '~'.code.toByte()) i = 2
+    while (i < datos.size) {
+        val c = datos[i++].toInt() and 0xFF
+        when {
+            esBlanco(c) -> Unit
+            c == '~'.code -> break
+            // Una `z` son cuatro ceros de golpe.
+            c == 'z'.code && cuantos == 0 -> repeat(4) { salida.write(0) }
+            c < '!'.code || c > 'u'.code -> return null
+            else -> {
+                grupo = grupo * 85 + (c - '!'.code)
+                cuantos++
+                if (cuantos == 5) {
+                    for (k in 3 downTo 0) salida.write(((grupo shr (k * 8)) and 0xFF).toInt())
+                    grupo = 0
+                    cuantos = 0
+                }
+            }
+        }
+    }
+    if (cuantos > 1) {
+        // Lo que quede a medias se completa con la letra más alta y se escriben los bytes
+        // que de verdad había.
+        repeat(5 - cuantos) { grupo = grupo * 85 + 84 }
+        for (k in 0 until cuantos - 1) salida.write(((grupo shr ((3 - k) * 8)) and 0xFF).toInt())
+    }
+    return salida.toByteArray()
+}
+
+/** ASCIIHex: dos letras por byte, hasta el `>`. */
+internal fun deAsciiHex(datos: ByteArray): ByteArray {
+    val salida = java.io.ByteArrayOutputStream(datos.size / 2)
+    var alto = -1
+    for (b in datos) {
+        val c = (b.toInt() and 0xFF).toChar()
+        if (c == '>') break
+        val d = Character.digit(c, 16)
+        if (d < 0) continue
+        if (alto < 0) alto = d else { salida.write(alto * 16 + d); alto = -1 }
+    }
+    if (alto >= 0) salida.write(alto * 16)
+    return salida.toByteArray()
+}
+
+/** RunLength: un byte dice cuántos vienen tal cual o cuántas veces se repite el siguiente. */
+internal fun deRunLength(datos: ByteArray): ByteArray {
+    val salida = java.io.ByteArrayOutputStream(datos.size * 2)
+    var i = 0
+    while (i < datos.size) {
+        val n = datos[i++].toInt() and 0xFF
+        if (n == 128) break
+        if (n < 128) {
+            for (k in 0..n) { if (i < datos.size) salida.write(datos[i++].toInt()) }
+        } else {
+            if (i < datos.size) {
+                val b = datos[i++].toInt()
+                repeat(257 - n) { salida.write(b) }
+            }
+        }
+    }
+    return salida.toByteArray()
 }
 
 internal fun coincide(bytes: ByteArray, desde: Int, que: ByteArray): Boolean {

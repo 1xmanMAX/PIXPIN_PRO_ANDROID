@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.pager.PagerState
@@ -38,16 +41,18 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.ViewCarousel
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -92,21 +97,30 @@ import com.forge.pixpin.motor.CapaDeAnotacion
 import com.forge.pixpin.motor.DrawEditorActivity
 import com.forge.pixpin.motor.DrawExport
 import com.forge.pixpin.motor.ExcalidrawStore
+import com.forge.pixpin.croquis3d.Camara3D
+import com.forge.pixpin.guardados.paginaAnotada
+import com.forge.pixpin.pin.ImageStore
+import com.forge.pixpin.croquis3d.Croquis3DAlmacen
+import com.forge.pixpin.croquis3d.ExportarCroquisHtml
+import com.forge.pixpin.motor.ExportarHtml
 import com.forge.pixpin.motor.ExportarProyecto
+import com.forge.pixpin.motor.ExportarProyectoWeb
 import com.forge.pixpin.motor.Hoja
 import com.forge.pixpin.motor.HojasDelProyecto
 import com.forge.pixpin.motor.PdfDoc
 import com.forge.pixpin.motor.PdfMiniaturas
+import com.forge.pixpin.motor.PlanoWeb
 import com.forge.pixpin.motor.Proyecto
 import com.forge.pixpin.motor.Proyectos
+import com.forge.pixpin.motor.Scene
 import com.forge.pixpin.motormd.Markdown
 import com.forge.pixpin.motormd.MarkdownText
 import com.forge.pixpin.motormd.Paginado
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 /**
  * Vuelve a poner en pantalla el PDF de un proyecto.
@@ -155,6 +169,8 @@ private fun volverAPinear(app: PixPinApp, p: Proyecto) {
 fun PantallaDeProyectos(
     app: PixPinApp,
     onVolver: () -> Unit,
+    /** Abre la pantalla de ajustes, que se ofrece desde la tarjeta de configuración. */
+    onAjustes: () -> Unit = {},
     /**
      * Si viene puesto, esta pantalla enseña **solo ese proyecto**.
      *
@@ -162,7 +178,13 @@ fun PantallaDeProyectos(
      * no el sitio donde vive. Con la lista entera había que volver a buscarlo entre los
      * demás, que es justo el trabajo que el acceso directo venía a ahorrar.
      */
-    soloEste: String? = null
+    soloEste: String? = null,
+    /**
+     * **A qué proyecto ponerse al llegar**, dentro del montón. Es lo que hace que cerrar un
+     * lienzo devuelva al proyecto del que se salió, y no al principio de la lista ni a una
+     * vista de ese proyecto solo. Ver `EXTRA_IR_A`.
+     */
+    irA: String? = null
 ) {
     val proyectos by app.proyectos.proyectos.collectAsState()
     val todos = Proyectos.ordenados(proyectos)
@@ -174,10 +196,40 @@ fun PantallaDeProyectos(
     // proyecto a la vez, que es como se entrega: marcar en otro empieza de cero.
     var marcado by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     var exportando by remember { mutableStateOf(false) }
+    // Exportar a página web es lo mismo marcado, otro formato: el PDF se imprime y se firma;
+    // la página se abre en el teléfono de quien la recibe, se pasea, se gira y se anota.
+    // Ver [ExportarProyectoWeb].
+    var exportandoWeb by remember { mutableStateOf(false) }
 
     // Se recuerda aquí y no dentro del paginador porque la cabecera enseña por
     // cuál se va, y esa cuenta es lo que dice que hay más debajo.
-    val paginador = rememberPagerState(pageCount = { ordenados.size })
+    // **Una página más que proyectos.** La primera es la configuración —ver
+    // [com.forge.pixpin.TarjetaDeConfiguracion]—, así que el proyecto que hay en la
+    // página `i` es el `i - 1` de la lista. Con un proyecto suelto no se pagina nada y
+    // esta cuenta no llega a usarse.
+    val paginador = rememberPagerState(pageCount = { ordenados.size + 1 })
+
+    // **Al crear un proyecto se va a él, no se queda uno donde estaba.** El
+    // botón de más dejaba el proyecto nuevo escondido en su página mientras la
+    // pantalla seguía enseñando la de antes: había que ir a buscarlo, que es
+    // justo lo contrario de lo que acaba de pedir quien lo creó. Se apunta su
+    // id y, en cuanto la lista lo trae, el paginador se desliza hasta él.
+    var recienCreado by remember { mutableStateOf<String?>(null) }
+    // Al volver de un lienzo, un croquis o una nota: al proyecto del que se venía, sin
+    // animación, que aquí no hay nada que enseñar por el camino.
+    LaunchedEffect(irA, ordenados.size) {
+        val indice = if (irA == null) -1 else ordenados.indexOfFirst { it.id == irA }
+        if (indice >= 0 && soloEste == null) paginador.scrollToPage(indice + 1)
+    }
+    recienCreado?.let { id ->
+        val indice = ordenados.indexOfFirst { it.id == id }
+        if (indice >= 0) {
+            LaunchedEffect(id) {
+                paginador.animateScrollToPage(indice + 1)
+                recienCreado = null
+            }
+        }
+    }
 
     Scaffold { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
@@ -244,7 +296,10 @@ fun PantallaDeProyectos(
                 if (soloEste == null) {
                     val plantilla = stringResourceSafe(R.string.proyecto_nuevo_nombre)
                     IconButton(
-                        onClick = { app.proyectos.nuevo(plantilla, System.currentTimeMillis()) }
+                        onClick = {
+                            recienCreado =
+                                app.proyectos.nuevo(plantilla, System.currentTimeMillis()).id
+                        }
                     ) {
                         Icon(
                             Icons.Filled.Add,
@@ -262,31 +317,96 @@ fun PantallaDeProyectos(
                         null
                     } else {
                         withContext(Dispatchers.IO) {
+                            // **Las escenas se recuerdan al cargarlas**, y de ellas sale dónde
+                            // está cada imagen: el dibujante pide el id del archivo y la ruta
+                            // la sabe la escena. Sin esto las fotos se perdían al exportar.
+                            val vistas = mutableMapOf<String, Scene?>()
+                            val escenaDe: (String) -> Scene? = { dibujo ->
+                                vistas.getOrPut(dibujo) {
+                                    ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
+                                }
+                            }
                             ExportarProyecto.aArchivo(
-                                contexto, proyecto, cual!!.second,
-                                { dibujo ->
-                                    ExcalidrawStore.cargar(
-                                        ExcalidrawStore.rutaDe(contexto, dibujo)
-                                    )
+                                contexto, proyecto, cual!!.second, escenaDe,
+                                { id ->
+                                    vistas.values.asSequence().filterNotNull()
+                                        .mapNotNull { it.files[id]?.path }
+                                        .firstOrNull()?.let { ImageStore.load(it) }
                                 }
                             )
                         }
                     }
                     exportando = false
                     if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
-                    else compartir(contexto, archivo)
+                    else compartir(contexto, archivo, "application/pdf")
                 }
             }
 
-            if (ordenados.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResourceSafe(R.string.proyectos_vacio),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(32.dp)
-                    )
+            val oscuroDelSistema = androidx.compose.foundation.isSystemInDarkTheme()
+            if (exportandoWeb) {
+                val cual = marcado
+                LaunchedEffect(cual) {
+                    val proyecto = ordenados.firstOrNull { it.id == cual?.first }
+                    val archivo = if (proyecto == null) null else withContext(Dispatchers.IO) {
+                        val pdf = Proyectos.rutaDelDocumento(proyecto) { java.io.File(it).exists() }
+                        ExportarProyectoWeb.aArchivo(
+                            contexto, proyecto, cual!!.second,
+                            escenaDe = { dibujo ->
+                                ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
+                            },
+                            imagenDeRuta = { ruta -> ImageStore.load(ruta) },
+                            // **La misma página al detalle, para verla en la web.** Va sin
+                            // lo anotado encima a propósito: eso lo pinta el SVG con sus
+                            // trazos, que se leen a cualquier aumento. Ver [DrawSvg.aTexto].
+                            paginaFinaDelPdf = { pagina, _ ->
+                                pdf?.let { PdfDoc.paraLaWeb(it, pagina) }
+                            },
+                            // **Y la página como líneas, si el PDF es vectorial**: un plano
+                            // así se lee de cerca en el navegador, que es de lo que se trata.
+                            // Ver [PlanoWeb].
+                            planoDelPdf = { pagina ->
+                                pdf?.let { PlanoWeb.deArchivo(it, pagina) }
+                            },
+                            paginaDelPdf = { pagina, dibujo ->
+                                pdf?.let {
+                                    kotlinx.coroutines.runBlocking {
+                                        paginaAnotada(
+                                            contexto, it, pagina, dibujo,
+                                            dibujo?.let { d -> ExcalidrawStore.rutaDe(contexto, d) },
+                                            PdfDoc.PAGE_WIDTH
+                                        )
+                                    }
+                                }
+                            },
+                            croquisComoHoja = { id ->
+                                Croquis3DAlmacen.cargar(contexto, id)?.let { croquis ->
+                                    ExportarCroquisHtml.hoja(
+                                        croquis, Camara3D(), "Croquis",
+                                        imagenIncrustada = { ruta -> imagenIncrustada(ruta) },
+                                        // El papel que se ve en la aplicación cuando el croquis
+                                        // no eligió uno: claro con el tema claro. Sin esto, un
+                                        // croquis sobre blanco salía sobre negro.
+                                        papel = if (oscuroDelSistema) ExportarCroquisHtml.FONDO_DE_FABRICA else "#ffffff"
+                                    )
+                                }
+                            }
+                        )
+                    }
+                    exportandoWeb = false
+                    if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
+                    else compartir(contexto, archivo, ExportarHtml.MIME_TYPE)
                 }
+            }
+
+            // Sin proyectos no hay nada que paginar: queda la tarjeta de
+            // configuración, que es la que cuenta que aún no hay ninguno y cómo se
+            // hace el primero.
+            if (ordenados.isEmpty()) {
+                com.forge.pixpin.TarjetaDeConfiguracion(
+                    onAjustes = onAjustes,
+                    sinProyectos = true,
+                    modifier = Modifier.fillMaxSize().padding(10.dp)
+                )
                 return@Column
             }
 
@@ -310,6 +430,7 @@ fun PantallaDeProyectos(
                     marcadas = if (marcado?.first == unico.id) marcado!!.second else emptySet(),
                     onMarcar = { clave -> marcarEn(unico, clave) },
                     onExportar = { exportando = true },
+                    onExportarWeb = { exportandoWeb = true },
                     modifier = Modifier.fillMaxSize().padding(10.dp)
                 )
                 return@Column
@@ -329,10 +450,29 @@ fun PantallaDeProyectos(
                 // falta pedirle al paginador que tenga listas otras tantas, que
                 // en un móvil con veinte proyectos es abrir veinte PDF para
                 // enseñar uno. Ver [PaginaDeProyecto] y su `enPrimerPlano`.
-                beyondViewportPageCount = 0,
-                key = { i -> ordenados.getOrNull(i)?.id ?: i }
+                // **La siguiente, ya preparada.** Con cero, la página de abajo se componía
+                // —miniaturas incluidas— justo cuando empezaba a asomar, en mitad del gesto:
+                // era el tirón «se queda a la mitad y luego baja» que reportó el usuario.
+                beyondViewportPageCount = 1,
+                // Y un impulso corto ya pasa de página, como en cualquier tira de vídeos:
+                // no hace falta arrastrar hasta la mitad.
+                flingBehavior = androidx.compose.foundation.pager.PagerDefaults.flingBehavior(
+                    state = paginador,
+                    snapPositionalThreshold = 0.25f
+                ),
+                // La clave de la primera es fija —siempre es la misma tarjeta—; las
+                // demás van desplazadas una, como el contenido.
+                key = { i -> if (i == 0) "configuracion" else ordenados.getOrNull(i - 1)?.id ?: i }
             ) { indice ->
-                val p = ordenados.getOrNull(indice) ?: return@VerticalPager
+                if (indice == 0) {
+                    com.forge.pixpin.TarjetaDeConfiguracion(
+                        onAjustes = onAjustes,
+                        sinProyectos = false,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    return@VerticalPager
+                }
+                val p = ordenados.getOrNull(indice - 1) ?: return@VerticalPager
                 PaginaDeProyecto(
                     app = app,
                     p = p,
@@ -344,6 +484,7 @@ fun PantallaDeProyectos(
                     marcadas = if (marcado?.first == p.id) marcado!!.second else emptySet(),
                     onMarcar = { clave -> marcarEn(p, clave) },
                     onExportar = { exportando = true },
+                    onExportarWeb = { exportandoWeb = true },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -361,8 +502,12 @@ fun PantallaDeProyectos(
  */
 @Composable
 private fun ContadorDeProyectos(paginador: PagerState, total: Int) {
+    // La página cero es la de configuración y no es un proyecto: ahí el contador se
+    // calla, porque decir «1 de 5» señalando a algo que no está en esa cuenta hace que
+    // luego el primer proyecto parezca el segundo.
+    val pagina = paginador.currentPage
     Text(
-        stringResourceSafe(R.string.proyecto_posicion, paginador.currentPage + 1, total),
+        if (pagina == 0) "" else stringResourceSafe(R.string.proyecto_posicion, pagina, total),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 4.dp)
@@ -393,6 +538,7 @@ private fun PaginaDeProyecto(
     marcadas: Set<String>,
     onMarcar: (String) -> Unit,
     onExportar: () -> Unit,
+    onExportarWeb: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val contexto = LocalContext.current
@@ -460,7 +606,15 @@ private fun PaginaDeProyecto(
                 .graphicsLayer { translationX = desplazamiento.value }
                 .deslizarAlChat(desplazamiento, alcance, p.id, alChat)
         ) {
-            Column(Modifier.fillMaxSize().padding(14.dp)) {
+            // **Vertical u apaisado, según la pantalla.** Girado, la cabecera y los botones se
+            // van a la izquierda y las hojas se quedan con el ancho de sobra a la derecha: en
+            // columna, las miniaturas quedaban con dos dedos de alto. Lo pidió el usuario.
+            BoxWithConstraints(Modifier.fillMaxSize().padding(14.dp)) {
+                val apaisado = maxWidth > maxHeight
+                // La hoja que se esté sujetando con los dedos, encima de todo.
+                // Ver [ZoomDeHoja]: no hace nada mientras no hay ninguna.
+                val ampliada = recordarZoomDeHoja()
+                val cabecera: @Composable () -> Unit = {
                 Row(verticalAlignment = Alignment.Top) {
                     Column(
                         Modifier
@@ -583,13 +737,9 @@ private fun PaginaDeProyecto(
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
-
-                // La hoja que se esté sujetando con los dedos, encima de todo.
-                // Ver [ZoomDeHoja]: no hace nada mientras no hay ninguna.
-                val ampliada = recordarZoomDeHoja()
-
-                Box(Modifier.weight(1f).fillMaxWidth()) {
+                }
+                val hojas: @Composable (Modifier) -> Unit = { modificador ->
+                    Box(modificador) {
                     when {
                         paginas.isEmpty() -> Box(
                             Modifier.fillMaxSize(),
@@ -623,9 +773,9 @@ private fun PaginaDeProyecto(
                             enPrimerPlano = enPrimerPlano
                         )
                     }
+                    }
                 }
-
-                CapaDeAmpliacion(ampliada)
+                val pie: @Composable () -> Unit = {
 
                 Spacer(Modifier.height(6.dp))
                 BarraDeAcciones(
@@ -633,8 +783,29 @@ private fun PaginaDeProyecto(
                     p = p,
                     marcadas = marcadas.size,
                     onChat = alChat,
-                    onExportar = onExportar
+                    onExportar = onExportar,
+                    onExportarWeb = onExportarWeb
                 )
+                }
+                if (apaisado) {
+                    Row(Modifier.fillMaxSize()) {
+                        Column(Modifier.weight(0.42f).fillMaxHeight()) {
+                            cabecera()
+                            Spacer(Modifier.weight(1f))
+                            pie()
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        hojas(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        cabecera()
+                        Spacer(Modifier.height(10.dp))
+                        hojas(Modifier.weight(1f).fillMaxWidth())
+                        pie()
+                    }
+                }
+                CapaDeAmpliacion(ampliada)
             }
         }
 
@@ -782,7 +953,8 @@ private fun BarraDeAcciones(
     p: Proyecto,
     marcadas: Int,
     onChat: () -> Unit,
-    onExportar: () -> Unit
+    onExportar: () -> Unit,
+    onExportarWeb: () -> Unit
 ) {
     val contexto = LocalContext.current
     Row(
@@ -820,7 +992,60 @@ private fun BarraDeAcciones(
                 val ahora = System.currentTimeMillis()
                 val id = "n-$ahora"
                 app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = id, nota = ""), ahora))
-                MarkdownEditorActivity.abrir(contexto, id, "")
+                MarkdownEditorActivity.abrir(contexto, id, "", desdeProyecto = p.id)
+            }
+        }
+        // **Los croquis en el espacio del proyecto.**
+        //
+        // Van en todos los proyectos, tengan plano de origen o no: croquizar en tres
+        // dimensiones es lo que uno hace *antes* de dibujar el plano —el volumen, el
+        // encaje, cómo se cruzan dos piezas— y también encima de un PDF que ya existe.
+        // Cada vista que se congele ahí entra aquí como una lámina, así que se marca y se
+        // exporta con las otras sin nada aparte. Ver [Croquis3DActivity].
+        //
+        // **Y son varios, como los lienzos.** Con ninguno, el botón crea el primero y lo
+        // abre —preguntar «¿cuál?» cuando no hay ninguno es preguntar por preguntar—; con
+        // alguno, enseña los que hay, cada uno con **su color**, que es el mismo con el que
+        // salen enmarcadas sus láminas en la lista de abajo.
+        var croquis by remember { mutableStateOf(false) }
+        Box {
+            BotonDeAccion(
+                Icons.Filled.ViewInAr,
+                R.string.proyecto_croquis_corto,
+                R.string.proyecto_croquis
+            ) {
+                if (p.croquis.isEmpty()) abrirUnCroquisNuevo(contexto, app, p) else croquis = true
+            }
+            DropdownMenu(expanded = croquis, onDismissRequest = { croquis = false }) {
+                p.croquis.forEachIndexed { i, id ->
+                    DropdownMenuItem(
+                        text = { Text(stringResourceSafe(R.string.proyecto_croquis_n, i + 1)) },
+                        leadingIcon = {
+                            Box(
+                                Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Color(
+                                            HojasDelProyecto.colorDe(Hoja(id = "", croquis = id))
+                                                ?: 0
+                                        )
+                                    )
+                            )
+                        },
+                        onClick = {
+                            croquis = false
+                            com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
+                                contexto, p.id, id, desdeProyectos = true
+                            )
+                        }
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResourceSafe(R.string.proyecto_croquis_nuevo)) },
+                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    onClick = { croquis = false; abrirUnCroquisNuevo(contexto, app, p) }
+                )
             }
         }
         Spacer(Modifier.weight(1f))
@@ -829,6 +1054,15 @@ private fun BarraDeAcciones(
         // acabas de marcar, y lleva la cuenta dentro para que no haya que ir a
         // contar las hojas con el tic.
         if (marcadas > 0) {
+            // La web va antes y sin texto: el número de al lado es de lo marcado, y decirlo
+            // dos veces sobra.
+            TextButton(onClick = onExportarWeb, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Icon(
+                    Icons.Filled.Language,
+                    contentDescription = stringResourceSafe(R.string.proyecto_exportar_web),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
             TextButton(onClick = onExportar, contentPadding = PaddingValues(horizontal = 10.dp)) {
                 Icon(
                     Icons.Filled.Share,
@@ -912,7 +1146,14 @@ private fun PortadaConTira(
     // editor—, la portada vuelve a la primera en vez de quedarse en blanco.
     val portada = paginas.getOrNull(enFoco) ?: paginas.first()
 
-    Column(Modifier.fillMaxSize()) {
+    // **La forma de la pantalla decide el reparto**, y se pregunta por la ventana y no por
+    // la configuración: `screenWidthDp` redondea y cuenta los recortes de otra forma según
+    // la versión, así que da respuestas distintas en el mismo aparato. Ver
+    // [LocalWindowInfo].
+    val ventana = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
+    val deLado = ventana.width > ventana.height
+
+    val laPortada: @Composable (Modifier) -> Unit = { m ->
         PortadaDelProyecto(
             app = app,
             p = p,
@@ -921,9 +1162,10 @@ private fun PortadaConTira(
             onMarcar = onMarcar,
             ampliada = ampliada,
             enPrimerPlano = enPrimerPlano,
-            modifier = Modifier.weight(1f).fillMaxWidth()
+            modifier = m
         )
-        Spacer(Modifier.height(8.dp))
+    }
+    val laTira: @Composable () -> Unit = {
         TiraDeHojas(
             app = app,
             p = p,
@@ -933,8 +1175,23 @@ private fun PortadaConTira(
             enFoco = enFoco,
             onFoco = { enFoco = it },
             onMarcar = onMarcar,
-            pedirMiniaturas = enPrimerPlano
+            pedirMiniaturas = enPrimerPlano,
+            deLado = deLado
         )
+    }
+
+    if (deLado) {
+        Row(Modifier.fillMaxSize()) {
+            laPortada(Modifier.weight(1f).fillMaxHeight())
+            Spacer(Modifier.width(8.dp))
+            laTira()
+        }
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            laPortada(Modifier.weight(1f).fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            laTira()
+        }
     }
 }
 
@@ -1054,16 +1311,12 @@ private fun TiraDeHojas(
     enFoco: Int,
     onFoco: (Int) -> Unit,
     onMarcar: (String) -> Unit,
-    pedirMiniaturas: Boolean
+    pedirMiniaturas: Boolean,
+    /** Si la pantalla está tumbada: entonces la tira va de canto. */
+    deLado: Boolean = false
 ) {
     val estado = remember(p.id) { LazyListState() }
-    LazyRow(
-        state = estado,
-        modifier = Modifier.fillMaxWidth(),
-        // Al soltar se para en una hoja: si la portada sigue a la primera de la
-        // fila, la fila tiene que dejar siempre una hoja en la primera posición.
-        flingBehavior = rememberSnapFlingBehavior(estado)
-    ) {
+    val hojas: LazyListScope.() -> Unit = {
         items(paginas.size, key = { it }) { i ->
             HojaDelProyecto(
                 app = app,
@@ -1077,6 +1330,29 @@ private fun TiraDeHojas(
                 pedirMiniatura = pedirMiniaturas
             )
         }
+    }
+    // **De pie va debajo; tumbado, al lado.**
+    //
+    // Con el móvil en horizontal el alto es lo escaso y el ancho sobra: una tira tumbada se
+    // llevaba un tercio de lo poco que quedaba y la portada —que es lo que uno ha venido a
+    // mirar— se quedaba en una banda. De canto, la tira usa el ancho que sobra y la portada
+    // se queda con todo el alto. Ver [PortadaConTira], que es quien decide el reparto.
+    if (deLado) {
+        LazyColumn(
+            state = estado,
+            modifier = Modifier.fillMaxHeight(),
+            flingBehavior = rememberSnapFlingBehavior(estado),
+            content = hojas
+        )
+    } else {
+        LazyRow(
+            state = estado,
+            modifier = Modifier.fillMaxWidth(),
+            // Al soltar se para en una hoja: si la portada sigue a la primera de la
+            // fila, la fila tiene que dejar siempre una hoja en la primera posición.
+            flingBehavior = rememberSnapFlingBehavior(estado),
+            content = hojas
+        )
     }
 
     // **La portada NO sigue a la tira.** Antes cambiaba con el desplazamiento, y eso
@@ -1207,6 +1483,23 @@ private fun PreparadorDeMiniaturas(
 }
 
 /**
+ * Crea un croquis en el espacio en el proyecto y lo abre.
+ *
+ * El identificador lleva la hora dentro: es único sin tener que mirar los que ya hay, y
+ * ordena solo por antigüedad, que es el orden en que se enseñan.
+ */
+private fun abrirUnCroquisNuevo(
+    contexto: android.content.Context,
+    app: PixPinApp,
+    p: Proyecto
+) {
+    val ahora = System.currentTimeMillis()
+    val id = "c3d-$ahora"
+    app.proyectos.guardar(Proyectos.conCroquis(p, id, ahora))
+    com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(contexto, p.id, id, desdeProyectos = true)
+}
+
+/**
  * Abre una hoja para trabajarla.
  *
  * Fuera de la composición porque lo hacen dos sitios —la portada y la tira— y
@@ -1221,6 +1514,22 @@ private fun abrirHoja(
 ) {
     val h = pagina.hoja
     when {
+        // **La lámina de un croquis en el espacio abre el croquis, no la lámina.**
+        //
+        // Lo que se entrega es la lámina —vectores, se exporta y se amplía sin límite— pero
+        // donde se trabaja es en el espacio. Tocarla lleva al croquis **puesto en la vista
+        // que la creó**, que es de donde salió y donde se sigue.
+        h.croquis != null && h.vista != null ->
+            com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
+                contexto, p.id, h.croquis!!, desdeProyectos = true, vista = h.vista!!
+            )
+
+        // El croquis entero, el que sale como una hoja más de la rejilla.
+        h.croquis != null ->
+            com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
+                contexto, p.id, h.croquis!!, desdeProyectos = true
+            )
+
         // La nota abre **por la hoja que se ha tocado**: el editor no tiene
         // páginas —el corte cambiaría con cada letra— pero sí sabe empezar por
         // donde estabas. Ver [MarkdownEditorActivity.abrir].
@@ -1232,7 +1541,8 @@ private fun abrirHoja(
                 Paginado.deTexto(h.nota!!).getOrNull(pagina.nota)?.desde ?: -1
             } else {
                 -1
-            }
+            },
+            desdeProyecto = p.id
         )
         else -> {
             val dibujo = h.dibujo ?: "dib-${System.currentTimeMillis()}"
@@ -1244,13 +1554,27 @@ private fun abrirHoja(
             val ruta = ExcalidrawStore.rutaDe(contexto, dibujo)
             if (p.pdfOrigen != null && h.pagina != null) {
                 DrawEditorActivity.abrirPaginaDePdf(
-                    contexto, dibujo, ruta, p.pdfOrigen!!, h.pagina!!
+                    contexto, dibujo, ruta, p.pdfOrigen!!, h.pagina!!, desdeProyecto = p.id
                 )
             } else {
-                DrawEditorActivity.abrir(contexto, dibujo, ruta, null)
+                DrawEditorActivity.abrir(contexto, dibujo, ruta, null, desdeProyecto = p.id)
             }
         }
     }
+}
+
+/**
+ * La etiqueta de qué clase de hoja es, o nulo para las que no hacen falta.
+ *
+ * Las páginas de un PDF no la llevan: en un proyecto que sale de un PDF son casi todas, y
+ * una etiqueta que está en todas partes no distingue nada.
+ */
+private fun deQueEs(h: Hoja): String? = when {
+    h.croquis != null -> "3D"
+    h.nota != null -> "MD"
+    h.pagina != null -> null
+    h.dibujo != null -> "2D"
+    else -> null
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -1333,7 +1657,35 @@ private fun HojaDelProyecto(
                 // que se va a entregar.
                 h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!)
 
+                // Un croquis del espacio no tiene miniatura que sacar sin montar la escena
+                // entera: se enseña con su color, que es el que lo identifica en todas partes.
+                h.croquis != null && h.vista == null -> Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(HojasDelProyecto.colorDe(h) ?: 0).copy(alpha = 0.16f))
+                )
+
                 else -> MiniaturaDeLienzo(contexto, h.dibujo, pagina.marco)
+            }
+
+            // **De qué es cada hoja, en una esquina.** Con la rejilla llena de miniaturas
+            // pequeñas, un croquis del espacio, un lienzo y una nota se parecen demasiado; y
+            // desde que los croquis salen aquí en vez de en una lista aparte, hace falta
+            // poder distinguirlos de un vistazo sin abrirlos.
+            deQueEs(h)?.let { que ->
+                Text(
+                    que,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(3.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                )
             }
 
             // **Un puntito si esa hoja lleva algo encima.**
@@ -1471,6 +1823,9 @@ private fun MiniaturaDeLienzo(
                             // mirar píxeles estirados; se vuelve a componer en grande
                             // mientras los dedos siguen encima, y aparece al llegar.
                             alcance.launch {
+                                // Arranca con el gesto ya en marcha, no en su primer
+                                // fotograma: ver `ZoomDeHoja.momentoDeAfinar`.
+                                if (!ampliada.momentoDeAfinar()) return@launch
                                 val fina = withContext(Dispatchers.IO) {
                                     runCatching {
                                         val escena = ExcalidrawStore.cargar(ruta)
@@ -1543,14 +1898,31 @@ private fun avisar(contexto: android.content.Context, id: Int) {
     android.widget.Toast.makeText(contexto, id, android.widget.Toast.LENGTH_SHORT).show()
 }
 
-/** Manda el PDF a donde el usuario elija. */
-private fun compartir(contexto: android.content.Context, archivo: java.io.File) {
+/**
+ * Una imagen del croquis metida en la página, como `data:`. Se recomprime: una foto de doce
+ * megapíxeles dentro de un archivo que se manda por mensajería no la abre nadie.
+ */
+private fun imagenIncrustada(ruta: String): String? = runCatching {
+    val bmp = ImageStore.load(ruta, 1024) ?: return null
+    val salida = java.io.ByteArrayOutputStream()
+    val conAlfa = bmp.hasAlpha()
+    bmp.compress(
+        if (conAlfa) android.graphics.Bitmap.CompressFormat.PNG
+        else android.graphics.Bitmap.CompressFormat.JPEG,
+        82, salida
+    )
+    "data:" + (if (conAlfa) "image/png" else "image/jpeg") + ";base64," +
+        android.util.Base64.encodeToString(salida.toByteArray(), android.util.Base64.NO_WRAP)
+}.getOrNull()
+
+/** Manda el archivo a donde el usuario elija. */
+private fun compartir(contexto: android.content.Context, archivo: java.io.File, tipo: String) {
     runCatching {
         val uri = androidx.core.content.FileProvider.getUriForFile(
             contexto, "${contexto.packageName}.fileprovider", archivo
         )
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
-            .setType("application/pdf")
+            .setType(tipo)
             .putExtra(android.content.Intent.EXTRA_STREAM, uri)
             .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         contexto.startActivity(
@@ -1711,6 +2083,7 @@ private fun MiniaturaDePagina(
                             // lo dibujado desaparecía justo al hacer zoom — que es
                             // cuando uno amplía precisamente para leer lo que anotó.
                             alcance.launch {
+                                if (!ampliada.momentoDeAfinar()) return@launch
                                 (if (rutaDelDibujo != null) {
                                     com.forge.pixpin.guardados.paginaAnotada(
                                         contexto, pdf, pagina, dibujo, rutaDelDibujo,

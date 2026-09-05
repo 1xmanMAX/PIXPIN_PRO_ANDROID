@@ -78,6 +78,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Image
@@ -100,13 +101,16 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -239,6 +243,16 @@ class MensajesActivity : ComponentActivity() {
             cargando = false
         }
 
+        // **Los proyectos, suscritos y una sola vez.** Se leían con `.value` allí donde
+        // hacían falta, y eso no apunta la composición al flujo: crear un proyecto y
+        // volver dejaba la lista de conversaciones con los nombres de antes. Suscrito
+        // aquí arriba, los dos sitios que lo usan se enteran solos.
+        val proyectosDeLaApp = (application as? PixPinApp)?.proyectos?.proyectos
+        val proyectos by (
+            proyectosDeLaApp
+                ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList<com.forge.pixpin.motor.Proyecto>()) }
+        ).collectAsState()
+
         // **Con `rememberSaveable` para que el giro no se lo lleve.** Girar el móvil
         // recreaba la pantalla entera: volvías a «Todo», sin búsqueda y con lo escrito a
         // medias perdido. Perder un texto a medio escribir por girar es imperdonable.
@@ -254,6 +268,11 @@ class MensajesActivity : ComponentActivity() {
         // entera al escribir o borrar, y con copias guardadas se quedarían marcadas
         // versiones viejas de cosas que ya han cambiado.
         var marcados by remember { mutableStateOf(setOf<String>()) }
+        // **Dónde cae cada burbuja en la ventana.** Es lo que permite que el arrastre
+        // para marcar varias sepa por cuál va pasando el dedo: el gesto se queda en la
+        // burbuja donde empezó, así que ella sola no puede saber qué hay tres filas más
+        // abajo. Ver [FilaDeMensaje] y su `registrarFranja`.
+        val franjas = remember { mutableStateMapOf<String, ClosedFloatingPointRange<Float>>() }
         val seleccionando = marcados.isNotEmpty()
         val loMarcado = remember(mensajes, marcados) { mensajes.filter { it.id in marcados } }
         // Salir de la selección es lo primero que hace el botón de atrás, antes que
@@ -308,6 +327,14 @@ class MensajesActivity : ComponentActivity() {
             mutableStateOf<String?>(null)
         }
         var reenviando by remember { mutableStateOf<List<Mensaje>>(emptyList()) }
+        /** El mensaje cuyo hilo se está mirando, si hay alguno. Ver [HojaDelHilo]. */
+        var hiloDe by remember { mutableStateOf<Mensaje?>(null) }
+        // Cuántos comentarios cuelgan de cada uno. Se cuenta una vez por lista y no una
+        // vez por burbuja: con doscientos mensajes, lo segundo es recorrer la lista
+        // doscientas veces en cada recomposición.
+        val comentariosPorMensaje = remember(mensajes) {
+            mensajes.mapNotNull { it.respondeA }.groupingBy { it }.eachCount()
+        }
         var etiquetando by remember { mutableStateOf<Mensaje?>(null) }
         var compartiendo by remember { mutableStateOf<Mensaje?>(null) }
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
@@ -461,6 +488,20 @@ class MensajesActivity : ComponentActivity() {
                                         contentDescription = getString(
                                             if (fijarTodos) com.forge.pixpin.R.string.guardados_fijar
                                             else com.forge.pixpin.R.string.guardados_soltar
+                                        )
+                                    )
+                                }
+                                // **Reenviar en bloque.** Estaba solo en el menú de uno,
+                                // y reenviar es de las cosas que más se hacen de varias a
+                                // la vez: tres fotos de la misma tanda van al mismo sitio.
+                                IconButton(onClick = {
+                                    reenviando = loMarcado.sortedBy { it.cuando }
+                                    marcados = emptySet()
+                                }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = getString(
+                                            com.forge.pixpin.R.string.guardados_reenviar
                                         )
                                     )
                                 }
@@ -1065,6 +1106,8 @@ class MensajesActivity : ComponentActivity() {
                                 etiquetar = { etiquetando = m },
                                 reenviar = { reenviando = listOf(m) },
                                 compartirComo = { compartiendo = m },
+                                verHilo = { hiloDe = m },
+                                cuantosComentarios = comentariosPorMensaje[m.id] ?: 0,
                                 alternarRecorte = {
                                     guardarAparte(mensajes.map {
                                         if (it.id == m.id) it.copy(soloLaFoto = !it.soloLaFoto)
@@ -1134,7 +1177,18 @@ class MensajesActivity : ComponentActivity() {
                                            else marcados + m.id
                             },
                             onResponder = { respondiendo = m },
-                            onIrAlCitado = { irA = m.respondeA }
+                            onIrAlCitado = { irA = m.respondeA },
+                            registrarFranja = { arriba, abajo ->
+                                franjas[m.id] = arriba..abajo
+                            },
+                            // **Se suma, no se alterna.** Arrastrando por encima de una
+                            // ya marcada, alternar la desmarcaría al pasar y volvería a
+                            // marcarla al volver: el gesto de barrer tiene que añadir.
+                            alArrastrarHasta = { y ->
+                                franjas.entries.firstOrNull { y in it.value }?.let { fila ->
+                                    if (fila.key !in marcados) marcados = marcados + fila.key
+                                }
+                            }
                         )
                     }
                 }
@@ -1443,8 +1497,55 @@ class MensajesActivity : ComponentActivity() {
             }
         }
 
+        // **El hilo de un mensaje: él arriba y sus comentarios debajo.**
+        //
+        // Una conversación larga desordena una discusión: los cinco comentarios sobre la
+        // misma foto están intercalados con todo lo demás y en el orden en que llegaron.
+        // Aquí se leen juntos, con lo comentado a la vista, que es como se lee un hilo.
+        //
+        // En una hoja y no en otra pantalla: se abre, se lee y se cierra sin perder el
+        // sitio de la conversación, que es el gesto de asomarse a algo.
+        hiloDe?.let { raiz ->
+            val comentarios = remember(mensajes, raiz.id) {
+                mensajes.filter { it.respondeA == raiz.id }.sortedBy { it.cuando }
+            }
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { hiloDe = null }
+            ) {
+                Text(
+                    resources.getQuantityString(
+                        com.forge.pixpin.R.plurals.guardados_comentarios,
+                        comentarios.size, comentarios.size
+                    ),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                androidx.compose.foundation.lazy.LazyColumn(
+                    Modifier.fillMaxWidth().weight(1f, fill = false)
+                ) {
+                    // La raíz va arriba y **separada**: es de lo que se habla, no un
+                    // comentario más. Sin la raya, el hilo empieza sin decir sobre qué.
+                    item {
+                        ResumenDelHilo(raiz, esLaRaiz = true) {
+                            hiloDe = null
+                            irA = raiz.id
+                        }
+                        androidx.compose.material3.HorizontalDivider(
+                            Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    items(comentarios, key = { it.id }) { c ->
+                        ResumenDelHilo(c, esLaRaiz = false) {
+                            hiloDe = null
+                            irA = c.id
+                        }
+                    }
+                }
+            }
+        }
+
         if (reenviando.isNotEmpty()) {
-            val proyectos = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
             val charlas = remember(mensajes, proyectos) {
                 conversaciones(
                     mensajes,
@@ -1501,7 +1602,6 @@ class MensajesActivity : ComponentActivity() {
             // mensaje y su hora, ordenadas por lo más reciente, y la general arriba por
             // ser el nexo. Se calcula en una sola pasada sobre todos los mensajes —ver
             // [conversaciones]— y no filtrando la lista una vez por proyecto.
-            val proyectos = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
             val charlas = remember(mensajes, proyectos) {
                 conversaciones(
                     mensajes,
@@ -1846,6 +1946,10 @@ class MensajesActivity : ComponentActivity() {
         val cambiarTexto: (String) -> Unit,
         val compartirComo: () -> Unit,
         val alternarRecorte: () -> Unit,
+        /** Abre el hilo: este mensaje arriba y debajo todo lo que le han comentado. */
+        val verHilo: () -> Unit,
+        /** Cuántos comentarios cuelgan de él. Cero es no tener hilo que ver. */
+        val cuantosComentarios: Int,
         val etiquetar: () -> Unit,
         val reenviar: () -> Unit,
         val responder: () -> Unit,
@@ -1884,8 +1988,23 @@ class MensajesActivity : ComponentActivity() {
         onTocar: () -> Unit,
         onMantener: () -> Unit,
         onResponder: () -> Unit,
-        onIrAlCitado: () -> Unit
+        onIrAlCitado: () -> Unit,
+        /**
+         * Dónde cae esta fila en la ventana, para saber sobre cuál va el dedo.
+         *
+         * Es la mitad del arrastre para marcar varias: el gesto se queda en la burbuja
+         * donde empezó —así lo reparte Compose— y ella sola no puede saber qué hay debajo
+         * del dedo tres filas más abajo. Cada una apunta su franja y el que las tiene
+         * todas resuelve. Ver [alArrastrarHasta].
+         */
+        registrarFranja: (Float, Float) -> Unit = { _, _ -> },
+        /** El dedo ha pasado por esta altura de la ventana mientras se marcaba. */
+        alArrastrarHasta: (Float) -> Unit = {}
     ) {
+        // Dónde empieza esta burbuja en la ventana. Lo apunta `onGloballyPositioned` y lo
+        // usa el arrastre para traducir «tanto he bajado el dedo» a «por aquí voy».
+        var arribaEnLaVentana by remember(m.id) { mutableStateOf(0f) }
+
         // **Deslizar la burbuja para comentarla**, copiado de Telegram y comprobado
         // contra su código (`ChatActivity.java:4963-5000` de DrKLO/Telegram).
         //
@@ -1988,6 +2107,16 @@ class MensajesActivity : ComponentActivity() {
                         menuAbierto = false
                         acciones.alternarRecorte()
                     }
+                }
+                // **El hilo, y solo cuando lo hay.** Un mensaje con cinco comentarios
+                // repartidos por la conversación no se lee: están intercalados con todo
+                // lo demás y en el orden en que llegaron, no en el de la discusión.
+                // Juntos y con su mensaje arriba, se leen de un tirón.
+                if (acciones.cuantosComentarios > 0) {
+                    DelMenu(
+                        com.forge.pixpin.R.string.guardados_ver_hilo,
+                        Icons.Filled.Forum
+                    ) { menuAbierto = false; acciones.verHilo() }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_etiquetar,
                         Icons.Filled.EmojiEmotions) {
@@ -2179,6 +2308,11 @@ class MensajesActivity : ComponentActivity() {
                 },
                 modifier = Modifier
                     .widthIn(max = anchoMaximo)
+                    .onGloballyPositioned {
+                        val caja = it.boundsInWindow()
+                        arribaEnLaVentana = caja.top
+                        registrarFranja(caja.top, caja.bottom)
+                    }
                     // **Se mira dónde cae el dedo sin quedarse con el toque.**
                     //
                     // El menú tiene que salir donde tocaste —en Telegram el popup nace
@@ -2203,10 +2337,33 @@ class MensajesActivity : ComponentActivity() {
                             )
                         }
                     }
-                    .combinedClickable(
-                        onClick = onTocar,
-                        onLongClick = {
-                            if (seleccionando) onMantener() else menuAbierto = true
+                    // **Mantener y jalar marca varias**, y solo con la selección ya
+                    // abierta. Fuera de ella, mantener pulsado abre el menú y arrastrar
+                    // desplaza la lista, que es lo de siempre y no se toca.
+                    //
+                    // Va **en vez de** `combinedClickable` y no además: dos detectores de
+                    // pulsación larga sobre la misma burbuja se disparan los dos, y el
+                    // mensaje se marcaba y se desmarcaba en el mismo gesto.
+                    .then(
+                        if (!seleccionando) {
+                            Modifier.combinedClickable(
+                                onClick = onTocar,
+                                onLongClick = { menuAbierto = true }
+                            )
+                        } else {
+                            Modifier
+                                .clickable(onClick = onTocar)
+                                .pointerInput(m.id) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = { onMantener() },
+                                        onDrag = { cambio, _ ->
+                                            cambio.consume()
+                                            alArrastrarHasta(
+                                                arribaEnLaVentana + cambio.position.y
+                                            )
+                                        }
+                                    )
+                                }
                         }
                     )
             ) {
@@ -2529,7 +2686,11 @@ class MensajesActivity : ComponentActivity() {
             ) {
                 File(rutaDelDibujo).lastModified()
             }
-            LaunchedEffect(rutaDelDibujo, version) {
+            // El recorte entra en la clave: cambiarlo no toca el fichero, así que la
+            // fecha sigue siendo la misma y sin él este bloque no se volvía a ejecutar.
+            // Se elegía «ver todo» y la foto seguía recortada hasta pasar por el editor
+            // —que sí cambia la fecha—, y la opción parecía no hacer nada.
+            LaunchedEffect(rutaDelDibujo, version, m.soloLaFoto) {
                 if (version == 0L) return@LaunchedEffect
                 editada = withContext(Dispatchers.IO) {
                     runCatching {
@@ -2602,6 +2763,10 @@ class MensajesActivity : ComponentActivity() {
                                 // encima, y entra en cuanto está.
                                 if (cogida) {
                                     alcance.launch {
+                                        // Componer esto arranca cuando el gesto ya va
+                                        // suelto, no en su primer fotograma: ver
+                                        // `ZoomDeHoja.momentoDeAfinar`.
+                                        if (!ampliada.momentoDeAfinar()) return@launch
                                         val fina = withContext(Dispatchers.IO) {
                                             // **Si la foto está anotada, la nítida es el
                                             // dibujo, no la foto.**
@@ -2623,7 +2788,14 @@ class MensajesActivity : ComponentActivity() {
                                                         .ExcalidrawStore.cargar(elDibujo)
                                                         ?: return@runCatching null
                                                     com.forge.pixpin.motor.DrawExport.aBitmap(
-                                                        escena, ESCALA_DE_LA_FOTO_AMPLIADA
+                                                        escena, ESCALA_DE_LA_FOTO_AMPLIADA,
+                                                        // El mismo encuadre que en la
+                                                        // burbuja: si no, ampliar una
+                                                        // foto recortada la cambiaba por
+                                                        // el dibujo entero a mitad del
+                                                        // gesto, y saltaba.
+                                                        recorte = if (m.soloLaFoto)
+                                                            cajaDeLaFoto(escena) else null
                                                     ) { id ->
                                                         escena.files[id]?.path?.let {
                                                             com.forge.pixpin.pin.ImageStore
@@ -2891,6 +3063,7 @@ class MensajesActivity : ComponentActivity() {
                                     // Lo mismo con la página: se recompone en grande, con
                                     // lo anotado encima, para poder leer lo que pone.
                                     alcance.launch {
+                                        if (!ampliada.momentoDeAfinar()) return@launch
                                         val fina = withContext(Dispatchers.IO) {
                                             runCatching {
                                                 paginaAnotada(
@@ -2937,6 +3110,48 @@ class MensajesActivity : ComponentActivity() {
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
+    }
+
+    /**
+     * Una fila del hilo: **de qué va el mensaje, en una línea**.
+     *
+     * Resumida y no la burbuja entera a propósito. Un hilo se abre para ver **de qué se
+     * habló**, no para volver a leerlo todo: metiendo las burbujas de verdad —con sus
+     * fotos, sus adjuntos y sus menús— la hoja se llena y hay que desplazarla, que es
+     * justo lo que se venía a evitar. Tocando una se va a ella en la conversación, que es
+     * donde está completa.
+     */
+    @Composable
+    private fun ResumenDelHilo(m: Mensaje, esLaRaiz: Boolean, onIr: () -> Unit) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onIr)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    horaDe(m.cuando),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    m.texto.ifBlank { getString(claseDelMensaje(m)) },
+                    style = if (esLaRaiz) MaterialTheme.typography.bodyMedium
+                    else MaterialTheme.typography.bodySmall,
+                    maxLines = if (esLaRaiz) 4 else 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+
+    /** Cómo se llama lo que lleva un mensaje sin texto, para poder nombrarlo en el hilo. */
+    private fun claseDelMensaje(m: Mensaje): Int = when (m.clase) {
+        Clase.IMAGEN -> com.forge.pixpin.R.string.guardados_una_foto
+        Clase.ARCHIVO -> com.forge.pixpin.R.string.guardados_un_archivo
+        else -> com.forge.pixpin.R.string.guardados_titulo
     }
 
     /**

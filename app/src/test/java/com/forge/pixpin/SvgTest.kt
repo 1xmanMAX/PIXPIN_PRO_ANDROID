@@ -122,6 +122,46 @@ class SvgTest {
         assertEquals(2.5, my, 1e-9)
     }
 
+    /**
+     * **El contorno compacto recorre la misma curva y pesa la mitad.**
+     *
+     * Se reconstruyen los puntos absolutos sumando las diferencias y se comparan con los
+     * puntos medios por los que cose [Svg.caminoSuaveCerrado]: tienen que coincidir hasta el
+     * decimal que se escribe. Y tiene que ser más corto, que es para lo que existe.
+     */
+    @Test
+    fun `el contorno del lápiz compacto es la misma curva con menos bytes`() {
+        // Un contorno como los que da el lápiz: denso y con decimales por todas partes.
+        val pts = (0 until 40).map {
+            val t = it / 40.0 * 2 * Math.PI
+            Pt(100 + 37.3 * Math.cos(t) + 0.137 * it, 60 + 21.7 * Math.sin(t) - 0.071 * it)
+        }
+        val d = Svg.caminoDelLapiz(pts)
+        assertTrue("no empieza donde el trazo: $d", d.startsWith("M137.3 60"))
+        assertTrue("no cose con cuadráticas relativas: $d", d.contains("q"))
+        assertTrue("no cierra: $d", d.endsWith("z"))
+        assertFalse("un decimal, no dos: $d", Regex("\\d\\.\\d\\d").containsMatchIn(d))
+        // Se rehacen los puntos finales de cada tramo sumando las diferencias al arranque.
+        val arranque = Regex("^M([-\\d.]+) ([-\\d.]+)").find(d)!!
+        var x = arranque.groupValues[1].toDouble()
+        var y = arranque.groupValues[2].toDouble()
+        val llegados = ArrayList<Pair<Double, Double>>()
+        for (m in Regex("q([-\\d.]+) ([-\\d.]+) ([-\\d.]+) ([-\\d.]+)").findAll(d)) {
+            x += m.groupValues[3].toDouble()
+            y += m.groupValues[4].toDouble()
+            llegados += x to y
+        }
+        val medios = (1 until pts.size - 1).map {
+            (pts[it].x + pts[it + 1].x) / 2 to (pts[it].y + pts[it + 1].y) / 2
+        }
+        assertEquals(medios.size, llegados.size)
+        for ((a, b) in medios.zip(llegados)) {
+            assertEquals(a.first, b.first, 0.051)
+            assertEquals(a.second, b.second, 0.051)
+        }
+        assertTrue("tenía que pesar menos", d.length < Svg.caminoSuaveCerrado(pts).length / 2)
+    }
+
     @Test
     fun `un trazo de dos puntos no se suaviza, se cierra a rectas`() {
         val d = Svg.caminoSuaveCerrado(listOf(Pt(0.0, 0.0), Pt(5.0, 5.0)))

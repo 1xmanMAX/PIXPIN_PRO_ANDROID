@@ -9,6 +9,8 @@ import com.forge.pixpin.motormd.Comandos
 import com.forge.pixpin.motormd.EditorVivo
 import com.forge.pixpin.motormd.Historial
 import com.forge.pixpin.motormd.Inline
+import com.forge.pixpin.motormd.Markdown
+import com.forge.pixpin.motormd.MarkdownText
 import com.forge.pixpin.motormd.InlineText
 import com.forge.pixpin.motormd.Menus
 import com.forge.pixpin.motormd.Sitio
@@ -139,9 +141,9 @@ class MarkdownEditorActivity : ComponentActivity() {
                     onGuardar = { texto ->
                         if (id.isNotEmpty()) TextoStore.guardar(id, texto)
                         guardarEnSuProyecto(id, texto)
-                        finish()
+                        cerrarYVolver()
                     },
-                    onDescartar = { finish() },
+                    onDescartar = { cerrarYVolver() },
                     onAProyecto = { texto -> aUnProyecto(texto) }
                 )
             }
@@ -194,6 +196,17 @@ class MarkdownEditorActivity : ComponentActivity() {
         Toast.makeText(this, R.string.nota_a_proyecto, Toast.LENGTH_SHORT).show()
     }
 
+    /**
+     * **Cerrar devuelve a donde se vino.** El editor vive en su propia tarea, así que sin
+     * decirlo atrás no es el proyecto que se estaba mirando sino lo que hubiera debajo.
+     * Ver [com.forge.pixpin.EXTRA_DESDE_PROYECTO].
+     */
+    private fun cerrarYVolver() {
+        val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
+        if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
+        finish()
+    }
+
     companion object {
         private const val EXTRA_ID = "md_id"
         private const val EXTRA_TEXTO = "md_texto"
@@ -211,12 +224,19 @@ class MarkdownEditorActivity : ComponentActivity() {
          * y solo sirve para **empezar ahí**: el editor sigue siendo un rollo
          * seguido, sin hojas. Ver el visor de páginas de la nota flotante.
          */
-        fun abrir(context: Context, id: String, texto: String, desde: Int = -1) {
+        fun abrir(
+            context: Context, id: String, texto: String, desde: Int = -1,
+            /** Si se viene de la zona de proyectos: cerrar tiene que devolver ahí. */
+            desdeProyecto: String? = null
+        ) {
             val i = Intent(context, MarkdownEditorActivity::class.java)
                 .putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_TEXTO, texto)
                 .putExtra(EXTRA_DESDE, desde)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (desdeProyecto != null) {
+                i.putExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO, desdeProyecto)
+            }
             runCatching { context.startActivity(i) }
         }
     }
@@ -245,12 +265,20 @@ private fun Pantalla(
             if (desde >= 0) {
                 trozosDe(inicial).takeIf { it.isNotEmpty() }
                     ?.let { Sitio(bloque = trozoEn(it, desde)) }
+            } else if (inicial.isBlank()) {
+                // **Una nota nueva se abre escribiendo.** Sin sitio no hay campo, y
+                // sin campo no hay teclado: se abría en blanco y muda.
+                Sitio(0, TextRange(0))
             } else {
                 null
             }
         )
     }
     var pidiendoUrl by remember { mutableStateOf(false) }
+    // **Ver la nota como va a quedar**, sin salir: el editor por bloques enseña
+    // cada bloque ya compuesto, pero solo de uno en uno; esto es la página
+    // entera, seguida, como la verá quien la reciba.
+    var viendo by remember { mutableStateOf(false) }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
     var viendoAdjuntar by remember { mutableStateOf(false) }
@@ -271,7 +299,7 @@ private fun Pantalla(
      * habiendo, y si no, el último.
      */
     fun recolocar(nuevoTexto: String) {
-        val cuantos = trozosDe(nuevoTexto).size
+        val cuantos = Vivo.trozos(nuevoTexto).size
         if (cuantos == 0) {
             sitio = null
             return
@@ -309,7 +337,7 @@ private fun Pantalla(
         }
         // La plantilla deja el cursor entre los paréntesis, así que la ruta se
         // escribe justo ahí y el bloque queda entero de una vez.
-        val donde = sitio?.let { trozosDe(valor.text).getOrNull(it.bloque)?.hasta }
+        val donde = sitio?.let { Vivo.trozos(valor.text).getOrNull(it.bloque)?.hasta }
             ?: valor.text.length
         val r = Comandos.elegir(valor.text, donde, tipo)
         val conRuta = r.text.substring(0, r.selStart) + ruta + r.text.substring(r.selStart)
@@ -333,7 +361,7 @@ private fun Pantalla(
     /** Cambia de tipo el bloque activo, conservando lo escrito. */
     fun convertirBloque(tipo: TipoDeBloque?) {
         val s2 = sitio ?: return
-        val trozos = trozosDe(valor.text)
+        val trozos = Vivo.trozos(valor.text)
         val trozo = trozos.getOrNull(s2.bloque) ?: return
         val fuente = trozo.de(valor.text)
         val cola = fuente.takeLastWhile { it == '\n' }
@@ -399,10 +427,20 @@ private fun Pantalla(
         cambia(TextFieldValue(r.text, TextRange(r.selStart, r.selEnd)))
     }
 
+    // El título de la barra es el de la nota, si lo tiene: se mira solo la
+    // primera línea, que es barato y es donde va un título.
+    val titulo = remember(valor.text) {
+        valor.text.lineSequence().firstOrNull()?.trim()
+            ?.takeIf { it.startsWith("#") }
+            ?.trimStart('#')?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "Nota"
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nota") },
+                title = { Text(titulo, maxLines = 1) },
                 navigationIcon = {
                     // Con algo escrito se pregunta: la flecha está pegada al
                     // borde y se toca sin querer más de lo que parece.
@@ -416,6 +454,14 @@ private fun Pantalla(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viendo = !viendo }) {
+                        Icon(
+                            if (viendo) Icons.Filled.Edit else Icons.Filled.Visibility,
+                            contentDescription = if (viendo) "Seguir escribiendo" else "Ver la nota",
+                            tint = if (viendo) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     // Deshacer y rehacer arriba a la derecha, como su
                     // `historyButtons`. `pasos` está solo para que Compose sepa
                     // que hay que volver a mirar si están habilitados: el
@@ -477,15 +523,20 @@ private fun Pantalla(
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                EditorVivo(
-                    texto = valor.text,
-                    sitio = sitio,
-                    onTexto = { cambia(valor.copy(text = it)) },
-                    onSitio = { sitio = it }
-                )
+                if (viendo) {
+                    val bloques = remember(valor.text) { Markdown.parse(valor.text) }
+                    MarkdownText(blocks = bloques, baseSizeSp = 16f)
+                } else {
+                    EditorVivo(
+                        texto = valor.text,
+                        sitio = sitio,
+                        onTexto = { cambia(valor.copy(text = it)) },
+                        onSitio = { sitio = it }
+                    )
+                }
             }
 
-            run {
+            if (!viendo) run {
                 // La lista de comandos va **encima** de la barra y por delante
                 // del teclado: es lo que estás mirando mientras tecleas.
                 val sugerencias = remember(consulta) {

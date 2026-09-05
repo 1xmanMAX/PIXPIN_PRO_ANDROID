@@ -41,6 +41,29 @@ fun opcionArrastrada(dx: Float, paso: Float, cuantas: Int, haciaLaIzquierda: Boo
 }
 
 /**
+ * **Qué opción cae bajo un arrastre vertical, contando desde la que ya estaba.**
+ *
+ * Es la hermana de [opcionArrastrada] para el gesto de arriba y abajo, y se diferencia en
+ * algo más que el eje: **parte de la opción puesta**, no de la primera. Arrastrar cero deja
+ * lo que había, bajar un paso pasa a la siguiente y subir uno vuelve a la anterior.
+ *
+ * Eso es lo que hace que el gesto sea el mismo en los dos lienzos. En el croquis en el
+ * espacio, cada mando es un botón que enseña **lo que hay puesto** y se sube o se baja desde
+ * ahí; midiendo desde la primera opción, el mismo gesto haría cosas distintas según lo que
+ * estuviera elegido — y eso es exactamente lo que no se puede hacer de reojo.
+ *
+ * Bajar avanza porque las opciones salen en columna hacia abajo: el dedo va por donde va la
+ * lista, que es lo único que no hay que explicar.
+ */
+fun opcionArrastradaAbajo(dy: Float, paso: Float, cuantas: Int, desde: Int): Int {
+    if (cuantas <= 0) return -1
+    val ahora = desde.coerceIn(0, cuantas - 1)
+    if (paso <= 0f) return ahora
+    // Media casilla de margen, como en la horizontal: el centro de cada opción es su punto.
+    return (ahora + (dy / paso).roundToInt()).coerceIn(0, cuantas - 1)
+}
+
+/**
  * Si un arrastre de [dx] píxeles cuenta ya como abrir el desplegable.
  *
  * Hace falta un mínimo porque **un toque también arrastra**: el dedo nunca se
@@ -144,7 +167,25 @@ fun masCercano(valor: Double, valores: List<Double>): Int {
 fun grosorDeLaFraccion(f: Float): Double {
     val x = f.coerceIn(0f, 1f).toDouble()
     val crudo = GROSOR_MINIMO + (GROSOR_MAXIMO - GROSOR_MINIMO) * x * x * x
-    return kotlin.math.round(crudo * 4.0) / 4.0
+    return grosorRedondo(crudo)
+}
+
+/**
+ * El redondeo de todo grosor que sale de un mando: **a paso limpio, y con el
+ * paso a la medida del número**. A cuartos de punto en los grosores de siempre;
+ * por debajo, más fino — con el suelo en 0,01 para los planos, el cuarto de
+ * punto se tragaba todos los finos de golpe (y el 0,01 mismo redondeaba a
+ * cero). Los pasos son múltiplos de 0,01, y el céntimo final quita la morralla
+ * del coma flotante antes de que se guarde.
+ */
+private fun grosorRedondo(crudo: Double): Double {
+    val paso = when {
+        crudo >= 2.0 -> 0.25
+        crudo >= 0.2 -> 0.05
+        else -> 0.01
+    }
+    val limpio = kotlin.math.round(kotlin.math.round(crudo / paso) * paso * 100.0) / 100.0
+    return limpio.coerceIn(GROSOR_MINIMO, GROSOR_MAXIMO)
 }
 
 /** Y la vuelta: en qué punto del recorrido queda un grosor. */
@@ -166,17 +207,224 @@ fun grosorEscrito(g: Double): String =
     else String.format(java.util.Locale.US, "%.2f", g).trimEnd('0').replace('.', ',')
 
 /**
- * El grosor dicho **en tanto por ciento del recorrido**.
+ * Lo más fino y lo más gordo que se puede poner un trazo.
  *
- * El número crudo no dice nada: «3,25» no se compara con nada y no se recuerda,
- * y encima el recorrido no es lineal —va al cubo, ver [grosorDeLaFraccion]— así
- * que el mismo salto de número vale distinto según por dónde vayas. El
- * porcentaje sí: dice **dónde está el mando**, que es lo que se está mirando, y
- * es la misma escala que la del deslizador de al lado.
+ * El suelo bajó de 0,5 a 0,01 **por los planos**: el grosor es una medida del
+ * mundo —el mismo número da la misma raya se mire desde donde se mire, como en
+ * el croquis del espacio— así que dibujando muy acercado hay que bajar el
+ * número, y con el suelo en 0,5 no había adónde bajarlo: a 100 aumentos medio
+ * punto de escena son cincuenta píxeles de pantalla, una brocha. Con 0,01 se
+ * puede trazar fino sobre el detalle de un plano, y el chivato del mando —que
+ * enseña el grosor como saldrá en pantalla— dice si ya se está en lo que se
+ * quiere.
  */
-fun porcentajeDelGrosor(g: Double): Int =
-    (fraccionDelGrosor(g) * 100).toDouble().roundToInt().coerceIn(0, 100)
-
-/** Lo más fino y lo más gordo que se puede poner un trazo. */
-const val GROSOR_MINIMO = 0.5
+const val GROSOR_MINIMO = 0.01
 const val GROSOR_MAXIMO = 20.0
+
+// ---- Los mandos que se posan y se arrastran, como los del croquis en el espacio ----
+
+/**
+ * **El tono que pide un arrastre, por hacia dónde va.**
+ *
+ * El mando del color no es una recta: es un círculo. El dedo se posa en el botón y se va
+ * hacia donde está el color que busca —arriba los verdes, abajo los morados, a un lado los
+ * rojos— y el ángulo de esa salida **es** el tono. Se mide desde donde se posó, no desde el
+ * centro del botón, que es lo que permite que el botón mida dos centímetros y la rueda, un
+ * palmo.
+ *
+ * [subida] va con el signo de la mano —positiva hacia arriba— y aquí se le da la vuelta
+ * para medir en ángulos de pantalla, que es como se pinta la rueda: el tono `t` cae a `t`
+ * grados en el sentido de las agujas del reloj. Así lo que se ve y lo que sale es lo mismo.
+ */
+fun tonoDelArrastre(lado: Float, subida: Float): Float {
+    val grados = Math.toDegrees(kotlin.math.atan2(-subida.toDouble(), lado.toDouble()))
+    return ((grados + 360.0) % 360.0).toFloat()
+}
+
+/**
+ * **Y lo viva que sale: lo lejos que se ha ido el dedo.**
+ *
+ * En el centro, gris; en el borde de la rueda, el color a tope. Es lo mismo que hace
+ * cualquier rueda de color, y de paso resuelve el rincón malo del gesto: en el mismísimo
+ * punto donde se posó el dedo no hay ángulo que medir, y ahí tampoco hay color que pedir.
+ */
+fun vivezaDelArrastre(lado: Float, subida: Float, radio: Float): Float {
+    if (radio <= 0f) return 0f
+    return (kotlin.math.hypot(lado, subida) / radio).coerceIn(0f, 1f)
+}
+
+/**
+ * **Lo gordo que sale de un arrastre, contando desde lo que había.**
+ *
+ * Va **a saltos iguales de tamaño y no de número**: cada tanto de recorrido multiplica por
+ * otro tanto, no suma otro tanto. De medio punto a veinte hay cuarenta veces, y repartir eso
+ * a partes iguales por el recorrido deja lo de escribir —de dos a cuatro— en el primer
+ * centímetro y el resto del dedo para grosores de tachar. Por veces, el mando responde igual
+ * de fino abajo que arriba, que es como se percibe el grosor: nadie nota un cuarto de punto
+ * sobre veinte, y sobre uno lo nota todo el mundo.
+ *
+ * [recorrido] va en `dp` y con el signo de la mano: subir engorda.
+ */
+fun grosorArrastrado(partida: Double, recorrido: Float): Double {
+    val desde = partida.coerceIn(GROSOR_MINIMO, GROSOR_MAXIMO)
+    val gordo = desde * Math.pow(VECES_POR_DP, recorrido.toDouble())
+    // Redondeado, que el mismo sitio del dedo dé siempre el mismo valor.
+    return grosorRedondo(gordo)
+}
+
+/**
+ * **Lo que tapa, contando desde lo que había.**
+ *
+ * Esta sí es una recta: de nada a del todo hay cien, y cien es cien en cualquier punto de la
+ * escala. Un dedo entero de recorrido la cruza de punta a punta, y sale de cinco en cinco
+ * para que el número sea redondo y para que el mismo sitio dé siempre el mismo valor.
+ */
+fun opacidadArrastrada(partida: Int, recorrido: Float): Int {
+    val crudo = partida + recorrido / RECORRIDO_DEL_MANDO * 100f
+    val redondo = (crudo / PASO_DE_LO_QUE_TAPA).roundToInt() * PASO_DE_LO_QUE_TAPA
+    return redondo.coerceIn(0, 100)
+}
+
+/**
+ * La opacidad que le toca a una fracción del recorrido, **con su paso**.
+ *
+ * La vuelta de [fraccionDeLaOpacidad], y la que hace falta para el imán: las marcas viven
+ * en fracciones de 0 a 1 —son las mismas para cualquier escala— y lo que se guarda en el
+ * estilo es el número de 0 a 100. Pasa por el mismo redondeo que [opacidadArrastrada], que
+ * si no una marca podría dejar el valor en 63 justo donde el arrastre nunca lo deja.
+ */
+fun opacidadDeLaFraccion(fraccion: Float): Int =
+    valorConPaso(fraccion, 0, 100, PASO_DE_LO_QUE_TAPA)
+
+/** En qué punto del recorrido queda una opacidad. La vuelta de [opacidadDeLaFraccion]. */
+fun fraccionDeLaOpacidad(opacidad: Int): Float = fraccionDelValor(opacidad, 0, 100)
+
+/**
+ * Cuánto hay que arrastrar para recorrer un mando de punta a punta, en `dp`.
+ *
+ * Un dedo de largo. Más corto, apurar un extremo pide pulso de relojero; más largo, no cabe
+ * en una pantalla y hay que arrastrar dos veces.
+ */
+const val RECORRIDO_DEL_MANDO = 170f
+
+/**
+ * Cuántas veces engorda el trazo por cada `dp` de arrastre.
+ *
+ * Sale de repartir el grosor entero —de [GROSOR_MINIMO] a [GROSOR_MAXIMO], que son cuarenta
+ * veces— por [RECORRIDO_DEL_MANDO], **por veces y no a partes iguales**. Ver
+ * [grosorArrastrado].
+ */
+const val VECES_POR_DP = 1.0219
+
+/**
+ * Lo lejos que hay que irse del botón del color para llegar al borde de la rueda, en `dp`.
+ *
+ * Es el radio de la rueda que sale al lado y también el recorrido del gesto: la que se ve es
+ * **del mismo tamaño** que la que se está manejando, así que lo que se mira es dónde está el
+ * dedo y no una traducción de dónde está.
+ */
+const val RADIO_DE_LA_RUEDA = 66f
+
+/** Cuánto recorrido cuesta pasar de una opción a la siguiente en un mando, en `dp`. */
+const val PASO_DE_LA_OPCION = 32f
+
+/** Lo menos clara que se deja una tinta al cogerla con la rueda: si no, el disco sale negro. */
+const val CLARIDAD_MINIMA = 0.55f
+
+/** De cinco en cinco, que es como se dice lo que tapa una tinta. */
+private const val PASO_DE_LO_QUE_TAPA = 5
+
+/**
+ * **Lo grande que sale la letra, contando desde lo que había.**
+ *
+ * Por veces y no a partes iguales, como el grosor y por lo mismo: de ocho a diez se ve
+ * muchísimo y de ochenta a ochenta y dos no se ve nada, así que un recorrido lineal deja
+ * media pantalla para diferencias que nadie nota y aprieta al principio, que es donde se
+ * decide. Y a números enteros: nadie ha pedido una letra de 23,7.
+ */
+fun tamanoDeLetraArrastrado(partida: Double, recorrido: Float): Double {
+    val desde = partida.coerceIn(LETRA_MINIMA, LETRA_MAXIMA)
+    val tam = desde * Math.pow(VECES_POR_DP_DE_LA_LETRA, recorrido.toDouble())
+    return kotlin.math.round(tam).coerceIn(LETRA_MINIMA, LETRA_MAXIMA)
+}
+
+/** De lo más pequeño que se lee a lo más grande que cabe en un rótulo. */
+const val LETRA_MINIMA = 8.0
+const val LETRA_MAXIMA = 96.0
+
+/**
+ * Cuánto crece la letra por cada `dp` de arrastre.
+ *
+ * Sale de repartir la escala entera —doce veces— por [RECORRIDO_DEL_MANDO], por veces.
+ */
+const val VECES_POR_DP_DE_LA_LETRA = 1.0147
+
+// ---- Las marcas de la rueda del color ----
+
+/**
+ * **Dónde cae un color dentro de la rueda**, en `dp` desde su centro y en coordenadas de
+ * pantalla —la `y` hacia abajo—.
+ *
+ * El tono es el ángulo y la viveza, lo lejos: es la propia definición de la rueda. Se mide
+ * con las agujas del reloj desde las tres, que es como reparte los tonos el barrido de
+ * Compose y como los lee [tonoDelArrastre]; así lo que se pinta y lo que se elige están en el
+ * mismo sitio.
+ */
+fun enLaRueda(tono: Float, viveza: Float, radio: Float): Pt {
+    val a = Math.toRadians(tono.toDouble())
+    val d = viveza.coerceIn(0f, 1f) * radio
+    return Pt(kotlin.math.cos(a) * d, kotlin.math.sin(a) * d)
+}
+
+/**
+ * **Qué marca tiene el dedo encima, si es que tiene alguna.** Devuelve su índice, o -1.
+ *
+ * Es lo que convierte una marca en algo que sirve: pintada sola dice «este color estaba
+ * aquí», pero volver a él seguiría siendo cuestión de puntería, y a pulso sobre una rueda de
+ * dos dedos no se acierta un tono concreto dos veces seguidas. Imantada, se pasa cerca y se
+ * cae dentro — que es lo mismo que hacen las marcas de los deslizadores.
+ *
+ * [lado] y [subida] son dónde está el dedo respecto del **centro de la rueda**, en `dp` y con
+ * la subida positiva hacia arriba. [marcas] son los tonos y vivezas de cada marca.
+ */
+fun marcaImantada(
+    lado: Float,
+    subida: Float,
+    radio: Float,
+    marcas: List<Pair<Float, Float>>
+): Int {
+    var mejor = -1
+    var cerca = IMAN_DE_LA_MARCA_DEL_COLOR
+    marcas.forEachIndexed { i, (tono, viveza) ->
+        val donde = enLaRueda(tono, viveza, radio)
+        val d = kotlin.math.hypot(lado - donde.x, -subida - donde.y).toFloat()
+        if (d < cerca) {
+            cerca = d
+            mejor = i
+        }
+    }
+    return mejor
+}
+
+/**
+ * Lo cerca que hay que pasar de una marca para caer en ella, en `dp`.
+ *
+ * Poco más que la propia marca: el imán está para no tener que afinar el último milímetro,
+ * no para robarle el gesto a quien está eligiendo el tono de al lado.
+ */
+const val IMAN_DE_LA_MARCA_DEL_COLOR = 13f
+
+/** Cuántas marcas se guardan. Más que esto, dejan de ser marcas y son otra paleta. */
+const val MARCAS_DE_COLOR = 8
+
+/**
+ * **Cuánto alumbra, contando desde lo que había.**
+ *
+ * Una recta, como lo que tapa: de apagada a tope hay uno, y ese uno vale lo mismo en
+ * cualquier punto de la escala. Un dedo entero de recorrido la cruza entera, y sale a
+ * centésimas para que el mismo sitio del dedo dé siempre el mismo brillo.
+ */
+fun brilloArrastrado(partida: Double, recorrido: Float): Double {
+    val crudo = partida + recorrido / RECORRIDO_DEL_MANDO
+    return (kotlin.math.round(crudo * 100) / 100.0).coerceIn(0.0, 1.0)
+}

@@ -33,6 +33,63 @@ class DrawControllerTest {
     // Crear
     // ---------------------------------------------------------------------
 
+    /**
+     * **Una flecha libre que rodea algo y vuelve no se borra al soltar.**
+     *
+     * Lo que mide una raya es lo que recorre, no lo que separan sus puntas: midiendo la
+     * cuerda, una flecha que da la vuelta acaba con las dos puntas juntas y el filtro de
+     * figuras degeneradas se la llevaba por delante. Ver [Tool.FLECHA_LIBRE].
+     */
+    @Test
+    fun `la flecha libre sobrevive aunque acabe donde empezo`() {
+        val c = controller()
+        c.selectTool(Tool.FLECHA_LIBRE)
+        c.pointerDown(Pt(100.0, 100.0))
+        // Una vuelta completa de radio 30: acaba a un pelo de donde empezó.
+        for (i in 1..36) {
+            val a = Math.PI * 2 * i / 36
+            c.pointerMove(Pt(100 + 30 * kotlin.math.cos(a), 100 + 30 * kotlin.math.sin(a)))
+        }
+        c.pointerUp(Pt(130.0, 100.0))
+        val flecha = c.scene.elements.singleOrNull()
+        assertNotNull("la flecha libre se borró al soltar", flecha)
+        assertEquals(ElementType.ARROW, flecha!!.type)
+        assertEquals(Arrowhead.ARROW, flecha.endArrowhead)
+        // Lisa: el trazado de boceto sobre cientos de tramos de un píxel es una maraña.
+        assertEquals(Element.ROUGHNESS_ARCHITECT, flecha.roughness)
+        assertTrue("tenía que guardar el recorrido", (flecha.points?.size ?: 0) > 10)
+    }
+
+    /**
+     * **Y la punta se ve.** En un trazo a pulso los puntos van a un píxel unos de otros, y
+     * mirando solo al anterior la punta salía del tamaño de ese píxel: invisible. Ver
+     * [getArrowheadPoints].
+     */
+    @Test
+    fun `la punta de una flecha libre sale del tamano que le toca`() {
+        val c = controller()
+        c.selectTool(Tool.FLECHA_LIBRE)
+        c.pointerDown(Pt(0.0, 0.0))
+        for (i in 1..200) c.pointerMove(Pt(i * 1.0, 0.0))
+        c.pointerUp(Pt(200.0, 0.0))
+        val flecha = c.scene.elements.single()
+        val punta = getArrowheadPoints(flecha, ArrowEnd.END, Arrowhead.ARROW)
+        assertNotNull("no salió punta", punta)
+        val (a, b) = punta!!.wings
+        val abre = kotlin.math.hypot(a.x - b.x, a.y - b.y)
+        assertTrue("la punta salió de $abre, o sea invisible", abre > 8.0)
+    }
+
+    /** Y una que no se mueve sí se descarta: un toque no es una flecha. */
+    @Test
+    fun `un toque con la flecha libre no deja nada`() {
+        val c = controller()
+        c.selectTool(Tool.FLECHA_LIBRE)
+        c.pointerDown(Pt(10.0, 10.0))
+        c.pointerUp(Pt(10.0, 10.0))
+        assertTrue(c.scene.elements.isEmpty())
+    }
+
     @Test
     fun `arrastrar con la herramienta rectangulo crea uno`() {
         val c = controller()

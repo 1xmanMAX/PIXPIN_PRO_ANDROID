@@ -54,7 +54,8 @@ class DrawPropertiesTest {
         assertEquals(
             setOf(
                 Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-                Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD, Propiedad.PRESION
+                Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD,
+                Propiedad.PRESION
             ),
             propiedadesPara(Tool.FREEDRAW, emptyList())
         )
@@ -65,9 +66,14 @@ class DrawPropertiesTest {
     }
 
     @Test
-    fun `solo la flecha ofrece puntas`() {
-        assertTrue(Propiedad.PUNTAS in propiedadesPara(Tool.ARROW, emptyList()))
-        for (t in Tool.entries.filter { it != Tool.ARROW }) {
+    fun `solo las flechas ofrecen puntas`() {
+        // La flecha libre es una flecha: se traza a pulso, pero acaba en punta y la punta se
+        // elige igual. Ver [Tool.FLECHA_LIBRE].
+        val flechas = setOf(Tool.ARROW, Tool.FLECHA_LIBRE)
+        for (t in flechas) {
+            assertTrue("$t tendría que ofrecer puntas", Propiedad.PUNTAS in propiedadesPara(t, emptyList()))
+        }
+        for (t in Tool.entries.filter { it !in flechas }) {
             assertTrue("$t no debería ofrecer puntas", Propiedad.PUNTAS !in propiedadesPara(t, emptyList()))
         }
     }
@@ -90,13 +96,16 @@ class DrawPropertiesTest {
         // La lupa: cuánto agranda y cómo es su montura. Nada de relleno —dentro
         // no hay color propio, hay dibujo— ni de tipo de línea.
         assertEquals(
-            setOf(Propiedad.LUPA, Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.OPACIDAD),
+            setOf(
+                Propiedad.LUPA, Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.MATERIAL,
+                Propiedad.OPACIDAD
+            ),
             propiedadesPara(Tool.LUPA, emptyList())
         )
         // El mosaico añade elegir entre bloques y mancha: el campo existía en el
         // modelo desde el principio y no había forma de tocarlo.
         assertEquals(
-            setOf(Propiedad.GROSOR, Propiedad.MOSAICO, Propiedad.OPACIDAD),
+            setOf(Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.MOSAICO, Propiedad.OPACIDAD),
             propiedadesPara(Tool.MOSAIC, emptyList())
         )
         assertTrue(Propiedad.FUENTE in propiedadesPara(Tool.SERIAL, emptyList()))
@@ -196,6 +205,79 @@ class CambioDeEstiloTest {
         c.load(Scene(elements = listOf(roja()), style = ItemStyle()))
         c.setSelection(setOf("r"))
         return c
+    }
+
+    /**
+     * **La tinta y su brillo llegan al dibujo**, tanto a lo marcado como a lo siguiente.
+     *
+     * Es la cadena entera de un mando nuevo —el estilo, lo que cambió, lo que se le aplica al
+     * elemento y con qué nace el siguiente— y falla en silencio: si a un campo se le olvida
+     * una de las cuatro paradas, el mando se mueve y el dibujo no cambia.
+     */
+    @Test
+    fun `la tinta encendida llega al elemento y al pincel`() {
+        val c = conLaRojaMarcada()
+        val antes = c.estiloActivo()
+        c.cambiarEstilo(antes.copy(material = MaterialDeTinta.LUZ))
+
+        val marcada = c.scene.byId("r")!!
+        assertEquals(MaterialDeTinta.LUZ, marcada.material)
+        // Y el pincel se queda igual, para que lo siguiente salga de la misma tinta.
+        assertEquals(MaterialDeTinta.LUZ, c.scene.style.material)
+
+        // Lo que se dibuje a partir de ahora nace con ella.
+        val nuevo = newElement(ElementType.LINE, 0.0, 0.0, c.scene.style)
+        assertEquals(MaterialDeTinta.LUZ, nuevo.material)
+    }
+
+    /**
+     * **El papel decide el modo noche**, y no un interruptor aparte.
+     *
+     * Es lo que impide la contradicción que había: papel a oscuras con el modo día puesto deja
+     * el dibujo negro sobre negro.
+     */
+    @Test
+    fun `el papel decide si es de noche`() {
+        assertTrue(!DrawTheme.esDeNoche("#ffffff"))
+        assertTrue(!DrawTheme.esDeNoche("#f5f1e8"))
+        assertTrue(!DrawTheme.esDeNoche("#d8dade"))
+        assertTrue(DrawTheme.esDeNoche("#121212"))
+        assertTrue(DrawTheme.esDeNoche("#000000"))
+        // Y los cinco que se ofrecen son colores de verdad, sin repetirse.
+        assertEquals(DrawTheme.PAPELES.size, DrawTheme.PAPELES.map { it.second }.toSet().size)
+    }
+
+    /** Cambiar el papel no entra en el historial: es mirar el dibujo, no cambiarlo. */
+    @Test
+    fun `el papel no entra en deshacer`() {
+        val c = conLaRojaMarcada()
+        c.ponerElPapel("#121212")
+        c.undo()
+        assertEquals("#121212", c.scene.backgroundColor)
+    }
+
+    /**
+     * **La llave de las luces es del dibujo, no de cada trazo, y no entra en el historial.**
+     *
+     * Apagada, una tinta de luz vale cero: es lo que hace que se pinte como una tinta lisa.
+     */
+    @Test
+    fun `la llave de las luces es una para todo el dibujo`() {
+        val c = conLaRojaMarcada()
+        assertEquals(1.0, c.scene.luces.cuanto, 1e-9)
+
+        c.ponerLasLuces(LucesDelDibujo(encendidas = false))
+        assertEquals("apagadas no alumbran nada", 0.0, c.scene.luces.cuanto, 1e-9)
+
+        c.ponerLasLuces(LucesDelDibujo(encendidas = true, fuerza = 2.0))
+        assertEquals("y llegan al doble", 2.0, c.scene.luces.cuanto, 1e-9)
+        // Pasarse no da más: dos es el techo.
+        c.ponerLasLuces(LucesDelDibujo(encendidas = true, fuerza = 9.0))
+        assertEquals(2.0, c.scene.luces.cuanto, 1e-9)
+
+        // Y deshacer no las toca: subir la luz es mirar el dibujo, no cambiarlo.
+        c.undo()
+        assertEquals(2.0, c.scene.luces.fuerza, 1e-9)
     }
 
     /** Los mandos enseñan lo de lo marcado, no lo del pincel. */
@@ -373,4 +455,5 @@ class AlinearTest {
         val hueco2 = xs[2] - (xs[1] + 20.0)
         assertEquals(hueco1, hueco2, 1e-6)
     }
+
 }

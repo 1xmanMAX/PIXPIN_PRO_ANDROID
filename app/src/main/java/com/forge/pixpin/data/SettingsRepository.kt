@@ -108,6 +108,13 @@ data class Settings(
      */
     val marcasDeDeslizadores: String = "",
     /**
+     * Los colores marcados en la rueda, separados por comas.
+     *
+     * Son de quien dibuja y no del dibujo —el tono con el que uno rotula es el mismo abra la
+     * lámina que abra—, así que viven aquí y no en el `.excalidraw`. Ver [marcaImantada].
+     */
+    val coloresMarcados: String = "",
+    /**
      * Cómo se agrupan las herramientas en cada barra, escrito.
      *
      * Es cosa aparte de **cuáles** salen: se puede tener la misma lista repartida
@@ -133,6 +140,24 @@ data class Settings(
      * defecto porque en una pantalla LCD el negro puro se ve peor.
      */
     val oledNegro: Boolean = false,
+
+    /**
+     * **Cómo se trae un plano en PDF: como líneas o como imagen.**
+     *
+     * Con esto puesto, al abrir un PDF vectorial se lee su geometría y se pinta como rayas
+     * (ver `PlanoEnPantalla`): se ve nítido a cualquier aumento y **no hay nada que cargar al
+     * acercarse**, que era lo lento del plano por cuadros. A cambio, abrirlo cuesta unos
+     * segundos la primera vez y no vale para un PDF escaneado —eso es una foto y no hay
+     * líneas que leer—, en cuyo caso se vuelve solo al mosaico de siempre.
+     */
+    val planoEnLineas: Boolean = true,
+
+    /**
+     * **Qué funciones lleva la página web exportada.** null es «todas»; un conjunto es lo
+     * marcado en Ajustes → Exportar → Página web. Los nombres son los de
+     * `ExportarHtml.Opciones.NOMBRES`.
+     */
+    val funcionesWeb: Set<String>? = null,
 
     /**
      * A qué se pega el dedo, punto por punto.
@@ -231,6 +256,7 @@ class SettingsRepository(private val context: Context) {
         val PIN_FONT = intPreferencesKey("pin_font")
         val IMAN_ACTIVO = booleanPreferencesKey("iman_activo")
         val MARCAS_DESLIZADORES = stringPreferencesKey("marcas_deslizadores")
+        val COLORES_MARCADOS = stringPreferencesKey("colores_marcados")
         val GUIA_EDITOR = booleanPreferencesKey("guia_editor")
         val GUIA_PIN = booleanPreferencesKey("guia_pin")
         val GUIA_CAPA = booleanPreferencesKey("guia_capa")
@@ -248,6 +274,8 @@ class SettingsRepository(private val context: Context) {
         val EDITOR_TOOLS = stringSetPreferencesKey("editor_tools")
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
+        val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
+        val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
         val COPY_FORMAT = stringPreferencesKey("copy_format")
         val PALABRAS = stringPreferencesKey("palabras_magicas")
@@ -268,12 +296,15 @@ class SettingsRepository(private val context: Context) {
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
+            planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
+            funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
             guiaEnPin = prefs[Keys.GUIA_PIN] ?: false,
             guiaEnCapa = prefs[Keys.GUIA_CAPA] ?: false,
             guiaEnCaptura = prefs[Keys.GUIA_CAPTURA] ?: false,
             imanActivo = prefs[Keys.IMAN_ACTIVO] ?: true,
             marcasDeDeslizadores = prefs[Keys.MARCAS_DESLIZADORES] ?: "",
+            coloresMarcados = prefs[Keys.COLORES_MARCADOS] ?: "",
             imanEsquinas = prefs[Keys.IMAN_ESQUINAS] ?: true,
             imanMedios = prefs[Keys.IMAN_MEDIOS] ?: true,
             imanCentros = prefs[Keys.IMAN_CENTROS] ?: true,
@@ -342,6 +373,16 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.OLED_NEGRO] = valor }
     }
 
+    /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */
+    suspend fun setFuncionesWeb(valor: Set<String>) {
+        context.dataStore.edit { it[Keys.FUNCIONES_WEB] = valor }
+    }
+
+    /** Cómo se trae un plano en PDF. Ver [Settings.planoEnLineas]. */
+    suspend fun setPlanoEnLineas(valor: Boolean) {
+        context.dataStore.edit { it[Keys.PLANO_EN_LINEAS] = valor }
+    }
+
     /** Enciende o apaga una clase de enganche. Ver [com.forge.pixpin.motor.Iman]. */
     /**
      * Enciende o apaga el modo guía en un sitio.
@@ -365,6 +406,11 @@ class SettingsRepository(private val context: Context) {
     /** Guarda las marcas de los deslizadores. Ver [Settings.marcasDeDeslizadores]. */
     suspend fun setMarcas(texto: String) {
         context.dataStore.edit { it[Keys.MARCAS_DESLIZADORES] = texto }
+    }
+
+    /** Guarda los colores marcados en la rueda. Ver [Settings.coloresMarcados]. */
+    suspend fun setColoresMarcados(texto: String) {
+        context.dataStore.edit { it[Keys.COLORES_MARCADOS] = texto }
     }
 
     suspend fun setIman(cual: ClaseDeIman, valor: Boolean) {

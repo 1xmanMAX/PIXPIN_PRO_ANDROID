@@ -153,9 +153,12 @@ fun esPared(e: Element): Boolean = when (e.type) {
     // redondel de cinco píxeles no puede detener un derrame.
     // El plano tampoco: es el papel pautado sobre el que se grafica, y contarlo
     // como pared dejaría cada cuadro suyo como un hueco cerrado que rellenar.
+    // El cronograma tampoco: es una lámina con datos, como la escala gráfica, y contar
+    // su marco como pared dejaría cada celda suya como un hueco que rellenar.
     ElementType.IMAGE, ElementType.FRAME, ElementType.SPOTLIGHT,
     ElementType.MOSAIC, ElementType.TEXT, ElementType.ESCALA_GRAFICA,
-    ElementType.PUNTO, ElementType.PLANO -> false
+    ElementType.CRONOGRAMA,
+    ElementType.PUNTO, ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO -> false
 
     // La lupa **sí** para el bote: es una placa opaca apoyada encima, y un
     // derrame que se colara por debajo saldría pintando dentro del cristal.

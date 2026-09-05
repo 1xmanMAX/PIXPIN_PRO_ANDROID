@@ -153,6 +153,28 @@ enum class ElementType {
     @SerialName("pixpin-axes") PLANO,
 
     /**
+     * La recta numérica: **el plano en una sola dimensión**.
+     *
+     * El mismo instrumento que [PLANO] con una regla sola: sabe cuánto vale una
+     * unidad, se estira por los lados enseñando más números y por las esquinas
+     * agrandando los mismos. Sustituye a la recta dibujada de la lista de
+     * figuras, que al alargarla estiraba las puntas y las cifras. Ver [Plano].
+     */
+    @SerialName("pixpin-number-line") RECTA,
+
+    /**
+     * El espacio de tres ejes: **x, y, z proyectados, y se gira**.
+     *
+     * Tres rectas numéricas que se cruzan en el origen, con el suelo pautado,
+     * proyectadas en paralelo desde un punto de vista que se elige con el
+     * tirador de giro —que aquí no inclina la caja sino que da la vuelta al
+     * espacio— y con una inclinación propia. Se estira como el plano: por un
+     * lado caben más números, por una esquina los mismos más grandes. Ver
+     * [Espacio].
+     */
+    @SerialName("pixpin-space") ESPACIO,
+
+    /**
      * La caja del boceto en volumen: **la única pieza 3D del motor**.
      *
      * Es un rectángulo apoyado en el suelo isométrico más lo que levanta. Se
@@ -182,8 +204,174 @@ enum class ElementType {
      * estira y lo que se mueve— y quien necesita lo que ocupa de verdad pregunta
      * por [cajaConLoQueDibuja].
      */
-    @SerialName("pixpin-solid") SOLIDO
+    @SerialName("pixpin-solid") SOLIDO,
+
+    /**
+     * El **cronograma**: filas de tareas y barras sobre una escala de tiempo.
+     *
+     * Es la figura que faltaba para bocetar un plan. A mano se dibuja en treinta segundos
+     * y queda torcido; con rectángulos del editor son doce elementos sueltos que hay que
+     * alinear uno a uno y que al mover una fila se quedan atrás. Aquí es **una figura con
+     * datos dentro**: la rejilla se reparte sola, las barras se arrastran por encima de
+     * ella y añadir una tarea recoloca lo demás.
+     *
+     * No pretende ser un gestor de proyectos —no hay dependencias, ni recursos, ni
+     * fechas—: es un croquis de cuándo va cada cosa, que es lo que uno dibuja en una
+     * reunión. Ver [TareaDelCronograma].
+     */
+    @SerialName("pixpin-gantt") CRONOGRAMA
 }
+
+/**
+ * Las dos piezas del boceto 3D.
+ *
+ * La caja explica casi todo lo que se explica en un croquis conceptual. La **cuña** es la
+ * única forma que dice algo que la caja no puede decir: un tejado, una rampa, un chaflán
+ * —cualquier cosa que suba de un lado y no del otro—. Y sale casi gratis: es la misma
+ * caja con dos de los cuatro vértices de arriba bajados hasta la base, así que las seis
+ * caras siguen siendo las mismas y la que se queda sin superficie se cae sola por donde
+ * ya se caían las traseras: proyecta área cero. Ver [verticesDe].
+ */
+/**
+ * Una fila del cronograma: **qué es y desde cuándo hasta cuándo**.
+ *
+ * Las dos medidas van en columnas y no en fechas, y pueden ser fraccionarias: media
+ * columna es media semana, o medio sprint, o lo que sea la columna. Es lo que permite
+ * arrastrar una barra a donde uno la quiere en vez de teclear un calendario.
+ */
+@Serializable
+data class TareaDelCronograma(
+    val nombre: String = "",
+    /** Desde qué columna arranca, contando desde cero. */
+    val desde: Double = 0.0,
+    /** Cuántas columnas dura. Nunca menos de un cuarto: por debajo no se puede ni tocar. */
+    val cuanto: Double = 1.0,
+    /**
+     * El color de esta barra, si tiene el suyo.
+     *
+     * Nulo quiere decir «el de la figura», que es lo normal. Tenerlo por fila es lo que
+     * deja agrupar por equipo o por fase con un vistazo, que es la mitad de para lo que
+     * sirve un cronograma dibujado.
+     */
+    val color: String? = null
+)
+
+/**
+ * El tamaño de una hoja, **por su proporción**.
+ *
+ * Una hoja no se guarda en centímetros porque el lienzo no tiene centímetros: se guarda
+ * como cualquier otro marco, con su caja en píxeles de escena. Lo que el tamaño aporta es
+ * **la proporción** —que un A4 sea un A4 y no un rectángulo cualquiera— y un ancho de
+ * partida para que todas nazcan iguales. Estirarla después es libre: quien quiera una
+ * hoja a medida la estira, y deja de ser un A4 porque ya no lo es.
+ */
+@Serializable
+enum class TamanoDePapel(val proporcion: Double) {
+    /** El de siempre: 210 × 297. */
+    @SerialName("a4") A4(297.0 / 210.0),
+
+    /** Media cuartilla, para notas sueltas. */
+    @SerialName("a5") A5(210.0 / 148.0),
+
+    /** Carta, que es lo normal en América. */
+    @SerialName("carta") CARTA(11.0 / 8.5),
+
+    /** Cuadrada: para un guion gráfico o un tablero. */
+    @SerialName("cuadrada") CUADRADA(1.0),
+
+    /** Apaisada, del ancho de una pantalla. */
+    @SerialName("apaisada") APAISADA(9.0 / 16.0)
+}
+
+/**
+ * La pauta impresa de una hoja: **lo que trae el papel antes de escribir**.
+ *
+ * Va por hoja y no por lienzo —que ya tiene la suya, ver [Cuadricula]— porque en un
+ * cuaderno de verdad conviven: la página de apuntes va a rayas y la de al lado, donde se
+ * dibuja el esquema, a cuadros. Y porque la pauta del lienzo es una ayuda de dibujo que
+ * no se exporta, mientras que esta **es parte de la hoja** y sale en el PDF.
+ */
+@Serializable
+enum class PautaDeHoja {
+    @SerialName("lisa") LISA,
+    @SerialName("rayada") RAYADA,
+    @SerialName("cuadros") CUADROS,
+    @SerialName("puntos") PUNTOS
+}
+
+@Serializable
+enum class FormaDeSolido {
+    @SerialName("caja") CAJA,
+    @SerialName("cuna") CUNA,
+
+    /**
+     * El **cilindro**: la misma caja con la planta redonda.
+     *
+     * No es una forma nueva por dentro. Un prisma de veinticuatro lados es un cilindro a
+     * la vista y a la vez es exactamente lo mismo que la caja —dos anillos de vértices y
+     * una tira de caras entre ellos—, así que hereda el reparto de visibles, el orden de
+     * pintado, el picado y el exportador sin una línea propia. Y con la luz de verdad
+     * puesta, sus caras laterales dan el degradado que hace que se lea como un tubo.
+     */
+    @SerialName("cilindro") CILINDRO,
+
+    /** El **prisma triangular**: lo mismo con tres lados. Una cubierta, una cuña ancha. */
+    @SerialName("prisma") PRISMA,
+
+    /**
+     * **De revolución**: un perfil dado la vuelta sobre el eje vertical.
+     *
+     * Un jarrón, una columna con basa, una copa, un depósito. Es la única forma que no se
+     * puede describir con dos números, y por eso trae su perfil consigo: la lista de
+     * radios y alturas por la que pasa el torno, en [Element.points] y en tanto por uno,
+     * de manera que estirar la pieza estira el perfil con ella.
+     *
+     * Por dentro sigue sin ser nada nuevo: en vez de dos anillos de vértices tiene tantos
+     * como puntos del perfil, y entre cada dos anillos va una tira de caras. La misma
+     * cuenta que la caja, repetida.
+     */
+    @SerialName("revolucion") REVOLUCION,
+
+    /**
+     * **Extrusión**: la planta es la figura que se levantó, sea la que sea.
+     *
+     * Es lo que sustituye a la lista de piezas de catálogo. Un cuadrado da un cubo, un
+     * triángulo da una barra triangular, un óvalo da un cilindro y un garabato cerrado da
+     * lo que dé — y ninguna de esas tres cosas hay que programarla por separado, porque
+     * todas son la misma: levantar un contorno. Las de arriba se quedan para que los
+     * dibujos ya guardados sigan abriéndose, no porque haya que elegirlas.
+     *
+     * El contorno va en [Element.planta], en tanto por uno de su caja, para que estirar
+     * la pieza estire la planta con ella.
+     */
+    @SerialName("extrusion") EXTRUSION;
+
+    /**
+     * Cuántos lados tiene su planta.
+     *
+     * La caja y la cuña, cuatro —son la misma planta con la tapa distinta—; el prisma,
+     * tres; y el cilindro, los que hagan falta para que el ojo no vea el polígono.
+     */
+    val lados: Int
+        get() = when (this) {
+            CAJA, CUNA -> 4
+            PRISMA -> 3
+            CILINDRO, REVOLUCION -> LADOS_DEL_CILINDRO
+            // La extrusión los saca de su planta; esto es solo el respaldo de quien
+            // llegue sin ninguna guardada. Ver [Element.planta].
+            EXTRUSION -> 4
+        }
+}
+
+/**
+ * Con cuántos lados se dibuja un cilindro.
+ *
+ * Veinticuatro son quince grados por lado: por debajo se ve el polígono en un cilindro
+ * grande, y por encima no se gana nada que el ojo note y sí se paga en cada fotograma —
+ * son caras que se reparten, se ordenan y se pintan una a una. Es el mismo criterio con
+ * el que se eligieron los tramos del arco.
+ */
+const val LADOS_DEL_CILINDRO = 24
 
 @Serializable
 enum class FillStyle {
@@ -209,6 +397,61 @@ enum class StrokeStyle {
     @SerialName("solid") SOLID,
     @SerialName("dashed") DASHED,
     @SerialName("dotted") DOTTED
+}
+
+/**
+ * **De qué está hecha la tinta.** Lisa, encendida o con grano.
+ *
+ * Es la misma idea que el material de la tinta del croquis en el espacio, traída al lienzo
+ * plano y por la misma razón: en un plano, **el color no basta para decir qué es una cosa**.
+ * Una sección cortada se raya, una sombra se cruza, un terreno se puntea y un tubo encendido
+ * resplandece, y todo eso se hace hoy con el mismo trazo liso de distinto color — que obliga a
+ * poner una leyenda al lado para saber qué es cada raya.
+ *
+ * Va en el estilo y en el elemento, como el color: se elige una vez y lo siguiente sale
+ * igual. Y no toca la geometría, solo cómo se pinta lo que ya hay, así que una figura cambia
+ * de material sin moverse ni un píxel.
+ */
+@Serializable
+enum class MaterialDeTinta {
+    /** La de siempre. */
+    @SerialName("lisa") LISA,
+
+    /**
+     * **Encendida**: el trazo suma luz en vez de tapar.
+     *
+     * Es la tinta HDR del croquis en el espacio. Se pinta en tres pasadas —el resplandor
+     * ancho y flojo, el cuerpo, y el filamento casi blanco por el medio— que es lo que hace
+     * un tubo de verdad, y lo que en una pantalla buena se lee como que **brilla** en vez de
+     * como un color claro.
+     */
+    @SerialName("luz") LUZ,
+
+    /**
+     * **HDR**: la luz que se suma.
+     *
+     * La diferencia con [LUZ] no es que brille más: es que **suma en vez de tapar**. Donde dos
+     * trazos se cruzan, el cruce sale más claro que cualquiera de los dos, y subiendo el
+     * brillo el resplandor se derrama sobre lo de alrededor en vez de quedarse dentro de la
+     * raya. Es lo que hace un tubo de verdad delante de una cámara, y es lo mismo que hace la
+     * tinta de luz del croquis en el espacio.
+     *
+     * [LUZ] se queda tal cual, que es un trazo con halo y se lee limpio sobre cualquier fondo.
+     * Esta es la otra: la que pide una pantalla buena y un fondo oscuro.
+     */
+    @SerialName("hdr") HDR,
+
+    /** Rayado de través: la sección cortada. */
+    @SerialName("rayado") RAYADO,
+
+    /** Rayado en retícula: la sombra. */
+    @SerialName("cruzado") CRUZADO,
+
+    /** Punteado: la tierra, la arena, el relleno. */
+    @SerialName("puntos") PUNTOS;
+
+    /** Si suma luz: entonces no lleva grano, porque lo que se ve es el resplandor. */
+    val alumbra: Boolean get() = this == LUZ || this == HDR
 }
 
 @Serializable
@@ -449,6 +692,16 @@ data class Element(
     /** Cada cuántas unidades va una raya fina de la rejilla. */
     val pasoDeCuadros: Double? = null,
 
+    // --- Solo ESPACIO ---
+    /**
+     * Cuánto se ha dado la vuelta al espacio, en grados, respecto de la vista
+     * de partida. Lo mueve el tirador de giro: es lo que en los demás cambia
+     * [angle]. Ver [Espacio].
+     */
+    val azimut: Double? = null,
+    /** Cuánto se mira desde arriba, en grados: 0 es a ras del suelo, 90 en picado. */
+    val elevacion: Double? = null,
+
     // --- Solo SOLIDO ---
     /**
      * Lo que levanta del suelo la caja del boceto en volumen, en píxeles de
@@ -465,6 +718,122 @@ data class Element(
      * vez de una caja aplastada. Ver [DrawController] y [sombraEnElSuelo].
      */
     val altura: Double? = null,
+
+    /**
+     * **A qué altura apoya**, en las mismas unidades que [altura]. Solo `SOLIDO`.
+     *
+     * Sin esto la caja iba siempre del suelo hacia arriba, y eso dejaba fuera lo que este
+     * módulo dice servir para dibujar: **apilar**. Tres módulos uno encima de otro no se
+     * podían enseñar; como mucho se ponían tres cajas al lado fingiendo que se tocaban.
+     *
+     * Y es lo que hace que la sombra cumpla por fin lo que promete: se queda en el suelo
+     * mientras la caja sube, así que un volumen a media altura se lee como tal en vez de
+     * como uno más grande y más lejos, que es la ambigüedad de la isométrica.
+     */
+    val cota: Double = 0.0,
+
+    /**
+     * **Cuánto está girada la planta**, en radianes, sobre el eje vertical. Solo `SOLIDO`.
+     *
+     * No es [angle]: aquel gira el dibujo ya hecho, en el plano de la pantalla, y en un
+     * volumen eso lo tumba. Este gira la caja **sobre el suelo**, que es lo que uno quiere
+     * decir cuando una pieza no va a escuadra con las demás — un módulo torcido, una
+     * rampa que entra en diagonal.
+     *
+     * La huella sigue midiendo `width` × `height`; lo único que cambia es en qué
+     * dirección se cuentan esos dos lados. Por eso todo lo que mide la caja sigue valiendo
+     * igual: el giro entra donde se sacan los vértices y no antes.
+     */
+    val giroEnPlanta: Double = 0.0,
+
+    /**
+     * Qué pieza es: una caja o una cuña. Solo `SOLIDO`.
+     *
+     * Ver [FormaDeSolido]. Va aquí y no en un [ElementType] nuevo porque no es otra clase
+     * de elemento: es la misma caja con dos vértices bajados, y todo lo que sabe hacer
+     * —el reparto de caras, el sombreado, el orden de pintado, picarla, exportarla— sirve
+     * sin tocar una línea.
+     */
+    val formaSolida: FormaDeSolido = FormaDeSolido.CAJA,
+
+    /**
+     * **El contorno de la planta**, en tanto por uno de la caja de la huella.
+     *
+     * Es lo que convierte «cinco piezas de catálogo» en «cualquier figura cerrada»: al
+     * levantar un dibujo se le guarda aquí su contorno de verdad, y a partir de ahí el
+     * volumen es ese contorno estirado hacia arriba. Un cuadrado da un cubo y un garabato
+     * da lo que dé, con el mismo código.
+     *
+     * Va normalizado por lo mismo que el perfil del torno: estirar la pieza por sus
+     * tiradores tiene que estirar la planta con ella, no dejarla del tamaño que tenía el
+     * dibujo del que salió.
+     */
+    val planta: List<Pt>? = null,
+
+    /**
+     * **Cuánto está volcada**, en radianes, sobre un eje horizontal. Solo `SOLIDO`.
+     *
+     * Con [giroEnPlanta] la caja gira sobre el suelo, de pie; con esta se tumba. Las dos
+     * juntas son el par de anillos —uno horizontal y otro vertical— con los que se
+     * orienta un volumen en el espacio, que es lo que uno espera poder hacer con algo
+     * dibujado en 3D.
+     *
+     * Se vuelca alrededor del **origen de la huella**, igual que se gira: es el punto que
+     * el elemento guarda proyectado, así que volcar no mueve la pieza de sitio.
+     */
+    val inclinacion: Double = 0.0,
+
+    /**
+     * **Esqueleto o macizo.** Solo `SOLIDO`.
+     *
+     * Macizo es lo de siempre: tres caras con su luz, que es lo que hace que se lea como
+     * bulto. En esqueleto no se rellena nada y se dibujan **las doce aristas**, también
+     * las de detrás: es el croquis de alambre de toda la vida, el que sirve para explicar
+     * cómo encaja una pieza dentro de otra —que con las caras macizas no se ve, porque lo
+     * de dentro queda tapado.
+     */
+    val esqueleto: Boolean = false,
+
+    /**
+     * Una imagen **tumbada en el suelo** en vez de de frente. Solo `IMAGE`.
+     *
+     * Es lo que permite meter un plano de planta debajo de un croquis en volumen y
+     * levantar las cajas encima de él, a escala. Sin esto la imagen se pinta siempre de
+     * cara al que mira, y sobre un dibujo isométrico eso se ve como un cartel colgado
+     * delante, no como un suelo.
+     */
+    val enElSuelo: Boolean = false,
+
+    // --- Solo FRAME ---
+    /**
+     * De qué tamaño de papel es esta hoja, si es de alguno.
+     *
+     * Nulo es un marco de los de siempre: un recuadro que dice «esto es el dibujo». Con
+     * tamaño puesto, además **se pinta como papel** —con su borde y su sombra— y el
+     * lienzo empieza a parecer un cuaderno en vez de una mesa infinita. Ver
+     * [TamanoDePapel] y [anadirHoja].
+     */
+    val papel: TamanoDePapel? = null,
+
+    /** La pauta impresa de la hoja. Ver [PautaDeHoja]. */
+    val pauta: PautaDeHoja = PautaDeHoja.LISA,
+
+    // --- Solo CRONOGRAMA ---
+    /** Las filas del cronograma, de arriba abajo. Ver [TareaDelCronograma]. */
+    val tareas: List<TareaDelCronograma> = emptyList(),
+    /**
+     * Cuántas columnas tiene la escala: semanas, meses, sprints, lo que uno decida.
+     *
+     * Sin unidad a propósito. Un croquis de un plan dice «esto ocupa el doble que
+     * aquello y empieza cuando acaba lo otro», y para eso los números de arriba solo
+     * tienen que estar repartidos por igual. Ponerle unidades obligaría a elegir un
+     * calendario, y con eso llegan los festivos y los fines de semana.
+     */
+    val periodos: Int = 6,
+
+    /** De qué está hecha su tinta. Ver [MaterialDeTinta]. */
+    @SerialName("material")
+    val material: MaterialDeTinta = MaterialDeTinta.LISA,
 
     // --- Solo MOSAIC ---
     /** Desenfocar en vez de pixelar. Son las dos formas de tapar de PixPin. */
@@ -687,6 +1056,20 @@ fun mosaicoGrano(strokeWidth: Double): Double = when {
 
 /** El plano cartesiano, que es un instrumento y no un dibujo. Ver [Plano]. */
 val Element.isPlano: Boolean get() = type == ElementType.PLANO
+
+/** La recta numérica, el plano en una dimensión. Ver [Plano]. */
+val Element.isRecta: Boolean get() = type == ElementType.RECTA
+
+/** El espacio de tres ejes que se gira. Ver [Espacio]. */
+val Element.isEspacio: Boolean get() = type == ElementType.ESPACIO
+
+/**
+ * Los instrumentos de graficar: plano, recta y espacio. Comparten la unidad,
+ * los pasos, el pintado por rayas y cifras, y el estirado que por un lado
+ * enseña más números y por una esquina los mismos más grandes.
+ */
+val Element.esInstrumento: Boolean
+    get() = type == ElementType.PLANO || type == ElementType.RECTA || type == ElementType.ESPACIO
 
 /** El marco: la hoja que decide qué se ve fuera del editor. */
 val Element.isFrame: Boolean get() = type == ElementType.FRAME

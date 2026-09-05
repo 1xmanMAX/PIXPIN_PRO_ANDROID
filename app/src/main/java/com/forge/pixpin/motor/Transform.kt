@@ -63,6 +63,11 @@ fun resizeSingleElement(
 ): Element {
     if (element.locked || handle == HandleType.ROTATION) return element
 
+    // El arco estira por la caja de lo que pinta, que no es la suya. Ver [resizeArco].
+    if (element.type == ElementType.ARC) {
+        return resizeArco(element, handle, pointer, keepAspectRatio, resizeFromCenter)
+    }
+
     val c = getElementAbsoluteCoords(element)
     val oldCenter = Pt(c.cx, c.cy)
 
@@ -88,6 +93,11 @@ fun resizeSingleElement(
         // el controlador con `withPointMovedTo`. Aquí no pintan nada.
         HandleType.POINT_START, HandleType.POINT_END,
         HandleType.POINT_MID, HandleType.POINT_ADD -> return element
+        // Y los de la caja tampoco: cada uno cambia una medida del volumen, y de eso se
+        // encarga el controlador con `huellaMoldeada`. Ver [HandleType.SOLIDO_HUELLA].
+        HandleType.SOLIDO_HUELLA, HandleType.SOLIDO_ANCHO,
+        HandleType.SOLIDO_FONDO, HandleType.SOLIDO_ALTURA,
+        HandleType.SOLIDO_COTA, HandleType.SOLIDO_GIRO -> return element
     }
 
     if (resizeFromCenter) {
@@ -168,7 +178,7 @@ fun resizeSingleElement(
      * Lo que las separa es de dónde se tira, y por eso el plano es de los pocos
      * que enseña los tiradores del medio. Ver [Plano].
      */
-    val unidadNueva = if (element.isPlano) {
+    val unidadNueva = if (element.esInstrumento) {
         if (handle.esEsquina) element.unidadDelPlano * escalaDeLaEsquina(scaleX, scaleY)
         else element.unidadDelPlano
     } else element.unidad
@@ -192,6 +202,109 @@ fun resizeSingleElement(
 }
 
 /**
+ * Estira un arco **por la caja del trozo que pinta**.
+ *
+ * Un arco guarda el óvalo entero y aparte cuánto barre, así que su `width`/`height` son
+ * los del círculo de partida aunque solo se vea una uña. Los tiradores van alrededor de
+ * lo que se ve —es lo único que tiene sentido agarrar—, y por eso la cuenta no se puede
+ * hacer contra la caja del elemento: arrastrar la esquina de la uña se habría entendido
+ * como arrastrar la esquina del círculo, y el arco habría pegado un salto al agarrarlo.
+ *
+ * Se hace en dos pasos. Primero la aritmética de siempre —la misma que
+ * [resizeSingleElement], con sus anclas— pero sobre la caja del trozo. Y después ese
+ * estiramiento se le aplica al óvalo **respecto del mismo ancla**: escalar el óvalo por
+ * `sx`/`sy` alrededor del punto que se queda quieto deja la uña exactamente donde el dedo
+ * la ha puesto, y el óvalo debajo sigue siendo el suyo. `arcStart` y `arcSweep` no se
+ * tocan: son ángulos paramétricos, y estirar los semiejes no mueve ninguno de sus puntos
+ * de sitio en el recorrido.
+ */
+private fun resizeArco(
+    element: Element,
+    handle: HandleType,
+    pointer: Pt,
+    keepAspectRatio: Boolean,
+    resizeFromCenter: Boolean
+): Element {
+    val c = getElementAbsoluteCoords(element)
+    // El centro del óvalo es el de giro del elemento, aquí y en todo lo demás del arco.
+    val centro = Pt(c.cx, c.cy)
+    val v = cajaDelArco(element)
+    val anchoV = v.x2 - v.x1
+    val altoV = v.y2 - v.y1
+    if (anchoV <= 0.0 || altoV <= 0.0) return element
+
+    val local = pointRotateRads(pointer, centro, -element.angle)
+
+    var nx1 = v.x1
+    var ny1 = v.y1
+    var nx2 = v.x2
+    var ny2 = v.y2
+    when (handle) {
+        HandleType.NW -> { nx1 = local.x; ny1 = local.y }
+        HandleType.NE -> { nx2 = local.x; ny1 = local.y }
+        HandleType.SW -> { nx1 = local.x; ny2 = local.y }
+        HandleType.SE -> { nx2 = local.x; ny2 = local.y }
+        HandleType.N -> ny1 = local.y
+        HandleType.S -> ny2 = local.y
+        HandleType.W -> nx1 = local.x
+        HandleType.E -> nx2 = local.x
+        HandleType.ROTATION -> return element
+        HandleType.POINT_START, HandleType.POINT_END,
+        HandleType.POINT_MID, HandleType.POINT_ADD -> return element
+        // Y los de la caja tampoco: cada uno cambia una medida del volumen, y de eso se
+        // encarga el controlador con `huellaMoldeada`. Ver [HandleType.SOLIDO_HUELLA].
+        HandleType.SOLIDO_HUELLA, HandleType.SOLIDO_ANCHO,
+        HandleType.SOLIDO_FONDO, HandleType.SOLIDO_ALTURA,
+        HandleType.SOLIDO_COTA, HandleType.SOLIDO_GIRO -> return element
+    }
+
+    if (resizeFromCenter) {
+        val medioX = max(abs(local.x - v.midX), MIN_SIZE / 2)
+        val medioY = max(abs(local.y - v.midY), MIN_SIZE / 2)
+        if (handle.affectsX) { nx1 = v.midX - medioX; nx2 = v.midX + medioX }
+        if (handle.affectsY) { ny1 = v.midY - medioY; ny2 = v.midY + medioY }
+    }
+
+    var nuevoAncho = max(nx2 - nx1, MIN_SIZE)
+    var nuevoAlto = max(ny2 - ny1, MIN_SIZE)
+    if (keepAspectRatio) {
+        val ratio = altoV / anchoV
+        if (abs(nuevoAncho - anchoV) > abs(nuevoAlto - altoV)) {
+            nuevoAlto = nuevoAncho * ratio
+        } else {
+            nuevoAncho = nuevoAlto / ratio
+        }
+    }
+    if (handle.anchorsRight) nx1 = nx2 - nuevoAncho else nx2 = nx1 + nuevoAncho
+    if (handle.anchorsBottom) ny1 = ny2 - nuevoAlto else ny2 = ny1 + nuevoAlto
+
+    val sx = nuevoAncho / anchoV
+    val sy = nuevoAlto / altoV
+
+    // El ancla —la esquina que se queda clavada— es la de la caja del trozo, y el óvalo
+    // se estira alrededor de ella. Así la uña acaba exactamente en `nx1..ny2`.
+    val ancla = handle.anchorPointOf(v.x1, v.y1, v.x2, v.y2)
+    val ex1 = ancla.x + (c.x1 - ancla.x) * sx
+    val ex2 = ancla.x + (c.x2 - ancla.x) * sx
+    val ey1 = ancla.y + (c.y1 - ancla.y) * sy
+    val ey2 = ancla.y + (c.y2 - ancla.y) * sy
+
+    // Y la corrección de siempre: al cambiar de tamaño se mueve el centro de giro, así
+    // que con el arco inclinado el ancla se iría de sitio. Se recoloca por la diferencia
+    // entre donde tiene que estar y donde caería sin corregir.
+    val anclaGlobal = pointRotateRads(ancla, centro, element.angle)
+    val nuevoCentro = Pt((ex1 + ex2) / 2, (ey1 + ey2) / 2)
+    val anclaDespues = pointRotateRads(ancla, nuevoCentro, element.angle)
+
+    return element.copy(
+        x = ex1 + (anclaGlobal.x - anclaDespues.x),
+        y = ey1 + (anclaGlobal.y - anclaDespues.y),
+        width = ex2 - ex1,
+        height = ey2 - ey1
+    ).touched()
+}
+
+/**
  * Redimensiona una selección entera como un bloque (`resizeMultipleElements`).
  *
  * **Por una esquina en proporción; por un lado, aplastando ese eje.**
@@ -211,10 +324,14 @@ fun resizeMultipleElements(
     elements: List<Element>,
     handle: HandleType,
     pointer: Pt,
-    keepAspectRatio: Boolean? = null
+    keepAspectRatio: Boolean? = null,
+    vista: Vista = Vista.CERO
 ): List<Element> {
     if (elements.size < 2) return elements
-    val b = getCommonBounds(elements)
+    // Lo que se ve, que es donde están los tiradores y el recuadro. Ver
+    // [envolturaVisible]: con un arco recortado dentro, la caja de los elementos y la
+    // de lo dibujado dejan de ser la misma, y el bloque tiene que estirar por la segunda.
+    val b = envolturaComun(elements, vista)
     if (b.width <= 0 || b.height <= 0) return elements
 
     var nx1 = b.x1; var ny1 = b.y1; var nx2 = b.x2; var ny2 = b.y2
@@ -278,6 +395,8 @@ fun rotateSingleElement(
     element: Element, pointer: Pt, discreteAngle: Boolean = false
 ): Element {
     if (element.locked) return element
+    // El espacio no se inclina: se le da la vuelta. Ver [girarElEspacio].
+    if (element.isEspacio) return girarElEspacio(element, pointer, discreteAngle)
     val c = getElementAbsoluteCoords(element)
     var angle = (5 * Math.PI) / 2 + atan2(pointer.y - c.cy, pointer.x - c.cx)
     if (discreteAngle) {
@@ -383,6 +502,90 @@ private fun flip(elements: List<Element>, horizontal: Boolean): List<Element> {
             angle = normalizeAngle(-e.angle),
             startArrowhead = if (horizontal) e.endArrowhead else e.startArrowhead,
             endArrowhead = if (horizontal) e.startArrowhead else e.endArrowhead
+        ).touched()
+    }
+}
+
+/**
+ * **Una selección estirada alrededor de su centro**, a lo ancho y a lo alto por separado.
+ *
+ * Es lo que hace el mando: no hay un tirador en una esquina del que tirar hasta un punto,
+ * hay un gesto que dice «un poco más grande». Así que la entrada es una razón y no un
+ * destino —al doble, a la mitad—, y el centro de la selección se queda quieto: lo que uno
+ * está mirando mientras agranda es lo que hay ahí, no la esquina de una caja.
+ *
+ * Las rayas y el lápiz se estiran **por sus puntos** y no por su caja, por lo mismo que al
+ * voltear: su caja sale de los puntos, y tocar las dos cosas por separado las descoloca en
+ * cuanto el primer punto no es el de arriba a la izquierda. Ver [flip].
+ */
+fun escaladasAlrededorDelCentro(
+    elements: List<Element>,
+    /** Cuánto se ensancha y cuánto se estira. Uno es dejarlo como está. */
+    aLoAncho: Double,
+    aLoAlto: Double
+): List<Element> {
+    if (elements.isEmpty()) return elements
+    if (!aLoAncho.isFinite() || !aLoAlto.isFinite()) return elements
+    // Por debajo de esto una figura deja de poder recuperarse: se queda en una raya sin
+    // grosor de la que ya no se puede tirar para agrandarla.
+    if (aLoAncho <= 1e-4 || aLoAlto <= 1e-4) return elements
+    val b = getCommonBounds(elements)
+    val cx = b.midX
+    val cy = b.midY
+
+    fun estirado(p: Pt) = Pt(cx + (p.x - cx) * aLoAncho, cy + (p.y - cy) * aLoAlto)
+
+    return elements.map { e ->
+        if (e.locked) return@map e
+        if ((e.isFreeDraw || e.isLinear) && !e.points.isNullOrEmpty()) {
+            e.conPuntosAbsolutos(absolutePoints(e).map { estirado(it) })
+                .copy(fontSize = e.fontSize?.times(aLoAlto))
+                .touched()
+        } else {
+            val esquina = estirado(Pt(e.x, e.y))
+            e.copy(
+                x = esquina.x,
+                y = esquina.y,
+                width = e.width * aLoAncho,
+                height = e.height * aLoAlto,
+                // El relleno guarda su contorno relativo a su propia esquina, así que se
+                // estira con la caja y no con la escena.
+                points = e.points?.map { Pt(it.x * aLoAncho, it.y * aLoAlto) },
+                huecos = e.huecos?.map { anillo ->
+                    anillo.map { Pt(it.x * aLoAncho, it.y * aLoAlto) }
+                },
+                // Un texto que se estira a la mitad y sigue con la misma letra no se ha
+                // estirado: se ha salido de su caja.
+                fontSize = e.fontSize?.times(aLoAlto)
+            ).touched()
+        }
+    }
+}
+
+/**
+ * **Una selección girada un poco más**, alrededor de su centro común.
+ *
+ * Por incremento y no hacia un punto, que es la diferencia entre un tirador de esquina y un
+ * mando: aquí no se arrastra *hasta* un ángulo, se pide *más* ángulo. Ver
+ * [rotateMultipleElements], que es la misma cuenta con la otra entrada.
+ */
+fun giradasAlrededorDelCentro(elements: List<Element>, cuanto: Double): List<Element> {
+    if (elements.isEmpty() || cuanto == 0.0 || !cuanto.isFinite()) return elements
+    val b = getCommonBounds(elements)
+    val centro = Pt(b.midX, b.midY)
+    return elements.map { e ->
+        if (e.locked) return@map e
+        val ec = getElementAbsoluteCoords(e)
+        // Cada uno gira sobre sí mismo **y** orbita el centro común: sin lo segundo la
+        // selección se deshace en cuanto se gira.
+        val movido = pointRotateRads(Pt(ec.cx, ec.cy), centro, cuanto)
+        e.copy(
+            x = e.x + (movido.x - ec.cx),
+            y = e.y + (movido.y - ec.cy),
+            angle = normalizeAngle(e.angle + cuanto),
+            // Girar suelta los anclajes: la flecha ya no apunta a donde apuntaba.
+            startBinding = null,
+            endBinding = null
         ).touched()
     }
 }

@@ -135,15 +135,47 @@ fun anclajesDe(e: Element, ajustes: AjustesEnganche): List<Anclaje> {
     val out = mutableListOf<Anclaje>()
 
     // Los lineales dan sus extremos y su medio; su caja no significa nada.
+    // Se sacan de la lista relativa sin materializarla entera en absolutas:
+    // esto corre por cada elemento y cada movimiento del dedo, y las cadenas
+    // de un plano importado son cientos de puntos que aquí no hacen falta.
     if (e.isLinear || e.isFreeDraw) {
-        val pts = absolutePoints(e)
+        val pts = e.points ?: return emptyList()
         if (pts.size < 2) return emptyList()
+        fun absoluto(p: Pt) = Pt(e.x + p.x, e.y + p.y)
         if (ajustes.esquinas) {
-            out += Anclaje(pts.first(), TipoAnclaje.EXTREMO, e.id)
-            out += Anclaje(pts.last(), TipoAnclaje.EXTREMO, e.id)
+            out += Anclaje(absoluto(pts.first()), TipoAnclaje.EXTREMO, e.id)
+            out += Anclaje(absoluto(pts.last()), TipoAnclaje.EXTREMO, e.id)
         }
         if (ajustes.medios) {
-            out += Anclaje(pts[pts.size / 2], TipoAnclaje.MEDIO, e.id)
+            out += Anclaje(absoluto(pts[pts.size / 2]), TipoAnclaje.MEDIO, e.id)
+        }
+        return out
+    }
+
+    // **Los instrumentos —plano, recta, espacio— enganchan por lo que miden**, no
+    // por su caja: el origen, cada marca de sus reglas y, en el plano, los
+    // cruces de la rejilla. Es lo que hace que un punto se pueda clavar en el
+    // (3, −2) sin contar cuadros. Lo pidió el usuario (2-sep-2026): estampados
+    // desde la lista de figuras no tenían imán que valiera.
+    if (e.esInstrumento) {
+        fun absoluto(p: Pt) = Pt(e.x + p.x, e.y + p.y)
+        if (ajustes.centros) out += Anclaje(absoluto(origenDelPlano(e)), TipoAnclaje.CENTRO, e.id)
+        if (ajustes.esquinas) {
+            for (n in numerosDelInstrumento(e)) {
+                // Las letras de los ejes del espacio van desplazadas de su punta.
+                if (n.texto.length == 1 && n.texto[0].isLetter()) continue
+                out += Anclaje(absoluto(n.donde), TipoAnclaje.EXTREMO, e.id)
+            }
+        }
+        if (ajustes.intersecciones && e.isPlano) {
+            val rejilla = trazosDelPlano(e).filter { !it.eje }
+            val xs = rejilla.filter { it.a.x == it.b.x }.map { it.a.x }
+            val ys = rejilla.filter { it.a.y == it.b.y }.map { it.a.y }
+            // Con tope: una rejilla muy fina daría miles de cruces por cada
+            // movimiento del dedo, y a esa densidad el borde ya sirve igual.
+            if (xs.size * ys.size <= CRUCES_QUE_SE_ENGANCHAN) {
+                for (x in xs) for (y in ys) out += Anclaje(absoluto(Pt(x, y)), TipoAnclaje.INTERSECCION, e.id)
+            }
         }
         return out
     }
@@ -228,6 +260,14 @@ fun buscarAnclaje(
 
     for (e in elementos) {
         if (e.id == excluir || e.isFrame) continue
+        // Todos los anclajes de un elemento caen dentro de su caja: si el dedo
+        // está a más de un radio de ella, no hay nada que mirar. La resta es lo
+        // que hace soportable un plano importado — sin ella, cada movimiento
+        // del dedo montaba los anclajes de miles de elementos para tirarlos.
+        val caja = getElementBounds(e)
+        if (p.x < caja.x1 - radio || p.x > caja.x2 + radio ||
+            p.y < caja.y1 - radio || p.y > caja.y2 + radio
+        ) continue
         for (a in anclajesDe(e, ajustes)) {
             val d = hypot(a.punto.x - p.x, a.punto.y - p.y)
             if (d > radio) continue
@@ -265,6 +305,15 @@ fun buscarAnclaje(
             if (e.type == ElementType.FRAME) continue
             val permitido = if (e.reference) ajustes.bordeDeGuia else ajustes.bordeDeFigura
             if (!permitido) continue
+            // La caja primero, que es una resta: sacarle el perímetro a una
+            // figura cuesta, y esto corre por CADA elemento en CADA movimiento
+            // del dedo. Con un plano importado —miles de figuras— saltarse esta
+            // criba era recorrer y alocar el plano entero a cada evento: la app
+            // se atragantaba hasta morir justo al dibujar encima.
+            val caja = getElementBounds(e)
+            if (p.x < caja.x1 - radio || p.x > caja.x2 + radio ||
+                p.y < caja.y1 - radio || p.y > caja.y2 + radio
+            ) continue
             puntoEnElPerimetro(e, p, radio)?.let {
                 considerar(Anclaje(it, TipoAnclaje.BORDE, e.id))
             }
@@ -272,6 +321,9 @@ fun buscarAnclaje(
     }
     return mejor
 }
+
+/** Cuántos cruces de rejilla de un plano se ofrecen como mucho al imán. */
+private const val CRUCES_QUE_SE_ENGANCHAN = 1600
 
 /** Menor es más prioritario. */
 private fun prioridad(t: TipoAnclaje): Int = when (t) {

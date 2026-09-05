@@ -48,18 +48,36 @@ object DrawExport {
          * a lo que hay dentro de ella, que es lo que uno espera ver.
          */
         recorte: Bounds? = null,
+        /**
+         * La página del PDF que se ve de fondo, si la hay: su píxel (0,0) es
+         * el (0,0) de la escena. Sin esto, exportar la anotación de una página
+         * sacaba los trazos flotando sobre el vacío. Va ANTES de la lambda por
+         * lo mismo que `scale`: la sintaxis de bloque final tiene que seguir
+         * cogiendo el `imageProvider`.
+         */
+        papel: Bitmap? = null,
         imageProvider: (String) -> Bitmap? = { null }
     ): Bitmap? = runCatching {
         val visible = scene.contenidoVisible
-        if (visible.isEmpty()) return null
+        if (visible.isEmpty() && papel == null) return null
 
-        // **Con hoja manda la hoja.** Sin ella, el encuadre lo da el contenido,
-        // que es lo de siempre. Y con hoja no se añade margen: el margen ya lo
-        // decides tú al colocar el marco.
+        // **Con hoja manda la hoja.** Sin ella, con página manda la página (y
+        // lo que se salga de ella); sin ninguna, el encuadre lo da el
+        // contenido, que es lo de siempre. Con hoja no se añade margen: el
+        // margen ya lo decides tú al colocar el marco.
         val marco = scene.marco
         val b = recorte
-            ?: if (marco != null) getElementBounds(marco) else getCommonBounds(visible)
-        val margen = if (marco != null || recorte != null) 0.0 else EXPORT_PADDING
+            ?: if (marco != null) getElementBounds(marco)
+            else if (papel != null) {
+                val pagina = Bounds(0.0, 0.0, papel.width.toDouble(), papel.height.toDouble())
+                if (visible.isEmpty()) pagina else getCommonBounds(visible).let { c ->
+                    Bounds(
+                        kotlin.math.min(pagina.x1, c.x1), kotlin.math.min(pagina.y1, c.y1),
+                        kotlin.math.max(pagina.x2, c.x2), kotlin.math.max(pagina.y2, c.y2)
+                    )
+                }
+            } else getCommonBounds(visible)
+        val margen = if (marco != null || recorte != null || papel != null) 0.0 else EXPORT_PADDING
         val anchoEscena = b.width + margen * 2
         val altoEscena = b.height + margen * 2
         if (anchoEscena <= 0 || altoEscena <= 0) return null
@@ -79,9 +97,27 @@ object DrawExport {
         val canvas = Canvas(bitmap)
         canvas.drawColor(parseColor(scene.backgroundColor))
 
+        // **Y con el modo noche puesto si el papel es oscuro.**
+        //
+        // Aquí se pintaba el papel de la escena —que en modo noche es negro— y en cambio se
+        // montaba el renderizador sin avisarle, o sea con la tinta **sin** filtrar. El
+        // resultado era negro sobre negro: en la vista de proyectos, una tabla de letras
+        // negras sobre una miniatura negra, ilegible, mientras dentro del editor se veía
+        // perfectamente. No era la miniatura la que estaba mal, era que el papel y la tinta
+        // no se habían puesto de acuerdo.
+        //
+        // El modo noche **no cambia el dibujo**, es un filtro de pintado (ver [DrawTheme]),
+        // así que se decide igual que en el editor: del papel. Con eso, lo que sale de aquí
+        // —miniatura, imagen compartida, imagen guardada— se ve como lo que hay en pantalla,
+        // que es lo único que se espera de una previsualización.
+        val noche = DrawTheme.esDeNoche(scene.backgroundColor)
+
         // Se reutiliza el renderizador de pantalla con un viewport a medida:
         // encuadrar es solo elegir desplazamiento y zoom.
-        Renderer(imageProvider, paraExportar = true).renderScene(
+        Renderer(
+            imageProvider, dark = noche, paraExportar = true,
+            backdrop = papel, papelALaVista = papel != null
+        ).renderScene(
             canvas,
             // Se pinta `contenidoVisible`, no la escena entera: así lo que
             // quedaba fuera de la hoja no aparece, y el marco tampoco se pinta

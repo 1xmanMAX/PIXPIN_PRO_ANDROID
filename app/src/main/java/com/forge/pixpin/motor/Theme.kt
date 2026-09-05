@@ -141,4 +141,48 @@ object DrawTheme {
         oled -> FONDO_OLED
         else -> FONDO_NOCHE
     }
+
+    /**
+     * **Si un papel de este color es papel de noche.**
+     *
+     * De aquí sale todo lo demás: con el papel oscuro, la tinta se pinta con el filtro de
+     * noche y la cuadrícula sale clara; con el papel claro, al revés. Es una sola decisión y
+     * no dos interruptores que se pueden contradecir — que era lo que pasaba: se podía tener
+     * el papel a oscuras y el modo día puesto, y entonces el dibujo salía negro sobre negro.
+     *
+     * El corte va alto a propósito, en el gris medio: lo que decide no es el gusto sino si
+     * encima de ese papel se lee mejor una tinta oscura o una clara.
+     */
+    fun esDeNoche(fondo: String): Boolean {
+        // **Se lee el hexadecimal a mano y no con `android.graphics.Color`.** De esta cuenta
+        // depende cómo se pinta todo el dibujo, y una decisión así tiene que poder
+        // comprobarse sin un móvil delante — que es la regla de esta carpeta.
+        val limpio = fondo.trim().removePrefix("#")
+        val seis = when (limpio.length) {
+            3 -> limpio.map { "$it$it" }.joinToString("")
+            6, 8 -> limpio.takeLast(6)
+            else -> return false
+        }
+        val n = seis.toLongOrNull(16) ?: return false
+        val r = ((n shr 16) and 0xFF) / 255.0
+        val g = ((n shr 8) and 0xFF) / 255.0
+        val b = (n and 0xFF) / 255.0
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 0.5
+    }
+
+    /**
+     * Los papeles que se ofrecen, del más blanco al negro.
+     *
+     * Cinco y no una rueda de color: un papel no es una tinta. Lo que se elige aquí es sobre
+     * qué se dibuja, y de eso hay **dos decisiones de verdad** —claro u oscuro— con un par de
+     * matices dentro de cada una. Una rueda entera invitaría a poner el papel verde lima, que
+     * es exactamente lo que nadie quiere y lo que dejaría el dibujo ilegible.
+     */
+    val PAPELES: List<Pair<String, String>> = listOf(
+        "Blanco" to FONDO_DIA,
+        "Hueso" to "#f5f1e8",
+        "Gris" to "#d8dade",
+        "Pizarra" to FONDO_NOCHE,
+        "Negro" to FONDO_OLED
+    )
 }

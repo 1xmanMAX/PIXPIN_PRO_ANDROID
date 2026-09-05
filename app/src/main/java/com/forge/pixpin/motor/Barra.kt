@@ -29,7 +29,7 @@ private const val SEPARA_HERRAMIENTA = ","
  * toque parte de algo entendible en vez de una lista plana.
  */
 val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
-    listOf(Tool.SELECTION, Tool.LASSO, Tool.HAND),
+    listOf(Tool.SELECTION, Tool.LASSO, Tool.BOLITA, Tool.HAND),
     // Lo que pinta: el lápiz, el marcador y el bote. El bote no traza, pero lo
     // que se hace con él es dar color, que es de lo que va este grupo.
     listOf(Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.RELLENO),
@@ -37,7 +37,10 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     // misma faena —poner un bulto donde uno quiere— y quien busca «un cuadrado»
     // mira ahí. En un grupo propio sería una herramienta más que nadie encuentra.
     listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND, Tool.SOLIDO),
-    listOf(Tool.ARROW, Tool.LINE),
+    // Las dos que llevan lo plano al volumen, juntas y al lado de las formas: se dibuja
+    // la planta con las de arriba y se levanta o se tornea con estas.
+    listOf(Tool.EXTRUIR, Tool.REVOLUCION),
+    listOf(Tool.ARROW, Tool.FLECHA_LIBRE, Tool.LINE),
     // Las dos que arreglan una raya ya trazada, juntas: se traza de largo y
     // luego se recorta lo que sobra y se estira lo que falta.
     listOf(Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO),
@@ -46,6 +49,9 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     listOf(Tool.TEXT, Tool.SERIAL, Tool.PUNTO),
     listOf(Tool.MOSAIC, Tool.LUPA, Tool.SPOTLIGHT),
     listOf(Tool.MEASURE, Tool.SCALE, Tool.ESCALA_GRAFICA),
+    // El cronograma va solo: no es una figura que se dibuja, es una lámina con datos
+    // dentro, y su vecino natural —la tabla— no existe todavía.
+    listOf(Tool.CRONOGRAMA),
     listOf(Tool.FRAME, Tool.IMAGE),
     listOf(Tool.ERASER)
 )

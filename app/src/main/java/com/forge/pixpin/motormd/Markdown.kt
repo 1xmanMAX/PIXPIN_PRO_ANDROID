@@ -412,7 +412,10 @@ object Markdown {
     /** El espacio tras el `>` es opcional: mucha gente pega citas sin él. */
     private fun esCita(line: String): Boolean = line.startsWith(">")
 
-    private val TITULO = Regex("""^(#{1,6})\s+(.*)$""")
+    // **Y el título vacío cuenta**: «#» a secas es lo que deja convertir un renglón
+    // vacío en título antes de escribirlo. Sin reconocerlo, la almohadilla se
+    // perdía en la primera letra y el título volvía a ser párrafo.
+    private val TITULO = Regex("""^(#{1,6})(?:\s+(.*)|\s*)$""")
     private val TAREA = Regex("""^[-*+]\s+\[([ xX])]\s*(.*)$""")
     private val MEDIO = Regex("""^!\[([^]]*)]\(([^)]*)\)$""")
 

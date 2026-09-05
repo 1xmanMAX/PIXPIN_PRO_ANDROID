@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -77,6 +78,15 @@ class ZoomDeHoja {
          * incluso con la versión nítida delante.
          */
         const val VECES_MAS = 4f
+
+        /**
+         * Lo que se tarda en pedir la versión nítida desde que bajan los dos dedos.
+         *
+         * No es un adorno: ver [momentoDeAfinar]. Un quinto de segundo es lo que dura
+         * separar los dedos lo justo para que la hoja despegue, y en ese rato lo que se
+         * ve es la miniatura a escala 1, o sea exactamente lo que ya había en la fila.
+         */
+        private const val ESPERA_DE_LA_NITIDA = 200L
     }
 
 
@@ -137,6 +147,29 @@ class ZoomDeHoja {
     /** La versión nítida, ya dibujada, para la hoja que se está sujetando. */
     fun afinar(imagen: ImageBitmap) {
         if (visible) mapa = imagen
+    }
+
+    /**
+     * Espera al momento de ponerse a componer la nítida. Devuelve si aún se sujeta.
+     *
+     * **El pellizco empezaba con un tirón.** Componer la versión grande —descodificar
+     * una foto de dos mil puntos, rasterizar una página de PDF, volver a pintar un
+     * dibujo entero al doble— son decenas de milisegundos de procesador y hasta treinta
+     * megas de memoria que había que reservar. Iba fuera del hilo de la pantalla, sí,
+     * pero arrancaba **en el mismo fotograma** en que baja el segundo dedo: justo cuando
+     * la hoja tiene que despegar, el móvil estaba ocupado en otra cosa y el arranque del
+     * gesto se notaba a trompicones.
+     *
+     * Ese rato no hay nada que ganar componiendo: a escala 1 lo que se ve es la misma
+     * miniatura que ya estaba en la fila, y hasta que uno no ha separado los dedos de
+     * verdad no hay nitidez que echar en falta. Así que se deja pasar
+     * [ESPERA_DE_LA_NITIDA] y solo entonces se compone —y no se compone en absoluto si
+     * para entonces ya se ha soltado, que es lo que pasa cuando el pellizco fue un
+     * resbalón.
+     */
+    suspend fun momentoDeAfinar(): Boolean {
+        delay(ESPERA_DE_LA_NITIDA)
+        return visible
     }
 
     /**

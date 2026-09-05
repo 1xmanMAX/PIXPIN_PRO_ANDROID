@@ -54,6 +54,22 @@ data class ArrowheadShape(
  * inapreciable y evita tener que devolver las `Op` del generador hasta aquí,
  * que acoplaría el dibujo de las flechas al orden del generador aleatorio.
  */
+/**
+ * El punto desde el que se mira la dirección de la punta: el primero, yendo hacia dentro del
+ * trazo, que se separe [cuanto] de la punta. Si no hay ninguno, el otro extremo.
+ */
+private fun deDondeViene(pts: List<Pt>, position: ArrowEnd, cuanto: Double): Pt {
+    val tip = if (position == ArrowEnd.END) pts.last() else pts.first()
+    val recorrido = if (position == ArrowEnd.END) pts.indices.reversed() else pts.indices
+    var ultimo = if (position == ArrowEnd.END) pts[pts.size - 2] else pts[1]
+    for (i in recorrido) {
+        val p = pts[i]
+        ultimo = p
+        if (hypot(tip.x - p.x, tip.y - p.y) >= cuanto) return p
+    }
+    return ultimo
+}
+
 fun getArrowheadPoints(
     element: Element, position: ArrowEnd, head: Arrowhead
 ): ArrowheadShape? {
@@ -61,7 +77,15 @@ fun getArrowheadPoints(
     if (pts.size < 2) return null
 
     val tip = if (position == ArrowEnd.END) pts.last() else pts.first()
-    val prev = if (position == ArrowEnd.END) pts[pts.size - 2] else pts[1]
+    // **Hacia dónde apunta se mira desde lo bastante atrás, no desde el punto de al lado.**
+    //
+    // Con dos puntos, el de al lado es el otro extremo y esto no cambia nada. Pero una flecha
+    // trazada a pulso tiene los puntos a un píxel unos de otros: mirando solo al anterior, lo
+    // que sale es una dirección temblorosa y, peor, una punta **del tamaño de ese píxel** —el
+    // tamaño se acota a la mitad de esa distancia—, o sea invisible. Se retrocede por el
+    // trazo hasta separarse lo que mide la punta, y así apunta a donde iba la mano y sale del
+    // tamaño que le toca. Ver [Tool.FLECHA_LIBRE].
+    val prev = deDondeViene(pts, position, arrowheadSize(head))
 
     val dist = hypot(tip.x - prev.x, tip.y - prev.y)
     if (dist == 0.0) return null

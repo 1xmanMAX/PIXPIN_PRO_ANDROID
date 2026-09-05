@@ -19,6 +19,14 @@ enum class Propiedad {
     TRAZO, FONDO, RELLENO, LINEA, GROSOR, RUGOSIDAD, ESQUINAS, PUNTAS, FUENTE, OPACIDAD,
 
     /**
+     * **De qué está hecha la tinta**: lisa, encendida o con grano. Ver [MaterialDeTinta].
+     *
+     * Va con las que tienen trazo, que son las mismas que tienen [GROSOR]: el material es
+     * cómo se pinta ese trazo, así que donde no hay raya no hay nada de lo que hablar.
+     */
+    MATERIAL,
+
+    /**
      * Negrita, cursiva y tachado. **Solo el texto.**
      *
      * Va aparte de [FUENTE] —que es la familia y el tamaño— porque son cosas
@@ -29,6 +37,15 @@ enum class Propiedad {
 
     /** Recta, curva o de codos. Solo la flecha. */
     FORMA_FLECHA,
+
+    /**
+     * **Qué pieza es un volumen y si va macizo o de alambre.** Solo el sólido.
+     *
+     * Las dos van juntas porque son la misma decisión repartida: qué estoy dibujando y
+     * cómo quiero verlo. Y van en el lateral, con el color y el relleno, porque son de lo
+     * que más se toca — metidas en el panel de acciones no había forma de dar con ellas.
+     */
+    VOLUMEN,
 
     /**
      * Pixelar o desenfocar. Solo el mosaico.
@@ -110,6 +127,10 @@ fun propiedadesDe(e: Element): Set<Propiedad> {
  * seleccionado no hay ningún estilo que ajustar y el panel desaparece entero.
  */
 fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
+    // La flecha libre crea una flecha: se le ajusta el estilo como a cualquiera.
+    Tool.FLECHA_LIBRE -> ElementType.ARROW
+    // La bolita selecciona, no dibuja: como la selección, el lazo y la mano.
+    Tool.BOLITA -> null
     Tool.PUNTO -> ElementType.PUNTO
     Tool.RECTANGLE -> ElementType.RECTANGLE
     Tool.DIAMOND -> ElementType.DIAMOND
@@ -128,6 +149,9 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     Tool.RELLENO -> ElementType.REGION
     Tool.ESCALA_GRAFICA -> ElementType.ESCALA_GRAFICA
     Tool.SOLIDO -> ElementType.SOLIDO
+    Tool.CRONOGRAMA -> ElementType.CRONOGRAMA
+    // No crean figuras: transforman las que ya hay.
+    Tool.EXTRUIR, Tool.REVOLUCION -> null
     // Recortar y extender no crean nada: arreglan lo que ya hay, y lo que
     // hacen no depende de ningún color ni de ningún grosor.
     Tool.SELECTION, Tool.LASSO, Tool.HAND, Tool.ERASER,
@@ -149,24 +173,24 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
 
     ElementType.RECTANGLE, ElementType.DIAMOND -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
-        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD
+        Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD
     )
 
     // La elipse no tiene esquinas que redondear.
     ElementType.ELLIPSE -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
-        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
+        Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
     )
 
     ElementType.ARROW -> setOf(
-        Propiedad.TRAZO, Propiedad.LINEA, Propiedad.GROSOR, Propiedad.RUGOSIDAD,
+        Propiedad.TRAZO, Propiedad.LINEA, Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD,
         Propiedad.PUNTAS, Propiedad.FORMA_FLECHA, Propiedad.OPACIDAD
     )
 
     // La línea sí admite fondo: cerrada sobre sí misma se rellena.
     ElementType.LINE -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
-        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD
+        Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD
     )
 
     // El lápiz no lleva línea discontinua ni esquinas, que serían botones
@@ -185,7 +209,7 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // [FreedrawTuning.streamlineDe].
     ElementType.FREEDRAW -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD, Propiedad.PRESION
+        Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD, Propiedad.PRESION
     )
 
     ElementType.TEXT -> setOf(
@@ -195,7 +219,7 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     ElementType.IMAGE -> setOf(Propiedad.ESQUINAS, Propiedad.OPACIDAD)
 
     // En el mosaico el grosor hace de tamaño de grano.
-    ElementType.MOSAIC -> setOf(Propiedad.GROSOR, Propiedad.MOSAICO, Propiedad.OPACIDAD)
+    ElementType.MOSAIC -> setOf(Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.MOSAICO, Propiedad.OPACIDAD)
 
     // El foco solo gradúa **cuánto oscurece lo de fuera**, que es lo único que
     // hace. Su opacidad no pinta nada: no dibuja tinta, apaga lo de alrededor.
@@ -205,14 +229,14 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // es [Propiedad.LUPA]— más el color y el grosor de su montura, que es un
     // borde como cualquier otro.
     ElementType.LUPA -> setOf(
-        Propiedad.LUPA, Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.OPACIDAD
+        Propiedad.LUPA, Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.OPACIDAD
     )
 
     ElementType.SERIAL -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)
 
     // El arco es una raya curva: ni fondo ni relleno, porque no encierra nada.
     ElementType.ARC -> setOf(
-        Propiedad.TRAZO, Propiedad.LINEA, Propiedad.GROSOR,
+        Propiedad.TRAZO, Propiedad.LINEA, Propiedad.GROSOR, Propiedad.MATERIAL,
         Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
     )
 
@@ -220,7 +244,7 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // —no encierra nada— ni rugosidad, que se pinta lisa a propósito para que
     // se vea exactamente dónde acaba la medida.
     ElementType.MEASURE -> setOf(
-        Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.FUENTE, Propiedad.OPACIDAD
+        Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.FUENTE, Propiedad.OPACIDAD
     )
 
     // El relleno de un hueco es **solo mancha**: ni trazo, ni línea, ni esquinas.
@@ -237,8 +261,8 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // El plano: el color de sus rayas y el tamaño de sus cifras. Ni relleno
     // —no encierra nada— ni imperfección: unos ejes temblorosos no se leen, y
     // menos con números encima.
-    ElementType.PLANO -> setOf(
-        Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.FUENTE, Propiedad.OPACIDAD
+    ElementType.PLANO, ElementType.RECTA, ElementType.ESPACIO -> setOf(
+        Propiedad.TRAZO, Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.FUENTE, Propiedad.OPACIDAD
     )
 
     /**
@@ -254,7 +278,24 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
      */
     ElementType.SOLIDO -> setOf(
         Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO,
-        Propiedad.GROSOR, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
+        // **Y el tipo de línea**, que faltaba y no por ningún motivo: una caja a trazos
+        // es lo que en un croquis dice «esto todavía no está» o «esto es lo que había
+        // antes», y es la distinción que más se usa después del color.
+        Propiedad.LINEA, Propiedad.VOLUMEN,
+        Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
+    )
+
+    /**
+     * El cronograma: **color, línea, grosor y letra**.
+     *
+     * El fondo es el color de las barras —es lo que se ve de él— y la letra importa
+     * porque los nombres van dentro de la figura. Sin rugosidad a propósito: una rejilla
+     * temblorosa hace que dos columnas no parezcan igual de anchas, y eso es justo lo que
+     * la rejilla viene a decir.
+     */
+    ElementType.CRONOGRAMA -> setOf(
+        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.LINEA,
+        Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.FUENTE, Propiedad.OPACIDAD
     )
 
     // La hoja no tiene estilo: es un límite, no un dibujo. Solo se estira.

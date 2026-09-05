@@ -97,7 +97,11 @@ object HojasDelProyecto {
                             Pagina(
                                 hoja = hoja,
                                 marco = marco.id,
-                                nombre = marco.text?.takeIf { it.isNotBlank() }
+                                // El rótulo de un marco vive en `name`; `text` es de los
+                                // textos. Se miran los dos: el editor escribe `name` y los
+                                // croquis congelados traen el suyo por ahí.
+                                nombre = marco.name?.takeIf { it.isNotBlank() }
+                                    ?: marco.text?.takeIf { it.isNotBlank() }
                                     ?: "${i + 1}"
                             )
                         }
@@ -106,6 +110,24 @@ object HojasDelProyecto {
 
                 else -> emptyList()
             }
+        } + croquisComoPaginas(proyecto)
+
+    /**
+     * **Los croquis del espacio, como una página más del proyecto.**
+     *
+     * Estaban solo en una lista desplegable de la barra, y eso los dejaba fuera de sitio: un
+     * croquis es tan hoja del proyecto como un lienzo o una nota, y quien mira la rejilla
+     * espera encontrarlo ahí con los demás. Aquí no hay nada que paginar —un croquis es uno—
+     * así que sale una página por croquis.
+     *
+     * Su [Pagina.hoja] es de mentira: se fabrica para que la rejilla pueda tratarlo como al
+     * resto —marcarlo, abrirlo, exportarlo—. No está en [Proyecto.hojas] ni lo estará: lo que
+     * el proyecto guarda de un croquis es su id, y sus láminas congeladas sí son hojas de
+     * verdad. Ver [Proyecto.croquis].
+     */
+    fun croquisComoPaginas(proyecto: Proyecto): List<Pagina> =
+        proyecto.croquis.mapIndexed { i, id ->
+            Pagina(hoja = Hoja(id = "c3d-$id", croquis = id), nombre = "Croquis ${i + 1}")
         }
 
     /**
@@ -143,18 +165,21 @@ object HojasDelProyecto {
     /**
      * De qué color se enmarca cada lienzo.
      *
-     * **Un color por lienzo**, para que se vea de un vistazo qué láminas vienen
-     * del mismo sitio cuando un proyecto junta varios. Sale del identificador
-     * del dibujo, así que es el mismo siempre y en todas partes: no depende del
-     * orden en que se añadieron ni de cuántos haya.
+     * **Un color por lienzo, y por croquis en el espacio**, para que se vea de un
+     * vistazo qué láminas vienen del mismo sitio cuando un proyecto junta
+     * varios. Sale del identificador, así que es el mismo siempre y en todas
+     * partes: no depende del orden en que se añadieron ni de cuántos haya.
      *
      * Las páginas de un PDF y las notas no llevan color: no vienen de un lienzo,
      * y pintarlas de uno diría algo que no es.
      */
     fun colorDe(hoja: Hoja): Int? {
-        val dibujo = hoja.dibujo ?: return null
         if (hoja.pagina != null) return null
-        return COLORES[Math.floorMod(dibujo.hashCode(), COLORES.size)]
+        // **El croquis manda sobre el dibujo.** Cada vista congelada se guarda en su
+        // propia escena, así que por el dibujo saldrían de un color distinto cada una y
+        // el color dejaría de decir de dónde vienen. Ver [Hoja.croquis].
+        val fuente = hoja.croquis ?: hoja.dibujo ?: return null
+        return COLORES[Math.floorMod(fuente.hashCode(), COLORES.size)]
     }
 
     /**

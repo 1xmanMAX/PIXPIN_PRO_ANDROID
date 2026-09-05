@@ -67,6 +67,28 @@ enum class Clase {
 }
 
 /**
+ * **El nombre de un archivo guardado, con la extensión que le toca.**
+ *
+ * Quien comparte no siempre dice cómo se llama el archivo: a veces solo manda el asunto, y un
+ * asunto no lleva extensión. El archivo se guardaba entonces como `Plano de la nave`, sin más,
+ * y al abrirlo después Android no tenía de dónde sacar de qué era —el tipo lo deduce de la
+ * extensión— así que lo ofrecía como «archivo» a secas y el PDF dejaba de abrirse con el
+ * lector de PDF. Eso es lo que se ve como «pierde el formato».
+ *
+ * [deSuTipo] es la extensión que corresponde a su tipo, si se sabe. Si el nombre ya trae una
+ * que parece extensión, se respeta: quien la puso sabía lo que hacía.
+ */
+fun nombreConExtension(nombre: String, deSuTipo: String?): String {
+    val sano = nombre.replace(Regex("[\\\\/:*?\"<>|]"), "-").trim().ifBlank { "compartido" }
+    val laQueTrae = sano.substringAfterLast('.', "")
+    val pareceExtension = laQueTrae.isNotBlank() && laQueTrae.length in 1..5 &&
+        laQueTrae.all { it.isLetterOrDigit() }
+    if (pareceExtension) return sano
+    val suya = deSuTipo?.trim()?.removePrefix(".").orEmpty()
+    return if (suya.isBlank()) sano else "$sano.$suya"
+}
+
+/**
  * Un mensaje guardado.
  *
  * [ruta] es el archivo si lo hay; [referencia] es el identificador de lo que abre —un

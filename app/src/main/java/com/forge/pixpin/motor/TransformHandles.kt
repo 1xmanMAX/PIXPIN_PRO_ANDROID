@@ -36,8 +36,40 @@ enum class HandleType {
      * punto de verdad: si se vieran iguales, no habría forma de saber cuáles se
      * pueden borrar.
      */
-    POINT_ADD
+    POINT_ADD,
+
+    /**
+     * Los del **sólido**, que no se estira por una caja como los demás.
+     *
+     * Una caja en isométrica no cabe en un rectángulo de pantalla: su ancho y su fondo
+     * son dos ejes del suelo que se dibujan en diagonal, y su altura sube recta. Con los
+     * ocho tiradores de siempre no había forma de decir cuál de los tres se quiere
+     * cambiar —un arrastre en diagonal vale para dos— y encima salían colocados sobre la
+     * huella sin proyectar, o sea lejos de lo dibujado.
+     *
+     * Estos van sobre las esquinas de verdad y cada uno toca **una cosa**: la esquina de
+     * enfrente cambia la huella entera, las dos de los lados un eje cada una, y el de
+     * arriba del todo la altura. Es el mismo gesto con el que se dibujó, que es lo que
+     * hace que se entiendan sin explicarlos.
+     */
+    SOLIDO_HUELLA, SOLIDO_ANCHO, SOLIDO_FONDO, SOLIDO_ALTURA,
+
+    /**
+     * Los dos que aparecieron con la cota y el giro.
+     *
+     * [SOLIDO_COTA] sube la caja entera sin cambiar lo que mide —es lo que permite
+     * apoyarla encima de otra— y va en el pie de la misma arista vertical en cuya punta
+     * está [SOLIDO_ALTURA]: abajo se levanta, arriba se estira. [SOLIDO_GIRO] va apartado
+     * de la planta y la hace girar sobre el suelo, no sobre la pantalla.
+     */
+    SOLIDO_COTA, SOLIDO_GIRO
 }
+
+/** Los del sólido: ni estiran una caja ni mueven un punto de un recorrido. */
+val HandleType.esDeSolido: Boolean
+    get() = this == HandleType.SOLIDO_HUELLA || this == HandleType.SOLIDO_ANCHO ||
+        this == HandleType.SOLIDO_FONDO || this == HandleType.SOLIDO_ALTURA ||
+        this == HandleType.SOLIDO_COTA || this == HandleType.SOLIDO_GIRO
 
 /** Los que mueven un punto suelto en vez de estirar una caja. */
 val HandleType.esPunto: Boolean
@@ -288,6 +320,8 @@ fun getSelectionTransformHandles(
     elements: List<Element>,
     zoom: Double,
     handleSize: Double = HandleSize.TOUCH,
+    /** Desde dónde se mira: los tiradores de un sólido van donde caiga proyectado. */
+    vista: Vista = Vista.CERO,
     /**
      * Dónde hay clavos. **Los tiradores que caen encima de uno no se pintan.**
      *
@@ -298,15 +332,16 @@ fun getSelectionTransformHandles(
      * clavo manda el clavo, y el tirador desaparece: **un punto, una ley**.
      */
     alfileres: List<Pt> = emptyList()
-): List<TransformHandle> = handlesSinAlfileres(elements, zoom, handleSize, alfileres)
+): List<TransformHandle> = handlesSinAlfileres(elements, zoom, handleSize, vista, alfileres)
 
 private fun handlesSinAlfileres(
     elements: List<Element>,
     zoom: Double,
     handleSize: Double,
+    vista: Vista,
     alfileres: List<Pt>
 ): List<TransformHandle> {
-    val todos = handlesDe(elements, zoom, handleSize)
+    val todos = handlesDe(elements, zoom, handleSize, vista)
     if (alfileres.isEmpty()) return todos
     val margen = handleSize / zoom.coerceAtLeast(0.0001)
     return todos.filterNot { h ->
@@ -317,7 +352,7 @@ private fun handlesSinAlfileres(
 }
 
 private fun handlesDe(
-    elements: List<Element>, zoom: Double, handleSize: Double
+    elements: List<Element>, zoom: Double, handleSize: Double, vista: Vista
 ): List<TransformHandle> {
     if (elements.isEmpty()) return emptyList()
 
@@ -340,11 +375,36 @@ private fun handlesDe(
     // **El plano enseña los ocho.** Los del medio no son un adorno en él: son
     // los que extienden el intervalo en vez de escalarlo, y sin ellos la mitad
     // de lo que sabe hacer no tendría por dónde tocarse. Ver [Plano].
-    if (elements.size == 1 && elements.first().isPlano) {
+    // La caja tiene los suyos, uno por cada cosa que se le puede cambiar. Ver
+    // [HandleType.SOLIDO_HUELLA] y [tiradoresDelSolido].
+    if (elements.size == 1 && elements.first().isSolido) {
+        val e = elements.first()
+        if (e.locked) return emptyList()
+        val lado = handleSize / zoom
+        return tiradoresDelSolido(e, vista).map { (tipo, p) ->
+            TransformHandle(tipo, p.x - lado / 2, p.y - lado / 2, lado, lado)
+        }
+    }
+    // **Los tiradores del arco van alrededor de lo que pinta.** Su caja es la del óvalo
+    // entero, así que en un arco recortado salían flotando lejísimos del trazo, en medio
+    // de la nada. Se le pasa la caja del trozo pero **con el centro del óvalo**: es el
+    // punto sobre el que gira el elemento, y el que tiene que girar los tiradores con él.
+    if (elements.size == 1 && elements.first().type == ElementType.ARC) {
+        val e = elements.first()
+        if (e.locked) return emptyList()
+        val caja = cajaDelArco(e)
+        val c = getElementAbsoluteCoords(e)
+        return getTransformHandlesFromCoords(
+            AbsoluteCoords(caja.x1, caja.y1, caja.x2, caja.y2, c.cx, c.cy),
+            e.angle, zoom, handleSize
+        )
+    }
+    if (elements.size == 1 && elements.first().esInstrumento) {
         return getTransformHandles(elements.first(), zoom, handleSize, OmitSides.NONE)
     }
     if (elements.size == 1) return getTransformHandles(elements.first(), zoom, handleSize)
-    val b = getCommonBounds(elements)
+    // La misma caja que pinta el recuadro y que estira el bloque. Ver [envolturaVisible].
+    val b = envolturaComun(elements, vista)
     // **Los ocho, también con varios elementos.** Solo salían las esquinas, y con
     // ellas la selección únicamente crece en proporción: una figura estampada de
     // la lista no se podía estrechar para meterla en un hueco. Los del medio son
@@ -382,8 +442,3 @@ fun hitHandle(
     return handles.firstOrNull { it.type != HandleType.POINT_ADD && toca(it) }
         ?: handles.firstOrNull { toca(it) }
 }
-
-/** Lo mismo, cuando solo interesa de qué tipo era. */
-fun hitTransformHandle(
-    handles: List<TransformHandle>, p: Pt, angle: Double, center: Pt
-): HandleType? = hitHandle(handles, p, angle, center)?.type

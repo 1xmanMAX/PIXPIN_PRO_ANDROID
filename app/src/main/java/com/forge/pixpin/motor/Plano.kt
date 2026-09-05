@@ -2,7 +2,10 @@ package com.forge.pixpin.motor
 
 import kotlin.math.abs
 import kotlin.math.floor
+import kotlin.math.hypot
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.tan
 
 /**
  * El plano cartesiano: **los ejes para dibujar una función**.
@@ -91,7 +94,54 @@ private const val MAXIMAS = 300
 private const val MINIMO_CUADRO = 6.0
 
 /** Lo poco que puede medir el hueco entre dos números antes de que se pisen. */
-private const val MINIMO_ENTRE_NUMEROS = 34.0
+internal const val MINIMO_ENTRE_NUMEROS = 34.0
+
+/** Lo que mide la punta de flecha de un eje con el trazo más fino, en px de escena. */
+private const val PUNTA_BASE = 9.0
+
+/** La apertura de cada ala de la punta, en grados. */
+private const val ANGULO_DE_LA_PUNTA = 25.0
+
+/**
+ * Lo que mide la punta de flecha de los ejes de [e].
+ *
+ * Crece un poco con el grosor —una punta de nueve píxeles en un eje de ocho es
+ * un bulto— y no pasa de una fracción de la caja, para que en un instrumento
+ * chico no se coma las marcas.
+ */
+fun largoDeLaPunta(e: Element): Double =
+    (PUNTA_BASE + e.strokeWidth * 1.5).coerceAtMost(min(e.width, e.height) / 5).coerceAtLeast(2.0)
+
+/**
+ * Las dos alas de una punta de flecha en [punta], apuntando hacia ([dx], [dy]),
+ * como rayas del eje. Es la misma uve en el plano, la recta y el espacio.
+ */
+fun puntaDeFlecha(punta: Pt, dx: Double, dy: Double, largo: Double): List<TrazoDelPlano> {
+    val n = hypot(dx, dy)
+    if (n == 0.0 || largo <= 0.0) return emptyList()
+    val ux = dx / n
+    val uy = dy / n
+    val ala = largo * tan(Math.toRadians(ANGULO_DE_LA_PUNTA))
+    val base = Pt(punta.x - ux * largo, punta.y - uy * largo)
+    return listOf(
+        TrazoDelPlano(Pt(base.x - uy * ala, base.y + ux * ala), punta, eje = true),
+        TrazoDelPlano(Pt(base.x + uy * ala, base.y - ux * ala), punta, eje = true)
+    )
+}
+
+/** Las rayas del instrumento que sea: plano, recta o espacio. Ver [trazosDelPlano]. */
+fun trazosDelInstrumento(e: Element): List<TrazoDelPlano> = when (e.type) {
+    ElementType.RECTA -> trazosDeLaRecta(e)
+    ElementType.ESPACIO -> trazosDelEspacio(e)
+    else -> trazosDelPlano(e)
+}
+
+/** Las cifras del instrumento que sea. Ver [numerosDelPlano]. */
+fun numerosDelInstrumento(e: Element): List<NumeroDelPlano> = when (e.type) {
+    ElementType.RECTA -> numerosDeLaRecta(e)
+    ElementType.ESPACIO -> numerosDelEspacio(e)
+    else -> numerosDelPlano(e)
+}
 
 /** Cuánto vale una unidad en este plano. */
 val Element.unidadDelPlano: Double
@@ -163,7 +213,59 @@ fun trazosDelPlano(e: Element): List<TrazoDelPlano> {
     }
     out += TrazoDelPlano(Pt(0.0, o.y), Pt(e.width, o.y), eje = true)
     out += TrazoDelPlano(Pt(o.x, 0.0), Pt(o.x, e.height), eje = true)
+    // Las puntas, en los cuatro extremos: es lo que dice «esto sigue» y lo que
+    // distingue un eje de un borde.
+    val punta = largoDeLaPunta(e)
+    out += puntaDeFlecha(Pt(e.width, o.y), 1.0, 0.0, punta)
+    out += puntaDeFlecha(Pt(0.0, o.y), -1.0, 0.0, punta)
+    out += puntaDeFlecha(Pt(o.x, 0.0), 0.0, -1.0, punta)
+    out += puntaDeFlecha(Pt(o.x, e.height), 0.0, 1.0, punta)
     return out
+}
+
+// -------------------------------------------------------------------------
+// La recta numérica
+// -------------------------------------------------------------------------
+
+/**
+ * Las rayas de la recta numérica: la regla por el medio de la caja, una marca
+ * por cada paso de cuadros y una punta en cada extremo.
+ *
+ * Es el plano con un eje solo, y por eso vive aquí y usa sus mismas cuentas:
+ * la unidad, el origen en el centro y el paso que se dobla cuando no cabe. La
+ * altura de la caja solo decide lo largas que son las marcas y dónde caen
+ * las cifras; el ancho es el que manda, y estirarlo por un lado enseña más
+ * números.
+ */
+fun trazosDeLaRecta(e: Element): List<TrazoDelPlano> {
+    if (e.width <= 0 || e.height <= 0) return emptyList()
+    val u = e.unidadDelPlano
+    val o = origenDelPlano(e)
+    val (alcance, _) = alcanceDelPlano(e)
+    val paso = pasoUtil(e.pasoDeCuadrosDelPlano, u, MINIMO_CUADRO)
+    val marca = min(6.0, e.height / 4)
+    val out = mutableListOf<TrazoDelPlano>()
+    for (n in enteros(alcance, paso)) {
+        val x = o.x + n * paso * u
+        out += TrazoDelPlano(Pt(x, o.y - marca), Pt(x, o.y + marca), eje = true)
+    }
+    out += TrazoDelPlano(Pt(0.0, o.y), Pt(e.width, o.y), eje = true)
+    val punta = largoDeLaPunta(e)
+    out += puntaDeFlecha(Pt(e.width, o.y), 1.0, 0.0, punta)
+    out += puntaDeFlecha(Pt(0.0, o.y), -1.0, 0.0, punta)
+    return out
+}
+
+/** Las cifras de la recta, debajo de sus marcas, con el cero incluido. */
+fun numerosDeLaRecta(e: Element): List<NumeroDelPlano> {
+    if (e.width <= 0 || e.height <= 0) return emptyList()
+    val u = e.unidadDelPlano
+    val o = origenDelPlano(e)
+    val (alcance, _) = alcanceDelPlano(e)
+    val paso = pasoUtil(e.pasoDeNumerosDelPlano, u, MINIMO_ENTRE_NUMEROS)
+    return enteros(alcance, paso).map { n ->
+        NumeroDelPlano(Pt(o.x + n * paso * u, o.y), escrito(n * paso), horizontal = true)
+    }
 }
 
 /**
@@ -209,7 +311,7 @@ fun puntoDelPlano(e: Element, x: Double, y: Double): Pt {
 }
 
 /** Los múltiplos que caben a cada lado del origen, del centro hacia fuera. */
-private fun enteros(alcance: Double, paso: Double): List<Int> {
+internal fun enteros(alcance: Double, paso: Double): List<Int> {
     if (paso <= 0.0 || alcance <= 0.0) return emptyList()
     val cuantos = floor(alcance / paso).toInt().coerceAtMost(MAXIMAS)
     if (cuantos <= 0) return listOf(0)

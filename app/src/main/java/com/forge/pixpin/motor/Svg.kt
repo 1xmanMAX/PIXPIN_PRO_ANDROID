@@ -90,6 +90,57 @@ object Svg {
      */
     fun caminoSuaveCerrado(pts: List<Pt>): String = camino(opsSuaveCerrado(pts))
 
+    /**
+     * **El contorno del lápiz, escrito para que pese poco.**
+     *
+     * Es la misma curva que [caminoSuaveCerrado] —cosida por los puntos medios— pero escrita
+     * como se escribe cuando hay que mandar setecientos trazos de letra manuscrita en un
+     * archivo: en **cuadráticas** (`q`, cuatro números por punto donde la cúbica gastaba
+     * seis; la cúbica de allí era una cuadrática convertida, así que la forma es idéntica),
+     * **relativas** (cada punto es lo que cambia respecto del anterior, y un salto de tres
+     * píxeles son dos cifras) y a **un decimal**, que en píxeles de escena es más fino de lo
+     * que se puede ver. Con eso, un punto pasa de cuarenta y seis bytes a doce.
+     *
+     * Las diferencias se calculan sobre los valores **ya redondeados**, para que el error de
+     * cada uno no se vaya sumando a lo largo del trazo.
+     */
+    fun caminoDelLapiz(pts: List<Pt>): String {
+        if (pts.isEmpty()) return ""
+        if (pts.size < 4) return camino(opsDePuntos(pts, cerrado = true))
+        val sb = StringBuilder(pts.size * 14)
+        var cx = redondeo(pts[0].x)
+        var cy = redondeo(pts[0].y)
+        sb.append('M').append(num1(cx)).append(' ').append(num1(cy))
+        var tiradorX = pts[1].x
+        var tiradorY = pts[1].y
+        var i = 2
+        while (i < pts.size) {
+            val hastaX = redondeo((pts[i - 1].x + pts[i].x) / 2)
+            val hastaY = redondeo((pts[i - 1].y + pts[i].y) / 2)
+            val tx = redondeo(tiradorX)
+            val ty = redondeo(tiradorY)
+            sb.append('q').append(num1(tx - cx)).append(' ').append(num1(ty - cy))
+                .append(' ').append(num1(hastaX - cx)).append(' ').append(num1(hastaY - cy))
+            cx = hastaX
+            cy = hastaY
+            tiradorX = pts[i].x
+            tiradorY = pts[i].y
+            i++
+        }
+        sb.append('z')
+        return sb.toString()
+    }
+
+    private fun redondeo(v: Double): Double = (v * 10.0).roundToLong() / 10.0
+
+    /** Un número a un decimal, sin ceros de más y con punto. */
+    private fun num1(v: Double): String {
+        if (!v.isFinite()) return "0"
+        val r = redondeo(v)
+        if (r == floor(r) && abs(r) < 1e15) return r.toLong().toString()
+        return String.format(Locale.ROOT, "%.1f", r)
+    }
+
     fun caminoCerrado(pts: List<Pt>): String = camino(opsDePuntos(pts, cerrado = true))
 
     fun caminoDeAnillos(anillos: List<List<Pt>>): String = camino(opsDeAnillos(anillos, 3))

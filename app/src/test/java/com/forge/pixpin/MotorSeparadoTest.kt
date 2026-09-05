@@ -44,6 +44,10 @@ class MotorSeparadoTest {
         // del núcleo —[Caminos], [Rough], [Perimetros]— y por eso el PDF se
         // comprueba casi entero sin dispositivo.
         "Glifos.kt", "PdfLienzo.kt", "PdfDoc.kt", "PdfDelProyecto.kt",
+        // Pinta el plano leído del PDF en un `Canvas` de Android, con sus `Paint` y sus
+        // `Matrix`. Lo que **lee** el PDF —[PlanoDePdf]— sí es núcleo y sí se comprueba sin
+        // dispositivo, que es donde está toda la dificultad.
+        "PlanoEnPantalla.kt",
         // Arma el PDF de lo marcado: escribe archivos y pinta imágenes, las dos
         // de Android. Qué láminas entran y cómo se llama el archivo sí es
         // núcleo, y por eso eso sí se comprueba sin dispositivo.
@@ -52,6 +56,16 @@ class MotorSeparadoTest {
         // dedo a qué valor sale— viven aparte en `Deslizadores.kt`, que sí es
         // núcleo y sí se comprueba sin dispositivo.
         "PanelLateral.kt",
+        // El mando de lo elegido es interfaz entera: un disco que se dibuja y unos
+        // arrastres que se atienden. Lo que le hace a lo elegido —mover, girar, escalar,
+        // estirar— vive en `DrawController` y en `Transform.kt`, que sí son núcleo y sí se
+        // comprueban sin dispositivo. Ver [Mando].
+        "Mando.kt",
+        // Los mandos del lateral: un botón que se arrastra, una rueda de color y un damero.
+        // Todo dibujo y todo dedo. Las cuentas —de dónde está el dedo a qué tono, a qué
+        // grosor o a qué opción sale— viven en `Deslizadores.kt`, que sí es núcleo y sí se
+        // comprueba sin dispositivo. Ver [MandoDelPanel].
+        "MandosDelPanel.kt",
         // La lista de figuras: el archivo donde se guardan y las dos pantallas
         // desde las que se tocan. Qué es una figura, cómo se estampa y cómo se
         // dibuja una tabla pegada sí son núcleo —`Biblioteca.kt` y
@@ -69,6 +83,16 @@ class MotorSeparadoTest {
         // Las dos ventanas flotantes: interfaz entera. Dónde caen las rayas
         // de la cuadrícula sí es núcleo y vive en `Cuadricula.kt`.
         "VentanaDeReferencia.kt", "VentanaDeAjustes.kt",
+        // El botón flotante de la pantalla completa: interfaz, y guarda dónde queda.
+        "BotonFlotante.kt",
+        // Junta el proyecto entero en una página web: lee escenas, PDF e imágenes. Lo que
+        // arma el documento —ExportarHtml, VisorEspacio— sí es núcleo y se comprueba aquí.
+        "ExportarProyectoWeb.kt",
+        // Rasteriza trozos de un PDF y los guarda en memoria: mapas de bits y PdfRenderer.
+        // Las cuentas de qué trozo toca sí son núcleo y viven en MosaicoDePdf.kt.
+        "ElMosaicoDelPapel.kt",
+        // Vuelve al PDF a por lo que se está mirando: `PdfRenderer` y `Bitmap`.
+        "LaminaDeCerca.kt",
         // La cabecera que comparten las tres ventanitas flotantes.
         "BarraDeVentana.kt"
     )

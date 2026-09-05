@@ -93,7 +93,8 @@ fun EditorVivo(
     modifier: Modifier = Modifier,
     ocultosVisibles: Set<String> = emptySet()
 ) {
-    val trozos = remember(texto) { trozosDe(texto) }
+    // Los de editar: el documento vacío es un bloque vacío. Ver [Vivo.trozos].
+    val trozos = remember(texto) { Vivo.trozos(texto) }
 
     /**
      * Lo ya analizado, **por su texto y no por su sitio**.
@@ -133,7 +134,7 @@ fun EditorVivo(
                     tabla = bloque,
                     baseSizeSp = baseSizeSp,
                     onCambio = { nueva ->
-                        val t = trozosDe(texto)[i]
+                        val t = Vivo.trozos(texto)[i]
                         val cola = t.de(texto).takeLastWhile { it == '\n' }
                         onTexto(
                             texto.substring(0, t.desde) + Tablas.aTexto(nueva) + cola +

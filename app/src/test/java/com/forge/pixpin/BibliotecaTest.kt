@@ -154,15 +154,24 @@ class BibliotecaTest {
         }
     }
 
-    /** Los ejes son ejes: dos flechas cruzadas y sus letras. */
+    /**
+     * Los tres instrumentos de graficar vienen de fábrica, cada uno como un
+     * solo elemento con su unidad puesta; los ejes, la cuadrícula y la recta
+     * dibujados con flechas sueltas ya no están (los quitó el usuario porque al
+     * alargarlos se deformaban).
+     */
     @Test
-    fun `los ejes traen sus dos flechas y sus rotulos`() {
-        val ejes = figurasDeFabrica(ItemStyle(), medir).first { it.id == ID_EJES }
-        assertEquals(2, ejes.elementos.count { it.type == ElementType.ARROW })
-        assertEquals(
-            listOf("X", "Y", "O"),
-            ejes.elementos.filter { it.type == ElementType.TEXT }.mapNotNull { it.text }
-        )
+    fun `de fabrica vienen el plano, la recta y el espacio como instrumentos`() {
+        val figuras = figurasDeFabrica(ItemStyle(), medir)
+        val porId = figuras.associateBy { it.id }
+        for ((id, tipo) in listOf(ID_PLANO to ElementType.PLANO, ID_RECTA to ElementType.RECTA, ID_ESPACIO to ElementType.ESPACIO)) {
+            val f = porId[id] ?: error("falta $id")
+            assertEquals(1, f.elementos.size)
+            assertEquals(tipo, f.elementos[0].type)
+            assertEquals(UNIDAD_POR_DEFECTO, f.elementos[0].unidad)
+        }
+        assertTrue(figuras.none { it.id == "fabrica-ejes" || it.id == "fabrica-cuadricula" })
+        assertTrue(figuras.none { e -> e.elementos.any { it.type == ElementType.ARROW } })
     }
 
     @Test

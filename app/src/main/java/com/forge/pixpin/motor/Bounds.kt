@@ -113,6 +113,74 @@ fun getElementBounds(element: Element): Bounds {
     return Bounds(minX, minY, maxX, maxY)
 }
 
+/**
+ * La caja de **lo que se ve**, que no siempre es la del elemento.
+ *
+ * Casi todas las figuras ocupan exactamente su caja, y para esas esto es
+ * [getElementBounds] y ya está. Dos no:
+ *
+ * - **El sólido** dibuja fuera de su huella —la proyección se sale por arriba y por un
+ *   lado—, así que su caja se queda corta. Y lo que ocupa depende de desde dónde se
+ *   mire, así que hay que decírselo: sin [vista] se devuelve la unión de las cuatro, que
+ *   sobra bastante. Ver [envolturaDeSolido].
+ * - **El arco** guarda el óvalo entero aunque solo pinte una uña de él, así que su caja
+ *   se pasa, y a veces muchísimo: es lo que hacía que recortar un círculo dejara un trozo
+ *   pequeño con un recuadro de selección enorme alrededor, imposible de encerrar con el
+ *   dedo. Ver [cajaDelArco].
+ *
+ * Es la caja que hay que usar en todo lo que sea *dónde está esto para el que mira*:
+ * el recuadro de la selección, encerrar con el dedo, el lazo y el descarte del picado.
+ * Lo que es *geometría del elemento* —de dónde sale el óvalo, cómo se estira— sigue
+ * yendo por [getElementAbsoluteCoords], que es donde vive esa verdad.
+ */
+fun envolturaVisible(element: Element, vista: Vista? = null): Bounds = when {
+    // Sin vista, la unión de las cuatro: se pasa, pero es lo único honrado cuando no se
+    // sabe desde dónde se mira. Ver [envolturaDeSolido].
+    element.isSolido ->
+        if (vista == null) envolturaDeSolidoSinVista(element)
+        else envolturaDeSolido(element, vista)
+    // Una imagen tumbada en el suelo ocupa su paralelogramo proyectado, no su rectángulo:
+    // con la caja del elemento, el recuadro de la selección caía en otro sitio. Ver
+    // [imagenEnElSuelo].
+    element.type == ElementType.IMAGE && element.enElSuelo ->
+        boundsOfPoints(imagenEnElSuelo(element, vista ?: Vista.CERO))
+
+    element.type == ElementType.ARC -> {
+        val caja = cajaDelArco(element)
+        if (element.angle == 0.0) caja else {
+            // **Se gira alrededor del centro del óvalo**, no del centro de la caja del
+            // trozo: es el punto sobre el que gira el elemento, y el que deshacen
+            // `toLocal` y el muestreo del arco.
+            val c = getElementAbsoluteCoords(element)
+            val centro = Pt(c.cx, c.cy)
+            boundsOfPoints(
+                listOf(
+                    pointRotateRads(Pt(caja.x1, caja.y1), centro, element.angle),
+                    pointRotateRads(Pt(caja.x2, caja.y1), centro, element.angle),
+                    pointRotateRads(Pt(caja.x2, caja.y2), centro, element.angle),
+                    pointRotateRads(Pt(caja.x1, caja.y2), centro, element.angle)
+                )
+            )
+        }
+    }
+    else -> getElementBounds(element)
+}
+
+/** Caja que envuelve **lo que se ve** de todos. Ver [envolturaVisible]. */
+fun envolturaComun(elements: List<Element>, vista: Vista? = null): Bounds {
+    if (elements.isEmpty()) return Bounds(0.0, 0.0, 0.0, 0.0)
+    var minX = Double.MAX_VALUE
+    var minY = Double.MAX_VALUE
+    var maxX = -Double.MAX_VALUE
+    var maxY = -Double.MAX_VALUE
+    for (e in elements) {
+        val b = envolturaVisible(e, vista)
+        minX = min(minX, b.x1); minY = min(minY, b.y1)
+        maxX = max(maxX, b.x2); maxY = max(maxY, b.y2)
+    }
+    return Bounds(minX, minY, maxX, maxY)
+}
+
 /** Caja que envuelve a todos (`getCommonBounds`). */
 fun getCommonBounds(elements: List<Element>): Bounds {
     if (elements.isEmpty()) return Bounds(0.0, 0.0, 0.0, 0.0)
@@ -250,3 +318,55 @@ fun encuadreEnPagina(
  * quepa de ancho, con media página en blanco debajo.
  */
 fun paginaApaisada(caja: Bounds): Boolean = caja.width > caja.height
+
+/**
+ * El trozo del segmento `a`→`b` que cae dentro del rectángulo, o null si no
+ * pasa por él. Liang–Barsky de toda la vida.
+ *
+ * Es la pieza del pintado recortado: al rasterizador no se le pueden dar
+ * coordenadas de dispositivo enormes —tiene un tope, y pasado el tope lo
+ * relleno desaparece o revienta, según el aparato—, así que a mucho aumento lo
+ * que se le da es **solo lo que se ve**, ya cortado. Devuelve las cuatro
+ * coordenadas en un arreglo para no fabricar objetos: esto corre por cada
+ * tramo de cada cadena visible, en cada fotograma.
+ */
+fun recortarSegmento(
+    ax: Double, ay: Double, bx: Double, by: Double,
+    x1: Double, y1: Double, x2: Double, y2: Double,
+    fuera: DoubleArray
+): Boolean {
+    var t0 = 0.0
+    var t1 = 1.0
+    val dx = bx - ax
+    val dy = by - ay
+
+    // Cada borde recorta el intervalo [t0, t1] del parámetro del segmento.
+    for (lado in 0 until 4) {
+        val p: Double
+        val q: Double
+        when (lado) {
+            0 -> { p = -dx; q = ax - x1 }
+            1 -> { p = dx; q = x2 - ax }
+            2 -> { p = -dy; q = ay - y1 }
+            else -> { p = dy; q = y2 - ay }
+        }
+        if (p == 0.0) {
+            // Paralelo a este borde: o está del lado bueno o no pasa.
+            if (q < 0.0) return false
+        } else {
+            val r = q / p
+            if (p < 0.0) {
+                if (r > t1) return false
+                if (r > t0) t0 = r
+            } else {
+                if (r < t0) return false
+                if (r < t1) t1 = r
+            }
+        }
+    }
+    fuera[0] = ax + t0 * dx
+    fuera[1] = ay + t0 * dy
+    fuera[2] = ax + t1 * dx
+    fuera[3] = ay + t1 * dy
+    return true
+}

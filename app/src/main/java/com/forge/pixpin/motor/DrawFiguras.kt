@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -64,7 +65,9 @@ fun PanelDeFiguras(
     puedeGuardar: Boolean,
     onPegarTabla: () -> Unit,
     onCerrar: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Abrir el diálogo de la gráfica de una función. Ver [Graficas]. */
+    onGrafica: () -> Unit = {}
 ) {
     /**
      * El nombre a medio escribir, o null si no se está guardando nada.
@@ -158,8 +161,257 @@ fun PanelDeFiguras(
                     modifier = Modifier.padding(start = 4.dp)
                 )
             }
+            // **La gráfica de una función**, escrita con su fórmula y sus límites.
+            TextButton(onClick = onGrafica) {
+                Text("ƒ(x)", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    stringResource(R.string.grafica_abrir),
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
         }
     }
+}
+
+/**
+ * **El teclado de fórmulas**: lo que una calculadora científica tiene y el teclado del
+ * teléfono no. Cada tecla mete su texto donde está el cursor —una función mete su
+ * paréntesis abierto—, y las de borrar y mover el cursor hacen lo suyo. Convive con el
+ * teclado del sistema: el campo sigue siendo un campo normal.
+ *
+ * [conY] y [conT] añaden las variables de las superficies y de las curvas en el espacio.
+ */
+@Composable
+fun TecladoDeFormulas(
+    valor: androidx.compose.ui.text.input.TextFieldValue,
+    onCambio: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+    conY: Boolean = false,
+    conT: Boolean = false
+) {
+    fun meter(texto: String, atras: Int = 0) {
+        val a = valor.selection.min.coerceIn(0, valor.text.length)
+        val b = valor.selection.max.coerceIn(0, valor.text.length)
+        val nuevo = valor.text.substring(0, a) + texto + valor.text.substring(b)
+        val cursor = a + texto.length - atras
+        onCambio(androidx.compose.ui.text.input.TextFieldValue(nuevo, androidx.compose.ui.text.TextRange(cursor)))
+    }
+    fun borrar() {
+        val a = valor.selection.min.coerceIn(0, valor.text.length)
+        val b = valor.selection.max.coerceIn(0, valor.text.length)
+        if (a != b) {
+            onCambio(androidx.compose.ui.text.input.TextFieldValue(valor.text.removeRange(a, b), androidx.compose.ui.text.TextRange(a)))
+        } else if (a > 0) {
+            onCambio(androidx.compose.ui.text.input.TextFieldValue(valor.text.removeRange(a - 1, a), androidx.compose.ui.text.TextRange(a - 1)))
+        }
+    }
+    fun mover(cuanto: Int) {
+        val c = (valor.selection.end + cuanto).coerceIn(0, valor.text.length)
+        onCambio(valor.copy(selection = androidx.compose.ui.text.TextRange(c)))
+    }
+
+    /** Una tecla: lo que enseña y lo que hace. */
+    class Tecla(val rotulo: String, val fuerte: Boolean = false, val hace: () -> Unit)
+    fun t(rotulo: String, texto: String = rotulo, atras: Int = 0) = Tecla(rotulo) { meter(texto, atras) }
+    fun fn(rotulo: String, nombre: String = rotulo) = Tecla(rotulo, fuerte = true) { meter("$nombre()", 1) }
+
+    val filas = buildList {
+        add(listOf(t("7"), t("8"), t("9"), t("÷", "/"), t("(", "()", 1), t(")")))
+        add(listOf(t("4"), t("5"), t("6"), t("×", "*"), t("^"), t("x²", "^2")))
+        add(listOf(t("1"), t("2"), t("3"), t("−", "-"), fn("√", "sqrt"), t("π", "pi")))
+        add(
+            buildList {
+                add(t("0")); add(t(".")); add(t(","))
+                add(t("+")); add(Tecla("x", fuerte = true) { meter("x") })
+                if (conY) add(Tecla("y", fuerte = true) { meter("y") })
+                if (conT) add(Tecla("t", fuerte = true) { meter("t") })
+                if (!conY && !conT) add(t("e"))
+            }
+        )
+        add(listOf(fn("sin"), fn("cos"), fn("tan"), fn("ln"), fn("log"), fn("exp")))
+        add(listOf(fn("abs"), t("|x|", "||", 1), t("<"), t(">"), t("≤", "<="), t("≥", ">=")))
+        add(
+            listOf(
+                t("si", " si "), t(";", "; "), t("e"),
+                Tecla("←") { mover(-1) }, Tecla("→") { mover(1) },
+                Tecla("⌫", fuerte = true) { borrar() }
+            )
+        )
+    }
+
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (fila in filas) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (tecla in fila) {
+                    Surface(
+                        Modifier
+                            .weight(1f)
+                            .height(36.dp)
+                            .clickable { tecla.hace() },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (tecla.fuerte) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 1.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                tecla.rotulo,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **La ecuación como es**: cada fórmula compuesta de verdad —fracciones, raíces,
+ * exponentes— con el mismo compositor que usan las notas, y con su condición al lado si
+ * es por partes. Lo que no se entiende se dice en rojo, sin más.
+ */
+@Composable
+fun VistaDeFormula(
+    prefijo: String,
+    texto: String,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    modifier: Modifier = Modifier
+) {
+    val compilada = remember(texto) { if (texto.isBlank()) null else Formula.compilar(texto) }
+    Column(modifier.fillMaxWidth()) {
+        if (texto.isBlank()) return@Column
+        if (compilada == null) {
+            Text(
+                stringResource(R.string.grafica_formula_mal) + ": " + texto,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+            return@Column
+        }
+        for ((i, parte) in compilada.latex.withIndex()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (i == 0) "$prefijo = " else "     ",
+                    color = color,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                com.forge.pixpin.motormd.FormulaUi(
+                    parte.first, tamanoSp = 18f, color = color,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                parte.second?.let { cond ->
+                    Text("  si  ", color = color, style = MaterialTheme.typography.bodySmall)
+                    com.forge.pixpin.motormd.FormulaUi(
+                        cond, tamanoSp = 15f, color = color,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Un campo de número con etiqueta corta, para los límites. */
+@Composable
+private fun CampoNumero(valor: String, etiqueta: String, modifier: Modifier, onCambio: (String) -> Unit) {
+    OutlinedTextField(
+        value = valor, onValueChange = onCambio,
+        label = { Text(etiqueta) },
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+        ),
+        modifier = modifier
+    )
+}
+
+/** El número de un campo de límites, con coma decimal admitida. */
+fun numeroDelCampo(t: String): Double? = t.trim().replace(',', '.').toDoubleOrNull()
+
+/**
+ * **El diálogo de la gráfica**: las fórmulas —una por renglón, cada una una curva—, la
+ * ecuación compuesta debajo mientras se teclea, el teclado de fórmulas y los límites. Todo
+ * con lo que hay de fábrica ya puesto, para que baste con teclear y aceptar. El botón no se
+ * enciende hasta que todo se entiende. Ver [Graficas] y [Formula].
+ */
+@Composable
+fun DialogoDeGrafica(
+    onCerrar: () -> Unit,
+    onAceptar: (Graficas.Peticion) -> Unit
+) {
+    var formulas by remember {
+        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("sin(x)", androidx.compose.ui.text.TextRange(6)))
+    }
+    var xDesde by remember { mutableStateOf("-5") }
+    var xHasta by remember { mutableStateOf("5") }
+    var yDesde by remember { mutableStateOf("-3") }
+    var yHasta by remember { mutableStateOf("3") }
+    var escala by remember { mutableStateOf("40") }
+
+    val lineas = remember(formulas.text) { formulas.text.lines().map { it.trim() }.filter { it.isNotEmpty() } }
+    val compilan = remember(lineas) {
+        lineas.isNotEmpty() && lineas.all { l ->
+            Formula.compilar(l)?.let { c -> c.variables.all { it == "x" } } == true
+        }
+    }
+    val peticion = remember(lineas, xDesde, xHasta, yDesde, yHasta, escala) {
+        val a = numeroDelCampo(xDesde); val b = numeroDelCampo(xHasta)
+        val c = numeroDelCampo(yDesde); val d = numeroDelCampo(yHasta)
+        val k = numeroDelCampo(escala)
+        if (a == null || b == null || c == null || d == null || k == null) null
+        else if (b <= a || d <= c || k <= 0.0) null
+        else Graficas.Peticion(lineas, a, b, c, d, k)
+    }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text(stringResource(R.string.grafica_titulo)) },
+        text = {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = formulas,
+                    onValueChange = { formulas = it },
+                    label = { Text(stringResource(R.string.grafica_formulas)) },
+                    placeholder = { Text("x^2 - 2x\nsin(x)/x\nx^2 si x<0; 2x si x>=0") },
+                    isError = !compilan,
+                    supportingText = { Text(stringResource(R.string.grafica_formulas_ayuda)) },
+                    minLines = 1,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // La ecuación como es, una por curva y del color con el que va a salir.
+                for ((i, l) in lineas.withIndex()) {
+                    val color = if (i == 0) MaterialTheme.colorScheme.onSurface
+                    else Color(parseColor(Graficas.COLORES_DE_CURVAS[(i - 1) % Graficas.COLORES_DE_CURVAS.size], 255))
+                    VistaDeFormula("y", l, color)
+                }
+                TecladoDeFormulas(formulas, { formulas = it })
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CampoNumero(xDesde, stringResource(R.string.grafica_x_desde), Modifier.weight(1f)) { xDesde = it }
+                    CampoNumero(xHasta, stringResource(R.string.grafica_x_hasta), Modifier.weight(1f)) { xHasta = it }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CampoNumero(yDesde, stringResource(R.string.grafica_y_desde), Modifier.weight(1f)) { yDesde = it }
+                    CampoNumero(yHasta, stringResource(R.string.grafica_y_hasta), Modifier.weight(1f)) { yHasta = it }
+                }
+                CampoNumero(escala, stringResource(R.string.grafica_escala), Modifier.fillMaxWidth()) { escala = it }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { peticion?.let(onAceptar) },
+                enabled = compilan && peticion != null
+            ) { Text(stringResource(R.string.grafica_insertar)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onCerrar) { Text(stringResource(R.string.grafica_cancelar)) }
+        }
+    )
 }
 
 /** Un grupo de la lista, con su título. Vacío, se dice en vez de no salir. */

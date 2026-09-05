@@ -21,6 +21,15 @@ class MarkdownBloquesTest {
         }
     }
 
+    /** Un título sin texto sigue siendo título: es el que se acaba de convertir. */
+    @Test
+    fun `un titulo vacio es un titulo`() {
+        val b = Markdown.parse("# ").single() as MarkdownBlock.Heading
+        assertEquals(1, b.level)
+        assertEquals("", b.content.text)
+        assertTrue(Markdown.parse("##").single() is MarkdownBlock.Heading)
+    }
+
     @Test
     fun `siete almohadillas ya no es titulo`() {
         val bloques = Markdown.parse("####### nope")

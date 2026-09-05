@@ -399,9 +399,16 @@ object MarkdownEdit {
         // Los seis niveles, como los seis del catálogo de bloques. Con tres se
         // quedaban fuera el 4, el 5 y el 6, y convertir uno de esos a párrafo
         // dejaba las almohadillas puestas.
-        Formato.TITULO -> Regex("""^#{1,6}\s""").find(linea)?.value?.length ?: 0
-        // La viñeta admite los tres marcadores de Markdown.
-        Formato.LISTA -> if (linea.length > 2 && linea[0] in "-*+" && linea[1] == ' ') 2 else 0
+        Formato.TITULO -> Regex("""^#{1,6}(\s|$)""").find(linea)?.value?.length ?: 0
+        // La viñeta admite los tres marcadores de Markdown. **Y la vacía cuenta**:
+        // «- » a secas es la viñeta que deja pulsar intro en una lista, y sin
+        // reconocerla aquí no había forma de quitársela — ni intro ni retroceso
+        // la tocaban, porque los dos pasan por quitarle el prefijo.
+        Formato.LISTA -> when {
+            linea.length >= 2 && linea[0] in "-*+" && linea[1] == ' ' -> 2
+            linea.length == 1 && linea[0] in "-*+" -> 1
+            else -> 0
+        }
         else -> {
             val p = formato.prefijo ?: return 0
             if (linea.startsWith(p)) p.length else 0
