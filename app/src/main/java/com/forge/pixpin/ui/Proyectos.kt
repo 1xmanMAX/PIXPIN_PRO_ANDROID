@@ -405,7 +405,8 @@ fun PantallaDeProyectos(
                     if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
                     else {
                         // Se dice qué lleva: así se sabe si el audio de una nota viajó.
-                        android.widget.Toast.makeText(contexto, ExportarWebDe.resumenDe(archivo), android.widget.Toast.LENGTH_LONG).show()
+                        val calidad = ExportarHtml.calidadDeAudio(app.settings.settings.first().funcionesWeb)
+                        android.widget.Toast.makeText(contexto, ExportarWebDe.resumenDe(archivo, calidad), android.widget.Toast.LENGTH_LONG).show()
                         compartir(contexto, archivo, ExportarHtml.MIME_TYPE)
                     }
                 }

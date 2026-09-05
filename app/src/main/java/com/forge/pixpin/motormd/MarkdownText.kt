@@ -101,6 +101,9 @@ data class LinkHit(
         x >= left && x <= right && y >= top && y <= bottom
 }
 
+/** Si los audios de la nota responden al toque. Falso por defecto: solo el editor lo pone. */
+val LocalMediosTocables = androidx.compose.runtime.compositionLocalOf { false }
+
 @Composable
 fun MarkdownText(
     blocks: List<MarkdownBlock>,
@@ -394,7 +397,9 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
     androidx.compose.runtime.DisposableEffect(medio.ruta) {
         onDispose { runCatching { reproductor[0]?.release() }; reproductor[0] = null }
     }
-    val esAudio = medio.clase == ClaseDeMedio.AUDIO && java.io.File(medio.ruta).exists()
+    // Solo donde se lee la nota de verdad: en la vista previa de un proyecto la tarjeta
+    // se llevaba el toque —y la pulsación larga— y no se podía abrir ni elegir la hoja.
+    val esAudio = LocalMediosTocables.current && medio.clase == ClaseDeMedio.AUDIO && java.io.File(medio.ruta).exists()
     Row(
         Modifier
             .fillMaxWidth()

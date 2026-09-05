@@ -584,7 +584,9 @@ private fun Pantalla(
             ) {
                 if (viendo) {
                     val bloques = remember(valor.text) { Markdown.parse(valor.text) }
-                    MarkdownText(blocks = bloques, baseSizeSp = 16f)
+                    androidx.compose.runtime.CompositionLocalProvider(com.forge.pixpin.motormd.LocalMediosTocables provides true) {
+                        MarkdownText(blocks = bloques, baseSizeSp = 16f)
+                    }
                 } else {
                     EditorVivo(
                         texto = valor.text,

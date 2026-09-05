@@ -63,7 +63,7 @@ object ExportarWebDe {
      * Qué lleva la página, para decirlo al compartirla: hojas, audios, imágenes y peso.
      * Es lo que permite saber, sin abrir el archivo, si el audio de una nota viajó o no.
      */
-    fun resumenDe(archivo: File): String {
+    fun resumenDe(archivo: File, calidadDeAudio: String? = null): String {
         val html = runCatching { archivo.readText() }.getOrDefault("")
         val hojas = Regex("<div class=\"hoja\"").findAll(html).count()
         val audios = Regex("<audio ").findAll(html).count()
@@ -76,6 +76,7 @@ object ExportarWebDe {
             if (imagenes > 0) append(" · ").append(imagenes).append(if (imagenes == 1) " imagen" else " imágenes")
             if (adjuntos > 0) append(" · ").append(adjuntos).append(if (adjuntos == 1) " adjunto" else " adjuntos")
             append(" · ").append(peso)
+            if (calidadDeAudio != null) append(" · audio: ").append(calidadDeAudio)
         }
     }
 

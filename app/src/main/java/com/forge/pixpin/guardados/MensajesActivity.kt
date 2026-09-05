@@ -2636,7 +2636,7 @@ class MensajesActivity : ComponentActivity() {
                         // había señalado en ella. Se enseña la hoja con lo dibujado
                         // encima, y tocarla abre el editor donde se anotó.
                         Clase.PAGINA -> MiniaturaDePagina(m, recarga, ampliada)
-                        Clase.VOZ -> FilaDeVoz(m)
+                        Clase.VOZ -> FilaDeVoz(m) { menuAbierto = true }
                         Clase.MINIAPP -> FilaDeMiniApp(m) { nuevo ->
                             acciones.cambiarTexto(nuevo)
                         }
@@ -3610,7 +3610,7 @@ class MensajesActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun FilaDeVoz(m: Mensaje) {
+    private fun FilaDeVoz(m: Mensaje, alMantener: () -> Unit = {}) {
         // **Una nota de voz de verdad: botón, onda y por dónde va.**
         //
         // Antes era un icono de micrófono y una duración, que es tanto como enseñar el
@@ -3700,7 +3700,7 @@ class MensajesActivity : ComponentActivity() {
                 )
             }
         }
-        LaTranscripcion(m)
+        LaTranscripcion(m, alMantener)
     }
 
     /**
@@ -3711,7 +3711,7 @@ class MensajesActivity : ComponentActivity() {
      * (5-sep-2026): la nota aparte que había antes no se podía abrir ni leer entera.
      */
     @Composable
-    private fun LaTranscripcion(m: Mensaje) {
+    private fun LaTranscripcion(m: Mensaje, alMantener: () -> Unit = {}) {
         val avances by MensajesStore.avances.collectAsState()
         val enCurso = avances[m.id]
         if (enCurso != null) {
@@ -3748,9 +3748,12 @@ class MensajesActivity : ComponentActivity() {
                 .widthIn(max = 320.dp)
                 .animateContentSize()
                 .pointerInput(m.id) {
+                    // La pulsación larga sigue siendo la del mensaje (el menú, elegir):
+                    // este detector se la quedaba y las notas de voz no se podían elegir.
                     detectTapGestures(
                         onTap = { desplegado = !desplegado },
-                        onDoubleTap = { abrirLaTranscripcion(m) }
+                        onDoubleTap = { abrirLaTranscripcion(m) },
+                        onLongPress = { alMantener() }
                     )
                 },
             verticalAlignment = Alignment.Top
@@ -4901,7 +4904,7 @@ class MensajesActivity : ComponentActivity() {
                 com.forge.pixpin.ui.ExportarWebDe.archivo(this@MensajesActivity, listOf(p to claves), opciones, deNoche, calidadDeAudio)
             }
             if (archivo == null) avisarDeQueNoHay() else {
-                Toast.makeText(this@MensajesActivity, com.forge.pixpin.ui.ExportarWebDe.resumenDe(archivo), Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MensajesActivity, com.forge.pixpin.ui.ExportarWebDe.resumenDe(archivo, calidadDeAudio), Toast.LENGTH_LONG).show()
                 compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
             }
         }

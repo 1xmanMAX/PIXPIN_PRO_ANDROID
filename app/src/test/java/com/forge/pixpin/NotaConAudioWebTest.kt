@@ -15,6 +15,19 @@ class NotaConAudioWebTest {
     private val context get() = RuntimeEnvironment.getApplication()
 
     @Test
+    fun `una nota larga, partida en paginas, lleva el audio en la primera`() {
+        val audio = File(context.cacheDir, "voz-2.m4a").also { it.writeBytes(ByteArray(64) { 7 }) }
+        val parrafos = (0 until 120).joinToString("\n\n") { "[${it / 3}:${"%02d".format((it * 20) % 60)}] Párrafo número $it de una transcripción muy larga que sigue y sigue." }
+        val texto = "# Transcripción\n\n![audio](${audio.absolutePath})\n\n$parrafos"
+        val proyecto = Proyecto(id = "p2", nombre = "Obra", hojas = listOf(Hoja(id = "n2", nombre = "Transcripción", nota = texto)))
+        val hojas = ExportarProyectoWeb.paginas(context, proyecto, emptySet(), escenaDe = { null }, calidadDeAudio = AudioLigero.ORIGINAL)
+        val notas = hojas.filterIsInstance<ExportarHtml.HojaWeb.Nota>()
+        assertTrue("tenía que partirse en varias: " + notas.size, notas.size > 1)
+        assertTrue(notas[0].html.take(600), notas[0].html.contains("<audio controls"))
+        assertTrue("los saltos van en todas las páginas", notas.all { it.html.contains("class=\"salto\"") })
+    }
+
+    @Test
     fun `la nota transcrita lleva su audio y sus saltos`() {
         val audio = File(context.cacheDir, "voz-1.m4a").also { it.writeBytes(ByteArray(64) { 7 }) }
         val texto = "# Transcripción\n\n![audio](${audio.absolutePath})\n\n[0:00] Hola a todos.\n\n[0:21] Segundo punto."
