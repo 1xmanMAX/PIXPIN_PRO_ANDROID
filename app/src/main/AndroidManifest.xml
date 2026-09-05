@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Para las notas de voz. Se pide al grabar la primera, no al instalar. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Solo para bajar el modelo de voz de Vosk (unos 40 MB) la primera vez. Ver MotorVosk. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!--
       Para ver el croquis puesto encima de lo que hay delante. Ver [Croquis3DCamara].

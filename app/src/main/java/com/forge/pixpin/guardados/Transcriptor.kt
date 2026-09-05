@@ -1,19 +1,11 @@
 package com.forge.pixpin.guardados
 
 import android.content.Context
-import android.content.Intent
-import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.ParcelFileDescriptor
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import java.io.File
 import java.io.OutputStream
 import java.io.RandomAccessFile
@@ -24,23 +16,15 @@ import java.util.Locale
 /**
  * **Una nota de voz, pasada a texto en el propio teléfono.**
  *
- * Sin servidores y sin pagar: el reconocedor que Google trae en Android desde la
- * versión 13 —el mismo que dicta en el teclado— sabe leer **un archivo** en vez del
- * micrófono ([RecognizerIntent.EXTRA_AUDIO_SOURCE]) y trocearlo en frases
- * ([RecognizerIntent.EXTRA_SEGMENTED_SESSION]), y con [SpeechRecognizer.createOnDeviceSpeechRecognizer]
- * lo hace **sin red**, con el idioma que el usuario tenga descargado. Es lo más preciso que
- * hay gratis y en local: el modelo es el de Google, no uno pequeño metido en la aplicación.
+ * Sin servidores y sin pagar. El reconocedor es [MotorVosk] (Kaldi, código abierto): se le
+ * da el audio entero y devuelve el texto frase a frase, con el tiempo de cada palabra. El
+ * de Google que trae Android se probó primero y no valía: se quedaba con la primera frase
+ * de cada sesión y decía «idioma no disponible» con el idioma descargado, porque el
+ * paquete que instala el teléfono («es-PE», «es-419») no cuadra con la etiqueta pedida.
  *
  * **Cualquier formato**: el archivo —`.m4a` nuestro, `.ogg` de WhatsApp, `.mp3`, `.wav`,
  * `.amr`— se decodifica con [MediaCodec] a PCM mono de 16 kHz, que es lo que el reconocedor
- * quiere, y se guarda en un archivo temporal.
- *
- * **Por trozos**: una grabación de una hora no se le manda de una vez. Se parte en trozos de
- * menos de un minuto, cortando **donde hay silencio** —la ventana más callada de los últimos
- * segundos del trozo— para no partir una palabra, y se reconoce trozo a trozo, uno detrás de
- * otro; el texto es la suma. Ver [cortes].
- *
- * Todo lo del reconocedor pasa por el hilo principal, que es donde exige vivir.
+ * quiere, y se guarda en un archivo temporal. Ver [decodificar].
  */
 object Transcriptor {
 
@@ -48,40 +32,12 @@ object Transcriptor {
     const val HERCIOS = 16_000
     private const val BYTES_POR_SEGUNDO = HERCIOS * 2
 
-    /**
-     * Lo que mide un trozo como mucho, y dónde se busca el silencio para cortarlo. Ocho
-     * segundos y no quince: el reconocedor se queda con la primera frase que oye, y en
-     * quince segundos de alguien que habla seguido caben tres (de una conversación de tres
-     * minutos salían tres líneas; lo reportó el usuario el 5-sep-2026).
-     */
-    private const val TROZO_SEGUNDOS = 8
-    private const val BUSQUEDA_SEGUNDOS = 4
-    private const val VENTANA_MS = 20
-    /** Un silencio cuenta a partir de aquí; y un trozo más corto que esto es ruido y se tira. */
-    private const val SILENCIO_MS = 250
-    private const val MINIMO_MS = 300
-    /** Silencio: menos que esta parte de la energía típica, y nunca por debajo de un suelo fijo. */
-    private const val PARTE_DE_SILENCIO = 0.12
-    private const val UMBRAL_MINIMO = 120.0
+    /** Siempre: el reconocedor va dentro de la aplicación. Ver [MotorVosk]. */
+    @Suppress("UNUSED_PARAMETER")
+    fun disponible(context: Context): Boolean = true
 
-    /** Sin reconocedor en el dispositivo: el de red no sirve para archivos. */
-    const val SIN_RECONOCEDOR_LOCAL = -4
-    /** Tras entregar el trozo entero, cuánto se espera al reconocedor; y cuánto sin noticias en general. */
-    private const val SILENCIO_TRAS_ENTREGAR_MS = 4_000L
-    private const val TOPE_SIN_NOTICIAS_MS = 30_000L
-
-    /**
-     * Si este aparato sabe transcribir un archivo: Android 13 **y el reconocedor en el
-     * dispositivo**. Solo ese sabe leer de un archivo; el de red ignora el archivo y se
-     * pone a escuchar el micrófono —se vio en el teléfono: la transcripción «empezaba» al
-     * darle al play, porque el altavoz le hablaba al micro, y salía a trozos—.
-     */
-    fun disponible(context: Context): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
-
-    /** Si lo hace sin red, con el modelo descargado en el aparato. */
-    fun enLocal(context: Context): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+    /** Si el modelo del idioma ya está en el aparato (si no, se baja la primera vez). */
+    fun enLocal(context: Context): Boolean = MotorVosk.modeloListo(context, Locale.getDefault().toLanguageTag())
 
     /** Un trozo de texto y en qué milisegundo del audio empieza. */
     class Segmento(val desdeMs: Int, val texto: String)
@@ -135,14 +91,18 @@ object Transcriptor {
          * [segmentos]: el texto por trozos, cada uno con en qué milisegundo del audio empieza.
          */
         class Texto(val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList()) : Resultado()
-        /** El idioma no está en el aparato; se ha pedido su descarga. */
+        /** El modelo del idioma no está en el aparato y no se pudo bajar (sin red). */
         object DescargandoIdioma : Resultado()
         class Fallo(val codigo: Int) : Resultado()
     }
 
+    /** No se entendió nada. */
+    const val NADA = -5
+
     /**
      * Transcribe [archivo] y llama a [alTerminar] en el hilo principal. Puede llamarse
-     * desde cualquier hilo. [avance] recibe, de 0 a 1, cuánto lleva.
+     * desde cualquier hilo. [avance] recibe, de 0 a 1, cuánto lleva: el primer tercio es
+     * bajar el modelo si faltaba, el resto es reconocer.
      */
     fun transcribir(
         context: Context,
@@ -152,191 +112,53 @@ object Transcriptor {
         alTerminar: (Resultado) -> Unit
     ) {
         val principal = Handler(Looper.getMainLooper())
-        if (!disponible(context)) {
-            principal.post { alTerminar(Resultado.Fallo(-1)) }
-            return
-        }
         val app = context.applicationContext
         Thread {
-            val pcm = File(app.cacheDir, "pcm-${System.nanoTime()}.raw")
+            val r = runCatching { transcribirAqui(app, archivo, idioma, avance) }.getOrElse { Resultado.Fallo(-9) }
+            principal.post { alTerminar(r) }
+        }.start()
+    }
+
+    /** Lo mismo, en este hilo: decodificar, bajar el modelo si falta, reconocer. */
+    fun transcribirAqui(context: Context, archivo: File, idioma: String, avance: (Float) -> Unit): Resultado {
+        val pcm = File(context.cacheDir, "pcm-${System.nanoTime()}.raw")
+        try {
             val bien = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it) } }.isSuccess && pcm.length() > 0
-            if (!bien) {
-                pcm.delete()
-                principal.post { alTerminar(Resultado.Fallo(-2)) }
-                return@Thread
+            if (!bien) return Resultado.Fallo(-2)
+            avance(0.05f)
+            if (!MotorVosk.modeloListo(context, idioma)) {
+                MotorVosk.asegurarModelo(context, idioma) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
             }
-            val trozos = cortes(pcm)
-            principal.post {
-                reconocerTrozos(app, pcm, trozos, 0, idioma, ArrayList(), avance, 0) { r ->
-                    pcm.delete()
-                    alTerminar(r)
-                }
-            }
-        }.start()
-    }
-
-    /** Un trozo tras otro; el resultado se junta al final. En el hilo principal. */
-    private fun reconocerTrozos(
-        context: Context, pcm: File, trozos: List<LongRange>, i: Int, idioma: String,
-        textos: ArrayList<Segmento>, avance: (Float) -> Unit, avisos: Int, alTerminar: (Resultado) -> Unit
-    ) {
-        if (i >= trozos.size) {
-            alTerminar(
-                if (textos.isEmpty()) Resultado.Fallo(SpeechRecognizer.ERROR_NO_MATCH)
-                else Resultado.Texto(textos.joinToString(" ") { it.texto }, avisos, textos)
-            )
-            return
-        }
-        var fallos = avisos
-        reconocer(context, pcm, trozos[i], idioma) { r ->
-            when (r) {
-                is Resultado.Texto -> textos += Segmento((trozos[i].first * 1000 / BYTES_POR_SEGUNDO).toInt(), r.texto)
-                is Resultado.DescargandoIdioma -> { alTerminar(r); return@reconocer }
-                is Resultado.Fallo -> {
-                    // Un trozo que no se entiende (silencio, ruido) no tira los demás; se
-                    // cuenta, para decir que el texto tiene huecos.
-                    if (r.codigo != SpeechRecognizer.ERROR_NO_MATCH && r.codigo != SpeechRecognizer.ERROR_SPEECH_TIMEOUT && textos.isEmpty() && i == 0) {
-                        alTerminar(r); return@reconocer
-                    }
-                    if (r.codigo != SpeechRecognizer.ERROR_NO_MATCH && r.codigo != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) fallos++
-                }
-            }
-            avance((i + 1).toFloat() / trozos.size)
-            reconocerTrozos(context, pcm, trozos, i + 1, idioma, textos, avance, fallos, alTerminar)
+            val segmentos = MotorVosk.reconocer(context, pcm, idioma) { avance(0.35f + 0.65f * it) }
+                ?: return Resultado.DescargandoIdioma
+            if (segmentos.isEmpty()) return Resultado.Fallo(NADA)
+            return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, segmentos)
+        } finally {
+            pcm.delete()
         }
     }
 
-    /** Una sesión del reconocedor sobre un tramo del PCM. En el hilo principal. */
-    private fun reconocer(context: Context, pcm: File, tramo: LongRange, idioma: String, alTerminar: (Resultado) -> Unit) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) { alTerminar(Resultado.Fallo(-1)); return }
-        val tubo = runCatching { ParcelFileDescriptor.createPipe() }.getOrNull()
-        if (tubo == null) { alTerminar(Resultado.Fallo(-2)); return }
-        val (lectura, escritura) = tubo
+    // ---- Cortes por frases (para quien quiera trocear un PCM; Vosk no los necesita) ----
 
-        // **Solo el del dispositivo.** Ver [disponible]: el de red no lee archivos.
-        val reconocedor = runCatching {
-            if (SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else null
-        }.getOrNull()
-        if (reconocedor == null) { lectura.close(); escritura.close(); alTerminar(Resultado.Fallo(SIN_RECONOCEDOR_LOCAL)); return }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, idioma)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, lectura)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
-            putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE, HERCIOS)
-            // Por frases: sin esto el reconocedor se para en el primer silencio y de una
-            // nota de dos minutos sale la primera frase.
-            putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, RecognizerIntent.EXTRA_AUDIO_SOURCE)
-        }
-
-        val trozos = ArrayList<String>()
-        var acabado = false
-        val reloj = Handler(Looper.getMainLooper())
-        var ultimoEvento = System.currentTimeMillis()
-        val entregado = java.util.concurrent.atomic.AtomicBoolean(false)
-        fun terminar(r: Resultado) {
-            if (acabado) return
-            acabado = true
-            reloj.removeCallbacksAndMessages(null)
-            runCatching { reconocedor.destroy() }
-            runCatching { lectura.close() }
-            alTerminar(r)
-        }
-        fun mejorDe(b: Bundle?): String? =
-            b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-        fun loQueHay(): Resultado =
-            if (trozos.isEmpty()) Resultado.Fallo(SpeechRecognizer.ERROR_NO_MATCH) else Resultado.Texto(trozos.joinToString(" "))
-        // **No se cierra al primer resultado.** Según la versión del reconocedor, los
-        // resultados llegan por `onSegmentResults` o por `onResults` una vez por frase; si
-        // se cerrara la sesión al primero, lo de después se perdería. Se cierra cuando lo
-        // dice el reconocedor, o cuando el archivo ya se le entregó entero y lleva un rato
-        // sin decir nada más.
-        val vigilante = object : Runnable {
-            override fun run() {
-                if (acabado) return
-                val callado = System.currentTimeMillis() - ultimoEvento
-                if ((entregado.get() && callado > SILENCIO_TRAS_ENTREGAR_MS) || callado > TOPE_SIN_NOTICIAS_MS) terminar(loQueHay())
-                else reloj.postDelayed(this, 500)
-            }
-        }
-        reloj.postDelayed(vigilante, 500)
-
-        reconocedor.setRecognitionListener(object : RecognitionListener {
-            override fun onSegmentResults(segmentResults: Bundle) { ultimoEvento = System.currentTimeMillis(); mejorDe(segmentResults)?.let { trozos += it } }
-            override fun onEndOfSegmentedSession() { terminar(loQueHay()) }
-            override fun onResults(results: Bundle?) {
-                ultimoEvento = System.currentTimeMillis()
-                mejorDe(results)?.let { trozos += it }
-                // Con el archivo ya entregado, un resultado final es el final.
-                if (entregado.get()) terminar(loQueHay())
-            }
-            override fun onError(error: Int) {
-                if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) {
-                    // El modelo del idioma no está en el aparato: se pide, y la próxima vez sale.
-                    runCatching { reconocedor.triggerModelDownload(intent) }
-                    terminar(Resultado.DescargandoIdioma)
-                } else if (trozos.isNotEmpty()) {
-                    terminar(loQueHay())
-                } else {
-                    terminar(Resultado.Fallo(error))
-                }
-            }
-            override fun onReadyForSpeech(params: Bundle?) { ultimoEvento = System.currentTimeMillis() }
-            override fun onBeginningOfSpeech() { ultimoEvento = System.currentTimeMillis() }
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() { ultimoEvento = System.currentTimeMillis() }
-            override fun onPartialResults(partialResults: Bundle?) { ultimoEvento = System.currentTimeMillis() }
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-        reconocedor.startListening(intent)
-
-        // El tramo del PCM, por la tubería y aparte; cerrarla es decirle al reconocedor
-        // que el trozo se ha terminado. Se manda **a ritmo de reloj** (el doble de rápido
-        // que el habla): de golpe, algún reconocedor descarta lo que no le cabe.
-        Thread {
-            ParcelFileDescriptor.AutoCloseOutputStream(escritura).use { salida ->
-                runCatching {
-                    RandomAccessFile(pcm, "r").use { raf ->
-                        raf.seek(tramo.first)
-                        var quedan = tramo.last - tramo.first + 1
-                        val buf = ByteArray(BYTES_POR_SEGUNDO / 10)   // décimas de segundo
-                        while (quedan > 0) {
-                            val n = raf.read(buf, 0, minOf(buf.size.toLong(), quedan).toInt())
-                            if (n <= 0) break
-                            salida.write(buf, 0, n)
-                            quedan -= n
-                            Thread.sleep(50)
-                        }
-                    }
-                }
-            }
-            entregado.set(true)
-            reloj.post { ultimoEvento = System.currentTimeMillis() }
-        }.start()
-    }
+    private const val TROZO_SEGUNDOS = 8
+    private const val BUSQUEDA_SEGUNDOS = 4
+    private const val VENTANA_MS = 20
+    private const val SILENCIO_MS = 250
+    private const val MINIMO_MS = 300
+    private const val PARTE_DE_SILENCIO = 0.12
+    private const val UMBRAL_MINIMO = 120.0
 
     /**
      * En qué tramos (bytes, PCM de 16 bits mono a [HERCIOS]) se parte el archivo: **por
-     * frases**.
-     *
-     * El reconocedor devuelve **una** frase por sesión aunque se le pida la sesión por
-     * segmentos —así se comportaba en el teléfono: de una nota de un minuto salían las tres
-     * primeras palabras—. De modo que cada trozo tiene que ser una frase: se mide la energía
-     * cada 20 ms, se llama silencio a lo que queda por debajo de una fracción de la energía
-     * típica de la nota (es adaptativo: una grabación baja no es todo silencio), y se corta
-     * en mitad de cada silencio de más de un cuarto de segundo. Los trozos cortos se pegan
-     * al anterior y los largos se parten en su punto más callado. Cada trozo se reconoce
-     * por su cuenta y el texto es la suma. Ver [reconocerTrozos].
+     * frases**. Se mide la energía cada 20 ms, se llama silencio a lo que queda por debajo
+     * de una fracción de la energía típica de la nota, y se corta en mitad de cada silencio
+     * de más de un cuarto de segundo. Nunca se pegan dos frases; los trozos largos se parten
+     * en su punto más callado; lo que no llega a un tercio de segundo es ruido.
      */
     internal fun cortes(pcm: File): List<LongRange> {
         val total = pcm.length() and 1L.inv()
         if (total <= 0) return emptyList()
         val ventana = (VENTANA_MS * BYTES_POR_SEGUNDO / 1000) and 1.inv()
-        // La energía (RMS) de cada ventana, en un solo paseo.
         val energias = ArrayList<Double>((total / ventana).toInt() + 1)
         RandomAccessFile(pcm, "r").use { raf ->
             val buf = ByteArray(ventana)
@@ -355,7 +177,6 @@ object Transcriptor {
         val tipica = ordenadas[(ordenadas.size * 0.6).toInt().coerceIn(0, ordenadas.size - 1)]
         val umbral = maxOf(UMBRAL_MINIMO, tipica * PARTE_DE_SILENCIO)
         val minimoDeSilencio = SILENCIO_MS / VENTANA_MS
-        // Dónde acaba cada frase: la mitad de cada silencio suficientemente largo.
         val puntos = ArrayList<Long>()
         var calladasDesde = -1
         for ((k, e) in energias.withIndex()) {
@@ -366,9 +187,6 @@ object Transcriptor {
                 calladasDesde = -1
             }
         }
-        // Trozos entre puntos: **nunca se pegan dos frases** —el reconocedor se pararía en
-        // la pausa que las separa y la segunda se perdería—; los largos se parten en su
-        // punto más callado, y lo que no llega a un tercio de segundo es ruido.
         val trozo = TROZO_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO
         val minimo = MINIMO_MS.toLong() * BYTES_POR_SEGUNDO / 1000
         val salida = ArrayList<LongRange>()
@@ -414,9 +232,16 @@ object Transcriptor {
         return mejor and 1L.inv()
     }
 
+    // ---- Decodificar a PCM ----
+
     /**
      * De lo que haya en el archivo a PCM de 16 bits, mono, a [HERCIOS]. Mezcla los canales
      * y remuestrea a saltos (interpolación lineal): para la voz sobra.
+     *
+     * **Sin esperas en el bucle**: se mete entrada y se saca salida con tiempo cero y solo
+     * se descansa un momento cuando el códec no tiene nada que dar. Con esperas de diez
+     * milisegundos por vuelta, un minuto de audio eran cientos de vueltas y varios segundos
+     * de reloj sin hacer nada (era lo que hacía lento compartir una nota con su audio).
      */
     internal fun decodificar(archivo: File, salida: OutputStream) {
         val extractor = MediaExtractor()
@@ -440,9 +265,11 @@ object Transcriptor {
         val remuestreador = Remuestreador(salida)
         try {
             while (!salidaAcabada) {
+                var hizoAlgo = false
                 if (!entradaAcabada) {
-                    val i = codec.dequeueInputBuffer(10_000)
+                    val i = codec.dequeueInputBuffer(0)
                     if (i >= 0) {
+                        hizoAlgo = true
                         val buf = codec.getInputBuffer(i)!!
                         val n = extractor.readSampleData(buf, 0)
                         if (n < 0) {
@@ -454,9 +281,10 @@ object Transcriptor {
                         }
                     }
                 }
-                val o = codec.dequeueOutputBuffer(info, 10_000)
+                val o = codec.dequeueOutputBuffer(info, 0)
                 when {
                     o >= 0 -> {
+                        hizoAlgo = true
                         val buf = codec.getOutputBuffer(o)!!
                         buf.position(info.offset); buf.limit(info.offset + info.size)
                         remuestreador.meter(buf, hercios, canales)
@@ -464,11 +292,13 @@ object Transcriptor {
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) salidaAcabada = true
                     }
                     o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        hizoAlgo = true
                         val f = codec.outputFormat
                         hercios = f.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         canales = f.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
                     }
                 }
+                if (!hizoAlgo) Thread.sleep(1)
             }
             remuestreador.vaciar()
         } finally {
@@ -481,7 +311,7 @@ object Transcriptor {
         private var posicion = 0.0     // en muestras de entrada
         private var ultima = 0f
         private var hayUltima = false
-        private val paquete = ByteArray(4096)
+        private val paquete = ByteArray(8192)
         private var n = 0
 
         fun meter(buf: ByteBuffer, hercios: Int, canales: Int) {

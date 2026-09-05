@@ -64,11 +64,13 @@ object AudioLigero {
         var muestrasMetidas = 0L
         try {
             pcm.inputStream().buffered().use { entrada ->
-                val trozo = ByteArray(4096)
+                val trozo = ByteArray(16 * 1024)
                 while (!salidaAcabada) {
+                    var hizoAlgo = false
                     if (!entradaAcabada) {
-                        val i = codec.dequeueInputBuffer(10_000)
+                        val i = codec.dequeueInputBuffer(0)
                         if (i >= 0) {
+                            hizoAlgo = true
                             val buf = codec.getInputBuffer(i)!!
                             val n = entrada.read(trozo, 0, minOf(trozo.size, buf.capacity()))
                             if (n <= 0) {
@@ -82,10 +84,11 @@ object AudioLigero {
                             }
                         }
                     }
-                    val o = codec.dequeueOutputBuffer(info, 10_000)
+                    val o = codec.dequeueOutputBuffer(info, 0)
                     when {
-                        o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> { pista = muxer.addTrack(codec.outputFormat); muxer.start() }
+                        o == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> { hizoAlgo = true; pista = muxer.addTrack(codec.outputFormat); muxer.start() }
                         o >= 0 -> {
+                            hizoAlgo = true
                             val buf = codec.getOutputBuffer(o)!!
                             if (info.size > 0 && pista >= 0 && (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
                                 buf.position(info.offset); buf.limit(info.offset + info.size)
@@ -95,6 +98,8 @@ object AudioLigero {
                             if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) salidaAcabada = true
                         }
                     }
+                    // Sin esperas de diez milisegundos por vuelta: solo se descansa si no hubo nada.
+                    if (!hizoAlgo) Thread.sleep(1)
                 }
             }
         } finally {

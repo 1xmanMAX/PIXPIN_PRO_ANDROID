@@ -12,6 +12,8 @@ android {
         applicationId = "com.forge.pixpin"
         minSdk = 29
         targetSdk = 36
+        // Vosk trae su biblioteca nativa: solo las dos arquitecturas de los teléfonos.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         // **Esto sube en cada APK que salga de aquí.** Se había quedado en 0.4.0
         // mientras se repartían archivos llamados v0.5.0, v0.5.1 y v0.5.2: los
         // tres se declaraban la misma versión y con el mismo `versionCode`, así
@@ -76,6 +78,9 @@ android {
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.02.01"))
+    // Reconocimiento de voz en el aparato, de archivo y con tiempos por palabra. Ver MotorVosk.
+    implementation("com.alphacephei:vosk-android:0.3.47")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.10.1")

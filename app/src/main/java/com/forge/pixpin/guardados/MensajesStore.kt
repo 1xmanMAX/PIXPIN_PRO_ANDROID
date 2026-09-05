@@ -125,7 +125,7 @@ class MensajesStore(private val context: Context) {
                     }
                     is Transcriptor.Resultado.Fallo -> {
                         actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
-                        if (r.codigo == Transcriptor.SIN_RECONOCEDOR_LOCAL) avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
+                        if (r.codigo != Transcriptor.NADA) avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
                     }
                 }
                 quitarAvance(m.id)
