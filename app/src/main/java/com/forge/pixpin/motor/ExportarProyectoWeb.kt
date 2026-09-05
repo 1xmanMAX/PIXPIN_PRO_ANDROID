@@ -130,7 +130,7 @@ object ExportarProyectoWeb {
                     if (!texto.isNullOrBlank()) {
                         // Las imágenes de la nota viajan dentro, pequeñas: ver [imagenLigera].
                         val html = MarkdownHtml.deTexto(texto) { ruta ->
-                            imagenDeRuta(ruta)?.let { imagenLigera(it) }
+                            audioEnDatos(ruta) ?: imagenDeRuta(ruta)?.let { imagenLigera(it) }
                         }
                         salida += ExportarHtml.HojaWeb.Nota(nombre, html, PAPEL)
                     }
@@ -179,6 +179,24 @@ object ExportarProyectoWeb {
      * de lado y en WEBP, que pesa una fracción del PNG y vale con transparencia y sin ella.
      * Una foto de doce megapíxeles no tiene sentido dentro de un HTML que se manda por chat.
      */
+    /** Un audio de la nota, entero y en `data:`, si es de los tipos que un navegador toca y no pesa de más. */
+    private const val TOPE_DE_AUDIO = 12L * 1024 * 1024
+    internal fun audioEnDatos(ruta: String): String? {
+        val mime = when (ruta.substringAfterLast('.', "").lowercase()) {
+            "m4a", "aac", "mp4" -> "audio/mp4"
+            "mp3" -> "audio/mpeg"
+            "ogg", "oga", "opus" -> "audio/ogg"
+            "wav" -> "audio/wav"
+            "flac" -> "audio/flac"
+            else -> return null
+        }
+        val archivo = java.io.File(ruta)
+        if (!archivo.exists() || archivo.length() > TOPE_DE_AUDIO) return null
+        return runCatching {
+            "data:$mime;base64," + android.util.Base64.encodeToString(archivo.readBytes(), android.util.Base64.NO_WRAP)
+        }.getOrNull()
+    }
+
     internal fun imagenLigera(bmp: Bitmap): String? = runCatching {
         val mayor = maxOf(bmp.width, bmp.height)
         val ajustada = if (mayor <= LADO_DE_LA_IMAGEN) bmp else {

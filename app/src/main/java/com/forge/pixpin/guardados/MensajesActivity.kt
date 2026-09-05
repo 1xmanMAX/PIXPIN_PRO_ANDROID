@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Subtitles
 import kotlinx.coroutines.flow.drop
 import androidx.compose.material.icons.filled.Close
@@ -1454,6 +1455,16 @@ class MensajesActivity : ComponentActivity() {
                     ) {
                         eligiendoQue = false
                         eligiendoProyecto = false
+                    }
+                    // **Una conversación por turnos**, con un micrófono por persona y la
+                    // transcripción con nombres. Ver [ConversacionActivity].
+                    BotonDeAdjuntar(
+                        Icons.Filled.RecordVoiceOver,
+                        com.forge.pixpin.R.string.guardados_adj_conversacion,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        ConversacionActivity.abrir(this@MensajesActivity, chatDe)
                     }
                     // Las mini-apps: cosas que se llevan la cuenta solas —lo que falta
                     // por hacer, lo que se lleva gastado— y que en una conversación con
@@ -4568,7 +4579,9 @@ class MensajesActivity : ComponentActivity() {
             // mientras se hace la compra es exactamente para lo que existe pinear.
             Clase.MINIAPP -> gestor.pinTexto(m.texto)
 
-            Clase.ARCHIVO -> m.ruta?.let { gestor.pinFile(it, m.nombre, "*/*") }
+            // Con su tipo de verdad: un PDF pineado como «*/*» salía como archivo sin
+            // formato en vez de como documento con sus páginas.
+            Clase.ARCHIVO -> m.ruta?.let { gestor.pinFile(it, m.nombre, tipoDe(it)) }
                 ?: avisarDeQueNoHay()
         }
         // Sacando varios de golpe el aviso lo da quien los saca, una sola vez: cinco
@@ -4838,6 +4851,11 @@ class MensajesActivity : ComponentActivity() {
         val total = runCatching { p.duration }.getOrDefault(0)
         if (total > 0) runCatching { p.seekTo((total * fraccion.coerceIn(0f, 1f)).toInt()) }
     }
+
+    /** El tipo de un archivo por su extensión, o «cualquiera» si Android no lo conoce. */
+    private fun tipoDe(ruta: String): String =
+        android.webkit.MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(ruta.substringAfterLast('.', "").lowercase()) ?: "*/*"
 
     private fun abrirFuera(ruta: String) {
         runCatching {

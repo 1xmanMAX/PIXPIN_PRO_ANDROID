@@ -275,6 +275,14 @@
             </intent-filter>
         </receiver>
     
+        <!-- Una conversación por turnos: un micrófono por persona. Ver ConversacionActivity. -->
+        <activity
+            android:name=".guardados.ConversacionActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.conversacion"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.PixPin" />
+
         <!-- Grabar una nota de voz. Transparente: es un botón, no una pantalla. -->
         <activity
             android:name=".pin.GrabadoraActivity"

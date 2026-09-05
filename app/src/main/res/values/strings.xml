@@ -316,6 +316,17 @@
     <string name="guardados_adj_pagina">Una página de un proyecto</string>
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
+    <string name="guardados_adj_conversacion">Una conversación</string>
+    <string name="conversacion_titulo">Conversación</string>
+    <string name="conversacion_explicacion">Un micrófono por persona. Cada uno mantiene pulsado el suyo mientras habla y lo suelta al terminar; la transcripción sale con los nombres.</string>
+    <string name="conversacion_cuantos">¿Cuántas personas hablan?</string>
+    <string name="conversacion_persona">Persona %1$d</string>
+    <string name="conversacion_empezar">Empezar</string>
+    <string name="conversacion_terminar">Terminar y transcribir</string>
+    <string name="conversacion_turnos">%1$d turnos grabados</string>
+    <string name="conversacion_hablando">Hablando…</string>
+    <string name="conversacion_manten">Mantén pulsado para hablar</string>
+    <string name="conversacion_transcribiendo">Pasando la conversación a texto…</string>
     <string name="miniapp_tareas">Lista de tareas</string>
     <string name="miniapp_gastos">Gastos</string>
     <string name="miniapp_cronometro">Cronómetro</string>

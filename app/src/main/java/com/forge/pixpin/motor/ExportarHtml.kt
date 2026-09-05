@@ -422,6 +422,7 @@ object ExportarHtml {
         .nota td:empty::after,.nota th:empty::after{content:"\00a0"}
         .nota figure{margin:1em 0;text-align:center}
         .nota figure img{max-width:100%;height:auto;border-radius:8px}
+        .nota figure audio{width:100%;max-width:520px}
         .nota figcaption{opacity:.7;font-size:.9em;margin-top:.4em}
         .nota caption{caption-side:top;opacity:.7;padding-bottom:6px;font-size:.9em}
         .nota ul.tareas{list-style:none;padding-left:1.1em}

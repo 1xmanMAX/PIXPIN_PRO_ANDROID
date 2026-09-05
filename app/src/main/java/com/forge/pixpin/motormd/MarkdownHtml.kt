@@ -98,6 +98,8 @@ object MarkdownHtml {
      * ordenador de quien la reciba esa ruta no existe. Se enseña de qué era, que es lo único
      * cierto que se puede decir.
      */
+    private val RELLENOS = setOf("audio", "imagen", "image", "video", "vídeo", "archivo", "file", "foto")
+
     private fun medio(b: MarkdownBlock.Medio, imagen: (String) -> String?): String {
         // **Una imagen viaja de verdad**, pequeña y comprimida, si quien exporta sabe leerla
         // del teléfono (ver `ExportarProyectoWeb`). Es lo que pidió el usuario: en la nota
@@ -109,13 +111,24 @@ object MarkdownHtml {
                     "</figure>"
             }
         }
+        // **Y un audio también**, como reproductor: una nota de voz transcrita lleva su
+        // audio, y en la página exportada tiene que poder escucharse al lado del texto.
+        // El mismo [imagen] devuelve el `data:` del archivo si sabe (ver `ExportarProyectoWeb`).
+        if (b.clase == ClaseDeMedio.AUDIO) {
+            imagen(b.ruta)?.let { datos ->
+                return "<figure><audio controls preload=\"metadata\" src=\"$datos\"></audio>" +
+                    (if (b.alt.isNotBlank() && b.alt != "audio") "<figcaption>${escapar(b.alt)}</figcaption>" else "") +
+                    "</figure>"
+            }
+        }
         val que = when (b.clase) {
             ClaseDeMedio.IMAGEN -> "Imagen"
             ClaseDeMedio.VIDEO -> "Vídeo"
             ClaseDeMedio.AUDIO -> "Audio"
             ClaseDeMedio.ARCHIVO -> "Archivo"
         }
-        val nombre = b.alt.ifBlank { b.ruta.substringAfterLast('/') }
+        // Un «audio» o «imagen» de relleno no es un nombre: se dice el del archivo.
+        val nombre = b.alt.takeIf { it.isNotBlank() && it.lowercase() !in RELLENOS } ?: b.ruta.substringAfterLast('/')
         return "<p class=\"medio\">$que: ${escapar(nombre)}</p>"
     }
 

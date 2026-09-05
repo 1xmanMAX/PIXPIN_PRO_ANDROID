@@ -16,6 +16,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import java.io.File
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
@@ -30,16 +31,27 @@ import java.util.Locale
  * lo hace **sin red**, con el idioma que el usuario tenga descargado. Es lo más preciso que
  * hay gratis y en local: el modelo es el de Google, no uno pequeño metido en la aplicación.
  *
- * El reconocedor quiere PCM de 16 bits, así que el `.m4a` de la nota se decodifica con
- * [MediaCodec] a mono de 16 kHz y se le manda por una tubería mientras se va decodificando:
- * una nota de diez minutos no se carga entera en memoria.
+ * **Cualquier formato**: el archivo —`.m4a` nuestro, `.ogg` de WhatsApp, `.mp3`, `.wav`,
+ * `.amr`— se decodifica con [MediaCodec] a PCM mono de 16 kHz, que es lo que el reconocedor
+ * quiere, y se guarda en un archivo temporal.
+ *
+ * **Por trozos**: una grabación de una hora no se le manda de una vez. Se parte en trozos de
+ * menos de un minuto, cortando **donde hay silencio** —la ventana más callada de los últimos
+ * segundos del trozo— para no partir una palabra, y se reconoce trozo a trozo, uno detrás de
+ * otro; el texto es la suma. Ver [cortes].
  *
  * Todo lo del reconocedor pasa por el hilo principal, que es donde exige vivir.
  */
 object Transcriptor {
 
     /** El reconocedor lee a esta frecuencia; lo demás se remuestrea aquí. */
-    private const val HERCIOS = 16_000
+    const val HERCIOS = 16_000
+    private const val BYTES_POR_SEGUNDO = HERCIOS * 2
+
+    /** Lo que mide un trozo como mucho, y dónde se busca el silencio para cortarlo. */
+    private const val TROZO_SEGUNDOS = 45
+    private const val BUSQUEDA_SEGUNDOS = 10
+    private const val VENTANA_MS = 100
 
     /** Si este aparato sabe transcribir un archivo. Hace falta Android 13. */
     fun disponible(context: Context): Boolean =
@@ -59,12 +71,13 @@ object Transcriptor {
 
     /**
      * Transcribe [archivo] y llama a [alTerminar] en el hilo principal. Puede llamarse
-     * desde cualquier hilo.
+     * desde cualquier hilo. [avance] recibe, de 0 a 1, cuánto lleva.
      */
     fun transcribir(
         context: Context,
         archivo: File,
         idioma: String = Locale.getDefault().toLanguageTag(),
+        avance: (Float) -> Unit = {},
         alTerminar: (Resultado) -> Unit
     ) {
         val principal = Handler(Looper.getMainLooper())
@@ -72,10 +85,52 @@ object Transcriptor {
             principal.post { alTerminar(Resultado.Fallo(-1)) }
             return
         }
-        principal.post { arrancar(context.applicationContext, archivo, idioma, alTerminar) }
+        val app = context.applicationContext
+        Thread {
+            val pcm = File(app.cacheDir, "pcm-${System.nanoTime()}.raw")
+            val bien = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it) } }.isSuccess && pcm.length() > 0
+            if (!bien) {
+                pcm.delete()
+                principal.post { alTerminar(Resultado.Fallo(-2)) }
+                return@Thread
+            }
+            val trozos = cortes(pcm)
+            principal.post {
+                reconocerTrozos(app, pcm, trozos, 0, idioma, ArrayList(), avance) { r ->
+                    pcm.delete()
+                    alTerminar(r)
+                }
+            }
+        }.start()
     }
 
-    private fun arrancar(context: Context, archivo: File, idioma: String, alTerminar: (Resultado) -> Unit) {
+    /** Un trozo tras otro; el resultado se junta al final. En el hilo principal. */
+    private fun reconocerTrozos(
+        context: Context, pcm: File, trozos: List<LongRange>, i: Int, idioma: String,
+        textos: ArrayList<String>, avance: (Float) -> Unit, alTerminar: (Resultado) -> Unit
+    ) {
+        if (i >= trozos.size) {
+            alTerminar(if (textos.isEmpty()) Resultado.Fallo(SpeechRecognizer.ERROR_NO_MATCH) else Resultado.Texto(textos.joinToString(" ")))
+            return
+        }
+        reconocer(context, pcm, trozos[i], idioma) { r ->
+            when (r) {
+                is Resultado.Texto -> textos += r.texto
+                is Resultado.DescargandoIdioma -> { alTerminar(r); return@reconocer }
+                is Resultado.Fallo -> {
+                    // Un trozo que no se entiende (silencio, ruido) no tira los demás.
+                    if (r.codigo != SpeechRecognizer.ERROR_NO_MATCH && r.codigo != SpeechRecognizer.ERROR_SPEECH_TIMEOUT && textos.isEmpty() && i == 0) {
+                        alTerminar(r); return@reconocer
+                    }
+                }
+            }
+            avance((i + 1).toFloat() / trozos.size)
+            reconocerTrozos(context, pcm, trozos, i + 1, idioma, textos, avance, alTerminar)
+        }
+    }
+
+    /** Una sesión del reconocedor sobre un tramo del PCM. En el hilo principal. */
+    private fun reconocer(context: Context, pcm: File, tramo: LongRange, idioma: String, alTerminar: (Resultado) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) { alTerminar(Resultado.Fallo(-1)); return }
         val tubo = runCatching { ParcelFileDescriptor.createPipe() }.getOrNull()
         if (tubo == null) { alTerminar(Resultado.Fallo(-2)); return }
@@ -139,13 +194,72 @@ object Transcriptor {
         })
         reconocedor.startListening(intent)
 
-        // La decodificación, aparte: escribe en la tubería y la cierra al acabar, que es lo
-        // que le dice al reconocedor que la nota se ha terminado.
+        // El tramo del PCM, por la tubería y aparte; cerrarla es decirle al reconocedor
+        // que el trozo se ha terminado.
         Thread {
             ParcelFileDescriptor.AutoCloseOutputStream(escritura).use { salida ->
-                runCatching { decodificar(archivo, salida) }
+                runCatching {
+                    RandomAccessFile(pcm, "r").use { raf ->
+                        raf.seek(tramo.first)
+                        var quedan = tramo.last - tramo.first + 1
+                        val buf = ByteArray(16 * 1024)
+                        while (quedan > 0) {
+                            val n = raf.read(buf, 0, minOf(buf.size.toLong(), quedan).toInt())
+                            if (n <= 0) break
+                            salida.write(buf, 0, n)
+                            quedan -= n
+                        }
+                    }
+                }
             }
         }.start()
+    }
+
+    /**
+     * En qué tramos (bytes, PCM de 16 bits mono a [HERCIOS]) se parte el archivo.
+     *
+     * Trozos de [TROZO_SEGUNDOS] como mucho. Cada corte se busca en los [BUSQUEDA_SEGUNDOS]
+     * anteriores al tope: la ventana de [VENTANA_MS] con menos energía, que es donde con más
+     * probabilidad no se está diciendo nada. Un archivo corto es un solo trozo.
+     */
+    internal fun cortes(pcm: File): List<LongRange> {
+        val total = pcm.length() and 1L.inv()
+        val trozo = TROZO_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO
+        if (total <= trozo + trozo / 4) return listOf(0 until total)
+        val salida = ArrayList<LongRange>()
+        var desde = 0L
+        RandomAccessFile(pcm, "r").use { raf ->
+            while (total - desde > trozo + trozo / 4) {
+                val tope = desde + trozo
+                val corte = puntoMasCallado(raf, tope - BUSQUEDA_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO, tope)
+                salida += desde until corte
+                desde = corte
+            }
+        }
+        salida += desde until total
+        return salida
+    }
+
+    /** El principio de la ventana de [VENTANA_MS] con menos energía entre [a] y [b] (bytes, pares). */
+    private fun puntoMasCallado(raf: RandomAccessFile, a: Long, b: Long): Long {
+        val ventana = (VENTANA_MS * BYTES_POR_SEGUNDO / 1000) and 1.inv()
+        val largo = (b - a).toInt()
+        val datos = ByteArray(largo)
+        raf.seek(a)
+        raf.readFully(datos)
+        val cortos = ByteBuffer.wrap(datos).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        var mejor = b
+        var menor = Double.MAX_VALUE
+        var i = 0
+        while (i + ventana <= largo) {
+            var energia = 0.0
+            var j = i / 2
+            val fin = (i + ventana) / 2
+            while (j < fin) { val v = cortos.get(j).toDouble(); energia += v * v; j++ }
+            if (energia < menor) { menor = energia; mejor = a + i }
+            i += ventana / 2
+        }
+        return mejor and 1L.inv()
     }
 
     /**
@@ -229,16 +343,13 @@ object Transcriptor {
                 mono[i] = suma / canales
             }
             val paso = hercios.toDouble() / HERCIOS
-            // La muestra anterior al primer bloque, para interpolar sin corte entre bloques.
             var p = posicion
             while (p < cuantas) {
                 val i = p.toInt()
                 val f = (p - i).toFloat()
                 val a = if (i == 0) (if (hayUltima) ultima else mono[0]) else mono[i - 1]
                 val b = mono[i]
-                // `a` es la muestra anterior a `b`; se interpola entre las dos al avanzar.
-                val v = (a + (b - a) * f)
-                escribir(v)
+                escribir(a + (b - a) * f)
                 p += paso
             }
             posicion = p - cuantas

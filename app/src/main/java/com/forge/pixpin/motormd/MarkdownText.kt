@@ -5,6 +5,8 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -382,10 +384,39 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
         // está no dice nada, y el nombre al menos dice cuál falta.
     }
 
+    // **El audio sí se reproduce aquí.** La regla de arriba vale para el vídeo, que se
+    // pelea por la pantalla; una nota de voz transcrita —ver `MensajesStore.transcribir`—
+    // se escucha mientras se lee su texto, y mandar al reproductor del teléfono para eso
+    // es salir de la nota cada vez. Un toque arranca, otro para. Lo pidió el usuario
+    // (5-sep-2026).
+    var sonando by remember(medio.ruta) { mutableStateOf(false) }
+    val reproductor = remember(medio.ruta) { arrayOfNulls<android.media.MediaPlayer>(1) }
+    androidx.compose.runtime.DisposableEffect(medio.ruta) {
+        onDispose { runCatching { reproductor[0]?.release() }; reproductor[0] = null }
+    }
+    val esAudio = medio.clase == ClaseDeMedio.AUDIO && java.io.File(medio.ruta).exists()
     Row(
         Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+            .then(
+                if (!esAudio) Modifier else Modifier.clickable {
+                    val actual = reproductor[0]
+                    if (sonando && actual != null) {
+                        runCatching { actual.stop(); actual.release() }
+                        reproductor[0] = null
+                        sonando = false
+                    } else {
+                        runCatching {
+                            android.media.MediaPlayer().apply {
+                                setDataSource(medio.ruta)
+                                setOnCompletionListener { sonando = false }
+                                prepare(); start()
+                            }
+                        }.getOrNull()?.let { reproductor[0] = it; sonando = true }
+                    }
+                }
+            )
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -393,7 +424,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
             imageVector = when (medio.clase) {
                 ClaseDeMedio.IMAGEN -> Icons.Filled.Image
                 ClaseDeMedio.VIDEO -> Icons.Filled.Movie
-                ClaseDeMedio.AUDIO -> Icons.Filled.AudioFile
+                ClaseDeMedio.AUDIO -> if (sonando) Icons.Filled.Stop else if (esAudio) Icons.Filled.PlayArrow else Icons.Filled.AudioFile
                 ClaseDeMedio.ARCHIVO -> Icons.Filled.Description
             },
             contentDescription = null,

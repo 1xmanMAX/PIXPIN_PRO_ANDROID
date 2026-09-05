@@ -80,13 +80,23 @@ enum class Clase {
  */
 fun nombreConExtension(nombre: String, deSuTipo: String?): String {
     val sano = nombre.replace(Regex("[\\\\/:*?\"<>|]"), "-").trim().ifBlank { "compartido" }
-    val laQueTrae = sano.substringAfterLast('.', "")
-    val pareceExtension = laQueTrae.isNotBlank() && laQueTrae.length in 1..5 &&
-        laQueTrae.all { it.isLetterOrDigit() }
-    if (pareceExtension) return sano
+    val laQueTrae = sano.substringAfterLast('.', "").lowercase()
+    // **Una extensión de verdad, no lo que haya detrás del último punto.** «Plano v1.2»
+    // compartido como PDF se guardaba como `Plano v1.2` porque el «2» parecía extensión,
+    // y ese archivo ya no lo abría ningún lector (lo reportó el usuario el 5-sep-2026).
+    // La que trae el nombre se respeta si es una conocida —quien la puso sabía lo que
+    // hacía—; si no, se le pone la de su tipo.
+    if (laQueTrae in EXTENSIONES_CONOCIDAS) return sano
     val suya = deSuTipo?.trim()?.removePrefix(".").orEmpty()
     return if (suya.isBlank()) sano else "$sano.$suya"
 }
+
+private val EXTENSIONES_CONOCIDAS = setOf(
+    "pdf", "jpg", "jpeg", "png", "webp", "gif", "heic", "bmp", "svg",
+    "m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp",
+    "mp4", "mkv", "mov", "webm", "txt", "md", "csv", "json", "xml", "html", "htm", "zip",
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "dxf", "dwg", "pixpin", "excalidraw"
+)
 
 /**
  * Un mensaje guardado.

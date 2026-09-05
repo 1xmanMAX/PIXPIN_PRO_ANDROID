@@ -104,14 +104,20 @@ class GuardarCompartidoActivity : ComponentActivity() {
             val bytes = temporal.length()
             temporal.delete()
             val esImagen = tipo?.startsWith("image/") == true
+            // **Un audio de otra aplicación es una nota de voz**: se escucha aquí y se
+            // pasa a texto como las nuestras, venga en el formato que venga (ver
+            // [Transcriptor]). Antes entraba como archivo a secas.
+            val esAudio = tipo?.startsWith("audio/") == true ||
+                ruta.substringAfterLast('.', "").lowercase() in setOf("m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp")
             almacen.anadir(
                 Mensaje(
                     id = UUID.randomUUID().toString(),
                     cuando = System.currentTimeMillis(),
-                    clase = if (esImagen) Clase.IMAGEN else Clase.ARCHIVO,
+                    clase = if (esImagen) Clase.IMAGEN else if (esAudio) Clase.VOZ else Clase.ARCHIVO,
                     ruta = ruta,
                     nombre = nombre,
-                    bytes = bytes
+                    bytes = bytes,
+                    duracionMs = if (esAudio) com.forge.pixpin.pin.Voz.duracion(ruta) else 0
                 )
             )
             true

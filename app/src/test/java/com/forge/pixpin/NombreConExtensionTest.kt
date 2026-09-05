@@ -32,6 +32,14 @@ class NombreConExtensionTest {
         assertEquals("Acta del 3. reunión.pdf", nombreConExtension("Acta del 3. reunión", "pdf"))
     }
 
+    /** Un número de versión tampoco: «Plano v1.2» compartido como PDF es `Plano v1.2.pdf`. */
+    @Test
+    fun `una version no es una extension`() {
+        assertEquals("Plano v1.2.pdf", nombreConExtension("Plano v1.2", "pdf"))
+        assertEquals("informe.PDF", nombreConExtension("informe.PDF", "pdf"))
+        assertEquals("nota.m4a", nombreConExtension("nota.m4a", "mp4"))
+    }
+
     @Test
     fun `sin tipo conocido se queda como esta`() {
         assertEquals("cosa", nombreConExtension("cosa", null))

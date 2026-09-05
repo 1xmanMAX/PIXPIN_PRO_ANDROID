@@ -37,6 +37,15 @@ object Adjuntos {
         destino.absolutePath
     }.getOrNull()
 
+    /** Lo mismo con un archivo que ya es nuestro (una nota de voz del chat): se copia con su nombre. */
+    fun importarArchivo(context: Context, archivo: File, cuando: Long, nombre: String = archivo.name): String? = runCatching {
+        val limpio = nombre.replace(Regex("""[/\\:|()\[\]]"""), "_").take(80)
+        val destino = File(carpeta(context), "$cuando-$limpio")
+        archivo.copyTo(destino, overwrite = true)
+        if (destino.length() <= 0) return null
+        destino.absolutePath
+    }.getOrNull()
+
     private fun nombreDe(context: Context, uri: Uri): String {
         val delProveedor = runCatching {
             context.contentResolver.query(uri, null, null, null, null)?.use { c ->

@@ -28,3 +28,19 @@ class MarkdownHtmlImagenTest {
         assertFalse(html.contains("<img"))
     }
 }
+
+class MarkdownHtmlAudioTest {
+    @org.junit.Test
+    fun `un audio de la nota viaja como reproductor`() {
+        val texto = "# Transcripción\n\n![audio](/data/notas/1-voz.m4a)\n\nHola, esto es la obra."
+        val html = com.forge.pixpin.motormd.MarkdownHtml.deTexto(texto) { ruta ->
+            if (ruta.endsWith(".m4a")) "data:audio/mp4;base64,AAAA" else null
+        }
+        org.junit.Assert.assertTrue(html, html.contains("<audio controls"))
+        org.junit.Assert.assertTrue(html, html.contains("src=\"data:audio/mp4;base64,AAAA\""))
+        org.junit.Assert.assertTrue("sin el nombre «audio» de relleno", !html.contains("<figcaption>audio"))
+        // Sin quien lo lea, se dice que estaba.
+        val sinDatos = com.forge.pixpin.motormd.MarkdownHtml.deTexto(texto)
+        org.junit.Assert.assertTrue(sinDatos, sinDatos.contains("Audio: 1-voz.m4a"))
+    }
+}
