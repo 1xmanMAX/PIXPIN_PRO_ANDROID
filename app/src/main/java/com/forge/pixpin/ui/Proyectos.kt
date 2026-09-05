@@ -388,67 +388,14 @@ fun PantallaDeProyectos(
                 val cual = marcado
                 LaunchedEffect(cual) {
                     val seleccion = ordenados.mapNotNull { p -> cual[p.id]?.let { p to it } }
+                    // Las hojas de cada proyecto marcado, una tras otra, en un solo
+                    // documento. Todo lo que hay que enchufar vive en [ExportarWebDe].
                     val archivo = if (seleccion.isEmpty()) null else withContext(Dispatchers.IO) {
-                        // Las hojas de cada proyecto marcado, una tras otra, en un solo documento.
-                        val hojas = seleccion.flatMap { (proyecto, claves) ->
-                            val pdf = Proyectos.rutaDelDocumento(proyecto) { java.io.File(it).exists() }
-                            ExportarProyectoWeb.paginas(
-                            contexto, proyecto, claves,
-                            escenaDe = { dibujo ->
-                                ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, dibujo))
-                            },
-                            imagenDeRuta = { ruta -> ImageStore.load(ruta) },
-                            // **La misma página al detalle, para verla en la web.** Va sin
-                            // lo anotado encima a propósito: eso lo pinta el SVG con sus
-                            // trazos, que se leen a cualquier aumento. Ver [DrawSvg.aTexto].
-                            paginaFinaDelPdf = { pagina, _ ->
-                                pdf?.let { PdfDoc.paraLaWeb(it, pagina) }
-                            },
-                            // **Y la página como líneas, si el PDF es vectorial**: un plano
-                            // así se lee de cerca en el navegador, que es de lo que se trata.
-                            // Ver [PlanoWeb].
-                            planoDelPdf = { pagina ->
-                                pdf?.let { PlanoWeb.deArchivo(it, pagina) }
-                            },
-                            paginaDelPdf = { pagina, dibujo ->
-                                pdf?.let {
-                                    kotlinx.coroutines.runBlocking {
-                                        paginaAnotada(
-                                            contexto, it, pagina, dibujo,
-                                            dibujo?.let { d -> ExcalidrawStore.rutaDe(contexto, d) },
-                                            PdfDoc.PAGE_WIDTH
-                                        )
-                                    }
-                                }
-                            },
-                            croquisComoHoja = { id ->
-                                Croquis3DAlmacen.cargar(contexto, id)?.let { croquis ->
-                                    ExportarCroquisHtml.hoja(
-                                        croquis, Camara3D(), "Croquis",
-                                        imagenIncrustada = { ruta -> imagenIncrustada(ruta) },
-                                        // El papel que se ve en la aplicación cuando el croquis
-                                        // no eligió uno: claro con el tema claro. Sin esto, un
-                                        // croquis sobre blanco salía sobre negro.
-                                        papel = if (oscuroDelSistema) ExportarCroquisHtml.FONDO_DE_FABRICA else "#ffffff"
-                                    )
-                                }
-                            }
+                        ExportarWebDe.archivo(
+                            contexto, seleccion,
+                            ExportarHtml.Opciones.de(app.settings.settings.first().funcionesWeb),
+                            oscuroDelSistema
                         )
-                        }
-                        if (hojas.isEmpty()) null else runCatching {
-                            val nombre = if (seleccion.size == 1) seleccion[0].first.nombre
-                            else seleccion.joinToString(" + ") { it.first.nombre }
-                            val opciones = ExportarHtml.Opciones.de(
-                                app.settings.settings.first().funcionesWeb
-                            )
-                            val pagina = ExportarHtml.paginas(
-                                hojas, titulo = nombre.ifBlank { "Proyecto" },
-                                nombre = ExportarProyecto.nombreDeArchivo(nombre), opciones = opciones
-                            )
-                            val carpeta = java.io.File(contexto.cacheDir, "share").apply { mkdirs() }
-                            java.io.File(carpeta, ExportarProyecto.nombreDeArchivo(nombre) + ".html")
-                                .also { it.writeText(pagina) }
-                        }.getOrNull()
                     }
                     exportandoWeb = false
                     if (archivo == null) avisar(contexto, R.string.pdf_no_se_pudo)
@@ -2022,7 +1969,7 @@ private fun avisar(contexto: android.content.Context, id: Int) {
  * Una imagen del croquis metida en la página, como `data:`. Se recomprime: una foto de doce
  * megapíxeles dentro de un archivo que se manda por mensajería no la abre nadie.
  */
-private fun imagenIncrustada(ruta: String): String? = runCatching {
+internal fun imagenIncrustada(ruta: String): String? = runCatching {
     val bmp = ImageStore.load(ruta, 1024) ?: return null
     val salida = java.io.ByteArrayOutputStream()
     val conAlfa = bmp.hasAlpha()

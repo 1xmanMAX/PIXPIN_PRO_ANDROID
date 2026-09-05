@@ -438,6 +438,8 @@
     <string name="guardados_ya_no_esta">Este archivo ya no está</string>
     <string name="guardados_compartir">Compartir</string>
     <string name="guardados_como_imagen">Compartir como imagen</string>
+    <string name="guardados_como_web">Como página web</string>
+    <string name="guardados_como_editable">Editable (.pixpin)</string>
     <string name="guardados_como_pdf">Compartir como PDF</string>
     <string name="guardados_volver_al_salto">Volver a donde estabas</string>
     <string name="guardados_foto_de">Foto guardada a las %1$s</string>

@@ -85,6 +85,8 @@ import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Mic
@@ -366,6 +368,26 @@ class MensajesActivity : ComponentActivity() {
         }
         var etiquetando by remember { mutableStateOf<Mensaje?>(null) }
         var compartiendo by remember { mutableStateOf<Mensaje?>(null) }
+        // El documento del que se va a hacer página web, mientras se elige qué lleva.
+        var pidiendoWebPara by remember { mutableStateOf<Mensaje?>(null) }
+        pidiendoWebPara?.let { cual ->
+            val app = application as? PixPinApp
+            val ajustesWeb by (app?.settings?.settings ?: kotlinx.coroutines.flow.flowOf(null)).collectAsState(initial = app?.ajustes)
+            val marcadas = ajustesWeb?.funcionesWeb ?: com.forge.pixpin.motor.ExportarHtml.Opciones.NOMBRES.toSet()
+            com.forge.pixpin.motor.DialogoDeFuncionesWeb(
+                marcadas = marcadas,
+                onCambio = { clave, puesta ->
+                    val ahora = marcadas.toMutableSet()
+                    if (puesta) ahora += clave else ahora -= clave
+                    lifecycleScope.launch { app?.settings?.setFuncionesWeb(ahora) }
+                },
+                onCompartir = {
+                    pidiendoWebPara = null
+                    compartirComoWeb(cual, com.forge.pixpin.motor.ExportarHtml.Opciones.de(marcadas))
+                },
+                onCerrar = { pidiendoWebPara = null }
+            )
+        }
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
 
         fun refrescar() { recargar++ }
@@ -1489,22 +1511,28 @@ class MensajesActivity : ComponentActivity() {
                 onDismissRequest = { compartiendo = null }
             ) {
                 Column(Modifier.padding(bottom = 28.dp)) {
-                    listOf(
-                        false to com.forge.pixpin.R.string.guardados_como_imagen,
-                        true to com.forge.pixpin.R.string.guardados_como_pdf
-                    ).forEach { (pdf, texto) ->
+                    // **Todas las caras con las que sale un documento**, las mismas que en
+                    // proyectos: imagen, PDF, página web (con su panel de funciones) y el
+                    // editable `.pixpin`. Un proyecto entero no tiene «imagen».
+                    val esProyecto = cual.clase == Clase.PROYECTO
+                    val opciones = ArrayList<Triple<androidx.compose.ui.graphics.vector.ImageVector, Int, () -> Unit>>()
+                    if (!esProyecto) opciones += Triple(Icons.Filled.Image, com.forge.pixpin.R.string.guardados_como_imagen, { compartirCompuesto(cual, false) })
+                    opciones += Triple(Icons.Filled.PictureAsPdf, com.forge.pixpin.R.string.guardados_como_pdf, { if (esProyecto) compartirPdfDelProyecto(cual) else compartirCompuesto(cual, true) })
+                    opciones += Triple(Icons.Filled.Language, com.forge.pixpin.R.string.guardados_como_web, { pidiendoWebPara = cual })
+                    opciones += Triple(Icons.Filled.FolderZip, com.forge.pixpin.R.string.guardados_como_editable, { compartirEditable(cual) })
+                    opciones.forEach { (icono, texto, hacer) ->
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     compartiendo = null
-                                    compartirCompuesto(cual, pdf)
+                                    hacer()
                                 }
                                 .padding(horizontal = 24.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                if (pdf) Icons.Filled.PictureAsPdf else Icons.Filled.Image,
+                                icono,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -2188,8 +2216,8 @@ class MensajesActivity : ComponentActivity() {
                 ) { menuAbierto = false; acciones.fijar() }
                 DelMenu(com.forge.pixpin.R.string.guardados_compartir, Icons.Filled.Share) {
                     menuAbierto = false
-                    // Con algo que componer, primero se pregunta con qué cara sale.
-                    if (sePuedeComponer(m)) acciones.compartirComo() else acciones.compartir()
+                    // Con algo que componer —o un proyecto—, primero se pregunta con qué cara sale.
+                    if (sePuedeComponer(m) || m.clase == Clase.PROYECTO) acciones.compartirComo() else acciones.compartir()
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
                     menuAbierto = false; acciones.pinear()
@@ -4721,6 +4749,100 @@ class MensajesActivity : ComponentActivity() {
                 envio.putExtra(Intent.EXTRA_TEXT, m.texto)
             }
             startActivity(Intent.createChooser(envio, null))
+        }
+    }
+
+    /**
+     * **El proyecto que hay detrás de un mensaje**, con las claves de todas sus hojas: el
+     * de verdad si el mensaje es un proyecto, y uno suelto —una hoja— si es una página,
+     * un dibujo o una foto anotada. Es lo que necesitan la web y el editable, que
+     * trabajan por proyectos. Trabajo de disco.
+     */
+    private fun proyectoDe(m: Mensaje): Pair<com.forge.pixpin.motor.Proyecto, Set<String>>? {
+        val app = application as? PixPinApp ?: return null
+        val nombre = nombreDeLoCompartido(m)
+        val p: com.forge.pixpin.motor.Proyecto = when (m.clase) {
+            Clase.PROYECTO -> app.proyectos.porId(m.referencia) ?: return null
+            Clase.PAGINA -> {
+                val pdf = m.ruta ?: return null
+                val pagina = m.pagina ?: return null
+                com.forge.pixpin.motor.Proyecto(
+                    id = "suelto-${m.id}", nombre = nombre, tocado = m.cuando, pdfOrigen = pdf,
+                    hojas = listOf(com.forge.pixpin.motor.Hoja(id = "h-${m.id}", nombre = nombre, pagina = pagina, dibujo = m.referencia))
+                )
+            }
+            Clase.DIBUJO, Clase.IMAGEN -> {
+                val dibujo = m.referencia ?: return null
+                com.forge.pixpin.motor.Proyecto(
+                    id = "suelto-${m.id}", nombre = nombre, tocado = m.cuando,
+                    hojas = listOf(com.forge.pixpin.motor.Hoja(id = "h-${m.id}", nombre = nombre, dibujo = dibujo))
+                )
+            }
+            else -> return null
+        }
+        val claves = com.forge.pixpin.motor.HojasDelProyecto.paginas(p) { dibujo ->
+            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo))
+        }.map { it.clave }.toSet()
+        return p to claves
+    }
+
+    /** Página web del documento, con las funciones elegidas. Ver [com.forge.pixpin.ui.ExportarWebDe]. */
+    private fun compartirComoWeb(m: Mensaje, opciones: com.forge.pixpin.motor.ExportarHtml.Opciones) {
+        val deNoche = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        lifecycleScope.launch {
+            val archivo = withContext(Dispatchers.IO) {
+                val (p, claves) = proyectoDe(m) ?: return@withContext null
+                com.forge.pixpin.ui.ExportarWebDe.archivo(this@MensajesActivity, listOf(p to claves), opciones, deNoche)
+            }
+            if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
+        }
+    }
+
+    /** El editable `.pixpin` del documento. Ver [com.forge.pixpin.motor.PaquetePixpin]. */
+    private fun compartirEditable(m: Mensaje) {
+        lifecycleScope.launch {
+            val archivo = withContext(Dispatchers.IO) {
+                val (p, _) = proyectoDe(m) ?: return@withContext null
+                val carpeta = File(cacheDir, "share").apply { mkdirs() }
+                com.forge.pixpin.motor.PaquetePixpin.escribir(
+                    this@MensajesActivity, p,
+                    File(carpeta, com.forge.pixpin.motor.ExportarProyecto.nombreDeArchivo(p.nombre) + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION),
+                    croquisDe = { id -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(this@MensajesActivity, id) }
+                )
+            }
+            if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE)
+        }
+    }
+
+    /** El PDF de un proyecto entero, como desde la pantalla de proyectos. */
+    private fun compartirPdfDelProyecto(m: Mensaje) {
+        lifecycleScope.launch {
+            val archivo = withContext(Dispatchers.IO) {
+                val (p, claves) = proyectoDe(m) ?: return@withContext null
+                com.forge.pixpin.motor.ExportarProyecto.aArchivo(
+                    this@MensajesActivity, p, claves,
+                    escenaDe = { dibujo -> com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, dibujo)) },
+                    imageProvider = { ruta -> com.forge.pixpin.pin.ImageStore.load(ruta) }
+                )
+            }
+            if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, "application/pdf")
+        }
+    }
+
+    private fun compartirArchivo(archivo: File, tipo: String) {
+        runCatching {
+            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", archivo)
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = tipo
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                    null
+                )
+            )
         }
     }
 
