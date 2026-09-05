@@ -1900,6 +1900,7 @@ class Croquis3DActivity : ComponentActivity() {
                         ElAstro(controlador.croquis.sol, deNoche = false)
                         ElAstro(controlador.croquis.luna, deNoche = true)
                     }
+                    PestanaDelCroquis.DETALLE -> ElDetalle()
                     PestanaDelCroquis.PIEZAS -> Column {
                         Croquis3DLista(controlador, Modifier.fillMaxWidth())
                         Croquis3DVistas(
@@ -2942,11 +2943,41 @@ private val RECORRIDO_DE_LA_LUZ = 180f
      * cuál. En pestañas con su nombre escrito, buscar es leer cuatro palabras: qué se dibuja,
      * con qué punta, de qué tinta, cómo es el sitio y qué hay montado.
      */
+    /** Qué archivo es este croquis y cuánto pesa, y lo mismo de su proyecto. Ver [com.forge.pixpin.motor.Detalle]. */
+    @Composable
+    private fun ElDetalle() {
+        val detalle by androidx.compose.runtime.produceState(emptyList<Pair<String, String>>(), controlador.croquis) {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val archivo = com.forge.pixpin.motor.Detalle.delCroquis(this@Croquis3DActivity, elCroquis)
+                val proyecto = elProyecto?.let { (application as? com.forge.pixpin.PixPinApp)?.proyectos?.porId(it) }
+                val filas = ArrayList<Pair<String, String>>()
+                filas += getString(R.string.detalle_archivo) to archivo.nombre
+                filas += getString(R.string.detalle_peso) to com.forge.pixpin.motor.Detalle.legible(archivo.bytes)
+                if (proyecto != null) {
+                    val p = com.forge.pixpin.motor.Detalle.delProyecto(this@Croquis3DActivity, proyecto)
+                    filas += getString(R.string.detalle_proyecto) to p.nombre
+                    filas += getString(R.string.detalle_hojas) to "${p.hojas}"
+                    filas += getString(R.string.detalle_peso_proyecto) to com.forge.pixpin.motor.Detalle.legible(p.bytes)
+                } else filas += getString(R.string.detalle_proyecto) to getString(R.string.detalle_sin_proyecto)
+                filas
+            }
+        }
+        Column(Modifier.padding(8.dp)) {
+            detalle.forEach { (que, cuanto) ->
+                Row(Modifier.fillMaxWidth()) {
+                    Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text(cuanto, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+
     private enum class PestanaDelCroquis(val nombre: Int) {
         DIBUJO(R.string.croquis_pes_dibujo),
         PUNTA(R.string.croquis_pes_punta),
         ESCENA(R.string.croquis_pes_escena),
-        PIEZAS(R.string.croquis_pes_piezas)
+        PIEZAS(R.string.croquis_pes_piezas),
+        DETALLE(R.string.croquis_pes_detalle)
     }
 
     companion object {

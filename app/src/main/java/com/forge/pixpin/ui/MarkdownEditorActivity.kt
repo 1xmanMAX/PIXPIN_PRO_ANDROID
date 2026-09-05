@@ -91,6 +91,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Info
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.motor.Hoja
@@ -144,7 +145,8 @@ class MarkdownEditorActivity : ComponentActivity() {
                         cerrarYVolver()
                     },
                     onDescartar = { cerrarYVolver() },
-                    onAProyecto = { texto -> aUnProyecto(texto) }
+                    onAProyecto = { texto -> aUnProyecto(texto) },
+                    detalle = { texto -> detalleDe(id, texto) }
                 )
             }
         }
@@ -159,6 +161,24 @@ class MarkdownEditorActivity : ComponentActivity() {
      * entrado. Sin esto, abrir una nota desde el proyecto y guardarla escribía
      * en el almacén del pin y el proyecto seguía enseñando lo de antes.
      */
+    /** Nombre y peso de la nota, y de su proyecto si lo tiene. */
+    private fun detalleDe(id: String, texto: String): List<Pair<String, String>> {
+        val nota = com.forge.pixpin.motor.Detalle.deLaNota(id.ifBlank { "nota" }, texto)
+        val filas = arrayListOf(
+            getString(com.forge.pixpin.R.string.detalle_archivo) to nota.nombre,
+            getString(com.forge.pixpin.R.string.detalle_peso) to com.forge.pixpin.motor.Detalle.legible(nota.bytes)
+        )
+        val proyecto = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
+            ?.let { (application as? com.forge.pixpin.PixPinApp)?.proyectos?.porId(it) }
+        if (proyecto != null) {
+            val p = com.forge.pixpin.motor.Detalle.delProyecto(this, proyecto)
+            filas += getString(com.forge.pixpin.R.string.detalle_proyecto) to p.nombre
+            filas += getString(com.forge.pixpin.R.string.detalle_hojas) to "${p.hojas}"
+            filas += getString(com.forge.pixpin.R.string.detalle_peso_proyecto) to com.forge.pixpin.motor.Detalle.legible(p.bytes)
+        } else filas += getString(com.forge.pixpin.R.string.detalle_proyecto) to getString(com.forge.pixpin.R.string.detalle_sin_proyecto)
+        return filas
+    }
+
     private fun guardarEnSuProyecto(id: String, texto: String) {
         if (id.isEmpty()) return
         val app = application as? PixPinApp ?: return
@@ -251,10 +271,31 @@ private fun Pantalla(
     onGuardar: (String) -> Unit,
     onDescartar: () -> Unit,
     onAProyecto: (String) -> Unit = {},
-    desde: Int = -1
+    desde: Int = -1,
+    /** Qué archivo es esta nota y cuánto pesa, con su proyecto. Ver [com.forge.pixpin.motor.Detalle]. */
+    detalle: (String) -> List<Pair<String, String>> = { emptyList() }
 ) {
+    var viendoDetalle by remember { mutableStateOf(false) }
     var valor by remember {
         mutableStateOf(TextFieldValue(inicial, TextRange(inicial.length)))
+    }
+    if (viendoDetalle) {
+        val filas = remember { detalle(valor.text) }
+        AlertDialog(
+            onDismissRequest = { viendoDetalle = false },
+            title = { Text("Detalle") },
+            text = {
+                Column {
+                    filas.forEach { (que, cuanto) ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            Text(cuanto, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { viendoDetalle = false }) { Text("Cerrar") } }
+        )
     }
     // Dónde se está escribiendo, en coordenadas del texto limpio. Ver [Sitio].
     //
@@ -494,6 +535,9 @@ private fun Pantalla(
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Rehacer")
                     }
 
+                    IconButton(onClick = { viendoDetalle = true }) {
+                        Icon(Icons.Filled.Info, contentDescription = "Detalle")
+                    }
                     // Mandar la nota a un proyecto: se queda como una hoja
                     // más, con sus páginas, junto a los dibujos y las del PDF.
                     IconButton(onClick = { onAProyecto(valor.text) }) {

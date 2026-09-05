@@ -35,6 +35,11 @@ class MensajesStore(private val context: Context) {
          * una foto compartida desde otra aplicación.
          */
         val cambios = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+        /** Por dónde va cada nota de voz que se está pasando a texto (id → 0..1). */
+        val avances = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Float>>(emptyMap())
+
+        private val CERROJO = Any()
     }
 
 
@@ -76,51 +81,75 @@ class MensajesStore(private val context: Context) {
     }
 
     /**
-     * De la nota de voz a una nota de texto en Markdown, **en el propio teléfono**. Ver
-     * [Transcriptor]. El texto entra como una nota que contesta a la de voz —así se ve
-     * debajo de ella— y, en el chat de un proyecto, además como hoja de notas del proyecto,
-     * que es donde se puede seguir escribiendo en el editor de Markdown.
+     * **La nota de voz, pasada a texto, se queda en la propia nota.** Ver [Transcriptor].
+     *
+     * Mientras dura, [avances] lleva por dónde va (0 a 1) para que el chat lo enseñe; al
+     * acabar, el texto y cómo acabó se escriben en el mensaje ([Mensaje.transcripcion],
+     * [Mensaje.estadoDelTexto]) y, en el chat de un proyecto, además en una hoja de notas
+     * con el audio adjunto. Antes salía como una nota aparte que contestaba al audio y no
+     * se podía abrir ni se leía entera (lo reportó el usuario el 5-sep-2026).
      */
     fun transcribir(m: Mensaje) {
         val ruta = m.ruta ?: return
         if (!Transcriptor.disponible(context)) return
-        Transcriptor.transcribir(context, File(ruta)) { r ->
-            when (r) {
-                is Transcriptor.Resultado.Texto -> Thread {
-                    apuntarTranscripcion(
-                        titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
-                        cuerpo = r.texto, audio = File(ruta), respondeA = m.id, proyecto = m.proyecto,
-                        cuando = System.currentTimeMillis()
-                    )
-                }.start()
-                is Transcriptor.Resultado.DescargandoIdioma -> avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_idioma))
-                is Transcriptor.Resultado.Fallo -> avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
-            }
+        ponerAvance(m.id, 0f)
+        Transcriptor.transcribir(context, File(ruta), avance = { ponerAvance(m.id, it) }) { r ->
+            Thread {
+                when (r) {
+                    is Transcriptor.Resultado.Texto -> {
+                        val cuando = System.currentTimeMillis()
+                        val hoja = apuntarTranscripcion(
+                            titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
+                            cuerpo = r.texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando
+                        )
+                        actualizar(m.id) {
+                            it.copy(
+                                transcripcion = r.texto,
+                                estadoDelTexto = if (r.avisos > 0) TEXTO_CON_AVISOS else TEXTO_BIEN,
+                                hojaDelTexto = hoja
+                            )
+                        }
+                    }
+                    is Transcriptor.Resultado.DescargandoIdioma -> {
+                        actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
+                        avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_idioma))
+                    }
+                    is Transcriptor.Resultado.Fallo -> actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
+                }
+                quitarAvance(m.id)
+            }.start()
         }
     }
 
+    /** Cambia un mensaje ya guardado, con el archivo entero bajo llave. */
+    fun actualizar(id: String, cambio: (Mensaje) -> Mensaje) {
+        synchronized(CERROJO) {
+            val lista = leer()
+            if (lista.none { it.id == id }) return
+            reescribir(lista.map { if (it.id == id) cambio(it) else it })
+        }
+    }
+
+    private fun ponerAvance(id: String, v: Float) { avances.value = avances.value + (id to v) }
+    private fun quitarAvance(id: String) { avances.value = avances.value - id }
+
     /**
-     * Deja una transcripción donde toca: como nota que contesta al audio en el chat y, en
-     * el chat de un proyecto, como hoja de notas **con el audio dentro** —copiado a los
-     * adjuntos de las notas, para que se escuche mientras se lee y sobreviva a que se borre
-     * el mensaje—. Ver `MedioUi` en el editor y [com.forge.pixpin.motormd.MarkdownHtml].
-     * La usan la transcripción de una nota de voz y la conversación por turnos.
+     * Deja una transcripción como hoja de notas del proyecto —**con el audio dentro**,
+     * copiado a los adjuntos de las notas, para que se escuche mientras se lee y sobreviva
+     * a que se borre el mensaje—. Devuelve el id de la hoja, o null si no hay proyecto.
+     * Ver `MedioUi` en el editor y [com.forge.pixpin.motormd.MarkdownHtml]. La usan la
+     * transcripción de una nota de voz y la conversación por turnos.
      */
-    fun apuntarTranscripcion(titulo: String, cuerpo: String, audio: File?, respondeA: String?, proyecto: String?, cuando: Long) {
-        val texto = "# $titulo\n\n$cuerpo"
-        anadir(
-            Mensaje(
-                id = java.util.UUID.randomUUID().toString(), cuando = cuando, clase = Clase.NOTA,
-                texto = texto, respondeA = respondeA, proyecto = proyecto, unido = proyecto != null
-            )
-        )
-        val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return
-        val elProyecto = proyecto?.let { app.proyectos.porId(it) } ?: return
+    fun apuntarTranscripcion(titulo: String, cuerpo: String, audio: File?, proyecto: String?, cuando: Long): String? {
+        val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return null
+        val elProyecto = proyecto?.let { app.proyectos.porId(it) } ?: return null
         val adjunto = audio?.takeIf { it.exists() }?.let {
             com.forge.pixpin.motormd.Adjuntos.importarArchivo(context, it, cuando, "voz-$cuando." + it.name.substringAfterLast('.', "m4a"))
         }
-        val conAudio = if (adjunto == null) texto else "# $titulo\n\n![audio]($adjunto)\n\n$cuerpo"
-        app.proyectos.conHoja(elProyecto, com.forge.pixpin.motor.Hoja(id = "nota-$cuando", nombre = titulo, nota = conAudio), cuando)
+        val texto = if (adjunto == null) "# $titulo\n\n$cuerpo" else "# $titulo\n\n![audio]($adjunto)\n\n$cuerpo"
+        val id = "nota-$cuando"
+        app.proyectos.conHoja(elProyecto, com.forge.pixpin.motor.Hoja(id = id, nombre = titulo, nota = texto), cuando)
+        return id
     }
 
     private fun avisar(texto: String) {

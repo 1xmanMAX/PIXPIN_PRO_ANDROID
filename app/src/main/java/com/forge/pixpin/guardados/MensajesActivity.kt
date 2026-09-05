@@ -37,6 +37,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Subtitles
 import kotlinx.coroutines.flow.drop
@@ -3680,6 +3684,87 @@ class MensajesActivity : ComponentActivity() {
                 )
             }
         }
+        LaTranscripcion(m)
+    }
+
+    /**
+     * **Debajo del audio, su texto.** Mientras se pasa a texto, el tanto por ciento en
+     * verde; después, un punto —verde si salió, naranja si quedaron huecos, rojo si no se
+     * pudo— y el texto plegado a dos líneas: un toque lo despliega (y se abre poco a poco,
+     * no de golpe) y dos toques lo abren en el editor de notas. Lo pidió el usuario
+     * (5-sep-2026): la nota aparte que había antes no se podía abrir ni leer entera.
+     */
+    @Composable
+    private fun LaTranscripcion(m: Mensaje) {
+        val avances by MensajesStore.avances.collectAsState()
+        val enCurso = avances[m.id]
+        if (enCurso != null) {
+            Text(
+                getString(com.forge.pixpin.R.string.guardados_pasando_texto, (enCurso * 100).toInt()),
+                fontSize = 12.sp,
+                color = VERDE_DEL_TEXTO,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            return
+        }
+        val estado = m.estadoDelTexto ?: return
+        var desplegado by remember(m.id) { mutableStateOf(false) }
+        val color = when (estado) {
+            TEXTO_BIEN -> VERDE_DEL_TEXTO
+            TEXTO_CON_AVISOS -> NARANJA_DEL_TEXTO
+            else -> ROJO_DEL_TEXTO
+        }
+        Row(
+            Modifier
+                .padding(top = 6.dp)
+                .widthIn(max = 320.dp)
+                .animateContentSize()
+                .pointerInput(m.id) {
+                    detectTapGestures(
+                        onTap = { desplegado = !desplegado },
+                        onDoubleTap = { abrirLaTranscripcion(m) }
+                    )
+                },
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                Modifier
+                    .padding(top = 5.dp)
+                    .size(8.dp)
+                    .background(color, androidx.compose.foundation.shape.CircleShape)
+            )
+            Text(
+                m.transcripcion ?: getString(com.forge.pixpin.R.string.guardados_transcripcion_no),
+                fontSize = 13.sp,
+                maxLines = if (desplegado) Int.MAX_VALUE else 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 7.dp).weight(1f)
+            )
+            if (m.transcripcion != null) {
+                Icon(
+                    if (desplegado) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+    }
+
+    /** Dos toques en la transcripción: su `.md`, en el editor de notas. */
+    private fun abrirLaTranscripcion(m: Mensaje) {
+        val texto = m.transcripcion ?: return
+        val app = application as? PixPinApp
+        val hoja = m.hojaDelTexto
+        val proyecto = m.proyecto
+        if (hoja != null && proyecto != null && app?.proyectos?.porId(proyecto)?.hojas?.any { it.id == hoja } == true) {
+            val nota = app.proyectos.porId(proyecto)!!.hojas.first { it.id == hoja }.nota ?: texto
+            com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this, hoja, nota, desdeProyecto = proyecto)
+        } else {
+            com.forge.pixpin.ui.MarkdownEditorActivity.abrir(
+                this, "trans-${m.id}", "# " + getString(com.forge.pixpin.R.string.guardados_transcripcion) + "\n\n" + texto
+            )
+        }
     }
 
     @Composable
@@ -5282,3 +5367,8 @@ private const val ESPERA_DE_LA_FECHA = 500L
 
 /** Cuánto hay que subir para que salga el botón de bajar, y cuánto bajar para que se vaya. */
 private val SUBIDA_PARA_EL_BOTON = 100.dp
+
+/** Los colores del estado de una transcripción: salió, con huecos, no se pudo. */
+private val VERDE_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFF43A047)
+private val NARANJA_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFFFB8C00)
+private val ROJO_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFFE53935)

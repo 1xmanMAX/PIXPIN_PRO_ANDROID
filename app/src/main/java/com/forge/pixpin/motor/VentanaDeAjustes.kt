@@ -77,7 +77,8 @@ import kotlin.math.roundToInt
 enum class PestanaDeAjustes(val titulo: String) {
     LIENZO("Lienzo"),
     DIBUJO("Dibujo"),
-    EXPORTAR("Exportar")
+    EXPORTAR("Exportar"),
+    DETALLE("Detalle")
 }
 
 /** Una opción de exportar, para no repetir la fila cuatro veces. */
@@ -133,6 +134,9 @@ fun VentanaDeAjustes(
     onSoltarClavados: (() -> Unit)?,
     formatos: List<FormatoDeSalida>,
     exportando: Boolean,
+    /** Qué archivo es y cuánto pesa, y lo mismo de su proyecto. Ver [Detalle]. */
+    detalleDelArchivo: List<Pair<String, String>> = emptyList(),
+    detalleDelProyecto: List<Pair<String, String>> = emptyList(),
 
     onCerrar: () -> Unit,
     modifier: Modifier = Modifier
@@ -320,6 +324,13 @@ fun VentanaDeAjustes(
                         }
                     }
 
+                    PestanaDeAjustes.DETALLE -> {
+                        Seccion("Este archivo") { Filas(detalleDelArchivo) }
+                        Seccion("Su proyecto", if (detalleDelProyecto.isEmpty()) "No está en ningún proyecto." else null) {
+                            Filas(detalleDelProyecto)
+                        }
+                    }
+
                     PestanaDeAjustes.EXPORTAR -> {
                         Seccion("Sacar el dibujo", if (exportando) "Escribiendo el archivo…" else null) {
                             // **Cuadrados grandes, a dos columnas**, con el icono arriba y
@@ -358,6 +369,19 @@ fun VentanaDeAjustes(
  * tarjeta.** Es lo que ordena la ventana: cada cosa con las de su clase, y el ojo va de
  * título en título sin leer nada.
  */
+/** Pares nombre → valor, uno por línea. Para la pestaña de detalle. */
+@Composable
+private fun Filas(filas: List<Pair<String, String>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        filas.forEach { (que, cuanto) ->
+            Row(Modifier.fillMaxWidth()) {
+                Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text(cuanto, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
 @Composable
 private fun Seccion(titulo: String, ayuda: String? = null, contenido: @Composable () -> Unit) {
     Column(

@@ -1542,7 +1542,26 @@ class DrawEditorActivity : ComponentActivity() {
             // La ventana de ajustes: también sin velo, que se deja abierta a un
             // lado mientras se sigue dibujando.
             if (ajustesAbiertos) {
+                // Lo que pesa este dibujo y su proyecto, medido fuera del hilo principal:
+                // sumar un proyecto es abrir cada uno de sus lienzos. Ver [Detalle].
+                val detalle by androidx.compose.runtime.produceState(Pair(emptyList<Pair<String, String>>(), emptyList<Pair<String, String>>()), tick) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val archivo = Detalle.delLienzo(this@DrawEditorActivity, dibujoId)
+                        val app = application as? com.forge.pixpin.PixPinApp
+                        val proyecto = app?.proyectos?.let { repo ->
+                            intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)?.let { repo.porId(it) }
+                                ?: Detalle.proyectoDelLienzo(repo.proyectos.value, dibujoId)
+                        }
+                        val delProyecto = proyecto?.let { Detalle.delProyecto(this@DrawEditorActivity, it) }
+                        Pair(
+                            listOf("Nombre" to archivo.nombre, "Peso" to Detalle.legible(archivo.bytes)),
+                            delProyecto?.let { listOf("Nombre" to it.nombre, "Hojas" to "${it.hojas}", "Peso" to Detalle.legible(it.bytes)) } ?: emptyList()
+                        )
+                    }
+                }
                 VentanaDeAjustes(
+                    detalleDelArchivo = detalle.first,
+                    detalleDelProyecto = detalle.second,
                     cuadricula = cuadricula,
                     onCuadricula = { cuadricula = it; cambiado() },
                     zoomBloqueado = zoomBloqueado,

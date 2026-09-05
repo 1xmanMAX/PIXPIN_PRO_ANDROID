@@ -193,7 +193,17 @@ data class Mensaje(
      * [MensajesStore.anadir] y [UnirAlProyecto]); con esto el menú no vuelve a ofrecer
      * «unir» lo que ya está unido, que daría la hoja dos veces.
      */
-    val unido: Boolean = false
+    val unido: Boolean = false,
+
+    /**
+     * La nota de voz pasada a texto, cuando ya está. Se enseña debajo del audio, plegada,
+     * y con dos toques se abre en el editor de notas. Ver [Transcriptor].
+     */
+    val transcripcion: String? = null,
+    /** Cómo acabó: [TEXTO_BIEN], [TEXTO_CON_AVISOS] (huecos) o [TEXTO_MAL]. Nulo si aún no. */
+    val estadoDelTexto: String? = null,
+    /** La hoja de notas del proyecto en la que quedó la transcripción, si la hay. */
+    val hojaDelTexto: String? = null
 )
 
 /** Las secciones de la cabecera, en su orden. */
@@ -470,3 +480,7 @@ fun yaEnBuzon(mensajes: List<Mensaje>, referencia: String?): Mensaje? {
  * encuentra. El [Mensaje.referencia] guardado sigue mandando si lo hay (fotos de antes).
  */
 val Mensaje.dibujoDeLaFoto: String get() = referencia ?: "foto-$id"
+
+const val TEXTO_BIEN = "bien"
+const val TEXTO_CON_AVISOS = "aviso"
+const val TEXTO_MAL = "mal"

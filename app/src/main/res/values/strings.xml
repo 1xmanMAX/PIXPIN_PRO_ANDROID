@@ -232,6 +232,13 @@
     <string name="croquis_pes_punta">Punta</string>
     <string name="croquis_pes_escena">Sitio</string>
     <string name="croquis_pes_piezas">Piezas</string>
+    <string name="croquis_pes_detalle">Detalle</string>
+    <string name="detalle_archivo">Archivo</string>
+    <string name="detalle_peso">Peso</string>
+    <string name="detalle_proyecto">Proyecto</string>
+    <string name="detalle_hojas">Hojas</string>
+    <string name="detalle_peso_proyecto">Peso del proyecto</string>
+    <string name="detalle_sin_proyecto">No está en ningún proyecto</string>
     <string name="croquis_punta_apagada">Apagada</string>
     <string name="croquis_punta_ancho">Ancho</string>
     <string name="croquis_punta_pulso">Con el pulso de la mano</string>
@@ -391,6 +398,9 @@
     <string name="guardados_anadido_a">Añadido a %1$s</string>
     <string name="guardados_unir_al_proyecto">Unir al proyecto</string>
     <string name="guardados_transcribir">Pasar a texto</string>
+    <string name="guardados_pasando_texto">Pasando a texto · %1$d %%</string>
+    <string name="guardados_elegir_chat">¿A qué chat?</string>
+    <string name="guardados_chat_general">Mensajes guardados</string>
     <string name="guardados_transcribiendo">Pasando a texto…</string>
     <string name="guardados_transcripcion">Transcripción</string>
     <string name="guardados_transcripcion_idioma">Falta el idioma en el reconocedor de voz del teléfono: se está descargando. Vuelve a intentarlo en un momento.</string>

@@ -6,6 +6,10 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import java.io.File
 import java.util.UUID
@@ -41,6 +45,9 @@ import kotlinx.coroutines.withContext
  */
 class GuardarCompartidoActivity : ComponentActivity() {
 
+    /** Lo compartido, ya copiado a un temporal nuestro: la URI del otro proceso caduca. */
+    private class Temporal(val archivo: File, val nombre: String, val tipo: String?)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
@@ -61,53 +68,111 @@ class GuardarCompartidoActivity : ComponentActivity() {
             return
         }
 
-        // La copia va **antes** de terminar: el permiso sobre lo compartido se retira en
-        // cuanto esta pantalla muere, y con él la posibilidad de leer el archivo. Es el
-        // mismo motivo por el que el receptor de pines lo hace así.
+        // La copia va **antes** de terminar y antes de preguntar nada: el permiso sobre lo
+        // compartido se retira en cuanto esta pantalla muere, y con él la posibilidad de
+        // leer el archivo. Es el mismo motivo por el que el receptor de pines lo hace así.
         lifecycleScope.launch {
-            val guardados = withContext(Dispatchers.IO) {
-                var cuantos = 0
-                uris.forEach { uri -> if (guardarArchivo(almacen, uri, asunto)) cuantos++ }
-                // El texto se guarda **además** del archivo, no en vez de él: al
-                // compartir una foto con comentario llegan los dos, y quedarse solo con
-                // la foto pierde justo lo que explicaba por qué se guardó.
-                if (texto.isNotBlank()) {
-                    almacen.anadir(
-                        Mensaje(
-                            id = UUID.randomUUID().toString(),
-                            cuando = System.currentTimeMillis(),
-                            clase = Clase.NOTA,
-                            texto = texto.trim()
-                        )
-                    )
-                    cuantos++
-                }
-                cuantos
+            val temporales = withContext(Dispatchers.IO) { uris.mapNotNull { copiar(it, asunto) } }
+            // **A qué chat.** Cada proyecto tiene el suyo, y lo que se manda desde otra
+            // aplicación —el PDF del cliente, una foto de la obra— casi siempre es de uno
+            // de ellos. Con proyectos, se pregunta; sin ninguno, va a la general como
+            // siempre (lo pidió el usuario el 5-sep-2026).
+            val proyectos = (application as? com.forge.pixpin.PixPinApp)?.proyectos?.proyectos?.value
+                .orEmpty().filterNot { it.archivado }
+            if (proyectos.isEmpty()) {
+                guardarEn(almacen, null, temporales, texto)
+                return@launch
             }
-            avisar(guardados > 0)
-            finishAndRemoveTask()
-            @Suppress("DEPRECATION")
-            overridePendingTransition(0, 0)
+            setContent {
+                com.forge.pixpin.ui.theme.PixPinTheme {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { finishAndRemoveTask() },
+                        title = { androidx.compose.material3.Text(getString(com.forge.pixpin.R.string.guardados_elegir_chat)) },
+                        text = {
+                            androidx.compose.foundation.lazy.LazyColumn(
+                                androidx.compose.ui.Modifier.heightIn(max = 360.dp)
+                            ) {
+                                item {
+                                    Destino(getString(com.forge.pixpin.R.string.guardados_chat_general)) {
+                                        lifecycleScope.launch { guardarEn(almacen, null, temporales, texto) }
+                                    }
+                                }
+                                items(proyectos.size) { i ->
+                                    Destino(proyectos[i].nombre) {
+                                        lifecycleScope.launch { guardarEn(almacen, proyectos[i].id, temporales, texto) }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = { finishAndRemoveTask() }) {
+                                androidx.compose.material3.Text(getString(com.forge.pixpin.R.string.cancel))
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 
-    /** Copia el archivo compartido al almacén y lo da de alta. */
-    private fun guardarArchivo(almacen: MensajesStore, uri: Uri, asunto: String): Boolean =
+    @androidx.compose.runtime.Composable
+    private fun Destino(nombre: String, alElegir: () -> Unit) {
+        androidx.compose.material3.TextButton(
+            onClick = alElegir,
+            modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+        ) {
+            androidx.compose.material3.Text(nombre, modifier = androidx.compose.ui.Modifier.fillMaxWidth())
+        }
+    }
+
+    /** Lo guarda todo en el chat elegido (null = la general), avisa y se va. */
+    private suspend fun guardarEn(almacen: MensajesStore, proyecto: String?, temporales: List<Temporal>, texto: String) {
+        val guardados = withContext(Dispatchers.IO) {
+            var cuantos = 0
+            temporales.forEach { if (darDeAlta(almacen, it, proyecto)) cuantos++ }
+            // El texto se guarda **además** del archivo, no en vez de él: al
+            // compartir una foto con comentario llegan los dos, y quedarse solo con
+            // la foto pierde justo lo que explicaba por qué se guardó.
+            if (texto.isNotBlank()) {
+                almacen.anadir(
+                    Mensaje(
+                        id = UUID.randomUUID().toString(),
+                        cuando = System.currentTimeMillis(),
+                        clase = Clase.NOTA,
+                        texto = texto.trim(),
+                        proyecto = proyecto
+                    )
+                )
+                cuantos++
+            }
+            cuantos
+        }
+        avisar(guardados > 0)
+        finishAndRemoveTask()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
+    }
+
+    private fun copiar(uri: Uri, asunto: String): Temporal? = runCatching {
+        val nombre = nombreDe(uri).ifBlank { asunto }.ifBlank { "compartido" }
+        val temporal = File(cacheDir, "comp_${System.currentTimeMillis()}_${nombre.hashCode()}")
+        contentResolver.openInputStream(uri)?.use { entrada ->
+            temporal.outputStream().use { entrada.copyTo(it) }
+        } ?: return null
+        Temporal(temporal, nombre, contentResolver.getType(uri))
+    }.getOrNull()
+
+    /** Copia el temporal al almacén y lo da de alta en el chat que toque. */
+    private fun darDeAlta(almacen: MensajesStore, t: Temporal, proyecto: String?): Boolean =
         runCatching {
-            val nombre = nombreDe(uri).ifBlank { asunto }.ifBlank { "compartido" }
-            val temporal = File(cacheDir, "comp_${System.currentTimeMillis()}")
-            contentResolver.openInputStream(uri)?.use { entrada ->
-                temporal.outputStream().use { entrada.copyTo(it) }
-            } ?: return false
-            val tipo = contentResolver.getType(uri)
-            val ruta = almacen.copiarAdjunto(temporal, nombre, extensionDe(tipo)) ?: return false
-            val bytes = temporal.length()
-            temporal.delete()
-            val esImagen = tipo?.startsWith("image/") == true
+            val ruta = almacen.copiarAdjunto(t.archivo, t.nombre, extensionDe(t.tipo)) ?: return false
+            val bytes = t.archivo.length()
+            t.archivo.delete()
+            val esImagen = t.tipo?.startsWith("image/") == true
             // **Un audio de otra aplicación es una nota de voz**: se escucha aquí y se
             // pasa a texto como las nuestras, venga en el formato que venga (ver
             // [Transcriptor]). Antes entraba como archivo a secas.
-            val esAudio = tipo?.startsWith("audio/") == true ||
+            val esAudio = t.tipo?.startsWith("audio/") == true ||
                 ruta.substringAfterLast('.', "").lowercase() in setOf("m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp")
             almacen.anadir(
                 Mensaje(
@@ -115,9 +180,10 @@ class GuardarCompartidoActivity : ComponentActivity() {
                     cuando = System.currentTimeMillis(),
                     clase = if (esImagen) Clase.IMAGEN else if (esAudio) Clase.VOZ else Clase.ARCHIVO,
                     ruta = ruta,
-                    nombre = nombre,
+                    nombre = t.nombre,
                     bytes = bytes,
-                    duracionMs = if (esAudio) com.forge.pixpin.pin.Voz.duracion(ruta) else 0
+                    duracionMs = if (esAudio) com.forge.pixpin.pin.Voz.duracion(ruta) else 0,
+                    proyecto = proyecto
                 )
             )
             true

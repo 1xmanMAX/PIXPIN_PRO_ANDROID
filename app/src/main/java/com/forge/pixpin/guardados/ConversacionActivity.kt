@@ -294,24 +294,28 @@ class ConversacionActivity : ComponentActivity() {
         }
         withContext(Dispatchers.IO) {
             val titulo = getString(R.string.conversacion_titulo)
-            val vozId = UUID.randomUUID().toString()
+            val cuerpo = lineas.joinToString("\n\n")
+            val hoja = if (lineas.isEmpty()) null else almacen.apuntarTranscripcion(
+                titulo = titulo, cuerpo = cuerpo, audio = if (unido) juntos else null, proyecto = proyecto, cuando = ahora
+            )
             if (unido) {
                 almacen.copiarAdjunto(juntos, "conversacion-$ahora.m4a")?.let { ruta ->
                     almacen.anadir(
                         Mensaje(
-                            id = vozId, cuando = ahora, clase = Clase.VOZ, ruta = ruta,
+                            id = UUID.randomUUID().toString(), cuando = ahora, clase = Clase.VOZ, ruta = ruta,
                             duracionMs = turnos.sumOf { it.ms }, proyecto = proyecto,
-                            texto = lineas.joinToString("\n")
+                            transcripcion = cuerpo.ifBlank { null },
+                            estadoDelTexto = when {
+                                lineas.isEmpty() -> TEXTO_MAL
+                                lineas.size < turnos.size -> TEXTO_CON_AVISOS
+                                else -> TEXTO_BIEN
+                            },
+                            hojaDelTexto = hoja
                         ),
                         transcribir = false
                     )
                 }
             }
-            val cuerpo = if (lineas.isEmpty()) getString(R.string.guardados_transcripcion_no) else lineas.joinToString("\n\n")
-            almacen.apuntarTranscripcion(
-                titulo = titulo, cuerpo = cuerpo, audio = if (unido) juntos else null,
-                respondeA = if (unido) vozId else null, proyecto = proyecto, cuando = ahora + 1
-            )
             turnos.forEach { it.archivo.delete() }
             juntos.delete()
         }

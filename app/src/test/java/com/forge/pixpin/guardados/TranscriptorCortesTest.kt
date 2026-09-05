@@ -23,8 +23,18 @@ class TranscriptorCortesTest {
 
     @Test
     fun `corto, un trozo`() {
-        val f = pcm(30, emptyList())
+        val f = pcm(10, emptyList())
         assertEquals(listOf(0L until f.length()), Transcriptor.cortes(f))
+    }
+
+    @Test
+    fun `cada frase, su trozo`() {
+        // Tres frases de cuatro segundos separadas por medio segundo de silencio.
+        val f = pcm(14, listOf(4, 9))
+        val trozos = Transcriptor.cortes(f)
+        assertEquals("una por frase: " + trozos, 3, trozos.size)
+        val bps = Transcriptor.HERCIOS * 2
+        assertTrue("el primer corte cae en el silencio de los 4 s", (trozos[0].last + 1) in (4L * bps)..(5L * bps))
     }
 
     @Test
@@ -34,8 +44,8 @@ class TranscriptorCortesTest {
         val trozos = Transcriptor.cortes(f)
         assertTrue("tenía que partirse: " + trozos.size, trozos.size >= 3)
         val bps = Transcriptor.HERCIOS * 2
-        val primero = trozos[0].last + 1
-        assertTrue("el corte va en el silencio de los 40 s, no en el tope: " + primero / bps.toDouble(), primero in (40L * bps)..(41L * bps))
+        assertTrue("ningún trozo pasa del tope", trozos.all { it.last - it.first <= 16L * bps })
+        assertTrue("hay un corte en el silencio de los 40 s", trozos.any { (it.last + 1) in (40L * bps)..(41L * bps) })
         // Seguidos y sin huecos.
         for (i in 1 until trozos.size) assertEquals(trozos[i - 1].last + 1, trozos[i].first)
         assertEquals(f.length() - 1, trozos.last().last)
