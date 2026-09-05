@@ -63,7 +63,11 @@ class LetraActivity : ComponentActivity() {
         androidx.compose.runtime.LaunchedEffect(Unit) { MensajesStore.cambios.collect { version++ } }
         val m = remember(version) { almacen.leer().firstOrNull { it.id == id } }
         var tamano by remember { mutableIntStateOf(22) }
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // Un `Surface` y no un `background`: el `Surface` es el que pone el color del texto
+        // a juego con el fondo. Con solo el fondo, de noche el texto salía negro sobre
+        // negro y la letra «no se veía» (lo reportó el usuario el 5-sep-2026).
+        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = getString(R.string.cancel)) }
                 Text(
@@ -102,6 +106,7 @@ class LetraActivity : ComponentActivity() {
                 }
                 BarraDelReproductor()
             }
+        }
         }
     }
 

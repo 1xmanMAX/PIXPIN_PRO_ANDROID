@@ -112,7 +112,9 @@ class ConversacionActivity : ComponentActivity() {
         var hablando by remember { mutableIntStateOf(-1) }
         var avance by remember { mutableStateOf(0f) }
 
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // `Surface`, que pone el color del texto a juego con el fondo (ver [LetraActivity]).
+        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize()) {
             when (paso) {
                 Paso.PREPARAR -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
                     Text(getString(R.string.conversacion_titulo), style = MaterialTheme.typography.headlineSmall)
@@ -200,6 +202,7 @@ class ConversacionActivity : ComponentActivity() {
                     Text("${(avance * 100).toInt()} %", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
         }
     }
 

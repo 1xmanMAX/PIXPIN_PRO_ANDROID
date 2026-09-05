@@ -73,7 +73,9 @@ class BibliotecaDeAudioActivity : ComponentActivity() {
         val proyectos = (application as? PixPinApp)?.proyectos?.proyectos?.collectAsState()?.value.orEmpty()
         val estado by Reproductor.estado.collectAsState()
 
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // `Surface`, que pone el color del texto a juego con el fondo (ver [LetraActivity]).
+        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = getString(R.string.cancel)) }
                 Text(getString(R.string.biblioteca_audio), fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -85,7 +87,7 @@ class BibliotecaDeAudioActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(getString(R.string.biblioteca_vacia), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                return@Column
+                return@Surface
             }
             LazyColumn(Modifier.fillMaxSize()) {
                 var ultimoGrupo: Boolean? = null
@@ -138,6 +140,7 @@ class BibliotecaDeAudioActivity : ComponentActivity() {
                     }
                 }
             }
+        }
         }
     }
 
