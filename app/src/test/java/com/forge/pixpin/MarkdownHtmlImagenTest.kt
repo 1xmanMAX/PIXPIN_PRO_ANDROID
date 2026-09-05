@@ -29,6 +29,19 @@ class MarkdownHtmlImagenTest {
     }
 }
 
+class MarkdownHtmlSaltosTest {
+    @org.junit.Test
+    fun `un parrafo con su minuto es un salto, y un pdf adjunto se baja`() {
+        val texto = "[1:23] Segundo punto de la reunión.\n\n![informe](/x/informe.pdf)\n\nSin minuto."
+        val html = com.forge.pixpin.motormd.MarkdownHtml.deTexto(texto) { ruta ->
+            if (ruta.endsWith(".pdf")) "data:application/pdf;base64,AAAA" else null
+        }
+        org.junit.Assert.assertTrue(html, html.contains("<a class=\"salto\" data-ms=\"83000\" href=\"#\">1:23</a> Segundo punto"))
+        org.junit.Assert.assertTrue(html, html.contains("class=\"adjunto\" download=\"informe\""))
+        org.junit.Assert.assertTrue(html, html.contains("<p>Sin minuto.</p>"))
+    }
+}
+
 class MarkdownHtmlAudioTest {
     @org.junit.Test
     fun `un audio de la nota viaja como reproductor`() {

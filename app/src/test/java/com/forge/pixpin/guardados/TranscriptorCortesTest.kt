@@ -23,8 +23,25 @@ class TranscriptorCortesTest {
 
     @Test
     fun `corto, un trozo`() {
-        val f = pcm(10, emptyList())
+        val f = pcm(6, emptyList())
         assertEquals(listOf(0L until f.length()), Transcriptor.cortes(f))
+    }
+
+    @Test
+    fun `el texto con tiempos, y de vuelta`() {
+        val segmentos = listOf(
+            Transcriptor.Segmento(0, "Hola a todos."), Transcriptor.Segmento(4000, "Empezamos."),
+            Transcriptor.Segmento(25000, "Segundo punto."), Transcriptor.Segmento(3_700_000, "Al final.")
+        )
+        val texto = Transcriptor.conTiempos(segmentos)
+        val lineas = texto.split("\n\n")
+        assertEquals("los dos primeros van juntos, el tercero aparte: " + texto, 3, lineas.size)
+        assertEquals(Pair(0, "Hola a todos. Empezamos."), Transcriptor.tiempoDe(lineas[0]))
+        assertEquals(Pair(25000, "Segundo punto."), Transcriptor.tiempoDe(lineas[1]))
+        assertEquals(Pair(3_700_000, "Al final."), Transcriptor.tiempoDe(lineas[2]))
+        assertEquals("1:01:40", Transcriptor.marcaDeTiempo(3_700_000))
+        assertEquals("con quién habla delante", "[0:00] **Pepe:** Hola a todos. Empezamos.", Transcriptor.conTiempos(segmentos.take(2), "**Pepe:** "))
+        assertEquals(null, Transcriptor.tiempoDe("sin tiempo"))
     }
 
     @Test
@@ -44,7 +61,7 @@ class TranscriptorCortesTest {
         val trozos = Transcriptor.cortes(f)
         assertTrue("tenía que partirse: " + trozos.size, trozos.size >= 3)
         val bps = Transcriptor.HERCIOS * 2
-        assertTrue("ningún trozo pasa del tope", trozos.all { it.last - it.first <= 16L * bps })
+        assertTrue("ningún trozo pasa del tope", trozos.all { it.last - it.first <= 9L * bps })
         assertTrue("hay un corte en el silencio de los 40 s", trozos.any { (it.last + 1) in (40L * bps)..(41L * bps) })
         // Seguidos y sin huecos.
         for (i in 1 until trozos.size) assertEquals(trozos[i - 1].last + 1, trozos[i].first)

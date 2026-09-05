@@ -74,7 +74,7 @@ object MarkdownHtml {
             val n = b.level.coerceIn(1, 6)
             "<h$n>${enLinea(b.content)}</h$n>"
         }
-        is MarkdownBlock.Paragraph -> "<p>${enLinea(b.content)}</p>"
+        is MarkdownBlock.Paragraph -> "<p>${conSalto(enLinea(b.content))}</p>"
         is MarkdownBlock.Quote -> "<blockquote>${enLinea(b.content)}</blockquote>"
         is MarkdownBlock.Code -> {
             val clase = if (b.lenguaje.isBlank()) "" else " class=\"len-${escapar(b.lenguaje)}\""
@@ -100,6 +100,20 @@ object MarkdownHtml {
      */
     private val RELLENOS = setOf("audio", "imagen", "image", "video", "vídeo", "archivo", "file", "foto")
 
+    /**
+     * Un párrafo que empieza por su minuto —`[1:23] …`, como los de una transcripción—
+     * lleva el minuto como **salto**: en la página, tocarlo lleva el audio de la nota a ese
+     * punto (ver el visor en `ExportarHtml`).
+     */
+    private val MARCA_DE_TIEMPO = Regex("""^\[(?:(\d+):)?(\d+):(\d\d)\]\s*""")
+    private fun conSalto(html: String): String {
+        val m = MARCA_DE_TIEMPO.find(html) ?: return html
+        val h = m.groupValues[1].toIntOrNull() ?: 0
+        val ms = ((h * 3600 + m.groupValues[2].toInt() * 60 + m.groupValues[3].toInt()) * 1000)
+        val etiqueta = m.value.trim().removePrefix("[").removeSuffix("]")
+        return "<a class=\"salto\" data-ms=\"$ms\" href=\"#\">$etiqueta</a> " + html.substring(m.range.last + 1)
+    }
+
     private fun medio(b: MarkdownBlock.Medio, imagen: (String) -> String?): String {
         // **Una imagen viaja de verdad**, pequeña y comprimida, si quien exporta sabe leerla
         // del teléfono (ver `ExportarProyectoWeb`). Es lo que pidió el usuario: en la nota
@@ -119,6 +133,14 @@ object MarkdownHtml {
                 return "<figure><audio controls preload=\"metadata\" src=\"$datos\"></audio>" +
                     (if (b.alt.isNotBlank() && b.alt != "audio") "<figcaption>${escapar(b.alt)}</figcaption>" else "") +
                     "</figure>"
+            }
+        }
+        // **Y un archivo, para bajarlo**: el PDF que la nota lleva al lado viaja dentro de
+        // la página, como enlace de descarga con su nombre.
+        if (b.clase == ClaseDeMedio.ARCHIVO) {
+            imagen(b.ruta)?.let { datos ->
+                val nombre = b.alt.takeIf { it.isNotBlank() && it.lowercase() !in RELLENOS } ?: b.ruta.substringAfterLast('/')
+                return "<p class=\"medio\"><a class=\"adjunto\" download=\"${escapar(nombre)}\" href=\"$datos\">&#128206; ${escapar(nombre)}</a></p>"
             }
         }
         val que = when (b.clase) {

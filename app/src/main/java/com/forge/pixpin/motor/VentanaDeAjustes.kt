@@ -758,7 +758,10 @@ fun DialogoDeFuncionesWeb(
     marcadas: Set<String>,
     onCambio: (String, Boolean) -> Unit,
     onCompartir: () -> Unit,
-    onCerrar: () -> Unit
+    onCerrar: () -> Unit,
+    /** Con qué calidad viaja el audio de las notas. Ver [AudioLigero]. */
+    calidadDeAudio: String = AudioLigero.LIGERO,
+    onCalidadDeAudio: (String) -> Unit = {}
 ) {
     val nombres = listOf(
         "lapiz" to "Lápiz", "resaltador" to "Resaltador", "borrador" to "Borrador",
@@ -780,6 +783,13 @@ fun DialogoDeFuncionesWeb(
                 for ((clave, texto) in nombres) {
                     Interruptor(texto, null, clave in marcadas) { onCambio(clave, it) }
                 }
+                // **El audio de las notas, y cuánto pesa.** Original tal cual; ligero es un
+                // cuarto y suena igual para voz; ultraligero, un décimo y se nota.
+                Text("Audio de las notas", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Segmentos(
+                    listOf("Original", "Ligero", "Ultraligero", "Sin audio"),
+                    listOf(AudioLigero.ORIGINAL, AudioLigero.LIGERO, AudioLigero.ULTRALIGERO, AudioLigero.SIN_AUDIO).indexOf(calidadDeAudio).coerceAtLeast(0)
+                ) { onCalidadDeAudio(listOf(AudioLigero.ORIGINAL, AudioLigero.LIGERO, AudioLigero.ULTRALIGERO, AudioLigero.SIN_AUDIO)[it]) }
             }
         },
         confirmButton = {

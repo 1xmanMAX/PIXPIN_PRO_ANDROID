@@ -221,7 +221,9 @@ fun PantallaDeProyectos(
                 alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ahora) }
             },
             onCompartir = { pidiendoFuncionesWeb = false; exportandoWeb = true },
-            onCerrar = { pidiendoFuncionesWeb = false }
+            onCerrar = { pidiendoFuncionesWeb = false },
+            calidadDeAudio = ExportarHtml.calidadDeAudio(marcadas),
+            onCalidadDeAudio = { c -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c)) } }
         )
     }
     // El proyecto que se está empaquetando como `.pixpin`, o null.
@@ -391,10 +393,12 @@ fun PantallaDeProyectos(
                     // Las hojas de cada proyecto marcado, una tras otra, en un solo
                     // documento. Todo lo que hay que enchufar vive en [ExportarWebDe].
                     val archivo = if (seleccion.isEmpty()) null else withContext(Dispatchers.IO) {
+                        val funciones = app.settings.settings.first().funcionesWeb
                         ExportarWebDe.archivo(
                             contexto, seleccion,
-                            ExportarHtml.Opciones.de(app.settings.settings.first().funcionesWeb),
-                            oscuroDelSistema
+                            ExportarHtml.Opciones.de(funciones),
+                            oscuroDelSistema,
+                            ExportarHtml.calidadDeAudio(funciones)
                         )
                     }
                     exportandoWeb = false

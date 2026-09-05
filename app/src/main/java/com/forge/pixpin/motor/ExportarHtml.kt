@@ -79,6 +79,13 @@ object ExportarHtml {
      * lo que se manda —una lámina para enseñar no necesita lápiz ni guardar—. Lo que se apaga
      * no va: ni su botón, ni su atajo de teclado, ni su código si no lo usa nadie.
      */
+    /** Con qué calidad viaja el audio; va en el mismo conjunto de funciones como `audio:<calidad>`. */
+    const val PREFIJO_DE_AUDIO = "audio:"
+    fun calidadDeAudio(marcadas: Set<String>?): String =
+        marcadas?.firstOrNull { it.startsWith(PREFIJO_DE_AUDIO) }?.removePrefix(PREFIJO_DE_AUDIO) ?: AudioLigero.LIGERO
+    fun conCalidadDeAudio(marcadas: Set<String>, calidad: String): Set<String> =
+        marcadas.filterNot { it.startsWith(PREFIJO_DE_AUDIO) }.toSet() + (PREFIJO_DE_AUDIO + calidad)
+
     class Opciones(
         val lapiz: Boolean = true,
         val resaltador: Boolean = true,
@@ -423,6 +430,8 @@ object ExportarHtml {
         .nota figure{margin:1em 0;text-align:center}
         .nota figure img{max-width:100%;height:auto;border-radius:8px}
         .nota figure audio{width:100%;max-width:520px}
+        .nota .salto{color:#1e88e5;font-weight:600;text-decoration:none;cursor:pointer;margin-right:.4em}
+        .nota .adjunto{display:inline-block;padding:8px 12px;border:1px solid #1e88e5;border-radius:10px;color:#1e88e5;text-decoration:none}
         .nota figcaption{opacity:.7;font-size:.9em;margin-top:.4em}
         .nota caption{caption-side:top;opacity:.7;padding-bottom:6px;font-size:.9em}
         .nota ul.tareas{list-style:none;padding-left:1.1em}
@@ -1233,5 +1242,17 @@ document.addEventListener('keydown',function(e){
 });
 irA(0);
 })();
+// **Los saltos de tiempo de una transcripción.** Un párrafo que empieza por su minuto es
+// un enlace: tocarlo lleva el audio de esa nota a ese punto y lo pone a sonar.
+document.addEventListener('click',function(e){
+  var a=e.target&&e.target.closest?e.target.closest('.salto'):null;
+  if(!a) return;
+  e.preventDefault();
+  var nota=a.closest('.nota')||document;
+  var au=nota.querySelector('audio');
+  if(!au) return;
+  au.currentTime=(+a.dataset.ms)/1000;
+  au.play();
+});
 """
 }

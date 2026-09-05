@@ -1536,7 +1536,13 @@ class DrawEditorActivity : ComponentActivity() {
                         }
                     },
                     onCompartir = { pidiendoFuncionesWeb = false; compartirHtml() },
-                    onCerrar = { pidiendoFuncionesWeb = false }
+                    onCerrar = { pidiendoFuncionesWeb = false },
+                    calidadDeAudio = ExportarHtml.calidadDeAudio(marcadas),
+                    onCalidadDeAudio = { c ->
+                        lifecycleScope.launch {
+                            (application as? com.forge.pixpin.PixPinApp)?.settings?.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c))
+                        }
+                    }
                 )
             }
             // La ventana de ajustes: también sin velo, que se deja abierta a un

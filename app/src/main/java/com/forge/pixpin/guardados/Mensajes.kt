@@ -203,7 +203,9 @@ data class Mensaje(
     /** Cómo acabó: [TEXTO_BIEN], [TEXTO_CON_AVISOS] (huecos) o [TEXTO_MAL]. Nulo si aún no. */
     val estadoDelTexto: String? = null,
     /** La hoja de notas del proyecto en la que quedó la transcripción, si la hay. */
-    val hojaDelTexto: String? = null
+    val hojaDelTexto: String? = null,
+    /** Las banderitas puestas en un audio: milisegundos a los que volver de un toque. */
+    val marcas: List<Int> = emptyList()
 )
 
 /** Las secciones de la cabecera, en su orden. */

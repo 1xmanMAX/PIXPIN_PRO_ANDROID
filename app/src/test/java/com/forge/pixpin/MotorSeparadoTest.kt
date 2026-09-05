@@ -89,7 +89,7 @@ class MotorSeparadoTest {
         "BotonFlotante.kt",
         // Junta el proyecto entero en una página web: lee escenas, PDF e imágenes. Lo que
         // arma el documento —ExportarHtml, VisorEspacio— sí es núcleo y se comprueba aquí.
-        "ExportarProyectoWeb.kt",
+        "ExportarProyectoWeb.kt", "AudioLigero.kt",
         // Rasteriza trozos de un PDF y los guarda en memoria: mapas de bits y PdfRenderer.
         // Las cuentas de qué trozo toca sí son núcleo y viven en MosaicoDePdf.kt.
         "ElMosaicoDelPapel.kt",

@@ -27,7 +27,7 @@ import java.io.File
 object ExportarWebDe {
 
     /** Las hojas web de las [claves] marcadas de un proyecto. Trabajo de disco: fuera del hilo principal. */
-    fun hojas(contexto: Context, proyecto: Proyecto, claves: Set<String>, deNoche: Boolean): List<ExportarHtml.HojaWeb> {
+    fun hojas(contexto: Context, proyecto: Proyecto, claves: Set<String>, deNoche: Boolean, calidadDeAudio: String = com.forge.pixpin.motor.AudioLigero.LIGERO): List<ExportarHtml.HojaWeb> {
         val pdf = Proyectos.rutaDelDocumento(proyecto) { File(it).exists() }
         return ExportarProyectoWeb.paginas(
             contexto, proyecto, claves,
@@ -54,13 +54,14 @@ object ExportarWebDe {
                         papel = if (deNoche) ExportarCroquisHtml.FONDO_DE_FABRICA else "#ffffff"
                     )
                 }
-            }
+            },
+            calidadDeAudio = calidadDeAudio
         )
     }
 
     /** El `.html` listo para compartir, en la carpeta que publica el FileProvider. Null si no hay nada. */
-    fun archivo(contexto: Context, seleccion: List<Pair<Proyecto, Set<String>>>, opciones: ExportarHtml.Opciones, deNoche: Boolean): File? {
-        val hojas = seleccion.flatMap { (p, claves) -> hojas(contexto, p, claves, deNoche) }
+    fun archivo(contexto: Context, seleccion: List<Pair<Proyecto, Set<String>>>, opciones: ExportarHtml.Opciones, deNoche: Boolean, calidadDeAudio: String = com.forge.pixpin.motor.AudioLigero.LIGERO): File? {
+        val hojas = seleccion.flatMap { (p, claves) -> hojas(contexto, p, claves, deNoche, calidadDeAudio) }
         if (hojas.isEmpty()) return null
         val nombre = if (seleccion.size == 1) seleccion[0].first.nombre else seleccion.joinToString(" + ") { it.first.nombre }
         return runCatching {

@@ -105,13 +105,15 @@ class MensajesStore(private val context: Context) {
                 when (r) {
                     is Transcriptor.Resultado.Texto -> {
                         val cuando = System.currentTimeMillis()
+                        // Con sus tiempos: cada párrafo dice en qué minuto va, y se salta ahí.
+                        val texto = if (r.segmentos.isEmpty()) r.texto else Transcriptor.conTiempos(r.segmentos)
                         val hoja = apuntarTranscripcion(
                             titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
-                            cuerpo = r.texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando
+                            cuerpo = texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando
                         )
                         actualizar(m.id) {
                             it.copy(
-                                transcripcion = r.texto,
+                                transcripcion = texto,
                                 estadoDelTexto = if (r.avisos > 0) TEXTO_CON_AVISOS else TEXTO_BIEN,
                                 hojaDelTexto = hoja
                             )

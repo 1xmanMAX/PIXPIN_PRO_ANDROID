@@ -389,9 +389,11 @@ class MensajesActivity : ComponentActivity() {
                 },
                 onCompartir = {
                     pidiendoWebPara = null
-                    compartirComoWeb(cual, com.forge.pixpin.motor.ExportarHtml.Opciones.de(marcadas))
+                    compartirComoWeb(cual, com.forge.pixpin.motor.ExportarHtml.Opciones.de(marcadas), com.forge.pixpin.motor.ExportarHtml.calidadDeAudio(marcadas))
                 },
-                onCerrar = { pidiendoWebPara = null }
+                onCerrar = { pidiendoWebPara = null },
+                calidadDeAudio = com.forge.pixpin.motor.ExportarHtml.calidadDeAudio(marcadas),
+                onCalidadDeAudio = { c -> lifecycleScope.launch { app?.settings?.setFuncionesWeb(com.forge.pixpin.motor.ExportarHtml.conCalidadDeAudio(marcadas, c)) } }
             )
         }
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
@@ -4890,13 +4892,13 @@ class MensajesActivity : ComponentActivity() {
     }
 
     /** Página web del documento, con las funciones elegidas. Ver [com.forge.pixpin.ui.ExportarWebDe]. */
-    private fun compartirComoWeb(m: Mensaje, opciones: com.forge.pixpin.motor.ExportarHtml.Opciones) {
+    private fun compartirComoWeb(m: Mensaje, opciones: com.forge.pixpin.motor.ExportarHtml.Opciones, calidadDeAudio: String) {
         val deNoche = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         lifecycleScope.launch {
             val archivo = withContext(Dispatchers.IO) {
                 val (p, claves) = proyectoDe(m) ?: return@withContext null
-                com.forge.pixpin.ui.ExportarWebDe.archivo(this@MensajesActivity, listOf(p to claves), opciones, deNoche)
+                com.forge.pixpin.ui.ExportarWebDe.archivo(this@MensajesActivity, listOf(p to claves), opciones, deNoche, calidadDeAudio)
             }
             if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
         }

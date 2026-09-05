@@ -58,6 +58,7 @@ class BibliotecaDeAudioActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        aPantallaCompleta()
         setContent { PixPinTheme { Pantalla() } }
     }
 

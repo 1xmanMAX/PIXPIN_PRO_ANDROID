@@ -110,7 +110,9 @@ object ExportarProyectoWeb {
         paginaFinaDelPdf: (Int, String?) -> Bitmap? = { _, _ -> null },
         /** La página como geometría, si se pudo leer. Ver [PlanoWeb]. */
         planoDelPdf: (Int) -> String? = { null },
-        croquisComoHoja: (String) -> ExportarHtml.HojaWeb? = { null }
+        croquisComoHoja: (String) -> ExportarHtml.HojaWeb? = { null },
+        /** Con qué calidad viaja el audio de las notas. Ver [AudioLigero]. */
+        calidadDeAudio: String = AudioLigero.ORIGINAL
     ): List<ExportarHtml.HojaWeb> {
         // **Lo que el dibujante de SVG pide es el id del archivo, no su ruta**, y la ruta la
         // sabe la escena que lo usa: el mapa va por escena, no por proyecto.
@@ -130,7 +132,9 @@ object ExportarProyectoWeb {
                     if (!texto.isNullOrBlank()) {
                         // Las imágenes de la nota viajan dentro, pequeñas: ver [imagenLigera].
                         val html = MarkdownHtml.deTexto(texto) { ruta ->
-                            audioEnDatos(ruta) ?: imagenDeRuta(ruta)?.let { imagenLigera(it) }
+                            audioEnDatos(context, ruta, calidadDeAudio)
+                                ?: archivoEnDatos(ruta)
+                                ?: imagenDeRuta(ruta)?.let { imagenLigera(it) }
                         }
                         salida += ExportarHtml.HojaWeb.Nota(nombre, html, PAPEL)
                     }
@@ -179,19 +183,45 @@ object ExportarProyectoWeb {
      * de lado y en WEBP, que pesa una fracción del PNG y vale con transparencia y sin ella.
      * Una foto de doce megapíxeles no tiene sentido dentro de un HTML que se manda por chat.
      */
-    /** Un audio de la nota, entero y en `data:`, si es de los tipos que un navegador toca y no pesa de más. */
-    private const val TOPE_DE_AUDIO = 12L * 1024 * 1024
-    internal fun audioEnDatos(ruta: String): String? {
-        val mime = when (ruta.substringAfterLast('.', "").lowercase()) {
+    /**
+     * Un audio de la nota en `data:`, con la [calidad] elegida (ver [AudioLigero]): tal
+     * cual, recodificado más ligero, o ninguno. Null si no es audio, si no cabe o si se
+     * eligió no llevarlo.
+     */
+    private const val TOPE_DE_AUDIO = 24L * 1024 * 1024
+    internal fun audioEnDatos(context: Context, ruta: String, calidad: String = AudioLigero.ORIGINAL): String? {
+        val extension = ruta.substringAfterLast('.', "").lowercase()
+        val mime = when (extension) {
             "m4a", "aac", "mp4" -> "audio/mp4"
             "mp3" -> "audio/mpeg"
             "ogg", "oga", "opus" -> "audio/ogg"
             "wav" -> "audio/wav"
             "flac" -> "audio/flac"
+            "amr", "3gp" -> "audio/3gpp"
             else -> return null
         }
+        if (calidad == AudioLigero.SIN_AUDIO) return null
         val archivo = java.io.File(ruta)
-        if (!archivo.exists() || archivo.length() > TOPE_DE_AUDIO) return null
+        if (!archivo.exists()) return null
+        val ligero = if (AudioLigero.bitsPorSegundo(calidad) != null) {
+            val destino = java.io.File(context.cacheDir, "web-audio-${ruta.hashCode()}-$calidad.m4a")
+            AudioLigero.comprimir(archivo, destino, calidad)
+        } else null
+        val (elArchivo, elMime) = if (ligero != null) ligero to "audio/mp4" else archivo to mime
+        if (elArchivo.length() > TOPE_DE_AUDIO) return null
+        return runCatching {
+            "data:$elMime;base64," + android.util.Base64.encodeToString(elArchivo.readBytes(), android.util.Base64.NO_WRAP)
+        }.getOrNull().also { ligero?.delete() }
+    }
+
+    /** Un archivo adjunto de la nota (un PDF, un documento), para bajarlo desde la página. */
+    private const val TOPE_DE_ARCHIVO = 16L * 1024 * 1024
+    internal fun archivoEnDatos(ruta: String): String? {
+        val extension = ruta.substringAfterLast('.', "").lowercase()
+        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: return null
+        if (mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/")) return null
+        val archivo = java.io.File(ruta)
+        if (!archivo.exists() || archivo.length() > TOPE_DE_ARCHIVO) return null
         return runCatching {
             "data:$mime;base64," + android.util.Base64.encodeToString(archivo.readBytes(), android.util.Base64.NO_WRAP)
         }.getOrNull()

@@ -48,13 +48,18 @@ object Transcriptor {
     const val HERCIOS = 16_000
     private const val BYTES_POR_SEGUNDO = HERCIOS * 2
 
-    /** Lo que mide un trozo como mucho, y dónde se busca el silencio para cortarlo. */
-    private const val TROZO_SEGUNDOS = 15
-    private const val BUSQUEDA_SEGUNDOS = 5
+    /**
+     * Lo que mide un trozo como mucho, y dónde se busca el silencio para cortarlo. Ocho
+     * segundos y no quince: el reconocedor se queda con la primera frase que oye, y en
+     * quince segundos de alguien que habla seguido caben tres (de una conversación de tres
+     * minutos salían tres líneas; lo reportó el usuario el 5-sep-2026).
+     */
+    private const val TROZO_SEGUNDOS = 8
+    private const val BUSQUEDA_SEGUNDOS = 4
     private const val VENTANA_MS = 20
-    /** Un silencio cuenta a partir de aquí; y un trozo no baja de esto (se pega al anterior). */
+    /** Un silencio cuenta a partir de aquí; y un trozo más corto que esto es ruido y se tira. */
     private const val SILENCIO_MS = 250
-    private const val MINIMO_SEGUNDOS = 1
+    private const val MINIMO_MS = 300
     /** Silencio: menos que esta parte de la energía típica, y nunca por debajo de un suelo fijo. */
     private const val PARTE_DE_SILENCIO = 0.12
     private const val UMBRAL_MINIMO = 120.0
@@ -78,10 +83,58 @@ object Transcriptor {
     fun enLocal(context: Context): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
+    /** Un trozo de texto y en qué milisegundo del audio empieza. */
+    class Segmento(val desdeMs: Int, val texto: String)
+
+    /**
+     * **El texto con sus tiempos**, una línea por párrafo: `[1:23] lo que se dijo`. Los
+     * segmentos se juntan en párrafos de unos [PARRAFO_MS]: así cada línea es un sitio al
+     * que saltar en el audio sin que el texto sea una lista de frases sueltas. Ver
+     * [tiempoDe] para leerlo de vuelta.
+     */
+    fun conTiempos(segmentos: List<Segmento>, prefijo: String = ""): String {
+        val lineas = ArrayList<String>()
+        var desde = -1
+        val trozo = StringBuilder()
+        for (sg in segmentos) {
+            if (desde >= 0 && sg.desdeMs - desde >= PARRAFO_MS) {
+                lineas += "[${marcaDeTiempo(desde)}] $prefijo${trozo.toString().trim()}"
+                trozo.clear(); desde = -1
+            }
+            if (desde < 0) desde = sg.desdeMs
+            trozo.append(sg.texto).append(' ')
+        }
+        if (trozo.isNotBlank()) lineas += "[${marcaDeTiempo(desde.coerceAtLeast(0))}] $prefijo${trozo.toString().trim()}"
+        return lineas.joinToString("\n\n")
+    }
+
+    /** `1:23`, `12:05`, `1:02:09`. */
+    fun marcaDeTiempo(ms: Int): String {
+        val s = ms / 1000
+        val h = s / 3600; val m = (s % 3600) / 60; val seg = s % 60
+        return if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, seg) else String.format(Locale.ROOT, "%d:%02d", m, seg)
+    }
+
+    private val MARCA = Regex("""^\s*\[(?:(\d+):)?(\d+):(\d\d)\]\s*""")
+
+    /** El tiempo (ms) con el que empieza una línea, y la línea sin él; null si no lo lleva. */
+    fun tiempoDe(linea: String): Pair<Int, String>? {
+        val m = MARCA.find(linea) ?: return null
+        val h = m.groupValues[1].toIntOrNull() ?: 0
+        val min = m.groupValues[2].toInt(); val seg = m.groupValues[3].toInt()
+        return ((h * 3600 + min * 60 + seg) * 1000) to linea.substring(m.range.last + 1)
+    }
+
+    /** Cuánto abarca un párrafo del texto con tiempos, como mucho. */
+    private const val PARRAFO_MS = 20_000
+
     /** En qué acabó: el texto, o por qué no. */
     sealed class Resultado {
-        /** [avisos]: cuántos trozos no se entendieron; con alguno, el texto tiene huecos. */
-        class Texto(val texto: String, val avisos: Int = 0) : Resultado()
+        /**
+         * [avisos]: cuántos trozos no se entendieron; con alguno, el texto tiene huecos.
+         * [segmentos]: el texto por trozos, cada uno con en qué milisegundo del audio empieza.
+         */
+        class Texto(val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList()) : Resultado()
         /** El idioma no está en el aparato; se ha pedido su descarga. */
         object DescargandoIdioma : Resultado()
         class Fallo(val codigo: Int) : Resultado()
@@ -125,16 +178,19 @@ object Transcriptor {
     /** Un trozo tras otro; el resultado se junta al final. En el hilo principal. */
     private fun reconocerTrozos(
         context: Context, pcm: File, trozos: List<LongRange>, i: Int, idioma: String,
-        textos: ArrayList<String>, avance: (Float) -> Unit, avisos: Int, alTerminar: (Resultado) -> Unit
+        textos: ArrayList<Segmento>, avance: (Float) -> Unit, avisos: Int, alTerminar: (Resultado) -> Unit
     ) {
         if (i >= trozos.size) {
-            alTerminar(if (textos.isEmpty()) Resultado.Fallo(SpeechRecognizer.ERROR_NO_MATCH) else Resultado.Texto(textos.joinToString(" "), avisos))
+            alTerminar(
+                if (textos.isEmpty()) Resultado.Fallo(SpeechRecognizer.ERROR_NO_MATCH)
+                else Resultado.Texto(textos.joinToString(" ") { it.texto }, avisos, textos)
+            )
             return
         }
         var fallos = avisos
         reconocer(context, pcm, trozos[i], idioma) { r ->
             when (r) {
-                is Resultado.Texto -> textos += r.texto
+                is Resultado.Texto -> textos += Segmento((trozos[i].first * 1000 / BYTES_POR_SEGUNDO).toInt(), r.texto)
                 is Resultado.DescargandoIdioma -> { alTerminar(r); return@reconocer }
                 is Resultado.Fallo -> {
                     // Un trozo que no se entiende (silencio, ruido) no tira los demás; se
@@ -310,26 +366,24 @@ object Transcriptor {
                 calladasDesde = -1
             }
         }
-        // Trozos entre puntos; los cortos se pegan al anterior, los largos se parten.
+        // Trozos entre puntos: **nunca se pegan dos frases** —el reconocedor se pararía en
+        // la pausa que las separa y la segunda se perdería—; los largos se parten en su
+        // punto más callado, y lo que no llega a un tercio de segundo es ruido.
         val trozo = TROZO_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO
-        val minimo = MINIMO_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO
+        val minimo = MINIMO_MS.toLong() * BYTES_POR_SEGUNDO / 1000
         val salida = ArrayList<LongRange>()
         var desde = 0L
         RandomAccessFile(pcm, "r").use { raf ->
             for (corte in puntos + total) {
-                var fin = corte
+                val fin = corte
                 if (fin <= desde) continue
-                if (fin - desde < minimo && salida.isNotEmpty() && fin != total) continue
                 while (fin - desde > trozo) {
                     val tope = desde + trozo
                     val enMedio = puntoMasCallado(raf, tope - BUSQUEDA_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO, tope)
-                    salida += desde until enMedio
+                    if (enMedio - desde >= minimo) salida += desde until enMedio
                     desde = enMedio
                 }
-                if (fin - desde < minimo && salida.isNotEmpty()) {
-                    val anterior = salida.removeAt(salida.size - 1)
-                    salida += anterior.first until fin
-                } else salida += desde until fin
+                if (fin - desde >= minimo) salida += desde until fin
                 desde = fin
             }
         }

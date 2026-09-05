@@ -95,6 +95,7 @@ class ConversacionActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         }
+        aPantallaCompleta()
         setContent { PixPinTheme { Pantalla(proyecto) } }
     }
 
@@ -284,15 +285,18 @@ class ConversacionActivity : ComponentActivity() {
         val ahora = System.currentTimeMillis()
         val juntos = File(carpeta(), "conversacion-$ahora.m4a")
         val unido = withContext(Dispatchers.IO) { unirM4a(turnos.map { it.archivo }, juntos) }
+        // Cada turno, con su nombre y con el minuto en el que empieza dentro del audio
+        // entero (los turnos van seguidos): así cada línea es un sitio al que saltar.
         val lineas = ArrayList<String>()
+        var desdeMs = 0
         for ((i, t) in turnos.withIndex()) {
-            val texto = transcribirUno(t.archivo)
-            if (texto != null) {
-                // Dos turnos seguidos de la misma persona se leen como uno.
+            val segmentos = transcribirUno(t.archivo)
+            if (segmentos != null) {
                 val nombre = nombres[t.quien]
-                if (lineas.isNotEmpty() && lineas.last().startsWith("**$nombre:**")) lineas[lineas.size - 1] = lineas.last() + " " + texto
-                else lineas += "**$nombre:** $texto"
+                val corridos = segmentos.map { Transcriptor.Segmento(desdeMs + it.desdeMs, it.texto) }
+                lineas += Transcriptor.conTiempos(corridos, prefijo = "**$nombre:** ")
             }
+            desdeMs += t.ms
             avance((i + 1).toFloat() / turnos.size)
         }
         withContext(Dispatchers.IO) {
@@ -324,10 +328,11 @@ class ConversacionActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun transcribirUno(archivo: File): String? = suspendCancellableCoroutine { cont ->
+    private suspend fun transcribirUno(archivo: File): List<Transcriptor.Segmento>? = suspendCancellableCoroutine { cont ->
         if (!Transcriptor.disponible(this)) { cont.resume(null); return@suspendCancellableCoroutine }
         Transcriptor.transcribir(this, archivo) { r ->
-            cont.resume((r as? Transcriptor.Resultado.Texto)?.texto)
+            val t = r as? Transcriptor.Resultado.Texto
+            cont.resume(t?.let { it.segmentos.ifEmpty { listOf(Transcriptor.Segmento(0, it.texto)) } })
         }
     }
 
