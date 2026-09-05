@@ -59,9 +59,20 @@ object Transcriptor {
     private const val PARTE_DE_SILENCIO = 0.12
     private const val UMBRAL_MINIMO = 120.0
 
-    /** Si este aparato sabe transcribir un archivo. Hace falta Android 13. */
+    /** Sin reconocedor en el dispositivo: el de red no sirve para archivos. */
+    const val SIN_RECONOCEDOR_LOCAL = -4
+    /** Tras entregar el trozo entero, cuánto se espera al reconocedor; y cuánto sin noticias en general. */
+    private const val SILENCIO_TRAS_ENTREGAR_MS = 4_000L
+    private const val TOPE_SIN_NOTICIAS_MS = 30_000L
+
+    /**
+     * Si este aparato sabe transcribir un archivo: Android 13 **y el reconocedor en el
+     * dispositivo**. Solo ese sabe leer de un archivo; el de red ignora el archivo y se
+     * pone a escuchar el micrófono —se vio en el teléfono: la transcripción «empezaba» al
+     * darle al play, porque el altavoz le hablaba al micro, y salía a trozos—.
+     */
     fun disponible(context: Context): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isRecognitionAvailable(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
     /** Si lo hace sin red, con el modelo descargado en el aparato. */
     fun enLocal(context: Context): Boolean =
@@ -146,11 +157,11 @@ object Transcriptor {
         if (tubo == null) { alTerminar(Resultado.Fallo(-2)); return }
         val (lectura, escritura) = tubo
 
+        // **Solo el del dispositivo.** Ver [disponible]: el de red no lee archivos.
         val reconocedor = runCatching {
-            if (SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
-            else SpeechRecognizer.createSpeechRecognizer(context)
+            if (SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else null
         }.getOrNull()
-        if (reconocedor == null) { lectura.close(); escritura.close(); alTerminar(Resultado.Fallo(-3)); return }
+        if (reconocedor == null) { lectura.close(); escritura.close(); alTerminar(Resultado.Fallo(SIN_RECONOCEDOR_LOCAL)); return }
 
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -167,9 +178,13 @@ object Transcriptor {
 
         val trozos = ArrayList<String>()
         var acabado = false
+        val reloj = Handler(Looper.getMainLooper())
+        var ultimoEvento = System.currentTimeMillis()
+        val entregado = java.util.concurrent.atomic.AtomicBoolean(false)
         fun terminar(r: Resultado) {
             if (acabado) return
             acabado = true
+            reloj.removeCallbacksAndMessages(null)
             runCatching { reconocedor.destroy() }
             runCatching { lectura.close() }
             alTerminar(r)
@@ -178,11 +193,30 @@ object Transcriptor {
             b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
         fun loQueHay(): Resultado =
             if (trozos.isEmpty()) Resultado.Fallo(SpeechRecognizer.ERROR_NO_MATCH) else Resultado.Texto(trozos.joinToString(" "))
+        // **No se cierra al primer resultado.** Según la versión del reconocedor, los
+        // resultados llegan por `onSegmentResults` o por `onResults` una vez por frase; si
+        // se cerrara la sesión al primero, lo de después se perdería. Se cierra cuando lo
+        // dice el reconocedor, o cuando el archivo ya se le entregó entero y lleva un rato
+        // sin decir nada más.
+        val vigilante = object : Runnable {
+            override fun run() {
+                if (acabado) return
+                val callado = System.currentTimeMillis() - ultimoEvento
+                if ((entregado.get() && callado > SILENCIO_TRAS_ENTREGAR_MS) || callado > TOPE_SIN_NOTICIAS_MS) terminar(loQueHay())
+                else reloj.postDelayed(this, 500)
+            }
+        }
+        reloj.postDelayed(vigilante, 500)
 
         reconocedor.setRecognitionListener(object : RecognitionListener {
-            override fun onSegmentResults(segmentResults: Bundle) { mejorDe(segmentResults)?.let { trozos += it } }
+            override fun onSegmentResults(segmentResults: Bundle) { ultimoEvento = System.currentTimeMillis(); mejorDe(segmentResults)?.let { trozos += it } }
             override fun onEndOfSegmentedSession() { terminar(loQueHay()) }
-            override fun onResults(results: Bundle?) { mejorDe(results)?.let { trozos += it }; terminar(loQueHay()) }
+            override fun onResults(results: Bundle?) {
+                ultimoEvento = System.currentTimeMillis()
+                mejorDe(results)?.let { trozos += it }
+                // Con el archivo ya entregado, un resultado final es el final.
+                if (entregado.get()) terminar(loQueHay())
+            }
             override fun onError(error: Int) {
                 if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE || error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED) {
                     // El modelo del idioma no está en el aparato: se pide, y la próxima vez sale.
@@ -194,34 +228,38 @@ object Transcriptor {
                     terminar(Resultado.Fallo(error))
                 }
             }
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
+            override fun onReadyForSpeech(params: Bundle?) { ultimoEvento = System.currentTimeMillis() }
+            override fun onBeginningOfSpeech() { ultimoEvento = System.currentTimeMillis() }
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEndOfSpeech() { ultimoEvento = System.currentTimeMillis() }
+            override fun onPartialResults(partialResults: Bundle?) { ultimoEvento = System.currentTimeMillis() }
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
         reconocedor.startListening(intent)
 
         // El tramo del PCM, por la tubería y aparte; cerrarla es decirle al reconocedor
-        // que el trozo se ha terminado.
+        // que el trozo se ha terminado. Se manda **a ritmo de reloj** (el doble de rápido
+        // que el habla): de golpe, algún reconocedor descarta lo que no le cabe.
         Thread {
             ParcelFileDescriptor.AutoCloseOutputStream(escritura).use { salida ->
                 runCatching {
                     RandomAccessFile(pcm, "r").use { raf ->
                         raf.seek(tramo.first)
                         var quedan = tramo.last - tramo.first + 1
-                        val buf = ByteArray(16 * 1024)
+                        val buf = ByteArray(BYTES_POR_SEGUNDO / 10)   // décimas de segundo
                         while (quedan > 0) {
                             val n = raf.read(buf, 0, minOf(buf.size.toLong(), quedan).toInt())
                             if (n <= 0) break
                             salida.write(buf, 0, n)
                             quedan -= n
+                            Thread.sleep(50)
                         }
                     }
                 }
             }
+            entregado.set(true)
+            reloj.post { ultimoEvento = System.currentTimeMillis() }
         }.start()
     }
 

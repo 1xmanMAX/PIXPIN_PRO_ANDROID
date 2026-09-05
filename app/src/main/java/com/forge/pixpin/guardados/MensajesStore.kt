@@ -91,7 +91,12 @@ class MensajesStore(private val context: Context) {
      */
     fun transcribir(m: Mensaje) {
         val ruta = m.ruta ?: return
-        if (!Transcriptor.disponible(context)) return
+        if (!Transcriptor.disponible(context)) {
+            // Se dice por qué, una vez: sin el reconocedor en el dispositivo no hay texto.
+            Thread { actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) } }.start()
+            avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
+            return
+        }
         ponerAvance(m.id, 0f)
         Transcriptor.transcribir(context, File(ruta), avance = { ponerAvance(m.id, it) }) { r ->
             Thread {
@@ -114,7 +119,10 @@ class MensajesStore(private val context: Context) {
                         actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
                         avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_idioma))
                     }
-                    is Transcriptor.Resultado.Fallo -> actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
+                    is Transcriptor.Resultado.Fallo -> {
+                        actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
+                        if (r.codigo == Transcriptor.SIN_RECONOCEDOR_LOCAL) avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
+                    }
                 }
                 quitarAvance(m.id)
             }.start()

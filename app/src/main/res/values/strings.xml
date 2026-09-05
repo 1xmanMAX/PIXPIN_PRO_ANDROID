@@ -404,7 +404,7 @@
     <string name="guardados_transcribiendo">Pasando a texto…</string>
     <string name="guardados_transcripcion">Transcripción</string>
     <string name="guardados_transcripcion_idioma">Falta el idioma en el reconocedor de voz del teléfono: se está descargando. Vuelve a intentarlo en un momento.</string>
-    <string name="guardados_transcripcion_no">No se pudo pasar a texto. Hace falta Android 13 y el reconocimiento de voz de Google.</string>
+    <string name="guardados_transcripcion_no">No se pudo pasar a texto. Hace falta Android 13 y el reconocimiento de voz de Google en el dispositivo (Ajustes → Sistema → Idiomas → Reconocimiento de voz → Google → Idiomas sin conexión), con el español descargado.</string>
     <string name="guardados_unir_a">Unir a un proyecto…</string>
     <string name="guardados_nada_que_unir">No hay nada que se pueda unir: solo fotos, dibujos, notas y PDF</string>
     <plurals name="guardados_unidas">
