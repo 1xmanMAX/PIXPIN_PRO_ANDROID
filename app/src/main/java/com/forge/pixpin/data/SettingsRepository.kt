@@ -152,6 +152,32 @@ data class Settings(
     val motorDeVoz: String = MOTOR_VOSK,
 
     /**
+     * **En qué idioma se habla en los audios** («es», «en»…); vacío = el del teléfono.
+     * Vosk baja el modelo de ese idioma, Google busca ese paquete, y a Whisper se le
+     * dice ese idioma en vez de dejarle adivinar entre sus 99 —que con el modelo pequeño
+     * adivinaba mal—. Lo pidió el usuario (6-sep-2026).
+     */
+    val idiomaDeVoz: String = "",
+
+    /**
+     * **Un segundo idioma, solo para Whisper**; vacío = ninguno. Con dos, Whisper mira al
+     * empezar cada nota cuál de los dos se habla y usa ese; cualquier otro que crea oír
+     * se descarta y se queda el primero. Ver [com.forge.pixpin.guardados.MotorWhisper].
+     */
+    val segundoIdiomaDeVoz: String = "",
+
+    /** Qué tamaño de Whisper: «tiny» (104 MB), «base» (161 MB) o «small» (375 MB). */
+    val modeloWhisper: String = "tiny",
+
+    /**
+     * **Qué hace Whisper con dos idiomas mezclados**: [MODO_CADA_IDIOMA], cada trozo en el
+     * idioma en que se dijo, o [MODO_TODO_EN_UNO], todo en el primer idioma, traducido.
+     * Whisper, con un idioma forzado, traduce a ese idioma lo que oye en otro; el usuario
+     * lo vio, le gustó, y pidió poder elegir (6-sep-2026).
+     */
+    val modoDeIdiomas: String = MODO_CADA_IDIOMA,
+
+    /**
      * **Cómo se trae un plano en PDF: como líneas o como imagen.**
      *
      * Con esto puesto, al abrir un PDF vectorial se lee su geometría y se pinta como rayas
@@ -286,6 +312,10 @@ class SettingsRepository(private val context: Context) {
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
         val MODO_NOCHE = stringPreferencesKey("modo_noche")
         val MOTOR_DE_VOZ = stringPreferencesKey("motor_de_voz")
+        val IDIOMA_DE_VOZ = stringPreferencesKey("idioma_de_voz")
+        val SEGUNDO_IDIOMA_DE_VOZ = stringPreferencesKey("segundo_idioma_de_voz")
+        val MODELO_WHISPER = stringPreferencesKey("modelo_whisper")
+        val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
@@ -311,6 +341,10 @@ class SettingsRepository(private val context: Context) {
             modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
                 .getOrDefault(ModoNoche.SISTEMA),
             motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_VOSK,
+            idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
+            segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
+            modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
+            modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
@@ -394,6 +428,26 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setMotorDeVoz(valor: String) {
         context.dataStore.edit { it[Keys.MOTOR_DE_VOZ] = valor }
+    }
+
+    /** El idioma de los audios («es», «en»…) o vacío para el del teléfono. Ver [Settings.idiomaDeVoz]. */
+    suspend fun setIdiomaDeVoz(valor: String) {
+        context.dataStore.edit { it[Keys.IDIOMA_DE_VOZ] = valor }
+    }
+
+    /** El segundo idioma para Whisper, o vacío. Ver [Settings.segundoIdiomaDeVoz]. */
+    suspend fun setSegundoIdiomaDeVoz(valor: String) {
+        context.dataStore.edit { it[Keys.SEGUNDO_IDIOMA_DE_VOZ] = valor }
+    }
+
+    /** «tiny», «base» o «small». Ver [Settings.modeloWhisper]. */
+    suspend fun setModeloWhisper(valor: String) {
+        context.dataStore.edit { it[Keys.MODELO_WHISPER] = valor }
+    }
+
+    /** [MODO_CADA_IDIOMA] o [MODO_TODO_EN_UNO]. Ver [Settings.modoDeIdiomas]. */
+    suspend fun setModoDeIdiomas(valor: String) {
+        context.dataStore.edit { it[Keys.MODO_DE_IDIOMAS] = valor }
     }
 
     /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */
@@ -531,3 +585,7 @@ enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO }
 const val MOTOR_VOSK = "vosk"
 const val MOTOR_WHISPER = "whisper"
 const val MOTOR_GOOGLE = "google"
+/** Whisper con dos idiomas: cada trozo en el idioma en que se dijo. */
+const val MODO_CADA_IDIOMA = "cada_uno"
+/** Whisper: todo en el primer idioma, traducido lo que se dijo en el otro. */
+const val MODO_TODO_EN_UNO = "todo_en_uno"

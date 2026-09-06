@@ -205,8 +205,21 @@ data class Mensaje(
     /** La hoja de notas del proyecto en la que quedó la transcripción, si la hay. */
     val hojaDelTexto: String? = null,
     /** Las banderitas puestas en un audio: milisegundos a los que volver de un toque. */
-    val marcas: List<Int> = emptyList()
+    val marcas: List<Int> = emptyList(),
+
+    /**
+     * **Quién habló cuándo**, en una conversación por turnos ([TurnoDeVoz]). Vacío en una
+     * nota de voz normal. Con esto, volver a pasar el audio a texto reconoce cada turno
+     * por separado y vuelve a poner los nombres: sin ello, la segunda vez salía todo
+     * seguido y sin quién dijo qué (lo reportó el usuario el 6-sep-2026). Ver
+     * [MensajesStore.transcribir] y `ConversacionActivity`.
+     */
+    val turnos: List<TurnoDeVoz> = emptyList()
 )
+
+/** Un turno de una conversación: quién, y de qué milisegundo a cuál dentro del audio entero. */
+@Serializable
+data class TurnoDeVoz(val quien: String, val desdeMs: Int, val hastaMs: Int)
 
 /** Las secciones de la cabecera, en su orden. */
 enum class Seccion { TODO, FOTOS, ARCHIVOS, VOZ, DIBUJOS, FIJADOS, BUZON }

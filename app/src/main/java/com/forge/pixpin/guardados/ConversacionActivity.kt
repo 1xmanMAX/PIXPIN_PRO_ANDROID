@@ -288,14 +288,17 @@ class ConversacionActivity : ComponentActivity() {
         // Cada turno, con su nombre y con el minuto en el que empieza dentro del audio
         // entero (los turnos van seguidos): así cada línea es un sitio al que saltar.
         val lineas = ArrayList<String>()
+        // Y quién habló cuándo, para que al volver a pasarlo a texto salgan los nombres. Ver [Mensaje.turnos].
+        val quienCuando = ArrayList<TurnoDeVoz>()
         var desdeMs = 0
         for ((i, t) in turnos.withIndex()) {
             val segmentos = transcribirUno(t.archivo)
+            val nombre = nombres[t.quien]
             if (segmentos != null) {
-                val nombre = nombres[t.quien]
                 val corridos = segmentos.map { Transcriptor.Segmento(desdeMs + it.desdeMs, it.texto) }
                 lineas += Transcriptor.conTiempos(corridos, prefijo = "**$nombre:** ")
             }
+            quienCuando += TurnoDeVoz(nombre, desdeMs, desdeMs + t.ms)
             desdeMs += t.ms
             avance((i + 1).toFloat() / turnos.size)
         }
@@ -317,7 +320,8 @@ class ConversacionActivity : ComponentActivity() {
                                 lineas.size < turnos.size -> TEXTO_CON_AVISOS
                                 else -> TEXTO_BIEN
                             },
-                            hojaDelTexto = hoja
+                            hojaDelTexto = hoja,
+                            turnos = quienCuando
                         ),
                         transcribir = false
                     )

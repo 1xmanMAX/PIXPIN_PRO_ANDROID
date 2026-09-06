@@ -45,6 +45,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Hearing
 import kotlinx.coroutines.flow.drop
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -1506,6 +1507,26 @@ class MensajesActivity : ComponentActivity() {
                     ) {
                         eligiendoQue = false
                         ConversacionActivity.abrir(this@MensajesActivity, chatDe)
+                    }
+                    // **Leer en voz alta y practicar la pronunciación.** El teleprónter va al
+                    // revés que una nota de voz: primero el texto, después la voz, y el texto
+                    // queda con sus minutos. Pronunciar es hablar, oírse y repetir, con una
+                    // guía delante. Ver [TelepronterActivity] y [PronunciarActivity].
+                    BotonDeAdjuntar(
+                        Icons.Filled.Subtitles,
+                        com.forge.pixpin.R.string.guardados_adj_telepronter,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        TelepronterActivity.abrir(this@MensajesActivity, chatDe)
+                    }
+                    BotonDeAdjuntar(
+                        Icons.Filled.Hearing,
+                        com.forge.pixpin.R.string.guardados_adj_pronunciar,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        PronunciarActivity.abrir(this@MensajesActivity, chatDe)
                     }
                     // Las mini-apps: cosas que se llevan la cuenta solas —lo que falta
                     // por hacer, lo que se lleva gastado— y que en una conversación con

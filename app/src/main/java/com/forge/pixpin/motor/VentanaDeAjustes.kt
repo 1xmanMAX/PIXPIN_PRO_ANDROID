@@ -776,7 +776,10 @@ fun DialogoDeFuncionesWeb(
         onDismissRequest = onCerrar,
         title = { Text("Página web") },
         text = {
-            Column {
+            // **Se puede bajar.** Con nueve interruptores y dos filas de opciones, en un
+            // teléfono la columna se salía del diálogo y las opciones del audio quedaban
+            // tapadas, sin forma de llegar a ellas (lo reportó el usuario el 6-sep-2026).
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     if (soloMirar) "Solo para mirar: quien la abra no podrá dibujar encima."
                     else "Quien la abra podrá usar lo que marques.",

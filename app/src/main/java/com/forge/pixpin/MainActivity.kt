@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
@@ -374,6 +375,20 @@ fun TarjetaDeConfiguracion(
             }
 
             Spacer(Modifier.height(12.dp))
+            // **La puerta a Mensajes guardados**, grande y aquí: estaba como un icono en la
+            // cabecera de los proyectos y ese hueco lo ocupa ahora la caja de exportar. Esta
+            // tarjeta es la portada, y es donde uno la busca. Lo pidió el usuario (6-sep-2026).
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    context.startActivity(Intent(context, com.forge.pixpin.guardados.MensajesActivity::class.java))
+                },
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Icon(Icons.Filled.BookmarkBorder, contentDescription = null, Modifier.size(20.dp))
+                Text(stringResource(R.string.guardados_titulo), modifier = Modifier.padding(start = 8.dp))
+            }
+
+            Spacer(Modifier.height(8.dp))
             // Ya no hace falta un botón de «Proyectos»: se está en ellos, a una
             // deslizada de aquí. Queda la puerta a los ajustes, que sigue siendo otra
             // pantalla porque son cuarenta interruptores y no una tarjeta.
@@ -905,6 +920,7 @@ private fun ModoNocheCard() {
  * puede bajar desde aquí sin esperar al primer audio. Ver [com.forge.pixpin.guardados.MotorVosk]
  * y [com.forge.pixpin.guardados.MotorWhisper].
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MotorDeVozCard() {
     val context = LocalContext.current
@@ -913,15 +929,17 @@ private fun MotorDeVozCard() {
     val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
     var descargando by remember { mutableStateOf<Pair<String, Float>?>(null) }
     var version by remember { mutableStateOf(0) }
-    val idioma = java.util.Locale.getDefault().toLanguageTag()
-    val voskListo = remember(version) { com.forge.pixpin.guardados.MotorVosk.modeloListo(context, idioma) }
-    val whisperListo = remember(version) { com.forge.pixpin.guardados.MotorWhisper.modeloListo(context) }
+    val delTelefono = java.util.Locale.getDefault().toLanguageTag()
+    val idioma = settings.idiomaDeVoz.ifBlank { delTelefono }
+    val modeloWhisper = settings.modeloWhisper.takeIf { it in com.forge.pixpin.guardados.MotorWhisper.MODELOS } ?: com.forge.pixpin.guardados.MotorWhisper.MODELO_POR_DEFECTO
+    val voskListo = remember(version, idioma) { com.forge.pixpin.guardados.MotorVosk.modeloListo(context, idioma) }
+    val whisperListo = remember(version, modeloWhisper) { com.forge.pixpin.guardados.MotorWhisper.modeloListo(context, modeloWhisper) }
     val googleDisponible = remember { com.forge.pixpin.guardados.MotorGoogle.disponible(context) }
     fun bajar(motor: String) {
         descargando = motor to 0f
         Thread {
             val ok = if (motor == com.forge.pixpin.data.MOTOR_WHISPER)
-                com.forge.pixpin.guardados.MotorWhisper.asegurarModelo(context) { descargando = motor to it } != null
+                com.forge.pixpin.guardados.MotorWhisper.asegurarModelo(context, modeloWhisper) { descargando = motor to it } != null
             else com.forge.pixpin.guardados.MotorVosk.asegurarModelo(context, idioma) { descargando = motor to it } != null
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 descargando = null; version++
@@ -997,14 +1015,14 @@ private fun MotorDeVozCard() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             for ((motor, texto, listo) in listOf(
-                Triple(com.forge.pixpin.data.MOTOR_VOSK, R.string.motor_voz_vosk, voskListo),
-                Triple(com.forge.pixpin.data.MOTOR_WHISPER, R.string.motor_voz_whisper, whisperListo)
+                Triple(com.forge.pixpin.data.MOTOR_VOSK, stringResource(R.string.motor_voz_vosk), voskListo),
+                Triple(com.forge.pixpin.data.MOTOR_WHISPER, stringResource(R.string.motor_voz_whisper, modeloWhisper, com.forge.pixpin.guardados.MotorWhisper.MODELOS[modeloWhisper] ?: 0), whisperListo)
             )) {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.FilterChip(
                         selected = settings.motorDeVoz == motor,
                         onClick = { scope.launch { app.settings.setMotorDeVoz(motor) } },
-                        label = { Text(stringResource(texto)) }
+                        label = { Text(texto) }
                     )
                     Spacer(Modifier.width(10.dp))
                     val enCurso = descargando?.takeIf { it.first == motor }
@@ -1023,14 +1041,80 @@ private fun MotorDeVozCard() {
                     }
                 }
             }
+            // **El tamaño de Whisper**: tiny, base o small. Cada uno se baja aparte.
+            Text(stringResource(R.string.motor_voz_tamano_whisper), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((nombre, peso) in com.forge.pixpin.guardados.MotorWhisper.MODELOS) {
+                    val bajado = remember(version) { com.forge.pixpin.guardados.MotorWhisper.modeloListo(context, nombre) }
+                    androidx.compose.material3.FilterChip(
+                        selected = modeloWhisper == nombre,
+                        onClick = { scope.launch { app.settings.setModeloWhisper(nombre) } },
+                        label = { Text(if (bajado) "$nombre ✓" else "$nombre ($peso MB)") }
+                    )
+                }
+            }
+            // **En qué idioma se habla**, y un segundo para Whisper. Ver Settings.idiomaDeVoz.
+            Text(stringResource(R.string.motor_voz_idioma), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.material3.FilterChip(
+                    selected = settings.idiomaDeVoz.isBlank(),
+                    onClick = { scope.launch { app.settings.setIdiomaDeVoz("") } },
+                    label = { Text(stringResource(R.string.motor_voz_idioma_telefono, delTelefono)) }
+                )
+                for ((codigo, nombre) in IDIOMAS_DE_VOZ) {
+                    androidx.compose.material3.FilterChip(
+                        selected = settings.idiomaDeVoz == codigo,
+                        onClick = { scope.launch { app.settings.setIdiomaDeVoz(codigo) } },
+                        label = { Text(nombre) }
+                    )
+                }
+            }
+            Text(stringResource(R.string.motor_voz_segundo_idioma), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                androidx.compose.material3.FilterChip(
+                    selected = settings.segundoIdiomaDeVoz.isBlank(),
+                    onClick = { scope.launch { app.settings.setSegundoIdiomaDeVoz("") } },
+                    label = { Text(stringResource(R.string.motor_voz_segundo_ninguno)) }
+                )
+                for ((codigo, nombre) in IDIOMAS_DE_VOZ) {
+                    if (codigo == idioma.substringBefore('-').lowercase()) continue
+                    androidx.compose.material3.FilterChip(
+                        selected = settings.segundoIdiomaDeVoz == codigo,
+                        onClick = { scope.launch { app.settings.setSegundoIdiomaDeVoz(codigo) } },
+                        label = { Text(nombre) }
+                    )
+                }
+            }
+            // **Con dos idiomas, qué hace Whisper**: cada trozo en el suyo, o todo en el primero (traducido).
+            if (settings.segundoIdiomaDeVoz.isNotBlank()) {
+                Text(stringResource(R.string.motor_voz_modo_idiomas), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for ((modo, texto) in listOf(
+                        com.forge.pixpin.data.MODO_CADA_IDIOMA to R.string.motor_voz_modo_cada_uno,
+                        com.forge.pixpin.data.MODO_TODO_EN_UNO to R.string.motor_voz_modo_todo_en_uno
+                    )) {
+                        androidx.compose.material3.FilterChip(
+                            selected = settings.modoDeIdiomas == modo,
+                            onClick = { scope.launch { app.settings.setModoDeIdiomas(modo) } },
+                            label = { Text(stringResource(texto, IDIOMAS_DE_VOZ.firstOrNull { it.first == idioma.substringBefore('-').lowercase() }?.second ?: idioma)) }
+                        )
+                    }
+                }
+            }
             // Los enlaces de los modelos, para bajarlos con el navegador e importarlos.
             TextButton(onClick = { abrir(com.forge.pixpin.guardados.MotorVosk.enlaceDelModelo(idioma)) }) { Text(stringResource(R.string.motor_voz_enlace_vosk)) }
-            TextButton(onClick = { com.forge.pixpin.guardados.MotorWhisper.enlaces().forEach { abrir(it) } }) { Text(stringResource(R.string.motor_voz_enlace_whisper)) }
+            TextButton(onClick = { com.forge.pixpin.guardados.MotorWhisper.enlaces(modeloWhisper).forEach { abrir(it) } }) { Text(stringResource(R.string.motor_voz_enlace_whisper, modeloWhisper)) }
             TextButton(onClick = { importar.launch(arrayOf("*/*")) }) { Text(stringResource(R.string.motor_voz_importar)) }
             TextButton(onClick = { abrir("https://alphacephei.com/vosk/models") }) { Text(stringResource(R.string.motor_voz_enlace)) }
         }
     }
 }
+
+/** Los idiomas que se ofrecen para los audios: los que tienen modelo pequeño de Vosk (y Whisper los entiende todos). */
+private val IDIOMAS_DE_VOZ = listOf(
+    "es" to "Español", "en" to "Inglés", "pt" to "Portugués", "fr" to "Francés",
+    "de" to "Alemán", "it" to "Italiano", "ca" to "Catalán"
+)
 
 @Composable
 private fun OledCard() {

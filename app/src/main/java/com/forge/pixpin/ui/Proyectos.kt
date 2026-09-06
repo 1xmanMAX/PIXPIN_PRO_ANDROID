@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -284,20 +283,35 @@ fun PantallaDeProyectos(
                 // aún no lo ha arrancado —o lo tiene parado— se quedaría sin forma de
                 // entrar a lo que tiene guardado. Aquí cuesta un icono y no se puede dar
                 // el caso de un cajón al que no se llega.
-                if (soloEste == null) {
-                    IconButton(onClick = {
-                        contexto.startActivity(
-                            android.content.Intent(
-                                contexto,
-                                com.forge.pixpin.guardados.MensajesActivity::class.java
-                            )
+                // **La caja de exportar, aquí arriba y una sola.** Estaba en el pie de cada
+                // tarjeta, y al marcar hojas de dos proyectos salían dos cajas iguales, una
+                // por tarjeta, como si fueran dos exportaciones distintas. Arriba solo hay
+                // una, sale en cuanto hay algo marcado —de este proyecto o de varios— y
+                // «Soltar» suelta todo. La puerta a Mensajes guardados, que vivía en este
+                // hueco, bajó a la tarjeta de inicio. Lo pidió el usuario (6-sep-2026).
+                val cuantasMarcadas = marcado.values.sumOf { it.size }
+                if (cuantasMarcadas > 0) {
+                    CajaDeAcciones(stringResourceSafe(R.string.proyecto_exportar_n, cuantasMarcadas)) {
+                        BotonDeAccion(
+                            Icons.Filled.Language, R.string.proyecto_web_corto, R.string.proyecto_exportar_web,
+                            ancho = ANCHO_EN_CAJA, onClick = { pidiendoFuncionesWeb = true }
                         )
-                    }) {
-                        Icon(
-                            Icons.Filled.BookmarkBorder,
-                            contentDescription = stringResourceSafe(R.string.guardados_titulo)
+                        BotonDeAccion(
+                            Icons.Filled.Share, R.string.proyecto_pdf_corto, R.string.proyecto_exportar,
+                            ancho = ANCHO_EN_CAJA, onClick = { exportando = true }
+                        )
+                        // El `.pixpin` es de un proyecto entero: el primero con algo marcado.
+                        BotonDeAccion(
+                            Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete,
+                            ancho = ANCHO_EN_CAJA, onClick = { exportandoPaquete = marcado.keys.firstOrNull() }
                         )
                     }
+                    Spacer(Modifier.weight(1f))
+                    BotonDeAccion(
+                        Icons.Filled.Close, R.string.proyecto_desmarcar_corto, R.string.proyecto_desmarcar,
+                        onClick = { marcado = emptyMap() }
+                    )
+                    return@Row
                 }
                 Text(
                     // Con un solo proyecto a la vista, el título es su nombre: decir
@@ -448,7 +462,6 @@ fun PantallaDeProyectos(
                     onExportar = { exportando = true },
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = unico.id },
-                    onDesmarcar = { marcado = marcado - unico.id },
                     modifier = Modifier.fillMaxSize().padding(10.dp)
                 )
                 return@Column
@@ -504,7 +517,6 @@ fun PantallaDeProyectos(
                     onExportar = { exportando = true },
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = p.id },
-                    onDesmarcar = { marcado = marcado - p.id },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -557,10 +569,10 @@ private fun PaginaDeProyecto(
     enPrimerPlano: Boolean,
     marcadas: Set<String>,
     onMarcar: (String) -> Unit,
+    /** Los del menú de la tarjeta («exportar todo»); la caja de lo marcado está en la cabecera. */
     onExportar: () -> Unit,
     onExportarWeb: () -> Unit,
     onExportarPaquete: () -> Unit = {},
-    onDesmarcar: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val contexto = LocalContext.current
@@ -821,16 +833,7 @@ private fun PaginaDeProyecto(
                 val pie: @Composable () -> Unit = {
 
                 Spacer(Modifier.height(6.dp))
-                BarraDeAcciones(
-                    app = app,
-                    p = p,
-                    marcadas = marcadas.size,
-                    onChat = alChat,
-                    onExportar = onExportar,
-                    onExportarWeb = onExportarWeb,
-                    onExportarPaquete = onExportarPaquete,
-                    onDesmarcar = onDesmarcar
-                )
+                BarraDeAcciones(app = app, p = p, onChat = alChat)
                 }
                 if (apaisado) {
                     Row(Modifier.fillMaxSize()) {
@@ -1004,43 +1007,17 @@ private fun PistaDeChat(desplazamiento: Animatable<Float, AnimationVector1D>) {
 private fun BarraDeAcciones(
     app: PixPinApp,
     p: Proyecto,
-    marcadas: Int,
-    onChat: () -> Unit,
-    onExportar: () -> Unit,
-    onExportarWeb: () -> Unit,
-    /** El proyecto entero como `.pixpin`, para seguir editándolo en otro aparato. */
-    onExportarPaquete: () -> Unit = {},
-    /** Suelta todo lo marcado de este proyecto. */
-    onDesmarcar: () -> Unit = {}
+    onChat: () -> Unit
 ) {
+    // Exportar ya no va aquí: la caja de exportar es una sola y está en la cabecera de
+    // la pantalla (ver `PantallaDeProyectos`), para que marcar hojas de dos proyectos no
+    // saque dos cajas.
     val contexto = LocalContext.current
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        if (marcadas > 0) {
-            CajaDeAcciones(stringResourceSafe(R.string.proyecto_exportar_n, marcadas)) {
-                BotonDeAccion(
-                    Icons.Filled.Language, R.string.proyecto_web_corto, R.string.proyecto_exportar_web,
-                    ancho = ANCHO_EN_CAJA, onClick = onExportarWeb
-                )
-                BotonDeAccion(
-                    Icons.Filled.Share, R.string.proyecto_pdf_corto, R.string.proyecto_exportar,
-                    ancho = ANCHO_EN_CAJA, onClick = onExportar
-                )
-                BotonDeAccion(
-                    Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete,
-                    ancho = ANCHO_EN_CAJA, onClick = onExportarPaquete
-                )
-            }
-            Spacer(Modifier.weight(1f))
-            BotonDeAccion(
-                Icons.Filled.Close, R.string.proyecto_desmarcar_corto, R.string.proyecto_desmarcar,
-                onClick = onDesmarcar
-            )
-            return@Row
-        }
         BotonDeAccion(
             Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onClick = onChat
         )

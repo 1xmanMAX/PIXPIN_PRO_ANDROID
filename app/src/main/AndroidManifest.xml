@@ -287,6 +287,18 @@
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
 
+        <!-- Leer un texto en voz alta mientras baja solo, grabándose. Ver TelepronterActivity. -->
+        <activity
+            android:name=".guardados.TelepronterActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.PixPin" />
+        <!-- Hablar, oírse y repetir, con una guía delante. Ver PronunciarActivity. -->
+        <activity
+            android:name=".guardados.PronunciarActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.PixPin" />
         <!-- Una conversación por turnos: un micrófono por persona. Ver ConversacionActivity. -->
         <activity
             android:name=".guardados.ConversacionActivity"

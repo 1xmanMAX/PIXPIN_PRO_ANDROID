@@ -62,7 +62,7 @@ class MensajesStore(private val context: Context) {
     }
 
     /** Añade uno. Es una línea al final del archivo: no toca lo que ya había. */
-    fun anadir(mensaje: Mensaje, transcribir: Boolean = true) {
+    fun anadir(mensaje: Mensaje, transcribir: Boolean = true, idioma: String? = null) {
         // **Lo que entra en el chat de un proyecto entra en el proyecto.** Una foto de la
         // obra o el PDF del cliente se guardan en la conversación del proyecto porque es lo
         // que está a mano, y de ahí a las hojas iba un menú: ahora van solos, como hoja, sin
@@ -84,7 +84,7 @@ class MensajesStore(private val context: Context) {
         }
         if (seUne) unirAlProyecto(apuntado)
         // **Una nota de voz se pasa a texto** en cuanto se guarda. Ver [transcribir].
-        if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null && !apuntado.esMusica) transcribir(apuntado)
+        if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null && !apuntado.esMusica) transcribir(apuntado, idioma)
         cambios.value = cambios.value + 1
     }
 
@@ -97,7 +97,7 @@ class MensajesStore(private val context: Context) {
      * con el audio adjunto. Antes salía como una nota aparte que contestaba al audio y no
      * se podía abrir ni se leía entera (lo reportó el usuario el 5-sep-2026).
      */
-    fun transcribir(m: Mensaje) {
+    fun transcribir(m: Mensaje, idioma: String? = null) {
         val ruta = m.ruta ?: return
         if (!Transcriptor.disponible(context)) {
             // Se dice por qué, una vez: sin el reconocedor en el dispositivo no hay texto.
@@ -106,13 +106,16 @@ class MensajesStore(private val context: Context) {
             return
         }
         ponerAvance(m.id, 0f)
-        Transcriptor.transcribir(context, File(ruta), avance = { ponerAvance(m.id, it) }) { r ->
+        // [idioma] solo lo pone quien practica otro idioma (ver `PronunciarActivity`); si no, el de Ajustes.
+        // Una conversación por turnos se reconoce turno a turno, con el nombre delante de cada uno.
+        val tramos = m.turnos.map { Transcriptor.Tramo(it.desdeMs, it.hastaMs, "**${it.quien}:** ") }.ifEmpty { null }
+        Transcriptor.transcribir(context, File(ruta), idioma = idioma, avance = { ponerAvance(m.id, it) }, tramos = tramos) { r ->
             Thread {
                 when (r) {
                     is Transcriptor.Resultado.Texto -> {
                         val cuando = System.currentTimeMillis()
                         // Con sus tiempos: cada párrafo dice en qué minuto va, y se salta ahí.
-                        val texto = if (r.segmentos.isEmpty()) r.texto else Transcriptor.conTiempos(r.segmentos)
+                        val texto = r.porParrafos ?: if (r.segmentos.isEmpty()) r.texto else Transcriptor.conTiempos(r.segmentos)
                         val hoja = apuntarTranscripcion(
                             titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
                             cuerpo = texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando

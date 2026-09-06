@@ -37,7 +37,22 @@ object Transcriptor {
     fun disponible(context: Context): Boolean = true
 
     /** Si el modelo del idioma ya está en el aparato (si no, se baja la primera vez). */
-    fun enLocal(context: Context): Boolean = MotorVosk.modeloListo(context, Locale.getDefault().toLanguageTag())
+    fun enLocal(context: Context): Boolean = MotorVosk.modeloListo(context, idiomaElegido(context))
+
+    private fun ajustes(context: Context) = (context.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes
+
+    /**
+     * **En qué idioma se habla**: el que eligió el usuario en Ajustes («es», «en»…) o, si
+     * no eligió, el del teléfono («es-PE»). Los tres motores parten de aquí.
+     */
+    fun idiomaElegido(context: Context): String =
+        ajustes(context)?.idiomaDeVoz?.takeIf { it.isNotBlank() } ?: Locale.getDefault().toLanguageTag()
+
+    /** El segundo idioma para Whisper, o vacío. Ver [com.forge.pixpin.data.Settings.segundoIdiomaDeVoz]. */
+    fun segundoIdioma(context: Context): String = ajustes(context)?.segundoIdiomaDeVoz.orEmpty()
+
+    /** Si Whisper tiene que ponerlo todo en el primer idioma. Ver [com.forge.pixpin.data.Settings.modoDeIdiomas]. */
+    fun todoEnUno(context: Context): Boolean = ajustes(context)?.modoDeIdiomas == com.forge.pixpin.data.MODO_TODO_EN_UNO
 
     /** Un trozo de texto y en qué milisegundo del audio empieza. */
     class Segmento(val desdeMs: Int, val texto: String)
@@ -90,7 +105,11 @@ object Transcriptor {
          * [avisos]: cuántos trozos no se entendieron; con alguno, el texto tiene huecos.
          * [segmentos]: el texto por trozos, cada uno con en qué milisegundo del audio empieza.
          */
-        class Texto(val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList()) : Resultado()
+        class Texto(
+            val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList(),
+            /** El texto ya puesto por párrafos con su minuto y, por tramos, con su nombre delante. Null: se arma con [conTiempos]. */
+            val porParrafos: String? = null
+        ) : Resultado()
         /** El modelo del idioma no está en el aparato y no se pudo bajar (sin red). */
         object DescargandoIdioma : Resultado()
         class Fallo(val codigo: Int, val detalle: String? = null) : Resultado()
@@ -108,21 +127,29 @@ object Transcriptor {
     const val FALLO_INTERNO = -9
 
     /**
+     * Un trozo del audio que se reconoce por su cuenta: de qué milisegundo a cuál, y qué
+     * va delante de su texto (`**Ana:** `). Son los turnos de una conversación.
+     */
+    class Tramo(val desdeMs: Int, val hastaMs: Int, val prefijo: String = "")
+
+    /**
      * Transcribe [archivo] y llama a [alTerminar] en el hilo principal. Puede llamarse
      * desde cualquier hilo. [avance] recibe, de 0 a 1, cuánto lleva: el primer tercio es
-     * bajar el modelo si faltaba, el resto es reconocer.
+     * bajar el modelo si faltaba, el resto es reconocer. Con [tramos], cada uno se
+     * reconoce aparte y sale con su prefijo y sus minutos (los del audio entero).
      */
     fun transcribir(
         context: Context,
         archivo: File,
-        idioma: String = Locale.getDefault().toLanguageTag(),
+        idioma: String? = null,
         avance: (Float) -> Unit = {},
+        tramos: List<Tramo>? = null,
         alTerminar: (Resultado) -> Unit
     ) {
         val principal = Handler(Looper.getMainLooper())
         val app = context.applicationContext
         Thread {
-            val r = runCatching { transcribirAqui(app, archivo, idioma, avance) }.getOrElse { e ->
+            val r = runCatching { transcribirAqui(app, archivo, idioma ?: idiomaElegido(app), avance, tramos) }.getOrElse { e ->
                 android.util.Log.e("PixPinVoz", "transcribir: " + e, e)
                 Resultado.Fallo(if (e is UnsatisfiedLinkError || e is NoClassDefFoundError) SIN_MOTOR else FALLO_INTERNO, resumenDe(e))
             }
@@ -134,7 +161,7 @@ object Transcriptor {
     fun resumenDe(e: Throwable): String = (e::class.java.simpleName + ": " + (e.message ?: "")).take(140)
 
     /** Lo mismo, en este hilo: decodificar, bajar el modelo si falta, reconocer. */
-    fun transcribirAqui(context: Context, archivo: File, idioma: String, avance: (Float) -> Unit): Resultado {
+    fun transcribirAqui(context: Context, archivo: File, idioma: String, avance: (Float) -> Unit, tramos: List<Tramo>? = null): Resultado {
         val pcm = File(context.cacheDir, "pcm-${System.nanoTime()}.raw")
         try {
             // Primero con el decodificador que elija el sistema; si falla o no da nada, con
@@ -150,7 +177,58 @@ object Transcriptor {
             if (pcm.length() <= 0) return Resultado.Fallo(NO_SE_LEE, "sin pista de audio en " + archivo.name)
             avance(0.05f)
             // **El motor que haya elegido el usuario** en Ajustes: Google, Vosk o Whisper.
-            val motor = (context.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_VOSK
+            // **Por tramos**: cada uno a su archivo PCM, se reconoce solo, y sus minutos se
+            // corren a los del audio entero. Así una conversación vuelve a salir con nombres.
+            if (!tramos.isNullOrEmpty()) {
+                val lineas = ArrayList<String>()
+                val todos = ArrayList<Segmento>()
+                var vacios = 0
+                for ((k, t) in tramos.withIndex()) {
+                    val trozo = File(context.cacheDir, "pcm-tramo-${System.nanoTime()}.raw")
+                    try {
+                        copiarTramo(pcm, trozo, t.desdeMs, t.hastaMs)
+                        val parte = (k.toFloat() / tramos.size) to ((k + 1).toFloat() / tramos.size)
+                        val r = reconocerPcm(context, trozo, idioma) { avance(0.1f + 0.9f * (parte.first + (parte.second - parte.first) * it)) }
+                        if (r !is Resultado.Texto) { if (r is Resultado.Fallo && r.codigo == NADA) { vacios++; continue } else return r }
+                        val corridos = r.segmentos.map { Segmento(t.desdeMs + it.desdeMs, it.texto) }
+                        todos += corridos
+                        lineas += conTiempos(corridos, prefijo = t.prefijo)
+                    } finally {
+                        trozo.delete()
+                    }
+                }
+                if (todos.isEmpty()) return Resultado.Fallo(NADA)
+                return Resultado.Texto(todos.joinToString(" ") { it.texto }, vacios, todos, porParrafos = lineas.joinToString("\n\n"))
+            }
+            return reconocerPcm(context, pcm, idioma, avance)
+        } finally {
+            pcm.delete()
+        }
+    }
+
+    /** Los bytes de [desdeMs] a [hastaMs] de un PCM (16 bits, mono, [HERCIOS]) a otro archivo. */
+    private fun copiarTramo(pcm: File, destino: File, desdeMs: Int, hastaMs: Int) {
+        val total = pcm.length()
+        val desde = (desdeMs.toLong() * BYTES_POR_SEGUNDO / 1000 and 1L.inv()).coerceIn(0, total)
+        val hasta = (hastaMs.toLong() * BYTES_POR_SEGUNDO / 1000 and 1L.inv()).coerceIn(desde, total)
+        RandomAccessFile(pcm, "r").use { raf ->
+            destino.outputStream().buffered().use { out ->
+                raf.seek(desde)
+                var quedan = hasta - desde
+                val buf = ByteArray(64 * 1024)
+                while (quedan > 0) {
+                    val n = raf.read(buf, 0, minOf(buf.size.toLong(), quedan).toInt())
+                    if (n <= 0) break
+                    out.write(buf, 0, n); quedan -= n
+                }
+            }
+        }
+    }
+
+    /** Un PCM entero por el motor que haya elegido el usuario: Google, Vosk o Whisper. */
+    private fun reconocerPcm(context: Context, pcm: File, idioma: String, avance: (Float) -> Unit): Resultado {
+        run {
+            val motor = ajustes(context)?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_VOSK
             val segmentos = if (motor == com.forge.pixpin.data.MOTOR_GOOGLE) {
                 if (!MotorGoogle.disponible(context)) return Resultado.Fallo(SIN_MOTOR, "Google: hace falta Android 13 y su reconocimiento en el dispositivo")
                 val etiqueta = when (val i = MotorGoogle.idiomaInstalado(context, idioma)) {
@@ -165,7 +243,7 @@ object Transcriptor {
                 if (!MotorWhisper.modeloListo(context)) {
                     MotorWhisper.asegurarModelo(context) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
                 }
-                MotorWhisper.reconocer(context, pcm, idioma) { avance(0.35f + 0.65f * it) }
+                MotorWhisper.reconocer(context, pcm, idioma, segundoIdioma(context), todoEnUno(context)) { avance(0.35f + 0.65f * it) }
             } else {
                 if (!MotorVosk.modeloListo(context, idioma)) {
                     MotorVosk.asegurarModelo(context, idioma) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
@@ -174,12 +252,78 @@ object Transcriptor {
             } ?: return Resultado.DescargandoIdioma
             if (segmentos.isEmpty()) return Resultado.Fallo(NADA)
             return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, segmentos)
-        } finally {
-            pcm.delete()
         }
     }
 
     // ---- Cortes por frases (para quien quiera trocear un PCM; Vosk no los necesita) ----
+
+    /**
+     * **Frases seguidas juntas en tandas de hasta [segundos]**, cada tanda un tramo
+     * contiguo de audio (de donde empieza su primera frase a donde acaba la última, con
+     * las pausas de en medio). A Whisper y a Google les va mejor un tramo largo que una
+     * frase suelta: Whisper rellena cada trozo hasta diez segundos de silencio y con
+     * trozos de dos segundos se pasaba la vida rellenando —y con tan poco contexto
+     * inventaba—, y Google abre una sesión por tramo, que cuesta lo suyo. Una frase que
+     * por sí sola pase de [segundos] va sola.
+     */
+    internal fun agrupar(trozos: List<LongRange>, segundos: Int): List<List<LongRange>> {
+        val tope = segundos.toLong() * BYTES_POR_SEGUNDO
+        val salida = ArrayList<List<LongRange>>()
+        var tanda = ArrayList<LongRange>()
+        for (t in trozos) {
+            if (tanda.isNotEmpty() && t.last - tanda.first().first + 1 > tope) { salida += tanda; tanda = ArrayList() }
+            tanda += t
+        }
+        if (tanda.isNotEmpty()) salida += tanda
+        return salida
+    }
+
+    /** El milisegundo en que empieza un tramo (bytes de PCM de 16 bits a [HERCIOS]). */
+    internal fun msDe(byte: Long): Int = (byte * 1000 / BYTES_POR_SEGUNDO).toInt()
+
+    private val JUNK = listOf(
+        // Lo que Whisper suelta cuando no oye nada: los créditos de subtítulos con que se entrenó.
+        "subtítulos realizados por", "subtitulos realizados por", "amara.org", "subtítulos por", "gracias por ver",
+        "suscríbete", "suscribete", "thanks for watching", "thank you for watching"
+    )
+
+    /**
+     * **Si un trozo de texto parece de verdad** y no una invención del modelo. Whisper,
+     * cuando le llega ruido o un silencio, se saca frases de la nada: en otros alfabetos
+     * (chino, cirílico, árabe…) aunque se le haya dicho el idioma, o los «Subtítulos
+     * realizados por la comunidad de Amara.org» de los vídeos con que se entrenó. Para un
+     * idioma de alfabeto latino, se tira lo que traiga letras de otro alfabeto, lo que sea
+     * una de esas coletillas, y lo que repita la misma palabra sin parar.
+     */
+    internal fun creible(texto: String, idioma: String): Boolean {
+        val t = texto.trim()
+        if (t.isEmpty()) return false
+        val lengua = idioma.substringBefore('-').lowercase()
+        if (lengua in LATINOS) {
+            var letras = 0; var raras = 0
+            for (c in t) {
+                if (!c.isLetter()) continue
+                letras++
+                val b = Character.UnicodeScript.of(c.code)
+                if (b != Character.UnicodeScript.LATIN && b != Character.UnicodeScript.COMMON) raras++
+            }
+            if (raras > 0 && raras * 5 >= letras) return false
+        }
+        val bajo = t.lowercase()
+        if (JUNK.any { bajo.contains(it) }) return false
+        // «no no no no no no no no»: la misma palabra ocho veces seguidas o más.
+        val palabras = bajo.split(' ').filter { it.isNotEmpty() }
+        if (palabras.size >= 8) {
+            var seguidas = 1
+            for (i in 1 until palabras.size) {
+                seguidas = if (palabras[i] == palabras[i - 1]) seguidas + 1 else 1
+                if (seguidas >= 8) return false
+            }
+        }
+        return true
+    }
+
+    private val LATINOS = setOf("es", "en", "pt", "fr", "de", "it", "ca", "nl", "pl", "ro", "sv", "da", "no", "fi", "cs", "hu", "tr", "id", "ms", "vi", "eu", "gl")
 
     private const val TROZO_SEGUNDOS = 8
     private const val BUSQUEDA_SEGUNDOS = 4
