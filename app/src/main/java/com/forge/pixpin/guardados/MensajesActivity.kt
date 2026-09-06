@@ -4927,7 +4927,7 @@ class MensajesActivity : ComponentActivity() {
             if (archivo == null) avisarDeQueNoHay() else {
                 Toast.makeText(this@MensajesActivity, com.forge.pixpin.ui.ExportarWebDe.resumenDe(archivo, calidadDeAudio), Toast.LENGTH_LONG).show()
                 // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-                com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(this@MensajesActivity, archivo, nombreDeLoCompartido(m))
+                compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
             }
         }
     }
@@ -4963,20 +4963,11 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
+    // **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
     private fun compartirArchivo(archivo: File, tipo: String) {
-        runCatching {
-            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", archivo)
-            startActivity(
-                Intent.createChooser(
-                    Intent(Intent.ACTION_SEND).apply {
-                        type = tipo
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    },
-                    null
-                )
-            )
-        }
+        com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
+            this, archivo, archivo.name.substringBeforeLast('.'), tipo
+        )
     }
 
     /** Abrir: cada clase se abre donde vive. Un dibujo en el lienzo, un PDF en su visor. */

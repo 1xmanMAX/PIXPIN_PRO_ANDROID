@@ -424,7 +424,7 @@ fun PantallaDeProyectos(
                         val calidad = ExportarHtml.calidadDeAudio(app.settings.settings.first().funcionesWeb)
                         android.widget.Toast.makeText(contexto, ExportarWebDe.resumenDe(archivo, calidad), android.widget.Toast.LENGTH_LONG).show()
                         // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-                        CompartirEnlaceActivity.abrir(contexto, archivo, archivo.name.removeSuffix(".html"))
+                        compartir(contexto, archivo, ExportarHtml.MIME_TYPE)
                     }
                 }
             }
@@ -1988,20 +1988,9 @@ internal fun imagenIncrustada(ruta: String): String? = runCatching {
 }.getOrNull()
 
 /** Manda el archivo a donde el usuario elija. */
+// **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
 private fun compartir(contexto: android.content.Context, archivo: java.io.File, tipo: String) {
-    runCatching {
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            contexto, "${contexto.packageName}.fileprovider", archivo
-        )
-        val intent = android.content.Intent(android.content.Intent.ACTION_SEND)
-            .setType(tipo)
-            .putExtra(android.content.Intent.EXTRA_STREAM, uri)
-            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        contexto.startActivity(
-            android.content.Intent.createChooser(intent, archivo.name)
-                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
+    CompartirEnlaceActivity.abrir(contexto, archivo, archivo.name.substringBeforeLast('.'), tipo)
 }
 
 /**

@@ -179,7 +179,7 @@ data class Settings(
 
     /**
      * Con qué servicio se subió la última página compartida como enlace, para ofrecerlo
-     * marcado la próxima vez. Ver [com.forge.pixpin.motor.SubirPagina].
+     * marcado la próxima vez. Ver [com.forge.pixpin.motor.SubirArchivo].
      */
     val servicioDeEnlace: String = "",
 

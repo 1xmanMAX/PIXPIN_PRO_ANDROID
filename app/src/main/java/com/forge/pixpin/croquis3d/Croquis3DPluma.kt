@@ -103,7 +103,11 @@ fun DrawScope.pintarTrazoPluma(
     if (n < 2) return false
 
     val punta = trazo.punta
-    if (punta.tienePerfil || punta.tieneDibujo || punta.trama != Trama.NINGUNA || punta.deCanto) {
+    // **La trama ya no cae al camino viejo.** Caía, y por eso una tinta con textura se
+    // dibujaba «de otra forma» que la lisa: otro cuerpo, otra silueta y otro grano (lo
+    // reportó el usuario el 6-sep-2026). Ahora el cuerpo es EL MISMO que el de la lisa —la
+    // sección barrida— y el grano se estampa encima. Ver [estamparTrama].
+    if (punta.tienePerfil || punta.tieneDibujo || punta.deCanto) {
         return false
     }
     val esLuz = trazo.pincel == Pincel.LUZ
@@ -155,8 +159,115 @@ fun DrawScope.pintarTrazoPluma(
     // verdad) pero ningún vértice se mueve: las uniones no pueden temblar, porque no hay
     // nada en ellas que se recalcule.
     barrerSeccion(trazo, esqueleto, base, luz, delAncho, cuantos, b)
+    // Y el grano encima, si la tinta lo lleva: la tinta es la misma, con textura dentro.
+    if (punta.trama.hayQuePintarla) {
+        estamparTrama(esqueleto, b, n, seccionDe(trazo.pincel).size / 2, punta.trama, delAncho, tinta, alfa)
+    }
     return true
 }
+
+/**
+ * **El grano de una tinta tramada, alrededor de la tinta entera.**
+ *
+ * El cuerpo ya está pintado y es el de la tinta lisa: esto solo estampa la marca encima. Y
+ * la marca es **el propio anillo de la sección**, proyectado cada cierto trecho del
+ * recorrido: como el anillo da la vuelta completa a la sección barrida, el grano rodea la
+ * tinta por todos lados en vez de quedarse en una cara —que es lo que pidió el usuario
+ * (6-sep-2026)—, y como sale de la geometría que ya está en el mundo, se escorza y gira con
+ * el trazo sin recortar nada contra la silueta: un anillo cae exactamente sobre el tubo.
+ *
+ * - **Rayado**: los anillos, y nada más. Es la sección cortada.
+ * - **Cruzado**: los anillos más dos líneas a lo largo. Con los anillos solos se ve un
+ *   peine; lo que dice «esto está en sombra» es la retícula.
+ * - **Puntos**: en vez de cerrar el anillo, una gota en un vértice que va rotando, para que
+ *   salga un punteado repartido y no una fila de puntos por el mismo sitio.
+ *
+ * El paso y el grueso salen del ancho del trazo, así que son tantas marcas por ancho se
+ * mire de cerca o de lejos; por debajo de [LO_QUE_YA_SE_TRAMA_PLUMA] en pantalla no se
+ * estampa nada, porque entre dos marcas ya no cabe tinta.
+ */
+private fun DrawScope.estamparTrama(
+    esqueleto: EsqueletoDelTrazo,
+    b: BorradorDePluma,
+    n: Int,
+    k: Int,
+    trama: Trama,
+    delAncho: Double,
+    tinta: Int,
+    alfa: Int
+) {
+    if (n < 2 || k < 3) return
+    val p = b.anillosPantalla
+    // Lo ancho que se ve: entre dos vértices opuestos del anillo de en medio.
+    val medio = n / 2
+    val opuesto = k / 2
+    val ax = p[(medio) * 2]; val ay = p[(medio) * 2 + 1]
+    val bx = p[(opuesto * n + medio) * 2]; val by = p[(opuesto * n + medio) * 2 + 1]
+    val anchoPx = hypot(bx - ax, by - ay)
+    if (anchoPx < LO_QUE_YA_SE_TRAMA_PLUMA.dp.toPx()) return
+
+    var suma = 0.0
+    for (i in 0 until n) suma += esqueleto.anchos[i]
+    val anchoMundo = (suma / n) * delAncho
+    if (anchoMundo <= 0.0) return
+    val paso = anchoMundo * PASO_DE_LA_TRAMA
+    val pelo = (anchoPx * GRUESO_DE_LA_TRAMA).toFloat().coerceAtLeast(1f)
+    val tono = Color(aclaradoDePluma(tinta, -HONDO_DE_LA_TRAMA, alfa))
+
+    val recorrido = esqueleto.recorrido
+    val camino = b.camino
+    camino.rewind()
+    var siguiente = recorrido[0] + paso
+    var cuantas = 0
+    var cual = 0
+    for (i in 1 until n) {
+        if (cuantas >= MARCAS_DE_SOBRA_PLUMA) break
+        if (recorrido[i] < siguiente) continue
+        siguiente = recorrido[i] + paso
+        cuantas++
+        if (trama == Trama.PUNTOS) {
+            // La gota va rotando de vértice: repartida por toda la vuelta.
+            val j = (cual++ * 3) % k
+            val o = (j * n + i) * 2
+            camino.addOval(
+                androidx.compose.ui.geometry.Rect(
+                    androidx.compose.ui.geometry.Offset(p[o].toFloat(), p[o + 1].toFloat()),
+                    pelo * 1.4f
+                )
+            )
+            continue
+        }
+        // El anillo entero: la vuelta completa a la sección.
+        var o = i * 2
+        camino.moveTo(p[o].toFloat(), p[o + 1].toFloat())
+        for (j in 1 until k) {
+            o = (j * n + i) * 2
+            camino.lineTo(p[o].toFloat(), p[o + 1].toFloat())
+        }
+        camino.close()
+    }
+    if (trama == Trama.PUNTOS) {
+        drawPath(camino, tono)
+        return
+    }
+    drawPath(camino, tono, style = androidx.compose.ui.graphics.drawscope.Stroke(width = pelo))
+    if (trama != Trama.CRUZADO) return
+    // Las dos de a lo largo: dos aristas opuestas del barrido, de punta a punta.
+    camino.rewind()
+    for (j in intArrayOf(0, k / 2)) {
+        for (i in 0 until n) {
+            val o = (j * n + i) * 2
+            if (i == 0) camino.moveTo(p[o].toFloat(), p[o + 1].toFloat())
+            else camino.lineTo(p[o].toFloat(), p[o + 1].toFloat())
+        }
+    }
+    drawPath(camino, tono, style = androidx.compose.ui.graphics.drawscope.Stroke(width = pelo))
+}
+
+/** Por debajo de este ancho en pantalla no se trama: entre dos marcas ya no cabe tinta. */
+private const val LO_QUE_YA_SE_TRAMA_PLUMA = 5.0
+/** El tope de marcas por trazo y fotograma: más allá, el grano ya no dice nada más. */
+private const val MARCAS_DE_SOBRA_PLUMA = 400
 
 /**
  * **El barrido de la sección**: los anillos en el mundo, las caras por su normal, y las

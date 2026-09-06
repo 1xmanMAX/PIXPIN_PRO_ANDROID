@@ -60,7 +60,16 @@ fun anchosDelMundo(
     calibre: Double,
     presiones: DoubleArray?,
     recorrido: DoubleArray,
-    tiempos: DoubleArray?
+    tiempos: DoubleArray?,
+    /**
+     * Si cada punta es **el final de verdad** del trazo. Un trazo que se está haciendo se
+     * pinta por trozos —una cabeza asentada y una cola viva, ver `ElTrazoAsentado`— y el
+     * corte entre los dos no es una punta: afilarlo dejaba el trazo a menos de la mitad de
+     * ancho justo en su mitad, y el usuario lo veía como «en el centro parece otra tinta
+     * más pequeña» (6-sep-2026).
+     */
+    afilaElPrincipio: Boolean = true,
+    afilaElFinal: Boolean = true
 ): DoubleArray {
     val n = recorrido.size
     if (n == 0) return DoubleArray(0)
@@ -153,7 +162,9 @@ fun anchosDelMundo(
         }
         // Y las dos puntas se afilan: es donde la mano posa y levanta, y un
         // trazo que acaba en un tajo recto no parece hecho a mano.
-        val delBorde = minOf(i, n - 1 - i)
+        val delPrincipio = if (afilaElPrincipio) i else Int.MAX_VALUE
+        val delFinal = if (afilaElFinal) n - 1 - i else Int.MAX_VALUE
+        val delBorde = minOf(delPrincipio, delFinal)
         if (delBorde < PUNTAS_QUE_SE_AFILAN) {
             val cuanto = (delBorde + 1.0) / (PUNTAS_QUE_SE_AFILAN + 1.0)
             suyo *= AFILADO + (1.0 - AFILADO) * cuanto

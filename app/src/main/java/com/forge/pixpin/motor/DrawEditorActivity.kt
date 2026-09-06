@@ -3574,15 +3574,6 @@ class DrawEditorActivity : ComponentActivity() {
      * nada al tocarlo».
      */
     private fun exportando(mime: String, escribir: suspend () -> File?) {
-        exportandoCon(mime, escribir, comoEnlace = mime == ExportarHtml.MIME_TYPE)
-    }
-
-    /**
-     * Escribe el archivo y lo comparte. Con [comoEnlace], en vez del selector de siempre se
-     * abre la pantalla que deja elegir entre archivo y enlace: una página web se mira, y por
-     * un enlace se mira sin bajar nada. Ver `ui.CompartirEnlaceActivity`.
-     */
-    private fun exportandoCon(mime: String, escribir: suspend () -> File?, comoEnlace: Boolean) {
         if (exportando) return
         exportando = true
         lifecycleScope.launch {
@@ -3596,13 +3587,7 @@ class DrawEditorActivity : ComponentActivity() {
                 ).show()
                 return@launch
             }
-            if (comoEnlace) {
-                com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
-                    this@DrawEditorActivity, archivo, archivo.name.removeSuffix(".html")
-                )
-            } else {
-                compartirArchivo(archivo, mime)
-            }
+            compartirArchivo(archivo, mime)
         }
     }
 
@@ -3617,22 +3602,11 @@ class DrawEditorActivity : ComponentActivity() {
     private var exportando by mutableStateOf(false)
 
     /** Manda un archivo ya escrito en `cache/share`, que es lo que ve el proveedor. */
+    // **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
     private fun compartirArchivo(archivo: File, mime: String) {
-        runCatching {
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                this, "$packageName.fileprovider", archivo
-            )
-            startActivity(
-                Intent.createChooser(
-                    Intent(Intent.ACTION_SEND).apply {
-                        type = mime
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    },
-                    getString(R.string.cd_draw_export)
-                )
-            )
-        }
+        com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
+            this, archivo, archivo.name.substringBeforeLast('.'), mime
+        )
     }
 
     /**

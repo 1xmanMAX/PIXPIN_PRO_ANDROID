@@ -5,11 +5,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * **Compartir una página como enlace, no como archivo.**
+ * **Compartir un archivo como enlace, no como archivo.**
  *
- * Mandar un `.html` por WhatsApp es incómodo: llega como documento, hay que bajarlo y
- * abrirlo a mano, y muchas aplicaciones ni lo enseñan. Un enlace se toca y se ve. Por eso
- * la misma página se puede subir a un servicio de archivos temporales y compartir su
+ * Mandar un `.html` o un PDF por WhatsApp es incómodo: llega como documento, hay que
+ * bajarlo y abrirlo a mano, y muchas aplicaciones ni lo enseñan. Un enlace se toca y se
+ * abre. Por eso cualquier cosa que se comparta —la página web, el PDF, el `.pixpin`, el
+ * OBJ, una foto— se puede subir a un servicio de archivos temporales y mandar su
  * dirección. Lo pidió el usuario (6-sep-2026).
  *
  * ## Lo que hay que tener claro
@@ -17,19 +18,34 @@ import java.net.URL
  * Esto es **lo único de toda la aplicación que manda algo fuera del teléfono**, y solo
  * cuando se pulsa el botón. El archivo se sube a un servicio público de otra gente:
  * **cualquiera con el enlace puede abrirlo** mientras dure, así que no vale para algo
- * privado. Los servicios no son nuestros y pueden caerse o cerrar; por eso hay varios y,
- * si el elegido falla, se prueban los demás ([conReserva]).
+ * privado. Los servicios no son nuestros y pueden caerse; por eso hay más de uno y, si el
+ * elegido falla, se prueban los demás ([conReserva]).
  *
- * ## Por qué estos y no otros
+ * ## Solo lo que el servicio publica
  *
- * Para que el enlace **se vea como página** —y no se descargue— el servicio tiene que
- * servir el archivo con `Content-Type: text/html` y sin obligar a descargar. Se probaron
- * los conocidos (6-sep-2026) y casi ninguno vale: `uguu.se` y `qu.ax` rechazan el HTML,
- * `x0.at` lo sirve como texto plano —se ve el código—, `0x0.st` tiene las subidas
- * cerradas, `tmpfiles.org` no sirve el archivo, `temp.sh` da una página con un botón, y
- * `pomf.lain.la`, `transfer.sh` y `file.io` ya no están. Quedan estos tres.
+ * Lo que la aplicación dice que dura un enlace tiene que ser **lo que el servicio dice que
+ * dura**, no lo que a nosotros nos parezca. Comprobado en sus propias páginas el
+ * 6-sep-2026:
+ *
+ * - **litterbox** — «Temporary uploads up to 1 GB are allowed. Expire after: 1 Hour,
+ *   12 Hours, 1 Day, 3 Days». Es el bueno: cuatro duraciones, todas cortas, y sirve el
+ *   archivo con su tipo, así que un `.html` se abre **como página**.
+ * - **temp.sh** — «Files expire after 3 days», hasta 4 GB. Sirve de reserva y para lo que
+ *   no cabe en el otro; a cambio su enlace abre **una página con un botón de descarga**,
+ *   así que un `.html` no se ve, se baja.
+ *
+ * Y los que se dejaron fuera, por lo mismo: **catbox** guarda «until they have 2 years of
+ * inactivity» —eso no es un enlace temporal— y **kappa.lol** no dice en ninguna parte
+ * cuánto lo guarda, solo que puede borrarlo cuando quiera; prometer una duración que el
+ * servicio no promete es informar mal.
+ *
+ * ## Lo que no admiten
+ *
+ * Los dos de catbox rechazan `.exe`, `.scr`, `.cpl`, `.doc*` y `.jar`. Nada de lo que
+ * exporta PixPin está en esa lista (comprobado con `.html`, `.pdf`, `.pixpin` y `.apk`).
  */
-object SubirPagina {
+object SubirArchivo {
+
 
     /**
      * Un sitio donde dejar la página. [caduca] es lo que se le dice al usuario, con sus
@@ -41,6 +57,12 @@ object SubirPagina {
         val caduca: String,
         /** Lo más grande que admite, en MB. */
         val topeMb: Int,
+        /**
+         * Si su enlace abre **el archivo** con su tipo. Con `false` abre una página con un
+         * botón de descarga, que para un PDF da igual pero para una página web no: lo que
+         * se quería enseñar hay que bajarlo primero.
+         */
+        val abreElArchivo: Boolean,
         internal val url: String,
         internal val campo: String,
         internal val extras: List<Pair<String, String>> = emptyList()
@@ -50,24 +72,25 @@ object SubirPagina {
 
     /**
      * Los sitios, en el orden en que se ofrecen y en el que se prueban. Primero lo que
-     * caduca antes: un croquis compartido en un chat se mira en el momento, y lo que no
+     * caduca antes: algo que se comparte en un chat se mira en el momento, y lo que no
      * dura no se queda por ahí.
      */
     val SERVICIOS: List<Servicio> = listOf(
-        Servicio("litter1h", "Enlace de 1 hora", "se borra en 1 hora", 1000, LITTERBOX, "fileToUpload",
+        Servicio("litter1h", "1 hora", "se borra en 1 hora", 1000, true, LITTERBOX, "fileToUpload",
             listOf("reqtype" to "fileupload", "time" to "1h")),
-        Servicio("litter12h", "Enlace de 12 horas", "se borra en 12 horas", 1000, LITTERBOX, "fileToUpload",
+        Servicio("litter12h", "12 horas", "se borra en 12 horas", 1000, true, LITTERBOX, "fileToUpload",
             listOf("reqtype" to "fileupload", "time" to "12h")),
-        Servicio("litter24h", "Enlace de 1 día", "se borra en 24 horas", 1000, LITTERBOX, "fileToUpload",
+        Servicio("litter24h", "1 día", "se borra en 24 horas", 1000, true, LITTERBOX, "fileToUpload",
             listOf("reqtype" to "fileupload", "time" to "24h")),
-        Servicio("litter72h", "Enlace de 3 días", "se borra en 3 días", 1000, LITTERBOX, "fileToUpload",
+        Servicio("litter72h", "3 días", "se borra en 3 días", 1000, true, LITTERBOX, "fileToUpload",
             listOf("reqtype" to "fileupload", "time" to "72h")),
-        Servicio("kappa", "Enlace sin caducidad", "no se borra solo", 100, "https://kappa.lol/api/upload", "file"),
-        Servicio("catbox", "Enlace permanente", "no se borra solo", 200,
-            "https://catbox.moe/user/api.php", "fileToUpload", listOf("reqtype" to "fileupload"))
+        // La reserva: dura lo mismo que la más larga, admite cuatro veces más, y a cambio
+        // su enlace abre una página con un botón en vez del archivo.
+        Servicio("tempsh", "3 días · otro servicio", "se borra en 3 días", 4000, false,
+            "https://temp.sh/upload", "file")
     )
 
-    /** El que se ofrece marcado: una hora es lo que dura mirar un croquis que te mandan. */
+    /** El que se ofrece marcado: una hora es lo que dura mirar algo que te mandan. */
     val POR_DEFECTO: Servicio = SERVICIOS.first()
 
     fun porId(id: String?): Servicio = SERVICIOS.firstOrNull { it.id == id } ?: POR_DEFECTO
@@ -85,7 +108,10 @@ object SubirPagina {
      * Sube [archivo] a [servicio] y devuelve su enlace. Bloquea: hilo de fondo. [avance] va
      * de 0 a 1 con lo que lleva subido.
      */
-    fun subir(servicio: Servicio, archivo: File, nombre: String, avance: (Float) -> Unit = {}): Resultado {
+    fun subir(
+        servicio: Servicio, archivo: File, nombre: String, mime: String,
+        avance: (Float) -> Unit = {}
+    ): Resultado {
         if (!archivo.exists() || archivo.length() == 0L) return Resultado.Fallo("no hay nada que subir")
         if (!cabe(servicio, archivo.length())) {
             return Resultado.Fallo("pesa ${archivo.length() / 1_000_000} MB y ${servicio.nombre.lowercase()} admite ${servicio.topeMb}")
@@ -99,8 +125,8 @@ object SubirPagina {
         }
         cabeza.append("--").append(frontera).append("\r\n")
             .append("Content-Disposition: form-data; name=\"").append(servicio.campo)
-            .append("\"; filename=\"").append(sano(nombre)).append("\"\r\n")
-            .append("Content-Type: text/html\r\n\r\n")
+            .append("\"; filename=\"").append(sano(nombre, archivo.extension)).append("\"\r\n")
+            .append("Content-Type: ").append(mime.ifBlank { "application/octet-stream" }).append("\r\n\r\n")
         val cola = "\r\n--$frontera--\r\n"
         val cabezaBytes = cabeza.toString().toByteArray()
         val colaBytes = cola.toByteArray()
@@ -154,15 +180,21 @@ object SubirPagina {
         preferido: Servicio,
         archivo: File,
         nombre: String,
+        mime: String,
         avance: (Float) -> Unit = {},
         alProbar: (Servicio) -> Unit = {}
     ): Resultado {
-        val cola = listOf(preferido) + SERVICIOS.filter { it.id != preferido.id }
+        // Con una página web, los que la abren van antes que los que la hacen bajar: la
+        // gracia del enlace era no tener que bajar nada.
+        val esPagina = mime == ExportarHtml.MIME_TYPE
+        val demas = SERVICIOS.filter { it.id != preferido.id }
+            .sortedByDescending { if (esPagina && it.abreElArchivo) 1 else 0 }
+        val cola = listOf(preferido) + demas
         var ultimo = "no se pudo subir"
         for (s in cola) {
             if (!cabe(s, archivo.length())) continue
             alProbar(s)
-            when (val r = subir(s, archivo, nombre, avance)) {
+            when (val r = subir(s, archivo, nombre, mime, avance)) {
                 is Resultado.Enlace -> return r
                 is Resultado.Fallo -> ultimo = r.motivo
             }
@@ -201,10 +233,14 @@ object SubirPagina {
             else -> (e::class.java.simpleName + ": " + (e.message ?: "")).take(120)
         }
 
-    /** Un nombre de archivo que no rompa la cabecera del multipart. */
-    internal fun sano(nombre: String): String {
+    /**
+     * Un nombre de archivo que no rompa la cabecera del multipart, **con su extensión**:
+     * varios de estos servicios deciden por ella con qué tipo sirven el archivo después.
+     */
+    internal fun sano(nombre: String, extension: String): String {
         // Una tanda seguida de caracteres prohibidos es **un** guion, no uno por letra.
-        val base = nombre.replace(Regex("[\\\\/:*?\"<>|\r\n]+"), "-").trim().ifBlank { "pagina" }
-        return if (base.endsWith(".html", true)) base else "$base.html"
+        val base = nombre.replace(Regex("[\\\\/:*?\"<>|\r\n]+"), "-").trim().ifBlank { "archivo" }
+        val ext = extension.removePrefix(".").lowercase()
+        return if (ext.isBlank() || base.endsWith(".$ext", true)) base else "$base.$ext"
     }
 }

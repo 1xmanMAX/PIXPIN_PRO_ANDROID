@@ -754,8 +754,7 @@ fun Croquis3DLienzo(
                     val laPlumaPuede = pincel.vigente != Pincel.LUZ && !punta.alumbra &&
                         !punta.plana &&
                         tiemposEnCurso.size == n && n in 2..TOPE_EN_LA_MANO &&
-                        !punta.tienePerfil && !punta.tieneDibujo &&
-                        punta.trama == Trama.NINGUNA && !punta.deCanto
+                        !punta.tienePerfil && !punta.tieneDibujo && !punta.deCanto
                     fun trozoVivo(desde: Int, hasta: Int, id: String) = Trazo3D(
                         id = id, puntos = trazoEnCurso.subList(desde, hasta), color = color,
                         grosor = grosor, pincel = pincel, calibre = grosor,
@@ -782,7 +781,10 @@ fun Croquis3DLienzo(
                             if (elAsentado.hayQueRepintar(cabezaHasta, camara, w, h)) {
                                 val lienzo = elAsentado.lienzoDe(w.toInt(), h.toInt())
                                 val cabeza = trozoVivo(0, cabezaHasta, "@mano-cabeza")
-                                val esqueletoDeLaCabeza = cocerEsqueleto(cabeza)
+                                // **La cabeza no acaba aquí**: el corte con la cola no es una
+                                // punta, así que ni se afila ni se cierra en domo. Sin esto el
+                                // trazo se estrechaba a menos de la mitad justo en su mitad.
+                                val esqueletoDeLaCabeza = cocerEsqueleto(cabeza, esPuntaN = false)
                                 var pintada = false
                                 elAsentado.brocha.draw(
                                     Density(density, fontScale), layoutDirection,
@@ -805,7 +807,9 @@ fun Croquis3DLienzo(
                         // de una y otra quedan tapadas por el cuerpo de la otra.
                         val desde = (cabezaHasta - SOLAPE_DE_LA_MANO).coerceAtLeast(0)
                         val cola = trozoVivo(desde, n, "@mano")
-                        val esqueletoDeLaCola = cocerEsqueleto(cola)
+                        // Y la cola no empieza: empezó la cabeza. Solo su final es punta —la
+                        // que va siguiendo al dedo—, y esa sí se afila.
+                        val esqueletoDeLaCola = cocerEsqueleto(cola, esPunta0 = desde == 0)
                         laPintoLaPluma = cabezaBien && esqueletoDeLaCola != null &&
                             pintarTrazoPluma(cola, esqueletoDeLaCola, base, luzMundo, false)
                     }

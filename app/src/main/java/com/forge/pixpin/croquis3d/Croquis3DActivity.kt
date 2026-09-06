@@ -112,6 +112,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -545,6 +547,9 @@ class Croquis3DActivity : ComponentActivity() {
                 // mientras no haya cuatro dedos: así trazar y girar la vista siguen igual.
                 modifier = Modifier
                     .fillMaxSize()
+                    // Dónde cae el lienzo en la ventana: es lo que se fotografía como portada
+                    // de la página exportada. Ver [portadaDelLienzo].
+                    .onGloballyPositioned { rectDelLienzo = it.boundsInWindow() }
                     .elToqueDeCuatroDedos(
                         alJuntarse = {
                             // El primer dedo llega unas milésimas antes que los otros tres,
@@ -2033,24 +2038,49 @@ class Croquis3DActivity : ComponentActivity() {
             Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
             return
         }
-        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", archivo)
-        startActivity(
-            android.content.Intent.createChooser(
-                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE
-                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                },
-                getString(R.string.croquis_exportar_paquete)
-            )
+        // **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
+        com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
+            this, archivo, elCroquis, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE
         )
     }
 
+    /** Dónde está el lienzo dentro de la ventana, para la portada de la página exportada. */
+    private var rectDelLienzo: androidx.compose.ui.geometry.Rect? = null
+
+    /**
+     * **La portada de la página web**: una foto del lienzo tal como se ve ahora, en JPEG y
+     * a lo sumo [LADO_DE_LA_PORTADA] de lado, para que el archivo enseñe el croquis al
+     * instante mientras el navegador compila el visor. Se saca con `PixelCopy` de la ventana,
+     * recortada al lienzo; si falla, la página va sin portada, que no es grave.
+     */
+    private fun portadaDelLienzo(luego: (String?) -> Unit) {
+        val r = rectDelLienzo
+        if (r == null || r.width < 8 || r.height < 8) { luego(null); return }
+        runCatching {
+            val escala = (LADO_DE_LA_PORTADA / maxOf(r.width, r.height)).coerceAtMost(1f)
+            val w = (r.width * escala).toInt().coerceAtLeast(1)
+            val h = (r.height * escala).toInt().coerceAtLeast(1)
+            val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            val zona = android.graphics.Rect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
+            android.view.PixelCopy.request(window, zona, bmp, { resultado ->
+                if (resultado != android.view.PixelCopy.SUCCESS) { luego(null); return@request }
+                val salida = java.io.ByteArrayOutputStream()
+                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, CALIDAD_DE_LA_PORTADA, salida)
+                bmp.recycle()
+                luego("data:image/jpeg;base64," + android.util.Base64.encodeToString(salida.toByteArray(), android.util.Base64.NO_WRAP))
+            }, android.os.Handler(android.os.Looper.getMainLooper()))
+        }.onFailure { luego(null) }
+    }
+
     private fun exportarLaPagina() {
+        portadaDelLienzo { portada -> exportarLaPaginaCon(portada) }
+    }
+
+    private fun exportarLaPaginaCon(portada: String?) {
         // Las imágenes puestas en el espacio viajan dentro del archivo: sin eso, el croquis
         // exportado sale sin sus texturas. Ver [ExportarCroquisHtml.datos].
         val html = ExportarCroquisHtml.pagina(
-            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora
+            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada
         )
         if (html == null) {
             Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
@@ -2060,7 +2090,7 @@ class Croquis3DActivity : ComponentActivity() {
             val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
             val archivo = java.io.File(carpeta, "$elCroquis.html").also { it.writeText(html) }
             // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-            com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(this, archivo, elCroquis)
+            com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(this, archivo, elCroquis, ExportarCroquisHtml.MIME_TYPE)
             Toast.makeText(
                 this,
                 getString(R.string.croquis_pagina_exportada, html.length / 1024),
@@ -3034,4 +3064,7 @@ private val RECORRIDO_DE_LA_LUZ = 180f
  * megapíxeles— es de dos órdenes de magnitud. Lo que se comparte tiene que abrirse deprisa.
  */
 private const val MAX_LADO_DE_LA_TEXTURA = 1024
+/** La portada de la página exportada: de lado, y su calidad JPEG. Unos 60-120 KB. */
+private const val LADO_DE_LA_PORTADA = 900f
+private const val CALIDAD_DE_LA_PORTADA = 62
 private const val CALIDAD_DE_LA_TEXTURA = 82

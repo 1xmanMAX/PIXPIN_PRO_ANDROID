@@ -56,7 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.forge.pixpin.R
-import com.forge.pixpin.motor.SubirPagina
+import com.forge.pixpin.motor.SubirArchivo
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -64,11 +64,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * **Compartir la página: como archivo o como enlace.**
+ * **Compartir: como archivo o como enlace.**
  *
  * Mandar un `.html` llega como documento —hay que bajarlo y abrirlo a mano, y muchas
  * aplicaciones ni lo enseñan—. Un enlace se toca y se ve. Aquí se elige una cosa o la otra,
- * y con qué servicio y cuánto dura. Lo pidió el usuario (6-sep-2026). Ver [SubirPagina].
+ * y con qué servicio y cuánto dura. Lo pidió el usuario (6-sep-2026). Ver [SubirArchivo].
  *
  * **Subir es lo único que manda algo fuera del teléfono**, y por eso se dice con todas las
  * letras antes de tocar nada: el archivo va a un servicio público de otra gente y cualquiera
@@ -77,18 +77,20 @@ import java.io.File
 class CompartirEnlaceActivity : ComponentActivity() {
 
     private lateinit var archivo: File
+    private lateinit var mime: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         archivo = File(intent.getStringExtra(EL_ARCHIVO).orEmpty())
+        mime = intent.getStringExtra(EL_MIME).orEmpty().ifBlank { "application/octet-stream" }
         if (!archivo.exists()) { finish(); return }
         setContent { PixPinTheme { Pantalla(intent.getStringExtra(EL_TITULO).orEmpty()) } }
     }
 
     private sealed class Paso {
         object Elegir : Paso()
-        class Subiendo(val servicio: SubirPagina.Servicio) : Paso()
-        class Listo(val url: String, val servicio: SubirPagina.Servicio) : Paso()
+        class Subiendo(val servicio: SubirArchivo.Servicio) : Paso()
+        class Listo(val url: String, val servicio: SubirArchivo.Servicio) : Paso()
         class Mal(val motivo: String) : Paso()
     }
 
@@ -97,7 +99,7 @@ class CompartirEnlaceActivity : ComponentActivity() {
         val alcance = rememberCoroutineScope()
         val app = applicationContext as? com.forge.pixpin.PixPinApp
         var paso by remember { mutableStateOf<Paso>(Paso.Elegir) }
-        var servicio by remember { mutableStateOf(SubirPagina.porId(app?.ajustes?.servicioDeEnlace)) }
+        var servicio by remember { mutableStateOf(SubirArchivo.porId(app?.ajustes?.servicioDeEnlace)) }
         var avance by remember { mutableFloatStateOf(0f) }
         val megas = remember { archivo.length() / 1_000_000.0 }
 
@@ -106,15 +108,15 @@ class CompartirEnlaceActivity : ComponentActivity() {
             alcance.launch { app?.settings?.setServicioDeEnlace(servicio.id) }
             alcance.launch {
                 val r = withContext(Dispatchers.IO) {
-                    SubirPagina.conReserva(
-                        servicio, archivo, titulo.ifBlank { archivo.name },
+                    SubirArchivo.conReserva(
+                        servicio, archivo, titulo.ifBlank { archivo.name }, mime,
                         avance = { avance = it },
                         alProbar = { s -> paso = Paso.Subiendo(s) }
                     )
                 }
                 paso = when (r) {
-                    is SubirPagina.Resultado.Enlace -> Paso.Listo(r.url, r.servicio)
-                    is SubirPagina.Resultado.Fallo -> Paso.Mal(r.motivo)
+                    is SubirArchivo.Resultado.Enlace -> Paso.Listo(r.url, r.servicio)
+                    is SubirArchivo.Resultado.Fallo -> Paso.Mal(r.motivo)
                 }
             }
         }
@@ -156,8 +158,8 @@ class CompartirEnlaceActivity : ComponentActivity() {
 
     @Composable
     private fun Elegir(
-        elegido: SubirPagina.Servicio,
-        alElegir: (SubirPagina.Servicio) -> Unit,
+        elegido: SubirArchivo.Servicio,
+        alElegir: (SubirArchivo.Servicio) -> Unit,
         bytes: Long,
         comoArchivo: () -> Unit,
         comoEnlace: () -> Unit
@@ -205,8 +207,8 @@ class CompartirEnlaceActivity : ComponentActivity() {
             )
         }
         Spacer(Modifier.height(10.dp))
-        for (s in SubirPagina.SERVICIOS) {
-            val cabe = SubirPagina.cabe(s, bytes)
+        for (s in SubirArchivo.SERVICIOS) {
+            val cabe = SubirArchivo.cabe(s, bytes)
             Row(
                 Modifier.fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
@@ -222,19 +224,28 @@ class CompartirEnlaceActivity : ComponentActivity() {
                         style = MaterialTheme.typography.bodySmall,
                         color = if (cabe) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error
                     )
+                    // Con una página web importa: hay servicios cuyo enlace la hace bajar
+                    // en vez de abrirla, y entonces el enlace no ahorra nada.
+                    if (cabe && !s.abreElArchivo && mime == com.forge.pixpin.motor.ExportarHtml.MIME_TYPE) {
+                        Text(
+                            getString(R.string.enlace_se_baja),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = comoEnlace,
-            enabled = SubirPagina.cabe(elegido, bytes),
+            enabled = SubirArchivo.cabe(elegido, bytes),
             modifier = Modifier.fillMaxWidth().height(50.dp)
         ) { Text(getString(R.string.enlace_subir)) }
     }
 
     @Composable
-    private fun Subiendo(servicio: SubirPagina.Servicio, avance: Float) {
+    private fun Subiendo(servicio: SubirArchivo.Servicio, avance: Float) {
         Column(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
             Text(
@@ -253,7 +264,7 @@ class CompartirEnlaceActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Listo(url: String, servicio: SubirPagina.Servicio) {
+    private fun Listo(url: String, servicio: SubirArchivo.Servicio) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Text(
@@ -330,7 +341,7 @@ class CompartirEnlaceActivity : ComponentActivity() {
             startActivity(
                 Intent.createChooser(
                     Intent(Intent.ACTION_SEND)
-                        .setType(com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
+                        .setType(mime)
                         .putExtra(Intent.EXTRA_STREAM, uri)
                         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
                     null
@@ -343,13 +354,15 @@ class CompartirEnlaceActivity : ComponentActivity() {
     companion object {
         private const val EL_ARCHIVO = "enlace_archivo"
         private const val EL_TITULO = "enlace_titulo"
+        private const val EL_MIME = "enlace_mime"
 
-        /** La pantalla de compartir para una página ya escrita en disco. */
-        fun abrir(context: Context, archivo: File, titulo: String) {
+        /** La pantalla de compartir para cualquier archivo ya escrito en disco. */
+        fun abrir(context: Context, archivo: File, titulo: String, mime: String) {
             context.startActivity(
                 Intent(context, CompartirEnlaceActivity::class.java)
                     .putExtra(EL_ARCHIVO, archivo.absolutePath)
                     .putExtra(EL_TITULO, titulo)
+                    .putExtra(EL_MIME, mime)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }

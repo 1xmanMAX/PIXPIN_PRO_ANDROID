@@ -365,13 +365,14 @@
     <string name="pronunciar_toma">Última toma: %1$s</string>
     <string name="pronunciar_no_se_pudo">No se pudo abrir eso</string>
     <string name="pronunciar_pagina">Página %1$d de %2$d</string>
-    <string name="enlace_titulo">Compartir la página</string>
+    <string name="enlace_titulo">Compartir</string>
     <string name="enlace_pesa">Pesa %1$s MB</string>
     <string name="enlace_como_archivo">Como archivo</string>
     <string name="enlace_como_archivo_desc">No sale del teléfono. Llega como documento: hay que bajarlo y abrirlo a mano.</string>
+    <string name="enlace_se_baja">Su enlace hace bajar la página en vez de abrirla</string>
     <string name="enlace_como_enlace">Como enlace</string>
-    <string name="enlace_como_enlace_desc">Se toca y se ve, sin bajar nada. Va bien por WhatsApp o por correo.</string>
-    <string name="enlace_aviso">La página se sube a un servicio público que no es nuestro: cualquiera que tenga el enlace podrá abrirla mientras dure. No lo uses con algo privado.</string>
+    <string name="enlace_como_enlace_desc">Se toca y se abre, sin bajar nada. Va bien por WhatsApp o por correo. Todos los enlaces caducan solos.</string>
+    <string name="enlace_aviso">El archivo se sube a un servicio público que no es nuestro: cualquiera que tenga el enlace podrá abrirlo mientras dure. No lo uses con algo privado.</string>
     <string name="enlace_no_cabe">No cabe: admite %1$d MB</string>
     <string name="enlace_subir">Subir y darme el enlace</string>
     <string name="enlace_subiendo">Subiendo a «%1$s»…</string>
@@ -382,7 +383,7 @@
     <string name="enlace_abrir">Abrir</string>
     <string name="enlace_copiado">Enlace copiado</string>
     <string name="enlace_mal">No se pudo subir</string>
-    <string name="enlace_mal_desc">Se probaron todos los servicios. Puede que no haya conexión o que estén caídos: son de otra gente y se caen sin avisar. Siempre queda compartirla como archivo.</string>
+    <string name="enlace_mal_desc">Se probaron todos los servicios. Puede que no haya conexión o que estén caídos: son de otra gente y se caen sin avisar. Siempre queda compartirlo como archivo.</string>
     <string name="enlace_otra_vez">Probar otra vez</string>
     <string name="biblioteca_audio">Biblioteca de audio</string>
     <string name="biblioteca_vacia">Aún no hay audios ni música guardados.</string>
