@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 372" role="img" aria-label="El chat de notas guardadas: secciones por tipo, burbujas de foto, voz con su transcripcion, nota y PDF, el buzon de lo que llega solo, y un chat propio por proyecto">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <text x="410" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#6965DB">
+      un chat con uno mismo: guardar no pregunta nada
+    </text>
+
+    <!-- el chat -->
+    <g transform="translate(28,42)">
+      <rect x="0" y="0" width="250" height="284" rx="14" fill="none" stroke="#8B8B9E" stroke-width="1.6"/>
+      <!-- secciones -->
+      <g font-size="9">
+        <rect x="10" y="10" width="42" height="18" rx="9" fill="#6965DB" opacity="0.28"/>
+        <text x="31" y="23" text-anchor="middle" fill="#6965DB" font-weight="bold">todo</text>
+        <text x="72" y="23" text-anchor="middle">fotos</text>
+        <text x="118" y="23" text-anchor="middle">archivos</text>
+        <text x="164" y="23" text-anchor="middle">voz</text>
+        <text x="207" y="23" text-anchor="middle">buzón</text>
+      </g>
+      <text x="125" y="46" text-anchor="middle" font-size="9">martes</text>
+
+      <!-- burbuja foto -->
+      <g transform="translate(96,54)">
+        <rect x="0" y="0" width="142" height="52" rx="10" fill="#6965DB" opacity="0.16"/>
+        <rect x="8" y="8" width="52" height="36" rx="4" fill="#8B8B9E" opacity="0.45"/>
+        <path d="M14 38 l12 -14 l10 12 l8 -8 l10 10" fill="none" stroke="#ffffff" stroke-width="1.6"/>
+        <g font-size="9"><text x="68" y="22">obra, muro sur</text><text x="68" y="36" opacity="0.8">anotada</text></g>
+      </g>
+
+      <!-- burbuja voz con onda y transcripcion -->
+      <g transform="translate(96,114)">
+        <rect x="0" y="0" width="142" height="74" rx="10" fill="#6965DB" opacity="0.16"/>
+        <circle cx="20" cy="20" r="11" fill="#6965DB"/>
+        <path d="M17 15 l9 5 l-9 5 z" fill="#ffffff"/>
+        <g stroke="#6965DB" stroke-width="2" stroke-linecap="round">
+          <path d="M38 20 v-7 M44 20 v-12 M50 20 v-5 M56 20 v-10 M62 20 v-14 M68 20 v-6 M74 20 v-9 M80 20 v-4 M86 20 v-11 M92 20 v-7"/>
+        </g>
+        <g stroke="#6965DB" stroke-width="2" stroke-linecap="round" transform="translate(0,0)">
+          <path d="M38 20 v7 M44 20 v12 M50 20 v5 M56 20 v10 M62 20 v14 M68 20 v6 M74 20 v9 M80 20 v4 M86 20 v11 M92 20 v7" opacity="0.55"/>
+        </g>
+        <text x="106" y="24" font-size="9">0:14</text>
+        <rect x="8" y="42" width="126" height="24" rx="5" fill="#8B8B9E" opacity="0.16"/>
+        <g font-size="8.5" fill="#6965DB">
+          <text x="13" y="52" font-weight="bold">[0:00]</text><text x="48" y="52" fill="#8B8B9E">llama al del taller</text>
+          <text x="13" y="62" font-weight="bold">[0:07]</text><text x="48" y="62" fill="#8B8B9E">por la pieza que falta</text>
+        </g>
+      </g>
+
+      <!-- burbuja PDF -->
+      <g transform="translate(96,196)">
+        <rect x="0" y="0" width="142" height="40" rx="10" fill="#6965DB" opacity="0.16"/>
+        <rect x="10" y="8" width="20" height="24" rx="2" fill="none" stroke="#E03131" stroke-width="1.6"/>
+        <text x="20" y="25" text-anchor="middle" font-size="8" fill="#E03131" font-weight="bold">PDF</text>
+        <g font-size="9"><text x="38" y="20">plano-nave.pdf</text><text x="38" y="32" opacity="0.8">12 páginas</text></g>
+      </g>
+
+      <!-- barra de abajo -->
+      <g transform="translate(10,246)">
+        <rect x="0" y="0" width="230" height="28" rx="14" fill="none" stroke="#8B8B9E" stroke-width="1.2"/>
+        <circle cx="18" cy="14" r="7" fill="none" stroke="#8B8B9E" stroke-width="1.4"/>
+        <path d="M15 14 h6 M18 11 v6" stroke="#8B8B9E" stroke-width="1.4"/>
+        <text x="36" y="18" font-size="9" opacity="0.7">escribe, o mantén para hablar</text>
+        <circle cx="212" cy="14" r="10" fill="#E03131"/>
+        <path d="M212 9 v6 M209 12 a3 3 0 0 0 6 0" stroke="#ffffff" stroke-width="1.4" fill="none"/>
+      </g>
+      <text x="125" y="300" text-anchor="middle" font-size="11" fill="#6965DB" font-weight="bold">se manda y ya está</text>
+    </g>
+
+    <!-- lo que pasa con cada cosa -->
+    <g transform="translate(310,52)" font-size="11">
+      <text x="0" y="0" font-size="12" font-weight="bold" fill="#6965DB">y entonces, solo</text>
+
+      <g transform="translate(0,18)">
+        <rect x="0" y="0" width="220" height="52" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.1"/>
+        <text x="12" y="20" font-weight="bold" fill="#2F9E44">una nota de voz</text>
+        <text x="12" y="36" font-size="10">se pasa a texto con sus minutos</text>
+        <text x="12" y="47" font-size="10" opacity="0.8">tocar un minuto salta ahí en el audio</text>
+      </g>
+
+      <g transform="translate(0,80)">
+        <rect x="0" y="0" width="220" height="52" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.1"/>
+        <text x="12" y="20" font-weight="bold" fill="#2F9E44">en el chat de un proyecto</text>
+        <text x="12" y="36" font-size="10">la foto, el PDF y la nota entran</text>
+        <text x="12" y="47" font-size="10" opacity="0.8">solos como hojas del proyecto</text>
+      </g>
+
+      <g transform="translate(0,142)">
+        <rect x="0" y="0" width="220" height="52" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.1"/>
+        <text x="12" y="20" font-weight="bold" fill="#F08C00">lo que llega compartido</text>
+        <text x="12" y="36" font-size="10">cae en el buzón, no en la lista;</text>
+        <text x="12" y="47" font-size="10" opacity="0.8">se caduca solo si nadie lo mira</text>
+      </g>
+
+      <g transform="translate(0,204)">
+        <rect x="0" y="0" width="220" height="52" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.1"/>
+        <text x="12" y="20" font-weight="bold" fill="#1971C2">un emoji por mensaje</text>
+        <text x="12" y="36" font-size="10">se pone después, cuando ya sabes</text>
+        <text x="12" y="47" font-size="10" opacity="0.8">de qué iba: una carpeta obliga antes</text>
+      </g>
+    </g>
+
+    <!-- un chat por proyecto -->
+    <g transform="translate(566,52)">
+      <text x="0" y="0" font-size="12" font-weight="bold" fill="#6965DB">un chat por proyecto</text>
+      <g transform="translate(0,14)">
+        <rect x="0" y="0" width="224" height="40" rx="9" fill="#6965DB" opacity="0.12"/>
+        <rect x="10" y="10" width="20" height="20" rx="4" fill="#6965DB" opacity="0.5"/>
+        <text x="40" y="19" font-size="10.5" fill="#8B8B9E">General</text>
+        <text x="40" y="32" font-size="9.5" opacity="0.75">la lista de la compra, lo suelto</text>
+      </g>
+      <g transform="translate(0,62)">
+        <rect x="0" y="0" width="224" height="40" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.1"/>
+        <rect x="10" y="10" width="20" height="20" rx="4" fill="#2F9E44" opacity="0.5"/>
+        <text x="40" y="19" font-size="10.5">Nave industrial</text>
+        <text x="40" y="32" font-size="9.5" opacity="0.75">sus fotos, sus notas, su plano</text>
+      </g>
+      <g transform="translate(0,110)">
+        <rect x="0" y="0" width="224" height="40" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.1"/>
+        <rect x="10" y="10" width="20" height="20" rx="4" fill="#1971C2" opacity="0.5"/>
+        <text x="40" y="19" font-size="10.5">Reforma cocina</text>
+        <text x="40" y="32" font-size="9.5" opacity="0.75">deslizar la tarjeta del proyecto</text>
+      </g>
+      <path d="M112 158 v18" stroke="#8B8B9E" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <g transform="translate(0,178)">
+        <rect x="0" y="0" width="224" height="72" rx="9" fill="none" stroke="#6965DB" stroke-width="1.4"/>
+        <text x="112" y="20" text-anchor="middle" font-size="11" font-weight="bold" fill="#6965DB">todo se busca junto</text>
+        <text x="112" y="38" text-anchor="middle" font-size="10">por lo que pone dentro, por su emoji</text>
+        <text x="112" y="52" text-anchor="middle" font-size="10">o por el texto de una nota de voz</text>
+        <text x="112" y="66" text-anchor="middle" font-size="9" opacity="0.8">ordenado por cuándo, que es lo que recuerdas</text>
+      </g>
+    </g>
+
+    <text x="410" y="358" text-anchor="middle" font-size="11">
+      sin red y sin cuentas: el JSONL y los adjuntos viven en el almacén privado de la aplicación
+    </text>
+  </g>
+</svg>

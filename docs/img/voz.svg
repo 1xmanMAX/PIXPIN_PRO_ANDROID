@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 400" role="img" aria-label="De la voz al texto: el audio se decodifica a PCM, se corta por frases, se junta en tandas de veinte segundos y lo reconoce el motor elegido: Vosk, Whisper o el de Google">
+  <g font-family="sans-serif" fill="#8B8B9E">
+    <text x="410" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#6965DB">
+      de la voz al texto, en el teléfono y sin red
+    </text>
+
+    <!-- cadena -->
+    <g transform="translate(24,42)">
+      <!-- 1 cualquier audio -->
+      <g>
+        <rect x="0" y="0" width="118" height="76" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.3"/>
+        <text x="59" y="20" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#6965DB">cualquier audio</text>
+        <g font-size="8.5" text-anchor="middle" opacity="0.85">
+          <text x="59" y="36">.m4a · .ogg de WhatsApp</text>
+          <text x="59" y="48">.mp3 · .wav · .amr</text>
+        </g>
+      </g>
+      <path d="M122 38 h26" stroke="#8B8B9E" stroke-width="1.4" marker-end="url(#f)"/>
+
+      <!-- 2 PCM -->
+      <g transform="translate(152,0)">
+        <rect x="0" y="0" width="118" height="76" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.3"/>
+        <text x="59" y="20" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#6965DB">MediaCodec</text>
+        <g font-size="8.5" text-anchor="middle" opacity="0.85">
+          <text x="59" y="36">PCM mono a 16 kHz,</text>
+          <text x="59" y="48">que es lo que oyen todos</text>
+        </g>
+      </g>
+      <path d="M274 38 h26" stroke="#8B8B9E" stroke-width="1.4" marker-end="url(#f)"/>
+
+      <!-- 3 cortes por frases -->
+      <g transform="translate(304,0)">
+        <rect x="0" y="0" width="150" height="76" rx="9" fill="none" stroke="#8B8B9E" stroke-width="1.3"/>
+        <text x="75" y="18" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#6965DB">cortes por frases</text>
+        <g stroke="#8B8B9E" stroke-width="1.6" stroke-linecap="round" transform="translate(12,40)">
+          <path d="M0 0 v-8 M4 0 v-12 M8 0 v-5 M12 0 v-11"/>
+          <path d="M22 0 v-2 M26 0 v-1 M30 0 v-2" opacity="0.35"/>
+          <path d="M40 0 v-10 M44 0 v-14 M48 0 v-6 M52 0 v-12 M56 0 v-9"/>
+          <path d="M66 0 v-1 M70 0 v-2" opacity="0.35"/>
+          <path d="M80 0 v-7 M84 0 v-13 M88 0 v-8 M92 0 v-4"/>
+        </g>
+        <g stroke="#E03131" stroke-width="1.4" stroke-dasharray="3 2">
+          <path d="M30 26 v22"/><path d="M78 26 v22"/>
+        </g>
+        <text x="75" y="59" text-anchor="middle" font-size="8.5" opacity="0.8">se corta en cada silencio</text>
+      </g>
+      <path d="M458 38 h26" stroke="#8B8B9E" stroke-width="1.4" marker-end="url(#f)"/>
+
+      <!-- 4 tandas -->
+      <g transform="translate(488,0)">
+        <rect x="0" y="0" width="140" height="76" rx="9" fill="#6965DB" opacity="0.12"/>
+        <rect x="0" y="0" width="140" height="76" rx="9" fill="none" stroke="#6965DB" stroke-width="1.4"/>
+        <text x="70" y="18" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#6965DB">tandas de 20 s</text>
+        <g font-size="9" text-anchor="middle">
+          <text x="70" y="34">frases seguidas juntas:</text>
+          <text x="70" y="46">con más contexto</text>
+          <text x="70" y="57" opacity="0.8">acierta más y va más rápido</text>
+        </g>
+      </g>
+      <path d="M632 38 h26" stroke="#8B8B9E" stroke-width="1.4" marker-end="url(#f)"/>
+
+      <!-- 5 salida -->
+      <g transform="translate(662,0)">
+        <rect x="0" y="0" width="126" height="76" rx="9" fill="none" stroke="#2F9E44" stroke-width="1.4"/>
+        <text x="63" y="18" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#2F9E44">texto con minutos</text>
+        <g font-size="8.5">
+          <text x="10" y="34"><tspan fill="#2F9E44" font-weight="bold">[0:00]</tspan> llama al taller</text>
+          <text x="10" y="48"><tspan fill="#2F9E44" font-weight="bold">[0:07]</tspan> por la pieza</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- los tres motores -->
+    <text x="410" y="140" text-anchor="middle" font-size="12" font-weight="bold" fill="#6965DB">quién lo reconoce: se elige en Ajustes</text>
+
+    <g transform="translate(24,152)">
+      <rect x="0" y="0" width="248" height="112" rx="10" fill="none" stroke="#2F9E44" stroke-width="1.6"/>
+      <text x="16" y="24" font-size="12" font-weight="bold" fill="#2F9E44">Vosk · 38 MB</text>
+      <text x="16" y="42" font-size="10">rápido y ligero, va en cualquier móvil</text>
+      <text x="16" y="58" font-size="10">un modelo por idioma, se baja una vez</text>
+      <text x="16" y="80" font-size="10" opacity="0.8">el menos fino de los tres</text>
+      <g transform="translate(16,90)">
+        <rect x="0" y="0" width="150" height="8" rx="4" fill="#2F9E44" opacity="0.25"/>
+        <rect x="0" y="0" width="132" height="8" rx="4" fill="#2F9E44"/>
+        <text x="160" y="8" font-size="9" fill="#2F9E44">veloz</text>
+      </g>
+    </g>
+
+    <g transform="translate(286,152)">
+      <rect x="0" y="0" width="248" height="112" rx="10" fill="none" stroke="#6965DB" stroke-width="1.6"/>
+      <text x="16" y="24" font-size="12" font-weight="bold" fill="#6965DB">Whisper · tiny, base o small</text>
+      <text x="16" y="42" font-size="10">104 · 161 · 375 MB, se elige el tamaño</text>
+      <text x="16" y="58" font-size="10">entiende el habla natural y puntúa</text>
+      <text x="16" y="80" font-size="10" opacity="0.8">solo en móviles de 64 bits</text>
+      <g transform="translate(16,90)">
+        <rect x="0" y="0" width="150" height="8" rx="4" fill="#6965DB" opacity="0.25"/>
+        <rect x="0" y="0" width="66" height="8" rx="4" fill="#6965DB"/>
+        <text x="160" y="8" font-size="9" fill="#6965DB">lento</text>
+      </g>
+    </g>
+
+    <g transform="translate(548,152)">
+      <rect x="0" y="0" width="248" height="112" rx="10" fill="none" stroke="#1971C2" stroke-width="1.6"/>
+      <text x="16" y="24" font-size="12" font-weight="bold" fill="#1971C2">Google · el del teléfono</text>
+      <text x="16" y="42" font-size="10">no pesa nada: ya está instalado</text>
+      <text x="16" y="58" font-size="10">el más preciso de los tres</text>
+      <text x="16" y="80" font-size="10" opacity="0.8">pide Android 13 y su idioma bajado</text>
+      <g transform="translate(16,90)">
+        <rect x="0" y="0" width="150" height="8" rx="4" fill="#1971C2" opacity="0.25"/>
+        <rect x="0" y="0" width="96" height="8" rx="4" fill="#1971C2"/>
+        <text x="160" y="8" font-size="9" fill="#1971C2">medio</text>
+      </g>
+    </g>
+
+    <!-- el idioma -->
+    <g transform="translate(24,282)">
+      <rect x="0" y="0" width="772" height="76" rx="10" fill="#6965DB" opacity="0.08"/>
+      <rect x="0" y="0" width="772" height="76" rx="10" fill="none" stroke="#6965DB" stroke-width="1.2"/>
+      <text x="18" y="22" font-size="12" font-weight="bold" fill="#6965DB">el idioma se le dice, no se adivina</text>
+      <text x="18" y="40" font-size="10.5">con 99 idiomas sueltos, un modelo pequeño oía lenguas que no eran. Ahora se elige el idioma de los audios, y un segundo para Whisper.</text>
+      <g transform="translate(18,50)">
+        <rect x="0" y="0" width="356" height="20" rx="10" fill="#8B8B9E" opacity="0.16"/>
+        <text x="12" y="14" font-size="10"><tspan fill="#2F9E44" font-weight="bold">cada uno como se dijo</tspan> · el inglés sale en inglés</text>
+      </g>
+      <g transform="translate(392,50)">
+        <rect x="0" y="0" width="362" height="20" rx="10" fill="#8B8B9E" opacity="0.16"/>
+        <text x="12" y="14" font-size="10"><tspan fill="#F08C00" font-weight="bold">todo en uno</tspan> · lo dicho en el otro sale traducido</text>
+      </g>
+    </g>
+
+    <text x="410" y="392" text-anchor="middle" font-size="11">
+      lo que se dijo en otro alfabeto, las coletillas de subtítulos y la palabra repetida sin parar se tiran: eso no lo dijiste tú
+    </text>
+
+    <defs>
+      <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0 0 L10 5 L0 10 z" fill="#8B8B9E"/>
+      </marker>
+    </defs>
+  </g>
+</svg>
