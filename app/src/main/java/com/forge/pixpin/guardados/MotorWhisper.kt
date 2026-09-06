@@ -72,6 +72,20 @@ object MotorWhisper {
         }.getOrNull()
     }
 
+    /** Los enlaces directos de los tres archivos, para bajarlos con el navegador e importarlos. */
+    fun enlaces(): List<String> = ARCHIVOS.map { REPOSITORIO + it }
+
+    /** Un archivo del modelo bajado a mano: se guarda por su nombre si es uno de los tres. */
+    fun instalarArchivo(context: Context, nombre: String, entrada: java.io.InputStream): Boolean {
+        if (nombre !in ARCHIVOS) return false
+        return runCatching {
+            val destino = File(carpeta(context), nombre)
+            val temporal = File(carpeta(context), "$nombre.parte")
+            temporal.outputStream().use { entrada.copyTo(it) }
+            temporal.renameTo(destino) || run { temporal.copyTo(destino, overwrite = true); temporal.delete(); true }
+        }.getOrDefault(false).also { if (it) { reconocedor?.release(); reconocedor = null; idiomaCargado = null } }
+    }
+
     private fun idiomaDe(idioma: String): String = idioma.substringBefore('-').lowercase().ifBlank { "es" }
 
     private fun reconocedorPara(context: Context, idioma: String): OfflineRecognizer {

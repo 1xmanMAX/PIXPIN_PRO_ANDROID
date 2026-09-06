@@ -916,6 +916,7 @@ private fun MotorDeVozCard() {
     val idioma = java.util.Locale.getDefault().toLanguageTag()
     val voskListo = remember(version) { com.forge.pixpin.guardados.MotorVosk.modeloListo(context, idioma) }
     val whisperListo = remember(version) { com.forge.pixpin.guardados.MotorWhisper.modeloListo(context) }
+    val googleDisponible = remember { com.forge.pixpin.guardados.MotorGoogle.disponible(context) }
     fun bajar(motor: String) {
         descargando = motor to 0f
         Thread {
@@ -928,6 +929,41 @@ private fun MotorDeVozCard() {
             }
         }.start()
     }
+    fun abrir(url: String) {
+        runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+    }
+    // **Importar un modelo bajado a mano**: el zip de Vosk o los tres archivos de Whisper,
+    // elegidos con el selector del sistema. Para cuando la descarga desde la aplicación no
+    // va (red capada, otro aparato) — lo pidió el usuario (6-sep-2026).
+    val importar = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        Thread {
+            var hechos = 0
+            for (uri in uris) {
+                val nombre = runCatching {
+                    context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                        val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (i >= 0 && c.moveToFirst()) c.getString(i) else null
+                    }
+                }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+                val ok = context.contentResolver.openInputStream(uri)?.use { entrada ->
+                    when {
+                        nombre.endsWith(".zip", true) -> com.forge.pixpin.guardados.MotorVosk.instalarZip(context, entrada) != null
+                        else -> com.forge.pixpin.guardados.MotorWhisper.instalarArchivo(context, nombre, entrada)
+                    }
+                } ?: false
+                if (ok) hechos++
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                version++
+                android.widget.Toast.makeText(
+                    context, if (hechos > 0) R.string.motor_voz_importado else R.string.motor_voz_importar_no, android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }.start()
+    }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(stringResource(R.string.motor_voz_title), style = MaterialTheme.typography.titleSmall)
@@ -936,6 +972,29 @@ private fun MotorDeVozCard() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
+            )
+            // Google: el del teléfono. Ni se baja ni pesa; solo hace falta que esté.
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.FilterChip(
+                    selected = settings.motorDeVoz == com.forge.pixpin.data.MOTOR_GOOGLE,
+                    onClick = { scope.launch { app.settings.setMotorDeVoz(com.forge.pixpin.data.MOTOR_GOOGLE) } },
+                    label = { Text(stringResource(R.string.motor_voz_google)) }
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(if (googleDisponible) R.string.motor_voz_google_ok else R.string.motor_voz_google_no),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = {
+                    runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+                }) { Text("Ajustes") }
+            }
+            Text(
+                stringResource(R.string.motor_voz_google_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             for ((motor, texto, listo) in listOf(
                 Triple(com.forge.pixpin.data.MOTOR_VOSK, R.string.motor_voz_vosk, voskListo),
@@ -964,9 +1023,11 @@ private fun MotorDeVozCard() {
                     }
                 }
             }
-            TextButton(onClick = {
-                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://alphacephei.com/vosk/models"))) }
-            }) { Text(stringResource(R.string.motor_voz_enlace)) }
+            // Los enlaces de los modelos, para bajarlos con el navegador e importarlos.
+            TextButton(onClick = { abrir(com.forge.pixpin.guardados.MotorVosk.enlaceDelModelo(idioma)) }) { Text(stringResource(R.string.motor_voz_enlace_vosk)) }
+            TextButton(onClick = { com.forge.pixpin.guardados.MotorWhisper.enlaces().forEach { abrir(it) } }) { Text(stringResource(R.string.motor_voz_enlace_whisper)) }
+            TextButton(onClick = { importar.launch(arrayOf("*/*")) }) { Text(stringResource(R.string.motor_voz_importar)) }
+            TextButton(onClick = { abrir("https://alphacephei.com/vosk/models") }) { Text(stringResource(R.string.motor_voz_enlace)) }
         }
     }
 }

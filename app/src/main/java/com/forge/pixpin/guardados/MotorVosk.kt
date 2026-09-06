@@ -98,6 +98,40 @@ object MotorVosk {
         }.getOrElse { zip.delete(); null }
     }
 
+    /** El enlace directo del modelo de un idioma, para bajarlo con el navegador e importarlo. */
+    fun enlaceDelModelo(idioma: String): String = DESCARGAS + modeloPara(idioma) + ".zip"
+
+    /**
+     * Un `vosk-model-*.zip` bajado a mano (el navegador, otro aparato): se desempaqueta
+     * como si lo hubiera bajado la aplicación. Devuelve el nombre del modelo, o null.
+     */
+    fun instalarZip(context: Context, entrada: java.io.InputStream): String? = runCatching {
+        var modelo: String? = null
+        val temporal = File(context.cacheDir, "vosk-importado-${System.nanoTime()}")
+        temporal.mkdirs()
+        ZipInputStream(entrada.buffered()).use { z ->
+            while (true) {
+                val e = z.nextEntry ?: break
+                val primero = e.name.substringBefore('/')
+                if (modelo == null && primero.startsWith("vosk-model")) modelo = primero
+                val ruta = e.name.substringAfter('/', "")
+                if (ruta.isBlank()) { z.closeEntry(); continue }
+                val f = File(temporal, ruta)
+                if (!f.canonicalPath.startsWith(temporal.canonicalPath)) { z.closeEntry(); continue }
+                if (e.isDirectory) f.mkdirs() else { f.parentFile?.mkdirs(); f.outputStream().use { z.copyTo(it) } }
+                z.closeEntry()
+            }
+        }
+        val nombre = modelo ?: run { temporal.deleteRecursively(); return null }
+        if (!File(temporal, "am").exists()) { temporal.deleteRecursively(); return null }
+        val destino = carpetaDe(context, nombre)
+        destino.deleteRecursively(); carpeta(context).mkdirs()
+        if (!temporal.renameTo(destino)) { temporal.copyRecursively(destino, overwrite = true); temporal.deleteRecursively() }
+        File(destino, ".listo").writeText(nombre)
+        cargado = null
+        nombre
+    }.getOrNull()
+
     @Serializable
     private class PalabraVosk(val word: String = "", val start: Double = 0.0, val end: Double = 0.0, val conf: Double = 1.0)
     @Serializable

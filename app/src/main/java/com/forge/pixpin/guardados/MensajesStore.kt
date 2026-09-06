@@ -135,9 +135,11 @@ class MensajesStore(private val context: Context) {
                             Transcriptor.NADA -> null
                             Transcriptor.NO_SE_LEE -> com.forge.pixpin.R.string.guardados_transcripcion_no
                             Transcriptor.SIN_MOTOR -> com.forge.pixpin.R.string.guardados_transcripcion_sin_motor
+                            Transcriptor.SIN_IDIOMA -> com.forge.pixpin.R.string.guardados_transcripcion_sin_idioma
                             else -> com.forge.pixpin.R.string.guardados_transcripcion_fallo
                         }
-                        if (aviso != null) avisar(context.getString(aviso))
+                        // Con el detalle técnico detrás: es lo que permite saber qué pasó sin el registro.
+                        if (aviso != null) avisar(context.getString(aviso) + (r.detalle?.let { "\n($it)" } ?: ""))
                     }
                 }
                 quitarAvance(m.id)

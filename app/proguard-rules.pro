@@ -26,3 +26,13 @@
 # rápidos y el receptor de arranque se han olvidado en más de un proyecto.
 -keep class com.forge.pixpin.floating.CaptureTileService { *; }
 -keep class com.forge.pixpin.pin.BootReceiver { *; }
+
+# Los motores de voz llaman a estas clases por su nombre desde código nativo (JNI en
+# sherpa-onnx, reflexión en JNA para Vosk): renombradas o quitadas por R8, el motor «no
+# carga» aunque el teléfono sea de 64 bits.
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { *; }
+-keep class org.vosk.** { *; }
+-keep class com.k2fsa.sherpa.onnx.** { *; }
+-keepclassmembers class com.k2fsa.sherpa.onnx.** { *; }
+-dontwarn com.sun.jna.**

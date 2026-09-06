@@ -93,7 +93,7 @@ object Transcriptor {
         class Texto(val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList()) : Resultado()
         /** El modelo del idioma no está en el aparato y no se pudo bajar (sin red). */
         object DescargandoIdioma : Resultado()
-        class Fallo(val codigo: Int) : Resultado()
+        class Fallo(val codigo: Int, val detalle: String? = null) : Resultado()
     }
 
     /** No se entendió nada. */
@@ -102,6 +102,8 @@ object Transcriptor {
     const val NO_SE_LEE = -2
     /** El motor no cargó (teléfono de 32 bits con Whisper, biblioteca rota). */
     const val SIN_MOTOR = -7
+    /** Google no tiene el idioma instalado (o lo está bajando). */
+    const val SIN_IDIOMA = -8
     /** Cualquier otra cosa: queda en el registro con su traza. */
     const val FALLO_INTERNO = -9
 
@@ -122,23 +124,43 @@ object Transcriptor {
         Thread {
             val r = runCatching { transcribirAqui(app, archivo, idioma, avance) }.getOrElse { e ->
                 android.util.Log.e("PixPinVoz", "transcribir: " + e, e)
-                Resultado.Fallo(if (e is UnsatisfiedLinkError || e is NoClassDefFoundError) SIN_MOTOR else FALLO_INTERNO)
+                Resultado.Fallo(if (e is UnsatisfiedLinkError || e is NoClassDefFoundError) SIN_MOTOR else FALLO_INTERNO, resumenDe(e))
             }
             principal.post { alTerminar(r) }
         }.start()
     }
 
+    /** Una línea con el nombre y el mensaje de un error, para el aviso. */
+    fun resumenDe(e: Throwable): String = (e::class.java.simpleName + ": " + (e.message ?: "")).take(140)
+
     /** Lo mismo, en este hilo: decodificar, bajar el modelo si falta, reconocer. */
     fun transcribirAqui(context: Context, archivo: File, idioma: String, avance: (Float) -> Unit): Resultado {
         val pcm = File(context.cacheDir, "pcm-${System.nanoTime()}.raw")
         try {
-            val decodificado = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it) } }
+            // Primero con el decodificador que elija el sistema; si falla o no da nada, con
+            // el de software de Android, que es el mismo en todos los teléfonos.
+            var decodificado = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it) } }
+            if (decodificado.isFailure || pcm.length() <= 0) {
+                decodificado.exceptionOrNull()?.let { android.util.Log.w("PixPinVoz", "decodificar " + archivo + " (primer intento)", it) }
+                pcm.delete()
+                decodificado = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it, software = true) } }
+            }
             decodificado.exceptionOrNull()?.let { android.util.Log.e("PixPinVoz", "decodificar " + archivo, it) }
-            if (decodificado.isFailure || pcm.length() <= 0) return Resultado.Fallo(NO_SE_LEE)
+            if (decodificado.isFailure) return Resultado.Fallo(NO_SE_LEE, decodificado.exceptionOrNull()?.let { resumenDe(it) })
+            if (pcm.length() <= 0) return Resultado.Fallo(NO_SE_LEE, "sin pista de audio en " + archivo.name)
             avance(0.05f)
-            // **El motor que haya elegido el usuario** en Ajustes: Vosk o Whisper. Ver [MotorWhisper].
+            // **El motor que haya elegido el usuario** en Ajustes: Google, Vosk o Whisper.
             val motor = (context.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_VOSK
-            val segmentos = if (motor == com.forge.pixpin.data.MOTOR_WHISPER) {
+            val segmentos = if (motor == com.forge.pixpin.data.MOTOR_GOOGLE) {
+                if (!MotorGoogle.disponible(context)) return Resultado.Fallo(SIN_MOTOR, "Google: hace falta Android 13 y su reconocimiento en el dispositivo")
+                val etiqueta = when (val i = MotorGoogle.idiomaInstalado(context, idioma)) {
+                    is MotorGoogle.Idioma.Vale -> i.etiqueta
+                    is MotorGoogle.Idioma.Descargando -> return Resultado.Fallo(SIN_IDIOMA, "Google está bajando el idioma " + i.etiqueta)
+                    is MotorGoogle.Idioma.NoHay -> return Resultado.Fallo(SIN_IDIOMA, "Google no tiene instalado " + idioma + "; instalados: " + i.instalados.joinToString(", ").ifBlank { "ninguno" })
+                }
+                MotorGoogle.reconocer(context, pcm, etiqueta) { avance(0.1f + 0.9f * it) }
+                    ?: return Resultado.Fallo(FALLO_INTERNO, "el reconocedor de Google no contestó")
+            } else if (motor == com.forge.pixpin.data.MOTOR_WHISPER) {
                 if (!MotorWhisper.soportado()) return Resultado.Fallo(SIN_MOTOR)
                 if (!MotorWhisper.modeloListo(context)) {
                     MotorWhisper.asegurarModelo(context) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
@@ -262,7 +284,7 @@ object Transcriptor {
      * milisegundos por vuelta, un minuto de audio eran cientos de vueltas y varios segundos
      * de reloj sin hacer nada (era lo que hacía lento compartir una nota con su audio).
      */
-    internal fun decodificar(archivo: File, salida: OutputStream) {
+    internal fun decodificar(archivo: File, salida: OutputStream, software: Boolean = false) {
         val extractor = MediaExtractor()
         extractor.setDataSource(archivo.absolutePath)
         var pista = -1
@@ -271,9 +293,16 @@ object Transcriptor {
             val f = extractor.getTrackFormat(i)
             if (f.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true) { pista = i; formato = f; break }
         }
-        if (pista < 0 || formato == null) { extractor.release(); return }
+        if (pista < 0 || formato == null) { extractor.release(); throw IllegalStateException("sin pista de audio (" + extractor.trackCount + " pistas)") }
         extractor.selectTrack(pista)
-        val codec = MediaCodec.createDecoderByType(formato.getString(MediaFormat.KEY_MIME)!!)
+        val mime = formato.getString(MediaFormat.KEY_MIME)!!
+        val codec = if (software) {
+            // El de software de Android (c2.android / OMX.google), que no depende del fabricante.
+            val nombre = android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS).codecInfos
+                .firstOrNull { !it.isEncoder && it.supportedTypes.any { t -> t.equals(mime, true) } && (it.name.startsWith("c2.android.") || it.name.startsWith("OMX.google.")) }
+                ?.name
+            if (nombre != null) MediaCodec.createByCodecName(nombre) else MediaCodec.createDecoderByType(mime)
+        } else MediaCodec.createDecoderByType(mime)
         codec.configure(formato, null, null, 0)
         codec.start()
         var hercios = formato.getInteger(MediaFormat.KEY_SAMPLE_RATE)

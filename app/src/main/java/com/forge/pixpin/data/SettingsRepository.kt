@@ -530,3 +530,4 @@ enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO }
 
 const val MOTOR_VOSK = "vosk"
 const val MOTOR_WHISPER = "whisper"
+const val MOTOR_GOOGLE = "google"
