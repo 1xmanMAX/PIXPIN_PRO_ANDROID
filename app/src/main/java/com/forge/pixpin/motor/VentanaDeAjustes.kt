@@ -761,7 +761,10 @@ fun DialogoDeFuncionesWeb(
     onCerrar: () -> Unit,
     /** Con qué calidad viaja el audio de las notas. Ver [AudioLigero]. */
     calidadDeAudio: String = AudioLigero.LIGERO,
-    onCalidadDeAudio: (String) -> Unit = {}
+    onCalidadDeAudio: (String) -> Unit = {},
+    /** Qué sale de un lienzo con marcos. Ver [ExportarHtml.hojasDelLienzo]. */
+    hojasDelLienzo: String = ExportarHtml.HOJAS_AMBOS,
+    onHojasDelLienzo: (String) -> Unit = {}
 ) {
     val nombres = listOf(
         "lapiz" to "Lápiz", "resaltador" to "Resaltador", "borrador" to "Borrador",
@@ -783,6 +786,13 @@ fun DialogoDeFuncionesWeb(
                 for ((clave, texto) in nombres) {
                     Interruptor(texto, null, clave in marcadas) { onCambio(clave, it) }
                 }
+                // **Un lienzo con marcos: qué hojas salen.** Solo los marcos (una hoja por
+                // marco), el lienzo entero, o los dos: el entero y detrás cada marco.
+                Text("Hojas de un lienzo con marcos", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                Segmentos(
+                    listOf("Solo los marcos", "El lienzo entero", "Ambos"),
+                    listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS).indexOf(hojasDelLienzo).coerceAtLeast(0)
+                ) { onHojasDelLienzo(listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS)[it]) }
                 // **El audio de las notas, y cuánto pesa.** Original tal cual; ligero es un
                 // cuarto y suena igual para voz; ultraligero, un décimo y se nota.
                 Text("Audio de las notas", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))

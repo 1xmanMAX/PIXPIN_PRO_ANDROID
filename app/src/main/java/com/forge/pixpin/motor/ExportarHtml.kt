@@ -79,6 +79,16 @@ object ExportarHtml {
      * lo que se manda —una lámina para enseñar no necesita lápiz ni guardar—. Lo que se apaga
      * no va: ni su botón, ni su atajo de teclado, ni su código si no lo usa nadie.
      */
+    /** Qué hojas salen de un lienzo con marcos: solo los marcos, el lienzo entero, o ambos. */
+    const val PREFIJO_DE_HOJAS = "hojas:"
+    const val HOJAS_MARCOS = "marcos"
+    const val HOJAS_ENTERO = "entero"
+    const val HOJAS_AMBOS = "ambos"
+    fun hojasDelLienzo(marcadas: Set<String>?): String =
+        marcadas?.firstOrNull { it.startsWith(PREFIJO_DE_HOJAS) }?.removePrefix(PREFIJO_DE_HOJAS) ?: HOJAS_AMBOS
+    fun conHojasDelLienzo(marcadas: Set<String>, cuales: String): Set<String> =
+        marcadas.filterNot { it.startsWith(PREFIJO_DE_HOJAS) }.toSet() + (PREFIJO_DE_HOJAS + cuales)
+
     /** Con qué calidad viaja el audio; va en el mismo conjunto de funciones como `audio:<calidad>`. */
     const val PREFIJO_DE_AUDIO = "audio:"
     fun calidadDeAudio(marcadas: Set<String>?): String =

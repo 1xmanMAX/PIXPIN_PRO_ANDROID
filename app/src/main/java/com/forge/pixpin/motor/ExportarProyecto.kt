@@ -108,7 +108,7 @@ object ExportarProyecto {
         notas.forEach { nota ->
             val actual = archivo
             val base = if (actual != null) actual.readBytes() else pdfEnBlanco()
-            val conNota = PdfDeNota.aniadir(base, nota) ?: return@forEach
+            val conNota = PdfDeNota.aniadir(base, nota, Detalle::medioParaPdf) ?: return@forEach
             val destino = actual ?: File(
                 File(context.cacheDir, "share").apply { mkdirs() }, "$nombre.pdf"
             )

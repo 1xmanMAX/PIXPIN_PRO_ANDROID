@@ -490,12 +490,9 @@ const val TEXTO_MAL = "mal"
 const val TEXTO_LETRA = "letra"
 
 /**
- * **Si un audio es música y no una nota de voz.** Lo dice el archivo —un `.mp3`, `.flac`…
- * no sale de nuestro micrófono— o lo dice el largo: nadie dicta notas de más de tres
- * minutos. La música no se transcribe (saldría basura): se le pega la letra a mano.
+ * **Si un audio es música y no una nota de voz.** Se decide al guardarlo, por las
+ * etiquetas del archivo (ver `MensajesStore`), y queda apuntado como [TEXTO_LETRA]. Ni la
+ * extensión ni el largo valen: un `.mp3` de una reunión es una reunión.
  */
 val Mensaje.esMusica: Boolean
-    get() = clase == Clase.VOZ && (
-        (nombre.ifBlank { ruta.orEmpty() }).substringAfterLast('.', "").lowercase() in setOf("mp3", "flac", "wav", "aac", "m4b", "wma") ||
-            duracionMs > 3 * 60_000
-        )
+    get() = clase == Clase.VOZ && estadoDelTexto == TEXTO_LETRA

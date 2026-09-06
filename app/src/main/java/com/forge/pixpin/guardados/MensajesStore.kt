@@ -71,8 +71,14 @@ class MensajesStore(private val context: Context) {
         // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
         val seUne = mensaje.proyecto != null && UnirAlProyecto.seUneSolo(mensaje)
         var apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
-        // La música no se pasa a texto: se le pega la letra a mano. Ver [esMusica].
-        if (apuntado.esMusica && apuntado.estadoDelTexto == null) apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
+        // **La música no se pasa a texto: se le pega la letra a mano.** Y qué es música lo
+        // dicen las etiquetas del archivo (artista, álbum, título…), no su largo: una nota de
+        // voz importada de diez minutos es una nota de voz (lo reportó el usuario el
+        // 6-sep-2026). Sin etiquetas, se transcribe; y desde el menú siempre se puede
+        // poner letra o pasar a texto, elija lo que elija esto.
+        if (apuntado.clase == Clase.VOZ && apuntado.estadoDelTexto == null && apuntado.ruta != null && pareceMusica(apuntado.ruta)) {
+            apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
+        }
         runCatching {
             archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
         }
@@ -125,13 +131,33 @@ class MensajesStore(private val context: Context) {
                     }
                     is Transcriptor.Resultado.Fallo -> {
                         actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
-                        if (r.codigo != Transcriptor.NADA) avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_no))
+                        val aviso = when (r.codigo) {
+                            Transcriptor.NADA -> null
+                            Transcriptor.NO_SE_LEE -> com.forge.pixpin.R.string.guardados_transcripcion_no
+                            Transcriptor.SIN_MOTOR -> com.forge.pixpin.R.string.guardados_transcripcion_sin_motor
+                            else -> com.forge.pixpin.R.string.guardados_transcripcion_fallo
+                        }
+                        if (aviso != null) avisar(context.getString(aviso))
                     }
                 }
                 quitarAvance(m.id)
             }.start()
         }
     }
+
+    /** Si el archivo lleva etiquetas de canción: artista, álbum, género o título. */
+    private fun pareceMusica(ruta: String): Boolean = runCatching {
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(ruta)
+            listOf(
+                android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST,
+                android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM,
+                android.media.MediaMetadataRetriever.METADATA_KEY_GENRE,
+                android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST
+            ).any { !r.extractMetadata(it).isNullOrBlank() }
+        } finally { runCatching { r.release() } }
+    }.getOrDefault(false)
 
     /** Cambia un mensaje ya guardado, con el archivo entero bajo llave. */
     fun actualizar(id: String, cambio: (Mensaje) -> Mensaje) {

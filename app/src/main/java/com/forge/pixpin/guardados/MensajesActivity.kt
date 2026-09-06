@@ -1188,7 +1188,7 @@ class MensajesActivity : ComponentActivity() {
                                 reenviar = { reenviando = listOf(m) },
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
                                 letra = if (m.clase == Clase.VOZ && m.ruta != null) { { LetraActivity.abrir(this@MensajesActivity, m.id) } } else null,
-                                transcribir = if (m.clase == Clase.VOZ && m.ruta != null && !m.esMusica && Transcriptor.disponible(this@MensajesActivity)) {
+                                transcribir = if (m.clase == Clase.VOZ && m.ruta != null && Transcriptor.disponible(this@MensajesActivity)) {
                                     {
                                         Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.guardados_transcribiendo), Toast.LENGTH_SHORT).show()
                                         almacen.transcribir(m)

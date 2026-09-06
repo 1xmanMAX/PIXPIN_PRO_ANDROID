@@ -85,7 +85,7 @@ object PdfDelProyecto {
         proyecto.hojas.forEach { hoja ->
             val nota = hoja.nota ?: return@forEach
             if (nota.isBlank()) return@forEach
-            PdfDeNota.aniadir(bytes, nota)?.let {
+            PdfDeNota.aniadir(bytes, nota, Detalle::medioParaPdf)?.let {
                 bytes = it
                 algo = true
             }

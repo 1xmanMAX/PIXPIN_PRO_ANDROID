@@ -494,6 +494,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
 
             GrupoDeAjustes(stringResource(R.string.ajustes_aspecto)) {
                 ModoNocheCard()
+                MotorDeVozCard()
                 OledCard()
                 Spacer(Modifier.height(12.dp))
                 LetraDelPinCard()
@@ -895,6 +896,77 @@ private fun ModoNocheCard() {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Con qué se pasan los audios a texto: Vosk o Whisper, cada uno con su modelo, que se
+ * puede bajar desde aquí sin esperar al primer audio. Ver [com.forge.pixpin.guardados.MotorVosk]
+ * y [com.forge.pixpin.guardados.MotorWhisper].
+ */
+@Composable
+private fun MotorDeVozCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    var descargando by remember { mutableStateOf<Pair<String, Float>?>(null) }
+    var version by remember { mutableStateOf(0) }
+    val idioma = java.util.Locale.getDefault().toLanguageTag()
+    val voskListo = remember(version) { com.forge.pixpin.guardados.MotorVosk.modeloListo(context, idioma) }
+    val whisperListo = remember(version) { com.forge.pixpin.guardados.MotorWhisper.modeloListo(context) }
+    fun bajar(motor: String) {
+        descargando = motor to 0f
+        Thread {
+            val ok = if (motor == com.forge.pixpin.data.MOTOR_WHISPER)
+                com.forge.pixpin.guardados.MotorWhisper.asegurarModelo(context) { descargando = motor to it } != null
+            else com.forge.pixpin.guardados.MotorVosk.asegurarModelo(context, idioma) { descargando = motor to it } != null
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                descargando = null; version++
+                if (!ok) android.widget.Toast.makeText(context, R.string.motor_voz_no_se_pudo, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(stringResource(R.string.motor_voz_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.motor_voz_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            for ((motor, texto, listo) in listOf(
+                Triple(com.forge.pixpin.data.MOTOR_VOSK, R.string.motor_voz_vosk, voskListo),
+                Triple(com.forge.pixpin.data.MOTOR_WHISPER, R.string.motor_voz_whisper, whisperListo)
+            )) {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.FilterChip(
+                        selected = settings.motorDeVoz == motor,
+                        onClick = { scope.launch { app.settings.setMotorDeVoz(motor) } },
+                        label = { Text(stringResource(texto)) }
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    val enCurso = descargando?.takeIf { it.first == motor }
+                    Text(
+                        when {
+                            enCurso != null -> stringResource(R.string.motor_voz_descargando, (enCurso.second * 100).toInt())
+                            listo -> stringResource(R.string.motor_voz_descargado)
+                            else -> stringResource(R.string.motor_voz_sin_descargar)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!listo && enCurso == null) {
+                        TextButton(onClick = { bajar(motor) }, enabled = descargando == null) { Text(stringResource(R.string.motor_voz_descargar)) }
+                    }
+                }
+            }
+            TextButton(onClick = {
+                runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://alphacephei.com/vosk/models"))) }
+            }) { Text(stringResource(R.string.motor_voz_enlace)) }
         }
     }
 }

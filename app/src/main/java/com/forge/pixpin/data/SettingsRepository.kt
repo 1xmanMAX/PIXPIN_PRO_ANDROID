@@ -148,6 +148,9 @@ data class Settings(
      */
     val modoNoche: ModoNoche = ModoNoche.SISTEMA,
 
+    /** Con qué se pasan a texto los audios: [MOTOR_VOSK] (rápido, 38 MB) o [MOTOR_WHISPER] (más fino, 105 MB). */
+    val motorDeVoz: String = MOTOR_VOSK,
+
     /**
      * **Cómo se trae un plano en PDF: como líneas o como imagen.**
      *
@@ -282,6 +285,7 @@ class SettingsRepository(private val context: Context) {
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
         val MODO_NOCHE = stringPreferencesKey("modo_noche")
+        val MOTOR_DE_VOZ = stringPreferencesKey("motor_de_voz")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
@@ -306,6 +310,7 @@ class SettingsRepository(private val context: Context) {
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
             modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
                 .getOrDefault(ModoNoche.SISTEMA),
+            motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_VOSK,
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
@@ -385,6 +390,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setModoNoche(valor: ModoNoche) {
         context.dataStore.edit { it[Keys.MODO_NOCHE] = valor.name }
+    }
+
+    suspend fun setMotorDeVoz(valor: String) {
+        context.dataStore.edit { it[Keys.MOTOR_DE_VOZ] = valor }
     }
 
     /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */
@@ -518,3 +527,6 @@ enum class DondeSeDibuja { EDITOR, PIN, CAPA, CAPTURA }
 
 /** Cuándo va la interfaz en modo noche. Ver [Settings.modoNoche]. */
 enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO }
+
+const val MOTOR_VOSK = "vosk"
+const val MOTOR_WHISPER = "whisper"

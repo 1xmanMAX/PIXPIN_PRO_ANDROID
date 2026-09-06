@@ -51,7 +51,16 @@ object PdfDeNota {
      *
      * Devuelve el PDF entero ya escrito, o null si no había nada que meter.
      */
-    fun aniadir(original: ByteArray, texto: String): ByteArray? = runCatching {
+    /**
+     * Lo que un medio de la nota aporta al PDF: una imagen como JPEG con sus medidas, o
+     * —para un audio, un PDF, cualquier archivo— una **etiqueta** («informe.pdf · PDF ·
+     * 1,2 MB») que se pinta en un recuadro. Lo da quien exporta, que es quien puede leer
+     * el archivo. Lo pidió el usuario (6-sep-2026): en el PDF de una nota no salían las
+     * imágenes ni se decía qué archivos llevaba.
+     */
+    class MedioParaPdf(val jpeg: ByteArray?, val ancho: Int, val alto: Int, val etiqueta: String?)
+
+    fun aniadir(original: ByteArray, texto: String, medio: (String) -> MedioParaPdf? = { null }): ByteArray? = runCatching {
         val archivo = leerPdf(original) ?: return null
         if (archivo.cifrado) return null
 
@@ -62,22 +71,23 @@ object PdfDeNota {
         var bytes = original
         paginas.forEach { bloques ->
             val actual = leerPdf(bytes) ?: return@forEach
-            val hoja = Hoja(StringBuilder())
+            val hoja = Hoja(StringBuilder(), medio, PdfEscritura.primerNumeroLibre(actual))
             bloques.forEach { hoja.bloque(it) }
             bytes = PdfAnotado.aniadirPagina(
                 actual,
                 hoja.salida.toString().toByteArray(Charsets.ISO_8859_1),
                 A4_ANCHO,
                 A4_ALTO,
-                recursos = recursos()
+                recursos = recursos(hoja.imagenes),
+                extra = hoja.extra
             ) ?: bytes
         }
         bytes
     }.getOrNull()
 
     /** Las catorce de siempre, sin incrustar nada. */
-    private fun recursos(): PdfValor.Dicc = PdfValor.Dicc(
-        linkedMapOf(
+    private fun recursos(imagenes: Map<String, PdfValor.Ref> = emptyMap()): PdfValor.Dicc = PdfValor.Dicc(
+        linkedMapOf<String, PdfValor>(
             "Font" to PdfValor.Dicc(
                 linkedMapOf(
                     "F1" to fuente("Helvetica"),
@@ -86,7 +96,7 @@ object PdfDeNota {
                     "F4" to fuente("Courier")
                 )
             )
-        )
+        ).also { if (imagenes.isNotEmpty()) it["XObject"] = PdfValor.Dicc(imagenes) }
     )
 
     private fun fuente(nombre: String): PdfValor.Dicc = PdfValor.Dicc(
@@ -104,8 +114,12 @@ object PdfDeNota {
      * El papel mide de abajo arriba, así que escribir hacia abajo es restar. Se
      * lleva la cuenta en [y] y cada bloque la mueve lo suyo.
      */
-    private class Hoja(val salida: StringBuilder) {
+    private class Hoja(val salida: StringBuilder, val medio: (String) -> MedioParaPdf? = { null }, primerNumero: Int = 1) {
         var y = A4_ALTO - MARGEN
+        /** Las imágenes de esta página, como objetos del PDF, y su nombre en los recursos. */
+        val extra = ArrayList<ObjetoPdf>()
+        val imagenes = LinkedHashMap<String, PdfValor.Ref>()
+        private var siguiente = primerNumero
 
         fun bloque(b: MarkdownBlock) {
             when (b) {
@@ -162,12 +176,56 @@ object PdfDeNota {
 
                 is MarkdownBlock.Tabla -> tabla(b)
 
-                // Un medio no se puede meter aquí sin cargar el archivo; queda
-                // su nombre, que al menos dice qué falta.
+                // **Una imagen se ve; lo demás se representa.** El JPEG entra como
+                // XObject a lo ancho de la caja; un audio o un archivo, como un recuadro
+                // con su nombre, su tipo y su peso — el archivo en sí no tiene sitio en un
+                // PDF, pero sí que se sepa que estaba.
                 is MarkdownBlock.Medio -> {
-                    escribir("[${b.alt.ifBlank { b.ruta.substringAfterLast('/') }}]",
-                        MARGEN, CUERPO, "F3")
-                    y -= CUERPO * RENGLON
+                    val m = medio(b.ruta)
+                    val jpeg = m?.jpeg
+                    if (jpeg != null && m.ancho > 0 && m.alto > 0) {
+                        val anchoCaja = A4_ANCHO - 2 * MARGEN
+                        var w = anchoCaja
+                        var h = w * m.alto / m.ancho
+                        val altoMax = minOf(360.0, (y - MARGEN).coerceAtLeast(80.0))
+                        if (h > altoMax) { h = altoMax; w = h * m.ancho / m.alto }
+                        val numero = siguiente++
+                        val nombre = "Im${imagenes.size + 1}"
+                        extra += ObjetoPdf(
+                            numero,
+                            PdfValor.Flujo(
+                                PdfValor.Dicc(
+                                    linkedMapOf(
+                                        "Type" to PdfValor.Nombre("XObject"),
+                                        "Subtype" to PdfValor.Nombre("Image"),
+                                        "Width" to PdfValor.Numero(m.ancho.toDouble()),
+                                        "Height" to PdfValor.Numero(m.alto.toDouble()),
+                                        "ColorSpace" to PdfValor.Nombre("DeviceRGB"),
+                                        "BitsPerComponent" to PdfValor.Numero(8.0),
+                                        "Filter" to PdfValor.Nombre("DCTDecode")
+                                    )
+                                ),
+                                jpeg
+                            )
+                        )
+                        imagenes[nombre] = PdfValor.Ref(numero, 0)
+                        y -= h + CUERPO * 0.4
+                        val x = MARGEN + (anchoCaja - w) / 2
+                        salida.append("q ").append(PdfEscritura.numero(w)).append(" 0 0 ").append(PdfEscritura.numero(h))
+                            .append(' ').append(PdfEscritura.numero(x)).append(' ').append(PdfEscritura.numero(y))
+                            .append(" cm /").append(nombre).append(" Do Q\n")
+                        if (b.alt.isNotBlank() && b.alt.lowercase() !in setOf("imagen", "image", "foto")) {
+                            escribir(b.alt, MARGEN, CUERPO * 0.9, "F3")
+                            y -= CUERPO * RENGLON
+                        }
+                    } else {
+                        val etiqueta = m?.etiqueta ?: b.alt.ifBlank { b.ruta.substringAfterLast('/') }
+                        val alto = CUERPO * 2.6
+                        y -= alto
+                        recuadro(MARGEN, y, A4_ANCHO - 2 * MARGEN, alto)
+                        escribir(etiqueta, MARGEN + 10, CUERPO, "F2", base = y + alto / 2 - CUERPO * 0.35)
+                        y -= CUERPO * 0.4
+                    }
                 }
 
                 is MarkdownBlock.Caja -> {
@@ -298,6 +356,14 @@ object PdfDeNota {
                 .append(PdfEscritura.numero(x)).append(' ')
                 .append(PdfEscritura.numero(base)).append(" Td ")
                 .append(cadena(texto)).append(" Tj ET\n")
+        }
+
+        /** Un rectángulo de borde fino, para representar un archivo. */
+        private fun recuadro(x: Double, y: Double, w: Double, h: Double) {
+            salida.append("q 0.6 w 0.55 G ")
+                .append(PdfEscritura.numero(x)).append(' ').append(PdfEscritura.numero(y)).append(' ')
+                .append(PdfEscritura.numero(w)).append(' ').append(PdfEscritura.numero(h))
+                .append(" re S Q\n")
         }
 
         private fun linea(x1: Double, y1: Double, x2: Double, y2: Double, grosor: Double) {

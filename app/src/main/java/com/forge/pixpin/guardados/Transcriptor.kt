@@ -98,6 +98,12 @@ object Transcriptor {
 
     /** No se entendió nada. */
     const val NADA = -5
+    /** El audio no se pudo decodificar. */
+    const val NO_SE_LEE = -2
+    /** El motor no cargó (teléfono de 32 bits con Whisper, biblioteca rota). */
+    const val SIN_MOTOR = -7
+    /** Cualquier otra cosa: queda en el registro con su traza. */
+    const val FALLO_INTERNO = -9
 
     /**
      * Transcribe [archivo] y llama a [alTerminar] en el hilo principal. Puede llamarse
@@ -114,7 +120,10 @@ object Transcriptor {
         val principal = Handler(Looper.getMainLooper())
         val app = context.applicationContext
         Thread {
-            val r = runCatching { transcribirAqui(app, archivo, idioma, avance) }.getOrElse { Resultado.Fallo(-9) }
+            val r = runCatching { transcribirAqui(app, archivo, idioma, avance) }.getOrElse { e ->
+                android.util.Log.e("PixPinVoz", "transcribir: " + e, e)
+                Resultado.Fallo(if (e is UnsatisfiedLinkError || e is NoClassDefFoundError) SIN_MOTOR else FALLO_INTERNO)
+            }
             principal.post { alTerminar(r) }
         }.start()
     }
@@ -123,14 +132,24 @@ object Transcriptor {
     fun transcribirAqui(context: Context, archivo: File, idioma: String, avance: (Float) -> Unit): Resultado {
         val pcm = File(context.cacheDir, "pcm-${System.nanoTime()}.raw")
         try {
-            val bien = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it) } }.isSuccess && pcm.length() > 0
-            if (!bien) return Resultado.Fallo(-2)
+            val decodificado = runCatching { pcm.outputStream().buffered().use { decodificar(archivo, it) } }
+            decodificado.exceptionOrNull()?.let { android.util.Log.e("PixPinVoz", "decodificar " + archivo, it) }
+            if (decodificado.isFailure || pcm.length() <= 0) return Resultado.Fallo(NO_SE_LEE)
             avance(0.05f)
-            if (!MotorVosk.modeloListo(context, idioma)) {
-                MotorVosk.asegurarModelo(context, idioma) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
-            }
-            val segmentos = MotorVosk.reconocer(context, pcm, idioma) { avance(0.35f + 0.65f * it) }
-                ?: return Resultado.DescargandoIdioma
+            // **El motor que haya elegido el usuario** en Ajustes: Vosk o Whisper. Ver [MotorWhisper].
+            val motor = (context.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_VOSK
+            val segmentos = if (motor == com.forge.pixpin.data.MOTOR_WHISPER) {
+                if (!MotorWhisper.soportado()) return Resultado.Fallo(SIN_MOTOR)
+                if (!MotorWhisper.modeloListo(context)) {
+                    MotorWhisper.asegurarModelo(context) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
+                }
+                MotorWhisper.reconocer(context, pcm, idioma) { avance(0.35f + 0.65f * it) }
+            } else {
+                if (!MotorVosk.modeloListo(context, idioma)) {
+                    MotorVosk.asegurarModelo(context, idioma) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
+                }
+                MotorVosk.reconocer(context, pcm, idioma) { avance(0.35f + 0.65f * it) }
+            } ?: return Resultado.DescargandoIdioma
             if (segmentos.isEmpty()) return Resultado.Fallo(NADA)
             return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, segmentos)
         } finally {

@@ -54,6 +54,40 @@ object Detalle {
     fun proyectoDelLienzo(proyectos: List<Proyecto>, dibujo: String): Proyecto? =
         proyectos.firstOrNull { p -> p.hojas.any { it.dibujo == dibujo } }
 
+    /**
+     * Lo que un medio de una nota aporta al PDF: una imagen en JPEG a tamaño razonable, o
+     * la etiqueta de un archivo («informe.pdf · PDF · 1,2 MB»). Ver [PdfDeNota.MedioParaPdf].
+     */
+    fun medioParaPdf(ruta: String): PdfDeNota.MedioParaPdf? {
+        val archivo = File(ruta)
+        if (!archivo.exists()) return null
+        val extension = ruta.substringAfterLast('.', "").lowercase()
+        if (extension in setOf("jpg", "jpeg", "png", "webp", "bmp", "heic", "gif")) {
+            val medidas = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(ruta, medidas)
+            if (medidas.outWidth > 0) {
+                var muestra = 1
+                while (medidas.outWidth / muestra > 1400) muestra *= 2
+                val bmp = android.graphics.BitmapFactory.decodeFile(ruta, android.graphics.BitmapFactory.Options().apply { inSampleSize = muestra })
+                if (bmp != null) {
+                    val salida = java.io.ByteArrayOutputStream()
+                    bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, salida)
+                    val r = PdfDeNota.MedioParaPdf(salida.toByteArray(), bmp.width, bmp.height, null)
+                    bmp.recycle()
+                    return r
+                }
+            }
+        }
+        val tipo = when (extension) {
+            "pdf" -> "PDF"
+            "m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp" -> "Audio"
+            "mp4", "mkv", "mov", "webm" -> "Vídeo"
+            "" -> "Archivo"
+            else -> extension.uppercase()
+        }
+        return PdfDeNota.MedioParaPdf(null, 0, 0, "${archivo.name} · $tipo · ${legible(archivo.length())}")
+    }
+
     /** `1,2 MB`, `340 KB`, `812 B`. */
     fun legible(bytes: Long): String = when {
         bytes >= 1L shl 30 -> String.format(java.util.Locale.getDefault(), "%.2f GB", bytes / (1L shl 30).toDouble())

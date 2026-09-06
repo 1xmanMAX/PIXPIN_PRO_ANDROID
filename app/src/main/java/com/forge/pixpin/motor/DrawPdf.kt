@@ -90,7 +90,7 @@ object DrawPdf {
      * Ver [PdfDeNota]: sale seleccionable y buscable, no dibujada.
      */
     fun aniadirNota(original: ByteArray, texto: String): ByteArray? =
-        PdfDeNota.aniadir(original, texto)
+        PdfDeNota.aniadir(original, texto, Detalle::medioParaPdf)
 
     /**
      * Escribe el PDF y devuelve el archivo, o null si no había nada que pintar.

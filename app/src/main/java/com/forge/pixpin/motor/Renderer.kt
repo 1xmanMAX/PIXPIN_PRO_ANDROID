@@ -3309,7 +3309,7 @@ class Renderer(
         const val MEASURE_HALO = 0.22
 
         /** El marco: contorno fino y gris, como en el original. */
-        const val FRAME_STROKE = 1.5f
+        const val FRAME_STROKE = 3f
         const val FRAME_RADIUS = 8f
         const val FRAME_LABEL_SIZE = 13f
         const val FRAME_LABEL_GAP = 6f

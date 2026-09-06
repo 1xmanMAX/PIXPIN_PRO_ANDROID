@@ -62,6 +62,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -1824,11 +1826,27 @@ private fun HojaDelProyecto(
 @Composable
 private fun MiniaturaDeNota(texto: String, tamaño: Float = 3.2f) {
     val bloques = remember(texto) { Markdown.parse(texto) }
-    MarkdownText(
-        blocks = bloques,
-        baseSizeSp = tamaño,
-        modifier = Modifier.fillMaxSize().padding(if (tamaño > 5f) 14.dp else 4.dp)
-    )
+    // **Se compone a tamaño normal y se encoge entera.** Componer con letra de 3 puntos
+    // dejaba las tarjetas, los iconos y los márgenes —que van en dp— a tamaño normal junto
+    // a un texto minúsculo: la miniatura no se parecía a la hoja. Encogiendo la hoja
+    // compuesta a 16, la miniatura es la hoja misma, en pequeño (lo pidió el usuario el
+    // 6-sep-2026).
+    val escala = tamaño / 16f
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
+        val anchoReal = maxWidth / escala
+        val altoReal = maxHeight / escala
+        Box(
+            Modifier
+                .requiredSize(anchoReal, altoReal)
+                .graphicsLayer(
+                    scaleX = escala, scaleY = escala,
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                )
+                .padding(14.dp)
+        ) {
+            MarkdownText(blocks = bloques, baseSizeSp = 16f, modifier = Modifier.fillMaxSize())
+        }
+    }
 }
 
 /**

@@ -1542,6 +1542,12 @@ class DrawEditorActivity : ComponentActivity() {
                         lifecycleScope.launch {
                             (application as? com.forge.pixpin.PixPinApp)?.settings?.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c))
                         }
+                    },
+                    hojasDelLienzo = ExportarHtml.hojasDelLienzo(marcadas),
+                    onHojasDelLienzo = { h ->
+                        lifecycleScope.launch {
+                            (application as? com.forge.pixpin.PixPinApp)?.settings?.setFuncionesWeb(ExportarHtml.conHojasDelLienzo(marcadas, h))
+                        }
                     }
                 )
             }
@@ -3480,7 +3486,13 @@ class DrawEditorActivity : ComponentActivity() {
             val c = getElementBounds(m)
             c.width > 0 && c.height > 0 && escena.contenidoDe(m).isNotEmpty()
         }
-        val hojas = if (marcos.size >= 2) {
+        // **Qué hojas salen** lo dice el panel de la web: solo los marcos, el lienzo entero,
+        // o ambos (el entero primero y detrás cada marco). Antes, con dos marcos, salían
+        // solo los marcos y el lienzo entero no se podía mandar (lo pidió el usuario el
+        // 6-sep-2026). Sin marcos, siempre el entero.
+        val funciones = (application as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb
+        val cuales = ExportarHtml.hojasDelLienzo(funciones)
+        val deMarcos = if (marcos.isNotEmpty() && cuales != ExportarHtml.HOJAS_ENTERO) {
             marcos.mapIndexedNotNull { i, m ->
                 val svg = DrawSvg.aTexto(this, escena, ::bitmapDe, soloEstaHoja = m)
                     ?: return@mapIndexedNotNull null
@@ -3489,7 +3501,8 @@ class DrawEditorActivity : ComponentActivity() {
                     escala = escena.escala
                 )
             }
-        } else {
+        } else emptyList()
+        val entera = if (marcos.isEmpty() || cuales != ExportarHtml.HOJAS_MARCOS) {
             // **Si el PDF de debajo son líneas, viajan las líneas y no una foto suya.** Un
             // plano leído como geometría se ve nítido a cualquier aumento, trae sus capas
             // para encender y apagar, y encima pesa menos que la página rasterizada. Cuando
@@ -3503,14 +3516,13 @@ class DrawEditorActivity : ComponentActivity() {
             val svg = DrawSvg.aTexto(
                 this, escena, ::bitmapDe, papel, fina, papelAparte = plano != null
             ) ?: return@exportando null
-            listOf(ExportarHtml.HojaWeb.Dibujo("", svg, fondo, plano, escala = escena.escala))
-        }
+            listOf(ExportarHtml.HojaWeb.Dibujo(if (deMarcos.isEmpty()) "" else "Lienzo", svg, fondo, plano, escala = escena.escala))
+        } else emptyList()
+        val hojas = entera + deMarcos
         if (hojas.isEmpty()) return@exportando null
         runCatching {
-            // Lo que lleva el documento: lo marcado en Ajustes → Exportar → Página web.
-            val opciones = ExportarHtml.Opciones.de(
-                (application as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb
-            )
+            // Lo que lleva el documento: lo marcado en el panel de la página web.
+            val opciones = ExportarHtml.Opciones.de(funciones)
             val pagina = ExportarHtml.paginas(
                 hojas, titulo = getString(R.string.formato_html_titulo), opciones = opciones
             )

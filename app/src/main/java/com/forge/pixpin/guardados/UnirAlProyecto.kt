@@ -126,13 +126,18 @@ object UnirAlProyecto {
         // fotos movibles en un lienzo. Ver [com.forge.pixpin.motor.PdfUnion]. Solo si no se
         // puede (un PDF cifrado) se cae a las fotos de abajo.
         pegarAlDocumento(context, proyectos, proyecto, pdf, paginas, ahora)?.let { return it }
+        // Si el PDF no se deja pegar tal cual (cifrado, raro), sus páginas se pintan y se
+        // pegan **como PDF propio**: siguen siendo páginas del documento, estáticas.
+        pegarComoPaginasPintadas(context, proyectos, proyecto, pdf, paginas, ahora)?.let { return it }
+        // Y si el documento del proyecto es el que no se deja tocar, fotos **clavadas**: al
+        // menos no se mueven. Ver `DrawEditorActivity.fijarLaFoto`.
         val hojas = ArrayList<Hoja>()
         for (i in 0 until paginas.coerceAtMost(TOPE_DE_PAGINAS_COMO_FOTO)) {
             val bmp = PdfDoc.render(pdf.absolutePath, i, ANCHO_DE_PAGINA) ?: continue
             val temporal = File(context.cacheDir, "pagina-$ahora-$i.jpg")
             runCatching { temporal.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) } }
             bmp.recycle()
-            val hoja = hojaConFoto(context, temporal, "image/jpeg", "hoja-$ahora-${n + i}", "$nombre ${i + 1}", ahora, n + i)
+            val hoja = hojaConFoto(context, temporal, "image/jpeg", "hoja-$ahora-${n + i}", "$nombre ${i + 1}", ahora, n + i, clavada = true)
             temporal.delete()
             if (hoja != null) hojas += hoja
         }
@@ -191,7 +196,48 @@ object UnirAlProyecto {
         return Hoja(id = id, nombre = nombre, dibujo = copia)
     }
 
-    private fun hojaConFoto(context: Context, archivo: File, mime: String, id: String, nombre: String, ahora: Long, n: Int): Hoja? {
+    /**
+     * Las páginas pintadas a mapa de bits, metidas en un PDF hecho aquí y pegado al documento
+     * del proyecto: para los PDF que no se dejan copiar objeto a objeto. Null si tampoco.
+     */
+    private fun pegarComoPaginasPintadas(context: Context, proyectos: ProyectosRepository, proyecto: Proyecto, pdf: File, paginas: Int, ahora: Long): List<Hoja>? {
+        val origen = proyecto.pdfOrigen?.let { File(it) }?.takeIf { it.exists() } ?: return null
+        val antes = PdfDoc.pageCount(origen.absolutePath)
+        if (antes <= 0) return null
+        val cuantas = paginas.coerceAtMost(TOPE_DE_PAGINAS_COMO_FOTO)
+        val mapas = HashMap<String, Bitmap>()
+        val elementos = ArrayList<Element>()
+        val archivos = HashMap<String, com.forge.pixpin.motor.SceneFile>()
+        for (i in 0 until cuantas) {
+            val bmp = PdfDoc.render(pdf.absolutePath, i, ANCHO_DE_PAGINA) ?: continue
+            val temporal = File(context.cacheDir, "pagina-$ahora-$i.jpg")
+            runCatching { temporal.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) } }
+            val foto = ExcalidrawStore.guardarImagen(context, temporal, "image/jpeg")
+            temporal.delete()
+            if (foto == null) { bmp.recycle(); continue }
+            mapas[foto.id] = bmp
+            archivos[foto.id] = foto
+            // Cada página en su marco, para que el PDF salga con una página por hoja.
+            val y = i * (bmp.height + 40.0)
+            elementos += Element(id = "marco-$ahora-$i", type = ElementType.FRAME, x = 0.0, y = y, width = bmp.width.toDouble(), height = bmp.height.toDouble(), seed = 1)
+            elementos += Element(id = "pag-$ahora-$i", type = ElementType.IMAGE, x = 0.0, y = y, width = bmp.width.toDouble(), height = bmp.height.toDouble(), seed = 2, fileId = foto.id)
+        }
+        if (elementos.isEmpty()) return null
+        val escena = Scene(elements = elementos, files = archivos)
+        val propio = com.forge.pixpin.motor.DrawPdf.aArchivo(context, escena, "paginas-$ahora") { id -> mapas[id] }
+        mapas.values.forEach { it.recycle() }
+        val bytes = propio?.readBytes() ?: return null
+        propio.delete()
+        val unidos = com.forge.pixpin.motor.PdfUnion.anadirPaginas(origen.readBytes(), bytes) ?: return null
+        proyecto.pdfLimpio?.let { File(it) }?.takeIf { it.exists() }?.let { limpio ->
+            com.forge.pixpin.motor.PdfUnion.anadirPaginas(limpio.readBytes(), bytes)?.let { limpio.writeBytes(it) }
+        }
+        runCatching { origen.writeBytes(unidos) }.getOrElse { return null }
+        val hechas = PdfDoc.pageCount(origen.absolutePath) - antes
+        return (0 until hechas.coerceAtLeast(0)).map { Hoja(id = "h-$ahora-${antes + it}", pagina = antes + it) }
+    }
+
+    private fun hojaConFoto(context: Context, archivo: File, mime: String, id: String, nombre: String, ahora: Long, n: Int, clavada: Boolean = false): Hoja? {
         if (!archivo.exists()) return null
         val foto = ExcalidrawStore.guardarImagen(context, archivo, mime) ?: return null
         val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -203,7 +249,7 @@ object UnirAlProyecto {
             elements = listOf(
                 Element(
                     id = "foto-$ahora-$n", type = ElementType.IMAGE, x = 0.0, y = 0.0,
-                    width = ancho * escala, height = alto * escala, seed = 1, fileId = foto.id
+                    width = ancho * escala, height = alto * escala, seed = 1, fileId = foto.id, locked = clavada
                 )
             ),
             files = mapOf(foto.id to foto)
