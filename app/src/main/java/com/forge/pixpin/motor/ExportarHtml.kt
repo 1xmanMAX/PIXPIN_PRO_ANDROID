@@ -383,6 +383,10 @@ object ExportarHtml {
             append("<div class=\"grupo solo-espacio\">")
             append(boton("vistas", "Vistas", "M3 5h18v11H3zM8 20h8"))
             append(boton("grupos", "Grupos", "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5"))
+            // **La escena**: suelo, sombra, niebla, giradiscos, efectos… y la guía de gestos.
+            // Lo que trae de serie el visor de la galería de Feather (6-sep-2026).
+            append(boton("escena", "Escena (suelo, niebla, efectos)", "M4 7h10M18 7h2M4 12h3M11 12h9M4 17h13M21 17h-1M14 5v4M7 10v4M17 15v4"))
+            append(boton("guia", "Guía de gestos (?)", "M9 9a3 3 0 1 1 4.5 2.6c-1 .6-1.5 1.2-1.5 2.4M12 17.5v.5M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"))
             append("</div>")
         }
         if (plano) {
@@ -453,6 +457,21 @@ object ExportarHtml {
         .nota .tapado:hover,.nota .tapado:focus{background:transparent}
         .nota a{color:inherit}
         canvas.espacio{position:absolute;inset:0;display:block;touch-action:none;cursor:grab}
+        /* La portada del croquis, encima hasta el primer fotograma. Ver VisorEspacio. */
+        img.portada{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+          pointer-events:none;transition:opacity .3s;z-index:2}
+        #guia-caja{position:fixed;inset:0;z-index:8;background:rgba(0,0,0,.45);display:flex;
+          align-items:center;justify-content:center;padding:16px}
+        .guia{width:min(360px,100%);max-height:86vh;overflow:auto;padding:14px 16px;border-radius:18px;
+          background:var(--vidrio);border:1px solid var(--filete);box-shadow:0 12px 40px rgba(0,0,0,.3);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+        .guia h2{margin:0 0 6px;font-size:16px}
+        .guia h3{margin:12px 0 4px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;opacity:.6}
+        .guia .par{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
+          border-bottom:1px solid var(--filete);font-size:14px}
+        .guia .par span:last-child{opacity:.75;text-align:right}
+        .guia .cerrar{margin-top:14px;width:100%;padding:10px;border:none;border-radius:12px;
+          background:#e03131;color:#fff;font:inherit;cursor:pointer}
         /* El plano vectorial va debajo del SVG y no recibe el dedo: el que manda sigue siendo
            el SVG, que es donde se raya. Sin el `z-index` el lienzo, que va posicionado, se
            pintaría por encima del SVG, que no lo va. */
@@ -1113,6 +1132,63 @@ if(id('vistas')) id('vistas').onclick=function(){
   }));
 };
 if(id('grupos')) id('grupos').onclick=function(){ pintarGrupos(); };
+if(id('escena')) id('escena').onclick=function(){ pintarEscena(); };
+if(id('guia')) id('guia').onclick=function(){ alternarGuia(); };
+// **La escena del croquis**: interruptores, y abajo el OBJ para llevárselo a Blender.
+function pintarEscena(){
+  if(!actual||!actual.escena) return;
+  var lista=actual.escena();
+  var filas=lista.map(function(g){
+    var d=document.createElement('div'); d.className='fila';
+    var c=document.createElement('input'); c.type='checkbox'; c.checked=g.puesto();
+    c.onchange=function(){g.poner(c.checked);};
+    var n=document.createElement('span'); n.className='n'; n.textContent=g.nombre;
+    n.onclick=function(){c.checked=!c.checked;c.onchange();};
+    d.appendChild(c); d.appendChild(n);
+    return d;
+  });
+  var pie=document.createElement('div'); pie.className='mini';
+  if(actual.obj) pie.appendChild(boton('Bajar OBJ',function(){ bajarObj(); }));
+  pie.appendChild(boton('Guía',function(){ alternarGuia(); }));
+  abrir('Escena',filas,pie);
+}
+// El giradiscos se para solo al tocar: el cajón, si está abierto, tiene que enterarse.
+api.escenaCambio=function(){ if(!cajon.hidden&&cajon.dataset.que==='Escena'){ cajon.dataset.que=''; pintarEscena(); } };
+function bajarObj(){
+  if(!actual||!actual.obj) return;
+  var m=actual.obj(), nombre=(document.body.dataset.nombre||'croquis').replace(/[\\/:*?"<>|]+/g,'-').trim()||'croquis';
+  function baja(texto,archivo){
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([texto],{type:'text/plain'})); a.download=archivo;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(a.href);},4000);
+  }
+  baja(m.obj,nombre+'.obj'); setTimeout(function(){ baja(m.mtl,'croquis.mtl'); },300);
+  avisar('OBJ y MTL bajados: ábrelos juntos');
+}
+// **La guía de gestos**: una tarjeta con lo que hace cada dedo, cada botón y cada tecla.
+function alternarGuia(){
+  var g=id('guia-caja');
+  if(g){ g.parentNode.removeChild(g); return; }
+  if(!actual||!actual.guia) return;
+  g=document.createElement('div'); g.id='guia-caja';
+  var t=document.createElement('div'); t.className='guia';
+  var h=document.createElement('h2'); h.textContent='Cómo se mueve'; t.appendChild(h);
+  actual.guia().forEach(function(b){
+    var h3=document.createElement('h3'); h3.textContent=b.t; t.appendChild(h3);
+    b.f.forEach(function(f){
+      var r=document.createElement('div'); r.className='par';
+      var a=document.createElement('span'); a.textContent=f[0];
+      var c=document.createElement('span'); c.textContent=f[1];
+      r.appendChild(a); r.appendChild(c); t.appendChild(r);
+    });
+  });
+  var cerrar=boton('Entendido',function(){ alternarGuia(); }); cerrar.className='cerrar';
+  t.appendChild(cerrar);
+  g.appendChild(t);
+  g.onclick=function(e){ if(e.target===g) alternarGuia(); };
+  document.body.appendChild(g);
+}
 if(id('capas')) id('capas').onclick=function(){ pintarCapas(); };
 // **Las capas del plano**: las mismas que traía el PDF de AutoCAD. Apagar las que estorban
 // —las tramas, los sombreados— deja el dibujo en sus líneas, que es lo que se quiere ver, y
@@ -1246,6 +1322,11 @@ document.addEventListener('keydown',function(e){
   else if(k==='g')elegir('girar');
   else if(k==='d')elegir('medir');
   else if(k==='0')actual.encajar();
+  else if(k==='o'&&actual.orto)actual.orto();
+  else if(k===']'&&actual.lente)actual.lente(0.08);
+  else if(k==='['&&actual.lente)actual.lente(-0.08);
+  else if(k==='t'&&actual.giradiscos){actual.giradiscos();api.escenaCambio();}
+  else if(k==='?'||(k==='/'&&e.shiftKey))alternarGuia();
   else if((k==='+'||k==='=')&&actual.zoom)actual.zoom(1/1.3);
   else if(k==='-'&&actual.zoom)actual.zoom(1.3);
   else if(k==='escape'){cajon.hidden=true;cajon.dataset.que='';api.decir('');}

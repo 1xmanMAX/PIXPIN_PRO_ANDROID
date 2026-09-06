@@ -47,6 +47,9 @@ object ExportarCroquisHtml {
     fun datos(
         croquis: Croquis,
         camara: Camara3D,
+        /** La foto del croquis tal como se ve al exportar (`data:image/jpeg;base64,…`), para
+         *  enseñarla al instante mientras la página arranca. Opcional. */
+        portada: String? = null,
         imagenIncrustada: (String) -> String? = { null }
     ): String? {
         val trazos = croquis.trazos.filter { !it.oculto && it.puntos.size >= 2 }
@@ -180,6 +183,7 @@ object ExportarCroquisHtml {
                 .append(',').append(n(-r.z)).append(']')
         }
         d.append(",\"cj\":").append(caja.json())
+        portada?.takeIf { it.startsWith("data:image/") }?.let { d.append(",\"po\":\"").append(it).append('"') }
         d.append('}')
         return d.toString()
     }
@@ -191,9 +195,10 @@ object ExportarCroquisHtml {
         nombre: String,
         imagenIncrustada: (String) -> String? = { null },
         /** El papel que se está viendo, si el croquis no ha elegido uno. Ver [FONDO_DE_FABRICA]. */
-        papel: String? = null
+        papel: String? = null,
+        portada: String? = null
     ): ExportarHtml.HojaWeb.Espacio? =
-        datos(croquis, camara, imagenIncrustada)?.let {
+        datos(croquis, camara, portada, imagenIncrustada)?.let {
             ExportarHtml.HojaWeb.Espacio(
                 nombre, it, croquis.colorDelFondo ?: papel ?: FONDO_DE_FABRICA
             )
@@ -205,8 +210,9 @@ object ExportarCroquisHtml {
         camara: Camara3D,
         titulo: String,
         imagenIncrustada: (String) -> String? = { null },
-        papel: String? = null
-    ): String? = hoja(croquis, camara, "", imagenIncrustada, papel)
+        papel: String? = null,
+        portada: String? = null
+    ): String? = hoja(croquis, camara, "", imagenIncrustada, papel, portada)
         ?.let { ExportarHtml.paginas(listOf(it), titulo) }
 
     /** El papel del croquis cuando no se ha elegido ninguno: la pizarra del tema oscuro. */

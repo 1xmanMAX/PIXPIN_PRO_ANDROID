@@ -51,8 +51,26 @@ var cam=clonar(D.c), inicial=clonar(D.c), w=0, h=0, dpr=1;
 var apagados=Object.create(null), modo='girar', medida=[], pendiente=false, vivo=false;
 var pivote=null, texturas=Object.create(null);
 // **La tarjeta gráfica, si la hay.** Ver [arrancarGl]: lo dibujado se sube una vez y pintar
-// es mandarle la cámara. El lienzo 2D se queda encima solo para la medida.
+// es mandarle la cámara. El lienzo 2D se queda encima para la medida y los efectos.
 var gl=null, lienzoGl=null, GL=null;
+// **La escena**: lo que se puede encender y apagar desde el cajón «Escena». Es lo que el
+// visor de la galería de Feather trae de serie —rejilla y niebla puestas, sombra al suelo,
+// efectos de acabado— y lo que el usuario pidió copiar (6-sep-2026). Nada de esto toca la
+// geometría: son pasadas y ajustes sobre lo mismo que ya se pinta.
+var escena={suelo:true,sombra:true,niebla:true,gira:false,degradado:false,nitido:false,
+            brillo:false,grano:false,pixel:false};
+var PIXEL=6, GIRO_POR_SEGUNDO=0.35;
+// El papel: lo que hay detrás. Manda en la niebla, en el color de la sombra y en el degradado.
+var fondoHex=D.f||caja.dataset.fondo||'#14161c', fondoRgb=rgb(fondoHex);
+var esOscuro=(fondoRgb[0]*0.299+fondoRgb[1]*0.587+fondoRgb[2]*0.114)<128;
+// El radio del croquis: de él salen la niebla, el paso de la rejilla y la fuerza del giro.
+var R=D.cj?Math.max(Math.hypot(D.cj[3]-D.cj[0],D.cj[4]-D.cj[1],D.cj[5]-D.cj[2])/2,1e-3):50;
+// **La portada**: la foto del croquis tal como se exportó, encima de todo hasta el primer
+// fotograma pintado. Con ella el archivo enseña algo al instante, antes de que la tarjeta
+// compile sus programas.
+var portada=null;
+if(D.po){ portada=document.createElement('img'); portada.className='portada'; portada.src=D.po;
+ portada.draggable=false; caja.appendChild(portada); }
 
 function clonar(c){return {g:c.g,i:c.i,z:c.z,b:c.b,l:c.l,r:c.r,c:[c.c[0],c.c[1],c.c[2]]};}
 function norm(v){var d=Math.hypot(v[0],v[1],v[2]);return d<1e-12?[0,0,0]:[v[0]/d,v[1]/d,v[2]/d];}
@@ -139,7 +157,8 @@ function pintar(){
  var B=base();
  ctx.setTransform(dpr,0,0,dpr,0,0);
  ctx.clearRect(0,0,w,h);
- if(arrancarGl()){ pintarGl(B); if(medida.length) pintarMedida(B); return; }
+ if(arrancarGl()){ pintarGl(B); efectos(); if(medida.length) pintarMedida(B); quitarPortada(); return; }
+ quitarPortada();
  var cola=[],i,j;
  for(i=0;i<D.im.length;i++){ var im=D.im[i];
   if(visible(im)) cola.push({o:im,t:2,d:hondura(B,im.e,im)}); }
@@ -339,12 +358,56 @@ function repintar(){ if(!pendiente&&vivo){pendiente=true; requestAnimationFrame(
 function medir(){
  var r=caja.getBoundingClientRect();
  w=Math.max(r.width,1); h=Math.max(r.height,1);
- dpr=Math.min(window.devicePixelRatio||1,2); // por encima de dos no se nota y cuesta el cuádruple
+ // Por encima de dos no se nota y cuesta el cuádruple; «nítido» sube a tres para una captura.
+ dpr=Math.min(window.devicePixelRatio||1,escena.nitido?3:2);
  lienzo.width=Math.round(w*dpr); lienzo.height=Math.round(h*dpr);
  lienzo.style.width=w+'px'; lienzo.style.height=h+'px';
- if(lienzoGl){ lienzoGl.width=lienzo.width; lienzoGl.height=lienzo.height;
-  lienzoGl.style.width=lienzo.style.width; lienzoGl.style.height=lienzo.style.height; }
+ if(lienzoGl){
+  // **El pixelado no es un filtro: es pintar en pequeño.** La tarjeta pinta a un sexto y el
+  // navegador lo estira sin suavizar. Sale gratis y encima va más deprisa.
+  var k=escena.pixel?PIXEL:1;
+  lienzoGl.width=Math.max(Math.round(lienzo.width/k),1); lienzoGl.height=Math.max(Math.round(lienzo.height/k),1);
+  lienzoGl.style.width=lienzo.style.width; lienzoGl.style.height=lienzo.style.height;
+  lienzoGl.style.imageRendering=escena.pixel?'pixelated':''; }
  repintar();
+}
+function quitarPortada(){
+ if(!portada) return;
+ var p=portada; portada=null;
+ p.style.opacity='0';
+ setTimeout(function(){ if(p.parentNode) p.parentNode.removeChild(p); },350);
+}
+// ---- Los efectos de acabado: sobre el lienzo 2D, encima de lo que pintó la tarjeta ----
+//
+// Sin pasadas de sombreador ni texturas intermedias, que en WebGL 1 dejarían sin suavizado
+// los bordes: el brillo es la propia imagen desenfocada y sumada encima, y el grano una
+// tela de ruido hecha una vez. El pixelado va aparte, en [medir].
+var tela=null, granoVivo=null;
+function telaDeGrano(){
+ if(tela) return tela;
+ var c=document.createElement('canvas'); c.width=c.height=192;
+ var g=c.getContext('2d'), im=g.createImageData(192,192), d=im.data;
+ for(var i=0;i<d.length;i+=4){ var v=(Math.random()*255)|0; d[i]=d[i+1]=d[i+2]=v; d[i+3]=255; }
+ g.putImageData(im,0,0);
+ tela=ctx.createPattern(c,'repeat');
+ return tela;
+}
+function efectos(){
+ if(!escena.brillo&&!escena.grano) return;
+ ctx.save();
+ if(escena.brillo&&'filter' in ctx){
+  ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=esOscuro?0.42:0.28;
+  ctx.filter='blur(7px) brightness(1.2)';
+  ctx.drawImage(lienzoGl,0,0,w,h);
+  ctx.filter='none';
+ }
+ if(escena.grano){
+  ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=esOscuro?0.11:0.09;
+  ctx.translate(-(Math.random()*192)|0,-(Math.random()*192)|0);
+  ctx.fillStyle=telaDeGrano(); ctx.fillRect(0,0,w+192,h+192);
+ }
+ ctx.restore();
+ ctx.setTransform(dpr,0,0,dpr,0,0);
 }
 
 // ---- La tarjeta gráfica ----
@@ -366,7 +429,21 @@ var PROYECCION=
  ' float en=ufocal*(urect>0.5?tan(min(ang,1.3962634)):ang);'+
  ' return vec3(umw+en*u/radio,umh-en*vv/radio,hd);}'+
  'uniform vec2 upx;'+
- 'vec4 clip(vec3 s){return vec4(s.x*upx.x-1.0,1.0-s.y*upx.y,clamp(s.z/uhondo,-0.999,0.999),1.0);}';
+ 'vec4 clip(vec3 s){return vec4(s.x*upx.x-1.0,1.0-s.y*upx.y,clamp(s.z/uhondo,-0.999,0.999),1.0);}'+
+ // **La sombra al suelo** es la misma geometría aplastada contra el plano del suelo siguiendo
+ // el rayo del sol (o cayendo a plomo si no hay sol): se pinta dos veces lo mismo, sin subir
+ // nada más. `usombra` lo enciende; `usoldir` es hacia dónde cae; `uz0`, dónde está el suelo.
+ 'uniform float usombra,uz0;uniform vec3 usoldir;uniform vec4 usombraTinta;'+
+ 'vec3 alSuelo(vec3 P){if(usombra<0.5) return P;float t=(P.z-uz0)/max(-usoldir.z,1e-4);'+
+ ' return P+usoldir*t;}'+
+ 'varying float vH;';
+// Lo que comparten los programas de fragmentos: la niebla y la sombra.
+var NIEBLA=
+ 'precision mediump float;varying float vH;uniform float uniebla,unieblaA,unieblaB,usombra;'+
+ 'uniform vec3 ufondo;uniform vec4 usombraTinta;'+
+ // Premultiplicado: lo lejano se funde con el papel, y el papel ya está detrás.
+ 'vec4 acabar(vec3 c,float a){float f=uniebla*smoothstep(unieblaA,unieblaB,vH);'+
+ ' return vec4(mix(c*a,ufondo*a,f),a);}';
 function programa(vs,fs){
  function sh(t,src){var o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);
   if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o;}
@@ -390,31 +467,39 @@ function arrancarGl(){
   GL.cinta=programa(
    'attribute vec3 p,q0,q1;attribute float lado,medio;attribute vec4 tinta;'+PROYECCION+
    'varying vec4 vT;varying vec2 vN;varying float vL;'+
-   'void main(){vec3 s=proy(p),s0=proy(q0),s1=proy(q1);vec2 t=s1.xy-s0.xy;float L=length(t);'+
+   'void main(){vec3 s=proy(alSuelo(p)),s0=proy(alSuelo(q0)),s1=proy(alSuelo(q1));vec2 t=s1.xy-s0.xy;float L=length(t);'+
    ' vec2 n=(L<1e-6)?vec2(0.0,1.0):vec2(-t.y,t.x)/L;float an=max(medio*uz,0.4);'+
-   ' vec2 sc=s.xy+n*an*lado;gl_Position=clip(vec3(sc,s.z));vT=tinta;vN=n;vL=lado;}',
+   ' vec2 sc=s.xy+n*an*lado;gl_Position=clip(vec3(sc,s.z));vT=tinta;vN=n;vL=lado;vH=s.z;}',
    // **Un trazo es un tubo, no una cinta plana.** La sección se sombrea redonda —más claro
    // en el lomo, más oscuro en los flancos— y el lado que mira a la luz brilla: es lo que en
-   // la aplicación hace que un trazo cambie de tono al girar y se lea con bulto.
-   'precision mediump float;varying vec4 vT;varying vec2 vN;varying float vL;uniform vec2 uluz;'+
-   'void main(){float x=clamp(vL,-1.0,1.0);float tubo=0.58+0.5*sqrt(max(0.0,1.0-x*x));'+
+   // la aplicación hace que un trazo cambie de tono al girar y se lea con bulto. El flanco
+   // toma un poco del color del papel, como la luz ambiente de Feather, que sale del fondo.
+   NIEBLA+'varying vec4 vT;varying vec2 vN;varying float vL;uniform vec2 uluz;'+
+   'void main(){if(usombra>0.5){gl_FragColor=acabar(usombraTinta.rgb,usombraTinta.a);return;}'+
+   ' float x=clamp(vL,-1.0,1.0);float tubo=0.58+0.5*sqrt(max(0.0,1.0-x*x));'+
    ' float brillo=max(0.0,dot(vN,uluz)*x)*0.45;'+
-   ' vec3 c=vT.rgb*(tubo+brillo);gl_FragColor=vec4(min(c,vec3(vT.a)),vT.a);}');
+   ' vec3 c=min(vT.rgb*(tubo+brillo),vec3(vT.a))+ufondo*vT.a*0.06*(1.0-tubo+0.42);'+
+   ' gl_FragColor=acabar(c/max(vT.a,1e-4),vT.a);}');
   // Las caras: sólidos sombreados por su normal, hojas con su velo según lo de frente que se miren.
   GL.cara=programa(
    'attribute vec3 p,nrm;attribute vec4 tinta;attribute float clase;'+PROYECCION+
    'uniform vec3 usol;varying vec4 vT;'+
-   'void main(){gl_Position=clip(proy(p));'+
-   ' if(clase<0.5){float luz=0.42+0.58*abs(dot(nrm,usol));vT=vec4(min(tinta.rgb*luz,1.0),tinta.a);}'+
+   'void main(){vec3 s=proy(alSuelo(p));gl_Position=clip(s);vH=s.z;'+
+   ' if(usombra>0.5){vT=usombraTinta;}'+
+   ' else if(clase<0.5){float luz=0.42+0.58*abs(dot(nrm,usol));vT=vec4(min(tinta.rgb*luz,1.0),tinta.a);}'+
    ' else{float f=abs(dot(nrm,uf));float a=min((0.055+0.11*f)*tinta.a,0.35);'+
    '  vT=vec4(tinta.rgb,clase<1.5?a:min(a*2.4,0.55));}}',
-   'precision mediump float;varying vec4 vT;void main(){gl_FragColor=vec4(vT.rgb*vT.a,vT.a);}');
+   NIEBLA+'varying vec4 vT;void main(){gl_FragColor=acabar(vT.rgb,vT.a);}');
   // Las imágenes: un cuadrilátero con su textura.
   GL.foto=programa(
    'attribute vec3 p;attribute vec2 uv;'+PROYECCION+'varying vec2 vUv;'+
-   'void main(){gl_Position=clip(proy(p));vUv=uv;}',
-   'precision mediump float;varying vec2 vUv;uniform sampler2D tex;uniform float uop;'+
-   'void main(){vec4 c=texture2D(tex,vUv);gl_FragColor=vec4(c.rgb*c.a*uop,c.a*uop);}');
+   'void main(){vec3 s=proy(p);gl_Position=clip(s);vH=s.z;vUv=uv;}',
+   NIEBLA+'varying vec2 vUv;uniform sampler2D tex;uniform float uop;'+
+   'void main(){vec4 c=texture2D(tex,vUv);gl_FragColor=acabar(c.rgb,c.a*uop);}');
+  // La rejilla del suelo: rayas de un color, que la niebla se lleva a lo lejos.
+  GL.linea=programa(
+   'attribute vec3 p;'+PROYECCION+'void main(){vec3 s=proy(p);gl_Position=clip(s);vH=s.z;}',
+   NIEBLA+'uniform vec4 utinta;void main(){gl_FragColor=acabar(utinta.rgb,utinta.a);}');
   lienzoGl=c;
   caja.insertBefore(c, lienzo);      // debajo del lienzo 2D, que se queda para la medida
   gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
@@ -494,6 +579,20 @@ function subirGl(){
  });
  var lados=D.cj?Math.hypot(D.cj[3]-D.cj[0],D.cj[4]-D.cj[1],D.cj[5]-D.cj[2]):100;
  GL.hondo=Math.max(lados*4,1);
+ // ---- El suelo: una rejilla en el plano de abajo del croquis, con un paso redondo ----
+ var cj=D.cj||[0,0,0,0,0,0];
+ GL.z0=cj[2]-R*0.02;
+ var paso=pasoRedondo(R/6), medio=Math.ceil(R*1.6/paso)*paso;
+ var cx=(cj[0]+cj[3])/2, cy=(cj[1]+cj[4])/2, x0=Math.floor((cx-medio)/paso)*paso, y0=Math.floor((cy-medio)/paso)*paso;
+ var rejilla=[], nl=Math.round(2*medio/paso);
+ for(i=0;i<=nl;i++){ var x=x0+i*paso, y=y0+i*paso;
+  rejilla.push(x,y0,GL.z0, x,y0+nl*paso,GL.z0, x0,y,GL.z0, x0+nl*paso,y,GL.z0); }
+ GL.bRejilla=buffer(new Float32Array(rejilla)); GL.nRejilla=rejilla.length/3;
+}
+// Un paso de rejilla «redondo»: 1, 2 o 5 por la potencia de diez que toque.
+function pasoRedondo(x){
+ var e=Math.pow(10,Math.floor(Math.log(Math.max(x,1e-9))/Math.LN10)), m=x/e;
+ return (m<1.5?1:m<3.5?2:m<7.5?5:10)*e;
 }
 function camaraGl(prog,B){
  gl.useProgram(prog);
@@ -510,6 +609,17 @@ function camaraGl(prog,B){
  gl.uniform1f(gl.getUniformLocation(prog,'umh'),B.mh);
  gl.uniform1f(gl.getUniformLocation(prog,'uhondo'),GL.hondo);
  gl.uniform2f(gl.getUniformLocation(prog,'upx'),2/w,2/h);
+ // La niebla empieza un poco por delante del centro y a dos radios ya se ha llevado la mitad.
+ gl.uniform1f(gl.getUniformLocation(prog,'uniebla'),escena.niebla?1:0);
+ gl.uniform1f(gl.getUniformLocation(prog,'unieblaA'),-0.4*R);
+ gl.uniform1f(gl.getUniformLocation(prog,'unieblaB'),2.4*R);
+ gl.uniform3f(gl.getUniformLocation(prog,'ufondo'),fondoRgb[0]/255,fondoRgb[1]/255,fondoRgb[2]/255);
+ gl.uniform1f(gl.getUniformLocation(prog,'usombra'),0);
+ gl.uniform1f(gl.getUniformLocation(prog,'uz0'),GL.z0||0);
+ var sd=direccionDeLaSombra();
+ gl.uniform3f(gl.getUniformLocation(prog,'usoldir'),sd[0],sd[1],sd[2]);
+ var st=esOscuro?[1,1,1,0.10]:[0,0,0,0.16];
+ gl.uniform4f(gl.getUniformLocation(prog,'usombraTinta'),st[0]*st[3],st[1]*st[3],st[2]*st[3],st[3]);
 }
 function atributo(prog,nombre,cuantos,paso,desde){
  var a=gl.getAttribLocation(prog,nombre); if(a<0) return;
@@ -520,6 +630,35 @@ function pintarGl(B){
  gl.viewport(0,0,lienzoGl.width,lienzoGl.height);
  gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
  gl.depthMask(true);
+ // **El suelo primero**: la rejilla escribe profundidad, y encima van las sombras —sin
+ // profundidad, son una mancha en el plano— y después todo lo demás, que las tapa.
+ if(escena.suelo&&GL.nRejilla){
+  camaraGl(GL.linea,B);
+  var rt=esOscuro?[1,1,1,0.13]:[0,0,0,0.11];
+  gl.uniform4f(gl.getUniformLocation(GL.linea,'utinta'),rt[0]*rt[3],rt[1]*rt[3],rt[2]*rt[3],rt[3]);
+  gl.bindBuffer(gl.ARRAY_BUFFER,GL.bRejilla); atributo(GL.linea,'p',3,3,0);
+  gl.drawArrays(gl.LINES,0,GL.nRejilla);
+ }
+ if(escena.sombra&&escena.suelo){
+  gl.depthMask(false); gl.disable(gl.DEPTH_TEST);
+  if(GL.nCinta){
+   camaraGl(GL.cinta,B); gl.uniform1f(gl.getUniformLocation(GL.cinta,'usombra'),1);
+   gl.uniform2f(gl.getUniformLocation(GL.cinta,'uluz'),0,0);
+   gl.bindBuffer(gl.ARRAY_BUFFER,GL.bCinta);
+   atributo(GL.cinta,'p',3,15,0); atributo(GL.cinta,'q0',3,15,3); atributo(GL.cinta,'q1',3,15,6);
+   atributo(GL.cinta,'lado',1,15,9); atributo(GL.cinta,'medio',1,15,10); atributo(GL.cinta,'tinta',4,15,11);
+   for(i=0;i<GL.tramosCinta.length;i++){ var ts=GL.tramosCinta[i];
+    if(!apagados[ts.g]&&ts.cuantos) gl.drawArrays(gl.TRIANGLE_STRIP,ts.desde,ts.cuantos); }
+  }
+  if(GL.solidos.length){
+   camaraGl(GL.cara,B); gl.uniform1f(gl.getUniformLocation(GL.cara,'usombra'),1);
+   gl.uniform3f(gl.getUniformLocation(GL.cara,'usol'),0,0,1);
+   gl.bindBuffer(gl.ARRAY_BUFFER,GL.bCara);
+   atributo(GL.cara,'p',3,11,0); atributo(GL.cara,'nrm',3,11,3); atributo(GL.cara,'tinta',4,11,6); atributo(GL.cara,'clase',1,11,10);
+   for(i=0;i<GL.solidos.length;i++){ var ss=GL.solidos[i]; if(visible(ss.o)&&ss.cuantos) gl.drawArrays(gl.TRIANGLES,ss.desde,ss.cuantos); }
+  }
+  gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
+ }
  // Los sólidos, opacos, con la luz.
  if(GL.solidos.length){
   camaraGl(GL.cara,B);
@@ -577,6 +716,12 @@ function pintarGl(B){
  }
 }
 
+// Hacia dónde cae la sombra: por el rayo del sol si lo hay y está alto; si no, a plomo.
+function direccionDeLaSombra(){
+ var s=D.sol;
+ if(s){ var n=norm([-s[0],-s[1],-s[2]]); if(n[2]<-0.25) return n; }
+ return [0,0,-1];
+}
 // ---- Encajar y el eje del giro ----
 function cajaDe(filtro){
  var c=[1e18,1e18,1e18,-1e18,-1e18,-1e18], hay=false;
@@ -640,13 +785,41 @@ function acercar(f,cx,cy){
 }
 
 // ---- El dedo ----
-var punteros=new Map(), gesto=null, movido=0;
+var punteros=new Map(), gesto=null, movido=0, dedosMax=0;
+// **La inercia**: al soltar, el giro sigue con la velocidad que llevaba el dedo y se va
+// frenando. Es lo que hace que el croquis se sienta con peso, como en la galería de Feather.
+var impulso=null, ultimoGiro={t:0,dx:0,dy:0};
+var ultimoToque=null;
 function muestras(e){ return (e.getCoalescedEvents&&e.getCoalescedEvents())||[e]; }
+function pararImpulso(){ impulso=null; }
+function seguirImpulso(){
+ if(!impulso||!vivo) return;
+ girar(impulso.dx,impulso.dy);
+ impulso.dx*=0.93; impulso.dy*=0.93;
+ if(Math.abs(impulso.dx)+Math.abs(impulso.dy)<0.05) impulso=null;
+ repintar();
+ if(impulso) requestAnimationFrame(seguirImpulso);
+}
+// **El giradiscos**: el croquis da vueltas solo hasta que se toca.
+var giroAnterior=0;
+function darVueltas(t){
+ if(!escena.gira||!vivo) return;
+ if(giroAnterior){ var dt=Math.min((t-giroAnterior)/1000,0.1);
+  girar(GIRO_POR_SEGUNDO*dt/(Math.PI*2)*VUELTA_ENTERA,0); repintar(); }
+ giroAnterior=t;
+ requestAnimationFrame(darVueltas);
+}
+function ponerGiradiscos(si){ escena.gira=!!si; giroAnterior=0; if(si) requestAnimationFrame(darVueltas); }
+// El grano se mueve: mientras está puesto se repinta a treinta por segundo.
+function moverGrano(){ if(!escena.grano||!vivo){granoVivo=null;return;} repintar(); granoVivo=setTimeout(moverGrano,33); }
+function ponerGrano(si){ escena.grano=!!si; if(si&&!granoVivo) moverGrano(); repintar(); }
 lienzo.addEventListener('pointerdown',function(e){
- if(e.pointerType==='mouse'&&e.button!==0&&e.button!==2) return;
+ if(e.pointerType==='mouse'&&e.button!==0&&e.button!==1&&e.button!==2) return;
  lienzo.setPointerCapture(e.pointerId);
  punteros.set(e.pointerId,{x:e.clientX,y:e.clientY,boton:e.button});
- movido=0;
+ movido=0; pararImpulso();
+ if(escena.gira){ escena.gira=false; if(api.escenaCambio) api.escenaCambio(); }
+ if(punteros.size===1) dedosMax=1; else dedosMax=Math.max(dedosMax,punteros.size);
  if(punteros.size===2){var v=Array.from(punteros.values());
   gesto={d:Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y),x:(v[0].x+v[1].x)/2,y:(v[0].y+v[1].y)/2};}
  else gesto=null;
@@ -662,9 +835,13 @@ lienzo.addEventListener('pointermove',function(e){
   a.x=m.clientX; a.y=m.clientY;
   movido+=Math.abs(dx)+Math.abs(dy);
   if(punteros.size===1){
-   // El botón derecho y el modo mover desplazan; lo demás gira. Es lo de siempre.
-   if(modo==='mover'||a.boton===2) desplazar(dx,dy);
-   else if(modo==='girar') girar(dx,dy);
+   // El botón derecho y el modo mover desplazan; el del medio cambia la lente; lo demás gira.
+   if(a.boton===1) lente(-dy/500);
+   else if(modo==='mover'||a.boton===2) desplazar(dx,dy);
+   else if(modo==='girar'){ girar(dx,dy); ultimoGiro={t:m.timeStamp||Date.now(),dx:dx,dy:dy}; }
+  } else if(punteros.size>=3){
+   // **Tres dedos arrastrando cambian la lente**, como en la galería de Feather.
+   lente(-dy/(500*punteros.size));
   }
  }
  if(punteros.size===2 && gesto){
@@ -679,7 +856,23 @@ lienzo.addEventListener('pointermove',function(e){
 function fin(e){ punteros.delete(e.pointerId); if(punteros.size<2) gesto=null; }
 lienzo.addEventListener('pointerup',function(e){
  if(modo==='medir'&&punteros.size===1&&movido<12) tomarPunto(e);
+ var ultimo=punteros.size===1, a=punteros.get(e.pointerId);
  fin(e);
+ if(!ultimo) return;
+ // Un dedo que se suelta girando deja el giro andando.
+ var ahora=e.timeStamp||Date.now();
+ if(dedosMax===1&&modo==='girar'&&a&&a.boton===0&&movido>=12&&ahora-ultimoGiro.t<80){
+  impulso={dx:ultimoGiro.dx*0.9,dy:ultimoGiro.dy*0.9}; requestAnimationFrame(seguirImpulso);
+ }
+ // **El doble toque**: con un dedo vuelve a la vista con la que se exportó —la «vista
+ // perfecta» de Feather—; con tres, cambia entre lente y ortográfica. El ratón hace lo
+ // mismo con el doble clic y el doble clic derecho.
+ if(movido<12&&e.pointerType!=='mouse'){
+  if(ultimoToque&&ahora-ultimoToque.t<320&&Math.hypot(e.clientX-ultimoToque.x,e.clientY-ultimoToque.y)<28&&ultimoToque.dedos===dedosMax){
+   ultimoToque=null;
+   if(dedosMax>=3) alternarOrto(); else if(dedosMax===1&&modo!=='medir') comoSeExporto();
+  } else ultimoToque={t:ahora,x:e.clientX,y:e.clientY,dedos:dedosMax};
+ }
 });
 lienzo.addEventListener('pointercancel',fin);
 lienzo.addEventListener('wheel',function(e){
@@ -687,7 +880,18 @@ lienzo.addEventListener('wheel',function(e){
  acercar(Math.pow(0.999,e.deltaY), e.clientX, e.clientY);
  repintar();
 },{passive:false});
-lienzo.addEventListener('dblclick',function(){encajar();});
+lienzo.addEventListener('dblclick',function(e){ if(e.button===2) alternarOrto(); else comoSeExporto(); });
+lienzo.addEventListener('auxclick',function(e){ if(e.button===2&&e.detail===2) alternarOrto(); });
+function comoSeExporto(){ cam=clonar(inicial); refrescarPivote(); repintar(); }
+// La lente: cero es ortográfica; hasta uno, cada vez más gran angular. Se recuerda la última
+// lente para poder volver a ella desde la ortográfica.
+var lenteGuardada=0.45;
+function lente(d){ cam.l=Math.min(Math.max(cam.l+d,0),1); if(cam.l>0) lenteGuardada=cam.l; repintar(); }
+function alternarOrto(){
+ if(cam.l>0){ lenteGuardada=cam.l; cam.l=0; api.decir('Ortográfica'); }
+ else { cam.l=lenteGuardada||0.45; api.decir('Con lente'); }
+ repintar();
+}
 
 // ---- Medir ----
 function tomarPunto(e){
@@ -713,10 +917,112 @@ function tomarPunto(e){
  repintar();
 }
 
+function ponerDegradado(si){
+ escena.degradado=!!si;
+ if(!si){ caja.style.background=''; return; }
+ var c=fondoRgb, k=esOscuro?1.35:0.94, j=esOscuro?0.55:0.82;
+ function t(m){ return 'rgb('+Math.min(255,Math.round(c[0]*m))+','+Math.min(255,Math.round(c[1]*m))+','+Math.min(255,Math.round(c[2]*m))+')'; }
+ caja.style.background='radial-gradient(ellipse at 50% 38%, '+t(k)+' 0%, '+fondoHex+' 55%, '+t(j)+' 100%)';
+}
+// ---- El croquis como OBJ, desde la propia página ----
+//
+// Lo mismo que hace la aplicación (`ExportarObj`): cada trazo un tubo de ocho lados con sus
+// anillos llevados por transporte paralelo —sin torcerse en las curvas—, las hojas su
+// contorno, los sólidos sus caras. Los ejes cambian de «z arriba» a «y arriba», que es lo que
+// esperan Blender y los visores; los colores van en el MTL y también por vértice.
+function objDelCroquis(){
+ var obj=[], mtl=[], nv=0, nn=0, mats={}, LADOS=8;
+ function f4(x){ return (Math.round(x*10000)/10000).toString(); }
+ function ejes(p){ return [p[0],p[2],-p[1]]; }
+ function material(hex,op){
+  var c=rgb(hex), k='c_'+hex.replace('#','')+(op<1?'_'+Math.round(op*100):'');
+  if(!mats[k]){ mats[k]=1; mtl.push('newmtl '+k,'Kd '+f4(c[0]/255)+' '+f4(c[1]/255)+' '+f4(c[2]/255),'d '+f4(op),''); }
+  return k;
+ }
+ function vertice(p,hex){ var q=ejes(p), c=rgb(hex); obj.push('v '+f4(q[0])+' '+f4(q[1])+' '+f4(q[2])+' '+f4(c[0]/255)+' '+f4(c[1]/255)+' '+f4(c[2]/255)); return ++nv; }
+ function normal(d){ var q=ejes(d); obj.push('vn '+f4(q[0])+' '+f4(q[1])+' '+f4(q[2])); return ++nn; }
+ obj.push('# PixPin croquis 3D','mtllib croquis.mtl','');
+ var i,j,k;
+ for(i=0;i<D.tr.length;i++){
+  var t=D.tr[i]; if(!visible(t)) continue;
+  var p=t.p, pts=[];
+  for(j=0;j<p.length;j+=3){ var q=[p[j],p[j+1],p[j+2]];
+   if(!pts.length||Math.hypot(q[0]-pts[pts.length-1][0],q[1]-pts[pts.length-1][1],q[2]-pts[pts.length-1][2])>1e-6) pts.push(q); }
+  if(pts.length<2) continue;
+  obj.push('o trazo_'+i,'usemtl '+material(t.c,t.o===undefined?1:t.o));
+  // Los marcos: la tangente de cada punto y una normal que se transporta de un punto al siguiente.
+  var tg=[], nr=[], m;
+  for(j=0;j<pts.length;j++){ var a=pts[Math.max(j-1,0)], b=pts[Math.min(j+1,pts.length-1)]; tg.push(norm([b[0]-a[0],b[1]-a[1],b[2]-a[2]])); }
+  var arb=Math.abs(tg[0][2])<0.9?[0,0,1]:[1,0,0];
+  nr.push(norm(cruz(tg[0],arb)));
+  for(j=1;j<pts.length;j++){ var pr=nr[j-1], tt=tg[j];
+   var d=pr[0]*tt[0]+pr[1]*tt[1]+pr[2]*tt[2];
+   var n2=norm([pr[0]-tt[0]*d,pr[1]-tt[1]*d,pr[2]-tt[2]*d]);
+   if(!(n2[0]||n2[1]||n2[2])) n2=norm(cruz(tt,arb));
+   nr.push(n2); }
+  var v0=nv+1, n0=nn+1;
+  for(j=0;j<pts.length;j++){
+   var r=Math.max((t.a?t.a[j]:t.w)/2,1e-4), bn=cruz(tg[j],nr[j]);
+   for(k=0;k<LADOS;k++){ var an=2*Math.PI*k/LADOS, cs=Math.cos(an), sn=Math.sin(an);
+    var dir=[nr[j][0]*cs+bn[0]*sn, nr[j][1]*cs+bn[1]*sn, nr[j][2]*cs+bn[2]*sn];
+    vertice([pts[j][0]+dir[0]*r, pts[j][1]+dir[1]*r, pts[j][2]+dir[2]*r], t.c); normal(dir); }
+  }
+  for(j=0;j<pts.length-1;j++) for(k=0;k<LADOS;k++){ var k2=(k+1)%LADOS;
+   var A=v0+j*LADOS+k, Bv=v0+j*LADOS+k2, C=v0+(j+1)*LADOS+k2, Dv=v0+(j+1)*LADOS+k;
+   var nA=n0+j*LADOS+k, nB=n0+j*LADOS+k2, nC=n0+(j+1)*LADOS+k2, nD=n0+(j+1)*LADOS+k;
+   obj.push('f '+A+'//'+nA+' '+Bv+'//'+nB+' '+C+'//'+nC+' '+Dv+'//'+nD); }
+  // Las tapas.
+  var cA=vertice(pts[0],t.c), cB=vertice(pts[pts.length-1],t.c);
+  for(k=0;k<LADOS;k++){ var k3=(k+1)%LADOS;
+   obj.push('f '+cA+' '+(v0+k3)+' '+(v0+k));
+   obj.push('f '+cB+' '+(v0+(pts.length-1)*LADOS+k)+' '+(v0+(pts.length-1)*LADOS+k3)); }
+ }
+ for(i=0;i<D.ho.length;i++){
+  var l=D.ho[i]; if(!visible(l)) continue;
+  obj.push('o hoja_'+i,'usemtl '+material(l.c,l.o===undefined?1:l.o));
+  var caras=l.k?l.s:[l.b];
+  for(j=0;j<caras.length;j++){ var fc=caras[j]; if(fc.length<9) continue;
+   var ids=[]; for(k=0;k<fc.length;k+=3) ids.push(vertice([fc[k],fc[k+1],fc[k+2]],l.c));
+   obj.push('f '+ids.join(' ')); }
+ }
+ return {obj:obj.join('\n')+'\n', mtl:mtl.join('\n')};
+}
 refrescarPivote();
+if(escena.degradado) ponerDegradado(true);
 return {
- activar:function(){ vivo=true; medir(); },
- desactivar:function(){ vivo=false; },
+ activar:function(){ vivo=true; medir(); if(escena.gira) ponerGiradiscos(true); if(escena.grano) ponerGrano(true); },
+ desactivar:function(){ vivo=false; pararImpulso(); },
+ orto:alternarOrto,
+ lente:lente,
+ comoSeExporto:comoSeExporto,
+ // **La escena**: lo que se enciende y apaga desde el cajón. Ver [escena].
+ escena:function(){
+  function opcion(n,clave,al){ return {nombre:n, puesto:function(){return !!escena[clave];},
+   poner:function(si){ escena[clave]=!!si; if(al) al(si); else repintar(); }}; }
+  return [
+   opcion('Suelo con rejilla','suelo'),
+   opcion('Sombra al suelo','sombra'),
+   opcion('Niebla','niebla'),
+   opcion('Giradiscos','gira',ponerGiradiscos),
+   opcion('Fondo degradado','degradado',ponerDegradado),
+   opcion('Más nitidez (captura)','nitido',function(){medir();}),
+   opcion('Brillo','brillo'),
+   opcion('Grano','grano',ponerGrano),
+   opcion('Pixelado','pixel',function(){medir();})
+  ];
+ },
+ // La guía de gestos: lo que hace cada dedo y cada botón del ratón.
+ guia:function(){
+  return [
+   {t:'Dedos',f:[['Un dedo','Girar'],['Pinza','Acercar'],['Dos dedos','Mover'],['Doble toque','Como se exportó'],
+     ['Tres dedos','Cambiar la lente'],['Doble toque con tres','Lente u ortográfica']]},
+   {t:'Ratón',f:[['Arrastrar','Girar'],['Rueda','Acercar'],['Botón derecho','Mover'],['Botón central','Cambiar la lente'],
+     ['Doble clic','Como se exportó'],['Doble clic derecho','Lente u ortográfica']]},
+   {t:'Teclas',f:[['G / V / D','Girar, mover, medir'],['0','Encajar'],['O','Lente u ortográfica'],['[ y ]','Lente'],['T','Giradiscos'],['?','Esta guía']]}
+  ];
+ },
+ giradiscos:function(){ ponerGiradiscos(!escena.gira); return escena.gira; },
+ obj:objDelCroquis,
  medir:medir,
  repintar:repintar,
  encajar:function(){ encajar(); },

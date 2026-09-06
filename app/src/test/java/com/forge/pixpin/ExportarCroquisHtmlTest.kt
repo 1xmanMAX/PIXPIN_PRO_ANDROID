@@ -192,6 +192,27 @@ class ExportarCroquisHtmlTest {
         assertFalse("las luces apagadas no mandan sol", sin.contains("\"sol\":["))
     }
 
+    /** La portada viaja dentro del JSON solo si es una imagen `data:`; otra cosa no se cuela. */
+    @Test
+    fun `la portada viaja como imagen incrustada`() {
+        val c = Croquis(trazos = listOf(recta))
+        val con = ExportarCroquisHtml.datos(c, Camara3D(), portada = "data:image/jpeg;base64,AAAA")!!
+        assertTrue(con.contains("\"po\":\"data:image/jpeg;base64,AAAA\""))
+        val sin = ExportarCroquisHtml.datos(c, Camara3D(), portada = "http://malo/x.jpg")!!
+        assertFalse(sin.contains("\"po\""))
+        assertFalse(ExportarCroquisHtml.datos(c, Camara3D())!!.contains("\"po\""))
+    }
+
+    /** Lo que la página del espacio trae de serie desde el 6-sep-2026: suelo, niebla, sombra, guía, OBJ. */
+    @Test
+    fun `el visor lleva la escena, la guia y el obj`() {
+        val html = pagina(Croquis(trazos = listOf(recta)))!!
+        for (cosa in listOf("id=\"escena\"", "id=\"guia\"", "function objDelCroquis", "usombra", "uniebla", "bRejilla",
+            "function seguirImpulso", "function darVueltas", "function alternarOrto", "img.portada", "function alternarGuia")) {
+            assertTrue("falta $cosa", html.contains(cosa))
+        }
+    }
+
     @Test
     fun `los numeros van cortos`() {
         assertEquals("0", ExportarCroquisHtml.n(0.0))
