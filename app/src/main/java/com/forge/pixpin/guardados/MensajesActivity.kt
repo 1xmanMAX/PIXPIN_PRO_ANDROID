@@ -4926,7 +4926,8 @@ class MensajesActivity : ComponentActivity() {
             }
             if (archivo == null) avisarDeQueNoHay() else {
                 Toast.makeText(this@MensajesActivity, com.forge.pixpin.ui.ExportarWebDe.resumenDe(archivo, calidadDeAudio), Toast.LENGTH_LONG).show()
-                compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
+                // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
+                com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(this@MensajesActivity, archivo, nombreDeLoCompartido(m))
             }
         }
     }

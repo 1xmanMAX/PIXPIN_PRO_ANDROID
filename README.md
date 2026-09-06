@@ -4,7 +4,8 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.196 pruebas · **sin red, sin cuentas, sin analítica**
+**Android 10+** · Kotlin + Compose · 2.203 pruebas · **sin cuentas y sin analítica**; la red solo
+se usa si tú pulsas bajar un modelo de voz o compartir una página como enlace
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md)
 
@@ -139,6 +140,17 @@ En una página de croquis, el visor trae suelo con rejilla, sombra proyectada, n
 giradiscos, guía de gestos y **bajar el OBJ** desde la propia página. Sin traer ni una
 biblioteca de fuera: son unos kilobytes de WebGL propio.
 
+### Como archivo o como enlace
+
+Mandar un `.html` llega como documento: hay que bajarlo y abrirlo a mano. Por eso al
+compartir se puede pedir un **enlace**, que se toca y se ve. La página se sube a un servicio
+público de archivos temporales y se elige cuál y cuánto dura: **1 hora**, 12 horas, un día,
+tres días, o sin caducidad. Si el elegido está caído se prueban los demás.
+
+> Subir es **lo único de toda la app que manda algo fuera del teléfono**, y solo al pulsar el
+> botón. El servicio no es nuestro y cualquiera con el enlace puede abrirlo mientras dure, así
+> que la pantalla lo dice antes de subir nada. Compartir como archivo no sale del aparato.
+
 ---
 
 ## Gestos sobre un pin
@@ -180,6 +192,7 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 | Mostrar sobre otras apps | Pines y bola | imprescindible |
 | `MediaProjection` | El fotograma que se recorta | imprescindible |
 | Micrófono | Notas de voz y transcripción | para la voz |
+| Internet | Bajar los modelos de voz y subir una página compartida como enlace | opcional |
 | Cámara | El modo «en el sitio» del croquis | opcional |
 | Notificaciones · batería | Accesos rápidos · que no maten el servicio | recomendado |
 
@@ -197,7 +210,7 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
-./gradlew testDebugUnitTest    # 2.196 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.203 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -249,8 +262,9 @@ com.forge.pixpin/
 | `Croquis3DEsqueleto` · `Croquis3DPluma` | El esqueleto del trazo, cocido una vez; el tubo con lomo y flanco |
 | `Camara3D` · `BaseDeCamara` | La proyección, con lente y ojo de pez; la base congelada por fotograma |
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
+| `SubirPagina` | Compartir la página como enlace: multipart a mano y varios servicios de reserva |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.196 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.203 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---

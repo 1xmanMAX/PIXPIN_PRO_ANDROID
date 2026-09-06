@@ -2096,19 +2096,8 @@ class Croquis3DActivity : ComponentActivity() {
         runCatching {
             val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
             val archivo = java.io.File(carpeta, "$elCroquis.html").also { it.writeText(html) }
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                this, "$packageName.fileprovider", archivo
-            )
-            startActivity(
-                android.content.Intent.createChooser(
-                    android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = ExportarCroquisHtml.MIME_TYPE
-                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    },
-                    getString(R.string.croquis_exportar_html)
-                )
-            )
+            // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
+            com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(this, archivo, elCroquis)
             Toast.makeText(
                 this,
                 getString(R.string.croquis_pagina_exportada, html.length / 1024),

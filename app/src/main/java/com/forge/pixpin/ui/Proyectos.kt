@@ -423,7 +423,8 @@ fun PantallaDeProyectos(
                         // Se dice qué lleva: así se sabe si el audio de una nota viajó.
                         val calidad = ExportarHtml.calidadDeAudio(app.settings.settings.first().funcionesWeb)
                         android.widget.Toast.makeText(contexto, ExportarWebDe.resumenDe(archivo, calidad), android.widget.Toast.LENGTH_LONG).show()
-                        compartir(contexto, archivo, ExportarHtml.MIME_TYPE)
+                        // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
+                        CompartirEnlaceActivity.abrir(contexto, archivo, archivo.name.removeSuffix(".html"))
                     }
                 }
             }

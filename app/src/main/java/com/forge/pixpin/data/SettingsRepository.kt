@@ -178,6 +178,12 @@ data class Settings(
     val modoDeIdiomas: String = MODO_CADA_IDIOMA,
 
     /**
+     * Con qué servicio se subió la última página compartida como enlace, para ofrecerlo
+     * marcado la próxima vez. Ver [com.forge.pixpin.motor.SubirPagina].
+     */
+    val servicioDeEnlace: String = "",
+
+    /**
      * **Cómo se trae un plano en PDF: como líneas o como imagen.**
      *
      * Con esto puesto, al abrir un PDF vectorial se lee su geometría y se pinta como rayas
@@ -316,6 +322,7 @@ class SettingsRepository(private val context: Context) {
         val SEGUNDO_IDIOMA_DE_VOZ = stringPreferencesKey("segundo_idioma_de_voz")
         val MODELO_WHISPER = stringPreferencesKey("modelo_whisper")
         val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
+        val SERVICIO_DE_ENLACE = stringPreferencesKey("servicio_de_enlace")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
@@ -345,6 +352,7 @@ class SettingsRepository(private val context: Context) {
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
             modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
             modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
+            servicioDeEnlace = prefs[Keys.SERVICIO_DE_ENLACE] ?: "",
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
@@ -448,6 +456,11 @@ class SettingsRepository(private val context: Context) {
     /** [MODO_CADA_IDIOMA] o [MODO_TODO_EN_UNO]. Ver [Settings.modoDeIdiomas]. */
     suspend fun setModoDeIdiomas(valor: String) {
         context.dataStore.edit { it[Keys.MODO_DE_IDIOMAS] = valor }
+    }
+
+    /** Ver [Settings.servicioDeEnlace]. */
+    suspend fun setServicioDeEnlace(valor: String) {
+        context.dataStore.edit { it[Keys.SERVICIO_DE_ENLACE] = valor }
     }
 
     /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */

@@ -287,6 +287,12 @@
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
 
+        <!-- Compartir una página como archivo o como enlace. Ver CompartirEnlaceActivity. -->
+        <activity
+            android:name=".ui.CompartirEnlaceActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.PixPin" />
         <!-- Leer un texto en voz alta mientras baja solo, grabándose. Ver TelepronterActivity. -->
         <activity
             android:name=".guardados.TelepronterActivity"

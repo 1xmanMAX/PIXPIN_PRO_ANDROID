@@ -3574,6 +3574,15 @@ class DrawEditorActivity : ComponentActivity() {
      * nada al tocarlo».
      */
     private fun exportando(mime: String, escribir: suspend () -> File?) {
+        exportandoCon(mime, escribir, comoEnlace = mime == ExportarHtml.MIME_TYPE)
+    }
+
+    /**
+     * Escribe el archivo y lo comparte. Con [comoEnlace], en vez del selector de siempre se
+     * abre la pantalla que deja elegir entre archivo y enlace: una página web se mira, y por
+     * un enlace se mira sin bajar nada. Ver `ui.CompartirEnlaceActivity`.
+     */
+    private fun exportandoCon(mime: String, escribir: suspend () -> File?, comoEnlace: Boolean) {
         if (exportando) return
         exportando = true
         lifecycleScope.launch {
@@ -3587,7 +3596,13 @@ class DrawEditorActivity : ComponentActivity() {
                 ).show()
                 return@launch
             }
-            compartirArchivo(archivo, mime)
+            if (comoEnlace) {
+                com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
+                    this@DrawEditorActivity, archivo, archivo.name.removeSuffix(".html")
+                )
+            } else {
+                compartirArchivo(archivo, mime)
+            }
         }
     }
 

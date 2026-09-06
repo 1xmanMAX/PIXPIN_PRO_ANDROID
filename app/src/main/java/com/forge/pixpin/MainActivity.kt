@@ -28,6 +28,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
@@ -55,6 +57,7 @@ import com.forge.pixpin.clipboard.MagicWord
 import com.forge.pixpin.clipboard.MiniApp
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -452,12 +455,12 @@ private fun TodoConcedido() {
 }
 
 /**
- * Los ajustes, detrás de una puerta y **en tres grupos**.
+ * Los ajustes, detrás de una puerta y **en grupos que se pliegan**.
  *
- * Sueltos y todos seguidos daban nueve tarjetas del mismo tamaño y con el mismo
- * peso, sin decir cuál importa ni cuál va con cuál. Agrupados por lo que tocan
- * —capturar, dibujar, cómo se ve— se leen de un vistazo y se encuentra lo que se
- * busca sin recorrerlos todos.
+ * Sueltos y todos seguidos daban trece tarjetas del mismo tamaño y con el mismo peso, sin
+ * decir cuál importa ni cuál va con cuál, y con la del motor de voz ocupando media pantalla
+ * ella sola: recorrerlos era un viaje. Ahora cada grupo es una fila con su resumen, cerrada,
+ * y la pantalla entera cabe de una vez; se abre solo lo que se viene a tocar.
  */
 @Composable
 fun PantallaDeAjustes(onVolver: () -> Unit) {
@@ -483,13 +486,19 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
 
-            GrupoDeAjustes(stringResource(R.string.ajustes_capturar)) {
+            GrupoDeAjustes(
+                stringResource(R.string.ajustes_capturar),
+                stringResource(R.string.ajustes_capturar_resumen)
+            ) {
                 CaptureModeCard()
                 Spacer(Modifier.height(12.dp))
                 FormatoDeCopiaCard()
             }
 
-            GrupoDeAjustes(stringResource(R.string.ajustes_dibujar)) {
+            GrupoDeAjustes(
+                stringResource(R.string.ajustes_dibujar),
+                stringResource(R.string.ajustes_dibujar_resumen)
+            ) {
                 ModoGuiaCard()
                 Spacer(Modifier.height(12.dp))
                 ImanCard()
@@ -503,13 +512,28 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
                 BarraDeLaCapaCard()
             }
 
-            GrupoDeAjustes(stringResource(R.string.ajustes_pinear)) {
+            GrupoDeAjustes(
+                stringResource(R.string.ajustes_pinear),
+                stringResource(R.string.ajustes_pinear_resumen)
+            ) {
                 PalabrasMagicasCard()
             }
 
-            GrupoDeAjustes(stringResource(R.string.ajustes_aspecto)) {
-                ModoNocheCard()
+            // La voz tiene su grupo: estaba en «Aspecto» de cuando era una tarjeta pequeña,
+            // y ahora es la más larga de todas y nadie la busca ahí.
+            GrupoDeAjustes(
+                stringResource(R.string.ajustes_voz),
+                stringResource(R.string.ajustes_voz_resumen)
+            ) {
                 MotorDeVozCard()
+            }
+
+            GrupoDeAjustes(
+                stringResource(R.string.ajustes_aspecto),
+                stringResource(R.string.ajustes_aspecto_resumen)
+            ) {
+                ModoNocheCard()
+                Spacer(Modifier.height(12.dp))
                 OledCard()
                 Spacer(Modifier.height(12.dp))
                 LetraDelPinCard()
@@ -532,15 +556,43 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
 }
 
 @Composable
-private fun GrupoDeAjustes(titulo: String, contenido: @Composable () -> Unit) {
-    Text(
-        titulo,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(bottom = 8.dp)
-    )
-    contenido()
-    Spacer(Modifier.height(28.dp))
+private fun GrupoDeAjustes(titulo: String, resumen: String, contenido: @Composable () -> Unit) {
+    var abierto by rememberSaveable(titulo) { mutableStateOf(false) }
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .clickable { abierto = !abierto }
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(titulo, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                // **El resumen es lo que evita abrirlo para ver qué había.** Cerrado, la
+                // pantalla entera cabe de un vistazo y aun así se sabe dónde mirar.
+                Text(
+                    resumen,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Icon(
+                if (abierto) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+    // **Cerrado no se compone.** Trece tarjetas abiertas a la vez eran una pantalla que no
+    // se acababa de recorrer (lo reportó el usuario el 6-sep-2026), y algunas leen del disco
+    // al componerse: así solo trabaja la que se abre.
+    if (abierto) {
+        Spacer(Modifier.height(12.dp))
+        contenido()
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 /**
