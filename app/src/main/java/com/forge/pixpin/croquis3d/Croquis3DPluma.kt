@@ -158,7 +158,29 @@ fun DrawScope.pintarTrazoPluma(
     // los marcos del esqueleto. Al orbitar cambia qué caras se ven (eso hace una caja de
     // verdad) pero ningún vértice se mueve: las uniones no pueden temblar, porque no hay
     // nada en ellas que se recalcule.
-    barrerSeccion(trazo, esqueleto, base, luz, delAncho, cuantos, b)
+    // **Una sola mano.** Una tinta de pintar —el rodillo— tiene que dar el mismo tono se
+    // cruce consigo misma o no: es lo que dice [Tinta.unaSolaMano] y lo que no estaba hecho.
+    // Al girar la vista, la parte de delante del trazo se proyecta encima de la de atrás, y
+    // dos capas translúcidas apiladas se van a negro: eso es lo que el usuario veía como
+    // «se anulan y se vuelve negro» (6-sep-2026). Se pinta el cuerpo entero **opaco en su
+    // propia capa** y la capa se vuelca una vez con la opacidad del trazo, así que cruzarse
+    // consigo mismo ya no suma tinta.
+    val deUnaMano = Tinta.de(trazo.pincel, punta).unaSolaMano && alfa < 255
+    if (deUnaMano) {
+        val lienzo = drawContext.canvas
+        lienzo.saveLayer(
+            androidx.compose.ui.geometry.Rect(
+                androidx.compose.ui.geometry.Offset.Zero,
+                androidx.compose.ui.geometry.Size(size.width, size.height)
+            ),
+            androidx.compose.ui.graphics.Paint().apply { this.alpha = alfa / 255f }
+        )
+        coloresDeTonoEn(parseColor(trazo.color, 255), cuantos, b.coloresDeTono)
+        barrerSeccion(trazo, esqueleto, base, luz, delAncho, cuantos, b)
+        lienzo.restore()
+    } else {
+        barrerSeccion(trazo, esqueleto, base, luz, delAncho, cuantos, b)
+    }
     // Y el grano encima, si la tinta lo lleva: la tinta es la misma, con textura dentro.
     if (punta.trama.hayQuePintarla) {
         estamparTrama(esqueleto, b, n, seccionDe(trazo.pincel).size / 2, punta.trama, delAncho, tinta, alfa)
@@ -342,16 +364,26 @@ private fun DrawScope.barrerSeccion(
                     tono = (lambert * cuantos).toInt().coerceAtMost(cuantos - 1)
                 }
             }
-            if (visible && (arranque < 0 || tono == tonoDeRun)) {
-                if (arranque < 0) { arranque = i; tonoDeRun = tono }
-            } else if (arranque >= 0) {
-                val hasta = i - 1
-                if (hasta > arranque) {
-                    pintaTira(b, j, j2, arranque, hasta, n, b.coloresDeTono[tonoDeRun])
-                }
-                // Al cambiar de tono con la cara aún visible, el tramo nuevo ARRANCA en la
-                // muestra frontera: los dos tramos la comparten y no queda rendija.
-                arranque = if (visible) hasta.coerceAtLeast(0) else -1
+            // **Ningún cuadro se queda sin pintar.**
+            //
+            // El tramo se cerraba en la muestra ANTERIOR y solo se pintaba si le quedaba más
+            // de una: un tramo de una sola muestra —lo que pasa en cuanto el tono cambia de
+            // una muestra a la siguiente, que con los escalones de sombra es constantemente—
+            // **no se pintaba**, y ahí quedaba un hueco. Es lo que se veía como una figura
+            // «hueca, como dos navajas con el medio vacío» según desde dónde se mirara
+            // (lo reportó el usuario el 6-sep-2026). Ahora el tramo llega HASTA la muestra
+            // frontera —su cuadro se pinta con el tono de antes— y el siguiente arranca ahí.
+            if (arranque < 0) {
+                if (visible) { arranque = i; tonoDeRun = tono }
+            } else if (!visible) {
+                // La cara se va: se pinta incluido el cuadro que se está poniendo de canto,
+                // que si no deja una rendija justo en la silueta.
+                val hasta = minOf(i, n - 1)
+                if (hasta > arranque) pintaTira(b, j, j2, arranque, hasta, n, b.coloresDeTono[tonoDeRun])
+                arranque = -1
+            } else if (tono != tonoDeRun) {
+                pintaTira(b, j, j2, arranque, i, n, b.coloresDeTono[tonoDeRun])
+                arranque = i
                 tonoDeRun = tono
             }
             i++
@@ -491,7 +523,8 @@ private fun DrawScope.pintaTapa(b: BorradorDePluma, i: Int, k: Int, n: Int, colo
 private fun seccionDe(pincel: Pincel): DoubleArray = when (pincel) {
     Pincel.CUADRADO -> SECCION_CUADRADA
     Pincel.CUCHILLA -> SECCION_HONDA
-    Pincel.PLANO, Pincel.LAPIZ, Pincel.RESALTADOR -> SECCION_PLANA
+    Pincel.RESALTADOR -> SECCION_DEL_RODILLO
+    Pincel.PLANO, Pincel.LAPIZ -> SECCION_PLANA
     else -> SECCION_REDONDA
 }
 
@@ -505,6 +538,22 @@ private val SECCION_REDONDA = DoubleArray(16).also {
 private val SECCION_CUADRADA = doubleArrayOf(1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0)
 private val SECCION_HONDA = doubleArrayOf(1.0, 0.14, -1.0, 0.14, -1.0, -0.14, 1.0, -0.14)
 private val SECCION_PLANA = doubleArrayOf(0.16, 1.0, -0.16, 1.0, -0.16, -1.0, 0.16, -1.0)
+
+/**
+ * **El rodillo: el listón, pero alargado.**
+ *
+ * Es la misma caja cerrada del lápiz cuadrado —cuatro caras, sólida, sin nada abierto— solo
+ * que muy estirada de un lado: **el mando alarga la banda y el canto se queda fino**. Antes
+ * el canto era una fracción del ancho, así que al subir el mando engordaba con él y el
+ * rodillo crecía en las dos direcciones a la vez; el usuario lo pidió al revés (6-sep-2026):
+ * ancho a gusto, canto pequeño y quieto. Como el ancho del rodillo ya viene multiplicado por
+ * [Croquis3DControlador.ENGORDE_DEL_RESALTADOR], se divide el canto por ese mismo número: lo
+ * que queda es un canto que solo sigue al mando, no al engorde.
+ */
+private val SECCION_DEL_RODILLO = run {
+    val canto = (0.16 / Croquis3DControlador.ENGORDE_DEL_RESALTADOR).coerceAtLeast(0.015)
+    doubleArrayOf(canto, 1.0, -canto, 1.0, -canto, -1.0, canto, -1.0)
+}
 
 // ---------------------------------------------------------------------------
 // Los ayudantes puros: sin DrawScope, para poder probarlos en la JVM.
