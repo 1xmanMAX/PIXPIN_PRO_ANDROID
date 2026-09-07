@@ -184,6 +184,12 @@ data class Settings(
     val servicioDeEnlace: String = "",
 
     /**
+     * **El papel del chat**, de entre los de `guardados.FondosDelChat`. Vacío: el de fábrica.
+     * Lo pidió el usuario (7-sep-2026), como los fondos de Telegram.
+     */
+    val fondoDelChat: String = "",
+
+    /**
      * **Cómo se trae un plano en PDF: como líneas o como imagen.**
      *
      * Con esto puesto, al abrir un PDF vectorial se lee su geometría y se pinta como rayas
@@ -323,6 +329,7 @@ class SettingsRepository(private val context: Context) {
         val MODELO_WHISPER = stringPreferencesKey("modelo_whisper")
         val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
         val SERVICIO_DE_ENLACE = stringPreferencesKey("servicio_de_enlace")
+        val FONDO_DEL_CHAT = stringPreferencesKey("fondo_del_chat")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
@@ -353,6 +360,7 @@ class SettingsRepository(private val context: Context) {
             modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
             modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
             servicioDeEnlace = prefs[Keys.SERVICIO_DE_ENLACE] ?: "",
+            fondoDelChat = prefs[Keys.FONDO_DEL_CHAT] ?: "",
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
@@ -461,6 +469,11 @@ class SettingsRepository(private val context: Context) {
     /** Ver [Settings.servicioDeEnlace]. */
     suspend fun setServicioDeEnlace(valor: String) {
         context.dataStore.edit { it[Keys.SERVICIO_DE_ENLACE] = valor }
+    }
+
+    /** Ver [Settings.fondoDelChat]. */
+    suspend fun setFondoDelChat(valor: String) {
+        context.dataStore.edit { it[Keys.FONDO_DEL_CHAT] = valor }
     }
 
     /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */

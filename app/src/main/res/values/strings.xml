@@ -332,6 +332,9 @@
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
     <string name="guardados_adj_conversacion">Una conversación</string>
+    <string name="guardados_fondo">Fondo del chat</string>
+    <string name="guardados_a_texto">Pasar a texto</string>
+    <string name="guardados_ver_texto">Ver el texto</string>
     <string name="guardados_recordar">Recordármelo</string>
     <string name="guardados_recordar_quitar">Quitar el recordatorio</string>
     <string name="guardados_recordar_puesto">Te lo recuerdo %1$s</string>

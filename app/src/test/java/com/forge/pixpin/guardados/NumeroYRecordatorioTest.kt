@@ -61,3 +61,32 @@ class NumeroYRecordatorioTest {
         assertTrue(tarde - mediodia in 1..(12 * 60 * 60 * 1000L))
     }
 }
+
+/**
+ * **La transcripción partida en trozos**, que es lo que deja resaltar por dónde va el audio y
+ * saltar tocando un trozo. Ver `trozosDeLaTranscripcion`.
+ */
+class TrozosDeLaTranscripcionTest {
+
+    @Test
+    fun `cada parrafo lleva su minuto y el minuto no se enseña`() {
+        val texto = "[0:00] llama al taller\n\n[0:07] por la pieza que falta\n\n[1:23] y al final"
+        val trozos = trozosDeLaTranscripcion(texto)
+        assertEquals(3, trozos.size)
+        assertEquals(0, trozos[0].ms)
+        assertEquals(7_000, trozos[1].ms)
+        assertEquals(83_000, trozos[2].ms)
+        // Lo que se lee es lo que se dijo: el minuto se usa, no se enseña.
+        assertEquals("llama al taller", trozos[0].texto)
+        assertEquals("y al final", trozos[2].texto)
+    }
+
+    @Test
+    fun `un texto sin minutos sigue siendo un trozo que se lee`() {
+        val trozos = trozosDeLaTranscripcion("una letra pegada a mano\n\ncon dos estrofas")
+        assertEquals(2, trozos.size)
+        assertEquals(-1, trozos[0].ms)
+        assertEquals("una letra pegada a mano", trozos[0].texto)
+        assertTrue(trozosDeLaTranscripcion("   ").isEmpty())
+    }
+}

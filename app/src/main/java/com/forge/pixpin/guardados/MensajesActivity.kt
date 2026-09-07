@@ -81,6 +81,8 @@ import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
 import androidx.compose.material.icons.filled.Tag
@@ -334,6 +336,8 @@ class MensajesActivity : ComponentActivity() {
         var porElFijado by remember { mutableIntStateOf(0) }
         var eligiendoProyecto by remember { mutableStateOf<Boolean?>(null) }
         var eligiendoMini by remember { mutableStateOf(false) }
+        // El papel del chat, a elegir. Ver [FondosDelChat].
+        var eligiendoFondo by remember { mutableStateOf(false) }
         var eligiendoChat by remember { mutableStateOf(false) }
         // La etiqueta por la que se está filtrando, y qué se está reenviando.
         var porEtiqueta by androidx.compose.runtime.saveable.rememberSaveable {
@@ -853,6 +857,10 @@ class MensajesActivity : ComponentActivity() {
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
+                                    DelMenu(com.forge.pixpin.R.string.guardados_fondo, Icons.Filled.Palette) {
+                                        masOpciones = false
+                                        eligiendoFondo = true
+                                    }
                                     DelMenu(com.forge.pixpin.R.string.ajustes_titulo) {
                                         masOpciones = false
                                         abrirLaPortada(enProyectos = false)
@@ -1077,11 +1085,12 @@ class MensajesActivity : ComponentActivity() {
             // objetos sueltos y la lista se vuelve una masa. Aquí no se mete una foto de
             // fondo —pesaría y se pelearía con lo escrito— sino un degradado suave
             // sacado del propio tema, que funciona igual de día que de noche.
+            // Los dos extremos salen de [ColoresDelChat], medidos contra la burbuja: antes
+            // este degradado era el propio azul de la aplicación a un velo bajísimo y la
+            // burbuja quedaba a 1,20:1 del papel, o sea encima de él.
+            val (papelAlto, papelBajo) = ColoresDelChat.papel()
             val fondo = androidx.compose.ui.graphics.Brush.linearGradient(
-                listOf(
-                    MaterialTheme.colorScheme.primary.copy(alpha = ALTO_DEL_FONDO),
-                    MaterialTheme.colorScheme.tertiary.copy(alpha = BAJO_DEL_FONDO)
-                )
+                listOf(papelAlto, papelBajo)
             )
             // La foto que se esté sujetando con los dedos, encima de todo. Es el mismo
             // aparato del carrusel de proyectos —dos dedos la despegan de la lista y la
@@ -1834,6 +1843,70 @@ class MensajesActivity : ComponentActivity() {
             }
         }
 
+        if (eligiendoFondo) {
+            val app = application as? PixPinApp
+            val ajustes by (app?.settings?.settings ?: kotlinx.coroutines.flow.flowOf(null))
+                .collectAsState(initial = app?.ajustes)
+            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { eligiendoFondo = false }) {
+                Column(Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
+                    Text(
+                        getString(com.forge.pixpin.R.string.guardados_fondo),
+                        fontSize = 16.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                    )
+                    val elegido = ajustes?.fondoDelChat.orEmpty()
+                    val deNoche = MaterialTheme.colorScheme.surface.red < 0.5f
+                    androidx.compose.foundation.layout.FlowRow(
+                        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        for (f in FondosDelChat.TODOS) {
+                            val suyo = FondosDelChat.porId(elegido).id == f.id
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(vertical = 6.dp)
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(
+                                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                                listOf(
+                                                    Color(if (deNoche) f.oscuroA else f.claroA),
+                                                    Color(if (deNoche) f.oscuroB else f.claroB)
+                                                )
+                                            )
+                                        )
+                                        .then(
+                                            if (!suyo) Modifier
+                                            else Modifier.border(
+                                                3.dp, MaterialTheme.colorScheme.primary,
+                                                RoundedCornerShape(14.dp)
+                                            )
+                                        )
+                                        .clickable {
+                                            lifecycleScope.launch { app?.settings?.setFondoDelChat(f.id) }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    // Una burbuja de muestra: es lo que hay que ver, no el papel.
+                                    Box(
+                                        Modifier
+                                            .size(34.dp, 18.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(ColoresDelChat.burbuja())
+                                    )
+                                }
+                                Text(f.nombre, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (eligiendoMini) {
             androidx.compose.material3.ModalBottomSheet(
                 onDismissRequest = { eligiendoMini = false }
@@ -2524,7 +2597,8 @@ class MensajesActivity : ComponentActivity() {
                     topStart = r.arribaIzq.dp, topEnd = r.arribaDer.dp,
                     bottomEnd = r.abajoDer.dp, bottomStart = r.abajoIzq.dp
                 ),
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = ColoresDelChat.burbuja(),
+                contentColor = ColoresDelChat.tinta(),
                 // El color del lienzo del que viene, si viene de uno: es lo que en
                 // proyectos separa las hojas de un lienzo de las de otro.
                 border = colorDelLienzo?.let {
@@ -2750,12 +2824,17 @@ class MensajesActivity : ComponentActivity() {
                     // la lleva. Se mide una vez por hora distinta, no por fotograma.
                     // El hueco cuenta con lo que va al lado de la hora: la chincheta y
                     // la etiqueta. Sin sumarlas, la hora sale pisando la última palabra.
-                    val huecoDeLaHora = remember(hora, m.fijado, m.enBuzon, m.emoji) {
+                    // **Todo lo que va en esa esquina cuenta.** La chapa del número y el
+                    // reloj del recordatorio se metieron después y no sumaban aquí: el hueco
+                    // se quedaba corto y la esquina se comía la última palabra del mensaje.
+                    val huecoDeLaHora = remember(hora, m.fijado, m.enBuzon, m.emoji, numero, m.recuerdaEn) {
                         medidor.measure(hora, estiloDeLaHora).size.width +
                             with(densidad) {
                                 var extra = 6.dp
                                 if (m.fijado) extra += 14.dp
                                 if (m.emoji != null) extra += 16.dp
+                                if (numero > 0) extra += (18 + 5 * numero.toString().length).dp
+                                if (m.recuerdaEn != null) extra += 15.dp
                                 extra.toPx()
                             }
                     }
@@ -2876,7 +2955,7 @@ class MensajesActivity : ComponentActivity() {
                             Text(
                                 hora,
                                 fontSize = TAMANO_DE_LA_HORA,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = ColoresDelChat.hora()
                             )
                         }
                     }
@@ -3708,7 +3787,12 @@ class MensajesActivity : ComponentActivity() {
         val barras = remember(m.picos) { aBarras(m.picos) }
         val acento = MaterialTheme.colorScheme.primary
         val apagado = acento.copy(alpha = ALFA_DE_LO_NO_OIDO)
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // **El texto se abre y se cierra desde el propio audio**, y el mando vive arriba a
+        // la derecha, como en Telegram: en su burbuja de voz hay un chevrón en esa esquina
+        // que despliega la transcripción dentro de la misma burbuja. Lo pidió el usuario
+        // con capturas suyas (7-sep-2026).
+        var desplegado by remember(m.id) { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.Top) {
             Box(
                 Modifier
                     .size(BOTON_DEL_ARCHIVO)
@@ -3773,23 +3857,86 @@ class MensajesActivity : ComponentActivity() {
                         } else m.duracionMs
                     ),
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = ColoresDelChat.hora(),
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
+            BotonDeTexto(m, desplegado) { desplegado = !desplegado }
         }
-        LaTranscripcion(m, alMantener)
+        LaTranscripcion(m, desplegado, alMantener)
     }
 
     /**
-     * **Debajo del audio, su texto.** Mientras se pasa a texto, el tanto por ciento en
-     * verde; después, un punto —verde si salió, naranja si quedaron huecos, rojo si no se
-     * pudo— y el texto plegado a dos líneas: un toque lo despliega (y se abre poco a poco,
-     * no de golpe) y dos toques lo abren en el editor de notas. Lo pidió el usuario
-     * (5-sep-2026): la nota aparte que había antes no se podía abrir ni leer entera.
+     * **El botón de «pásamelo a texto», en la esquina del audio.**
+     *
+     * Es el chevrón de Telegram, y hace las dos cosas según lo que haya: si la nota todavía
+     * no tiene texto, **lo pide** —que es lo que el usuario echaba en falta: la opción estaba
+     * escondida en el menú—; si ya lo tiene, lo abre y lo cierra. Mientras se está pasando,
+     * una ruedecita: es trabajo que tarda y hay que decirlo donde se pulsó.
      */
     @Composable
-    private fun LaTranscripcion(m: Mensaje, alMantener: () -> Unit = {}) {
+    private fun BotonDeTexto(m: Mensaje, desplegado: Boolean, alPulsar: () -> Unit) {
+        val avances by MensajesStore.avances.collectAsState()
+        val enCurso = avances[m.id]
+        val hayTexto = !m.transcripcion.isNullOrBlank()
+        val sePuede = m.ruta != null && Transcriptor.disponible(this@MensajesActivity)
+        if (enCurso == null && !hayTexto && !sePuede) return
+        Box(
+            Modifier
+                .padding(start = 6.dp)
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(ColoresDelChat.filete())
+                .clickable(enabled = enCurso == null) {
+                    if (hayTexto) alPulsar()
+                    else {
+                        Toast.makeText(
+                            this@MensajesActivity,
+                            getString(com.forge.pixpin.R.string.guardados_transcribiendo),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        almacen.transcribir(m)
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            when {
+                enCurso != null -> androidx.compose.material3.CircularProgressIndicator(
+                    progress = { enCurso },
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = ColoresDelChat.hora()
+                )
+                hayTexto -> Icon(
+                    if (desplegado) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = getString(com.forge.pixpin.R.string.guardados_ver_texto),
+                    tint = ColoresDelChat.hora(),
+                    modifier = Modifier.size(18.dp)
+                )
+                else -> Icon(
+                    Icons.Filled.Subtitles,
+                    contentDescription = getString(com.forge.pixpin.R.string.guardados_a_texto),
+                    tint = ColoresDelChat.hora(),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+
+    /**
+     * **Debajo del audio, su texto: dentro de la misma burbuja.**
+     *
+     * Como en Telegram (capturas del usuario, 7-sep-2026): el texto se despliega bajo la onda
+     * y, **mientras suena, lo ya dicho va en tinta y lo que falta en gris**, así que se sigue
+     * con el ojo sin perderse. Y **tocar un trozo lleva el audio ahí**, que es para lo que uno
+     * mira una transcripción: para volver a la frase que importa sin rebobinar a ciegas.
+     *
+     * El resaltado va **por párrafos y no por palabras** porque es lo que dan los datos: la
+     * transcripción guarda el minuto de cada párrafo (`[1:23] …`), no el de cada palabra.
+     * Prometer más sería pintar una precisión que no existe.
+     */
+    @Composable
+    private fun LaTranscripcion(m: Mensaje, desplegado: Boolean, alMantener: () -> Unit = {}) {
         val avances by MensajesStore.avances.collectAsState()
         val enCurso = avances[m.id]
         if (enCurso != null) {
@@ -3802,7 +3949,6 @@ class MensajesActivity : ComponentActivity() {
             return
         }
         val estado = m.estadoDelTexto ?: return
-        var desplegado by remember(m.id) { mutableStateOf(false) }
         // Música sin letra todavía: la invitación a pegarla.
         if (estado == TEXTO_LETRA && m.transcripcion.isNullOrBlank()) {
             Text(
@@ -3815,49 +3961,94 @@ class MensajesActivity : ComponentActivity() {
             )
             return
         }
+        val texto = m.transcripcion
+        if (texto.isNullOrBlank()) {
+            // Sin texto y sin nada en curso: se dice por qué, y el botón de arriba lo pide.
+            Text(
+                getString(com.forge.pixpin.R.string.guardados_transcripcion_no),
+                fontSize = 12.sp,
+                color = ROJO_DEL_TEXTO,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            return
+        }
         val color = when (estado) {
             TEXTO_BIEN, TEXTO_LETRA -> VERDE_DEL_TEXTO
             TEXTO_CON_AVISOS -> NARANJA_DEL_TEXTO
             else -> ROJO_DEL_TEXTO
         }
-        Row(
+        val trozos = remember(texto) { trozosDeLaTranscripcion(texto) }
+        val estadoDelSonido by Reproductor.estado.collectAsState()
+        val esteAudio = m.ruta != null && estadoDelSonido.ruta == m.ruta
+        // El trozo por el que va: el último cuyo minuto ya se pasó.
+        val porDonde = if (esteAudio) trozos.indexOfLast { it.ms in 0..estadoDelSonido.posicionMs } else -1
+
+        Column(
             Modifier
                 .padding(top = 6.dp)
                 .widthIn(max = 320.dp)
                 .animateContentSize()
-                .pointerInput(m.id) {
-                    // La pulsación larga sigue siendo la del mensaje (el menú, elegir):
-                    // este detector se la quedaba y las notas de voz no se podían elegir.
-                    detectTapGestures(
-                        onTap = { desplegado = !desplegado },
-                        onDoubleTap = { abrirLaTranscripcion(m) },
-                        onLongPress = { alMantener() }
-                    )
-                },
-            verticalAlignment = Alignment.Top
         ) {
-            Box(
-                Modifier
-                    .padding(top = 5.dp)
-                    .size(8.dp)
-                    .background(color, androidx.compose.foundation.shape.CircleShape)
-            )
-            Text(
-                m.transcripcion ?: getString(com.forge.pixpin.R.string.guardados_transcripcion_no),
-                fontSize = 13.sp,
-                maxLines = if (desplegado) Int.MAX_VALUE else 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 7.dp).weight(1f)
-            )
-            if (m.transcripcion != null) {
-                Icon(
-                    if (desplegado) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    Modifier
+                        .padding(top = 5.dp)
+                        .size(8.dp)
+                        .background(color, androidx.compose.foundation.shape.CircleShape)
                 )
+                Column(Modifier.padding(start = 7.dp)) {
+                    // Plegado, las dos primeras líneas y nada más: es el resumen que deja
+                    // saber de qué iba sin abrirlo.
+                    if (!desplegado) {
+                        Text(
+                            texto,
+                            fontSize = 13.sp,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.pointerInput(m.id) {
+                                detectTapGestures(
+                                    onDoubleTap = { abrirLaTranscripcion(m) },
+                                    onLongPress = { alMantener() }
+                                )
+                            }
+                        )
+                    } else {
+                        for ((i, trozo) in trozos.withIndex()) {
+                            // Lo ya dicho, en tinta; lo que falta, en gris. Y sin audio
+                            // sonando, todo en tinta: no hay nada que separar.
+                            val yaDicho = porDonde < 0 || i <= porDonde
+                            Text(
+                                trozo.texto,
+                                fontSize = 13.sp,
+                                color = if (yaDicho) ColoresDelChat.tinta()
+                                else ColoresDelChat.tinta().copy(alpha = ALFA_DE_LO_NO_DICHO),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 1.dp)
+                                    .pointerInput(m.id, trozo.ms) {
+                                        detectTapGestures(
+                                            // **Tocar un trozo lleva el audio ahí.**
+                                            onTap = { if (trozo.ms >= 0) saltarEnElAudio(m, trozo.ms) },
+                                            onDoubleTap = { abrirLaTranscripcion(m) },
+                                            onLongPress = { alMantener() }
+                                        )
+                                    }
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /** Lleva el audio de [m] a ese milisegundo y lo deja sonando. Como en la pantalla de la letra. */
+    private fun saltarEnElAudio(m: Mensaje, ms: Int) {
+        val ruta = m.ruta ?: return
+        val titulo = tituloDeAudio(this, m)
+        if (Reproductor.estado.value.ruta != ruta) Reproductor.cargar(ruta, titulo, arrancar = false)
+        val total = Reproductor.estado.value.duracionMs
+        if (total > 0) Reproductor.irA(ms.toFloat() / total)
+        if (!Reproductor.estado.value.sonando) Reproductor.seguir()
     }
 
     /**
@@ -5475,10 +5666,10 @@ private fun ChapaDelNumero(numero: Int) {
     Text(
         "#" + numero,
         fontSize = 10.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = ColoresDelChat.hora(),
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+            .background(ColoresDelChat.filete())
             .padding(horizontal = 4.dp, vertical = 1.dp)
     )
 }
@@ -5574,3 +5765,25 @@ internal fun atajosDeRecordatorio(ahora: Long): List<Pair<String, Long>> {
         "Mañana (9:00)" to aLas(9, 1)
     )
 }
+
+/** Un trozo de una transcripción: en qué milisegundo empieza (o -1) y qué dice. */
+internal class TrozoDeTexto(val ms: Int, val texto: String)
+
+/**
+ * **La transcripción partida en trozos con su minuto.**
+ *
+ * Lo que escribe la transcripción es `[1:23] lo que se dijo`, un párrafo por trozo. Aquí se
+ * lee ese minuto y se quita del texto: dentro de la burbuja el minuto no se enseña —lo que se
+ * lee es lo que se dijo—, pero sí se usa para saber por dónde va el audio y para saltar.
+ * Puro, para poder comprobarlo sin pantalla.
+ */
+internal fun trozosDeLaTranscripcion(texto: String): List<TrozoDeTexto> =
+    texto.split(Regex("""\n\s*\n""")).mapNotNull { bloque ->
+        val limpio = bloque.trim()
+        if (limpio.isEmpty()) return@mapNotNull null
+        val con = Transcriptor.tiempoDe(limpio)
+        if (con != null) TrozoDeTexto(con.first, con.second.trim()) else TrozoDeTexto(-1, limpio)
+    }
+
+/** Lo apagado que va lo que todavía no se ha dicho, mientras suena. */
+private const val ALFA_DE_LO_NO_DICHO = 0.45f
