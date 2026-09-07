@@ -104,6 +104,48 @@ data class LinkHit(
 /** Si los audios de la nota responden al toque. Falso por defecto: solo el editor lo pone. */
 val LocalMediosTocables = androidx.compose.runtime.compositionLocalOf { false }
 
+/**
+ * **Quién sabe hacer sonar el audio de la nota.**
+ *
+ * La nota transcrita lleva su audio dentro y cada párrafo lleva su minuto: en la pantalla de
+ * la letra eso ya se usaba —tocar un párrafo salta a ese punto— y en la nota no, aunque es
+ * el mismo texto. Lo pidió el usuario (7-sep-2026): que las dos interfaces sirvan.
+ *
+ * Entra como un trato y no como una llamada directa al reproductor porque el Markdown no
+ * sabe —ni tiene por qué— de reproductores ni de mensajes: quien enseña la nota es quien
+ * pone el suyo. Sin nadie que lo ponga, el audio se toca como antes, con su propio
+ * reproductor de usar y tirar, y los minutos no hacen nada.
+ */
+interface AudioDeLaNota {
+    /** Suena, o se calla si ya sonaba. */
+    fun alternar(ruta: String)
+    /** Va a ese milisegundo del audio y sigue sonando desde ahí. */
+    fun saltar(ruta: String, ms: Int)
+    /** Si ese audio está sonando ahora mismo. */
+    fun sonando(ruta: String): Boolean
+}
+
+val LocalAudioDeLaNota = androidx.compose.runtime.compositionLocalOf<AudioDeLaNota?> { null }
+
+/** El audio de **esta** nota: el primero que lleve dentro. Lo pone [MarkdownText]. */
+private val LocalRutaDelAudio = androidx.compose.runtime.compositionLocalOf<String?> { null }
+
+/**
+ * El minuto con el que empieza un párrafo, en milisegundos, o -1.
+ *
+ * `[1:23] lo que se dijo` y `[1:02:09] …`. Es el formato que escribe la transcripción, y
+ * aquí se lee sin depender de ella: el Markdown no sabe de transcripciones.
+ */
+internal fun minutoDelParrafo(texto: String): Int {
+    val m = EL_MINUTO.find(texto) ?: return -1
+    val a = m.groupValues[1].toIntOrNull() ?: return -1
+    val b = m.groupValues[2].toIntOrNull() ?: return -1
+    val c = m.groupValues[3].toIntOrNull()
+    return if (c == null) (a * 60 + b) * 1000 else ((a * 3600) + b * 60 + c) * 1000
+}
+
+private val EL_MINUTO = Regex("""^\s*\[(\d{1,2}):(\d{2})(?::(\d{2}))?]""")
+
 @Composable
 fun MarkdownText(
     blocks: List<MarkdownBlock>,
@@ -118,8 +160,15 @@ fun MarkdownText(
     LaunchedEffect(perBlock.size, blocks) {
         onLinks(perBlock.values.flatten())
     }
-    Column(modifier = modifier) {
-        Bloques(blocks, "", baseSizeSp, ocultosVisibles) { clave, hits -> perBlock[clave] = hits }
+    // El audio de la nota: el primero que lleve dentro. Es al que saltan sus minutos.
+    val delAudio = remember(blocks) {
+        blocks.filterIsInstance<MarkdownBlock.Medio>()
+            .firstOrNull { it.clase == ClaseDeMedio.AUDIO }?.ruta
+    }
+    androidx.compose.runtime.CompositionLocalProvider(LocalRutaDelAudio provides delAudio) {
+        Column(modifier = modifier) {
+            Bloques(blocks, "", baseSizeSp, ocultosVisibles) { clave, hits -> perBlock[clave] = hits }
+        }
     }
 }
 
@@ -170,13 +219,32 @@ private fun Bloque(
             onLinks = recoge
         )
 
-        is MarkdownBlock.Paragraph -> Body(
-            content = block.content,
-            sizeSp = baseSizeSp,
-            bloque = clave,
-            ocultosVisibles = ocultosVisibles,
-            onLinks = recoge
-        )
+        // **Un párrafo que empieza por su minuto es un salto.** Es lo que hace la pantalla
+        // de la letra: tocarlo lleva el audio de la nota a ese punto. Aquí igual, cuando la
+        // nota trae audio y quien la enseña sabe hacerlo sonar. Ver [AudioDeLaNota].
+        is MarkdownBlock.Paragraph -> {
+            val ruta = LocalRutaDelAudio.current
+            val reproductor = LocalAudioDeLaNota.current
+            val ms = if (ruta != null && reproductor != null) minutoDelParrafo(block.content.text) else -1
+            val cuerpo = @Composable {
+                Body(
+                    content = block.content,
+                    sizeSp = baseSizeSp,
+                    bloque = clave,
+                    ocultosVisibles = ocultosVisibles,
+                    onLinks = recoge
+                )
+            }
+            if (ms < 0 || ruta == null || reproductor == null) cuerpo()
+            else {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape((baseSizeSp * 0.4f).dp))
+                        .clickable { reproductor.saltar(ruta, ms) }
+                ) { cuerpo() }
+            }
+        }
 
         is MarkdownBlock.Bullet -> Row {
             Marker("\u2022  ", baseSizeSp)
@@ -399,13 +467,19 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
     }
     // Solo donde se lee la nota de verdad: en la vista previa de un proyecto la tarjeta
     // se llevaba el toque —y la pulsación larga— y no se podía abrir ni elegir la hoja.
+    val elReproductor = LocalAudioDeLaNota.current
     val esAudio = LocalMediosTocables.current && medio.clase == ClaseDeMedio.AUDIO && java.io.File(medio.ruta).exists()
+    // Con reproductor puesto manda él: así el audio de la nota es **el mismo** que el de la
+    // pantalla de la letra y el de la barra de abajo, y los minutos pueden saltar dentro.
+    val suena = if (elReproductor != null && esAudio) elReproductor.sonando(medio.ruta) else sonando
     Row(
         Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
             .then(
-                if (!esAudio) Modifier else Modifier.clickable {
+                if (!esAudio) Modifier
+                else if (elReproductor != null) Modifier.clickable { elReproductor.alternar(medio.ruta) }
+                else Modifier.clickable {
                     val actual = reproductor[0]
                     if (sonando && actual != null) {
                         runCatching { actual.stop(); actual.release() }
@@ -429,7 +503,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
             imageVector = when (medio.clase) {
                 ClaseDeMedio.IMAGEN -> Icons.Filled.Image
                 ClaseDeMedio.VIDEO -> Icons.Filled.Movie
-                ClaseDeMedio.AUDIO -> if (sonando) Icons.Filled.Stop else if (esAudio) Icons.Filled.PlayArrow else Icons.Filled.AudioFile
+                ClaseDeMedio.AUDIO -> if (suena) Icons.Filled.Stop else if (esAudio) Icons.Filled.PlayArrow else Icons.Filled.AudioFile
                 ClaseDeMedio.ARCHIVO -> Icons.Filled.Description
             },
             contentDescription = null,

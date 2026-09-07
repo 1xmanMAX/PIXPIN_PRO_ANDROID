@@ -78,6 +78,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -584,7 +585,14 @@ private fun Pantalla(
             ) {
                 if (viendo) {
                     val bloques = remember(valor.text) { Markdown.parse(valor.text) }
-                    androidx.compose.runtime.CompositionLocalProvider(com.forge.pixpin.motormd.LocalMediosTocables provides true) {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        com.forge.pixpin.motormd.LocalMediosTocables provides true,
+                        // **El audio de la nota suena por el reproductor de siempre**, el
+                        // mismo de la pantalla de la letra y el de la barra de abajo: así
+                        // los minutos de cada párrafo pueden saltar dentro de él, que es lo
+                        // que el usuario pidió (7-sep-2026). Ver [AudioDeLaNota].
+                        com.forge.pixpin.motormd.LocalAudioDeLaNota provides elReproductorDeLaNota()
+                    ) {
                         MarkdownText(blocks = bloques, baseSizeSp = 16f)
                     }
                 } else {
@@ -910,6 +918,36 @@ private fun HojaDeAdjuntar(onCerrar: () -> Unit, onElegir: (TipoDeBloque) -> Uni
                     Text(Bloques.de(tipo).nombre, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
+        }
+    }
+}
+
+/**
+ * **El puente entre una nota y el reproductor de la aplicación.**
+ *
+ * El Markdown no sabe de reproductores: pide un [com.forge.pixpin.motormd.AudioDeLaNota] y
+ * aquí se le da uno hecho con el [Reproductor] de siempre. Se rehace cuando cambia lo que
+ * suena, que es lo que hace que el icono pase de «tocar» a «parar» solo.
+ */
+@Composable
+private fun elReproductorDeLaNota(): com.forge.pixpin.motormd.AudioDeLaNota {
+    val estado by com.forge.pixpin.guardados.Reproductor.estado.collectAsState()
+    return remember(estado.ruta, estado.sonando, estado.duracionMs) {
+        object : com.forge.pixpin.motormd.AudioDeLaNota {
+            override fun alternar(ruta: String) {
+                com.forge.pixpin.guardados.Reproductor.alternar(ruta, java.io.File(ruta).name)
+            }
+
+            override fun saltar(ruta: String, ms: Int) {
+                val r = com.forge.pixpin.guardados.Reproductor
+                if (r.estado.value.ruta != ruta) r.cargar(ruta, java.io.File(ruta).name, arrancar = false)
+                val total = r.estado.value.duracionMs
+                if (total > 0) r.irA(ms.toFloat() / total)
+                if (!r.estado.value.sonando) r.seguir()
+            }
+
+            override fun sonando(ruta: String): Boolean =
+                estado.ruta == ruta && estado.sonando
         }
     }
 }

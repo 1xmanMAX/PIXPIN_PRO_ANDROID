@@ -349,8 +349,16 @@
     <string name="telepronter_nota">Lectura</string>
     <string name="telepronter_texto_pegar">Pega o escribe aquí lo que vas a leer. Cada párrafo llevará su minuto.</string>
     <string name="telepronter_listo">Listo</string>
+    <string name="telepronter_preparate">Prepárate…</string>
+    <string name="telepronter_mas_lento">Más lento</string>
+    <string name="telepronter_mas_rapido">Más rápido</string>
+    <string name="telepronter_pista">Ensaya para ver cómo baja. Al grabar hay una cuenta atrás de tres.</string>
+    <string name="telepronter_pista_grabando">Se está grabando. Puedes parar el texto y seguir cuando quieras.</string>
     <string name="pronunciar_titulo">Pronunciar</string>
-    <string name="pronunciar_manten">Mantén pulsado y habla; al soltar te oyes</string>
+    <string name="pronunciar_manten">Mantén pulsado y habla</string>
+    <string name="pronunciar_suelta">Suelta para oírte</string>
+    <string name="pronunciar_otra_vez">Mantén otra vez para repetirla</string>
+    <string name="pronunciar_ya_guardada">Guardada</string>
     <string name="pronunciar_guia">Guía</string>
     <string name="pronunciar_guia_texto">Escribir un texto</string>
     <string name="pronunciar_guia_imagen">Una imagen del teléfono</string>

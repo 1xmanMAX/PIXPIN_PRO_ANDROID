@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.TextDecrease
 import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -151,6 +154,10 @@ class PronunciarActivity : ComponentActivity() {
         var tamano by rememberSaveable { mutableIntStateOf(24) }
         var idioma by rememberSaveable { mutableStateOf("") }
         var grabando by remember { mutableStateOf(false) }
+        // **El reloj mientras se habla.** Manteniendo pulsado no hay forma de saber si el
+        // micrófono está cogiendo algo; un número que corre lo dice sin explicar nada.
+        var hablandoDesde by remember { mutableLongStateOf(0L) }
+        var hablando by remember { mutableIntStateOf(0) }
         // La última toma: el archivo, lo que dura y si ya se guardó (para no guardarla dos veces).
         var toma by remember { mutableStateOf<File?>(null) }
         var tomaMs by remember { mutableIntStateOf(0) }
@@ -183,6 +190,8 @@ class PronunciarActivity : ComponentActivity() {
             val destino = File(carpeta(), "toma-${System.currentTimeMillis()}.m4a")
             grabador = Voz.empezar(this, destino) ?: return
             grabandoEn = destino
+            hablandoDesde = System.currentTimeMillis()
+            hablando = 0
             grabando = true
         }
         fun soltar() {
@@ -216,6 +225,13 @@ class PronunciarActivity : ComponentActivity() {
             }
         }
 
+        LaunchedEffect(grabando) {
+            while (grabando) {
+                hablando = (System.currentTimeMillis() - hablandoDesde).toInt()
+                kotlinx.coroutines.delay(100)
+            }
+        }
+
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -228,11 +244,22 @@ class PronunciarActivity : ComponentActivity() {
                     IconButton(onClick = { eligiendo = true }) { Icon(Icons.Filled.Description, contentDescription = getString(R.string.pronunciar_guia)) }
                 }
                 // **El idioma que se practica**: manda en la transcripción de lo que se guarde.
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(getString(R.string.pronunciar_idioma), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
+                    Text(
+                        getString(R.string.pronunciar_idioma),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         for ((codigo, nombre) in IDIOMAS) {
-                            FilterChip(selected = idioma == codigo, onClick = { idioma = codigo }, label = { Text(nombre, fontSize = 12.sp) })
+                            FilterChip(
+                                selected = idioma == codigo,
+                                onClick = { idioma = codigo },
+                                label = { Text(nombre, fontSize = 12.sp) }
+                            )
                         }
                     }
                 }
@@ -258,21 +285,68 @@ class PronunciarActivity : ComponentActivity() {
                         }
                     }
                 }
-                // **La toma y el botón.** Se mantiene pulsado; al soltar, suena.
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // **La toma y el botón, con los tres estados dichos claros.**
+                //
+                // El bucle que pidió el usuario es: mantener, hablar, soltar, oírse y repetir.
+                // Así que el pie dice en cada momento **cuál de los tres** es: mientras se
+                // habla, un reloj y «suelta para oírte»; con una toma hecha, oírla otra vez o
+                // guardarla; y en reposo, cómo se empieza.
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     val t = toma
-                    if (t != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(getString(R.string.pronunciar_toma, com.forge.pixpin.pin.duracionLegible(tomaMs)), style = MaterialTheme.typography.labelMedium)
-                            OutlinedButton(onClick = { oir(t) }) { Icon(Icons.Filled.Replay, contentDescription = null, Modifier.size(18.dp)); Text(getString(R.string.pronunciar_repetir), modifier = Modifier.padding(start = 4.dp)) }
-                            OutlinedButton(onClick = { guardar() }, enabled = !guardada) { Icon(Icons.Filled.Save, contentDescription = null, Modifier.size(18.dp)); Text(getString(R.string.pronunciar_guardar), modifier = Modifier.padding(start = 4.dp)) }
+                    if (t != null && !grabando) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(onClick = { oir(t) }, modifier = Modifier.weight(1f).height(48.dp)) {
+                                Icon(Icons.Filled.Replay, contentDescription = null, Modifier.size(18.dp))
+                                Text(getString(R.string.pronunciar_repetir), modifier = Modifier.padding(start = 6.dp))
+                            }
+                            OutlinedButton(
+                                onClick = { guardar() },
+                                enabled = !guardada,
+                                modifier = Modifier.weight(1f).height(48.dp)
+                            ) {
+                                Icon(
+                                    if (guardada) Icons.Filled.Check else Icons.Filled.Save,
+                                    contentDescription = null, Modifier.size(18.dp)
+                                )
+                                Text(
+                                    getString(if (guardada) R.string.pronunciar_ya_guardada else R.string.pronunciar_guardar),
+                                    modifier = Modifier.padding(start = 6.dp)
+                                )
+                            }
                         }
-                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            getString(R.string.pronunciar_toma, com.forge.pixpin.pin.duracionLegible(tomaMs)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
                     }
-                    Text(getString(R.string.pronunciar_manten), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        when {
+                            grabando -> getString(R.string.pronunciar_suelta)
+                            t != null -> getString(R.string.pronunciar_otra_vez)
+                            else -> getString(R.string.pronunciar_manten)
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (grabando) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                    // El reloj de lo que se lleva hablado: dice que el micrófono está cogiendo.
+                    Text(
+                        if (grabando) com.forge.pixpin.pin.duracionLegible(hablando) else " ",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                     Box(
-                        Modifier.size(if (grabando) 104.dp else 88.dp)
+                        Modifier.size(if (grabando) 108.dp else 92.dp)
                             .clip(CircleShape)
                             .background(if (grabando) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             .pointerInput(Unit) {
@@ -283,9 +357,14 @@ class PronunciarActivity : ComponentActivity() {
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.Mic, contentDescription = getString(R.string.pronunciar_manten), tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(40.dp))
+                        Icon(
+                            Icons.Filled.Mic,
+                            contentDescription = getString(R.string.pronunciar_manten),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(if (grabando) 46.dp else 40.dp)
+                        )
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                 }
             }
         }

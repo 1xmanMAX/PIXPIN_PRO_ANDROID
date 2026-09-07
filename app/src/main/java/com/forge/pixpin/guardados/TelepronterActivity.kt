@@ -26,6 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
@@ -139,6 +142,10 @@ class TelepronterActivity : ComponentActivity() {
         var bajando by remember { mutableStateOf(false) }
         var grabando by remember { mutableStateOf(false) }
         var guardando by remember { mutableStateOf(false) }
+        // **La cuenta atrás antes de grabar.** Se pulsaba «Grabar» y empezaba en el acto, con
+        // uno todavía mirando el botón: los tres primeros segundos de todas las tomas eran
+        // el silencio de colocarse. Tres, dos, uno y arranca.
+        var cuenta by remember { mutableIntStateOf(0) }
         var inicio by remember { mutableLongStateOf(0L) }
         var transcurrido by remember { mutableLongStateOf(0L) }
         val scroll = rememberScrollState()
@@ -181,7 +188,7 @@ class TelepronterActivity : ComponentActivity() {
             while (grabando) { transcurrido = System.currentTimeMillis() - inicio; delay(500) }
         }
 
-        fun empezar() {
+        fun grabarYa() {
             if (parrafos.isEmpty()) { eligiendo = true; return }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1); return
@@ -195,6 +202,16 @@ class TelepronterActivity : ComponentActivity() {
             java.util.Arrays.fill(tiempos, -1)
             grabando = true
             bajando = true
+        }
+        fun empezar() {
+            if (parrafos.isEmpty()) { eligiendo = true; return }
+            cuenta = CUENTA_ATRAS
+        }
+        // La cuenta baja sola, un número por segundo escaso, y al llegar arranca.
+        LaunchedEffect(cuenta) {
+            if (cuenta <= 0) return@LaunchedEffect
+            delay(900)
+            if (cuenta > 1) cuenta -= 1 else { cuenta = 0; grabarYa() }
         }
         fun tirar() {
             bajando = false; grabando = false
@@ -269,11 +286,18 @@ class TelepronterActivity : ComponentActivity() {
                         Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
                             // Aire arriba: el primer párrafo empieza en la línea de lectura, no pegado al borde.
                             Spacer(Modifier.height(with(densidad) { (altoVisible * FRANJA).toDp() }))
+                            // **El que va por la línea, más marcado.** Es lo que hace que el
+                            // ojo no se pierda al levantar la vista un momento.
+                            val enLaLinea = parrafos.indices.lastOrNull { altos[it] - scroll.value <= lineaDeLectura } ?: -1
                             for ((i, p) in parrafos.withIndex()) {
+                                val suyo = i == enLaLinea
                                 Text(
                                     p,
                                     fontSize = tamano.sp,
                                     lineHeight = (tamano * 1.45f).sp,
+                                    fontWeight = if (suyo) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (suyo) MaterialTheme.colorScheme.onBackground
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.fillMaxWidth()
                                         .onGloballyPositioned { altos[i] = it.positionInParent().y }
                                         .padding(horizontal = 24.dp, vertical = 10.dp)
@@ -291,31 +315,118 @@ class TelepronterActivity : ComponentActivity() {
                         )
                     }
                 }
-                // **Los mandos.** Velocidad; ensayar o parar; grabar, terminar o tirar.
+                // **Los mandos.** Cuánto queda, a qué velocidad va, y qué se hace ahora.
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    // **Cuánto texto queda.** Sin esto uno lee a ciegas: no se sabe si va por
+                    // la mitad o le queda un tercio, y con una toma en marcha eso importa.
+                    if (parrafos.isNotEmpty()) {
+                        val cuanto = if (scroll.maxValue > 0) scroll.value.toFloat() / scroll.maxValue else 0f
+                        LinearProgressIndicator(
+                            progress = { cuanto.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        )
+                    }
+                    // **La velocidad, dicha con palabras.** Un «45» no significa nada; y se
+                    // ajusta con dos botones, que es lo que se puede tocar sin mirar mientras
+                    // se lee. El deslizador se queda para afinar.
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(getString(R.string.telepronter_velocidad), style = MaterialTheme.typography.labelMedium)
-                        Slider(value = velocidad, onValueChange = { velocidad = it }, valueRange = 10f..150f, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
-                        Text("${velocidad.toInt()}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(32.dp))
+                        IconButton(onClick = { velocidad = (velocidad - 10f).coerceAtLeast(10f) }) {
+                            Icon(Icons.Filled.Remove, contentDescription = getString(R.string.telepronter_mas_lento))
+                        }
+                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                getString(R.string.telepronter_velocidad) + ": " + nombreDeLaVelocidad(velocidad),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Slider(
+                                value = velocidad, onValueChange = { velocidad = it },
+                                valueRange = 10f..150f, modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        IconButton(onClick = { velocidad = (velocidad + 10f).coerceAtMost(150f) }) {
+                            Icon(Icons.Filled.Add, contentDescription = getString(R.string.telepronter_mas_rapido))
+                        }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = { bajando = !bajando }, enabled = parrafos.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = { bajando = !bajando },
+                            enabled = parrafos.isNotEmpty() && cuenta == 0,
+                            modifier = Modifier.height(52.dp)
+                        ) {
                             Icon(if (bajando) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null)
-                            Text(getString(if (bajando) R.string.telepronter_pausa else if (grabando) R.string.telepronter_seguir else R.string.telepronter_ensayar), modifier = Modifier.padding(start = 6.dp))
+                            Text(
+                                getString(
+                                    if (bajando) R.string.telepronter_pausa
+                                    else if (grabando) R.string.telepronter_seguir
+                                    else R.string.telepronter_ensayar
+                                ),
+                                modifier = Modifier.padding(start = 6.dp)
+                            )
                         }
                         Spacer(Modifier.width(8.dp))
+                        // **Un solo botón grande manda.** Es el que se busca sin leer: graba,
+                        // y mientras graba, termina.
                         if (!grabando) {
-                            Button(onClick = { empezar() }, enabled = parrafos.isNotEmpty() && !guardando, modifier = Modifier.weight(1f)) {
+                            Button(
+                                onClick = { empezar() },
+                                enabled = parrafos.isNotEmpty() && !guardando && cuenta == 0,
+                                modifier = Modifier.weight(1f).height(52.dp)
+                            ) {
                                 Icon(Icons.Filled.Mic, contentDescription = null)
-                                Text(getString(R.string.telepronter_grabar), modifier = Modifier.padding(start = 6.dp))
+                                Text(getString(R.string.telepronter_grabar), modifier = Modifier.padding(start = 8.dp))
                             }
                         } else {
-                            Button(onClick = { terminar() }, modifier = Modifier.weight(1f)) {
+                            Button(
+                                onClick = { terminar() },
+                                modifier = Modifier.weight(1f).height(52.dp),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
                                 Icon(Icons.Filled.Stop, contentDescription = null)
-                                Text(getString(R.string.telepronter_terminar), modifier = Modifier.padding(start = 6.dp))
+                                Text(getString(R.string.telepronter_terminar), modifier = Modifier.padding(start = 8.dp))
                             }
-                            IconButton(onClick = { tirar() }) { Icon(Icons.Filled.Delete, contentDescription = getString(R.string.telepronter_tirar), tint = MaterialTheme.colorScheme.error) }
+                            Spacer(Modifier.width(4.dp))
+                            IconButton(onClick = { tirar() }) {
+                                Icon(Icons.Filled.Delete, contentDescription = getString(R.string.telepronter_tirar), tint = MaterialTheme.colorScheme.error)
+                            }
                         }
+                    }
+                    // Lo que va a pasar al pulsar, dicho una vez y en pequeño.
+                    Text(
+                        getString(
+                            if (grabando) R.string.telepronter_pista_grabando
+                            else R.string.telepronter_pista
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
+        }
+
+        // **Tres, dos, uno.** Encima de todo y a pantalla completa: es lo único que hay que
+        // mirar mientras se cuenta, y da tiempo a colocarse antes de que corra la cinta.
+        if (cuenta > 0) {
+            Box(
+                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        cuenta.toString(),
+                        fontSize = 96.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Text(
+                        getString(R.string.telepronter_preparate),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    TextButton(onClick = { cuenta = 0 }) {
+                        Text(getString(R.string.cancel), color = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             }
@@ -415,3 +526,15 @@ class TelepronterActivity : ComponentActivity() {
             }
     }
 }
+
+/** La velocidad dicha con palabras: un número de píxeles por segundo no significa nada. */
+private fun nombreDeLaVelocidad(v: Float): String = when {
+    v < 30f -> "muy lenta"
+    v < 55f -> "lenta"
+    v < 85f -> "normal"
+    v < 115f -> "rápida"
+    else -> "muy rápida"
+}
+
+/** Desde cuánto cuenta antes de arrancar la grabación. */
+private const val CUENTA_ATRAS = 3

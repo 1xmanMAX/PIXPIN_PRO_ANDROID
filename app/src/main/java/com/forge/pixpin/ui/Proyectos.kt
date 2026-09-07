@@ -1310,7 +1310,7 @@ private fun PortadaDelProyecto(
             )
             // A tamaño grande la nota se compone con letra de leer, no con la
             // de tres puntos y medio de la tira.
-            h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!, tamaño = 9f)
+            h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!, tamaño = LETRA_DE_LA_PORTADA)
             else -> MiniaturaDeLienzo(
                 contexto, h.dibujo, pagina.marco,
                 escala = if (enPrimerPlano) 0.6 else 0.18,
@@ -1796,57 +1796,33 @@ private fun HojaDelProyecto(
 }
 
 /**
- * La miniatura de una hoja de nota.
+ * **La miniatura de una hoja de nota.**
  *
- * Se compone de verdad, con el pintor de siempre a letra diminuta: la tabla se
- * ve como tabla y el título como título. La rejilla encoge sus mínimos con la
- * letra —ver [RejillaDeTabla]—, que es lo que evita que una tabla de tres
- * columnas se salga cinco veces de la hoja.
+ * Se compone con el pintor de siempre, así que la tabla se ve como tabla y el título como
+ * título. Lo que **no** se hace es enseñar la hoja entera encogida: se probó, y a la letra
+ * que salía —tres puntos y pico— no se veía absolutamente nada; en la miniatura pequeña el
+ * usuario solo veía la etiqueta «MD» y en la grande el texto salía descuadrado (lo reportó
+ * dos veces, el 6 y el 7-sep-2026). Una miniatura no es la hoja: es **su principio**, con
+ * letra que se pueda leer. Así que se compone a tamaño legible, se cortan los bloques que no
+ * van a caber y lo que sobre se recorta por abajo.
  */
 @Composable
-private fun MiniaturaDeNota(texto: String, tamaño: Float = 3.2f) {
-    val bloques = remember(texto) { Markdown.parse(texto) }
-    // **Se compone a tamaño normal y se encoge entera.** Componer con letra de 3 puntos
-    // dejaba las tarjetas, los iconos y los márgenes —que van en dp— a tamaño normal junto
-    // a un texto minúsculo: la miniatura no se parecía a la hoja. Encogiendo la hoja
-    // compuesta a 16, la miniatura es la hoja misma, en pequeño (lo pidió el usuario el
-    // 6-sep-2026).
-    val escala = (tamaño / 16f).coerceIn(0.05f, 1f)
-    androidx.compose.foundation.layout.BoxWithConstraints(
-        Modifier.fillMaxSize().clipToBounds(),
-        // **Arriba y a la izquierda, dicho a mano.** La hoja que se compone es varias veces
-        // más grande que su hueco y se encoge desde su esquina de arriba a la izquierda: si
-        // se coloca centrada, esa esquina cae fuera y lo que se ve es el texto corrido y
-        // medio perdido, que es como estaba (lo reportó el usuario el 6-sep-2026).
-        contentAlignment = Alignment.TopStart
-    ) {
-        // **Y sin un hueco medido no hay nada que encoger.** En una tira, el alto puede
-        // llegar sin tope: dividirlo por la escala daba un infinito, la hoja se componía
-        // contra un alto infinito y la miniatura salía en blanco. Ahí se compone a su
-        // tamaño pequeño y ya, que es peor de aspecto pero se lee.
-        if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
-            MarkdownText(
-                blocks = bloques,
-                baseSizeSp = tamaño.coerceAtLeast(7f),
-                modifier = Modifier.fillMaxWidth().padding(4.dp)
-            )
-            return@BoxWithConstraints
-        }
-        val anchoReal = maxWidth / escala
-        val altoReal = maxHeight / escala
-        Box(
-            Modifier
-                .requiredSize(anchoReal, altoReal)
-                .graphicsLayer(
-                    scaleX = escala, scaleY = escala,
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
-                )
-                .padding(14.dp)
-        ) {
-            MarkdownText(blocks = bloques, baseSizeSp = 16f, modifier = Modifier.fillMaxSize())
-        }
+private fun MiniaturaDeNota(texto: String, tamaño: Float = LETRA_DE_LA_MINIATURA) {
+    val bloques = remember(texto) { Markdown.parse(texto).take(BLOQUES_DE_LA_MINIATURA) }
+    Box(Modifier.fillMaxSize().clipToBounds().padding(horizontal = 8.dp, vertical = 6.dp)) {
+        MarkdownText(blocks = bloques, baseSizeSp = tamaño, modifier = Modifier.fillMaxWidth())
     }
 }
+
+/** La letra de la miniatura de la tira, y la de la portada, en puntos. */
+private const val LETRA_DE_LA_MINIATURA = 9f
+private const val LETRA_DE_LA_PORTADA = 13f
+
+/**
+ * Cuántos bloques entran en una miniatura. Una nota de doscientos párrafos no cabe en un
+ * sello, y componerla entera para recortarla es trabajo tirado en cada tarjeta que se ve.
+ */
+private const val BLOQUES_DE_LA_MINIATURA = 24
 
 /**
  * La miniatura de un lienzo, o de uno de sus marcos.
