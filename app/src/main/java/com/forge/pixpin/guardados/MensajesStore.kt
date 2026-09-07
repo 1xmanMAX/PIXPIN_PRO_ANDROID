@@ -71,6 +71,14 @@ class MensajesStore(private val context: Context) {
         // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
         val seUne = mensaje.proyecto != null && UnirAlProyecto.seUneSolo(mensaje)
         var apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
+        // **Su número en la conversación**, que no se reutiliza jamás: uno más que el mayor
+        // que haya, y nunca menos que cuantos hay —eso es lo que deja seguir la cuenta de
+        // los mensajes de antes, que no llevan número, sin renumerar nada. Ver [Mensaje.numero].
+        if (apuntado.numero <= 0) {
+            val suyos = leer().filter { it.proyecto == apuntado.proyecto }
+            val mayor = suyos.maxOfOrNull { it.numero } ?: 0
+            apuntado = apuntado.copy(numero = maxOf(mayor, suyos.size) + 1)
+        }
         // **La música no se pasa a texto: se le pega la letra a mano.** Y qué es música lo
         // dicen las etiquetas del archivo (artista, álbum, título…), no su largo: una nota de
         // voz importada de diez minutos es una nota de voz (lo reportó el usuario el

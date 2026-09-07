@@ -373,8 +373,24 @@ class MensajesActivity : ComponentActivity() {
         val comentariosPorMensaje = remember(mensajes) {
             mensajes.mapNotNull { it.respondeA }.groupingBy { it }.eachCount()
         }
+        // **El número con el que se nombra cada mensaje.** El suyo si lo trae; si es de antes
+        // de que esto existiera, su sitio en la conversación, que es lo que habría tenido.
+        // Ver [Mensaje.numero].
+        val numeroPorMensaje = remember(mensajes) { numerar(mensajes) }
         var etiquetando by remember { mutableStateOf<Mensaje?>(null) }
+        // El mensaje al que se le está poniendo hora. Ver [DialogoDeRecordatorio].
+        var recordando by remember { mutableStateOf<Mensaje?>(null) }
         var compartiendo by remember { mutableStateOf<Mensaje?>(null) }
+        recordando?.let { cual ->
+            DialogoDeRecordatorio(
+                puesto = cual.recuerdaEn,
+                onElegir = { cuando ->
+                    recordando = null
+                    ponerRecordatorio(cual, cuando)
+                },
+                onCerrar = { recordando = null }
+            )
+        }
         // El documento del que se va a hacer página web, mientras se elige qué lleva.
         var pidiendoWebPara by remember { mutableStateOf<Mensaje?>(null) }
         pidiendoWebPara?.let { cual ->
@@ -1181,6 +1197,8 @@ class MensajesActivity : ComponentActivity() {
                     items(tramo.mensajes, key = { it.id }) { m ->
                         Burbuja(
                             m = m,
+                            numero = numeroPorMensaje[m.id] ?: 0,
+                            numeroDelCitado = m.respondeA?.let { numeroPorMensaje[it] } ?: 0,
                             respondido = m.respondeA?.let { porId[it] },
                             sitio = sitios[m.id] ?: Sitio(false, false),
                             consulta = consulta,
@@ -1188,6 +1206,7 @@ class MensajesActivity : ComponentActivity() {
                             ampliada = ampliada,
                             acciones = remember(m, mensajes) { Acciones(
                                 etiquetar = { etiquetando = m },
+                                recordar = { recordando = m },
                                 reenviar = { reenviando = listOf(m) },
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
                                 letra = if (m.clase == Clase.VOZ && m.ruta != null) { { LetraActivity.abrir(this@MensajesActivity, m.id) } } else null,
@@ -2119,6 +2138,8 @@ class MensajesActivity : ComponentActivity() {
         /** Cuántos comentarios cuelgan de él. Cero es no tener hilo que ver. */
         val cuantosComentarios: Int,
         val etiquetar: () -> Unit,
+        /** «Recuérdame esto»: pone o quita la alarma del mensaje. */
+        val recordar: () -> Unit,
         val reenviar: () -> Unit,
         /** Lo mete en las hojas de un proyecto; nulo si no hay hoja que hacer con él. */
         val unir: (() -> Unit)?,
@@ -2150,6 +2171,10 @@ class MensajesActivity : ComponentActivity() {
     @Composable
     private fun Burbuja(
         m: Mensaje,
+        /** Con qué número se le nombra. Cero: no se enseña. Ver [Mensaje.numero]. */
+        numero: Int,
+        /** Y el del mensaje al que contesta, para la cita. */
+        numeroDelCitado: Int,
         respondido: Mensaje?,
         sitio: Sitio,
         consulta: String?,
@@ -2266,6 +2291,11 @@ class MensajesActivity : ComponentActivity() {
                 DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
                     menuAbierto = false; acciones.pinear()
                 }
+                DelMenu(
+                    if (m.recuerdaEn != null) com.forge.pixpin.R.string.guardados_recordar_quitar
+                    else com.forge.pixpin.R.string.guardados_recordar,
+                    Icons.Filled.Alarm
+                ) { menuAbierto = false; acciones.recordar() }
                 acciones.rescatar?.let { rescatar ->
                     DelMenu(com.forge.pixpin.R.string.guardados_rescatar,
                             Icons.Filled.BookmarkBorder) {
@@ -2625,6 +2655,18 @@ class MensajesActivity : ComponentActivity() {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                             SelloDelMensaje(citado)
+                            // **A cuál se contesta, dicho con su número y en color.** Es lo
+                            // que deja nombrar un mensaje en voz alta —«mira el 47»— y
+                            // encontrarlo después. Lo pidió el usuario (7-sep-2026).
+                            if (numeroDelCitado > 0) {
+                                Text(
+                                    "#" + numeroDelCitado,
+                                    fontSize = 11.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    color = acento,
+                                    modifier = Modifier.padding(end = 6.dp)
+                                )
+                            }
                             Column(Modifier.padding(end = 8.dp)) {
                                 // Donde Telegram pone el autor, aquí va el nombre de la
                                 // cosa: es lo que identifica a qué se contesta cuando
@@ -2805,8 +2847,21 @@ class MensajesActivity : ComponentActivity() {
                             Modifier.align(Alignment.BottomEnd),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            if (numero > 0) {
+                                ChapaDelNumero(numero)
+                                Spacer(Modifier.size(4.dp))
+                            }
                             m.emoji?.let {
                                 Text(it, fontSize = 11.sp)
+                                Spacer(Modifier.size(3.dp))
+                            }
+                            if (m.recuerdaEn != null) {
+                                Icon(
+                                    Icons.Filled.Alarm,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(11.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
                                 Spacer(Modifier.size(3.dp))
                             }
                             if (m.fijado) {
@@ -4669,6 +4724,46 @@ class MensajesActivity : ComponentActivity() {
      * página como la hoja anotada, el proyecto como su documento y la mini-app como su
      * texto. Y si de verdad no hay nada que sacar, se dice.
      */
+    /**
+     * **Pone o quita el recordatorio de un mensaje.** Con [cuando] nulo se quita.
+     *
+     * La alarma la guarda el sistema ([com.forge.pixpin.pin.Recordatorios]), que es el único
+     * que no se duerme; el mensaje solo apunta a qué hora, para poder enseñarlo y para poder
+     * quitarlo. Ver [Mensaje.recuerdaEn].
+     */
+    private fun ponerRecordatorio(m: Mensaje, cuando: Long?) {
+        val clave = com.forge.pixpin.pin.RecordatorioReceiver.DE_UN_MENSAJE + m.id
+        if (cuando == null) {
+            com.forge.pixpin.pin.Recordatorios.quitar(this, clave)
+        } else {
+            com.forge.pixpin.pin.Recordatorios.poner(this, clave, cuando)
+        }
+        Thread { almacen.actualizar(m.id) { it.copy(recuerdaEn = cuando) } }.start()
+        Toast.makeText(
+            this,
+            if (cuando == null) getString(com.forge.pixpin.R.string.guardados_recordar_quitado)
+            else getString(com.forge.pixpin.R.string.guardados_recordar_puesto, cuandoLegible(cuando)),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /** «mañana 9:00», «hoy 18:30»: la hora de un recordatorio dicha como se dice. */
+    private fun cuandoLegible(cuando: Long): String {
+        val hoy = java.util.Calendar.getInstance()
+        val ese = java.util.Calendar.getInstance().apply { timeInMillis = cuando }
+        val hora = horaDe(cuando)
+        val mismoDia = hoy.get(java.util.Calendar.YEAR) == ese.get(java.util.Calendar.YEAR) &&
+            hoy.get(java.util.Calendar.DAY_OF_YEAR) == ese.get(java.util.Calendar.DAY_OF_YEAR)
+        hoy.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        val manana = hoy.get(java.util.Calendar.YEAR) == ese.get(java.util.Calendar.YEAR) &&
+            hoy.get(java.util.Calendar.DAY_OF_YEAR) == ese.get(java.util.Calendar.DAY_OF_YEAR)
+        return when {
+            mismoDia -> getString(com.forge.pixpin.R.string.guardados_recordar_hoy, hora)
+            manana -> getString(com.forge.pixpin.R.string.guardados_recordar_manana, hora)
+            else -> fechaDe(cuando) + " " + hora
+        }
+    }
+
     private fun pinear(m: Mensaje, avisar: Boolean = true) {
         val gestor = (application as? PixPinApp)?.overlayManager ?: return
         when (m.clase) {
@@ -5368,3 +5463,114 @@ private val SUBIDA_PARA_EL_BOTON = 100.dp
 private val VERDE_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFF43A047)
 private val NARANJA_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFFFB8C00)
 private val ROJO_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFFE53935)
+
+/**
+ * **La chapa con el número de un mensaje**: pequeña, en gris y en la esquina.
+ *
+ * En gris y no en color porque no es una alerta: está ahí para poder nombrarlo —«el 47»— y
+ * para que se lea el número de la cita cuando se contesta, que ese sí va en color.
+ */
+@Composable
+private fun ChapaDelNumero(numero: Int) {
+    Text(
+        "#" + numero,
+        fontSize = 10.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+            .padding(horizontal = 4.dp, vertical = 1.dp)
+    )
+}
+
+/**
+ * **Con qué número se nombra cada mensaje**, por conversación.
+ *
+ * El que trae guardado ([Mensaje.numero]) manda: es el que no se reutiliza, así que borrar
+ * el 47 deja el 47 vacío para siempre. Los de antes de que esto existiera no traen ninguno y
+ * se numeran por su sitio, empezando por uno, que es el que habrían tenido.
+ */
+internal fun numerar(mensajes: List<Mensaje>): Map<String, Int> {
+    val salida = HashMap<String, Int>(mensajes.size)
+    for ((_, suyos) in mensajes.groupBy { it.proyecto }) {
+        var sinNumero = 0
+        for (m in suyos.sortedBy { it.cuando }) {
+            salida[m.id] = if (m.numero > 0) m.numero else ++sinNumero
+        }
+    }
+    return salida
+}
+
+/**
+ * **A qué hora quiero que me lo recuerdes.**
+ *
+ * Cuatro atajos y nada más: lo que uno contesta a «recuérdamelo» es «en un rato», «esta
+ * tarde» o «mañana», no una fecha. Las horas se calculan sobre el reloj de verdad, así que
+ * «esta tarde» ya pasada la tarde cae mañana, que es lo que uno quiere decir.
+ */
+@Composable
+private fun DialogoDeRecordatorio(
+    puesto: Long?,
+    onElegir: (Long?) -> Unit,
+    onCerrar: () -> Unit
+) {
+    val ahora = System.currentTimeMillis()
+    val opciones = remember(ahora) { atajosDeRecordatorio(ahora) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.guardados_recordar)) },
+        text = {
+            Column {
+                for ((texto, cuando) in opciones) {
+                    Text(
+                        texto,
+                        fontSize = 16.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onElegir(cuando) }
+                            .padding(horizontal = 8.dp, vertical = 14.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (puesto != null) {
+                androidx.compose.material3.TextButton(onClick = { onElegir(null) }) {
+                    Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.guardados_recordar_quitar))
+                }
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onCerrar) {
+                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.cancel))
+            }
+        }
+    )
+}
+
+/**
+ * Los cuatro atajos, con su hora ya calculada sobre [ahora]. Puro, para poder comprobar que
+ * «esta tarde» de noche cae mañana y que ninguno sale en el pasado.
+ */
+internal fun atajosDeRecordatorio(ahora: Long): List<Pair<String, Long>> {
+    fun aLas(hora: Int, dias: Int = 0): Long {
+        val c = java.util.Calendar.getInstance().apply {
+            timeInMillis = ahora
+            add(java.util.Calendar.DAY_OF_YEAR, dias)
+            set(java.util.Calendar.HOUR_OF_DAY, hora)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        // Una hora que ya pasó no es un recordatorio: es mañana a esa hora.
+        if (c.timeInMillis <= ahora) c.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        return c.timeInMillis
+    }
+    return listOf(
+        "En 1 hora" to ahora + 60L * 60 * 1000,
+        "En 3 horas" to ahora + 3L * 60 * 60 * 1000,
+        "Esta tarde (18:00)" to aLas(18),
+        "Mañana (9:00)" to aLas(9, 1)
+    )
+}

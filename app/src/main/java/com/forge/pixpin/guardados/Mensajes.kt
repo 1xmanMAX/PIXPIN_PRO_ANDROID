@@ -214,7 +214,27 @@ data class Mensaje(
      * seguido y sin quién dijo qué (lo reportó el usuario el 6-sep-2026). Ver
      * [MensajesStore.transcribir] y `ConversacionActivity`.
      */
-    val turnos: List<TurnoDeVoz> = emptyList()
+    val turnos: List<TurnoDeVoz> = emptyList(),
+
+    /**
+     * **Su número en la conversación**, para poder nombrarlo: «mira el 47».
+     *
+     * Se pone al guardarlo y **no se reutiliza**: si se borra el 47, ese número se queda
+     * vacío y el siguiente sigue siendo el 48. Un número que se reparte otra vez es peor que
+     * no tenerlo, porque quien apuntó «el 47» encontraría otra cosa. Cero es un mensaje de
+     * antes de que esto existiera; entonces se cuenta por su sitio en la conversación. Lo
+     * pidió el usuario (7-sep-2026). Ver [MensajesStore.anadir].
+     */
+    val numero: Int = 0,
+
+    /**
+     * **Cuándo hay que recordarlo**, o nada. Ver [com.forge.pixpin.pin.Recordatorios].
+     *
+     * Un mensaje guardado es lo que uno no quiere olvidar, y a veces lo que hace falta no es
+     * encontrarlo después sino que te lo pongan delante a una hora. Lo pidió el usuario
+     * (7-sep-2026).
+     */
+    val recuerdaEn: Long? = null
 )
 
 /** Un turno de una conversación: quién, y de qué milisegundo a cuál dentro del audio entero. */

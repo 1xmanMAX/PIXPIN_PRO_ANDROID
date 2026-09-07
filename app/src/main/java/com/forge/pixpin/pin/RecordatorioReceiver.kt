@@ -23,6 +23,9 @@ class RecordatorioReceiver : BroadcastReceiver() {
          * puestas antes de actualizar, que es justo las que ya están esperando.
          */
         const val DE_UNA_MINIAPP = "mini:"
+
+        /** Y el que lleva un mensaje guardado al que se le puso hora. Ver `Mensaje.recuerdaEn`. */
+        const val DE_UN_MENSAJE = "msg:"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -42,6 +45,20 @@ class RecordatorioReceiver : BroadcastReceiver() {
             val titulo = com.forge.pixpin.mini.Cabecera.titulo(mensaje.texto)
                 .ifBlank { mensaje.nombre }
             app.overlayManager.pinTexto(titulo)
+            return
+        }
+        // **Un mensaje guardado al que se le puso hora.** Lo que se pidió fue «recuérdamelo»,
+        // así que aparece en la pantalla como cualquier otro recordatorio —encima de lo que
+        // se esté haciendo— con lo que decía, y se le quita la hora para que no quede una
+        // alarma fantasma en la conversación. Ver `MensajesActivity.ponerRecordatorio`.
+        if (pinId.startsWith(DE_UN_MENSAJE)) {
+            val id = pinId.removePrefix(DE_UN_MENSAJE)
+            val almacen = com.forge.pixpin.guardados.MensajesStore(context)
+            val mensaje = runCatching { almacen.leer().firstOrNull { it.id == id } }.getOrNull() ?: return
+            runCatching { almacen.actualizar(id) { it.copy(recuerdaEn = null) } }
+            val texto = mensaje.texto.ifBlank { mensaje.nombre }
+                .ifBlank { context.getString(com.forge.pixpin.R.string.guardados_titulo) }
+            app.overlayManager.pinTexto(texto)
             return
         }
         app.overlayManager.sonarRecordatorio(pinId)

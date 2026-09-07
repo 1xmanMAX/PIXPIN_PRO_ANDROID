@@ -74,6 +74,8 @@
     <string name="proyecto_web_corto">Web</string>
     <string name="proyecto_desmarcar_corto">Soltar</string>
     <string name="proyecto_desmarcar">Quitar las marcas</string>
+    <string name="proyecto_toca_para_abrir">Toca para ver las páginas</string>
+    <string name="proyecto_plegar">Plegar</string>
     <string name="proyecto_exportar_todo_web">Página web de todo el proyecto</string>
     <string name="proyecto_exportar_todo_pdf">PDF de todo el proyecto</string>
     <string name="zoom_bloquear">Clavar el zoom</string>
@@ -330,6 +332,12 @@
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
     <string name="guardados_adj_conversacion">Una conversación</string>
+    <string name="guardados_recordar">Recordármelo</string>
+    <string name="guardados_recordar_quitar">Quitar el recordatorio</string>
+    <string name="guardados_recordar_puesto">Te lo recuerdo %1$s</string>
+    <string name="guardados_recordar_quitado">Recordatorio quitado</string>
+    <string name="guardados_recordar_hoy">hoy a las %1$s</string>
+    <string name="guardados_recordar_manana">mañana a las %1$s</string>
     <string name="guardados_adj_telepronter">Teleprónter</string>
     <string name="guardados_adj_pronunciar">Pronunciar</string>
     <string name="telepronter_titulo">Teleprónter</string>

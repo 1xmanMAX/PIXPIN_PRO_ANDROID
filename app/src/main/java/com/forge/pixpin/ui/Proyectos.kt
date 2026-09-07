@@ -75,6 +75,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -626,6 +631,15 @@ private fun PaginaDeProyecto(
     // cambiar de una a otra no cuesta nada.
     var rejilla by remember(p.id) { mutableStateOf(false) }
 
+    // **Plegado de fábrica: una sola portada con el montón detrás.**
+    //
+    // Con cuatro proyectos abiertos a la vez, cada uno enseñando sus doce páginas, la
+    // pantalla era una sopa de sellos y no se distinguía un proyecto de otro. Plegado, cada
+    // uno es lo que es —**una cosa con un nombre y una portada**— y las páginas están a un
+    // toque. Lo pidió el usuario (7-sep-2026). Se recuerda por proyecto mientras dure la
+    // pantalla: el que abriste sigue abierto al volver de anotar una hoja.
+    var desplegado by rememberSaveable(p.id) { mutableStateOf(false) }
+
     val alcance = rememberCoroutineScope()
     val desplazamiento = remember(p.id) { Animatable(0f) }
     val alChat = {
@@ -694,6 +708,24 @@ private fun PaginaDeProyecto(
                     }
 
                     if (paginas.isNotEmpty()) {
+                        // **Plegar y desplegar el montón.** Solo cuando hay algo que plegar,
+                        // y al lado del cambio de vista, que es donde uno busca «cómo se ve
+                        // esto». Ver [ElMonton].
+                        if (paginas.isNotEmpty()) {
+                            IconButton(
+                                onClick = { desplegado = !desplegado },
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Icon(
+                                    if (desplegado) Icons.Filled.UnfoldLess else Icons.Filled.UnfoldMore,
+                                    contentDescription = stringResourceSafe(
+                                        if (desplegado) R.string.proyecto_plegar
+                                        else R.string.proyecto_toca_para_abrir
+                                    ),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         IconButton(onClick = { rejilla = !rejilla }, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 if (rejilla) Icons.Filled.ViewCarousel else Icons.Filled.GridView,
@@ -809,6 +841,14 @@ private fun PaginaDeProyecto(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+
+                        !desplegado -> ElMonton(
+                            app = app,
+                            p = p,
+                            paginas = paginas,
+                            enPrimerPlano = enPrimerPlano,
+                            onAbrir = { desplegado = true }
+                        )
 
                         rejilla -> RejillaDeHojas(
                             app = app,
@@ -1794,6 +1834,95 @@ private fun HojaDelProyecto(
         )
     }
 }
+
+/**
+ * **El montón**: la portada del proyecto con sus páginas asomando detrás.
+ *
+ * Es lo que se ve de un proyecto cerrado, y dice tres cosas sin ocupar nada: **qué es**
+ * —su portada—, **cuánto tiene** —el número— y **que hay más debajo** —las dos cartas
+ * asomadas—. Un PDF de doscientas páginas y un proyecto de una hoja ocupan aquí lo mismo,
+ * que es lo que hace que en una pantalla con varios proyectos se distinga uno de otro.
+ *
+ * Un toque lo abre. No hay botón de abrir: la propia portada es el botón, que es lo que
+ * uno prueba primero.
+ */
+@Composable
+private fun ElMonton(
+    app: PixPinApp,
+    p: Proyecto,
+    paginas: List<HojasDelProyecto.Pagina>,
+    enPrimerPlano: Boolean,
+    onAbrir: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().clickable(onClick = onAbrir),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(Modifier.weight(1f, fill = false), contentAlignment = Alignment.Center) {
+            // Las cartas de atrás: solo dos, y solo si de verdad hay más. Tres ya se leen
+            // como una baraja y no como un documento.
+            val detras = (paginas.size - 1).coerceIn(0, 2)
+            for (k in detras downTo 1) {
+                Card(
+                    Modifier
+                        .fillMaxWidth(0.62f)
+                        .aspectRatio(RELACION_DE_LA_PORTADA)
+                        .offset(x = (k * 7).dp, y = (k * 7).dp),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {}
+            }
+            Card(Modifier.fillMaxWidth(0.62f).aspectRatio(RELACION_DE_LA_PORTADA)) {
+                Box(Modifier.fillMaxSize()) {
+                    LaPortadaDelMonton(app, p, paginas.first(), enPrimerPlano)
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            stringResourceSafe(R.string.proyecto_hojas, paginas.size),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            stringResourceSafe(R.string.proyecto_toca_para_abrir),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** La primera hoja del proyecto, pintada como la pinta la tira. */
+@Composable
+private fun LaPortadaDelMonton(
+    app: PixPinApp,
+    p: Proyecto,
+    pagina: HojasDelProyecto.Pagina,
+    enPrimerPlano: Boolean
+) {
+    val contexto = LocalContext.current
+    val h = pagina.hoja
+    when {
+        p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
+            p.pdfOrigen!!, h.pagina!!, PdfDoc.THUMB_WIDTH, ampliada = null, dibujo = h.dibujo
+        )
+        h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!, tamaño = LETRA_DE_LA_PORTADA)
+        h.croquis != null && h.vista == null -> Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(HojasDelProyecto.colorDe(h) ?: 0).copy(alpha = 0.16f))
+        )
+        else -> MiniaturaDeLienzo(
+            contexto, h.dibujo, pagina.marco,
+            escala = if (enPrimerPlano) 0.6 else 0.18,
+            ampliada = null
+        )
+    }
+}
+
+/** Lo alta que es una portada respecto de su ancho: la de un A4 de pie. */
+private const val RELACION_DE_LA_PORTADA = 0.72f
 
 /**
  * **La miniatura de una hoja de nota.**
