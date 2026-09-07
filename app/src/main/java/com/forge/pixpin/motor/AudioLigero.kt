@@ -21,6 +21,31 @@ import java.nio.ByteBuffer
  * mono) y codifica con el AAC del sistema.
  */
 object AudioLigero {
+    /**
+     * **Si un texto de nota lleva algún audio dentro.**
+     *
+     * Es lo que decide si la pregunta por la calidad del audio tiene sentido al exportar:
+     * preguntarla en un documento que no tiene ni un audio es una opción que no hace nada, y
+     * el usuario la veía siempre (6-sep-2026). Se mira la extensión del destino de cada
+     * medio del Markdown, la misma lista que usa `motormd.Markdown.claseDeMedio` para
+     * llamarlo audio; si allí se añade una, aquí también (lo comprueba `AudioLigeroTest`).
+     */
+    fun hayAudioEn(markdown: String?): Boolean {
+        if (markdown.isNullOrBlank()) return false
+        for (m in DESTINO_DE_UN_MEDIO.findAll(markdown)) {
+            val ruta = m.groupValues[1].trim()
+            val ext = ruta.substringAfterLast('.', "").lowercase().substringBefore('?')
+            if (ext in EXTENSIONES_DE_AUDIO) return true
+        }
+        return false
+    }
+
+    /** `![algo](destino)`: el destino de un medio del Markdown. */
+    private val DESTINO_DE_UN_MEDIO = Regex("""!\[[^\]]*]\(([^)]*)\)""")
+
+    internal val EXTENSIONES_DE_AUDIO =
+        setOf("mp3", "ogg", "oga", "m4a", "wav", "flac", "opus", "aac")
+
     const val ORIGINAL = "original"
     const val LIGERO = "ligero"
     const val ULTRALIGERO = "ultraligero"

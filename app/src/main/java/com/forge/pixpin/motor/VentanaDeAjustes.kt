@@ -762,6 +762,12 @@ fun DialogoDeFuncionesWeb(
     /** Con qué calidad viaja el audio de las notas. Ver [AudioLigero]. */
     calidadDeAudio: String = AudioLigero.LIGERO,
     onCalidadDeAudio: (String) -> Unit = {},
+    /**
+     * Si lo que se va a exportar lleva **algún audio**. Con `false` no se pregunta por su
+     * calidad: era una opción que salía siempre y que en un documento sin audios no hacía
+     * nada (lo reportó el usuario el 6-sep-2026). Ver [AudioLigero.hayAudioEn].
+     */
+    hayAudio: Boolean = true,
     /** Qué sale de un lienzo con marcos. Ver [ExportarHtml.hojasDelLienzo]. */
     hojasDelLienzo: String = ExportarHtml.HOJAS_AMBOS,
     onHojasDelLienzo: (String) -> Unit = {}
@@ -797,12 +803,15 @@ fun DialogoDeFuncionesWeb(
                     listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS).indexOf(hojasDelLienzo).coerceAtLeast(0)
                 ) { onHojasDelLienzo(listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS)[it]) }
                 // **El audio de las notas, y cuánto pesa.** Original tal cual; ligero es un
-                // cuarto y suena igual para voz; ultraligero, un décimo y se nota.
-                Text("Audio de las notas", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-                Segmentos(
-                    listOf("Original", "Ligero", "Ultraligero", "Sin audio"),
-                    listOf(AudioLigero.ORIGINAL, AudioLigero.LIGERO, AudioLigero.ULTRALIGERO, AudioLigero.SIN_AUDIO).indexOf(calidadDeAudio).coerceAtLeast(0)
-                ) { onCalidadDeAudio(listOf(AudioLigero.ORIGINAL, AudioLigero.LIGERO, AudioLigero.ULTRALIGERO, AudioLigero.SIN_AUDIO)[it]) }
+                // cuarto y suena igual para voz; ultraligero, un décimo y se nota. Solo si
+                // lo que se va a exportar trae algún audio: ver [hayAudio].
+                if (hayAudio) {
+                    Text("Audio de las notas", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                    Segmentos(
+                        listOf("Original", "Ligero", "Ultraligero", "Sin audio"),
+                        listOf(AudioLigero.ORIGINAL, AudioLigero.LIGERO, AudioLigero.ULTRALIGERO, AudioLigero.SIN_AUDIO).indexOf(calidadDeAudio).coerceAtLeast(0)
+                    ) { onCalidadDeAudio(listOf(AudioLigero.ORIGINAL, AudioLigero.LIGERO, AudioLigero.ULTRALIGERO, AudioLigero.SIN_AUDIO)[it]) }
+                }
             }
         },
         confirmButton = {

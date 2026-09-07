@@ -4,7 +4,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.208 pruebas · **sin cuentas y sin analítica**; la red solo
+**Android 10+** · Kotlin + Compose · 2.213 pruebas · **sin cuentas y sin analítica**; la red solo
 se usa si tú pulsas bajar un modelo de voz o compartir una página como enlace
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md)
@@ -215,7 +215,7 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
-./gradlew testDebugUnitTest    # 2.208 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.213 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -269,7 +269,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.208 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.213 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---

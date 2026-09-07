@@ -394,7 +394,9 @@ class MensajesActivity : ComponentActivity() {
                 },
                 onCerrar = { pidiendoWebPara = null },
                 calidadDeAudio = com.forge.pixpin.motor.ExportarHtml.calidadDeAudio(marcadas),
-                onCalidadDeAudio = { c -> lifecycleScope.launch { app?.settings?.setFuncionesWeb(com.forge.pixpin.motor.ExportarHtml.conCalidadDeAudio(marcadas, c)) } }
+                onCalidadDeAudio = { c -> lifecycleScope.launch { app?.settings?.setFuncionesWeb(com.forge.pixpin.motor.ExportarHtml.conCalidadDeAudio(marcadas, c)) } },
+                // Solo se pregunta por el audio si el documento trae alguno.
+                hayAudio = remember(cual.id) { hayAudioEn(cual) }
             )
         }
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
@@ -4887,6 +4889,15 @@ class MensajesActivity : ComponentActivity() {
      * un dibujo o una foto anotada. Es lo que necesitan la web y el editable, que
      * trabajan por proyectos. Trabajo de disco.
      */
+    /** Si el documento que se va a exportar lleva algún audio. Ver [com.forge.pixpin.motor.AudioLigero.hayAudioEn]. */
+    private fun hayAudioEn(m: Mensaje): Boolean {
+        val (p, claves) = proyectoDe(m) ?: return false
+        return com.forge.pixpin.motor.HojasDelProyecto.paginas(p) { null }.any {
+            (claves.isEmpty() || it.clave in claves) &&
+                com.forge.pixpin.motor.AudioLigero.hayAudioEn(it.texto ?: it.hoja.nota)
+        }
+    }
+
     private fun proyectoDe(m: Mensaje): Pair<com.forge.pixpin.motor.Proyecto, Set<String>>? {
         val app = application as? PixPinApp ?: return null
         val nombre = nombreDeLoCompartido(m)

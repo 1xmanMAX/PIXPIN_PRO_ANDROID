@@ -1538,6 +1538,8 @@ class DrawEditorActivity : ComponentActivity() {
                     onCompartir = { pidiendoFuncionesWeb = false; compartirHtml() },
                     onCerrar = { pidiendoFuncionesWeb = false },
                     calidadDeAudio = ExportarHtml.calidadDeAudio(marcadas),
+                    // Del lienzo salen dibujos, nunca notas: aquí no hay audio que ajustar.
+                    hayAudio = false,
                     onCalidadDeAudio = { c ->
                         lifecycleScope.launch {
                             (application as? com.forge.pixpin.PixPinApp)?.settings?.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c))

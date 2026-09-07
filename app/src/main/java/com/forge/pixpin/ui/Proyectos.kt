@@ -224,7 +224,9 @@ fun PantallaDeProyectos(
             onCompartir = { pidiendoFuncionesWeb = false; exportandoWeb = true },
             onCerrar = { pidiendoFuncionesWeb = false },
             calidadDeAudio = ExportarHtml.calidadDeAudio(marcadas),
-            onCalidadDeAudio = { c -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c)) } }
+            onCalidadDeAudio = { c -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c)) } },
+            // Solo se pregunta por el audio si alguna de las hojas marcadas trae uno.
+            hayAudio = remember(marcado) { hayAudioEnLoMarcado(ordenados, marcado) }
         )
     }
     // El proyecto que se está empaquetando como `.pixpin`, o null.
@@ -1809,8 +1811,27 @@ private fun MiniaturaDeNota(texto: String, tamaño: Float = 3.2f) {
     // a un texto minúsculo: la miniatura no se parecía a la hoja. Encogiendo la hoja
     // compuesta a 16, la miniatura es la hoja misma, en pequeño (lo pidió el usuario el
     // 6-sep-2026).
-    val escala = tamaño / 16f
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
+    val escala = (tamaño / 16f).coerceIn(0.05f, 1f)
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        Modifier.fillMaxSize().clipToBounds(),
+        // **Arriba y a la izquierda, dicho a mano.** La hoja que se compone es varias veces
+        // más grande que su hueco y se encoge desde su esquina de arriba a la izquierda: si
+        // se coloca centrada, esa esquina cae fuera y lo que se ve es el texto corrido y
+        // medio perdido, que es como estaba (lo reportó el usuario el 6-sep-2026).
+        contentAlignment = Alignment.TopStart
+    ) {
+        // **Y sin un hueco medido no hay nada que encoger.** En una tira, el alto puede
+        // llegar sin tope: dividirlo por la escala daba un infinito, la hoja se componía
+        // contra un alto infinito y la miniatura salía en blanco. Ahí se compone a su
+        // tamaño pequeño y ya, que es peor de aspecto pero se lee.
+        if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+            MarkdownText(
+                blocks = bloques,
+                baseSizeSp = tamaño.coerceAtLeast(7f),
+                modifier = Modifier.fillMaxWidth().padding(4.dp)
+            )
+            return@BoxWithConstraints
+        }
         val anchoReal = maxWidth / escala
         val altoReal = maxHeight / escala
         Box(
@@ -1989,6 +2010,19 @@ internal fun imagenIncrustada(ruta: String): String? = runCatching {
 
 /** Manda el archivo a donde el usuario elija. */
 // **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
+/**
+ * Si algo de lo marcado lleva un audio dentro. Solo las notas pueden traerlo, y viaja como
+ * un medio de su Markdown. Ver [com.forge.pixpin.motor.AudioLigero.hayAudioEn].
+ */
+private fun hayAudioEnLoMarcado(
+    proyectos: List<Proyecto>,
+    marcado: Map<String, Set<String>>
+): Boolean = proyectos.any { p ->
+    val suyas = marcado[p.id] ?: return@any false
+    HojasDelProyecto.paginas(p) { null }
+        .any { it.clave in suyas && com.forge.pixpin.motor.AudioLigero.hayAudioEn(it.texto ?: it.hoja.nota) }
+}
+
 private fun compartir(contexto: android.content.Context, archivo: java.io.File, tipo: String) {
     CompartirEnlaceActivity.abrir(contexto, archivo, archivo.name.substringBeforeLast('.'), tipo)
 }

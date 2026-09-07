@@ -386,25 +386,85 @@ private fun tonoDeTapa(
     return b.coloresDeTono[(lambert * cuantos).toInt().coerceAtMost(cuantos - 1)]
 }
 
-/** Una tira de cara: por el anillo j de ida y por el j2 de vuelta, cerrada y rellena. */
+/**
+ * **Una tira de cara**: por el anillo j de ida y por el j2 de vuelta, cerrada y rellena.
+ *
+ * ## Cuando la tira se dobla sobre sí misma
+ *
+ * Una tira larga se pinta como **un solo polígono**, que es lo barato y lo que no deja
+ * costuras entre cuadros. Pero un trazo que se aleja del ojo, al girar la vista, acaba
+ * proyectándose encima de sí mismo: entonces ese polígono se cruza, y la regla de relleno de
+ * siempre —la del número de vueltas— **descuenta** el trozo que va al revés en vez de
+ * rellenarlo. Lo que se ve es un agujero justo donde la tinta se superpone con la tinta, y
+ * solo al girar (lo reportó el usuario el 6-sep-2026).
+ *
+ * Así que se mira si el sentido de los cuadros cambia dentro de la tira. Si no cambia —que
+ * es lo normal— se pinta el polígono largo de siempre, sin costuras. Si cambia, se pinta
+ * **cuadro a cuadro y todos en el mismo sentido**: entonces donde dos se solapan las vueltas
+ * se suman en vez de restarse, y ahí hay tinta, que es lo que tiene que haber.
+ */
 private fun DrawScope.pintaTira(
     b: BorradorDePluma, j: Int, j2: Int, desde: Int, hasta: Int, n: Int, color: Int
 ) {
     val p = b.anillosPantalla
     val camino = b.camino
     camino.rewind()
-    var o = (j * n + desde) * 2
-    camino.moveTo(p[o].toFloat(), p[o + 1].toFloat())
-    for (i in desde + 1..hasta) {
-        o = (j * n + i) * 2
-        camino.lineTo(p[o].toFloat(), p[o + 1].toFloat())
+    if (!seDobla(p, j, j2, desde, hasta, n)) {
+        var o = (j * n + desde) * 2
+        camino.moveTo(p[o].toFloat(), p[o + 1].toFloat())
+        for (i in desde + 1..hasta) {
+            o = (j * n + i) * 2
+            camino.lineTo(p[o].toFloat(), p[o + 1].toFloat())
+        }
+        for (i in hasta downTo desde) {
+            o = (j2 * n + i) * 2
+            camino.lineTo(p[o].toFloat(), p[o + 1].toFloat())
+        }
+        camino.close()
+        drawPath(camino, Color(color))
+        return
     }
-    for (i in hasta downTo desde) {
-        o = (j2 * n + i) * 2
-        camino.lineTo(p[o].toFloat(), p[o + 1].toFloat())
+    for (i in desde until hasta) {
+        val a = (j * n + i) * 2
+        val bb = (j * n + i + 1) * 2
+        val c = (j2 * n + i + 1) * 2
+        val d = (j2 * n + i) * 2
+        cuadroEnElMismoSentido(camino, p, a, bb, c, d)
+    }
+    drawPath(camino, Color(color))
+}
+
+/** Dos veces el área con signo del cuadrilátero: su signo es el sentido en que va. */
+internal fun areaDelCuadro(p: DoubleArray, a: Int, b: Int, c: Int, d: Int): Double =
+    (p[a] * p[b + 1] - p[b] * p[a + 1]) +
+        (p[b] * p[c + 1] - p[c] * p[b + 1]) +
+        (p[c] * p[d + 1] - p[d] * p[c + 1]) +
+        (p[d] * p[a + 1] - p[a] * p[d + 1])
+
+/** Si dentro de la tira hay cuadros de los dos sentidos: entonces se ha doblado. */
+internal fun seDobla(p: DoubleArray, j: Int, j2: Int, desde: Int, hasta: Int, n: Int): Boolean {
+    var signo = 0
+    for (i in desde until hasta) {
+        val area = areaDelCuadro(p, (j * n + i) * 2, (j * n + i + 1) * 2, (j2 * n + i + 1) * 2, (j2 * n + i) * 2)
+        if (area > 0.0) { if (signo < 0) return true; signo = 1 }
+        else if (area < 0.0) { if (signo > 0) return true; signo = -1 }
+    }
+    return false
+}
+
+/** Mete el cuadrilátero en el camino, siempre en el mismo sentido de giro. */
+private fun cuadroEnElMismoSentido(camino: Path, p: DoubleArray, a: Int, b: Int, c: Int, d: Int) {
+    camino.moveTo(p[a].toFloat(), p[a + 1].toFloat())
+    if (areaDelCuadro(p, a, b, c, d) >= 0.0) {
+        camino.lineTo(p[b].toFloat(), p[b + 1].toFloat())
+        camino.lineTo(p[c].toFloat(), p[c + 1].toFloat())
+        camino.lineTo(p[d].toFloat(), p[d + 1].toFloat())
+    } else {
+        camino.lineTo(p[d].toFloat(), p[d + 1].toFloat())
+        camino.lineTo(p[c].toFloat(), p[c + 1].toFloat())
+        camino.lineTo(p[b].toFloat(), p[b + 1].toFloat())
     }
     camino.close()
-    drawPath(camino, Color(color))
 }
 
 /** Una tapa: el anillo entero de la muestra [i], como polígono. */

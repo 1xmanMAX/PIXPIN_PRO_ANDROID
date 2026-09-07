@@ -5105,6 +5105,48 @@ private const val FILAMENTO = 0.28f
  */
 private const val ALFA_DEL_RESALTADOR = 0xFF
 
+/**
+ * **El relleno de una lámina**: sus cuadriláteros, todos en el mismo sentido de giro.
+ *
+ * El contorno viene de [Lamina3D.contorno] —un lado de ida y el otro de vuelta—, así que el
+ * cuadro `i` son los puntos `i` e `i+1` de la ida y sus dos parejas de la vuelta. Emitidos
+ * todos con el mismo giro, una hoja que se dobla sobre sí misma en la pantalla se rellena
+ * entera en vez de descontarse justo donde se cruza.
+ */
+private fun mancharLaHoja(
+    contorno: List<Pt3>,
+    camara: Camara3D,
+    ancho: Double,
+    alto: Double
+): Path {
+    val camino = Path()
+    val cuantos = contorno.size
+    val xs = FloatArray(cuantos)
+    val ys = FloatArray(cuantos)
+    for (i in 0 until cuantos) {
+        val v = camara.aPantalla(contorno[i], ancho, alto)
+        xs[i] = v.x.toFloat(); ys[i] = v.y.toFloat()
+    }
+    val m = cuantos / 2
+    if (m < 2) return camino
+    for (i in 0 until m - 1) {
+        val a = i
+        val b = i + 1
+        val c = cuantos - 2 - i
+        val d = cuantos - 1 - i
+        val area = (xs[a] * ys[b] - xs[b] * ys[a]) + (xs[b] * ys[c] - xs[c] * ys[b]) +
+            (xs[c] * ys[d] - xs[d] * ys[c]) + (xs[d] * ys[a] - xs[a] * ys[d])
+        camino.moveTo(xs[a], ys[a])
+        if (area >= 0f) {
+            camino.lineTo(xs[b], ys[b]); camino.lineTo(xs[c], ys[c]); camino.lineTo(xs[d], ys[d])
+        } else {
+            camino.lineTo(xs[d], ys[d]); camino.lineTo(xs[c], ys[c]); camino.lineTo(xs[b], ys[b])
+        }
+        camino.close()
+    }
+    return camino
+}
+
 private fun DrawScope.pintarLamina(
     lamina: Lamina3D,
     camara: Camara3D,
@@ -5140,13 +5182,16 @@ private fun DrawScope.pintarLamina(
 
     val contorno = laHoja.contorno()
     if (contorno.size < 3) return
-    val camino = Path()
-    contorno.forEachIndexed { i, p ->
-        val v = camara.aPantalla(p, ancho, alto)
-        if (i == 0) camino.moveTo(v.x.toFloat(), v.y.toFloat())
-        else camino.lineTo(v.x.toFloat(), v.y.toFloat())
-    }
-    camino.close()
+    // **La mancha, cuadro a cuadro y todos en el mismo sentido.**
+    //
+    // Iba como un solo polígono —el contorno entero— y eso vale mientras la hoja se vea
+    // desplegada. Una hoja **curva mirada de lado** se proyecta encima de sí misma: el
+    // contorno se cruza, y la regla de relleno de siempre descuenta el trozo que va al
+    // revés en vez de rellenarlo. Lo que se veía es que la hoja curva desaparecía por
+    // trozos al mirarla de canto y parecía plana (lo reportó el usuario el 6-sep-2026).
+    // Partida en sus cuadros y todos girando igual, donde se solapa consigo misma las
+    // vueltas se suman. Ver [mancharLaHoja].
+    val camino = mancharLaHoja(contorno, camara, ancho, alto)
 
     run {
         // **Translúcida, y bastante.** Una lámina es un apoyo para dibujar encima, no un
