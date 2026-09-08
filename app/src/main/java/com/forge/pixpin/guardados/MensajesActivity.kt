@@ -3981,6 +3981,58 @@ class MensajesActivity : ComponentActivity() {
         val hayTexto = !m.transcripcion.isNullOrBlank()
         val sePuede = m.ruta != null && Transcriptor.disponible(this@MensajesActivity)
         if (enCurso == null && !hayTexto && !sePuede) return
+        PastillaDeAtajo(
+            icono = when {
+                // Mientras trabaja se queda el mismo icono: quien avisa es el borde.
+                enCurso != null -> Icons.Filled.Subtitles
+                hayTexto && desplegado -> Icons.Filled.ExpandLess
+                hayTexto -> Icons.Filled.ExpandMore
+                else -> Icons.Filled.Subtitles
+            },
+            descripcion = getString(
+                when {
+                    enCurso != null -> com.forge.pixpin.R.string.guardados_transcribiendo
+                    hayTexto -> com.forge.pixpin.R.string.guardados_ver_texto
+                    else -> com.forge.pixpin.R.string.guardados_a_texto
+                }
+            ),
+            trabajando = enCurso != null
+        ) {
+            if (hayTexto) alPulsar()
+            else {
+                Toast.makeText(
+                    this@MensajesActivity,
+                    getString(com.forge.pixpin.R.string.guardados_transcribiendo),
+                    Toast.LENGTH_SHORT
+                ).show()
+                almacen.transcribir(m)
+            }
+        }
+    }
+
+    /**
+     * **La pastilla de atajo de una burbuja**: el botón pequeño de su esquina.
+     *
+     * Es el mismo objeto para todos los atajos que viven dentro de una burbuja, y eso es
+     * lo que pidió el usuario el 8-sep-2026: «un botón igual debería haber al lado de los
+     * PDF o archivos, imágenes también». Con dos botones parecidos pero distintos hay que
+     * aprenderlos dos veces; con el mismo, quien ya sabe qué hace el de la nota de voz
+     * sabe que el del PDF es de la misma familia.
+     *
+     * Sus medidas son las del botón de transcribir de Telegram —30 × 24 dp, esquinas de 8,
+     * el fondo con el color del icono al 15,6 %— porque es el único atajo de esta clase
+     * que ellos tienen. Ver [BotonDeTexto] y `ChatMessageCell.java:14854-14859`.
+     *
+     * Va dentro de una caja de [CAJA_DE_LA_ONDA] de alto para que caiga centrado sobre el
+     * eje del contenido que acompaña, sea una onda o el icono redondo de un archivo.
+     */
+    @Composable
+    private fun PastillaDeAtajo(
+        icono: androidx.compose.ui.graphics.vector.ImageVector,
+        descripcion: String,
+        trabajando: Boolean = false,
+        alPulsar: () -> Unit
+    ) {
         val tinta = ColoresDelChat.hora()
         Box(
             Modifier.padding(start = 8.dp).height(CAJA_DE_LA_ONDA),
@@ -3991,35 +4043,13 @@ class MensajesActivity : ComponentActivity() {
                     .size(ANCHO_DEL_BOTON_DE_TEXTO, ALTO_DEL_BOTON_DE_TEXTO)
                     .clip(RoundedCornerShape(RADIO_DEL_BOTON_DE_TEXTO))
                     .background(tinta.copy(alpha = ALFA_DEL_FONDO_DEL_BOTON))
-                    .then(if (enCurso != null) Modifier.elBordeQueGira(tinta) else Modifier)
-                    .clickable(enabled = enCurso == null) {
-                        if (hayTexto) alPulsar()
-                        else {
-                            Toast.makeText(
-                                this@MensajesActivity,
-                                getString(com.forge.pixpin.R.string.guardados_transcribiendo),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            almacen.transcribir(m)
-                        }
-                    },
+                    .then(if (trabajando) Modifier.elBordeQueGira(tinta) else Modifier)
+                    .clickable(enabled = !trabajando, onClick = alPulsar),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    when {
-                        // Mientras trabaja se queda el mismo icono: quien avisa es el borde.
-                        enCurso != null -> Icons.Filled.Subtitles
-                        hayTexto && desplegado -> Icons.Filled.ExpandLess
-                        hayTexto -> Icons.Filled.ExpandMore
-                        else -> Icons.Filled.Subtitles
-                    },
-                    contentDescription = getString(
-                        when {
-                            enCurso != null -> com.forge.pixpin.R.string.guardados_transcribiendo
-                            hayTexto -> com.forge.pixpin.R.string.guardados_ver_texto
-                            else -> com.forge.pixpin.R.string.guardados_a_texto
-                        }
-                    ),
+                    icono,
+                    contentDescription = descripcion,
                     tint = tinta,
                     modifier = Modifier.size(16.dp)
                 )
@@ -4286,6 +4316,20 @@ class MensajesActivity : ComponentActivity() {
                     )
                 }
             }
+            // **Y el atajo para sacarlo a la pantalla**, al lado, como el de pasar a texto
+            // en una nota de voz. Lo pidió el usuario el 8-sep-2026: sacar un PDF a un pin
+            // estaba solo detrás de mantener pulsado y buscar en el menú, que son tres
+            // gestos para lo que en esta pantalla se hace a todas horas — tener el plano
+            // delante mientras se trabaja en otra cosa. Ver [pinear].
+            //
+            // Con `OpenInNew` y no con la chincheta: en este chat la chincheta ya
+            // significa **fijado arriba**, que es otra cosa. Es el mismo icono con el que
+            // sale «Sacar a la pantalla» en el menú de la burbuja, así que el atajo y la
+            // opción larga se reconocen como lo mismo.
+            PastillaDeAtajo(
+                icono = Icons.Filled.OpenInNew,
+                descripcion = getString(com.forge.pixpin.R.string.guardados_pinear)
+            ) { pinear(m) }
         }
     }
 
