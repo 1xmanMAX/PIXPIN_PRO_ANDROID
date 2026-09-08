@@ -4,11 +4,12 @@
 > Objetivo registrado: `goal-138c4dcf-2240-44fb-8bc7-4291cadb588a` (tras un reinicio,
 > si el usuario dice "continúa", rearmar con `update_goal action=resume`).
 
-## Estado al último guardado (reinicio del usuario)
+## Estado al último guardado
 - **WP1 HECHA y publicada**: commit `518b9a2` en `origin/DEEPROOT`.
-- **WP2+WP3 EN ANÁLISIS (sin cambios de código todavía)** — siguiente paso listo abajo.
-- Árbol de trabajo **limpio**. Línea base de tests en verde (suite completa ~48 s en caliente).
-- Ningún trabajo en segundo plano.
+- **WP2+WP3 HECHA (parte de código)**: commit `1092bb0` en `origin/DEEPROOT` (guard de pintado en
+  hoja oculta en `VisorPlano.pintar`). Verificación en navegador/dispositivo pendiente
+  (aceptación manual del plan).
+- WP4 en curso (medir en HTML).
 
 ## Entorno verificado
 - SDK 36 en `C:\Users\MaxBook\AppData\Local\Android\Sdk`; `local.properties` creado (ignorado).
@@ -22,7 +23,7 @@
 ## Estado por WP
 - [x] WP0 Entorno + línea base verde.
 - [x] **WP1** "Dibujo vacío" al exportar HTML desde lienzo → HECHA (commit `518b9a2`).
-- [ ] WP2+WP3 Reserva de pintado del plano al mover vista + roundtrip HTML con plano → **EN CURSO**.
+- [x] WP2+WP3 Reserva de pintado del plano al mover vista + roundtrip HTML con plano → HECHA (código, `1092bb0`; verificación en navegador pendiente).
 - [ ] WP4 Medir en el HTML: flechas+cota, movibles, persistentes, varias, imán (diseño confirmado por el usuario).
 - [ ] WP5 Rendimiento de planos PDF enormes manteniendo vectorial.
 - [ ] WP6 Compartir: opciones/aviso de audio solo cuando hay audio.
@@ -41,37 +42,16 @@
   `un fallo al escribir no se anuncia como dibujo vacío`.
 - Suite completa verde; commit `518b9a2` pusheado (`origin/DEEPROOT`).
 
-## WP2+WP3 — siguiente paso (análisis terminado, sin código tocado)
-Objetivo: (a) al mover/ampliar la vista de un plano en el HTML no debe asomar blanco fuera de
-la reserva de pintado; (b) al abrir/reabrir un HTML guardado el plano debe verse al pasar a su
-hoja. El parche histórico ya existe (`VisorPlano` JS: `cubierto()` + `alSiguienteFotograma()`,
-`VisorPlano.kt` ~623-652); queda **endurecer** dos huecos concretos:
-
-1. **Pintar con la hoja oculta envenena la reserva.** `VisorPlano.kt` `pintar()` (~466-480):
-   una hoja escondida mide 0 y un pintado a 0 llenaría `pintado` con una reserva vacía;
-   al asomarse luego no se repinta hasta que algo mueve la vista.
-   Cambio planeado — insertar tras `var m=medir(), v=vista;`:
-   ```javascript
-   if(m.anL<2||m.alL<2){ pintado=null; return; }
-   ```
-   (con comentario en español explicando el motivo, estilo del archivo).
-2. **Garantizar repintado al activar la hoja con plano.** `ExportarHtml.kt` `VISOR_DIBUJO`,
-   export `activar:function(){ aplicar(); }` (~886): `aplicar()` → `plano.ver(v)`. El orden
-   de `irA` (`ExportarHtml.kt` ~1093-1110) es: `hojas.forEach(hidden)` (1097) y DESPUÉS
-   `actual.activar()` (1110), así que activar corre con la hoja visible → ver con el guard (1)
-   repinta solo. Si se quiere blindar más: en `activar` añadir `if(plano) plano.medir();`
-   (fuerza repintado completo al cambiar de hoja; coste = un repintado por activación).
-3. Tras editar: `testDebugUnitTest` (al menos `com.forge.pixpin.motor.ExportarHtmlTest` y
-   suite) → commit (mensaje estilo repo, ej. `el plano se repinta al asomarse a su hoja en la web`) → push.
-4. Verificación real en navegador/dispositivo pendiente (el repo no ejecuta el JS del visor
-   en tests; la verificación manual es parte de la aceptación del plan).
-
-Anclas útiles leídas: hoja de dibujo = `svg` + (si plano) `<canvas class="plano">` +
-`<script class="plano">JSON</script>` dentro de `.hoja` (`ExportarHtml.paginas` 219-229);
-guardado = `PLANTILLA` (outerHTML al cargar, `SHELL` 917) + `paginaAnotada()` reescribe cada
-`<g id="croquis">` con `rayasComoTexto()` (1290-1298, 870-881); las rayas son `<path>`
-hijos de `#croquis` (`crearDibujo`, 592-656); el grupo `#medida` se cuelga del `svg` fuera de
-`#croquis` (734-763) y **no** sobrevive al guardado (ver WP4).
+## WP2+WP3 — HECHA (código, commit 1092bb0; verificación manual pendiente)
+- **Causa atacada**: al pintar el plano de una hoja oculta (mide 0) se llenaba `pintado` con
+  una reserva vacía; al asomarse a la hoja no se repintaba hasta que algo movía la vista → el
+  plano salía en blanco al pasar a su página o al reabrir un archivo guardado.
+- **Cambio**: `motor/VisorPlano.kt` `pintar()` — si `medir()` devuelve una hoja de menos de 2 px
+  (`m.anL<2||m.alL<2`) se deja `pintado=null` y se sale; al hacerse visible la hoja, `ver`
+  repinta entero. El parche histórico de pan (reserva de pintado ×MARGEN, `cubierto()` +
+  `alSiguienteFotograma()`, ~623-652) ya estaba en HEAD.
+- Tests: suite completa verde. **Pendiente de aceptación en navegador/dispositivo**: pasear un
+  plano sin huecos; abrir→anotar→guardar→reabrir y ver el plano + trazos.
 
 ## Notas para el resto de WPs (anclas de la investigación; leer antes de tocar)
 - **WP4** medir en HTML: hoy efímero en grupo `#medida` (ExportarHtml.kt JS 734-763, `medirEn`
