@@ -469,6 +469,11 @@ function pintar(){
   arrancarGl();
   var t0=(performance&&performance.now)?performance.now():Date.now();
   var m=medir(), v=vista;
+  // **Una hoja escondida mide cero.** Pintar a cero llenaba `pintado` con una reserva vacía,
+  // y al asomarse a la hoja luego no había nada que repintar hasta que algo moviera la vista:
+  // el plano salía en blanco al pasar a su página (o al reabrir un archivo guardado). Sin
+  // reserva no se pinta; cuando la hoja se vea, `ver` repinta entero al no haber `pintado`.
+  if(m.anL<2||m.alL<2){ pintado=null; return; }
   var e=encuadre(v, m.an, m.al);
   lienzo.style.transform='';
   ctx.setTransform(1,0,0,1,0,0);
