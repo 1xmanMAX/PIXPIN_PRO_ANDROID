@@ -306,6 +306,9 @@
     <string name="cd_delete">Borrar</string>
     <string name="draw_text_title">Texto</string>
     <string name="pin_draw_empty">El dibujo está vacío</string>
+    <!-- Cuando la exportación se rompe. Antes esto salía como «el dibujo está vacío», que
+         mandaba a buscar el problema al sitio equivocado. %1$s es el tipo del fallo. -->
+    <string name="export_fallo">No se pudo exportar (%1$s)</string>
 
     <!-- Barra de dibujo: los cinco grupos y las herramientas de cada uno -->
     <string name="tool_punto">Punto</string>

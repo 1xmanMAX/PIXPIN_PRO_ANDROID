@@ -3522,15 +3522,16 @@ class DrawEditorActivity : ComponentActivity() {
         } else emptyList()
         val hojas = entera + deMarcos
         if (hojas.isEmpty()) return@exportando null
-        runCatching {
-            // Lo que lleva el documento: lo marcado en el panel de la página web.
-            val opciones = ExportarHtml.Opciones.de(funciones)
-            val pagina = ExportarHtml.paginas(
-                hojas, titulo = getString(R.string.formato_html_titulo), opciones = opciones
-            )
-            val carpeta = File(cacheDir, "share").apply { mkdirs() }
-            File(carpeta, "$dibujoId.html").also { it.writeText(pagina) }
-        }.getOrNull()
+        // **Sin `runCatching` aquí a propósito.** Lo había, y convertía cualquier fallo al
+        // montar la página —una hoja que no cabe en memoria, un medio que no se deja
+        // leer— en un `null`, que arriba se anunciaba como «el dibujo está vacío». Que
+        // suba: [exportando] ya distingue el fallo del documento vacío y lo registra.
+        val opciones = ExportarHtml.Opciones.de(funciones)
+        val pagina = ExportarHtml.paginas(
+            hojas, titulo = getString(R.string.formato_html_titulo), opciones = opciones
+        )
+        val carpeta = File(cacheDir, "share").apply { mkdirs() }
+        File(carpeta, "$dibujoId.html").also { it.writeText(pagina) }
     }
 
     /**
@@ -3579,8 +3580,32 @@ class DrawEditorActivity : ComponentActivity() {
         if (exportando) return
         exportando = true
         lifecycleScope.launch {
-            val archivo = withContext(Dispatchers.IO) { runCatching { escribir() }.getOrNull() }
+            // **Un fallo no es un dibujo vacío, y decirlo mal cuesta caro.**
+            //
+            // Esto era `runCatching { ... }.getOrNull()`: cualquier excepción al escribir
+            // —una fuente que no carga, un PDF que no se deja leer, memoria que no
+            // alcanza— salía por pantalla como «El dibujo está vacío». El usuario lo
+            // reportó el 8-sep-2026 exportando un lienzo con cosas dentro a página web:
+            // «me dice que no hay nada, que el dibujo está vacío y que no se puede hacer
+            // nada». No había forma de saber qué pasaba, ni desde fuera ni desde dentro,
+            // porque la excepción se tiraba sin registrarla.
+            //
+            // Ahora son dos cosas distintas: **null** es que de verdad no hay nada que
+            // sacar, y **excepción** es que algo se rompió — se registra con su traza y
+            // se dice que ha fallado, no que esté vacío.
+            val salida = withContext(Dispatchers.IO) { runCatching { escribir() } }
             exportando = false
+            val fallo = salida.exceptionOrNull()
+            if (fallo != null) {
+                android.util.Log.e("PixPinExportar", "exportar a " + mime + ": " + fallo, fallo)
+                android.widget.Toast.makeText(
+                    this@DrawEditorActivity,
+                    getString(R.string.export_fallo, fallo.javaClass.simpleName),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            val archivo = salida.getOrNull()
             if (archivo == null) {
                 android.widget.Toast.makeText(
                     this@DrawEditorActivity,
