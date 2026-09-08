@@ -411,14 +411,25 @@ object ExportarHtml {
           --fusion:multiply}
         body.oscuro{--tinta:#f2f2f2;--vidrio:rgba(30,30,32,.82);--filete:rgba(255,255,255,.12);
           --fusion:screen}
-        html,body{margin:0;height:100%;overflow:hidden;background:FONDO;color:var(--tinta);
+        html,body{margin:0;height:100%;background:FONDO;color:var(--tinta);
           font:14px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-          -webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+          -webkit-tap-highlight-color:transparent}
+        /* **Todo lo que ata la página a la ventana cuelga de `html.vivo`**, y el guion se
+           pone esa clase al arrancar. Sin guion —hay visores dentro de otras aplicaciones
+           que abren un HTML con el guion apagado, y ahí se abren muchos de los que se
+           mandan por mensajería— la página se queda como estaba: `overflow:hidden` y
+           `touch-action:none` sobre el dibujo dejaban una lámina a pantalla completa **sin
+           zoom, sin desplazamiento y sin nada que tocar**. Es justo lo que reportó el
+           usuario el 8-sep-2026 al abrir uno reenviado. Así, sin guion, al menos queda un
+           documento que se amplía con dos dedos y se pasea, que es lo que hace el navegador
+           solo cuando se le deja. */
+        html.vivo,html.vivo body{overflow:hidden;overscroll-behavior:none}
         #lienzo{position:fixed;inset:0}
         .hoja{position:absolute;inset:0}
         .hoja[hidden]{display:none}
-        #lienzo svg{width:100%;height:100%;display:block;touch-action:none;cursor:grab;
+        #lienzo svg{width:100%;height:100%;display:block;
           user-select:none;-webkit-user-select:none}
+        html.vivo #lienzo svg{touch-action:none;cursor:grab}
         .hoja[data-tipo=nota]{overflow:auto;-webkit-overflow-scrolling:touch;position:absolute}
         /* La capa donde se raya, encima del texto y del alto que tenga la nota. No recibe el
            dedo salvo con lápiz o resaltador en la mano: así el texto se sigue pudiendo
@@ -456,7 +467,8 @@ object ExportarHtml {
         .nota .tapado{background:currentColor;border-radius:3px}
         .nota .tapado:hover,.nota .tapado:focus{background:transparent}
         .nota a{color:inherit}
-        canvas.espacio{position:absolute;inset:0;display:block;touch-action:none;cursor:grab}
+        canvas.espacio{position:absolute;inset:0;display:block}
+        html.vivo canvas.espacio{touch-action:none;cursor:grab}
         /* La portada del croquis, encima hasta el primer fotograma. Ver VisorEspacio. */
         img.portada{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
           pointer-events:none;transition:opacity .3s;z-index:2}
@@ -907,6 +919,10 @@ function id(x){return document.getElementById(x);}
 var cajaLienzo=id('lienzo'), estado=id('estado'), cajon=id('cajon');
 var hojas=[].slice.call(document.querySelectorAll('#lienzo .hoja'));
 if(!hojas.length) return;
+// **La página se declara viva aquí y no antes.** De esta clase cuelga todo lo que le quita
+// el control al navegador —el recorte a la ventana y el `touch-action` del dibujo—, así que
+// se pone cuando ya se sabe que hay armazón que lo sustituya. Ver la hoja de estilo.
+document.documentElement.className+=' vivo';
 var color=(document.querySelector('#colores .activo')||{dataset:{}}).dataset.color||'#ff1744';
 var grosor=+((document.querySelector('#grosores .activo')||{dataset:{}}).dataset.grosor||4);
 var iHoja=-1, actual=null, avisoPendiente=null;

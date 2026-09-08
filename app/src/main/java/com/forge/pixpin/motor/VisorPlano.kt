@@ -608,22 +608,48 @@ function estirar(){
   lienzo.style.transformOrigin='0 0';
   lienzo.style.transform='translate('+dx+'px,'+dy+'px) scale('+f+')';
 }
+// **¿Lo que se ve sigue cayendo dentro de lo que hay pintado?**
+//
+// El lienzo se pinta MARGEN veces más grande que la ventana, centrado en la vista de
+// entonces: eso es la reserva que permite estirar mientras la mano se mueve sin que asome
+// nada. En cuanto la vista se sale de esa reserva, **estirar ya no tiene qué estirar** y
+// lo que asoma es papel en blanco.
+//
+// Aquí estaba el fallo que reportó el usuario el 8-sep-2026: «cuando muevo la pantalla
+// solo la parte central se genera la imagen, y al moverlo va desapareciendo una parte».
+// Y no era solo cuestión de reserva corta: cada `ver` hacía `clearTimeout(quieto)`, así
+// que **mientras la mano no parase, el repintado no llegaba nunca**. Arrastrando seguido
+// se podía llevar el lienzo arbitrariamente lejos y la mitad de la pantalla quedaba vacía.
+function cubierto(){
+  if(!pintado||!vista) return false;
+  // Ampliar también invalida lo pintado: estirar hacia arriba es agrandar píxeles, y el
+  // plano se ve borroso justo cuando se acerca uno para leer una cota.
+  if(vista.w < pintado.w*0.8) return false;
+  var w=pintado.w*MARGEN, h=pintado.h*MARGEN;
+  var x0=pintado.x+pintado.w/2-w/2, y0=pintado.y+pintado.h/2-h/2;
+  return vista.x>=x0 && vista.y>=y0 &&
+         vista.x+vista.w<=x0+w && vista.y+vista.h<=y0+h;
+}
+function alSiguienteFotograma(){
+  if(pendiente) return;
+  // La marca se pone **antes** de pedir el fotograma: si la petición contesta en el acto,
+  // asignar el resultado después dejaría la marca puesta para siempre y no se repintaría más.
+  pendiente=1;
+  requestAnimationFrame(function(){ pendiente=0; pintar(); });
+}
 function programar(){
   // Si el último pintado costó poco, se repinta en el siguiente fotograma; si costó, se
   // espera a que la mano pare. Un plano grande cuesta, y estirar mientras tanto se ve mejor
   // que dar tirones. Sin encuadre anterior no hay nada que estirar: se pinta ya.
   clearTimeout(quieto);
   // Con tarjeta gráfica se repinta siempre en el acto: pintar es mandarle dos números.
-  if(gl||coste<24||!pintado){
-    if(pendiente) return;
-    // La marca se pone **antes** de pedir el fotograma: si la petición contesta en el acto,
-    // asignar el resultado después dejaría la marca puesta para siempre y no se repintaría más.
-    pendiente=1;
-    requestAnimationFrame(function(){ pendiente=0; pintar(); });
-  } else {
-    estirar();
-    quieto=setTimeout(function(){ pintar(); }, 90);
-  }
+  if(gl||coste<24||!pintado){ alSiguienteFotograma(); return; }
+  // **Fuera de la reserva se repinta ya, aunque la mano siga moviéndose.** Cuesta un
+  // tirón, sí; pero la alternativa es enseñar media pantalla en blanco, y un tirón se
+  // perdona y un hueco no. Dentro de la reserva se sigue estirando, que es gratis.
+  if(!cubierto()){ alSiguienteFotograma(); return; }
+  estirar();
+  quieto=setTimeout(function(){ pintar(); }, 90);
 }
 return {
   // Con tarjeta gráfica no se estira nada: se repinta, y se repinta entero.
