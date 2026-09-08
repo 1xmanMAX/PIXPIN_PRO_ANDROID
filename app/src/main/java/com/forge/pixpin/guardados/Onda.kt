@@ -45,6 +45,43 @@ const val BARRAS_DE_LA_ONDA = 50
 /** El alto útil de la franja, en dp. Los 14 dp de Telegram dentro de sus 30 dp de fila. */
 const val ALTO_DE_LA_ONDA_DP = 14
 
+/**
+ * **La barra, con los números exactos de Telegram.**
+ *
+ * De `SeekBarWaveform.addBar` (`SeekBarWaveform.java:479-488`), leído en la fuente el
+ * 8-sep-2026. La barra no es «un rectángulo de alto proporcional»: es un rectángulo de
+ * medio alto `h` **engordado 1 dp por cada lado**, así que
+ *
+ *     alto = 2·h + [GRUESO_DE_BARRA_DP],  con h de 0 a 7 dp
+ *
+ * y por eso la más baja mide 2 dp —no 0— y la más alta 16, que **se sale 1 dp por arriba
+ * y por abajo** de la franja de 14. Es la diferencia entre un silencio que se ve y un
+ * hueco en la fila.
+ *
+ * `heights[i] = max(0, 7 · valor / 31)` (`SeekBarWaveform.java:286`): sus muestras son de
+ * 5 bits (0 a 31) y se reparten sobre esos 7 dp. Aquí las muestras ya vienen de 0 a 1
+ * desde [aBarras], así que se multiplica por [MEDIO_ALTO_DE_BARRA_DP] y sale lo mismo.
+ */
+const val GRUESO_DE_BARRA_DP = 2f
+
+/** Cada cuánto va una barra: 2 dp de barra y 1 de aire. `SeekBarWaveform.java:318`. */
+const val PASO_DE_BARRA_DP = 3f
+
+/** El medio alto máximo. El alto máximo es el doble más el grueso: 16 dp. */
+const val MEDIO_ALTO_DE_BARRA_DP = 7f
+
+/** Lo que mide la barra más alta, y por tanto lo que tiene que medir la franja al pintar. */
+const val ALTO_MAXIMO_DE_BARRA_DP = 2f * MEDIO_ALTO_DE_BARRA_DP + GRUESO_DE_BARRA_DP
+
+/**
+ * El alto en dp de la barra cuyo valor —de 0 a 1— es [valor].
+ *
+ * Aparte y pura porque es la fórmula que hay que poder comprobar sin pantalla: que el
+ * silencio dé 2 y no 0, que el máximo dé 16, y que nada se salga de ahí.
+ */
+fun altoDeBarraDp(valor: Float): Float =
+    2f * valor.coerceIn(0f, 1f) * MEDIO_ALTO_DE_BARRA_DP + GRUESO_DE_BARRA_DP
+
 /** Lo más bajita que puede quedar una barra, para que el silencio se vea y no falte. */
 const val SUELO_DE_BARRA = 0.05f
 

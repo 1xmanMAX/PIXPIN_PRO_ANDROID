@@ -184,6 +184,21 @@ data class Settings(
     val servicioDeEnlace: String = "",
 
     /**
+     * **Máxima fluidez**: pedirle a la pantalla que vaya a su tasa más alta.
+     *
+     * En un teléfono de 90 o 120 Hz, Android deja cada ventana a 60 salvo que la
+     * aplicación pida otra cosa, y se nota: el dedo va al doble de velocidad que la raya
+     * que deja detrás. Con esto puesto se pide la máxima en todas las ventanas —también
+     * en los pines y en la capa de dibujo, que son las que más se mueven— y un vigilante
+     * baja a 60 si alguna pantalla no llega. Ver [com.forge.pixpin.motor.PantallaFluida].
+     *
+     * Encendido de fábrica porque es lo que se quiere casi siempre. Se puede apagar: una
+     * pantalla a 120 Hz gasta más batería, y quien prefiera aguantar más antes que ir más
+     * suave tiene derecho a elegirlo.
+     */
+    val maximaFluidez: Boolean = true,
+
+    /**
      * **El papel del chat**, de entre los de `guardados.FondosDelChat`. Vacío: el de fábrica.
      * Lo pidió el usuario (7-sep-2026), como los fondos de Telegram.
      */
@@ -330,6 +345,7 @@ class SettingsRepository(private val context: Context) {
         val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
         val SERVICIO_DE_ENLACE = stringPreferencesKey("servicio_de_enlace")
         val FONDO_DEL_CHAT = stringPreferencesKey("fondo_del_chat")
+        val MAXIMA_FLUIDEZ = booleanPreferencesKey("maxima_fluidez")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
@@ -361,6 +377,7 @@ class SettingsRepository(private val context: Context) {
             modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
             servicioDeEnlace = prefs[Keys.SERVICIO_DE_ENLACE] ?: "",
             fondoDelChat = prefs[Keys.FONDO_DEL_CHAT] ?: "",
+            maximaFluidez = prefs[Keys.MAXIMA_FLUIDEZ] ?: true,
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
@@ -474,6 +491,11 @@ class SettingsRepository(private val context: Context) {
     /** Ver [Settings.fondoDelChat]. */
     suspend fun setFondoDelChat(valor: String) {
         context.dataStore.edit { it[Keys.FONDO_DEL_CHAT] = valor }
+    }
+
+    /** Ver [Settings.maximaFluidez]. */
+    suspend fun setMaximaFluidez(valor: Boolean) {
+        context.dataStore.edit { it[Keys.MAXIMA_FLUIDEZ] = valor }
     }
 
     /** Qué funciones lleva la página web exportada. Ver [Settings.funcionesWeb]. */

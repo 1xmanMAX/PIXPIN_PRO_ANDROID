@@ -66,6 +66,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import com.forge.pixpin.ui.pinzaParaAmpliar
@@ -134,6 +135,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -473,481 +483,7 @@ class MensajesActivity : ComponentActivity() {
         val porId = remember(mensajes) { mensajes.associateBy { it.id } }
 
         Scaffold(
-            topBar = {
-                Column {
-                    if (seleccionando) {
-                        // **La barra de arriba se sustituye, no se añade otra debajo.**
-                        //
-                        // Es lo que hace Telegram (`ActionBar` en modo selección) y el
-                        // motivo es que mientras se eligen cosas el título y el buscador
-                        // no sirven de nada; lo que hace falta es cuántas van y qué se
-                        // puede hacer con ellas, en el sitio donde ya estaba mirando.
-                        //
-                        // Las acciones de uno solo —comentar, compartir, sacar a la
-                        // pantalla— **desaparecen** con dos o más en vez de quedarse
-                        // apagadas: un botón apagado se sigue pulsando y no explica nada.
-                        TopAppBar(
-                            navigationIcon = {
-                                IconButton(onClick = { marcados = emptySet() }) {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = getString(
-                                            com.forge.pixpin.R.string.cancel
-                                        )
-                                    )
-                                }
-                            },
-                            title = {
-                                // Los dígitos ruedan al cambiar, como el `AnimatedTextView`
-                                // de Telegram: sin eso el número salta y no se percibe si
-                                // subió o bajó, que es justo lo que se está mirando.
-                                androidx.compose.animation.AnimatedContent(
-                                    targetState = marcados.size,
-                                    transitionSpec = {
-                                        val sube = targetState > initialState
-                                        val entra = androidx.compose.animation.slideInVertically {
-                                            if (sube) it else -it
-                                        } + androidx.compose.animation.fadeIn()
-                                        val sale = androidx.compose.animation.slideOutVertically {
-                                            if (sube) -it else it
-                                        } + androidx.compose.animation.fadeOut()
-                                        entra togetherWith sale
-                                    },
-                                    label = "cuantos"
-                                ) { cuantos ->
-                                    Text(
-                                        resources.getQuantityString(
-                                            com.forge.pixpin.R.plurals.guardados_elegidos,
-                                            cuantos, cuantos
-                                        ),
-                                        fontSize = 18.sp,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                    )
-                                }
-                            },
-                            actions = {
-                                // **Solo lo que es de bloque.**
-                                //
-                                // Aquí había siete iconos, y tres de ellos —responder,
-                                // compartir, sacar a la pantalla— solo valían con uno
-                                // marcado: aparecían y desaparecían según cuántos
-                                // llevaras, que es una barra que cambia debajo del dedo.
-                                // Esas tres viven en el menú de la pulsación larga, que
-                                // es donde se actúa sobre **un** mensaje. Aquí se queda
-                                // lo que de verdad tiene sentido en bloque.
-                                // Copiar sale siempre que haya texto que copiar, con uno
-                                // o con veinte: es el botón más usado con notas sueltas.
-                                // Con varios, Telegram los junta con una línea en blanco
-                                // en medio (`ChatActivity.java:3699-3724`), que es lo que
-                                // hace que lo pegado se lea como lo que era.
-                                val copiables = loMarcado.filter { it.texto.isNotBlank() }
-                                if (copiables.isNotEmpty()) {
-                                    IconButton(onClick = {
-                                        val junto = copiables.sortedBy { it.cuando }
-                                            .joinToString("\n\n") { it.texto }
-                                        val portapapeles = getSystemService(CLIPBOARD_SERVICE)
-                                            as android.content.ClipboardManager
-                                        portapapeles.setPrimaryClip(
-                                            android.content.ClipData.newPlainText(null, junto)
-                                        )
-                                        marcados = emptySet()
-                                    }) {
-                                        Icon(
-                                            Icons.Filled.ContentCopy,
-                                            contentDescription = getString(
-                                                com.forge.pixpin.R.string.guardados_copiar
-                                            )
-                                        )
-                                    }
-                                }
-                                // Fijar mira lo que hay marcado: si algo no está fijado,
-                                // el botón fija todo; si ya lo estaban todos, los suelta.
-                                // Con una selección mixta, «fijar» es lo que se espera.
-                                val fijarTodos = loMarcado.any { !it.fijado }
-                                IconButton(onClick = {
-                                    guardarAparte(mensajes.map {
-                                        if (it.id in marcados) it.copy(fijado = fijarTodos) else it
-                                    }) { refrescar() }
-                                    marcados = emptySet()
-                                }) {
-                                    Icon(
-                                        Icons.Filled.PushPin,
-                                        contentDescription = getString(
-                                            if (fijarTodos) com.forge.pixpin.R.string.guardados_fijar
-                                            else com.forge.pixpin.R.string.guardados_soltar
-                                        )
-                                    )
-                                }
-                                // **Reenviar en bloque.** Estaba solo en el menú de uno,
-                                // y reenviar es de las cosas que más se hacen de varias a
-                                // la vez: tres fotos de la misma tanda van al mismo sitio.
-                                IconButton(onClick = {
-                                    reenviando = loMarcado.sortedBy { it.cuando }
-                                    marcados = emptySet()
-                                }) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = getString(
-                                            com.forge.pixpin.R.string.guardados_reenviar
-                                        )
-                                    )
-                                }
-                                if (loMarcado.any { !it.unido && UnirAlProyecto.sePuedeUnir(it) }) {
-                                    IconButton(onClick = {
-                                        unirAlProyecto(loMarcado.filterNot { it.unido }.sortedBy { it.cuando })
-                                        marcados = emptySet()
-                                    }) {
-                                        Icon(
-                                            Icons.Filled.LibraryAdd,
-                                            contentDescription = getString(
-                                                com.forge.pixpin.R.string.guardados_unir_al_proyecto
-                                            )
-                                        )
-                                    }
-                                }
-                                IconButton(onClick = {
-                                    loMarcado.forEach { almacen.borrarAdjunto(it.ruta) }
-                                    guardarAparte(
-                                        mensajes.filterNot { it.id in marcados }
-                                    ) { refrescar() }
-                                    marcados = emptySet()
-                                }) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = getString(
-                                            com.forge.pixpin.R.string.cd_delete
-                                        )
-                                    )
-                                }
-                            }
-                        )
-                        // Las pestañas siguen la misma regla que fuera de la selección:
-                        // si no estaban abiertas, entrar a elegir no las abre. Aparecían
-                        // de golpe cuarenta y seis puntos que nadie había pedido y toda
-                        // la lista daba un salto hacia abajo.
-                        if (fichasALaVista || consulta != null) {
-                            Fichas(seccion, deEsteChat.any { it.enBuzon }) { seccion = it }
-                        }
-                        return@Column
-                    }
-                    TopAppBar(
-                        navigationIcon = {
-                            // La flecha solo dentro de un proyecto: en la general no hay
-                            // adónde volver, y una flecha que no lleva a ningún sitio
-                            // enseña a no fiarse de las flechas.
-                            if (chatDe != null && vineDeLaGeneral) {
-                                IconButton(onClick = {
-                                    chatDe = null
-                                    nombreDelChat = ""
-                                    vineDeLaGeneral = false
-                                }) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = getString(
-                                            com.forge.pixpin.R.string.guardados_titulo
-                                        )
-                                    )
-                                }
-                            }
-                        },
-                        title = {
-                            if (consulta == null) {
-                                // Telegram esconde el subtítulo en Mensajes guardados
-                                // porque allí diría «en línea», que hablando solo no
-                                // significa nada (`ChatAvatarContainer.java:1097`).
-                                // Aquí sí hay algo que decir, y es justo lo que se
-                                // pregunta de un cajón de documentos: cuántas cosas
-                                // guarda y cuánto ocupan.
-                                //
-                                // Y mantener pulsado el título abre el buscador, como
-                                // en Telegram (`ChatAvatarContainer.java:376-382`): es
-                                // el blanco más grande de la pantalla y llegar a la
-                                // lupa de la esquina obliga a cruzarla entera.
-                                Column(
-                                    Modifier.combinedClickable(
-                                        onClick = { fichasALaVista = !fichasALaVista },
-                                        onLongClick = { consulta = "" }
-                                    )
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        // Donde Telegram pone el avatar del chat, aquí va
-                                        // el marcador: es lo que dice de un vistazo en qué
-                                        // pantalla estás, ahora que es la primera que se
-                                        // abre y ya no se llega a ella desde ningún sitio.
-                                        Box(
-                                            Modifier
-                                                .size(32.dp)
-                                                .background(
-                                                    MaterialTheme.colorScheme.primary,
-                                                    androidx.compose.foundation.shape.CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                if (chatDe == null) Icons.Filled.BookmarkBorder
-                                                else Icons.Filled.Folder,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.size(19.dp)
-                                            )
-                                        }
-                                        Spacer(Modifier.size(10.dp))
-                                        Text(
-                                            nombreDelChat.ifBlank {
-                                                getString(com.forge.pixpin.R.string.guardados_titulo)
-                                            }
-                                        )
-                                        // La flechita es lo único que dice que aquí hay
-                                        // algo que abrir. Sin ella, unas pestañas
-                                        // escondidas son unas pestañas que no existen.
-                                        Icon(
-                                            Icons.Filled.KeyboardArrowDown,
-                                            contentDescription = null,
-                                            modifier = Modifier
-                                                .padding(start = 2.dp)
-                                                .size(18.dp)
-                                                .rotate(if (fichasALaVista) 180f else 0f)
-                                        )
-                                    }
-                                    if (mensajes.isNotEmpty()) {
-                                        Text(
-                                            // El tamaño solo si se sabe: casi nada
-                                            // guarda su peso, y `tamanoLegible(0)`
-                                            // devuelve vacío, así que el subtítulo
-                                            // decía «12 cosas · » con el separador
-                                            // colgando de la nada.
-                                            listOfNotNull(
-                                                resources.getQuantityString(
-                                                    com.forge.pixpin.R.plurals.guardados_cuantos,
-                                                    deEsteChat.size, deEsteChat.size
-                                                ),
-                                                tamanoLegible(
-                                                    deEsteChat.sumOf { it.bytes }
-                                                ).ifBlank { null }
-                                            ).joinToString(" · "),
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            } else {
-                                // El buscador **sustituye al título**, no se añade
-                                // debajo: mientras se busca no hace falta saber en
-                                // qué pantalla se está, se sabe de sobra.
-                                // **En píldora, como todo lo que se escribe aquí.**
-                                //
-                                // El `TextField` de Material trae subrayado y relleno de
-                                // formulario: en una barra de arriba se ve como un campo
-                                // de registro. Telegram redondea el suyo y lo deja del
-                                // color del fondo hundido, que es lo que lo hace parecer
-                                // un hueco donde escribir y no un trámite.
-                                Surface(
-                                    shape = androidx.compose.foundation.shape.CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        Modifier
-                                            .heightIn(min = ALTO_DE_LA_FICHA)
-                                            .padding(horizontal = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // **El teclado sale solo al abrir la búsqueda.**
-                                        //
-                                        // Tocar la lupa y encontrarse un campo vacío que
-                                        // hay que volver a tocar son dos toques para una
-                                        // intención sola. En cualquier mensajería el
-                                        // campo llega con el cursor puesto.
-                                        val foco = remember { androidx.compose.ui.focus.FocusRequester() }
-                                        LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
-                                        androidx.compose.foundation.text.BasicTextField(
-                                            value = consulta.orEmpty(),
-                                            onValueChange = { consulta = it },
-                                            singleLine = true,
-                                            textStyle = androidx.compose.ui.text.TextStyle(
-                                                fontSize = 16.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            ),
-                                            cursorBrush =
-                                                androidx.compose.ui.graphics.SolidColor(
-                                                    MaterialTheme.colorScheme.primary
-                                                ),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .focusRequester(foco),
-                                            decorationBox = { campo ->
-                                                if (consulta.isNullOrEmpty()) {
-                                                    Text(
-                                                        getString(
-                                                            com.forge.pixpin.R.string
-                                                                .guardados_buscar
-                                                        ),
-                                                        fontSize = 16.sp,
-                                                        color = MaterialTheme.colorScheme
-                                                            .onSurfaceVariant
-                                                    )
-                                                }
-                                                campo()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = { consulta = if (consulta == null) "" else null }) {
-                                Icon(
-                                    if (consulta == null) Icons.Filled.Search else Icons.Filled.Close,
-                                    // La misma etiqueta para buscar y para cerrar la
-                                    // búsqueda dejaba a quien usa el lector de pantalla
-                                    // sin saber cuál de las dos cosas iba a pasar.
-                                    contentDescription = getString(
-                                        if (consulta == null) com.forge.pixpin.R.string.guardados_buscar
-                                        else com.forge.pixpin.R.string.cd_close
-                                    )
-                                )
-                            }
-                            // **Lo demás de la aplicación, detrás de los tres puntos.**
-                            //
-                            // Esta pantalla pasa a ser lo primero que se ve, y lo que se
-                            // hace aquí a diario es dejar algo o volver a buscarlo. Los
-                            // proyectos, los ajustes y arrancar la bola se tocan de
-                            // uvas a peras, así que van donde Telegram pone lo suyo:
-                            // al lado de la lupa, detrás de una puerta. Sacarlos a la
-                            // barra les daría el mismo peso que a buscar, que es lo que
-                            // de verdad se usa.
-                            var masOpciones by remember { mutableStateOf(false) }
-                            Box {
-                                IconButton(onClick = { masOpciones = true }) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        contentDescription = getString(
-                                            com.forge.pixpin.R.string.guardados_mas
-                                        )
-                                    )
-                                }
-                                androidx.compose.material3.DropdownMenu(
-                                    expanded = masOpciones,
-                                    onDismissRequest = { masOpciones = false }
-                                ) {
-                                    // **El nexo.** Desde la conversación general se
-                                    // entra a la de cualquier proyecto: es lo que hace
-                                    // que esto sea el sitio desde el que se llega a todo
-                                    // y no una conversación más entre otras.
-                                    if (chatDe == null) {
-                                        DelMenu(com.forge.pixpin.R.string.biblioteca_audio, Icons.Filled.LibraryMusic) {
-                                            masOpciones = false
-                                            BibliotecaDeAudioActivity.abrir(this@MensajesActivity)
-                                        }
-                                        DelMenu(com.forge.pixpin.R.string.guardados_chats) {
-                                            masOpciones = false
-                                            eligiendoChat = true
-                                        }
-                                    }
-                                    DelMenu(com.forge.pixpin.R.string.proyectos_titulo) {
-                                        masOpciones = false
-                                        abrirLaPortada(enProyectos = true)
-                                    }
-                                    DelMenu(com.forge.pixpin.R.string.start_app) {
-                                        masOpciones = false
-                                        com.forge.pixpin.floating.PinHostService.start(this@MensajesActivity)
-                                        Toast.makeText(
-                                            this@MensajesActivity,
-                                            com.forge.pixpin.R.string.app_started,
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                    DelMenu(com.forge.pixpin.R.string.guardados_fondo, Icons.Filled.Palette) {
-                                        masOpciones = false
-                                        eligiendoFondo = true
-                                    }
-                                    DelMenu(com.forge.pixpin.R.string.ajustes_titulo) {
-                                        masOpciones = false
-                                        abrirLaPortada(enProyectos = false)
-                                    }
-                                }
-                            }
-                        }
-                    )
-                    // Al buscar salen solas: ahí es cuando de verdad hacen falta, que
-                    // es exactamente cuando las saca Telegram.
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = fichasALaVista || consulta != null
-                    ) {
-                        Fichas(seccion, deEsteChat.any { it.enBuzon }) { seccion = it }
-                    }
-                    // **La fila de etiquetas, como la de Telegram en Guardados.**
-                    //
-                    // Sale **solo mientras se busca** (`ChatActivity.java:8890`), y por
-                    // el mismo motivo que allí: el resto del tiempo es una fila de
-                    // colores que no se toca, y en la pantalla manda el contenido. Al
-                    // buscar, en cambio, es media búsqueda hecha: la mayoría de las
-                    // veces uno no recuerda la palabra, recuerda que lo marcó.
-                    val etiquetas = remember(deEsteChat) { emojisUsados(deEsteChat) }
-                    if (consulta != null && etiquetas.isNotEmpty()) {
-                        androidx.compose.foundation.lazy.LazyRow(
-                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            items(etiquetas) { emoji ->
-                                FilterChip(
-                                    selected = porEtiqueta == emoji,
-                                    onClick = {
-                                        porEtiqueta = if (porEtiqueta == emoji) null else emoji
-                                    },
-                                    shape = androidx.compose.foundation.shape.CircleShape,
-                                    modifier = Modifier.height(ALTO_DE_LA_FICHA),
-                                    label = { Text(emoji, fontSize = 16.sp) }
-                                )
-                            }
-                        }
-                    }
-                    // **La barra de fijados.**
-                    //
-                    // Lo fijado es lo que quieres tener a mano, y tenerlo escondido en
-                    // una pestaña es tenerlo lejos. Telegram lo pone bajo la barra de
-                    // arriba, con unas rayitas al lado que dicen cuántos hay y por cuál
-                    // vas (`ChatActivity.java:11326`, `PinnedLineView.java:74-77`), y
-                    // tocarlo salta al siguiente, volviendo al primero al acabar
-                    // (`:11336-11344`).
-                    val fijados = remember(deEsteChat) {
-                        deEsteChat.filter { it.fijado && !it.enBuzon }.sortedBy { it.cuando }
-                    }
-                    // **El buzón dice en voz alta que caduca.**
-                    //
-                    // Lo que entra ahí se borra solo si nadie lo toca, y eso es
-                    // exactamente la clase de cosa que no se puede dejar implícita: quien
-                    // no lo sepa dará por guardado algo que va a desaparecer. Es un
-                    // renglón y solo sale dentro del buzón.
-                    if (seccion == Seccion.BUZON) {
-                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                            Text(
-                                getString(com.forge.pixpin.R.string.guardados_buzon_aviso),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
-                    if (fijados.isNotEmpty() && seccion != Seccion.FIJADOS &&
-                        consulta == null
-                    ) {
-                        BarraDeFijados(
-                            fijados = fijados,
-                            cual = porElFijado % fijados.size,
-                            onTocar = {
-                                irA = fijados[porElFijado % fijados.size].id
-                                porElFijado++
-                            },
-                            onVerTodos = if (fijados.size <= 1) null else {
-                                { seccion = Seccion.FIJADOS }
-                            }
-                        )
-                    }
-                }
-            },
+            // La cabecera ya no vive aquí: flota sobre la lista. Ver más abajo.
             bottomBar = {
                 Column {
                     // Mientras se eligen cosas no se escribe: el sitio del teclado lo
@@ -1102,7 +638,11 @@ class MensajesActivity : ComponentActivity() {
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
                     .background(fondo)
-                    .padding(hueco)
+                    // **Por abajo sí, por arriba no.** Arriba ya no hay barra que reserve
+                    // sitio: la lista llega hasta el borde y la cabecera flota encima, que
+                    // es justo lo que se pidió («el chat va por detrás»). El hueco de
+                    // arriba se lo pone la propia lista, midiendo la cabecera.
+                    .padding(bottom = hueco.calculateBottomPadding())
             ) {
             // **Se abre por el final.**
             //
@@ -1185,11 +725,21 @@ class MensajesActivity : ComponentActivity() {
                     lista.animateScrollToItem((visibles.size + tramos.size - 1).coerceAtLeast(0))
                 }
             }
+            // **Lo que mide la cabecera flotante**, para que la lista le deje sitio.
+            //
+            // Es lo mismo que hace Telegram: la lista va a pantalla completa y el hueco lo
+            // pone el relleno del contenido, no un recorte (`ChatActivity.java:11932-11939`,
+            // `:12030-12034`). Se mide en vez de escribirlo a mano porque la cabecera
+            // crece y encoge sola —salen las pestañas, la fila de etiquetas, la barra de
+            // fijados, el aviso del buzón—, y un número fijo dejaría el primer mensaje
+            // tapado o un claro enorme según el día.
+            var altoDeLaCabecera by remember { mutableStateOf(0.dp) }
             LazyColumn(
                 state = lista,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 10.dp, vertical = 8.dp
+                    start = 10.dp, end = 10.dp,
+                    top = altoDeLaCabecera + 8.dp, bottom = 8.dp
                 ),
                 // Sin espaciado fijo: lo pone cada burbuja según esté agrupada o
                 // suelta, que es lo que separa una racha de mensajes del siguiente.
@@ -1460,12 +1010,515 @@ class MensajesActivity : ComponentActivity() {
                 }
             }
 
-            // **La barra de lo que suena**, arriba, como en Telegram: sigue mientras se
-            // lee, y tocar el título abre la letra o el texto. Ver [BarraDelReproductor].
-            BarraDelReproductor(alTocarElTitulo = {
-                val ruta = Reproductor.estado.value.ruta
-                mensajes.firstOrNull { it.ruta == ruta }?.let { LetraActivity.abrir(this@MensajesActivity, it.id) }
-            })
+            // **El velo de arriba**, entre la lista y la cabecera.
+            //
+            // Sin él, un mensaje que sube se lee a medias por los huecos que quedan entre
+            // las tres pastillas y bajo la barra de estado. Telegram resuelve eso mismo
+            // con un degradado de 48 dp (`ChatActivityFadeView.java:47-51`), no recortando
+            // la lista: lo que asoma se apaga contra el papel en vez de cortarse en seco.
+            VeloDeLaLista(
+                papelAlto,
+                arriba = true,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+            // **Y la cabecera encima de todo eso.**
+            //
+            // Ya no es la barra del andamio: es una capa. Se mide con `onSizeChanged` y lo
+            // que mide es lo que la lista se aparta ([altoDeLaCabecera]). Lleva dentro la
+            // barra de lo que suena porque también es cabecera: si estuviera fuera, taparía
+            // las pastillas o dejaría un hueco sin contar.
+            val densidadDeLaCabecera = androidx.compose.ui.platform.LocalDensity.current
+            Column(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(top = hueco.calculateTopPadding())
+                    .onSizeChanged {
+                        val alto = with(densidadDeLaCabecera) { it.height.toDp() } +
+                            hueco.calculateTopPadding()
+                        if (alto != altoDeLaCabecera) altoDeLaCabecera = alto
+                    }
+            ) {
+                    if (seleccionando) {
+                        // **La barra de arriba se sustituye, no se añade otra debajo.**
+                        //
+                        // Es lo que hace Telegram (`ActionBar` en modo selección) y el
+                        // motivo es que mientras se eligen cosas el título y el buscador
+                        // no sirven de nada; lo que hace falta es cuántas van y qué se
+                        // puede hacer con ellas, en el sitio donde ya estaba mirando.
+                        //
+                        // Las acciones de uno solo —comentar, compartir, sacar a la
+                        // pantalla— **desaparecen** con dos o más en vez de quedarse
+                        // apagadas: un botón apagado se sigue pulsando y no explica nada.
+                        TopAppBar(
+                            navigationIcon = {
+                                IconButton(onClick = { marcados = emptySet() }) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = getString(
+                                            com.forge.pixpin.R.string.cancel
+                                        )
+                                    )
+                                }
+                            },
+                            title = {
+                                // Los dígitos ruedan al cambiar, como el `AnimatedTextView`
+                                // de Telegram: sin eso el número salta y no se percibe si
+                                // subió o bajó, que es justo lo que se está mirando.
+                                androidx.compose.animation.AnimatedContent(
+                                    targetState = marcados.size,
+                                    transitionSpec = {
+                                        val sube = targetState > initialState
+                                        val entra = androidx.compose.animation.slideInVertically {
+                                            if (sube) it else -it
+                                        } + androidx.compose.animation.fadeIn()
+                                        val sale = androidx.compose.animation.slideOutVertically {
+                                            if (sube) -it else it
+                                        } + androidx.compose.animation.fadeOut()
+                                        entra togetherWith sale
+                                    },
+                                    label = "cuantos"
+                                ) { cuantos ->
+                                    Text(
+                                        resources.getQuantityString(
+                                            com.forge.pixpin.R.plurals.guardados_elegidos,
+                                            cuantos, cuantos
+                                        ),
+                                        fontSize = 18.sp,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                    )
+                                }
+                            },
+                            actions = {
+                                // **Solo lo que es de bloque.**
+                                //
+                                // Aquí había siete iconos, y tres de ellos —responder,
+                                // compartir, sacar a la pantalla— solo valían con uno
+                                // marcado: aparecían y desaparecían según cuántos
+                                // llevaras, que es una barra que cambia debajo del dedo.
+                                // Esas tres viven en el menú de la pulsación larga, que
+                                // es donde se actúa sobre **un** mensaje. Aquí se queda
+                                // lo que de verdad tiene sentido en bloque.
+                                // Copiar sale siempre que haya texto que copiar, con uno
+                                // o con veinte: es el botón más usado con notas sueltas.
+                                // Con varios, Telegram los junta con una línea en blanco
+                                // en medio (`ChatActivity.java:3699-3724`), que es lo que
+                                // hace que lo pegado se lea como lo que era.
+                                val copiables = loMarcado.filter { it.texto.isNotBlank() }
+                                if (copiables.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        val junto = copiables.sortedBy { it.cuando }
+                                            .joinToString("\n\n") { it.texto }
+                                        val portapapeles = getSystemService(CLIPBOARD_SERVICE)
+                                            as android.content.ClipboardManager
+                                        portapapeles.setPrimaryClip(
+                                            android.content.ClipData.newPlainText(null, junto)
+                                        )
+                                        marcados = emptySet()
+                                    }) {
+                                        Icon(
+                                            Icons.Filled.ContentCopy,
+                                            contentDescription = getString(
+                                                com.forge.pixpin.R.string.guardados_copiar
+                                            )
+                                        )
+                                    }
+                                }
+                                // Fijar mira lo que hay marcado: si algo no está fijado,
+                                // el botón fija todo; si ya lo estaban todos, los suelta.
+                                // Con una selección mixta, «fijar» es lo que se espera.
+                                val fijarTodos = loMarcado.any { !it.fijado }
+                                IconButton(onClick = {
+                                    guardarAparte(mensajes.map {
+                                        if (it.id in marcados) it.copy(fijado = fijarTodos) else it
+                                    }) { refrescar() }
+                                    marcados = emptySet()
+                                }) {
+                                    Icon(
+                                        Icons.Filled.PushPin,
+                                        contentDescription = getString(
+                                            if (fijarTodos) com.forge.pixpin.R.string.guardados_fijar
+                                            else com.forge.pixpin.R.string.guardados_soltar
+                                        )
+                                    )
+                                }
+                                // **Reenviar en bloque.** Estaba solo en el menú de uno,
+                                // y reenviar es de las cosas que más se hacen de varias a
+                                // la vez: tres fotos de la misma tanda van al mismo sitio.
+                                IconButton(onClick = {
+                                    reenviando = loMarcado.sortedBy { it.cuando }
+                                    marcados = emptySet()
+                                }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = getString(
+                                            com.forge.pixpin.R.string.guardados_reenviar
+                                        )
+                                    )
+                                }
+                                if (loMarcado.any { !it.unido && UnirAlProyecto.sePuedeUnir(it) }) {
+                                    IconButton(onClick = {
+                                        unirAlProyecto(loMarcado.filterNot { it.unido }.sortedBy { it.cuando })
+                                        marcados = emptySet()
+                                    }) {
+                                        Icon(
+                                            Icons.Filled.LibraryAdd,
+                                            contentDescription = getString(
+                                                com.forge.pixpin.R.string.guardados_unir_al_proyecto
+                                            )
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = {
+                                    loMarcado.forEach { almacen.borrarAdjunto(it.ruta) }
+                                    guardarAparte(
+                                        mensajes.filterNot { it.id in marcados }
+                                    ) { refrescar() }
+                                    marcados = emptySet()
+                                }) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = getString(
+                                            com.forge.pixpin.R.string.cd_delete
+                                        )
+                                    )
+                                }
+                            }
+                        )
+                        // Las pestañas siguen la misma regla que fuera de la selección:
+                        // si no estaban abiertas, entrar a elegir no las abre. Aparecían
+                        // de golpe cuarenta y seis puntos que nadie había pedido y toda
+                        // la lista daba un salto hacia abajo.
+                        if (fichasALaVista || consulta != null) {
+                            Fichas(seccion, deEsteChat.any { it.enBuzon }) { seccion = it }
+                        }
+                        return@Column
+                    }
+                    CabeceraFlotante(
+                        // La flecha solo dentro de un proyecto: en la general no hay
+                        // adónde volver, y una flecha que no lleva a ningún sitio
+                        // enseña a no fiarse de las flechas. Cuando no está, su sitio
+                        // **se reserva igual** para que el título no dé un salto lateral
+                        // al entrar y salir de un proyecto. Ver [CabeceraFlotante].
+                        atras = if (chatDe != null && vineDeLaGeneral) {
+                            {
+                                IconButton(onClick = {
+                                    chatDe = null
+                                    nombreDelChat = ""
+                                    vineDeLaGeneral = false
+                                }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = getString(
+                                            com.forge.pixpin.R.string.guardados_titulo
+                                        )
+                                    )
+                                }
+                            }
+                        } else null,
+                        centro = {
+                            if (consulta == null) {
+                                // Telegram esconde el subtítulo en Mensajes guardados
+                                // porque allí diría «en línea», que hablando solo no
+                                // significa nada (`ChatAvatarContainer.java:1097`).
+                                // Aquí sí hay algo que decir, y es justo lo que se
+                                // pregunta de un cajón de documentos: cuántas cosas
+                                // guarda y cuánto ocupan.
+                                //
+                                // Y mantener pulsado el título abre el buscador, como
+                                // en Telegram (`ChatAvatarContainer.java:376-382`): es
+                                // el blanco más grande de la pantalla y llegar a la
+                                // lupa de la esquina obliga a cruzarla entera.
+                                Column(
+                                    Modifier.combinedClickable(
+                                        onClick = { fichasALaVista = !fichasALaVista },
+                                        onLongClick = { consulta = "" }
+                                    )
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        // Donde Telegram pone el avatar del chat, aquí va
+                                        // el marcador: es lo que dice de un vistazo en qué
+                                        // pantalla estás, ahora que es la primera que se
+                                        // abre y ya no se llega a ella desde ningún sitio.
+                                        Box(
+                                            Modifier
+                                                .size(32.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    androidx.compose.foundation.shape.CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                if (chatDe == null) Icons.Filled.BookmarkBorder
+                                                else Icons.Filled.Folder,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(19.dp)
+                                            )
+                                        }
+                                        Spacer(Modifier.size(10.dp))
+                                        Text(
+                                            nombreDelChat.ifBlank {
+                                                getString(com.forge.pixpin.R.string.guardados_titulo)
+                                            }
+                                        )
+                                        // La flechita es lo único que dice que aquí hay
+                                        // algo que abrir. Sin ella, unas pestañas
+                                        // escondidas son unas pestañas que no existen.
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .padding(start = 2.dp)
+                                                .size(18.dp)
+                                                .rotate(if (fichasALaVista) 180f else 0f)
+                                        )
+                                    }
+                                    if (mensajes.isNotEmpty()) {
+                                        Text(
+                                            // El tamaño solo si se sabe: casi nada
+                                            // guarda su peso, y `tamanoLegible(0)`
+                                            // devuelve vacío, así que el subtítulo
+                                            // decía «12 cosas · » con el separador
+                                            // colgando de la nada.
+                                            listOfNotNull(
+                                                resources.getQuantityString(
+                                                    com.forge.pixpin.R.plurals.guardados_cuantos,
+                                                    deEsteChat.size, deEsteChat.size
+                                                ),
+                                                tamanoLegible(
+                                                    deEsteChat.sumOf { it.bytes }
+                                                ).ifBlank { null }
+                                            ).joinToString(" · "),
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            } else {
+                                // El buscador **sustituye al título**, no se añade
+                                // debajo: mientras se busca no hace falta saber en
+                                // qué pantalla se está, se sabe de sobra.
+                                // **En píldora, como todo lo que se escribe aquí.**
+                                //
+                                // El `TextField` de Material trae subrayado y relleno de
+                                // formulario: en una barra de arriba se ve como un campo
+                                // de registro. Telegram redondea el suyo y lo deja del
+                                // color del fondo hundido, que es lo que lo hace parecer
+                                // un hueco donde escribir y no un trámite.
+                                Surface(
+                                    shape = androidx.compose.foundation.shape.CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        Modifier
+                                            .heightIn(min = ALTO_DE_LA_FICHA)
+                                            .padding(horizontal = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // **El teclado sale solo al abrir la búsqueda.**
+                                        //
+                                        // Tocar la lupa y encontrarse un campo vacío que
+                                        // hay que volver a tocar son dos toques para una
+                                        // intención sola. En cualquier mensajería el
+                                        // campo llega con el cursor puesto.
+                                        val foco = remember { androidx.compose.ui.focus.FocusRequester() }
+                                        LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+                                        androidx.compose.foundation.text.BasicTextField(
+                                            value = consulta.orEmpty(),
+                                            onValueChange = { consulta = it },
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(
+                                                fontSize = 16.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            ),
+                                            cursorBrush =
+                                                androidx.compose.ui.graphics.SolidColor(
+                                                    MaterialTheme.colorScheme.primary
+                                                ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .focusRequester(foco),
+                                            decorationBox = { campo ->
+                                                if (consulta.isNullOrEmpty()) {
+                                                    Text(
+                                                        getString(
+                                                            com.forge.pixpin.R.string
+                                                                .guardados_buscar
+                                                        ),
+                                                        fontSize = 16.sp,
+                                                        color = MaterialTheme.colorScheme
+                                                            .onSurfaceVariant
+                                                    )
+                                                }
+                                                campo()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        menu = {
+                            IconButton(onClick = { consulta = if (consulta == null) "" else null }) {
+                                Icon(
+                                    if (consulta == null) Icons.Filled.Search else Icons.Filled.Close,
+                                    // La misma etiqueta para buscar y para cerrar la
+                                    // búsqueda dejaba a quien usa el lector de pantalla
+                                    // sin saber cuál de las dos cosas iba a pasar.
+                                    contentDescription = getString(
+                                        if (consulta == null) com.forge.pixpin.R.string.guardados_buscar
+                                        else com.forge.pixpin.R.string.cd_close
+                                    )
+                                )
+                            }
+                            // **Lo demás de la aplicación, detrás de los tres puntos.**
+                            //
+                            // Esta pantalla pasa a ser lo primero que se ve, y lo que se
+                            // hace aquí a diario es dejar algo o volver a buscarlo. Los
+                            // proyectos, los ajustes y arrancar la bola se tocan de
+                            // uvas a peras, así que van donde Telegram pone lo suyo:
+                            // al lado de la lupa, detrás de una puerta. Sacarlos a la
+                            // barra les daría el mismo peso que a buscar, que es lo que
+                            // de verdad se usa.
+                            var masOpciones by remember { mutableStateOf(false) }
+                            Box {
+                                IconButton(onClick = { masOpciones = true }) {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        contentDescription = getString(
+                                            com.forge.pixpin.R.string.guardados_mas
+                                        )
+                                    )
+                                }
+                                androidx.compose.material3.DropdownMenu(
+                                    expanded = masOpciones,
+                                    onDismissRequest = { masOpciones = false }
+                                ) {
+                                    // **El nexo.** Desde la conversación general se
+                                    // entra a la de cualquier proyecto: es lo que hace
+                                    // que esto sea el sitio desde el que se llega a todo
+                                    // y no una conversación más entre otras.
+                                    if (chatDe == null) {
+                                        DelMenu(com.forge.pixpin.R.string.biblioteca_audio, Icons.Filled.LibraryMusic) {
+                                            masOpciones = false
+                                            BibliotecaDeAudioActivity.abrir(this@MensajesActivity)
+                                        }
+                                        DelMenu(com.forge.pixpin.R.string.guardados_chats) {
+                                            masOpciones = false
+                                            eligiendoChat = true
+                                        }
+                                    }
+                                    DelMenu(com.forge.pixpin.R.string.proyectos_titulo) {
+                                        masOpciones = false
+                                        abrirLaPortada(enProyectos = true)
+                                    }
+                                    DelMenu(com.forge.pixpin.R.string.start_app) {
+                                        masOpciones = false
+                                        com.forge.pixpin.floating.PinHostService.start(this@MensajesActivity)
+                                        Toast.makeText(
+                                            this@MensajesActivity,
+                                            com.forge.pixpin.R.string.app_started,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    DelMenu(com.forge.pixpin.R.string.guardados_fondo, Icons.Filled.Palette) {
+                                        masOpciones = false
+                                        eligiendoFondo = true
+                                    }
+                                    DelMenu(com.forge.pixpin.R.string.ajustes_titulo) {
+                                        masOpciones = false
+                                        abrirLaPortada(enProyectos = false)
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    // Al buscar salen solas: ahí es cuando de verdad hacen falta, que
+                    // es exactamente cuando las saca Telegram.
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = fichasALaVista || consulta != null
+                    ) {
+                        Fichas(seccion, deEsteChat.any { it.enBuzon }) { seccion = it }
+                    }
+                    // **La fila de etiquetas, como la de Telegram en Guardados.**
+                    //
+                    // Sale **solo mientras se busca** (`ChatActivity.java:8890`), y por
+                    // el mismo motivo que allí: el resto del tiempo es una fila de
+                    // colores que no se toca, y en la pantalla manda el contenido. Al
+                    // buscar, en cambio, es media búsqueda hecha: la mayoría de las
+                    // veces uno no recuerda la palabra, recuerda que lo marcó.
+                    val etiquetas = remember(deEsteChat) { emojisUsados(deEsteChat) }
+                    if (consulta != null && etiquetas.isNotEmpty()) {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(etiquetas) { emoji ->
+                                FilterChip(
+                                    selected = porEtiqueta == emoji,
+                                    onClick = {
+                                        porEtiqueta = if (porEtiqueta == emoji) null else emoji
+                                    },
+                                    shape = androidx.compose.foundation.shape.CircleShape,
+                                    modifier = Modifier.height(ALTO_DE_LA_FICHA),
+                                    label = { Text(emoji, fontSize = 16.sp) }
+                                )
+                            }
+                        }
+                    }
+                    // **La barra de fijados.**
+                    //
+                    // Lo fijado es lo que quieres tener a mano, y tenerlo escondido en
+                    // una pestaña es tenerlo lejos. Telegram lo pone bajo la barra de
+                    // arriba, con unas rayitas al lado que dicen cuántos hay y por cuál
+                    // vas (`ChatActivity.java:11326`, `PinnedLineView.java:74-77`), y
+                    // tocarlo salta al siguiente, volviendo al primero al acabar
+                    // (`:11336-11344`).
+                    val fijados = remember(deEsteChat) {
+                        deEsteChat.filter { it.fijado && !it.enBuzon }.sortedBy { it.cuando }
+                    }
+                    // **El buzón dice en voz alta que caduca.**
+                    //
+                    // Lo que entra ahí se borra solo si nadie lo toca, y eso es
+                    // exactamente la clase de cosa que no se puede dejar implícita: quien
+                    // no lo sepa dará por guardado algo que va a desaparecer. Es un
+                    // renglón y solo sale dentro del buzón.
+                    if (seccion == Seccion.BUZON) {
+                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                            Text(
+                                getString(com.forge.pixpin.R.string.guardados_buzon_aviso),
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                    if (fijados.isNotEmpty() && seccion != Seccion.FIJADOS &&
+                        consulta == null
+                    ) {
+                        BarraDeFijados(
+                            fijados = fijados,
+                            cual = porElFijado % fijados.size,
+                            onTocar = {
+                                irA = fijados[porElFijado % fijados.size].id
+                                porElFijado++
+                            },
+                            onVerTodos = if (fijados.size <= 1) null else {
+                                { seccion = Seccion.FIJADOS }
+                            }
+                        )
+                    }
+                // **La barra de lo que suena**, como en Telegram: sigue mientras se lee, y
+                // tocar el título abre la letra o el texto. Ver [BarraDelReproductor].
+                BarraDelReproductor(alTocarElTitulo = {
+                    val ruta = Reproductor.estado.value.ruta
+                    mensajes.firstOrNull { it.ruta == ruta }?.let { LetraActivity.abrir(this@MensajesActivity, it.id) }
+                })
+            }
             // La foto sujetada, por encima de todo lo demás. Se pone una vez y no hace
             // nada mientras no haya ninguna cogida.
             CapaDeAmpliacion(ampliada)
@@ -3785,6 +3838,34 @@ class MensajesActivity : ComponentActivity() {
         val avance = if (activo) Reproductor.fraccion() else 0f
         val titulo = tituloDeAudio(this@MensajesActivity, m)
         val barras = remember(m.picos) { aBarras(m.picos) }
+        val densidad = LocalDensity.current
+        // El ancho sale de las barras, no al revés: así el camino y el lienzo miden lo
+        // mismo hasta el píxel y el recorte no deja media barra fuera por redondeo.
+        val anchoDeLaOnda = (barras.size * PASO_DE_BARRA_DP).dp
+        // **El camino se monta una vez por nota**, no una por fotograma. Son cincuenta
+        // rectángulos redondeados; hacerlos en cada pintada sería reservar memoria a 120
+        // fotogramas por segundo justo mientras se arrastra el dedo por la onda.
+        val caminoDeLaOnda = remember(barras, densidad) {
+            Path().apply {
+                with(densidad) {
+                    val paso = PASO_DE_BARRA_DP.dp.toPx()
+                    val grueso = GRUESO_DE_BARRA_DP.dp.toPx()
+                    val eje = ALTO_MAXIMO_DE_BARRA_DP.dp.toPx() / 2f
+                    barras.forEachIndexed { i, valor ->
+                        val medio = altoDeBarraDp(valor).dp.toPx() / 2f
+                        addRoundRect(
+                            RoundRect(
+                                left = i * paso,
+                                top = eje - medio,
+                                right = i * paso + grueso,
+                                bottom = eje + medio,
+                                cornerRadius = CornerRadius(grueso / 2f)
+                            )
+                        )
+                    }
+                }
+            }
+        }
         val acento = MaterialTheme.colorScheme.primary
         val apagado = acento.copy(alpha = ALFA_DE_LO_NO_OIDO)
         // **El texto se abre y se cierra desde el propio audio**, y el mando vive arriba a
@@ -3817,11 +3898,15 @@ class MensajesActivity : ComponentActivity() {
                     // Las notas grabadas antes de guardar los picos no tienen onda. Una
                     // onda inventada mentiría sobre lo que se dijo, así que no se pinta.
                     Spacer(Modifier.size(4.dp))
-                } else {
+                } else Box(Modifier.height(CAJA_DE_LA_ONDA), contentAlignment = Alignment.Center) {
+                    // La caja de 30 dp es la de Telegram (`SeekBarWaveform.java:480`), y
+                    // está aquí por una razón muy concreta: es la que hace que el eje de la
+                    // onda y el centro del botón de texto caigan **en la misma línea**, sin
+                    // cuadrarlos a ojo con márgenes.
                     androidx.compose.foundation.Canvas(
                         Modifier
-                            .width(ANCHO_DE_LA_ONDA)
-                            .height(ALTO_DE_LA_ONDA)
+                            .width(anchoDeLaOnda)
+                            .height(ALTO_MAXIMO_DE_BARRA_DP.dp)
                             // Tocar la onda salta a ese punto, que es para lo que uno
                             // mira una onda: para volver al trozo que importa.
                             .pointerInput(m.id) {
@@ -3832,21 +3917,21 @@ class MensajesActivity : ComponentActivity() {
                                 }
                             }
                     ) {
-                        val paso = size.width / barras.size
-                        val grueso = paso * PARTE_LLENA_DE_LA_BARRA
-                        barras.forEachIndexed { i, valor ->
-                            val alto = (size.height * valor).coerceAtLeast(grueso)
-                            drawRoundRect(
-                                color = if (i.toFloat() / barras.size <= avance) acento
-                                        else apagado,
-                                topLeft = androidx.compose.ui.geometry.Offset(
-                                    i * paso, (size.height - alto) / 2f
-                                ),
-                                size = androidx.compose.ui.geometry.Size(grueso, alto),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(
-                                    grueso / 2f
-                                )
-                            )
+                        // **Un solo recorte y dos rectángulos**, que es como lo hace
+                        // Telegram (`SeekBarWaveform.java:396-399, 449-451`): se recorta
+                        // al camino con todas las barras y encima van dos rectángulos, el
+                        // de lo que falta a todo lo ancho y el de lo oído hasta donde va.
+                        //
+                        // No es un capricho de eficiencia —aunque también: son dos órdenes
+                        // al lienzo en vez de cincuenta—. Es que pintar barra a barra
+                        // obliga a decidir **por barra** de qué color va, y entonces el
+                        // borde de lo oído solo puede caer en los múltiplos de 3 dp: la
+                        // marca avanza a saltos y, en una nota corta, se queda parada
+                        // segundos entre salto y salto. Recortando, el borde cae donde de
+                        // verdad va la reproducción, aunque sea por la mitad de una barra.
+                        clipPath(caminoDeLaOnda) {
+                            drawRect(apagado, size = size)
+                            drawRect(acento, size = Size(size.width * avance, size.height))
                         }
                     }
                 }
@@ -3869,10 +3954,25 @@ class MensajesActivity : ComponentActivity() {
     /**
      * **El botón de «pásamelo a texto», en la esquina del audio.**
      *
-     * Es el chevrón de Telegram, y hace las dos cosas según lo que haya: si la nota todavía
-     * no tiene texto, **lo pide** —que es lo que el usuario echaba en falta: la opción estaba
-     * escondida en el menú—; si ya lo tiene, lo abre y lo cierra. Mientras se está pasando,
-     * una ruedecita: es trabajo que tarda y hay que decirlo donde se pulsó.
+     * Hace las dos cosas según lo que haya: si la nota todavía no tiene texto, **lo pide**
+     * —que es lo que el usuario echaba en falta: la opción estaba escondida en el menú—; si
+     * ya lo tiene, lo abre y lo cierra.
+     *
+     * **Y ahora es la única forma de que una nota se pase a texto.** Antes se transcribía
+     * sola al guardarla; el usuario lo pidió al revés el 8-sep-2026. Ver
+     * [MensajesStore.anadir], donde está el porqué.
+     *
+     * ## Sus medidas son las de Telegram, leídas en la fuente
+     *
+     * - **30 × 24 dp, esquinas de 8** (`ChatMessageCell.java:14854-14859`), no un cuadrado:
+     *   es una pastilla tumbada, que es lo que le deja sitio al icono sin comerse la onda.
+     * - **Centrado en el eje de la onda** (`transcribeY = seekBarY + dp(3)`, con la caja de
+     *   la onda de 30 dp y el botón de 24: los dos ejes caen en el mismo sitio).
+     * - **El fondo es el propio color del icono al 15,6 %** de opacidad
+     *   (`TranscribeButton.java:264`). Con eso el botón se tiñe solo: en una burbuja verde
+     *   sale verde pálido y en una gris, gris, sin una sola línea de tema aparte.
+     * - Mientras trabaja, **el trazo recorre su borde** (`TranscribeButton.java:377`,
+     *   `:449-461`). Ver [VueltaDeCarga] y [ElBordeQueGira].
      */
     @Composable
     private fun BotonDeTexto(m: Mensaje, desplegado: Boolean, alPulsar: () -> Unit) {
@@ -3881,45 +3981,120 @@ class MensajesActivity : ComponentActivity() {
         val hayTexto = !m.transcripcion.isNullOrBlank()
         val sePuede = m.ruta != null && Transcriptor.disponible(this@MensajesActivity)
         if (enCurso == null && !hayTexto && !sePuede) return
+        val tinta = ColoresDelChat.hora()
         Box(
-            Modifier
-                .padding(start = 6.dp)
-                .size(28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(ColoresDelChat.filete())
-                .clickable(enabled = enCurso == null) {
-                    if (hayTexto) alPulsar()
-                    else {
-                        Toast.makeText(
-                            this@MensajesActivity,
-                            getString(com.forge.pixpin.R.string.guardados_transcribiendo),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        almacen.transcribir(m)
-                    }
-                },
+            Modifier.padding(start = 8.dp).height(CAJA_DE_LA_ONDA),
             contentAlignment = Alignment.Center
         ) {
-            when {
-                enCurso != null -> androidx.compose.material3.CircularProgressIndicator(
-                    progress = { enCurso },
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = ColoresDelChat.hora()
-                )
-                hayTexto -> Icon(
-                    if (desplegado) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    contentDescription = getString(com.forge.pixpin.R.string.guardados_ver_texto),
-                    tint = ColoresDelChat.hora(),
-                    modifier = Modifier.size(18.dp)
-                )
-                else -> Icon(
-                    Icons.Filled.Subtitles,
-                    contentDescription = getString(com.forge.pixpin.R.string.guardados_a_texto),
-                    tint = ColoresDelChat.hora(),
+            Box(
+                Modifier
+                    .size(ANCHO_DEL_BOTON_DE_TEXTO, ALTO_DEL_BOTON_DE_TEXTO)
+                    .clip(RoundedCornerShape(RADIO_DEL_BOTON_DE_TEXTO))
+                    .background(tinta.copy(alpha = ALFA_DEL_FONDO_DEL_BOTON))
+                    .then(if (enCurso != null) Modifier.elBordeQueGira(tinta) else Modifier)
+                    .clickable(enabled = enCurso == null) {
+                        if (hayTexto) alPulsar()
+                        else {
+                            Toast.makeText(
+                                this@MensajesActivity,
+                                getString(com.forge.pixpin.R.string.guardados_transcribiendo),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            almacen.transcribir(m)
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    when {
+                        // Mientras trabaja se queda el mismo icono: quien avisa es el borde.
+                        enCurso != null -> Icons.Filled.Subtitles
+                        hayTexto && desplegado -> Icons.Filled.ExpandLess
+                        hayTexto -> Icons.Filled.ExpandMore
+                        else -> Icons.Filled.Subtitles
+                    },
+                    contentDescription = getString(
+                        when {
+                            enCurso != null -> com.forge.pixpin.R.string.guardados_transcribiendo
+                            hayTexto -> com.forge.pixpin.R.string.guardados_ver_texto
+                            else -> com.forge.pixpin.R.string.guardados_a_texto
+                        }
+                    ),
+                    tint = tinta,
                     modifier = Modifier.size(16.dp)
                 )
             }
+        }
+    }
+
+    /**
+     * **El borde que gira**: el aviso de que se está pasando a texto.
+     *
+     * Un trazo de 1,5 dp recorriendo el contorno del botón, que crece y se encoge, con la
+     * vuelta entera en 5,4 segundos. Es lo que hace Telegram en `TranscribeButton.java:377`
+     * y `:449-461`, y tiene una ventaja concreta sobre la ruedecita que había antes: la
+     * ruedecita tapaba el icono, así que mientras trabajaba el botón dejaba de decir qué
+     * botón era. El borde avisa **alrededor** y el icono se queda.
+     *
+     * Los ángulos los da [VueltaDeCarga], que no sabe nada de pantallas; aquí solo se
+     * reparten sobre el contorno y se pinta el trozo. El contorno arranca en el centro de
+     * arriba y va en el sentido de las agujas, como el suyo (`TranscribeButton.java:366`).
+     *
+     * En una vuelta de reloj el trazo da unas siete al botón —avanza 2.520° en los 5.400
+     * ms—, así que el ángulo se toma en módulo 360 y, cuando el trozo cruza el punto de
+     * arranque, se pinta en dos partes. Sin eso, el trazo desaparecería al cruzar arriba.
+     */
+    @Composable
+    private fun Modifier.elBordeQueGira(color: Color): Modifier {
+        val vuelta by androidx.compose.animation.core.rememberInfiniteTransition(label = "carga")
+            .animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                    androidx.compose.animation.core.tween(
+                        VueltaDeCarga.CICLO_MS.toInt(),
+                        easing = androidx.compose.animation.core.LinearEasing
+                    )
+                ),
+                label = "vuelta"
+            )
+        // Se reutilizan: esto se pinta a cada fotograma y reservar tres objetos por
+        // fotograma es justo lo que no se hace aquí. Ver la norma de rendimiento.
+        val contorno = remember { Path() }
+        val trozo = remember { Path() }
+        val medidor = remember { androidx.compose.ui.graphics.PathMeasure() }
+        return this.drawWithContent {
+            drawContent()
+            val r = RADIO_DEL_BOTON_DE_TEXTO.toPx()
+            val an = size.width
+            val al = size.height
+            contorno.rewind()
+            contorno.moveTo(an / 2f, 0f)
+            contorno.lineTo(an - r, 0f)
+            contorno.arcTo(androidx.compose.ui.geometry.Rect(an - 2 * r, 0f, an, 2 * r), -90f, 90f, false)
+            contorno.lineTo(an, al - r)
+            contorno.arcTo(androidx.compose.ui.geometry.Rect(an - 2 * r, al - 2 * r, an, al), 0f, 90f, false)
+            contorno.lineTo(r, al)
+            contorno.arcTo(androidx.compose.ui.geometry.Rect(0f, al - 2 * r, 2 * r, al), 90f, 90f, false)
+            contorno.lineTo(0f, r)
+            contorno.arcTo(androidx.compose.ui.geometry.Rect(0f, 0f, 2 * r, 2 * r), 180f, 90f, false)
+            contorno.lineTo(an / 2f, 0f)
+            medidor.setPath(contorno, false)
+            val largo = medidor.length
+            if (largo <= 0f) return@drawWithContent
+            val (a, b) = VueltaDeCarga.trazo((vuelta * VueltaDeCarga.CICLO_MS).toLong())
+            val abarca = b - a
+            val desde = (((a % 360f) + 360f) % 360f)
+            val hasta = desde + abarca
+            val pincel = Stroke(width = GRUESO_DEL_BORDE.toPx(), cap = StrokeCap.Round)
+            fun pinta(g0: Float, g1: Float) {
+                trozo.rewind()
+                if (medidor.getSegment(g0 / 360f * largo, g1 / 360f * largo, trozo, true)) {
+                    drawPath(trozo, color, style = pincel)
+                }
+            }
+            if (hasta <= 360f) pinta(desde, hasta)
+            else { pinta(desde, 360f); pinta(0f, hasta - 360f) }
         }
     }
 
@@ -5577,10 +5752,8 @@ private const val LATIDO_DE_LA_ONDA = 60L
 /** Lo que se ve de la parte de la onda que aún no se ha oído. */
 private const val ALFA_DE_LO_NO_OIDO = 0.3f
 
-/** La onda: barras de 2 puntos cada 3, sobre una franja de 14. */
-private val ANCHO_DE_LA_ONDA = 150.dp
-private val ALTO_DE_LA_ONDA = ALTO_DE_LA_ONDA_DP.dp
-private const val PARTE_LLENA_DE_LA_BARRA = 2f / 3f
+// La onda ya no lleva medidas propias: las suyas están en `Onda.kt` con la línea de
+// Telegram de la que salen, y el ancho lo pone el número de barras. Ver [FilaDeVoz].
 
 /** El tamaño de la hora, el mismo en la burbuja y sobre una foto. */
 private val TAMANO_DE_LA_HORA = 11.sp
@@ -5593,6 +5766,23 @@ private const val FILAS_DE_LA_MINIAPP = 8
 
 /** El botón redondo del archivo y de la nota de voz. */
 private val BOTON_DEL_ARCHIVO = 44.dp
+
+/**
+ * La caja donde vive la onda: 30 dp de alto con el eje en el 15.
+ * `SeekBarWaveform.java:480`. Ver por qué en [FilaDeVoz].
+ */
+private val CAJA_DE_LA_ONDA = 30.dp
+
+/** El botón de pasar a texto: una pastilla tumbada. `ChatMessageCell.java:14854-14859`. */
+private val ANCHO_DEL_BOTON_DE_TEXTO = 30.dp
+private val ALTO_DEL_BOTON_DE_TEXTO = 24.dp
+private val RADIO_DEL_BOTON_DE_TEXTO = 8.dp
+
+/** Su fondo es el color de su icono a esto. `TranscribeButton.java:264`. */
+private const val ALFA_DEL_FONDO_DEL_BOTON = 0.156f
+
+/** Y el trazo que le da la vuelta mientras trabaja. `TranscribeButton.java:377`. */
+private val GRUESO_DEL_BORDE = 1.5.dp
 
 /** Más allá de esto no es una extensión, es parte del nombre. */
 private const val LARGO_DE_EXTENSION = 5

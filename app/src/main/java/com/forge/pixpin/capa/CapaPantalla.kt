@@ -52,6 +52,7 @@ import com.forge.pixpin.motor.Renderer
 import com.forge.pixpin.motor.Scene
 import com.forge.pixpin.motor.Tool
 import com.forge.pixpin.motor.Viewport
+import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.motor.estiloAplicado
 import com.forge.pixpin.pin.OverlayComposeWindow
 import kotlinx.coroutines.Dispatchers
@@ -133,7 +134,7 @@ class CapaPantalla(private val app: PixPinApp) {
         val ventana = OverlayComposeWindow(app, matchParent = true) { Lienzo() }
         ventana.setTouchHandler(lector())
         runCatching {
-            wm.addView(ventana.view, lp)
+            wm.añadirVistaFluida(ventana.view, lp)
             ventana.onAttached()
             lienzo = ventana
             lienzoLp = lp
@@ -168,7 +169,7 @@ class CapaPantalla(private val app: PixPinApp) {
         }
         val ventana = OverlayComposeWindow(app) { Barra() }
         runCatching {
-            wm.addView(ventana.view, lp)
+            wm.añadirVistaFluida(ventana.view, lp)
             ventana.onAttached()
             barra = ventana
             barraLp = lp

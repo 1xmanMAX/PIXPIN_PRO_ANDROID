@@ -68,6 +68,7 @@ import com.forge.pixpin.clipboard.PinContent
 import com.forge.pixpin.data.CrashLog
 import com.forge.pixpin.data.PinRepository
 import com.forge.pixpin.floating.FloatingBallController
+import com.forge.pixpin.motor.añadirVistaFluida
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -891,7 +892,7 @@ class OverlayManager(private val app: PixPinApp) {
         val window = OverlayComposeWindow(app) { PinListContent() }
         listWindow = window
         runCatching {
-            wm.addView(window.view, lp)
+            wm.añadirVistaFluida(window.view, lp)
             window.onAttached()
         }.onFailure { listWindow = null }
     }

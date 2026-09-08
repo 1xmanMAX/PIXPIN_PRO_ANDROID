@@ -61,8 +61,23 @@ class MensajesStore(private val context: Context) {
         }
     }
 
-    /** Añade uno. Es una línea al final del archivo: no toca lo que ya había. */
-    fun anadir(mensaje: Mensaje, transcribir: Boolean = true, idioma: String? = null) {
+    /**
+     * Añade uno. Es una línea al final del archivo: no toca lo que ya había.
+     *
+     * **[transcribir] viene apagado, y esto es a propósito.** Antes toda nota de voz se
+     * pasaba a texto sola en cuanto se guardaba; el usuario lo pidió al revés el
+     * 8-sep-2026: «si subo un vídeo o grabo un vídeo no se traduzca o se saque su texto
+     * inmediatamente automáticamente, sino al darle el botón recién se haga ese proceso».
+     * Y tiene razón por tres motivos que se ven en el aparato: un audio largo tiene al
+     * teléfono minutos con el reconocedor puesto sin que nadie lo haya pedido, gasta
+     * batería, y llena la conversación de hojas de transcripción que nadie quería.
+     *
+     * Ahora el texto sale **solo** al pulsar el botón de la nota de voz
+     * (`BotonDeTexto` en `MensajesActivity`). Lo único que sigue pidiéndolo solo es
+     * practicar pronunciación, y ahí el texto **es** la función: sin él no hay con qué
+     * comparar lo que has leído (`PronunciarActivity`, que pasa `transcribir = true`).
+     */
+    fun anadir(mensaje: Mensaje, transcribir: Boolean = false, idioma: String? = null) {
         // **Lo que entra en el chat de un proyecto entra en el proyecto.** Una foto de la
         // obra o el PDF del cliente se guardan en la conversación del proyecto porque es lo
         // que está a mano, y de ahí a las hojas iba un menú: ahora van solos, como hoja, sin
@@ -91,7 +106,8 @@ class MensajesStore(private val context: Context) {
             archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
         }
         if (seUne) unirAlProyecto(apuntado)
-        // **Una nota de voz se pasa a texto** en cuanto se guarda. Ver [transcribir].
+        // **Solo si quien llama lo pide**, que hoy es únicamente practicar pronunciación.
+        // Ver el porqué en la documentación de esta función.
         if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null && !apuntado.esMusica) transcribir(apuntado, idioma)
         cambios.value = cambios.value + 1
     }

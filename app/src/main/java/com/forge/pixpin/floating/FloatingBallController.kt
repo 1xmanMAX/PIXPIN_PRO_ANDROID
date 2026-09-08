@@ -44,6 +44,7 @@ import androidx.core.animation.doOnEnd
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.capture.CaptureFlow
 import com.forge.pixpin.clipboard.ClipboardPinActivity
+import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.pin.OverlayComposeWindow
 import com.forge.pixpin.pin.OverlayTouchHandler
 import kotlinx.coroutines.flow.first
@@ -211,7 +212,7 @@ class FloatingBallController(private val context: Context) {
             ball = window
             ballLp = lp
             runCatching {
-                wm.addView(window.view, lp)
+                wm.añadirVistaFluida(window.view, lp)
                 window.onAttached()
                 active = this@FloatingBallController
                 ultimaPantalla = screenW to screenH
@@ -377,9 +378,9 @@ class FloatingBallController(private val context: Context) {
         scrim = scrimWindow
         menu = menuWindow
         runCatching {
-            wm.addView(scrimWindow.view, scrimLp)
+            wm.añadirVistaFluida(scrimWindow.view, scrimLp)
             scrimWindow.onAttached()
-            wm.addView(menuWindow.view, menuLp)
+            wm.añadirVistaFluida(menuWindow.view, menuLp)
             menuWindow.onAttached()
         }
     }

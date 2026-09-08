@@ -157,6 +157,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.drawText
 import com.forge.pixpin.mini.Ruleta
+import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.motormd.BarraDeEstilosUi
 import com.forge.pixpin.motormd.BarraDeFamiliasUi
 import com.forge.pixpin.motormd.EditorVivo
@@ -474,7 +475,7 @@ class PinWindowController(
         window = w
         lp = params
         runCatching {
-            wm.addView(w.view, params)
+            wm.añadirVistaFluida(w.view, params)
             w.onAttached()
         }.onFailure {
             window = null
@@ -653,7 +654,7 @@ class PinWindowController(
         }
         tirador = ventana
         runCatching {
-            wm.addView(ventana.view, params)
+            wm.añadirVistaFluida(ventana.view, params)
             ventana.onAttached()
         }
         // El aviso solo al activarlo a mano: repetirlo en cada arranque sería una
@@ -1450,7 +1451,7 @@ class PinWindowController(
         val bar = OverlayComposeWindow(context) { ActionBarContent() }
         actionBar = bar
         runCatching {
-            wm.addView(bar.view, params)
+            wm.añadirVistaFluida(bar.view, params)
             bar.onAttached()
         }.onFailure { actionBar = null }
     }
@@ -1799,7 +1800,7 @@ class PinWindowController(
         val bar = OverlayComposeWindow(context) { AnnotateBarContent() }
         annotateBar = bar
         runCatching {
-            wm.addView(bar.view, params)
+            wm.añadirVistaFluida(bar.view, params)
             bar.onAttached()
         }.onFailure { annotateBar = null }
     }
@@ -1834,7 +1835,7 @@ class PinWindowController(
         ).apply { gravity = Gravity.CENTER }
         val w = OverlayComposeWindow(context) { BoardPaletteContent() }
         boardPalette = w
-        runCatching { wm.addView(w.view, params); w.onAttached() }
+        runCatching { wm.añadirVistaFluida(w.view, params); w.onAttached() }
             .onFailure { boardPalette = null }
     }
 
@@ -1977,7 +1978,7 @@ class PinWindowController(
         val viewer = OverlayComposeWindow(context) { PdfViewerContent() }
         pdfViewer = viewer
         runCatching {
-            wm.addView(viewer.view, params)
+            wm.añadirVistaFluida(viewer.view, params)
             viewer.onAttached()
         }.onFailure { pdfViewer = null }
     }
@@ -2298,7 +2299,7 @@ class PinWindowController(
         val viewer = OverlayComposeWindow(context) { PaginasDeNotaContent() }
         notaViewer = viewer
         runCatching {
-            wm.addView(viewer.view, params)
+            wm.añadirVistaFluida(viewer.view, params)
             viewer.onAttached()
         }.onFailure { notaViewer = null }
     }
@@ -2463,7 +2464,7 @@ class PinWindowController(
         val bar = OverlayComposeWindow(context) { EditBarContent() }
         editBar = bar
         runCatching {
-            wm.addView(bar.view, params)
+            wm.añadirVistaFluida(bar.view, params)
             bar.onAttached()
         }.onFailure { editBar = null }
     }
@@ -2645,7 +2646,7 @@ class PinWindowController(
         val picker = OverlayComposeWindow(context) { EmojiPickerContent() }
         emojiPicker = picker
         runCatching {
-            wm.addView(picker.view, params)
+            wm.añadirVistaFluida(picker.view, params)
             picker.onAttached()
         }.onFailure { emojiPicker = null }
     }

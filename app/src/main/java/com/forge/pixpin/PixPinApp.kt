@@ -56,6 +56,12 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        // **La tasa de refresco, en todas las ventanas y desde el primer momento.**
+        //
+        // Aquí y no en cada Activity porque son veinte y no tienen clase base común: de
+        // una en una, la próxima que se escriba nacería a 60 Hz sin que nadie lo note.
+        // Ver [com.forge.pixpin.motor.PantallaFluida].
+        com.forge.pixpin.motor.PantallaFluida.vigilarLasVentanas(this)
         // Y lo que el capturador no ve —crashes nativos, ANR—, que Android sí
         // apunta: se recoge al arrancar y acaba en el mismo informe.
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }

@@ -532,6 +532,8 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
                 stringResource(R.string.ajustes_aspecto),
                 stringResource(R.string.ajustes_aspecto_resumen)
             ) {
+                FluidezCard()
+                Spacer(Modifier.height(12.dp))
                 ModoNocheCard()
                 Spacer(Modifier.height(12.dp))
                 OledCard()
@@ -1167,6 +1169,45 @@ private val IDIOMAS_DE_VOZ = listOf(
     "es" to "Español", "en" to "Inglés", "pt" to "Portugués", "fr" to "Francés",
     "de" to "Alemán", "it" to "Italiano", "ca" to "Catalán"
 )
+
+/**
+ * **Máxima fluidez.**
+ *
+ * Está en «Aspecto» porque es de cómo se ve la aplicación moviéndose, y no en
+ * «Dibujar»: afecta a todo —a la lista de mensajes, al croquis, a los pines—, no
+ * solo al lienzo. Ver [com.forge.pixpin.motor.PantallaFluida].
+ */
+@Composable
+private fun FluidezCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.fluidez_title),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    stringResource(R.string.fluidez_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Switch(
+                checked = settings.maximaFluidez,
+                onCheckedChange = { scope.launch { app.settings.setMaximaFluidez(it) } }
+            )
+        }
+    }
+}
 
 @Composable
 private fun OledCard() {

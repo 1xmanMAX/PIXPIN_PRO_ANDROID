@@ -96,7 +96,12 @@ class MotorSeparadoTest {
         // Vuelve al PDF a por lo que se está mirando: `PdfRenderer` y `Bitmap`.
         "LaminaDeCerca.kt",
         // La cabecera que comparten las tres ventanitas flotantes.
-        "BarraDeVentana.kt"
+        "BarraDeVentana.kt",
+        // Pedirle a la pantalla su tasa de refresco máxima: ventanas, `LayoutParams`,
+        // `FrameMetrics` y el ciclo de vida de las Activity, todo de Android. Lo que
+        // **decide** cuándo subir y cuándo bajar es `PoliticaDeFluidez.kt`, que sí es
+        // núcleo, sí lo vigila esta prueba y por eso se puede comprobar sin teléfono.
+        "PantallaFluida.kt"
     )
 
     private fun archivos(): List<File> =

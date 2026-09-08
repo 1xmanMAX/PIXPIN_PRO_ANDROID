@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.data.CaptureMode
+import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.pin.OverlayComposeWindow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -255,7 +256,7 @@ class ScrollCaptureController private constructor(
         val window = OverlayComposeWindow(app) { BarContent() }
         bar = window
         runCatching {
-            wm.addView(window.view, params)
+            wm.añadirVistaFluida(window.view, params)
             window.onAttached()
         }.onFailure { bar = null }
     }
