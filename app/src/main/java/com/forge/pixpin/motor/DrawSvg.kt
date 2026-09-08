@@ -124,6 +124,12 @@ object DrawSvg {
     /**
      * El dibujo escrito, o null si no había nada que escribir.
      *
+     * Un fallo al escribir **no es un dibujo vacío**: antes se tragaba con un
+     * `runCatching` y cualquier excepción —memoria al incrustar una imagen, un perfil
+     * que no carga— subía como si no hubiera nada, y quien exportaba anunciaba «el
+     * dibujo está vacío» con el lienzo lleno. Ahora las excepciones suben y quien
+     * llama distingue las dos cosas (ver `DrawEditorActivity.exportando`).
+     *
      * Se encuadra igual que el PNG: con hoja manda la hoja y sin ella manda el
      * contenido con un margen. Que las tres salidas encuadren igual no es un
      * detalle — es lo que hace que exportar dos veces en formatos distintos dé
@@ -173,7 +179,7 @@ object DrawSvg {
          * justamente lo que se quería quitar de encima.
          */
         papelAparte: Boolean = false
-    ): String? = runCatching {
+    ): String? {
         val contenido =
             if (soloEstaHoja != null)
                 listOfNotNull(soloEstaHoja.takeIf { it.papel != null }) + scene.contenidoDe(soloEstaHoja)
@@ -243,8 +249,8 @@ object DrawSvg {
         val fondo = if (papelAparte) null else Svg.hex(parseColor(scene.backgroundColor))
         // Los glifos, delante: un `<use>` puede apuntar a algo que venga después, pero hay
         // lectores de SVG que agradecen encontrarlo antes.
-        Svg.documento(caja, fondo, pincel.defs() + cuerpo.toString())
-    }.getOrNull()
+        return Svg.documento(caja, fondo, pincel.defs() + cuerpo.toString())
+    }
 
     /**
      * El SVG en un archivo, listo para compartir.
@@ -261,13 +267,13 @@ object DrawSvg {
         papel: Bitmap? = null,
         /** El mismo papel con más píxeles, si se tiene. Ver [aTexto]. */
         papelFino: Bitmap? = null
-    ): File? = runCatching {
+    ): File? {
         val texto = aTexto(context, scene, imageProvider, papel, papelFino) ?: return null
         val carpeta = File(context.cacheDir, "share").apply { mkdirs() }
         val archivo = File(carpeta, if (nombre.endsWith(".svg")) nombre else "$nombre.svg")
         archivo.writeText(texto)
-        archivo
-    }.getOrNull()
+        return archivo
+    }
 
     // ---------------------------------------------------------------------
     // El que escribe

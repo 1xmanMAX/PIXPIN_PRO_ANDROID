@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -161,6 +162,31 @@ class DrawSvgTest {
     @Test
     fun `un dibujo vacío no da archivo`() {
         assertEquals(null, DrawSvg.aTexto(context, Scene()))
+    }
+
+    /**
+     * **Un fallo al escribir no es un dibujo vacío.**
+     *
+     * Esto era un `runCatching{…}.getOrNull()`: cualquier excepción —memoria al
+     * incrustar una foto, un perfil que no carga— se convertía en `null`, y la
+     * exportación anunciaba «el dibujo está vacío» con el lienzo lleno. El null
+     * solo puede significar que no hay nada; el fallo sube para que quien llama
+     * lo distinga (ver `DrawEditorActivity.exportando`).
+     */
+    @Test
+    fun `un fallo al escribir no se anuncia como dibujo vacío`() {
+        val foto = Element(
+            id = "foto", type = ElementType.IMAGE, x = 0.0, y = 0.0,
+            width = 64.0, height = 64.0, seed = 1, fileId = "f"
+        )
+        try {
+            DrawSvg.aTexto(context, escenaCon(foto), imageProvider = {
+                throw RuntimeException("se rompió al incrustar la foto")
+            })
+            fail("el fallo tenía que subir, no volver null como si no hubiera nada")
+        } catch (esperado: RuntimeException) {
+            assertEquals("se rompió al incrustar la foto", esperado.message)
+        }
     }
 
     @Test
