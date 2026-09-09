@@ -6,10 +6,11 @@
 
 ## Estado al último guardado
 - WP1 `518b9a2` · WP2+3 `1092bb0` · WP4 `41426b0` · WP6 `1389ff1` · WP7 `c3bec25` ·
-  WP8 (lógica) `f8968dc` · WP9a `bdca245` · WP9b `ddde108` · WP5 `6ca530a` (fase 1) +
-  `8314084` (fase 2b) · caché `71194ce` — todas pusheadas en `origin/DEEPROOT`.
-- **Pendientes**: WP5 fase 2a (raster inicial de `DrawEditorActivity` ~305-309 en el hilo
-  principal) y trazo incremental opcional; WP8-UI; WP10.
+  WP8 (lógica) `f8968dc` · WP9a `bdca245` · WP9b `ddde108` · WP5 `6ca530a` + `8314084` +
+  `0622672` · caché `71194ce` — todas pusheadas en `origin/DEEPROOT`.
+- **WP5 completo en sus fases principales** (web perezosa, raster inicial y devolverAlPdf en
+  segundo plano); queda opcional el trazo incremental (elemento en curso fuera de la escena).
+- **Pendientes**: WP8-UI (plegar rachas en la LazyColumn) y WP10 (hoja de apuntes con 3 dedos).
 - Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4 y las UI nuevas).
 
 ## Notas para retomar WP5 (fases 2-3), WP8-UI, WP9b y WP10
@@ -53,7 +54,7 @@
 - [x] **WP1** "Dibujo vacío" al exportar HTML desde lienzo → HECHA (commit `518b9a2`).
 - [x] WP2+WP3 Reserva de pintado del plano al mover vista + roundtrip HTML con plano → HECHA (código, `1092bb0`; verificación en navegador pendiente).
 - [x] WP4 Medir en el HTML: flechas+cota, movibles, persistentes, varias, imán → HECHA (`41426b0`; verificación en navegador pendiente).
-- [ ] WP5 Rendimiento de planos PDF enormes → fases 1 y 2b HECHAS (`6ca530a` web perezosa; `8314084` `devolverAlPdf` en segundo plano); falta fase 2a (raster inicial ~305-309 fuera del hilo principal) y el trazo incremental opcional.
+- [x] WP5 Rendimiento de planos PDF enormes → HECHA en sus fases principales (`6ca530a` web perezosa, `0622672` raster inicial en segundo plano, `8314084` `devolverAlPdf` en segundo plano). Queda opcional: trazo incremental (elemento en curso fuera de `scene.elements`).
 - [x] WP6 Compartir: opciones/aviso de audio solo cuando hay audio → HECHA (`1389ff1`).
 - [x] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto → HECHA (`c3bec25`).
 - [~] WP8 Agrupación por rachas de origen en Guardar → lógica HECHA (`f8968dc`); falta plegar la UI de la LazyColumn.
