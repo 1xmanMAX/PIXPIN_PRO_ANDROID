@@ -38,6 +38,9 @@ object ExportarHtml {
     /** El grupo del SVG donde viven las anotaciones. El visor lo busca por este id. */
     const val ID_DEL_CROQUIS = "croquis"
 
+    /** El grupo del SVG donde viven las medidas del navegador. Ver `VISOR_DIBUJO`. */
+    const val ID_DE_MEDIDAS = "medidas"
+
     /**
      * **Una página del documento.** O un dibujo plano —un SVG, que se puede anotar— o un
      * croquis del espacio —la geometría en JSON, que se gira y se mide—.
@@ -252,14 +255,23 @@ object ExportarHtml {
     }
 
     /**
-     * El grupo de las anotaciones, dentro del SVG y el último de todo: así las notas van
-     * encima del dibujo y pasean y se amplían con él. Va ya en el archivo, vacío, para que
-     * guardar sea rellenarlo.
+     * Los grupos vivos del SVG de un dibujo: las anotaciones y, encima, las medidas del
+     * navegador. Van ya en el archivo, vacíos, para que guardar sea rellenarlos.
      */
     private fun conGrupoDeCroquis(svg: String): String {
         val cuerpo = svg.trim().removePrefix("<?xml version=\"1.0\" encoding=\"UTF-8\"?>").trim()
-        if (!cuerpo.endsWith("</svg>") || cuerpo.contains("id=\"$ID_DEL_CROQUIS\"")) return cuerpo
-        return cuerpo.removeSuffix("</svg>").trimEnd() + "\n<g id=\"$ID_DEL_CROQUIS\"></g>\n</svg>"
+        if (!cuerpo.endsWith("</svg>")) return cuerpo
+        var salida = cuerpo.removeSuffix("</svg>").trimEnd()
+        if (!salida.contains("id=\"$ID_DEL_CROQUIS\"")) {
+            salida += "\n<g id=\"$ID_DEL_CROQUIS\"></g>"
+        }
+        // **Las medidas del navegador viven en su propio grupo**, dentro del SVG y encima del
+        // croquis: así viajan con la página al guardarla y se pueden volver a tocar al abrirla.
+        // Ver `VISOR_DIBUJO` y [ID_DE_MEDIDAS].
+        if (!salida.contains("id=\"$ID_DE_MEDIDAS\"")) {
+            salida += "\n<g id=\"$ID_DE_MEDIDAS\"></g>"
+        }
+        return salida + "\n</svg>"
     }
 
     /**
@@ -510,8 +522,10 @@ object ExportarHtml {
           flex-wrap:wrap;justify-content:center;max-width:100%}
         .grupo{display:flex;gap:2px}
         .grupo[hidden]{display:none}
-        #medida line{stroke:#ff8a3d;stroke-width:2px;vector-effect:non-scaling-stroke}
-        #medida circle{fill:#ff8a3d}
+        /* Las medidas del visor: la mano las coge (se mueven) y el rótulo lleva un halo
+           blanco para leerse sobre las líneas del plano. */
+        #medidas .medida{cursor:pointer}
+        #medidas text{paint-order:stroke;stroke:rgba(255,255,255,.92);stroke-width:1px}
         .grupo+.grupo{border-left:1px solid var(--filete);padding-left:6px;margin-left:2px}
         #barra button{width:40px;height:40px;border:none;border-radius:11px;background:transparent;
           color:inherit;display:inline-flex;align-items:center;justify-content:center;
@@ -603,9 +617,14 @@ var MIN=casa.w/400, MAX=casa.w*20;
 var croquis=svg.querySelector('#croquis');
 if(!croquis){croquis=document.createElementNS(NS,'g');croquis.id='croquis';svg.appendChild(croquis);}
 var hecho=[], rehecho=[], modo='mano', trazo=null, hayLapiz=false;
-// Medir: dos puntos, y la distancia en la unidad de la escala del dibujo si la hay.
-var medida=[], grupoMedida=null;
+// **Medir: cotas con flechas, varias a la vez, movibles y que se guardan con la página.**
+// Cada medida son dos puntos de la escena; al terminar entra en [medidas] y se dibuja como
+// una cota de plano —flechas en los extremos y el número en medio—. La escala del dibujo
+// viaja en los datos de la hoja (los atributos de escala); con ella se escribe en su unidad.
 var escala=parseFloat(caja.dataset.escala)||0, unidad=caja.dataset.unidad||'', decimales=parseInt(caja.dataset.decimales)||2;
+var medidas=[], enCurso=null, mArrastre=null;
+var grupoMedidas=svg.querySelector('#medidas');
+if(!grupoMedidas){grupoMedidas=document.createElementNS(NS,'g');grupoMedidas.id='medidas';svg.appendChild(grupoMedidas);}
 // El papel, si vino como geometría en vez de como foto. Ver [VisorPlano].
 var plano=(typeof crearPlano==='function')?crearPlano(caja,{encuadrar:encuadrarEn}):null;
 
@@ -654,6 +673,8 @@ function leerPuntos(r){
   return lista.filter(function(q){return isFinite(q.x)&&isFinite(q.y);});
 }
 Array.prototype.forEach.call(croquis.children,function(r){r.puntos=leerPuntos(r);});
+// Las medidas de un archivo ya guardado también se leen para poder seguir tocándolas.
+cargarMedidas();
 
 function deshacer(){
   var u=hecho.pop(); if(!u)return;
@@ -677,6 +698,9 @@ function distanciaAlTramo(p,a,c){
 // tiene los puntos lejos unos de otros.
 function borrarEn(px,py,m){
   var p=aEscena(px,py,m);
+  // La goma también quita medidas: un toque sobre su raya o sus flechas la borra entera.
+  var tocada=medidaBajo(px,py);
+  if(tocada){ medidas.splice(tocada.i,1); pintarMedidas(); return; }
   var rayas=Array.prototype.slice.call(croquis.children);
   for(var i=0;i<rayas.length;i++){
     var r=rayas[i], pts=r.puntos||[];
@@ -731,36 +755,108 @@ function soltarTrazo(){
   else apuntar({que:'pinta',raya:trazo});
   trazo=null;
 }
-// ---- Medir ----
-function pintarMedida(){
-  if(!grupoMedida){ grupoMedida=document.createElementNS(NS,'g'); grupoMedida.id='medida'; svg.appendChild(grupoMedida); }
-  Array.prototype.slice.call(grupoMedida.children).forEach(function(c){ grupoMedida.removeChild(c); });
-  var k=aEscena(0,0).k;
-  if(medida.length===2){
-    var l=document.createElementNS(NS,'line');
-    l.setAttribute('x1',medida[0].x); l.setAttribute('y1',medida[0].y);
-    l.setAttribute('x2',medida[1].x); l.setAttribute('y2',medida[1].y);
-    grupoMedida.appendChild(l);
+// ---- Medir: cotas con flechas, varias, movibles y que se guardan ----
+function xml(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function textoDeLaDistancia(d){
+  return escala>0 ? (d*escala).toFixed(decimales)+' '+unidad
+                  : d.toFixed(1)+' px';
+}
+// **La púa de una flecha de cota**: un triángulo relleno con la punta en (x,y) mirando hacia
+// la dirección [fi]. Va dibujada en la propia medida para no depender de ningún `marker`.
+function punta(x,y,fi,c,lado){
+  var rem=Math.max(10*lado,3), bw=rem*0.5;
+  var o=Math.cos(fi)*rem, q=Math.sin(fi)*rem;
+  var px=-Math.sin(fi)*bw, py=Math.cos(fi)*bw;
+  return '<path d="M'+x+' '+y+' L'+(x+o+px)+' '+(y+q+py)+' L'+(x+o-px)+' '+(y+q-py)+' Z" fill="'+c+'"/>';
+}
+function dibujarMedida(m,k){
+  var dx=m.x2-m.x1, dy=m.y2-m.y1, d=Math.hypot(dx,dy);
+  if(d<1e-6) return '';
+  var ang=Math.atan2(dy,dx), c=m.c||'#ff1744';
+  var ancho=Math.max(1.3*k,0.6);
+  var raya='<line x1="'+r3(m.x1)+'" y1="'+r3(m.y1)+'" x2="'+r3(m.x2)+'" y2="'+r3(m.y2)+'"';
+  raya+=' stroke="'+c+'" stroke-width="'+ancho+'" stroke-linecap="round"/>';
+  // Las flechas miran hacia fuera de la medida, cada una desde su extremo.
+  var a1=punta(m.x1,m.y1,ang+Math.PI,c,1), a2=punta(m.x2,m.y2,ang,c,1);
+  // El rótulo, en medio y un poco apartado; se da la vuelta si quedaría cabeza abajo.
+  var mx=(m.x1+m.x2)/2, my=(m.y1+m.y2)/2, sep=Math.max(11*k,4);
+  var tx=mx+dy/d*sep, ty=my-dx/d*sep;
+  var grados=ang*180/Math.PI;
+  if(grados>90)grados-=180; else if(grados<-90)grados+=180;
+  var rot=' rotate('+Math.round(grados)+' '+r3(tx)+' '+r3(ty)+')';
+  var texto='<text x="'+r3(tx)+'" y="'+r3(ty)+'" transform="'+rot+'"';
+  texto+=' font-size="'+Math.max(13*k,5)+'" text-anchor="middle" dominant-baseline="central"';
+  texto+=' fill="'+c+'" font-weight="bold">'+xml(textoDeLaDistancia(d))+'</text>';
+  return '<g class="medida" data-x1="'+r3(m.x1)+'" data-y1="'+r3(m.y1)+'"'+
+         ' data-x2="'+r3(m.x2)+'" data-y2="'+r3(m.y2)+'" data-c="'+c+'">'+raya+a1+a2+texto+'</g>';
+}
+function pintarMedidas(){
+  var k=aEscena(0,0).k, s='';
+  for(var i=0;i<medidas.length;i++) s+=dibujarMedida(medidas[i],k);
+  grupoMedidas.innerHTML=s;
+}
+// Al abrir un archivo guardado, las medidas ya vienen dentro de `#medidas`: se vuelven a leer
+// de sus atributos para poder seguir moviéndolas. Lo pintado se deja tal cual hasta que algo
+// cambie (o la hoja se active), que es cuando se repinta con la escala de la vista.
+function cargarMedidas(){
+  Array.prototype.forEach.call(grupoMedidas.children,function(n){
+    var gx=n.getAttribute&&n.getAttribute('data-x1');
+    if(gx===null||gx===undefined) return;
+    medidas.push({x1:+gx,y1:+n.getAttribute('data-y1'),
+                  x2:+n.getAttribute('data-x2'),y2:+n.getAttribute('data-y2'),
+                  c:n.getAttribute('data-c')||'#ff1744'});
+  });
+}
+// **El imán**: un punto puesto —o un extremo arrastrado— se engancha a los extremos de lo ya
+// dibujado o de otras medidas si cae a menos de una docena de píxeles. La misma promesa que el
+// imán de la aplicación, dentro del visor.
+function puntoConIman(p){
+  var k=aEscena(0,0).k, r=Math.max(14*k,6), mejor=p, md=r;
+  function mira(q){
+    var dd=Math.hypot((q.x-p.x)/k,(q.y-p.y)/k);
+    if(dd<md){md=dd;mejor={x:q.x,y:q.y};}
   }
-  for(var i=0;i<medida.length;i++){
-    var c=document.createElementNS(NS,'circle');
-    c.setAttribute('cx',medida[i].x); c.setAttribute('cy',medida[i].y); c.setAttribute('r',5*k);
-    grupoMedida.appendChild(c);
+  Array.prototype.forEach.call(croquis.children,function(e){
+    var pts=e.puntos||[]; if(!pts.length) return;
+    mira(pts[0]); if(pts.length>1) mira(pts[pts.length-1]);
+  });
+  for(var i=0;i<medidas.length;i++){
+    mira({x:medidas[i].x1,y:medidas[i].y1}); mira({x:medidas[i].x2,y:medidas[i].y2});
   }
+  return mejor;
+}
+function medidaBajo(px,py){
+  var p=aEscena(px,py), k=aEscena(0,0).k;
+  var rPunta=Math.max(14*k,7), rRaya=Math.max(11*k,6);
+  for(var i=0;i<medidas.length;i++){
+    var m=medidas[i];
+    if(Math.hypot(m.x1-p.x,m.y1-p.y)<=rPunta) return {i:i,punta:1};
+    if(Math.hypot(m.x2-p.x,m.y2-p.y)<=rPunta) return {i:i,punta:2};
+    if(distanciaAlTramo(p,{x:m.x1,y:m.y1},{x:m.x2,y:m.y2})<=rRaya) return {i:i,punta:0};
+  }
+  return null;
 }
 function medirEn(px,py){
-  var p=aEscena(px,py);
-  if(medida.length>=2) medida=[];
-  medida.push({x:p.x,y:p.y});
-  if(medida.length===2){
-    var d=Math.hypot(medida[1].x-medida[0].x, medida[1].y-medida[0].y);
-    // Con escala, en su unidad; sin ella, en píxeles del dibujo, que al menos no engaña.
-    api.decir(escala>0 ? 'Distancia: '+(d*escala).toFixed(decimales)+' '+unidad
-                       : 'Distancia: '+d.toFixed(1)+' px (sin escala)');
-  } else api.decir('Primer punto puesto: toca el segundo');
-  pintarMedida();
+  var p=puntoConIman(aEscena(px,py));
+  if(!enCurso){ enCurso={x:p.x,y:p.y}; api.decir('Primer punto puesto: toca el segundo'); return; }
+  var x1=enCurso.x, y1=enCurso.y;
+  enCurso=null;
+  medidas.push({x1:x1,y1:y1,x2:p.x,y2:p.y,c:api.color()});
+  pintarMedidas();
+  api.decir('Distancia: '+textoDeLaDistancia(Math.hypot(p.x-x1,p.y-y1)));
 }
-function quitarMedida(){ medida=[]; if(grupoMedida) pintarMedida(); }
+// Al salir del modo medir se descarta el primer punto sin terminar. Las medidas hechas se
+// quedan: viven en `#medidas` y se guardan con la página.
+function quitarMedida(){ enCurso=null; }
+// Cómo se guardan: cada medida es un `<g>` con sus coordenadas y sus hijos tal cual; al
+// guardar se copia, y al abrir de nuevo `cargarMedidas` las lee de esos atributos.
+function medidasComoTexto(){
+  var s='';
+  Array.prototype.forEach.call(grupoMedidas.children,function(g){
+    if(g.nodeType===1) s+=g.outerHTML+'\n';
+  });
+  return s;
+}
 
 // **Con lápiz a la vista, el dedo mueve el papel.** En cuanto se posa un lápiz la página se
 // entera y no vuelve atrás: desde ese momento el lápiz traza y el dedo pasea, sin cambiar de
@@ -810,11 +906,16 @@ caja.addEventListener('pointerdown',function(e){
     if(q1==='lapiz'||q1==='marcador') empezarTrazo(e.clientX,e.clientY,q1==='marcador',e.pointerId);
     else if(q1==='goma') borrarEn(e.clientX,e.clientY);
     else if(q1==='medir') medirEn(e.clientX,e.clientY);
-    else { arrastre={id:e.pointerId,x:e.clientX,y:e.clientY}; api.agarrado(true); }
+    else {
+      // Con la mano puesta, coger una medida la arrastra; lo demás mueve el papel.
+      var golpe=modo==='mano'?medidaBajo(e.clientX,e.clientY):null;
+      if(golpe){ mArrastre={id:e.pointerId,i:golpe.i,punta:golpe.punta,ant:aEscena(e.clientX,e.clientY)}; api.agarrado(true); }
+      else { arrastre={id:e.pointerId,x:e.clientX,y:e.clientY}; api.agarrado(true); }
+    }
   } else if(dd.length===2){
     // El segundo dedo encuadra: un trazo del dedo a medias se queda como iba; el del lápiz
     // sigue, que es de otra mano.
-    arrastre=null;
+    arrastre=null; mArrastre=null;
     if(trazo&&trazo.puntero!==undefined&&dedos.get(trazo.puntero)&&dedos.get(trazo.puntero).tipo!=='pen') soltarTrazo();
     pellizco={d:Math.hypot(dd[0].x-dd[1].x,dd[0].y-dd[1].y)};
   }
@@ -839,6 +940,19 @@ caja.addEventListener('pointermove',function(e){
   } else if(!trazo&&!pellizco&&loQueHace(e)==='goma'){
     var mg=marco(), lg=muestras(e);
     for(var g=0;g<lg.length;g++)borrarEn(lg[g].clientX,lg[g].clientY,mg);
+  } else if(mArrastre&&mArrastre.id===e.pointerId){
+    var pN=aEscena(e.clientX,e.clientY), m0=medidas[mArrastre.i];
+    if(mArrastre.punta){
+      // Se arrastra un extremo: se mueve ese solo, con el imán puesto.
+      var q=puntoConIman(pN);
+      if(mArrastre.punta===1){m0.x1=q.x;m0.y1=q.y;} else {m0.x2=q.x;m0.y2=q.y;}
+    } else {
+      // Se arrastra la medida entera, cogida por su raya.
+      var dx=pN.x-mArrastre.ant.x, dy=pN.y-mArrastre.ant.y;
+      m0.x1+=dx; m0.y1+=dy; m0.x2+=dx; m0.y2+=dy;
+    }
+    mArrastre.ant=pN;
+    pintarMedidas();
   } else if(arrastrando(e)){
     var k=aEscena(0,0).k;
     v.x-=(e.clientX-arrastre.x)*k; v.y-=(e.clientY-arrastre.y)*k;
@@ -851,6 +965,7 @@ function soltar(e){
   if(losDedos().length<2)pellizco=null;
   if(trazo&&trazo.puntero===e.pointerId) soltarTrazo();
   if(arrastrando(e)){ arrastre=null; }
+  if(mArrastre&&mArrastre.id===e.pointerId){ mArrastre=null; api.agarrado(false); }
   if(dedos.size===0){ soltarTrazo(); arrastre=null; api.agarrado(false); }
 }
 caja.addEventListener('pointerup',soltar);
@@ -883,7 +998,7 @@ aplicar();
 return {
  tipo:'dibujo',
  // Una hoja escondida mide cero: el plano se pinta al asomarse a ella, no antes.
- activar:function(){ aplicar(); },
+ activar:function(){ aplicar(); if(medidas.length) pintarMedidas(); },
  desactivar:function(){soltarTrazo();},
  medir:function(){ if(plano) plano.medir(); },
  capas:plano?plano.capas:null,
@@ -898,7 +1013,8 @@ return {
  deshacer:deshacer, rehacer:rehacer,
  puedeDeshacer:function(){return hecho.length>0;},
  puedeRehacer:function(){return rehecho.length>0;},
- rayas:rayasComoTexto
+ rayas:rayasComoTexto,
+  medidas:medidasComoTexto
 };
 }
 """
@@ -1285,15 +1401,51 @@ function avisar(texto){
   var a=id('aviso'); a.textContent=texto; a.hidden=false;
   clearTimeout(avisoPendiente); avisoPendiente=setTimeout(function(){a.hidden=true;},1800);
 }
-// Se reescribe el grupo de cada dibujo, en orden: la primera copia del patrón es la del
-// primer dibujo. Las páginas del espacio no tienen grupo y no cuentan.
+// **Guardar es rellenar los grupos vivos de cada página, no reescribir el documento.** El
+// grupo del croquis (`#croquis`) y, encima, el de las medidas (`#medidas`) viajan vacíos en la
+// plantilla; al guardar se les mete el contenido de cada página. Como el contenido de
+// `#medidas` lleva grupos anidados, el relleno busca su cierre contando la anidación y no con
+// una expresión que se detendría en el primer `</g>`.
+function hastaElCierre(html,p){
+  // [p] es donde termina la etiqueta que abre; devuelve dónde empieza la que cierra el grupo.
+  var prof=1, n=html.length;
+  while(p<n&&prof>0){
+    var o=html.indexOf('<',p);
+    if(o<0) return n;
+    var t=html.charAt(o+1);
+    var e=html.indexOf('>',o); if(e<0) return n;
+    if(t==='/'){
+      if(/^<\/g[\s>]/.test(html.slice(o,e+1))) prof--;
+    } else if(t==='g'){
+      if(/^<g[\s>]/.test(html.slice(o,e+1))) prof++;
+    }
+    p=e+1;
+  }
+  return p;
+}
+function rellenar(html,id,rellenoDe){
+  var salida='', desde=0;
+  for(;;){
+    var a=html.indexOf('<g id="'+id+'"',desde);
+    if(a<0){ salida+=html.slice(desde); break; }
+    var abre=html.indexOf('>',a), cierra=hastaElCierre(html,abre);
+    salida+=html.slice(desde,a)+'<g id="'+id+'">\n'+rellenoDe()+'</g>';
+    desde=cierra;
+  }
+  return salida;
+}
 function paginaAnotada(){
-  // Los dibujos y las notas llevan grupo; las páginas del espacio, no.
+  // Las notas y los dibujos llevan grupo de croquis; las páginas del espacio, no. Las
+  // medidas solo las llevan los dibujos.
   var dibujos=pagina.filter(function(p){return p&&(p.tipo==='dibujo'||p.tipo==='nota');}), i=0;
-  var re=/<g id="croquis"[^>]*>[\s\S]*?<\/g>/g;
-  return PLANTILLA.replace(re,function(){
+  var conMedidas=pagina.filter(function(p){return p&&p.tipo==='dibujo';}), j=0;
+  var s=rellenar(PLANTILLA,'croquis',function(){
     var p=dibujos[i++];
-    return p?'<g id="croquis">\n'+p.rayas()+'</g>':'<g id="croquis"></g>';
+    return p?p.rayas():'';
+  });
+  return rellenar(s,'medidas',function(){
+    var p=conMedidas[j++];
+    return p&&p.medidas?p.medidas():'';
   });
 }
 function nombreDelArchivo(){

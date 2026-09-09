@@ -49,6 +49,50 @@ class ExportarHtmlTest {
     }
 
     @Test
+    fun `cada hoja de dibujo lleva su grupo de medidas`() {
+        val html = ExportarHtml.paginas(tresHojas(), "Proyecto")
+        val lienzo = html.substringAfter("<div id=\"lienzo\">").substringBefore("<div id=\"pizarra\"")
+        // Una por dibujo, vacía, para que guardar sea rellenarla (ver `VISOR_DIBUJO`).
+        assertEquals(3, Regex("<g id=\"medidas\"></g>").findAll(lienzo).count())
+        // Las notas no llevan medidas: solo los dibujos.
+        val notas = ExportarHtml.paginas(
+            listOf(ExportarHtml.HojaWeb.Nota("Notas", "<p>hola</p>", "#ffffff")), "Proyecto"
+        )
+        assertFalse("una nota no lleva grupo de medidas", notas.contains("id=\"medidas\""))
+        // Y al guardar se rellenan con la página, no solo en pantalla.
+        assertTrue("el guardado no reescribe las medidas", html.contains("rellenar(s,'medidas'"))
+    }
+
+    /**
+     * **El javascript del documento es sintaxis válida.** El visor se escribe a mano dentro de
+     * Kotlin, y un error de sintaxis no lo cazaría ningún test de JVM —el Kotlin lo trata como
+     * texto. Con `node` instalado se comprueba el JS entero de un documento con plano (el más
+     * completo: descompresor + visor del plano + visor del dibujo + armazón).
+     */
+    @Test
+    fun `el javascript del documento es sintaxis valida`() {
+        val plana = ExportarHtml.HojaWeb.Dibujo("Planta", svg, "#ffffff", plano = "{}")
+        val html = ExportarHtml.paginas(listOf(plana), "Proyecto")
+        val js = Regex("<script(?![^>]*class=\"(plano|datos)\")[^>]*>([\\s\\S]*?)<\\/script>")
+            .findAll(html).joinToString("\n;\n") { it.groupValues[2] }
+        assertTrue("el documento no trae su javascript", js.contains("function crearDibujo"))
+        val nodeOk = runCatching {
+            ProcessBuilder("node", "--version").redirectErrorStream(true).start()
+                .apply { waitFor() }
+        }.getOrNull()?.exitValue() == 0
+        if (!nodeOk) {
+            org.junit.Assume.assumeTrue("node no está; no se puede comprobar la sintaxis", false)
+        }
+        val archivo = java.io.File.createTempFile("pixpin-visor", ".js").apply { writeText(js) }
+        val proceso = ProcessBuilder("node", "--check", archivo.absolutePath)
+            .redirectErrorStream(true).start()
+        val salida = proceso.inputStream.bufferedReader().readText()
+        proceso.waitFor()
+        archivo.delete()
+        assertTrue("node --check falló:\n$salida", proceso.exitValue() == 0)
+    }
+
+    @Test
     fun `con una sola hoja no hay menu de paginas`() {
         val html = ExportarHtml.pagina(svg, "Mi dibujo", "#ffffff")
         assertFalse(html.contains("class=\"varias\""))
