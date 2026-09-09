@@ -6,12 +6,10 @@
 
 ## Estado al último guardado
 - WP1 `518b9a2` · WP2+3 `1092bb0` · WP4 `41426b0` · WP6 `1389ff1` · WP7 `c3bec25` ·
-  WP8 (lógica) `f8968dc` · WP9a `bdca245` · **WP5 fase-1 `6ca530a`** (empaquetado web perezoso:
-  `planoLeido` + `PlanoWeb.aJson` solo al exportar) · **estabilización caché miniaturas
-  `71194ce`** (provisional único + `Files.move` atómico; elimina el flake de
-  `PdfMiniaturasTest`) — todas pusheadas en `origin/DEEPROOT`.
+  WP8 (lógica) `f8968dc` · WP9a `bdca245` · WP9b `ddde108` · WP5 fase-1 `6ca530a` ·
+  estabilización caché miniaturas `71194ce` — todas pusheadas en `origin/DEEPROOT`.
 - **Pendientes**: WP5 fases 2-3 (raster de fondo y `devolverAlPdf` fuera del hilo principal;
-  trazo incremental opcional), WP8-UI, WP9b, WP10.
+  trazo incremental opcional), WP8-UI, WP10.
 - Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4 y las UI nuevas).
 
 ## Notas para retomar WP5 (fases 2-3), WP8-UI, WP9b y WP10
@@ -59,7 +57,7 @@
 - [x] WP6 Compartir: opciones/aviso de audio solo cuando hay audio → HECHA (`1389ff1`).
 - [x] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto → HECHA (`c3bec25`).
 - [~] WP8 Agrupación por rachas de origen en Guardar → lógica HECHA (`f8968dc`); falta plegar la UI de la LazyColumn.
-- [ ] WP9 Píldoras "hacer pin" en burbujas (IMAGEN/PAGINA; VOZ opcional) + lector PDF ligero.
+- [x] WP9 Píldoras "hacer pin" en burbujas (IMAGEN/PAGINA; VOZ opcional) + lector PDF ligero → HECHA (`bdca245` + `ddde108`: `LectorPdfActivity`, manifest y toque de PDF-ARCHIVO).
 - [ ] WP10 Hoja de apuntes rápida (block de notas) con 3 dedos en canvas 2D/3D/Markdown.
 - [ ] (Descartado por el usuario) Sección-pizarra acumuladora de pines copiados — era para PC.
 
