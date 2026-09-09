@@ -588,6 +588,13 @@ private fun PaginaDeProyecto(
     var menu by remember(p.id) { mutableStateOf(false) }
     val tick = remember(p) { p.tocado }
 
+    // **La lista también mira la revisión de sus escenas.** Borrar una lámina del lienzo en
+    // el editor no toca `tocado` del proyecto: si la lista solo dependiera de eso, al volver
+    // seguiría enseñando la hoja borrada. Cada guardado del editor sube la revisión de la
+    // escena ([ExcalidrawStore.revisionDe]), así que se mete en la clave y la lista se rehace.
+    val revisionDeLosLienzos = p.hojas.mapNotNull { it.dibujo }.distinct()
+        .joinToString(",") { ExcalidrawStore.revisionDe(it).toString() }
+
     // **Anotadas de verdad, no «abiertas alguna vez».** A una hoja se le asigna
     // su dibujo al tocarla y el editor guarda al salir aunque no se haya trazado
     // nada: contando archivos, abrir cinco páginas y cerrarlas decía que el
@@ -613,7 +620,7 @@ private fun PaginaDeProyecto(
     } else {
         // `produceState` conserva lo último mientras rehace, así que la lista no
         // se queda vacía al volver de anotar una hoja.
-        produceState(emptyList<HojasDelProyecto.Pagina>(), p, tick) {
+        produceState(emptyList<HojasDelProyecto.Pagina>(), p, tick, revisionDeLosLienzos) {
             value = withContext(Dispatchers.IO) {
                 HojasDelProyecto.paginas(p) { dibujo ->
                     // Solo los marcos, y recordados: la lista no necesita el dibujo entero.

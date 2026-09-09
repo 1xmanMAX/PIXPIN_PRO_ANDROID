@@ -545,7 +545,8 @@ class DrawEditorActivity : ComponentActivity() {
             // el que escribe después escribe el estado más nuevo.
             val escena = controller.scene
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                ExcalidrawStore.guardar(this@DrawEditorActivity, dibujoId, escena)
+                val escrito = ExcalidrawStore.guardar(this@DrawEditorActivity, dibujoId, escena)
+                if (escrito != null) purgarHojasDeMarcosPerdidos(escena)
             }
         }
     }
@@ -556,7 +557,35 @@ class DrawEditorActivity : ComponentActivity() {
     private fun guardarYa() {
         guardadoPendiente?.cancel()
         guardadoPendiente = null
-        ExcalidrawStore.guardar(this, dibujoId, controller.scene)
+        val escena = controller.scene
+        if (ExcalidrawStore.guardar(this, dibujoId, escena) != null) {
+            purgarHojasDeMarcosPerdidos(escena)
+        }
+    }
+
+    /**
+     * **Si un lienzo pierde marcos, el proyecto pierde las hojas que apuntaban a ellos.**
+     *
+     * Borrar una lámina del cuaderno (un marco) dentro del editor solo escribe la escena: las
+     * hojas del proyecto que vivían de ese marco —`Hoja` con `marco` puesto— se quedaban
+     * colgadas y, al no encontrar su marco, se enseñaban como el lienzo entero, duplicando la
+     * hoja principal. Aquí se mira cada proyecto con hojas de este dibujo y se quita la hoja
+     * cuyo marco ya no exista. El lienzo entero (`Hoja` sin `marco`) se conserva siempre, y el
+     * proyecto solo se reescribe si algo cambió. Ver [Proyectos.sinHoja].
+     */
+    private fun purgarHojasDeMarcosPerdidos(escena: com.forge.pixpin.motor.Scene) {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val ahora = System.currentTimeMillis()
+        val vivos = escena.marcos.map { it.id }.toHashSet()
+        for (proyecto in app.proyectos.proyectos.value) {
+            var cambiado = proyecto
+            for (hoja in proyecto.hojas) {
+                if (hoja.dibujo == dibujoId && hoja.marco != null && hoja.marco !in vivos) {
+                    cambiado = Proyectos.sinHoja(cambiado, hoja.id, ahora)
+                }
+            }
+            if (cambiado != proyecto) app.proyectos.guardar(cambiado)
+        }
     }
 
     /**

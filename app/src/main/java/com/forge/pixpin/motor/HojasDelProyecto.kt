@@ -88,7 +88,23 @@ object HojasDelProyecto {
                 hoja.dibujo != null -> {
                     val escena = escenaDe(hoja.dibujo!!)
                     val marcos = escena?.marcos.orEmpty()
-                    if (marcos.isEmpty()) {
+                    // **Una hoja que apunta a un marco concreto es ese marco, y solo él.**
+                    // Si el marco ya no existe —se borró dentro del lienzo— la hoja no sale:
+                    // desplegar el lienzo entero en su lugar era como duplicar la hoja
+                    // principal (Hoja sin marco) que sí se conserva.
+                    if (hoja.marco != null) {
+                        val marco = marcos.firstOrNull { it.id == hoja.marco }
+                            ?: return@flatMap emptyList()
+                        listOf(
+                            Pagina(
+                                hoja = hoja,
+                                marco = marco.id,
+                                nombre = marco.name?.takeIf { it.isNotBlank() }
+                                    ?: marco.text?.takeIf { it.isNotBlank() }
+                                    ?: hoja.nombre.ifBlank { "1" }
+                            )
+                        )
+                    } else if (marcos.isEmpty()) {
                         // Un lienzo sin marcos es una lámina y ya: lo que haya
                         // dibujado, entero. Es lo que hace la exportación.
                         listOf(Pagina(hoja, nombre = hoja.nombre.ifBlank { "Lienzo" }))

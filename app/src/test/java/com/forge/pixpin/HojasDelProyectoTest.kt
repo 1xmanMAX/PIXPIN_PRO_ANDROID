@@ -72,6 +72,25 @@ class HojasDelProyectoTest {
         assertNull(paginas[0].marco)
     }
 
+    /** Una hoja que guarda un marco concreto es ese marco, y solo él. Si el marco ya no
+     * existe —se borró dentro del lienzo— la hoja no sale: desplegar el lienzo entero era
+     * como duplicar la hoja principal. Ver `DrawEditorActivity.purgarHojasDeMarcosPerdidos`. */
+    @Test
+    fun `la hoja de un marco borrado no se abre como lienzo entero`() {
+        val p = Proyecto(
+            id = "p", nombre = "Obra",
+            hojas = listOf(Hoja(id = "h1", dibujo = "d1", marco = "m1"))
+        )
+        // El marco m1 ya no está en la escena: la hoja no puede salir entera por su lado.
+        val sinMarco = HojasDelProyecto.paginas(p) { escenaCon(marco("m2")) }
+        assertEquals("el marco borrado no puede desplegar el lienzo entero", 0, sinMarco.size)
+        // Con su marco vivo, es una sola página con el nombre del marco.
+        val conMarco = HojasDelProyecto.paginas(p) { escenaCon(marco("m1", "Planta")) }
+        assertEquals(1, conMarco.size)
+        assertEquals("m1", conMarco[0].marco)
+        assertEquals("Planta", conMarco[0].nombre)
+    }
+
     @Test
     fun `un lienzo que no se puede leer sigue siendo una lamina`() {
         val p = Proyecto(id = "p", nombre = "Obra", hojas = listOf(Hoja(id = "h1", dibujo = "d1")))
