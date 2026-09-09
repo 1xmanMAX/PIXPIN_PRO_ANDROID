@@ -888,19 +888,32 @@ function cotaBajoElDedo(p,k){
 }
 
 /**
- * Un toque midiendo. Devuelve `true` si ha cogido una cota, para que quien llama sepa que el
- * dedo está ocupado y no lo use además para pasear el papel.
+ * Coger una cota que ya está puesta. Devuelve `true` si la ha cogido.
+ *
+ * Se guarda **dónde estaba** para poder devolverla si el gesto resulta no ser un arrastre
+ * —por ejemplo si aparece un segundo dedo y lo que se quería era hacer zoom—. Ver
+ * [cancelarArrastreDeCota].
  */
-function medirEn(px,py){
+function cogerCotaEn(px,py){
   var k=aEscena(0,0).k, p=aEscena(px,py);
   var cogida=cotaBajoElDedo(p,k);
-  if(cogida){
-    agarreCota=cogida.i;
-    arrastreDeCota={i:cogida.i,parte:cogida.parte,x:p.x,y:p.y};
-    api.decir(cogida.parte==='todo'?'Cota cogida: arrástrala':'Punta cogida: arrástrala');
-    pintarMedida();
-    return true;
-  }
+  if(!cogida) return false;
+  var c=cotas[cogida.i];
+  agarreCota=cogida.i;
+  arrastreDeCota={i:cogida.i,parte:cogida.parte,x:p.x,y:p.y,
+                  antes:{a:{x:c.a.x,y:c.a.y},b:{x:c.b.x,y:c.b.y}}};
+  return true;
+}
+/** Devolver la cota a donde estaba y soltarla, sin dar la medida por buena. */
+function cancelarArrastreDeCota(){
+  if(!arrastreDeCota) return;
+  var c=cotas[arrastreDeCota.i];
+  if(c&&arrastreDeCota.antes){ c.a=arrastreDeCota.antes.a; c.b=arrastreDeCota.antes.b; }
+  arrastreDeCota=null; agarreCota=null; pintarMedida();
+}
+/** Poner un punto de medida donde se ha tocado. */
+function ponerPuntoDeMedida(px,py){
+  var k=aEscena(0,0).k, p=aEscena(px,py);
   if(!medida){                       // primer punto
     medida={a:imantar(p,k)};
     api.decir('Primer punto puesto: toca el segundo');
@@ -913,7 +926,6 @@ function medirEn(px,py){
     medida=null;
   }
   pintarMedida();
-  return false;
 }
 var arrastreDeCota=null;
 function arrastrarCota(px,py){
@@ -980,7 +992,9 @@ caja.addEventListener('pointerdown',function(e){
     var q=loQueHace(e);
     if(q==='lapiz'||q==='marcador') empezarTrazo(e.clientX,e.clientY,q==='marcador',e.pointerId);
     else if(q==='goma') borrarEn(e.clientX,e.clientY);
-    else if(q==='medir'){ if(medirEn(e.clientX,e.clientY)) cotaConElDedo=e.pointerId; }
+    // **El lápiz sí mide al posarse**: es una punta, no pellizca, y esperar al levantarlo
+    // solo lo haría torpe. Lo que espera es el dedo. Ver [tocaMedir].
+    else if(q==='medir'){ if(cogerCotaEn(e.clientX,e.clientY)) cotaConElDedo=e.pointerId; else ponerPuntoDeMedida(e.clientX,e.clientY); }
     else if(!arrastre){ arrastre={id:e.pointerId,x:e.clientX,y:e.clientY}; api.agarrado(true); }
     return;
   }
@@ -989,13 +1003,30 @@ caja.addEventListener('pointerdown',function(e){
     if(trazo) return;   // el lápiz está escribiendo: el dedo no le quita el trazo
     if(q1==='lapiz'||q1==='marcador') empezarTrazo(e.clientX,e.clientY,q1==='marcador',e.pointerId);
     else if(q1==='goma') borrarEn(e.clientX,e.clientY);
-    else if(q1==='medir'){ if(medirEn(e.clientX,e.clientY)) cotaConElDedo=e.pointerId; }
+    // **Midiendo, el dedo no hace nada todavía.**
+    //
+    // El primer dedo de un pellizco es idéntico a un toque: no hay forma de distinguirlos
+    // hasta que pasa algo más —llega el segundo dedo, se mueve, o se levanta—. Poniendo el
+    // punto al posarse, cada zoom de dos dedos dejaba una medida a medias sin querer, que es
+    // lo que reportó el usuario el 9-sep-2026. Así que se apunta lo que ha pasado y **se
+    // decide al levantar**: si no llegó un segundo dedo y no se movió, es un toque y pone
+    // punto. Ver [soltar].
+    else if(q1==='medir'){
+      tocaMedir={id:e.pointerId, x:e.clientX, y:e.clientY, movido:false, cogida:false};
+      if(cogerCotaEn(e.clientX,e.clientY)){ tocaMedir.cogida=true; cotaConElDedo=e.pointerId; }
+    }
     else { arrastre={id:e.pointerId,x:e.clientX,y:e.clientY}; api.agarrado(true); }
   } else if(dd.length===2){
     // El segundo dedo encuadra: un trazo del dedo a medias se queda como iba; el del lápiz
     // sigue, que es de otra mano.
     arrastre=null;
     if(trazo&&trazo.puntero!==undefined&&dedos.get(trazo.puntero)&&dedos.get(trazo.puntero).tipo!=='pen') soltarTrazo();
+    // **Esto era un pellizco desde el principio.** Se deshace lo que el primer dedo hubiera
+    // empezado a medir: la cota que hubiera cogido vuelve a donde estaba y no se pone punto.
+    if(tocaMedir){
+      if(tocaMedir.cogida) cancelarArrastreDeCota();
+      cotaConElDedo=null; tocaMedir=null;
+    }
     pellizco={d:Math.hypot(dd[0].x-dd[1].x,dd[0].y-dd[1].y)};
   }
 });
@@ -1019,6 +1050,21 @@ caja.addEventListener('pointermove',function(e){
   } else if(!trazo&&!pellizco&&loQueHace(e)==='goma'){
     var mg=marco(), lg=muestras(e);
     for(var g=0;g<lg.length;g++)borrarEn(lg[g].clientX,lg[g].clientY,mg);
+  } else if(tocaMedir&&tocaMedir.id===e.pointerId&&!pellizco){
+    // Hasta que no se mueva de verdad no es un arrastre: un dedo tiembla, y un temblor no
+    // puede convertir un toque en otra cosa. El umbral se mide en pantalla.
+    if(!tocaMedir.movido&&Math.hypot(e.clientX-tocaMedir.x,e.clientY-tocaMedir.y)>8) tocaMedir.movido=true;
+    if(tocaMedir.movido){
+      if(tocaMedir.cogida) arrastrarCota(e.clientX,e.clientY);
+      else {
+        // **Y midiendo, un dedo que arrastra pasea el papel**, como en cualquier otro modo.
+        // Antes no hacía nada: para moverse por el plano había que salir de medir.
+        var km=aEscena(0,0).k;
+        v.x-=(e.clientX-tocaMedir.x)*km; v.y-=(e.clientY-tocaMedir.y)*km;
+        tocaMedir.x=e.clientX; tocaMedir.y=e.clientY;
+        aplicar();
+      }
+    }
   } else if(cotaConElDedo===e.pointerId){
     arrastrarCota(e.clientX,e.clientY);
   } else if(arrastrando(e)){
@@ -1030,8 +1076,16 @@ caja.addEventListener('pointermove',function(e){
 });
 // Qué dedo trae una cota cogida: mientras la trae, ese dedo no pasea el papel.
 var cotaConElDedo=null;
+// El dedo que está midiendo, mientras no se sabe todavía qué quiere. Ver el `pointerdown`.
+var tocaMedir=null;
 function soltar(e){
   dedos.delete(e.pointerId);
+  if(tocaMedir&&tocaMedir.id===e.pointerId){
+    // Ni segundo dedo ni movimiento: era un toque, y ahora sí se pone el punto.
+    if(!tocaMedir.movido&&!tocaMedir.cogida) ponerPuntoDeMedida(e.clientX,e.clientY);
+    else if(tocaMedir.cogida&&!tocaMedir.movido) cancelarArrastreDeCota();  // se rozó y ya
+    tocaMedir=null;
+  }
   if(cotaConElDedo===e.pointerId){ cotaConElDedo=null; soltarCota(); }
   if(losDedos().length<2)pellizco=null;
   if(trazo&&trazo.puntero===e.pointerId) soltarTrazo();
