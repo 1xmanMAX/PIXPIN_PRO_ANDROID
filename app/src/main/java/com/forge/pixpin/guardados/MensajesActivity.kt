@@ -2830,7 +2830,8 @@ class MensajesActivity : ComponentActivity() {
                             Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) {
                                 PastillaDeAtajo(
                                     icono = Icons.Filled.OpenInNew,
-                                    descripcion = getString(com.forge.pixpin.R.string.guardados_pinear)
+                                    descripcion = getString(com.forge.pixpin.R.string.guardados_pinear),
+                                    sobreContenido = true
                                 ) { pinear(m) }
                             }
                         }
@@ -2846,7 +2847,8 @@ class MensajesActivity : ComponentActivity() {
                             Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) {
                                 PastillaDeAtajo(
                                     icono = Icons.Filled.OpenInNew,
-                                    descripcion = getString(com.forge.pixpin.R.string.guardados_pinear)
+                                    descripcion = getString(com.forge.pixpin.R.string.guardados_pinear),
+                                    sobreContenido = true
                                 ) { pinear(m) }
                             }
                         }
@@ -4053,9 +4055,18 @@ class MensajesActivity : ComponentActivity() {
         icono: androidx.compose.ui.graphics.vector.ImageVector,
         descripcion: String,
         trabajando: Boolean = false,
+        sobreContenido: Boolean = false,
         alPulsar: () -> Unit
     ) {
         val tinta = ColoresDelChat.hora()
+        // **Sobre una foto o una página, el fondo translúcido se funde con el documento.** Para
+        // esas se usa un fondo sólido con borde, que se distingue de cualquier contenido.
+        val fondo = if (sobreContenido) {
+            MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+        } else {
+            tinta.copy(alpha = ALFA_DEL_FONDO_DEL_BOTON)
+        }
+        val tintaDelIcono = if (sobreContenido) MaterialTheme.colorScheme.onSurfaceVariant else tinta
         Box(
             Modifier.padding(start = 8.dp).height(CAJA_DE_LA_ONDA),
             contentAlignment = Alignment.Center
@@ -4064,7 +4075,16 @@ class MensajesActivity : ComponentActivity() {
                 Modifier
                     .size(ANCHO_DEL_BOTON_DE_TEXTO, ALTO_DEL_BOTON_DE_TEXTO)
                     .clip(RoundedCornerShape(RADIO_DEL_BOTON_DE_TEXTO))
-                    .background(tinta.copy(alpha = ALFA_DEL_FONDO_DEL_BOTON))
+                    .background(fondo)
+                    .then(
+                        if (sobreContenido) {
+                            Modifier.border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                RoundedCornerShape(RADIO_DEL_BOTON_DE_TEXTO)
+                            )
+                        } else Modifier
+                    )
                     .then(if (trabajando) Modifier.elBordeQueGira(tinta) else Modifier)
                     .clickable(enabled = !trabajando, onClick = alPulsar),
                 contentAlignment = Alignment.Center
@@ -4072,7 +4092,7 @@ class MensajesActivity : ComponentActivity() {
                 Icon(
                     icono,
                     contentDescription = descripcion,
-                    tint = tinta,
+                    tint = tintaDelIcono,
                     modifier = Modifier.size(16.dp)
                 )
             }
