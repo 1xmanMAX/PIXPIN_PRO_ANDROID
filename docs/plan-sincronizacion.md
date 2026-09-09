@@ -34,9 +34,11 @@ De ahí sale lo demás casi solo:
 
 ### 1 · Identidad: la letra del dispositivo y el grupo
 
-- Al arrancar por primera vez, el dispositivo se da una **letra** libre (`a`, `b`, `t`, `l`…)
-  y un nombre legible («Teléfono de Max»). La letra **no se puede cambiar** una vez que ha
-  repartido señas: cambiarla renombraría cosas que ya viajaron.
+- Al arrancar por primera vez, el dispositivo **se reparte solo** una letra libre (`a`, `b`,
+  `t`…) — decidido el 9-sep-2026, ver las preguntas del final— y el usuario le pone un nombre
+  legible («Teléfono de Max»), que es lo que se ve al sincronizar. La letra es de la máquina y
+  **no se puede cambiar** una vez que ha repartido señas: cambiarla renombraría cosas que ya
+  viajaron.
 - **El grupo** es un secreto compartido. Un dispositivo lo crea y enseña un código corto; los
   demás lo teclean. De ese secreto salen (a) la prueba de que son del mismo grupo y (b) la
   clave con la que se cifra lo que viaja.
@@ -133,8 +135,12 @@ eso solo lo puede hacer el usuario.
 
 ## Preguntas abiertas
 
-1. **La letra, ¿la elige el usuario o se reparte sola?** Elegirla es bonito («l» de laptop)
-   pero se agota y choca. Propongo: se reparte sola y **se puede poner un nombre** al aparato.
+1. ~~**La letra, ¿la elige el usuario o se reparte sola?**~~ **Decidido (9-sep-2026): se
+   reparte sola.** El usuario le pone un **nombre** al aparato («Teléfono de Max»), que es lo
+   que se ve en la lista al sincronizar; la letra es de la máquina y no se enseña salvo dentro
+   de la seña (`5b`). Elegirla a mano era bonito —«l» de laptop— pero se agota, choca entre
+   aparatos, y obligaría a resolver ese choque justo en el momento de emparejar, que es cuando
+   menos ganas hay de leer un aviso.
 2. **¿Sincroniza todo o por proyectos?** Todo es más simple de explicar; por proyectos evita
    traerse a la tableta los 300 MB de planos del trabajo.
 3. **¿Hace falta que sea segura de verdad?** Cifrar lo que viaja con la clave del grupo cuesta
