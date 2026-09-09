@@ -1631,6 +1631,8 @@ class DrawEditorActivity : ComponentActivity() {
                             planoVectorial?.soltar()
                             planoVectorial = null
                             planoParaLaWeb = null
+                            planoLeido = null
+                            anchoDelPlano = 0.0
                             if (ruta != null && ancho != null && mosaico == null) {
                                 prepararElMosaico(ruta, ancho, fondo!!.height.toDouble())
                             }
@@ -3446,12 +3448,17 @@ class DrawEditorActivity : ComponentActivity() {
     private var planoVectorial by mutableStateOf<PlanoEnPantalla?>(null)
 
     /**
-     * **El mismo plano, ya empaquetado para la página web.**
+     * **El plano leído como geometría**, para poder empaquetarlo para la web si se exporta.
      *
-     * Se hace al abrirlo, junto con el de la pantalla: lo caro es leer el PDF, y hacerlo dos
-     * veces —una para verlo y otra para exportarlo— es lo que convertía exportar un plano
-     * grande en una espera larguísima. Ver [PlanoWeb] y [compartirHtml].
+     * La lectura es lo caro; una vez leído, [PlanoWeb.aJson] se hace solo cuando hace falta
+     * (al exportar) y se recuerda en [planoParaLaWeb]. Antes el empaquetado se hacía siempre
+     * al abrir —aunque nadie fuera a exportar— y un plano grande tardaba el doble en
+     * aparecer en pantalla. Ver [PlanoWeb] y [compartirHtml].
      */
+    private var planoLeido: PlanoDePdf.Plano? = null
+    private var anchoDelPlano = 0.0
+
+    /** El mismo plano, ya empaquetado para la página web, o null si no hace falta aún. */
     private var planoParaLaWeb: String? = null
 
     /** Si se está eligiendo qué lleva la página web antes de compartirla. */
@@ -3469,16 +3476,17 @@ class DrawEditorActivity : ComponentActivity() {
             runCatching {
                 val plano = PlanoDePdf.deArchivo(ruta, paginaDeFondo) ?: return@runCatching null
                 if (!plano.valeLaPena || plano.sinEntender > 0) return@runCatching null
-                // **Y de paso, el mismo plano listo para la web.** Leer el PDF es lo caro;
-                // hacerlo otra vez al exportar era lo que hacía la exportación casi imposible
-                // con un plano grande. Ver [compartirHtml].
-                val web = runCatching { PlanoWeb.aJson(plano, ancho) }.getOrNull()
-                PlanoEnPantalla.de(plano, ancho) to web
+                // **Solo la pantalla: la web se empaqueta cuando se exporta.** Empaquetar aquí,
+                // aunque nadie fuera a exportar, hacía que un plano grande tardara el doble en
+                // aparecer (ver [planoLeido]/[planoParaLaWeb]).
+                PlanoEnPantalla.de(plano, ancho) to plano
             }.getOrNull()
         }
         val leido = hecho?.first ?: return false
         if (pdfDeFondo != ruta) return false
-        planoParaLaWeb = hecho.second
+        planoLeido = hecho.second
+        anchoDelPlano = ancho
+        planoParaLaWeb = null
         // El obrero que pinta la lámina, y a quién avisar cuando esté. Ver
         // [PlanoEnPantalla.pintar].
         planoVectorial = leido.conObrero(lifecycleScope) { runOnUiThread { tickDelMosaico++ } }
@@ -3540,6 +3548,11 @@ class DrawEditorActivity : ComponentActivity() {
             // no se puede —una página escaneada, que por dentro es una imagen— se manda la
             // página al detalle, como hasta ahora. Ver [PlanoWeb] y [PdfDoc.paraLaWeb].
             val plano = planoParaLaWeb
+                ?: planoLeido?.let { p ->
+                    // Empaquetado perezoso: se hace aquí, al exportar, y se recuerda para que
+                    // exportar dos veces no lo repita. Ver [traerElPlanoEnLineas].
+                    PlanoWeb.aJson(p, anchoDelPlano).also { planoParaLaWeb = it }
+                }
                 ?: pdfDeFondo?.takeIf { paginaDeFondo >= 0 && papel != null }
                     ?.let { PlanoWeb.deArchivo(it, paginaDeFondo, papel!!.width.toDouble()) }
             val fina = if (plano != null) null else pdfDeFondo?.takeIf { paginaDeFondo >= 0 }
