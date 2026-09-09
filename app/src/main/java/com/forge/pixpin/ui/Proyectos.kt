@@ -120,6 +120,7 @@ import com.forge.pixpin.motor.PdfMiniaturas
 import com.forge.pixpin.motor.PlanoWeb
 import com.forge.pixpin.motor.Proyecto
 import com.forge.pixpin.motor.Proyectos
+import com.forge.pixpin.motor.TramosDeLaTira
 import com.forge.pixpin.motor.Scene
 import com.forge.pixpin.motormd.Markdown
 import com.forge.pixpin.motormd.MarkdownText
@@ -1458,19 +1459,44 @@ private fun TiraDeHojas(
     deLado: Boolean = false
 ) {
     val estado = remember(p.id) { LazyListState() }
+    // **Qué montones están abiertos.** Vive aquí y por proyecto: es una forma de mirar la
+    // tira, no algo del documento, y no tiene por qué sobrevivir a cambiar de proyecto.
+    // Ver [TramosDeLaTira].
+    var abiertos by remember(p.id) { mutableStateOf(emptySet<String>()) }
+    val tramos = remember(paginas, abiertos) { TramosDeLaTira.de(paginas, abiertos) }
     val hojas: LazyListScope.() -> Unit = {
-        items(paginas.size, key = { it }) { i ->
-            HojaDelProyecto(
-                app = app,
-                p = p,
-                pagina = paginas[i],
-                marcada = paginas[i].clave in marcadas,
-                onMarcar = { onMarcar(paginas[i].clave) },
-                onElegir = { onFoco(i) },
-                anotada = paginas[i].hoja.dibujo in anotadas,
-                enFoco = i == enFoco,
-                pedirMiniatura = pedirMiniaturas
-            )
+        items(tramos.size, key = { tramos[it].primera.clave }) { t ->
+            val tramo = tramos[t]
+            val i = tramo.desde
+            if (tramo.montón) {
+                MontonDeHojas(
+                    app = app, p = p, tramo = tramo,
+                    // Un montón se ve marcado cuando **todas** las suyas lo están: a medias
+                    // sería mentira, y decir que sí porque una lo esté haría creer que se van
+                    // a exportar las diez.
+                    marcadas = marcadas, anotadas = anotadas,
+                    // Tocarlo lo abre. **No sube nada a la portada**: uno abre el montón para
+                    // ver qué hay dentro, y cambiarle además la portada por la primera sería
+                    // hacer dos cosas con un toque.
+                    onAbrir = { abiertos = abiertos + tramo.primera.clave },
+                    // Y mantenerlo pulsado marca las suyas de golpe, que es para lo que
+                    // sirve tener las diez páginas de un PDF juntas en un sitio.
+                    onMarcarTodas = { tramo.paginas.forEach { onMarcar(it.clave) } },
+                    pedirMiniatura = pedirMiniaturas
+                )
+            } else {
+                HojaDelProyecto(
+                    app = app,
+                    p = p,
+                    pagina = paginas[i],
+                    marcada = paginas[i].clave in marcadas,
+                    onMarcar = { onMarcar(paginas[i].clave) },
+                    onElegir = { onFoco(i) },
+                    anotada = paginas[i].hoja.dibujo in anotadas,
+                    enFoco = i == enFoco,
+                    pedirMiniatura = pedirMiniaturas
+                )
+            }
         }
     }
     // **De pie va debajo; tumbado, al lado.**
@@ -1717,6 +1743,75 @@ private fun deQueEs(h: Hoja): String? = when {
     h.pagina != null -> null
     h.dibujo != null -> "2D"
     else -> null
+}
+
+/**
+ * **Un montón de la tira**: las seguidas que salen del mismo sitio, plegadas en una.
+ *
+ * Se ve como lo que es —un taco de hojas, con dos cantos asomando detrás— y lleva cuántas
+ * son. Tocarlo lo abre y ya no se vuelve a plegar mientras se esté mirando el proyecto: quien
+ * lo abre es porque quiere andar por dentro, y volver a plegarlo solo bajo el dedo sería
+ * quitarle lo que acaba de pedir. Ver [TramosDeLaTira].
+ *
+ * La miniatura es la de su **primera** página, sin más: dibujar las diez para enseñar un taco
+ * sería gastar justo lo que este montón viene a ahorrar.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun MontonDeHojas(
+    app: PixPinApp,
+    p: Proyecto,
+    tramo: TramosDeLaTira.Tramo,
+    marcadas: Set<String>,
+    anotadas: Set<String>,
+    onAbrir: () -> Unit,
+    onMarcarTodas: () -> Unit,
+    pedirMiniatura: Boolean
+) {
+    val todasMarcadas = tramo.paginas.all { it.clave in marcadas }
+    Box(Modifier.padding(end = 6.dp)) {
+        // Los dos cantos de detrás. Son el dibujo entero del «hay más debajo»: sin ellos, un
+        // número en una esquina se lee como el número de página y no como cuántas hay.
+        Box(
+            Modifier
+                .padding(start = 6.dp, top = 6.dp)
+                .matchParentSize()
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Box(
+            Modifier
+                .padding(start = 3.dp, top = 3.dp)
+                .matchParentSize()
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        Box(
+            Modifier.combinedClickable(onClick = onAbrir, onLongClick = onMarcarTodas)
+        ) {
+            HojaDelProyecto(
+                app = app,
+                p = p,
+                pagina = tramo.primera,
+                marcada = todasMarcadas,
+                onMarcar = onMarcarTodas,
+                onElegir = onAbrir,
+                anotada = tramo.primera.hoja.dibujo in anotadas,
+                pedirMiniatura = pedirMiniatura
+            )
+            Text(
+                "${tramo.paginas.size}",
+                fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 6.dp, vertical = 1.dp)
+            )
+        }
+    }
 }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
