@@ -164,3 +164,55 @@ fun relleno(sitio: Sitio): Relleno = Relleno(
     fin = if (sitio.ultimoDelGrupo) 18 else 12,
     abajo = 7
 )
+
+// -----------------------------------------------------------------------------------
+// Agrupación por origen (lo que se guardó junto, junto se enseña)
+// -----------------------------------------------------------------------------------
+
+/**
+ * De qué documento viene un mensaje, a efectos de agrupar las miniaturas.
+ *
+ * Tres familias se agrupan cuando van seguidas: las páginas de un mismo PDF
+ * (comparten [Mensaje.ruta]), las hojas de un mismo lienzo (comparten
+ * [Mensaje.referencia]) y las notas de voz. El resto —fotos, archivos sueltos,
+ * notas— no tiene origen que agrupar y cada uno va por su cuenta. `null`
+ * significa «no agrupar».
+ */
+fun claveDeOrigen(m: Mensaje): String? = when (m.clase) {
+    Clase.PAGINA -> m.ruta?.let { "pdf:$it" }
+    Clase.DIBUJO -> m.referencia?.let { "lienzo:$it" }
+    Clase.VOZ -> "voz:${m.proyecto.orEmpty()}"
+    else -> null
+}
+
+/** Un tramo seguido de mensajes del mismo origen: de [desde] a [hasta], ambos dentro. */
+data class RachaDeOrigen(val clave: String, val desde: Int, val hasta: Int) {
+    val tamano: Int get() = hasta - desde + 1
+}
+
+/**
+ * Las rachas seguidas del mismo origen dentro de una lista.
+ *
+ * Solo cuentan las rachas de **dos o más** (una página sola de un PDF no es un
+ * grupo), y solo mientras no se interrumpan: si entre dos páginas del mismo PDF
+ * se cuela una foto, las dos páginas van por su lado. Devuelve los índices de
+ * cada racha sobre [mensajes], para que quien pinta las pueda plegar sin copiar
+ * la lista.
+ */
+fun rachasDeOrigen(mensajes: List<Mensaje>): List<RachaDeOrigen> {
+    val salida = ArrayList<RachaDeOrigen>()
+    var desde = 0
+    var clave: String? = null
+    for (i in mensajes.indices) {
+        val c = claveDeOrigen(mensajes[i])
+        if (c != clave) {
+            val racha = RachaDeOrigen(clave ?: "", desde, i - 1)
+            if (clave != null && racha.tamano > 1) salida += racha
+            clave = c
+            desde = i
+        }
+    }
+    val ultima = RachaDeOrigen(clave ?: "", desde, mensajes.size - 1)
+    if (clave != null && ultima.tamano > 1) salida += ultima
+    return salida
+}

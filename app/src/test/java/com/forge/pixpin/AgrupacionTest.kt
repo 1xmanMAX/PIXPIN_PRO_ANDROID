@@ -153,4 +153,82 @@ class AgrupacionTest {
         assertEquals(12, agrupado.fin)
         assertEquals(Relleno(inicio = 12, arriba = 7, fin = 18, abajo = 7), conCola)
     }
+
+    // ---- Rachas por origen ------------------------------------------------
+
+    private fun m(
+        id: String,
+        clase: Clase,
+        ruta: String? = null,
+        referencia: String? = null,
+        proyecto: String? = null
+    ) = Mensaje(id = id, cuando = 0, clase = clase, ruta = ruta, referencia = referencia, proyecto = proyecto)
+
+    @Test
+    fun `tres paginas del mismo pdf se agrupan`() {
+        val rachas = rachasDeOrigen(
+            listOf(
+                m("p1", Clase.PAGINA, ruta = "/plano.pdf"),
+                m("p2", Clase.PAGINA, ruta = "/plano.pdf"),
+                m("p3", Clase.PAGINA, ruta = "/plano.pdf")
+            )
+        )
+        assertEquals(listOf(RachaDeOrigen("pdf:/plano.pdf", 0, 2)), rachas)
+    }
+
+    @Test
+    fun `una foto en medio corta la racha del pdf`() {
+        val rachas = rachasDeOrigen(
+            listOf(
+                m("p1", Clase.PAGINA, ruta = "/plano.pdf"),
+                m("f1", Clase.IMAGEN),
+                m("p2", Clase.PAGINA, ruta = "/plano.pdf")
+            )
+        )
+        assertTrue("la foto rompe el grupo", rachas.isEmpty())
+    }
+
+    @Test
+    fun `hojas de lienzos distintos son grupos distintos`() {
+        val rachas = rachasDeOrigen(
+            listOf(
+                m("d1", Clase.DIBUJO, referencia = "escena-1"),
+                m("d2", Clase.DIBUJO, referencia = "escena-1"),
+                m("d3", Clase.DIBUJO, referencia = "escena-2"),
+                m("d4", Clase.DIBUJO, referencia = "escena-2")
+            )
+        )
+        assertEquals(
+            listOf(RachaDeOrigen("lienzo:escena-1", 0, 1), RachaDeOrigen("lienzo:escena-2", 2, 3)),
+            rachas
+        )
+    }
+
+    @Test
+    fun `las notas de voz van juntas aunque no lleven transcripcion`() {
+        val rachas = rachasDeOrigen(
+            listOf(
+                m("v1", Clase.VOZ, ruta = "/a1.m4a", proyecto = "pr-1"),
+                m("v2", Clase.VOZ, ruta = "/a2.m4a", proyecto = "pr-1"),
+                m("v3", Clase.VOZ, ruta = "/a3.m4a", proyecto = "pr-1")
+            )
+        )
+        assertEquals(1, rachas.size)
+        assertEquals(0, rachas[0].desde)
+        assertEquals(2, rachas[0].hasta)
+    }
+
+    @Test
+    fun `una sola pagina no es un grupo`() {
+        assertTrue(rachasDeOrigen(listOf(m("p1", Clase.PAGINA, ruta = "/x.pdf"))).isEmpty())
+    }
+
+    @Test
+    fun `fotos y notas sueltas nunca se agrupan`() {
+        assertTrue(
+            rachasDeOrigen(
+                listOf(m("n1", Clase.NOTA), m("i1", Clase.IMAGEN), m("n2", Clase.NOTA))
+            ).isEmpty()
+        )
+    }
 }
