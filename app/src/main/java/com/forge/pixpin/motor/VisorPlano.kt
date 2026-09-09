@@ -392,14 +392,11 @@ function pintarGl(v, e, m){
   // De unidades del dibujo a la pantalla de la tarjeta, con el mismo encuadre que el SVG.
   gl.uniform2f(uA, 2/(e.k*an), -2/(e.k*al));
   gl.uniform2f(uB, e.ox*2/an-1-v.x*2/(e.k*an), 1-e.oy*2/al+v.y*2/(e.k*al));
-  // **De lejos, solo las largas — pero solo si hay muchísimas.** Antes se dejaban de pintar
-  // las cortas en cuanto una unidad del dibujo bajaba de un píxel, y eso es «la página cabe
-  // en la pantalla»: en una hoja de texto, donde casi todo son trazos de letras de menos de
-  // una unidad, desaparecía el 90 % del dibujo de golpe al alejarse y volvía al acercarse
-  // (lo reportó el usuario el 5-sep-2026). La tarjeta pinta un millón de rayas sin
-  // inmutarse, así que el recorte queda para los planos enormes, y solo cuando una raya
-  // corta ya no llega a un tercio de píxel del aparato: ahí sí que no se ve.
-  var soloLargas=rayasSubidas>MUCHAS_RAYAS && e.k*0.3>LARGA*dpr;
+  // **De lejos se dibuja todo.** El recorte a «solo las largas» en los planos enormes hacía
+  // que, al alejarse, las rayas cortas desaparecieran en masa y el plano se fuera vaciando
+  // conforme te alejabas (lo reportó el usuario). La tarjeta pinta un millón de rayas sin
+  // inmutarse, así que el recorte no compensa el susto de ver el dibujo deshacerse.
+  var soloLargas=false;
   var margen=e.k*8;
   var vx0=v.x-margen, vy0=v.y-margen, vx1=v.x+v.w+margen, vy1=v.y+v.h+margen;
   for(var i=0;i<tramos.length;i++){
