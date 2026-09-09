@@ -57,7 +57,7 @@
 - [x] WP5 Rendimiento de planos PDF enormes → HECHA en sus fases principales (`6ca530a` web perezosa, `0622672` raster inicial en segundo plano, `8314084` `devolverAlPdf` en segundo plano). Queda opcional: trazo incremental (elemento en curso fuera de `scene.elements`).
 - [x] WP6 Compartir: opciones/aviso de audio solo cuando hay audio → HECHA (`1389ff1`).
 - [x] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto → HECHA (`c3bec25`).
-- [~] WP8 Agrupación por rachas de origen en Guardar → lógica HECHA (`f8968dc`); falta plegar la UI de la LazyColumn.
+- [~] WP8 Agrupación por rachas de origen en Guardar → lógica + modelo de entradas HECHOS (`f8968dc` + `97a0574`); falta **plegar en la LazyColumn** de `MensajesActivity` (usar `entradasDe(tramo.mensajes)`; por cada `GrupoDeOrigen` pintar una fila compacta de miniaturas/chips con `abrir(m)` por miembro; respetar `filaDe`/`cuandoDeLaFila`/franjas).
 - [x] WP9 Píldoras "hacer pin" en burbujas (IMAGEN/PAGINA; VOZ opcional) + lector PDF ligero → HECHA (`bdca245` + `ddde108`: `LectorPdfActivity`, manifest y toque de PDF-ARCHIVO).
 - [ ] WP10 Hoja de apuntes rápida (block de notas) con 3 dedos en canvas 2D/3D/Markdown.
 - [ ] (Descartado por el usuario) Sección-pizarra acumuladora de pines copiados — era para PC.
