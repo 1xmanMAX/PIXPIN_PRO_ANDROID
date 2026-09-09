@@ -304,26 +304,12 @@ class DrawEditorActivity : ComponentActivity() {
         paginaDeFondo = intent.getIntExtra(EXTRA_PAGINA, -1)
         pdfDeFondo?.let { ruta ->
             if (paginaDeFondo >= 0) {
-                fondo = com.forge.pixpin.motor.PdfDoc.render(
-                    ruta, paginaDeFondo, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH
-                )
-                fondo?.let {
-                    medidaDeLaPagina = it.width.toDouble() to it.height.toDouble()
-                    encajarLaPagina(it.width.toDouble(), it.height.toDouble())
-                    // **Primero las líneas y solo después, si no las hay, los cuadros.**
-                    //
-                    // Las dos cosas leen el mismo PDF y las dos cuestan: hacerlas a la vez era
-                    // rasterizar ochocientos cuadros mientras se interpretaba el mismo
-                    // archivo, o sea el doble de trabajo justo en el momento en que se abre el
-                    // plano y todo va lento. Mientras se lee se ve la página de una pieza, que
-                    // es lo que ya pintaba el mosaico al empezar. Ver [traerElPlanoEnLineas].
-                    lifecycleScope.launch {
-                        val quiere = (application as? com.forge.pixpin.PixPinApp)
-                            ?.settings?.settings?.first()?.planoEnLineas ?: true
-                        val hecho = quiere && traerElPlanoEnLineas(ruta, it.width.toDouble())
-                        if (!hecho) prepararElMosaico(ruta, it.width.toDouble(), it.height.toDouble())
-                    }
-                }
+                // **La página del PDF, de telón — pero dibujada fuera de la pantalla.** En el
+                // hilo de la interfaz, antes de enseñar nada, rasterizar a 1400 px un plano
+                // grande era la espera de siempre al abrir una hoja. Ahora se dibuja en el
+                // hilo de disco y, cuando llega, se coloca el encuadre y se piden las líneas o
+                // el mosaico, igual que antes. Ver [cargarLaPaginaDeFondo].
+                lifecycleScope.launch { cargarLaPaginaDeFondo(ruta, paginaDeFondo) }
             }
         }
 
@@ -3513,6 +3499,40 @@ class DrawEditorActivity : ComponentActivity() {
         laminaFina = null
         tickDelMosaico++
         return true
+    }
+
+    /**
+     * Dibuja la página del PDF que se va a anotar y la coloca de fondo.
+     *
+     * Fuera del hilo de la pantalla, con [PdfDoc.render]; al volver se comprueba que el
+     * documento siga siendo el mismo (no se haya abierto otro entretanto) y se hace en el hilo
+     * principal lo que antes se hacía al abrir: guardar el fondo, medir la página, encuadrarla
+     * y pedir las líneas o el mosaico. El [tickDelMosaico] extra es lo que le dice al lienzo
+     * que ya hay papel que enseñar.
+     */
+    private suspend fun cargarLaPaginaDeFondo(ruta: String, pagina: Int) {
+        val bmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.forge.pixpin.motor.PdfDoc.render(ruta, pagina, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH)
+        }
+        if (pdfDeFondo != ruta) return
+        fondo = bmp
+        bmp ?: return
+        medidaDeLaPagina = bmp.width.toDouble() to bmp.height.toDouble()
+        encajarLaPagina(bmp.width.toDouble(), bmp.height.toDouble())
+        tickDelMosaico++
+        // **Primero las líneas y solo después, si no las hay, los cuadros.**
+        //
+        // Las dos cosas leen el mismo PDF y las dos cuestan: hacerlas a la vez era rasterizar
+        // ochocientos cuadros mientras se interpretaba el mismo archivo, o sea el doble de
+        // trabajo justo en el momento en que se abre el plano y todo va lento. Mientras se lee
+        // se ve la página de una pieza, que es lo que ya pintaba el mosaico al empezar. Ver
+        // [traerElPlanoEnLineas].
+        lifecycleScope.launch {
+            val quiere = (application as? com.forge.pixpin.PixPinApp)
+                ?.settings?.settings?.first()?.planoEnLineas ?: true
+            val hecho = quiere && traerElPlanoEnLineas(ruta, bmp.width.toDouble())
+            if (!hecho) prepararElMosaico(ruta, bmp.width.toDouble(), bmp.height.toDouble())
+        }
     }
 
     private fun papelDeFondo(): android.graphics.Bitmap? =
