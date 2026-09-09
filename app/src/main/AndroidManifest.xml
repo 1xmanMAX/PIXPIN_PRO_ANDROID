@@ -282,6 +282,11 @@
             android:name=".guardados.LetraActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
+        <!-- Leer un PDF guardado sin salir de la aplicación. Ver LectorPdfActivity. -->
+        <activity
+            android:name=".guardados.LectorPdfActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
         <activity
             android:name=".guardados.BibliotecaDeAudioActivity"
             android:exported="false"

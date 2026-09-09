@@ -5580,7 +5580,16 @@ class MensajesActivity : ComponentActivity() {
                     if (yaTenia == null) foto else null
                 )
             }
-            else -> m.ruta?.let { abrirFuera(it) }
+            else -> m.ruta?.let { ruta ->
+                // **Un PDF guardado se lee aquí dentro**, sin saltar a otra aplicación:
+                // es un documento de trabajo, no un archivo para mirar una vez. Los demás
+                // archivos siguen abriéndose con el visor del sistema. Ver [LectorPdfActivity].
+                if (m.clase == Clase.ARCHIVO && ruta.endsWith(".pdf", ignoreCase = true)) {
+                    LectorPdfActivity.abrir(
+                        this, ruta, m.nombre.ifBlank { m.texto.ifBlank { "Documento" } }
+                    )
+                } else abrirFuera(ruta)
+            }
         }
     }
 
