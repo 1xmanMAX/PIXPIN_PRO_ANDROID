@@ -140,6 +140,8 @@ var esc=D.e;                      // unidades del dibujo por paso del punto fijo
 var ops=null, xs=null, ys=null;   // las órdenes y los puntos, en pasos
 var cx0=null, cy0=null, cx1=null, cy1=null, cop=null, cpt=null; // la caja de cada camino
 var brochas=D.brochas||[], textos=D.textos||[], capas=D.capas||[], fotos=D.fotos||[];
+// Las imágenes distintas; cada foto de arriba dice con `i` cuál le toca. Ver PlanoWeb.
+var imagenes=D.imagenes||[];
 var encendida=[], sueltaPuesta=true, soloLineas=false;
 var vista=null, pintado=null, coste=0, pendiente=0, quieto=0, listo=false, sucio=false;
 // **La tarjeta gráfica, si la hay.** Ver [arrancarGl]: con ella las rayas viven en su memoria
@@ -185,7 +187,10 @@ function juntarConLaMascara(t, img, mascara){
     t.img=img;
   }
 }
-for(var f=0;f<fotos.length;f++)(function(t){
+// Se piden **las imágenes**, no las colocaciones: un plano coloca la misma muchas veces —81
+// veces 21, en el del usuario— y pedirla una vez por colocación era decodificar el mismo JPEG
+// ochenta veces para tener ochenta copias iguales en memoria.
+for(var f=0;f<imagenes.length;f++)(function(t){
   var img=new Image();
   img.onload=function(){
     if(!t.k){ t.img=img; sucio=true; programar(); return; }
@@ -196,7 +201,7 @@ for(var f=0;f<fotos.length;f++)(function(t){
     mascara.src=t.k;
   };
   img.src=t.u;
-})(fotos[f]);
+})(imagenes[f]);
 
 // ---- Desempaquetar ----
 // Se hace una sola vez, la primera que se mira esta página: descomprimir y recorrer un plano
@@ -588,11 +593,14 @@ function pintarFotos(v, e, m){
   var tx=(e.ox + m.dx - v.x/e.k)*m.dpr, ty=(e.oy + m.dy - v.y/e.k)*m.dpr;
   for(var i=0;i<fotos.length;i++){
     var f=fotos[i];
-    if(!f.img||!seVe(f.c)) continue;
+    // La imagen es de la lista de imágenes, no de la colocación: la misma sirve para todas
+    // sus colocaciones y cada una la pone con su matriz.
+    var im=imagenes[f.i];
+    if(!im||!im.img||!seVe(f.c)) continue;
     ctx.setTransform(z,0,0,z,tx,ty);
     ctx.transform(f.m[0],f.m[1],f.m[2],f.m[3],f.m[4],f.m[5]);
     ctx.globalAlpha=(f.o===undefined?1:f.o);
-    try{ ctx.drawImage(f.img,0,0,1,1); }catch(err){}
+    try{ ctx.drawImage(im.img,0,0,1,1); }catch(err){}
     ctx.globalAlpha=1;
   }
   ctx.setTransform(1,0,0,1,0,0);

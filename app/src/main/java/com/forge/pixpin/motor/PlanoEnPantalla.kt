@@ -504,6 +504,8 @@ class PlanoEnPantalla private constructor(
         base = null
         lamina?.bmp?.takeIf { !it.isRecycled }?.recycle()
         lamina = null
+        // Ojo: varias colocaciones comparten mapa de bits (ver [de]), así que se comprueba
+        // que no esté ya reciclado antes de soltarlo.
         for (f in fotos) if (!f.bitmap.isRecycled) f.bitmap.recycle()
     }
 
@@ -598,10 +600,18 @@ class PlanoEnPantalla private constructor(
             }
 
             val fotos = ArrayList<Foto>()
+            // **Una imagen, un mapa de bits, por muchas veces que se coloque.**
+            //
+            // Un plano repite: el del usuario (8-sep-2026) coloca 81 imágenes que son 21.
+            // Decodificando una por colocación salían **268 MB** de ARGB —medido— y de ahí
+            // que un plano con pocas líneas fuera a tirones. Se guardan por
+            // [PlanoDePdf.Imagen.id] y se comparten: `drawBitmap` no toca el mapa, así que el
+            // mismo vale para todas sus colocaciones, cada una con su matriz.
+            val decodificadas = HashMap<Int, Bitmap>()
             for (f in plano.fotos) {
-                val bmp = runCatching {
+                val bmp = decodificadas[f.id] ?: runCatching {
                     conSuMascara(f)
-                }.getOrNull() ?: continue
+                }.getOrNull()?.also { decodificadas[f.id] = it } ?: continue
                 val m = Matrix()
                 // La matriz lleva el cuadrado de la imagen al papel; el bitmap se mide en sus
                 // propios píxeles, así que primero se encoge a ese cuadrado.

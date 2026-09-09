@@ -510,8 +510,19 @@ object ExportarHtml {
           flex-wrap:wrap;justify-content:center;max-width:100%}
         .grupo{display:flex;gap:2px}
         .grupo[hidden]{display:none}
+        /* **La cota.** Naranja para que no se confunda con el dibujo, y con el grosor y la
+           letra medidos en pantalla (`non-scaling-stroke`) para que se lean igual de cerca que
+           de lejos. La cifra lleva un reborde del color del papel: sobre un plano lleno de
+           líneas, un número sin reborde no se lee. */
+        #medida{pointer-events:none}
         #medida line{stroke:#ff8a3d;stroke-width:2px;vector-effect:non-scaling-stroke}
-        #medida circle{fill:#ff8a3d}
+        #medida path{fill:#ff8a3d;stroke:none}
+        #medida .pendiente{fill:none;stroke:#ff8a3d;stroke-width:2px;vector-effect:non-scaling-stroke}
+        #medida text{fill:#ff8a3d;text-anchor:middle;paint-order:stroke;
+          stroke:var(--papel,#fff);stroke-width:4px;vector-effect:non-scaling-stroke;
+          font-weight:600;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+        #medida .viva line{stroke:#ff5722;stroke-width:3px}
+        #medida .viva text{fill:#ff5722}
         .grupo+.grupo{border-left:1px solid var(--filete);padding-left:6px;margin-left:2px}
         #barra button{width:40px;height:40px;border:none;border-radius:11px;background:transparent;
           color:inherit;display:inline-flex;align-items:center;justify-content:center;
@@ -603,8 +614,9 @@ var MIN=casa.w/400, MAX=casa.w*20;
 var croquis=svg.querySelector('#croquis');
 if(!croquis){croquis=document.createElementNS(NS,'g');croquis.id='croquis';svg.appendChild(croquis);}
 var hecho=[], rehecho=[], modo='mano', trazo=null, hayLapiz=false;
-// Medir: dos puntos, y la distancia en la unidad de la escala del dibujo si la hay.
-var medida=[], grupoMedida=null;
+// Medir: cotas de plano —dos puntas, flechas y la cifra encima—, y se quedan puestas.
+// Ver la sección «Medir» más abajo.
+var cotas=[], medida=null, grupoMedida=null, agarreCota=null, imanes=null;
 var escala=parseFloat(caja.dataset.escala)||0, unidad=caja.dataset.unidad||'', decimales=parseInt(caja.dataset.decimales)||2;
 // El papel, si vino como geometría en vez de como foto. Ver [VisorPlano].
 var plano=(typeof crearPlano==='function')?crearPlano(caja,{encuadrar:encuadrarEn}):null;
@@ -612,6 +624,9 @@ var plano=(typeof crearPlano==='function')?crearPlano(caja,{encuadrar:encuadrarE
 function aplicar(){
   svg.setAttribute('viewBox',v.x+' '+v.y+' '+v.w+' '+v.h);
   if(plano) plano.ver(v);
+  // Las cotas se miden en pantalla —la flecha mide lo mismo de cerca que de lejos—, así que
+  // cambiar el encuadre obliga a rehacerlas. Ver [pintarMedida].
+  if(grupoMedida&&(cotas.length||medida)) pintarMedida();
 }
 // Encuadra una caja del dibujo, con un dedo de margen: es lo que usa el cajón de capas para
 // llevarte a donde está lo que acabas de encender.
@@ -676,6 +691,7 @@ function distanciaAlTramo(p,a,c){
 // Se borra la raya cuyo trazado —no solo sus puntos— pasa bajo el dedo: una raya rápida
 // tiene los puntos lejos unos de otros.
 function borrarEn(px,py,m){
+  olvidarLosImanes();
   var p=aEscena(px,py,m);
   var rayas=Array.prototype.slice.call(croquis.children);
   for(var i=0;i<rayas.length;i++){
@@ -726,41 +742,205 @@ function empezarTrazo(px,py,marca,puntero){
   croquis.appendChild(trazo);
 }
 function soltarTrazo(){
+  // El dibujo ha cambiado: el imán tiene que volver a mirarlo. Ver [imanesDeLaHoja].
+  olvidarLosImanes();
   if(!trazo)return;
   if(trazo.puntos.length<2)croquis.removeChild(trazo); // un punto solo no se ve
   else apuntar({que:'pinta',raya:trazo});
   trazo=null;
 }
-// ---- Medir ----
+// ---- Medir: cotas de plano ----
+//
+// **Una cota, no una cifra suelta.** Antes medir eran dos puntos gordos, una raya y un número
+// en la barra de estado, y la medida siguiente borraba la anterior. En un plano eso no sirve:
+// se miden varias cosas y se comparan, y la cifra tiene que estar **donde está lo medido**.
+// Ahora cada medida es una cota como la de un plano —línea, flecha en cada punta y la cifra
+// encima, en su sitio— que **se queda puesta**, se puede coger y mover, y se pega a las líneas
+// del dibujo. Lo pidió el usuario el 8-sep-2026.
+//
+// Todo se guarda en unidades del dibujo y se pinta contando el aumento, para que la flecha y
+// la letra midan lo mismo de cerca que de lejos. Por eso [aplicar] repinta al encuadrar.
+
+/** Lo que mide una cota, ya escrito: en la unidad del dibujo si se calibró, en píxeles si no. */
+function textoDeCota(c){
+  var d=Math.hypot(c.b.x-c.a.x, c.b.y-c.a.y);
+  return escala>0 ? (d*escala).toFixed(decimales)+' '+unidad : d.toFixed(1)+' px';
+}
+/** Una flecha en la punta (x,y), apuntando desde (dx,dy), del tamaño [t] en unidades. */
+function flechaDe(x,y,dx,dy,t){
+  var l=Math.hypot(dx,dy)||1, ux=dx/l, uy=dy/l, px=-uy, py=ux;
+  var f=document.createElementNS(NS,'path');
+  f.setAttribute('d','M'+x+' '+y+'L'+(x+ux*t+px*t*0.36)+' '+(y+uy*t+py*t*0.36)+
+                     'L'+(x+ux*t-px*t*0.36)+' '+(y+uy*t-py*t*0.36)+'Z');
+  return f;
+}
 function pintarMedida(){
   if(!grupoMedida){ grupoMedida=document.createElementNS(NS,'g'); grupoMedida.id='medida'; svg.appendChild(grupoMedida); }
-  Array.prototype.slice.call(grupoMedida.children).forEach(function(c){ grupoMedida.removeChild(c); });
-  var k=aEscena(0,0).k;
-  if(medida.length===2){
-    var l=document.createElementNS(NS,'line');
-    l.setAttribute('x1',medida[0].x); l.setAttribute('y1',medida[0].y);
-    l.setAttribute('x2',medida[1].x); l.setAttribute('y2',medida[1].y);
-    grupoMedida.appendChild(l);
-  }
-  for(var i=0;i<medida.length;i++){
-    var c=document.createElementNS(NS,'circle');
-    c.setAttribute('cx',medida[i].x); c.setAttribute('cy',medida[i].y); c.setAttribute('r',5*k);
-    grupoMedida.appendChild(c);
+  while(grupoMedida.firstChild) grupoMedida.removeChild(grupoMedida.firstChild);
+  var k=aEscena(0,0).k;                 // unidades del dibujo por píxel de pantalla
+  var todas=cotas.concat(medida&&medida.b?[medida]:[]);
+  for(var i=0;i<todas.length;i++) pintarUnaCota(todas[i], k, i===agarreCota&&agarreCota!==null);
+  // El primer punto de una cota a medias: un aspa, que no es una cota todavía.
+  if(medida&&!medida.b){
+    var t=7*k, a=medida.a;
+    var x=document.createElementNS(NS,'path');
+    x.setAttribute('d','M'+(a.x-t)+' '+a.y+'h'+(2*t)+'M'+a.x+' '+(a.y-t)+'v'+(2*t));
+    x.setAttribute('class','pendiente');
+    grupoMedida.appendChild(x);
   }
 }
+function pintarUnaCota(c, k, viva){
+  var g=document.createElementNS(NS,'g');
+  g.setAttribute('class','cota'+(viva?' viva':''));
+  var dx=c.b.x-c.a.x, dy=c.b.y-c.a.y, l=Math.hypot(dx,dy);
+  var linea=document.createElementNS(NS,'line');
+  linea.setAttribute('x1',c.a.x); linea.setAttribute('y1',c.a.y);
+  linea.setAttribute('x2',c.b.x); linea.setAttribute('y2',c.b.y);
+  g.appendChild(linea);
+  // Las flechas solo si la cota da para ellas: en una cota más corta que su propia punta,
+  // dos flechas encontradas son una mancha y no se entiende nada.
+  var t=9*k;
+  if(l>t*2.4){
+    g.appendChild(flechaDe(c.a.x,c.a.y, dx, dy, t));
+    g.appendChild(flechaDe(c.b.x,c.b.y,-dx,-dy, t));
+  }
+  // La cifra, **encima de la línea y girada con ella**, como en un plano. Y siempre legible:
+  // pasado el vertical se lee del revés, así que se le da la vuelta.
+  var gr=Math.atan2(dy,dx)*180/Math.PI;
+  if(gr>90||gr<-90) gr+=180;
+  var mx=(c.a.x+c.b.x)/2, my=(c.a.y+c.b.y)/2;
+  var texto=document.createElementNS(NS,'text');
+  texto.setAttribute('x',mx); texto.setAttribute('y',my-5*k);
+  texto.setAttribute('transform','rotate('+gr+' '+mx+' '+my+')');
+  texto.setAttribute('font-size',(13*k));
+  texto.textContent=textoDeCota(c);
+  g.appendChild(texto);
+  grupoMedida.appendChild(g);
+}
+
+/**
+ * **El imán.** Devuelve el punto del dibujo al que se pega (px,py), o el punto tal cual si no
+ * hay nada cerca.
+ *
+ * Los candidatos se sacan **una vez** recorriendo la geometría de la hoja y muestreando cada
+ * camino: es lo caro, y hacerlo en cada toque daría tirones justo mientras se mide. Se guardan
+ * en unidades del dibujo, así que valen para cualquier aumento; solo hay que rehacerlos si
+ * cambia el dibujo, y de eso ya se encarga [olvidarLosImanes].
+ *
+ * El radio de pegado se mide **en pantalla** (14 px): es la distancia a la que el ojo dice
+ * «ahí», y no depende de cuánto se haya acercado uno. Ver [pixpin-gestos-en-pantalla].
+ */
+function imanesDeLaHoja(){
+  if(imanes) return imanes;
+  imanes=[];
+  var geo=svg.querySelectorAll('path,line,polyline,polygon,rect,circle,ellipse');
+  // Un plano trae miles de caminos: se reparte un presupuesto de puntos entre todos en vez de
+  // muestrear cada uno a lo loco. Con esto, el índice sale igual de útil y siempre en el acto.
+  var PRESUPUESTO=6000, porCamino=Math.max(2,Math.min(24,Math.floor(PRESUPUESTO/Math.max(1,geo.length))));
+  for(var i=0;i<geo.length;i++){
+    var el=geo[i];
+    if(grupoMedida&&grupoMedida.contains(el)) continue;   // las propias cotas, no
+    var largo=0;
+    try{ largo=el.getTotalLength?el.getTotalLength():0; }catch(err){ continue; }
+    if(!largo) continue;
+    var n=Math.min(porCamino,Math.max(2,Math.round(largo/4)));
+    for(var j=0;j<n;j++){
+      try{ var q=el.getPointAtLength(largo*j/(n-1||1)); imanes.push({x:q.x,y:q.y}); }catch(err){}
+    }
+  }
+  return imanes;
+}
+function olvidarLosImanes(){ imanes=null; }
+function imantar(p,k){
+  var r=14*k, mejor=null, mejorD=r*r;
+  // Las puntas de las cotas ya puestas tiran también: encadenar medidas es lo normal.
+  for(var c=0;c<cotas.length;c++){
+    var ps=[cotas[c].a,cotas[c].b];
+    for(var e=0;e<2;e++){
+      var d=(ps[e].x-p.x)*(ps[e].x-p.x)+(ps[e].y-p.y)*(ps[e].y-p.y);
+      if(d<mejorD){ mejorD=d; mejor=ps[e]; }
+    }
+  }
+  var lista=imanesDeLaHoja();
+  for(var i=0;i<lista.length;i++){
+    var q=lista[i], dd=(q.x-p.x)*(q.x-p.x)+(q.y-p.y)*(q.y-p.y);
+    if(dd<mejorD){ mejorD=dd; mejor=q; }
+  }
+  return mejor?{x:mejor.x,y:mejor.y}:p;
+}
+
+/** Qué cota y qué parte de ella cae bajo el dedo: una punta, o su mitad para moverla entera. */
+function cotaBajoElDedo(p,k){
+  var r=16*k, rr=r*r;
+  for(var i=cotas.length-1;i>=0;i--){    // la de encima primero, que es la última puesta
+    var c=cotas[i];
+    if((c.a.x-p.x)*(c.a.x-p.x)+(c.a.y-p.y)*(c.a.y-p.y)<rr) return {i:i,parte:'a'};
+    if((c.b.x-p.x)*(c.b.x-p.x)+(c.b.y-p.y)*(c.b.y-p.y)<rr) return {i:i,parte:'b'};
+    // El cuerpo: distancia al segmento, para poder arrastrarla entera.
+    var dx=c.b.x-c.a.x, dy=c.b.y-c.a.y, ll=dx*dx+dy*dy;
+    if(!ll) continue;
+    var t=((p.x-c.a.x)*dx+(p.y-c.a.y)*dy)/ll;
+    if(t<0.18||t>0.82) continue;         // cerca de las puntas manda la punta
+    var qx=c.a.x+dx*t, qy=c.a.y+dy*t;
+    if((qx-p.x)*(qx-p.x)+(qy-p.y)*(qy-p.y)<rr) return {i:i,parte:'todo',t:t};
+  }
+  return null;
+}
+
+/**
+ * Un toque midiendo. Devuelve `true` si ha cogido una cota, para que quien llama sepa que el
+ * dedo está ocupado y no lo use además para pasear el papel.
+ */
 function medirEn(px,py){
-  var p=aEscena(px,py);
-  if(medida.length>=2) medida=[];
-  medida.push({x:p.x,y:p.y});
-  if(medida.length===2){
-    var d=Math.hypot(medida[1].x-medida[0].x, medida[1].y-medida[0].y);
-    // Con escala, en su unidad; sin ella, en píxeles del dibujo, que al menos no engaña.
-    api.decir(escala>0 ? 'Distancia: '+(d*escala).toFixed(decimales)+' '+unidad
-                       : 'Distancia: '+d.toFixed(1)+' px (sin escala)');
-  } else api.decir('Primer punto puesto: toca el segundo');
+  var k=aEscena(0,0).k, p=aEscena(px,py);
+  var cogida=cotaBajoElDedo(p,k);
+  if(cogida){
+    agarreCota=cogida.i;
+    arrastreDeCota={i:cogida.i,parte:cogida.parte,x:p.x,y:p.y};
+    api.decir(cogida.parte==='todo'?'Cota cogida: arrástrala':'Punta cogida: arrástrala');
+    pintarMedida();
+    return true;
+  }
+  if(!medida){                       // primer punto
+    medida={a:imantar(p,k)};
+    api.decir('Primer punto puesto: toca el segundo');
+  } else {                           // segundo: la cota se queda
+    medida.b=imantar(p,k);
+    if(Math.hypot(medida.b.x-medida.a.x,medida.b.y-medida.a.y)>0.0001){
+      cotas.push(medida);
+      api.decir(textoDeCota(medida)+'  ·  toca una cota para moverla');
+    }
+    medida=null;
+  }
+  pintarMedida();
+  return false;
+}
+var arrastreDeCota=null;
+function arrastrarCota(px,py){
+  if(!arrastreDeCota) return;
+  var k=aEscena(0,0).k, p=aEscena(px,py), c=cotas[arrastreDeCota.i];
+  if(!c) return;
+  if(arrastreDeCota.parte==='todo'){
+    var dx=p.x-arrastreDeCota.x, dy=p.y-arrastreDeCota.y;
+    c.a={x:c.a.x+dx,y:c.a.y+dy}; c.b={x:c.b.x+dx,y:c.b.y+dy};
+    arrastreDeCota.x=p.x; arrastreDeCota.y=p.y;
+  } else {
+    // La punta que se mueve sí se imanta; la cota entera no, que se movería a saltos.
+    c[arrastreDeCota.parte]=imantar(p,k);
+  }
   pintarMedida();
 }
-function quitarMedida(){ medida=[]; if(grupoMedida) pintarMedida(); }
+function soltarCota(){
+  if(!arrastreDeCota) return;
+  var c=cotas[arrastreDeCota.i];
+  // Una cota arrastrada hasta quedar en un punto se ha querido borrar.
+  if(c&&Math.hypot(c.b.x-c.a.x,c.b.y-c.a.y)<aEscena(0,0).k*6){
+    cotas.splice(arrastreDeCota.i,1); api.decir('Cota quitada');
+  } else if(c) api.decir(textoDeCota(c));
+  arrastreDeCota=null; agarreCota=null; pintarMedida();
+}
+/** Quitarlas todas. Es lo que hace salir de medir, y la tecla de escape. */
+function quitarMedida(){ cotas=[]; medida=null; arrastreDeCota=null; agarreCota=null; if(grupoMedida) pintarMedida(); }
 
 // **Con lápiz a la vista, el dedo mueve el papel.** En cuanto se posa un lápiz la página se
 // entera y no vuelve atrás: desde ese momento el lápiz traza y el dedo pasea, sin cambiar de
@@ -800,7 +980,7 @@ caja.addEventListener('pointerdown',function(e){
     var q=loQueHace(e);
     if(q==='lapiz'||q==='marcador') empezarTrazo(e.clientX,e.clientY,q==='marcador',e.pointerId);
     else if(q==='goma') borrarEn(e.clientX,e.clientY);
-    else if(q==='medir') medirEn(e.clientX,e.clientY);
+    else if(q==='medir'){ if(medirEn(e.clientX,e.clientY)) cotaConElDedo=e.pointerId; }
     else if(!arrastre){ arrastre={id:e.pointerId,x:e.clientX,y:e.clientY}; api.agarrado(true); }
     return;
   }
@@ -809,7 +989,7 @@ caja.addEventListener('pointerdown',function(e){
     if(trazo) return;   // el lápiz está escribiendo: el dedo no le quita el trazo
     if(q1==='lapiz'||q1==='marcador') empezarTrazo(e.clientX,e.clientY,q1==='marcador',e.pointerId);
     else if(q1==='goma') borrarEn(e.clientX,e.clientY);
-    else if(q1==='medir') medirEn(e.clientX,e.clientY);
+    else if(q1==='medir'){ if(medirEn(e.clientX,e.clientY)) cotaConElDedo=e.pointerId; }
     else { arrastre={id:e.pointerId,x:e.clientX,y:e.clientY}; api.agarrado(true); }
   } else if(dd.length===2){
     // El segundo dedo encuadra: un trazo del dedo a medias se queda como iba; el del lápiz
@@ -839,6 +1019,8 @@ caja.addEventListener('pointermove',function(e){
   } else if(!trazo&&!pellizco&&loQueHace(e)==='goma'){
     var mg=marco(), lg=muestras(e);
     for(var g=0;g<lg.length;g++)borrarEn(lg[g].clientX,lg[g].clientY,mg);
+  } else if(cotaConElDedo===e.pointerId){
+    arrastrarCota(e.clientX,e.clientY);
   } else if(arrastrando(e)){
     var k=aEscena(0,0).k;
     v.x-=(e.clientX-arrastre.x)*k; v.y-=(e.clientY-arrastre.y)*k;
@@ -846,8 +1028,11 @@ caja.addEventListener('pointermove',function(e){
     aplicar();
   }
 });
+// Qué dedo trae una cota cogida: mientras la trae, ese dedo no pasea el papel.
+var cotaConElDedo=null;
 function soltar(e){
   dedos.delete(e.pointerId);
+  if(cotaConElDedo===e.pointerId){ cotaConElDedo=null; soltarCota(); }
   if(losDedos().length<2)pellizco=null;
   if(trazo&&trazo.puntero===e.pointerId) soltarTrazo();
   if(arrastrando(e)){ arrastre=null; }
@@ -892,7 +1077,10 @@ return {
  hayRellenos:plano?plano.hayRellenos:null,
  encajar:encajar,
  zoom:function(f){var r=svg.getBoundingClientRect();zoom(f,r.left+r.width/2,r.top+r.height/2);},
- modo:function(m){ modo=m; if(m!=='medir') quitarMedida(); else api.decir('Toca dos puntos del dibujo'); },
+ // **Salir de medir ya no borra las cotas**: para eso están puestas. Lo que se deja a medias
+ // —un primer punto sin su pareja— sí se suelta, que no es nada todavía. Se quitan todas con
+ // la tecla de escape, y una a una arrastrando su punta sobre la otra. Ver [quitarMedida].
+ modo:function(m){ modo=m; if(m!=='medir'){ medida=null; if(grupoMedida) pintarMedida(); } else api.decir('Toca dos puntos: la cota se queda puesta'); },
  pintando:function(){ return !hayLapiz && modo!=='mano' && modo!=='medir'; },
  herramientas:permitidasDe(['mano','lapiz','marcador','goma','medir']),
  deshacer:deshacer, rehacer:rehacer,

@@ -106,15 +106,21 @@ object PlanoWeb {
             }
             append("],\"brochas\":[")
             cabeceras.forEachIndexed { i, c -> if (i > 0) append(','); append(c) }
-            append("],\"fotos\":[")
-            plano.fotos.forEachIndexed { i, f ->
+            // **Cada imagen se escribe una vez.**
+            //
+            // Un plano repite: el del usuario (8-sep-2026) coloca 81 imágenes que son 21, y
+            // escribirlas por colocación eran **1.321.191 bytes donde bastan 312.722** — el
+            // archivo salía 4,2 veces más pesado de lo necesario. Van en su propia lista y
+            // cada colocación dice cuál es la suya con `i`. Ver [PlanoDePdf.Imagen.id].
+            append("],\"imagenes\":[")
+            val orden = LinkedHashMap<Int, Int>()
+            plano.fotos.forEach { f -> orden.getOrPut(f.id) { orden.size } }
+            val unaPorSena = HashMap<Int, PlanoDePdf.Imagen>()
+            plano.fotos.forEach { f -> unaPorSena.getOrPut(f.id) { f } }
+            orden.keys.forEachIndexed { i, sena ->
                 if (i > 0) append(',')
-                append("{\"c\":").append(f.capa)
-                append(",\"m\":[")
-                append(numero(f.a * escala)).append(',').append(numero(f.b * escala)).append(',')
-                append(numero(f.c * escala)).append(',').append(numero(f.d * escala)).append(',')
-                append(numero(f.x * escala)).append(',').append(numero(f.y * escala))
-                append("],\"u\":\"data:").append(f.tipo).append(";base64,")
+                val f = unaPorSena.getValue(sena)
+                append("{\"u\":\"data:").append(f.tipo).append(";base64,")
                 append(java.util.Base64.getEncoder().encodeToString(f.datos)).append('"')
                 // Su transparencia, si la trae, como una segunda imagen. La página las junta
                 // en un lienzo suyo al cargar. Ver [PlanoDePdf.Imagen.mascara].
@@ -123,6 +129,18 @@ object PlanoWeb {
                     append(",\"k\":\"data:").append(f.tipoMascara).append(";base64,")
                     append(java.util.Base64.getEncoder().encodeToString(mascara)).append('"')
                 }
+                append('}')
+            }
+            append("],\"fotos\":[")
+            plano.fotos.forEachIndexed { i, f ->
+                if (i > 0) append(',')
+                append("{\"c\":").append(f.capa)
+                append(",\"i\":").append(orden.getValue(f.id))
+                append(",\"m\":[")
+                append(numero(f.a * escala)).append(',').append(numero(f.b * escala)).append(',')
+                append(numero(f.c * escala)).append(',').append(numero(f.d * escala)).append(',')
+                append(numero(f.x * escala)).append(',').append(numero(f.y * escala))
+                append(']')
                 if (f.alfa < 0.999) append(",\"o\":").append(numero(f.alfa))
                 append('}')
             }

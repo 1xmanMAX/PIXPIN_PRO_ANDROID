@@ -162,7 +162,17 @@ object PlanoDePdf {
          */
         val mascara: ByteArray? = null,
         /** El tipo MIME de [mascara]. */
-        val tipoMascara: String? = null
+        val tipoMascara: String? = null,
+        /**
+         * **Qué píxeles son estos.** Dos imágenes con el mismo [id] son la misma imagen puesta
+         * en dos sitios, y valen los mismos bytes y el mismo mapa de bits.
+         *
+         * Un plano lo repite todo el rato: el plano del usuario (8-sep-2026) coloca **81
+         * imágenes que son 21**. Sin esta seña, la pantalla decodificaba las 81 —**268 MB** de
+         * mapas de bits ARGB medidos, de ahí que un plano «pequeño» fuera a tirones— y la
+         * página web escribía los mismos bytes 81 veces: 1.321.191 donde bastan 312.722.
+         */
+        val id: Int = 0
     )
 
     /** Una página leída. Las medidas van en puntos del papel. */
@@ -354,6 +364,17 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
     private val textos = ArrayList<PlanoDePdf.Texto>()
     private val fotos = ArrayList<PlanoDePdf.Imagen>()
     private var pesoDeFotos = 0
+
+    /**
+     * Qué seña le toca a cada imagen ya vista. Ver [PlanoDePdf.Imagen.id].
+     *
+     * Se compara **por identidad del array**: el lector guarda sus objetos, así que el mismo
+     * XObject devuelve el mismo `ByteArray` cada vez que se coloca, y comparar identidad es
+     * un puntero mientras que comparar contenido serían megabytes por colocación. Si algún día
+     * dejara de guardarlos, esto repartiría señas distintas a imágenes iguales: se pintarían
+     * y se escribirían repetidas, como antes — más peso, nunca un dibujo equivocado.
+     */
+    private val senasDeFoto = java.util.IdentityHashMap<ByteArray, Int>()
     private val capas = ArrayList<PlanoDePdf.Capa>()
     private val capaPorObjeto = HashMap<Int, Int>()
     private val rayados = ArrayList<DoubleArray>()
@@ -827,9 +848,12 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
                 else -> return false
             }
             mascara = dm
-            pesoDeFotos += dm.size
+            if (!senasDeFoto.containsKey(datos)) pesoDeFotos += dm.size
         }
-        pesoDeFotos += datos.size
+        // El peso solo cuenta la **primera** vez: lo que ocupa el archivo es lo distinto.
+        val yaVista = senasDeFoto[datos]
+        val sena = yaVista ?: senasDeFoto.size.also { senasDeFoto[datos] = it }
+        if (yaVista == null) pesoDeFotos += datos.size
         // El cuadrado de la imagen va del (0,0) al (1,1) del espacio de dibujo, y su primera
         // fila cae **arriba**, o sea en la y = 1: de ahí que el vector de bajar sea el de la y
         // del revés.
@@ -844,7 +868,7 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
             a = caja.vectorX(ux, uy), b = caja.vectorY(ux, uy),
             c = caja.vectorX(vx, vy), d = caja.vectorY(vx, vy),
             x = caja.enX(ox, oy), y = caja.enY(ox, oy),
-            mascara = mascara, tipoMascara = tipoMascara
+            mascara = mascara, tipoMascara = tipoMascara, id = sena
         )
         return true
     }

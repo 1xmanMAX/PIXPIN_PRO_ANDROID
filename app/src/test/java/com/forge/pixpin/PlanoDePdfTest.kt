@@ -301,6 +301,36 @@ class PlanoDePdfTest {
     }
 
     /**
+     * **La misma imagen colocada dos veces es una imagen.**
+     *
+     * Un plano repite: el del usuario (8-sep-2026) colocaba **81 imágenes que eran 21**. Sin
+     * distinguirlo, la pantalla decodificaba las 81 —268 MB de mapas de bits ARGB, medidos— y
+     * la página web escribía los mismos bytes 81 veces. De ahí que un plano «con pocas líneas»
+     * fuera a tirones y pesara de más. Ver [PlanoDePdf.Imagen.id].
+     */
+    @Test
+    fun `la misma imagen colocada dos veces lleva la misma sena`() {
+        val jpeg = "\u00ff\u00d8\u00ff\u00e0FOTO"
+        val p = leer(
+            paginaCon(
+                "q 10 0 0 10 0 0 cm /Im1 Do Q q 10 0 0 10 40 40 cm /Im1 Do Q 0 0 m 1 1 l S",
+                recursos = "/XObject << /Im1 5 0 R >>",
+                masObjetos = listOf(
+                    flujo(
+                        5, jpeg,
+                        " /Type /XObject /Subtype /Image /Width 4 /Height 2 " +
+                            "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode"
+                    )
+                )
+            )
+        )!!
+        assertEquals("dos colocaciones", 2, p.fotos.size)
+        assertEquals("una sola imagen", 1, p.fotos.map { it.id }.distinct().size)
+        // Y cada una en su sitio: son la misma imagen, no la misma colocación.
+        assertTrue("no están en el mismo punto", p.fotos[0].x != p.fotos[1].x)
+    }
+
+    /**
      * **La zona de color de un plano de Revit**: un JPEG recortado por su máscara.
      *
      * Es como Revit pinta lo sombreado —no rellena el polígono, pone encima una imagen de ese
