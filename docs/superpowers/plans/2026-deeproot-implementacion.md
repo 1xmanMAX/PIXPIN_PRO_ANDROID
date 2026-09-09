@@ -6,10 +6,10 @@
 
 ## Estado al último guardado
 - WP1 `518b9a2` · WP2+3 `1092bb0` · WP4 `41426b0` · WP6 `1389ff1` · WP7 `c3bec25` ·
-  WP8 (lógica) `f8968dc` · WP9a `bdca245` · WP9b `ddde108` · WP5 fase-1 `6ca530a` ·
-  estabilización caché miniaturas `71194ce` — todas pusheadas en `origin/DEEPROOT`.
-- **Pendientes**: WP5 fases 2-3 (raster de fondo y `devolverAlPdf` fuera del hilo principal;
-  trazo incremental opcional), WP8-UI, WP10.
+  WP8 (lógica) `f8968dc` · WP9a `bdca245` · WP9b `ddde108` · WP5 `6ca530a` (fase 1) +
+  `8314084` (fase 2b) · caché `71194ce` — todas pusheadas en `origin/DEEPROOT`.
+- **Pendientes**: WP5 fase 2a (raster inicial de `DrawEditorActivity` ~305-309 en el hilo
+  principal) y trazo incremental opcional; WP8-UI; WP10.
 - Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4 y las UI nuevas).
 
 ## Notas para retomar WP5 (fases 2-3), WP8-UI, WP9b y WP10
@@ -53,7 +53,7 @@
 - [x] **WP1** "Dibujo vacío" al exportar HTML desde lienzo → HECHA (commit `518b9a2`).
 - [x] WP2+WP3 Reserva de pintado del plano al mover vista + roundtrip HTML con plano → HECHA (código, `1092bb0`; verificación en navegador pendiente).
 - [x] WP4 Medir en el HTML: flechas+cota, movibles, persistentes, varias, imán → HECHA (`41426b0`; verificación en navegador pendiente).
-- [ ] WP5 Rendimiento de planos PDF enormes → fase-1 HECHA (`6ca530a`: web perezosa); faltan fases 2-3 (raster de fondo y devolverAlPdf fuera del hilo principal, ~305-309 y ~587-622 de `DrawEditorActivity.kt`; trazo incremental opcional).
+- [ ] WP5 Rendimiento de planos PDF enormes → fases 1 y 2b HECHAS (`6ca530a` web perezosa; `8314084` `devolverAlPdf` en segundo plano); falta fase 2a (raster inicial ~305-309 fuera del hilo principal) y el trazo incremental opcional.
 - [x] WP6 Compartir: opciones/aviso de audio solo cuando hay audio → HECHA (`1389ff1`).
 - [x] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto → HECHA (`c3bec25`).
 - [~] WP8 Agrupación por rachas de origen en Guardar → lógica HECHA (`f8968dc`); falta plegar la UI de la LazyColumn.
