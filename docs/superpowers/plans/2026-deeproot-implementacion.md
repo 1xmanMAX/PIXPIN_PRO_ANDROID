@@ -6,13 +6,15 @@
 
 ## Estado al último guardado
 - WP1 `518b9a2` · WP2+3 `1092bb0` · WP4 `41426b0` · WP6 `1389ff1` · WP7 `c3bec25` ·
-  WP8 (lógica) `f8968dc` · WP9a (píldoras pin en IMAGEN/PAGINA) `bdca245` — todas pusheadas
-  en `origin/DEEPROOT`.
-- **WP5 pendiente**, **WP8-UI pendiente** (plegar rachas en la LazyColumn), **WP9b pendiente**
-  (lector PDF ligero), **WP10 pendiente**.
-- Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4 y UI nueva).
+  WP8 (lógica) `f8968dc` · WP9a `bdca245` · **WP5 fase-1 `6ca530a`** (empaquetado web perezoso:
+  `planoLeido` + `PlanoWeb.aJson` solo al exportar) · **estabilización caché miniaturas
+  `71194ce`** (provisional único + `Files.move` atómico; elimina el flake de
+  `PdfMiniaturasTest`) — todas pusheadas en `origin/DEEPROOT`.
+- **Pendientes**: WP5 fases 2-3 (raster de fondo y `devolverAlPdf` fuera del hilo principal;
+  trazo incremental opcional), WP8-UI, WP9b, WP10.
+- Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4 y las UI nuevas).
 
-## Notas para retomar WP5, WP8-UI, WP9b y WP10
+## Notas para retomar WP5 (fases 2-3), WP8-UI, WP9b y WP10
 - **WP5**: el intento de delegarlo a un subagente no avanzó (se canceló). Hacerlo con alcance
   mínimo propio y pruebas JVM: (1) `DrawEditorActivity.kt` ~305-309 raster de fondo fuera del
   hilo principal o perezoso; (2) en `traerElPlanoEnLineas` (~3438-3465) construir antes
@@ -53,7 +55,7 @@
 - [x] **WP1** "Dibujo vacío" al exportar HTML desde lienzo → HECHA (commit `518b9a2`).
 - [x] WP2+WP3 Reserva de pintado del plano al mover vista + roundtrip HTML con plano → HECHA (código, `1092bb0`; verificación en navegador pendiente).
 - [x] WP4 Medir en el HTML: flechas+cota, movibles, persistentes, varias, imán → HECHA (`41426b0`; verificación en navegador pendiente).
-- [ ] WP5 Rendimiento de planos PDF enormes manteniendo vectorial → PENDIENTE (ver notas arriba).
+- [ ] WP5 Rendimiento de planos PDF enormes → fase-1 HECHA (`6ca530a`: web perezosa); faltan fases 2-3 (raster de fondo y devolverAlPdf fuera del hilo principal, ~305-309 y ~587-622 de `DrawEditorActivity.kt`; trazo incremental opcional).
 - [x] WP6 Compartir: opciones/aviso de audio solo cuando hay audio → HECHA (`1389ff1`).
 - [x] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto → HECHA (`c3bec25`).
 - [~] WP8 Agrupación por rachas de origen en Guardar → lógica HECHA (`f8968dc`); falta plegar la UI de la LazyColumn.
