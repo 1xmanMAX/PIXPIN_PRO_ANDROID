@@ -307,21 +307,39 @@ object PdfMiniaturas {
  *   —`Bitmap.compress` responde `false` ante tamaños que WEBP no admite—, y en
  *   ese caso **no queda ningún archivo fingiendo estar hecho**.
  */
+/** Cuenta las escrituras para que dos provisionales del mismo instante jamás compartan nombre. */
+private val numeroDeEscritura = java.util.concurrent.atomic.AtomicLong()
+
 internal fun escribirDeGolpe(destino: File, contenido: (java.io.OutputStream) -> Boolean): Boolean {
-    // El nombre lleva el instante dentro para que dos escrituras de la misma
-    // página a la vez no se estropeen la una a la otra el archivo provisional.
-    val aMedias = File(destino.parentFile, "${destino.name}.amedias${System.nanoTime()}")
+    // El nombre lleva el instante **y una cuenta** dentro para que dos escrituras de la misma
+    // página a la vez no se estropeen la una a la otra el archivo provisional: el instante
+    // solo podía coincidir y entonces las dos escribían en el mismo provisional, mezcladas.
+    val aMedias = File(
+        destino.parentFile,
+        "${destino.name}.amedias${System.nanoTime()}-${numeroDeEscritura.incrementAndGet()}"
+    )
     val pudo = runCatching { aMedias.outputStream().use(contenido) }.getOrDefault(false)
     if (!pudo) {
         aMedias.delete()
         return false
     }
-    if (aMedias.renameTo(destino)) return true
-    // Renombrar encima de algo no está permitido en todos los sistemas de
-    // archivos. Se quita lo viejo y se prueba otra vez; si tampoco, mejor
-    // quedarse sin caché que dejar un archivo suelto que nadie va a recoger.
-    destino.delete()
-    if (aMedias.renameTo(destino)) return true
+    // Sustituir de una vez y, si el sistema lo permite, atómicamente: quien lea a la vez solo
+    // puede encontrarse «nada» o «la miniatura completa», nunca un trozo de cada escritura.
+    val movido = runCatching {
+        java.nio.file.Files.move(
+            aMedias.toPath(), destino.toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+            java.nio.file.StandardCopyOption.ATOMIC_MOVE
+        )
+    }.getOrElse {
+        runCatching {
+            java.nio.file.Files.move(
+                aMedias.toPath(), destino.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING
+            )
+        }.getOrDefault(null)
+    }
+    if (movido != null) return true
     aMedias.delete()
     return false
 }
