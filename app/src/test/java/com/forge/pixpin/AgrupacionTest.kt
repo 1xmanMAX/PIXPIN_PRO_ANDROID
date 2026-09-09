@@ -231,4 +231,35 @@ class AgrupacionTest {
             ).isEmpty()
         )
     }
+
+    // ---- Entradas de la lista (con las rachas plegadas) --------------------
+
+    @Test
+    fun `la lista pliega las rachas en una sola entrada cada una`() {
+        val entradas = entradasDe(
+            listOf(
+                m("n1", Clase.NOTA),
+                m("p1", Clase.PAGINA, ruta = "/plano.pdf"),
+                m("p2", Clase.PAGINA, ruta = "/plano.pdf"),
+                m("i1", Clase.IMAGEN),
+                m("v1", Clase.VOZ),
+                m("v2", Clase.VOZ),
+                m("v3", Clase.VOZ)
+            )
+        )
+        assertEquals(4, entradas.size)
+        assertEquals(EntradaDeLista.MensajeSolo(m("n1", Clase.NOTA)), entradas[0])
+        val pdf = entradas[1] as EntradaDeLista.GrupoDeOrigen
+        assertEquals(listOf("p1", "p2"), pdf.mensajes.map { it.id })
+        assertEquals(EntradaDeLista.MensajeSolo(m("i1", Clase.IMAGEN)), entradas[2])
+        val voz = entradas[3] as EntradaDeLista.GrupoDeOrigen
+        assertEquals(listOf("v1", "v2", "v3"), voz.mensajes.map { it.id })
+    }
+
+    @Test
+    fun `sin rachas la lista de entradas es uno a uno`() {
+        val lista = listOf(m("n1", Clase.NOTA), m("i1", Clase.IMAGEN))
+        assertEquals(2, entradasDe(lista).size)
+        assertTrue(entradasDe(emptyList()).isEmpty())
+    }
 }

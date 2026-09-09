@@ -216,3 +216,38 @@ fun rachasDeOrigen(mensajes: List<Mensaje>): List<RachaDeOrigen> {
     if (clave != null && ultima.tamano > 1) salida += ultima
     return salida
 }
+
+/**
+ * Lo que la lista enseña por cada mensaje, con las rachas del mismo origen ya plegadas.
+ *
+ * Quien pinta recibe una entrada por mensaje suelto y **una sola** por cada racha de dos o
+ * más del mismo origen —las páginas seguidas de un mismo PDF, las hojas de un mismo lienzo,
+ * las notas de voz—. La UI decide cómo dibujar el grupo; aquí solo se decide qué es grupo.
+ */
+sealed interface EntradaDeLista {
+    /** Un mensaje normal, sin compañía del mismo origen. */
+    data class MensajeSolo(val mensaje: Mensaje) : EntradaDeLista
+
+    /** La racha entera, en orden, con su clave de origen. */
+    data class GrupoDeOrigen(val clave: String, val mensajes: List<Mensaje>) : EntradaDeLista
+}
+
+/** Convierte la lista de un tramo en sus entradas, plegando las rachas de [rachasDeOrigen]. */
+fun entradasDe(mensajes: List<Mensaje>): List<EntradaDeLista> {
+    if (mensajes.isEmpty()) return emptyList()
+    val salida = ArrayList<EntradaDeLista>(mensajes.size)
+    var i = 0
+    for (g in rachasDeOrigen(mensajes)) {
+        while (i < g.desde) {
+            salida += EntradaDeLista.MensajeSolo(mensajes[i])
+            i++
+        }
+        salida += EntradaDeLista.GrupoDeOrigen(g.clave, mensajes.subList(g.desde, g.hasta + 1))
+        i = g.hasta + 1
+    }
+    while (i < mensajes.size) {
+        salida += EntradaDeLista.MensajeSolo(mensajes[i])
+        i++
+    }
+    return salida
+}
