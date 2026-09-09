@@ -215,6 +215,10 @@ fun PantallaDeProyectos(
     // desde aquí salía con lo que quedó marcado la última vez, y el usuario no sabía por
     // qué su página traía o dejaba de traer el lápiz (5-sep-2026). Ver [DialogoDeFuncionesWeb].
     var pidiendoFuncionesWeb by remember { mutableStateOf(false) }
+    // **Quitar lo marcado del proyecto.** Hasta ahora no había forma de quitar una hoja de un
+    // proyecto —`Proyectos.sinHoja` existía y no lo llamaba nadie— y se acumulaban. Se pregunta
+    // antes, porque es lo único de esta caja que no se deshace. Ver [Proyectos.sinPaginas].
+    var quitando by remember { mutableStateOf(false) }
     val ajustesWeb by app.settings.settings.collectAsState(initial = null)
     val alcanceDeAjustes = rememberCoroutineScope()
     if (pidiendoFuncionesWeb) {
@@ -232,6 +236,42 @@ fun PantallaDeProyectos(
             onCalidadDeAudio = { c -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c)) } },
             // Solo se pregunta por el audio si alguna de las hojas marcadas trae uno.
             hayAudio = remember(marcado) { hayAudioEnLoMarcado(contexto, ordenados, marcado) }
+        )
+    }
+    if (quitando) {
+        val cuantas = marcado.values.sumOf { it.size }
+        AlertDialog(
+            onDismissRequest = { quitando = false },
+            title = { Text(stringResourceSafe(R.string.proyecto_quitar_titulo, cuantas)) },
+            text = { Text(stringResourceSafe(R.string.proyecto_quitar_texto)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    quitando = false
+                    val cual = marcado
+                    marcado = emptyMap()
+                    alcanceDeAjustes.launch {
+                        withContext(Dispatchers.IO) {
+                            val ahora = System.currentTimeMillis()
+                            for ((id, claves) in cual) {
+                                val p = ordenados.firstOrNull { it.id == id } ?: continue
+                                val quita = Proyectos.sinPaginas(p, claves, ahora)
+                                // Primero los marcos, que es lo que puede fallar: si un lienzo
+                                // no se puede abrir, sus páginas se quedan y se ve; el
+                                // proyecto se guarda igual con lo que sí se fue.
+                                for ((dibujo, marcos) in quita.marcosPorDibujo) {
+                                    val ruta = ExcalidrawStore.rutaDe(contexto, dibujo)
+                                    val escena = ExcalidrawStore.cargar(ruta) ?: continue
+                                    ExcalidrawStore.guardar(contexto, dibujo, escena.sinMarcos(marcos))
+                                }
+                                if (quita.proyecto !== p) app.proyectos.guardar(quita.proyecto)
+                                else if (quita.marcosPorDibujo.isNotEmpty()) app.proyectos.guardar(p.copy(tocado = ahora))
+                            }
+                        }
+                        android.widget.Toast.makeText(contexto, R.string.proyecto_quitar_hecho, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text(stringResourceSafe(R.string.proyecto_quitar_corto)) }
+            },
+            dismissButton = { TextButton(onClick = { quitando = false }) { Text(stringResourceSafe(android.R.string.cancel)) } }
         )
     }
     // El proyecto que se está empaquetando como `.pixpin`, o null.
@@ -311,6 +351,10 @@ fun PantallaDeProyectos(
                         BotonDeAccion(
                             Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete,
                             ancho = ANCHO_EN_CAJA, onClick = { exportandoPaquete = marcado.keys.firstOrNull() }
+                        )
+                        BotonDeAccion(
+                            Icons.Filled.Delete, R.string.proyecto_quitar_corto, R.string.proyecto_quitar,
+                            ancho = ANCHO_EN_CAJA, onClick = { quitando = true }
                         )
                     }
                     Spacer(Modifier.weight(1f))

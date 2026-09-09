@@ -347,6 +347,60 @@ object Proyectos {
         proyecto.copy(hojas = proyecto.hojas.filter { it.id != hojaId }, tocado = cuando)
 
     /**
+     * **Lo que hay que hacer para quitar unas páginas del proyecto.** Ver [sinPaginas].
+     *
+     * Son dos cosas distintas y por eso van separadas: [proyecto] es el proyecto ya sin las
+     * hojas que se van enteras, y [marcosPorDibujo] son los marcos que hay que borrar
+     * **dentro de cada lienzo** —por identificador de dibujo— para que sus páginas
+     * desaparezcan. Lo primero se guarda en el proyecto; lo segundo pide abrir cada escena,
+     * que es trabajo de disco y no de aquí.
+     */
+    class Quita(val proyecto: Proyecto, val marcosPorDibujo: Map<String, Set<String>>)
+
+    /**
+     * Quita del proyecto las páginas de estas [claves] (las de [HojasDelProyecto.Pagina.clave]).
+     *
+     * Hasta ahora **no había forma de quitar una hoja de un proyecto**: [sinHoja] existía y no
+     * lo llamaba nadie, y las hojas se acumulaban. Lo pidió el usuario el 9-sep-2026: «no
+     * debería tener tantas hojas».
+     *
+     * Qué significa quitar cada clase de página, decidido con él:
+     * - **Una página de un PDF**, o un lienzo sin marcos, o una lámina: la hoja se va del
+     *   proyecto. El PDF y el dibujo no se tocan.
+     * - **Un marco de un lienzo**: se borra **el marco** dentro del lienzo y la hoja se queda,
+     *   porque es un solo archivo con varias páginas y el usuario quiere conservar el lienzo.
+     *   Solo el marco, no lo que hay dentro: lo dibujado sigue en el lienzo, sin encuadrar.
+     *   Si se marcan todos sus marcos, se quitan todos y el lienzo queda como una sola página.
+     * - **Una nota partida en varias páginas**: se va entera solo si se marcaron **todas** sus
+     *   páginas; con una sola marcada no se toca, porque quitar la nota entera por una página
+     *   sería más de lo que se pidió, y una nota no se puede partir por la mitad.
+     */
+    fun sinPaginas(proyecto: Proyecto, claves: Set<String>, cuando: Long): Quita {
+        val fuera = HashSet<String>()
+        val marcos = HashMap<String, MutableSet<String>>()
+        for (hoja in proyecto.hojas) {
+            val suyas = claves.filter { it.startsWith(hoja.id + "/") }
+            if (suyas.isEmpty()) continue
+            val conMarco = suyas.mapNotNull { it.split("/").getOrNull(1)?.takeIf { m -> m.isNotEmpty() } }
+            when {
+                hoja.dibujo != null && conMarco.isNotEmpty() ->
+                    marcos.getOrPut(hoja.dibujo) { HashSet() }.addAll(conMarco)
+                hoja.nota != null -> {
+                    val paginas = com.forge.pixpin.motormd.Paginado.deTexto(hoja.nota).size
+                    val marcadas = suyas.mapNotNull { it.split("/").getOrNull(2) }.toSet()
+                    // Una nota de una página lleva la clave sin número; una partida, un
+                    // número por página, y hacen falta todos.
+                    if (paginas <= 1 || (0 until paginas).all { "$it" in marcadas }) fuera += hoja.id
+                }
+                else -> fuera += hoja.id
+            }
+        }
+        val sinEllas = if (fuera.isEmpty()) proyecto
+            else proyecto.copy(hojas = proyecto.hojas.filter { it.id !in fuera }, tocado = cuando)
+        return Quita(sinEllas, marcos)
+    }
+
+    /**
      * Cambia una hoja de sitio.
      *
      * El orden de las hojas es el de las páginas al exportar, así que tiene que

@@ -74,6 +74,11 @@
     <string name="proyecto_web_corto">Web</string>
     <string name="proyecto_desmarcar_corto">Soltar</string>
     <string name="proyecto_desmarcar">Quitar las marcas</string>
+    <string name="proyecto_quitar_corto">Quitar</string>
+    <string name="proyecto_quitar">Quitar del proyecto lo marcado</string>
+    <string name="proyecto_quitar_titulo">¿Quitar %1$d páginas del proyecto?</string>
+    <string name="proyecto_quitar_texto">Las páginas de un PDF y las notas dejan de estar en el proyecto; el PDF no se toca. De un lienzo con varias hojas se borra el marco de cada página marcada y lo dibujado se queda en el lienzo.</string>
+    <string name="proyecto_quitar_hecho">Quitadas</string>
     <string name="proyecto_toca_para_abrir">Toca para ver las páginas</string>
     <string name="proyecto_plegar">Plegar</string>
     <string name="proyecto_exportar_todo_web">Página web de todo el proyecto</string>

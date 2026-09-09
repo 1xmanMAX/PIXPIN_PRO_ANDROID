@@ -568,6 +568,15 @@ data class Scene(
      */
     val marcos: List<Element> get() = visible.filter { it.isFrame }
 
+    /**
+     * La escena sin estos marcos. Se marcan como borrados, que es como se borra aquí todo
+     * —así deshacer y el resto del motor los siguen entendiendo—, y **solo el marco**: lo que
+     * encuadraba sigue dibujado. Ver [Proyectos.sinPaginas].
+     */
+    fun sinMarcos(ids: Set<String>): Scene =
+        if (ids.isEmpty()) this
+        else copy(elements = elements.map { if (it.isFrame && it.id in ids) it.copy(isDeleted = true) else it })
+
     /** Lo que cae dentro de [marco], sin el marco mismo. */
     fun contenidoDe(marco: Element): List<Element> {
         val caja = getElementBounds(marco)
