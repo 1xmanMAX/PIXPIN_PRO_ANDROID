@@ -600,7 +600,7 @@ class PlanoEnPantalla private constructor(
             val fotos = ArrayList<Foto>()
             for (f in plano.fotos) {
                 val bmp = runCatching {
-                    BitmapFactory.decodeByteArray(f.datos, 0, f.datos.size)
+                    conSuMascara(f)
                 }.getOrNull() ?: continue
                 val m = Matrix()
                 // La matriz lleva el cuadrado de la imagen al papel; el bitmap se mide en sus
@@ -635,6 +635,44 @@ class PlanoEnPantalla private constructor(
          * paso es fino de sobra —una milésima de la caja— para que al acercarse no se vean
          * esquinas.
          */
+        /**
+         * **La imagen del PDF con su transparencia ya puesta.**
+         *
+         * Un plano de Revit no rellena sus zonas de color: pone encima un JPEG de ese color y
+         * lo recorta con una segunda imagen en gris —la máscara—, donde el negro es
+         * transparente. Aquí se juntan las dos en un solo `Bitmap`: el gris de la máscara pasa
+         * a ser el alfa del píxel. Ver [PlanoDePdf.Imagen.mascara].
+         *
+         * Se hace **una vez, al abrir el plano**, y no en cada fotograma: después es un
+         * `drawBitmap` corriente y cuesta lo mismo que cualquier otro. Si la máscara no se
+         * puede leer se devuelve la imagen tal cual, opaca, que es lo que se hacía antes de
+         * entenderlas.
+         */
+        private fun conSuMascara(f: PlanoDePdf.Imagen): Bitmap? {
+            val color = BitmapFactory.decodeByteArray(f.datos, 0, f.datos.size) ?: return null
+            val bytes = f.mascara ?: return color
+            val mascara = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return color
+            if (mascara.width != color.width || mascara.height != color.height) {
+                mascara.recycle(); return color
+            }
+            val ancho = color.width
+            val alto = color.height
+            val px = IntArray(ancho * alto)
+            val mx = IntArray(ancho * alto)
+            color.getPixels(px, 0, ancho, 0, 0, ancho, alto)
+            mascara.getPixels(mx, 0, ancho, 0, 0, ancho, alto)
+            mascara.recycle()
+            // El gris de la máscara es su alfa. Se mira **el canal rojo** y no la luminancia:
+            // una máscara es gris, con los tres canales iguales, y calcular la media sería
+            // gastar tres multiplicaciones por píxel para llegar al mismo número. Un plano
+            // trae millones de píxeles de máscara y esto se nota al abrirlo.
+            for (i in px.indices) px[i] = (px[i] and 0x00FFFFFF) or ((mx[i] and 0xFF) shl 24)
+            val junta = Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888)
+            junta.setPixels(px, 0, ancho, 0, 0, ancho, alto)
+            color.recycle()
+            return junta
+        }
+
         private fun rayas(b: PlanoDePdf.Brocha, paso: Float): List<Tanda> {
             val salida = ArrayList<Float>(b.ops.size * 4)
             var i = 0

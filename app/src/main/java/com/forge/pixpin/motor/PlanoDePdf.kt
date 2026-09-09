@@ -143,7 +143,26 @@ object PlanoDePdf {
         val tipo: String,
         val datos: ByteArray,
         val a: Double, val b: Double, val c: Double, val d: Double,
-        val x: Double, val y: Double
+        val x: Double, val y: Double,
+        /**
+         * **La transparencia de la imagen, si la trae** (`/SMask`), en sus bytes de origen.
+         *
+         * Es una segunda imagen en gris del mismo tamaño donde el negro es transparente y el
+         * blanco opaco. Aquí **no se junta con la de color**: juntarlas es descomprimir dos
+         * JPEG y recorrer un millón de píxeles, y esto se lee en una prueba de JVM sin
+         * Android. Cada quien la junta a su manera y una sola vez — la pantalla en
+         * [PlanoEnPantalla] con un `Bitmap`, la página web en un lienzo suyo.
+         *
+         * **Por qué importa.** Un plano de Revit pinta así sus zonas de color: no rellena el
+         * polígono, sino que pone encima un JPEG de ese color recortado por su máscara. En el
+         * plano del usuario (8-sep-2026) eran **21 pares** de imágenes, y como la máscara se
+         * rechazaba, las 42 caían en [Plano.sinEntender] y **el plano entero se mandaba como
+         * fotografía**: ni vectorial en la web, ni líneas en la pantalla, y de ahí que un
+         * plano grande fuera a tirones. Ver [pasarLaFoto].
+         */
+        val mascara: ByteArray? = null,
+        /** El tipo MIME de [mascara]. */
+        val tipoMascara: String? = null
     )
 
     /** Una página leída. Las medidas van en puntos del papel. */
@@ -780,7 +799,8 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
      */
     private fun pasarLaFoto(flujo: PdfValor.Flujo): Boolean {
         val d = flujo.dicc
-        if (d.entradas.containsKey("SMask") || d.entradas.containsKey("Mask")) return false
+        // `/Mask` es otra cosa: o un recorte por color o un sello de un bit. Sigue fuera.
+        if (d.entradas.containsKey("Mask")) return false
         if ((d.entradas["ImageMask"] as? PdfValor.Booleano)?.valor == true) return false
         if (pesoDeFotos > PESO_DE_LAS_FOTOS) return false
         val (filtro, datos) = archivo.sinElUltimoFiltro(flujo) ?: return false
@@ -788,6 +808,26 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
             "DCTDecode", "DCT" -> "image/jpeg"
             "JPXDecode" -> return false
             else -> return false
+        }
+        // **La transparencia, si la trae.** Ver [PlanoDePdf.Imagen.mascara]: se pasa entera y
+        // sin tocar, como la de color, y quien pinte las junta. Si la máscara existe pero no
+        // se puede pasar tal cual, la imagen entera se rechaza: pintarla sin su transparencia
+        // sería taparle al plano lo que hay debajo con un rectángulo opaco, que se ve **peor**
+        // que no pintarla.
+        var mascara: ByteArray? = null
+        var tipoMascara: String? = null
+        if (d.entradas.containsKey("SMask")) {
+            val m = archivo.resolver(d.entradas["SMask"]) as? PdfValor.Flujo ?: return false
+            // Una máscara con máscara, no. Ni una que a su vez sea un sello.
+            if (m.dicc.entradas.containsKey("SMask") || m.dicc.entradas.containsKey("Mask")) return false
+            if (!mismoTamano(d, m.dicc)) return false
+            val (fm, dm) = archivo.sinElUltimoFiltro(m) ?: return false
+            tipoMascara = when (fm) {
+                "DCTDecode", "DCT" -> "image/jpeg"
+                else -> return false
+            }
+            mascara = dm
+            pesoDeFotos += dm.size
         }
         pesoDeFotos += datos.size
         // El cuadrado de la imagen va del (0,0) al (1,1) del espacio de dibujo, y su primera
@@ -803,9 +843,26 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
             capa = capaActual(), alfa = e.alfaRelleno, tipo = tipo, datos = datos,
             a = caja.vectorX(ux, uy), b = caja.vectorY(ux, uy),
             c = caja.vectorX(vx, vy), d = caja.vectorY(vx, vy),
-            x = caja.enX(ox, oy), y = caja.enY(ox, oy)
+            x = caja.enX(ox, oy), y = caja.enY(ox, oy),
+            mascara = mascara, tipoMascara = tipoMascara
         )
         return true
+    }
+
+    /**
+     * Si la máscara mide lo mismo que su imagen.
+     *
+     * El PDF **no** lo exige —una máscara puede venir a otra resolución y el lector la
+     * estira—, pero juntarlas píxel a píxel sí lo exige, y estirar aquí sería rasterizar. Las
+     * de Revit vienen exactamente del mismo tamaño (992×877 en el plano del usuario), que es
+     * lo corriente; la que no, se rechaza y su página se manda como foto, como antes.
+     */
+    private fun mismoTamano(imagen: PdfValor.Dicc, mascara: PdfValor.Dicc): Boolean {
+        fun lado(d: PdfValor.Dicc, cual: String) =
+            (archivo.resolver(d.entradas[cual]) as? PdfValor.Numero)?.valor?.toInt()
+        val ancho = lado(imagen, "Width") ?: return false
+        val alto = lado(imagen, "Height") ?: return false
+        return ancho == lado(mascara, "Width") && alto == lado(mascara, "Height")
     }
 
     // ---- El texto ----

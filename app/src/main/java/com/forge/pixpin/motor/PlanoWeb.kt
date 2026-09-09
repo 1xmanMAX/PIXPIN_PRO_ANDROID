@@ -116,6 +116,13 @@ object PlanoWeb {
                 append(numero(f.x * escala)).append(',').append(numero(f.y * escala))
                 append("],\"u\":\"data:").append(f.tipo).append(";base64,")
                 append(java.util.Base64.getEncoder().encodeToString(f.datos)).append('"')
+                // Su transparencia, si la trae, como una segunda imagen. La página las junta
+                // en un lienzo suyo al cargar. Ver [PlanoDePdf.Imagen.mascara].
+                val mascara = f.mascara
+                if (mascara != null && f.tipoMascara != null) {
+                    append(",\"k\":\"data:").append(f.tipoMascara).append(";base64,")
+                    append(java.util.Base64.getEncoder().encodeToString(mascara)).append('"')
+                }
                 if (f.alfa < 0.999) append(",\"o\":").append(numero(f.alfa))
                 append('}')
             }

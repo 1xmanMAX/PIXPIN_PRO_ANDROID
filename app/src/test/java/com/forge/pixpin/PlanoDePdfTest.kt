@@ -300,8 +300,79 @@ class PlanoDePdfTest {
         assertEquals("alto, hacia abajo", 20.0, f.d, 0.001)
     }
 
+    /**
+     * **La zona de color de un plano de Revit**: un JPEG recortado por su máscara.
+     *
+     * Es como Revit pinta lo sombreado —no rellena el polígono, pone encima una imagen de ese
+     * color y la recorta—, y el plano del usuario (8-sep-2026) traía **21 pares** así. Mientras
+     * la máscara se rechazaba, esas 42 imágenes caían en [PlanoDePdf.Plano.sinEntender] y el
+     * plano entero se mandaba como fotografía: ni vectorial en la web ni líneas en la pantalla.
+     */
     @Test
-    fun `una imagen con recorte de transparencia no se pasa`() {
+    fun `una foto con mascara de transparencia se pasa con las dos`() {
+        val jpeg = "\u00ff\u00d8\u00ff\u00e0COLOR"
+        val gris = "\u00ff\u00d8\u00ff\u00e0MASCARA"
+        val p = leer(
+            paginaCon(
+                "q 10 0 0 10 0 0 cm /Im1 Do Q 0 0 m 1 1 l S",
+                recursos = "/XObject << /Im1 5 0 R >>",
+                masObjetos = listOf(
+                    flujo(
+                        5, jpeg,
+                        " /Type /XObject /Subtype /Image /Width 4 /Height 2 /SMask 6 0 R " +
+                            "/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode"
+                    ),
+                    flujo(
+                        6, gris,
+                        " /Type /XObject /Subtype /Image /Width 4 /Height 2 " +
+                            "/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode"
+                    )
+                )
+            )
+        )!!
+        assertEquals("no se ha quedado nada fuera", 0, p.sinEntender)
+        assertEquals(1, p.fotos.size)
+        val f = p.fotos[0]
+        assertEquals(jpeg, String(f.datos, Charsets.ISO_8859_1))
+        assertEquals("image/jpeg", f.tipoMascara)
+        assertEquals(gris, String(f.mascara!!, Charsets.ISO_8859_1))
+    }
+
+    /**
+     * Una máscara de otro tamaño **no** se junta: hacerlo pediría estirarla, y estirar es
+     * rasterizar, que es justo de lo que huye este lector. Se rechaza la imagen entera.
+     */
+    @Test
+    fun `una mascara de otro tamano no se pasa`() {
+        val p = leer(
+            paginaCon(
+                "q 10 0 0 10 0 0 cm /Im1 Do Q",
+                recursos = "/XObject << /Im1 5 0 R >>",
+                masObjetos = listOf(
+                    flujo(
+                        5, "xx",
+                        " /Type /XObject /Subtype /Image /Width 4 /Height 2 /SMask 6 0 R " +
+                            "/Filter /DCTDecode"
+                    ),
+                    flujo(
+                        6, "yy",
+                        " /Type /XObject /Subtype /Image /Width 2 /Height 1 " +
+                            "/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode"
+                    )
+                )
+            )
+        )!!
+        assertEquals("hay que contarla para poder volver a la foto", 1, p.sinEntender)
+        assertTrue(p.fotos.isEmpty())
+    }
+
+    /**
+     * Y una máscara que no es un flujo que se pueda pasar tal cual tampoco: pintar la imagen
+     * sin su transparencia taparía el plano con un rectángulo opaco, que se ve **peor** que no
+     * pintarla.
+     */
+    @Test
+    fun `una imagen con recorte de transparencia ilegible no se pasa`() {
         val p = leer(
             paginaCon(
                 "q 10 0 0 10 0 0 cm /Im1 Do Q",

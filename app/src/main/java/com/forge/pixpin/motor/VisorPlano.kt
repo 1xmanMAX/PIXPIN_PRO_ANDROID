@@ -159,9 +159,42 @@ function haySueltas(){
 // Las fotos del PDF —un logotipo, una ortofoto— van tal cual venían dentro del archivo. Se
 // piden al abrir y, cuando llegan, se repinta: es lo único de la página que no está listo
 // desde el primer fotograma.
+// Y si la foto trae **máscara** (`k`), no se puede usar tal cual: es un JPEG opaco al que
+// otra imagen en gris le dice qué parte se ve. Un plano de Revit pinta así sus zonas de
+// color, y son todas las que tiene. Se juntan en un lienzo aparte —el gris pasa a ser el
+// alfa— **una sola vez al cargar**, y a partir de ahí es una imagen normal que se dibuja
+// como las demás. Ver PlanoDePdf.Imagen.mascara.
+function juntarConLaMascara(t, img, mascara){
+  var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+  if(!w||!h||mascara.naturalWidth!==w||mascara.naturalHeight!==h){ t.img=img; return; }
+  try{
+    var c=document.createElement('canvas'); c.width=w; c.height=h;
+    var g=c.getContext('2d');
+    g.drawImage(img,0,0);
+    var d=g.getImageData(0,0,w,h);
+    g.clearRect(0,0,w,h);
+    g.drawImage(mascara,0,0);
+    var m=g.getImageData(0,0,w,h).data, p=d.data;
+    // El canal rojo de la máscara es el alfa: es gris, los tres canales valen lo mismo, y
+    // esto recorre millones de píxeles.
+    for(var i=0,n=p.length;i<n;i+=4) p[i+3]=m[i];
+    g.putImageData(d,0,0);
+    t.img=c;
+  }catch(err){
+    // Un lienzo manchado por venir la imagen de otro sitio: mejor opaca que nada.
+    t.img=img;
+  }
+}
 for(var f=0;f<fotos.length;f++)(function(t){
   var img=new Image();
-  img.onload=function(){ t.img=img; sucio=true; programar(); };
+  img.onload=function(){
+    if(!t.k){ t.img=img; sucio=true; programar(); return; }
+    var mascara=new Image();
+    mascara.onload=function(){ juntarConLaMascara(t,img,mascara); sucio=true; programar(); };
+    // Sin su máscara la imagen taparía el plano con un rectángulo opaco: se deja fuera.
+    mascara.onerror=function(){ sucio=true; programar(); };
+    mascara.src=t.k;
+  };
   img.src=t.u;
 })(fotos[f]);
 
