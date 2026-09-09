@@ -5438,11 +5438,27 @@ class MensajesActivity : ComponentActivity() {
     /** Si el documento que se va a exportar lleva algún audio. Ver [com.forge.pixpin.motor.AudioLigero.hayAudioEn]. */
     private fun hayAudioEn(m: Mensaje): Boolean {
         val (p, claves) = proyectoDe(m) ?: return false
-        return com.forge.pixpin.motor.HojasDelProyecto.paginas(p) { null }.any {
+        // **Con los mismos dibujos con los que se sacaron las claves.**
+        //
+        // Aquí se pasaba `{ null }` mientras [proyectoDe] cargaba las escenas de verdad, y las
+        // claves de las dos listas **no eran las mismas**: un lienzo con marcos sale como una
+        // página por marco (`hoja/marco/`) cuando se lee su escena y como una sola página
+        // (`hoja//`) cuando no, así que ninguna de las marcadas casaba y la pregunta por el
+        // audio no salía aunque lo hubiera. Comparar dos listas hechas con criterios distintos
+        // es un error que no se ve: las dos parecen razonables por separado.
+        return paginasConSusDibujos(p).any {
             (claves.isEmpty() || it.clave in claves) &&
                 com.forge.pixpin.motor.AudioLigero.hayAudioEn(it.texto ?: it.hoja.nota)
         }
     }
+
+    /** Las páginas de un proyecto leyendo las escenas de sus lienzos. Ver [proyectoDe]. */
+    private fun paginasConSusDibujos(p: com.forge.pixpin.motor.Proyecto) =
+        com.forge.pixpin.motor.HojasDelProyecto.paginas(p) { dibujo ->
+            com.forge.pixpin.motor.ExcalidrawStore.cargar(
+                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo)
+            )
+        }
 
     private fun proyectoDe(m: Mensaje): Pair<com.forge.pixpin.motor.Proyecto, Set<String>>? {
         val app = application as? PixPinApp ?: return null
@@ -5466,9 +5482,7 @@ class MensajesActivity : ComponentActivity() {
             }
             else -> return null
         }
-        val claves = com.forge.pixpin.motor.HojasDelProyecto.paginas(p) { dibujo ->
-            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo))
-        }.map { it.clave }.toSet()
+        val claves = paginasConSusDibujos(p).map { it.clave }.toSet()
         return p to claves
     }
 

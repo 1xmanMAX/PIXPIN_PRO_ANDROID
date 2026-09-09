@@ -231,7 +231,7 @@ fun PantallaDeProyectos(
             calidadDeAudio = ExportarHtml.calidadDeAudio(marcadas),
             onCalidadDeAudio = { c -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c)) } },
             // Solo se pregunta por el audio si alguna de las hojas marcadas trae uno.
-            hayAudio = remember(marcado) { hayAudioEnLoMarcado(ordenados, marcado) }
+            hayAudio = remember(marcado) { hayAudioEnLoMarcado(contexto, ordenados, marcado) }
         )
     }
     // El proyecto que se está empaquetando como `.pixpin`, o null.
@@ -2120,12 +2120,20 @@ internal fun imagenIncrustada(ruta: String): String? = runCatching {
  * un medio de su Markdown. Ver [com.forge.pixpin.motor.AudioLigero.hayAudioEn].
  */
 private fun hayAudioEnLoMarcado(
+    contexto: android.content.Context,
     proyectos: List<Proyecto>,
     marcado: Map<String, Set<String>>
 ): Boolean = proyectos.any { p ->
     val suyas = marcado[p.id] ?: return@any false
-    HojasDelProyecto.paginas(p) { null }
-        .any { it.clave in suyas && com.forge.pixpin.motor.AudioLigero.hayAudioEn(it.texto ?: it.hoja.nota) }
+    // **Con las escenas de verdad**, que es como se sacaron las claves de lo marcado: un
+    // lienzo con marcos son varias páginas cuando se lee su dibujo y una sola cuando no, así
+    // que leyéndolo de otra manera ninguna clave casaba. Ver el mismo arreglo en
+    // `MensajesActivity.hayAudioEn`.
+    HojasDelProyecto.paginas(p) { dibujo ->
+        com.forge.pixpin.motor.ExcalidrawStore.cargar(
+            com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, dibujo)
+        )
+    }.any { it.clave in suyas && com.forge.pixpin.motor.AudioLigero.hayAudioEn(it.texto ?: it.hoja.nota) }
 }
 
 private fun compartir(contexto: android.content.Context, archivo: java.io.File, tipo: String) {
