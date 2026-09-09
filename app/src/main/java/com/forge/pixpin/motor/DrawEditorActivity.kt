@@ -623,12 +623,26 @@ class DrawEditorActivity : ComponentActivity() {
         guardar()
         faltaDevolverAlPdf = false
 
-        val bien = PdfDelProyecto.rehacer(this, proyecto, ::bitmapDe)
-        android.widget.Toast.makeText(
-            this,
-            if (bien) R.string.pdf_anotado_ok else R.string.pdf_no_se_pudo,
-            android.widget.Toast.LENGTH_SHORT
-        ).show()
+        // **Rehacer el PDF fuera de la pantalla.** Con un plano grande y varias hojas
+        // anotadas, esto podía tardar segundos justo en `onPause` —la pantalla congelada
+        // al salir del editor—. Se lanza al hilo de disco con lo que hace falta ya
+        // capturado (el proyecto y las rutas de sus imágenes), de modo que aunque la
+        // actividad se destruya el documento se termina de rehacer.
+        val rutasDeImagenes = controller.scene.files.mapValues { it.value.path }
+        val contexto = app
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val cargarImagen: (String) -> Bitmap? = { id -> rutasDeImagenes[id]?.let { ImageStore.load(it) } }
+            val bien = PdfDelProyecto.rehacer(contexto, proyecto, cargarImagen)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (!isFinishing && !isDestroyed) {
+                    android.widget.Toast.makeText(
+                        this@DrawEditorActivity,
+                        if (bien) R.string.pdf_anotado_ok else R.string.pdf_no_se_pudo,
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
