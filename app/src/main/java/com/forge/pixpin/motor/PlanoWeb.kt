@@ -40,11 +40,12 @@ object PlanoWeb {
     /**
      * **La página de un PDF lista para el documento web, o null si no compensa.**
      *
-     * Devuelve null en los tres casos en los que mandar geometría sería peor que mandar la
-     * fotografía de siempre: si el archivo no se entiende, si la página **pinta algo que aquí
-     * no está** —una imagen que no se pudo pasar tal cual, un degradado, un patrón: entonces
-     * la lámina saldría incompleta, y una lámina a la que le falta algo es peor que una
-     * borrosa, porque lo borroso se ve y lo que falta no— y si apenas tiene geometría. Ver
+     * Devuelve null si el archivo no se entiende o si apenas tiene geometría (un escaneo): una
+     * página con líneas de verdad manda sus líneas, aunque tenga cosas que aquí no se pintan
+     * —una imagen que no se pudo pasar tal cual, un degradado, un patrón—. Antes eso mandaba
+     * toda la lámina como foto, y un plano de Revit con su geometría entera se entregaba como
+     * una imagen borrosa por cuatro detalles que no se vectorizaban; el usuario prefirió el
+     * vector, que se ve nítido, y asumir que lo que no se entiende no sale. Ver
      * [PlanoDePdf.Plano.valeLaPena] y [PlanoDePdf.Plano.sinEntender].
      *
      * Va con red: leer un plano enorme puede quedarse sin memoria en un teléfono modesto, y
@@ -56,7 +57,7 @@ object PlanoWeb {
         anchoEnUnidades: Double = ANCHO_EN_UNIDADES
     ): String? = runCatching {
         val plano = PlanoDePdf.deArchivo(ruta, pagina) ?: return null
-        if (!plano.valeLaPena || plano.sinEntender > 0) return null
+        if (!plano.valeLaPena) return null
         aJson(plano, anchoEnUnidades)
     }.getOrNull()
 

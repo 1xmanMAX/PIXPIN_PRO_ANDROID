@@ -3475,7 +3475,10 @@ class DrawEditorActivity : ComponentActivity() {
         val hecho = withContext(Dispatchers.IO) {
             runCatching {
                 val plano = PlanoDePdf.deArchivo(ruta, paginaDeFondo) ?: return@runCatching null
-                if (!plano.valeLaPena || plano.sinEntender > 0) return@runCatching null
+                // Se manda en líneas si hay geometría que valga, aunque haya cosas que aquí no
+                // se pinten: mejor vectorial nítido que toda la página como foto por un detalle
+                // (un plano de Revit salía como imagen por esto). Ver [PlanoWeb.deArchivo].
+                if (!plano.valeLaPena) return@runCatching null
                 // **Solo la pantalla: la web se empaqueta cuando se exporta.** Empaquetar aquí,
                 // aunque nadie fuera a exportar, hacía que un plano grande tardara el doble en
                 // aparecer (ver [planoLeido]/[planoParaLaWeb]).
