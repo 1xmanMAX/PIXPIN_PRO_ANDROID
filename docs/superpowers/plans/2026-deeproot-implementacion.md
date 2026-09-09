@@ -5,11 +5,40 @@
 > si el usuario dice "continúa", rearmar con `update_goal action=resume`).
 
 ## Estado al último guardado
-- **WP1 HECHA y publicada**: commit `518b9a2` en `origin/DEEPROOT`.
-- **WP2+WP3 HECHA (parte de código)**: commit `1092bb0` en `origin/DEEPROOT` (guard de pintado en
-  hoja oculta en `VisorPlano.pintar`). Verificación en navegador/dispositivo pendiente
-  (aceptación manual del plan).
-- WP4 en curso (medir en HTML).
+- WP1 `518b9a2` · WP2+3 `1092bb0` · WP4 `41426b0` · WP6 `1389ff1` · WP7 `c3bec25` ·
+  WP8 (lógica) `f8968dc` — todas pusheadas en `origin/DEEPROOT`.
+- **WP5 pendiente** (ver nota más abajo).
+- **WP8 pendiente la mitad de UI**: la lógica pura (`claveDeOrigen`/`rachasDeOrigen` en
+  `guardados/Agrupacion.kt`, con tests) está hecha; falta **plegar en la LazyColumn** de
+  `MensajesActivity` las miniaturas pequeñas de cada racha (ver detalle abajo).
+- WP9 y WP10 sin empezar. Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4).
+
+## Notas para retomar WP5, WP8-UI, WP9 y WP10
+- **WP5**: el intento de delegarlo a un subagente no avanzó (se canceló). Hacerlo con alcance
+  mínimo propio y pruebas JVM: (1) `DrawEditorActivity.kt` ~305-309 raster de fondo fuera del
+  hilo principal o perezoso; (2) en `traerElPlanoEnLineas` (~3438-3465) construir antes
+  `PlanoEnPantalla` y `PlanoWeb.aJson` solo si se va a exportar; (3) `devolverAlPdf` (~587-622)
+  en IO. El trazo incremental (elemento en curso fuera de `scene.elements`) es opcional y
+  arriesgado: solo si DrawControllerTest sigue verde.
+- **WP8-UI**: en `MensajesActivity.Pantalla()` la lista es una `LazyColumn` (~737-865) que
+  itera `tramos` (porDias). Tras `visibles`/`tramos`, calcular `rachas = rachasDeOrigen(tramo.mensajes)`
+  por tramo y emitir items que colapsen cada racha (≥2) en una fila de miniaturas pequeñas
+  (usar las funciones de miniatura existentes a tamaño reducido + «+N»), manteniendo
+  `abrir(m)` por miembro; tocar los helpers que asumen 1 item = 1 mensaje:
+  `filaDe` ~4798, `cuandoDeLaFila` ~4817, saltos `animateScrollToItem` ~699-727 y el arrastre
+  de selección `registrarFranja` ~851-861 (líneas aproximadas; verificar sobre el archivo).
+- **WP9a**: `PastillaDeAtajo` (~4030-4058) + `pinear(m)` (~5177-5258) ya existen y `ARCHIVO`
+  ya tiene píldora (FilaDeArchivo ~4319). Falta envolver `IMAGEN` (`Miniatura` ~2823/3022) y
+  `PAGINA` (`MiniaturaDePagina` ~2830/3386) en fila/píldora superpuesta (cuidar `soloLaFoto`,
+  ~2863); `VOZ` ya tiene transcribir.
+- **WP9b**: lector PDF ligero al tocar un PDF-ARCHIVO (hoy `abrirFuera` ~5561 = visor externo):
+  pantalla nueva usando `PdfDoc.pageCount/render` + caché `PdfMiniaturas`; referencia de rejilla
+  `PinWindowController.openPdfViewer`/`PdfViewerContent` (2077-2260); anotar por página con el
+  patrón `guardarPagina` (MensajesActivity ~4865-4914).
+- **WP10**: gesto 3 dedos arriba dentro de los editores 2D/3D/Markdown → hoja de apuntes
+  flotante (block de notas) con ocultar/pegar al lienzo. En 2D el toque 2-3 dedos SIN
+  movimiento es undo/redo (`DrawCanvas.kt` 1562-1621); en 3D los 3 dedos ladean cámara (usar
+  flick vertical o botón alternativo). v1 = pin "hoja" patrón `OverlayManager.kt:494-509`.
 
 ## Entorno verificado
 - SDK 36 en `C:\Users\MaxBook\AppData\Local\Android\Sdk`; `local.properties` creado (ignorado).
@@ -24,11 +53,11 @@
 - [x] WP0 Entorno + línea base verde.
 - [x] **WP1** "Dibujo vacío" al exportar HTML desde lienzo → HECHA (commit `518b9a2`).
 - [x] WP2+WP3 Reserva de pintado del plano al mover vista + roundtrip HTML con plano → HECHA (código, `1092bb0`; verificación en navegador pendiente).
-- [ ] WP4 Medir en el HTML: flechas+cota, movibles, persistentes, varias, imán (diseño confirmado por el usuario).
-- [ ] WP5 Rendimiento de planos PDF enormes manteniendo vectorial.
-- [ ] WP6 Compartir: opciones/aviso de audio solo cuando hay audio.
-- [ ] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto.
-- [ ] WP8 Agrupación por rachas de origen en Guardar (miniaturas pequeñas).
+- [x] WP4 Medir en el HTML: flechas+cota, movibles, persistentes, varias, imán → HECHA (`41426b0`; verificación en navegador pendiente).
+- [ ] WP5 Rendimiento de planos PDF enormes manteniendo vectorial → PENDIENTE (ver notas arriba).
+- [x] WP6 Compartir: opciones/aviso de audio solo cuando hay audio → HECHA (`1389ff1`).
+- [x] WP7 Borrado de hojas/marcos del canvas se refleja en el proyecto → HECHA (`c3bec25`).
+- [~] WP8 Agrupación por rachas de origen en Guardar → lógica HECHA (`f8968dc`); falta plegar la UI de la LazyColumn.
 - [ ] WP9 Píldoras "hacer pin" en burbujas (IMAGEN/PAGINA; VOZ opcional) + lector PDF ligero.
 - [ ] WP10 Hoja de apuntes rápida (block de notas) con 3 dedos en canvas 2D/3D/Markdown.
 - [ ] (Descartado por el usuario) Sección-pizarra acumuladora de pines copiados — era para PC.
