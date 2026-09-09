@@ -333,6 +333,16 @@
             android:exported="false" />
 
         <!-- Las mini-apps: la lista de tareas y los gastos, cada una en su pantalla. -->
+        <!-- **El lector de PDF**: ver un PDF de la conversación sin salir de PixPin. Su
+             propia tarea, como los editores, para que abrirlo desde un pin no traiga la
+             aplicación entera al frente. Ver [LectorPdfActivity]. -->
+        <activity
+            android:name=".pdf.LectorPdfActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:taskAffinity="${applicationId}.lector"
+            android:documentLaunchMode="intoExisting" />
+
         <activity
             android:name=".mini.MiniActivity"
             android:exported="false"

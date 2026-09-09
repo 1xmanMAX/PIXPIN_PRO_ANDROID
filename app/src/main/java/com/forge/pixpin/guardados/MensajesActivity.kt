@@ -5613,7 +5613,14 @@ class MensajesActivity : ComponentActivity() {
                     if (yaTenia == null) foto else null
                 )
             }
-            else -> m.ruta?.let { abrirFuera(it) }
+            // **Un PDF se ve aquí dentro.** Salía con `ACTION_VIEW` a otra aplicación, y
+            // volver costaba deshacer el camino. Ver [com.forge.pixpin.pdf.LectorPdfActivity].
+            // Lo que no sea un PDF sigue saliendo fuera: para eso están las otras aplicaciones.
+            else -> m.ruta?.let { ruta ->
+                if (ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true)) {
+                    com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
+                } else abrirFuera(ruta)
+            }
         }
     }
 
