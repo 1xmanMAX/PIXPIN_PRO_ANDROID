@@ -766,8 +766,12 @@ fun DialogoDeFuncionesWeb(
      * Si lo que se va a exportar lleva **algún audio**. Con `false` no se pregunta por su
      * calidad: era una opción que salía siempre y que en un documento sin audios no hacía
      * nada (lo reportó el usuario el 6-sep-2026). Ver [AudioLigero.hayAudioEn].
+     *
+     * **Por defecto es `false`**: cada llamada que exporta algo tiene que decir si trae
+     * audio; si no lo dice, la fila no sale —volver a un `true` por omisión era cómo se
+     * colaba la pregunta en documentos sin ningún audio.
      */
-    hayAudio: Boolean = true,
+    hayAudio: Boolean = false,
     /** Qué sale de un lienzo con marcos. Ver [ExportarHtml.hojasDelLienzo]. */
     hojasDelLienzo: String = ExportarHtml.HOJAS_AMBOS,
     onHojasDelLienzo: (String) -> Unit = {}

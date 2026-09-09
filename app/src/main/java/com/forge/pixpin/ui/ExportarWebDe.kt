@@ -76,7 +76,10 @@ object ExportarWebDe {
             if (imagenes > 0) append(" · ").append(imagenes).append(if (imagenes == 1) " imagen" else " imágenes")
             if (adjuntos > 0) append(" · ").append(adjuntos).append(if (adjuntos == 1) " adjunto" else " adjuntos")
             append(" · ").append(peso)
-            if (calidadDeAudio != null) append(" · audio: ").append(calidadDeAudio)
+            // El audio solo se anuncia si de verdad viajó: contar los `<audio>` del archivo y
+            // añadir «· audio: ligero» siempre hacía que un proyecto sin un solo audio dijera
+            // que lo llevaba (lo reportó el usuario al compartir proyectos seleccionados).
+            if (audios > 0 && calidadDeAudio != null) append(" · audio: ").append(calidadDeAudio)
         }
     }
 
