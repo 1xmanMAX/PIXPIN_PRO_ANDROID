@@ -34,6 +34,10 @@ class MotorSeparadoTest {
      */
     private val conAndroid = setOf(
         "Renderer.kt", "DrawCanvas.kt", "DrawToolbar.kt", "DrawEditorActivity.kt",
+        // La hoja adhesiva: es interfaz —se garabatea con el dedo— y acaba en un `Bitmap`,
+        // que es lo que se pega en el lienzo. Las dos mitades son de Android. Ver
+        // [com.forge.pixpin.motor.NotaAdhesiva].
+        "NotaAdhesiva.kt",
         "DrawExport.kt", "DrawPdf.kt", "DrawSvg.kt", "DrawTablas.kt", "DrawFonts.kt",
         "Theme.kt", "ExcalidrawStore.kt",
         // Abre archivos para saber qué hoja lleva algo dibujado. Ver el porqué

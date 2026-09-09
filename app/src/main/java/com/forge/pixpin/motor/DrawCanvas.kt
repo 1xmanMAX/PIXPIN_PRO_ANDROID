@@ -1620,6 +1620,64 @@ fun Modifier.elToqueDeVariosDedos(
     }
 }
 
+/**
+ * **El tirón de tres dedos hacia arriba: saca la hoja adhesiva.**
+ *
+ * Convive con [elToqueDeVariosDedos] sin pelearse, y no por casualidad: aquel solo cuenta como
+ * toque si los dedos **no se van a ningún sitio**, así que un tirón invalida el toque por su
+ * propia definición. Uno es «tres dedos y sueltas», el otro «tres dedos y subes».
+ *
+ * Se pide que suban de verdad —más hacia arriba que a los lados— y que **no se separen**: tres
+ * dedos que se abren mientras suben son una mano acomodándose sobre el cristal, no un tirón.
+ * Y se avisa **una sola vez por gesto**: sin eso, seguir subiendo sacaría una hoja por
+ * fotograma.
+ *
+ * Como todo lo que decide un gesto aquí, se mide **en la pantalla** y no en el espacio del
+ * dibujo: lo que la mano hace no cambia porque el lienzo esté más o menos acercado.
+ */
+fun Modifier.elTironDeTresDedos(alSubir: () -> Unit): Modifier = pointerInput(Unit) {
+    val margen = viewConfiguration.touchSlop
+    val subida = margen * LO_QUE_SUBE_UN_TIRON
+    awaitPointerEventScope {
+        var enMarcha = false
+        var maximo = 0
+        var donde = Offset.Zero
+        var separados = 0f
+        var valido = false
+        var avisado = false
+        while (true) {
+            val evento = awaitPointerEvent(PointerEventPass.Initial)
+            val dedos = evento.changes.filter { it.pressed && it.type != PointerType.Stylus }
+            if (dedos.size >= 2 && dedos.size > maximo) {
+                if (!enMarcha) { enMarcha = true; valido = true; avisado = false }
+                maximo = dedos.size
+                donde = centroDe(dedos)
+                separados = loSeparadosQueEstan(dedos)
+            }
+            if (!enMarcha) continue
+            if (dedos.size >= DEDOS_PARA_ESCONDER) valido = false
+            if (dedos.isEmpty()) { enMarcha = false; maximo = 0; valido = false; continue }
+            if (valido && !avisado && maximo == 3 && dedos.size == 3) {
+                // Abrir o cerrar la mano no es subir: eso es un pellizco con tres dedos.
+                if (kotlin.math.abs(loSeparadosQueEstan(dedos) - separados) > margen * 2) {
+                    valido = false
+                    continue
+                }
+                val ido = centroDe(dedos) - donde
+                // Arriba es y negativa, y tiene que ganarle claramente al movimiento lateral:
+                // si no, una mano que barre en diagonal sacaría la hoja sin querer.
+                if (-ido.y > subida && -ido.y > kotlin.math.abs(ido.x) * 1.5f) {
+                    avisado = true
+                    alSubir()
+                }
+            }
+        }
+    }
+}
+
+/** Cuántos márgenes de arrastre hay que subir para que sea un tirón y no un temblor. */
+private const val LO_QUE_SUBE_UN_TIRON = 4f
+
 /** Cuánto puede durar un toque de dos o tres dedos. */
 private const val LO_QUE_DURA_UN_TOQUE = 350L
 

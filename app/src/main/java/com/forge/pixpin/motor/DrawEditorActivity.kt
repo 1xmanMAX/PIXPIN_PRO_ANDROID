@@ -758,6 +758,8 @@ class DrawEditorActivity : ComponentActivity() {
         // de la pantalla, y una barra no puede pintar fuera de sí misma.
         var grupoDesplegado by remember { mutableStateOf<List<Tool>?>(null) }
         var zoomBloqueado by remember { mutableStateOf(false) }
+        // La hoja adhesiva, si está a la vista. Ver [NotaAdhesiva].
+        var adhesivoALaVista by remember { mutableStateOf(false) }
 
         /**
          * **El atrás, por capas.**
@@ -777,6 +779,7 @@ class DrawEditorActivity : ComponentActivity() {
          */
         androidx.activity.compose.BackHandler {
             when {
+                adhesivoALaVista -> adhesivoALaVista = false
                 grupoDesplegado != null -> grupoDesplegado = null
                 ajustesAbiertos -> ajustesAbiertos = false
                 pidiendoFuncionesWeb -> pidiendoFuncionesWeb = false
@@ -839,6 +842,11 @@ class DrawEditorActivity : ComponentActivity() {
                             controller.redo(); cambiado()
                         }
                     }
+                    // **Y tres dedos hacia arriba sacan la hoja adhesiva.** No se pisa con el
+                    // toque de tres de aquí arriba: aquel solo cuenta si los dedos no se van a
+                    // ningún sitio, así que subir lo invalida por su propia definición. Ver
+                    // [elTironDeTresDedos] y [NotaAdhesiva].
+                    .elTironDeTresDedos { adhesivoALaVista = true }
                     .elToqueDeCuatroDedos(
                         alJuntarse = {
                             // El primer dedo llega unas milésimas antes que los otros tres,
@@ -1584,6 +1592,22 @@ class DrawEditorActivity : ComponentActivity() {
                         }
                     }
                 )
+            }
+            // **La hoja adhesiva**, arriba del todo y sin velo: se garabatea mirando lo que
+            // hay debajo, que es de lo que va un recado. Ver [NotaAdhesiva].
+            if (adhesivoALaVista) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = androidx.compose.ui.Alignment.TopCenter
+                ) {
+                    NotaAdhesiva(
+                        onCerrar = { adhesivoALaVista = false },
+                        onPegar = { trazos, ancho, alto, papel, tinta ->
+                            adhesivoALaVista = false
+                            pegarElAdhesivo(trazos, ancho, alto, papel, tinta)
+                        }
+                    )
+                }
             }
             // La ventana de ajustes: también sin velo, que se deja abierta a un
             // lado mientras se sigue dibujando.
@@ -3353,6 +3377,40 @@ class DrawEditorActivity : ComponentActivity() {
 
     private fun aviso(texto: String) {
         android.widget.Toast.makeText(this, texto, android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * **Pega el adhesivo en el lienzo**, como una imagen más.
+     *
+     * Va por el mismo camino que una foto elegida ([colocarImagenElegida]) a propósito: así se
+     * arrastra, se gira, se borra y se exporta con lo que ya sabe hacer el motor, en vez de
+     * inventar una clase de elemento que habría que enseñarle a todo lo demás.
+     *
+     * Se coloca en el **centro de lo que se está mirando**: en un lienzo infinito el origen de
+     * la escena puede quedar a kilómetros de donde está la vista.
+     */
+    private fun pegarElAdhesivo(
+        trazos: List<List<androidx.compose.ui.geometry.Offset>>,
+        ancho: Int, alto: Int, papel: Int, tinta: Int
+    ) {
+        runCatching {
+            val bmp = alBitmap(trazos, ancho, alto, papel, tinta) ?: return
+            val temporal = File(cacheDir, "adhesivo_${System.currentTimeMillis()}.png")
+            temporal.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            val file = ExcalidrawStore.guardarImagen(this, temporal, "image/png") ?: return
+            temporal.delete()
+            bitmaps[file.id] = bmp
+            val v = controller.scene.viewport
+            // A la mitad de lo que mide el mapa de bits: se dibujó a tres veces para que no se
+            // vea blando al acercarse, pero se pega del tamaño en que se garabateó.
+            controller.placeImage(
+                file,
+                at = Pt(-v.scrollX + 120.0, -v.scrollY + 120.0),
+                width = ancho.toDouble(),
+                height = alto.toDouble()
+            )
+            guardar()
+        }
     }
 
     private fun colocarImagenElegida(uri: Uri) {
