@@ -1291,7 +1291,22 @@ function paginaAnotada(){
   // Los dibujos y las notas llevan grupo; las páginas del espacio, no.
   var dibujos=pagina.filter(function(p){return p&&(p.tipo==='dibujo'||p.tipo==='nota');}), i=0;
   var re=/<g id="croquis"[^>]*>[\s\S]*?<\/g>/g;
-  return PLANTILLA.replace(re,function(){
+  // **Solo los primeros, y son los del dibujo.**
+  //
+  // La plantilla es el documento **entero**, y el documento incluye este mismo guion, que
+  // habla de `<g id="croquis">` dos veces: en el patrón de aquí arriba y en el texto que
+  // devuelve esta función. Con una `replace` global, guardar reescribía también **su propia
+  // fuente** —153 bytes, medidos—, el guion quedaba con un error de sintaxis y el archivo
+  // guardado se abría **muerto**: sin poder dibujar, sin poder ampliar, sin nada. Es el fallo
+  // que reportó el usuario el 8-sep-2026 («lo edito, lo guardo, lo reenvío, y ya no puedo
+  // hacer zoom ni manejar ni nada»), y solo salía en el archivo guardado, nunca en el
+  // exportado, porque hace falta guardar una vez para estropearlo.
+  //
+  // Los grupos de verdad están en el `#lienzo`, que va **antes** del guion: son las primeras
+  // coincidencias, tantas como hojas con grupo. Lo que venga después es el guion hablando de
+  // sí mismo y se deja **tal cual**.
+  return PLANTILLA.replace(re,function(entero){
+    if(i>=dibujos.length) return entero;
     var p=dibujos[i++];
     return p?'<g id="croquis">\n'+p.rayas()+'</g>':'<g id="croquis"></g>';
   });

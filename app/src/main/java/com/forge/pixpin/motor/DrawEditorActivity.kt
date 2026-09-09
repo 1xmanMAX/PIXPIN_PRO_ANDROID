@@ -160,6 +160,7 @@ class DrawEditorActivity : ComponentActivity() {
         private const val ESPERA_PARA_GUARDAR = 350L
 
         private const val EXTRA_ID = "draw_id"
+        const val EXTRA_DESDE_DENTRO = "desde_dentro"
         private const val EXTRA_RUTA = "draw_ruta"
         private const val EXTRA_IMAGEN = "draw_imagen"
         private const val EXTRA_PDF = "draw_pdf"
@@ -214,6 +215,11 @@ class DrawEditorActivity : ComponentActivity() {
                     if (desdeProyecto != null) {
                         putExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO, desdeProyecto)
                     }
+                    // **Que se abrió desde dentro de PixPin**, que es lo que decide si atrás
+                    // devuelve a la aplicación o sale. Un dibujo que llega de fuera —de
+                    // compartir, de abrir un archivo— no lleva esta seña y atrás devuelve a
+                    // quien lo mandó, que es lo que espera quien lo mandó. Ver [cerrarYVolver].
+                    putExtra(EXTRA_DESDE_DENTRO, true)
                     // Igual que el croquis: con su propia taskAffinity, una
                     // instancia viva se trae al frente sin pasar por `onCreate`
                     // y seguiría enseñando el dibujo del pin anterior.
@@ -752,6 +758,32 @@ class DrawEditorActivity : ComponentActivity() {
         // de la pantalla, y una barra no puede pintar fuera de sí misma.
         var grupoDesplegado by remember { mutableStateOf<List<Tool>?>(null) }
         var zoomBloqueado by remember { mutableStateOf(false) }
+
+        /**
+         * **El atrás, por capas.**
+         *
+         * El editor no manejaba el botón de atrás **en absoluto**, así que Android hacía lo
+         * suyo: cerrar la actividad. Y como el editor es la raíz de su propia tarea, cerrarla
+         * es salir de PixPin. De ahí las dos quejas del usuario del 8-sep-2026 —«estoy en el
+         * canvas, retrocedo y me saca de la aplicación» y «estoy en ajustes, retrocedo,
+         * también me saca, y vuelvo y vuelvo en ajustes»—: lo segundo era lo mismo más que el
+         * panel se quedaba abierto, porque nadie lo había cerrado al salir.
+         *
+         * Se atiende **de dentro afuera**, que es el orden en que se abrieron: primero lo que
+         * esté encima del dibujo, y solo cuando no queda nada abierto se sale. Y va en un solo
+         * sitio, con un `when`, y no en varios `BackHandler` sueltos: con varios, quién atiende
+         * el golpe depende del orden en que se compusieron, que es justo lo que nadie quiere
+         * tener que recordar al añadir el siguiente panel.
+         */
+        androidx.activity.compose.BackHandler {
+            when {
+                grupoDesplegado != null -> grupoDesplegado = null
+                ajustesAbiertos -> ajustesAbiertos = false
+                pidiendoFuncionesWeb -> pidiendoFuncionesWeb = false
+                soloElDibujo -> soloElDibujo = false
+                else -> cerrarYVolver()
+            }
+        }
         val ajustes by (application as? com.forge.pixpin.PixPinApp)?.settings?.settings
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
@@ -2731,7 +2763,17 @@ class DrawEditorActivity : ComponentActivity() {
      */
     private fun cerrarYVolver() {
         val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
+        // **Y si no se vino de ningún proyecto, se vuelve a la aplicación igualmente.**
+        //
+        // Como el editor es la raíz de su propia tarea, `finish()` a secas no deja al usuario
+        // en PixPin: lo deja **fuera**, en el lanzador o en la aplicación anterior. Es lo que
+        // reportó el usuario el 8-sep-2026: «estoy en el canvas, retrocedo y me saca de la
+        // aplicación». Solo se sale de verdad cuando el dibujo **llegó de fuera** —de
+        // compartir, de abrir un archivo—, porque ahí lo que espera cualquiera es volver a
+        // quien se lo mandó. Ver [EXTRA_DESDE_DENTRO].
+        val deDentro = intent?.getBooleanExtra(EXTRA_DESDE_DENTRO, false) == true
         if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
+        else if (deDentro && isTaskRoot) com.forge.pixpin.volverALosProyectos(this, null)
         finish()
     }
 

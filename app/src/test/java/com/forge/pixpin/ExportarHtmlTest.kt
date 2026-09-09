@@ -22,6 +22,41 @@ class ExportarHtmlTest {
         ExportarHtml.HojaWeb.Dibujo("", svg, "#ffffff")
     )
 
+    /**
+     * **Guardar no puede reescribir el guion.**
+     *
+     * La plantilla que guarda la página es el documento entero, y el documento incluye el
+     * guion, que nombra `<g id="croquis">` dos veces: en su patrón y en el texto que devuelve.
+     * Con una `replace` global —como estaba— guardar se comía **1.126 bytes de su propia
+     * fuente**, el archivo guardado abría con un error de sintaxis y quedaba **muerto**: ni
+     * dibujar, ni ampliar, ni mover. Solo pasaba en el archivo guardado, nunca en el
+     * exportado, que es lo que lo hacía tan desconcertante (usuario, 8-sep-2026).
+     *
+     * Aquí se guarda igual que lo hace el navegador y se comprueba lo que importa: que el
+     * trazo entre y que **el guion salga con los mismos bytes con los que entró**.
+     */
+    @Test
+    fun `guardar mete el trazo y deja el guion intacto`() {
+        val html = ExportarHtml.paginas(tresHojas(), "Proyecto")
+        val patron = Regex("""<g id="croquis"[^>]*>[\s\S]*?</g>""")
+        assertTrue(
+            "el guion habla de sí mismo: hay más coincidencias que hojas",
+            patron.findAll(html).count() > 3
+        )
+        // Guardar, con el tope que lleva la página: solo las hojas, que van antes del guion.
+        var i = 0
+        val guardado = patron.replace(html) { m ->
+            if (i >= 3) m.value else { i++; """<g id="croquis">\n<path d="M0 0 L9 9"/>\n</g>""" }
+        }
+        assertTrue("el trazo del usuario está", guardado.contains("""<path d="M0 0 L9 9"/>"""))
+        val guion = Regex("""<script[^>]*>([\s\S]*?)</script>""")
+        assertEquals(
+            "el guion del archivo guardado es el mismo que el del exportado",
+            guion.find(html)!!.groupValues[1],
+            guion.find(guardado)!!.groupValues[1]
+        )
+    }
+
     @Test
     fun `un documento lleva todas sus hojas y el menu para pasarlas`() {
         val html = ExportarHtml.paginas(tresHojas(), "Proyecto")
