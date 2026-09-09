@@ -6,14 +6,13 @@
 
 ## Estado al último guardado
 - WP1 `518b9a2` · WP2+3 `1092bb0` · WP4 `41426b0` · WP6 `1389ff1` · WP7 `c3bec25` ·
-  WP8 (lógica) `f8968dc` — todas pusheadas en `origin/DEEPROOT`.
-- **WP5 pendiente** (ver nota más abajo).
-- **WP8 pendiente la mitad de UI**: la lógica pura (`claveDeOrigen`/`rachasDeOrigen` en
-  `guardados/Agrupacion.kt`, con tests) está hecha; falta **plegar en la LazyColumn** de
-  `MensajesActivity` las miniaturas pequeñas de cada racha (ver detalle abajo).
-- WP9 y WP10 sin empezar. Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4).
+  WP8 (lógica) `f8968dc` · WP9a (píldoras pin en IMAGEN/PAGINA) `bdca245` — todas pusheadas
+  en `origin/DEEPROOT`.
+- **WP5 pendiente**, **WP8-UI pendiente** (plegar rachas en la LazyColumn), **WP9b pendiente**
+  (lector PDF ligero), **WP10 pendiente**.
+- Verificación manual en dispositivo/navegador pendiente (WP2+3/WP4 y UI nueva).
 
-## Notas para retomar WP5, WP8-UI, WP9 y WP10
+## Notas para retomar WP5, WP8-UI, WP9b y WP10
 - **WP5**: el intento de delegarlo a un subagente no avanzó (se canceló). Hacerlo con alcance
   mínimo propio y pruebas JVM: (1) `DrawEditorActivity.kt` ~305-309 raster de fondo fuera del
   hilo principal o perezoso; (2) en `traerElPlanoEnLineas` (~3438-3465) construir antes
