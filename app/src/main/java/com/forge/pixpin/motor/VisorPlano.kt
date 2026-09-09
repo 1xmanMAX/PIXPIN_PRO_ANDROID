@@ -402,6 +402,9 @@ function pintarGl(v, e, m){
   for(var i=0;i<tramos.length;i++){
     var t=tramos[i], b=t.b;
     if(!seVe(b.c)) continue;
+    // Las que tienen grosor de verdad las pinta el lienzo de 2D con su ancho: la tarjeta
+    // solo sabe dibujar pelo. Ver [pintar].
+    if((b.g||0)/esc>=1.5) continue;
     var c=color(b.t), o=(b.o===undefined?1:b.o);
     gl.uniform4f(uColor, c[0], c[1], c[2], o);
     // Los bloques que se tocan se dibujan de una sola orden: cambiar de tanda cuesta más que
@@ -493,8 +496,11 @@ function pintar(){
     var b=brochas[i];
     if(!seVe(b.c)) continue;
     if(soloLineas && b.r) continue;
-    // Las rayas las lleva la tarjeta; aquí quedan el papel, las manchas y los rótulos.
-    if(gl && !b.r) continue;
+    // Las rayas las lleva la tarjeta; aquí quedan el papel, las manchas, los rótulos —y las
+    // rayas con **grosor de verdad**, porque la tarjeta las dibuja a pelo, a un píxel (lo
+    // notó el usuario: muros y cotas salían todos del mismo pelo). Una raya que en pantalla
+    // mide menos de un píxel y medio es pelo también y se la queda la tarjeta.
+    if(gl && !b.r && (b.g||0)/esc < 1.5) continue;
     ctx.beginPath();
     var algo=false;
     for(var c=b.c0;c<b.c1;c++){
