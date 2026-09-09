@@ -2820,14 +2820,36 @@ class MensajesActivity : ComponentActivity() {
                     }
                     when (m.clase) {
                         Clase.NOTA -> {}
-                        Clase.IMAGEN -> Miniatura(m, soloFoto, recarga, ampliada)
+                        // **La foto con su atajo para sacarla a un pin encima**, como el de
+                        // los archivos y el de pasar a texto en la voz (lo pidió el usuario):
+                        // mantener pulsado y buscar en el menú eran tres gestos para lo que
+                        // aquí se hace a todas horas — tener la foto delante mientras se
+                        // trabaja en otra cosa. Ver [pinear].
+                        Clase.IMAGEN -> Box {
+                            Miniatura(m, soloFoto, recarga, ampliada)
+                            Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) {
+                                PastillaDeAtajo(
+                                    icono = Icons.Filled.OpenInNew,
+                                    descripcion = getString(com.forge.pixpin.R.string.guardados_pinear)
+                                ) { pinear(m) }
+                            }
+                        }
                         // **Una página adjunta se ve, no se lee.**
                         //
                         // Como fila de archivo decía «documento.pdf · pág. 7», que es
                         // justo lo que uno no recuerda: lo que se recuerda es lo que
                         // había señalado en ella. Se enseña la hoja con lo dibujado
                         // encima, y tocarla abre el editor donde se anotó.
-                        Clase.PAGINA -> MiniaturaDePagina(m, recarga, ampliada)
+                        Clase.PAGINA -> Box {
+                            MiniaturaDePagina(m, recarga, ampliada)
+                            // La página también tiene su atajo para dejarla en un pin.
+                            Box(Modifier.align(Alignment.TopEnd).padding(6.dp)) {
+                                PastillaDeAtajo(
+                                    icono = Icons.Filled.OpenInNew,
+                                    descripcion = getString(com.forge.pixpin.R.string.guardados_pinear)
+                                ) { pinear(m) }
+                            }
+                        }
                         Clase.VOZ -> FilaDeVoz(m) { menuAbierto = true }
                         Clase.MINIAPP -> FilaDeMiniApp(m) { nuevo ->
                             acciones.cambiarTexto(nuevo)
