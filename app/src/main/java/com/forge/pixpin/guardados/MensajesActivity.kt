@@ -3245,6 +3245,8 @@ class MensajesActivity : ComponentActivity() {
                     )
                 }
             }
+            // El atajo para sacarla a la pantalla, en su esquina. Ver [AtajoEnLaEsquina].
+            Box(Modifier.align(Alignment.TopEnd)) { AtajoEnLaEsquina(m) }
         }
     }
 
@@ -3481,6 +3483,8 @@ class MensajesActivity : ComponentActivity() {
                     )
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             )
+                // El atajo para sacar la hoja a la pantalla. Ver [AtajoEnLaEsquina].
+                Box(Modifier.align(Alignment.TopEnd)) { AtajoEnLaEsquina(m) }
             }
             Text(
                 m.nombre.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },
@@ -4007,6 +4011,43 @@ class MensajesActivity : ComponentActivity() {
                 ).show()
                 almacen.transcribir(m)
             }
+        }
+    }
+
+    /**
+     * **El mismo atajo, pero encima de una miniatura.**
+     *
+     * Una foto o una página de plano no tienen sitio *al lado* donde poner el botón: ocupan
+     * la burbuja entera. Así que va **en su esquina**, que es donde lo pidió el usuario
+     * («al lado de los PDF o en una esquina del PDF»).
+     *
+     * Y no puede ser la pastilla de [PastillaDeAtajo] tal cual: aquella se tiñe del color de
+     * la hora sobre el fondo de la burbuja, que se conoce. Aquí debajo hay **una foto
+     * cualquiera** —puede ser negra, blanca o un plano lleno de líneas—, así que el botón se
+     * pinta al revés: un disco oscuro traslúcido con el icono en blanco, que es lo que se lee
+     * sobre cualquier cosa. Es lo mismo que hace cualquier galería con sus mandos encima de la
+     * foto.
+     *
+     * Arriba y a la derecha, no abajo: abajo está la hora, y dos cosas en la misma esquina se
+     * estorban.
+     */
+    @Composable
+    private fun AtajoEnLaEsquina(m: Mensaje) {
+        Box(
+            Modifier
+                .padding(6.dp)
+                .size(30.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(Color.Black.copy(alpha = 0.42f))
+                .clickable { pinear(m) },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.OpenInNew,
+                contentDescription = getString(com.forge.pixpin.R.string.guardados_pinear),
+                tint = Color.White,
+                modifier = Modifier.size(17.dp)
+            )
         }
     }
 
