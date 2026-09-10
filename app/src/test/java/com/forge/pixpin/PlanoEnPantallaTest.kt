@@ -289,4 +289,35 @@ class PlanoEnPantallaTest {
         assertEquals("no se ha quedado ninguna fuera", 50, c.segmentos)
     }
 
+    /**
+     * **Las tandas se reparten por sitio, no por orden de dibujo.**
+     *
+     * Se partían cada tantas mil rayas seguidas, y en un plano mil rayas seguidas del archivo
+     * van repartidas por toda la hoja: la caja de esa tanda es la hoja entera y el descarte no
+     * descarta. Medido en el plano del usuario (9-sep-2026), mirando el 10 % de la página se
+     * recorrían 5.888 rayas de 6.366; repartidas por zonas, 988. Ver [PlanoEnPantalla].
+     */
+    @Test
+    fun `acercarse a un rincon no recorre el plano entero`() {
+        // Una rejilla de rayitas repartidas por toda la hoja, en el orden en que las escribiría
+        // un archivo: fila por fila, que es justo lo que engañaba al reparto por orden.
+        val muchas = (0 until 40).flatMap { fila ->
+            (0 until 40).map { col ->
+                brocha(listOf(M, L), listOf(col * 2.5 to fila * 2.5, col * 2.5 + 1.0 to fila * 2.5 + 1.0))
+            }
+        }
+        val pl = PlanoDePdf.Plano(100.0, 100.0, emptyList(), muchas, emptyList(), emptyList(), 0, false)
+        val p = PlanoEnPantalla.de(pl, 100.0)
+        val entera = Contador()
+        p.pintar(entera, Bounds(0.0, 0.0, 100.0, 100.0), 1.0)
+        assertEquals("mirándolo entero se pintan todas", 1600, entera.segmentos)
+        val rincon = Contador()
+        p.pintar(rincon, Bounds(0.0, 0.0, 10.0, 10.0), 10.0)
+        assertTrue(
+            "un rincón del 1 % no puede costar como la hoja entera (fueron ${rincon.segmentos})",
+            rincon.segmentos < entera.segmentos / 4
+        )
+        assertTrue("y tiene que pintar lo que hay ahí", rincon.segmentos > 0)
+    }
+
 }

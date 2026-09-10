@@ -68,4 +68,21 @@ class TramosDeLaTiraTest {
     @Test fun `una tira vacia no da tramos`() {
         assertTrue(TramosDeLaTira.de(emptyList()).isEmpty())
     }
+    @Test fun `dos pdf en el mismo proyecto son dos montones`() {
+        // Una hoja de PDF no guarda de qué PDF sale, pero sí su número: las páginas de un
+        // documento entran seguidas y el siguiente vuelve a empezar. Donde la cuenta se rompe,
+        // empieza otro montón. Lo pidió el usuario: «cada PDF individual se agrupa».
+        val paginas = (0 until 4).map { pdf(it) } + (0 until 3).map { pdf(it) }
+        val tramos = TramosDeLaTira.de(paginas)
+        assertEquals(2, tramos.size)
+        assertEquals(listOf(4, 3), tramos.map { it.paginas.size })
+        assertEquals(listOf(0, 4), tramos.map { it.desde })
+    }
+
+    @Test fun `un salto en la numeracion tambien parte el monton`() {
+        // Una página suelta sacada de otro documento no se cuela en el montón del primero.
+        val tramos = TramosDeLaTira.de(listOf(pdf(0), pdf(1), pdf(7), pdf(8)))
+        assertEquals(2, tramos.size)
+    }
+
 }

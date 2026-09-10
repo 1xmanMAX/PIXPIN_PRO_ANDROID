@@ -1552,10 +1552,16 @@ private fun RejillaDeHojas(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val caben = (maxHeight / ALTO_DE_FILA).toInt().coerceIn(1, 6)
+        // **El mosaico se agrupa igual que la tira.** Lo pidió el usuario el 9-sep-2026: un
+        // proyecto de doscientas hojas en mosaico son doscientos sellos, y buscar en él es
+        // pasar de largo diez veces el mismo documento. Con los montones, el mosaico enseña
+        // **documentos** y se abre el que interese. Ver [TramosDeLaTira].
+        var abiertos by remember(p.id) { mutableStateOf(emptySet<String>()) }
+        val tramos = remember(paginas, abiertos) { TramosDeLaTira.de(paginas, abiertos) }
         // Cuatro columnas antes de abrir otra fila: por debajo de eso la rejilla
         // deja de ser una rejilla.
-        val filas = caben.coerceAtMost(((paginas.size + 3) / 4).coerceAtLeast(1))
-        val porFila = (paginas.size + filas - 1) / filas
+        val filas = caben.coerceAtMost(((tramos.size + 3) / 4).coerceAtLeast(1))
+        val porFila = (tramos.size + filas - 1) / filas
         val estado = remember(p.id, filas) { LazyListState() }
 
         // **Una fila de columnas**, no una columna de filas. Con la primera mitad
@@ -1579,18 +1585,29 @@ private fun RejillaDeHojas(
             items(porFila, key = { it }) { x ->
                 Column {
                     (0 until filas).forEach { f ->
-                        val pagina = paginas.getOrNull(f * porFila + x)
-                        if (pagina != null) {
-                            HojaDelProyecto(
-                                app = app,
-                                p = p,
-                                pagina = pagina,
-                                marcada = pagina.clave in marcadas,
-                                onMarcar = { onMarcar(pagina.clave) },
-                                anotada = pagina.hoja.dibujo in anotadas,
-                                enFoco = false,
-                                pedirMiniatura = pedirMiniaturas
-                            )
+                        val tramo = tramos.getOrNull(f * porFila + x)
+                        if (tramo != null) {
+                            if (tramo.montón) {
+                                MontonDeHojas(
+                                    app = app, p = p, tramo = tramo,
+                                    marcadas = marcadas, anotadas = anotadas,
+                                    onAbrir = { abiertos = abiertos + tramo.primera.clave },
+                                    onMarcarTodas = { tramo.paginas.forEach { onMarcar(it.clave) } },
+                                    pedirMiniatura = pedirMiniaturas
+                                )
+                            } else {
+                                val pagina = tramo.primera
+                                HojaDelProyecto(
+                                    app = app,
+                                    p = p,
+                                    pagina = pagina,
+                                    marcada = pagina.clave in marcadas,
+                                    onMarcar = { onMarcar(pagina.clave) },
+                                    anotada = pagina.hoja.dibujo in anotadas,
+                                    enFoco = false,
+                                    pedirMiniatura = pedirMiniaturas
+                                )
+                            }
                         }
                     }
                 }

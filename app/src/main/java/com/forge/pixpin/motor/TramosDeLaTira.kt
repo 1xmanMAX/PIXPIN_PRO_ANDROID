@@ -57,6 +57,26 @@ object TramosDeLaTira {
         }
     }
 
+    /**
+     * **Si esta página sigue a la anterior dentro del mismo documento.**
+     *
+     * Con el origen solo no basta para los PDF. Una hoja de PDF no guarda **de qué** PDF sale
+     * —el PDF es del proyecto, no de la hoja— así que dos documentos metidos en el mismo
+     * proyecto tenían el mismo origen y se juntaban en un montón. El usuario lo pidió al revés
+     * (9-sep-2026): «cada PDF individual se agrupa, no todos los PDF en un agrupamiento».
+     *
+     * Lo que sí se sabe es **el número de página**, y eso basta: las páginas de un documento
+     * entran seguidas —0, 1, 2…— y el siguiente documento vuelve a empezar. Donde la cuenta se
+     * rompe, empieza otro montón. No hace falta cambiar lo que se guarda.
+     */
+    private fun sigueA(anterior: HojasDelProyecto.Pagina, p: HojasDelProyecto.Pagina): Boolean {
+        if (origenDe(anterior) != origenDe(p)) return false
+        val a = anterior.hoja.pagina
+        val b = p.hoja.pagina
+        if (a == null || b == null) return true
+        return b == a + 1
+    }
+
     /** La tira ya repartida en tramos, en orden. Los montones que estén en [abiertos] salen sueltos. */
     fun de(
         paginas: List<HojasDelProyecto.Pagina>,
@@ -68,7 +88,7 @@ object TramosDeLaTira {
         while (i < paginas.size) {
             val origen = origenDe(paginas[i])
             var j = i + 1
-            while (j < paginas.size && origenDe(paginas[j]) == origen) j++
+            while (j < paginas.size && sigueA(paginas[j - 1], paginas[j])) j++
             val cuantas = j - i
             // Un montón se nombra por su **primera clave**, no por su origen ni por su
             // posición: el origen se repite si el mismo lienzo sale dos veces en la tira, y la

@@ -120,7 +120,9 @@ fun CabeceraFlotante(
                         ColoresDelChat.filete(),
                         RoundedCornerShape(ALTO_DE_LA_PILDORA / 2)
                     )
-                    .padding(horizontal = 14.dp),
+                    // Aire arriba y abajo: sin él, lo que se meta dentro —un disco, dos
+                    // renglones— llega al borde redondeado y se ve tocarlo.
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) { centro() }
         }

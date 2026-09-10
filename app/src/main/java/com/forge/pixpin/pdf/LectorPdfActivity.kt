@@ -99,6 +99,21 @@ class LectorPdfActivity : ComponentActivity() {
         // página; en un plano de veinte hojas, veinte veces.
         var zoom by remember { mutableStateOf(1f) }
         var desplazado by remember { mutableStateOf(Offset.Zero) }
+        // **Mientras los dedos están encima no se rasteriza nada.**
+        //
+        // Es lo que hacen los visores de PDF que van bien, y lo que este no hacía: pedía la
+        // página a más resolución **en mitad del pellizco**, y rasterizar una hoja grande son
+        // decenas de megas y cientos de milisegundos. Lo que se enseña mientras tanto es el
+        // mapa de bits de antes, estirado, que es gratis; cuando la mano para, se pide la
+        // buena. Ver [Hoja].
+        var pellizcando by remember { mutableStateOf(false) }
+        var zoomFirme by remember { mutableStateOf(1f) }
+        LaunchedEffect(zoom, pellizcando) {
+            if (pellizcando) return@LaunchedEffect
+            // Un respiro tras soltar: así dos pellizcos seguidos no piden dos rasterizados.
+            kotlinx.coroutines.delay(180)
+            zoomFirme = zoom
+        }
         val estado = rememberLazyListState()
         val anchoPx = LocalWindowInfo.current.containerSize.width
         Box(
@@ -120,8 +135,8 @@ class LectorPdfActivity : ComponentActivity() {
                         while (true) {
                             val evento = awaitPointerEvent()
                             val dedos = evento.changes.count { it.pressed }
-                            if (dedos == 0) break
-                            if (dedos >= 2) cogido = true
+                            if (dedos == 0) { pellizcando = false; break }
+                            if (dedos >= 2) { cogido = true; pellizcando = true }
                             if (!cogido) continue
                             val antes = zoom
                             val ahora = (antes * evento.calculateZoom()).coerceIn(1f, 6f)
@@ -164,7 +179,7 @@ class LectorPdfActivity : ComponentActivity() {
                             translationX = desplazado.x, translationY = desplazado.y
                         )
                 ) {
-                    items((0 until cuantas).toList()) { i -> Hoja(ruta, i, zoom, anchoPx) }
+                    items((0 until cuantas).toList()) { i -> Hoja(ruta, i, zoomFirme, anchoPx) }
                 }
             }
             if (nombre.isNotBlank()) {
@@ -211,7 +226,17 @@ class LectorPdfActivity : ComponentActivity() {
         }
         LaunchedEffect(ruta, i, escalon) {
             mapa = withContext(Dispatchers.IO) {
-                PdfDoc.render(ruta, i, (anchoPx * escalon).coerceIn(320, 4000))
+                // **Y con un tope de píxeles, no solo de ancho.**
+                //
+                // El tope era el ancho, y en una hoja apaisada grande —un A1— cuatro veces el
+                // ancho de la pantalla son trece millones de píxeles, o sea **cincuenta megas
+                // de mapa de bits** por hoja. Pedirlo cuesta segundos y llena la memoria; con
+                // el tope, la hoja sale a menos aumento del pedido pero **sale**, que es la
+                // misma regla que sigue la lámina del plano. Ver [PIXELES_POR_HOJA].
+                val pedido = (anchoPx * escalon).coerceIn(320, 4000)
+                val alto = proporcion.takeIf { it > 0.01f } ?: 0.7f
+                val cabe = kotlin.math.sqrt(PIXELES_POR_HOJA * alto).toInt()
+                PdfDoc.render(ruta, i, minOf(pedido, cabe).coerceAtLeast(320))
             }
         }
         val actual = mapa
@@ -228,3 +253,12 @@ class LectorPdfActivity : ComponentActivity() {
         }
     }
 }
+
+/**
+ * Cuántos píxeles como mucho tiene la hoja rasterizada de una página.
+ *
+ * Cuatro millones son dieciséis megas en ARGB, que un teléfono da sin pestañear y que a una
+ * pantalla de móvil le sobran: son casi cuatro veces sus píxeles. Por encima de eso lo único
+ * que se gana es esperar. Ver [LectorPdfActivity.Hoja].
+ */
+private const val PIXELES_POR_HOJA = 4_000_000.0

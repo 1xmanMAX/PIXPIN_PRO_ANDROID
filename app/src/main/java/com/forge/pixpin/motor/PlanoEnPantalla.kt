@@ -611,8 +611,23 @@ class PlanoEnPantalla private constructor(
          */
         private const val MUCHAS_RAYAS = 50_000
 
-        /** Cuántas rayas van en una tanda: la caja de una tanda es lo que permite saltársela. */
-        private const val POR_TANDA = 8192
+        /**
+         * A cuántas rayas por celda se apunta al repartir. Ver [porZonas].
+         *
+         * Unos cientos: bastantes para que mandarlas a pintar de un tirón valga la pena, y
+         * pocas para que la celda sea un trozo pequeño de la hoja y descartarla ahorre de
+         * verdad.
+         */
+        private const val POR_ZONA = 64
+
+        /**
+         * Lo más fina que se pone la rejilla.
+         *
+         * Cada celda acaba siendo un nodo de dibujo, así que pasarse tiene su propio precio:
+         * mil nodos que mirar para descartarlos cuestan más que las rayas que ahorran. Con
+         * dieciséis por lado, un plano de seis mil rayas sale en poco más de cien tandas.
+         */
+        private const val LADO_MAXIMO = 16
 
         /**
          * **Cuánto más grande que la pantalla se pinta la lámina.**
@@ -783,6 +798,63 @@ class PlanoEnPantalla private constructor(
             return junta
         }
 
+        /**
+         * **Reparte las rayas en una rejilla**, y devuelve los grupos que salen.
+         *
+         * [planas] son las rayas seguidas: `x0,y0,x1,y1` por cada una. Sale una lista por
+         * celda no vacía, en la que cada raya está entera. Ver [rayas].
+         *
+         * Lo fino de la rejilla sale de cuántas rayas hay: se apunta a unas [POR_ZONA] por
+         * celda. Demasiado fina y son miles de tandas que recorrer para descartarlas —el
+         * descarte también cuesta—; demasiado basta y volvemos a lo de antes. Y se pone tope
+         * por arriba y por abajo, que en un plano de cuatro rayas una rejilla no pinta nada.
+         */
+        private fun porZonas(planas: ArrayList<Float>): List<FloatArray> {
+            val cuantas = planas.size / 4
+            if (cuantas == 0) return emptyList()
+            if (cuantas <= POR_ZONA) return listOf(FloatArray(planas.size) { planas[it] })
+            var x0 = Float.MAX_VALUE; var y0 = Float.MAX_VALUE
+            var x1 = -Float.MAX_VALUE; var y1 = -Float.MAX_VALUE
+            var k = 0
+            while (k + 1 < planas.size) {
+                val vx = planas[k]; val vy = planas[k + 1]
+                if (vx < x0) x0 = vx
+                if (vx > x1) x1 = vx
+                if (vy < y0) y0 = vy
+                if (vy > y1) y1 = vy
+                k += 2
+            }
+            val an = (x1 - x0).coerceAtLeast(1e-3f)
+            val al = (y1 - y0).coerceAtLeast(1e-3f)
+            // Hacia arriba, no truncando: con novecientas rayas y cuatrocientas por celda,
+            // truncar daba **una** celda y la rejilla no existía. Es lo que hacía que el
+            // reparto pareciera no servir. Ver la medida en el comentario de [rayas].
+            val n = kotlin.math.ceil(sqrt(cuantas.toDouble() / POR_ZONA)).toInt().coerceIn(1, LADO_MAXIMO)
+            if (n == 1) return listOf(FloatArray(planas.size) { planas[it] })
+            val cubos = HashMap<Int, ArrayList<Float>>()
+            // Se probó apartar las rayas largas —una raya que cruza media hoja estira la caja
+            // de su celda y esa celda ya no se descarta— pero **medido salía peor**: van a un
+            // grupo que cruza la página, así que se pintan siempre, y en este plano eso costaba
+            // más de lo que ahorraba (1.031 rayas frente a 988 mirando el 10 %). Queda escrito
+            // para no volver a intentarlo sin medirlo.
+            var i = 0
+            while (i + 3 < planas.size) {
+                val mx = (planas[i] + planas[i + 2]) / 2f
+                val my = (planas[i + 1] + planas[i + 3]) / 2f
+                val cx = (((mx - x0) / an) * n).toInt().coerceIn(0, n - 1)
+                val cy = (((my - y0) / al) * n).toInt().coerceIn(0, n - 1)
+                val lista = cubos.getOrPut(cy * n + cx) { ArrayList() }
+                lista.add(planas[i]); lista.add(planas[i + 1])
+                lista.add(planas[i + 2]); lista.add(planas[i + 3])
+                i += 4
+            }
+            // En orden de celda, que no cambia el dibujo —son rayas del mismo color y grosor—
+            // y hace que dos lecturas del mismo plano den lo mismo.
+            return cubos.entries.sortedBy { it.key }.map { e ->
+                FloatArray(e.value.size) { e.value[it] }
+            }
+        }
+
         private fun rayas(b: PlanoDePdf.Brocha, paso: Float): List<Tanda> {
             val salida = ArrayList<Float>(b.ops.size * 4)
             var i = 0
@@ -829,18 +901,29 @@ class PlanoEnPantalla private constructor(
                 }
                 i++
             }
-            // **Se parte en tandas**: la caja de una brocha entera es medio plano y no sirve
-            // para saltarse nada, y sin poder saltarse nada, acercarse a una esquina costaría
-            // lo mismo que mirar el plano entero. En tandas de unas miles de rayas, la caja de
-            // cada una sí dice si toca la pantalla o no.
+            // **Se parte en tandas por SITIO, no por orden de dibujo.**
+            //
+            // Se partía cada tantas mil rayas seguidas, y eso no sirve para saltarse nada: en
+            // un plano, mil rayas seguidas del archivo van repartidas por toda la hoja, así
+            // que la caja de esa tanda es la hoja entera y el descarte no descarta. Medido en
+            // el plano del usuario (9-sep-2026): mirando **el 10 % de la página** se seguían
+            // recorriendo **5.888 rayas de 6.366**. O sea que acercarse no costaba menos que
+            // mirarlo entero, que es justo lo que hacía que ampliar fuera a tirones.
+            //
+            // Repartiéndolas en una rejilla, la caja de cada tanda es su celda y el descarte
+            // funciona: acercarse toca dos o tres celdas y se pinta lo que se ve. Es lo que
+            // hace cualquier programa que dibuje mucha geometría, y es puro reparto — no se
+            // deja de pintar nada, solo se agrupa por dónde cae.
+            //
+            // La raya va a la celda de **su punto medio**, y la caja de la tanda se calcula
+            // con sus puntos de verdad: una raya larga estira la caja de su celda y se sigue
+            // pintando entera. Repartir por punto medio y medir por extremos es lo que
+            // mantiene esto correcto sin tener que partir rayas.
             val color = color(b.color)
             val grosor = (b.grosor * paso * PlanoDePdf.FINEZA).toFloat()
             val alfa = (b.alfa * 255).toInt().coerceIn(0, 255)
-            val salidaTandas = ArrayList<Tanda>(salida.size / (POR_TANDA * 4) + 1)
-            var desde = 0
-            while (desde < salida.size) {
-                val hasta = min(salida.size, desde + POR_TANDA * 4)
-                val puntos = FloatArray(hasta - desde) { salida[desde + it] }
+            val salidaTandas = ArrayList<Tanda>()
+            for (puntos in porZonas(salida)) {
                 var x0 = Float.MAX_VALUE
                 var y0 = Float.MAX_VALUE
                 var x1 = -Float.MAX_VALUE
@@ -876,7 +959,6 @@ class PlanoEnPantalla private constructor(
                     x1 = if (x1 == -Float.MAX_VALUE) 0f else x1,
                     y1 = if (y1 == -Float.MAX_VALUE) 0f else y1
                 )
-                desde = hasta
             }
             return salidaTandas
         }

@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.automirrored.filled.Reply
@@ -987,7 +988,16 @@ class MensajesActivity : ComponentActivity() {
                 Box(
                     Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 6.dp)
+                        // **Debajo de la cabecera, no detrás.**
+                        //
+                        // Iba pegada arriba del todo, que es exactamente donde flota la
+                        // píldora del nombre: la fecha aparecía tapada por ella y no se leía.
+                        // Lo reportó el usuario el 9-sep-2026. Se baja lo que ocupa la
+                        // cabecera —su alto más el aire de arriba y de abajo— para que caiga
+                        // justo debajo, que es donde la pone Telegram respecto de su barra. El
+                        // hueco de la barra de estado no se cuenta aquí: la cabecera y esto
+                        // viven en la misma caja y lo tienen ya descontado.
+                        .padding(top = ALTO_DE_LA_PILDORA + AIRE_DE_LA_PILDORA * 2 + 6.dp)
                         .graphicsLayer { alpha = opacidad }
                         .background(
                             // Al 0,75 del fondo, como la suya (`ChatActionCell.java:3486`):
@@ -1195,17 +1205,22 @@ class MensajesActivity : ComponentActivity() {
                         return@Column
                     }
                     CabeceraFlotante(
-                        // La flecha solo dentro de un proyecto: en la general no hay
-                        // adónde volver, y una flecha que no lleva a ningún sitio
-                        // enseña a no fiarse de las flechas. Cuando no está, su sitio
-                        // **se reserva igual** para que el título no dé un salto lateral
-                        // al entrar y salir de un proyecto. Ver [CabeceraFlotante].
-                        atras = if (chatDe != null && vineDeLaGeneral) {
-                            {
-                                IconButton(onClick = {
-                                    chatDe = null
-                                    nombreDelChat = ""
-                                    vineDeLaGeneral = false
+                        // **La flecha, siempre.**
+                        //
+                        // Estaba solo dentro de un proyecto, con el argumento de que en la
+                        // general no hay adónde volver. Pero sí lo hay —se sale de esta
+                        // pantalla— y el usuario la echó en falta (9-sep-2026): una pantalla
+                        // sin flecha obliga a acordarse del botón del sistema, que en un
+                        // teléfono con gestos es un deslizamiento que aquí compite con el
+                        // resto. Dentro de un proyecto vuelve a la conversación general; en la
+                        // general, cierra. Ver [CabeceraFlotante].
+                        atras = {
+                            IconButton(onClick = {
+                                    if (chatDe != null && vineDeLaGeneral) {
+                                        chatDe = null
+                                        nombreDelChat = ""
+                                        vineDeLaGeneral = false
+                                    } else finish()
                                 }) {
                                     Icon(
                                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -1213,9 +1228,8 @@ class MensajesActivity : ComponentActivity() {
                                             com.forge.pixpin.R.string.guardados_titulo
                                         )
                                     )
-                                }
                             }
-                        } else null,
+                        },
                         centro = {
                             if (consulta == null) {
                                 // Telegram esconde el subtítulo en Mensajes guardados
@@ -1240,9 +1254,16 @@ class MensajesActivity : ComponentActivity() {
                                         // el marcador: es lo que dice de un vistazo en qué
                                         // pantalla estás, ahora que es la primera que se
                                         // abre y ya no se llega a ella desde ningún sitio.
+                                        // **Cabe dentro de la píldora, con aire.**
+                                        //
+                                        // A 32 y sin margen vertical, con el subtítulo debajo,
+                                        // el disco llegaba al borde redondeado y se veía
+                                        // salirse (usuario, 9-sep-2026). A 28 queda holgado
+                                        // dentro de los 46 de la píldora pase lo que pase con
+                                        // el texto de al lado.
                                         Box(
                                             Modifier
-                                                .size(32.dp)
+                                                .size(28.dp)
                                                 .background(
                                                     MaterialTheme.colorScheme.primary,
                                                     androidx.compose.foundation.shape.CircleShape
@@ -1254,7 +1275,7 @@ class MensajesActivity : ComponentActivity() {
                                                 else Icons.Filled.Folder,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.onPrimary,
-                                                modifier = Modifier.size(19.dp)
+                                                modifier = Modifier.size(17.dp)
                                             )
                                         }
                                         Spacer(Modifier.size(10.dp))
