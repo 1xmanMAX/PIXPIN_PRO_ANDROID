@@ -45,10 +45,13 @@ android {
         }
     }
 
-    // Nota: `enableV1Signing` aquí NO surte efecto. Con minSdk 29 el plugin
-    // decide que la firma v1 sobra y la omite igualmente. Los APK que se
-    // reparten para instalar a mano se vuelven a firmar con apksigner
-    // pasándole `--min-sdk-version 21`, que es lo que la incluye de verdad.
+    // **El APK que sale de aquí NO está listo para repartir.** Lleva solo firma v2, y el
+    // instalador que abre un archivo descargado a mano quiere además la v1 (JAR): sin ella el
+    // teléfono dice «hay un problema con el archivo de la app» y no explica más. Pasó el
+    // 9-sep-2026 y costó un rato, porque el APK estaba bien — le faltaba una firma que Gradle
+    // decide omitir. Ponerlo aquí no sirve: con minSdk 29 `enableV1Signing` no surte efecto.
+    // Antes de subirlo hay que pasarlo por `herramientas/apk-para-repartir.sh`, que lo vuelve
+    // a firmar con apksigner y `--min-sdk-version 21`, que es lo único que la incluye.
 
     buildFeatures {
         compose = true
