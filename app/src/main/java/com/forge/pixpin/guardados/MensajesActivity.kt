@@ -4065,11 +4065,13 @@ class MensajesActivity : ComponentActivity() {
         val esArchivo = m.clase == Clase.IMAGEN || m.clase == Clase.ARCHIVO ||
             m.clase == Clase.PAGINA || m.clase == Clase.DIBUJO || m.clase == Clase.PROYECTO
         if (!esArchivo) return
-        val esta = remember(proyectos, m.id, m.referencia, m.ruta) {
+        val esta = remember(proyectos, m.id, m.referencia) {
             com.forge.pixpin.motor.Proyectos.estaEnLosProyectos(
                 proyectos,
-                dibujo = m.referencia.takeIf { m.clase != Clase.PROYECTO },
-                pdf = m.ruta,
+                mensaje = m.id,
+                // El rastro viejo: una foto o un dibujo unidos antes de que existiera el
+                // vínculo comparten identificador de dibujo con su hoja.
+                dibujo = if (m.clase == Clase.PROYECTO) null else m.dibujoDeLaFoto,
                 proyecto = m.referencia.takeIf { m.clase == Clase.PROYECTO }
             )
         }

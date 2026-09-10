@@ -169,6 +169,18 @@ data class Hoja(
      * pone el croquis**, que es de donde vienen de verdad. Ver
      * [HojasDelProyecto.colorDe].
      */
+    /**
+     * **De qué mensaje del chat salió esta hoja**, si salió de uno.
+     *
+     * Sin esto no hay forma de saberlo después: al unir algo a un proyecto **el archivo se
+     * copia** —el adjunto del chat se borra con el mensaje y el proyecto no puede quedarse
+     * apuntando a lo que ya no está— y el dibujo también, con identificador nuevo. Así que
+     * ni la ruta ni el identificador sirven para reconocerlo, y el punto verde de la
+     * conversación salía rojo en todo aunque estuviera en un proyecto (usuario, 9-sep-2026).
+     *
+     * Se apunta al unir y no se toca más. Ver [UnirAlProyecto] y [estaEnLosProyectos].
+     */
+    val deMensaje: String? = null,
     val croquis: String? = null,
     /**
      * Y de qué vista suya.
@@ -468,15 +480,21 @@ object Proyectos {
      */
     fun estaEnLosProyectos(
         proyectos: List<Proyecto>,
+        mensaje: String? = null,
         dibujo: String? = null,
-        pdf: String? = null,
         proyecto: String? = null
     ): Boolean {
-        if (proyecto != null) return proyectos.any { it.id == proyecto }
+        // Un mensaje que **es** un proyecto está mientras ese proyecto exista.
+        if (proyecto != null && proyectos.any { it.id == proyecto }) return true
+        // Lo normal: la hoja apunta al mensaje del que salió. Ver [Hoja.deMensaje].
+        if (mensaje != null && proyectos.any { p -> p.hojas.any { it.deMensaje == mensaje } }) return true
+        // **Y el rastro viejo, para lo que se unió antes de que existiera el vínculo.**
+        // Una foto y un dibujo unidos entonces comparten identificador de dibujo con su
+        // mensaje, así que eso sí se puede reconocer. Un PDF no —se copió con otro nombre— y
+        // se queda en rojo hasta que se vuelva a unir: preferible eso a inventarse una
+        // coincidencia por el nombre del archivo, que daría verdes falsos en cuanto dos se
+        // llamen igual, que en un teléfono es a todas horas.
         if (dibujo != null && proyectos.any { p -> p.hojas.any { it.dibujo == dibujo } }) return true
-        if (pdf != null) {
-            if (proyectos.any { it.pdfOrigen == pdf || it.pdfLimpio == pdf }) return true
-        }
         return false
     }
 

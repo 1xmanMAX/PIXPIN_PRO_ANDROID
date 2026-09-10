@@ -66,7 +66,12 @@ object UnirAlProyecto {
             val proyecto = proyectos.porId(proyectoId) ?: break
             val hojas = hojasDe(context, proyectos, proyecto, m, ahora, n)
             n += hojas.size.coerceAtLeast(1)
-            for (h in hojas) proyectos.porId(proyectoId)?.let { proyectos.conHoja(it, h, ahora) }
+            // **Cada hoja se queda con la seña de su mensaje.** Se pone aquí, en el único sitio
+        // por el que pasan todas, y no dentro de cada rama: así una clase nueva de mensaje no
+        // puede olvidarse de hacerlo. Ver [Hoja.deMensaje].
+        for (h in hojas) proyectos.porId(proyectoId)?.let {
+            proyectos.conHoja(it, h.copy(deMensaje = m.id), ahora)
+        }
         }
         // Se cuenta mirando el proyecto y no lo devuelto: el PDF que se vuelve documento
         // pone sus hojas por su cuenta.
@@ -92,7 +97,7 @@ object UnirAlProyecto {
                     val texto = runCatching { File(m.ruta!!).readText() }.getOrNull() ?: return emptyList()
                     listOf(Hoja(id = "hoja-$ahora-$n", nombre = nombre, nota = texto))
                 }
-                esPdf(m) -> hojasDelPdf(context, proyectos, proyecto, File(m.ruta!!), nombre, ahora, n)
+                esPdf(m) -> hojasDelPdf(context, proyectos, proyecto, File(m.ruta!!), nombre, ahora, n, m.id)
                 else -> emptyList()
             }
             else -> emptyList()
@@ -105,7 +110,7 @@ object UnirAlProyecto {
      * Se copia a la carpeta de proyectos antes de nada: el adjunto del chat se borra con el
      * mensaje, y el proyecto no puede quedarse apuntando a un archivo que ya no está.
      */
-    private fun hojasDelPdf(context: Context, proyectos: ProyectosRepository, proyecto: Proyecto, pdf: File, nombre: String, ahora: Long, n: Int): List<Hoja> {
+    private fun hojasDelPdf(context: Context, proyectos: ProyectosRepository, proyecto: Proyecto, pdf: File, nombre: String, ahora: Long, n: Int, deMensaje: String): List<Hoja> {
         val paginas = PdfDoc.pageCount(pdf.absolutePath)
         if (paginas <= 0) return emptyList()
         val carpeta = File(context.filesDir, "proyectos").also { it.mkdirs() }
@@ -114,7 +119,7 @@ object UnirAlProyecto {
                 ?: return emptyList()
             val limpio = runCatching { pdf.copyTo(File(carpeta, "limpio-$ahora.pdf"), overwrite = true).path }.getOrNull()
             val nuevas = (0 until paginas.coerceAtMost(Proyectos.MAX_HOJAS - proyecto.hojas.size).coerceAtLeast(0))
-                .map { Hoja(id = "h-$ahora-$it", pagina = it) }
+                .map { Hoja(id = "h-$ahora-$it", pagina = it, deMensaje = deMensaje) }
             proyectos.guardar(
                 proyecto.copy(pdfOrigen = origen.path, pdfLimpio = limpio, hojas = proyecto.hojas + nuevas, tocado = ahora)
             )
