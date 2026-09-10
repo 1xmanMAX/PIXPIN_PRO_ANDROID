@@ -1463,12 +1463,20 @@ private class Fuente(
             (enc as? PdfValor.Dicc)?.let { leerDiferencias(archivo, it, aTexto) }
 
             val minus = base.lowercase()
+            // **Las estrechas se reconocen y se dicen.** Un plano las usa a mansalva —los
+            // rótulos de un cajetín no caben de otra forma— y el del usuario (9-sep-2026)
+            // traía ArialNarrow. Sustituyéndola por una Arial normal, la letra hay que
+            // apretarla hasta que ocupe lo que decía el PDF, y lo que sale es una letra
+            // aplastada: «el texto se ve mucho más delgadito, más estirado». Con una
+            // tipografía estrecha de verdad, el apretón es pequeño y la letra se parece.
+            val estrecha = minus.contains("narrow") || minus.contains("condensed") ||
+                minus.contains("cond") || minus.contains("compressed")
             val familia = when {
                 minus.contains("courier") || minus.contains("mono") -> "monospace"
-                minus.contains("sans") -> "sans-serif"
                 minus.contains("times") || minus.contains("georgia") || minus.contains("garamond") ||
                     minus.contains("cambria") || minus.contains("minion") ||
-                    minus.contains("serif") -> "serif"
+                    minus.contains("serif") && !minus.contains("sans") -> "serif"
+                estrecha -> "sans-serif-condensed"
                 else -> "sans-serif"
             }
             return Fuente(

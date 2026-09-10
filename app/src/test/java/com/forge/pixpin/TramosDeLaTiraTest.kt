@@ -33,12 +33,21 @@ class TramosDeLaTiraTest {
         assertEquals(listOf("lienzo:d1", "lienzo:d2"), tramos.map { it.deQue })
     }
 
-    @Test fun `pocas seguidas se quedan sueltas`() {
-        // Un montón de dos ahorra una miniatura y cuesta un toque: sale perdiendo.
+    @Test fun `dos paginas del mismo documento ya son un monton`() {
+        // El usuario lo pidió en dos (9-sep-2026): lo que se gana no es una miniatura, es que
+        // un documento ocupe un sitio y se vea de un vistazo dónde empieza el siguiente.
         val tramos = TramosDeLaTira.de(listOf(pdf(0), pdf(1)))
-        assertEquals(2, tramos.size)
+        assertEquals(1, tramos.size)
+        assertTrue(tramos.single().montón)
+        assertEquals(2, tramos.single().paginas.size)
+    }
+
+    @Test fun `una hoja sola no se pliega`() {
+        // Un montón de una no es un montón: es una hoja con un toque de más para verla.
+        val tramos = TramosDeLaTira.de(listOf(pdf(0), marco("d1", "m0"), nota("n1", 0)))
+        assertEquals(3, tramos.size)
         assertTrue(tramos.none { it.montón })
-        assertEquals(listOf(0, 1), tramos.map { it.desde })
+        assertEquals(listOf(0, 1, 2), tramos.map { it.desde })
     }
 
     @Test fun `un monton abierto sale suelto y en su sitio`() {

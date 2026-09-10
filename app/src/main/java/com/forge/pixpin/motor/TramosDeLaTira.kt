@@ -21,10 +21,14 @@ object TramosDeLaTira {
     /**
      * Cuántas seguidas hacen falta para que valga la pena juntarlas.
      *
-     * Con dos no: un montón de dos ahorra una miniatura y cuesta un toque para abrirlo, así
-     * que sale perdiendo. Con tres ya se nota, y a partir de ahí mucho.
+     * Empezó en tres, con el argumento de que un montón de dos ahorra una miniatura y cuesta
+     * un toque, así que sale perdiendo. El usuario lo pidió en dos (9-sep-2026): «si es un
+     * markdown grande que tiene varias páginas se agrupa también en uno». Y tiene razón: lo
+     * que se gana no es una miniatura, es que **un documento ocupe un sitio** y se vea de un
+     * vistazo dónde empieza el siguiente, que es lo que se pierde cuando la tira son cien
+     * sellos iguales.
      */
-    const val MINIMO = 3
+    const val MINIMO = 2
 
     /**
      * Un trozo de la tira: o una página suelta, o un montón de [paginas] que vienen del mismo

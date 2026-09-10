@@ -215,4 +215,78 @@ class PlanoEnPantallaTest {
         assertEquals("dónde empieza", 100f, v[2], 0.001f)
         assertEquals(200f, v[5], 0.001f)
     }
+    // ---------------------------------------------------------------------
+    // Lo que llega al Canvas
+    // ---------------------------------------------------------------------
+
+    /** Un lienzo que no pinta: solo cuenta lo que le mandan. */
+    private class Contador : android.graphics.Canvas(
+        android.graphics.Bitmap.createBitmap(8, 8, android.graphics.Bitmap.Config.ARGB_8888)
+    ) {
+        var segmentos = 0
+        var fotos = 0
+        override fun drawLines(pts: FloatArray, paint: android.graphics.Paint) {
+            segmentos += pts.size / 4
+        }
+        override fun drawBitmap(
+            bitmap: android.graphics.Bitmap,
+            matrix: android.graphics.Matrix,
+            paint: android.graphics.Paint?
+        ) { fotos++ }
+    }
+
+    private fun foto(x: Double, y: Double, lado: Double) = PlanoDePdf.Imagen(
+        capa = -1, alfa = 1.0, tipo = "image/jpeg", datos = ByteArray(64),
+        a = lado, b = 0.0, c = 0.0, d = lado, x = x, y = y
+    )
+
+    /**
+     * **La foto que no se ve no se pinta.**
+     *
+     * Se pintaban todas en cada fotograma. En el plano del usuario (9-sep-2026) eso eran 81
+     * mapas de bits de 992×877 por fotograma **mirando el 10 % de la página**, y era el tirón
+     * que reportó. Una raya que sobra cuesta unos flotantes; una foto que sobra, un mapa de
+     * bits entero.
+     */
+    @Test
+    fun `una foto fuera de la vista no se pinta`() {
+        val pl = PlanoDePdf.Plano(
+            100.0, 100.0, emptyList(),
+            listOf(brocha(listOf(M, L), listOf(0.0 to 0.0, 90.0 to 90.0))),
+            emptyList(),
+            // Una en la esquina de arriba a la izquierda y otra en la de abajo a la derecha.
+            listOf(foto(0.0, 0.0, 10.0), foto(80.0, 80.0, 10.0)),
+            0, false
+        )
+        val p = PlanoEnPantalla.de(pl, 1000.0)   // el papel se estira a mil unidades
+        val cerca = Contador()
+        p.pintar(cerca, Bounds(0.0, 0.0, 200.0, 200.0), 1.0)
+        assertEquals("solo la de esa esquina", 1, cerca.fotos)
+        val todo = Contador()
+        p.pintar(todo, Bounds(0.0, 0.0, 1000.0, 1000.0), 1.0)
+        assertEquals("mirando la página entera, las dos", 2, todo.fotos)
+    }
+
+    /**
+     * **Un plano corriente se pinta entero por lejos que se mire.**
+     *
+     * El nivel basto tira las rayas cortas, y en el plano del usuario eso era **el 53 %**: casi
+     * la mitad del dibujo desaparecía al abrirlo. Sueltas son detalles de menos de un píxel; a
+     * cientos son el rayado y las curvas, o sea lo que hace que un plano parezca un plano.
+     * Abaratar solo tiene sentido cuando hay rayas de sobra. Ver [PlanoEnPantalla].
+     */
+    @Test
+    fun `un plano pequeno no pierde rayas al mirarlo de lejos`() {
+        // Rayas cortas, de las que el nivel basto tiraría.
+        val cortas = (0 until 50).map {
+            brocha(listOf(M, L), listOf(it * 0.4 to 0.0, it * 0.4 + 0.2 to 0.3))
+        }
+        val pl = PlanoDePdf.Plano(100.0, 100.0, emptyList(), cortas, emptyList(), emptyList(), 0, false)
+        val p = PlanoEnPantalla.de(pl, 100.0)
+        val c = Contador()
+        // Un aumento diminuto: la página entera en un sello, que es lo más lejos que se mira.
+        p.pintar(c, Bounds(-500.0, -500.0, 600.0, 600.0), 0.02)
+        assertEquals("no se ha quedado ninguna fuera", 50, c.segmentos)
+    }
+
 }

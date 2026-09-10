@@ -68,14 +68,21 @@ class PlanoEnPantalla private constructor(
     /**
      * **Cuándo se pasa al nivel basto.** [pixel] es lo que mide un píxel en unidades del dibujo.
      *
-     * Antes bastaba con que una unidad bajara de un píxel, y eso es «la página cabe en la
-     * pantalla»: en una hoja de texto, donde casi todo son trazos de letra de menos de una
-     * unidad, se iba el 90 % del dibujo de golpe al alejarse y volvía al acercarse. Ahora las
-     * cortas se dejan solo cuando de verdad no llegan a un tercio de píxel, y en un plano
-     * enorme —donde pintarlas todas cuesta— con el criterio de antes.
+     * El nivel basto tira las rayas más cortas que [LARGO_QUE_SE_VE]. Eso suena inofensivo y
+     * no lo es: en el plano del usuario (9-sep-2026) **el 53 % de las rayas sobrevivía** —
+     * medido—, o sea que casi la mitad del dibujo desaparecía. De ahí «se muestran algunas
+     * líneas pero muchas ya no se pueden ver». Sueltas son detalles de menos de un píxel; a
+     * cientos son el rayado, las curvas y los rótulos, o sea lo que hace que un plano parezca
+     * un plano.
+     *
+     * Así que ahora **solo se abarata cuando hay rayas de sobra de verdad**. Antes la primera
+     * condición se aplicaba a cualquier plano por pequeño que fuera, y en uno de seis mil
+     * rayas —que se pintan enteras sin despeinarse— eso era perder la mitad del dibujo a
+     * cambio de un ahorro que no hacía falta. Un plano grande sigue abaratándose igual, que es
+     * para lo que se hizo.
      */
     private fun nivelDeLejos(pixel: Float): Boolean =
-        pixel * 0.3f > LARGO_QUE_SE_VE || (muchasRayas && pixel > LARGO_QUE_SE_VE)
+        muchasRayas && pixel * 0.3f > LARGO_QUE_SE_VE
 
 
     /**
@@ -144,7 +151,18 @@ class PlanoEnPantalla private constructor(
      * que ir cambiando de camino a mitad de un gesto.
      */
     private class Grabados(
-        val fondo: android.graphics.RenderNode,
+        /** El papel blanco, y nada más. */
+        val papel: android.graphics.RenderNode,
+        /**
+         * **Una foto por nodo, con su caja**, para poder saltarse las que no se ven.
+         *
+         * Estaban todas dentro del nodo del fondo, y un nodo se reproduce entero o no se
+         * reproduce: eso son 81 mapas de bits de 992×877 por fotograma aunque se esté mirando
+         * un rincón. Es el lag que reportó el usuario el 9-sep-2026.
+         */
+        val fotos: List<Grabado>,
+        /** Las manchas de color, que van **encima** de las fotos: por eso son un nodo aparte. */
+        val manchas: android.graphics.RenderNode,
         val cerca: List<Grabado>,
         val lejos: List<Grabado>,
         val rotulos: android.graphics.RenderNode
@@ -181,8 +199,19 @@ class PlanoEnPantalla private constructor(
         val familia: android.graphics.Typeface
     )
 
-    /** Una foto del PDF, ya descomprimida. */
-    class Foto(val bitmap: Bitmap, val matriz: Matrix, val alfa: Int)
+    /**
+     * Una foto del PDF, ya descomprimida, **con la caja que ocupa en el papel**.
+     *
+     * La caja no es decoración: sin ella no se puede saber si la foto toca la pantalla, y las
+     * fotos se pintaban **todas en cada fotograma**. En el plano del usuario (9-sep-2026) eso
+     * eran 81 mapas de bits de 992×877 por fotograma mirando el 10 % de la página, y era el
+     * lag que reportó. Ver [tocaLaVista].
+     */
+    class Foto(val bitmap: Bitmap, val matriz: Matrix, val alfa: Int, val caja: RectF) {
+        /** Si esta foto pinta algo dentro de [v]. */
+        fun tocaLaVista(v: Bounds): Boolean =
+            caja.right >= v.x1 && caja.left <= v.x2 && caja.bottom >= v.y1 && caja.top <= v.y2
+    }
 
     /**
      * El pincel de la pantalla. **No lo toca el obrero**: los suyos se hacen dentro de
@@ -207,7 +236,22 @@ class PlanoEnPantalla private constructor(
         val ambito = this.ambito
         if (canvas.isHardwareAccelerated && android.os.Build.VERSION.SDK_INT >= 29 && !sinGrabar) {
             val g = grabados
-            if (g != null) { pintarGrabado(canvas, vista, zoom, g); return }
+            // **Y que lo grabado siga estando.**
+            //
+            // Un `RenderNode` guarda su lista de órdenes en el hilo de pintado del sistema, y
+            // **el sistema la tira cuando la ventana se va al fondo**. Al volver, el objeto
+            // sigue ahí y parece bueno, pero reproducirlo no pinta nada: el plano
+            // desaparecía de la pantalla y no volvía. Es lo que reportó el usuario el
+            // 9-sep-2026 —«salgo del canvas, vuelvo, y ya no está la imagen del PDF»— y no se
+            // arreglaba solo porque nadie volvía a grabar. `hasDisplayList` es justo la
+            // pregunta «¿sigues teniendo lo tuyo?».
+            if (g != null && g.papel.hasDisplayList()) {
+                pintarGrabado(canvas, vista, zoom, g); return
+            }
+            if (g != null) {
+                grabados = null
+                obreroDeGrabar = null       // si no, `pedirGrabado` no volvería a intentarlo
+            }
             if (ambito != null) pedirGrabado(ambito)
             // Mientras se graba, las láminas de siempre.
         }
@@ -309,12 +353,17 @@ class PlanoEnPantalla private constructor(
         val lejos = nivelDeLejos((1.0 / max(zoom, 1e-6)).toFloat())
         canvas.save()
         canvas.clipRect(0f, 0f, ancho.toFloat(), alto.toFloat())
-        canvas.drawRenderNode(g.fondo)
-        val tandas = if (lejos) g.lejos else g.cerca
         val vx0 = vista.x1.toFloat(); val vy0 = vista.y1.toFloat()
         val vx1 = vista.x2.toFloat(); val vy1 = vista.y2.toFloat()
+        fun tocaLaVista(g: Grabado) = !(g.x1 < vx0 || g.x0 > vx1 || g.y1 < vy0 || g.y0 > vy1)
+        canvas.drawRenderNode(g.papel)
+        // Las fotos, solo las que tocan. El orden es el mismo que al dibujar a pelo: el papel
+        // debajo, las fotos encima y las manchas sobre ellas. Ver [dibujar].
+        for (f in g.fotos) if (tocaLaVista(f)) canvas.drawRenderNode(f.nodo)
+        canvas.drawRenderNode(g.manchas)
+        val tandas = if (lejos) g.lejos else g.cerca
         for (t in tandas) {
-            if (t.x1 < vx0 || t.x0 > vx1 || t.y1 < vy0 || t.y0 > vy1) continue
+            if (!tocaLaVista(t)) continue
             canvas.drawRenderNode(t.nodo)
         }
         canvas.drawRenderNode(g.rotulos)
@@ -341,8 +390,18 @@ class PlanoEnPantalla private constructor(
     }
 
     private fun grabarTodo(): Grabados {
-        val papel = Bounds(0.0, 0.0, ancho, alto)
-        val fondo = nodo("plano-fondo") { c -> dibujar(c, papel, 1.0, pelo = true, que = QUE_FONDO) }
+        val hoja = Bounds(0.0, 0.0, ancho, alto)
+        val papel = nodo("plano-papel") { c -> dibujar(c, hoja, 1.0, pelo = true, que = QUE_PAPEL) }
+        val susFotos = fotos.mapIndexed { i, f ->
+            Grabado(
+                nodo("foto$i") { c ->
+                    val pincel = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = f.alfa }
+                    c.drawBitmap(f.bitmap, f.matriz, pincel)
+                },
+                f.caja.left, f.caja.top, f.caja.right, f.caja.bottom
+            )
+        }
+        val manchas = nodo("plano-manchas") { c -> dibujar(c, hoja, 1.0, pelo = true, que = QUE_MANCHAS) }
         val cerca = ArrayList<Grabado>(tandas.size)
         val lejos = ArrayList<Grabado>(tandas.size)
         for ((i, t) in tandas.withIndex()) {
@@ -351,8 +410,8 @@ class PlanoEnPantalla private constructor(
                 lejos += Grabado(nodo("l$i") { c -> dibujarTanda(c, t, todas = false) }, t.x0, t.y0, t.x1, t.y1)
             }
         }
-        val rotulos = nodo("plano-rotulos") { c -> dibujar(c, papel, 1.0, pelo = true, que = QUE_ROTULOS) }
-        return Grabados(fondo, cerca, lejos, rotulos)
+        val rotulos = nodo("plano-rotulos") { c -> dibujar(c, hoja, 1.0, pelo = true, que = QUE_ROTULOS) }
+        return Grabados(papel, susFotos, manchas, cerca, lejos, rotulos)
     }
 
     /** Una tanda, tal como se graba: a pelo (grosor cero) o con su grosor si lo tiene. */
@@ -379,10 +438,19 @@ class PlanoEnPantalla private constructor(
             val bmp = pedirMapa(anchoPx, altoPx) ?: return@launch
             val lienzo = Canvas(bmp)
             lienzo.scale(bmp.width / ancho.toFloat(), bmp.height / alto.toFloat())
-            // **La base va siempre en detalle basto**, cueste lo que cueste su resolución: es
-            // el respaldo de debajo, y pintarle las novecientas mil rayas retrasaría a la
-            // lámina buena, que es la que se mira.
-            dibujar(lienzo, Bounds(0.0, 0.0, ancho, alto), bmp.width / ancho, soloGordas = true)
+            // **La base va en detalle basto solo si el plano es enorme.**
+            //
+            // Iba siempre, y estaba mal: el nivel basto se queda con las rayas de más de una
+            // unidad, y en el plano del usuario (9-sep-2026) eso era **el 53 %** — medido—, o
+            // sea que casi la mitad del dibujo no estaba. Como la base es lo que se ve al
+            // abrir y mientras se pasea deprisa, el plano parecía venir a medias: «ya no se
+            // muestran las líneas, se muestran algunas pero muchas no se pueden ver».
+            //
+            // El motivo de que fuera basto sigue siendo bueno —no retrasar a la lámina buena,
+            // que es la que se mira— pero solo pesa cuando hay rayas de sobra. Se usa el mismo
+            // criterio que [nivelDeLejos] para decir «de sobra», que es el que ya distingue un
+            // plano enorme de uno corriente: así no hay dos ideas distintas de lo mismo.
+            dibujar(lienzo, Bounds(0.0, 0.0, ancho, alto), bmp.width / ancho, soloGordas = muchasRayas)
             base = Lamina(bmp, 0.0, 0.0, ancho, alto, bmp.width / ancho)
             alLlegar?.invoke()
         }
@@ -433,27 +501,34 @@ class PlanoEnPantalla private constructor(
         val pixel = (1.0 / max(zoom, 1e-6)).toFloat()
         val lejos = soloGordas || nivelDeLejos(pixel)
 
-        if (que != QUE_ROTULOS) {
+        if (que != QUE_ROTULOS && que != QUE_MANCHAS) {
         // El papel, blanco: un PDF no trae fondo, y la aplicación pinta el suyo antes de
         // dibujar encima. Ver [PdfDoc.render].
         pincel.style = Paint.Style.FILL
         pincel.color = android.graphics.Color.WHITE
         pincel.alpha = 255
         canvas.drawRect(0f, 0f, ancho.toFloat(), alto.toFloat(), pincel)
+        }
 
+        if (que == QUE_TODO || que == QUE_FONDO) {
         for (f in fotos) {
+            // **La que no se ve no se pinta.** Es lo mismo que ya se hacía con las tandas de
+            // rayas, y aquí pesa mucho más: una raya que sobra cuesta unos flotantes y una
+            // foto que sobra cuesta un mapa de bits entero.
+            if (!f.tocaLaVista(vista)) continue
             pincelDeFoto.alpha = f.alfa
             canvas.drawBitmap(f.bitmap, f.matriz, pincelDeFoto)
         }
+        }
 
+        if (que != QUE_ROTULOS && que != QUE_PAPEL) {
         pincel.style = Paint.Style.FILL
         for (r in rellenos) {
             pincel.color = r.color
             pincel.alpha = r.alfa
             canvas.drawPath(r.camino, pincel)
         }
-
-        } // que != QUE_ROTULOS
+        }
         pincel.style = Paint.Style.STROKE
         for (t in tandas) {
             if (que != QUE_TODO) break
@@ -491,7 +566,9 @@ class PlanoEnPantalla private constructor(
         obreroDeGrabar?.cancel()
         obreroDeGrabar = null
         grabados?.let { g ->
-            g.fondo.discardDisplayList(); g.rotulos.discardDisplayList()
+            g.papel.discardDisplayList(); g.manchas.discardDisplayList()
+            g.rotulos.discardDisplayList()
+            g.fotos.forEach { it.nodo.discardDisplayList() }
             g.cerca.forEach { it.nodo.discardDisplayList() }
             g.lejos.forEach { it.nodo.discardDisplayList() }
         }
@@ -514,12 +591,25 @@ class PlanoEnPantalla private constructor(
         private const val QUE_TODO = 0
         private const val QUE_FONDO = 1
         private const val QUE_ROTULOS = 2
+        /** Solo el papel blanco. Ver [Grabados], que lo graba aparte para descartar fotos. */
+        private const val QUE_PAPEL = 3
+        /** Solo las manchas de color, que van encima de las fotos. */
+        private const val QUE_MANCHAS = 4
 
         /** Rayas más cortas que esto (en píxeles) no se pintan de lejos: no se pueden ver. */
         private const val LARGO_QUE_SE_VE = 1.0f
 
-        /** A partir de aquí un plano es «enorme» y de lejos se recorta como antes. */
-        private const val MUCHAS_RAYAS = 300_000
+        /**
+         * A partir de aquí un plano tiene rayas de sobra y de lejos se abarata. Ver
+         * [nivelDeLejos].
+         *
+         * Estaba en trescientas mil, pero eso solo decidía la **segunda** condición de las dos
+         * que había; la primera no miraba el tamaño y castigaba a cualquier plano. Ahora que es
+         * la única que hay, el número tiene que separar «se pinta entero sin problema» de «hay
+         * que abaratar», y eso está mucho más abajo: cincuenta mil rayas se pintan de un tirón
+         * en un teléfono, y el plano del usuario, con seis mil, no debería abaratarse nunca.
+         */
+        private const val MUCHAS_RAYAS = 50_000
 
         /** Cuántas rayas van en una tanda: la caja de una tanda es lo que permite saltársela. */
         private const val POR_TANDA = 8192
@@ -583,9 +673,14 @@ class PlanoEnPantalla private constructor(
                     tam = hypot(t.c * escala, t.d * escala).toFloat(),
                     // En emes, que es como lo mide el PDF: ver [PlanoDePdf.Texto.ancho].
                     ancho = t.ancho.toFloat(),
-                    familia = when {
-                        t.familia == "monospace" -> android.graphics.Typeface.MONOSPACE
-                        t.familia == "serif" -> android.graphics.Typeface.SERIF
+                    familia = when (t.familia) {
+                        "monospace" -> android.graphics.Typeface.MONOSPACE
+                        "serif" -> android.graphics.Typeface.SERIF
+                        // La estrecha del aparato, que Android trae desde siempre. Sin ella
+                        // un rótulo de cajetín hay que aplastarlo para que quepa donde decía
+                        // el PDF, y se nota. Ver [PlanoDePdf.Texto.familia].
+                        "sans-serif-condensed" ->
+                            android.graphics.Typeface.create("sans-serif-condensed", android.graphics.Typeface.NORMAL)
                         else -> android.graphics.Typeface.SANS_SERIF
                     }.let {
                         val estilo = when {
@@ -623,7 +718,12 @@ class PlanoEnPantalla private constructor(
                     )
                 )
                 m.preScale(1f / max(bmp.width, 1), 1f / max(bmp.height, 1))
-                fotos += Foto(bmp, m, (f.alfa * 255).toInt().coerceIn(0, 255))
+                // La caja que ocupa en el papel: el rectángulo del mapa de bits pasado por su
+                // propia matriz, que es exactamente lo que se va a pintar. Calcularlo aquí y
+                // no en cada fotograma: la matriz no cambia nunca.
+                val caja = RectF(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat())
+                m.mapRect(caja)
+                fotos += Foto(bmp, m, (f.alfa * 255).toInt().coerceIn(0, 255), caja)
             }
 
             return PlanoEnPantalla(

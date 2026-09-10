@@ -624,7 +624,13 @@ function pintarTextos(v, e, m){
     ctx.setTransform(z,0,0,z,tx,ty);
     ctx.transform(mm[0],mm[1],mm[2],mm[3],mm[4],mm[5]);
     ctx.scale(0.01,0.01);
-    ctx.font=(t.n?'bold ':'')+(t.i?'italic ':'')+'100px '+(t.f||'sans-serif');
+    // `sans-serif-condensed` es el nombre que usa Android; en un navegador hay que decirlo
+    // con una pila de familias de verdad. Un plano usa la estrecha a mansalva —los rótulos de
+    // un cajetín no caben de otra forma— y sin ella la letra hay que aplastarla hasta que
+    // ocupe lo que decía el PDF. Ver PlanoDePdf.Texto.familia.
+    ctx.font=(t.n?'bold ':'')+(t.i?'italic ':'')+'100px '+
+      (t.f==='sans-serif-condensed' ? '"Arial Narrow","Helvetica Neue Condensed",'+
+       '"Liberation Sans Narrow",Roboto Condensed,sans-serif' : (t.f||'sans-serif'));
     if(t.k===undefined){ t.k=ctx.measureText(t.s).width; }
     if(t.k>0) ctx.scale(t.w*100/t.k,1);
     ctx.fillStyle=t.t;

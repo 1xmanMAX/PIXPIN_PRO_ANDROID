@@ -8,7 +8,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -30,10 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
+import com.forge.pixpin.guardados.aPantallaCompleta
 import com.forge.pixpin.motor.PdfDoc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -74,6 +80,10 @@ class LectorPdfActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // **Sin la barra de estado.** Un plano se mira a pantalla completa: la hora y la
+        // batería encima de la primera línea de un plano no aportan nada y tapan. Se enseñan
+        // deslizando desde el borde, como en el editor. Ver [aPantallaCompleta].
+        aPantallaCompleta()
         val ruta = intent?.getStringExtra(EXTRA_RUTA)
         if (ruta == null) { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()
@@ -88,15 +98,53 @@ class LectorPdfActivity : ComponentActivity() {
         // al pasar de hoja se volviera al tamaño de antes obligaría a repetir el gesto en cada
         // página; en un plano de veinte hojas, veinte veces.
         var zoom by remember { mutableStateOf(1f) }
+        var desplazado by remember { mutableStateOf(Offset.Zero) }
         val estado = rememberLazyListState()
         val anchoPx = LocalWindowInfo.current.containerSize.width
         Box(
             Modifier
                 .fillMaxSize()
                 .background(Color(0xFF1B1B1B))
+                // **El pellizco se coge solo con dos dedos, y entonces sí se consume.**
+                //
+                // Estaba con `detectTransformGestures` sobre la lista, y la lista se comía los
+                // eventos: el zoom «funcionaba y luego dejaba de funcionar» según quién
+                // ganase la carrera, que es lo que reportó el usuario el 9-sep-2026. Con un
+                // dedo no se toca nada —la lista pasa hojas como siempre— y en cuanto baja el
+                // segundo, este gesto se lo queda entero. Es el mismo patrón que
+                // [com.forge.pixpin.ui.pinzaParaAmpliar] usa en la conversación.
                 .pointerInput(Unit) {
-                    detectTransformGestures { _, _, escala, _ ->
-                        zoom = (zoom * escala).coerceIn(1f, 6f)
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var cogido = false
+                        while (true) {
+                            val evento = awaitPointerEvent()
+                            val dedos = evento.changes.count { it.pressed }
+                            if (dedos == 0) break
+                            if (dedos >= 2) cogido = true
+                            if (!cogido) continue
+                            val antes = zoom
+                            val ahora = (antes * evento.calculateZoom()).coerceIn(1f, 6f)
+                            val centro = Offset(size.width / 2f, size.height / 2f)
+                            val foco = evento.calculateCentroid(useCurrent = false)
+                            // **El punto entre los dedos se queda quieto.** Sin esto el
+                            // documento crece desde el centro de la pantalla y lo que uno
+                            // quería mirar se escapa por un lado.
+                            val movido = if (ahora == antes) desplazado
+                            else foco - centro - (foco - centro - desplazado) * (ahora / antes)
+                            zoom = ahora
+                            // Y que no se pueda echar el documento fuera de la pantalla: como
+                            // mucho, hasta que su borde toca el borde.
+                            val topeX = (ahora - 1f) * size.width / 2f
+                            val topeY = (ahora - 1f) * size.height / 2f
+                            val conPan = movido + evento.calculatePan()
+                            desplazado = Offset(
+                                conPan.x.coerceIn(-topeX, topeX),
+                                conPan.y.coerceIn(-topeY, topeY)
+                            )
+                            if (ahora <= 1.001f) desplazado = Offset.Zero
+                            evento.changes.forEach { if (it.pressed) it.consume() }
+                        }
                     }
                 }
         ) {
@@ -111,7 +159,10 @@ class LectorPdfActivity : ComponentActivity() {
                     state = estado,
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer(scaleX = zoom, scaleY = zoom)
+                        .graphicsLayer(
+                            scaleX = zoom, scaleY = zoom,
+                            translationX = desplazado.x, translationY = desplazado.y
+                        )
                 ) {
                     items((0 until cuantas).toList()) { i -> Hoja(ruta, i, zoom, anchoPx) }
                 }
