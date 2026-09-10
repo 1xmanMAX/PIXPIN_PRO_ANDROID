@@ -4473,12 +4473,33 @@ class MensajesActivity : ComponentActivity() {
                   with(densidad) { RECORRIDO_MAXIMO_PARA_TIRAR.toPx() })
         }
         val subidaParaFijar = with(densidad) { SUBIDA_PARA_FIJAR.toPx() }
-        Surface(shadowElevation = 8.dp) {
+        // **La barra de abajo es una isla, no una barra.**
+        //
+        // Era una losa de lado a lado con su sombra, y la cabecera ya flotaba desde el 8-sep:
+        // dos lenguajes distintos en la misma pantalla. Telegram tiene las dos flotando, y la
+        // de abajo con medidas concretas —radio 22, 7 de margen a los lados, 9 sobre el hueco
+        // de los botones del sistema y 44 de alto mínimo, `ChatInputViewsContainer.java:27,
+        // 30, 81-82, 234`—, que son las que van aquí. Lo pidió el usuario el 9-sep-2026.
+        //
+        // Lo que **todavía no** hace es dejar pasar la lista por debajo: para eso hay que
+        // sacarla del hueco inferior del `Scaffold` y ponerla flotando, como se hizo con la
+        // cabecera. Ver [CabeceraFlotante].
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = MARGEN_DE_LA_ISLA, vertical = SOBRE_EL_HUECO)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(RADIO_DE_LA_ISLA),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 3.dp,
+                modifier = Modifier.fillMaxWidth().heightIn(min = ALTO_DE_LA_ISLA)
+            ) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .imePadding()
-                    .navigationBarsPadding()
                     .padding(horizontal = 6.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
@@ -4745,6 +4766,7 @@ class MensajesActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -5920,6 +5942,16 @@ private val FILA_DE_LA_BARRA = 44.dp
 
 /** Lo redondo que es el campo. La mitad del alto: una píldora. */
 private val ESQUINA_DEL_CAMPO = 22.dp
+
+/**
+ * **La isla de abajo**, con las medidas de Telegram (`ChatInputViewsContainer.java:27, 30,
+ * 81-82, 234`): radio 22, 7 de margen a los lados, 9 sobre el hueco de los botones del sistema
+ * y 44 de alto mínimo. Ver [MensajesActivity.BarraDeEscribir].
+ */
+private val RADIO_DE_LA_ISLA = 22.dp
+private val MARGEN_DE_LA_ISLA = 7.dp
+private val SOBRE_EL_HUECO = 9.dp
+private val ALTO_DE_LA_ISLA = 44.dp
 
 /** Lo que tarda el clip en apartarse al empezar a escribir. */
 private const val RETIRADA_DEL_CLIP = 100
