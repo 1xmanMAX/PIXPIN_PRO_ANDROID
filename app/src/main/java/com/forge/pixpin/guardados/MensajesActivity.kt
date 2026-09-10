@@ -3268,6 +3268,7 @@ class MensajesActivity : ComponentActivity() {
             }
             // El atajo para sacarla a la pantalla, en su esquina. Ver [AtajoEnLaEsquina].
             Box(Modifier.align(Alignment.TopEnd)) { AtajoEnLaEsquina(m) }
+            PuntoDeProyecto(m, Modifier.align(Alignment.TopStart).padding(8.dp))
         }
     }
 
@@ -3506,6 +3507,7 @@ class MensajesActivity : ComponentActivity() {
             )
                 // El atajo para sacar la hoja a la pantalla. Ver [AtajoEnLaEsquina].
                 Box(Modifier.align(Alignment.TopEnd)) { AtajoEnLaEsquina(m) }
+                PuntoDeProyecto(m, Modifier.align(Alignment.TopStart).padding(8.dp))
             }
             Text(
                 m.nombre.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },
@@ -3918,7 +3920,14 @@ class MensajesActivity : ComponentActivity() {
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
-            Column(Modifier.padding(start = 10.dp)) {
+            // El punto de si vive también en los proyectos. Ver [PuntoDeProyecto].
+            PuntoDeProyecto(m, Modifier.padding(start = 6.dp))
+            // **La columna cede sitio al atajo.** Sin peso, el nombre se quedaba con todo el
+            // ancho de la burbuja y el botón de sacar a la pantalla se quedaba **fuera**: con
+            // un PDF de nombre largo no aparecía, y con una imagen sí, que es lo que reportó
+            // el usuario el 9-sep-2026. `fill = false` para que un nombre corto no estire la
+            // burbuja hasta el borde.
+            Column(Modifier.padding(start = 10.dp).weight(1f, fill = false)) {
                 if (barras.isEmpty()) {
                     // Las notas grabadas antes de guardar los picos no tienen onda. Una
                     // onda inventada mentiría sobre lo que se dijo, así que no se pinta.
@@ -4033,6 +4042,45 @@ class MensajesActivity : ComponentActivity() {
                 almacen.transcribir(m)
             }
         }
+    }
+
+    /**
+     * **El punto de si esto vive también en los proyectos.**
+     *
+     * Verde, está en los dos sitios; rojo, solo aquí. Lo pidió el usuario el 9-sep-2026, y
+     * contesta algo que esta pantalla no sabía decir: uno va dejando cosas en la conversación
+     * sin saber cuáles ha llevado ya a un proyecto y cuáles se quedan sueltas.
+     *
+     * **Se calcula cada vez**, mirando los proyectos que hay ahora mismo, y por eso no hace
+     * falta avisar a nadie cuando algo cambia: borrar el proyecto pone el punto en rojo solo.
+     * Y como los proyectos se leen de un flujo, la burbuja se repinta cuando cambian.
+     *
+     * Solo en lo que es un archivo: una nota escrita o un cronómetro no están «en los
+     * proyectos» ni dejan de estarlo, y un punto ahí sería un adorno que hay que interpretar.
+     */
+    @Composable
+    private fun PuntoDeProyecto(m: Mensaje, modifier: Modifier = Modifier) {
+        val app = application as? PixPinApp ?: return
+        val proyectos by app.proyectos.proyectos.collectAsState()
+        val esArchivo = m.clase == Clase.IMAGEN || m.clase == Clase.ARCHIVO ||
+            m.clase == Clase.PAGINA || m.clase == Clase.DIBUJO || m.clase == Clase.PROYECTO
+        if (!esArchivo) return
+        val esta = remember(proyectos, m.id, m.referencia, m.ruta) {
+            com.forge.pixpin.motor.Proyectos.estaEnLosProyectos(
+                proyectos,
+                dibujo = m.referencia.takeIf { m.clase != Clase.PROYECTO },
+                pdf = m.ruta,
+                proyecto = m.referencia.takeIf { m.clase == Clase.PROYECTO }
+            )
+        }
+        Box(
+            modifier
+                .size(9.dp)
+                .background(
+                    if (esta) Color(0xFF2E9E4F) else Color(0xFFD24B3E),
+                    androidx.compose.foundation.shape.CircleShape
+                )
+        )
     }
 
     /**
@@ -4352,7 +4400,14 @@ class MensajesActivity : ComponentActivity() {
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
-            Column(Modifier.padding(start = 10.dp)) {
+            // El punto de si vive también en los proyectos. Ver [PuntoDeProyecto].
+            PuntoDeProyecto(m, Modifier.padding(start = 6.dp))
+            // **La columna cede sitio al atajo.** Sin peso, el nombre se quedaba con todo el
+            // ancho de la burbuja y el botón de sacar a la pantalla se quedaba **fuera**: con
+            // un PDF de nombre largo no aparecía, y con una imagen sí, que es lo que reportó
+            // el usuario el 9-sep-2026. `fill = false` para que un nombre corto no estire la
+            // burbuja hasta el borde.
+            Column(Modifier.padding(start = 10.dp).weight(1f, fill = false)) {
                 // Dos líneas y recorte por el medio: los nombres de archivo se
                 // distinguen por el final («…informe_v3_FINAL.pdf»), y cortarlos ahí
                 // deja todos los de una carpeta con el mismo aspecto.

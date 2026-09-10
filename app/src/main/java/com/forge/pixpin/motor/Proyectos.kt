@@ -450,6 +450,37 @@ object Proyectos {
         proyectos.firstOrNull { it.pdfOrigen == pdf }
 
     /**
+     * **Si lo que hay en el chat vive también en los proyectos.**
+     *
+     * Es lo que decide el punto verde o rojo de la burbuja: verde, está en los dos sitios;
+     * rojo, solo en el chat. Lo pidió el usuario el 9-sep-2026, y es una pregunta que esta
+     * pantalla no sabía contestar — uno acumula cosas en la conversación sin saber cuáles ha
+     * llevado ya a un proyecto y cuáles se quedarán ahí sueltas.
+     *
+     * Se mira por lo que identifica a cada clase, no por el nombre del archivo: un [dibujo]
+     * es una hoja del proyecto por su identificador, y un [pdf] lo es por ser el origen de un
+     * proyecto o el papel de alguna de sus hojas. Comparar nombres daría verdes falsos en
+     * cuanto dos archivos se llamaran igual, que en un teléfono pasa a todas horas.
+     *
+     * [proyecto] es el identificador cuando lo que se mira **es** un proyecto: entonces basta
+     * con que ese proyecto siga existiendo. Borrarlo de la zona de proyectos lo pone en rojo
+     * sin que haya que avisar a nadie, porque la respuesta se calcula cada vez.
+     */
+    fun estaEnLosProyectos(
+        proyectos: List<Proyecto>,
+        dibujo: String? = null,
+        pdf: String? = null,
+        proyecto: String? = null
+    ): Boolean {
+        if (proyecto != null) return proyectos.any { it.id == proyecto }
+        if (dibujo != null && proyectos.any { p -> p.hojas.any { it.dibujo == dibujo } }) return true
+        if (pdf != null) {
+            if (proyectos.any { it.pdfOrigen == pdf || it.pdfLimpio == pdf }) return true
+        }
+        return false
+    }
+
+    /**
      * Si este archivo **es de algún proyecto**.
      *
      * El PDF de un proyecto entra en la aplicación como archivo de un pin, y
