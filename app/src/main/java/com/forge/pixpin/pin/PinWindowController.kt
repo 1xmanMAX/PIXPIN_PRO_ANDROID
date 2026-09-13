@@ -51,6 +51,8 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
@@ -2108,10 +2110,16 @@ class PinWindowController(
                     // después de anotar una página, y el archivo ya lleva
                     // dentro todo lo hecho: no hay nada que montar, solo
                     // mandarlo. Ver [Proyecto].
+                    // **Abrir el PDF en otra aplicación**, un editor de PDF por ejemplo.
+                    if (pages > 0) {
+                        IconButton(onClick = { pin.value.filePath?.let { com.forge.pixpin.ui.AbrirCon.abrir(context, File(it), "application/pdf") } }) {
+                            Icon(Icons.Filled.OpenInNew, contentDescription = "Abrir con otra app")
+                        }
+                    }
                     if (pages > 0) {
                         IconButton(onClick = { compartirElPdf() }) {
                             Icon(
-                                Icons.Filled.Share,
+                                Icons.Filled.IosShare,
                                 contentDescription = context.getString(R.string.pdf_compartir)
                             )
                         }
@@ -3016,17 +3024,7 @@ class PinWindowController(
         val uri = runCatching {
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
         }.getOrNull() ?: return
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        runCatching {
-            context.startActivity(
-                Intent.createChooser(intent, context.getString(R.string.pdf_compartir))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }
+        runCatching { com.forge.pixpin.ui.CompartirNativo.uris(context, listOf(uri), "application/pdf", File(path).name) }
     }
 
     private fun openFile(s: PinState) {
@@ -3034,15 +3032,9 @@ class PinWindowController(
         val uri = runCatching {
             FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
         }.getOrNull() ?: return
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, s.mimeType ?: "*/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            toast(context.getString(R.string.no_app_for_file))
-        }
+        @Suppress("UNUSED_VARIABLE") val sinUsar = uri
+        // Con otra aplicación (sin PixPin en la lista), o instalándolo si es un APK. Ver [com.forge.pixpin.ui.AbrirCon].
+        com.forge.pixpin.ui.AbrirCon.abrir(context, File(path), s.mimeType)
     }
 
     private fun clipboard() = context.getSystemService(ClipboardManager::class.java)

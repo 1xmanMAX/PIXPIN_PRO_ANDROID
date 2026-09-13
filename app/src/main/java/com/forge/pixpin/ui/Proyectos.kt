@@ -1,5 +1,8 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
@@ -40,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -102,6 +106,7 @@ import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.motor.CapaDeAnotacion
+import com.forge.pixpin.tabla.MiniaturaDeTabla
 import com.forge.pixpin.motor.DrawEditorActivity
 import com.forge.pixpin.motor.DrawExport
 import com.forge.pixpin.motor.ExcalidrawStore
@@ -235,7 +240,15 @@ fun PantallaDeProyectos(
             calidadDeAudio = ExportarHtml.calidadDeAudio(marcadas),
             onCalidadDeAudio = { c -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conCalidadDeAudio(marcadas, c)) } },
             // Solo se pregunta por el audio si alguna de las hojas marcadas trae uno.
-            hayAudio = remember(marcado) { hayAudioEnLoMarcado(contexto, ordenados, marcado) }
+            hayAudio = remember(marcado) { hayAudioEnLoMarcado(contexto, ordenados, marcado) },
+            // Y por las tablas, si hay alguna marcada: editarlas o solo mirarlas.
+            hayTabla = remember(marcado) {
+                ordenados.any { p ->
+                    marcado[p.id].orEmpty().any { clave -> p.hojas.any { h -> h.tabla != null && clave.startsWith(h.id + "/") } }
+                }
+            },
+            tablasEditables = ExportarHtml.tablasEditables(marcadas),
+            onTablasEditables = { e -> alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ExportarHtml.conTablasEditables(marcadas, e)) } }
         )
     }
     if (quitando) {
@@ -276,6 +289,28 @@ fun PantallaDeProyectos(
     }
     // El proyecto que se está empaquetando como `.pixpin`, o null.
     var exportandoPaquete by remember { mutableStateOf<String?>(null) }
+
+    // **La hoja de compartir de toda la aplicación** (13-sep-2026): lo marcado —de uno o de
+    // varios proyectos— o un proyecto entero, con todos los formatos, qué páginas y el peso.
+    // Ver [HojaDeCompartir] y [CompartirPaginas].
+    var compartiendoHoja by remember { mutableStateOf<Compartible?>(null) }
+    val alcanceDeLaHoja = rememberCoroutineScope()
+    fun abrirHoja(seleccion: List<Pair<Proyecto, Set<String>?>>) {
+        if (seleccion.isEmpty()) return
+        alcanceDeLaHoja.launch {
+            val titulo = if (seleccion.size == 1) seleccion[0].first.nombre else seleccion.joinToString(" + ") { it.first.nombre }
+            val c = withContext(Dispatchers.IO) {
+                runCatching {
+                    CompartirPaginas.de(
+                        contexto, titulo, seleccion,
+                        wifi = seleccion.singleOrNull()?.first?.let { p -> { com.forge.pixpin.sincro.EnviarActivity.enviarProyecto(contexto, p.id) } }
+                    )
+                }.onFailure { android.util.Log.e("PixPinCompartir", "proyectos", it) }.getOrNull()
+            }
+            compartiendoHoja = c
+        }
+    }
+    compartiendoHoja?.let { c -> HojaDeCompartir(c) { compartiendoHoja = null } }
 
     // Se recuerda aquí y no dentro del paginador porque la cabecera enseña por
     // cuál se va, y esa cuenta es lo que dice que hay más debajo.
@@ -339,18 +374,13 @@ fun PantallaDeProyectos(
                 val cuantasMarcadas = marcado.values.sumOf { it.size }
                 if (cuantasMarcadas > 0) {
                     CajaDeAcciones(stringResourceSafe(R.string.proyecto_exportar_n, cuantasMarcadas)) {
+                        // **Un solo botón de compartir** con la hoja de toda la aplicación: ahí salen
+                        // PDF, página web, imagen y SVG (con una página), editable y Wi-Fi.
                         BotonDeAccion(
-                            Icons.Filled.Language, R.string.proyecto_web_corto, R.string.proyecto_exportar_web,
-                            ancho = ANCHO_EN_CAJA, onClick = { pidiendoFuncionesWeb = true }
-                        )
-                        BotonDeAccion(
-                            Icons.Filled.Share, R.string.proyecto_pdf_corto, R.string.proyecto_exportar,
-                            ancho = ANCHO_EN_CAJA, onClick = { exportando = true }
-                        )
-                        // El `.pixpin` es de un proyecto entero: el primero con algo marcado.
-                        BotonDeAccion(
-                            Icons.Filled.FolderZip, R.string.proyecto_paquete_corto, R.string.proyecto_paquete,
-                            ancho = ANCHO_EN_CAJA, onClick = { exportandoPaquete = marcado.keys.firstOrNull() }
+                            IconoDeCompartir, R.string.guardados_compartir, R.string.guardados_compartir,
+                            ancho = ANCHO_EN_CAJA, onClick = {
+                                abrirHoja(ordenados.mapNotNull { p -> marcado[p.id]?.takeIf { it.isNotEmpty() }?.let { p to it } })
+                            }
                         )
                         BotonDeAccion(
                             Icons.Filled.Delete, R.string.proyecto_quitar_corto, R.string.proyecto_quitar,
@@ -514,6 +544,7 @@ fun PantallaDeProyectos(
                     onExportar = { exportando = true },
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = unico.id },
+                    onCompartir = { abrirHoja(listOf(unico to null)) },
                     modifier = Modifier.fillMaxSize().padding(10.dp)
                 )
                 return@Column
@@ -569,6 +600,7 @@ fun PantallaDeProyectos(
                     onExportar = { exportando = true },
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = p.id },
+                    onCompartir = { abrirHoja(listOf(p to null)) },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -625,6 +657,7 @@ private fun PaginaDeProyecto(
     onExportar: () -> Unit,
     onExportarWeb: () -> Unit,
     onExportarPaquete: () -> Unit = {},
+    onCompartir: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val contexto = LocalContext.current
@@ -674,6 +707,21 @@ private fun PaginaDeProyecto(
     // sellos y llegas al final en dos gestos. Las dos son perezosas, así que
     // cambiar de una a otra no cuesta nada.
     var rejilla by remember(p.id) { mutableStateOf(false) }
+
+    // **Los sublienzos, plegados bajo su página** (lo pidió el usuario el 13-sep-2026). Una zona
+    // mandada al chat es una hoja colgada de otra ([Hoja.padre]); de fábrica no se ve, y su página
+    // lleva un contador que la despliega. Así el proyecto no se llena de recortes.
+    var abiertos by remember(p.id) { mutableStateOf(emptySet<String>()) }
+    val hijos = remember(p) { p.hojas.mapNotNull { it.padre }.groupingBy { it }.eachCount() }
+    val visibles = remember(paginas, abiertos, p) {
+        val porId = p.hojas.associateBy { it.id }
+        fun seVe(padre: String?, vueltas: Int = 0): Boolean =
+            padre == null || (vueltas < 8 && padre in abiertos && seVe(porId[padre]?.padre, vueltas + 1))
+        paginas.filter { seVe(it.hoja.padre) }
+    }
+    val plegado = remember(hijos, abiertos) {
+        Plegado(hijos, abiertos) { id -> abiertos = if (id in abiertos) abiertos - id else abiertos + id }
+    }
 
     // **Plegado de fábrica: una sola portada con el montón detrás.**
     //
@@ -827,20 +875,12 @@ private fun PaginaDeProyecto(
                             // todas las hojas y se sigue por el camino de siempre, así lo
                             // que sale es lo mismo que marcando una a una.
                             val todas = { paginas.forEach { if (it.clave !in marcadas) onMarcar(it.clave) } }
+                            // Todo lo de sacar el proyecto, en la hoja de compartir. Ver [HojaDeCompartir].
+                            @Suppress("UNUSED_EXPRESSION") todas
                             DropdownMenuItem(
-                                text = { Text(stringResourceSafe(R.string.proyecto_exportar_todo_web)) },
-                                leadingIcon = { Icon(Icons.Filled.Language, contentDescription = null) },
-                                onClick = { menu = false; todas(); onExportarWeb() }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResourceSafe(R.string.proyecto_exportar_todo_pdf)) },
-                                leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
-                                onClick = { menu = false; todas(); onExportar() }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResourceSafe(R.string.proyecto_paquete)) },
-                                leadingIcon = { Icon(Icons.Filled.FolderZip, contentDescription = null) },
-                                onClick = { menu = false; onExportarPaquete() }
+                                text = { Text(stringResourceSafe(R.string.guardados_compartir)) },
+                                leadingIcon = { Icon(IconoDeCompartir, contentDescription = null) },
+                                onClick = { menu = false; onCompartir() }
                             )
                             DropdownMenuItem(
                                 text = {
@@ -873,6 +913,8 @@ private fun PaginaDeProyecto(
 
                 }
                 val hojas: @Composable (Modifier) -> Unit = { modificador ->
+                    androidx.compose.runtime.CompositionLocalProvider(LocalPlegado provides plegado) {
+                    val paginas = visibles
                     Box(modificador) {
                     when {
                         paginas.isEmpty() -> Box(
@@ -914,6 +956,7 @@ private fun PaginaDeProyecto(
                             ampliada = ampliada,
                             enPrimerPlano = enPrimerPlano
                         )
+                    }
                     }
                     }
                 }
@@ -1138,6 +1181,19 @@ private fun BarraDeAcciones(
                 app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = id, nota = ""), ahora))
                 MarkdownEditorActivity.abrir(contexto, id, "", desdeProyecto = p.id)
             }
+            // **Una tabla con fórmulas.** Nace vacía y el editor la crea al guardar; el proyecto
+            // guarda solo por dónde encontrarla. Ver [com.forge.pixpin.tabla.TablaActivity].
+            BotonDeAccion(
+                Icons.Filled.TableChart,
+                R.string.proyecto_tabla_corta,
+                R.string.proyecto_tabla_nueva,
+                ancho = ANCHO_EN_CAJA
+            ) {
+                val ahora = System.currentTimeMillis()
+                val tabla = "t-$ahora"
+                app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = "h-$ahora", nombre = "Tabla", tabla = tabla), ahora))
+                com.forge.pixpin.tabla.TablaActivity.abrir(contexto, tabla, desdeProyecto = p.id)
+            }
             // **Los croquis en el espacio del proyecto.**
             //
             // Cada vista que se congele ahí entra aquí como una lámina, así que se marca y
@@ -1192,8 +1248,8 @@ private fun BarraDeAcciones(
     }
 }
 
-/** Lo que mide un botón dentro de una [CajaDeAcciones]: tres caben junto al chat y el PDF. */
-private val ANCHO_EN_CAJA = 56.dp
+/** Lo que mide un botón dentro de una [CajaDeAcciones]: cuatro caben junto al chat y el PDF. */
+private val ANCHO_EN_CAJA = 50.dp
 
 /**
  * Un grupo de botones con su rótulo, dentro de un borde.
@@ -1392,6 +1448,7 @@ private fun PortadaDelProyecto(
             p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
                 p.pdfOrigen!!, h.pagina!!, ancho, ampliada, dibujo = h.dibujo
             )
+            h.tabla != null -> MiniaturaDeTabla(h.tabla!!, grande = true)
             // A tamaño grande la nota se compone con letra de leer, no con la
             // de tres puntos y medio de la tira.
             h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!, tamaño = LETRA_DE_LA_PORTADA)
@@ -1660,6 +1717,8 @@ private fun abrirHoja(
 ) {
     val h = pagina.hoja
     when {
+        h.tabla != null -> com.forge.pixpin.tabla.TablaActivity.abrir(contexto, h.tabla!!, desdeProyecto = p.id)
+
         // **La lámina de un croquis en el espacio abre el croquis, no la lámina.**
         //
         // Lo que se entrega es la lámina —vectores, se exporta y se amplía sin límite— pero
@@ -1716,6 +1775,7 @@ private fun abrirHoja(
  * una etiqueta que está en todas partes no distingue nada.
  */
 private fun deQueEs(h: Hoja): String? = when {
+    h.tabla != null -> "fx"
     h.croquis != null -> "3D"
     h.nota != null -> "MD"
     h.pagina != null -> null
@@ -1801,6 +1861,7 @@ private fun HojaDelProyecto(
                 // a lo que luego salía en el PDF. Ahora es el mismo pintor que el
                 // pin y el mismo corte en páginas: lo que se ve aquí es la hoja
                 // que se va a entregar.
+                h.tabla != null -> MiniaturaDeTabla(h.tabla!!)
                 h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!)
 
                 // Un croquis del espacio no tiene miniatura que sacar sin montar la escena
@@ -1812,6 +1873,40 @@ private fun HojaDelProyecto(
                 )
 
                 else -> MiniaturaDeLienzo(contexto, h.dibujo, pagina.marco)
+            }
+
+            // **Sus sublienzos, plegados**: un contador que los despliega y los vuelve a plegar.
+            val plegado = LocalPlegado.current
+            val cuantos = plegado?.hijos?.get(h.id) ?: 0
+            if (cuantos > 0 && plegado != null) {
+                val abierto = h.id in plegado.abiertos
+                Row(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(3.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable { plegado.alternar(h.id) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        (if (abierto) "▾ " else "▸ ") + cuantos,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                }
+            }
+            // Y un sublienzo se distingue de un vistazo: filete del color de la marca de las zonas.
+            if (h.padre != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .width(4.dp)
+                        .background(Color(0xFF1971C2))
+                )
             }
 
             // **De qué es cada hoja, en una esquina.** Con la rejilla llena de miniaturas
@@ -1955,6 +2050,7 @@ private fun LaPortadaDelMonton(
         p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
             p.pdfOrigen!!, h.pagina!!, PdfDoc.THUMB_WIDTH, ampliada = null, dibujo = h.dibujo
         )
+        h.tabla != null -> MiniaturaDeTabla(h.tabla!!, grande = true)
         h.nota != null -> MiniaturaDeNota(pagina.texto ?: h.nota!!, tamaño = LETRA_DE_LA_PORTADA)
         h.croquis != null && h.vista == null -> Box(
             Modifier
@@ -2365,3 +2461,8 @@ private fun MiniaturaDePagina(
 private fun stringResourceSafe(id: Int, vararg args: Any): String =
     if (args.isEmpty()) androidx.compose.ui.res.stringResource(id)
     else androidx.compose.ui.res.stringResource(id, *args)
+
+/** Qué hojas tienen sublienzos y cuáles están desplegadas. Ver [PaginaDeProyecto]. */
+private class Plegado(val hijos: Map<String, Int>, val abiertos: Set<String>, val alternar: (String) -> Unit)
+
+private val LocalPlegado = androidx.compose.runtime.compositionLocalOf<Plegado?> { null }

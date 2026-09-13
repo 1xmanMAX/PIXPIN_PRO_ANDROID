@@ -3,8 +3,9 @@
 Fecha: 9-sep-2026. Lo pidió el usuario: multiplataforma, por la red local, sin que nadie
 tenga que montar ni pagar un servidor, y construido sobre el número que ya lleva cada mensaje.
 
-> **Esto es un plan, no código.** Nada de lo de aquí está implementado todavía. Las preguntas
-> abiertas están al final y hay que responderlas antes de empezar la parte 3.
+> **Implementado el 13-sep-2026** (v0.34.0), salvo Windows y Wi-Fi Direct. Lo que se hizo y
+> cómo probarlo está en «Cómo quedó», al final. Probado solo con dos «aparatos» simulados en la
+> JVM que se hablan por un socket (`SincronizarDeVerdadTest`); **nada probado en teléfonos**.
 
 ---
 
@@ -141,10 +142,85 @@ eso solo lo puede hacer el usuario.
    de la seña (`5b`). Elegirla a mano era bonito —«l» de laptop— pero se agota, choca entre
    aparatos, y obligaría a resolver ese choque justo en el momento de emparejar, que es cuando
    menos ganas hay de leer un aviso.
-2. **¿Sincroniza todo o por proyectos?** Todo es más simple de explicar; por proyectos evita
-   traerse a la tableta los 300 MB de planos del trabajo.
+2. ~~**¿Sincroniza todo o por proyectos?**~~ **Decidido (13-sep-2026): por proyectos.** La
+   primera vez con cada aparato se marcan cuáles viajan; así la tableta no se trae los 300 MB
+   de planos del trabajo. La base (lo acordado la última vez) se guarda por aparato y proyecto.
 3. **¿Hace falta que sea segura de verdad?** Cifrar lo que viaja con la clave del grupo cuesta
    poco y evita que alguien en la misma Wi-Fi lea los planos. Doy por hecho que sí.
-4. **El «5b» y el «5b tal» del mensaje del usuario**: entendí que la seña **no cambia** al
-   viajar —`5b` sigue siendo `5b` en los tres aparatos—, porque si cambiara dejaría de servir
-   para reconocer el mismo archivo. Confirmar.
+4. ~~**El «5b» del mensaje del usuario**~~ **Confirmado (13-sep-2026):** la seña **no cambia**
+   al viajar; `5b` es `5b` en los tres aparatos.
+5. **Decidido (13-sep-2026): siempre en los dos sentidos.** Aunque el usuario diga «de la
+   tablet a la laptop», los dos quedan iguales. No hay sincronización de ida sola.
+6. **Decidido (13-sep-2026): borrado contra intacto se pregunta**, con «borrar en los dos»
+   marcado por omisión (lo que ya hace `Diferencia`).
+7. **Decidido (13-sep-2026): todo nace en el chat.** Crear un lienzo, abrir un PDF o una
+   imagen tiene que dejar un mensaje con su número; lo que se lo salte no tiene seña y no se
+   puede sincronizar. Hay que revisar las entradas que hoy no pasan por el chat.
+8. **Los relojes.** No hacen falta iguales para decidir (se compara el resumen y la base),
+   pero sí ordenan el chat. Se pensó corregir la hora de lo que llega; al escribirlo se vio que
+   eso cambia el mensaje en un solo lado y lo haría chocar en la vuelta siguiente, así que **se
+   avisa** en vez de corregir (ver «Cómo quedó»).
+
+---
+
+## Cómo quedó (13-sep-2026)
+
+### Dónde está cada pieza (`app/src/main/java/com/forge/pixpin/sincro/`)
+
+| Archivo | Qué hace | ¿Android? |
+|---|---|---|
+| `Sena.kt` | número + letra | no |
+| `Diferencia.kt` | qué traer, mandar o preguntar, con la base | no |
+| `Identidad.kt` | el aparato (id, nombre, letra), el código del grupo, la clave (PBKDF2) y la etiqueta que se anuncia | no |
+| `Canal.kt` | tramos AES-GCM con clave por sesión y por sentido; con otro código no se descifra ni el saludo | no |
+| `Disco.kt` | lee y escribe la carpeta `files`: sellar, apuntes, marcas de borrado, qué archivos son de un chat, rutas portátiles, base | no |
+| `Mezcla.kt` | junta dos versiones de un proyecto a tres bandas, sin preguntar | no |
+| `Protocolo.kt` | `Sesion` (el que dirige) y `Respondedor` (el otro) | no |
+| `Red.kt` | escuchar en el puerto 47474, anunciarse y buscar por mDNS (`_pixpin._tcp`) | sí |
+| `SincronizarActivity.kt` | la pantalla | sí |
+
+Fuera de `sincro/`: `Mensaje.letra`; `MensajesStore.anadir` pone la letra; `MensajesStore.reescribir`
+deja las marcas de borrado; la chapa del chat enseña `#47a`; `reenviado` quita número y letra
+(la copia es un mensaje nuevo en su chat); botón «Sincronizar» en la portada.
+
+### Decisiones tomadas al escribirlo
+
+- **Qué viaja de un chat**: sus mensajes (por seña), su proyecto (si es de un proyecto) y los
+  archivos que alcanzan: adjuntos, lienzos (`pins/draw/<id>.excalidraw.gz`) con sus fotos,
+  tablas, croquis, el PDF del proyecto y los adjuntos de sus notas. Lo que esté fuera de `files`
+  (una ruta a Descargas) no viaja.
+- **Dos pasos por chat**: primero mensajes y proyecto; después, con los dos chats ya iguales,
+  los archivos. Así un archivo de un mensaje borrado no vuelve.
+- **Rutas portátiles**: la carpeta del aparato se cambia por `pixpin:files/` al salir y por la
+  del otro al entrar, también dentro de los lienzos. Los resúmenes se hacen sobre la forma
+  portátil, así que el mismo lienzo da el mismo resumen en los dos.
+- **El proyecto no pregunta**: hojas añadidas en los dos lados quedan todas; una quitada en un
+  lado se quita; si los dos cambiaron la misma hoja, gana el proyecto tocado más tarde.
+- **Un archivo cambiado en los dos** se pregunta nombrado por su mensaje (`#3a · Planta baja`),
+  con el editado más tarde marcado. Un mensaje cambiado en los dos: marcado el de este aparato.
+  Borrado contra intacto: marcado el borrado.
+- **Lo acordado solo vale si los dos lo recuerdan igual** (se compara su sello). Si una vuelta se
+  cortó a medias, la siguiente hace como la primera: pregunta de más, nunca pisa.
+- **El reloj**: no se corrige nada. Si el otro va desfasado más de 2 minutos, al acabar se avisa
+  de que ponga la hora automática.
+- **Una sincronización a la vez por aparato**: el que llega segundo recibe «ocupado».
+- **La pantalla abierta es lo que hace a un aparato encontrable.** No hay servicio en segundo
+  plano: para sincronizar, los dos tienen Sincronizar abierto.
+
+### Cómo probarlo con dos aparatos
+
+1. Los dos en la misma Wi-Fi, con la v0.34.0.
+2. En el primero: portada → **Sincronizar** → ponerle nombre → **Crear un grupo** → «Enseñar» el código.
+3. En el segundo: **Sincronizar** → **Unirme con un código** → teclearlo. Si en 25 s no aparece,
+   escribir la dirección que enseña el primero («Dirección en la Wi-Fi»).
+4. Con los dos en Sincronizar, en uno aparece el otro en «Aparatos cerca» → **Sincronizar** →
+   elegir chats.
+5. Casos que merece la pena probar: una foto y un PDF en un proyecto; editar la misma nota en
+   los dos; borrar un mensaje en uno; dibujar en el mismo lienzo en los dos; un tercer aparato.
+
+### Lo que falta
+
+- Probarlo en teléfonos (mDNS cambia mucho de un router a otro; por eso existe la dirección a mano).
+- Proyectos borrados: no se propaga el borrado de un proyecto entero.
+- Sincronizar sin la pantalla abierta (un servicio en primer plano) si hace falta.
+- Wi-Fi Direct y la versión de Windows.

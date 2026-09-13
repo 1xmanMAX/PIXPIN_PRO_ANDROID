@@ -60,6 +60,9 @@
     -->
     <string name="proyecto_hoja_corta">Hoja</string>
     <string name="proyecto_nota_corta">Nota</string>
+    <string name="proyecto_tabla_corta">Tabla</string>
+    <string name="proyecto_tabla_nueva">Añadir tabla con fórmulas</string>
+    <string name="tablas_titulo">Tablas</string>
     <string name="proyecto_croquis_corto">3D</string>
     <string name="proyecto_croquis">Croquis en el espacio: cada vista que congeles entra como hoja</string>
     <string name="proyecto_croquis_n">Croquis %1$d</string>
@@ -320,6 +323,7 @@
     <string name="punto_sin_sitio">Los puntos van en cruces, extremos, medios o el centro de un círculo</string>
     <string name="tool_selection">Seleccionar</string>
     <string name="tool_lasso">Lazo</string>
+    <string name="tool_zona">Zona</string>
     <string name="tool_bolita">Bolita: se pasa por encima y va cogiendo</string>
     <string name="tool_hand">Mano</string>
     <string name="tool_freedraw">Lápiz</string>
@@ -495,6 +499,7 @@
     <string name="guardados_reenviado">Reenviado</string>
     <string name="guardados_anadido_a">Añadido a %1$s</string>
     <string name="guardados_unir_al_proyecto">Unir al proyecto</string>
+    <string name="guardados_devolver_al_proyecto">Volver a añadir al proyecto</string>
     <string name="guardados_transcribir">Pasar a texto</string>
     <string name="guardados_pasando_texto">Pasando a texto · %1$d %%</string>
     <string name="guardados_elegir_chat">¿A qué chat?</string>
@@ -575,6 +580,7 @@
     <string name="guardados_pineado">Puesto en la pantalla</string>
     <string name="guardados_ya_no_esta">Este archivo ya no está</string>
     <string name="guardados_compartir">Compartir</string>
+    <string name="guardados_abrir_con">Abrir con otra app</string>
     <string name="guardados_como_imagen">Compartir como imagen</string>
     <string name="guardados_como_web">Como página web</string>
     <string name="guardados_como_editable">Editable (.pixpin)</string>

@@ -57,6 +57,72 @@ class ExportarHtmlTest {
         )
     }
 
+    /**
+     * **Una tabla viaja calculada, escapada y con una sola cosa que reescribir al guardar.**
+     *
+     * Guardar reemplaza el JSON y la tabla estática de cada hoja de tabla con las primeras
+     * coincidencias de dos patrones. Si el guion o el estilo contuvieran esos principios de
+     * etiqueta escritos tal cual, guardar se los comería como pasó con `<g id="croquis">`.
+     */
+    @Test
+    fun `una tabla viaja con sus formulas y guardar solo encuentra lo suyo`() {
+        val t = TablaDeCalculo(
+            nombre = "Gastos",
+            celdas = mapOf(
+                "A1" to "Precio", "B1" to "10", "B2" to "20", "B3" to "=SUMA(B1:B2)",
+                "A4" to "<script>alert(1)</script>", "A5" to "</script><table class=\"calc\">"
+            ),
+            estilos = mapOf("A1" to EstiloDeCelda(n = true))
+        )
+        val html = ExportarHtml.paginas(listOf(ExportarHtml.HojaWeb.Tabla("Gastos", t)), "Gastos")
+        assertTrue(html.contains("data-tipo=\"tabla\""))
+        assertTrue("sale ya calculada", html.contains(">30</td>"))
+        assertTrue("la negrita va", html.contains("<td class=\"n\">Precio</td>"))
+        assertFalse("lo escrito no se vuelve etiqueta", html.contains("<script>alert"))
+        assertEquals(1, Regex(Regex.escape("<script type=\"application/json\" class=\"tabla\">")).findAll(html).count())
+        assertEquals(1, Regex(Regex.escape("<table class=\"calc\">")).findAll(html).count())
+        assertTrue("el visor va dentro", html.contains("function crearTabla("))
+        assertTrue("y el motor", html.contains("var Calculo="))
+        // Una página sin tablas no arrastra ni el motor ni el visor.
+        assertFalse(ExportarHtml.paginas(tresHojas(), "Sin tablas").contains("var Calculo="))
+        // **Solo lo ocupado y uno alrededor**: A1:B5 lleva hasta la columna C y la fila 6.
+        assertTrue(html.contains("px\">C</th>"))
+        assertFalse(html.contains("px\">D</th>"))
+        assertTrue(html.contains("<tr><th>6</th>"))
+        assertFalse(html.contains("<tr><th>7</th>"))
+        assertTrue("la fórmula va sombreada", html.contains("<td class=\"d f\">30</td>"))
+        assertTrue("la tabla lleva su capa de tinta", html.contains("<svg class=\"tinta\"><g class=\"origen\"><g id=\"croquis\"></g></g></svg>"))
+        assertTrue("y el lápiz en la barra", html.contains("id=\"lapiz\""))
+        assertFalse("sin marca de solo lectura", html.contains("data-tabla-editable"))
+        // En solo lectura: la marca va, y los botones que cambian celdas no.
+        val soloVer = ExportarHtml.paginas(
+            listOf(ExportarHtml.HojaWeb.Tabla("Gastos", t)), "Gastos",
+            opciones = ExportarHtml.Opciones.de(ExportarHtml.conTablasEditables(ExportarHtml.Opciones.NOMBRES.toSet(), false))
+        )
+        assertTrue(soloVer.contains("data-tabla-editable=\"0\""))
+        assertFalse(soloVer.contains("id=\"t-pegar\""))
+        assertTrue(soloVer.contains("id=\"t-copiar\""))
+        assertTrue("los ajustes de antes siguen dejando editar", ExportarHtml.Opciones.de(setOf("lapiz")).editarTablas)
+        // Una tabla que empieza lejos de A1 enseña su margen y no la esquina vacía.
+        val lejos = VisorTabla.estatica(TablaDeCalculo(celdas = mapOf("D10" to "1", "E12" to "2")))
+        assertTrue(lejos.contains("px\">C</th>") && lejos.contains("px\">F</th>"))
+        assertFalse(lejos.contains("px\">B</th>") || lejos.contains("px\">G</th>"))
+        assertTrue(lejos.contains("<tr><th>9</th>") && lejos.contains("<tr><th>13</th>"))
+        assertFalse(lejos.contains("<tr><th>8</th>") || lejos.contains("<tr><th>14</th>"))
+        // **Con un lienzo al lado, la tabla oculta no se pinta encima.** Su `display:flex` pesaba
+        // lo mismo que `.hoja[hidden]` y ganaba por ir detrás (usuario, 11-sep-2026).
+        val mixta = ExportarHtml.paginas(listOf(tresHojas()[0], ExportarHtml.HojaWeb.Tabla("Gastos", t)), "Mixta")
+        assertTrue(mixta.contains(".hoja[data-tipo=tabla][hidden]{display:none}"))
+        System.getenv("PIXPIN_VOLCAR")?.let {
+            java.io.File(it).writeText(html)
+            java.io.File(it.removeSuffix(".html") + "-mixta.html").writeText(mixta)
+            // Protegida, con B1 y B2 como las únicas celdas que se pueden cambiar.
+            val protegida = t.copy(protegida = true, estilos = t.estilos + mapOf("B1" to EstiloDeCelda(e = true), "B2" to EstiloDeCelda(e = true)))
+            java.io.File(it.removeSuffix(".html") + "-protegida.html")
+                .writeText(ExportarHtml.paginas(listOf(ExportarHtml.HojaWeb.Tabla("Gastos", protegida)), "Protegida"))
+        }
+    }
+
     @Test
     fun `un documento lleva todas sus hojas y el menu para pasarlas`() {
         val html = ExportarHtml.paginas(tresHojas(), "Proyecto")
@@ -68,9 +134,23 @@ class ExportarHtmlTest {
         // Solo se ve la primera: las demás no las pinta el navegador.
         assertEquals(2, Regex("data-nombre=\"[^\"]*\" hidden").findAll(html).count())
         assertTrue("el menú tiene que salir", html.contains("<div id=\"pizarra\" class=\"varias\">"))
-        assertTrue(html.contains("id=\"indice\""))
-        assertTrue(html.contains("id=\"siguiente\""))
+        // Pasar de página va en el índice de arriba, no en la barra.
+        assertTrue(html.contains("id=\"indice-fijo\""))
+        assertFalse(html.contains("id=\"siguiente\""))
+        assertTrue("el índice dice la hoja de ahora", html.contains("<span class=\"titulo\">Planta</span><span class=\"cuenta\">1 / 3</span>"))
         assertTrue(html.contains("viewBox=\"0 0 300 200\""))
+    }
+
+    @Test
+    fun `con varias hojas hay un indice con enlaces a cada una`() {
+        val html = ExportarHtml.paginas(tresHojas(), "Proyecto")
+        assertTrue(html.contains("<details id=\"indice-fijo\""))
+        assertTrue(html.contains("href=\"#hoja-2\""))
+        assertTrue(html.contains("id=\"hoja-3\""))
+        val indice = html.substringAfter("<details id=\"indice-fijo\"").substringBefore("</details>")
+        assertTrue(indice.contains("Planta") && indice.contains("Alzado") && indice.contains("Hoja 3"))
+        // Una sola hoja no lleva índice.
+        assertFalse(ExportarHtml.pagina(svg, "Mi dibujo", "#ffffff").contains("indice-fijo\" open"))
     }
 
     @Test
@@ -449,7 +529,7 @@ class ExportarHtmlTest {
             assertFalse("no tenía que ir «$id»", html.contains("id=\"$id\""))
         }
         assertTrue("medir sí se pidió", html.contains("id=\"medir\""))
-        assertTrue("las páginas también", html.contains("id=\"indice\""))
+        assertTrue("las páginas también", html.contains("id=\"indice-fijo\""))
         assertTrue(html.contains("data-herramientas=\"mano medir girar mover\""))
         // Y con todo puesto, va todo.
         val todo = ExportarHtml.paginas(tresHojas(), "Proyecto")

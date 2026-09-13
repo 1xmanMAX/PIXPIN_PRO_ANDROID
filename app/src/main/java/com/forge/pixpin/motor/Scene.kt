@@ -40,6 +40,13 @@ val ExcalidrawJson: Json = Json {
  */
 enum class Tool {
     SELECTION, LASSO, HAND,
+
+    /**
+     * **Zona**: se arrastra un rectángulo y sale una foto de lo que hay dentro —el PDF de fondo y
+     * lo dibujado—, para arrastrarla a otro sitio o, con el interruptor, mandarla al chat del
+     * proyecto como sublienzo. Lo pidió el usuario el 13-sep-2026. Ver `DrawEditorActivity.alSoltarLaZona`.
+     */
+    ZONA,
     RECTANGLE, DIAMOND, ELLIPSE, ARROW, LINE, FREEDRAW, TEXT, IMAGE,
 
     /**
@@ -1094,7 +1101,9 @@ fun eraseAt(
  * un gesto que se hace a propósito y no de refilón.
  */
 fun intocableParaElBorrador(e: Element): Boolean =
-    e.locked || e.type == ElementType.IMAGE
+    // Y las tres figuras de la barra —plano, recta, espacio—: son la base sobre la que se
+    // resuelve, no un trazo más (lo pidió el usuario el 13-sep-2026).
+    e.locked || e.type == ElementType.IMAGE || e.esInstrumento || e.enlace != null
 
 /** Quita de verdad lo marcado como borrado. Solo al guardar, no al editar. */
 fun purgeDeleted(elements: List<Element>): List<Element> = elements.filter { !it.isDeleted }

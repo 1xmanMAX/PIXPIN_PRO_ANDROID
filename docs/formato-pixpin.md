@@ -15,6 +15,7 @@ versión de escritorio— y se sigue editando allí.
 | `imagenes/<id>`              | Cada foto de los lienzos tal cual (JPEG, PNG, WEBP…); el `mimeType` está en `files` del lienzo. |
 | `croquis/<id>.json`          | Cada croquis del espacio, en el JSON de `Croquis` (kotlinx.serialization). |
 | `notas/<id-de-hoja>.md`      | Cada nota, en Markdown. También va inline en `proyecto.json` (`hojas[].nota`). |
+| `tablas/<id>.json`           | Cada tabla con fórmulas (`hojas[].tabla` es su id). `{"nombre","celdas":{"B7":"=SUMA(B1:B6)"},"anchos":{"B":140},"estilos":{"A1":{"n":true,"a":"c","f":"#fff3bf"}},"tocado"}`. Se guarda lo tecleado, nunca el resultado. |
 | `documento.pdf`              | El PDF del proyecto, si lo tiene: el limpio (sin anotar). |
 
 ## `proyecto.json`

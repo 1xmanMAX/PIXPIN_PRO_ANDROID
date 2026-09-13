@@ -48,9 +48,22 @@ object ExportarProyecto {
         imageProvider: (String) -> Bitmap? = { null }
     ): File? = runCatching {
         val paginas = seleccion.flatMap { (proyecto, marcadas) ->
-            HojasDelProyecto.paginas(proyecto, escenaDe).filter { it.clave in marcadas }
+            HojasDelProyecto.elegidas(proyecto, escenaDe, marcadas)
         }
         if (paginas.isEmpty()) return null
+
+        // **Las páginas del PDF del proyecto van tal cual**, sacadas del documento —que ya lleva
+        // lo anotado dentro, en su capa—: vectoriales y con su texto. Antes no salían: la hoja de
+        // una página sin dibujo no tenía escena y se saltaba, y la que sí tenía salía sin el
+        // papel debajo. Ver [PdfUnion.soloPaginas].
+        var documento: ByteArray? = null
+        for ((proyecto, marcadas) in seleccion) {
+            val ruta = Proyectos.rutaDelDocumento(proyecto) { File(it).exists() } ?: continue
+            val indices = HojasDelProyecto.elegidas(proyecto, escenaDe, marcadas).mapNotNull { it.hoja.pagina }
+            if (indices.isEmpty()) continue
+            val trozo = PdfUnion.soloPaginas(File(ruta).readBytes(), indices) ?: continue
+            documento = documento?.let { PdfUnion.anadirPaginas(it, trozo) ?: it } ?: trozo
+        }
 
         // **Una sola escena con un marco por lámina**, y que la exportación de
         // siempre la pagine. Ya sabe hacerlo —un marco, una página— así que no
@@ -64,6 +77,15 @@ object ExportarProyecto {
 
         paginas.forEach { pagina ->
             val hoja = pagina.hoja
+            if (hoja.tabla != null) {
+                // **Una tabla entra como la tabla de Markdown de sus valores**, ya calculados:
+                // el PDF de las notas sabe componerla y partirla en páginas, y así el texto
+                // sigue siendo texto que se busca y se copia.
+                TablasEnDisco.de(context.filesDir).cargar(hoja.tabla)?.let { t ->
+                    TablaViva.comoMarkdown(t).takeIf { it.isNotBlank() }?.let { notas += it }
+                }
+                return@forEach
+            }
             if (hoja.nota != null) {
                 // **La página marcada, no la nota entera.** Con una nota de
                 // doce hojas de la que se eligen dos, entregar las doce es
@@ -71,6 +93,8 @@ object ExportarProyecto {
                 notas += pagina.texto ?: hoja.nota!!
                 return@forEach
             }
+            // Ya va en [documento], como página de verdad.
+            if (hoja.pagina != null && documento != null) return@forEach
             val escena = hoja.dibujo?.let(escenaDe) ?: return@forEach
 
             val marco = pagina.marco?.let { id -> escena.marcos.firstOrNull { it.id == id } }
@@ -102,6 +126,12 @@ object ExportarProyecto {
             archivo = DrawPdf.aArchivo(
                 context, Scene(elements = elementos), nombre, imageProvider
             )
+        }
+        documento?.let { doc ->
+            val destino = File(File(context.cacheDir, "share").apply { mkdirs() }, "$nombre.pdf")
+            val dibujos = archivo?.readBytes()
+            destino.writeBytes(dibujos?.let { PdfUnion.anadirPaginas(doc, it) } ?: doc)
+            archivo = destino
         }
 
         // Las notas van detrás, como texto de verdad. Ver [PdfDeNota].
@@ -139,22 +169,6 @@ object ExportarProyecto {
     }
 
     /** Un PDF vacío del que partir cuando lo primero que entra es una nota. */
-    private fun pdfEnBlanco(): ByteArray {
-        val objetos = listOf(
-            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-            "2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
-        )
-        val cuerpo = StringBuilder("%PDF-1.4\n")
-        val posiciones = mutableListOf<Int>()
-        objetos.forEach {
-            posiciones += cuerpo.length
-            cuerpo.append(it)
-        }
-        val xref = cuerpo.length
-        cuerpo.append("xref\n0 ${objetos.size + 1}\n0000000000 65535 f \n")
-        posiciones.forEach { cuerpo.append("%010d 00000 n \n".format(it)) }
-        cuerpo.append("trailer\n<< /Size ${objetos.size + 1} /Root 1 0 R >>\n")
-            .append("startxref\n").append(xref).append("\n%%EOF\n")
-        return cuerpo.toString().toByteArray(Charsets.ISO_8859_1)
-    }
+    private fun pdfEnBlanco(): ByteArray = PdfUnion.enBlanco()
+
 }

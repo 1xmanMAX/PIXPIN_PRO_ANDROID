@@ -29,7 +29,7 @@ private const val SEPARA_HERRAMIENTA = ","
  * toque parte de algo entendible en vez de una lista plana.
  */
 val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
-    listOf(Tool.SELECTION, Tool.LASSO, Tool.BOLITA, Tool.HAND),
+    listOf(Tool.SELECTION, Tool.LASSO, Tool.BOLITA, Tool.HAND, Tool.ZONA),
     // Lo que pinta: el lápiz, el marcador y el bote. El bote no traza, pero lo
     // que se hace con él es dar color, que es de lo que va este grupo.
     listOf(Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.RELLENO),

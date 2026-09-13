@@ -561,6 +561,13 @@ data class Element(
     val locked: Boolean = false,
 
     /**
+     * **La marca de una zona mandada al chat**: el dibujo del sublienzo que salió de aquí. Se
+     * pinta con un icono de enlace en la esquina, y tocarlo abre ese lienzo. El borrador no la
+     * quita. Ver `Tool.ZONA`.
+     */
+    val enlace: String? = null,
+
+    /**
      * Es una **línea de referencia**, no parte del dibujo.
      *
      * Se pinta translúcida, imanta como cualquier otra cosa y se puede esconder

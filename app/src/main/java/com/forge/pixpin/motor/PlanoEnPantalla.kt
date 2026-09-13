@@ -166,7 +166,15 @@ class PlanoEnPantalla private constructor(
         val cerca: List<Grabado>,
         val lejos: List<Grabado>,
         val rotulos: android.graphics.RenderNode
-    )
+    ) {
+        fun vivos(): Boolean {
+            if (!papel.hasDisplayList() || !manchas.hasDisplayList() || !rotulos.hasDisplayList()) return false
+            for (f in fotos) if (!f.nodo.hasDisplayList()) return false
+            for (t in cerca) if (!t.nodo.hasDisplayList()) return false
+            for (t in lejos) if (!t.nodo.hasDisplayList()) return false
+            return true
+        }
+    }
     @Volatile
     private var grabados: Grabados? = null
     @Volatile
@@ -245,7 +253,12 @@ class PlanoEnPantalla private constructor(
             // 9-sep-2026 —«salgo del canvas, vuelvo, y ya no está la imagen del PDF»— y no se
             // arreglaba solo porque nadie volvía a grabar. `hasDisplayList` es justo la
             // pregunta «¿sigues teniendo lo tuyo?».
-            if (g != null && g.papel.hasDisplayList()) {
+            // **Y todo lo grabado, no solo el papel.** El sistema tira las listas de los nodos que
+            // lleva rato sin reproducir —las tandas de rayas que quedaron fuera de la vista mientras
+            // se estaba acercado— y el papel seguía teniendo la suya: al alejarse solo se veían las
+            // letras y lo que había estado en foco (lo reportó el usuario el 13-sep-2026). Si falta
+            // cualquiera, se vuelve a grabar.
+            if (g != null && g.vivos()) {
                 pintarGrabado(canvas, vista, zoom, g); return
             }
             if (g != null) {
@@ -965,6 +978,7 @@ class PlanoEnPantalla private constructor(
 
         private fun relleno(b: PlanoDePdf.Brocha, paso: Float): Relleno {
             val camino = Path()
+            if (b.parImpar) camino.fillType = Path.FillType.EVEN_ODD
             var i = 0
             var p = 0
             while (i < b.ops.size) {

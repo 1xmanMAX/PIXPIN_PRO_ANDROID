@@ -60,8 +60,12 @@ class ProyectosRepository(context: Context) {
 
     /** Mete el proyecto o sustituye al que tuviera su id, y lo escribe. */
     fun guardar(proyecto: Proyecto) {
+        val antes = porId(proyecto.id)
         _proyectos.value = Proyectos.actualizada(_proyectos.value, proyecto)
         escribir()
+        // **Todo pasa por el chat**: lo nuevo del proyecto se cuenta en su conversación.
+        // Ver [com.forge.pixpin.guardados.ChatDeLosProyectos].
+        com.forge.pixpin.guardados.ChatDeLosProyectos.alGuardar(app, antes, proyecto)
     }
 
     fun borrar(id: String) {
@@ -105,6 +109,23 @@ class ProyectosRepository(context: Context) {
             idDeHoja = { "h-$ahora-$it" }
         ).copy(pdfLimpio = limpio)
         guardar(nuevo)
+        // **Todo pasa por el chat: el PDF del que nace el proyecto es su primer mensaje**
+        // (lo pidió el usuario el 13-sep-2026). Ya unido, para que no se vuelva a meter como hojas.
+        runCatching {
+            val archivo = File(limpio ?: ruta)
+            com.forge.pixpin.guardados.MensajesStore(app).anadir(
+                com.forge.pixpin.guardados.Mensaje(
+                    id = java.util.UUID.randomUUID().toString(),
+                    cuando = ahora,
+                    clase = com.forge.pixpin.guardados.Clase.ARCHIVO,
+                    ruta = archivo.absolutePath,
+                    nombre = if (nombre.endsWith(".pdf", true)) nombre else "$nombre.pdf",
+                    bytes = archivo.length(),
+                    proyecto = nuevo.id,
+                    unido = true
+                )
+            )
+        }
         return nuevo
     }
 

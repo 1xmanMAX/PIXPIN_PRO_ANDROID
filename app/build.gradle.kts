@@ -20,8 +20,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 81
-        versionName = "0.28.3"
+        versionCode = 93
+        versionName = "0.38.0"
     }
 
     buildTypes {
@@ -31,8 +31,13 @@ android {
             // entero de iconos de Material, del que se usan treinta. Con R8 se
             // queda en una fracción, y eso se nota cada vez que hay que
             // bajárselo por un enlace y meterlo a mano en el móvil.
-            isMinifyEnabled = true
-            isShrinkResources = true
+            //
+            // **`-Prapido` se lo salta** (lo pidió el usuario el 13-sep-2026): R8 es lo que más tarda
+            // del release, y para probar en el teléfono basta un APK sin encoger. Sigue sin ser
+            // depurable, así que va igual de fluido; solo pesa más.
+            val rapido = project.hasProperty("rapido")
+            isMinifyEnabled = !rapido
+            isShrinkResources = !rapido
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -107,6 +112,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.5.0")
     implementation("androidx.camera:camera-lifecycle:1.5.0")
     implementation("androidx.camera:camera-view:1.5.0")
+    // El QR del envío por Wi-Fi: dibujarlo y leerlo. Solo el núcleo de ZXing, sin servicios de Google.
+    implementation("com.google.zxing:core:3.5.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

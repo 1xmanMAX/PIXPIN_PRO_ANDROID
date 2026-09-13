@@ -11,6 +11,13 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Solo para bajar el modelo de voz de Vosk (unos 40 MB) la primera vez. Ver MotorVosk. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Instalar un APK recibido por Wi-Fi o guardado en el chat. Ver ui/AbrirCon.kt. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Sincronizar entre aparatos por la Wi-Fi: saber la dirección propia y oír los anuncios
+         de los demás (mDNS). Ver sincro/Red.kt. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <!--
       Para ver el croquis puesto encima de lo que hay delante. Ver [Croquis3DCamara].
@@ -139,6 +146,16 @@
             android:name=".ui.MarkdownEditorActivity"
             android:exported="false"
             android:taskAffinity="${applicationId}.markdown"
+            android:documentLaunchMode="intoExisting"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+
+        <!-- Las tablas con fórmulas: como las notas, cada una en su tarea. -->
+        <activity
+            android:name=".tabla.TablaActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.tabla"
             android:documentLaunchMode="intoExisting"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
@@ -285,6 +302,38 @@
         <activity
             android:name=".guardados.BibliotecaDeAudioActivity"
             android:exported="false"
+            android:theme="@style/Theme.PixPin" />
+        <!-- Enviar por Wi-Fi una sola vez: desde «Compartir» de cualquier app. Ver sincro/EnviarActivity. -->
+        <activity
+            android:name=".sincro.EnviarActivity"
+            android:exported="true"
+            android:label="Enviar por Wi-Fi"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:taskAffinity="${applicationId}.enviar"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.PixPin">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".sincro.RecibirActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+        <!-- Sincronizar con los otros aparatos del grupo. Ver sincro/SincronizarActivity. -->
+        <activity
+            android:name=".sincro.SincronizarActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
 
         <!-- Compartir una página como archivo o como enlace. Ver CompartirEnlaceActivity. -->

@@ -2,4 +2,9 @@
 <paths>
     <cache-path name="share" path="share/" />
     <files-path name="pins" path="pins/" />
+    <!-- Los archivos del chat y de los proyectos, para abrirlos con otra aplicación. Ver ui/AbrirCon.kt. -->
+    <files-path name="guardados" path="guardados/" />
+    <files-path name="proyectos" path="proyectos/" />
+    <files-path name="notas" path="notas/" />
+    <files-path name="voz" path="voz/" />
 </paths>

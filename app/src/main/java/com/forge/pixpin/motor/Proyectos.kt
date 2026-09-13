@@ -110,7 +110,14 @@ data class Proyecto(
      * cada uno tiene su color, en la lista se ve de un vistazo qué lámina viene
      * de cuál. Ver [Hoja.croquis].
      */
-    val croquis: List<String> = emptyList()
+    val croquis: List<String> = emptyList(),
+    /**
+     * **La seña del proyecto entre personas**, si llegó por un envío por Wi-Fi: la identidad que
+     * traía. Al recibirlo otra vez se reconoce por aquí y se pone al día en vez de duplicarse; al
+     * devolverlo, viaja esta misma seña. Nula en lo creado aquí, cuya seña es su id. Ver
+     * `sincro/Envio.kt`.
+     */
+    val origen: String? = null
 )
 
 /**
@@ -189,7 +196,26 @@ data class Hoja(
      * croquis en el espacio puesto en esa vista**. La lámina es lo que se entrega; el
      * croquis es donde se trabaja.
      */
-    val vista: String? = null
+    val vista: String? = null,
+    /**
+     * **Una tabla con fórmulas**, por su identificador en [TablasEnDisco].
+     *
+     * Referencia y no copia, como un lienzo y al revés que una nota: una tabla es donde se
+     * trabaja —se le van metiendo filas durante semanas— y el proyecto tiene que entregar la
+     * de hoy, no la del día en que se añadió.
+     */
+    val tabla: String? = null,
+    /**
+     * **La seña de esta hoja entre personas**, si llegó sola por Wi-Fi: la de la hoja de quien la
+     * mandó. Si vuelve a llegar, sustituye a esta en vez de añadirse otra. Ver `sincro/Recepcion.kt`.
+     */
+    val origen: String? = null,
+    /**
+     * **El lienzo del que salió**, si es un sublienzo: la zona de otra hoja mandada al chat. Los
+     * proyectos tienen tres niveles —proyecto, lienzo, sublienzo— y este es el tercero. Ver
+     * `Tool.ZONA`.
+     */
+    val padre: String? = null
 ) {
     /**
      * Dos hojas son la misma si señalan al mismo sitio.
@@ -201,6 +227,7 @@ data class Hoja(
      */
     val señal: String
         get() = when {
+            tabla != null -> "tabla:$tabla"
             nota != null -> "nota:$id"
             pagina != null -> "pagina:$pagina"
             marco != null -> "marco:$dibujo/$marco"
@@ -482,7 +509,11 @@ object Proyectos {
         proyectos: List<Proyecto>,
         mensaje: String? = null,
         dibujo: String? = null,
-        proyecto: String? = null
+        proyecto: String? = null,
+        /** Una tabla vive en un proyecto si alguna hoja apunta a ella. */
+        tabla: String? = null,
+        /** Y un croquis 3D, si algún proyecto lo lleva en su lista. */
+        croquis: String? = null
     ): Boolean {
         // Un mensaje que **es** un proyecto está mientras ese proyecto exista.
         if (proyecto != null && proyectos.any { it.id == proyecto }) return true
@@ -495,6 +526,8 @@ object Proyectos {
         // coincidencia por el nombre del archivo, que daría verdes falsos en cuanto dos se
         // llamen igual, que en un teléfono es a todas horas.
         if (dibujo != null && proyectos.any { p -> p.hojas.any { it.dibujo == dibujo } }) return true
+        if (tabla != null && proyectos.any { p -> p.hojas.any { it.tabla == tabla } }) return true
+        if (croquis != null && proyectos.any { p -> croquis in p.croquis }) return true
         return false
     }
 

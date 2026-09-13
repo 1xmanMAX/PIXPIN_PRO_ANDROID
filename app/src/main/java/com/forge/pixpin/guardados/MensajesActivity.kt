@@ -36,6 +36,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -50,7 +53,10 @@ import androidx.compose.material.icons.filled.Hearing
 import kotlinx.coroutines.flow.drop
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -85,6 +91,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.ArrowRightAlt
 import androidx.compose.material.icons.filled.Tag
@@ -483,9 +490,11 @@ class MensajesActivity : ComponentActivity() {
         // hace una vez, igual que [sitiosPorId] y por el mismo motivo.
         val porId = remember(mensajes) { mensajes.associateBy { it.id } }
 
-        Scaffold(
-            // La cabecera ya no vive aquí: flota sobre la lista. Ver más abajo.
-            bottomBar = {
+        // **El pie del chat flota, como la cabecera** (lo pidió el usuario el 11-sep-2026): la
+        // barra de escribir era una isla, pero vivía en el hueco inferior del andamio, así que
+        // la lista se paraba encima y alrededor de la isla se veía una franja lisa. Ahora se
+        // pinta encima de la lista, se mide, y la lista solo se aparta de ese alto al final.
+        val pieDelChat: @Composable () -> Unit = {
                 Column {
                     // Mientras se eligen cosas no se escribe: el sitio del teclado lo
                     // ocupan las acciones de arriba, y dejar el campo ahí invita a
@@ -498,7 +507,12 @@ class MensajesActivity : ComponentActivity() {
                     // suelta. Va arriba del campo porque es lo que se mira al escribir.
                     respondiendo?.let { r ->
                         val acento = MaterialTheme.colorScheme.primary
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(16.dp),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 6.dp)
+                        ) {
                             Row(
                                 Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                                 verticalAlignment = Alignment.CenterVertically
@@ -548,7 +562,12 @@ class MensajesActivity : ComponentActivity() {
                     // es eso: el recuento, y un botón que quita el filtro y **deja el
                     // primer resultado a la vista**, para no perder dónde estabas.
                     if (!consulta.isNullOrBlank() && visibles.isNotEmpty()) {
-                        Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(16.dp),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 6.dp)
+                        ) {
                             Row(
                                 Modifier.fillMaxWidth().padding(start = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -614,6 +633,8 @@ class MensajesActivity : ComponentActivity() {
                     )
                 }
             }
+        Scaffold(
+            // La cabecera y el pie ya no viven aquí: flotan sobre la lista. Ver más abajo.
         ) { hueco ->
             // **El fondo no es el mismo papel que las burbujas.**
             //
@@ -639,11 +660,9 @@ class MensajesActivity : ComponentActivity() {
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
                     .background(fondo)
-                    // **Por abajo sí, por arriba no.** Arriba ya no hay barra que reserve
-                    // sitio: la lista llega hasta el borde y la cabecera flota encima, que
-                    // es justo lo que se pidió («el chat va por detrás»). El hueco de
-                    // arriba se lo pone la propia lista, midiendo la cabecera.
-                    .padding(bottom = hueco.calculateBottomPadding())
+                    // **Ni por arriba ni por abajo.** La lista llega hasta los dos bordes y la
+                    // cabecera y el pie flotan encima, que es lo que se pidió («el chat va por
+                    // detrás»). Los huecos se los pone la propia lista, midiendo a los dos.
             ) {
             // **Se abre por el final.**
             //
@@ -655,6 +674,16 @@ class MensajesActivity : ComponentActivity() {
                 initialFirstVisibleItemIndex = (visibles.size + tramos.size - 1)
                     .coerceAtLeast(0)
             )
+            // **Y cuando los mensajes llegan después, también.** Se leen del disco fuera del hilo
+            // de la pantalla, así que al montarse la lista aún estaba vacía: el índice inicial era
+            // el 0 y el chat abría por el primer mensaje (lo reportó el usuario el 13-sep-2026).
+            // La primera vez que hay algo, se baja al último, sin animación.
+            var yaAbajo by remember { mutableStateOf(false) }
+            androidx.compose.runtime.LaunchedEffect(visibles.isNotEmpty()) {
+                if (yaAbajo || visibles.isEmpty()) return@LaunchedEffect
+                yaAbajo = true
+                runCatching { lista.scrollToItem((visibles.size + tramos.size - 1).coerceAtLeast(0)) }
+            }
             // Y al mandar algo nuevo, baja hasta ello. Sin esto, lo que acabas de
             // escribir aparece fuera de la vista y parece que no se ha mandado.
             // Saltar al mensaje citado. Se busca **en lo que se está viendo**: si el
@@ -735,12 +764,14 @@ class MensajesActivity : ComponentActivity() {
             // fijados, el aviso del buzón—, y un número fijo dejaría el primer mensaje
             // tapado o un claro enorme según el día.
             var altoDeLaCabecera by remember { mutableStateOf(0.dp) }
+            // Lo mismo por abajo: lo que mide el pie flotante. Ver [pieDelChat].
+            var altoDelPie by remember { mutableStateOf(0.dp) }
             LazyColumn(
                 state = lista,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     start = 10.dp, end = 10.dp,
-                    top = altoDeLaCabecera + 8.dp, bottom = 8.dp
+                    top = altoDeLaCabecera + 8.dp, bottom = altoDelPie + 8.dp
                 ),
                 // Sin espaciado fijo: lo pone cada burbuja según esté agrupada o
                 // suelta, que es lo que separa una racha de mensajes del siguiente.
@@ -769,6 +800,7 @@ class MensajesActivity : ComponentActivity() {
                                 recordar = { recordando = m },
                                 reenviar = { reenviando = listOf(m) },
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
+                                devolver = if (m.proyecto != null) { { devolverAlProyecto(m) } } else null,
                                 letra = if (m.clase == Clase.VOZ && m.ruta != null) { { LetraActivity.abrir(this@MensajesActivity, m.id) } } else null,
                                 transcribir = if (m.clase == Clase.VOZ && m.ruta != null && Transcriptor.disponible(this@MensajesActivity)) {
                                     {
@@ -822,6 +854,8 @@ class MensajesActivity : ComponentActivity() {
                                 seleccionar = { marcados = marcados + m.id },
                                 borrar = {
                                     almacen.borrarAdjunto(m.ruta)
+                                    // El chat manda: lo que era este mensaje se va también del proyecto.
+                                    quitarDeLosProyectos(listOf(m))
                                     guardarAparte(
                                         mensajes.filterNot { it.id == m.id }
                                     ) { refrescar() }
@@ -1026,6 +1060,23 @@ class MensajesActivity : ComponentActivity() {
             // las tres pastillas y bajo la barra de estado. Telegram resuelve eso mismo
             // con un degradado de 48 dp (`ChatActivityFadeView.java:47-51`), no recortando
             // la lista: lo que asoma se apaga contra el papel en vez de cortarse en seco.
+            // **El velo de abajo y el pie flotante.** Lo que baja se apaga contra el papel antes
+            // de pasar por detrás de la isla, igual que arriba con la cabecera.
+            VeloDeLaLista(
+                papelBajo,
+                arriba = false,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = (altoDelPie - 24.dp).coerceAtLeast(0.dp))
+            )
+            val densidadDelPie = androidx.compose.ui.platform.LocalDensity.current
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged {
+                        val alto = with(densidadDelPie) { it.height.toDp() }
+                        if (alto != altoDelPie) altoDelPie = alto
+                    }
+            ) { pieDelChat() }
             VeloDeLaLista(
                 papelAlto,
                 arriba = true,
@@ -1181,6 +1232,7 @@ class MensajesActivity : ComponentActivity() {
                                 }
                                 IconButton(onClick = {
                                     loMarcado.forEach { almacen.borrarAdjunto(it.ruta) }
+                                    quitarDeLosProyectos(loMarcado.toList())
                                     guardarAparte(
                                         mensajes.filterNot { it.id in marcados }
                                     ) { refrescar() }
@@ -1651,44 +1703,16 @@ class MensajesActivity : ComponentActivity() {
         }
 
         compartiendo?.let { cual ->
-            androidx.compose.material3.ModalBottomSheet(
-                onDismissRequest = { compartiendo = null }
-            ) {
-                Column(Modifier.padding(bottom = 28.dp)) {
-                    // **Todas las caras con las que sale un documento**, las mismas que en
-                    // proyectos: imagen, PDF, página web (con su panel de funciones) y el
-                    // editable `.pixpin`. Un proyecto entero no tiene «imagen».
-                    val esProyecto = cual.clase == Clase.PROYECTO
-                    val opciones = ArrayList<Triple<androidx.compose.ui.graphics.vector.ImageVector, Int, () -> Unit>>()
-                    if (!esProyecto) opciones += Triple(Icons.Filled.Image, com.forge.pixpin.R.string.guardados_como_imagen, { compartirCompuesto(cual, false) })
-                    opciones += Triple(Icons.Filled.PictureAsPdf, com.forge.pixpin.R.string.guardados_como_pdf, { if (esProyecto) compartirPdfDelProyecto(cual) else compartirCompuesto(cual, true) })
-                    opciones += Triple(Icons.Filled.Language, com.forge.pixpin.R.string.guardados_como_web, { pidiendoWebPara = cual })
-                    opciones += Triple(Icons.Filled.FolderZip, com.forge.pixpin.R.string.guardados_como_editable, { compartirEditable(cual) })
-                    opciones.forEach { (icono, texto, hacer) ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    compartiendo = null
-                                    hacer()
-                                }
-                                .padding(horizontal = 24.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                icono,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                getString(texto),
-                                fontSize = 16.sp,
-                                modifier = Modifier.padding(start = 14.dp)
-                            )
-                        }
-                    }
+            // **La hoja de compartir de toda la aplicación** (13-sep-2026). Se arma leyendo del
+            // disco, así que primero se prepara y luego sube. Ver [compartibleDe].
+            var hoja by remember(cual.id) { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
+            LaunchedEffect(cual.id) {
+                val c = withContext(Dispatchers.IO) {
+                    runCatching { compartibleDe(cual) }.onFailure { android.util.Log.e("PixPinCompartir", "chat", it) }.getOrNull()
                 }
+                if (c == null) { compartiendo = null; avisarDeQueNoHay() } else hoja = c
             }
+            hoja?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
         }
 
         etiquetando?.let { cual ->
@@ -2290,6 +2314,11 @@ class MensajesActivity : ComponentActivity() {
         val reenviar: () -> Unit,
         /** Lo mete en las hojas de un proyecto; nulo si no hay hoja que hacer con él. */
         val unir: (() -> Unit)?,
+        /**
+         * Lo devuelve al proyecto de su chat si se quitó de él; nulo fuera del chat de un
+         * proyecto. Si de verdad falta se mira al abrir el menú. Ver [UnirAlProyecto.sePuedeDevolver].
+         */
+        val devolver: (() -> Unit)? = null,
         /** Pasa una nota de voz a texto; nulo si no es de voz o el aparato no sabe. */
         val transcribir: (() -> Unit)?,
         /** La letra o el texto de un audio, a pantalla completa; nulo si no es un audio. */
@@ -2430,10 +2459,17 @@ class MensajesActivity : ComponentActivity() {
                     if (m.fijado) com.forge.pixpin.R.string.guardados_soltar
                     else com.forge.pixpin.R.string.guardados_fijar
                 ) { menuAbierto = false; acciones.fijar() }
-                DelMenu(com.forge.pixpin.R.string.guardados_compartir, Icons.Filled.Share) {
+                DelMenu(com.forge.pixpin.R.string.guardados_compartir, com.forge.pixpin.ui.IconoDeCompartir) {
                     menuAbierto = false
-                    // Con algo que componer —o un proyecto—, primero se pregunta con qué cara sale.
-                    if (sePuedeComponer(m) || m.clase == Clase.PROYECTO) acciones.compartirComo() else acciones.compartir()
+                    // Siempre la hoja de compartir de toda la aplicación. Ver [compartibleDe].
+                    acciones.compartirComo()
+                }
+                // **Abrir con otra aplicación** (o instalar, si es un APK). Ver [com.forge.pixpin.ui.AbrirCon].
+                m.ruta?.let { ruta ->
+                    DelMenu(com.forge.pixpin.R.string.guardados_abrir_con, Icons.Filled.Launch) {
+                        menuAbierto = false
+                        com.forge.pixpin.ui.AbrirCon.abrir(this@MensajesActivity, File(ruta))
+                    }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
                     menuAbierto = false; acciones.pinear()
@@ -2484,6 +2520,17 @@ class MensajesActivity : ComponentActivity() {
                     DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto,
                             Icons.Filled.LibraryAdd) {
                         menuAbierto = false; unir()
+                    }
+                }
+                // **Volver a añadir al proyecto** lo que se quitó de él: la misma hoja, con lo que
+                // se hizo mientras estuvo fuera. Se mira al abrir el menú, que es cuando importa.
+                acciones.devolver?.let { devolver ->
+                    val proyectosAhora = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
+                    if (UnirAlProyecto.sePuedeDevolver(m, proyectosAhora)) {
+                        DelMenu(com.forge.pixpin.R.string.guardados_devolver_al_proyecto,
+                                Icons.Filled.LibraryAdd) {
+                            menuAbierto = false; devolver()
+                        }
                     }
                 }
                 acciones.transcribir?.let { transcribir ->
@@ -2839,9 +2886,80 @@ class MensajesActivity : ComponentActivity() {
                             }
                         }
                     }
+                    // **De quién llegó**, si vino por Wi-Fi: su nombre y el código fijo de su aparato.
+                    m.recibidoDe?.let { de ->
+                        Text(
+                            "Recibido de $de",
+                            fontSize = 11.sp,
+                            color = ColoresDelChat.hora(),
+                            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp)
+                        )
+                    }
                     when (m.clase) {
                         Clase.NOTA -> {}
-                        Clase.IMAGEN -> Miniatura(m, soloFoto, recarga, ampliada)
+                        Clase.IMAGEN -> Column {
+                            Miniatura(m, soloFoto, recarga, ampliada)
+                            // **De dónde salió la zona**: toca y lleva al lienzo de origen.
+                            // **Más a la vista** (13-sep-2026): una pastilla con el enlace, «Viene de» y
+                            // de dónde, y la flecha que dice que se toca para ir.
+                            m.vieneDe?.let { v ->
+                                Row(
+                                    Modifier
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                        .clickable { abrirElOrigen(v) }
+                                        .padding(start = 8.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Link, contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.size(6.dp))
+                                    Column(Modifier.weight(1f, fill = false)) {
+                                        Text(
+                                            "Viene de",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                                        )
+                                        Text(
+                                            v.texto,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            maxLines = 2
+                                        )
+                                    }
+                                    Spacer(Modifier.size(6.dp))
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Abrir el origen",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        // **Lo creado en los proyectos se ve, no se lee**: el lienzo con lo
+                        // dibujado y la tabla con sus primeras celdas, y debajo su nombre con el
+                        // punto de si vive en un proyecto (usuario, 11-sep-2026).
+                        Clase.DIBUJO -> Column {
+                            MiniaturaDeDibujo(m, recarga)
+                            FilaDeArchivo(m)
+                        }
+                        Clase.TABLA -> Column {
+                            Box(
+                                Modifier
+                                    .width(260.dp)
+                                    .height(150.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                            ) {
+                                m.referencia?.let { com.forge.pixpin.tabla.MiniaturaDeTabla(it) }
+                            }
+                            FilaDeArchivo(m)
+                        }
                         // **Una página adjunta se ve, no se lee.**
                         //
                         // Como fila de archivo decía «documento.pdf · pág. 7», que es
@@ -3001,7 +3119,7 @@ class MensajesActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (numero > 0) {
-                                ChapaDelNumero(numero)
+                                ChapaDelNumero(numero, m.letra)
                                 Spacer(Modifier.size(4.dp))
                             }
                             m.emoji?.let {
@@ -3555,6 +3673,42 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **La vista previa de un lienzo**, con lo dibujado. Se pinta fuera del hilo de la pantalla y
+     * solo cuando el archivo cambia, igual que la foto anotada de [Miniatura]. Un lienzo recién
+     * creado aún no tiene archivo: hasta que se dibuje algo, solo se ve su fila.
+     */
+    @Composable
+    private fun MiniaturaDeDibujo(m: Mensaje, recarga: Int) {
+        val dibujo = m.referencia ?: return
+        val ruta = remember(dibujo) { com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo) }
+        val version = remember(ruta, recarga, com.forge.pixpin.motor.ExcalidrawStore.revisionDe(dibujo)) {
+            File(ruta).lastModified()
+        }
+        var mapa by remember(dibujo) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        LaunchedEffect(ruta, version) {
+            if (version == 0L) return@LaunchedEffect
+            mapa = withContext(Dispatchers.IO) {
+                runCatching {
+                    val escena = com.forge.pixpin.motor.ExcalidrawStore.cargar(ruta) ?: return@runCatching null
+                    com.forge.pixpin.motor.DrawExport.aBitmap(escena, ESCALA_DE_LA_FOTO) { id ->
+                        escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                    }
+                }.getOrNull()
+            }
+        }
+        val actual = mapa ?: return
+        androidx.compose.foundation.Image(
+            bitmap = actual.asImageBitmap(),
+            contentDescription = m.nombre,
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            modifier = Modifier
+                .heightIn(max = ALTO_DE_LA_FOTO)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.White)
+        )
+    }
+
     /** Cómo se llama lo que lleva un mensaje sin texto, para poder nombrarlo en el hilo. */
     private fun claseDelMensaje(m: Mensaje): Int = when (m.clase) {
         Clase.IMAGEN -> com.forge.pixpin.R.string.guardados_una_foto
@@ -4063,7 +4217,8 @@ class MensajesActivity : ComponentActivity() {
         val app = application as? PixPinApp ?: return
         val proyectos by app.proyectos.proyectos.collectAsState()
         val esArchivo = m.clase == Clase.IMAGEN || m.clase == Clase.ARCHIVO ||
-            m.clase == Clase.PAGINA || m.clase == Clase.DIBUJO || m.clase == Clase.PROYECTO
+            m.clase == Clase.PAGINA || m.clase == Clase.DIBUJO || m.clase == Clase.PROYECTO ||
+            m.clase == Clase.TABLA || m.clase == Clase.CROQUIS
         if (!esArchivo) return
         val esta = remember(proyectos, m.id, m.referencia) {
             com.forge.pixpin.motor.Proyectos.estaEnLosProyectos(
@@ -4071,13 +4226,19 @@ class MensajesActivity : ComponentActivity() {
                 mensaje = m.id,
                 // El rastro viejo: una foto o un dibujo unidos antes de que existiera el
                 // vínculo comparten identificador de dibujo con su hoja.
-                dibujo = if (m.clase == Clase.PROYECTO) null else m.dibujoDeLaFoto,
-                proyecto = m.referencia.takeIf { m.clase == Clase.PROYECTO }
+                dibujo = if (m.clase == Clase.PROYECTO || m.clase == Clase.TABLA || m.clase == Clase.CROQUIS) null else m.dibujoDeLaFoto,
+                proyecto = m.referencia.takeIf { m.clase == Clase.PROYECTO },
+                tabla = m.referencia.takeIf { m.clase == Clase.TABLA },
+                croquis = m.referencia.takeIf { m.clase == Clase.CROQUIS }
             )
         }
+        // **Con un halo blanco**, para que se vea igual sobre la burbuja clara, la oscura y
+        // encima de una foto (lo pidió el usuario el 11-sep-2026).
         Box(
             modifier
-                .size(9.dp)
+                .size(12.dp)
+                .background(Color.White, androidx.compose.foundation.shape.CircleShape)
+                .padding(2.dp)
                 .background(
                     if (esta) Color(0xFF2E9E4F) else Color(0xFFD24B3E),
                     androidx.compose.foundation.shape.CircleShape
@@ -4396,6 +4557,9 @@ class MensajesActivity : ComponentActivity() {
                     when (m.clase) {
                         Clase.PROYECTO -> Icons.Filled.Folder
                         Clase.PAGINA -> Icons.AutoMirrored.Filled.MenuBook
+                        Clase.TABLA -> Icons.Filled.TableChart
+                        Clase.CROQUIS -> Icons.Filled.ViewInAr
+                        Clase.DIBUJO -> Icons.Filled.Draw
                         else -> Icons.Filled.Description
                     },
                     contentDescription = null,
@@ -4559,9 +4723,8 @@ class MensajesActivity : ComponentActivity() {
         // de los botones del sistema y 44 de alto mínimo, `ChatInputViewsContainer.java:27,
         // 30, 81-82, 234`—, que son las que van aquí. Lo pidió el usuario el 9-sep-2026.
         //
-        // Lo que **todavía no** hace es dejar pasar la lista por debajo: para eso hay que
-        // sacarla del hueco inferior del `Scaffold` y ponerla flotando, como se hizo con la
-        // cabecera. Ver [CabeceraFlotante].
+        // Y desde el 11-sep-2026 la lista pasa por debajo: la barra ya no vive en el hueco del
+        // `Scaffold`, flota encima como la cabecera. Ver `pieDelChat`.
         Box(
             Modifier
                 .fillMaxWidth()
@@ -5336,6 +5499,8 @@ class MensajesActivity : ComponentActivity() {
             }
             Clase.VOZ -> m.ruta?.let { gestor.pinVoz(it) } ?: avisarDeQueNoHay()
             Clase.NOTA -> gestor.pinTexto(m.texto)
+            // Una tabla o un croquis no caben en una ventana flotante: se abren donde viven.
+            Clase.TABLA, Clase.CROQUIS -> abrir(m)
 
             // El dibujo va **al mismo archivo**: dibujar en el pin es dibujar en lo que
             // guarda la conversación, no en una copia que luego no se sabe cuál manda.
@@ -5416,7 +5581,8 @@ class MensajesActivity : ComponentActivity() {
                     if (!archivo.exists()) return@let copia.copy(ruta = null)
                     copia.copy(ruta = almacen.copiarAdjunto(archivo, m.nombre) ?: return@let copia)
                 } ?: copia
-                almacen.anadir(conArchivo)
+                // Y lo editable, aparte: la copia es otra rama. Ver [RamaDeMensaje].
+                almacen.anadir(runCatching { RamaDeMensaje.separar(this@MensajesActivity, m, conArchivo) }.getOrDefault(conArchivo))
             }
             withContext(Dispatchers.Main) {
                 Toast.makeText(
@@ -5425,6 +5591,41 @@ class MensajesActivity : ComponentActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
                 recargarLaLista?.invoke()
+            }
+        }
+    }
+
+    /** Borrar del chat es borrar de los proyectos: el chat manda. Ver [UnirAlProyecto.quitarDeLosProyectos]. */
+    private fun quitarDeLosProyectos(borrados: List<Mensaje>) {
+        val app = application as? PixPinApp ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val cuantas = runCatching {
+                UnirAlProyecto.quitarDeLosProyectos(app.proyectos, borrados, System.currentTimeMillis())
+            }.getOrDefault(0)
+            if (cuantas > 0) withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MensajesActivity,
+                    if (cuantas == 1) "También se quitó de su proyecto" else "También se quitaron $cuantas cosas de sus proyectos",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    /** Devuelve al proyecto lo que se quitó de él. Ver [UnirAlProyecto.devolver]. */
+    private fun devolverAlProyecto(m: Mensaje) {
+        val app = application as? PixPinApp ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val cuantas = runCatching {
+                UnirAlProyecto.devolver(this@MensajesActivity, app.proyectos, m, System.currentTimeMillis())
+            }.getOrDefault(0)
+            val nombre = app.proyectos.porId(m.proyecto)?.nombre.orEmpty()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MensajesActivity,
+                    if (cuantas > 0) "De vuelta en «$nombre»" else "No se pudo volver a añadir",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -5497,6 +5698,69 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **Lo compartible de un mensaje**, para la hoja de compartir. Un lienzo, una foto anotada, una
+     * página o un proyecto salen por páginas, con todos los formatos; un archivo, una nota de voz o
+     * una nota, tal cual. Y por Wi-Fi: el lienzo (si es de un proyecto), el proyecto o el archivo.
+     * Trabajo de disco.
+     */
+    private fun compartibleDe(m: Mensaje): com.forge.pixpin.ui.Compartible? {
+        val app = application as? PixPinApp ?: return null
+        val nombre = nombreDeLoCompartido(m)
+        val real = m.proyecto?.let { app.proyectos.porId(it) }
+        val hojaReal = real?.hojas?.firstOrNull { h ->
+            h.deMensaje == m.id || (m.referencia != null && h.dibujo == m.referencia) ||
+                (m.clase == Clase.IMAGEN && h.dibujo == m.dibujoDeLaFoto)
+        }
+        val wifi: (() -> Unit)? = when {
+            m.clase == Clase.PROYECTO -> m.referencia?.let { id -> { com.forge.pixpin.sincro.EnviarActivity.enviarProyecto(this, id) } }
+            real != null && hojaReal != null && (hojaReal.dibujo != null || hojaReal.pagina != null) ->
+                { { com.forge.pixpin.sincro.EnviarActivity.enviarLienzo(this, real.id, hojaReal.id) } }
+            m.ruta != null && File(m.ruta).exists() -> { { com.forge.pixpin.sincro.EnviarActivity.enviarArchivo(this, m.ruta, m.nombre) } }
+            else -> null
+        }
+        val talCual = m.ruta?.takeIf { File(it).exists() }?.let { ruta ->
+            com.forge.pixpin.ui.Compartible.Formato(
+                "original", Icons.Filled.Description, "Archivo", com.forge.pixpin.ui.Compartible.NINGUNA,
+                generar = {
+                    val origen = File(ruta)
+                    val nombreDelArchivo = nombreConExtension(m.nombre.ifBlank { origen.name }, origen.extension.ifBlank { null })
+                    val destino = File(File(cacheDir, "share").apply { mkdirs() }, nombreDelArchivo)
+                    origen.copyTo(destino, overwrite = true)
+                    val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(destino.extension.lowercase()) ?: "application/octet-stream"
+                    com.forge.pixpin.ui.Compartible.Salida(destino, mime, "Tal cual, sin cambiar nada")
+                }
+            )
+        }
+        if (sePuedeComponer(m) || m.clase == Clase.PROYECTO) {
+            val (p, _) = proyectoDe(m) ?: return null
+            return com.forge.pixpin.ui.CompartirPaginas.de(this, nombre, listOf(p to null), wifi = wifi, editable = p, extras = listOfNotNull(talCual))
+        }
+        val formatos = buildList {
+            talCual?.let { add(it) }
+            if (m.texto.isNotBlank()) add(
+                com.forge.pixpin.ui.Compartible.Formato(
+                    "texto", Icons.AutoMirrored.Filled.Notes, "Texto", com.forge.pixpin.ui.Compartible.NINGUNA,
+                    accion = { runOnUiThread { compartir(m.copy(ruta = null)) } }
+                )
+            )
+            wifi?.let { add(com.forge.pixpin.ui.Compartible.Formato("wifi", Icons.Filled.Wifi, "Enviar por Wi-Fi", com.forge.pixpin.ui.Compartible.NINGUNA, accion = { it() })) }
+        }
+        if (formatos.isEmpty()) return null
+        return com.forge.pixpin.ui.Compartible(nombre, formatos = formatos)
+    }
+
+    /** Abre el lienzo del que salió una zona: la página del PDF, o el lienzo. */
+    private fun abrirElOrigen(v: VieneDe) {
+        val dibujo = v.dibujo ?: return
+        val ruta = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo)
+        if (v.pdf != null && v.pagina != null && v.pagina >= 0 && File(v.pdf).exists()) {
+            com.forge.pixpin.motor.DrawEditorActivity.abrirPaginaDePdf(this, dibujo, ruta, v.pdf, v.pagina, desdeProyecto = v.proyecto)
+        } else {
+            com.forge.pixpin.motor.DrawEditorActivity.abrir(this, dibujo, ruta, null, desdeProyecto = v.proyecto)
+        }
+    }
+
     /** Cómo se llama lo que sale, con su página si viene de un documento. */
     private fun nombreDeLoCompartido(m: Mensaje): String {
         val base = m.nombre.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) }
@@ -5513,19 +5777,8 @@ class MensajesActivity : ComponentActivity() {
 
     private fun compartir(m: Mensaje) {
         runCatching {
-            val envio = Intent(Intent.ACTION_SEND)
-            if (m.ruta != null) {
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    this, "$packageName.fileprovider", File(m.ruta)
-                )
-                envio.type = "*/*"
-                envio.putExtra(Intent.EXTRA_STREAM, uri)
-                envio.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } else {
-                envio.type = "text/plain"
-                envio.putExtra(Intent.EXTRA_TEXT, m.texto)
-            }
-            startActivity(Intent.createChooser(envio, null))
+            if (m.ruta != null) com.forge.pixpin.ui.CompartirNativo.archivo(this, File(m.ruta), "*/*", m.nombre.ifBlank { File(m.ruta).name })
+            else com.forge.pixpin.ui.CompartirNativo.texto(this, m.texto)
         }
     }
 
@@ -5649,7 +5902,15 @@ class MensajesActivity : ComponentActivity() {
             // espera cualquiera que se manda una dirección a sí mismo para leerla luego.
             // Sin enlace no hay nada que abrir, y tocarla no hace nada — que es correcto:
             // el texto ya está entero delante.
-            Clase.NOTA -> primerEnlace(m.texto)?.let { abrirEnlace(it.url) }
+            // **La nota de un proyecto se abre en su editor**: es la hoja, y lo que se escriba
+            // vuelve al proyecto y de ahí a este mensaje. Ver [ChatDeLosProyectos].
+            Clase.NOTA -> {
+                val hoja = m.referencia?.let { ref ->
+                    (application as? PixPinApp)?.proyectos?.porId(m.proyecto)?.hojas?.firstOrNull { it.id == ref && it.nota != null }
+                }
+                if (hoja != null) com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this, hoja.id, hoja.nota!!)
+                else primerEnlace(m.texto)?.let { abrirEnlace(it.url) }
+            }
             // Una página se abre **en el editor, sobre su PDF**: es donde se anotó y
             // donde se sigue anotando. Abrir el PDF a secas perdería lo dibujado.
             Clase.PAGINA -> {
@@ -5674,6 +5935,10 @@ class MensajesActivity : ComponentActivity() {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             Clase.MINIAPP -> com.forge.pixpin.mini.MiniActivity.abrir(this, m.id)
+            Clase.TABLA -> m.referencia?.let { com.forge.pixpin.tabla.TablaActivity.abrir(this, it) }
+            Clase.CROQUIS -> m.referencia?.let {
+                com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(this, m.proyecto, it)
+            }
             Clase.DIBUJO -> m.referencia?.let { dibujo ->
                 com.forge.pixpin.motor.DrawEditorActivity.abrir(
                     this, dibujo,
@@ -5717,9 +5982,29 @@ class MensajesActivity : ComponentActivity() {
             // volver costaba deshacer el camino. Ver [com.forge.pixpin.pdf.LectorPdfActivity].
             // Lo que no sea un PDF sigue saliendo fuera: para eso están las otras aplicaciones.
             else -> m.ruta?.let { ruta ->
-                if (ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true)) {
-                    com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
-                } else abrirFuera(ruta)
+                when {
+                    ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
+                        com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
+                    // **Un Excel se abre en Tablas**, con una pestaña por hoja, y no en otra
+                    // aplicación. Ver [LibroDelChat].
+                    LibroDelChat.esLibro(m) -> lifecycleScope.launch {
+                        val leido = withContext(Dispatchers.IO) { runCatching { LibroDelChat.tablas(this@MensajesActivity, m) } }
+                        leido.onSuccess { hojas ->
+                            if (hojas.isEmpty()) abrirFuera(ruta)
+                            else com.forge.pixpin.tabla.TablaActivity.abrir(
+                                this@MensajesActivity, hojas.first().first, hojas = hojas.map { it.first }
+                            )
+                        }.onFailure { e ->
+                            Toast.makeText(
+                                this@MensajesActivity,
+                                (e as? com.forge.pixpin.motor.ImportarHojas.NoSeLee)?.message ?: "No se pudo leer la hoja de cálculo",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            abrirFuera(ruta)
+                        }
+                    }
+                    else -> abrirFuera(ruta)
+                }
             }
         }
     }
@@ -5730,16 +6015,8 @@ class MensajesActivity : ComponentActivity() {
             .getMimeTypeFromExtension(ruta.substringAfterLast('.', "").lowercase()) ?: "*/*"
 
     private fun abrirFuera(ruta: String) {
-        runCatching {
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                this, "$packageName.fileprovider", File(ruta)
-            )
-            startActivity(
-                Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(uri, contentResolver.getType(uri) ?: "*/*")
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            )
-        }
+        // Un APK se instala; lo demás, con la aplicación que se elija. Ver [com.forge.pixpin.ui.AbrirCon].
+        com.forge.pixpin.ui.AbrirCon.abrir(this, File(ruta))
     }
 
     override fun onStop() {
@@ -6068,9 +6345,10 @@ private val ROJO_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFFE53935)
  * para que se lea el número de la cita cuando se contesta, que ese sí va en color.
  */
 @Composable
-private fun ChapaDelNumero(numero: Int) {
+private fun ChapaDelNumero(numero: Int, letra: String? = null) {
+    // Con la letra del aparato donde nació, si la tiene: «#47a». Ver [Mensaje.letra].
     Text(
-        "#" + numero,
+        "#" + numero + letra.orEmpty(),
         fontSize = 10.sp,
         color = ColoresDelChat.hora(),
         modifier = Modifier

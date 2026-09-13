@@ -737,7 +737,7 @@ private fun ElColorQueHay(
             // tinta oscura, agarrar el mando para mover **el tono** la aclaraba sin que nadie
             // lo hubiera pedido. El mínimo existe para que la rueda no salga negra, que es
             // cosa de cómo se ve y no de qué tinta es. Ver [CLARIDAD_MINIMA].
-            claridad = hsv[2].coerceAtLeast(0.06f)
+            claridad = claridadDeLaRueda(puesto.strokeColor)
             // La rueda sale **antes** de tocarla, con la marca en el color que hay puesto:
             // es lo que dice hacia dónde hay que llevar el dedo. Ver abajo.
             elTono = hsv[0]
@@ -811,6 +811,7 @@ private fun ElColorQueHay(
                     // mismo mando del croquis en el espacio sí la pasaba, que es la razón de
                     // que allí funcionara y aquí no.
                     claridad = claridad.coerceAtLeast(CLARIDAD_MINIMA),
+                    noche = noche,
                     alMedirElCentro = { centroDeLaRueda = it }
                 )
             }

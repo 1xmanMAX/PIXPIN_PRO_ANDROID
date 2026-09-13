@@ -88,6 +88,10 @@ import androidx.compose.material.icons.filled.SquareFoot
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Texture
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.Screenshot
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.VerticalDistribute
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -111,6 +115,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -332,6 +337,10 @@ class DrawEditorActivity : ComponentActivity() {
                 }
             }
         }
+
+        // **La herramienta Zona** y el icono de enlace de sus marcas. Ver [alSoltarLaZona].
+        controller.alSoltarLaZona = { b -> alSoltarLaZona(b) }
+        controller.alTocarEnlace = { dibujo -> abrirSublienzo(dibujo) }
 
         ensenarAMedirElTexto()
         aPantallaCompleta()
@@ -558,6 +567,285 @@ class DrawEditorActivity : ComponentActivity() {
 
     private var guardadoPendiente: kotlinx.coroutines.Job? = null
 
+    // ---------------------------------------------------------------------
+    // La herramienta Zona
+    // ---------------------------------------------------------------------
+
+    /** Con el interruptor puesto, la zona va al chat del proyecto como sublienzo. */
+    private var zonaAlChat by mutableStateOf(false)
+
+    /** Una zona esperando a que se elija proyecto (el lienzo no estaba en ninguno). */
+    private var pidiendoProyectoParaLaZona by mutableStateOf<Pair<Bitmap, Bounds>?>(null)
+
+    @Composable
+    private fun PastillaDeLaZona(modifier: Modifier = Modifier) {
+        // Con el color del texto dicho: un fondo con transparencia no le deja a la superficie
+        // adivinar cuál toca, y de noche salía texto negro sobre negro.
+        Surface(
+            modifier = modifier,
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shadowElevation = 3.dp
+        ) {
+            Row(Modifier.padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(androidx.compose.material.icons.Icons.Filled.Screenshot, contentDescription = null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (zonaAlChat) "Arrastra: va al chat del proyecto" else "Arrastra: sale una copia", style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(8.dp))
+                Text("Al chat", style = MaterialTheme.typography.labelMedium)
+                androidx.compose.material3.Switch(
+                    checked = zonaAlChat, onCheckedChange = { zonaAlChat = it },
+                    modifier = Modifier.padding(start = 4.dp).graphicsLayer(scaleX = 0.8f, scaleY = 0.8f)
+                )
+            }
+        }
+    }
+
+    /**
+     * **Se soltó el rectángulo de la Zona.** Se hace una foto de lo que hay dentro —el PDF de
+     * fondo, pedido a la resolución que haga falta, y lo dibujado encima— y, según el interruptor,
+     * se deja una copia para arrastrar o se manda al chat del proyecto como sublienzo.
+     */
+    private fun alSoltarLaZona(b: Bounds) {
+        val escena = controller.scene
+        lifecycleScope.launch {
+            val foto = withContext(Dispatchers.IO) {
+                runCatching { fotoDeLaZona(escena, b) }.onFailure { android.util.Log.e("PixPinZona", "foto", it) }.getOrNull()
+            }
+            if (foto == null) {
+                android.widget.Toast.makeText(this@DrawEditorActivity, "No se pudo sacar la zona", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (!zonaAlChat) colocarCopiaDeLaZona(foto, b) else mandarLaZona(foto, b, null)
+        }
+    }
+
+    private fun fotoDeLaZona(escena: Scene, b: Bounds): Bitmap? {
+        val lado = maxOf(b.width, b.height)
+        if (lado <= 0) return null
+        val s = (LADO_DE_LA_FOTO_DE_ZONA / lado).coerceIn(1.0, 4.0)
+        val w = (b.width * s).toInt().coerceIn(1, 4096)
+        val h = (b.height * s).toInt().coerceIn(1, 4096)
+        val mapa = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val lienzo = android.graphics.Canvas(mapa)
+        lienzo.drawColor(parseColor(escena.backgroundColor))
+        val papel = fondo
+        val pdf = pdfDeFondo
+        if (pdf != null && paginaDeFondo >= 0 && papel != null) {
+            // **La página, pedida al PDF para esta zona**: se lee igual de nítida que al acercarse.
+            PdfDoc.lamina(pdf, paginaDeFondo, b, papel.width.toDouble(), w, h)?.let {
+                lienzo.drawBitmap(it, 0f, 0f, null)
+                it.recycle()
+            }
+        } else if (papel != null && !papel.isRecycled) {
+            lienzo.save()
+            lienzo.scale(s.toFloat(), s.toFloat())
+            lienzo.translate(-b.x1.toFloat(), -b.y1.toFloat())
+            lienzo.drawBitmap(papel, 0f, 0f, android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+            lienzo.restore()
+        }
+        Renderer(::bitmapDe, dark = DrawTheme.esDeNoche(escena.backgroundColor), paraExportar = true).renderScene(
+            lienzo,
+            escena.copy(
+                elements = escena.elements.filter { !it.isDeleted && it.enlace == null },
+                viewport = Viewport(scrollX = -b.x1, scrollY = -b.y1, zoom = s)
+            ),
+            w.toDouble(), h.toDouble()
+        )
+        return mapa
+    }
+
+    /** Pide repintar el lienzo tras un cambio que no vino del dedo. */
+    private fun cambiadoDesdeFuera() { tickDelMosaico++ }
+
+    /** Sin interruptor: la foto queda encima, un poco corrida y seleccionada, para arrastrarla. */
+    private fun colocarCopiaDeLaZona(foto: Bitmap, b: Bounds) {
+        runCatching {
+            val temporal = File(cacheDir, "zona_${System.currentTimeMillis()}.png")
+            temporal.outputStream().use { foto.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            val file = ExcalidrawStore.guardarImagen(this, temporal, "image/png") ?: return
+            temporal.delete()
+            bitmaps[file.id] = foto
+            val corrido = 24.0 / controller.scene.viewport.zoom.coerceAtLeast(0.0001)
+            // **Un marco que se vea**: negro sobre papel claro, blanco sobre papel oscuro. Sobre una
+            // página de PDF (blanca) siempre negro.
+            val oscuro = pdfDeFondo == null && DrawTheme.esDeNoche(controller.scene.backgroundColor)
+            controller.ponerCopiaDeZona(file, b, corrido, if (oscuro) "#ffffff" else "#1e1e1e")
+            guardar()
+            cambiadoDesdeFuera()
+        }
+    }
+
+    /**
+     * **Con interruptor: la zona, al chat del proyecto, como sublienzo.** La imagen va al chat con
+     * «PDF «Plano» → página 3» debajo; es una hoja del proyecto colgada de la hoja de origen, que
+     * se abre para resolver encima; y en el origen queda la marca con su enlace. Si el lienzo no
+     * está en ningún proyecto, primero se elige uno ([proyectoElegido]).
+     */
+    private fun mandarLaZona(foto: Bitmap, b: Bounds, proyectoElegido: Proyecto?) {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val todos = app.proyectos.proyectos.value
+        val proyecto = proyectoElegido
+            ?: pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) }
+            ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+        if (proyecto == null) {
+            pidiendoProyectoParaLaZona = foto to b
+            return
+        }
+        val escena = controller.scene
+        lifecycleScope.launch {
+            val hecho = withContext(Dispatchers.IO) {
+                runCatching {
+                    ExcalidrawStore.guardar(this@DrawEditorActivity, dibujoId, escena)
+                    val ahora = System.currentTimeMillis()
+                    // El lienzo de origen tiene que ser una hoja del proyecto: si no lo era, lo pasa a ser.
+                    var p = app.proyectos.porId(proyecto.id) ?: proyecto
+                    var origen = p.hojas.firstOrNull { it.dibujo == dibujoId || (pdfDeFondo != null && it.pagina == paginaDeFondo) }
+                    if (origen == null) {
+                        origen = Hoja(id = "h-$ahora", nombre = "Lienzo", dibujo = dibujoId)
+                        app.proyectos.guardar(Proyectos.conHoja(p, origen, ahora))
+                        p = app.proyectos.porId(p.id) ?: p
+                    }
+                    val deDonde = if (pdfDeFondo != null) "PDF «${p.nombre}» → página ${paginaDeFondo + 1}"
+                    else "Lienzo «${origen.nombre.ifBlank { p.nombre }}»"
+                    val nombre = if (pdfDeFondo != null) "Zona de la página ${paginaDeFondo + 1}" else "Zona de ${origen.nombre.ifBlank { "lienzo" }}"
+                    val almacen = com.forge.pixpin.guardados.MensajesStore(this@DrawEditorActivity)
+                    val temporal = File(cacheDir, "zona_$ahora.png")
+                    temporal.outputStream().use { foto.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    val ruta = almacen.copiarAdjunto(temporal, "$nombre.png", "png") ?: error("no se pudo copiar")
+                    temporal.delete()
+                    val idDelMensaje = java.util.UUID.randomUUID().toString()
+                    val sublienzo = "foto-$idDelMensaje"
+                    // El sublienzo: la foto clavada en su propio lienzo, como una foto del chat.
+                    val hoja = com.forge.pixpin.guardados.UnirAlProyecto.hojaDeLaFotoDelChat(
+                        this@DrawEditorActivity, File(ruta), "image/png", sublienzo, "hoja-$ahora", nombre, ahora, 0
+                    ) ?: error("no se pudo crear el sublienzo")
+                    // Detrás de su lienzo (y de los sublienzos que ya tuviera), no al final del proyecto.
+                    val actual = app.proyectos.porId(p.id) ?: p
+                    val nueva = hoja.copy(padre = origen.id, deMensaje = idDelMensaje, nombre = "↳ $nombre")
+                    val donde = actual.hojas.indexOfLast { it.id == origen.id || it.padre == origen.id }
+                    val hojas = actual.hojas.toMutableList().apply { add((donde + 1).coerceIn(0, size), nueva) }
+                    app.proyectos.guardar(actual.copy(hojas = hojas, tocado = ahora))
+                    almacen.anadir(
+                        com.forge.pixpin.guardados.Mensaje(
+                            id = idDelMensaje, cuando = ahora, clase = com.forge.pixpin.guardados.Clase.IMAGEN,
+                            ruta = ruta, nombre = "$nombre.png", bytes = File(ruta).length(), proyecto = p.id,
+                            referencia = sublienzo, unido = true,
+                            vieneDe = com.forge.pixpin.guardados.VieneDe(deDonde, dibujoId, pdfDeFondo, paginaDeFondo.takeIf { it >= 0 }, p.id)
+                        )
+                    )
+                    sublienzo to p.nombre
+                }.onFailure { android.util.Log.e("PixPinZona", "al chat", it) }.getOrNull()
+            }
+            if (hecho == null) {
+                android.widget.Toast.makeText(this@DrawEditorActivity, "No se pudo mandar la zona", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            controller.marcarZona(b, hecho.first)
+            guardar()
+            cambiadoDesdeFuera()
+            android.widget.Toast.makeText(this@DrawEditorActivity, "Zona mandada al chat de «${hecho.second}»", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** El lienzo no está en ningún proyecto: todo lienzo vive en uno, así que se elige o se crea. */
+    @Composable
+    private fun ElegirProyectoParaLaZona(foto: Bitmap, b: Bounds) {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val todos by app.proyectos.proyectos.collectAsState()
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pidiendoProyectoParaLaZona = null },
+            title = { Text("¿A qué proyecto?") },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    Text("Este lienzo no está en ningún proyecto. La zona irá al chat del que elijas, y el lienzo pasará a ser de ese proyecto.", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    for (p in todos.filterNot { it.archivado }) {
+                        androidx.compose.material3.TextButton(onClick = {
+                            pidiendoProyectoParaLaZona = null
+                            mandarLaZona(foto, b, p)
+                        }, modifier = Modifier.fillMaxWidth()) { Text(p.nombre, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    pidiendoProyectoParaLaZona = null
+                    val nuevo = app.proyectos.nuevo(getString(R.string.proyecto_nuevo_nombre), System.currentTimeMillis())
+                    mandarLaZona(foto, b, nuevo)
+                }) { Text("Proyecto nuevo") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { pidiendoProyectoParaLaZona = null }) { Text("Cancelar") } }
+        )
+    }
+
+    /** Abre el sublienzo de una marca de zona. */
+    private fun abrirSublienzo(dibujo: String) {
+        val app = application as? com.forge.pixpin.PixPinApp
+        val proyecto = app?.proyectos?.proyectos?.value?.firstOrNull { p -> p.hojas.any { it.dibujo == dibujo } }
+        guardarYa()
+        DrawEditorActivity.abrir(this, dibujo, ExcalidrawStore.rutaDe(this, dibujo), null, desdeProyecto = proyecto?.id)
+    }
+
+    /** Lo que se está compartiendo, con la hoja abierta. */
+    private var compartiendo by mutableStateOf<com.forge.pixpin.ui.Compartible?>(null)
+
+    /**
+     * Abre la hoja de compartir con este lienzo: sus páginas —«Lienzo completo» y cada marco— o,
+     * anotando un PDF, esa página. Si el lienzo es de un proyecto se comparte desde el proyecto
+     * (así una página del PDF sale vectorial, del documento); el editable es solo este lienzo.
+     */
+    private fun abrirCompartir() {
+        if (exportando) return
+        exportando = true
+        val escena = controller.scene
+        lifecycleScope.launch {
+            val hecho = withContext(Dispatchers.IO) {
+                runCatching {
+                    guardadoPendiente?.cancel()
+                    ExcalidrawStore.guardar(this@DrawEditorActivity, dibujoId, escena)
+                    val app = application as com.forge.pixpin.PixPinApp
+                    val todos = app.proyectos.proyectos.value
+                    val real = pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) } ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+                    // El PDF del proyecto, al día con lo que se acaba de anotar.
+                    if (real != null && pdfDeFondo != null && faltaDevolverAlPdf) {
+                        if (PdfDelProyecto.rehacer(this@DrawEditorActivity, real, ::bitmapDe)) faltaDevolverAlPdf = false
+                    }
+                    val hojaReal = real?.hojas?.firstOrNull { it.dibujo == dibujoId || (pdfDeFondo != null && it.pagina == paginaDeFondo) }
+                    val nombre = hojaReal?.nombre?.ifBlank { null }
+                        ?: real?.let { if (paginaDeFondo >= 0) "${it.nombre} · página ${paginaDeFondo + 1}" else it.nombre }
+                        ?: "Lienzo"
+                    val suelto = Proyecto(
+                        id = "suelto-$dibujoId", nombre = nombre, tocado = System.currentTimeMillis(),
+                        hojas = listOf(Hoja(id = hojaReal?.id ?: "hoja-$dibujoId", nombre = nombre, dibujo = dibujoId, pagina = paginaDeFondo.takeIf { it >= 0 })),
+                        pdfOrigen = pdfDeFondo, pdfLimpio = real?.pdfLimpio
+                    )
+                    val escenaDe: (String) -> Scene? = { id -> ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(this@DrawEditorActivity, id)) }
+                    val seleccion: Pair<Proyecto, Set<String>?> = if (real != null && hojaReal != null) {
+                        real to HojasDelProyecto.conEntero(real, escenaDe).filter { it.hoja.id == hojaReal.id }.map { it.clave }.toSet()
+                    } else suelto to null
+                    val extras = pdfDeUnProyecto()?.let {
+                        listOf(com.forge.pixpin.ui.Compartible.Formato(
+                            "al-pdf", Icons.Filled.NoteAdd, getString(R.string.formato_hoja_del_pdf),
+                            com.forge.pixpin.ui.Compartible.NINGUNA, accion = { aniadirAlPdfDelProyecto() }
+                        ))
+                    }.orEmpty()
+                    val c = com.forge.pixpin.ui.CompartirPaginas.de(
+                        this@DrawEditorActivity, nombre, listOf(seleccion), editable = suelto, extras = extras,
+                        wifi = hojaReal?.let { h -> { com.forge.pixpin.sincro.EnviarActivity.enviarLienzo(this@DrawEditorActivity, real.id, h.id) } },
+                        antes = { ExcalidrawStore.guardar(this@DrawEditorActivity, dibujoId, controller.scene) }
+                    )
+                    // Al abrir, el lienzo completo (la primera): los marcos se añaden a mano.
+                    com.forge.pixpin.ui.Compartible(c.titulo, c.paginas, c.formatos, c.paginas.firstOrNull()?.let { setOf(it.clave) })
+                }
+            }
+            exportando = false
+            hecho.exceptionOrNull()?.let { android.util.Log.e("PixPinCompartir", "abrir", it) }
+            compartiendo = hecho.getOrNull()
+        }
+    }
+
     /** Escribe ahora, sin esperar. */
     private fun guardarYa() {
         guardadoPendiente?.cancel()
@@ -672,11 +960,12 @@ class DrawEditorActivity : ComponentActivity() {
         val nocheDeLaApp = com.forge.pixpin.ui.theme.deNoche()
         var papelClaroForzado by remember { mutableStateOf(false) }
         val papelGuardado = controller.scene.backgroundColor
-        val papel =
-            if (nocheDeLaApp && !papelClaroForzado &&
-                papelGuardado.equals(DrawTheme.FONDO_DIA, ignoreCase = true)
-            ) DrawTheme.fondoDe(true, (application as? com.forge.pixpin.PixPinApp)?.ajustes?.oledNegro ?: false)
-            else papelGuardado
+        // **Sin modo noche en el lienzo** (13-sep-2026): el papel es el que se elige, y las tintas se
+        // adaptan a él ([DrawTheme.adaptar]). Pintar de oscuro un papel blanco era lo que hacía que
+        // un color elegido de noche saliera casi negro de día.
+        @Suppress("UNUSED_EXPRESSION") nocheDeLaApp
+        @Suppress("UNUSED_EXPRESSION") papelClaroForzado
+        val papel = papelGuardado
         val noche = DrawTheme.esDeNoche(papel)
 
         /**
@@ -758,6 +1047,8 @@ class DrawEditorActivity : ComponentActivity() {
         // de la pantalla, y una barra no puede pintar fuera de sí misma.
         var grupoDesplegado by remember { mutableStateOf<List<Tool>?>(null) }
         var zoomBloqueado by remember { mutableStateOf(false) }
+        // **La vista clavada**, en pantalla completa: ni moverse ni ampliar, solo dibujar.
+        var vistaFija by remember { mutableStateOf(false) }
         // La hoja adhesiva, si está a la vista. Ver [NotaAdhesiva].
         var adhesivoALaVista by remember { mutableStateOf(false) }
 
@@ -949,6 +1240,7 @@ class DrawEditorActivity : ComponentActivity() {
                 papelALaVista = pdfDeFondo != null,
                 zurdo = zurdo,
                 zoomBloqueado = zoomBloqueado,
+                vistaFija = vistaFija && soloElDibujo,
                 figurasPerfectas = figurasPerfectas,
                 cuadricula = cuadricula,
                 modoLapiz = modoLapiz,
@@ -1034,6 +1326,18 @@ class DrawEditorActivity : ComponentActivity() {
                                 10.dp
                         )
                 )
+                @Suppress("UNUSED_EXPRESSION") tick
+                if (controller.tool == Tool.ZONA) {
+                    PastillaDeLaZona(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(
+                                top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } +
+                                    (if (pdfDeFondo != null) 58.dp else 10.dp)
+                            )
+                    )
+                }
+                pidiendoProyectoParaLaZona?.let { (foto, b) -> ElegirProyectoParaLaZona(foto, b) }
 
                 // **Las islas cambian de lado con la mano.** El brazo entra por el
                 // lado de su mano y tapa lo que hay debajo: lo que se toca a menudo
@@ -1073,7 +1377,10 @@ class DrawEditorActivity : ComponentActivity() {
                                 tablaAbierta = controller.scene.tablas.firstOrNull()?.id
                                     ?: controller.addTabla(centroDeLaVista()).also { cambiado() }.id
                             },
-                            onAjustes = { ajustesAbiertos = !ajustesAbiertos }
+                            onAjustes = { ajustesAbiertos = !ajustesAbiertos },
+                            formatos = formatosDeSalida(),
+                            exportando = exportando,
+                            onAProyecto = { aUnProyecto() }
                         )
                     }
                 }
@@ -1265,6 +1572,7 @@ class DrawEditorActivity : ComponentActivity() {
                             guardados = marcasDeColor + COMBINACIONES.first().colores
                                 .filterNot { c -> marcasDeColor.any { it.equals(c, true) } },
                             marcas = marcasDeColor,
+                            noche = noche,
                             onElegir = { hex ->
                                 aplicarEstilo(estilo.copy(strokeColor = hex))
                                 cambiado()
@@ -1547,6 +1855,20 @@ class DrawEditorActivity : ComponentActivity() {
             // su asa. Ver [BotonFlotante].
             if (soloElDibujo) BotonFlotante(zurdo, agarre)
 
+            // **Los candados de la pantalla completa** (13-sep-2026): uno clava la vista —ni
+            // moverse ni ampliar; con lápiz, los dedos no hacen nada—, otro solo el aumento.
+            if (soloElDibujo) {
+                CandadosDePantallaCompleta(
+                    vistaFija = vistaFija,
+                    zoomBloqueado = zoomBloqueado,
+                    onVistaFija = { vistaFija = !vistaFija },
+                    onZoom = { zoomBloqueado = !zoomBloqueado },
+                    modifier = Modifier
+                        .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
+                        .padding(top = 18.dp, start = 14.dp, end = 14.dp)
+                )
+            }
+
             // **La imagen de referencia**, encima del lienzo y sin velo: se
             // dibuja mirándola, así que estorbar lo mínimo es todo su trabajo.
             referencia?.let { mapa ->
@@ -1564,6 +1886,7 @@ class DrawEditorActivity : ComponentActivity() {
                 )
             }
 
+            compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
             if (pidiendoFuncionesWeb) {
                 val marcadas = ajustes.funcionesWeb ?: ExportarHtml.Opciones.NOMBRES.toSet()
                 DialogoDeFuncionesWeb(
@@ -1881,7 +2204,11 @@ class DrawEditorActivity : ComponentActivity() {
         onColor: () -> Unit,
         onFiguras: () -> Unit,
         onTablas: () -> Unit,
-        onAjustes: () -> Unit
+        onAjustes: () -> Unit,
+        /** Las formas de sacar el dibujo, para el botón de compartir. Ver [formatosDeSalida]. */
+        formatos: List<FormatoDeSalida> = emptyList(),
+        exportando: Boolean = false,
+        onAProyecto: () -> Unit = {}
     ) {
         @Suppress("UNUSED_EXPRESSION") tick
         Row(
@@ -1985,10 +2312,17 @@ class DrawEditorActivity : ComponentActivity() {
                     contentDescription = getString(R.string.tabla_abrir)
                 )
             }
-            // **Exportar ya no tiene botón propio.** Es una pestaña de la
-            // ventana de ajustes: se toca al terminar, no dibujando, y tenerlo
-            // en dos sitios era justo lo que había que quitar. Ver
-            // [VentanaDeAjustes].
+            // **Exportar, en la barra y con el icono de compartir** —el cuadro con la flecha
+            // hacia arriba, como en iOS—. Estaba escondido en una pestaña de los ajustes; lo
+            // pidió el usuario el 12-sep-2026: se toca y los formatos salen ahí mismo. Sigue
+            // estando en un solo sitio, que es lo que importaba: la pestaña se quitó.
+            // **La hoja de compartir de toda la aplicación** (13-sep-2026): los formatos, qué
+            // páginas —el lienzo completo o cada marco— y cuánto pesará. Ver [com.forge.pixpin.ui.HojaDeCompartir].
+            @Suppress("UNUSED_EXPRESSION") formatos
+            IconButton(onClick = { abrirCompartir() }, enabled = !exportando) {
+                if (exportando) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Filled.IosShare, contentDescription = "Compartir")
+            }
             IconButton(onClick = onAjustes) {
                 Icon(
                     Icons.Filled.Tune,
@@ -2324,6 +2658,44 @@ class DrawEditorActivity : ComponentActivity() {
      * **es** el botón de volver al cien por cien, que es lo único que se le pide
      * a un indicador de zoom aparte de mirarlo.
      */
+    @Composable
+    private fun CandadosDePantallaCompleta(
+        vistaFija: Boolean,
+        zoomBloqueado: Boolean,
+        onVistaFija: () -> Unit,
+        onZoom: () -> Unit,
+        modifier: Modifier = Modifier
+    ) {
+        Surface(
+            modifier = modifier,
+            shape = RoundedCornerShape(14.dp),
+            shadowElevation = 4.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CandadoDePantalla(vistaFija, if (vistaFija) "Vista fija" else "Mover", onVistaFija)
+                if (!vistaFija) CandadoDePantalla(zoomBloqueado, "Zoom", onZoom)
+            }
+        }
+    }
+
+    @Composable
+    private fun CandadoDePantalla(puesto: Boolean, texto: String, al: () -> Unit) {
+        Row(
+            Modifier.clickable(onClick = al).padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (puesto) Icons.Filled.Lock else Icons.Filled.LockOpen, contentDescription = null,
+                tint = if (puesto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(texto, fontSize = 12.sp, color = if (puesto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        }
+    }
+
     @Composable
     private fun VisorDeZoom(
         zoom: Float,
@@ -3826,3 +4198,5 @@ private val STROKE_GLYPHS = mapOf(
     StrokeStyle.DOTTED to "┈┈"
 )
 
+/** El lado largo, en píxeles, de la foto de una zona: se lee bien sin pesar de más. */
+private const val LADO_DE_LA_FOTO_DE_ZONA = 1600.0

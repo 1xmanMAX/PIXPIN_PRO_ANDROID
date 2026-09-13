@@ -71,11 +71,32 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             app.proyectos.guardar(p)
             return p
         }
+        // **Un libro de hojas de cálculo**: un proyecto con una tabla por hoja. Ver [ImportarHojas].
+        if (com.forge.pixpin.motor.ImportarHojas.esLibro(nombre)) {
+            val hojas = runCatching { com.forge.pixpin.motor.ImportarHojas.leer(primero, nombre, ahora) }.getOrNull() ?: return null
+            val almacen = com.forge.pixpin.motor.TablasEnDisco.de(filesDir)
+            val proyecto = app.proyectos.nuevo(nombre.substringBeforeLast('.').ifBlank { getString(R.string.proyecto_nuevo_nombre) }, ahora)
+            var alguna = false
+            for ((i, h) in hojas.withIndex()) {
+                val tabla = "libro-$ahora-$i"
+                if (!almacen.guardar(tabla, h.tabla)) continue
+                val actual = app.proyectos.porId(proyecto.id) ?: break
+                app.proyectos.conHoja(actual, Hoja(id = "hoja-$ahora-$i", nombre = h.nombre, tabla = tabla), ahora)
+                alguna = true
+            }
+            return if (alguna) app.proyectos.porId(proyecto.id) else { app.proyectos.borrar(proyecto.id); null }
+        }
         // Un PDF: un proyecto con sus páginas, como al abrir uno desde dentro.
         if (tipo?.contains("pdf") == true || nombre.endsWith(".pdf", ignoreCase = true)) {
             val paginas = PdfDoc.pageCount(primero.absolutePath)
             if (paginas <= 0) return null
-            return app.proyectos.deEstePdf(primero.absolutePath, nombre.removeSuffix(".pdf"), paginas, ahora)
+            // **Dentro de la carpeta de PixPin, no en la caché**: la caché la vacía Android cuando
+            // quiere, y lo que está fuera de `files` no viaja al sincronizar (el proyecto llegaba
+            // sin su PDF; lo vio el usuario el 13-sep-2026).
+            val documento = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+            runCatching { primero.copyTo(documento, overwrite = true) }.getOrElse { return null }
+            primero.delete()
+            return app.proyectos.deEstePdf(documento.absolutePath, nombre.removeSuffix(".pdf"), paginas, ahora)
         }
         // Fotos: un proyecto con un lienzo por foto.
         val proyecto = app.proyectos.nuevo(nombre.substringBeforeLast('.').ifBlank { getString(R.string.proyecto_nuevo_nombre) }, ahora)

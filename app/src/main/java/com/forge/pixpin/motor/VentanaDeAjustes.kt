@@ -3,6 +3,8 @@ package com.forge.pixpin.motor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -77,7 +79,6 @@ import kotlin.math.roundToInt
 enum class PestanaDeAjustes(val titulo: String) {
     LIENZO("Lienzo"),
     DIBUJO("Dibujo"),
-    EXPORTAR("Exportar"),
     DETALLE("Detalle")
 }
 
@@ -190,10 +191,7 @@ fun VentanaDeAjustes(
                         // elegir papel oscuro **es** ponerse en modo noche, y de ahí salen el
                         // filtro de la tinta y el color de la cuadrícula. Ver [DrawTheme.esDeNoche].
                         Seccion("Papel", "Con papel oscuro, la tinta y la cuadrícula se pintan para leerse encima: es el modo noche.") {
-                            Segmentos(
-                                DrawTheme.PAPELES.map { it.first },
-                                DrawTheme.PAPELES.indexOfFirst { it.second.equals(papel, ignoreCase = true) }
-                            ) { onPapel2(DrawTheme.PAPELES[it].second) }
+                            MuestrasDePapel(papel) { onPapel2(it) }
                         }
                         Seccion("Fondo") {
                             Segmentos(
@@ -331,33 +329,8 @@ fun VentanaDeAjustes(
                         }
                     }
 
-                    PestanaDeAjustes.EXPORTAR -> {
-                        Seccion("Sacar el dibujo", if (exportando) "Escribiendo el archivo…" else null) {
-                            // **Cuadrados grandes, a dos columnas**, con el icono arriba y
-                            // el nombre debajo: lo pidió el usuario (2-sep-2026) en vez de
-                            // la lista de filas, para que el icono se vea grande y el
-                            // formato se reconozca de un vistazo.
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                formatos.chunked(2).forEach { tanda ->
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        tanda.forEach { formato ->
-                                            Cuadro(
-                                                formato.icono, formato.nombre,
-                                                if (exportando) null else formato.al,
-                                                Modifier.weight(1f)
-                                            )
-                                        }
-                                        repeat(2 - tanda.size) { Box(Modifier.weight(1f)) }
-                                    }
-                                }
-                            }
-                        }
-                        // **Llevarlo al proyecto**, que es donde acaba lo que se dibuja: en un
-                        // PDF con las demás hojas.
-                        Seccion("Proyecto") {
-                            Fila("Guardar en un proyecto", "Añadir", onAProyecto)
-                        }
-                    }
+                    // Exportar ya no es una pestaña: es el botón de compartir de la barra de
+                    // arriba (lo pidió el usuario el 12-sep-2026). Ver `CarruselDeFunciones`.
                 }
             }
         }
@@ -423,6 +396,51 @@ private fun Gesto(gesto: String, hace: String) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+/**
+ * **Los papeles, como muestras de su color de verdad** (13-sep-2026): se ve a qué se cambia antes
+ * de tocarlo, en vez de una fila de nombres. Ver [DrawTheme.PAPELES].
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun MuestrasDePapel(papel: String, onElegir: (String) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        for ((nombre, hex) in DrawTheme.PAPELES) {
+            val puesto = hex.equals(papel, ignoreCase = true)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .width(60.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onElegir(hex) }
+                    .padding(vertical = 4.dp)
+            ) {
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .background(androidx.compose.ui.graphics.Color(parseColor(hex)), RoundedCornerShape(10.dp))
+                        .border(
+                            if (puesto) 3.dp else 1.dp,
+                            if (puesto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                            RoundedCornerShape(10.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (puesto) Text("✓", color = if (DrawTheme.esDeNoche(hex)) androidx.compose.ui.graphics.Color.White else androidx.compose.ui.graphics.Color.Black)
+                }
+                Text(
+                    nombre, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+            }
+        }
     }
 }
 
@@ -770,7 +788,13 @@ fun DialogoDeFuncionesWeb(
     hayAudio: Boolean = true,
     /** Qué sale de un lienzo con marcos. Ver [ExportarHtml.hojasDelLienzo]. */
     hojasDelLienzo: String = ExportarHtml.HOJAS_AMBOS,
-    onHojasDelLienzo: (String) -> Unit = {}
+    onHojasDelLienzo: (String) -> Unit = {},
+    /** Si lo que sale lleva algún lienzo: sin lienzos, lo de sus marcos no se pregunta. */
+    hayLienzo: Boolean = true,
+    /** Si lo que sale lleva alguna tabla. Ver [ExportarHtml.TABLAS_SOLO_VER]. */
+    hayTabla: Boolean = false,
+    tablasEditables: Boolean = true,
+    onTablasEditables: (Boolean) -> Unit = {}
 ) {
     val nombres = listOf(
         "lapiz" to "Lápiz", "resaltador" to "Resaltador", "borrador" to "Borrador",
@@ -792,16 +816,37 @@ fun DialogoDeFuncionesWeb(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                for ((clave, texto) in nombres) {
-                    Interruptor(texto, null, clave in marcadas) { onCambio(clave, it) }
+                // **Las tablas: editar o solo mirar.** Con esto apagado, quien la abra puede
+                // elegir celdas, copiarlas y bajar el CSV, pero no cambiar nada; el lápiz sigue
+                // yendo por su interruptor.
+                if (hayTabla) {
+                    Interruptor(
+                        "Editar las celdas de las tablas",
+                        if (tablasEditables) "Escribir, pegar y cambiar fórmulas" else "Solo lectura: se ven, se copian y se bajan",
+                        tablasEditables
+                    ) { onTablasEditables(it) }
+                }
+                // **Agrupadas y con nombres que se entienden** (lo pidió el usuario el 13-sep-2026,
+                // con un dibujo de cómo las quería).
+                @Suppress("UNUSED_EXPRESSION") nombres
+                for ((grupo, que, filas) in GRUPOS_DE_LA_WEB) {
+                    Text(grupo, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 12.dp))
+                    Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 2.dp))
+                    for ((clave, texto, detalle) in filas) {
+                        Interruptor(texto, detalle, clave in marcadas) { onCambio(clave, it) }
+                    }
                 }
                 // **Un lienzo con marcos: qué hojas salen.** Solo los marcos (una hoja por
                 // marco), el lienzo entero, o los dos: el entero y detrás cada marco.
-                Text("Hojas de un lienzo con marcos", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-                Segmentos(
-                    listOf("Solo los marcos", "El lienzo entero", "Ambos"),
-                    listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS).indexOf(hojasDelLienzo).coerceAtLeast(0)
-                ) { onHojasDelLienzo(listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS)[it]) }
+                if (hayLienzo) {
+                    Text("Qué hojas salen de un lienzo con marcos", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                    Segmentos(
+                        listOf("Solo los marcos", "El lienzo entero", "Ambos"),
+                        listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS).indexOf(hojasDelLienzo).coerceAtLeast(0)
+                    ) { onHojasDelLienzo(listOf(ExportarHtml.HOJAS_MARCOS, ExportarHtml.HOJAS_ENTERO, ExportarHtml.HOJAS_AMBOS)[it]) }
+                }
                 // **El audio de las notas, y cuánto pesa.** Original tal cual; ligero es un
                 // cuarto y suena igual para voz; ultraligero, un décimo y se nota. Solo si
                 // lo que se va a exportar trae algún audio: ver [hayAudio].
@@ -822,3 +867,24 @@ fun DialogoDeFuncionesWeb(
         }
     )
 }
+
+/** Las funciones de la página web, en sus grupos: nombre del grupo, para qué es, y (clave, nombre, qué hace). */
+private val GRUPOS_DE_LA_WEB: List<Triple<String, String, List<Triple<String, String, String>>>> = listOf(
+    Triple("Herramientas de edición", "Para dibujar y escribir encima de la página.", listOf(
+        Triple("lapiz", "Lápiz", "Dibujar a mano alzada"),
+        Triple("resaltador", "Resaltador", "Marcar encima, transparente"),
+        Triple("borrador", "Borrador", "Quitar lo dibujado"),
+        Triple("deshacer", "Deshacer y rehacer", "Volver atrás un paso o recuperarlo")
+    )),
+    Triple("Herramientas avanzadas", "Para trabajar con planos.", listOf(
+        Triple("medir", "Medir distancias", "Con la escala del dibujo"),
+        Triple("capas", "Capas del plano", "Encender y apagar las capas de un PDF de AutoCAD")
+    )),
+    Triple("Predeterminado", "Lo básico para moverse por el documento.", listOf(
+        Triple("paginas", "Índice de páginas", "Ir de una hoja a otra")
+    )),
+    Triple("Herramientas especiales", "Lo que hace la página con lo que se le hace.", listOf(
+        Triple("guardar", "Guardar los cambios", "Descargar la página con lo dibujado"),
+        Triple("compartir", "Compartir desde la página", "Mandarla a otra persona desde el navegador")
+    ))
+)

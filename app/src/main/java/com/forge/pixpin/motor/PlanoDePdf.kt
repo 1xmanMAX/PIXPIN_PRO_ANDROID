@@ -100,7 +100,13 @@ object PlanoDePdf {
         val raya: DoubleArray,
         val ops: ByteArray,
         val xs: IntArray,
-        val ys: IntArray
+        val ys: IntArray,
+        /**
+         * **Relleno par-impar** (`f*`, `B*`, `b*`): donde los caminos se cruzan dos veces queda
+         * hueco. Rellenado a lo normal, las letras y fórmulas con agujeros salían macizas y negras
+         * (lo reportó el usuario el 13-sep-2026).
+         */
+        val parImpar: Boolean = false
     ) {
         val puntos: Int get() = xs.size
     }
@@ -514,9 +520,12 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
                         // ---- Pintarlo ----
                         "S" -> pintar(trazo = true, relleno = false, cerrando = false)
                         "s" -> pintar(trazo = true, relleno = false, cerrando = true)
-                        "f", "F", "f*" -> pintar(false, true, false)
-                        "B", "B*" -> pintar(true, true, false)
-                        "b", "b*" -> pintar(true, true, true)
+                        "f", "F" -> pintar(false, true, false)
+                        "f*" -> pintar(false, true, false, parImpar = true)
+                        "B" -> pintar(true, true, false)
+                        "B*" -> pintar(true, true, false, parImpar = true)
+                        "b" -> pintar(true, true, true)
+                        "b*" -> pintar(true, true, true, parImpar = true)
                         "n" -> pintar(false, false, false)
                         "W", "W*" -> recortePendiente = true
 
@@ -646,11 +655,11 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
      * planos lo usan, y no cuesta nada. Un recorte con forma se queda en su caja, o sea que
      * deja pasar de más; pasar de más se ve, y pasar de menos borra dibujo.
      */
-    private fun pintar(trazo: Boolean, relleno: Boolean, cerrando: Boolean) {
+    private fun pintar(trazo: Boolean, relleno: Boolean, cerrando: Boolean, parImpar: Boolean = false) {
         if (nOps > 0 && (trazo || relleno)) {
             if (cerrando && !cerroSubcamino) { apuntar(PlanoDePdf.CERRAR) }
             if (dentroDelRecorte() && dentroDelPapel()) {
-                if (relleno) copiarA(brochaViva(relleno = true))
+                if (relleno) copiarA(rellenoEnOrden(parImpar))
                 if (trazo) copiarA(brochaViva(relleno = false))
                 puntos += nPts
             }
@@ -678,7 +687,36 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
 
     private fun capaActual(): Int = if (marcas.isEmpty()) -1 else marcas[marcas.size - 1]
 
-    private fun brochaViva(relleno: Boolean): BrochaViva {
+    /**
+     * **Los rellenos, en el orden en que se pintan.**
+     *
+     * Las rayas se juntan por color en una sola brocha y no pasa nada: van todas encima. Con los
+     * rellenos no vale: una caja blanca que tapa parte de una fórmula tiene que ir **después** de
+     * lo que tapa. Juntándolos por color se pintaban todos los negros y luego todos los blancos (o
+     * al revés), y en PDF cargados salían manchas negras y trozos tapados (usuario, 13-sep-2026).
+     * Se junta solo lo **seguido** de la misma brocha; si en medio se pintó otra, empieza una nueva.
+     * Pasado [TOPE_DE_RELLENOS_EN_ORDEN] se vuelve a juntar por color, para no reventar la memoria.
+     */
+    private fun rellenoEnOrden(parImpar: Boolean): BrochaViva {
+        val muestra = brochaViva(relleno = true, parImpar = parImpar, soloClave = true)
+        val clave = claveDeLaUltima
+        val ultima = rellenosEnOrden.lastOrNull()
+        if (ultima != null && clave == ultimaClaveDeRelleno) return ultima
+        if (rellenosEnOrden.size >= TOPE_DE_RELLENOS_EN_ORDEN) {
+            porClaveDeRelleno[clave]?.let { ultimaClaveDeRelleno = clave; return it }
+        }
+        rellenosEnOrden += muestra
+        porClaveDeRelleno.putIfAbsent(clave, muestra)
+        ultimaClaveDeRelleno = clave
+        return muestra
+    }
+
+    private val rellenosEnOrden = ArrayList<BrochaViva>()
+    private val porClaveDeRelleno = HashMap<Long, BrochaViva>()
+    private var ultimaClaveDeRelleno: Long? = null
+    private var claveDeLaUltima = 0L
+
+    private fun brochaViva(relleno: Boolean, parImpar: Boolean = false, soloClave: Boolean = false): BrochaViva {
         var color = if (relleno) e.colorRelleno else e.colorTrazo
         val alfa = if (relleno) e.alfaRelleno else e.alfaTrazo
         val grosor = if (relleno) 0.0 else grosorEnPapel()
@@ -688,16 +726,19 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
         val aq = (alfa * 15).roundToInt().coerceIn(0, 15)
         // Pasado el tope se redondea, y con eso las mil variantes de un degradado caen en unas
         // pocas brochas. Ver [PlanoDePdf.TOPE_DE_BROCHAS].
-        if (brochas.size >= PlanoDePdf.TOPE_DE_BROCHAS) {
+        if (brochas.size + porClaveDeRelleno.size >= PlanoDePdf.TOPE_DE_BROCHAS) {
             color = (color and 0xF0F0F0) or 0x080808
             gq = (gq / 8) * 8
         }
         val clave = (capa + 1).toLong() shl 54 or
             ((if (relleno) 1L else 0L) shl 53) or
+            ((if (parImpar) 1L else 0L) shl 24) or
             ((raya + 1).toLong() and 0xF shl 49) or
             (aq.toLong() shl 45) or
             (gq.toLong() shl 33) or
             (color.toLong() and 0xFFFFFF)
+        claveDeLaUltima = clave
+        if (soloClave) return BrochaViva(capa, color, aq / 15.0, gq / 16.0, relleno, DOBLE_VACIO, parImpar)
         brochas[clave]?.let { return it }
         val nueva = BrochaViva(
             capa, color, aq / 15.0, gq / 16.0, relleno,
@@ -971,7 +1012,9 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
     // ---- Cosechar ----
 
     fun cosecha(): PlanoDePdf.Plano {
-        val salida = ArrayList<PlanoDePdf.Brocha>(brochas.size)
+        // Los rellenos primero y en su orden; las rayas, que van encima, después.
+        val salida = ArrayList<PlanoDePdf.Brocha>(brochas.size + rellenosEnOrden.size)
+        for (b in rellenosEnOrden) salida += b.cerrar()
         for (b in brochas.values) salida += b.cerrar()
         return PlanoDePdf.Plano(
             ancho = caja.ancho,
@@ -1108,7 +1151,8 @@ private class BrochaViva(
     val alfa: Double,
     val grosor: Double,
     val relleno: Boolean,
-    val raya: DoubleArray
+    val raya: DoubleArray,
+    val parImpar: Boolean = false
 ) {
     var ops = ByteArray(64)
     var nOps = 0
@@ -1131,7 +1175,7 @@ private class BrochaViva(
 
     fun cerrar() = PlanoDePdf.Brocha(
         capa, color, alfa, grosor, relleno, raya,
-        ops.copyOf(nOps), xs.copyOf(nPts), ys.copyOf(nPts)
+        ops.copyOf(nOps), xs.copyOf(nPts), ys.copyOf(nPts), parImpar
     )
 }
 
@@ -1612,3 +1656,6 @@ private class Fuente(
         }
     }
 }
+
+/** Cuántos rellenos se guardan en su orden antes de volver a juntarlos por color. Ver `rellenoEnOrden`. */
+private const val TOPE_DE_RELLENOS_EN_ORDEN = 6000

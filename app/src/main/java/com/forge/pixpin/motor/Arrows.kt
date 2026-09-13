@@ -70,6 +70,49 @@ private fun deDondeViene(pts: List<Pt>, position: ArrowEnd, cuanto: Double): Pt 
     return ultimo
 }
 
+/**
+ * **Hacia dónde va el trazo en su último tramo**: la recta que mejor pasa (mínimos cuadrados,
+ * eje principal) por los puntos que hay a menos de [largo] de la punta, recorriendo el trazo.
+ * Orientada hacia la punta. Null si el tramo no tiene puntos para decidir.
+ */
+internal fun direccionDelFinal(pts: List<Pt>, position: ArrowEnd, largo: Double): Pt? {
+    val tip = if (position == ArrowEnd.END) pts.last() else pts.first()
+    val recorrido = if (position == ArrowEnd.END) pts.indices.reversed().drop(1) else pts.indices.drop(1)
+    val tramo = ArrayList<Pt>()
+    tramo += tip
+    var acumulado = 0.0
+    var anterior = tip
+    for (i in recorrido) {
+        val p = pts[i]
+        acumulado += hypot(p.x - anterior.x, p.y - anterior.y)
+        tramo += p
+        anterior = p
+        if (acumulado >= largo) break
+    }
+    if (tramo.size < 3) return null
+    var mx = 0.0
+    var my = 0.0
+    for (p in tramo) { mx += p.x; my += p.y }
+    mx /= tramo.size
+    my /= tramo.size
+    var sxx = 0.0
+    var syy = 0.0
+    var sxy = 0.0
+    for (p in tramo) {
+        val dx = p.x - mx
+        val dy = p.y - my
+        sxx += dx * dx; syy += dy * dy; sxy += dx * dy
+    }
+    val angulo = 0.5 * atan2(2 * sxy, sxx - syy)
+    var dx = kotlin.math.cos(angulo)
+    var dy = kotlin.math.sin(angulo)
+    val hx = tip.x - tramo.last().x
+    val hy = tip.y - tramo.last().y
+    if (hypot(hx, hy) < 1e-9) return null
+    if (dx * hx + dy * hy < 0) { dx = -dx; dy = -dy }
+    return Pt(dx, dy)
+}
+
 fun getArrowheadPoints(
     element: Element, position: ArrowEnd, head: Arrowhead
 ): ArrowheadShape? {
@@ -89,8 +132,17 @@ fun getArrowheadPoints(
 
     val dist = hypot(tip.x - prev.x, tip.y - prev.y)
     if (dist == 0.0) return null
-    val nx = (tip.x - prev.x) / dist
-    val ny = (tip.y - prev.y) / dist
+    var nx = (tip.x - prev.x) / dist
+    var ny = (tip.y - prev.y) / dist
+    // **Y con muchos puntos, la dirección del tramo final entero.** Mirando un solo punto de
+    // atrás, la punta de una flecha libre saltaba de postura en postura: el temblor y el gancho
+    // que hace la mano al soltar decidían hacia dónde miraba, y parecía que solo supiera unos
+    // cuantos ángulos (lo reportó el usuario el 12-sep-2026). Con la recta que mejor pasa por
+    // el último tramo, la punta gira seguida con la raya y queda perpendicular a su final.
+    if (pts.size > 2) direccionDelFinal(pts, position, maxOf(arrowheadSize(head) * 1.6, 30.0))?.let {
+        nx = it.x
+        ny = it.y
+    }
 
     val size = arrowheadSize(head)
     // La punta se encoge en flechas cortas: una punta de 25px en un trazo de
@@ -114,7 +166,7 @@ fun getArrowheadPoints(
     val w2 = pointRotateRads(Pt(xs, ys), Pt(tx, ty), angle * Math.PI / 180)
 
     val opposite = if (head == Arrowhead.DIAMOND || head == Arrowhead.DIAMOND_OUTLINE) {
-        val dir = atan2(ty - prev.y, tx - prev.x)
+        val dir = atan2(ny, nx)
         pointRotateRads(Pt(tx - minSize * 2, ty), Pt(tx, ty), dir)
     } else null
 

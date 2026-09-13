@@ -45,78 +45,92 @@ object DrawTheme {
     private const val ES_GRIS = 0.14
 
     /**
-     * Lo claro que se pone un color de noche: `BASE + POR_CLARIDAD × claridad de día`, entre
-     * [CLARIDAD_MINIMA] y [CLARIDAD_MAXIMA]. Un rojo puro (0,5) queda en 0,675; un granate
-     * (0,25) en 0,59; un rosa pastel (0,85) en 0,80. Es la regla del estudio de logotipos en
-     * modo oscuro (PLOS One, 2025): los oscuros suben bastante, los claros bajan un poco, y
-     * todos acaban en la franja en la que una tinta se lee sobre negro sin deslumbrar.
-     */
-    private const val CLARIDAD_BASE = 0.5
-    private const val CLARIDAD_POR_CLARIDAD = 0.35
-    private const val CLARIDAD_MINIMA = 0.55
-    private const val CLARIDAD_MAXIMA = 0.85
-
-    /**
-     * Cuánto se le sube la saturación a un color de noche. Es el **contraste simultáneo**:
-     * el mismo rojo sobre casi negro se ve más apagado que sobre blanco, y para que se
-     * perciba igual hay que darle un 15–25 % más. Antes se le *quitaba*, y por eso las
-     * tintas de noche salían pálidas.
-     */
-    private const val MAS_SATURACION = 1.15
-
-    /**
-     * El color con el que hay que pintar [argb] en modo noche.
+     * **La tinta se adapta al papel, no a un «modo noche».**
      *
-     * Con [noche] a false no toca nada: el modo día es el color tal cual.
+     * Hasta el 13-sep-2026 había un filtro de noche que aclaraba todos los colores al pintarlos
+     * sobre papel oscuro. Tenía un fallo de fondo que el usuario vio dos veces: lo que se elegía de
+     * noche se guardaba con otra claridad, y al volver al día salía casi negro. Pidió quitarlo y
+     * hacer algo mejor: que cada tinta se vea bien **sobre el papel que haya**, cambiando solo la
+     * que haga falta.
+     *
+     * La regla es la del contraste de WCAG 2.2 (1.4.11, gráficos y trazos: 3:1):
+     *
+     * - **Si la tinta ya se lee sobre ese papel, no se toca.** Un rojo vivo, un morado uva o un azul
+     *   medio se leen sobre blanco y sobre negro; cambiarlos sería estropearlos.
+     * - **Si no, se le cambia la claridad y se le deja el tono**, lo justo para llegar a 4,5:1 (el
+     *   de texto normal): el amarillo sobre blanco pasa a un ocre; el azul marino sobre negro, a un
+     *   azul claro; el morado sobre papel morado, a uno mucho más claro u oscuro.
+     * - **Un gris es tinta, y se da la vuelta**: el blanco sobre papel blanco sale negro, y al revés.
+     *
+     * Es pintura, no dibujo: el color guardado no cambia nunca, así que cambiar de papel y volver
+     * deja todo exactamente como estaba.
      */
-    fun filtrar(argb: Int, noche: Boolean): Int {
-        if (!noche) return argb
-        // **Sin `android.graphics.Color`**, a propósito: son cuatro bytes en un
-        // entero y desempaquetarlos a mano deja este filtro comprobable en la
-        // JVM. Decidir cómo se ve un color de noche es de las cosas que hay que
-        // poder comprobar sin un móvil delante.
+    fun adaptar(argb: Int, papel: Int): Int {
+        val lp = luminancia(papel)
+        if (contraste(luminancia(argb), lp) >= CONTRASTE_QUE_VALE) return argb
         val a = (argb ushr 24) and 0xFF
-        val (h, s, l) = aHsl(
-            ((argb shr 16) and 0xFF) / 255.0,
-            ((argb shr 8) and 0xFF) / 255.0,
-            (argb and 0xFF) / 255.0
-        )
-
-        // **La tinta se da la vuelta; el color solo se aclara.**
-        //
-        // El filtro de antes era el del original: invertir al 93 % y girar el
-        // tono media vuelta. Tenía dos pegas que se veían enseguida. El negro
-        // salía **gris claro** —invertir al 93 y no al 100 lo deja en 237— y a
-        // nadie le cuadra que su rotulador negro se vuelva plomo. Y los colores
-        // salían de la matriz de giro de tono, que no es una decisión sobre cómo
-        // se lee un color sobre fondo oscuro: es una fórmula.
-        //
-        // Aquí se separan los dos casos, que de verdad son dos:
-        //
-        // - **Un gris es tinta, y de noche toda tinta es clara.** El negro se dibujó
-        //   pensando en papel blanco, así que se invierte: sale blanco. Pero el blanco
-        //   **no se vuelve negro**: quien elige tinta blanca quiere tinta blanca, y sobre
-        //   un papel oscuro un trazo negro es un trazo que no está (lo reportó el usuario
-        //   el 5-sep-2026: «selecciono un trazo en blanco y sale negro»). La regla es
-        //   quedarse con la más clara de las dos: el gris oscuro se aclara y el claro se
-        //   queda como está.
-        // - **Un color es un color.** Se le respeta el tono —el rojo tiene que seguir
-        //   siendo rojo, no rosa ni naranja—, se le lleva la claridad a la franja en que se
-        //   lee sobre oscuro y se le **sube** un punto la saturación, porque sobre negro
-        //   el mismo color se percibe más apagado. Ver [MAS_SATURACION].
+        val (h, s, l) = aHsl(((argb shr 16) and 0xFF) / 255.0, ((argb shr 8) and 0xFF) / 255.0, (argb and 0xFF) / 255.0)
         val gris = s < ES_GRIS
-        val claridad = if (gris) maxOf(l, 1.0 - l)
-            else (CLARIDAD_BASE + CLARIDAD_POR_CLARIDAD * l).coerceIn(CLARIDAD_MINIMA, CLARIDAD_MAXIMA)
-        val saturacion = if (gris) s else minOf(1.0, s * MAS_SATURACION)
-
-        val (r, g, b) = deHsl(h, saturacion, claridad)
-        return (a shl 24) or
-            (redondear(r) shl 16) or
-            (redondear(g) shl 8) or
-            redondear(b)
+        // Hacia donde hay más contraste: oscurecer sobre papel claro, aclarar sobre oscuro.
+        val oscurecer = contraste(0.0, lp) >= contraste(1.0, lp)
+        fun con(claridad: Double): Int {
+            val (r, g, b) = deHsl(h, if (gris) 0.0 else s, claridad.coerceIn(0.0, 1.0))
+            return (a shl 24) or (redondear(r) shl 16) or (redondear(g) shl 8) or redondear(b)
+        }
+        // Un gris empieza en su espejo (blanco → negro); un color, en su propia claridad.
+        var claridad = if (gris) 1.0 - l else l
+        val paso = if (oscurecer) -0.02 else 0.02
+        var mejor = con(claridad)
+        while (claridad in 0.0..1.0) {
+            val c = con(claridad)
+            mejor = c
+            if (contraste(luminancia(c), lp) >= CONTRASTE_BUSCADO) return c
+            claridad += paso
+        }
+        // Un papel de gris medio no deja llegar: el extremo que más se lea.
+        return mejor
     }
 
-    /** De 0..1 a un byte, redondeando: truncar dejaba el blanco en 254. */
+    /** Lo mismo con el papel escrito en hexadecimal. */
+    fun adaptar(argb: Int, papel: String): Int = adaptar(argb, colorDe(papel))
+
+    /** El papel en entero, sin Android. */
+    fun colorDe(hex: String): Int {
+        val limpio = hex.trim().removePrefix("#")
+        val seis = when (limpio.length) {
+            3 -> limpio.map { "$it$it" }.joinToString("")
+            6, 8 -> limpio.takeLast(6)
+            else -> return 0xFFFFFFFF.toInt()
+        }
+        return (0xFF shl 24) or (seis.toLongOrNull(16)?.toInt() ?: 0xFFFFFF)
+    }
+
+    /** Luminancia relativa de WCAG. */
+    fun luminancia(argb: Int): Double {
+        fun lineal(c: Int): Double {
+            val v = c / 255.0
+            return if (v <= 0.04045) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * lineal((argb shr 16) and 0xFF) + 0.7152 * lineal((argb shr 8) and 0xFF) + 0.0722 * lineal(argb and 0xFF)
+    }
+
+    fun contraste(l1: Double, l2: Double): Double = (maxOf(l1, l2) + 0.05) / (minOf(l1, l2) + 0.05)
+
+    /** Por debajo de esto, la tinta se adapta. WCAG 1.4.11: trazos y gráficos. */
+    const val CONTRASTE_QUE_VALE = 3.0
+
+    /** Adonde se lleva la que se adapta: WCAG 1.4.3, texto normal. */
+    const val CONTRASTE_BUSCADO = 4.5
+
+    /**
+     * **Compatibilidad**: quien aún pregunta por «noche» pinta contra el papel de noche o el de día
+     * de fábrica. Lo nuevo pasa el papel de verdad ([adaptar]).
+     */
+    fun filtrar(argb: Int, noche: Boolean): Int = adaptar(argb, if (noche) PAPEL_NOCHE else PAPEL_DIA)
+
+    private val PAPEL_DIA = 0xFFFFFFFF.toInt()
+    private val PAPEL_NOCHE = 0xFF121212.toInt()
+
     private fun redondear(v: Double): Int = Math.round(v * 255).toInt().coerceIn(0, 255)
 
     /** De rojo, verde y azul a tono, saturación y claridad. Todo de 0 a 1. */
@@ -197,11 +211,29 @@ object DrawTheme {
      * matices dentro de cada una. Una rueda entera invitaría a poner el papel verde lima, que
      * es exactamente lo que nadie quiere y lo que dejaría el dibujo ilegible.
      */
+    /*
+     * **Ampliados el 13-sep-2026 con lo que dicen los estudios de papel para leer y escribir.** El
+     * blanco puro refleja más luz y cansa en sesiones largas; el crema/marfil lo prefiere la
+     * mayoría (dos de cada tres lectores en las encuestas de editoriales) y los tonos pastel
+     * suaves —amarillo pálido, menta, azul claro— bajan el deslumbramiento **sin perder contraste**
+     * con la tinta, que es la condición (Perkins School for the Blind; guías para dislexia: crema,
+     * verde y azul claros). Nada saturado: un amarillo canario deslumbra más que el blanco. De
+     * noche, además de la pizarra y el negro, un azul noche y el verde de pizarra de aula, que
+     * con tinta clara se leen igual de bien y cansan menos que el negro puro en pantallas LCD.
+     * Los valores que ya existían no cambian: un lienzo guardado sigue encontrando su papel.
+     */
     val PAPELES: List<Pair<String, String>> = listOf(
         "Blanco" to FONDO_DIA,
+        "Crema" to "#fdf6e3",
         "Hueso" to "#f5f1e8",
+        "Sepia" to "#f1e7d0",
+        "Amarillo" to "#fbf6d9",
+        "Menta" to "#e9f5ec",
+        "Azul claro" to "#e8f1fb",
         "Gris" to "#d8dade",
         "Pizarra" to FONDO_NOCHE,
+        "Azul noche" to "#14213d",
+        "Verde pizarra" to "#1f3b33",
         "Negro" to FONDO_OLED
     )
 }

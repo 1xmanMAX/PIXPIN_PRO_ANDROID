@@ -32,6 +32,7 @@ import java.util.zip.ZipOutputStream
  * | `imagenes/<id>`                 | Cada foto de los lienzos, en su formato original.       |
  * | `croquis/<id>.json`             | Cada croquis del espacio, en su JSON.                   |
  * | `notas/<id-de-hoja>.md`         | Cada nota, en Markdown.                                 |
+ * | `tablas/<id>.json`              | Cada tabla con fórmulas. Ver [TablaDeCalculo].          |
  * | `documento.pdf`                 | El PDF del proyecto, si lo hay (el limpio, sin anotar). |
  */
 object PaquetePixpin {
@@ -78,6 +79,11 @@ object PaquetePixpin {
             val fotosPuestas = HashSet<String>()
             for (hoja in proyecto.hojas) {
                 hoja.nota?.let { entrada("notas/${hoja.id}.md", it.toByteArray()) }
+                hoja.tabla?.let { id ->
+                    TablasEnDisco.de(context.filesDir).cargar(id)?.let {
+                        entrada("tablas/$id.json", TablaDeCalculo.aJson(it).toByteArray())
+                    }
+                }
                 val dibujo = hoja.dibujo ?: continue
                 val escena = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(context, dibujo)) ?: continue
                 // Las fotos, dentro y por su id; en el JSON la ruta pasa a ser ese id.
@@ -106,7 +112,8 @@ object PaquetePixpin {
         val imagenes: Map<String, ByteArray>,
         val croquis: Map<String, String>,
         val notas: Map<String, String>,
-        val pdf: ByteArray?
+        val pdf: ByteArray?,
+        val tablas: Map<String, String> = emptyMap()
     )
 
     /** Abre un paquete y devuelve lo que trae, o null si no es un `.pixpin`. */
@@ -116,6 +123,7 @@ object PaquetePixpin {
         val imagenes = HashMap<String, ByteArray>()
         val croquis = HashMap<String, String>()
         val notas = HashMap<String, String>()
+        val tablas = HashMap<String, String>()
         var pdf: ByteArray? = null
         var esPixpin = false
         ZipInputStream(archivo.inputStream().buffered()).use { zip ->
@@ -135,13 +143,15 @@ object PaquetePixpin {
                         croquis[nombre.removePrefix("croquis/").removeSuffix(".json")] = String(bytes)
                     nombre.startsWith("notas/") ->
                         notas[nombre.removePrefix("notas/").removeSuffix(".md")] = String(bytes)
+                    nombre.startsWith("tablas/") ->
+                        tablas[nombre.removePrefix("tablas/").removeSuffix(".json")] = String(bytes)
                 }
                 zip.closeEntry()
             }
         }
         val p = proyecto ?: return null
         if (!esPixpin) return null
-        Contenido(p, lienzos, imagenes, croquis, notas, pdf)
+        Contenido(p, lienzos, imagenes, croquis, notas, pdf, tablas)
     }.getOrNull()
 
     /**
@@ -182,6 +192,13 @@ object PaquetePixpin {
             val nuevo = "$id$sufijo"
             if (guardarCroquis(nuevo, json)) croquis[id] = nuevo
         }
+        val tablas = HashMap<String, String>()
+        val almacen = TablasEnDisco.de(context.filesDir)
+        for ((id, json) in contenido.tablas) {
+            val t = TablaDeCalculo.deJson(json) ?: continue
+            val nuevo = "$id$sufijo"
+            if (almacen.guardar(nuevo, t.copy(tocado = ahora))) tablas[id] = nuevo
+        }
         var pdfRuta: String? = null
         contenido.pdf?.let { bytes ->
             carpetaDeProyectos.mkdirs()
@@ -198,9 +215,11 @@ object PaquetePixpin {
             hojas = p.hojas.map { h ->
                 h.copy(
                     id = "${h.id}$sufijo",
+                    padre = h.padre?.let { "$it$sufijo" },
                     dibujo = h.dibujo?.let { lienzos[it] },
                     croquis = h.croquis?.let { croquis[it] },
-                    nota = h.nota ?: contenido.notas[h.id]
+                    nota = h.nota ?: contenido.notas[h.id],
+                    tabla = h.tabla?.let { tablas[it] }
                 )
             },
             croquis = p.croquis.mapNotNull { croquis[it] }

@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.CenterFocusStrong
@@ -803,7 +804,7 @@ private fun ActionBar(
             ToolbarButton(Icons.Filled.Edit, active = false, onClick = onAnnotate)
             ToolbarButton(Icons.Filled.ExpandMore, active = false, onClick = onScroll)
             ToolbarButton(Icons.Filled.ContentCopy, active = false, onClick = onCopy)
-            ToolbarButton(Icons.Filled.Share, active = false, onClick = onShare)
+            ToolbarButton(Icons.Filled.IosShare, active = false, onClick = onShare)
             ToolbarButton(Icons.Filled.Close, active = false, onClick = onClose)
         }
     }

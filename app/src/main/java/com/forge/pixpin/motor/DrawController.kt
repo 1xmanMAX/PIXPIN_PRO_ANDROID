@@ -194,6 +194,7 @@ class DrawController(initial: Scene = Scene()) {
         cuando: Long = 0L
     ) {
         zoomDelTrazo = zoom
+        cuandoDelToque = if (cuando > 0) cuando else System.nanoTime() / 1_000_000
         sceneAtGestureStart = scene.elements
         val threshold = margenDelDedo(zoom)
         // Solo se engancha al DIBUJAR. Al seleccionar, mover o encuadrar el
@@ -204,7 +205,28 @@ class DrawController(initial: Scene = Scene()) {
         // Una sola tabla de faenas y una sola puerta al imán. Ver [faenaDeAhora] e [imantado].
         val p = imantado(pRaw, faenaDeAhora(hayAlgoEnLaMano = true), zoom)
 
+        // **El icono de enlace de una zona se toca con cualquier herramienta**: abre su sublienzo.
+        enlaceBajoElDedo(pRaw, zoom)?.let { dibujo ->
+            gesture = Gesture.TocandoEnlace(dibujo, pRaw)
+            return
+        }
+
         when (tool) {
+            Tool.ZONA -> {
+                // **Una copia de zona se arrastra sin cambiar de herramienta**, y se pueden sacar
+                // varias seguidas: la Zona se queda puesta (lo pidió el usuario el 13-sep-2026).
+                val copia = getElementAtPosition(editables, p, threshold, scene.vista)
+                    ?.takeIf { e -> e.groupIds.any { it.startsWith(GRUPO_DE_ZONA) } }
+                if (copia != null) {
+                    selectedIds = getElementsInGroupOf(editables, copia).map { it.id }.toSet()
+                    gesture = Gesture.Moving(p, selectedElements())
+                } else {
+                    selectedIds = emptySet()
+                    selectionBox = Bounds(p.x, p.y, p.x, p.y)
+                    gesture = Gesture.Zonando(p)
+                }
+            }
+
             // **El punto de partida se guarda en coordenadas de PANTALLA.** En
             // escena no vale: la conversión depende del desplazamiento, que es
             // justo lo que este gesto cambia. Ver [Gesture.Panning].
@@ -722,10 +744,24 @@ class DrawController(initial: Scene = Scene()) {
             excluir = enCurso
         )
 
+        // **Un instrumento se mueve manteniendo pulsado** (plano, recta, espacio). Tocar y
+        // arrastrar sin esperar abre el rectángulo de seleccionar, como en el vacío.
+        (gesture as? Gesture.EsperandoInstrumento)?.let { g ->
+            val ahora = if (cuando > 0) cuando else System.nanoTime() / 1_000_000
+            val lejos = kotlin.math.hypot(pRaw.x - g.startPointer.x, pRaw.y - g.startPointer.y) * zoom > TEMBLOR_DEL_DEDO
+            gesture = when {
+                ahora - g.desde >= ESPERA_PARA_MOVER_UN_INSTRUMENTO -> Gesture.Moving(g.startPointer, g.originals)
+                lejos -> { selectedIds = emptySet(); Gesture.BoxSelecting(g.startPointer, BoxSelectionMode.CONTAIN) }
+                else -> g
+            }
+        }
+
         when (val g = gesture) {
             is Gesture.None -> return
 
-            is Gesture.Panning -> {
+            is Gesture.EsperandoInstrumento -> return
+
+            is Gesture.Panning -> if (!vistaFija) {
                 val v = g.startViewport
                 // El dedo llega en coordenadas de escena, calculadas con el
                 // desplazamiento **de ahora**. Se deshace esa conversión con el
@@ -779,6 +815,13 @@ class DrawController(initial: Scene = Scene()) {
                 g.points += p
                 lassoPath = g.points.toList()
             }
+
+            is Gesture.Zonando -> selectionBox = Bounds(
+                minOf(g.origen.x, p.x), minOf(g.origen.y, p.y),
+                maxOf(g.origen.x, p.x), maxOf(g.origen.y, p.y)
+            )
+
+            is Gesture.TocandoEnlace -> {}
 
             is Gesture.BoxSelecting -> {
                 val b = Bounds(
@@ -1107,6 +1150,16 @@ class DrawController(initial: Scene = Scene()) {
 
             is Gesture.BoxSelecting -> selectionBox = null
 
+            is Gesture.Zonando -> {
+                val b = selectionBox
+                selectionBox = null
+                val minimo = TAMANO_MINIMO_DE_ZONA / zoom.coerceAtLeast(0.0001)
+                if (b != null && b.width >= minimo && b.height >= minimo) alSoltarLaZona?.invoke(b)
+            }
+
+            is Gesture.TocandoEnlace ->
+                if (kotlin.math.hypot(p.x - g.donde.x, p.y - g.donde.y) * zoom < TEMBLOR_DEL_DEDO * 2) alTocarEnlace?.invoke(g.dibujo)
+
             is Gesture.Creating -> finishCreating(g.elementId, zoom)
 
             // Se levanta el dedo de la huella: la caja queda **pendiente de
@@ -1382,6 +1435,13 @@ class DrawController(initial: Scene = Scene()) {
     /** Dónde arrancó el trazo que se está enderezando. */
     private var arranqueDelTrazo: Pt? = null
 
+    /**
+     * El dedo trazó una «L» y se paró: lo que se lleva es un rectángulo de la esquina donde
+     * empezó a la que marca el dedo. Ver [GestoDeRectangulo].
+     */
+    var rectangulandoSolo = false
+        private set
+
     /** Desde cuándo el dedo no se mueve, y desde dónde —en pantalla—. */
     private var quietoDesde = 0L
     private var quietoEn: Pt? = null
@@ -1390,6 +1450,7 @@ class DrawController(initial: Scene = Scene()) {
     private fun olvidarElDedoParado() {
         enderezandoSolo = false
         redondeandoSolo = false
+        rectangulandoSolo = false
         centroDelCompas = null
         arranqueDelTrazo = null
         quietoEn = null
@@ -1404,7 +1465,7 @@ class DrawController(initial: Scene = Scene()) {
      * porque sí. Ver [DrawCanvas].
      */
     fun latido(cuando: Long): Boolean {
-        if (enderezandoSolo || redondeandoSolo) return false
+        if (enderezandoSolo || redondeandoSolo || rectangulandoSolo) return false
         val g = gesture as? Gesture.Creating ?: return false
         val e = scene.byId(g.elementId)?.takeIf { it.isFreeDraw } ?: return false
         if (quietoEn == null || cuando - quietoDesde < ESPERA_PARA_LA_RECTA) return false
@@ -1443,6 +1504,11 @@ class DrawController(initial: Scene = Scene()) {
             centroDelCompas = enSuSitio
             redondeandoSolo = true
             replace(comoUnOvalo(e, enSuSitio, puntaEnSuSitio))
+        } else if (GestoDeRectangulo.esUnaEle(puntos, z)) {
+            // **Una «L»: un rectángulo** de la esquina de salida a la del dedo. Ver
+            // [GestoDeRectangulo].
+            rectangulandoSolo = true
+            replace(comoUnRectangulo(e, enSuSitio, puntaEnSuSitio))
         } else {
             enderezandoSolo = true
             replace(comoUnaRaya(e, enSuSitio, puntaEnSuSitio))
@@ -1499,6 +1565,25 @@ class DrawController(initial: Scene = Scene()) {
             fillStyle = scene.style.fillStyle,
             roundness = null
         )
+    }
+
+    /**
+     * **Y el rectángulo es un rectángulo de verdad**, el mismo que deja su herramienta —con su
+     * redondeo, su relleno y su trama del estilo—, de la esquina [a] a la esquina [b]. Con el
+     * segundo dedo puesto (figura perfecta, [keepAspectRatio]) sale cuadrado.
+     */
+    private fun comoUnRectangulo(e: Element, a: Pt, b: Pt): Element {
+        var bx = b.x
+        var by = b.y
+        if (keepAspectRatio) {
+            val lado = maxOf(kotlin.math.abs(b.x - a.x), kotlin.math.abs(b.y - a.y))
+            bx = a.x + (if (b.x >= a.x) lado else -lado)
+            by = a.y + (if (b.y >= a.y) lado else -lado)
+        }
+        return newElement(
+            ElementType.RECTANGLE, minOf(a.x, bx), minOf(a.y, by), scene.style,
+            width = kotlin.math.abs(bx - a.x), height = kotlin.math.abs(by - a.y)
+        ).copy(id = e.id, seed = e.seed, reference = e.reference)
     }
 
     /** El aumento del último toque, para medir en pantalla lo que llega en escena. */
@@ -2024,6 +2109,8 @@ class DrawController(initial: Scene = Scene()) {
             // la mano. Va antes que los dos gestos, que es lo que los desactiva.
             tool == Tool.FLECHA_LIBRE -> e.withPoint(p)
 
+            rectangulandoSolo -> arranqueDelTrazo?.let { comoUnRectangulo(e, it, p) } ?: e
+
             redondeandoSolo -> centroDelCompas?.let { comoUnOvalo(e, it, p) } ?: e
 
             enderezandoSolo -> arranqueDelTrazo?.let { comoUnaRaya(e, it, p) } ?: e
@@ -2243,6 +2330,62 @@ class DrawController(initial: Scene = Scene()) {
     // Selección
     // ---------------------------------------------------------------------
 
+    /** **La vista clavada**: la mano no desplaza. Lo pone el lienzo. Ver `DrawCanvas.vistaFija`. */
+    var vistaFija = false
+
+    /** La hora del último toque, para saber cuánto lleva el dedo quieto. */
+    private var cuandoDelToque = 0L
+
+    /** Se suelta el rectángulo de la herramienta Zona: la pantalla hace la foto. */
+    var alSoltarLaZona: ((Bounds) -> Unit)? = null
+
+    /** Se toca el icono de enlace de una zona: la pantalla abre su sublienzo. */
+    var alTocarEnlace: ((String) -> Unit)? = null
+
+    /** El dibujo al que lleva el icono de enlace bajo [p], si lo hay. El icono va en la esquina de arriba a la derecha. */
+    fun enlaceBajoElDedo(p: Pt, zoom: Double): String? {
+        val radio = RADIO_DEL_ICONO_DE_ENLACE * 1.4 / zoom.coerceAtLeast(0.0001)
+        return scene.elements.lastOrNull { e ->
+            if (e.isDeleted || e.enlace == null) return@lastOrNull false
+            val b = getElementBounds(e)
+            kotlin.math.hypot(p.x - b.x2, p.y - b.y1) <= radio
+        }?.enlace
+    }
+
+    /**
+     * **Pone la copia de una zona**: la foto y un marco fino alrededor, agrupados para que se muevan
+     * juntos, encima de todo y un poco corridos de su sitio. **No cambia de herramienta**: con la Zona
+     * puesta se saca otra, o se arrastra esta. [colorDelMarco] contrasta con el fondo.
+     */
+    fun ponerCopiaDeZona(file: SceneFile, b: Bounds, desplazamiento: Double, colorDelMarco: String) {
+        val before = scene.elements
+        val grupo = GRUPO_DE_ZONA + randomId()
+        val x = b.x1 + desplazamiento
+        val y = b.y1 + desplazamiento
+        val foto = newImageElement(file.id, x, y, b.width, b.height, scene.style).copy(groupIds = listOf(grupo))
+        val marco = newElement(ElementType.RECTANGLE, x, y, scene.style, b.width, b.height).copy(
+            strokeColor = colorDelMarco, backgroundColor = Element.TRANSPARENT,
+            strokeStyle = StrokeStyle.SOLID, strokeWidth = 2.0, roughness = 0, groupIds = listOf(grupo)
+        )
+        scene = scene.copy(elements = scene.elements + foto + marco, files = scene.files + (file.id to file))
+        selectedIds = setOf(foto.id, marco.id)
+        anotar(before)
+    }
+
+    /**
+     * **Deja la marca de una zona mandada al chat**: un rectángulo discontinuo del tamaño de la
+     * zona, con el enlace a su sublienzo. Va al historial, así que se deshace como cualquier trazo.
+     */
+    fun marcarZona(b: Bounds, dibujo: String) {
+        val before = scene.elements
+        val marca = newElement(ElementType.RECTANGLE, b.x1, b.y1, scene.style, b.width, b.height).copy(
+            strokeColor = COLOR_DE_LA_ZONA, backgroundColor = Element.TRANSPARENT,
+            strokeStyle = StrokeStyle.DASHED, strokeWidth = 2.0, roughness = 0, enlace = dibujo
+        )
+        scene = scene.copy(elements = scene.elements + marca)
+        anotar(before)
+    }
+
     private fun beginSelectionGesture(p: Pt, threshold: Double, zoom: Double) {
         // 0. ¿Un clavo? **Antes que nada.** Un clavo y un tirador en el mismo
         //    sitio son dos reglas peleándose por el mismo toque, y hasta ahora
@@ -2415,7 +2558,11 @@ class DrawController(initial: Scene = Scene()) {
             // el clavo es limitar a la propia figura —con uno solo puede girar,
             // con dos no puede nada—, y para mover el conjunto se mueve el
             // clavo. Ver [Libertad].
-            gesture = Gesture.Moving(p, selectedElements())
+            // **Las tres figuras de la barra no se mueven de refilón** (lo pidió el usuario el
+            // 13-sep-2026): son la base de un ejercicio. Tocarlas las selecciona; moverlas pide
+            // dejar el dedo quieto un momento encima. Con candado, ni eso.
+            gesture = if (hit.esInstrumento) Gesture.EsperandoInstrumento(p, cuandoDelToque, selectedElements())
+            else Gesture.Moving(p, selectedElements())
             return
         }
 
@@ -3301,6 +3448,15 @@ private sealed interface Gesture {
     data class Creating(val elementId: String) : Gesture
     data class Moving(val startPointer: Pt, val originals: List<Element>) : Gesture
 
+    /** Arrastrando el rectángulo de la herramienta Zona. */
+    data class Zonando(val origen: Pt) : Gesture
+
+    /** El dedo sobre el icono de enlace de una zona: al levantarlo sin moverse, se abre. */
+    data class TocandoEnlace(val dibujo: String, val donde: Pt) : Gesture
+
+    /** Un instrumento tocado, esperando a ver si el dedo se queda quieto para moverlo. */
+    data class EsperandoInstrumento(val startPointer: Pt, val desde: Long, val originals: List<Element>) : Gesture
+
     /**
      * La letra de un punto, dando vueltas alrededor de él.
      *
@@ -3455,6 +3611,9 @@ private sealed interface Gesture {
  */
 const val ESPERA_PARA_LA_RECTA = 550L
 
+/** Lo que hay que dejar el dedo quieto sobre un instrumento (plano, recta, espacio) para moverlo. */
+const val ESPERA_PARA_MOVER_UN_INSTRUMENTO = 450L
+
 /**
  * Cuánto puede temblar el dedo, en píxeles de pantalla, sin dejar de estar parado.
  *
@@ -3480,3 +3639,15 @@ const val LO_QUE_ES_UN_TOQUE = 14.0
  * número que en el croquis en el espacio, porque es el mismo dedo.
  */
 const val RADIO_DE_LA_BOLITA = 30.0
+
+/** Lo mínimo que tiene que medir en pantalla una zona para que cuente, y no sea un toque. */
+const val TAMANO_MINIMO_DE_ZONA = 24.0
+
+/** El radio en pantalla del icono de enlace de una zona. Ver [DrawController.enlaceBajoElDedo]. */
+const val RADIO_DEL_ICONO_DE_ENLACE = 14.0
+
+/** El azul de la marca de una zona mandada al chat. */
+const val COLOR_DE_LA_ZONA = "#1971c2"
+
+/** El prefijo del grupo de una copia de zona (la foto y su marco). Ver [DrawController.ponerCopiaDeZona]. */
+const val GRUPO_DE_ZONA = "zona-"

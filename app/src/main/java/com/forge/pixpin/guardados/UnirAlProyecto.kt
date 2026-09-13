@@ -29,6 +29,7 @@ import java.io.File
  * - Un PDF → el documento del proyecto si aún no tiene; si ya tiene, cada página como una
  *   hoja de lienzo con la página de fondo, que es lo único que cabe en un proyecto de un
  *   solo documento.
+ * - Un Excel, ODS o CSV → una tabla por hoja. Ver [LibroDelChat].
  *
  * Lo demás —voz, mini-apps, archivos de otro tipo— no tiene hoja en la que vivir y se deja
  * donde está. Devuelve cuántas hojas se añadieron.
@@ -44,8 +45,9 @@ object UnirAlProyecto {
     fun sePuedeUnir(m: Mensaje): Boolean = when (m.clase) {
         Clase.IMAGEN -> m.ruta != null || m.referencia != null
         Clase.DIBUJO -> m.referencia != null
+        Clase.TABLA -> m.referencia != null
         Clase.NOTA -> m.texto.isNotBlank()
-        Clase.ARCHIVO -> m.ruta != null && (esPdf(m) || esMarkdown(m))
+        Clase.ARCHIVO -> m.ruta != null && (esPdf(m) || esMarkdown(m) || LibroDelChat.esLibro(m))
         else -> false
     }
 
@@ -57,6 +59,85 @@ object UnirAlProyecto {
      */
     fun seUneSolo(m: Mensaje): Boolean =
         sePuedeUnir(m) && (m.clase == Clase.IMAGEN || m.clase == Clase.ARCHIVO)
+
+    /**
+     * **Si este mensaje del chat de un proyecto señala algo que ya no está en el proyecto**: se
+     * quitó la hoja, pero el mensaje sigue. Es lo que enseña el punto rojo y lo que ofrece
+     * «Volver a añadir al proyecto» (lo pidió el usuario el 11-sep-2026).
+     */
+    fun sePuedeDevolver(m: Mensaje, proyectos: List<Proyecto>): Boolean {
+        val p = proyectos.firstOrNull { it.id == m.proyecto } ?: return false
+        val ref = m.referencia
+        return when (m.clase) {
+            Clase.DIBUJO -> ref != null && p.hojas.none { it.dibujo == ref }
+            Clase.TABLA -> ref != null && p.hojas.none { it.tabla == ref }
+            Clase.CROQUIS -> ref != null && ref !in p.croquis
+            Clase.NOTA -> ref != null && m.texto.isNotBlank() && p.hojas.none { it.id == ref }
+            Clase.IMAGEN, Clase.ARCHIVO -> m.unido && sePuedeUnir(m) &&
+                p.hojas.none { it.deMensaje == m.id || (m.clase == Clase.IMAGEN && it.dibujo == m.dibujoDeLaFoto) }
+            else -> false
+        }
+    }
+
+    /**
+     * **Lo devuelve al proyecto como estaba**: la misma hoja, apuntando al mismo dibujo, tabla,
+     * nota o croquis —no una copia—, así que lo que se hizo mientras estuvo fuera sigue ahí.
+     * Las fotos y los archivos vuelven por el camino de siempre ([unir]). Devuelve cuántas hojas.
+     */
+    fun devolver(context: Context, proyectos: ProyectosRepository, m: Mensaje, ahora: Long): Int {
+        val p = proyectos.porId(m.proyecto) ?: return 0
+        val ref = m.referencia
+        val nombre = m.nombre.ifBlank { primeraLinea(m.texto) }
+        when (m.clase) {
+            Clase.DIBUJO -> proyectos.conHoja(p, Hoja(id = "hoja-$ahora", nombre = nombre, dibujo = ref ?: return 0), ahora)
+            Clase.TABLA -> proyectos.conHoja(p, Hoja(id = "hoja-$ahora", nombre = nombre, tabla = ref ?: return 0), ahora)
+            // Con el mismo identificador de hoja: así el mensaje vuelve a ser el de esa nota.
+            Clase.NOTA -> proyectos.conHoja(p, Hoja(id = ref ?: return 0, nombre = nombre, nota = m.texto), ahora)
+            Clase.CROQUIS -> proyectos.guardar(Proyectos.conCroquis(p, ref ?: return 0, ahora))
+            Clase.IMAGEN, Clase.ARCHIVO -> return unir(context, proyectos, p.id, listOf(m), ahora)
+            else -> return 0
+        }
+        return 1
+    }
+
+    /**
+     * **El proyecto sin lo que eran estos mensajes.** Borrar del chat es borrar del proyecto:
+     * el chat es quien manda (lo pidió el usuario el 12-sep-2026). Al revés no: quitar una hoja
+     * del proyecto deja el mensaje, que es lo que permite devolverla ([devolver]).
+     *
+     * Solo cuenta lo que ese mensaje **es**: las hojas que salieron de él ([Hoja.deMensaje]) y,
+     * en el chat del propio proyecto, el dibujo, la tabla, la nota o el croquis que señala. Un
+     * dibujo del proyecto adjuntado a otro chat no es esa hoja: borrarlo allí no la toca.
+     * Devuelve el proyecto nuevo y cuántas cosas se quitaron.
+     */
+    fun sinLoDeLosMensajes(p: Proyecto, borrados: List<Mensaje>, ahora: Long): Pair<Proyecto, Int> {
+        val ids = borrados.map { it.id }.toSet()
+        val suyos = borrados.filter { it.proyecto == p.id }
+        fun ligada(h: Hoja): Boolean = h.deMensaje in ids || suyos.any { m ->
+            val ref = m.referencia
+            when (m.clase) {
+                Clase.DIBUJO -> ref != null && h.dibujo == ref
+                Clase.TABLA -> ref != null && h.tabla == ref
+                Clase.NOTA -> ref != null && h.id == ref
+                Clase.IMAGEN -> h.dibujo == m.dibujoDeLaFoto
+                else -> false
+            }
+        }
+        val hojas = p.hojas.filterNot(::ligada)
+        val croquis = p.croquis.filterNot { c -> suyos.any { it.clase == Clase.CROQUIS && it.referencia == c } }
+        val quitadas = (p.hojas.size - hojas.size) + (p.croquis.size - croquis.size)
+        return if (quitadas == 0) p to 0 else p.copy(hojas = hojas, croquis = croquis, tocado = ahora) to quitadas
+    }
+
+    /** Aplica [sinLoDeLosMensajes] a todos los proyectos. Devuelve cuántas cosas se quitaron. */
+    fun quitarDeLosProyectos(proyectos: ProyectosRepository, borrados: List<Mensaje>, ahora: Long): Int {
+        var total = 0
+        for (p in proyectos.proyectos.value) {
+            val (nuevo, cuantas) = sinLoDeLosMensajes(p, borrados, ahora)
+            if (cuantas > 0) { proyectos.guardar(nuevo); total += cuantas }
+        }
+        return total
+    }
 
     fun unir(context: Context, proyectos: ProyectosRepository, proyectoId: String, mensajes: List<Mensaje>, ahora: Long): Int {
         val antes = proyectos.porId(proyectoId)?.hojas?.size ?: return 0
@@ -83,6 +164,8 @@ object UnirAlProyecto {
         return when (m.clase) {
             Clase.NOTA -> listOf(Hoja(id = "hoja-$ahora-$n", nombre = nombre, nota = m.texto))
             Clase.DIBUJO -> listOfNotNull(copiaDelDibujo(context, m.referencia, "hoja-$ahora-$n", nombre, ahora, n))
+            // Una tabla entra **la misma**, no una copia: se trabaja en un solo sitio.
+            Clase.TABLA -> listOfNotNull(m.referencia?.let { Hoja(id = "hoja-$ahora-$n", nombre = m.nombre.ifBlank { "Tabla" }, tabla = it) })
             Clase.IMAGEN -> {
                 // **El mismo dibujo que abre el chat, no una copia.** Desde el chat la foto
                 // se abre con su apunte encima y la foto clavada al fondo; la hoja del
@@ -98,6 +181,9 @@ object UnirAlProyecto {
                     listOf(Hoja(id = "hoja-$ahora-$n", nombre = nombre, nota = texto))
                 }
                 esPdf(m) -> hojasDelPdf(context, proyectos, proyecto, File(m.ruta!!), nombre, ahora, n, m.id)
+                // **Un Excel → una tabla por hoja**, las mismas que abre el chat. Ver [LibroDelChat].
+                LibroDelChat.esLibro(m) -> runCatching { LibroDelChat.tablas(context, m) }.getOrDefault(emptyList())
+                    .mapIndexed { i, (tabla, nombreDeHoja) -> Hoja(id = "hoja-$ahora-${n + i}", nombre = nombreDeHoja, tabla = tabla) }
                 else -> emptyList()
             }
             else -> emptyList()
@@ -154,7 +240,7 @@ object UnirAlProyecto {
      * chat aún no lo había abierto, lo crea **como lo crearía el editor**: la foto a su
      * tamaño, al fondo y clavada. Ver `DrawEditorActivity.colocarImagenInicial` y `fijarLaFoto`.
      */
-    private fun hojaDeLaFotoDelChat(context: Context, archivo: File, mime: String, dibujo: String, id: String, nombre: String, ahora: Long, n: Int): Hoja? {
+    internal fun hojaDeLaFotoDelChat(context: Context, archivo: File, mime: String, dibujo: String, id: String, nombre: String, ahora: Long, n: Int): Hoja? {
         if (File(ExcalidrawStore.rutaDe(context, dibujo)).exists()) return Hoja(id = id, nombre = nombre, dibujo = dibujo)
         if (!archivo.exists()) return null
         val foto = ExcalidrawStore.guardarImagen(context, archivo, mime) ?: return null

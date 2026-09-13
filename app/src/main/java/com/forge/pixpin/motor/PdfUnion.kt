@@ -29,15 +29,47 @@ object PdfUnion {
     /** Tope de objetos copiados, por si un PDF roto se referencia a sí mismo sin fin. */
     private const val MAX_OBJETOS = 200_000
 
-    /** El primer archivo con las páginas del segundo detrás, o null si no se pudo. */
-    fun anadirPaginas(primero: ByteArray, segundo: ByteArray): ByteArray? = runCatching {
+    /**
+     * **Solo unas páginas de un PDF**, tal cual —vectoriales, con su texto—, en un documento
+     * nuevo. [indices] cuentan desde cero y salen en ese orden. Es lo que deja compartir la
+     * página 3 de un plano sin rasterizarla.
+     */
+    fun soloPaginas(origen: ByteArray, indices: List<Int>): ByteArray? =
+        if (indices.isEmpty()) null else anadirPaginas(enBlanco(), origen, indices)
+
+    /** Un PDF válido sin ninguna página: la base sobre la que se pegan otras. */
+    fun enBlanco(): ByteArray {
+        val objetos = listOf(
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n"
+        )
+        val cuerpo = StringBuilder("%PDF-1.4\n")
+        val posiciones = mutableListOf<Int>()
+        objetos.forEach {
+            posiciones += cuerpo.length
+            cuerpo.append(it)
+        }
+        val xref = cuerpo.length
+        cuerpo.append("xref\n0 ${objetos.size + 1}\n0000000000 65535 f \n")
+        posiciones.forEach { cuerpo.append("%010d 00000 n \n".format(it)) }
+        cuerpo.append("trailer\n<< /Size ${objetos.size + 1} /Root 1 0 R >>\n")
+            .append("startxref\n").append(xref).append("\n%%EOF\n")
+        return cuerpo.toString().toByteArray(Charsets.ISO_8859_1)
+    }
+
+    /**
+     * El primer archivo con las páginas del segundo detrás, o null si no se pudo. Con [cuales],
+     * solo esas páginas del segundo (desde cero, en ese orden).
+     */
+    fun anadirPaginas(primero: ByteArray, segundo: ByteArray, cuales: List<Int>? = null): ByteArray? = runCatching {
         val a = leerPdf(primero) ?: return null
         val b = leerPdf(segundo) ?: return null
         if (a.cifrado || b.cifrado) return null
         val raizA = a.diccDe(a.trailer.entradas["Root"]) ?: return null
         val refPaginasA = raizA.ref("Pages") ?: return null
         val paginasA = a.diccDe(refPaginasA) ?: return null
-        val paginasB = b.paginas()
+        val todasB = b.paginas()
+        val paginasB = cuales?.mapNotNull { todasB.getOrNull(it) } ?: todasB
         if (paginasB.isEmpty()) return null
 
         var siguiente = PdfEscritura.primerNumeroLibre(a)

@@ -110,6 +110,11 @@ fun DrawCanvas(
      */
     zoomBloqueado: Boolean = false,
     /**
+     * **La vista clavada** (pantalla completa, 13-sep-2026): ni se desplaza ni se amplía. Con
+     * lápiz, los dedos no hacen nada; sin lápiz, el dedo solo dibuja. Ver `DrawController.vistaFija`.
+     */
+    vistaFija: Boolean = false,
+    /**
      * Las figuras salen perfectas sin apoyar el segundo dedo.
      *
      * El gesto de los dos dedos se queda —es el bueno para un círculo suelto—,
@@ -223,6 +228,8 @@ fun DrawCanvas(
     // subirlo obliga a repintar. Convertir el controlador entero a estado de
     // Compose obligaría a copiar la escena en cada punto del lápiz.
     var tick by remember { mutableIntStateOf(0) }
+    // La mano (herramienta Mover) también respeta la vista clavada: la lleva el controlador.
+    controller.vistaFija = vistaFija
 
     /**
      * Dónde está el dedo mientras dibuja, o null si no hay nadie tocando.
@@ -313,7 +320,7 @@ fun DrawCanvas(
         // cuando arrancó —falso, siempre— y el candado no se enteraba nunca de
         // que lo habían echado. Se veía como un botón que se enciende y no hace
         // nada, que es lo peor que puede hacer un botón.
-        modifier = modifier.pointerInput(controller, zoomBloqueado, figurasPerfectas, modoLapiz) {
+        modifier = modifier.pointerInput(controller, zoomBloqueado, vistaFija, figurasPerfectas, modoLapiz) {
             awaitEachGesture {
                 val first = awaitFirstDown(requireUnconsumed = false)
                 var pointers = 1
@@ -426,8 +433,8 @@ fun DrawCanvas(
                             val estilo = controller.estiloActivo()
                             // Con la claridad de la tinta puesta, lo que se ve es lo que sale;
                             // y con un suelo, que con tinta negra el disco saldría negro.
-                            val claridad = enHsv(parseColor(estilo.strokeColor, 255))[2].coerceAtLeast(CLARIDAD_MINIMA)
-                            menu = MenuRapido.Color(centro, tonosDeLaRueda(claridad), claridad, null, null)
+                            val claridad = claridadDeLaRueda(estilo.strokeColor)
+                            menu = MenuRapido.Color(centro, tonosDeLaRueda(claridad, dark), claridad, null, null)
                             touched()
                         }
                         // Sin dedo a la vista y sin elegir nada: eso era un trazo que se
@@ -609,7 +616,7 @@ fun DrawCanvas(
                         }
                         if (activos.size > 1) {
                             val factor = if (zoomBloqueado) 1f else evento.calculateZoom()
-                            controller.setViewport(
+                            if (!vistaFija) controller.setViewport(
                                 zoomAnchored(
                                     v,
                                     factor = factor,
@@ -619,7 +626,7 @@ fun DrawCanvas(
                             )
                         } else {
                             val ahora = activos.first().position
-                            controller.setViewport(
+                            if (!vistaFija) controller.setViewport(
                                 v.copy(
                                     scrollX = v.scrollX + (ahora.x - previo.x) / v.zoom,
                                     scrollY = v.scrollY + (ahora.y - previo.y) / v.zoom
@@ -804,7 +811,7 @@ fun DrawCanvas(
                         }
                         if (zoom != 1f || event.calculatePan() != Offset.Zero) {
                             huboEncuadre = true
-                            controller.setViewport(
+                            if (!vistaFija) controller.setViewport(
                                 zoomAnchored(
                                     controller.scene.viewport,
                                     factor = zoom,
@@ -1222,7 +1229,7 @@ fun DrawCanvas(
                     drawCircle(Color.Black.copy(alpha = 0.25f), disco + sombra, m.centro)
                     drawCircle(Brush.sweepGradient(m.tonos, m.centro), disco, m.centro)
                     // El gris del centro: la viveza sale de lo lejos que está el lápiz.
-                    val gris = Color(deHsv(floatArrayOf(0f, 0f, m.claridad)))
+                    val gris = Color(DrawTheme.filtrar(deHsv(floatArrayOf(0f, 0f, m.claridad)), dark))
                     drawCircle(
                         Brush.radialGradient(listOf(gris, gris.copy(alpha = 0f)), m.centro, disco),
                         disco, m.centro
@@ -1230,7 +1237,7 @@ fun DrawCanvas(
                     val hex = m.hex
                     val punto = m.punto
                     if (hex != null && punto != null) {
-                        val tinta = Color(parseColor(hex))
+                        val tinta = Color(DrawTheme.filtrar(parseColor(hex), dark))
                         drawCircle(tinta, disco + sombra * 2.5f, m.centro, style = Stroke(sombra * 3))
                         val p = 9.dp.toPx()
                         drawCircle(tinta, p, punto)
@@ -1772,8 +1779,8 @@ private const val RADIO_EXTERIOR_DEL_ABANICO = 104
 private const val ICONO_DEL_ABANICO = 26
 
 /** El barrido de tonos de la rueda del color, a la claridad de la tinta puesta. */
-private fun tonosDeLaRueda(claridad: Float): List<Color> =
-    List(TONOS_DEL_AJUSTE + 1) { Color(deHsv(floatArrayOf(it * 360f / TONOS_DEL_AJUSTE, 1f, claridad))) }
+private fun tonosDeLaRueda(claridad: Float, noche: Boolean): List<Color> =
+    List(TONOS_DEL_AJUSTE + 1) { Color(DrawTheme.filtrar(deHsv(floatArrayOf(it * 360f / TONOS_DEL_AJUSTE, 1f, claridad)), noche)) }
 
 private const val TONOS_DEL_AJUSTE = 24
 

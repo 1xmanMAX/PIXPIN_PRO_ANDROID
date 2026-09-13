@@ -91,9 +91,21 @@ class LectorPdfActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Lector(ruta: String, nombre: String) {
-        var cuantas by remember(ruta) { mutableStateOf(-1) }
-        LaunchedEffect(ruta) { cuantas = withContext(Dispatchers.IO) { PdfDoc.pageCount(ruta) } }
+    private fun Lector(rutaPedida: String, nombre: String) {
+        // **El del proyecto, con lo anotado**, si lo que se abrió es su copia limpia (el mensaje del chat).
+        var ruta by remember(rutaPedida) { mutableStateOf(rutaPedida) }
+        var cuantas by remember(rutaPedida) { mutableStateOf(-1) }
+        // Los recortes de cada página (sublienzos mandados al chat). Ver [SublienzosDelPdf].
+        var recortes by remember(rutaPedida) { mutableStateOf<Map<Int, List<SublienzosDelPdf.Recorte>>>(emptyMap()) }
+        var abiertas by remember(rutaPedida) { mutableStateOf(emptySet<Int>()) }
+        LaunchedEffect(rutaPedida) {
+            withContext(Dispatchers.IO) {
+                val doc = runCatching { SublienzosDelPdf.documentoDe(this@LectorPdfActivity, rutaPedida) }.getOrDefault(rutaPedida)
+                val n = PdfDoc.pageCount(doc)
+                val r = runCatching { SublienzosDelPdf.de(this@LectorPdfActivity, doc) }.getOrDefault(emptyMap())
+                withContext(Dispatchers.Main) { ruta = doc; recortes = r; cuantas = n }
+            }
+        }
         // **El aumento es del documento, no de una página.** Acercarse para leer una cota y que
         // al pasar de hoja se volviera al tamaño de antes obligaría a repetir el gesto en cada
         // página; en un plano de veinte hojas, veinte veces.
@@ -128,10 +140,14 @@ class LectorPdfActivity : ComponentActivity() {
                 // dedo no se toca nada —la lista pasa hojas como siempre— y en cuanto baja el
                 // segundo, este gesto se lo queda entero. Es el mismo patrón que
                 // [com.forge.pixpin.ui.pinzaParaAmpliar] usa en la conversación.
-                .pointerInput(Unit) {
+                .pointerInput(recortes) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
                         var cogido = false
+                        // **Alejar una página con recortes la abre; acercarla, la cierra.** Solo con
+                        // el documento a su tamaño: acercado, el pellizco sigue siendo el zoom.
+                        var acumulado = 1f
+                        var decidido = false
                         while (true) {
                             val evento = awaitPointerEvent()
                             val dedos = evento.changes.count { it.pressed }
@@ -139,7 +155,22 @@ class LectorPdfActivity : ComponentActivity() {
                             if (dedos >= 2) { cogido = true; pellizcando = true }
                             if (!cogido) continue
                             val antes = zoom
-                            val ahora = (antes * evento.calculateZoom()).coerceIn(1f, 6f)
+                            val factor = evento.calculateZoom()
+                            if (antes <= 1.001f && !decidido && recortes.isNotEmpty()) {
+                                acumulado *= factor
+                                val foco = evento.calculateCentroid(useCurrent = false)
+                                val bajo = estado.layoutInfo.visibleItemsInfo.firstOrNull { foco.y >= it.offset && foco.y <= it.offset + it.size }?.index
+                                if (bajo != null && recortes[bajo]?.isNotEmpty() == true) {
+                                    if (acumulado < 0.85f && bajo !in abiertas) { abiertas = abiertas + bajo; decidido = true }
+                                    else if (acumulado > 1.18f && bajo in abiertas) { abiertas = abiertas - bajo; decidido = true }
+                                    if (decidido || bajo in abiertas || acumulado < 1f) {
+                                        evento.changes.forEach { if (it.pressed) it.consume() }
+                                        continue
+                                    }
+                                }
+                            }
+                            if (decidido) { evento.changes.forEach { if (it.pressed) it.consume() }; continue }
+                            val ahora = (antes * factor).coerceIn(1f, 6f)
                             val centro = Offset(size.width / 2f, size.height / 2f)
                             val foco = evento.calculateCentroid(useCurrent = false)
                             // **El punto entre los dedos se queda quieto.** Sin esto el
@@ -179,7 +210,9 @@ class LectorPdfActivity : ComponentActivity() {
                             translationX = desplazado.x, translationY = desplazado.y
                         )
                 ) {
-                    items((0 until cuantas).toList()) { i -> Hoja(ruta, i, zoomFirme, anchoPx) }
+                    items((0 until cuantas).toList()) { i ->
+                        Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), i in abiertas)
+                    }
                 }
             }
             if (nombre.isNotBlank()) {
@@ -211,7 +244,10 @@ class LectorPdfActivity : ComponentActivity() {
      * desplazamiento pega saltos según van llegando las hojas.
      */
     @Composable
-    private fun Hoja(ruta: String, i: Int, zoom: Float, anchoPx: Int) {
+    private fun Hoja(
+        ruta: String, i: Int, zoom: Float, anchoPx: Int,
+        suyos: List<SublienzosDelPdf.Recorte> = emptyList(), abierta: Boolean = false
+    ) {
         var mapa by remember(ruta, i) { mutableStateOf<Bitmap?>(null) }
         // A más aumento, más puntos: acercarse a una hoja ya dibujada la estiraría y se vería
         // blanda justo cuando uno se acerca para leer una cota. Por escalones, para no
@@ -240,6 +276,15 @@ class LectorPdfActivity : ComponentActivity() {
             }
         }
         val actual = mapa
+        if (suyos.isNotEmpty()) {
+            HojaConSublienzos(actual, proporcion, suyos, abierta) { r ->
+                val dibujo = r.dibujo
+                com.forge.pixpin.motor.DrawEditorActivity.abrir(
+                    this, dibujo, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo), null, desdeProyecto = r.proyecto
+                )
+            }
+            return
+        }
         Box(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
             if (actual != null) {
                 Image(

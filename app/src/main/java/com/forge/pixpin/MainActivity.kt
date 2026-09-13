@@ -1,5 +1,6 @@
 package com.forge.pixpin
 
+import androidx.compose.material.icons.filled.TableChart
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Button
@@ -392,6 +394,19 @@ fun TarjetaDeConfiguracion(
             }
 
             Spacer(Modifier.height(8.dp))
+            // **Sincronizar con los otros aparatos**, por la Wi-Fi y sin servidor. Ver
+            // [com.forge.pixpin.sincro.SincronizarActivity].
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    context.startActivity(Intent(context, com.forge.pixpin.sincro.SincronizarActivity::class.java))
+                },
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(20.dp))
+                Text("Sincronizar", modifier = Modifier.padding(start = 8.dp))
+            }
+
+            Spacer(Modifier.height(8.dp))
             // Ya no hace falta un botón de «Proyectos»: se está en ellos, a una
             // deslizada de aquí. Queda la puerta a los ajustes, que sigue siendo otra
             // pantalla porque son cuarenta interruptores y no una tarjeta.
@@ -408,6 +423,17 @@ fun TarjetaDeConfiguracion(
                     Icon(Icons.Filled.ViewInAr, contentDescription = null, Modifier.size(18.dp))
                     Text(
                         stringResource(R.string.croquis_titulo),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                // **Las tablas con fórmulas**, la otra aplicación aparte. Ver [TablaActivity].
+                TextButton(
+                    onClick = { com.forge.pixpin.tabla.TablaActivity.abrir(context) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.TableChart, contentDescription = null, Modifier.size(18.dp))
+                    Text(
+                        stringResource(R.string.tablas_titulo),
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }

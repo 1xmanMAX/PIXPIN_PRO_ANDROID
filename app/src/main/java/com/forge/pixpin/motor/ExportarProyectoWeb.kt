@@ -112,19 +112,25 @@ object ExportarProyectoWeb {
         planoDelPdf: (Int) -> String? = { null },
         croquisComoHoja: (String) -> ExportarHtml.HojaWeb? = { null },
         /** Con qué calidad viaja el audio de las notas. Ver [AudioLigero]. */
-        calidadDeAudio: String = AudioLigero.ORIGINAL
+        calidadDeAudio: String = AudioLigero.ORIGINAL,
+        /** Una tabla por su identificador. Ver [TablasEnDisco]. */
+        tablaDe: (String) -> TablaDeCalculo? = { null }
     ): List<ExportarHtml.HojaWeb> {
         // **Lo que el dibujante de SVG pide es el id del archivo, no su ruta**, y la ruta la
         // sabe la escena que lo usa: el mapa va por escena, no por proyecto.
         fun proveedorDe(escena: Scene): (String) -> Bitmap? =
             { id -> escena.files[id]?.path?.let(imagenDeRuta) }
-        val todas = HojasDelProyecto.paginas(proyecto, escenaDe)
-        val elegidas = if (marcadas.isEmpty()) todas else todas.filter { it.clave in marcadas }
+        val elegidas = if (marcadas.isEmpty()) HojasDelProyecto.paginas(proyecto, escenaDe)
+        else HojasDelProyecto.elegidas(proyecto, escenaDe, marcadas)
         val salida = ArrayList<ExportarHtml.HojaWeb>(elegidas.size + proyecto.croquis.size)
         for (p in elegidas) {
             val hoja = p.hoja
             val nombre = p.nombre.ifBlank { hoja.nombre.ifBlank { "Hoja" } }
             when {
+                // **Una tabla va con sus fórmulas**, y en el navegador sigue calculando.
+                hoja.tabla != null -> {
+                    tablaDe(hoja.tabla!!)?.let { t -> salida += ExportarHtml.HojaWeb.Tabla(nombre, t, PAPEL) }
+                }
                 // **Una nota va como texto, no como dibujo.** Es lo que la deja legible en un
                 // teléfono y buscable con la lupa del navegador.
                 hoja.nota != null -> {

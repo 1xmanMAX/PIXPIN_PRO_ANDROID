@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Highlight
+import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.HighlightAlt
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
@@ -1063,6 +1064,8 @@ val MAIN_TOOLS: List<Tool> = listOf(
  */
 val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.LASSO,
+    // La foto de una zona, para arrastrarla o mandarla al chat. Ver [Tool.ZONA].
+    Tool.ZONA,
     // La flecha libre va en el desplegable y no en la fila: es la flecha de anotar, se usa
     // menos que la recta y la fila de arriba es sitio caro. Ver [Tool.FLECHA_LIBRE].
     Tool.FLECHA_LIBRE,
@@ -1149,6 +1152,7 @@ val CAPA_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
 fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.SELECTION -> Icons.Outlined.NearMe
     Tool.LASSO -> Icons.Filled.HighlightAlt
+    Tool.ZONA -> Icons.Filled.Screenshot
     Tool.BOLITA -> Icons.Filled.Adjust
     Tool.HAND -> Icons.Filled.PanTool
     Tool.FREEDRAW -> Icons.Filled.Gesture
@@ -1186,6 +1190,7 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.PUNTO -> R.string.tool_punto
     Tool.SELECTION -> R.string.tool_selection
     Tool.LASSO -> R.string.tool_lasso
+    Tool.ZONA -> R.string.tool_zona
     Tool.BOLITA -> R.string.tool_bolita
     Tool.HAND -> R.string.tool_hand
     Tool.FREEDRAW -> R.string.tool_freedraw

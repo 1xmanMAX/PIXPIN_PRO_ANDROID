@@ -55,7 +55,8 @@ object ExportarWebDe {
                     )
                 }
             },
-            calidadDeAudio = calidadDeAudio
+            calidadDeAudio = calidadDeAudio,
+            tablaDe = { id -> com.forge.pixpin.motor.TablasEnDisco.de(contexto.filesDir).cargar(id) }
         )
     }
 

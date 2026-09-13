@@ -56,6 +56,9 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
+        // vista. Ver [com.forge.pixpin.sincro.Presencia].
+        com.forge.pixpin.sincro.Presencia.instalar(this)
         // **La tasa de refresco, en todas las ventanas y desde el primer momento.**
         //
         // Aquí y no en cada Activity porque son veinte y no tienen clase base común: de

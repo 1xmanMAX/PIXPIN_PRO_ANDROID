@@ -65,4 +65,35 @@ class PdfUnionTest {
         val roto = "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R /Encrypt 9 0 R >>".toByteArray()
         assertEquals(null, PdfUnion.anadirPaginas(a, roto))
     }
+
+    @Test
+    fun `solo unas paginas salen tal cual y en el orden pedido`() {
+        val plano = pdf(4, 200, 100, "P")
+        val trozo = PdfUnion.soloPaginas(plano, listOf(2, 0))
+        assertNotNull("no se pudo sacar", trozo)
+        val leido = leerPdf(trozo!!)!!
+        assertEquals(2, leido.paginas().size)
+        val primera = leido.resolver(leido.pagina(0)!!.entradas["Contents"]) as PdfValor.Flujo
+        assertTrue("la primera es la tercera del plano", String(primera.datos).contains("(P 3)"))
+        val segunda = leido.resolver(leido.pagina(1)!!.entradas["Contents"]) as PdfValor.Flujo
+        assertTrue(String(segunda.datos).contains("(P 1)"))
+        assertEquals(Pair(200.0, 100.0), leido.tamanoDePagina(0))
+    }
+
+    @Test
+    fun `sin paginas pedidas no sale nada`() {
+        assertEquals(null, PdfUnion.soloPaginas(pdf(2, 100, 100, "A"), emptyList()))
+    }
+
+    @Test
+    fun `un lienzo con marcos ofrece tambien el lienzo completo delante`() {
+        val marco1 = Element(id = "m1", type = ElementType.FRAME, x = 0.0, y = 0.0, width = 100.0, height = 100.0, seed = 1)
+        val marco2 = Element(id = "m2", type = ElementType.FRAME, x = 200.0, y = 0.0, width = 100.0, height = 100.0, seed = 1)
+        val escena = Scene(elements = listOf(marco1, marco2))
+        val p = Proyecto("pr", "Obra", hojas = listOf(Hoja("h1", "Planta", dibujo = "d1"), Hoja("h2", "Nota", nota = "hola")))
+        val con = HojasDelProyecto.conEntero(p) { if (it == "d1") escena else null }
+        assertEquals(listOf("h1///", "h1/m1/", "h1/m2/", "h2//").map { it.replace("///", "//") }, con.map { it.clave })
+        assertEquals(HojasDelProyecto.NOMBRE_DEL_ENTERO, con[0].nombre)
+        assertEquals(listOf("h1/m2/"), HojasDelProyecto.elegidas(p, { escena }, setOf("h1/m2/")).map { it.clave })
+    }
 }

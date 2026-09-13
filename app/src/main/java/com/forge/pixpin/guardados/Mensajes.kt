@@ -63,7 +63,13 @@ enum class Clase {
      * el buscador de la conversación, se copia y se pega en cualquier sitio, y sobrevive
      * a que la aplicación cambie por dentro. Ver `MiniApp`.
      */
-    MINIAPP
+    MINIAPP,
+
+    /** Una tabla con fórmulas, por su identificador: se abre en Tablas. Ver `ChatDeLosProyectos`. */
+    TABLA,
+
+    /** Un croquis 3D de un proyecto, por su identificador. */
+    CROQUIS
 }
 
 /**
@@ -95,7 +101,7 @@ private val EXTENSIONES_CONOCIDAS = setOf(
     "pdf", "jpg", "jpeg", "png", "webp", "gif", "heic", "bmp", "svg",
     "m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp",
     "mp4", "mkv", "mov", "webm", "txt", "md", "csv", "json", "xml", "html", "htm", "zip",
-    "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "dxf", "dwg", "pixpin", "excalidraw"
+    "doc", "docx", "xls", "xlsx", "xlsm", "tsv", "ppt", "pptx", "odt", "ods", "dxf", "dwg", "pixpin", "excalidraw"
 )
 
 /**
@@ -228,6 +234,32 @@ data class Mensaje(
     val numero: Int = 0,
 
     /**
+     * **La letra del aparato donde nació**, que junto al [numero] da su seña: `47a`. Ver
+     * [com.forge.pixpin.sincro.Sena].
+     *
+     * Nula en lo guardado antes de pertenecer a un grupo de sincronización: al crear o unirse a
+     * uno se le pone la de este aparato a todo lo que no la tenga. Lo que llega de otro aparato
+     * trae la suya y **no cambia nunca**, que es lo que permite reconocerlo en la próxima vuelta.
+     */
+    val letra: String? = null,
+
+    /**
+     * **De dónde vino, si llegó por un envío por Wi-Fi**: la seña de esa cosa entre envíos. Si la
+     * misma persona la vuelve a mandar, se sustituye este mensaje en vez de añadir otro. Ver
+     * [com.forge.pixpin.sincro.Envio.Elemento.identidad].
+     */
+    val origen: String? = null,
+
+    /** **Quién lo mandó por Wi-Fi**: «Max phone · K7Q2», el nombre y el código fijo de su aparato. */
+    val recibidoDe: String? = null,
+
+    /**
+     * **De dónde salió**, si es la zona de un lienzo mandada al chat: «PDF «Plano» → página 3». Se
+     * enseña debajo de la imagen y lleva al lienzo de origen. Ver `Tool.ZONA`.
+     */
+    val vieneDe: VieneDe? = null,
+
+    /**
      * **Cuándo hay que recordarlo**, o nada. Ver [com.forge.pixpin.pin.Recordatorios].
      *
      * Un mensaje guardado es lo que uno no quiere olvidar, y a veces lo que hace falta no es
@@ -235,6 +267,16 @@ data class Mensaje(
      * (7-sep-2026).
      */
     val recuerdaEn: Long? = null
+)
+
+/** El lienzo del que salió una zona: qué dice el vínculo y cómo volver a él. */
+@Serializable
+data class VieneDe(
+    val texto: String,
+    val dibujo: String? = null,
+    val pdf: String? = null,
+    val pagina: Int? = null,
+    val proyecto: String? = null
 )
 
 /** Un turno de una conversación: quién, y de qué milisegundo a cuál dentro del audio entero. */
@@ -255,7 +297,7 @@ fun clasesDe(seccion: Seccion): Set<Clase> = when (seccion) {
     Seccion.FOTOS -> setOf(Clase.IMAGEN)
     // Las mini-apps van con los archivos: son documentos, no conversación, y es donde
     // uno las busca cuando quiere «esa lista de la compra» y no recuerda cuándo la hizo.
-    Seccion.ARCHIVOS -> setOf(Clase.ARCHIVO, Clase.PAGINA, Clase.PROYECTO, Clase.MINIAPP)
+    Seccion.ARCHIVOS -> setOf(Clase.ARCHIVO, Clase.PAGINA, Clase.PROYECTO, Clase.MINIAPP, Clase.TABLA, Clase.CROQUIS)
     Seccion.VOZ -> setOf(Clase.VOZ)
     Seccion.DIBUJOS -> setOf(Clase.DIBUJO)
     Seccion.FIJADOS -> Clase.entries.toSet()
@@ -421,7 +463,17 @@ fun reenviado(m: Mensaje, aDondeVa: String?, ahora: Long, idNuevo: String): Mens
     proyecto = aDondeVa,
     fijado = false,
     enBuzon = false,
-    respondeA = null
+    respondeA = null,
+    // **Un número nuevo en su chat**: la seña es de la conversación de origen, y con la misma en
+    // el destino chocaría con otro mensaje al sincronizar. Lo pone [MensajesStore.anadir].
+    numero = 0,
+    letra = null,
+    // **La copia es otra rama**: no está unida al proyecto de destino ni a la hoja de origen.
+    // Una nota que venía de una hoja deja de abrir esa hoja; lo demás que apunta a un dibujo, una
+    // tabla o un croquis se duplica aparte, en [RamaDeMensaje], porque eso es trabajo de disco.
+    unido = false,
+    hojaDelTexto = null,
+    referencia = if (m.clase == Clase.NOTA) null else m.referencia
 )
 
 /** Cuánto aguanta algo en el buzón antes de irse solo. */

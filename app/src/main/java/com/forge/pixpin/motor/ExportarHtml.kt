@@ -72,6 +72,12 @@ object ExportarHtml {
          * nota dibujada, no.
          */
         class Nota(nombre: String, val html: String, fondo: String) : HojaWeb(nombre, fondo)
+        /**
+         * **Una tabla con fórmulas.** Viaja lo escrito —el JSON de [TablaDeCalculo]— y la
+         * tabla ya calculada para leerse sin guion; en el navegador sigue calculando, se edita,
+         * se pega desde Excel y se guarda. Ver [VisorTabla].
+         */
+        class Tabla(nombre: String, val tabla: TablaDeCalculo, fondo: String = "#ffffff") : HojaWeb(nombre, fondo)
     }
 
     /**
@@ -96,7 +102,19 @@ object ExportarHtml {
     fun conCalidadDeAudio(marcadas: Set<String>, calidad: String): Set<String> =
         marcadas.filterNot { it.startsWith(PREFIJO_DE_AUDIO) }.toSet() + (PREFIJO_DE_AUDIO + calidad)
 
+    /**
+     * **Si quien abre la página puede cambiar las celdas de las tablas.** Va como marca de
+     * «solo ver» y no como nombre más: los ajustes guardados antes de que existiera no la
+     * traen, y tienen que seguir dejando editar, que es lo que hacían.
+     */
+    const val TABLAS_SOLO_VER = "tablas:solo-ver"
+    fun tablasEditables(marcadas: Set<String>?): Boolean = marcadas?.contains(TABLAS_SOLO_VER) != true
+    fun conTablasEditables(marcadas: Set<String>, editables: Boolean): Set<String> =
+        if (editables) marcadas - TABLAS_SOLO_VER else marcadas + TABLAS_SOLO_VER
+
     class Opciones(
+        /** Ver [TABLAS_SOLO_VER]. */
+        val editarTablas: Boolean = true,
         val lapiz: Boolean = true,
         val resaltador: Boolean = true,
         val borrador: Boolean = true,
@@ -128,6 +146,7 @@ object ExportarHtml {
             fun de(marcadas: Set<String>?): Opciones {
                 if (marcadas == null) return Opciones()
                 return Opciones(
+                    editarTablas = tablasEditables(marcadas),
                     lapiz = "lapiz" in marcadas, resaltador = "resaltador" in marcadas,
                     borrador = "borrador" in marcadas, deshacer = "deshacer" in marcadas,
                     medir = "medir" in marcadas, capas = "capas" in marcadas,
@@ -166,12 +185,15 @@ object ExportarHtml {
         // **Una nota también se raya**, así que lleva los mismos mandos aunque no haya
         // ningún dibujo en el documento. Lo que no lleva es el visor del SVG: eso sí es de
         // los dibujos. Ver [crearNota].
-        val hayPintable = hayDibujo || hojas.any { it is HojaWeb.Nota }
+        // Una tabla también se raya: el lápiz va encima de las celdas. Ver `crearTabla`.
+        val hayPintable = hayDibujo || hojas.any { it is HojaWeb.Nota || it is HojaWeb.Tabla }
+        val hayTabla = hojas.any { it is HojaWeb.Tabla }
         val tamano = hojas.sumOf {
             when (it) {
                 is HojaWeb.Dibujo -> it.svg.length + (it.plano?.length ?: 0)
                 is HojaWeb.Espacio -> it.datos.length
                 is HojaWeb.Nota -> it.html.length
+                is HojaWeb.Tabla -> it.tabla.celdas.size * 60
             }
         }
         return buildString(tamano + 60000) {
@@ -181,7 +203,9 @@ object ExportarHtml {
             append("<meta name=\"color-scheme\" content=\"").append(if (oscuro) "dark" else "light").append("\"/>\n")
             append("<meta name=\"generator\" content=\"PixPin\"/>\n")
             append("<title>").append(escapar(titulo)).append("</title>\n")
-            append("<style>").append(ESTILO.replace("FONDO", fondo)).append("</style>\n</head>\n")
+            append("<style>").append(ESTILO.replace("FONDO", fondo))
+            if (hayTabla) append('\n').append(VisorTabla.ESTILO)
+            append("</style>\n</head>\n")
             // **El tema va con la página.** Un documento puede llevar una lámina sobre papel
             // blanco y un croquis sobre pizarra; con un solo juego de colores para todo, en
             // una de las dos la letra queda encima de su propio color. La clase la pone el
@@ -190,16 +214,33 @@ object ExportarHtml {
             // Lo que se deja coger: el visor filtra sus herramientas por esto, para que lo que
             // no tiene botón tampoco entre por el teclado.
             append(" data-herramientas=\"").append(opciones.herramientas().joinToString(" ")).append('"')
+            if (hayTabla && !opciones.editarTablas) append(" data-tabla-editable=\"0\"")
             if (oscuro) append(" class=\"oscuro\"")
             append(">\n")
+            // **El índice, a la vista y con enlaces** (lo pidió el usuario el 13-sep-2026): cada
+            // hoja con su nombre, y tocarla lleva a ella. Plegable, y plegado en un teléfono.
+            if (hojas.size > 1 && opciones.paginas) {
+                // El título es **la hoja que se está mirando** («Canvas 8»); al abrirlo, todas.
+                append("<details id=\"indice-fijo\" open><summary><span class=\"titulo\">")
+                append(escapar(hojas[0].nombre.ifBlank { "Hoja 1" }))
+                append("</span><span class=\"cuenta\">1 / ").append(hojas.size).append("</span></summary><nav>")
+                for ((i, hoja) in hojas.withIndex()) {
+                    append("<a href=\"#hoja-").append(i + 1).append("\" data-i=\"").append(i).append("\">")
+                    append("<b>").append(i + 1).append("</b> ")
+                    append(escapar(hoja.nombre.ifBlank { "Hoja ${i + 1}" })).append("</a>")
+                }
+                append("</nav></details>\n")
+            }
             append("<div id=\"lienzo\">\n")
             for ((i, hoja) in hojas.withIndex()) {
-                append("<div class=\"hoja\" data-tipo=\"")
+                // **Su dirección**: `#hoja-3` abre la tercera. Ver el índice de arriba.
+                append("<div class=\"hoja\" id=\"hoja-").append(i + 1).append("\" data-tipo=\"")
                 append(
                     when (hoja) {
                         is HojaWeb.Espacio -> "espacio"
                         is HojaWeb.Nota -> "nota"
                         is HojaWeb.Dibujo -> "dibujo"
+                        is HojaWeb.Tabla -> "tabla"
                     }
                 )
                 append("\" data-fondo=\"").append(escapar(hoja.fondo))
@@ -237,15 +278,29 @@ object ExportarHtml {
                         append("<article class=\"nota\">").append(hoja.html).append("</article>")
                             .append("\n<svg class=\"tinta\"><g id=\"")
                             .append(ID_DEL_CROQUIS).append("\"></g></svg>")
+                    // La barra de fórmula arriba, la tabla ya calculada en medio y lo escrito
+                    // al final. Guardar reescribe las dos últimas: ver `paginaAnotada`.
+                    is HojaWeb.Tabla -> {
+                        append("<div class=\"tabla-fx\"><span class=\"tabla-dir\">A1</span>")
+                        append("<input class=\"tabla-fx-in\" type=\"text\" spellcheck=\"false\" autocomplete=\"off\" ")
+                        append("autocapitalize=\"off\" aria-label=\"Contenido de la celda\" placeholder=\"Valor o =SUMA(A1:A3)\"/></div>\n")
+                        // La tinta va dentro de la caja que se desplaza, así se mueve con las celdas;
+                        // su grupo es uno más de los que reescribe guardar.
+                        append("<div class=\"tabla-caja\" tabindex=\"0\"><svg class=\"tinta\"><g class=\"origen\"><g id=\"")
+                        append(ID_DEL_CROQUIS).append("\"></g></g></svg>")
+                        append(VisorTabla.estatica(hoja.tabla)).append("</div>\n")
+                        append("<script type=\"application/json\" class=\"tabla\">").append(VisorTabla.json(hoja.tabla)).append("</script>")
+                    }
                 }
                 append("\n</div>\n")
             }
             append("</div>\n")
-            append(barra(hojas.size > 1 && opciones.paginas, hayPintable, hayEspacio, hayPlano && opciones.capas, opciones))
+            append(barra(hojas.size > 1 && opciones.paginas, hayPintable, hayEspacio, hayPlano && opciones.capas, opciones, hayTabla))
             append("<script>")
             if (hayEspacio) append(VisorEspacio.JS)
             if (hayPlano) { append(VisorPlano.INFLAR); append(VisorPlano.JS) }
             if (hayDibujo) append(VISOR_DIBUJO)
+            if (hayTabla) { append(VisorTabla.CALCULO); append(VisorTabla.JS) }
             append(SHELL)
             append("</script>\n</body>\n</html>\n")
         }
@@ -310,7 +365,8 @@ object ExportarHtml {
         dibujo: Boolean,
         espacio: Boolean,
         plano: Boolean = false,
-        o: Opciones = Opciones()
+        o: Opciones = Opciones(),
+        tabla: Boolean = false
     ): String = buildString {
         append("<div id=\"estado\" role=\"status\" aria-live=\"polite\"></div>\n")
         append("<div id=\"cajon\" hidden></div>\n")
@@ -340,13 +396,8 @@ object ExportarHtml {
             append("</div>\n")
         }
         append("<div id=\"barra\" role=\"toolbar\">")
-        if (varias) {
-            append("<div class=\"grupo\">")
-            append(boton("anterior", "Página anterior", "M15 5l-7 7 7 7"))
-            append(boton("indice", "Páginas", "M4 6h16M4 12h16M4 18h10"))
-            append(boton("siguiente", "Página siguiente", "M9 5l7 7-7 7"))
-            append("</div>")
-        }
+        // Pasar de página ya no va en la barra: lo hace el índice de arriba, que dice en qué hoja
+        // se está y lleva a cualquiera (lo pidió el usuario el 13-sep-2026; dos sitios eran redundancia).
         if (dibujo && (o.lapiz || o.resaltador || o.borrador)) {
             append("<div class=\"grupo solo-dibujo\">")
             append(boton("mano", "Mover (V)", "M8 13V5a2 2 0 1 1 4 0v6M12 11V4a2 2 0 1 1 4 0v7M16 12V6a2 2 0 1 1 4 0v8a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3.4L3.5 13a2 2 0 0 1 3.4-2.1L8 13", "activo"))
@@ -387,6 +438,28 @@ object ExportarHtml {
             // Lo que trae de serie el visor de la galería de Feather (6-sep-2026).
             append(boton("escena", "Escena (suelo, niebla, efectos)", "M4 7h10M18 7h2M4 12h3M11 12h9M4 17h13M21 17h-1M14 5v4M7 10v4M17 15v4"))
             append(boton("guia", "Guía de gestos (?)", "M9 9a3 3 0 1 1 4.5 2.6c-1 .6-1.5 1.2-1.5 2.4M12 17.5v.5M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"))
+            append("</div>")
+        }
+        if (tabla) {
+            // **La tabla**: deshacer, negrita, Σ, y el portapapeles con botón, que en un
+            // teléfono no hay Ctrl+C. Y el CSV, que abre cualquier hoja de cálculo.
+            // Deshacer: si ya está el de la tinta, ese mismo deshace también las celdas.
+            val deshacerComun = dibujo && o.deshacer && (o.lapiz || o.resaltador || o.borrador)
+            val primeros = StringBuilder()
+            if (o.deshacer && !deshacerComun) {
+                primeros.append(boton("t-deshacer", "Deshacer (Ctrl+Z)", "M9 14L4 9l5-5M4 9h9a6 6 0 0 1 0 12h-3"))
+                primeros.append(boton("t-rehacer", "Rehacer (Ctrl+Y)", "M15 14l5-5-5-5M20 9h-9a6 6 0 0 0 0 12h3"))
+            }
+            // En solo lectura no se ofrece nada que cambie celdas. Ver [TABLAS_SOLO_VER].
+            if (o.editarTablas) {
+                primeros.append(boton("t-negrita", "Negrita (Ctrl+B)", "M7 5h6a4 4 0 0 1 0 8H7zM7 13h7a4 4 0 0 1 0 8H7z"))
+                primeros.append(boton("t-suma", "Autosuma", "M18 5H6l6 7-6 7h12"))
+            }
+            if (primeros.isNotEmpty()) append("<div class=\"grupo solo-tabla\">").append(primeros).append("</div>")
+            append("<div class=\"grupo solo-tabla\">")
+            append(boton("t-copiar", "Copiar (Ctrl+C)", "M9 9h11v11H9zM5 15H4V4h11v1"))
+            if (o.editarTablas) append(boton("t-pegar", "Pegar (Ctrl+V)", "M9 3h6v4H9zM7 5H5v16h14V5h-2M9 12h6M9 16h4"))
+            append(boton("t-csv", "Bajar CSV", "M12 4v11M7 10l5 5 5-5M5 20h14"))
             append("</div>")
         }
         if (plano) {
@@ -578,6 +651,22 @@ object ExportarHtml {
         .mini button{flex:1;padding:7px 10px;border-radius:9px;border:1px solid var(--filete);
           background:transparent;color:inherit;cursor:pointer;font:inherit}
         .mini button:hover{background:var(--filete)}
+        #indice-fijo{position:fixed;top:12px;left:12px;z-index:5;max-width:240px;max-height:70vh;overflow:auto;
+          padding:4px 6px;border-radius:14px;background:var(--vidrio);border:1px solid var(--filete);
+          box-shadow:0 6px 24px rgba(0,0,0,.12);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+        #indice-fijo summary{cursor:pointer;font-weight:600;padding:6px 8px;list-style:none;white-space:nowrap;
+          display:flex;align-items:center;gap:10px;max-width:228px}
+        #indice-fijo summary .titulo{overflow:hidden;text-overflow:ellipsis}
+        #indice-fijo summary .cuenta{opacity:.55;font-weight:500;font-size:12px;flex:none}
+        #indice-fijo summary::after{content:"▾";opacity:.6;flex:none}
+        #indice-fijo[open] summary::after{content:"▴"}
+        #indice-fijo summary::-webkit-details-marker{display:none}
+        #indice-fijo a{display:block;padding:6px 8px;border-radius:9px;color:inherit;text-decoration:none;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        #indice-fijo a b{opacity:.5;font-weight:600;margin-right:4px}
+        #indice-fijo a:hover{background:var(--filete)}
+        #indice-fijo a.activo{background:#e03131;color:#fff}
+        #indice-fijo a.activo b{opacity:.8}
         #pizarra:not(.varias) #anterior,#pizarra:not(.varias) #indice,
         #pizarra:not(.varias) #siguiente{display:none}
         @media (max-width:600px){
@@ -1182,6 +1271,7 @@ var pagina=hojas.map(function(d){
     return crearEspacio(d, JSON.parse(t.textContent), api);
   }
   if(d.dataset.tipo==='nota') return crearNota(d);
+  if(d.dataset.tipo==='tabla') return crearTabla(d, api);
   return crearDibujo(d, api);
 });
 // **Una nota no se pinta: la compone el navegador**, y de ahí le viene lo que un dibujo no
@@ -1313,9 +1403,11 @@ function crearNota(d){
 function grupoDe(i){ return pagina[i]&&pagina[i].tipo==='dibujo'?pagina[i]:null; }
 
 function refrescar(){
-  var d=id('deshacer'), r=id('rehacer');
+  var d=id('deshacer'), r=id('rehacer'), td=id('t-deshacer'), tr=id('t-rehacer');
   if(d) d.disabled=!(actual&&actual.puedeDeshacer&&actual.puedeDeshacer());
   if(r) r.disabled=!(actual&&actual.puedeRehacer&&actual.puedeRehacer());
+  if(td) td.disabled=!(actual&&actual.puedeDeshacer&&actual.puedeDeshacer());
+  if(tr) tr.disabled=!(actual&&actual.puedeRehacer&&actual.puedeRehacer());
 }
 function marcarHerramienta(){
   ['mano','lapiz','marcador','goma','girar','mover','medir'].forEach(function(n){
@@ -1341,9 +1433,13 @@ function irA(i){
   document.body.classList.toggle('oscuro',hojas[i].dataset.oscuro==='1');
   document.body.classList.toggle('enElEspacio',hojas[i].dataset.tipo==='espacio');
   var esEspacio=hojas[i].dataset.tipo==='espacio';
+  var esTabla=hojas[i].dataset.tipo==='tabla';
+  document.body.classList.toggle('enLaTabla',esTabla);
   var hayPlano=hojas[i].dataset.plano==='1';
   // Una nota lleva los mismos mandos que un dibujo: se raya encima igual. Ver [crearNota].
+  // Una tabla también: el lápiz raya encima de las celdas, y además lleva su grupo aparte.
   [].forEach.call(document.querySelectorAll('.solo-dibujo'),function(g){g.hidden=esEspacio;});
+  [].forEach.call(document.querySelectorAll('.solo-tabla'),function(g){g.hidden=!esTabla;});
   [].forEach.call(document.querySelectorAll('.solo-espacio'),function(g){g.hidden=!esEspacio;});
   [].forEach.call(document.querySelectorAll('.solo-plano'),function(g){g.hidden=!hayPlano;});
   var mide=actual&&actual.herramientas.indexOf('medir')>=0;
@@ -1355,9 +1451,30 @@ function irA(i){
   if(a) a.disabled=i===0;
   if(s) s.disabled=i===pagina.length-1;
   if(!cajon.hidden){cajon.hidden=true;cajon.dataset.que='';}
+  // El índice marca la hoja de ahora, y la dirección la nombra: así un enlace lleva a ella.
+  [].forEach.call(document.querySelectorAll('#indice-fijo a'),function(a){a.classList.toggle('activo',+a.dataset.i===i);});
+  var tit=document.querySelector('#indice-fijo .titulo'), cue=document.querySelector('#indice-fijo .cuenta');
+  if(tit) tit.textContent=hojas[i].dataset.nombre||('Hoja '+(i+1));
+  if(cue) cue.textContent=(i+1)+' / '+hojas.length;
+  try{ if(location.hash!=='#hoja-'+(i+1)) history.replaceState(null,'','#hoja-'+(i+1)); }catch(e){}
   api.decir('');
   marcarHerramienta(); refrescar();
 }
+function desdeLaDireccion(){
+  var h=location.hash||'';
+  if(h.indexOf('#hoja-')!==0) return;
+  var n=parseInt(h.slice(6),10);
+  if(n>0) irA(n-1);
+}
+window.addEventListener('hashchange',desdeLaDireccion);
+(function(){
+  var d=id('indice-fijo');
+  if(!d) return;
+  if(window.innerWidth<600) d.open=false;
+  [].forEach.call(d.querySelectorAll('a'),function(a){
+    a.addEventListener('click',function(e){ e.preventDefault(); irA(+a.dataset.i); if(window.innerWidth<600) d.open=false; });
+  });
+})();
 
 // ---- Los cajones: páginas, vistas y grupos ----
 function abrir(titulo,filas,pie){
@@ -1509,6 +1626,13 @@ function refrescarGrupos(){ cajon.dataset.que=''; pintarGrupos(); }
 });
 if(id('deshacer')) id('deshacer').onclick=function(){if(actual.deshacer)actual.deshacer();};
 if(id('rehacer')) id('rehacer').onclick=function(){if(actual.rehacer)actual.rehacer();};
+if(id('t-deshacer')) id('t-deshacer').onclick=function(){if(actual.deshacer)actual.deshacer();};
+if(id('t-rehacer')) id('t-rehacer').onclick=function(){if(actual.rehacer)actual.rehacer();};
+['t-negrita','t-suma','t-copiar','t-pegar','t-csv'].forEach(function(n){
+  var b=id(n);
+  // `mousedown` sin foco: pulsar el botón no le quita la celda elegida a la tabla.
+  if(b){ b.onmousedown=function(e){e.preventDefault();}; b.onclick=function(){ if(actual&&actual.accion)actual.accion(n); }; }
+});
 if(id('encajar')) id('encajar').onclick=function(){actual.encajar();};
 if(id('mas')) id('mas').onclick=function(){if(actual.zoom)actual.zoom(1/1.3);};
 if(id('menos')) id('menos').onclick=function(){if(actual.zoom)actual.zoom(1.3);};
@@ -1531,7 +1655,7 @@ function avisar(texto){
 // primer dibujo. Las páginas del espacio no tienen grupo y no cuentan.
 function paginaAnotada(){
   // Los dibujos y las notas llevan grupo; las páginas del espacio, no.
-  var dibujos=pagina.filter(function(p){return p&&(p.tipo==='dibujo'||p.tipo==='nota');}), i=0;
+  var dibujos=pagina.filter(function(p){return p&&(p.tipo==='dibujo'||p.tipo==='nota'||p.tipo==='tabla');}), i=0;
   var re=/<g id="croquis"[^>]*>[\s\S]*?<\/g>/g;
   // **Solo los primeros, y son los del dibujo.**
   //
@@ -1547,11 +1671,24 @@ function paginaAnotada(){
   // Los grupos de verdad están en el `#lienzo`, que va **antes** del guion: son las primeras
   // coincidencias, tantas como hojas con grupo. Lo que venga después es el guion hablando de
   // sí mismo y se deja **tal cual**.
-  return PLANTILLA.replace(re,function(entero){
+  var salida=PLANTILLA.replace(re,function(entero){
     if(i>=dibujos.length) return entero;
     var p=dibujos[i++];
     return p?'<g id="croquis">\n'+p.rayas()+'</g>':'<g id="croquis"></g>';
   });
+  // **Las tablas: su JSON y su tabla ya calculada**, con el mismo tope. Las etiquetas se
+  // escriben a trozos para que el patrón no se encuentre a sí mismo en este guion.
+  var tablas=pagina.filter(function(p){return p&&p.tipo==='tabla';});
+  if(tablas.length){
+    var j=0, m=0, abre='<'+'script type="application/json" class="'+'tabla">';
+    salida=salida.replace(new RegExp(abre+'[\\s\\S]*?<\\/script>','g'),function(entero){
+      return j>=tablas.length?entero:abre+tablas[j++].json()+'<\/script>';
+    });
+    salida=salida.replace(new RegExp('<'+'table class="'+'calc">[\\s\\S]*?<\\/table>','g'),function(entero){
+      return m>=tablas.length?entero:tablas[m++].estatica();
+    });
+  }
+  return salida;
 }
 function nombreDelArchivo(){
   var n=(document.body.dataset.nombre||document.title||'dibujo').replace(/[\\/:*?"<>|]+/g,'-').trim();
@@ -1581,6 +1718,11 @@ if(id('compartir')) id('compartir').onclick=compartir;
 
 addEventListener('resize',function(){ if(actual&&actual.medir) actual.medir(); });
 document.addEventListener('keydown',function(e){
+  // La tabla primero: las letras que se escriben en ella no son atajos. Y en cualquier campo
+  // de texto, tampoco.
+  if(actual&&actual.tecla&&actual.tecla(e)) return;
+  var tg=e.target;
+  if(tg&&(tg.tagName==='INPUT'||tg.tagName==='TEXTAREA'||tg.isContentEditable)) return;
   var ctrl=e.ctrlKey||e.metaKey, k=(e.key||'').toLowerCase();
   if(ctrl&&k==='z'&&!e.shiftKey){e.preventDefault();if(actual.deshacer)actual.deshacer();return;}
   if(ctrl&&(k==='y'||(k==='z'&&e.shiftKey))){e.preventDefault();if(actual.rehacer)actual.rehacer();return;}
@@ -1604,7 +1746,10 @@ document.addEventListener('keydown',function(e){
   else if(k==='-'&&actual.zoom)actual.zoom(1.3);
   else if(k==='escape'){cajon.hidden=true;cajon.dataset.que='';api.decir('');}
 });
+// La dirección se lee antes de ir a la primera, que la reescribe.
+var alAbrir=location.hash||'';
 irA(0);
+if(alAbrir.indexOf('#hoja-')===0){ var n0=parseInt(alAbrir.slice(6),10); if(n0>0) irA(n0-1); }
 })();
 // **Los saltos de tiempo de una transcripción.** Un párrafo que empieza por su minuto es
 // un enlace: tocarlo lleva el audio de esa nota a ese punto y lo pone a sonar.

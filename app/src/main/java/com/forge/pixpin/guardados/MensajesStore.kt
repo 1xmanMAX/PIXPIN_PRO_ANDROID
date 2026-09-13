@@ -39,7 +39,8 @@ class MensajesStore(private val context: Context) {
         /** Por dónde va cada nota de voz que se está pasando a texto (id → 0..1). */
         val avances = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Float>>(emptyMap())
 
-        private val CERROJO = Any()
+        /** El mismo que usa la sincronización para escribir el chat: no pueden cruzarse. */
+        private val CERROJO = com.forge.pixpin.sincro.Cerrojos.chat
     }
 
 
@@ -84,7 +85,8 @@ class MensajesStore(private val context: Context) {
         // tocar nada (lo pidió el usuario el 5-sep-2026). Se hace **fuera del hilo** que
         // guarda —un PDF de cuarenta páginas se rasteriza— y se apunta el mensaje ya como
         // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
-        val seUne = mensaje.proyecto != null && UnirAlProyecto.seUneSolo(mensaje)
+        // Lo que llega ya unido (el PDF con el que nació el proyecto, una zona) no se vuelve a unir.
+        val seUne = mensaje.proyecto != null && !mensaje.unido && UnirAlProyecto.seUneSolo(mensaje)
         var apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
         // **Su número en la conversación**, que no se reutiliza jamás: uno más que el mayor
         // que haya, y nunca menos que cuantos hay —eso es lo que deja seguir la cuenta de
@@ -93,6 +95,11 @@ class MensajesStore(private val context: Context) {
             val suyos = leer().filter { it.proyecto == apuntado.proyecto }
             val mayor = suyos.maxOfOrNull { it.numero } ?: 0
             apuntado = apuntado.copy(numero = maxOf(mayor, suyos.size) + 1)
+        }
+        // **Y la letra de este aparato**, si está en un grupo: con ella la seña (`48a`) no choca
+        // con el 48 que otro aparato del grupo haya creado a la vez. Ver [com.forge.pixpin.sincro.Sena].
+        if (apuntado.letra == null) {
+            com.forge.pixpin.sincro.IdentidadEnDisco(context.filesDir).letraSiHay()?.let { apuntado = apuntado.copy(letra = it.toString()) }
         }
         // **La música no se pasa a texto: se le pega la letra a mano.** Y qué es música lo
         // dicen las etiquetas del archivo (artista, álbum, título…), no su largo: una nota de
@@ -103,7 +110,7 @@ class MensajesStore(private val context: Context) {
             apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
         }
         runCatching {
-            archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
+            synchronized(CERROJO) { archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n") }
         }
         if (seUne) unirAlProyecto(apuntado)
         // **Solo si quien llama lo pide**, que hoy es únicamente practicar pronunciación.
@@ -142,7 +149,7 @@ class MensajesStore(private val context: Context) {
                         val texto = r.porParrafos ?: if (r.segmentos.isEmpty()) r.texto else Transcriptor.conTiempos(r.segmentos)
                         val hoja = apuntarTranscripcion(
                             titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
-                            cuerpo = texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando
+                            cuerpo = texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando, deMensaje = m.id
                         )
                         actualizar(m.id) {
                             it.copy(
@@ -207,7 +214,11 @@ class MensajesStore(private val context: Context) {
      * Ver `MedioUi` en el editor y [com.forge.pixpin.motormd.MarkdownHtml]. La usan la
      * transcripción de una nota de voz y la conversación por turnos.
      */
-    fun apuntarTranscripcion(titulo: String, cuerpo: String, audio: File?, proyecto: String?, cuando: Long): String? {
+    fun apuntarTranscripcion(
+        titulo: String, cuerpo: String, audio: File?, proyecto: String?, cuando: Long,
+        /** El audio del que sale: la hoja lo lleva, y así no se vuelve a contar en el chat. */
+        deMensaje: String? = null
+    ): String? {
         val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return null
         val elProyecto = proyecto?.let { app.proyectos.porId(it) } ?: return null
         val adjunto = audio?.takeIf { it.exists() }?.let {
@@ -215,7 +226,7 @@ class MensajesStore(private val context: Context) {
         }
         val texto = if (adjunto == null) "# $titulo\n\n$cuerpo" else "# $titulo\n\n![audio]($adjunto)\n\n$cuerpo"
         val id = "nota-$cuando"
-        app.proyectos.conHoja(elProyecto, com.forge.pixpin.motor.Hoja(id = id, nombre = titulo, nota = texto), cuando)
+        app.proyectos.conHoja(elProyecto, com.forge.pixpin.motor.Hoja(id = id, nombre = titulo, nota = texto, deMensaje = deMensaje), cuando)
         return id
     }
 
@@ -254,8 +265,15 @@ class MensajesStore(private val context: Context) {
      * quedarse a medias aquí significaría perder todo lo guardado, y eso no puede pasar
      * por cerrar la aplicación en mal momento.
      */
-    fun reescribir(mensajes: List<Mensaje>) {
+    fun reescribir(mensajes: List<Mensaje>): Unit = synchronized(CERROJO) {
         cambios.value = cambios.value + 1
+        // **Lo que se va deja su marca**, para que la sincronización no lo resucite desde otro
+        // aparato. Solo si hay grupo: lo borrado sin haber sincronizado nunca no lo tiene nadie.
+        val letra = com.forge.pixpin.sincro.IdentidadEnDisco(context.filesDir).letraSiHay()
+        if (letra != null) runCatching {
+            val disco = com.forge.pixpin.sincro.Disco(context.filesDir)
+            disco.anotarBorrados(com.forge.pixpin.sincro.Disco.borradosEntre(leer(), mensajes, letra, System.currentTimeMillis()))
+        }
         runCatching {
             val temporal = File(context.filesDir, "guardados.jsonl.nuevo")
             temporal.writeText(
@@ -276,6 +294,7 @@ class MensajesStore(private val context: Context) {
                 temporal.delete()
             }
         }
+        Unit
     }
 
     /**

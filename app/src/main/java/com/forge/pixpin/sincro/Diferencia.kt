@@ -17,6 +17,7 @@ object Diferencia {
      * Lo que un aparato sabe de un mensaje suyo. Es lo que se manda al empezar: una línea por
      * mensaje, no el mensaje. Un proyecto entero son unos kilobytes.
      */
+    @kotlinx.serialization.Serializable
     data class Apunte(
         /** Ver [Sena]. No cambia al viajar. */
         val sena: String,

@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
@@ -287,7 +288,7 @@ class CompartirEnlaceActivity : ComponentActivity() {
         )
         Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { compartirTexto(url) }, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Filled.Share, contentDescription = null, Modifier.size(18.dp))
+                Icon(Icons.Filled.IosShare, contentDescription = null, Modifier.size(18.dp))
                 Text(getString(R.string.enlace_compartir), modifier = Modifier.padding(start = 6.dp))
             }
             OutlinedButton(onClick = { copiar(url) }) {
@@ -326,28 +327,11 @@ class CompartirEnlaceActivity : ComponentActivity() {
     }
 
     private fun compartirTexto(url: String) {
-        runCatching {
-            startActivity(
-                Intent.createChooser(
-                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url), null
-                )
-            )
-        }
+        CompartirNativo.texto(this, url)
     }
 
     private fun compartirArchivo() {
-        runCatching {
-            val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", archivo)
-            startActivity(
-                Intent.createChooser(
-                    Intent(Intent.ACTION_SEND)
-                        .setType(mime)
-                        .putExtra(Intent.EXTRA_STREAM, uri)
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
-                    null
-                )
-            )
-        }
+        runCatching { CompartirNativo.archivo(this, archivo, mime) }
         finish()
     }
 

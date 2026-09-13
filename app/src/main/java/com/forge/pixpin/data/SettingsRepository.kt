@@ -293,7 +293,8 @@ data class Settings(
 
     /** Las del editor a pantalla completa: de fábrica, todas. */
     val editorToolSet: Set<com.forge.pixpin.motor.Tool>
-        get() = herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet())
+        // La Zona entra aunque se hubiera guardado una lista antes de que existiera (13-sep-2026).
+        get() = herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet()) + com.forge.pixpin.motor.Tool.ZONA
 
     private fun herramientas(
         guardadas: Set<String>?,

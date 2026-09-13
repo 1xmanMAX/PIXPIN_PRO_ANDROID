@@ -386,6 +386,11 @@ internal fun LaRuedaDelColor(
     /** Lo clara que va la rueda: la de la tinta que hay puesta. */
     claridad: Float = 1f,
     /**
+     * **Con el papel oscuro, la rueda enseña los colores como se van a ver** (pasados por el
+     * filtro de noche, [DrawTheme.filtrar]). Lo que se guarda sigue siendo el color de día.
+     */
+    noche: Boolean = false,
+    /**
      * Lo que mide de lado a lado, **la sombra incluida**.
      *
      * Por defecto, el disco de [RADIO_DE_LA_RUEDA] más el filo de [SOMBRA_DE_LA_RUEDA] por
@@ -398,12 +403,12 @@ internal fun LaRuedaDelColor(
     /** Dónde ha quedado su centro en la ventana. Ver [MandoDelPanel.alMedirElCentro]. */
     alMedirElCentro: ((Offset) -> Unit)? = null
 ) {
-    val tonos = remember(claridad) {
+    val tonos = remember(claridad, noche) {
         List(TONOS_DE_LA_RUEDA + 1) {
-            Color(deHsv(floatArrayOf(it * 360f / TONOS_DE_LA_RUEDA, 1f, claridad)))
+            Color(DrawTheme.filtrar(deHsv(floatArrayOf(it * 360f / TONOS_DE_LA_RUEDA, 1f, claridad)), noche))
         }
     }
-    val centroDeLaRueda = remember(claridad) { Color(deHsv(floatArrayOf(0f, 0f, claridad))) }
+    val centroDeLaRueda = remember(claridad, noche) { Color(DrawTheme.filtrar(deHsv(floatArrayOf(0f, 0f, claridad)), noche)) }
     val elegir by rememberUpdatedState(alElegir)
     val tocable = if (alElegir == null) Modifier else Modifier.pointerInput(Unit) {
         fun senalar(donde: Offset) {
@@ -463,7 +468,7 @@ internal fun LaRuedaDelColor(
             val hsv = enHsv(parseColor(hex, 255))
             val donde = enLaRueda(hsv[0], hsv[1], disco)
             val en = Offset(centro.x + donde.x.toFloat(), centro.y + donde.y.toFloat())
-            drawCircle(Color(parseColor(hex, 255)), radius = PUNTO_DE_LA_MARCA, center = en)
+            drawCircle(Color(DrawTheme.filtrar(parseColor(hex, 255), noche)), radius = PUNTO_DE_LA_MARCA, center = en)
             drawCircle(
                 Color.Black.copy(alpha = 0.45f),
                 radius = PUNTO_DE_LA_MARCA, center = en, style = Stroke(2.6f)
@@ -515,9 +520,13 @@ internal fun ElTallerDelColor(
      * eso no sirve para volver a nada.
      */
     onGuardar: ((String) -> Unit)? = null,
+    /** Con el papel oscuro, los colores se enseñan como se van a ver. Ver [LaRuedaDelColor]. */
+    noche: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val hsv = enHsv(parseColor(actual, 255))
+    // Con una tinta gris, la rueda abre a colores vivos. Ver [claridadDeLaRueda].
+    val claridadRueda = claridadDeLaRueda(actual)
     Surface(
         modifier,
         shape = RoundedCornerShape(18.dp),
@@ -532,14 +541,15 @@ internal fun ElTallerDelColor(
                     tono = { hsv[0] },
                     viveza = { hsv[1] },
                     marcas = marcas,
-                    claridad = hsv[2],
+                    claridad = claridadRueda,
+                    noche = noche,
                     lado = ANILLO.dp,
                     alElegir = { tono, viveza ->
                         // La claridad no la toca la rueda: la pone la tira de abajo, y es la
                         // que hace que una tinta sea *esa* tinta.
                         onElegir(
                             enTexto(
-                                deHsv(floatArrayOf(tono, viveza, hsv[2].coerceAtLeast(0.06f)))
+                                deHsv(floatArrayOf(tono, viveza, claridadRueda))
                             )
                         )
                     }
@@ -557,7 +567,7 @@ internal fun ElTallerDelColor(
                                         .padding(3.dp)
                                         .size(20.dp)
                                         .clip(CircleShape)
-                                        .background(Color(parseColor(c, 255)))
+                                        .background(Color(DrawTheme.filtrar(parseColor(c, 255), noche)))
                                         .border(
                                             if (esEste) 2.dp else 1.dp,
                                             if (esEste) MaterialTheme.colorScheme.primary
@@ -941,3 +951,19 @@ internal fun rememberChivato(): ElChivato {
 
 /** Lo que se queda en la pantalla una muestra a la que ya no le queda mano encima. */
 private const val LO_QUE_DURA_EL_CHIVATO = 900L
+
+/**
+ * **A qué claridad se abre la rueda para una tinta.**
+ *
+ * Con la tinta de siempre —negra o gris— la rueda heredaba su claridad y salía casi negra: el rojo
+ * elegido se guardaba como un granate oscurísimo. De noche no se notaba, porque el filtro de noche
+ * lo aclara al pintarlo; de día salía casi negro (lo reportó el usuario el 13-sep-2026). Un gris no
+ * tiene tono que conservar, así que la rueda abre a **colores vivos**; una tinta de color conserva
+ * la suya, que es la que la hace esa tinta.
+ */
+internal fun claridadDeLaRueda(hex: String): Float {
+    val hsv = enHsv(parseColor(hex, 255))
+    return if (hsv[1] < SATURACION_DE_UN_GRIS) 1f else hsv[2].coerceAtLeast(CLARIDAD_MINIMA)
+}
+
+private const val SATURACION_DE_UN_GRIS = 0.15f

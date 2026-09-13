@@ -154,7 +154,7 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     Tool.EXTRUIR, Tool.REVOLUCION -> null
     // Recortar y extender no crean nada: arreglan lo que ya hay, y lo que
     // hacen no depende de ningún color ni de ningún grosor.
-    Tool.SELECTION, Tool.LASSO, Tool.HAND, Tool.ERASER,
+    Tool.SELECTION, Tool.LASSO, Tool.ZONA, Tool.HAND, Tool.ERASER,
     Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO -> null
 }
 

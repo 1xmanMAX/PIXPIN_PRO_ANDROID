@@ -51,6 +51,29 @@ object HojasDelProyecto {
      * Entra como función para que esto no sepa nada de discos ni de contextos y
      * se pueda comprobar entero en la JVM.
      */
+    /**
+     * **Las páginas con el «Lienzo completo» delante de los marcos** de cada lienzo que los tenga.
+     * Es la lista que se ofrece al compartir: un lienzo con tres marcos son tres láminas, pero a
+     * veces lo que se quiere mandar es el lienzo entero. Su clave es la del lienzo sin marco
+     * (`hoja//`), que ninguna página normal usa cuando el lienzo tiene marcos.
+     */
+    fun conEntero(proyecto: Proyecto, escenaDe: (String) -> Scene?): List<Pagina> {
+        val salida = ArrayList<Pagina>()
+        var anterior: String? = null
+        for (p in paginas(proyecto, escenaDe)) {
+            if (p.marco != null && p.hoja.id != anterior) salida += Pagina(p.hoja, nombre = NOMBRE_DEL_ENTERO)
+            salida += p
+            anterior = p.hoja.id
+        }
+        return salida
+    }
+
+    /** Las páginas de [claves], en el orden del proyecto, «Lienzo completo» incluido. */
+    fun elegidas(proyecto: Proyecto, escenaDe: (String) -> Scene?, claves: Set<String>): List<Pagina> =
+        conEntero(proyecto, escenaDe).filter { it.clave in claves }
+
+    const val NOMBRE_DEL_ENTERO = "Lienzo completo"
+
     fun paginas(proyecto: Proyecto, escenaDe: (String) -> Scene?): List<Pagina> =
         proyecto.hojas.flatMap { hoja ->
             when {
@@ -80,6 +103,9 @@ object HojasDelProyecto {
                         }
                     }
                 }
+
+                // Una tabla es una página, por larga que sea: se lee desplazándose, no pasando hojas.
+                hoja.tabla != null -> listOf(Pagina(hoja, nombre = hoja.nombre.ifBlank { "Tabla" }))
 
                 hoja.pagina != null -> listOf(
                     Pagina(hoja, nombre = "${hoja.pagina!! + 1}")

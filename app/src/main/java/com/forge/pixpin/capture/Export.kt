@@ -70,14 +70,7 @@ object Export {
     fun prepareShare(context: Context, bitmap: Bitmap): Uri? = writeShareFile(context, bitmap)
 
     fun share(context: Context, uri: Uri) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = formatoElegido(context).mime
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(
-            Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+        com.forge.pixpin.ui.CompartirNativo.uris(context, listOf(uri), formatoElegido(context).mime, "Captura")
     }
 
     private fun writeShareFile(context: Context, bitmap: Bitmap): Uri? {

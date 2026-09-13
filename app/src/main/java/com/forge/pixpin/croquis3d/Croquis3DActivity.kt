@@ -178,6 +178,9 @@ class Croquis3DActivity : ComponentActivity() {
     /** Si está abierto el diálogo de la gráfica en el espacio. Ver [DialogoDeGrafica3D]. */
     private var grafica3dAbierta by mutableStateOf(false)
 
+    /** La hoja de compartir abierta, o null. Ver [com.forge.pixpin.ui.HojaDeCompartir]. */
+    private var compartiendo by mutableStateOf<com.forge.pixpin.ui.Compartible?>(null)
+
     private val elCroquis: String by lazy {
         intent?.getStringExtra(EL_CROQUIS) ?: Croquis3DAlmacen.EL_DE_SIEMPRE
     }
@@ -463,6 +466,7 @@ class Croquis3DActivity : ComponentActivity() {
             ).show()
         }
 
+        compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
         if (grafica3dAbierta) {
             DialogoDeGrafica3D(
                 onCerrar = { grafica3dAbierta = false },
@@ -1974,26 +1978,13 @@ class Croquis3DActivity : ComponentActivity() {
                 descripcion = getString(R.string.grafica3d_abrir)
             ) { grafica3dAbierta = true }
             FileteDePie()
-            // **El croquis como modelo 3D**, para Blender o cualquier visor. Ver [ExportarObj].
+            // **Compartir, con la hoja de toda la aplicación** (13-sep-2026): modelo 3D, página
+            // web y editable, con su peso. Eran tres botones sueltos. Ver [abrirCompartir].
             Alternable(
                 encendido = false,
-                icono = Icons.Filled.ViewInAr,
-                descripcion = getString(R.string.croquis_exportar_modelo)
-            ) { exportarElModelo() }
-            // **Y como página web**, para quien no tiene con qué abrir un modelo: se abre
-            // en el navegador y se gira con el dedo. Ver [ExportarCroquisHtml].
-            Alternable(
-                encendido = false,
-                icono = Icons.Filled.Public,
-                descripcion = getString(R.string.croquis_exportar_html)
-            ) { exportarLaPagina() }
-            // **Y editable**: un `.pixpin` con el croquis, para seguirlo en otro aparato o en
-            // el escritorio. Ver [PaquetePixpin].
-            Alternable(
-                encendido = false,
-                icono = Icons.Filled.FolderZip,
-                descripcion = getString(R.string.croquis_exportar_paquete)
-            ) { exportarElPaquete() }
+                icono = com.forge.pixpin.ui.IconoDeCompartir,
+                descripcion = "Compartir"
+            ) { abrirCompartir() }
         }
     }
 
@@ -2019,6 +2010,63 @@ class Croquis3DActivity : ComponentActivity() {
      * **El croquis como página web**: un archivo que se abre en cualquier navegador, sin
      * internet y sin instalar nada. Ver [ExportarCroquisHtml].
      */
+    /** Las tres caras del croquis en la hoja de compartir: modelo 3D, página web y editable. */
+    private fun abrirCompartir() {
+        Croquis3DAlmacen.guardar(this, elCroquis, controlador.croquis)
+        val F = com.forge.pixpin.ui.Compartible
+        compartiendo = com.forge.pixpin.ui.Compartible(
+            titulo = elCroquis,
+            formatos = listOf(
+                com.forge.pixpin.ui.Compartible.Formato("web", Icons.Filled.Public, "Página web", F.NINGUNA, generar = {
+                    val portada = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        kotlinx.coroutines.suspendCancellableCoroutine<String?> { k -> portadaDelLienzo { k.resumeWith(Result.success(it)) } }
+                    }
+                    paginaWeb(portada)?.let { com.forge.pixpin.ui.Compartible.Salida(it, ExportarCroquisHtml.MIME_TYPE, "Se abre en el navegador y se gira con el dedo") }
+                }),
+                com.forge.pixpin.ui.Compartible.Formato("modelo", Icons.Filled.ViewInAr, "Modelo 3D", F.NINGUNA, generar = {
+                    modeloEnZip()?.let { com.forge.pixpin.ui.Compartible.Salida(it, "application/zip", ".obj y .mtl, para Blender o cualquier visor") }
+                }),
+                com.forge.pixpin.ui.Compartible.Formato("editable", Icons.Filled.FolderZip, "Editable", F.NINGUNA, generar = {
+                    paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PixPin") }
+                })
+            )
+        )
+    }
+
+    private fun paquete(): java.io.File? {
+        val suelto = com.forge.pixpin.motor.Proyecto(
+            id = "suelto-$elCroquis", nombre = elCroquis, tocado = System.currentTimeMillis(),
+            hojas = listOf(com.forge.pixpin.motor.Hoja(id = "hoja-$elCroquis", nombre = elCroquis, croquis = elCroquis)),
+            croquis = listOf(elCroquis)
+        )
+        val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
+        return com.forge.pixpin.motor.PaquetePixpin.escribir(
+            this, suelto,
+            java.io.File(carpeta, "$elCroquis.${com.forge.pixpin.motor.PaquetePixpin.EXTENSION}"),
+            croquisDe = { id -> Croquis3DAlmacen.jsonDe(this, id) }
+        )
+    }
+
+    private fun paginaWeb(portada: String?): java.io.File? {
+        val html = ExportarCroquisHtml.pagina(
+            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada
+        ) ?: return null
+        val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
+        return java.io.File(carpeta, "$elCroquis.html").also { it.writeText(html) }
+    }
+
+    /** El OBJ y su MTL juntos en un ZIP: el MTL lleva los colores y sin él muchos visores lo abren en gris. */
+    private fun modeloEnZip(): java.io.File? {
+        val salida = ExportarObj.escribir(controlador.croquis, elCroquis) ?: return null
+        val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
+        val zip = java.io.File(carpeta, "$elCroquis (modelo 3D).zip")
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { z ->
+            z.putNextEntry(java.util.zip.ZipEntry("$elCroquis.obj")); z.write(salida.obj.toByteArray()); z.closeEntry()
+            z.putNextEntry(java.util.zip.ZipEntry("$elCroquis.mtl")); z.write(salida.mtl.toByteArray()); z.closeEntry()
+        }
+        return zip
+    }
+
     /** El croquis como `.pixpin`: un proyecto de una hoja con él dentro. Ver [PaquetePixpin]. */
     private fun exportarElPaquete() {
         Croquis3DAlmacen.guardar(this, elCroquis, controlador.croquis)

@@ -163,11 +163,18 @@ class Renderer(
         // entero al abrir, y los cuadros se descomprimen a la escala que se está viendo. Ver
         // [ElMosaicoDelPapel.aTrabajar].
         mosaico.aTrabajar(vista, vp.zoom)
+        // **Cada cuadro, un pelo más grande que su hueco.** Los bordes de dos cuadros vecinos caen
+        // casi siempre entre dos píxeles de la pantalla, y al estirarlos con filtro cada uno pinta
+        // su última fila a medias: entre los dos queda una raya más clara. A ciertos aumentos esas
+        // rayas se ven como una cuadrícula encima del plano (lo reportó el usuario el
+        // 13-sep-2026). Solapándolos un píxel de pantalla la junta queda tapada.
+        val solape = (SOLAPE_DE_CUADROS / vp.zoom).toFloat()
         for (puesto in mosaico.loQueHaya(vista, vp.zoom)) {
             if (puesto.bitmap.isRecycled) continue
             val donde = puesto.donde
             huecoDelTrozo.set(
-                donde.x1.toFloat(), donde.y1.toFloat(), donde.x2.toFloat(), donde.y2.toFloat()
+                donde.x1.toFloat() - solape, donde.y1.toFloat() - solape,
+                donde.x2.toFloat() + solape, donde.y2.toFloat() + solape
             )
             canvas.drawBitmap(puesto.bitmap, null, huecoDelTrozo, fillPaint)
         }
@@ -218,7 +225,10 @@ class Renderer(
     }
 
     /** Pasa un color por el filtro del modo noche. En modo día no toca nada. */
-    private fun tema(argb: Int): Int = DrawTheme.filtrar(argb, dark)
+    private fun tema(argb: Int): Int = DrawTheme.adaptar(argb, papelActual)
+
+    /** El papel de la escena que se está pintando: contra él se adapta cada tinta. Ver [DrawTheme.adaptar]. */
+    private var papelActual: Int = if (dark) 0xFF121212.toInt() else 0xFFFFFFFF.toInt()
 
     /**
      * Caché de geometría rugosa, por elemento.
@@ -530,6 +540,7 @@ class Renderer(
         canvas: Canvas, scene: Scene, screenWidth: Double, screenHeight: Double
     ) {
         escalaActual = scene.escala
+        papelActual = DrawTheme.colorDe(scene.backgroundColor)
         // La llave de paso de las luces, para todo este pintado. Ver [LucesDelDibujo].
         lasLuces = scene.luces.cuanto
         zoomActual = scene.viewport.zoom.coerceAtLeast(0.0001)
@@ -657,6 +668,9 @@ class Renderer(
             renderElement(canvas, element)
         }
         capaDebajo = null
+        // **El icono de enlace de las zonas mandadas al chat**, encima de su marca: se toca para
+        // abrir el sublienzo. Es un mando, no dibujo: no sale al exportar.
+        if (!paraExportar) for (e in visible) if (e.enlace != null) pintarIconoDeEnlace(canvas, e)
         // **Primero se pregunta, y solo después se separa.** El `filter` reservaba
         // una lista nueva en cada fotograma aunque no hubiera ni un foco, que es
         // lo normal: en un dibujo de mil elementos eso es una lista de mil
@@ -697,6 +711,32 @@ class Renderer(
 
     }
 
+
+    private val pinturaDelEnlace = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    private fun pintarIconoDeEnlace(canvas: Canvas, e: Element) {
+        val b = getElementBounds(e)
+        val r = (RADIO_DEL_ICONO_DE_ENLACE / zoomActual).toFloat()
+        val cx = b.x2.toFloat()
+        val cy = b.y1.toFloat()
+        val pintura = pinturaDelEnlace
+        pintura.style = Paint.Style.FILL
+        pintura.color = android.graphics.Color.parseColor(COLOR_DE_LA_ZONA)
+        canvas.drawCircle(cx, cy, r, pintura)
+        // Dos eslabones blancos, en diagonal.
+        pintura.style = Paint.Style.STROKE
+        pintura.color = android.graphics.Color.WHITE
+        pintura.strokeWidth = r * 0.16f
+        pintura.strokeCap = Paint.Cap.ROUND
+        canvas.save()
+        canvas.rotate(-45f, cx, cy)
+        val w = r * 0.62f
+        val h = r * 0.42f
+        val esquina = h / 2
+        canvas.drawRoundRect(cx - w * 0.95f, cy - h / 2, cx + w * 0.15f, cy + h / 2, esquina, esquina, pintura)
+        canvas.drawRoundRect(cx - w * 0.15f, cy - h / 2, cx + w * 0.95f, cy + h / 2, esquina, esquina, pintura)
+        canvas.restore()
+    }
 
     /**
      * Los puntos de una tabla de coordenadas, con su origen.
@@ -1456,7 +1496,7 @@ class Renderer(
             // El papel primero: la escena no pinta su fondo, así que sin esto lo
             // de debajo saldría flotando sobre transparente y el mosaico dejaría
             // ver a través de él justo donde no hay nada dibujado.
-            lienzo.drawColor(parseColor(DrawTheme.fondoDe(dark)))
+            lienzo.drawColor(papelActual)
             lienzo.scale((miniW / ancho).toFloat(), (miniH / alto).toFloat())
             lienzo.translate(-c.x1.toFloat(), -c.y1.toFloat())
             val guardado = capaDebajo
@@ -1750,7 +1790,7 @@ class Renderer(
                     (c.x2 + CANTO_DE_LA_HOJA).toFloat(), (c.y2 + CANTO_DE_LA_HOJA).toFloat(),
                     FRAME_RADIUS, FRAME_RADIUS, fillPaint
                 )
-                fillPaint.color = tema(parseColor(DrawTheme.fondoDe(dark)))
+                fillPaint.color = papelActual
                 canvas.drawRoundRect(
                     c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(),
                     FRAME_RADIUS, FRAME_RADIUS, fillPaint
@@ -2602,7 +2642,7 @@ class Renderer(
         // enseña — dos dibujos superpuestos y ninguno legible.
         fillPaint.reset()
         fillPaint.style = Paint.Style.FILL
-        fillPaint.color = parseColor(DrawTheme.fondoDe(dark))
+        fillPaint.color = papelActual
         canvas.drawRect(cristal, fillPaint)
 
         // La matriz que lleva el foco al centro del cristal, agrandado.
@@ -2845,7 +2885,7 @@ class Renderer(
         return runCatching {
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val lienzo = Canvas(bmp)
-            lienzo.drawColor(parseColor(DrawTheme.fondoDe(dark)))
+            lienzo.drawColor(papelActual)
             // Del mapa de bits al dibujo: primero a la escala de salida, luego
             // la misma cuenta que en pantalla.
             lienzo.scale((w / ancho).toFloat(), (h / alto).toFloat())
@@ -3822,3 +3862,6 @@ private val ELPINCEL_ENCENDIDO by lazy {
         it.blendMode = android.graphics.BlendMode.PLUS
     }
 }
+
+/** Cuánto se solapan dos cuadros vecinos del mosaico, en píxeles de pantalla. Ver `pintarElMosaico`. */
+private const val SOLAPE_DE_CUADROS = 0.75

@@ -30,3 +30,6 @@ Thumbs.db
 # Documento de referencia externo (no se publica)
 PixPin_Detailed_Report*.md
 telegram/
+
+# La firma v4 que deja apksigner junto a cada APK repartido
+*.idsig
