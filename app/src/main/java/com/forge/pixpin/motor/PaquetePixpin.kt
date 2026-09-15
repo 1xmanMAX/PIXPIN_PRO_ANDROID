@@ -34,6 +34,11 @@ import java.util.zip.ZipOutputStream
  * | `notas/<id-de-hoja>.md`         | Cada nota, en Markdown.                                 |
  * | `tablas/<id>.json`              | Cada tabla con fórmulas. Ver [TablaDeCalculo].          |
  * | `documento.pdf`                 | El PDF del proyecto, si lo hay (el limpio, sin anotar). |
+ * | `chat/mensajes.jsonl`           | Opcional: los mensajes de su chat, uno por línea.       |
+ * | `chat/adjuntos/<clave>`         | Opcional: los archivos de esos mensajes.                |
+ *
+ * El chat solo lo pone el envío por Wi-Fi (`sincro/ChatQueViaja.kt`); quien no lo entienda lo
+ * ignora y el proyecto se abre igual.
  */
 object PaquetePixpin {
 
@@ -52,7 +57,10 @@ object PaquetePixpin {
         proyecto: Proyecto,
         destino: File,
         croquisDe: (String) -> String? = { null },
-        escrito: Long = System.currentTimeMillis()
+        escrito: Long = System.currentTimeMillis(),
+        /** Los mensajes del chat, ya en texto, y sus archivos por clave. Ver la tabla de arriba. */
+        chat: String? = null,
+        adjuntosDelChat: Map<String, File> = emptyMap()
     ): File? = runCatching {
         destino.parentFile?.mkdirs()
         ZipOutputStream(destino.outputStream().buffered()).use { zip ->
@@ -101,6 +109,12 @@ object PaquetePixpin {
             for (id in proyecto.croquis) {
                 croquisDe(id)?.let { entrada("croquis/$id.json", it.toByteArray()) }
             }
+            if (chat != null) {
+                entrada("chat/mensajes.jsonl", chat.toByteArray())
+                for ((clave, archivo) in adjuntosDelChat) {
+                    if (archivo.isFile) entrada("chat/adjuntos/$clave", archivo.readBytes())
+                }
+            }
         }
         destino
     }.getOrNull()
@@ -113,7 +127,9 @@ object PaquetePixpin {
         val croquis: Map<String, String>,
         val notas: Map<String, String>,
         val pdf: ByteArray?,
-        val tablas: Map<String, String> = emptyMap()
+        val tablas: Map<String, String> = emptyMap(),
+        val chat: String? = null,
+        val adjuntosDelChat: Map<String, ByteArray> = emptyMap()
     )
 
     /** Abre un paquete y devuelve lo que trae, o null si no es un `.pixpin`. */
@@ -125,6 +141,8 @@ object PaquetePixpin {
         val notas = HashMap<String, String>()
         val tablas = HashMap<String, String>()
         var pdf: ByteArray? = null
+        var chat: String? = null
+        val adjuntosDelChat = HashMap<String, ByteArray>()
         var esPixpin = false
         ZipInputStream(archivo.inputStream().buffered()).use { zip ->
             while (true) {
@@ -145,13 +163,15 @@ object PaquetePixpin {
                         notas[nombre.removePrefix("notas/").removeSuffix(".md")] = String(bytes)
                     nombre.startsWith("tablas/") ->
                         tablas[nombre.removePrefix("tablas/").removeSuffix(".json")] = String(bytes)
+                    nombre == "chat/mensajes.jsonl" -> chat = String(bytes)
+                    nombre.startsWith("chat/adjuntos/") -> adjuntosDelChat[nombre.removePrefix("chat/adjuntos/")] = bytes
                 }
                 zip.closeEntry()
             }
         }
         val p = proyecto ?: return null
         if (!esPixpin) return null
-        Contenido(p, lienzos, imagenes, croquis, notas, pdf, tablas)
+        Contenido(p, lienzos, imagenes, croquis, notas, pdf, tablas, chat, adjuntosDelChat)
     }.getOrNull()
 
     /**
@@ -166,38 +186,54 @@ object PaquetePixpin {
         contenido: Contenido,
         ahora: Long,
         carpetaDeProyectos: File,
-        guardarCroquis: (String, String) -> Boolean = { _, _ -> false }
+        guardarCroquis: (String, String) -> Boolean = { _, _ -> false },
+        /**
+         * **Si un id ya se usa aquí** (un proyecto, una hoja). Lo que no esté en uso **conserva su id**
+         * (15-sep-2026): así lo recibido se llama igual que en el aparato de donde vino, y al
+         * sincronizarse después con él no sale repetido. Por omisión todo se da por usado y se le
+         * pone la hora detrás, como siempre.
+         */
+        idEnUso: ((String) -> Boolean)? = null
     ): Proyecto? = runCatching {
         val sufijo = "-$ahora"
+        fun libre(id: String, enUso: Boolean) = if (idEnUso == null || enUso) "$id$sufijo" else id
         val fotos = HashMap<String, String>()
         fun fotoPuesta(id: String): String? = fotos[id] ?: run {
             val bytes = contenido.imagenes[id] ?: return null
-            val nuevo = "$id$sufijo"
+            val nuevo = libre(id, ExcalidrawStore.rutaDeImagen(context, id).exists())
             val destino = ExcalidrawStore.rutaDeImagen(context, nuevo)
             destino.writeBytes(bytes)
             fotos[id] = destino.absolutePath
             destino.absolutePath
         }
         val lienzos = HashMap<String, String>()
+        val nombreDeLienzo = contenido.lienzos.keys.associateWith { id -> libre(id, File(ExcalidrawStore.rutaDe(context, id)).exists()) }
         for ((id, json) in contenido.lienzos) {
             val escena = runCatching { ExcalidrawJson.decodeFromString<Scene>(json) }.getOrNull() ?: continue
             val conFotos = escena.copy(
-                files = escena.files.mapValues { (fid, f) -> f.copy(path = fotoPuesta(fid) ?: f.path) }
+                files = escena.files.mapValues { (fid, f) -> f.copy(path = fotoPuesta(fid) ?: f.path) },
+                // La marca de una zona señala a su sublienzo por su id, y el id cambia aquí: sin
+                // esto, en el otro aparato la marca apuntaba a nada y la web salía sin sublienzos.
+                elements = escena.elements.map { e ->
+                    val enlace = e.enlace
+                    if (enlace != null && contenido.lienzos.containsKey(enlace)) e.copy(enlace = nombreDeLienzo.getValue(enlace)) else e
+                }
             )
-            val nuevo = "$id$sufijo"
+            val nuevo = nombreDeLienzo.getValue(id)
             if (ExcalidrawStore.guardar(context, nuevo, conFotos) != null) lienzos[id] = nuevo
         }
         val croquis = HashMap<String, String>()
         for ((id, json) in contenido.croquis) {
-            val nuevo = "$id$sufijo"
+            val nuevo = libre(id, File(context.filesDir, "croquis3d/$id.croquis.gz").exists())
             if (guardarCroquis(nuevo, json)) croquis[id] = nuevo
         }
         val tablas = HashMap<String, String>()
         val almacen = TablasEnDisco.de(context.filesDir)
         for ((id, json) in contenido.tablas) {
             val t = TablaDeCalculo.deJson(json) ?: continue
-            val nuevo = "$id$sufijo"
-            if (almacen.guardar(nuevo, t.copy(tocado = ahora))) tablas[id] = nuevo
+            val nuevo = libre(id, almacen.archivo(id).exists())
+            // Con su id de allí, tal cual: igual que en el otro aparato, que es lo que la sincronización compara.
+            if (almacen.guardar(nuevo, if (nuevo == id) t else t.copy(tocado = ahora))) tablas[id] = nuevo
         }
         var pdfRuta: String? = null
         contenido.pdf?.let { bytes ->
@@ -207,15 +243,16 @@ object PaquetePixpin {
             pdfRuta = destino.absolutePath
         }
         val p = contenido.proyecto
+        val hojaNueva = p.hojas.associate { it.id to libre(it.id, idEnUso?.invoke(it.id) ?: true) }
         p.copy(
-            id = "pr$sufijo",
+            id = if (idEnUso != null && !idEnUso(p.id)) p.id else "pr$sufijo",
             tocado = ahora,
             pdfOrigen = pdfRuta,
             pdfLimpio = pdfRuta,
             hojas = p.hojas.map { h ->
                 h.copy(
-                    id = "${h.id}$sufijo",
-                    padre = h.padre?.let { "$it$sufijo" },
+                    id = hojaNueva.getValue(h.id),
+                    padre = h.padre?.let { hojaNueva[it] ?: "$it$sufijo" },
                     dibujo = h.dibujo?.let { lienzos[it] },
                     croquis = h.croquis?.let { croquis[it] },
                     nota = h.nota ?: contenido.notas[h.id],

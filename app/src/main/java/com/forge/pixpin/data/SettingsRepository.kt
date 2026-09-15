@@ -216,6 +216,19 @@ data class Settings(
     val planoEnLineas: Boolean = true,
 
     /**
+     * **Las páginas que se quieren como imagen**, aunque el plano en líneas esté puesto.
+     *
+     * Lo pidió el usuario el 13-sep-2026: leer un PDF como geometría sale bien casi siempre,
+     * pero una página puede traer algo que no se entienda del todo —una trama, un degradado, un
+     * dibujo con veinte mil rellenos— y verla rasterizada es entonces mejor que verla mal. Es
+     * **por página** y no un ajuste general porque el mismo documento suele tener páginas de
+     * las dos clases: el plano en líneas y la portada escaneada.
+     *
+     * La clave la hace `claveDePagina`: la ruta del PDF y el número de página.
+     */
+    val paginasComoImagen: Set<String> = emptySet(),
+
+    /**
      * **Qué funciones lleva la página web exportada.** null es «todas»; un conjunto es lo
      * marcado en Ajustes → Exportar → Página web. Los nombres son los de
      * `ExportarHtml.Opciones.NOMBRES`.
@@ -348,6 +361,7 @@ class SettingsRepository(private val context: Context) {
         val FONDO_DEL_CHAT = stringPreferencesKey("fondo_del_chat")
         val MAXIMA_FLUIDEZ = booleanPreferencesKey("maxima_fluidez")
         val PLANO_EN_LINEAS = booleanPreferencesKey("plano_en_lineas")
+        val PAGINAS_COMO_IMAGEN = stringSetPreferencesKey("paginas_como_imagen")
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
         val COPY_FORMAT = stringPreferencesKey("copy_format")
@@ -380,6 +394,7 @@ class SettingsRepository(private val context: Context) {
             fondoDelChat = prefs[Keys.FONDO_DEL_CHAT] ?: "",
             maximaFluidez = prefs[Keys.MAXIMA_FLUIDEZ] ?: true,
             planoEnLineas = prefs[Keys.PLANO_EN_LINEAS] ?: true,
+            paginasComoImagen = prefs[Keys.PAGINAS_COMO_IMAGEN] ?: emptySet(),
             funcionesWeb = prefs[Keys.FUNCIONES_WEB],
             guiaEnEditor = prefs[Keys.GUIA_EDITOR] ?: true,
             guiaEnPin = prefs[Keys.GUIA_PIN] ?: false,
@@ -509,6 +524,20 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.PLANO_EN_LINEAS] = valor }
     }
 
+    /**
+     * Esta página, como imagen o como líneas. Ver [Settings.paginasComoImagen].
+     *
+     * Se guarda solo lo que se sale de lo normal —las páginas marcadas como imagen— y no una
+     * entrada por página vista, que serían cientos por documento.
+     */
+    suspend fun setPaginaComoImagen(clave: String, comoImagen: Boolean) {
+        if (clave.isBlank()) return
+        context.dataStore.edit { p ->
+            val ahora = p[Keys.PAGINAS_COMO_IMAGEN] ?: emptySet()
+            p[Keys.PAGINAS_COMO_IMAGEN] = if (comoImagen) ahora + clave else ahora - clave
+        }
+    }
+
     /** Enciende o apaga una clase de enganche. Ver [com.forge.pixpin.motor.Iman]. */
     /**
      * Enciende o apaga el modo guía en un sitio.
@@ -627,6 +656,14 @@ enum class ClaseDeIman {
 
 /** Los cuatro sitios donde se dibuja, cada uno con su barra. */
 enum class DondeSeDibuja { EDITOR, PIN, CAPA, CAPTURA }
+
+/**
+ * La clave de una página de un PDF, para [Settings.paginasComoImagen]: la ruta y el número.
+ *
+ * Vacía si no hay PDF debajo, y una clave vacía no se guarda: así quien la pide no tiene que
+ * preguntar antes si hay plano.
+ */
+fun claveDePagina(ruta: String?, pagina: Int): String = if (ruta.isNullOrBlank()) "" else "$ruta#$pagina"
 
 /** Cuándo va la interfaz en modo noche. Ver [Settings.modoNoche]. */
 enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO }

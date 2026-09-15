@@ -224,3 +224,63 @@ deja las marcas de borrado; la chapa del chat enseña `#47a`; `reenviado` quita 
 - Proyectos borrados: no se propaga el borrado de un proyecto entero.
 - Sincronizar sin la pantalla abierta (un servicio en primer plano) si hace falta.
 - Wi-Fi Direct y la versión de Windows.
+
+## Fusionar sin maestro y tres códigos (15-sep-2026, v0.50)
+
+Tras perder lienzos de «Tesis» (ver v0.49), el usuario pidió dos cosas que van juntas:
+
+1. **Tres códigos para todo lo que pasa por el chat**, que nacen con la cosa y no cambian al
+   viajar: el **código único** (`uid`, diez signos, oculto), el **código de chat** (número +
+   código del aparato, `47·K7Q2`, sustituye a la letra de grupo `47a`) y la **fecha de creación**.
+   Al compartir, **solo se pone al día lo que coincide en los tres**, y quien recibe elige
+   «Actualizar el que tengo» o «Crear como nuevo» (con códigos nuevos). Si no coinciden, entra
+   aparte. Copiar a propósito (`reenviado`) da códigos nuevos.
+2. **Sincronizar como git, sin predominancia**: A+B y A+C → A+B+C, y **solo viajan los cambios**.
+
+### Reglas (respuestas propuestas y aceptadas: «si todo está bien, sigue»)
+
+| Caso | Qué pasa |
+|---|---|
+| Cambiado en un solo lado | Pasa al otro |
+| Cambiado en los dos | Se fusiona: figura por figura (id), celda por celda, párrafo por párrafo (diff3), trazo por trazo |
+| La misma propiedad / celda / párrafo en los dos | Gana el último cambio (hora `updated`/`tocado` corregida con el desfase de reloj; a igualdad, versión y `versionNonce` como Excalidraw). Lo perdido queda en Copias |
+| Borrado en uno, sin tocar en el otro | Se borra en los dos |
+| Borrado en uno, cambiado en el otro | Se queda lo cambiado (OR-Set, «add-wins») |
+| Hoja de proyecto que falta en un lado | Solo se quita si allí **se quitó a mano** (`Proyecto.quitadas`) y el otro no la cambió; si falta sin marca, vuelve |
+| PDF / foto cambiados en los dos | Gana el tocado más tarde (no se pueden juntar) |
+
+### Piezas
+
+- `sincro/Fusion.kt` — fusión a tres bandas de JSON, párrafos (diff3), orden de listas, y
+  `diferencia`/`aplicar` (parches). Pruebas: `FusionTest`.
+- `sincro/Codigos.kt` — los tres códigos, sellado (lo de antes saca el `uid` de su id, igual en
+  todos los aparatos), `mismos`, `renovar`. Pruebas: `CodigosTest`.
+- `Diferencia.plan` — ya no pregunta: `Traer`, `Mandar`, `Fusionar`. Mensajes por `uid`; las
+  marcas de borrado viejas (solo seña) se reconocen por `alias`.
+- `Disco` — resumen **canónico** de los archivos de texto (para que dos aparatos que escriben el
+  mismo JSON con otro orden de claves coincidan) y el crudo aparte para traducir las bases
+  viejas; `sincro/objetos/<resumen>.gz` guarda el contenido de lo acordado para fusionar y para
+  los parches; se recogen los que ya no señala ninguna base.
+- `Protocolo` v3 — peticiones `parche` y `damecambios`; si el otro no tiene la base, se manda entero.
+- `Mezcla` — sin `Ganador`; hojas con marcas de quitada y `cambiadas` por archivo.
+- `Recepcion`/`RecibirActivity` — coincidencia por tres códigos y la elección por cosa;
+  `PaquetePixpin.importar(idEnUso)` conserva los ids libres para que lo recibido y luego
+  sincronizado no salga repetido.
+
+### Fuentes
+
+Excalidraw `packages/excalidraw/data/reconcile.ts`; Wallace, «How Figma's multiplayer technology
+works» (2019); Shapiro et al., CRDT (SSS 2011); Bieniusa et al., «An optimized conflict-free
+replicated set» (arXiv:1210.3368, 2012); Khanna, Kunal y Pierce, «A formal investigation of diff3»
+(FSTTCS 2007); Kulkarni et al., «Logical Physical Clocks» (OPODIS 2014); Almeida, Shoker y
+Baquero, «Delta state replicated data types» (JPDC 2018); Kleppmann et al., «Local-first
+software» (Onward! 2019) e «Interleaving anomalies…» (PaPoC 2019).
+
+### Sin probar / pendiente
+
+- Nada probado en teléfonos. La primera vuelta tras actualizar junta los lienzos que cambiaron en
+  los dos desde la última sincronización **sin base** (no había contenido guardado): se suman
+  figuras y lo borrado desde entonces puede reaparecer esa vez.
+- Lo compartido antes de v0.50 con ids cambiados no coincide en códigos: al recibirlo otra vez
+  entra como nuevo.
+- Reloj híbrido (HLC) de verdad: ahora se corrige con el desfase medido al conectar.

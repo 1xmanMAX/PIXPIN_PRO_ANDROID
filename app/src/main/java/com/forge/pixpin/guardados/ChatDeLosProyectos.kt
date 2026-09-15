@@ -37,6 +37,29 @@ object ChatDeLosProyectos {
         }
     }
 
+    /**
+     * **Pone en el chat lo que está en los proyectos y falta en él.** Ver [RegistroDelChat]. Se llama
+     * al arrancar y cada vez que la sincronización o un envío escriben proyectos.
+     */
+    fun reparar(context: Context) {
+        val app = context.applicationContext as? PixPinApp ?: return
+        app.scope.launch(enFila) {
+            runCatching {
+                val chat = MensajesStore(app)
+                val todos = chat.leer()
+                val faltan = app.proyectos.proyectos.value.flatMap { p ->
+                    RegistroDelChat.queFalta(p, todos) { _, h ->
+                        h.dibujo?.let { java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(app, it)) }
+                            ?.takeIf { it.exists() }?.lastModified()
+                    }
+                }
+                // En orden de creación: así el número que recibe cada uno también sigue la hora.
+                for (m in faltan.sortedBy { it.cuando }) chat.anadir(m)
+                if (faltan.isNotEmpty()) android.util.Log.i("PixPinChat", "Reparados ${faltan.size} mensajes que faltaban en el chat")
+            }
+        }
+    }
+
     private fun publicar(context: Context, p: Proyecto, novedades: List<AvisosDelProyecto.Novedad>) {
         val chat = MensajesStore(context)
         val suyos = chat.leer().filter { it.proyecto == p.id }

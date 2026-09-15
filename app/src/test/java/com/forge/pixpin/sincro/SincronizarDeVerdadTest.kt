@@ -119,30 +119,43 @@ class SincronizarDeVerdadTest {
         return codigo
     }
 
-    /** Sincroniza los chats dados eligiendo con [elegir] en cada pregunta (por omisión, lo marcado). */
+    /** Sincroniza los chats dados, sin preguntas: lo cambiado en los dos se junta. Devuelve lo hecho. */
     private fun sincronizar(
         chats: List<String> = listOf(Disco.GENERAL),
         antesDeCerrar: () -> Unit = {},
-        elegir: (Sesion.Pregunta) -> Boolean = { it.porOmision }
-    ): List<Sesion.Pregunta> {
-        val preguntadas = ArrayList<Sesion.Pregunta>()
+        bytes: (Long) -> Unit = {}
+    ): Sesion.Hecho {
+        val hecho = Sesion.Hecho()
         conectado(telefono, tableta) { s ->
             for (chat in chats) {
-                val hecho = Sesion.Hecho()
                 val prep = s.preparar(chat)
-                preguntadas += prep.preguntas
-                s.aplicar(prep, prep.preguntas.associate { it.clave to elegir(it) }, hecho)
+                s.aplicar(prep, hecho)
                 val arch = s.prepararArchivos(prep)
-                preguntadas += arch.preguntas
-                s.aplicarArchivos(arch, arch.preguntas.associate { it.clave to elegir(it) }, hecho)
+                s.aplicarArchivos(arch, hecho)
                 antesDeCerrar()
                 s.cerrar(prep)
             }
+            bytes(s.enviados + s.recibidos)
         }
-        return preguntadas
+        return hecho
     }
 
-    private fun senas(d: Disco, chat: String = Disco.GENERAL) = d.mensajesPorSena(chat).keys.toSortedSet()
+    /** Los códigos de chat de un chat: `1a`, `2·K7Q2`… */
+    private fun senas(d: Disco, chat: String = Disco.GENERAL) =
+        d.leerMensajes().filter { Disco.chatDe(it) == chat }.mapNotNull { Codigos.deChat(it) }.toSortedSet()
+
+    /** Un lienzo de verdad: figuras con id, versión y hora. */
+    private fun lienzo(d: Disco, id: String, vararg figuras: String) {
+        val f = File(d.filesDir, "pins/draw/$id.excalidraw.gz").apply { parentFile!!.mkdirs() }
+        val json = figuras.joinToString(",", prefix = "{\"elements\":[", postfix = "],\"files\":{}}") { it }
+        GZIPOutputStream(f.outputStream()).use { it.write(json.toByteArray()) }
+    }
+
+    private fun fig(id: String, x: Int = 0, color: String = "#000", v: Int = 1, updated: Long = 1) =
+        """{"id":"$id","type":"rectangle","x":$x,"strokeColor":"$color","version":$v,"versionNonce":7,"updated":$updated}"""
+
+    private fun figuras(d: Disco, id: String): List<String> =
+        Regex("\"id\":\"([^\"]+)\"").findAll(textoDelDibujo(d, id)).map { it.groupValues[1] }.toList()
 
     // ------------------------------------------------------------------ pruebas
 
@@ -171,12 +184,19 @@ class SincronizarDeVerdadTest {
     }
 
     @Test
-    fun `lo de antes del grupo se sella con la letra del aparato`() {
+    fun `lo de antes del grupo se sella con el codigo del aparato`() {
         mensaje(telefono, "viejo1", "de antes")
         mensaje(tableta, "viejo2", "de antes también")
         emparejar()
-        assertEquals(setOf("1a"), senas(telefono))
-        assertEquals(setOf("1b"), senas(tableta))
+        val tel = telefono.identidad.leer().yo.codigo
+        val tab = tableta.identidad.leer().yo.codigo
+        assertEquals(setOf("1·$tel"), senas(telefono))
+        assertEquals(setOf("1·$tab"), senas(tableta))
+        // Y con su código único, sacado de su id: el mismo en cualquier aparato.
+        assertEquals(Codigos.de("m:viejo1"), telefono.leerMensajes().single().uid)
+        sincronizar()
+        assertEquals(setOf("1·$tel", "1·$tab"), senas(telefono))
+        assertEquals(senas(telefono), senas(tableta))
     }
 
     @Test
@@ -185,8 +205,7 @@ class SincronizarDeVerdadTest {
         mensaje(telefono, "t1", "hola desde el teléfono")
         mensaje(telefono, "t2", "otra")
         mensaje(tableta, "b1", "hola desde la tableta")
-        val preguntas = sincronizar()
-        assertTrue(preguntas.isEmpty())
+        assertEquals(0, sincronizar().fusionados)
         assertEquals(setOf("1a", "2a", "1b"), senas(telefono))
         assertEquals(senas(telefono), senas(tableta))
         // Y en el mismo orden: por hora de creación.
@@ -205,7 +224,7 @@ class SincronizarDeVerdadTest {
         conectado(telefono, tableta) { s ->
             val prep = s.preparar(Disco.GENERAL)
             assertTrue("sin pasos: ${prep.pasos}", prep.pasos.isEmpty())
-            s.aplicar(prep, emptyMap(), Sesion.Hecho())
+            s.aplicar(prep, Sesion.Hecho())
             assertTrue(s.prepararArchivos(prep).pasos.isEmpty())
         }
     }
@@ -216,41 +235,67 @@ class SincronizarDeVerdadTest {
         mensaje(telefono, "t1", "versión 1")
         sincronizar()
         editar(tableta, "t1") { it.copy(texto = "versión 2, desde la tableta") }
-        assertTrue(sincronizar().isEmpty())
+        assertEquals(0, sincronizar().fusionados)
         assertEquals("versión 2, desde la tableta", telefono.leerMensajes().single().texto)
     }
 
     @Test
-    fun `lo que cambio en los dos se pregunta y lo elegido queda en los dos`() {
+    fun `una nota cambiada en los dos se junta parrafo por parrafo sin preguntar`() {
         emparejar()
-        mensaje(telefono, "t1", "versión 1")
+        mensaje(telefono, "t1", "Introducción\n\nMétodo\n\nResultados")
         sincronizar()
-        editar(telefono, "t1") { it.copy(texto = "del teléfono") }
-        editar(tableta, "t1") { it.copy(texto = "de la tableta") }
-        val preguntas = sincronizar { false }  // me quedo con lo de la tableta
-        assertEquals(1, preguntas.size)
-        assertEquals(Diferencia.Choque.LOS_DOS_CAMBIARON, preguntas.single().porque)
-        assertEquals("de la tableta", preguntas.single().suyo!!.texto)
-        assertEquals("de la tableta", telefono.leerMensajes().single().texto)
-        assertEquals("de la tableta", tableta.leerMensajes().single().texto)
-        // Y la vuelta siguiente ya no pregunta.
-        assertTrue(sincronizar().isEmpty())
+        editar(telefono, "t1") { it.copy(texto = "Introducción corregida\n\nMétodo\n\nResultados") }
+        editar(tableta, "t1") { it.copy(texto = "Introducción\n\nMétodo\n\nResultados\n\nConclusiones") }
+        assertEquals(1, sincronizar().fusionados)
+        val esperado = "Introducción corregida\n\nMétodo\n\nResultados\n\nConclusiones"
+        assertEquals(esperado, telefono.leerMensajes().single().texto)
+        assertEquals(esperado, tableta.leerMensajes().single().texto)
+        // Y la vuelta siguiente ya no tiene nada que juntar.
+        conectado(telefono, tableta) { s -> assertTrue(s.preparar(Disco.GENERAL).pasos.isEmpty()) }
     }
 
     @Test
-    fun `lo borrado en un lado se pregunta, gana el borrado, y no resucita`() {
+    fun `lo borrado en un lado y sin tocar en el otro se borra en los dos y no resucita`() {
         emparejar()
         val m = mensaje(telefono, "t1", "para borrar")
         mensaje(telefono, "t2", "se queda")
         sincronizar()
         borrar(telefono, m.id)
-        val preguntas = sincronizar()
-        assertEquals(Diferencia.Choque.BORRADO_CONTRA_INTACTO, preguntas.single().porque)
-        assertTrue(preguntas.single().porOmision)
+        sincronizar()
         assertEquals(setOf("2a"), senas(tableta))
         assertEquals(setOf("2a"), senas(telefono))
-        assertTrue(sincronizar().isEmpty())
+        sincronizar()
         assertEquals(setOf("2a"), senas(telefono))
+    }
+
+    @Test
+    fun `una marca de borrado de antes de los codigos sigue borrando en el otro`() {
+        emparejar()
+        mensaje(telefono, "t1", "viejo")
+        mensaje(telefono, "t2", "queda")
+        sincronizar()
+        // Se borró con una versión anterior de PixPin: la marca solo sabe la seña.
+        val antes = telefono.leerMensajes()
+        File(telefono.filesDir, "guardados.jsonl").writeText(antes.filter { it.id != "t1" }.joinToString("") { Disco.JSON.encodeToString(Mensaje.serializer(), it) + "\n" })
+        telefono.anotarBorrados(listOf(Marca(Disco.GENERAL, "1a", reloj++)))
+        sincronizar()
+        assertEquals(setOf("2a"), senas(tableta))
+        sincronizar()
+        assertEquals(setOf("2a"), senas(telefono))
+    }
+
+    @Test
+    fun `lo borrado en un lado y cambiado en el otro se queda en los dos`() {
+        emparejar()
+        val m = mensaje(telefono, "t1", "borrador")
+        sincronizar()
+        borrar(telefono, m.id)
+        editar(tableta, "t1") { it.copy(texto = "borrador mejorado en la tableta") }
+        sincronizar()
+        assertEquals("borrador mejorado en la tableta", telefono.leerMensajes().single().texto)
+        assertEquals("borrador mejorado en la tableta", tableta.leerMensajes().single().texto)
+        sincronizar()
+        assertEquals(1, telefono.leerMensajes().size)
     }
 
     @Test
@@ -261,7 +306,7 @@ class SincronizarDeVerdadTest {
         // Los dos crean «el siguiente» sin saber del otro: el 2a y el 2b.
         mensaje(telefono, "t2", "segundo del teléfono")
         mensaje(tableta, "b2", "segundo de la tableta")
-        assertTrue(sincronizar().isEmpty())
+        sincronizar()
         assertEquals(setOf("1a", "2a", "2b"), senas(telefono))
         assertEquals(senas(telefono), senas(tableta))
     }
@@ -293,18 +338,52 @@ class SincronizarDeVerdadTest {
     }
 
     @Test
-    fun `un lienzo dibujado en los dos se pregunta por su mensaje y gana lo elegido`() {
+    fun `un lienzo dibujado en los dos se junta figura por figura - A+B y A+C dan A+B+C`() {
         emparejar()
-        dibujo(telefono, "d1", "v1")
+        lienzo(telefono, "d1", fig("A"))
         mensaje(telefono, "t1", "Planta baja", clase = Clase.DIBUJO, referencia = "d1")
         sincronizar()
-        dibujo(telefono, "d1", "trazo del teléfono")
-        dibujo(tableta, "d1", "trazo de la tableta")
-        val preguntas = sincronizar { false }
-        val p = preguntas.single()
-        assertTrue("se nombra por su mensaje: ${p.titulo}", p.titulo.contains("1a"))
-        assertTrue(textoDelDibujo(telefono, "d1").contains("trazo de la tableta"))
-        assertTrue(sincronizar().isEmpty())
+        lienzo(telefono, "d1", fig("A"), fig("B"))
+        lienzo(tableta, "d1", fig("A", color = "#f00", v = 2, updated = 50), fig("C"))
+        val hecho = sincronizar()
+        assertEquals(1, hecho.fusionados)
+        assertEquals(listOf("A", "B", "C"), figuras(telefono, "d1"))
+        assertEquals(listOf("A", "B", "C"), figuras(tableta, "d1"))
+        assertTrue("el color de la tableta se queda", textoDelDibujo(telefono, "d1").contains("#f00"))
+        assertEquals(textoDelDibujo(telefono, "d1").let(Canonico::de), textoDelDibujo(tableta, "d1").let(Canonico::de))
+        // Nada más que hacer en la vuelta siguiente.
+        assertEquals(0, sincronizar().fusionados)
+        conectado(telefono, tableta) { s -> val prep = s.preparar(Disco.GENERAL); s.aplicar(prep, Sesion.Hecho()); assertTrue(s.prepararArchivos(prep).pasos.isEmpty()) }
+    }
+
+    @Test
+    fun `una figura borrada en un lado y movida en el otro vuelve`() {
+        emparejar()
+        lienzo(telefono, "d1", fig("A"), fig("B"))
+        mensaje(telefono, "t1", "Planta", clase = Clase.DIBUJO, referencia = "d1")
+        sincronizar()
+        lienzo(telefono, "d1", fig("A"))
+        lienzo(tableta, "d1", fig("A"), fig("B", x = 300, v = 2, updated = 90))
+        val hecho = sincronizar()
+        assertEquals(listOf("A", "B"), figuras(telefono, "d1"))
+        assertEquals(1, hecho.rescatados)
+    }
+
+    @Test
+    fun `solo viajan los cambios de un lienzo grande`() {
+        emparejar()
+        val muchas = (1..400).map { fig("f$it", x = it) }
+        lienzo(telefono, "d1", *muchas.toTypedArray())
+        mensaje(telefono, "t1", "Grande", clase = Clase.DIBUJO, referencia = "d1")
+        var primera = 0L
+        sincronizar(bytes = { primera = it })
+        // Un cambio pequeño en la tableta.
+        lienzo(tableta, "d1", *(muchas.map { if (it.contains("\"f9\"")) fig("f9", x = 999, v = 2, updated = 5) else it }).toTypedArray())
+        var segunda = 0L
+        val hecho = sincronizar(bytes = { segunda = it })
+        assertTrue(textoDelDibujo(telefono, "d1").contains("999"))
+        assertTrue("la segunda vuelta mueve $segunda bytes y la primera $primera", segunda * 3 < primera)
+        assertTrue(hecho.ahorrados > 0)
     }
 
     @Test
@@ -323,15 +402,20 @@ class SincronizarDeVerdadTest {
         proyecto(telefono, p.copy(hojas = p.hojas + Hoja("h2", "Alzado"), tocado = 6))
         val q = tableta.leerProyectos().single()
         proyecto(tableta, q.copy(hojas = q.hojas + Hoja("h3", "Detalle"), tocado = 7))
-        assertTrue(sincronizar(listOf("pr-1")).isEmpty())
+        sincronizar(listOf("pr-1"))
         assertEquals(listOf("h1", "h2", "h3"), telefono.leerProyectos().single().hojas.map { it.id })
         assertEquals(listOf("h1", "h2", "h3").toSet(), tableta.leerProyectos().single().hojas.map { it.id }.toSet())
 
-        // Y una hoja quitada en un lado se quita en los dos.
+        // Y una hoja quitada a mano en un lado se quita en los dos.
         val r = tableta.leerProyectos().single()
-        proyecto(tableta, r.copy(hojas = r.hojas.filter { it.id != "h2" }, tocado = 8))
+        proyecto(tableta, Proyectos.sinHoja(r, "h2", 8))
         sincronizar(listOf("pr-1"))
         assertEquals(listOf("h1", "h3"), telefono.leerProyectos().single().hojas.map { it.id })
+        // Pero una que simplemente falta —sin marca de quitada— vuelve.
+        val t = telefono.leerProyectos().single()
+        proyecto(telefono, t.copy(hojas = t.hojas.filter { it.id != "h3" }, tocado = 9))
+        sincronizar(listOf("pr-1"))
+        assertEquals(setOf("h1", "h3"), telefono.leerProyectos().single().hojas.map { it.id }.toSet())
     }
 
     @Test
@@ -339,7 +423,7 @@ class SincronizarDeVerdadTest {
         emparejar()
         val largo = "x".repeat(4_000)
         repeat(450) { mensaje(telefono, "t$it", "nota $it $largo") }
-        assertTrue(sincronizar().isEmpty())
+        sincronizar()
         assertEquals(450, tableta.leerMensajes().size)
         assertEquals(senas(telefono), senas(tableta))
     }
@@ -373,8 +457,7 @@ class SincronizarDeVerdadTest {
         dibujo(telefono, "d1", "v2")
         sincronizar(antesDeCerrar = { dibujo(telefono, "d1", "v3 guardado a última hora") })
         assertTrue(textoDelDibujo(tableta, "d1").contains("v2"))
-        val preguntas = sincronizar()
-        assertTrue("no hay nada que preguntar: $preguntas", preguntas.isEmpty())
+        assertEquals("nada que juntar", 0, sincronizar().fusionados)
         assertTrue(textoDelDibujo(telefono, "d1").contains("v3"))
         assertTrue("la tableta recibe lo último", textoDelDibujo(tableta, "d1").contains("v3"))
     }
@@ -499,13 +582,132 @@ class SincronizarDeVerdadTest {
     }
 
     @Test
-    fun `mezclar listas conserva el orden y lo de cada lado`() {
+    fun `juntar listas conserva el orden y lo de cada lado`() {
         val base = listOf("a", "b", "c")
-        assertEquals(listOf("a", "x", "b", "y"), Mezcla.lista(listOf("a", "b", "y"), listOf("a", "x", "b", "c"), base, { it }, true).let {
-            // «c» se quitó en el mío; «x» se añadió en el suyo detrás de «a»; «y» en el mío.
-            it
-        })
-        assertEquals(listOf("a", "b"), Mezcla.lista(listOf("a"), listOf("b"), null, { it }, true).sorted())
+        val mio = listOf("a", "b", "y")
+        val suyo = listOf("a", "x", "b", "c")
+        // «c» se quitó en el mío; «x» se añadió en el suyo detrás de «a»; «y» en el mío.
+        assertEquals(listOf("a", "x", "b", "y"), Fusion.ordenJunto(mio, suyo, base) { k -> (k in mio && k in suyo) || k !in base })
         assertNull(Mezcla.proyecto(null, null, null))
+    }
+
+    /** Sin maestro: el nombre cambiado en un lado pasa; en los dos, gana el proyecto tocado más tarde. */
+    @Test
+    fun `sin maestro el nombre cambiado en los dos lo gana el ultimo`() {
+        val hoja = Hoja(id = "h1", nombre = "planta")
+        val base = Proyecto(id = "p", nombre = "obra", hojas = listOf(hoja), tocado = 100)
+        assertEquals("obra nueva", Mezcla.proyecto(base.copy(nombre = "obra vieja", tocado = 200), base.copy(nombre = "obra nueva", tocado = 300), base)?.nombre)
+        assertEquals("obra vieja", Mezcla.proyecto(base.copy(nombre = "obra vieja", tocado = 400), base.copy(nombre = "obra nueva", tocado = 300), base)?.nombre)
+        // Cambiado en uno solo, pasa aunque el otro sea más reciente.
+        assertEquals("obra nueva", Mezcla.proyecto(base.copy(tocado = 900), base.copy(nombre = "obra nueva", tocado = 300), base)?.nombre)
+    }
+
+    @Test
+    fun `las hojas nuevas de los dos se suman y una nota se junta por parrafos`() {
+        val a = Hoja(id = "h1", nota = "uno\ndos")
+        val base = Proyecto(id = "p", nombre = "obra", hojas = listOf(a), tocado = 100)
+        val mio = base.copy(hojas = listOf(a.copy(nota = "UNO\ndos"), Hoja(id = "h2")), tocado = 200)
+        val suyo = base.copy(hojas = listOf(a.copy(nota = "uno\ndos\ntres"), Hoja(id = "h3")), tocado = 300)
+        val junto = Mezcla.proyecto(mio, suyo, base)!!
+        assertEquals(listOf("h1", "h2", "h3"), junto.hojas.map { it.id })
+        assertEquals("UNO\ndos\ntres", junto.hojas.first().nota)
+    }
+
+    @Test
+    fun `una hoja quitada a mano en un lado y cambiada en el otro se queda`() {
+        val h = Hoja(id = "h1", dibujo = "d1")
+        val base = Proyecto(id = "p", nombre = "obra", hojas = listOf(h), tocado = 100)
+        val mio = Proyectos.sinHoja(base, "h1", 200)
+        assertNull(Mezcla.proyecto(mio, base, base)!!.hojas.firstOrNull())
+        val junto = Mezcla.proyecto(mio, base.copy(tocado = 300), base, cambiadasAlli = setOf("h1"))!!
+        assertEquals(listOf("h1"), junto.hojas.map { it.id })
+        assertTrue("vuelve y pierde la marca", "h1" !in junto.quitadas)
+    }
+
+    /**
+     * **Lo que le pasó al usuario el 15-sep-2026 con «Tesis».** Los dos aparatos compartían dos
+     * lienzos; un envío dejó el proyecto del teléfono con un mismo lienzo repetido, y la tableta tenía
+     * además uno suyo. Sincronizando con la tableta de maestro, se perdió uno de los compartidos en
+     * los dos. Ahora no manda nadie: lo que falta sin marca de quitado vuelve, y antes de tocar nada
+     * hay copia en los dos.
+     */
+    @Test
+    fun `el caso de Tesis - sin maestro no se pierde ningun lienzo`() {
+        emparejar()
+        dibujo(tableta, "d1", "uno"); dibujo(tableta, "d2", "dos")
+        proyecto(tableta, Proyecto("tesis", "Tesis", hojas = listOf(Hoja("h1", "Uno", dibujo = "d1"), Hoja("h2", "Dos", dibujo = "d2")), tocado = 5))
+        sincronizar(listOf("tesis"))
+        assertEquals(listOf("h1", "h2"), telefono.leerProyectos().single().hojas.map { it.id })
+
+        reloj += 1_000
+        // La tableta añade uno suyo.
+        dibujo(tableta, "d3", "tres")
+        val t = tableta.leerProyectos().single()
+        proyecto(tableta, t.copy(hojas = t.hojas + Hoja("h3", "Tres", dibujo = "d3"), tocado = 6))
+        // El teléfono queda roto como lo dejó el envío: el mismo lienzo tres veces, tocado después.
+        val f = telefono.leerProyectos().single()
+        proyecto(telefono, f.copy(hojas = listOf(f.hojas[1], f.hojas[1], f.hojas[1]), tocado = 9))
+        // Nunca dos hojas con el mismo id.
+        assertEquals(listOf("h2"), telefono.leerProyectos().single().hojas.map { it.id })
+
+        sincronizar(listOf("tesis"))
+        assertEquals(setOf("h1", "h2", "h3"), telefono.leerProyectos().single().hojas.map { it.id }.toSet())
+        assertEquals(setOf("h1", "h2", "h3"), tableta.leerProyectos().single().hojas.map { it.id }.toSet())
+        assertTrue(textoDelDibujo(telefono, "d3").contains("tres"))
+
+        // Y en los dos quedó copia de cómo estaba antes de esa vuelta.
+        val copiaTel = Copias(telefono).lista("tesis").first()
+        assertEquals(1, copiaTel.hojas)
+        assertTrue(copiaTel.motivo.contains("Tableta"))
+        assertEquals(3, Copias(tableta).lista("tesis").first().hojas)
+    }
+
+    @Test
+    fun `una copia vuelve a poner el indice, los lienzos y los mensajes, y se puede deshacer`() {
+        dibujo(telefono, "d1", "original")
+        proyecto(telefono, Proyecto("p", "Obra", hojas = listOf(Hoja("h1", "Uno", dibujo = "d1"), Hoja("h2", "Dos")), tocado = 1))
+        mensaje(telefono, "m1", "Uno", clase = Clase.DIBUJO, proyecto = "p", referencia = "d1")
+        val copias = Copias(telefono)
+        assertNotNull(copias.hacer("p", "Antes de la prueba", 100))
+        // Igual que la última: no se repite.
+        assertNull(copias.hacer("p", "Otra vez", 101))
+
+        // Algo lo pisa: se va una hoja, cambia el lienzo, se borra el mensaje, y se añade otra hoja.
+        dibujo(telefono, "d1", "pisado")
+        proyecto(telefono, Proyecto("p", "Obra", hojas = listOf(Hoja("h9", "Nueva")), tocado = 2))
+        File(telefono.filesDir, "guardados.jsonl").writeText("")
+
+        // Sin proyecto que lo señale, el lienzo sale entre los sueltos.
+        assertEquals(listOf("d1"), copias.lienzosSueltos().map { it.dibujo })
+
+        assertTrue(copias.restaurar(copias.lista("p").last(), 200))
+        val p = telefono.leerProyectos().single()
+        // Lo de entonces, y lo añadido después se queda detrás.
+        assertEquals(listOf("h1", "h2", "h9"), p.hojas.map { it.id })
+        assertTrue(textoDelDibujo(telefono, "d1").contains("original"))
+        assertEquals(listOf("m1"), telefono.leerMensajes().map { it.id })
+        assertTrue(copias.lienzosSueltos().isEmpty())
+
+        // Restaurar dejó otra copia antes: se puede volver a lo pisado.
+        val antesDeRestaurar = copias.lista("p").first { it.motivo.startsWith("Antes de volver") }
+        assertTrue(copias.restaurar(antesDeRestaurar, 300))
+        assertTrue(textoDelDibujo(telefono, "d1").contains("pisado"))
+    }
+
+    @Test
+    fun `dos aparatos que repararon su chat por separado acaban con un solo mensaje`() {
+        emparejar()
+        proyecto(telefono, Proyecto("p", "Obra", tocado = 1))
+        sincronizar(listOf("p"))
+        val id = com.forge.pixpin.guardados.RegistroDelChat.idPara("p", "d1")
+        mensaje(telefono, id, "Lienzo", clase = Clase.DIBUJO, proyecto = "p", referencia = "d1")
+        mensaje(tableta, id, "Lienzo", clase = Clase.DIBUJO, proyecto = "p", referencia = "d1")
+        sincronizar(listOf("p"))
+        assertEquals(1, telefono.leerMensajes().count { it.id == id })
+        assertEquals(1, tableta.leerMensajes().count { it.id == id })
+        assertEquals(senas(telefono, "p"), senas(tableta, "p"))
+        // Y la siguiente vuelta no lo resucita.
+        sincronizar(listOf("p"))
+        assertEquals(1, telefono.leerMensajes().count { it.id == id })
     }
 }

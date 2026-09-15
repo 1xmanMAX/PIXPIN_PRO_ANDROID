@@ -2,7 +2,6 @@ package com.forge.pixpin.pdf
 
 import android.content.Context
 import android.graphics.Bitmap
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -102,8 +101,37 @@ object SublienzosDelPdf {
         return p.pdfOrigen?.takeIf { File(it).exists() } ?: ruta
     }
 
-    /** La miniatura de un sublienzo: la foto de la zona con lo resuelto encima. */
+    /**
+     * **Las miniaturas, hechas una vez.** Pintar un sublienzo es leer su escena, cargar la foto
+     * de la zona y rasterizarlo todo: cientos de milisegundos. Se guarda en memoria y en la
+     * caché del disco con la fecha del dibujo en el nombre, así que solo se rehace cuando el
+     * sublienzo cambia; volver a la página, o abrir el PDF otro día, es leer un PNG pequeño.
+     */
+    private val enMemoria = object : android.util.LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 32).toInt()) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    }
+
+    /** La miniatura de un sublienzo: la foto de la zona con lo resuelto encima. Trabajo de disco. */
     fun miniatura(context: Context, dibujo: String, lado: Int): Bitmap? {
+        val archivo = File(ExcalidrawStore.rutaDe(context, dibujo))
+        if (!archivo.exists()) return null
+        val clave = "$dibujo-${archivo.lastModified()}-$lado"
+        enMemoria.get(clave)?.let { return it }
+        val carpeta = File(context.cacheDir, "miniaturas-de-sublienzos")
+        val enDisco = File(carpeta, "$clave.png")
+        val hecha = enDisco.takeIf { it.exists() }?.let { runCatching { android.graphics.BitmapFactory.decodeFile(it.path) }.getOrNull() }
+            ?: pintarMiniatura(context, dibujo, lado)?.also { b ->
+                runCatching {
+                    carpeta.mkdirs()
+                    // Las de versiones anteriores del mismo sublienzo ya no sirven.
+                    carpeta.listFiles { f -> f.name.startsWith("$dibujo-") }?.forEach { it.delete() }
+                    java.io.FileOutputStream(enDisco).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                }
+            }
+        return hecha?.also { enMemoria.put(clave, it) }
+    }
+
+    private fun pintarMiniatura(context: Context, dibujo: String, lado: Int): Bitmap? {
         val escena = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(context, dibujo)) ?: return null
         val visibles = escena.contenidoVisible
         if (visibles.isEmpty()) return null
@@ -115,9 +143,16 @@ object SublienzosDelPdf {
 
 private val AZUL_DE_LA_ZONA = Color(0xFF1971C2)
 
+/** El lado de las miniaturas: de sobra para el hueco que tienen al lado de la hoja. */
+private const val MINIATURA_PX = 360
+
 /**
- * Una hoja del lector con sus recortes. [abierta]: alejada, con las miniaturas a los lados.
+ * Una hoja del lector con sus recortes. [abierta]: con las miniaturas a los lados, unidas por
+ * una línea a su recuadro; cerrada, solo los recuadros y un aviso que la abre ([alPedirlos]).
  * [imagen] es la página ya rasterizada (o null mientras llega) y [proporcion] su ancho / alto.
+ *
+ * **Sin animación de tamaño**: animar el ancho obligaba a medir y recomponer la hoja y todas
+ * sus miniaturas en cada fotograma, que era parte del tirón. Ver [LectorPdfActivity].
  */
 @Composable
 internal fun HojaConSublienzos(
@@ -125,81 +160,102 @@ internal fun HojaConSublienzos(
     proporcion: Float,
     recortes: List<SublienzosDelPdf.Recorte>,
     abierta: Boolean,
+    alPedirlos: () -> Unit = {},
     alAbrir: (SublienzosDelPdf.Recorte) -> Unit
 ) {
-    val contexto = LocalContext.current
-    // La página encoge al abrirse y deja sitio a los lados; animado, que se entienda qué pasa.
-    val ancho by animateFloatAsState(if (abierta && recortes.isNotEmpty()) 0.56f else 1f, label = "hoja")
+    val ancho = if (abierta && recortes.isNotEmpty()) 0.56f else 1f
     BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         val densidad = LocalDensity.current
         val total = constraints.maxWidth.toFloat()
         val anchoHoja = total * ancho
         val altoHoja = anchoHoja / proporcion.coerceAtLeast(0.1f)
         val izquierda = (total - anchoHoja) / 2f
-        val ladoMini = (total - anchoHoja) / 2f - with(densidad) { 12.dp.toPx() }
-        val visibles = abierta && recortes.isNotEmpty() && ancho < 0.6f
+        val hueco = with(densidad) { 8.dp.toPx() }
+        val ladoMini = (total - anchoHoja) / 2f - 2 * hueco
+        val visibles = abierta && recortes.isNotEmpty()
+        // **Las bandas de arriba y abajo, reservadas siempre que haya sublienzos.** Un recorte
+        // del borde de arriba se enseña arriba, y si el sitio apareciera solo cuando toca, la
+        // hoja daría un salto al abrirse. Ver [SitioDeSublienzos].
+        val banda = if (visibles) ladoMini + hueco else 0f
 
-        // Dónde va cada miniatura: a la altura de su recorte, alternando lado, sin montarse.
-        data class Puesto(val r: SublienzosDelPdf.Recorte, val derecha: Boolean, val y: Float)
-        val puestos = remember(recortes, altoHoja, ladoMini) {
-            val finIzq = floatArrayOf(-1f)
-            val finDer = floatArrayOf(-1f)
-            recortes.mapIndexed { i, r ->
-                val centro = (r.y0 + r.y1) / 2f * altoHoja
-                val derecha = i % 2 == 1
-                val fin = if (derecha) finDer else finIzq
-                val y = maxOf(centro - ladoMini / 2f, fin[0] + with(densidad) { 8.dp.toPx() }, 0f)
-                fin[0] = y + ladoMini
-                Puesto(r, derecha, y)
+        // Dónde va cada uno: por el lado más cercano a su recuadro, a su altura, sin montarse.
+        val puestos = remember(recortes, altoHoja, ladoMini, banda) {
+            val pagina = com.forge.pixpin.motor.Bounds(
+                izquierda.toDouble(), banda.toDouble(),
+                (izquierda + anchoHoja).toDouble(), (banda + altoHoja).toDouble()
+            )
+            val zonas = recortes.map { r ->
+                com.forge.pixpin.motor.Bounds(
+                    izquierda + r.x0 * anchoHoja.toDouble(), banda + r.y0 * altoHoja.toDouble(),
+                    izquierda + r.x1 * anchoHoja.toDouble(), banda + r.y1 * altoHoja.toDouble()
+                )
             }
+            recortes.zip(
+                com.forge.pixpin.motor.SitioDeSublienzos.colocar(
+                    pagina, zonas, recortes.map { 1.0 }, ladoMini.toDouble(), hueco.toDouble()
+                )
+            )
         }
-        val altoTotal = maxOf(altoHoja, if (visibles) (puestos.maxOfOrNull { it.y + ladoMini } ?: 0f) else 0f)
+        val altoTotal = maxOf(
+            banda + altoHoja + banda,
+            if (visibles) (puestos.maxOfOrNull { (_, p) -> (p.y + p.alto).toFloat() + hueco } ?: 0f) else 0f
+        )
 
         Box(Modifier.fillMaxWidth().height(with(densidad) { altoTotal.toDp() })) {
             Box(
                 Modifier
-                    .offset(x = with(densidad) { izquierda.toDp() })
+                    .offset(x = with(densidad) { izquierda.toDp() }, y = with(densidad) { banda.toDp() })
                     .size(with(densidad) { anchoHoja.toDp() }, with(densidad) { altoHoja.toDp() })
                     .background(Color.White)
             ) {
                 if (imagen != null) Image(imagen.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize())
                 // El recuadro de cada recorte, siempre: dice que ahí hay algo resuelto.
                 Canvas(Modifier.fillMaxSize()) {
+                    val trazo = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f)))
                     for (r in recortes) {
                         drawRect(
                             AZUL_DE_LA_ZONA,
                             topLeft = Offset(r.x0 * size.width, r.y0 * size.height),
                             size = Size((r.x1 - r.x0) * size.width, (r.y1 - r.y0) * size.height),
-                            style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 7f)))
+                            style = trazo
                         )
                     }
                 }
                 if (!abierta && recortes.isNotEmpty()) {
                     Text(
-                        "${recortes.size} ${if (recortes.size == 1) "recorte" else "recortes"} · aleja con dos dedos",
+                        "${recortes.size} ${if (recortes.size == 1) "sublienzo" else "sublienzos"} · aleja o toca",
                         color = Color.White, fontSize = 11.sp,
                         modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
-                            .background(AZUL_DE_LA_ZONA.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(AZUL_DE_LA_ZONA.copy(alpha = 0.85f))
+                            .clickable(onClick = alPedirlos)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
             if (visibles) {
-                // Las líneas, de la miniatura a su recuadro.
+                // Las líneas, del borde de la miniatura que mira a la hoja a su recuadro.
                 Canvas(Modifier.fillMaxSize()) {
-                    for (p in puestos) {
-                        val desde = Offset(if (p.derecha) izquierda + anchoHoja + with(densidad) { 6.dp.toPx() } + 0f else izquierda - with(densidad) { 6.dp.toPx() }, p.y + ladoMini / 2f)
+                    for ((r, p) in puestos) {
+                        val desde = Offset(p.salidaX.toFloat(), p.salidaY.toFloat())
                         val hasta = Offset(
-                            izquierda + (if (p.derecha) p.r.x1 else p.r.x0) * anchoHoja,
-                            (p.r.y0 + p.r.y1) / 2f * altoHoja
+                            izquierda + when (p.lado) {
+                                com.forge.pixpin.motor.SitioDeSublienzos.Lado.IZQUIERDA -> r.x0
+                                com.forge.pixpin.motor.SitioDeSublienzos.Lado.DERECHA -> r.x1
+                                else -> (r.x0 + r.x1) / 2f
+                            } * anchoHoja,
+                            banda + when (p.lado) {
+                                com.forge.pixpin.motor.SitioDeSublienzos.Lado.ARRIBA -> r.y0
+                                com.forge.pixpin.motor.SitioDeSublienzos.Lado.ABAJO -> r.y1
+                                else -> (r.y0 + r.y1) / 2f
+                            } * altoHoja
                         )
                         drawLine(AZUL_DE_LA_ZONA, desde, hasta, strokeWidth = 2.dp.toPx())
                         drawCircle(AZUL_DE_LA_ZONA, 4.dp.toPx(), hasta)
                     }
                 }
-                for (p in puestos) {
-                    val x = if (p.derecha) izquierda + anchoHoja + with(densidad) { 6.dp.toPx() } else with(densidad) { 6.dp.toPx() }
-                    Miniatura(p.r, ladoMini, x, p.y, alAbrir)
+                for ((r, p) in puestos) {
+                    Miniatura(r, p.ancho.toFloat(), p.alto.toFloat(), p.x.toFloat(), p.y.toFloat(), alAbrir)
                 }
             }
         }
@@ -207,17 +263,17 @@ internal fun HojaConSublienzos(
 }
 
 @Composable
-private fun Miniatura(r: SublienzosDelPdf.Recorte, lado: Float, x: Float, y: Float, alAbrir: (SublienzosDelPdf.Recorte) -> Unit) {
+private fun Miniatura(r: SublienzosDelPdf.Recorte, ancho: Float, alto: Float, x: Float, y: Float, alAbrir: (SublienzosDelPdf.Recorte) -> Unit) {
     val contexto = LocalContext.current
     val densidad = LocalDensity.current
     var mapa by remember(r.dibujo) { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(r.dibujo) {
-        mapa = withContext(Dispatchers.IO) { runCatching { SublienzosDelPdf.miniatura(contexto, r.dibujo, 360) }.getOrNull() }
+        mapa = withContext(Dispatchers.IO) { runCatching { SublienzosDelPdf.miniatura(contexto, r.dibujo, MINIATURA_PX) }.getOrNull() }
     }
     Box(
         Modifier
             .offset(x = with(densidad) { x.toDp() }, y = with(densidad) { y.toDp() })
-            .size(with(densidad) { lado.toDp() })
+            .size(with(densidad) { ancho.toDp() }, with(densidad) { alto.toDp() })
             .clip(RoundedCornerShape(10.dp))
             .background(Color.White)
             .border(2.dp, AZUL_DE_LA_ZONA, RoundedCornerShape(10.dp))

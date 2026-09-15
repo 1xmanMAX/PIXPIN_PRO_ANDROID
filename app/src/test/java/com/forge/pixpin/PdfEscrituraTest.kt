@@ -502,4 +502,59 @@ class PdfEscrituraTest {
     fun `sin nada que dibujar no se escribe nada`() {
         assertNull(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, ByteArray(0)))
     }
+
+    /**
+     * **Reescribir el archivo entero conserva lo que vive en el catálogo.**
+     *
+     * Es la diferencia con rehacerlo por páginas, que es lo que se hacía para aligerar: un PDF con
+     * marcadores o con un formulario se quedaba **sin tocar** para no perderlos, y marcadores los
+     * trae casi todo lo que sale de un programa de oficina. De ahí que nueve de cada diez
+     * documentos no bajaran ni un byte (usuario, 14-sep-2026). Ver [PdfEscritura.completo].
+     */
+    @Test
+    fun `reescribir entero conserva marcadores, formularios y capas`() {
+        val original = pdfClasico()
+        val conExtras = String(original, Charsets.ISO_8859_1).replace(
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Catalog /Pages 2 0 R /Outlines 5 0 R /AcroForm << /Fields [] >> /OCProperties << /OCGs [] >> >>"
+        )
+        // Las posiciones ya no valen, pero el lector se rehace por el `startxref` de la cola:
+        // para esta prueba basta con volver a leerlo y comprobar lo que se copia.
+        val archivo = leerPdf(conExtras.toByteArray(Charsets.ISO_8859_1)) ?: leerPdf(original)!!
+        val rehecho = PdfEscritura.completo(archivo) { _, v -> null }
+        assertNotNull("no se pudo reescribir", rehecho)
+        val leido = leerPdf(rehecho!!)!!
+        assertEquals("las páginas siguen ahí", archivo.paginas().size, leido.paginas().size)
+        val raizVieja = archivo.diccDe(archivo.trailer.entradas["Root"])!!
+        val raizNueva = leido.diccDe(leido.trailer.entradas["Root"])!!
+        for (clave in raizVieja.entradas.keys) {
+            assertTrue("se perdió /$clave", raizNueva.entradas.containsKey(clave))
+        }
+    }
+
+    /** Y lo que cambie el que reescribe sale cambiado, con su `/Length` al día. */
+    @Test
+    fun `reescribir deja cambiar los flujos`() {
+        val archivo = leerPdf(pdfClasico())!!
+        val rehecho = PdfEscritura.completo(archivo) { _, v ->
+            (v as? PdfValor.Flujo)?.let { PdfValor.Flujo(it.dicc, "BT ET".toByteArray()) }
+        }
+        val leido = leerPdf(rehecho!!)!!
+        val pagina = leido.pagina(0)!!
+        val contenido = leido.resolver(pagina.entradas["Contents"]) as PdfValor.Flujo
+        assertEquals("BT ET", String(contenido.datos))
+        assertEquals(5.0, (contenido.dicc.entradas["Length"] as PdfValor.Numero).valor, 0.001)
+    }
+
+    /**
+     * **LZW, el comprimido de los PDF viejos y de mucho escáner.** El ejemplo es el de la propia
+     * especificación (tabla 7.8): sin saber deshacerlo, sus imágenes no se podían ni aligerar.
+     */
+    @Test
+    fun `se sabe deshacer el lzw`() {
+        val codificado = intArrayOf(0x80, 0x0B, 0x60, 0x50, 0x22, 0x0C, 0x0C, 0x85, 0x01)
+            .map { it.toByte() }.toByteArray()
+        val esperado = byteArrayOf(45, 45, 45, 45, 45, 65, 45, 45, 45, 66)
+        assertEquals(esperado.toList(), com.forge.pixpin.motor.deLzw(codificado, 1)!!.toList())
+    }
 }

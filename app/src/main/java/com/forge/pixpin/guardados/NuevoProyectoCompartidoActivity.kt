@@ -86,6 +86,19 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             }
             return if (alguna) app.proyectos.porId(proyecto.id) else { app.proyectos.borrar(proyecto.id); null }
         }
+        // **Una presentación de PowerPoint**: se convierte en PDF —una página por diapositiva— y
+        // entra como cualquier PDF, lista para anotar y presentar. Ver [DiapositivasAPdf].
+        if (com.forge.pixpin.motor.Diapositivas.esPresentacion(nombre)) {
+            val documento = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+            val paginas = runCatching { DiapositivasAPdf.convertir(primero, nombre, documento) }.getOrElse { e ->
+                val porque = (e as? com.forge.pixpin.motor.Diapositivas.NoSeLee)?.message ?: "No se pudo leer la presentación"
+                runOnUiThread { android.widget.Toast.makeText(this, porque, android.widget.Toast.LENGTH_LONG).show() }
+                documento.delete()
+                return null
+            }
+            primero.delete()
+            return app.proyectos.deEstePdf(documento.absolutePath, nombre.substringBeforeLast('.'), paginas, ahora)
+        }
         // Un PDF: un proyecto con sus páginas, como al abrir uno desde dentro.
         if (tipo?.contains("pdf") == true || nombre.endsWith(".pdf", ignoreCase = true)) {
             val paginas = PdfDoc.pageCount(primero.absolutePath)
@@ -96,6 +109,9 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             val documento = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
             runCatching { primero.copyTo(documento, overwrite = true) }.getOrElse { return null }
             primero.delete()
+            // **Primero se aligera**: las fotos de un escaneo, a la resolución de imprimir. Todo lo
+            // que salga de este proyecto —la web, los envíos— pesa luego lo justo. Ver [ComprimirPdf].
+            com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(documento)
             return app.proyectos.deEstePdf(documento.absolutePath, nombre.removeSuffix(".pdf"), paginas, ahora)
         }
         // Fotos: un proyecto con un lienzo por foto.

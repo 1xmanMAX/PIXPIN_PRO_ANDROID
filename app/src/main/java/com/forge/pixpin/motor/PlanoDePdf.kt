@@ -495,17 +495,23 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
                         "rg" -> if (nNum >= 3) e.colorRelleno = rgb(num[0], num[1], num[2])
                         "K" -> if (nNum >= 4) e.colorTrazo = cmyk(num[0], num[1], num[2], num[3])
                         "k" -> if (nNum >= 4) e.colorRelleno = cmyk(num[0], num[1], num[2], num[3])
-                        "CS" -> e.colorTrazo = 0x000000
-                        "cs" -> e.colorRelleno = 0x000000
+                        "CS" -> {
+                            e.espacioTrazo = espacioDe(recursos, nombre1)
+                            e.colorTrazo = alEmpezar(e.espacioTrazo)
+                        }
+                        "cs" -> {
+                            e.espacioRelleno = espacioDe(recursos, nombre1)
+                            e.colorRelleno = alEmpezar(e.espacioRelleno)
+                        }
                         "SC", "SCN" -> {
                             // Con un nombre delante es un patrón —una trama o un degradado
                             // dentro de la tinta—, y eso tampoco se sabe pintar.
                             if (nombre1 != null) sinEntender++
-                            e.colorTrazo = porComponentes(num, nNum, e.colorTrazo)
+                            e.colorTrazo = enEsteEspacio(e.espacioTrazo, num, nNum, e.colorTrazo)
                         }
                         "sc", "scn" -> {
                             if (nombre1 != null) sinEntender++
-                            e.colorRelleno = porComponentes(num, nNum, e.colorRelleno)
+                            e.colorRelleno = enEsteEspacio(e.espacioRelleno, num, nNum, e.colorRelleno)
                         }
 
                         // ---- El camino ----
@@ -1044,6 +1050,111 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
         rgb((1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k))
 
     /**
+     * **Qué espacio de color pone `cs`.** Ver [Espacio], que cuenta por qué hace falta saberlo.
+     *
+     * Los nombres de aparato se conocen sin mirar nada; los demás se buscan en el
+     * `/ColorSpace` de los recursos de la página, donde son una lista que empieza por su clase.
+     */
+    private fun espacioDe(recursos: PdfValor.Dicc?, nombre: String?): Espacio {
+        if (nombre == null) return Espacio.NINGUNO
+        porNombre(nombre)?.let { return it }
+        val v = archivo.resolver(recurso(recursos, "ColorSpace", nombre)) ?: return Espacio.NINGUNO
+        return deLaLista(v)
+    }
+
+    private fun porNombre(nombre: String): Espacio? = when (nombre) {
+        "DeviceGray", "CalGray", "G" -> Espacio(Espacio.GRIS)
+        "DeviceRGB", "CalRGB", "RGB" -> Espacio(Espacio.RGB)
+        "DeviceCMYK", "CMYK" -> Espacio(Espacio.CMYK)
+        // Un patrón no se sabe pintar y ya se cuenta en `scn`; que el color se quede como esté.
+        "Pattern" -> Espacio.NINGUNO
+        else -> null
+    }
+
+    /** El espacio escrito como lista: `[/Indexed base hival tabla]`, `[/ICCBased ref]`… */
+    private fun deLaLista(v: PdfValor): Espacio {
+        if (v is PdfValor.Nombre) return porNombre(v.valor) ?: Espacio.NINGUNO
+        val l = (v as? PdfValor.Lista)?.valores ?: return Espacio.NINGUNO
+        return when ((l.firstOrNull() as? PdfValor.Nombre)?.valor) {
+            "ICCBased" -> when (archivo.diccDe(l.getOrNull(1))?.entero("N")) {
+                1 -> Espacio(Espacio.GRIS)
+                3 -> Espacio(Espacio.RGB)
+                4 -> Espacio(Espacio.CMYK)
+                else -> Espacio.NINGUNO
+            }
+            "CalGray" -> Espacio(Espacio.GRIS)
+            "CalRGB", "Lab" -> Espacio(Espacio.RGB)
+            "Indexed", "I" -> paletaDe(l)
+            // Una tinta plana o varias: el número es cuánta tinta se echa, y la tabla que la
+            // convierte en color es una función que aquí no se ejecuta. Uno a uno, cuanta más
+            // tinta más oscuro, que es lo que hace un gris invertido.
+            "Separation", "DeviceN" -> Espacio(Espacio.TINTA)
+            "DeviceGray" -> Espacio(Espacio.GRIS)
+            "DeviceRGB" -> Espacio(Espacio.RGB)
+            "DeviceCMYK" -> Espacio(Espacio.CMYK)
+            else -> Espacio.NINGUNO
+        }
+    }
+
+    /**
+     * La paleta de un `/Indexed`, ya pasada a RGB: `[/Indexed base hival tabla]`, donde la tabla
+     * son los componentes del color de cada índice, seguidos y en bytes.
+     */
+    private fun paletaDe(l: List<PdfValor>): Espacio {
+        val base = archivo.resolver(l.getOrNull(1))?.let { deLaLista(it) } ?: return Espacio.NINGUNO
+        val comp = when (base.clase) {
+            Espacio.GRIS, Espacio.TINTA -> 1
+            Espacio.RGB -> 3
+            Espacio.CMYK -> 4
+            else -> return Espacio.NINGUNO
+        }
+        val tope = (archivo.resolver(l.getOrNull(2)) as? PdfValor.Numero)?.valor?.toInt() ?: return Espacio.NINGUNO
+        if (tope < 0 || tope > 255) return Espacio.NINGUNO
+        val tabla = when (val t = archivo.resolver(l.getOrNull(3))) {
+            is PdfValor.Cadena -> t.bytes
+            is PdfValor.Flujo -> archivo.descomprimir(t) ?: return Espacio.NINGUNO
+            else -> return Espacio.NINGUNO
+        }
+        val paleta = IntArray(tope + 1)
+        for (i in 0..tope) {
+            val o = i * comp
+            if (o + comp > tabla.size) break
+            fun c(k: Int) = (tabla[o + k].toInt() and 0xFF) / 255.0
+            paleta[i] = when (comp) {
+                1 -> if (base.clase == Espacio.TINTA) gris(1 - c(0)) else gris(c(0))
+                3 -> rgb(c(0), c(1), c(2))
+                else -> cmyk(c(0), c(1), c(2), c(3))
+            }
+        }
+        return Espacio(Espacio.INDEXADO, paleta)
+    }
+
+    /**
+     * El color con el que se estrena un espacio: negro, que es lo que dice el formato para los
+     * de aparato. Con una paleta, negro no significa nada: es el primer color de la tabla.
+     */
+    private fun alEmpezar(espacio: Espacio): Int = when (espacio.clase) {
+        Espacio.INDEXADO -> espacio.paleta?.firstOrNull() ?: 0x000000
+        else -> 0x000000
+    }
+
+    /** Los números de `sc`/`scn`, leídos en el espacio que toque. */
+    private fun enEsteEspacio(espacio: Espacio, num: DoubleArray, n: Int, antes: Int): Int {
+        if (n < 1) return antes
+        return when (espacio.clase) {
+            Espacio.GRIS -> gris(num[0])
+            Espacio.RGB -> if (n >= 3) rgb(num[0], num[1], num[2]) else antes
+            Espacio.CMYK -> if (n >= 4) cmyk(num[0], num[1], num[2], num[3]) else antes
+            Espacio.TINTA -> gris(1 - num[0].coerceIn(0.0, 1.0))
+            Espacio.INDEXADO -> {
+                val p = espacio.paleta ?: return antes
+                if (p.isEmpty()) antes else p[num[0].toInt().coerceIn(0, p.size - 1)]
+            }
+            else -> porComponentes(num, n, antes)
+        }
+    }
+
+    /**
      * `sc`/`scn` sin saber en qué espacio se está: se deduce por cuántos números trae, que
      * acierta con lo corriente —gris, rgb, cmyk— y con una tinta plana la deja en gris.
      */
@@ -1082,6 +1193,9 @@ private class Estado {
     var alfaRelleno = 1.0
     var raya: DoubleArray = DoubleArray(0)
     var recorte = Recorte.TODO
+    /** En qué espacio de color hablan `sc`/`scn`. Ver [Espacio]. */
+    var espacioTrazo: Espacio = Espacio.NINGUNO
+    var espacioRelleno: Espacio = Espacio.NINGUNO
 
     // El texto: la matriz del renglón y por dónde va el cursor.
     var txa = 1.0; var txb = 0.0; var txc = 0.0; var txd = 1.0; var txe = 0.0; var txf = 0.0
@@ -1126,11 +1240,43 @@ private class Estado {
         o.alfaTrazo = alfaTrazo; o.alfaRelleno = alfaRelleno
         o.raya = raya
         o.recorte = recorte
+        o.espacioTrazo = espacioTrazo; o.espacioRelleno = espacioRelleno
         o.txa = txa; o.txb = txb; o.txc = txc; o.txd = txd; o.txe = txe; o.txf = txf
         o.tx = tx; o.ty = ty
         o.fuente = fuente; o.tam = tam
         o.tc = tc; o.tw = tw; o.tz = tz; o.ts = ts; o.tl = tl; o.tr = tr
         return o
+    }
+}
+
+/**
+ * **En qué espacio de color habla `sc`/`scn`.**
+ *
+ * `sc` no dice de qué habla: sus números significan lo que diga el espacio que se puso antes con
+ * `cs`. Se adivinaba por cuántos números venían —uno gris, tres RGB, cuatro CMYK— y eso acierta
+ * con lo corriente, pero **con una paleta (`/Indexed`) el número que viene es un índice**, no un
+ * tono: un `scn 5` sobre una paleta de colores se leía como «gris 1−5», o sea negro. De ahí los
+ * rellenos negros de los PDF cargados, que son justo los que traen paletas (usuario, 13-sep-2026).
+ *
+ * Así que el espacio se guarda de verdad: el nombre de `cs` se busca en los recursos de la página
+ * y se traduce a una de estas formas. Lo que no se reconozca se sigue adivinando por el número de
+ * componentes, que es lo que había.
+ */
+private class Espacio(
+    val clase: Int,
+    /** `/Indexed`: un color por índice, ya en RGB. */
+    val paleta: IntArray? = null
+) {
+    companion object {
+        /** Ni idea: se adivina por cuántos números traiga `sc`. */
+        const val ADIVINAR = 0
+        const val GRIS = 1
+        const val RGB = 2
+        const val CMYK = 3
+        const val INDEXADO = 4
+        /** Una tinta plana o `/DeviceN`: el número es cuánta tinta, de 0 (nada) a 1 (a tope). */
+        const val TINTA = 5
+        val NINGUNO = Espacio(ADIVINAR)
     }
 }
 

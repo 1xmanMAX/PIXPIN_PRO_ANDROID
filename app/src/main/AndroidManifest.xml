@@ -303,6 +303,11 @@
             android:name=".guardados.BibliotecaDeAudioActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
+        <!-- Copias de seguridad de los proyectos y lienzos sin proyecto. Ver sincro/CopiasActivity. -->
+        <activity
+            android:name=".sincro.CopiasActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
         <!-- Enviar por Wi-Fi una sola vez: desde «Compartir» de cualquier app. Ver sincro/EnviarActivity. -->
         <activity
             android:name=".sincro.EnviarActivity"

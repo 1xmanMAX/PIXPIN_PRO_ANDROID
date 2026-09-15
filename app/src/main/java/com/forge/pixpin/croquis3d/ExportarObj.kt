@@ -1,5 +1,6 @@
 package com.forge.pixpin.croquis3d
 
+import com.forge.pixpin.motor.Malla3D
 import com.forge.pixpin.motor.Pt3
 import java.util.Locale
 import kotlin.math.abs
@@ -44,7 +45,12 @@ object ExportarObj {
     class Salida(val obj: String, val mtl: String, val vertices: Int, val caras: Int)
 
     /** El croquis entero, o null si no hay nada visible que escribir. */
-    fun escribir(croquis: Croquis, nombre: String): Salida? {
+    fun escribir(
+        croquis: Croquis,
+        nombre: String,
+        /** Los triángulos de un modelo importado, por su ruta. Ver [Modelo3D]. */
+        malla: (String) -> Malla3D? = { null }
+    ): Salida? {
         val obj = StringBuilder()
         val materiales = LinkedHashMap<String, String>()
         var vertices = 0
@@ -164,6 +170,42 @@ object ExportarObj {
             }
         }
 
+        // **Los modelos importados** (un IFC de Revit, un OBJ): sus triángulos llevados a
+        // donde están puestos, un objeto por pieza —el muro, la losa…— para que en Blender o
+        // en otro programa se sigan pudiendo elegir sueltas, y un material por color.
+        for (m in croquis.modelos) {
+            if (m.oculto) continue
+            val ma = malla(m.ruta) ?: continue
+            val v = ma.vertices
+            val primero = vertices + 1
+            var i = 0
+            while (i < v.size) {
+                val p = m.alMundo(v[i].toDouble(), v[i + 1].toDouble(), v[i + 2].toDouble())
+                obj.append("v ").append(n4(p.x)).append(' ').append(n4(p.z)).append(' ').append(n4(-p.y)).append('\n')
+                vertices++
+                i += 3
+            }
+            val piezas = ma.piezas.ifEmpty { listOf(Malla3D.Pieza(m.nombre, "", 0, ma.cuantosTriangulos)) }
+            val t = ma.triangulos
+            val refleja = determinante(m) < 0
+            for ((k, pieza) in piezas.withIndex()) {
+                obj.append("o ").append(limpio(m.nombre)).append('_').append(k).append('_').append(limpio(pieza.nombre)).append('\n')
+                var colorEnCurso = 0
+                var hayColor = false
+                for (tri in pieza.desde until pieza.hasta.coerceAtMost(ma.cuantosTriangulos)) {
+                    val c = ma.colores.getOrElse(tri) { -0x424243 }
+                    if (!hayColor || c != colorEnCurso) {
+                        colorEnCurso = c; hayColor = true
+                        obj.append("usemtl ").append(materialDe(String.format(Locale.ROOT, "#%06x", c and 0xFFFFFF), ((c ushr 24) / 255.0).takeIf { it > 0 } ?: 1.0)).append('\n')
+                    }
+                    val a = primero + t[tri * 3]; val b = primero + t[tri * 3 + 1]; val cc = primero + t[tri * 3 + 2]
+                    if (refleja) obj.append("f ").append(a).append(' ').append(cc).append(' ').append(b).append('\n')
+                    else obj.append("f ").append(a).append(' ').append(b).append(' ').append(cc).append('\n')
+                    caras++
+                }
+            }
+        }
+
         if (caras == 0) return null
         val mtl = StringBuilder("# PixPin — materiales de ").append(nombre).append('\n')
         for (m in materiales.values) mtl.append(m).append('\n')
@@ -216,6 +258,36 @@ object ExportarObj {
         val n = hex.toLongOrNull(16) ?: return Triple(0.2, 0.2, 0.2)
         val v = if (hex.length == 8) (n and 0xFFFFFF) else n
         return Triple(((v shr 16) and 0xff) / 255.0, ((v shr 8) and 0xff) / 255.0, (v and 0xff) / 255.0)
+    }
+
+    private fun determinante(m: Modelo3D): Double {
+        val a = m.ejeX; val b = m.ejeY; val c = m.ejeZ
+        return a.x * (b.y * c.z - b.z * c.y) - b.x * (a.y * c.z - a.z * c.y) + c.x * (a.y * b.z - a.z * b.y)
+    }
+
+    /**
+     * Cuatro decimales **sin `String.format`**: un edificio son millones de números, y
+     * formatear cada uno con su `Locale` convertía la exportación en medio minuto.
+     */
+    internal fun n4(x: Double): String {
+        if (!x.isFinite()) return "0"
+        val r = Math.round(x * 10000.0)
+        if (r == 0L) return "0"
+        val neg = r < 0
+        val a = Math.abs(r)
+        val ent = a / 10000; var dec = a % 10000
+        val sb = StringBuilder(12)
+        if (neg) sb.append('-')
+        sb.append(ent)
+        if (dec != 0L) {
+            var ancho = 4
+            while (dec % 10 == 0L) { dec /= 10; ancho-- }
+            sb.append('.')
+            val d = dec.toString()
+            repeat(ancho - d.length) { sb.append('0') }
+            sb.append(d)
+        }
+        return sb.toString()
     }
 
     private fun limpio(id: String) = id.filter { it.isLetterOrDigit() || it == '_' || it == '-' }.ifEmpty { "x" }

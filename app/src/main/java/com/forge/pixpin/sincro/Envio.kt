@@ -18,11 +18,10 @@ import kotlinx.serialization.Serializable
  * Usa las mismas piezas que la sincronización —el [Canal] cifrado con una clave sacada del
  * código, los trozos con su resumen detrás—, así que lo que llega es lo que salió.
  *
- * **Quien envía manda.** Cada cosa lleva una [Elemento.identidad] que no cambia de un envío a
- * otro (la de un proyecto viaja con él). Si quien recibe ya tiene esa misma cosa de un envío
- * anterior, **se sustituye por la versión de quien la manda**, y la pantalla lo dice antes de
- * aceptar. Así, pasarse el mismo proyecto de ida y vuelta lo va poniendo al día en vez de llenar
- * la lista de copias.
+ * **Quien recibe elige** (15-sep-2026). Cada cosa viaja con sus tres códigos ([Codigos]). Si quien
+ * recibe ya tiene algo con **los tres iguales**, elige entre **ponerlo al día** con lo que llega o
+ * **crearlo como nuevo** (con códigos nuevos, que es otra cosa desde ese momento). Si no coinciden
+ * los tres, se crea aparte: ante la duda, duplicar y no pisar.
  */
 object Envio {
 
@@ -77,7 +76,15 @@ object Envio {
         /** Y cómo se llama ese proyecto, para crearlo con el mismo nombre si no se tiene. */
         val proyectoNombre: String? = null,
         /** Cuándo se creó en el aparato que lo manda: ordena el chat igual en los dos. */
-        val creado: Long = 0
+        val creado: Long = 0,
+        /**
+         * **Sus tres códigos** (15-sep-2026, ver [Codigos]): el único, el de chat (`47·K7Q2`) y la
+         * fecha de [creado]; en un proyecto, el aparato donde nació en vez del código de chat. Quien
+         * recibe solo puede poner al día lo que tenga con los tres iguales.
+         */
+        val uid: String? = null,
+        val codigoDeChat: String? = null,
+        val aparato: String? = null
     )
 
     const val ARCHIVO = "archivo"

@@ -14,11 +14,11 @@ import org.junit.Test
  */
 class MandoTest {
 
-    private val lado = 176f
+    private val lado = 264f
 
-    // Los mismos números que el mando: el disco no está centrado en su cuadro.
-    private val centro = Offset(lado * 0.44f, lado * 0.56f)
-    private val radio = lado * 0.32f
+    // Los mismos números que el mando.
+    private val centro = Offset(lado * 0.5f, lado * 0.47f)
+    private val radio = lado * 0.30f
 
     // ---------------------------------------------------------------------
     // Qué se agarra
@@ -32,19 +32,26 @@ class MandoTest {
     }
 
     @Test
-    fun `sobre la raya de la x se agarra la x`() {
+    fun `la punta de la x agarra la x`() {
         assertEquals(
             AgarreDelMando.FLECHA_X,
-            queSeHaAgarrado(centro + Offset(radio * 0.4f, 0f), lado)
+            queSeHaAgarrado(centro + Offset(radio * 1.05f, 0f), lado)
         )
     }
 
     @Test
-    fun `sobre la raya de la y se agarra la y`() {
+    fun `la punta de la y agarra la y`() {
         assertEquals(
             AgarreDelMando.FLECHA_Y,
-            queSeHaAgarrado(centro + Offset(0f, -radio * 0.4f), lado)
+            queSeHaAgarrado(centro + Offset(0f, -radio * 1.05f), lado)
         )
+    }
+
+    @Test
+    fun `cerca del centro sobre la raya de un eje se mueve libre`() {
+        // Empujar el joystick hacia la derecha o hacia arriba no puede coger un eje.
+        assertEquals(AgarreDelMando.LIBRE, queSeHaAgarrado(centro + Offset(radio * 0.4f, 0f), lado))
+        assertEquals(AgarreDelMando.LIBRE, queSeHaAgarrado(centro + Offset(0f, -radio * 0.4f), lado))
     }
 
     @Test

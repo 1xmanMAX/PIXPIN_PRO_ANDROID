@@ -87,7 +87,14 @@ class MensajesStore(private val context: Context) {
         // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
         // Lo que llega ya unido (el PDF con el que nació el proyecto, una zona) no se vuelve a unir.
         val seUne = mensaje.proyecto != null && !mensaje.unido && UnirAlProyecto.seUneSolo(mensaje)
-        var apuntado = if (seUne) mensaje.copy(unido = true) else mensaje
+        // **Un lienzo que llega de otro proyecto entra en este** (14-sep-2026): reenviado o
+        // adjuntado desde otro proyecto, el mensaje se quedaba en el chat y el lienzo no salía
+        // en las hojas. Un lienzo del propio proyecto ya es una hoja y no se toca.
+        val app = context.applicationContext as? com.forge.pixpin.PixPinApp
+        val destino = mensaje.proyecto?.let { app?.proyectos?.porId(it) }
+        val lienzoDeFuera = !mensaje.unido && mensaje.clase == Clase.DIBUJO && destino != null &&
+            mensaje.referencia != null && destino.hojas.none { it.dibujo == mensaje.referencia }
+        var apuntado = if (seUne || lienzoDeFuera) mensaje.copy(unido = true) else mensaje
         // **Su número en la conversación**, que no se reutiliza jamás: uno más que el mayor
         // que haya, y nunca menos que cuantos hay —eso es lo que deja seguir la cuenta de
         // los mensajes de antes, que no llevan número, sin renumerar nada. Ver [Mensaje.numero].
@@ -96,11 +103,13 @@ class MensajesStore(private val context: Context) {
             val mayor = suyos.maxOfOrNull { it.numero } ?: 0
             apuntado = apuntado.copy(numero = maxOf(mayor, suyos.size) + 1)
         }
-        // **Y la letra de este aparato**, si está en un grupo: con ella la seña (`48a`) no choca
-        // con el 48 que otro aparato del grupo haya creado a la vez. Ver [com.forge.pixpin.sincro.Sena].
-        if (apuntado.letra == null) {
-            com.forge.pixpin.sincro.IdentidadEnDisco(context.filesDir).letraSiHay()?.let { apuntado = apuntado.copy(letra = it.toString()) }
-        }
+        // **Y sus códigos**: el único, oculto, y el de este aparato, que con el número da el código de
+        // chat (`48·K7Q2`) y no choca con el 48 que otro aparato haya creado a la vez. Lo que llega de
+        // otro aparato ya trae los suyos y no se tocan. Ver [com.forge.pixpin.sincro.Codigos].
+        apuntado = com.forge.pixpin.sincro.Codigos.sellar(
+            apuntado,
+            com.forge.pixpin.sincro.Codigos.deEsteAparato(context.filesDir)
+        )
         // **La música no se pasa a texto: se le pega la letra a mano.** Y qué es música lo
         // dicen las etiquetas del archivo (artista, álbum, título…), no su largo: una nota de
         // voz importada de diez minutos es una nota de voz (lo reportó el usuario el
@@ -113,6 +122,26 @@ class MensajesStore(private val context: Context) {
             synchronized(CERROJO) { archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n") }
         }
         if (seUne) unirAlProyecto(apuntado)
+        if (lienzoDeFuera && app != null && destino != null) {
+            val m = apuntado
+            app.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val ahora = System.currentTimeMillis()
+                    val p = app.proyectos.porId(destino.id) ?: return@runCatching
+                    if (p.hojas.any { it.dibujo == m.referencia }) return@runCatching
+                    // El mismo dibujo que señala el mensaje —ya es una copia suya, ver
+                    // [RamaDeMensaje]— y apuntando al mensaje: borrarlo del chat lo quita.
+                    app.proyectos.conHoja(
+                        p,
+                        com.forge.pixpin.motor.Hoja(
+                            id = "hoja-$ahora", nombre = m.nombre.ifBlank { "Lienzo" },
+                            dibujo = m.referencia, deMensaje = m.id
+                        ),
+                        ahora
+                    )
+                }
+            }
+        }
         // **Solo si quien llama lo pide**, que hoy es únicamente practicar pronunciación.
         // Ver el porqué en la documentación de esta función.
         if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null && !apuntado.esMusica) transcribir(apuntado, idioma)
@@ -268,10 +297,11 @@ class MensajesStore(private val context: Context) {
     fun reescribir(mensajes: List<Mensaje>): Unit = synchronized(CERROJO) {
         cambios.value = cambios.value + 1
         // **Lo que se va deja su marca**, para que la sincronización no lo resucite desde otro
-        // aparato. Solo si hay grupo: lo borrado sin haber sincronizado nunca no lo tiene nadie.
-        val letra = com.forge.pixpin.sincro.IdentidadEnDisco(context.filesDir).letraSiHay()
-        if (letra != null) runCatching {
+        // aparato. Siempre, aunque aún no haya grupo: con los códigos únicos cualquier cosa puede
+        // haber viajado ya a otro aparato por un envío.
+        runCatching {
             val disco = com.forge.pixpin.sincro.Disco(context.filesDir)
+            val letra = com.forge.pixpin.sincro.IdentidadEnDisco(context.filesDir).letraSiHay()
             disco.anotarBorrados(com.forge.pixpin.sincro.Disco.borradosEntre(leer(), mensajes, letra, System.currentTimeMillis()))
         }
         runCatching {
@@ -304,12 +334,29 @@ class MensajesStore(private val context: Context) {
      * de un mes, y una ruta a la galería o a descargas se rompe en cuanto el usuario
      * ordena su móvil. Guardar una referencia que se puede evaporar es no guardar nada.
      */
-    fun copiarAdjunto(origen: File, nombre: String, deSuTipo: String? = null): String? = runCatching {
+    fun copiarAdjunto(
+        origen: File,
+        nombre: String,
+        deSuTipo: String? = null,
+        /**
+         * Si un PDF se aligera al copiarlo. **Lo que llega sincronizando, no**: los dos aparatos
+         * comparan los archivos por su resumen, así que reescribir aquí lo que acaba de llegar los
+         * dejaría distintos para siempre y volverían a pasárselo en cada vuelta.
+         */
+        aligerar: Boolean = true
+    ): String? = runCatching {
         // Con su extensión: sin ella, al abrirlo después Android no sabe de qué es. Ver
         // [nombreConExtension].
         val comoSeLlama = nombreConExtension(nombre, deSuTipo)
         val destino = File(carpetaDeAdjuntos(), "${System.currentTimeMillis()}_$comoSeLlama")
         origen.copyTo(destino, overwrite = true)
+        // **Un PDF se aligera en cuanto entra**, aquí y no más tarde: por este sitio pasan todos
+        // los adjuntos del chat, y lo que entra pesando cinco megas pesa lo mismo cada vez que se
+        // comparte, se sincroniza o se manda por Wi-Fi. Lo pidió el usuario el 14-sep-2026. Se
+        // llama desde un hilo de disco (ver quien llama). Ver [com.forge.pixpin.pdf.ComprimirPdf].
+        if (aligerar && destino.name.endsWith(".pdf", ignoreCase = true)) {
+            com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(destino)
+        }
         destino.absolutePath
     }.getOrNull()
 

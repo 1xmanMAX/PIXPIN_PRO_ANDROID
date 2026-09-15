@@ -42,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -50,6 +51,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
@@ -111,6 +113,7 @@ import com.forge.pixpin.motor.DrawEditorActivity
 import com.forge.pixpin.motor.DrawExport
 import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.croquis3d.Camara3D
+import com.forge.pixpin.guardados.FusionarPaginas
 import com.forge.pixpin.guardados.paginaAnotada
 import com.forge.pixpin.pin.ImageStore
 import com.forge.pixpin.croquis3d.Croquis3DAlmacen
@@ -231,8 +234,7 @@ fun PantallaDeProyectos(
         com.forge.pixpin.motor.DialogoDeFuncionesWeb(
             marcadas = marcadas,
             onCambio = { clave, puesta ->
-                val ahora = marcadas.toMutableSet()
-                if (puesta) ahora += clave else ahora -= clave
+                val ahora = com.forge.pixpin.motor.ExportarHtml.conGrupo(marcadas, clave, puesta)
                 alcanceDeAjustes.launch { app.settings.setFuncionesWeb(ahora) }
             },
             onCompartir = { pidiendoFuncionesWeb = false; exportandoWeb = true },
@@ -287,6 +289,37 @@ fun PantallaDeProyectos(
             dismissButton = { TextButton(onClick = { quitando = false }) { Text(stringResourceSafe(android.R.string.cancel)) } }
         )
     }
+    // **La fusión que se está montando**, o null. Se hace fuera del hilo de la pantalla —son
+    // varias páginas rasterizadas— y al acabar se abre el lienzo, que es lo que se quería.
+    var fusionando by remember { mutableStateOf<FusionarPaginas.Peticion?>(null) }
+    var renombrandoHoja by remember { mutableStateOf<Pair<Proyecto, com.forge.pixpin.motor.Hoja>?>(null) }
+    renombrandoHoja?.let { (p, h) ->
+        DialogoDeNombre(h.nombre, onCerrar = { renombrandoHoja = null }, titulo = "Nombre del lienzo") { nuevo ->
+            (contexto.applicationContext as? com.forge.pixpin.PixPinApp)?.let {
+                com.forge.pixpin.guardados.NombreDelLienzo.deHoja(it, p.id, h.id, nuevo)
+            }
+            renombrandoHoja = null
+            marcado = emptyMap()
+        }
+    }
+    fusionando?.let { peticion ->
+        LaunchedEffect(peticion) {
+            marcado = emptyMap()
+            val hoja = withContext(Dispatchers.IO) {
+                FusionarPaginas.enUnLienzo(contexto, app.proyectos, peticion, System.currentTimeMillis())
+            }
+            fusionando = null
+            if (hoja?.dibujo == null) {
+                android.widget.Toast.makeText(contexto, R.string.proyecto_fusionar_fallo, android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                com.forge.pixpin.motor.DrawEditorActivity.abrir(
+                    contexto, hoja.dibujo, ExcalidrawStore.rutaDe(contexto, hoja.dibujo), null,
+                    peticion.proyecto.id
+                )
+            }
+        }
+    }
+
     // El proyecto que se está empaquetando como `.pixpin`, o null.
     var exportandoPaquete by remember { mutableStateOf<String?>(null) }
 
@@ -303,7 +336,17 @@ fun PantallaDeProyectos(
                 runCatching {
                     CompartirPaginas.de(
                         contexto, titulo, seleccion,
-                        wifi = seleccion.singleOrNull()?.first?.let { p -> { com.forge.pixpin.sincro.EnviarActivity.enviarProyecto(contexto, p.id) } }
+                        // **Lo marcado, no el proyecto entero** (15-sep-2026): con lienzos marcados
+                        // se mandan esos lienzos. Mandar el proyecto entero sustituía el del otro
+                        // aparato y el usuario perdió lienzos.
+                        wifi = seleccion.singleOrNull()?.let { (p, claves) ->
+                            val hojas = claves?.map { it.substringBefore('/') }?.filter { id -> p.hojas.any { it.id == id } }?.distinct()
+                            if (hojas.isNullOrEmpty() || hojas.size == p.hojas.size) {
+                                { com.forge.pixpin.sincro.EnviarActivity.enviarProyecto(contexto, p.id) }
+                            } else {
+                                { com.forge.pixpin.sincro.EnviarActivity.enviarLienzos(contexto, p.id, hojas) }
+                            }
+                        }
                     )
                 }.onFailure { android.util.Log.e("PixPinCompartir", "proyectos", it) }.getOrNull()
             }
@@ -382,6 +425,36 @@ fun PantallaDeProyectos(
                                 abrirHoja(ordenados.mapNotNull { p -> marcado[p.id]?.takeIf { it.isNotEmpty() }?.let { p to it } })
                             }
                         )
+                        // **Fusionar páginas en un lienzo.** Solo cuando lo marcado son dos o
+                        // más páginas del PDF de un mismo proyecto: fusionar un lienzo con una
+                        // nota no significa nada. Ver [FusionarPaginas].
+                        val fusion = remember(marcado, ordenados) {
+                            val unico = marcado.entries.singleOrNull { it.value.isNotEmpty() }
+                            val p = unico?.let { e -> ordenados.firstOrNull { it.id == e.key } }
+                            if (p == null) null else FusionarPaginas.de(p, unico.value)
+                        }
+                        if (fusion != null) {
+                            BotonDeAccion(
+                                Icons.Filled.Layers, R.string.proyecto_fusionar_corto, R.string.proyecto_fusionar,
+                                ancho = ANCHO_EN_CAJA, onClick = { fusionando = fusion }
+                            )
+                        }
+                        // **Cambiar el nombre de una hoja** (14-sep-2026): con una sola marcada.
+                        // El nombre va también al mensaje del chat, que es por donde se busca.
+                        // Ver [com.forge.pixpin.guardados.NombreDelLienzo].
+                        val unaHoja = remember(marcado, ordenados) {
+                            val e = marcado.entries.singleOrNull { it.value.isNotEmpty() }
+                            val clave = e?.value?.singleOrNull()
+                            val p = e?.let { x -> ordenados.firstOrNull { it.id == x.key } }
+                            val h = p?.hojas?.firstOrNull { clave != null && (clave == it.id || clave.startsWith(it.id + "/")) }
+                            if (p != null && h != null) p to h else null
+                        }
+                        if (unaHoja != null) {
+                            BotonDeAccion(
+                                Icons.Filled.Edit, R.string.proyecto_renombrar, R.string.proyecto_renombrar,
+                                ancho = ANCHO_EN_CAJA, onClick = { renombrandoHoja = unaHoja }
+                            )
+                        }
                         BotonDeAccion(
                             Icons.Filled.Delete, R.string.proyecto_quitar_corto, R.string.proyecto_quitar,
                             ancho = ANCHO_EN_CAJA, onClick = { quitando = true }
@@ -881,6 +954,13 @@ private fun PaginaDeProyecto(
                                 text = { Text(stringResourceSafe(R.string.guardados_compartir)) },
                                 leadingIcon = { Icon(IconoDeCompartir, contentDescription = null) },
                                 onClick = { menu = false; onCompartir() }
+                            )
+                            // **Volver atrás** (15-sep-2026): las copias que se hacen solas antes de
+                            // recibir y de sincronizar, y los lienzos que se quedaron sin proyecto.
+                            DropdownMenuItem(
+                                text = { Text("Copias de seguridad") },
+                                leadingIcon = { Icon(Icons.Filled.History, contentDescription = null) },
+                                onClick = { menu = false; com.forge.pixpin.sincro.CopiasActivity.abrir(contexto, p.id) }
                             )
                             DropdownMenuItem(
                                 text = {
@@ -2208,15 +2288,16 @@ private const val ESCALA_AMPLIADA = 2.0
  * que le llega al que lo reciba. Ver [ExportarProyecto.nombreDeArchivo].
  */
 @Composable
-private fun DialogoDeNombre(
+internal fun DialogoDeNombre(
     actual: String,
     onCerrar: () -> Unit,
+    titulo: String? = null,
     onAceptar: (String) -> Unit
 ) {
     var texto by remember { mutableStateOf(actual) }
     AlertDialog(
         onDismissRequest = onCerrar,
-        title = { Text(stringResourceSafe(R.string.proyecto_renombrar)) },
+        title = { Text(titulo ?: stringResourceSafe(R.string.proyecto_renombrar)) },
         text = {
             OutlinedTextField(
                 value = texto,

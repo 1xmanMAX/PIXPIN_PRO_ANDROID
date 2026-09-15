@@ -166,7 +166,8 @@ class GuardarCompartidoActivity : ComponentActivity() {
     private fun darDeAlta(almacen: MensajesStore, t: Temporal, proyecto: String?): Boolean =
         runCatching {
             val ruta = almacen.copiarAdjunto(t.archivo, t.nombre, extensionDe(t.tipo)) ?: return false
-            val bytes = t.archivo.length()
+            // El peso de lo guardado: un PDF entra aligerado. Ver [MensajesStore.copiarAdjunto].
+            val bytes = File(ruta).length()
             t.archivo.delete()
             val esImagen = t.tipo?.startsWith("image/") == true
             // **Un audio de otra aplicación es una nota de voz**: se escucha aquí y se

@@ -100,9 +100,11 @@ class EnviarActivity : ComponentActivity() {
         if (savedInstanceState != null) { finish(); return }
         val proyecto = intent.getStringExtra(EXTRA_PROYECTO)
         val hoja = intent.getStringExtra(EXTRA_HOJA)
+        val hojas = intent.getStringArrayExtra(EXTRA_HOJAS)
         val ruta = intent.getStringExtra(EXTRA_RUTA)
         when {
             proyecto != null && hoja != null -> lifecycleScope.launch { preparar { deLienzo(proyecto, hoja) } }
+            proyecto != null && hojas != null -> lifecycleScope.launch { preparar { hojas.distinct().flatMap { deLienzo(proyecto, it) } } }
             proyecto != null -> lifecycleScope.launch { preparar { deProyecto(proyecto) } }
             ruta != null -> lifecycleScope.launch { preparar { deRuta(File(ruta), intent.getStringExtra(EXTRA_NOMBRE)) } }
             intent.getBooleanExtra(EXTRA_ELEGIR, false) -> elegir.launch(arrayOf("*/*"))
@@ -159,34 +161,54 @@ class EnviarActivity : ComponentActivity() {
      */
     private fun deLienzo(proyectoId: String, hojaId: String): List<Pair<Envio.Elemento, File>> {
         val app = application as PixPinApp
-        val p = app.proyectos.porId(proyectoId) ?: return emptyList()
+        val p = sellado(proyectoId) ?: return emptyList()
         val h = p.hojas.firstOrNull { it.id == hojaId } ?: return emptyList()
         val conPdf = h.pagina != null
         val solo = p.copy(hojas = listOf(h), croquis = emptyList(), pdfOrigen = p.pdfOrigen.takeIf { conPdf }, pdfLimpio = p.pdfLimpio.takeIf { conPdf })
         val nombre = h.nombre.ifBlank { if (h.pagina != null) "Página ${h.pagina + 1}" else "Lienzo" }
-        val destino = File(carpeta, Envio.nombreSano("${p.nombre} - $nombre") + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION)
-        com.forge.pixpin.motor.PaquetePixpin.escribir(this, solo, destino) ?: return emptyList()
-        val creado = com.forge.pixpin.guardados.MensajesStore(this).leer()
-            .firstOrNull { it.proyecto == p.id && ((h.dibujo != null && it.referencia == h.dibujo) || it.id == h.deMensaje) }?.cuando ?: p.tocado
+        val destino = File(File(carpeta, "l-${System.nanoTime()}").apply { mkdirs() }, Envio.nombreSano("${p.nombre} - $nombre") + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION)
+        // **Con su chat**: el mensaje de ese lienzo, con su hora y su seña. Ver [ChatQueViaja].
+        val chat = ChatQueViaja.preparar(p, ChatQueViaja.deLaHoja(this, p, h))
+        com.forge.pixpin.motor.PaquetePixpin.escribir(this, solo, destino, chat = chat?.texto, adjuntosDelChat = chat?.adjuntos.orEmpty()) ?: return emptyList()
+        val suMensaje = Recepcion.mensajeDeLaHoja(com.forge.pixpin.guardados.MensajesStore(this).leer(), p, h)
         val identidadDelProyecto = Recepcion.identidadDe(p)
         return listOf(
             Envio.Elemento(
                 Envio.LIENZO, nombre, destino.length(), com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE,
                 identidad = "lienzo:${identidadDelProyecto.removePrefix("proyecto:")}:${h.origen ?: h.id}",
-                proyecto = identidadDelProyecto, proyectoNombre = p.nombre, creado = creado
+                proyecto = identidadDelProyecto, proyectoNombre = p.nombre, creado = suMensaje?.cuando ?: 0L,
+                uid = Codigos.unico(h), codigoDeChat = suMensaje?.let { Codigos.deChat(it) }
             ) to destino
         )
     }
 
-    private fun deProyecto(id: String): List<Pair<Envio.Elemento, File>> {
+    /**
+     * **El proyecto con sus códigos puestos** antes de empaquetarlo: lo que sale tiene que llevar los
+     * tres, o quien lo recibe no podría ponerlo al día la próxima vez. Ver [Codigos].
+     */
+    private fun sellado(id: String): com.forge.pixpin.motor.Proyecto? {
         val app = application as PixPinApp
-        val p = app.proyectos.porId(id) ?: return emptyList()
+        runCatching { Red.disco(this).sellar() }
+        app.proyectos.recargar()
+        return app.proyectos.porId(id)
+    }
+
+    private fun deProyecto(id: String): List<Pair<Envio.Elemento, File>> {
+        val p = sellado(id) ?: return emptyList()
         val destino = File(carpeta, Envio.nombreSano(p.nombre) + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION)
+        // **El proyecto con su chat entero**: el chat manda. Ver [ChatQueViaja].
+        val chat = ChatQueViaja.preparar(p, ChatQueViaja.delProyecto(this, p))
         com.forge.pixpin.motor.PaquetePixpin.escribir(
             this, p, destino,
-            croquisDe = { c -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(this, c) }
+            croquisDe = { c -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(this, c) },
+            chat = chat?.texto, adjuntosDelChat = chat?.adjuntos.orEmpty()
         ) ?: return emptyList()
-        return listOf(Envio.Elemento(Envio.PROYECTO, p.nombre, destino.length(), com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, Recepcion.identidadDe(p)) to destino)
+        return listOf(
+            Envio.Elemento(
+                Envio.PROYECTO, p.nombre, destino.length(), com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, Recepcion.identidadDe(p),
+                creado = p.creado, uid = Codigos.unico(p), aparato = p.aparato
+            ) to destino
+        )
     }
 
     private suspend fun preparar(que: () -> List<Pair<Envio.Elemento, File>>) {
@@ -366,12 +388,23 @@ class EnviarActivity : ComponentActivity() {
         private const val EXTRA_PROYECTO = "enviar_proyecto"
         private const val EXTRA_ELEGIR = "enviar_elegir"
         private const val EXTRA_HOJA = "enviar_hoja"
+        private const val EXTRA_HOJAS = "enviar_hojas"
         private const val EXTRA_RUTA = "enviar_ruta"
         private const val EXTRA_NOMBRE = "enviar_nombre"
 
         /** Un solo lienzo (una hoja) de un proyecto. */
         fun enviarLienzo(context: Context, proyecto: String, hoja: String) {
             context.startActivity(Intent(context, EnviarActivity::class.java).putExtra(EXTRA_PROYECTO, proyecto).putExtra(EXTRA_HOJA, hoja))
+        }
+
+        /**
+         * **Solo los lienzos marcados** de un proyecto, cada uno como un lienzo suelto que al otro
+         * lado cae en el mismo proyecto. Es lo que tiene que pasar al marcar lienzos en Proyectos y
+         * darle a Wi-Fi: antes se mandaba el proyecto entero (usuario, 15-sep-2026).
+         */
+        fun enviarLienzos(context: Context, proyecto: String, hojas: Collection<String>) {
+            if (hojas.size == 1) return enviarLienzo(context, proyecto, hojas.first())
+            context.startActivity(Intent(context, EnviarActivity::class.java).putExtra(EXTRA_PROYECTO, proyecto).putExtra(EXTRA_HOJAS, hojas.toTypedArray()))
         }
 
         /** Un archivo de PixPin, tal cual. */

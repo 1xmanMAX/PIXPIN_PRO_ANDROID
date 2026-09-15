@@ -123,8 +123,45 @@ object ExportarProyectoWeb {
         val elegidas = if (marcadas.isEmpty()) HojasDelProyecto.paginas(proyecto, escenaDe)
         else HojasDelProyecto.elegidas(proyecto, escenaDe, marcadas)
         val salida = ArrayList<ExportarHtml.HojaWeb>(elegidas.size + proyecto.croquis.size)
+        // **Los sublienzos van pegados a su página, no sueltos** (13-sep-2026). Una hoja entera
+        // que sale lleva a su lado los sublienzos que nacieron de ella; un sublienzo cuya página
+        // también sale ya va ahí y no se repite como hoja. Ver [SublienzosWeb].
+        val enteras = elegidas.filter { it.marco == null && it.hoja.nota == null }.map { it.hoja.id }.toSet()
+        // Los sublienzos que sí quedaron pegados a su página: **solo esos** se saltan como hoja.
+        // Uno cuya marca no se encuentre sale suelto, como antes, en vez de perderse.
+        val pegados = HashSet<String>()
+        fun raiz(id: String) = id.replace(Regex("(-\\d{13})+$"), "")
+        /**
+         * Los sublienzos de [hoja] para pegarlos a su lado. Con [reutilizarLaPagina], la foto de la
+         * zona **no viaja otra vez**: es un trozo de la página, que ya va en el documento, y el
+         * sublienzo la toma de ahí ([SublienzosWeb.Adjunto.foto]). Es lo que más pesaba.
+         */
+        fun adjuntosDe(hoja: Hoja, escena: Scene, reutilizarLaPagina: Boolean): List<SublienzosWeb.Adjunto> =
+            proyecto.hojas.filter { it.padre == hoja.id && it.dibujo != null }.mapNotNull { sub ->
+                val dibujo = sub.dibujo!!
+                val vivas = escena.elements.filter { !it.isDeleted && it.enlace != null }
+                // Por su id, y si no, por su raíz: lo recibido de otro aparato cambia de sufijo.
+                val marca = vivas.firstOrNull { it.enlace == dibujo }
+                    ?: vivas.firstOrNull { raiz(it.enlace!!) == raiz(dibujo) }
+                    ?: return@mapNotNull null
+                val suya = escenaDe(dibujo) ?: return@mapNotNull null
+                val foto = if (reutilizarLaPagina) suya.elements.firstOrNull { !it.isDeleted && it.type == ElementType.IMAGE } else null
+                val paraPintar = if (foto == null) suya else suya.copy(
+                    // En su lugar, un hueco del mismo tamaño: el encuadre del sublienzo no cambia.
+                    elements = suya.elements.map {
+                        if (it.id == foto.id) it.copy(
+                            type = ElementType.RECTANGLE, fileId = null,
+                            strokeColor = Element.TRANSPARENT, backgroundColor = Element.TRANSPARENT
+                        ) else it
+                    }
+                )
+                val svg = DrawSvg.aTexto(context, paraPintar, proveedorDe(paraPintar)) ?: return@mapNotNull null
+                pegados += sub.id
+                SublienzosWeb.Adjunto(getElementBounds(marca), svg, foto?.let { getElementBounds(it) })
+            }
         for (p in elegidas) {
             val hoja = p.hoja
+            if (hoja.padre != null && hoja.padre in enteras && hoja.id in pegados) continue
             val nombre = p.nombre.ifBlank { hoja.nombre.ifBlank { "Hoja" } }
             when {
                 // **Una tabla va con sus fórmulas**, y en el navegador sigue calculando.
@@ -159,7 +196,10 @@ object ExportarProyectoWeb {
                         papelAparte = plano != null
                     )
                     if (svg != null) {
-                        salida += ExportarHtml.HojaWeb.Dibujo(nombre, svg, fondoDe(escena), plano, escala = escena.escala)
+                        // Con el papel dentro del SVG, la foto de cada zona sale de él; con el plano en
+                        // líneas el papel lo pinta el visor aparte y la foto tiene que viajar.
+                        val conSublienzos = SublienzosWeb.adjuntar(svg, adjuntosDe(hoja, escena, reutilizarLaPagina = plano == null), "h${salida.size}")
+                        salida += ExportarHtml.HojaWeb.Dibujo(nombre, conSublienzos, fondoDe(escena), plano, escala = escena.escala)
                     }
                 }
                 // **Un croquis del espacio va entero, para poder girarlo.** En el proyecto
@@ -174,7 +214,8 @@ object ExportarProyectoWeb {
                         context, escena, proveedorDe(escena), soloEstaHoja = marco
                     )
                     if (svg != null) {
-                        salida += ExportarHtml.HojaWeb.Dibujo(nombre, svg, fondoDe(escena), escala = escena.escala)
+                        val conSublienzos = if (marco == null) SublienzosWeb.adjuntar(svg, adjuntosDe(hoja, escena, reutilizarLaPagina = true), "h${salida.size}") else svg
+                        salida += ExportarHtml.HojaWeb.Dibujo(nombre, conSublienzos, fondoDe(escena), escala = escena.escala)
                     }
                 }
             }

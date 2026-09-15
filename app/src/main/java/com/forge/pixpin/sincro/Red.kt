@@ -226,7 +226,10 @@ class Red(private val context: Context) {
             return Disco(app.filesDir) { cambio ->
                 when (cambio) {
                     Disco.Cambio.MENSAJES -> MensajesStore.cambios.value = MensajesStore.cambios.value + 1
-                    Disco.Cambio.PROYECTOS -> (app as? PixPinApp)?.proyectos?.recargar()
+                    Disco.Cambio.PROYECTOS -> {
+                        (app as? PixPinApp)?.proyectos?.recargar()
+                        com.forge.pixpin.guardados.ChatDeLosProyectos.reparar(app)
+                    }
                     Disco.Cambio.ARCHIVOS -> principal.post { ExcalidrawStore.revision.intValue++ }
                     Disco.Cambio.IDENTIDAD -> Presencia.identidadCambio()
                 }

@@ -105,6 +105,9 @@ fun VentanaDeAjustes(
      * anotando ningún PDF, y entonces el interruptor no sale. Ver [PlanoEnPantalla].
      */
     planoEnLineas: Boolean? = null,
+    /** Esta página como imagen; null si no hay PDF debajo o el plano ya va como imagen. */
+    paginaComoImagen: Boolean? = null,
+    onPaginaComoImagen: (Boolean) -> Unit = {},
     onPlanoEnLineas: (Boolean) -> Unit = {},
     /** El trazo a mano sale firme. Ver [Element.presionFirme]. */
     presionFirme: Boolean,
@@ -250,6 +253,18 @@ fun VentanaDeAjustes(
                                     "Lee el PDF como geometría: nítido a cualquier aumento y sin cargar nada al acercarse. Un escaneo sigue yendo como imagen.",
                                     planoEnLineas,
                                     onPlanoEnLineas
+                                )
+                            }
+                            // **Y una página suelta puede querer lo contrario.** El mismo
+                            // documento suele traer páginas de las dos clases —el plano en
+                            // líneas y la portada escaneada—, y una página con una trama o
+                            // veinte mil rellenos se ve mejor rasterizada que mal dibujada.
+                            if (paginaComoImagen != null) {
+                                Interruptor(
+                                    "Esta página como imagen",
+                                    "Solo la página que se está viendo: se rasteriza por cuadros, como un escaneo. Se recuerda para la próxima vez que se abra.",
+                                    paginaComoImagen,
+                                    onPaginaComoImagen
                                 )
                             }
                             // Escribir y dibujar piden cosas contrarias, y por eso es un
@@ -796,11 +811,6 @@ fun DialogoDeFuncionesWeb(
     tablasEditables: Boolean = true,
     onTablasEditables: (Boolean) -> Unit = {}
 ) {
-    val nombres = listOf(
-        "lapiz" to "Lápiz", "resaltador" to "Resaltador", "borrador" to "Borrador",
-        "deshacer" to "Deshacer y rehacer", "medir" to "Medir", "capas" to "Capas del plano",
-        "paginas" to "Pasar de página", "guardar" to "Guardar", "compartir" to "Compartir"
-    )
     val soloMirar = marcadas.none { it == "lapiz" || it == "resaltador" || it == "borrador" }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onCerrar,
@@ -828,15 +838,12 @@ fun DialogoDeFuncionesWeb(
                 }
                 // **Agrupadas y con nombres que se entienden** (lo pidió el usuario el 13-sep-2026,
                 // con un dibujo de cómo las quería).
-                @Suppress("UNUSED_EXPRESSION") nombres
-                for ((grupo, que, filas) in GRUPOS_DE_LA_WEB) {
-                    Text(grupo, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 12.dp))
-                    Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 2.dp))
-                    for ((clave, texto, detalle) in filas) {
-                        Interruptor(texto, detalle, clave in marcadas) { onCambio(clave, it) }
-                    }
+                //
+                // **Un solo interruptor por grupo** (13-sep-2026): lo de cada grupo funciona junto
+                // —el lápiz sin borrador ni deshacer no sirve—, así que se enciende y se apaga
+                // junto. El índice de páginas no se pregunta: va siempre. Ver [ExportarHtml.GRUPOS].
+                for ((clave, texto, detalle) in GRUPOS_DE_LA_WEB) {
+                    Interruptor(texto, detalle, ExportarHtml.grupoPuesto(marcadas, clave)) { onCambio(clave, it) }
                 }
                 // **Un lienzo con marcos: qué hojas salen.** Solo los marcos (una hoja por
                 // marco), el lienzo entero, o los dos: el entero y detrás cada marco.
@@ -868,23 +875,9 @@ fun DialogoDeFuncionesWeb(
     )
 }
 
-/** Las funciones de la página web, en sus grupos: nombre del grupo, para qué es, y (clave, nombre, qué hace). */
-private val GRUPOS_DE_LA_WEB: List<Triple<String, String, List<Triple<String, String, String>>>> = listOf(
-    Triple("Herramientas de edición", "Para dibujar y escribir encima de la página.", listOf(
-        Triple("lapiz", "Lápiz", "Dibujar a mano alzada"),
-        Triple("resaltador", "Resaltador", "Marcar encima, transparente"),
-        Triple("borrador", "Borrador", "Quitar lo dibujado"),
-        Triple("deshacer", "Deshacer y rehacer", "Volver atrás un paso o recuperarlo")
-    )),
-    Triple("Herramientas avanzadas", "Para trabajar con planos.", listOf(
-        Triple("medir", "Medir distancias", "Con la escala del dibujo"),
-        Triple("capas", "Capas del plano", "Encender y apagar las capas de un PDF de AutoCAD")
-    )),
-    Triple("Predeterminado", "Lo básico para moverse por el documento.", listOf(
-        Triple("paginas", "Índice de páginas", "Ir de una hoja a otra")
-    )),
-    Triple("Herramientas especiales", "Lo que hace la página con lo que se le hace.", listOf(
-        Triple("guardar", "Guardar los cambios", "Descargar la página con lo dibujado"),
-        Triple("compartir", "Compartir desde la página", "Mandarla a otra persona desde el navegador")
-    ))
+/** Los interruptores de la página web: (clave del grupo, nombre, qué trae). Ver [ExportarHtml.GRUPOS]. */
+private val GRUPOS_DE_LA_WEB: List<Triple<String, String, String>> = listOf(
+    Triple("edicion", "Herramientas de edición", "Lápiz, resaltador, borrador y deshacer"),
+    Triple("especiales", "Herramientas especiales", "Medir distancias y ver las capas del plano"),
+    Triple("guardar", "Guardar y compartir", "Descargar la página con lo dibujado y mandarla desde el navegador")
 )

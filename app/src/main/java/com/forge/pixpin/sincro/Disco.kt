@@ -33,7 +33,14 @@ data class Chat(
 
 /** La marca que deja un mensaje borrado. Ver [Diferencia.Apunte.borrado]. */
 @Serializable
-data class Marca(val chat: String, val sena: String, val cuando: Long)
+data class Marca(
+    val chat: String,
+    /** El código de chat que tenía (`47·K7Q2` o `47a`). */
+    val sena: String,
+    val cuando: Long,
+    /** Su código único. Nulo en las marcas de antes de los códigos, que se reconocen por la seña. */
+    val uid: String? = null
+)
 
 /** Lo que se acordó con un aparato la última vez que se sincronizó un chat. */
 @Serializable
@@ -48,7 +55,16 @@ data class Base(
 
 /** Lo que se sabe de un archivo del chat sin mandarlo. */
 @Serializable
-data class ArchivoInfo(val ruta: String, val resumen: String, val bytes: Long, val tocado: Long, val etiqueta: String = "")
+data class ArchivoInfo(
+    val ruta: String,
+    /** En los de texto, del JSON en orden canónico: sale igual aunque cada aparato lo escriba a su manera. */
+    val resumen: String,
+    val bytes: Long,
+    val tocado: Long,
+    val etiqueta: String = "",
+    /** El resumen de los bytes tal cual, que es lo que se acordaba antes del 15-sep-2026. */
+    val crudo: String = ""
+)
 
 /**
  * **Todo lo que la sincronización lee y escribe del disco de un aparato.**
@@ -87,6 +103,40 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         if (!tmp.renameTo(archivoDelChat)) { tmp.copyTo(archivoDelChat, overwrite = true); tmp.delete() }
     }
 
+    /**
+     * **Dos aparatos que repararon su chat por separado** ponen el mismo mensaje con el mismo id
+     * y señas distintas. Queda el de la seña menor, que es la misma elección en los dos lados: así
+     * al acabar los dos tienen uno, el mismo. Ver `RegistroDelChat`.
+     */
+    private fun sinRegistrosRepetidos(lista: List<Mensaje>): List<Mensaje> {
+        val registros = lista.filter { it.id.startsWith(com.forge.pixpin.guardados.RegistroDelChat.PREFIJO) }
+        if (registros.size < 2) return lista
+        val queda = registros.groupBy { chatDe(it) to it.id }.values
+            .filter { it.size > 1 }
+            .associate { grupo -> grupo.first().let { chatDe(it) to it.id } to grupo.minByOrNull { senaDe(it) ?: "" } }
+        if (queda.isEmpty()) return lista
+        return lista.filter { m -> queda[chatDe(m) to m.id]?.let { it === m } ?: true }
+    }
+
+    /**
+     * Vuelve a poner mensajes que faltan (por su id), sin tocar los que hay. Es lo que hace
+     * restaurar una copia: lo escrito después de la copia se queda. Ver [Copias].
+     */
+    fun reponerMensajes(extra: List<Mensaje>): Int {
+        if (extra.isEmpty()) return 0
+        var puestos = 0
+        synchronized(Cerrojos.chat) {
+            val lista = leerMensajes()
+            val hay = lista.mapTo(HashSet()) { it.id }
+            val nuevos = extra.filter { it.id !in hay }
+            if (nuevos.isEmpty()) return 0
+            escribirMensajes((lista + nuevos).sortedBy { it.cuando })
+            puestos = nuevos.size
+        }
+        alCambiar(Cambio.MENSAJES)
+        return puestos
+    }
+
     fun chats(): List<Chat> {
         val todos = leerMensajes()
         val mensajes = todos.groupingBy { chatDe(it) }.eachCount()
@@ -99,12 +149,14 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     }
 
     /**
-     * **Le pone seña a todo lo que no la tiene**: número a lo de antes de que hubiera números
-     * —el mismo que ya se ve en el chat, el de su sitio— y la letra de este aparato a lo que no
-     * trae ninguna. Si dos mensajes propios quedaran con la misma seña, el segundo pasa al
-     * siguiente número libre. Lo que trae letra de otro aparato no se toca nunca.
+     * **Le pone sus códigos a todo lo que no los tiene** (ver [Codigos]): número a lo de antes de
+     * que hubiera números —el mismo que ya se ve en el chat, el de su sitio—, el código único sacado
+     * de su id y el código de este aparato a lo que no trae ni aparato ni letra. Si dos mensajes
+     * propios quedaran con el mismo código de chat, el segundo pasa al siguiente número libre. Lo
+     * que trae los de otro aparato no se toca nunca. Los proyectos y sus hojas, igual.
      */
-    fun sellar(letra: Char) {
+    fun sellar() {
+        val aparato = identidad.leer().yo.codigo
         synchronized(Cerrojos.chat) {
             val lista = leerMensajes()
             var cambio = false
@@ -115,18 +167,25 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 var mayor = ordenados.maxOfOrNull { it.numero } ?: 0
                 val vistas = HashSet<String>()
                 for (m in ordenados) {
+                    val sellado = Codigos.sellar(m, aparato)
                     var n = if (m.numero > 0) m.numero else ++sinNumero
-                    val l = m.letra ?: letra.toString()
-                    if ("$n$l" in vistas && l == letra.toString()) { n = maxOf(mayor, suyos.size) + 1 }
+                    val quien = sellado.aparato ?: sellado.letra.orEmpty()
+                    if ("$n|$quien" in vistas && quien == aparato) { n = maxOf(mayor, suyos.size) + 1 }
                     mayor = maxOf(mayor, n)
-                    vistas += "$n$l"
-                    if (n != m.numero || l != m.letra) { nuevos[m.id] = m.copy(numero = n, letra = l); cambio = true }
+                    vistas += "$n|$quien"
+                    val puesto = if (n != sellado.numero) sellado.copy(numero = n) else sellado
+                    if (puesto != m) { nuevos[m.id] = puesto; cambio = true }
                 }
             }
-            if (!cambio) return
-            escribirMensajes(lista.map { nuevos[it.id] ?: it })
+            if (cambio) escribirMensajes(lista.map { nuevos[it.id] ?: it })
+        }
+        val proyectosSellados = synchronized(PROYECTOS) {
+            val lista = leerProyectos()
+            val sellados = lista.map { Codigos.sellar(it) }
+            (sellados != lista).also { if (it) escribirProyectos(sellados) }
         }
         alCambiar(Cambio.MENSAJES)
+        if (proyectosSellados) alCambiar(Cambio.PROYECTOS)
     }
 
     /** Crea un grupo nuevo con este aparato dentro, con la letra `a`. Devuelve el código. */
@@ -134,7 +193,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         val actual = identidad.leer()
         val yo = actual.yo.copy(nombre = nombre ?: actual.yo.nombre, letra = "a", desde = ahora)
         identidad.guardar(Identidad(yo = yo, codigo = codigo, miembros = listOf(yo)))
-        sellar('a')
+        sellar()
         alCambiar(Cambio.IDENTIDAD)
         return codigo
     }
@@ -157,31 +216,49 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         alCambiar(Cambio.IDENTIDAD)
     }
 
-    /** Los apuntes de un chat: uno por mensaje con seña, y uno por cada marca de borrado. */
+    /**
+     * Los apuntes de un chat: uno por mensaje, **por su código único**, y uno por cada marca de
+     * borrado. Una marca de antes de los códigos va por su seña (ver [Diferencia.MARCA_VIEJA]).
+     */
     fun apuntes(chat: String): List<Diferencia.Apunte> {
+        val vistos = HashSet<String>()
         val vivos = leerMensajes().filter { chatDe(it) == chat }.mapNotNull { m ->
-            val sena = senaDe(m) ?: return@mapNotNull null
-            Diferencia.Apunte(sena, m.cuando, m.cuando, resumenDe(m))
+            val clave = Codigos.unico(m)
+            if (!vistos.add(clave)) return@mapNotNull null
+            Diferencia.Apunte(clave, m.cuando, m.cuando, resumenDe(m), alias = senaDe(m))
         }
-        val conSena = vivos.map { it.sena }.toSet()
-        val borrados = marcas().filter { it.chat == chat && it.sena !in conSena }
+        val señas = vivos.mapNotNullTo(HashSet()) { it.alias }
+        val borrados = marcas().filter { it.chat == chat }
+            .filter { mk -> if (mk.uid != null) mk.uid !in vistos else mk.sena !in señas }
+            .map { mk -> Diferencia.Apunte(mk.uid ?: (Diferencia.MARCA_VIEJA + mk.sena), mk.cuando, mk.cuando, BORRADO, borrado = true, alias = mk.sena.ifBlank { null }) }
             .associateBy { it.sena }.values
-            .map { Diferencia.Apunte(it.sena, it.cuando, it.cuando, BORRADO, borrado = true) }
         return vivos + borrados
     }
 
-    fun mensajesPorSena(chat: String): Map<String, Mensaje> =
-        leerMensajes().filter { chatDe(it) == chat }.mapNotNull { m -> senaDe(m)?.let { it to m } }.toMap()
+    /** Los mensajes de un chat por su código único. */
+    fun mensajesPorClave(chat: String): Map<String, Mensaje> {
+        val salida = LinkedHashMap<String, Mensaje>()
+        for (m in leerMensajes()) if (chatDe(m) == chat) salida.putIfAbsent(Codigos.unico(m), m)
+        return salida
+    }
 
     /** El mensaje listo para viajar: sin rutas de este aparato. */
     fun portatil(m: Mensaje): String = rutas.aPortatil(JSON.encodeToString(Mensaje.serializer(), m))
 
-    fun resumenDe(m: Mensaje): String = sha256(Canonico.de(portatil(m.copy(recuerdaEn = null))).toByteArray())
+    /**
+     * El resumen de un mensaje. Sin el recordatorio, que es de este aparato, ni los códigos, que no
+     * cambian nunca después de nacer y que lo guardado de antes recibe al sellarse: si contaran,
+     * sellar haría parecer cambiado todo lo que ya se había sincronizado.
+     */
+    fun resumenDe(m: Mensaje): String = sha256(textoDeBase(m).toByteArray())
+
+    /** El mensaje tal como se guarda de base para fusionar: portátil, canónico y sin lo que no cuenta. */
+    fun textoDeBase(m: Mensaje): String = Canonico.de(portatil(m.copy(recuerdaEn = null, uid = null, aparato = null)))
 
     /**
-     * Pone y quita mensajes de un chat. [poner] viene en JSON portátil; lo que ya hubiera con esa
-     * seña se sustituye —conservando el recordatorio, que es de este aparato—. Lo borrado deja su
-     * marca y se lleva su adjunto.
+     * Pone y quita mensajes de un chat. [poner] viene en JSON portátil; lo que ya hubiera con ese
+     * código único se sustituye —conservando el recordatorio, que es de este aparato—. [borrar] son
+     * códigos únicos: lo borrado deja su marca y se lleva su adjunto.
      */
     fun aplicarMensajes(chat: String, poner: List<String>, borrar: List<String>, ahora: Long = System.currentTimeMillis()) {
         if (poner.isEmpty() && borrar.isEmpty()) return
@@ -190,26 +267,29 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             val lista = leerMensajes().toMutableList()
             val quitar = borrar.toSet()
             val llegan = poner.mapNotNull { runCatching { JSON.decodeFromString(Mensaje.serializer(), rutas.aLocal(it)) }.getOrNull() }
-                .filter { chatDe(it) == chat && senaDe(it) != null }
-            val porSena = llegan.associateBy { senaDe(it)!! }
+                .filter { chatDe(it) == chat }
+            val porClave = llegan.associateBy { Codigos.unico(it) }
             val puestos = HashSet<String>()
+            val quitados = ArrayList<Mensaje>()
             val salida = ArrayList<Mensaje>(lista.size + llegan.size)
             for (m in lista) {
-                val sena = if (chatDe(m) == chat) senaDe(m) else null
+                val clave = if (chatDe(m) == chat) Codigos.unico(m) else null
                 when {
-                    sena != null && sena in porSena -> {
-                        salida += porSena.getValue(sena).copy(recuerdaEn = m.recuerdaEn)
-                        puestos += sena
+                    clave != null && clave in porClave -> {
+                        if (puestos.add(clave)) salida += porClave.getValue(clave).copy(recuerdaEn = m.recuerdaEn)
                     }
-                    sena != null && sena in quitar -> m.ruta?.let { adjuntosFuera += it }
+                    clave != null && clave in quitar -> { quitados += m; m.ruta?.let { adjuntosFuera += it } }
                     else -> salida += m
                 }
             }
-            for ((sena, m) in porSena) if (sena !in puestos) salida += m.copy(recuerdaEn = null)
-            escribirMensajes(salida)
+            for ((clave, m) in porClave) if (clave !in puestos) salida += m.copy(recuerdaEn = null)
+            escribirMensajes(sinRegistrosRepetidos(salida))
             val marcasViejas = marcas()
-            val nuevas = marcasViejas.filterNot { it.chat == chat && it.sena in porSena } +
-                quitar.filter { s -> marcasViejas.none { it.chat == chat && it.sena == s } }.map { Marca(chat, it, ahora) }
+            val señasPuestas = llegan.mapNotNullTo(HashSet()) { senaDe(it) }
+            val nuevas = marcasViejas.filterNot { it.chat == chat && ((it.uid != null && it.uid in porClave) || (it.uid == null && it.sena in señasPuestas)) } +
+                quitar.filter { k -> marcasViejas.none { it.chat == chat && it.uid == k } }.map { k ->
+                    Marca(chat, quitados.firstOrNull { Codigos.unico(it) == k }?.let { senaDe(it) }.orEmpty(), ahora, uid = k)
+                }
             escribirMarcas(nuevas)
         }
         for (ruta in adjuntosFuera) {
@@ -261,14 +341,15 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     fun aPortatil(p: Proyecto): String = rutas.aPortatil(Proyectos.json.encodeToString(Proyecto.serializer(), p))
 
     fun guardarProyecto(p: Proyecto) {
-        synchronized(PROYECTOS) {
-            val lista = Proyectos.actualizada(leerProyectos(), p)
-            archivoDeProyectos.parentFile?.mkdirs()
-            val tmp = File(archivoDeProyectos.parentFile, "proyectos.json.sincro")
-            tmp.writeText(Proyectos.json.encodeToString(lista))
-            if (!tmp.renameTo(archivoDeProyectos)) { tmp.copyTo(archivoDeProyectos, overwrite = true); tmp.delete() }
-        }
+        synchronized(PROYECTOS) { escribirProyectos(Proyectos.actualizada(leerProyectos(), p)) }
         alCambiar(Cambio.PROYECTOS)
+    }
+
+    private fun escribirProyectos(lista: List<Proyecto>) {
+        archivoDeProyectos.parentFile?.mkdirs()
+        val tmp = File(archivoDeProyectos.parentFile, "proyectos.json.sincro")
+        tmp.writeText(Proyectos.json.encodeToString(lista))
+        if (!tmp.renameTo(archivoDeProyectos)) { tmp.copyTo(archivoDeProyectos, overwrite = true); tmp.delete() }
     }
 
     /**
@@ -384,26 +465,41 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     }
 
     /** Resumen, tamaño y fecha de cada archivo del chat. Lo ya calculado se recuerda por tamaño y fecha. */
-    fun archivos(chat: String): List<ArchivoInfo> {
+    fun archivos(
+        chat: String,
+        /** Lo ya calculado en esta vuelta: se reutiliza si el archivo sigue con el mismo tamaño y fecha. */
+        conocidos: Map<String, ArchivoInfo> = emptyMap()
+    ): List<ArchivoInfo> {
         val cache = leerCache()
         var tocada = false
         val salida = alcance(chat).map { (rel, etiqueta) ->
             val f = File(filesDir, rel)
+            conocidos[rel]?.takeIf { it.bytes == f.length() && it.tocado == f.lastModified() }?.let { return@map it.copy(etiqueta = etiqueta) }
             val sello = "${f.length()}:${f.lastModified()}"
             val guardado = cache[rel]
             // **Solo lo grande se fía de la fecha.** Hay Android donde reescribir un archivo pequeño no
             // le cambia la fecha: con la caché, un lienzo retocado parecía el de antes y no se mandaba.
             // Medir lo pequeño cada vez cuesta nada; lo grande (un PDF de 300 MB) sí se recuerda.
-            val resumen = if (guardado != null && f.length() > UMBRAL_DE_CACHE && guardado.substringBefore('|') == sello) guardado.substringAfter('|')
-            else resumenDeArchivo(rel).also { cache[rel] = "$sello|$it"; tocada = true }
-            ArchivoInfo(rel, resumen, f.length(), f.lastModified(), etiqueta)
+            if (guardado != null && f.length() > UMBRAL_DE_CACHE && guardado.substringBefore('|') == sello) {
+                ArchivoInfo(rel, guardado.substringAfter('|'), f.length(), f.lastModified(), etiqueta)
+            } else if (esTexto(rel)) {
+                val texto = textoDe(rel)
+                val canonico = sha256(Canonico.de(texto).toByteArray())
+                cache[rel] = "$sello|$canonico"; tocada = true
+                ArchivoInfo(rel, canonico, f.length(), f.lastModified(), etiqueta, crudo = sha256(texto.toByteArray()))
+            } else {
+                val resumen = resumenDeArchivo(rel)
+                cache[rel] = "$sello|$resumen"; tocada = true
+                ArchivoInfo(rel, resumen, f.length(), f.lastModified(), etiqueta, crudo = resumen)
+            }
         }
         if (tocada) guardarCache(cache)
         return salida
     }
 
-    private fun resumenDeArchivo(rel: String): String =
-        if (esTexto(rel)) sha256(textoDe(rel).toByteArray())
+    /** El resumen de un archivo como lo cuenta la sincronización: canónico si es de texto. */
+    fun resumenDeArchivo(rel: String): String =
+        if (esTexto(rel)) sha256(Canonico.de(textoDe(rel)).toByteArray())
         else File(filesDir, rel).inputStream().use { sha256De(it) }
 
     /**
@@ -419,6 +515,21 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         val crudo = if (rel.endsWith(".gz")) GZIPInputStream(f.inputStream()).use { it.readBytes().decodeToString() } else f.readText()
         return rutas.aPortatil(crudo)
     }
+
+    /**
+     * **El texto de la versión [resumen] de [rel]**: el archivo de ahora si es esa, o lo acordado
+     * guardado ([objeto]). Null si no se tiene.
+     */
+    fun textoBase(rel: String, resumen: String): String? {
+        objeto(resumen)?.let { return it }
+        if (!File(filesDir, rel).isFile) return null
+        val ahora = runCatching { textoDe(rel) }.getOrNull() ?: return null
+        return ahora.takeIf { sha256(Canonico.de(it).toByteArray()) == resumen }
+    }
+
+    /** Escribe un archivo de texto (JSON portátil) en su sitio, comprimido si toca. */
+    fun escribirTexto(rel: String, portatil: String): Boolean =
+        escribirArchivo(rel) { salida -> salida.write(portatil.toByteArray()); true }
 
     fun abrir(rel: String): InputStream = File(filesDir, rel).inputStream()
 
@@ -482,6 +593,72 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
     }
 
+    // ------------------------------------------------------ bases para fusionar
+
+    private val carpetaDeObjetos get() = File(carpeta, "objetos").apply { mkdirs() }
+
+    /**
+     * **El contenido de lo acordado**, por su resumen (15-sep-2026). Fusionar a tres bandas necesita
+     * la base entera, no solo su resumen, y mandar solo los cambios también: los dos aparatos la
+     * tienen y basta decir qué cambió respecto a ella. Se guarda comprimida y una vez por contenido.
+     */
+    fun objeto(resumen: String): String? = runCatching {
+        val f = File(carpetaDeObjetos, "$resumen.gz")
+        if (!f.isFile) null else GZIPInputStream(f.inputStream()).use { it.readBytes().decodeToString() }
+    }.getOrNull()
+
+    fun hayObjeto(resumen: String) = File(carpetaDeObjetos, "$resumen.gz").isFile
+
+    /** Guarda [texto] (JSON portátil) como objeto y devuelve su resumen canónico. */
+    fun guardarObjeto(texto: String): String {
+        val canonico = Canonico.de(texto)
+        val resumen = sha256(canonico.toByteArray())
+        escribirObjeto(resumen, canonico)
+        return resumen
+    }
+
+    private fun escribirObjeto(resumen: String, canonico: String) {
+        val f = File(carpetaDeObjetos, "$resumen.gz")
+        if (f.isFile) return
+        val tmp = File(carpetaDeObjetos, "$resumen.gz.tmp")
+        GZIPOutputStream(tmp.outputStream()).use { it.write(canonico.toByteArray()) }
+        if (!tmp.renameTo(f)) { tmp.copyTo(f, overwrite = true); tmp.delete() }
+    }
+
+    /**
+     * Guarda el contenido de lo acordado en [base] que siga aquí igual, y tira los objetos que ya no
+     * señala ninguna base. Lo llaman los dos lados al cerrar una vuelta.
+     */
+    fun guardarObjetosDeBase(chat: String, base: Base) {
+        runCatching {
+            for ((rel, resumen) in base.archivos) {
+                if (!esTexto(rel) || hayObjeto(resumen) || !File(filesDir, rel).isFile) continue
+                val canonico = Canonico.de(textoDe(rel))
+                if (sha256(canonico.toByteArray()) == resumen) escribirObjeto(resumen, canonico)
+            }
+            val porClave = mensajesPorClave(chat)
+            for ((clave, resumen) in base.mensajes) {
+                if (resumen == BORRADO || hayObjeto(resumen)) continue
+                val m = porClave[clave] ?: continue
+                val texto = textoDeBase(m)
+                if (sha256(texto.toByteArray()) == resumen) escribirObjeto(resumen, texto)
+            }
+        }
+        recogerObjetos()
+    }
+
+    private fun recogerObjetos() = runCatching {
+        val vivos = HashSet<String>()
+        File(carpeta, "base").walkTopDown().filter { it.isFile && it.name.endsWith(".json") }.forEach { f ->
+            runCatching { JSON.decodeFromString(Base.serializer(), f.readText()) }.getOrNull()?.let { b ->
+                vivos += b.archivos.values; vivos += b.mensajes.values
+            }
+        }
+        carpetaDeObjetos.listFiles().orEmpty().forEach { f ->
+            if (f.name.endsWith(".gz") && f.name.removeSuffix(".gz") !in vivos) f.delete()
+        }
+    }
+
     fun elegidos(otro: String): Set<String>? = runCatching {
         File(carpeta, "elegidos/${limpio(otro)}.txt").readLines().filter { it.isNotBlank() }.toSet()
     }.getOrNull()
@@ -542,7 +719,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
 
     fun avisar(c: Cambio) = alCambiar(c)
 
-    fun senaDe(m: Mensaje): String? = m.letra?.firstOrNull()?.let { Sena.de(m.numero, it) }
+    /** El código de chat de un mensaje (`47·K7Q2`, o `47a` en lo de antes). Ver [Codigos.deChat]. */
+    fun senaDe(m: Mensaje): String? = Codigos.deChat(m)
 
     companion object {
         const val GENERAL = "general"
@@ -577,9 +755,9 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
          */
         fun borradosEntre(antes: List<Mensaje>, despues: List<Mensaje>, miLetra: Char?, ahora: Long): List<Marca> {
             val quedan = despues.mapTo(HashSet()) { it.id }
-            return antes.filter { it.id !in quedan && it.numero > 0 }.mapNotNull { m ->
-                val letra = m.letra?.firstOrNull() ?: miLetra ?: return@mapNotNull null
-                Sena.de(m.numero, letra)?.let { Marca(chatDe(m), it, ahora) }
+            return antes.filter { it.id !in quedan }.map { m ->
+                val sena = Codigos.deChat(m) ?: miLetra?.let { Sena.de(m.numero, it) }
+                Marca(chatDe(m), sena.orEmpty(), ahora, uid = Codigos.unico(m))
             }
         }
     }

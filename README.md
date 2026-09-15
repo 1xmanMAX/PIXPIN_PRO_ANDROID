@@ -4,7 +4,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.357 pruebas · **sin cuentas, sin servidores y sin analítica**;
+**Android 10+** · Kotlin + Compose · 2.463 pruebas · **sin cuentas, sin servidores y sin analítica**;
 internet solo se usa si tú pulsas bajar un modelo de voz o compartir como enlace. Sincronizar y
 enviar van por **tu Wi-Fi**, sin pasar por internet
 
@@ -117,6 +117,9 @@ marques hojas de proyectos distintos.
 | **Planos enormes** | Uno mayor que un A0 se trae por trozos, como las teselas de un mapa |
 | **Calibrar** | Dos toques sobre una medida conocida y las cotas salen en metros |
 | **Salidas** | Página web · PDF de varias hojas · imagen · `.pixpin` editable |
+| **Mirar y presentar** | Un lienzo se abre en **modo visualización**: mover, ampliar, **imprimir** y **presentar** a pantalla completa con un mando en bolita. Para dibujar se pasa a editar |
+| **PowerPoint** | Un `.pptx` se convierte en PDF y entra como proyecto |
+| **Copias de seguridad** | Antes de recibir o sincronizar se guarda cómo estaba el proyecto; se vuelve a cualquier versión, y los lienzos que se quedaron sin proyecto se devuelven |
 
 ## El croquis en el espacio
 
@@ -127,34 +130,45 @@ cambian de tono al girar, porque cada uno es un tubo con su lomo y su flanco. Se
 del centro de lo que ves, no de un punto cualquiera. Hay bola, cilindro, cono y anillo, licuar
 para deformar a mano, sol, grupos y vistas guardadas.
 
+**Modelos de Revit y OBJ**: un edificio exportado como IFC (o un OBJ de SketchUp, Blender o Rhino)
+entra en el croquis a escala real, con los huecos de puertas y ventanas recortados. Se mueve, se
+agrupa, sale en la lista, en el OBJ exportado y en la página web.
+
 **◉ En el sitio** pone la cámara de atrás de fondo y el croquis encima a tamaño real, con la
 lente de verdad del aparato: mueves el teléfono y la vista se mueve con él.
 
 ## Sincronizar tus aparatos, sin servidor
 
-Cada mensaje del chat lleva un **número y la letra del aparato** donde nació (`#47a`, `#12b`): con
-eso dos aparatos nunca reparten el mismo nombre y no hace falta ningún servidor que ponga orden.
-Los aparatos que comparten un **código de grupo** se encuentran solos en la misma Wi-Fi y se
-sincronizan cuando pulsas el botón.
+**Tres códigos por cada cosa.** Todo lo que pasa por el chat —un lienzo, una tabla, un PDF, una
+nota— nace con un **código único** oculto, un **código de chat** (el número y el código del aparato
+donde nació, `#47·K7Q2`) y su **fecha de creación**. No cambian nunca, se comparta las veces que se
+comparta: por eso no hace falta ningún servidor que ponga orden.
 
-- **Por proyectos**: eliges qué pasa, en dos pestañas —una por aparato—, con un punto verde en lo
-  que está en los dos, uno rojo en lo que solo está en uno, y cuál es la versión más reciente.
-- **Lo nuevo de cada lado se suma**: un lienzo creado en el teléfono y otro en la tableta acaban en los dos.
-- **Lo cambiado en los dos se pregunta**, o manda el aparato que elijas como **maestro** en esa
-  vuelta, o lo más reciente.
-- **Lo borrado deja marca**, para que el otro aparato no lo resucite.
-- Todo viaja **cifrado** con la clave del grupo (AES-GCM) y cada archivo lleva su resumen: si algo
-  se estaba guardando mientras se mandaba, no se da por bueno.
+Los aparatos que comparten un **código de grupo** se encuentran solos en la misma Wi-Fi y se
+sincronizan cuando pulsas el botón. **Como git, y sin que mande ningún aparato:**
+
+- **A+B en uno y A+C en el otro dan A+B+C.** Lo cambiado en los dos se **junta**: los lienzos figura
+  por figura, las tablas celda por celda, las notas párrafo por párrafo y los croquis trazo por trazo.
+- **Movida en uno y con otro color en el otro** queda movida y con el color nuevo. Si los dos tocaron
+  lo mismo, gana **el último cambio** (con el reloj corregido si un aparato va desfasado), y lo otro
+  queda en las copias de seguridad.
+- **Borrado en uno y cambiado en el otro, se queda.** Borrado y sin tocar, se borra en los dos.
+- **Una hoja solo se quita en los dos si la quitaste a mano**; si faltara por un fallo, vuelve.
+- **Solo viajan los cambios**: de un lienzo ya sincronizado se manda qué figuras cambiaron, no el lienzo.
+- Todo viaja **cifrado** con la clave del grupo (AES-GCM) y cada archivo lleva su resumen.
+
+Cómo lo resuelven Excalidraw, Figma y la literatura (CRDT, OR-Set, diff3, relojes híbridos), y qué
+se tomó de cada uno: [`docs/plan-sincronizacion.md`](docs/plan-sincronizacion.md).
 
 ## Enviar una sola vez por Wi-Fi
 
 Desde **Compartir** de cualquier app, desde un proyecto, un lienzo o un mensaje: sale un **código de
 seis cifras y un QR**. Quien recibe lo escanea en *Sincronizar → Recibir*, ve qué le llega y acepta.
-Al terminar el código deja de existir.
+Al terminar el código deja de existir. **El chat viaja con lo que se manda**, con su hora y su número.
 
-**Quien envía manda**: cada proyecto, lienzo o archivo lleva una seña que no cambia, así que
-mandarlo otra vez **pone al día** lo que el otro ya tenía en vez de duplicarlo. Un lienzo suelto cae
-en su proyecto —o crea el proyecto con el mismo nombre— y en el chat se ve de quién vino.
+**Quien recibe elige.** Si ya tiene algo con **los tres códigos iguales**, decide cosa por cosa entre
+**«Actualizar el que tengo»** y **«Crear como nuevo»** (con códigos nuevos: desde ahí es otra cosa).
+Si los códigos no coinciden, entra aparte sin tocar nada: ante la duda, duplicar y no pisar.
 
 ## Compartir: una sola hoja en toda la app
 
@@ -261,7 +275,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.357 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.463 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -274,7 +288,7 @@ sdk.dir=C\:\\Users\\TU_USUARIO\\AppData\\Local\\Android\\Sdk
 > El `build.gradle.kts` raíz manda la carpeta de compilación a `pixpin-build`, para poder tener
 > el proyecto en una carpeta sincronizada. Si no te hace falta, borra ese bloque.
 
-### Por qué el APK pesa 51 MB
+### Por qué el APK pesa 52 MB
 
 Son **los motores de voz**, no el código. R8 no puede recortar un binario ya compilado:
 
@@ -315,7 +329,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.224 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.463 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---
@@ -342,7 +356,7 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 - **Contenido protegido** (banca, DRM): sale en negro.
 - **Fabricantes agresivos con la batería**: si matan el servicio, los pines desaparecen hasta reabrir.
 - Sin **OCR** ni **grabación de vídeo** (el QR solo se usa para enviar por Wi-Fi).
-- **No se leen DWG, RVT ni DXF**: para medir sobre un plano ajeno se calibra su captura.
+- **No se leen DWG, RVT ni DXF**: un modelo de Revit entra exportado como **IFC**; para medir sobre un plano ajeno se calibra su captura.
 - La **captura con scroll** cose fotogramas: con cabeceras fijas o sin textura puede fallar.
 - Lo más reciente **está sin verificar en un móvil**: la geometría y los formatos tienen pruebas, el aspecto no.
 
@@ -356,6 +370,7 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 | ✅ 8 | El chat, la voz a texto con tres motores, teleprónter y pronunciar |
 | ✅ 9 | El croquis en el espacio, «en el sitio», OBJ y el visor 3D del documento web |
 | ✅ 9.5 | Tablas con fórmulas, sincronizar sin servidor, enviar por Wi-Fi, compartir unificado, zonas y sublienzos |
+| ✅ 9.6 | Modelos IFC/OBJ en el croquis, presentar e imprimir, `.pptx`, copias de seguridad, **tres códigos y sincronizar fusionando** |
 | 10 | **Editar PDFs**: devolver la página anotada al original conservando su texto |
 | 11 | OCR y QR · contenido de DOCX/XLSX/PPTX |
 
@@ -373,7 +388,7 @@ segundo plano).
 
 - [`docs/motor.md`](docs/motor.md) — **catálogo visual**: cada función del motor de dibujo, en dibujos
 - [`docs/formato-pixpin.md`](docs/formato-pixpin.md) — el formato `.pixpin` por dentro
-- [`docs/plan-sincronizacion.md`](docs/plan-sincronizacion.md) — sincronizar sin servidor: la seña, la base y el protocolo
+- [`docs/plan-sincronizacion.md`](docs/plan-sincronizacion.md) — sincronizar sin servidor: los tres códigos, la fusión a tres bandas, los parches y sus fuentes
 - [`docs/plan-compartir-y-zonas.md`](docs/plan-compartir-y-zonas.md) — la hoja de compartir, lienzos por Wi-Fi, zonas y sublienzos
 - [`docs/superpowers/specs/`](docs/superpowers/specs/) — diseño original y decisiones de cada fase
 

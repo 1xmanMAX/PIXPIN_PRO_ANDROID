@@ -1,99 +1,127 @@
 package com.forge.pixpin.sincro
 
+import com.forge.pixpin.motor.Hoja
 import com.forge.pixpin.motor.Proyecto
+import com.forge.pixpin.motor.Proyectos
+import kotlinx.serialization.json.JsonElement
 
 /**
- * **Juntar dos versiones de un proyecto sin preguntar.**
+ * **Juntar dos versiones de un proyecto sin preguntar y sin que mande nadie.**
  *
  * Un proyecto es un índice: qué hojas tiene, en qué orden, cómo se llama. Si en el teléfono se
- * añade una hoja y en la tableta otra, lo que uno espera es **tener las dos**, no elegir entre
- * dos listas. Preguntar aquí sería preguntar cada vez que los dos aparatos trabajaron en el mismo
- * proyecto, que es justo lo normal.
+ * añade una hoja y en la tableta otra, lo que uno espera es **tener las dos**, no elegir entre dos
+ * listas.
  *
- * Se hace con lo acordado la última vez ([base]), como con los mensajes: una hoja que estaba y
- * falta en un lado **se quitó allí**; una que no estaba y aparece **se añadió**. Sin base (la
- * primera vez) no hay forma de saber qué se quitó, así que se juntan todas: perder una hoja es
- * peor que tener una de más.
+ * Hasta el 15-sep-2026 un aparato podía ponerse de **maestro** y ganar los empates; ese día, con un
+ * proyecto roto en un aparato, la sincronización tomó un lienzo que faltaba por un borrado y lo quitó
+ * en los dos. El usuario pidió entonces **fusionar sin predominancia** (A+B y A+C → A+B+C), y así es
+ * ahora:
  *
- * Lo que sí puede chocar —la misma hoja cambiada en los dos lados, el nombre cambiado en los dos—
- * lo gana el proyecto tocado más tarde. Es un dato menor al lado del contenido: lo que se dibuja o
- * se escribe va en los archivos y en los mensajes, y eso sí se pregunta.
+ * - **Las hojas se suman.** Una hoja que falta en un lado **solo se quita si allí se quitó a mano**
+ *   —la marca de [Proyecto.quitadas]— y **ni así si en el otro lado se cambió** (su lienzo, su tabla,
+ *   su nota): lo modificado gana a lo borrado. Una hoja que simplemente falta, sin marca, se devuelve.
+ *   Es el conjunto «observed-remove» de Bieniusa et al. (2012): borrar quita lo que uno vio.
+ * - **Cada hoja y los datos del proyecto se juntan campo a campo** con [Fusion]: una nota por
+ *   párrafos, el nombre cambiado en un solo lado pasa; cambiado en los dos, gana el proyecto tocado
+ *   más tarde.
+ * - **El orden**: el del mío con lo nuevo del otro detrás de su vecina ([Fusion.ordenJunto]).
  */
 object Mezcla {
 
-    fun proyecto(mio: Proyecto?, suyo: Proyecto?, base: Proyecto?): Proyecto? {
+    fun proyecto(
+        mio: Proyecto?,
+        suyo: Proyecto?,
+        base: Proyecto?,
+        /**
+         * Las hojas (por id) y croquis cuyos archivos cambiaron **en este aparato** desde lo acordado.
+         * Una hoja quitada allí y cambiada aquí vuelve.
+         */
+        cambiadasAqui: Set<String> = emptySet(),
+        /** Lo mismo en el otro aparato. */
+        cambiadasAlli: Set<String> = emptySet(),
+        /** Cuánto va adelantado el reloj del otro. */
+        desfase: Long = 0L
+    ): Proyecto? {
         if (mio == null) return suyo
         if (suyo == null) return mio
         if (mio == suyo) return mio
-        val ganaElMio = mio.tocado >= suyo.tocado
-        fun <T> campo(m: T, s: T, b: T?): T = when {
-            base == null -> if (ganaElMio) m else s
-            m == b -> s
-            s == b -> m
-            else -> if (ganaElMio) m else s
-        }
-        return Proyecto(
-            id = mio.id,
-            nombre = campo(mio.nombre, suyo.nombre, base?.nombre),
-            hojas = lista(mio.hojas, suyo.hojas, base?.hojas, { it.id }, ganaElMio),
-            archivado = campo(mio.archivado, suyo.archivado, base?.archivado),
-            tocado = maxOf(mio.tocado, suyo.tocado),
-            pdfOrigen = campo(mio.pdfOrigen, suyo.pdfOrigen, base?.pdfOrigen) ?: mio.pdfOrigen ?: suyo.pdfOrigen,
-            pdfLimpio = campo(mio.pdfLimpio, suyo.pdfLimpio, base?.pdfLimpio) ?: mio.pdfLimpio ?: suyo.pdfLimpio,
-            croquis = lista(mio.croquis, suyo.croquis, base?.croquis, { it }, ganaElMio),
-            origen = campo(mio.origen, suyo.origen, base?.origen)
-        )
-    }
+        val criterio = Fusion.Criterio(mioMasNuevo = mio.tocado >= suyo.tocado - desfase, desfase = desfase)
 
-    /**
-     * Una lista juntada a tres bandas, **en el orden del mío** con lo nuevo del otro metido detrás
-     * de la que tenía delante en su lista: así una hoja añadida en medio en la tableta cae en
-     * medio también aquí, y no al final.
-     */
-    fun <T> lista(mio: List<T>, suyo: List<T>, base: List<T>?, clave: (T) -> String, ganaElMio: Boolean): List<T> {
-        val enMio = mio.associateBy(clave)
-        val enSuyo = suyo.associateBy(clave)
-        val enBase = base?.associateBy(clave) ?: emptyMap()
-        fun sigue(k: String): Boolean {
-            val m = k in enMio
-            val s = k in enSuyo
-            if (base == null) return m || s
-            val b = k in enBase
-            return when {
-                m && s -> true
-                m -> !b   // solo en el mío: si estaba en la base, el otro lo quitó
-                s -> !b   // solo en el suyo: ídem al revés
+        // Los datos sueltos del proyecto (nombre, archivado, PDF, códigos), campo a campo.
+        fun campos(p: Proyecto?): JsonElement? = p?.let {
+            Proyectos.json.encodeToJsonElement(Proyecto.serializer(), it.copy(hojas = emptyList(), croquis = emptyList(), quitadas = emptyList(), tocado = 0L))
+        }
+        val datos = Fusion.json(campos(base), campos(mio), campos(suyo), criterio)
+            ?.let { runCatching { Proyectos.json.decodeFromJsonElement(Proyecto.serializer(), it) }.getOrNull() }
+            ?: if (criterio.mioMasNuevo) mio else suyo
+
+        val hm = unicas(mio.hojas).associateBy { it.id }
+        val hs = unicas(suyo.hojas).associateBy { it.id }
+        val hb = base?.hojas?.let(::unicas)?.associateBy { it.id } ?: emptyMap()
+        val quitadasAqui = mio.quitadas.toHashSet()
+        val quitadasAlli = suyo.quitadas.toHashSet()
+        val orden = Fusion.ordenJunto(hm.keys.toList(), hs.keys.toList(), base?.hojas?.map { it.id }) { k ->
+            val m = hm[k]; val s = hs[k]; val b = hb[k]
+            when {
+                m != null && s != null -> true
+                // Falta en el suyo: se queda salvo que allí se quitara a mano y aquí nadie la tocara.
+                m != null -> k !in quitadasAlli || k in cambiadasAqui || (b != null && m != b)
+                s != null -> k !in quitadasAqui || k in cambiadasAlli || (b != null && s != b)
                 else -> false
             }
         }
-        fun version(k: String): T {
-            val m = enMio[k]
-            val s = enSuyo[k]
-            if (m == null) return s!!
-            if (s == null) return m
-            val b = enBase[k]
-            return when {
-                m == s -> m
-                b != null && m == b -> s
-                b != null && s == b -> m
-                else -> if (ganaElMio) m else s
+        val hojas = orden.map { k -> hoja(hb[k], hm[k], hs[k], criterio) }
+
+        val croquis = Fusion.ordenJunto(mio.croquis.distinct(), suyo.croquis.distinct(), base?.croquis?.distinct()) { c ->
+            val m = c in mio.croquis; val s = c in suyo.croquis
+            val enBase = base?.croquis?.contains(c) == true
+            when {
+                m && s -> true
+                !enBase -> true
+                m -> c in cambiadasAqui
+                else -> c in cambiadasAlli
             }
         }
-        val salida = ArrayList<String>()
-        for (x in mio) { val k = clave(x); if (sigue(k)) salida += k }
-        // Lo del otro que falta, detrás de su vecino de delante.
-        var anterior: String? = null
-        for (x in suyo) {
-            val k = clave(x)
-            if (k !in enMio && sigue(k) && k !in salida) {
-                var donde = if (anterior == null) 0 else salida.indexOf(anterior) + 1
-                // Detrás también de lo que yo añadí justo ahí: si los dos añadieron al final, va
-                // primero lo mío y luego lo suyo, no intercalado.
-                while (donde < salida.size && salida[donde] !in enSuyo && salida[donde] !in enBase) donde++
-                salida.add(donde.coerceIn(0, salida.size), k)
-            }
-            if (k in salida) anterior = k
+        val quedan = orden.toHashSet()
+        return datos.copy(
+            id = mio.id,
+            hojas = hojas,
+            croquis = croquis,
+            tocado = maxOf(mio.tocado, suyo.tocado),
+            quitadas = (mio.quitadas + suyo.quitadas).distinct().filter { it !in quedan }.takeLast(Proyectos.MARCAS_DE_QUITADAS)
+        )
+    }
+
+    private fun hoja(b: Hoja?, m: Hoja?, s: Hoja?, criterio: Fusion.Criterio): Hoja {
+        if (m == null) return s!!
+        if (s == null || m == s) return m
+        fun j(h: Hoja?) = h?.let { Proyectos.json.encodeToJsonElement(Hoja.serializer(), it) }
+        return Fusion.json(j(b), j(m), j(s), criterio)
+            ?.let { runCatching { Proyectos.json.decodeFromJsonElement(Hoja.serializer(), it) }.getOrNull() }
+            ?.copy(id = m.id)
+            ?: if (criterio.mioMasNuevo) m else s
+    }
+
+    private fun unicas(h: List<Hoja>): List<Hoja> {
+        val vistas = HashSet<String>()
+        return h.filter { vistas.add(it.id) }
+    }
+
+    /**
+     * **Qué hojas y croquis cambiaron** en un lado desde lo acordado, por sus archivos: [archivos] es
+     * ruta → resumen de ese lado y [acordado] lo de la base. Un archivo que no estaba en la base
+     * también cuenta como cambiado.
+     */
+    fun cambiadas(p: Proyecto?, archivos: Map<String, String>, acordado: Map<String, String>): Set<String> {
+        if (p == null) return emptySet()
+        fun cambio(rel: String?) = rel != null && archivos[rel] != null && archivos[rel] != acordado[rel]
+        val salida = HashSet<String>()
+        for (h in p.hojas) {
+            if (cambio(h.dibujo?.let { "pins/draw/$it.excalidraw.gz" }) || cambio(h.croquis?.let { "croquis3d/$it.croquis.gz" }) ||
+                cambio(h.tabla?.let { "tablas/${it.replace(Regex("[^A-Za-z0-9._-]"), "_")}.json" })
+            ) salida += h.id
         }
-        return salida.map(::version)
+        for (c in p.croquis) if (cambio("croquis3d/$c.croquis.gz")) salida += c
+        return salida
     }
 }

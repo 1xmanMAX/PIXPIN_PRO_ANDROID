@@ -68,6 +68,14 @@ var R=D.cj?Math.max(Math.hypot(D.cj[3]-D.cj[0],D.cj[4]-D.cj[1],D.cj[5]-D.cj[2])/
 // **La portada**: la foto del croquis tal como se exportó, encima de todo hasta el primer
 // fotograma pintado. Con ella el archivo enseña algo al instante, antes de que la tarjeta
 // compile sus programas.
+// **Los modelos importados** (un IFC de Revit, un OBJ): llegan en binario y se abren una vez.
+// Cada uno: `v` Float32Array de vértices ya en el mundo, `t` Uint32Array de índices, `k` el
+// color ARGB de cada triángulo y `cj` su caja. Solo se pintan con la tarjeta gráfica: sin
+// WebGL, un edificio de cien mil triángulos ordenados a mano no se mueve.
+function binario(b64){ var s=atob(b64), n=s.length, u=new Uint8Array(n); for(var i=0;i<n;i++) u[i]=s.charCodeAt(i); return u.buffer; }
+var MO=(D.mo||[]).map(function(m){
+ return {n:m.n, g:m.g, cj:m.cj, v:new Float32Array(binario(m.v)), t:new Uint32Array(binario(m.t)), k:new Uint32Array(binario(m.k))};
+});
 var portada=null;
 if(D.po){ portada=document.createElement('img'); portada.className='portada'; portada.src=D.po;
  portada.draggable=false; caja.appendChild(portada); }
@@ -571,6 +579,28 @@ function subirGl(){
   }
  }
  GL.bCara=buffer(new Float32Array(caras)); GL.bBorde=buffer(new Float32Array(bordes));
+ // ---- Los modelos: sus triángulos sueltos, 11 números por vértice como las caras ----
+ // Sin índices: WebGL 1 no los admite de más de 65 536 vértices sin extensión, y así el
+ // sombreado es plano, por cara, que es como se leen los muros y las losas.
+ GL.modelos=[];
+ MO.forEach(function(m){
+  var V=m.v, T=m.t, K=m.k, nt=T.length/3, opacos=0, q;
+  for(q=0;q<nt;q++) if((K[q]>>>24)>=250) opacos++;
+  var A=new Float32Array(opacos*33), Bt=new Float32Array((nt-opacos)*33), na=0, nb=0;
+  for(q=0;q<nt;q++){
+   var ia=T[q*3]*3, ib=T[q*3+1]*3, ic=T[q*3+2]*3;
+   var ax=V[ia],ay=V[ia+1],az=V[ia+2], bx=V[ib],by=V[ib+1],bz=V[ib+2], cx=V[ic],cy=V[ic+1],cz=V[ic+2];
+   var ux=bx-ax,uy=by-ay,uz=bz-az, vx=cx-ax,vy=cy-ay,vz=cz-az;
+   var nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx, L=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;
+   nx/=L; ny/=L; nz/=L;
+   var c=K[q], al=(c>>>24)/255, r=((c>>>16)&255)/255*al, g=((c>>>8)&255)/255*al, b=(c&255)/255*al;
+   var opaco=(c>>>24)>=250, D2=opaco?A:Bt, o=opaco?na:nb;
+   D2[o]=ax;D2[o+1]=ay;D2[o+2]=az; D2[o+11]=bx;D2[o+12]=by;D2[o+13]=bz; D2[o+22]=cx;D2[o+23]=cy;D2[o+24]=cz;
+   for(var e=0;e<33;e+=11){ D2[o+e+3]=nx;D2[o+e+4]=ny;D2[o+e+5]=nz; D2[o+e+6]=r;D2[o+e+7]=g;D2[o+e+8]=b;D2[o+e+9]=opaco?1:al; D2[o+e+10]=0; }
+   if(opaco) na+=33; else nb+=33;
+  }
+  GL.modelos.push({o:m, b:na?buffer(A):null, cuantos:na/11, bt:nb?buffer(Bt):null, tcuantos:nb/11});
+ });
  // ---- Las imágenes: cuatro esquinas y su textura, que se sube cuando carga ----
  GL.fotos=D.im.map(function(im){
   var e=im.e, v=new Float32Array([e[0],e[1],e[2],0,0, e[3],e[4],e[5],1,0, e[9],e[10],e[11],0,1,
@@ -657,6 +687,7 @@ function pintarGl(B){
    atributo(GL.cara,'p',3,11,0); atributo(GL.cara,'nrm',3,11,3); atributo(GL.cara,'tinta',4,11,6); atributo(GL.cara,'clase',1,11,10);
    for(i=0;i<GL.solidos.length;i++){ var ss=GL.solidos[i]; if(visible(ss.o)&&ss.cuantos) gl.drawArrays(gl.TRIANGLES,ss.desde,ss.cuantos); }
   }
+  pintarModelosGl(B,true);
   gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
  }
  // Los sólidos, opacos, con la luz.
@@ -668,6 +699,7 @@ function pintarGl(B){
   atributo(GL.cara,'p',3,11,0); atributo(GL.cara,'nrm',3,11,3); atributo(GL.cara,'tinta',4,11,6); atributo(GL.cara,'clase',1,11,10);
   for(i=0;i<GL.solidos.length;i++){ var s=GL.solidos[i]; if(visible(s.o)&&s.cuantos) gl.drawArrays(gl.TRIANGLES,s.desde,s.cuantos); }
  }
+ pintarModelosGl(B,false);
  // Las imágenes.
  for(i=0;i<GL.fotos.length;i++){
   var f=GL.fotos[i]; if(!visible(f.o)) continue;
@@ -700,6 +732,8 @@ function pintarGl(B){
   for(i=0;i<GL.tramosCinta.length;i++){ var tr=GL.tramosCinta[i];
    if(!apagados[tr.g]&&tr.cuantos) gl.drawArrays(gl.TRIANGLE_STRIP,tr.desde,tr.cuantos); }
  }
+ // Los cristales de los modelos: translúcidos, después de lo opaco y sin tapar lo de detrás.
+ pintarModelosGl(B,false,true);
  // Las hojas, translúcidas, de lejos a cerca y sin escribir profundidad.
  if(GL.hojas.length){
   gl.depthMask(false);
@@ -716,6 +750,23 @@ function pintarGl(B){
  }
 }
 
+// Los modelos: [sombra] aplastados al suelo; [cristal] la parte translúcida.
+function pintarModelosGl(B,sombra,cristal){
+ if(!GL.modelos.length) return;
+ camaraGl(GL.cara,B);
+ if(sombra){ gl.uniform1f(gl.getUniformLocation(GL.cara,'usombra'),1); gl.uniform3f(gl.getUniformLocation(GL.cara,'usol'),0,0,1); }
+ else { var sol=D.sol||[B.fx,B.fy,B.fz]; gl.uniform3f(gl.getUniformLocation(GL.cara,'usol'),sol[0],sol[1],sol[2]); }
+ if(cristal) gl.depthMask(false);
+ for(var i=0;i<GL.modelos.length;i++){
+  var m=GL.modelos[i]; if(!visible(m.o)) continue;
+  var b=cristal?m.bt:m.b, n=cristal?m.tcuantos:m.cuantos;
+  if(!b||!n) continue;
+  gl.bindBuffer(gl.ARRAY_BUFFER,b);
+  atributo(GL.cara,'p',3,11,0); atributo(GL.cara,'nrm',3,11,3); atributo(GL.cara,'tinta',4,11,6); atributo(GL.cara,'clase',1,11,10);
+  gl.drawArrays(gl.TRIANGLES,0,n);
+ }
+ if(cristal) gl.depthMask(true);
+}
 // Hacia dónde cae la sombra: por el rayo del sol si lo hay y está alto; si no, a plomo.
 function direccionDeLaSombra(){
  var s=D.sol;
@@ -732,6 +783,7 @@ function cajaDe(filtro){
  D.tr.forEach(function(t){if(filtro(t))mete(t.p);});
  D.ho.forEach(function(l){if(filtro(l)){ if(l.k)l.s.forEach(mete); else mete(l.b); }});
  D.im.forEach(function(im){if(filtro(im))mete(im.e);});
+ MO.forEach(function(m){if(filtro(m)&&m.cj)mete(m.cj);});
  return hay?c:null;
 }
 function cajaVisible(){ return cajaDe(visible)||D.cj; }
@@ -907,6 +959,7 @@ function tomarPunto(e){
  D.tr.forEach(function(t){if(visible(t))mira(t.p);});
  D.ho.forEach(function(l){if(visible(l)){ if(l.k)l.s.forEach(mira); else mira(l.b); }});
  D.im.forEach(function(im){if(visible(im))mira(im.e);});
+ MO.forEach(function(m){if(visible(m))mira(m.v);});
  if(!mejor){ api.decir('Toca cerca de un punto dibujado'); return; }
  if(medida.length>=2) medida=[];
  medida.push(mejor);
@@ -985,6 +1038,20 @@ function objDelCroquis(){
    var ids=[]; for(k=0;k<fc.length;k+=3) ids.push(vertice([fc[k],fc[k+1],fc[k+2]],l.c));
    obj.push('f '+ids.join(' ')); }
  }
+ // Los modelos: sus triángulos, un material por color. Las normales las calcula quien lo abra.
+ for(i=0;i<MO.length;i++){
+  var mo=MO[i]; if(!visible(mo)) continue;
+  var V=mo.v, v0m=nv+1;
+  obj.push('o modelo_'+i+'_'+String(mo.n).replace(/[^A-Za-z0-9_-]/g,'_'));
+  for(j=0;j<V.length;j+=3){ var qm=ejes([V[j],V[j+1],V[j+2]]); obj.push('v '+f4(qm[0])+' '+f4(qm[1])+' '+f4(qm[2])); nv++; }
+  var TT=mo.t, KK=mo.k, actual=-1;
+  for(j=0;j<TT.length/3;j++){
+   var cc=KK[j]; if(cc!==actual){ actual=cc;
+    var hx='#'+('00000'+(cc&0xffffff).toString(16)).slice(-6);
+    obj.push('usemtl '+material(hx,Math.max((cc>>>24)/255,0.05))); }
+   obj.push('f '+(v0m+TT[j*3])+' '+(v0m+TT[j*3+1])+' '+(v0m+TT[j*3+2]));
+  }
+ }
  return {obj:obj.join('\n')+'\n', mtl:mtl.join('\n')};
 }
 refrescarPivote();
@@ -1048,7 +1115,7 @@ return {
  grupos:function(){
   var l=D.gr.slice();
   var sueltos=D.tr.some(function(t){return !t.g;})||D.ho.some(function(o){return !o.g;})||
-              D.im.some(function(o){return !o.g;});
+              D.im.some(function(o){return !o.g;})||MO.some(function(o){return !o.g;});
   if(sueltos) l.push({i:'',n:'Sin grupo'});
   return l.map(function(g){ return {
    id:g.i, nombre:g.n,

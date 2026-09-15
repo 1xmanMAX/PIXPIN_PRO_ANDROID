@@ -117,7 +117,25 @@ data class Proyecto(
      * devolverlo, viaja esta misma seña. Nula en lo creado aquí, cuya seña es su id. Ver
      * `sincro/Envio.kt`.
      */
-    val origen: String? = null
+    val origen: String? = null,
+    /** **Su código único**, oculto y para siempre. Ver `sincro/Codigos.kt`. */
+    val uid: String? = null,
+    /** **Cuándo se creó**, en el aparato donde nació. Viaja con él y no cambia. */
+    val creado: Long = 0L,
+    /** **El código del aparato donde nació** (`K7Q2`). */
+    val aparato: String? = null,
+    /**
+     * **Las hojas que se quitaron a mano**, por su id (15-sep-2026). Borrar deja marca, como en el
+     * chat: sin ella, a una hoja que falta en un aparato no se le sabe distinguir un borrado de un
+     * descuido —un envío que la pisó—, y el 15-sep un descuido se tomó por borrado y se llevó un
+     * lienzo de los dos aparatos. Al sincronizar solo se quita lo que tiene marca, y ni eso si en el
+     * otro aparato se cambió después (lo modificado gana).
+     *
+     * **Solo lo apunta quitar a mano** ([Proyectos.sinPaginas], borrar su mensaje del chat), no
+     * cualquier guardado que llegue sin la hoja: un fallo que la pierda no es una decisión, y
+     * tomarlo por borrado es justo lo que se llevó el lienzo el 15-sep.
+     */
+    val quitadas: List<String> = emptyList()
 )
 
 /**
@@ -215,7 +233,12 @@ data class Hoja(
      * proyectos tienen tres niveles —proyecto, lienzo, sublienzo— y este es el tercero. Ver
      * `Tool.ZONA`.
      */
-    val padre: String? = null
+    val padre: String? = null,
+    /**
+     * **Su código único**, el mismo que el del mensaje que la registra en el chat: no cambia aunque
+     * al recibirla aquí cambie su [id]. Ver `sincro/Codigos.kt`.
+     */
+    val uid: String? = null
 ) {
     /**
      * Dos hojas son la misma si señalan al mismo sitio.
@@ -383,7 +406,11 @@ object Proyectos {
     fun notas(proyecto: Proyecto): List<Hoja> = proyecto.hojas.filter { it.nota != null }
 
     fun sinHoja(proyecto: Proyecto, hojaId: String, cuando: Long): Proyecto =
-        proyecto.copy(hojas = proyecto.hojas.filter { it.id != hojaId }, tocado = cuando)
+        proyecto.copy(hojas = proyecto.hojas.filter { it.id != hojaId }, tocado = cuando, quitadas = marcadas(proyecto, listOf(hojaId)))
+
+    /** Las marcas de [Proyecto.quitadas] con [ids] añadidas. */
+    fun marcadas(proyecto: Proyecto, ids: Collection<String>): List<String> =
+        (proyecto.quitadas + ids).distinct().takeLast(MARCAS_DE_QUITADAS)
 
     /**
      * **Lo que hay que hacer para quitar unas páginas del proyecto.** Ver [sinPaginas].
@@ -435,7 +462,7 @@ object Proyectos {
             }
         }
         val sinEllas = if (fuera.isEmpty()) proyecto
-            else proyecto.copy(hojas = proyecto.hojas.filter { it.id !in fuera }, tocado = cuando)
+            else proyecto.copy(hojas = proyecto.hojas.filter { it.id !in fuera }, tocado = cuando, quitadas = marcadas(proyecto, fuera))
         return Quita(sinEllas, marcos)
     }
 
@@ -465,9 +492,51 @@ object Proyectos {
         proyecto.copy(archivado = archivar, tocado = cuando)
 
     /** Sustituye un proyecto por su versión nueva, o lo añade si no estaba. */
-    fun actualizada(proyectos: List<Proyecto>, nuevo: Proyecto): List<Proyecto> =
-        if (proyectos.none { it.id == nuevo.id }) proyectos + nuevo
-        else proyectos.map { if (it.id == nuevo.id) nuevo else it }
+    fun actualizada(proyectos: List<Proyecto>, nuevo: Proyecto): List<Proyecto> {
+        val antes = proyectos.firstOrNull { it.id == nuevo.id }
+        val limpio = conMarcasDeQuitadas(antes, sinHojasRepetidas(nuevo))
+        return if (antes == null) proyectos + limpio
+        else proyectos.map { if (it.id == limpio.id) limpio else it }
+    }
+
+    /** Cuántas marcas de hojas quitadas se recuerdan por proyecto. */
+    const val MARCAS_DE_QUITADAS = 400
+
+    /**
+     * **Una hoja que vuelve pierde su marca de quitada** (ver [Proyecto.quitadas]), y lo que ya tenía
+     * el proyecto guardado no se pierde por guardar una copia vieja: sus códigos y sus marcas.
+     */
+    fun conMarcasDeQuitadas(antes: Proyecto?, nuevo: Proyecto): Proyecto {
+        val hay = nuevo.hojas.mapTo(HashSet()) { it.id }
+        val marcas = (nuevo.quitadas + antes?.quitadas.orEmpty()).filter { it !in hay }.distinct().takeLast(MARCAS_DE_QUITADAS)
+        var p = if (marcas == nuevo.quitadas) nuevo else nuevo.copy(quitadas = marcas)
+        // **Los códigos no se pierden** porque alguien guarde una copia vieja del proyecto que se hizo
+        // antes de sellarlo: lo que ya tenía lo sigue teniendo. Ver `sincro/Codigos.kt`.
+        if (antes != null) {
+            if (p.uid == null && antes.uid != null) p = p.copy(uid = antes.uid)
+            if (p.creado == 0L && antes.creado != 0L) p = p.copy(creado = antes.creado)
+            if (p.aparato == null && antes.aparato != null) p = p.copy(aparato = antes.aparato)
+            if (p.hojas.any { it.uid == null }) {
+                val suyos = antes.hojas.filter { it.uid != null }.associate { it.id to it.uid }
+                if (suyos.isNotEmpty()) p = p.copy(hojas = p.hojas.map { h -> if (h.uid == null && suyos[h.id] != null) h.copy(uid = suyos[h.id]) else h })
+            }
+        }
+        return p
+    }
+
+    /**
+     * **Dos hojas con el mismo id no pueden estar en un proyecto** (15-sep-2026). Pasó al recibir
+     * un proyecto por Wi-Fi: tres lienzos llegaron a ponerse en el sitio de uno solo y el proyecto
+     * quedó con el mismo lienzo tres veces. Todo lo que cuenta hojas por su id —la sincronización,
+     * el chat— se equivoca con eso, y la sincronización siguiente lo tomó por un borrado. Se queda
+     * la primera de cada id.
+     */
+    fun sinHojasRepetidas(p: Proyecto): Proyecto {
+        if (p.hojas.size < 2) return p
+        val vistas = HashSet<String>()
+        val hojas = p.hojas.filter { vistas.add(it.id) }
+        return if (hojas.size == p.hojas.size) p else p.copy(hojas = hojas)
+    }
 
     /**
      * En qué proyecto se está trabajando ahora mismo.
@@ -513,8 +582,16 @@ object Proyectos {
         /** Una tabla vive en un proyecto si alguna hoja apunta a ella. */
         tabla: String? = null,
         /** Y un croquis 3D, si algún proyecto lo lleva en su lista. */
-        croquis: String? = null
+        croquis: String? = null,
+        /**
+         * La ruta del archivo del mensaje. **El PDF del que nace un proyecto** es su primer
+         * mensaje, pero no es una hoja: es el documento entero. Está mientras algún proyecto lo
+         * tenga como documento (13-sep-2026: salía en rojo aunque el proyecto existiera). Se
+         * compara la ruta exacta, nunca el nombre.
+         */
+        archivo: String? = null
     ): Boolean {
+        if (archivo != null && proyectos.any { it.pdfOrigen == archivo || it.pdfLimpio == archivo }) return true
         // Un mensaje que **es** un proyecto está mientras ese proyecto exista.
         if (proyecto != null && proyectos.any { it.id == proyecto }) return true
         // Lo normal: la hoja apunta al mensaje del que salió. Ver [Hoja.deMensaje].

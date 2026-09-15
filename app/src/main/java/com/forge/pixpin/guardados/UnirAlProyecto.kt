@@ -126,7 +126,10 @@ object UnirAlProyecto {
         val hojas = p.hojas.filterNot(::ligada)
         val croquis = p.croquis.filterNot { c -> suyos.any { it.clase == Clase.CROQUIS && it.referencia == c } }
         val quitadas = (p.hojas.size - hojas.size) + (p.croquis.size - croquis.size)
-        return if (quitadas == 0) p to 0 else p.copy(hojas = hojas, croquis = croquis, tocado = ahora) to quitadas
+        // Quitar al borrar del chat es quitar a mano: deja marca, para que la sincronización lo quite
+        // también en el otro aparato. Ver [com.forge.pixpin.motor.Proyecto.quitadas].
+        val marcas = com.forge.pixpin.motor.Proyectos.marcadas(p, p.hojas.filter(::ligada).map { it.id })
+        return if (quitadas == 0) p to 0 else p.copy(hojas = hojas, croquis = croquis, tocado = ahora, quitadas = marcas) to quitadas
     }
 
     /** Aplica [sinLoDeLosMensajes] a todos los proyectos. Devuelve cuántas cosas se quitaron. */
@@ -203,7 +206,10 @@ object UnirAlProyecto {
         if (proyecto.pdfOrigen == null) {
             val origen = runCatching { pdf.copyTo(File(carpeta, "doc-$ahora.pdf"), overwrite = true) }.getOrNull()
                 ?: return emptyList()
-            val limpio = runCatching { pdf.copyTo(File(carpeta, "limpio-$ahora.pdf"), overwrite = true).path }.getOrNull()
+            // **Se aligera al entrar**, y la copia limpia sale ya de la aligerada: si no, el
+            // proyecto llevaría el mismo documento pesado dos veces. Ver [ComprimirPdf].
+            com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(origen)
+            val limpio = runCatching { origen.copyTo(File(carpeta, "limpio-$ahora.pdf"), overwrite = true).path }.getOrNull()
             val nuevas = (0 until paginas.coerceAtMost(Proyectos.MAX_HOJAS - proyecto.hojas.size).coerceAtLeast(0))
                 .map { Hoja(id = "h-$ahora-$it", pagina = it, deMensaje = deMensaje) }
             proyectos.guardar(

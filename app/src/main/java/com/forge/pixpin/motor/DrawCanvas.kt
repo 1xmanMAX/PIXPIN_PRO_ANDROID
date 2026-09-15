@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -23,6 +24,10 @@ import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Gesture
+import androidx.compose.material.icons.filled.NearMe
+import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -161,6 +166,13 @@ fun DrawCanvas(
     /** Se ha elegido un grosor: uno de los lápices hechos, o jalando arriba y abajo. */
     onGrosorRapido: (Double) -> Unit = {},
     /**
+     * **Un instrumento del abanico de figuras** —recta, plano, espacio— para ponerlo donde
+     * se posó el lápiz: el id de la figura de fábrica y el punto de la pantalla.
+     */
+    onInstrumentoRapido: (id: String, donde: Offset) -> Unit = { _, _ -> },
+    /** Los colores marcados de la paleta, como puntos dentro de la rueda del abanico. */
+    marcasDeColor: List<String> = emptyList(),
+    /**
      * **El agarre del botón flotante.** Mientras haya dedos apretándolo —o acaben de
      * levantarse—, lo que se pose en el lienzo no traza: abre el abanico. Y mientras se
      * mantenga, cada lápiz que se pose lo vuelve a abrir. Vale cualquier puntero, no solo
@@ -258,8 +270,18 @@ fun DrawCanvas(
         rememberVectorPainter(Icons.Filled.Remove),
         rememberVectorPainter(Icons.Filled.NorthEast),
         rememberVectorPainter(Icons.Filled.CropSquare),
-        rememberVectorPainter(Icons.Outlined.Diamond)
+        rememberVectorPainter(Icons.Outlined.Diamond),
+        rememberVectorPainter(Icons.Filled.Straighten),
+        rememberVectorPainter(Icons.Filled.GridOn),
+        rememberVectorPainter(Icons.Filled.ViewInAr),
+        rememberVectorPainter(Icons.Filled.NearMe)
     )
+    /**
+     * **El borrador del abanico es de un uso** (14-sep-2026): se borra y se vuelve al lápiz,
+     * que es lo que se iba a hacer después. Ver [abrirElAbanico].
+     */
+    var borradorDeUnUso by remember { mutableStateOf(false) }
+    val marcasDelAbanico by rememberUpdatedState(marcasDeColor)
 
     /**
      * **Al dedo apoyado se le lleva la hora**, mientras dura un trazo a mano alzada.
@@ -393,7 +415,18 @@ fun DrawCanvas(
                         hex = enTexto(deHsv(floatArrayOf(tono, viveza, abierta.claridad)))
                         // Fuera del disco se sigue por el borde: apurar el tono más vivo no
                         // puede pedir puntería.
-                        val punto = if (lejos <= disco || lejos == 0f) pos else centro + d * (disco / lejos)
+                        var punto = if (lejos <= disco || lejos == 0f) pos else centro + d * (disco / lejos)
+                        // **Las marcas de la paleta imantan**, como en la rueda del panel: al
+                        // pasar cerca, el color es exactamente el guardado.
+                        val iman = IMAN_DE_LAS_MARCAS.dp.toPx()
+                        var cerca = iman
+                        for (marca in marcasDelAbanico) {
+                            val hsv = enHsv(parseColor(marca, 255))
+                            val en = enLaRueda(hsv[0], hsv[1], disco)
+                            val p = centro + Offset(en.x.toFloat(), en.y.toFloat())
+                            val dist = (p - pos).getDistance()
+                            if (dist < cerca) { cerca = dist; hex = marca; punto = p }
+                        }
                         menu = MenuRapido.Color(centro, abierta.tonos, abierta.claridad, punto, hex)
                         touched()
                     }
@@ -408,7 +441,13 @@ fun DrawCanvas(
                     }
                     menu = null
                     touched()
-                    hex?.let(onColorRapido)
+                    hex?.let {
+                        onColorRapido(it)
+                        // **Elegido el color, a dibujar con él** (14-sep-2026): se vuelve al
+                        // lápiz, sea cual sea la herramienta que hubiera.
+                        borradorDeUnUso = false
+                        onHerramientaRapida(Tool.FREEDRAW)
+                    }
                 }
 
                 /**
@@ -420,7 +459,10 @@ fun DrawCanvas(
                     val centro = primero.position
                     val abanico = MenuRapido.Abanico(centro, OPCIONES_DEL_ABANICO, -1)
                     when (elegirEnElAbanico(primero, abanico)) {
-                        OpcionDelAbanico.BORRADOR -> onHerramientaRapida(Tool.ERASER)
+                        OpcionDelAbanico.BORRADOR -> {
+                            onHerramientaRapida(Tool.ERASER)
+                            borradorDeUnUso = true
+                        }
                         OpcionDelAbanico.LAPIZ -> {
                             menu = MenuRapido.Abanico(centro, LAPICES_DEL_ABANICO, -1)
                             touched()
@@ -457,6 +499,12 @@ fun DrawCanvas(
                                 menu = null; touched(); primero.consume(); return
                             }
                             val opcion = elegirEnElAbanico(primero, abierto) ?: return
+                            when (opcion) {
+                                OpcionDelAbanico.RECTA -> onInstrumentoRapido(ID_RECTA, abierto.centro)
+                                OpcionDelAbanico.PLANO -> onInstrumentoRapido(ID_PLANO, abierto.centro)
+                                OpcionDelAbanico.ESPACIO -> onInstrumentoRapido(ID_ESPACIO, abierto.centro)
+                                else -> {}
+                            }
                             opcion.tool?.let(onHerramientaRapida)
                             LAPICES_DEL_ABANICO.indexOf(opcion).takeIf { it >= 0 }?.let {
                                 onGrosorRapido(GROSORES_DE_LOS_LAPICES[it])
@@ -874,6 +922,16 @@ fun DrawCanvas(
                     controller.pointerUp(last, controller.scene.viewport.zoom)
                     touched()
                 }
+                // Se gasta con el primer borrón de verdad; mover el papel con los dedos no
+                // cuenta. Si entretanto se eligió otra herramienta, ya no hay nada que volver.
+                if (borradorDeUnUso) {
+                    if (controller.tool != Tool.ERASER) {
+                        borradorDeUnUso = false
+                    } else if (gestureStarted) {
+                        borradorDeUnUso = false
+                        onHerramientaRapida(Tool.FREEDRAW)
+                    }
+                }
 
                 // **La pulsación larga rescata lo clavado.**
                 //
@@ -1234,6 +1292,17 @@ fun DrawCanvas(
                         Brush.radialGradient(listOf(gris, gris.copy(alpha = 0f)), m.centro, disco),
                         disco, m.centro
                     )
+                    // Las marcas de la paleta, cada una en su sitio: las mismas que en la rueda
+                    // del panel. Ver [LaRuedaDelColor].
+                    for (marca in marcasDeColor) {
+                        val hsv = enHsv(parseColor(marca, 255))
+                        val en = enLaRueda(hsv[0], hsv[1], disco)
+                        val p = m.centro + Offset(en.x.toFloat(), en.y.toFloat())
+                        val r = 6.dp.toPx()
+                        drawCircle(Color(DrawTheme.filtrar(parseColor(marca, 255), dark)), r, p)
+                        drawCircle(Color.Black.copy(alpha = 0.45f), r, p, style = Stroke(2.6f))
+                        drawCircle(Color.White.copy(alpha = 0.95f), r + 1f, p, style = Stroke(1.6f))
+                    }
                     val hex = m.hex
                     val punto = m.punto
                     if (hex != null && punto != null) {
@@ -1747,7 +1816,8 @@ enum class OpcionDelAbanico(val icono: Int, val tool: Tool? = null) {
     LAPIZ(0), BORRADOR(1, Tool.ERASER), COLOR(2), FIGURAS(3),
     FINO(-1, Tool.FREEDRAW), MEDIO(-1, Tool.FREEDRAW), GRUESO(-1, Tool.FREEDRAW),
     ELIPSE(4, Tool.ELLIPSE), LINEA(5, Tool.LINE), FLECHA(6, Tool.ARROW),
-    CUADRADO(7, Tool.RECTANGLE), ROMBO(8, Tool.DIAMOND)
+    CUADRADO(7, Tool.RECTANGLE), ROMBO(8, Tool.DIAMOND),
+    RECTA(9), PLANO(10), ESPACIO(11), SELECCIONAR(12, Tool.SELECTION)
 }
 
 /** El abanico principal, de izquierda a derecha; el de los lápices hechos, con sus grosores; y el de las figuras. */
@@ -1756,9 +1826,15 @@ private val OPCIONES_DEL_ABANICO = listOf(
 )
 private val LAPICES_DEL_ABANICO = listOf(OpcionDelAbanico.FINO, OpcionDelAbanico.MEDIO, OpcionDelAbanico.GRUESO)
 private val GROSORES_DE_LOS_LAPICES = listOf(1.0, 2.5, 6.0)
+/**
+ * **Las figuras del abanico son las del panel de Figuras** (14-sep-2026): la recta, el plano
+ * cartesiano y el espacio de tres ejes —los instrumentos—, y al lado la selección para
+ * moverlos. Eran elipse, línea, flecha, cuadrado y rombo, que no son las que el usuario usa
+ * en pantalla completa.
+ */
 private val FIGURAS_DEL_ABANICO = listOf(
-    OpcionDelAbanico.ELIPSE, OpcionDelAbanico.LINEA, OpcionDelAbanico.FLECHA,
-    OpcionDelAbanico.CUADRADO, OpcionDelAbanico.ROMBO
+    OpcionDelAbanico.RECTA, OpcionDelAbanico.PLANO, OpcionDelAbanico.ESPACIO,
+    OpcionDelAbanico.SELECCIONAR
 )
 
 /**
@@ -1777,6 +1853,9 @@ private const val HOLGURA_DEL_ABANICO = 10f
 private const val RADIO_MUERTO_DEL_ABANICO = 18
 private const val RADIO_EXTERIOR_DEL_ABANICO = 104
 private const val ICONO_DEL_ABANICO = 26
+
+/** Lo cerca que hay que pasar de una marca de color en la rueda del abanico para caer en ella, en dp. */
+private const val IMAN_DE_LAS_MARCAS = 14
 
 /** El barrido de tonos de la rueda del color, a la claridad de la tinta puesta. */
 private fun tonosDeLaRueda(claridad: Float, noche: Boolean): List<Color> =

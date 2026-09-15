@@ -293,6 +293,9 @@ class PdfArchivo internal constructor(
                 "ASCII85Decode", "A85" -> deAscii85(datos) ?: return null
                 "ASCIIHexDecode", "AHx" -> deAsciiHex(datos)
                 "RunLengthDecode", "RL" -> deRunLength(datos)
+                // LZW: el comprimido de los PDF anteriores a Flate, y el que sigue saliendo de
+                // bastantes escáneres. Sin esto, sus imágenes no se podían ni mirar ni aligerar.
+                "LZWDecode", "LZW" -> deLzw(datos, parms.getOrNull(i)?.entero("EarlyChange") ?: 1) ?: return null
                 // Imágenes y compresiones que aquí no se usan: quien llame decide.
                 else -> return null
             }
@@ -645,6 +648,55 @@ internal fun deAsciiHex(datos: ByteArray): ByteArray {
 }
 
 /** RunLength: un byte dice cuántos vienen tal cual o cuántas veces se repite el siguiente. */
+/**
+ * **LZW, como lo usa un PDF**: códigos de 9 a 12 bits, 256 = limpiar la tabla, 257 = fin.
+ *
+ * Con [pronto] (el `/EarlyChange`, 1 por omisión) la anchura del código sube **un código antes**,
+ * que es la rareza histórica del formato: sin eso se descodifica basura desde el primer salto.
+ */
+internal fun deLzw(datos: ByteArray, pronto: Int): ByteArray? {
+    val salida = java.io.ByteArrayOutputStream(datos.size * 4)
+    val tabla = arrayOfNulls<ByteArray>(4096)
+    for (k in 0 until 256) tabla[k] = byteArrayOf(k.toByte())
+    var siguiente = 258
+    var anchura = 9
+    var anterior: ByteArray? = null
+    var acumulado = 0L
+    var bits = 0
+    var i = 0
+    while (true) {
+        while (bits < anchura) {
+            if (i >= datos.size) return salida.toByteArray()
+            acumulado = (acumulado shl 8) or (datos[i++].toLong() and 0xFF)
+            bits += 8
+        }
+        val codigo = ((acumulado shr (bits - anchura)) and ((1L shl anchura) - 1)).toInt()
+        bits -= anchura
+        when {
+            codigo == 256 -> { siguiente = 258; anchura = 9; anterior = null }
+            codigo == 257 -> return salida.toByteArray()
+            else -> {
+                val trozo = when {
+                    codigo < siguiente && tabla[codigo] != null -> tabla[codigo]!!
+                    // El código que se define a sí mismo: lo anterior más su primer byte.
+                    anterior != null -> anterior + anterior[0]
+                    else -> return null
+                }
+                salida.write(trozo)
+                if (anterior != null && siguiente < 4096) tabla[siguiente++] = anterior + trozo[0]
+                anterior = trozo
+                val tope = siguiente + (if (pronto != 0) 1 else 0)
+                anchura = when {
+                    tope > 2048 -> 12
+                    tope > 1024 -> 11
+                    tope > 512 -> 10
+                    else -> 9
+                }
+            }
+        }
+    }
+}
+
 internal fun deRunLength(datos: ByteArray): ByteArray {
     val salida = java.io.ByteArrayOutputStream(datos.size * 2)
     var i = 0

@@ -149,6 +149,73 @@ class PlanoDePdfTest {
         assertEquals("una curva gasta tres puntos", 4, b.xs.size)
     }
 
+    /**
+     * **`sc` habla en el espacio que puso `cs`**, y con una paleta sus números son índices.
+     *
+     * Adivinando por cuántos números vienen, un `scn 2` sobre una paleta salía «gris 1−2» = negro:
+     * los rellenos negros de los PDF cargados, que son justo los que traen paletas. Ver [Espacio].
+     */
+    @Test
+    fun `una paleta indexada da el color de su indice, no un gris`() {
+        // Paleta de tres colores en RGB: rojo, verde, azul.
+        val p = leer(
+            paginaCon(
+                "/P0 cs 2 scn 10 10 20 20 re f",
+                recursos = "/ColorSpace << /P0 5 0 R >>",
+                masObjetos = listOf("5 0 obj\n[/Indexed /DeviceRGB 2 <FF000000FF000000FF>]\nendobj\n")
+            )
+        )!!
+        assertEquals(0x0000ff, p.brochas.single().color)
+        assertEquals("una paleta se entiende: no hay que volver a la fotografía", 0, p.sinEntender)
+    }
+
+    /** Y el color con el que se estrena una paleta es su primer color, no el negro. */
+    @Test
+    fun `poner un espacio indexado deja el primer color de la paleta`() {
+        val p = leer(
+            paginaCon(
+                "/P0 cs 10 10 20 20 re f",
+                recursos = "/ColorSpace << /P0 5 0 R >>",
+                masObjetos = listOf("5 0 obj\n[/Indexed /DeviceRGB 1 <11223344 5566>]\nendobj\n")
+            )
+        )!!
+        assertEquals(0x112233, p.brochas.single().color)
+    }
+
+    /** Un `/ICCBased` de cuatro canales es CMYK aunque `sc` traiga los cuatro números sueltos. */
+    @Test
+    fun `el icc dice cuantos canales tiene su espacio`() {
+        val p = leer(
+            paginaCon(
+                "/I0 cs 0 1 1 0 sc 10 10 20 20 re f",
+                recursos = "/ColorSpace << /I0 [/ICCBased 5 0 R] >>",
+                masObjetos = listOf("5 0 obj\n<< /N 4 >>\nendobj\n")
+            )
+        )!!
+        assertEquals("cian a cero y magenta y amarillo a tope: rojo", 0xff0000, p.brochas.single().color)
+    }
+
+    /** Una tinta plana no se sabe convertir: cuanta más tinta, más oscuro. */
+    @Test
+    fun `una tinta plana va de blanco a negro`() {
+        val p = leer(
+            paginaCon(
+                "/S0 cs 1 sc 10 10 20 20 re f /S0 cs 0 sc 40 10 20 20 re f",
+                recursos = "/ColorSpace << /S0 [/Separation /Tinta /DeviceCMYK 5 0 R] >>",
+                masObjetos = listOf("5 0 obj\n<< /FunctionType 2 /C0 [0 0 0 0] /C1 [0 0 0 1] /N 1 /Domain [0 1] >>\nendobj\n")
+            )
+        )!!
+        assertEquals(0x000000, p.brochas.first { puntos(it).first().first < 30.0 }.color)
+        assertEquals(0xffffff, p.brochas.first { puntos(it).first().first > 30.0 }.color)
+    }
+
+    /** Y lo que no se reconoce se sigue adivinando por cuántos números trae, como antes. */
+    @Test
+    fun `sin espacio conocido se adivina por los numeros`() {
+        val p = leer(paginaCon("1 0 0 sc 10 10 20 20 re f"))!!
+        assertEquals(0xff0000, p.brochas.single().color)
+    }
+
     @Test
     fun `el cmyk se convierte a color de pantalla`() {
         val p = leer(paginaCon("0 1 1 0 K 0 0 m 1 1 l S"))!!

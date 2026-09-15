@@ -298,11 +298,15 @@ class ExportarHtmlTest {
      * siguen leyendo.
      */
     @Test
-    fun `las rayas se trazan con todas las muestras y como curvas`() {
+    fun `las rayas se trazan con todas las muestras y tal cual`() {
         val html = ExportarHtml.pagina(svg, "t", "#fff")
         assertTrue(html.contains("getCoalescedEvents"))
         assertTrue(html.contains("createElementNS(NS,'path')"))
-        assertTrue(html.contains("' Q '"))
+        // Lo que puso el lápiz, recta a recta: ni curvas por los puntos medios ni punta prevista
+        // (usuario, 14-sep-2026). Las rayas viejas con Q se siguen leyendo.
+        assertFalse(html.contains("getPredictedEvents"))
+        assertFalse(html.contains("quadraticCurveTo"))
+        assertTrue(html.contains("curvas=d.indexOf('Q')>=0"))
         assertTrue(html.contains("getAttribute('points')"))
     }
 
@@ -559,8 +563,20 @@ class ExportarHtmlTest {
     @Test
     fun `las opciones se leen de lo marcado en los ajustes`() {
         val o = ExportarHtml.Opciones.de(setOf("lapiz", "medir"))
-        assertTrue(o.lapiz && o.medir)
-        assertFalse(o.resaltador || o.guardar || o.paginas)
+        // Van por grupos: con algo de un grupo, va el grupo entero. Y el índice, siempre.
+        assertTrue(o.lapiz && o.resaltador && o.borrador && o.deshacer && o.medir && o.capas && o.paginas)
+        assertFalse(o.guardar || o.compartir)
         assertTrue("null es todo", ExportarHtml.Opciones.de(null).compartir)
+        assertTrue("sin nada, el índice sigue", ExportarHtml.Opciones.de(emptySet()).paginas)
+    }
+
+    @Test
+    fun `un interruptor enciende y apaga su grupo entero`() {
+        val todo = ExportarHtml.Opciones.NOMBRES.toSet() + "audio:ligero"
+        val sinEdicion = ExportarHtml.conGrupo(todo, "edicion", false)
+        assertTrue(sinEdicion.none { it in listOf("lapiz", "resaltador", "borrador", "deshacer") })
+        assertTrue("lo demás se queda", "medir" in sinEdicion && "audio:ligero" in sinEdicion)
+        assertFalse(ExportarHtml.grupoPuesto(sinEdicion, "edicion"))
+        assertTrue(ExportarHtml.conGrupo(sinEdicion, "edicion", true).containsAll(listOf("lapiz", "deshacer")))
     }
 }

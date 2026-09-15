@@ -244,6 +244,20 @@ data class Mensaje(
     val letra: String? = null,
 
     /**
+     * **El código único de lo que es este mensaje**, oculto y para siempre: diez signos que viajan
+     * con él a cualquier aparato. Ver [com.forge.pixpin.sincro.Codigos]. Nulo en lo de antes, que lo
+     * saca de su [id] al sellarse.
+     */
+    val uid: String? = null,
+
+    /**
+     * **El código del aparato donde nació** (`K7Q2`), que con el [numero] da su código de chat:
+     * `47·K7Q2`. Sustituye a la [letra], que solo valía dentro de un grupo. Ver
+     * [com.forge.pixpin.sincro.Codigos.deChat].
+     */
+    val aparato: String? = null,
+
+    /**
      * **De dónde vino, si llegó por un envío por Wi-Fi**: la seña de esa cosa entre envíos. Si la
      * misma persona la vuelve a mandar, se sustituye este mensaje en vez de añadir otro. Ver
      * [com.forge.pixpin.sincro.Envio.Elemento.identidad].
@@ -468,6 +482,11 @@ fun reenviado(m: Mensaje, aDondeVa: String?, ahora: Long, idNuevo: String): Mens
     // el destino chocaría con otro mensaje al sincronizar. Lo pone [MensajesStore.anadir].
     numero = 0,
     letra = null,
+    // **Una copia es otra cosa: tres códigos nuevos** (los pone [MensajesStore.anadir]). Con los del
+    // original, al compartirse se tomaría por él y lo pisaría. Ver `sincro/Codigos.kt`.
+    uid = null,
+    aparato = null,
+    origen = null,
     // **La copia es otra rama**: no está unida al proyecto de destino ni a la hoja de origen.
     // Una nota que venía de una hoja deja de abrir esa hoja; lo demás que apunta a un dibujo, una
     // tabla o un croquis se duplica aparte, en [RamaDeMensaje], porque eso es trabajo de disco.

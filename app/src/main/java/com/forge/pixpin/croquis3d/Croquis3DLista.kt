@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -102,6 +104,35 @@ fun Croquis3DLista(controlador: Croquis3DControlador, modifier: Modifier = Modif
                 }
             }
 
+            // **Los modelos importados** (un IFC de Revit, un OBJ), cada uno en su fila: se
+            // eligen, se esconden y se quitan sin tener que apuntarles en la escena.
+            val modelos = controlador.croquis.modelos
+            if (modelos.isNotEmpty()) {
+                Text(
+                    stringResource(R.string.croquis_modelos),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, start = 8.dp)
+                )
+                Column(
+                    Modifier.heightIn(max = ALTO_MAXIMO.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    for (m in modelos.reversed()) {
+                        Fila(
+                            nombre = m.nombre,
+                            cuantos = m.triangulos,
+                            elegido = m.id in controlador.seleccion,
+                            escondido = m.oculto,
+                            alElegir = { controlador.elegirElModelo(m.id) },
+                            alEsconder = { controlador.ocultarElModelo(m.id, !m.oculto) },
+                            alDesagrupar = { controlador.quitarElModelo(m.id) },
+                            detalle = stringResource(R.string.croquis_modelo_triangulos, m.triangulos)
+                        )
+                    }
+                }
+            }
+
             // El fondo: la capa de debajo de todo. Se toca y se le cambia el color.
             val fondo = controlador.croquis.colorDelFondo
             Row(
@@ -157,7 +188,7 @@ fun Croquis3DLista(controlador: Croquis3DControlador, modifier: Modifier = Modif
                 }
             }
 
-            if (capas.isEmpty()) {
+            if (capas.isEmpty() && controlador.croquis.modelos.isEmpty()) {
                 Text(
                     stringResource(R.string.croquis_sin_grupos),
                     style = MaterialTheme.typography.bodySmall,
@@ -183,7 +214,8 @@ private fun Fila(
     escondido: Boolean,
     alElegir: () -> Unit,
     alEsconder: () -> Unit,
-    alDesagrupar: () -> Unit
+    alDesagrupar: () -> Unit,
+    detalle: String? = null
 ) {
     Row(
         Modifier
@@ -196,7 +228,7 @@ private fun Fila(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            "$nombre · $cuantos",
+            if (detalle != null) "$nombre · $detalle" else "$nombre · $cuantos",
             style = MaterialTheme.typography.bodyMedium,
             color = if (escondido) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
             else MaterialTheme.colorScheme.onSurfaceVariant,

@@ -155,8 +155,7 @@ object CompartirPaginas {
                     DialogoDeFuncionesWeb(
                         marcadas = marcadas,
                         onCambio = { clave, puesta ->
-                            val ahora = marcadas.toMutableSet()
-                            if (puesta) ahora += clave else ahora -= clave
+                            val ahora = com.forge.pixpin.motor.ExportarHtml.conGrupo(marcadas, clave, puesta)
                             alcance.launch { app.settings.setFuncionesWeb(ahora) }
                         },
                         onCompartir = cerrar,

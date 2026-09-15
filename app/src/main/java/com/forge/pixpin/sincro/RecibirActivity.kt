@@ -9,6 +9,8 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,15 +76,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * **Recibir lo que alguien envía por Wi-Fi, una sola vez.** Ver [Envio] y [EnviarActivity].
  *
- * Se escanea el QR o se escribe el código de seis cifras; se ve qué llega —y qué va a sustituir
- * de lo que ya hay, porque **quien envía manda**— y se acepta o no.
+ * Se escanea el QR o se escribe el código de seis cifras; se ve qué llega y se acepta o no. De lo
+ * que **ya se tiene con los mismos tres códigos** ([Codigos]) se elige, cosa por cosa, si ponerlo al
+ * día o crearlo como nuevo (15-sep-2026).
  */
 class RecibirActivity : ComponentActivity() {
 
     private sealed interface Estado {
         data object Pidiendo : Estado
         data class Buscando(val texto: String) : Estado
-        data class Oferta(val oferta: Envio.Oferta, val sustituye: Map<String, String>, val decision: CompletableDeferred<Boolean>) : Estado
+        /** [decision]: null si no se acepta; si sí, identidad → `true` para crearlo como nuevo. */
+        data class Oferta(val oferta: Envio.Oferta, val sustituye: Map<String, String>, val decision: CompletableDeferred<Map<String, Boolean>?>) : Estado
         data class Recibiendo(val de: String, val hechos: Long, val total: Long) : Estado
         data class Hecho(val de: String, val guardados: List<Recepcion.Guardado>) : Estado
         data class Fallo(val texto: String) : Estado
@@ -104,7 +108,7 @@ class RecibirActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        (estado as? Estado.Oferta)?.decision?.complete(false)
+        (estado as? Estado.Oferta)?.decision?.complete(null)
         red?.cerrar()
     }
 
@@ -124,16 +128,17 @@ class RecibirActivity : ComponentActivity() {
                     }
                     val oferta = receptor.oferta
                     val sustituye = oferta.elementos.mapNotNull { e -> Recepcion.queSustituye(this@RecibirActivity, e)?.let { e.identidad to it } }.toMap()
-                    val decision = CompletableDeferred<Boolean>()
+                    val decision = CompletableDeferred<Map<String, Boolean>?>()
                     estado = Estado.Oferta(oferta, sustituye, decision)
-                    if (!decision.await()) { receptor.rechazar(); finish(); return@use }
+                    val comoNuevo = decision.await()
+                    if (comoNuevo == null) { receptor.rechazar(); finish(); return@use }
                     estado = Estado.Recibiendo(oferta.de, 0, oferta.elementos.sumOf { it.bytes })
                     var ultimo = 0L
                     val llegados = receptor.aceptar(File(cacheDir, "recibido/${System.currentTimeMillis()}")) { hechos, total ->
                         val ahora = System.currentTimeMillis()
                         if (ahora - ultimo > 120 || hechos == total) { ultimo = ahora; estado = Estado.Recibiendo(oferta.de, hechos, total) }
                     }
-                    val guardados = llegados.mapNotNull { (e, archivo) -> Recepcion.guardar(this@RecibirActivity, e, archivo, oferta) }
+                    val guardados = llegados.mapNotNull { (e, archivo) -> Recepcion.guardar(this@RecibirActivity, e, archivo, oferta, comoNuevo = comoNuevo[e.identidad] == true) }
                     estado = Estado.Hecho(oferta.de, guardados)
                 }
             } catch (e: Exception) {
@@ -249,6 +254,8 @@ class RecibirActivity : ComponentActivity() {
 
     @Composable
     private fun Oferta(e: Estado.Oferta) {
+        // Por omisión, lo que coincide se pone al día.
+        val comoNuevo = remember(e) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
         Spacer(Modifier.height(12.dp))
         Text("${e.oferta.de} quiere enviarte", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         if (e.oferta.deCodigo.isNotBlank()) Text("Aparato ${e.oferta.deCodigo}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -267,24 +274,55 @@ class RecibirActivity : ComponentActivity() {
                         if (el.tipo == Envio.LIENZO && e.sustituye[el.identidad] == null) {
                             Recepcion.adonde(this@RecibirActivity, el)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
+                        if (el.codigoDeChat != null || el.creado > 0) {
+                            Text(
+                                listOfNotNull(el.codigoDeChat?.let { "#$it" }, el.creado.takeIf { it > 0 }?.let { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(it)) }).joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         e.sustituye[el.identidad]?.let { suyo ->
-                            Text("Sustituye a tu «$suyo» por su versión", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            Text("Ya tienes «$suyo» con los mismos códigos", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(6.dp))
+                            val nuevo = comoNuevo[el.identidad] == true
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Eleccion("Actualizar el que tengo", !nuevo, Modifier.weight(1f)) { comoNuevo[el.identidad] = false }
+                                Eleccion("Crear como nuevo", nuevo, Modifier.weight(1f)) { comoNuevo[el.identidad] = true }
+                            }
+                            Text(
+                                if (nuevo) "Entra aparte, con códigos nuevos: desde ahora es otra cosa." else "Se escribe encima de lo tuyo. Lo de antes queda en «Copias de seguridad».",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
         }
-        if (e.sustituye.isNotEmpty()) {
+        if (e.sustituye.isEmpty()) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Quien envía manda: lo que ya te había enviado antes se cambia por lo que te manda ahora.",
+                "Nada de esto coincide con lo que tienes: entra como nuevo, sin tocar nada tuyo.",
                 style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = { e.decision.complete(false) }, modifier = Modifier.weight(1f).height(48.dp)) { Text("No, gracias") }
-            Button(onClick = { e.decision.complete(true) }, modifier = Modifier.weight(1f).height(48.dp)) { Text("Aceptar") }
+            OutlinedButton(onClick = { e.decision.complete(null) }, modifier = Modifier.weight(1f).height(48.dp)) { Text("No, gracias") }
+            Button(onClick = { e.decision.complete(comoNuevo.toMap()) }, modifier = Modifier.weight(1f).height(48.dp)) { Text("Aceptar") }
+        }
+    }
+
+    /** Una de dos opciones, como pastilla. */
+    @Composable
+    private fun Eleccion(texto: String, puesta: Boolean, modifier: Modifier, alTocar: () -> Unit) {
+        Box(
+            modifier.clip(RoundedCornerShape(10.dp))
+                .background(if (puesta) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(onClick = alTocar)
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(texto, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center,
+                color = if (puesta) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 

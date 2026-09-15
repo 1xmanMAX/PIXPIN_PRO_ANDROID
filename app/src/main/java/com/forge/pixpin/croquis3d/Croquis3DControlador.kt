@@ -1299,16 +1299,13 @@ class Croquis3DControlador {
             // **Tocar uno de un grupo los coge a todos.** Para eso está el grupo: si hubiera
             // que pasar la bolita por los catorce trazos del respaldo cada vez, agruparlos
             // no habría servido de nada.
-            val suyos =
-                if (t.grupo == null) listOf(t)
-                else croquis.trazos.filter { it.grupo == t.grupo && !it.oculto }
+            val ids = if (t.grupo == null) setOf(t.id) else idsDelGrupo(t.grupo, soloVisibles = true)
             // Un conjunto que se rehacía entero por cada muestra del dedo y por cada trazo
             // tocado. Se apunta encima del que hay: pasar la bolita es un gesto seguido, y lo
             // ya tocado solo crece hasta que se levanta el dedo.
             val tocados = HashSet(yaTocados)
-            suyos.forEach { tocados += it.id }
+            tocados.addAll(ids)
             yaTocados = tocados
-            val ids = suyos.mapTo(HashSet()) { it.id }
             nueva = if (t.id in nueva) nueva - ids else nueva + ids
         }
         // Y las imágenes, que no son una raya sino una superficie: se cogen apuntándoles
@@ -1317,8 +1314,20 @@ class Croquis3DControlador {
         for (i in croquis.imagenes) {
             if (i.oculto || i.id in yaTocados) continue
             if (corteConCuadrilatero(rayo, i.esquinas) == null) continue
-            yaTocados = yaTocados + i.id
-            nueva = if (i.id in nueva) nueva - i.id else nueva + i.id
+            val ids = if (i.grupo == null) setOf(i.id) else idsDelGrupo(i.grupo, soloVisibles = true)
+            yaTocados = yaTocados + ids
+            nueva = if (i.id in nueva) nueva - ids else nueva + ids
+        }
+        // Y los modelos, por su caja vista en pantalla: un edificio se señala apuntándole.
+        for (m in croquis.modelos) {
+            if (m.oculto || m.id in yaTocados) continue
+            val enPantalla = m.esquinas().map { camara.aPantalla(it, ancho, alto) }
+            val x0 = enPantalla.minOf { it.x }; val x1 = enPantalla.maxOf { it.x }
+            val y0 = enPantalla.minOf { it.y }; val y1 = enPantalla.maxOf { it.y }
+            if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue
+            val ids = if (m.grupo == null) setOf(m.id) else idsDelGrupo(m.grupo, soloVisibles = true)
+            yaTocados = yaTocados + ids
+            nueva = if (m.id in nueva) nueva - ids else nueva + ids
         }
         if (nueva != seleccion) elegir(nueva)
     }
@@ -1648,11 +1657,15 @@ class Croquis3DControlador {
         val copiasDeImagen = croquis.imagenes.filter { it.id in seleccion }.map {
             it.copy(id = randomId(), grupo = null, esquinas = it.esquinas.map { q -> mas(q, aparte) })
         }
+        val copiasDeModelo = croquis.modelos.filter { it.id in seleccion }.map {
+            it.copy(id = randomId(), grupo = null, origen = mas(it.origen, aparte))
+        }
         croquis = croquis.copy(
             trazos = croquis.trazos + copias,
-            imagenes = croquis.imagenes + copiasDeImagen
+            imagenes = croquis.imagenes + copiasDeImagen,
+            modelos = croquis.modelos + copiasDeModelo
         )
-        elegir((copias.map { it.id } + copiasDeImagen.map { it.id }).toSet())
+        elegir((copias.map { it.id } + copiasDeImagen.map { it.id } + copiasDeModelo.map { it.id }).toSet())
     }
 
     private fun cambiarLaSeleccion(como: (Pt3) -> Pt3) {
@@ -1665,6 +1678,19 @@ class Croquis3DControlador {
             // y ya está girada, escalada o volteada. Ver [Imagen3D].
             imagenes = croquis.imagenes.map {
                 if (it.id in seleccion) it.copy(esquinas = it.esquinas.map(como)) else it
+            },
+            // **Un modelo, por su origen y sus tres ejes**, que llevan dentro la escala: la
+            // misma cuenta que a cualquier punto vale para mover, girar, escalar y voltear.
+            modelos = croquis.modelos.map {
+                if (it.id in seleccion) {
+                    val o = como(it.origen)
+                    it.copy(
+                        origen = o,
+                        ejeX = menos(como(mas(it.origen, it.ejeX)), o),
+                        ejeY = menos(como(mas(it.origen, it.ejeY)), o),
+                        ejeZ = menos(como(mas(it.origen, it.ejeZ)), o)
+                    )
+                } else it
             },
             // **Y la bola, por su centro y por sus tres ejes.**
             //
@@ -1697,7 +1723,7 @@ class Croquis3DControlador {
      * Por aquí pasan todas: lo volteado es de esta selección y de ninguna otra, y dejando la
      * cuenta puesta el cubo contaría de la figura de antes.
      */
-    private fun elegir(nueva: Set<String>) {
+    internal fun elegir(nueva: Set<String>) {
         seleccion = nueva
         vueltaDeLoElegido = Postura(0.0, 0.0)
     }
@@ -1706,7 +1732,10 @@ class Croquis3DControlador {
     fun centroDeLaSeleccion(): Pt3? {
         val puntos = croquis.trazos.filter { it.id in seleccion }.flatMap { it.puntos } +
             croquis.imagenes.filter { it.id in seleccion }.flatMap { it.esquinas } +
-            croquis.laminas.filter { it.id in seleccion }.mapNotNull { it.esfera?.centro }
+            croquis.laminas.filter { it.id in seleccion }.mapNotNull { it.esfera?.centro } +
+            croquis.modelos.filter { it.id in seleccion }.map { m ->
+                val e = m.esquinas(); por(e.fold(Pt3(0.0, 0.0, 0.0)) { a, q -> mas(a, q) }, 1.0 / e.size)
+            }
         if (puntos.isEmpty()) return null
         return por(puntos.fold(Pt3(0.0, 0.0, 0.0)) { a, q -> mas(a, q) }, 1.0 / puntos.size)
     }
@@ -1744,7 +1773,8 @@ class Croquis3DControlador {
             trazos = croquis.trazos.map { if (it.id in seleccion) it.copy(oculto = true) else it },
             imagenes = croquis.imagenes.map {
                 if (it.id in seleccion) it.copy(oculto = true) else it
-            }
+            },
+            modelos = croquis.modelos.map { if (it.id in seleccion) it.copy(oculto = true) else it }
         )
         elegir(emptySet())
     }
@@ -1755,7 +1785,8 @@ class Croquis3DControlador {
         anotar()
         croquis = croquis.copy(
             trazos = croquis.trazos.map { if (it.oculto) it.copy(oculto = false) else it },
-            imagenes = croquis.imagenes.map { if (it.oculto) it.copy(oculto = false) else it }
+            imagenes = croquis.imagenes.map { if (it.oculto) it.copy(oculto = false) else it },
+            modelos = croquis.modelos.map { if (it.oculto) it.copy(oculto = false) else it }
         )
     }
 
@@ -1765,7 +1796,8 @@ class Croquis3DControlador {
         croquis = sinGruposVacios(
             croquis.copy(
                 trazos = croquis.trazos.filterNot { it.id in seleccion },
-                imagenes = croquis.imagenes.filterNot { it.id in seleccion }
+                imagenes = croquis.imagenes.filterNot { it.id in seleccion },
+                modelos = croquis.modelos.filterNot { it.id in seleccion }
             )
         )
         elegir(emptySet())
@@ -1850,6 +1882,51 @@ class Croquis3DControlador {
         elegir(setOf(imagen.id))
     }
 
+    /**
+     * **Pone un modelo importado** (14-sep-2026): con su base apoyada en el suelo y centrado
+     * donde mira la cámara, a escala real —un cuadro del suelo es un metro— y ya elegido, para
+     * colocarlo con el mando. [caja] en metros, `minX, minY, minZ, maxX, maxY, maxZ`.
+     */
+    fun ponerModelo(ruta: String, nombre: String, caja: DoubleArray, triangulos: Int) {
+        val centroDelModelo = Pt3((caja[0] + caja[3]) / 2, (caja[1] + caja[4]) / 2, caja[2])
+        val donde = Pt3(camara.centro.x, camara.centro.y, 0.0)
+        val m = METRO
+        anotar()
+        val modelo = Modelo3D(
+            id = randomId(), ruta = ruta, nombre = nombre,
+            origen = donde,
+            ejeX = Pt3(m, 0.0, 0.0), ejeY = Pt3(0.0, m, 0.0), ejeZ = Pt3(0.0, 0.0, m),
+            centro = centroDelModelo, caja = caja.toList(), triangulos = triangulos,
+            grupo = capaActiva
+        )
+        croquis = croquis.copy(modelos = croquis.modelos + modelo)
+        elegir(setOf(modelo.id))
+    }
+
+    // Los modelos, desde la lista: un edificio no se señala bien con la bolita cuando está
+    // detrás de otro o es más grande que la pantalla.
+
+    /** Elige un modelo (y lo que vaya en su grupo). */
+    fun elegirElModelo(id: String) {
+        val m = croquis.modelos.firstOrNull { it.id == id } ?: return
+        if (m.oculto) ocultarElModelo(id, false)
+        elegir(if (m.grupo == null) setOf(id) else idsDelGrupo(m.grupo, soloVisibles = true) + id)
+    }
+
+    fun ocultarElModelo(id: String, ocultar: Boolean) {
+        if (croquis.modelos.none { it.id == id && it.oculto != ocultar }) return
+        anotar()
+        croquis = croquis.copy(modelos = croquis.modelos.map { if (it.id == id) it.copy(oculto = ocultar) else it })
+        if (ocultar) elegir(seleccion - id)
+    }
+
+    fun quitarElModelo(id: String) {
+        if (croquis.modelos.none { it.id == id }) return
+        anotar()
+        croquis = sinGruposVacios(croquis.copy(modelos = croquis.modelos.filterNot { it.id == id }))
+        elegir(seleccion - id)
+    }
+
     // ---------------------------------------------------------------------
     // Los grupos
     // ---------------------------------------------------------------------
@@ -1873,6 +1950,9 @@ class Croquis3DControlador {
                 imagenes = croquis.imagenes.map {
                     if (it.id in seleccion) it.copy(grupo = grupo.id) else it
                 },
+                modelos = croquis.modelos.map {
+                    if (it.id in seleccion) it.copy(grupo = grupo.id) else it
+                },
                 grupos = croquis.grupos + grupo
             )
         )
@@ -1886,16 +1966,14 @@ class Croquis3DControlador {
         croquis = croquis.copy(
             trazos = croquis.trazos.map { if (it.grupo == id) it.copy(grupo = null) else it },
             imagenes = croquis.imagenes.map { if (it.grupo == id) it.copy(grupo = null) else it },
+            modelos = croquis.modelos.map { if (it.grupo == id) it.copy(grupo = null) else it },
             grupos = croquis.grupos.filterNot { it.id == id }
         )
     }
 
     /** Elige un grupo entero, desde la lista. */
     fun elegirElGrupo(id: String) {
-        elegir(
-            (croquis.trazos.filter { it.grupo == id && !it.oculto }.map { it.id } +
-                croquis.imagenes.filter { it.grupo == id && !it.oculto }.map { it.id }).toSet()
-        )
+        elegir(idsDelGrupo(id, soloVisibles = true))
     }
 
     /** Esconde o vuelve a enseñar un grupo entero. */
@@ -1907,27 +1985,34 @@ class Croquis3DControlador {
             trazos = croquis.trazos.map { if (it.grupo == id) it.copy(oculto = ocultar) else it },
             imagenes = croquis.imagenes.map {
                 if (it.grupo == id) it.copy(oculto = ocultar) else it
-            }
+            },
+            modelos = croquis.modelos.map { if (it.grupo == id) it.copy(oculto = ocultar) else it }
         )
         if (ocultar) elegir(seleccion - suyos)
     }
 
     /** Qué hay dentro de un grupo, para la lista. */
-    fun idsDelGrupo(id: String): Set<String> =
-        (croquis.trazos.filter { it.grupo == id }.map { it.id } +
-            croquis.imagenes.filter { it.grupo == id }.map { it.id }).toSet()
+    fun idsDelGrupo(id: String, soloVisibles: Boolean = false): Set<String> {
+        val r = HashSet<String>()
+        croquis.trazos.forEach { if (it.grupo == id && !(soloVisibles && it.oculto)) r += it.id }
+        croquis.imagenes.forEach { if (it.grupo == id && !(soloVisibles && it.oculto)) r += it.id }
+        croquis.modelos.forEach { if (it.grupo == id && !(soloVisibles && it.oculto)) r += it.id }
+        return r
+    }
 
     /** Si todo lo de un grupo está escondido. */
     fun grupoEscondido(id: String): Boolean {
         val trazos = croquis.trazos.filter { it.grupo == id }
         val imagenes = croquis.imagenes.filter { it.grupo == id }
-        if (trazos.isEmpty() && imagenes.isEmpty()) return false
-        return trazos.all { it.oculto } && imagenes.all { it.oculto }
+        val modelos = croquis.modelos.filter { it.grupo == id }
+        if (trazos.isEmpty() && imagenes.isEmpty() && modelos.isEmpty()) return false
+        return trazos.all { it.oculto } && imagenes.all { it.oculto } && modelos.all { it.oculto }
     }
 
     /** Un grupo sin trazos no es un grupo: se va solo, sin que nadie lo borre. */
     private fun sinGruposVacios(c: Croquis): Croquis {
-        val vivos = (c.trazos.mapNotNull { it.grupo } + c.imagenes.mapNotNull { it.grupo }).toSet()
+        val vivos = (c.trazos.mapNotNull { it.grupo } + c.imagenes.mapNotNull { it.grupo } +
+            c.modelos.mapNotNull { it.grupo }).toSet()
         // **La capa en la que se está dibujando no se va aunque esté vacía**: es el sitio al
         // que va lo siguiente, y desaparecer justo antes de que llegue el primer trazo es la
         // peor forma de perder una capa recién hecha.
@@ -3508,3 +3593,6 @@ internal fun distanciaASegmento(p: Pt, a: Pt, b: Pt): Double {
     else (((p.x - a.x) * vx + (p.y - a.y) * vy) / largo2).coerceIn(0.0, 1.0)
     return hypot(p.x - (a.x + vx * t), p.y - (a.y + vy * t))
 }
+
+/** Un metro de un modelo importado, en unidades del croquis: un cuadro del suelo. */
+internal const val METRO = LADO_DEL_CUADRO

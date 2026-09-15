@@ -102,6 +102,16 @@ object ExportarHtml {
     fun conCalidadDeAudio(marcadas: Set<String>, calidad: String): Set<String> =
         marcadas.filterNot { it.startsWith(PREFIJO_DE_AUDIO) }.toSet() + (PREFIJO_DE_AUDIO + calidad)
 
+    /** Si el grupo [grupo] va en la página: basta con que vaya algo suyo. Ver [Opciones.GRUPOS]. */
+    fun grupoPuesto(marcadas: Set<String>, grupo: String): Boolean =
+        Opciones.GRUPOS[grupo].orEmpty().any { it in marcadas }
+
+    /** Enciende o apaga el grupo entero; una clave suelta que no sea de ningún grupo, sola. */
+    fun conGrupo(marcadas: Set<String>, grupo: String, puesto: Boolean): Set<String> {
+        val claves = Opciones.GRUPOS[grupo] ?: listOf(grupo)
+        return if (puesto) marcadas + claves else marcadas - claves.toSet()
+    }
+
     /**
      * **Si quien abre la página puede cambiar las celdas de las tablas.** Va como marca de
      * «solo ver» y no como nombre más: los ajustes guardados antes de que existiera no la
@@ -142,16 +152,30 @@ object ExportarHtml {
                 "guardar", "compartir"
             )
 
+            /**
+             * **Las funciones van por grupos**, y cada grupo es un interruptor: lo que funciona
+             * junto se enciende junto (lo pidió el usuario el 13-sep-2026). El índice de páginas
+             * no está en ninguno porque va siempre.
+             */
+            val GRUPOS: Map<String, List<String>> = linkedMapOf(
+                "edicion" to listOf("lapiz", "resaltador", "borrador", "deshacer"),
+                "especiales" to listOf("medir", "capas"),
+                "guardar" to listOf("guardar", "compartir")
+            )
+
             /** Las opciones a partir de lo marcado en los ajustes; null es «todo». */
             fun de(marcadas: Set<String>?): Opciones {
                 if (marcadas == null) return Opciones()
+                // Lo guardado antes de los grupos puede traer un grupo a medias: con que vaya
+                // algo suyo, va entero, que es lo que dice el interruptor.
+                val edicion = grupoPuesto(marcadas, "edicion")
+                val especiales = grupoPuesto(marcadas, "especiales")
+                val guardado = grupoPuesto(marcadas, "guardar")
                 return Opciones(
                     editarTablas = tablasEditables(marcadas),
-                    lapiz = "lapiz" in marcadas, resaltador = "resaltador" in marcadas,
-                    borrador = "borrador" in marcadas, deshacer = "deshacer" in marcadas,
-                    medir = "medir" in marcadas, capas = "capas" in marcadas,
-                    paginas = "paginas" in marcadas, guardar = "guardar" in marcadas,
-                    compartir = "compartir" in marcadas
+                    lapiz = edicion, resaltador = edicion, borrador = edicion, deshacer = edicion,
+                    medir = especiales, capas = especiales,
+                    paginas = true, guardar = guardado, compartir = guardado
                 )
             }
         }
@@ -369,6 +393,21 @@ object ExportarHtml {
         tabla: Boolean = false
     ): String = buildString {
         append("<div id=\"estado\" role=\"status\" aria-live=\"polite\"></div>\n")
+        // La pastilla de la presentación. Ver `presentar` en el armazón.
+        append("<div id=\"presentacion\" hidden>")
+        append(boton("p-anterior", "Anterior (←)", "M15 5l-7 7 7 7"))
+        append("<span id=\"p-cuenta\"></span>")
+        append(boton("p-siguiente", "Siguiente (→)", "M9 5l7 7-7 7"))
+        if (dibujo) {
+            append("<i class=\"p-sep\"></i>")
+            append("<button data-m=\"mano\" title=\"Pasar\" aria-label=\"Pasar\">" + icono("M8 13V5a2 2 0 1 1 4 0v6M12 11V4a2 2 0 1 1 4 0v7M16 12V6a2 2 0 1 1 4 0v8a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3.4L3.5 13a2 2 0 0 1 3.4-2.1L8 13") + "</button>")
+            append("<button data-m=\"lapiz\" title=\"Lápiz\" aria-label=\"Lápiz\">" + icono("M4 20l4-1L19.5 7.5a2.1 2.1 0 0 0-3-3L5 16l-1 4zM14 6l4 4") + "</button>")
+            append("<button data-m=\"marcador\" title=\"Resaltador\" aria-label=\"Resaltador\">" + icono("M4 20h16M6 16l8.5-8.5a2.1 2.1 0 0 1 3 3L9 19H6v-3zM13 8l3 3") + "</button>")
+            append("<button data-m=\"goma\" title=\"Borrador\" aria-label=\"Borrador\">" + icono("M20 20H8M4.6 14.4l8.8-8.8a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L13 18H8.6l-4-4a1 1 0 0 1 0-1.4zM9.5 9.5l5 5") + "</button>")
+        }
+        append("<i class=\"p-sep\"></i>")
+        append(boton("p-salir", "Salir (Esc)", "M6 6l12 12M18 6L6 18"))
+        append("</div>\n")
         append("<div id=\"cajon\" hidden></div>\n")
         append("<div id=\"pizarra\"")
         if (varias) append(" class=\"varias\"")
@@ -429,6 +468,13 @@ object ExportarHtml {
         append(boton("menos", "Alejar (−)", "M5 12h14", "solo-raton"))
         append(boton("encajar", "Encajar (0)", "M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"))
         append(boton("mas", "Acercar (+)", "M12 5v14M5 12h14", "solo-raton"))
+        append("</div>")
+        // **Presentar e imprimir** (14-sep-2026), como en la aplicación: la hoja a pantalla
+        // completa con una pastilla para pasar y anotar, y el diálogo de impresión del
+        // navegador con una hoja por página.
+        append("<div class=\"grupo\">")
+        append(boton("presentar", "Presentar (F5)", "M3 4h18v12H3zM12 16v4M8 20h8M10 8l5 2.5-5 2.5z"))
+        append(boton("imprimir", "Imprimir (Ctrl+P)", "M7 8V3h10v5M7 17H4v-7h16v7h-3M7 14h10v7H7z"))
         append("</div>")
         if (espacio) {
             append("<div class=\"grupo solo-espacio\">")
@@ -500,7 +546,9 @@ object ExportarHtml {
         #lienzo{position:fixed;inset:0}
         .hoja{position:absolute;inset:0}
         .hoja[hidden]{display:none}
-        #lienzo svg{width:100%;height:100%;display:block;
+        /* Solo el SVG de la hoja, no los que lleva dentro: un sublienzo es un `<svg>` anidado con su
+           propio tamaño, y con `#lienzo svg` algunos navegadores lo estiraban a toda la hoja. */
+        #lienzo .hoja>svg{width:100%;height:100%;display:block;
           user-select:none;-webkit-user-select:none}
         html.vivo #lienzo svg{touch-action:none;cursor:grab}
         .hoja[data-tipo=nota]{overflow:auto;-webkit-overflow-scrolling:touch;position:absolute}
@@ -564,6 +612,8 @@ object ExportarHtml {
            lados: así, al mover, lo que asoma ya está pintado. Su sitio y su tamaño los pone
            el visor. Ver [VisorPlano]. */
         canvas.plano{position:absolute;left:0;top:0;display:block;pointer-events:none;z-index:0}
+        /* La raya mientras se escribe, encima de todo y sin coger el dedo. Ver la tinta viva. */
+        canvas.tinta-viva{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
         .hoja{overflow:hidden}
         .hoja[data-plano] svg{position:relative;z-index:1}
         #lienzo.agarrado svg,#lienzo.agarrado canvas.espacio{cursor:grabbing}
@@ -674,6 +724,33 @@ object ExportarHtml {
             bottom:calc(116px + env(safe-area-inset-bottom))}
         }
         @media (min-width:900px){#barra button{width:38px;height:38px}}
+        /* **Presentar**: solo la hoja y la pastilla. */
+        #presentacion{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));
+          transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:2px;padding:4px 6px;
+          border-radius:24px;background:rgba(0,0,0,.66);color:#fff;transition:opacity .2s}
+        #presentacion[hidden]{display:none}
+        #presentacion.escondida{opacity:0;pointer-events:none}
+        #presentacion button{width:40px;height:40px;border:none;border-radius:20px;background:transparent;
+          color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+        #presentacion button svg{width:22px;height:22px}
+        #presentacion button.activo{background:rgba(255,255,255,.28)}
+        #presentacion button:disabled{opacity:.35}
+        #p-cuenta{font-size:14px;min-width:52px;text-align:center}
+        .p-sep{width:1px;height:22px;background:rgba(255,255,255,.3);margin:0 4px}
+        html.presentando #barra,html.presentando #pizarra>*:not(#presentacion):not(#paleta),html.presentando #indice-fijo,
+          html.presentando #estado,html.presentando #cajon,html.presentando #aviso{display:none!important}
+        /* **Imprimir**: una hoja por página, sin mandos. */
+        @media print{
+          @page{margin:10mm}
+          html.vivo,html.vivo body,html,body{overflow:visible!important;height:auto!important;background:#fff!important}
+          #barra,#pizarra,#estado,#cajon,#indice-fijo,#paleta,#aviso,#presentacion{display:none!important}
+          #lienzo{position:static!important}
+          .hoja,.hoja[hidden]{position:relative!important;display:block!important;inset:auto!important;
+            width:100%!important;height:auto!important;page-break-after:always;break-after:page;overflow:visible!important}
+          #lienzo .hoja>svg{width:100%!important;height:auto!important;max-height:95vh}
+          html.imprimir-una .hoja:not(.a-imprimir){display:none!important}
+          .hoja:last-child{page-break-after:auto;break-after:auto}
+        }
     """.trimIndent()
 
     /**
@@ -705,17 +782,29 @@ if(!croquis){croquis=document.createElementNS(NS,'g');croquis.id='croquis';svg.a
 var hecho=[], rehecho=[], modo='mano', trazo=null, hayLapiz=false;
 // Medir: cotas de plano —dos puntas, flechas y la cifra encima—, y se quedan puestas.
 // Ver la sección «Medir» más abajo.
-var cotas=[], medida=null, grupoMedida=null, agarreCota=null, imanes=null;
+var cotas=[], medida=null, grupoMedida=null, agarreCota=null;
 var escala=parseFloat(caja.dataset.escala)||0, unidad=caja.dataset.unidad||'', decimales=parseInt(caja.dataset.decimales)||2;
 // El papel, si vino como geometría en vez de como foto. Ver [VisorPlano].
 var plano=(typeof crearPlano==='function')?crearPlano(caja,{encuadrar:encuadrarEn}):null;
 
+// **Un encuadre por fotograma.** Dos dedos mandan dos `pointermove` por fotograma y la rueda
+// del ratón o la tableta, más; cambiar el `viewBox` repinta la hoja entera, así que se apunta
+// que hace falta y se hace una vez, justo antes de pintar. [v] cambia en el acto: las cuentas
+// de dónde cae el dedo siguen siendo exactas.
+var fotograma=0;
 function aplicar(){
+  if(fotograma) return;
+  fotograma=requestAnimationFrame(aplicarYa);
+}
+function aplicarYa(){
+  if(fotograma){ cancelAnimationFrame(fotograma); fotograma=0; }
   svg.setAttribute('viewBox',v.x+' '+v.y+' '+v.w+' '+v.h);
   if(plano) plano.ver(v);
   // Las cotas se miden en pantalla —la flecha mide lo mismo de cerca que de lejos—, así que
   // cambiar el encuadre obliga a rehacerlas. Ver [pintarMedida].
   if(grupoMedida&&(cotas.length||medida)) pintarMedida();
+  // Un trazo a medias se había dibujado con el encuadre de antes: se vuelve a dibujar.
+  if(trazo) repintarTintaViva();
 }
 // Encuadra una caja del dibujo, con un dedo de margen: es lo que usa el cajón de capas para
 // llevarte a donde está lo que acabas de encender.
@@ -737,18 +826,20 @@ function zoom(factor,px,py){
   v.x=p.x-(p.x-v.x)*f; v.y=p.y-(p.y-v.y)*f; v.w*=f; v.h*=f;
   aplicar();
 }
-// Las rayas son caminos suavizados: el punto de partida, el control de cada Q y la L final
-// son justo los puntos que se trazaron. Las páginas anotadas con versiones anteriores traen
-// polilíneas, y se leen igual.
+// Las rayas son **la línea tal cual la trazó el lápiz**: `M` y una `L` con todas las muestras.
+// Las de antes del 14-sep-2026 eran curvas por los puntos medios —el punto de partida, el
+// control de cada Q y la L final son las muestras— y se leen igual, como las polilíneas.
 function leerPuntos(r){
   var lista=[], i;
   if(r.localName==='path'){
-    var re=/([MLQ])([^MLQ]*)/g, m, ultimaL=null;
-    while((m=re.exec(r.getAttribute('d')||''))){
+    var d=r.getAttribute('d')||'';
+    var re=/([MLQ])([^MLQ]*)/g, m, ultimaL=null, curvas=d.indexOf('Q')>=0;
+    while((m=re.exec(d))){
       var n=m[2].trim().split(/[\s,]+/).map(Number);
       if(m[1]==='M'&&n.length>=2)lista.push({x:n[0],y:n[1]});
       else if(m[1]==='Q'&&n.length>=4)lista.push({x:n[0],y:n[1]});
-      else if(m[1]==='L'&&n.length>=2)ultimaL={x:n[0],y:n[1]};
+      else if(m[1]==='L'&&curvas&&n.length>=2)ultimaL={x:n[0],y:n[1]};
+      else if(m[1]==='L')for(var j=0;j+1<n.length;j+=2)lista.push({x:n[j],y:n[j+1]});
     }
     if(ultimaL)lista.push(ultimaL);
   } else {
@@ -795,20 +886,85 @@ function borrarEn(px,py,m){
   }
 }
 function r3(x){return Math.round(x*1000)/1000;}
-// La raya pasa por el punto medio de cada dos muestras, con la muestra de control: entre dos
-// puntos no hay una recta con codo sino una curva, y una raya trazada deprisa —pocas
-// muestras muy separadas— sale fluida y no a tramos.
+// **La raya es lo que puso el lápiz, sin arreglos** (lo pidió el usuario el 14-sep-2026: con
+// curvas por los puntos medios y la cola prevista, lo escrito «se movía» y parecía corregido).
+// Cada muestra es un vértice, y entre dos, una recta.
+//
+// Y **ligera**: cada número lleva los decimales que hacen falta para medio píxel de pantalla
+// en el aumento con el que se trazó, ni uno más, y la `L` se escribe una sola vez.
+function redondeo(k){ return Math.pow(10,Math.max(0,Math.min(3,Math.ceil(-Math.log10(k*0.5))))); }
 function anadirPunto(t,p){
-  var pts=t.puntos, n=pts.length;
+  var pts=t.puntos, n=pts.length, f=t.f||(t.f=redondeo(t.m?t.m.k:1));
   pts.push(p);
-  if(n===0){t.abierto='M '+r3(p.x)+' '+r3(p.y);return;}
-  var a=pts[n-1], mx=r3((a.x+p.x)/2), my=r3((a.y+p.y)/2);
-  t.abierto+=(n===1?' L ':' Q '+r3(a.x)+' '+r3(a.y)+' ')+mx+' '+my;
+  var x=Math.round(p.x*f)/f, y=Math.round(p.y*f)/f;
+  if(n===0){t.abierto='M'+x+' '+y;return;}
+  t.abierto+=(n===1?'L':' ')+x+' '+y;
 }
-function pintarTrazo(t){
-  var u=t.puntos[t.puntos.length-1];
-  t.setAttribute('d',t.abierto+(t.puntos.length>1?' L '+r3(u.x)+' '+r3(u.y):''));
+// ---- La tinta viva ----
+//
+// **Mientras se escribe, la raya no está en el SVG.** Cambiar el `d` de un camino obliga al
+// navegador a repintar la hoja entera —con un plano o una foto grande debajo, eso es cada
+// muestra del lápiz— y el trazo se quedaba atrás de la punta. Así que la raya viva se dibuja
+// en un lienzo transparente encima, **solo el tramo nuevo** cada vez, y al levantar el lápiz
+// pasa al SVG de una vez. Con `desynchronized` el navegador lo enseña sin esperar al resto de
+// la página, que es lo que usan las pizarras para ir pegadas a la punta. Se dibuja **lo mismo**
+// que irá al SVG —rectas entre las muestras—, así que al soltar no cambia nada. Pedido el 13-sep-2026, probando con tableta gráfica. **Sin predecir** hacia dónde va la punta:
+// esa cola se corregía en cada muestra y lo escrito parecía moverse (14-sep-2026).
+var viva=null, vctx=null;
+function prepararTintaViva(marca){
+  if(!viva){
+    viva=document.createElement('canvas');
+    viva.className='tinta-viva';
+    caja.appendChild(viva);
+    try{ vctx=viva.getContext('2d',{desynchronized:true}); }catch(err){}
+    vctx=vctx||viva.getContext('2d');
+  }
+  var r=caja.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  var w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(viva.width!==w||viva.height!==h){ viva.width=w; viva.height=h; }
+  vctx.setTransform(dpr,0,0,dpr,-r.left*dpr,-r.top*dpr);
+  vctx.clearRect(r.left,r.top,r.width,r.height);
+  vctx.lineCap='round'; vctx.lineJoin='round';
+  // El resaltador es translúcido y se funde con el papel: el lienzo entero, no cada tramo,
+  // que si no los tramos se pisan y salen cuentas más oscuras.
+  viva.style.opacity=marca?'0.55':'1';
+  viva.style.mixBlendMode=marca?'var(--fusion)':'normal';
+  return r;
 }
+function limpiarTintaViva(){
+  if(!viva) return;
+  vctx.setTransform(1,0,0,1,0,0); vctx.clearRect(0,0,viva.width,viva.height);
+}
+function estiloVivo(g,t){ g.strokeStyle=t.color; g.lineWidth=t.ancho; }
+// El tramo que añade la muestra [n] de la raya: la misma recta que irá al SVG.
+function tramoVivo(t,n){
+  var q=t.pan, g=vctx;
+  estiloVivo(g,t);
+  g.beginPath();
+  g.moveTo(q[n-1].x,q[n-1].y);
+  g.lineTo(q[n].x,q[n].y);
+  g.stroke();
+}
+// El punto del principio, para que un toque se vea mientras el lápiz sigue apoyado.
+function colaViva(t){
+  if(t.pan.length!==1) return;
+  var g=vctx, q=t.pan[0];
+  estiloVivo(g,t);
+  g.beginPath(); g.moveTo(q.x,q.y); g.lineTo(q.x+0.01,q.y); g.stroke();
+}
+// El encuadre cambió con la raya a medias (un dedo pellizcando mientras escribe el lápiz): la
+// raya se vuelve a poner en pantalla desde sus puntos del dibujo, que son los que valen.
+function repintarTintaViva(){
+  if(!trazo||!viva) return;
+  var m=marco();
+  trazo.r=prepararTintaViva(trazo.marca);
+  trazo.m=m;
+  trazo.ancho=trazo.anchoDibujo/m.k;
+  trazo.pan=trazo.puntos.map(function(p){ return {x:(p.x-m.ox)/m.k, y:(p.y-m.oy)/m.k}; });
+  colaViva(trazo);
+  for(var i=1;i<trazo.pan.length;i++) tramoVivo(trazo,i);
+}
+function pintarTrazo(t){ t.setAttribute('d',t.abierto); }
 // El navegador junta en un solo pointermove todas las muestras llegadas desde el fotograma
 // anterior; un ratón da cientos por segundo. Sin pedirlas, una raya rápida salía a tramos.
 function muestras(e){
@@ -816,27 +972,52 @@ function muestras(e){
   return lote.length?lote:[e];
 }
 function empezarTrazo(px,py,marca,puntero){
-  var p=aEscena(px,py);
+  // **El marco se mide una vez por raya**: medirlo en cada muestra era preguntarle al
+  // navegador dónde está el SVG cientos de veces por segundo. Si el encuadre cambia a mitad,
+  // [aplicarYa] lo vuelve a medir.
+  var m=marco(), p=aEscena(px,py,m);
+  var ancho=marca?api.grosor()*3:api.grosor();
   trazo=document.createElementNS(NS,'path');
   trazo.puntero=puntero;
   trazo.setAttribute('fill','none');
   trazo.setAttribute('stroke',api.color());
-  trazo.setAttribute('stroke-width',r3((marca?api.grosor()*3:api.grosor())*p.k));
+  trazo.setAttribute('stroke-width',r3(ancho*p.k));
   trazo.setAttribute('stroke-linecap','round');
   trazo.setAttribute('stroke-linejoin','round');
   if(marca){trazo.setAttribute('stroke-opacity','0.55');trazo.setAttribute('class','marca');}
   trazo.puntos=[];trazo.ultimo={x:px,y:py};
+  trazo.m=m; trazo.marca=marca; trazo.color=api.color(); trazo.ancho=ancho; trazo.anchoDibujo=ancho*p.k;
+  trazo.pan=[{x:px,y:py}];
   anadirPunto(trazo,{x:p.x,y:p.y});
-  pintarTrazo(trazo);
-  croquis.appendChild(trazo);
+  trazo.r=prepararTintaViva(marca);
+  colaViva(trazo);
+}
+/** Una muestra más de la raya viva, en píxeles de pantalla. */
+function seguirTrazo(cx,cy){
+  if(Math.hypot(cx-trazo.ultimo.x,cy-trazo.ultimo.y)<0.5) return false; // menos de medio píxel no se ve
+  trazo.ultimo={x:cx,y:cy};
+  anadirPunto(trazo,aEscena(cx,cy,trazo.m));
+  trazo.pan.push({x:cx,y:cy});
+  tramoVivo(trazo,trazo.pan.length-1);
+  return true;
 }
 function soltarTrazo(){
+  if(!trazo)return;
   // El dibujo ha cambiado: el imán tiene que volver a mirarlo. Ver [imanesDeLaHoja].
   olvidarLosImanes();
-  if(!trazo)return;
-  if(trazo.puntos.length<2)croquis.removeChild(trazo); // un punto solo no se ve
-  else apuntar({que:'pinta',raya:trazo});
+  var t=trazo;
   trazo=null;
+  if(t.puntos.length>=2){        // un punto solo no se ve
+    pintarTrazo(t);
+    croquis.appendChild(t);
+    apuntar({que:'pinta',raya:t});
+  }
+  // La tinta viva se borra **cuando el SVG ya enseña la raya**, dos fotogramas después; si se
+  // borrase a la vez, se vería un parpadeo. Si mientras tanto empezó otra raya, se redibuja.
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
+    limpiarTintaViva();
+    if(trazo) repintarTintaViva();
+  }); });
 }
 // ---- Medir: cotas de plano ----
 //
@@ -908,55 +1089,12 @@ function pintarUnaCota(c, k, viva){
 }
 
 /**
- * **El imán.** Devuelve el punto del dibujo al que se pega (px,py), o el punto tal cual si no
- * hay nada cerca.
- *
- * Los candidatos se sacan **una vez** recorriendo la geometría de la hoja y muestreando cada
- * camino: es lo caro, y hacerlo en cada toque daría tirones justo mientras se mide. Se guardan
- * en unidades del dibujo, así que valen para cualquier aumento; solo hay que rehacerlos si
- * cambia el dibujo, y de eso ya se encarga [olvidarLosImanes].
- *
- * El radio de pegado se mide **en pantalla** (14 px): es la distancia a la que el ojo dice
- * «ahí», y no depende de cuánto se haya acercado uno. Ver [pixpin-gestos-en-pantalla].
+ * **Medir es libre**: el punto va exactamente donde se toca. Hubo un imán que pegaba el punto a
+ * la geometría cercana, y en un plano pegaba a puntos que no se ven —muestras de una diagonal,
+ * esquinas que no eran la buscada—; lo quitó el usuario el 14-sep-2026.
  */
-function imanesDeLaHoja(){
-  if(imanes) return imanes;
-  imanes=[];
-  var geo=svg.querySelectorAll('path,line,polyline,polygon,rect,circle,ellipse');
-  // Un plano trae miles de caminos: se reparte un presupuesto de puntos entre todos en vez de
-  // muestrear cada uno a lo loco. Con esto, el índice sale igual de útil y siempre en el acto.
-  var PRESUPUESTO=6000, porCamino=Math.max(2,Math.min(24,Math.floor(PRESUPUESTO/Math.max(1,geo.length))));
-  for(var i=0;i<geo.length;i++){
-    var el=geo[i];
-    if(grupoMedida&&grupoMedida.contains(el)) continue;   // las propias cotas, no
-    var largo=0;
-    try{ largo=el.getTotalLength?el.getTotalLength():0; }catch(err){ continue; }
-    if(!largo) continue;
-    var n=Math.min(porCamino,Math.max(2,Math.round(largo/4)));
-    for(var j=0;j<n;j++){
-      try{ var q=el.getPointAtLength(largo*j/(n-1||1)); imanes.push({x:q.x,y:q.y}); }catch(err){}
-    }
-  }
-  return imanes;
-}
-function olvidarLosImanes(){ imanes=null; }
-function imantar(p,k){
-  var r=14*k, mejor=null, mejorD=r*r;
-  // Las puntas de las cotas ya puestas tiran también: encadenar medidas es lo normal.
-  for(var c=0;c<cotas.length;c++){
-    var ps=[cotas[c].a,cotas[c].b];
-    for(var e=0;e<2;e++){
-      var d=(ps[e].x-p.x)*(ps[e].x-p.x)+(ps[e].y-p.y)*(ps[e].y-p.y);
-      if(d<mejorD){ mejorD=d; mejor=ps[e]; }
-    }
-  }
-  var lista=imanesDeLaHoja();
-  for(var i=0;i<lista.length;i++){
-    var q=lista[i], dd=(q.x-p.x)*(q.x-p.x)+(q.y-p.y)*(q.y-p.y);
-    if(dd<mejorD){ mejorD=dd; mejor=q; }
-  }
-  return mejor?{x:mejor.x,y:mejor.y}:p;
-}
+function imantar(p){ return {x:p.x,y:p.y}; }
+function olvidarLosImanes(){}
 
 /** Qué cota y qué parte de ella cae bajo el dedo: una punta, o su mitad para moverla entera. */
 function cotaBajoElDedo(p,k){
@@ -1128,14 +1266,8 @@ caja.addEventListener('pointermove',function(e){
     if(dist>0&&pellizco.d>0) zoom(pellizco.d/dist,(dd[0].x+dd[1].x)/2,(dd[0].y+dd[1].y)/2);
     pellizco.d=dist;
   } else if(trazo&&trazo.puntero===e.pointerId){
-    var m=marco(), lote=muestras(e), nuevos=0;
-    for(var i=0;i<lote.length;i++){
-      var cx=lote[i].clientX, cy=lote[i].clientY;
-      if(Math.hypot(cx-trazo.ultimo.x,cy-trazo.ultimo.y)<1)continue; // menos de un píxel no es un punto
-      trazo.ultimo={x:cx,y:cy};
-      anadirPunto(trazo,aEscena(cx,cy,m));nuevos++;
-    }
-    if(nuevos)pintarTrazo(trazo);
+    var lote=muestras(e);
+    for(var i=0;i<lote.length;i++) seguirTrazo(lote[i].clientX,lote[i].clientY);
   } else if(!trazo&&!pellizco&&loQueHace(e)==='goma'){
     var mg=marco(), lg=muestras(e);
     for(var g=0;g<lg.length;g++)borrarEn(lg[g].clientX,lg[g].clientY,mg);
@@ -1207,11 +1339,11 @@ function rayasComoTexto(){
   });
   return s;
 }
-aplicar();
+aplicarYa();
 return {
  tipo:'dibujo',
  // Una hoja escondida mide cero: el plano se pinta al asomarse a ella, no antes.
- activar:function(){ aplicar(); },
+ activar:function(){ aplicarYa(); },
  desactivar:function(){soltarTrazo();},
  medir:function(){ if(plano) plano.medir(); },
  capas:plano?plano.capas:null,
@@ -1300,17 +1432,15 @@ function crearNota(d){
     return {x:e.clientX-r.left, y:e.clientY-r.top};
   }
   function r3(x){return Math.round(x*1000)/1000;}
+  // Lo que puso el lápiz, recta a recta, y a medio píxel: ver `anadirPunto` del dibujo.
   function anadirPunto(t,p){
     var pts=t.puntos, n=pts.length;
     pts.push(p);
-    if(n===0){t.abierto='M '+r3(p.x)+' '+r3(p.y);return;}
-    var a=pts[n-1];
-    t.abierto+=(n===1?' L ':' Q '+r3(a.x)+' '+r3(a.y)+' ')+r3((a.x+p.x)/2)+' '+r3((a.y+p.y)/2);
+    var x=Math.round(p.x*2)/2, y=Math.round(p.y*2)/2;
+    if(n===0){t.abierto='M'+x+' '+y;return;}
+    t.abierto+=(n===1?'L':' ')+x+' '+y;
   }
-  function pintar(t){
-    var u=t.puntos[t.puntos.length-1];
-    t.setAttribute('d',t.abierto+(t.puntos.length>1?' L '+r3(u.x)+' '+r3(u.y):''));
-  }
+  function pintar(t){ t.setAttribute('d',t.abierto); }
   function muestras(e){
     var lote=(e.getCoalescedEvents&&e.getCoalescedEvents())||[];
     return lote.length?lote:[e];
@@ -1417,6 +1547,10 @@ function marcarHerramienta(){
   if(p) p.hidden=!(actual&&(actual.modoActual==='lapiz'||actual.modoActual==='marcador'));
   cajaLienzo.classList.toggle('pintando', !!(actual&&actual.pintando&&actual.pintando()));
   cajaLienzo.classList.toggle('midiendo', !!(actual&&actual.modoActual==='medir'));
+  [].forEach.call(document.querySelectorAll('#presentacion [data-m]'),function(b){
+    b.classList.toggle('activo', !!(actual&&actual.modoActual===b.dataset.m));
+    b.hidden=!(actual&&actual.herramientas.indexOf(b.dataset.m)>=0);
+  });
 }
 function elegir(m){
   if(!actual||actual.herramientas.indexOf(m)<0) return;
@@ -1746,6 +1880,93 @@ document.addEventListener('keydown',function(e){
   else if(k==='-'&&actual.zoom)actual.zoom(1.3);
   else if(k==='escape'){cajon.hidden=true;cajon.dataset.que='';api.decir('');}
 });
+// ---- Presentar (14-sep-2026) ----
+// La hoja a pantalla completa y una pastilla abajo. Con la mano puesta, un toque en el tercio
+// derecho o un barrido a la izquierda pasa a la siguiente; en el izquierdo, a la anterior; en
+// el medio esconde la pastilla. Con el lápiz se anota encima como siempre.
+var raiz=document.documentElement, pastilla=id('presentacion'), presentando=false, toque=null;
+function cuenta(){
+  if(!pastilla) return;
+  id('p-cuenta').textContent=(iHoja+1)+' / '+pagina.length;
+  id('p-anterior').disabled=iHoja<=0;
+  id('p-siguiente').disabled=iHoja>=pagina.length-1;
+}
+function pasar(d){
+  var antes=iHoja;
+  irA(iHoja+d);
+  if(iHoja!==antes&&actual&&actual.encajar) actual.encajar();
+  cuenta();
+}
+function presentar(){
+  if(!pastilla) return;
+  presentando=true; raiz.classList.add('presentando'); pastilla.hidden=false;
+  pastilla.classList.remove('escondida');
+  if(actual&&actual.herramientas.indexOf('mano')>=0) elegir('mano');
+  if(raiz.requestFullscreen) raiz.requestFullscreen().catch(function(){});
+  setTimeout(function(){ if(actual&&actual.medir) actual.medir(); if(actual&&actual.encajar) actual.encajar(); },250);
+  marcarHerramienta(); cuenta();
+}
+function dejarDePresentar(){
+  if(!presentando) return;
+  presentando=false; raiz.classList.remove('presentando'); if(pastilla) pastilla.hidden=true;
+  if(document.fullscreenElement&&document.exitFullscreen) document.exitFullscreen().catch(function(){});
+  setTimeout(function(){ if(actual&&actual.medir) actual.medir(); },250);
+}
+function enModoPasar(){ return presentando&&(!actual||!actual.modoActual||actual.modoActual==='mano'||actual.modoActual==='mover'||actual.modoActual==='girar'); }
+if(id('presentar')) id('presentar').onclick=presentar;
+if(pastilla){
+  id('p-anterior').onclick=function(){pasar(-1);};
+  id('p-siguiente').onclick=function(){pasar(1);};
+  id('p-salir').onclick=dejarDePresentar;
+  [].forEach.call(pastilla.querySelectorAll('[data-m]'),function(b){
+    b.onclick=function(){ if(actual&&actual.herramientas.indexOf(b.dataset.m)>=0){ actual.modoActual=b.dataset.m; actual.modo(b.dataset.m); marcarHerramienta(); } };
+  });
+  // En la fase de captura y **antes** que el visor: con la mano puesta, el dedo pasa hojas en
+  // vez de mover el dibujo.
+  cajaLienzo.addEventListener('pointerdown',function(e){
+    if(!enModoPasar()) return;
+    toque={x:e.clientX,y:e.clientY,t:Date.now()};
+    e.stopPropagation(); e.preventDefault();
+  },true);
+  cajaLienzo.addEventListener('pointermove',function(e){ if(enModoPasar()&&toque) e.stopPropagation(); },true);
+  cajaLienzo.addEventListener('pointerup',function(e){
+    if(!enModoPasar()||!toque) return;
+    e.stopPropagation();
+    var dx=e.clientX-toque.x, dy=e.clientY-toque.y; toque=null;
+    if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)){ pasar(dx<0?1:-1); return; }
+    if(Math.abs(dx)<12&&Math.abs(dy)<12){
+      var w=innerWidth;
+      if(e.clientX<w/3) pasar(-1);
+      else if(e.clientX>w*2/3) pasar(1);
+      else pastilla.classList.toggle('escondida');
+    }
+  },true);
+  document.addEventListener('fullscreenchange',function(){ if(!document.fullscreenElement&&presentando) dejarDePresentar(); });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='F5'){ e.preventDefault(); if(presentando) dejarDePresentar(); else presentar(); e.stopImmediatePropagation(); return; }
+    if(!presentando) return;
+    var k=e.key;
+    if(k==='ArrowRight'||k==='PageDown'||k===' '){ e.preventDefault(); e.stopImmediatePropagation(); pasar(1); }
+    else if(k==='ArrowLeft'||k==='PageUp'){ e.preventDefault(); e.stopImmediatePropagation(); pasar(-1); }
+    else if(k==='Escape'){ e.stopImmediatePropagation(); dejarDePresentar(); }
+  },true);
+}
+
+// ---- Imprimir (14-sep-2026) ----
+// El diálogo del navegador, con el papel que se elija; la hoja de estilo de impresión pone
+// una hoja por página. Con varias hojas se pregunta si todas o solo la que se mira.
+function imprimir(){
+  hojas.forEach(function(d){d.classList.remove('a-imprimir');});
+  raiz.classList.remove('imprimir-una');
+  if(pagina.length>1&&!confirm('¿Imprimir todas las hojas?\n\nAceptar: todas · Cancelar: solo la que estás viendo')){
+    raiz.classList.add('imprimir-una'); hojas[iHoja].classList.add('a-imprimir');
+  }
+  if(actual&&actual.encajar) actual.encajar();
+  setTimeout(function(){ window.print(); },60);
+}
+if(id('imprimir')) id('imprimir').onclick=imprimir;
+addEventListener('afterprint',function(){ raiz.classList.remove('imprimir-una'); if(actual&&actual.medir) actual.medir(); });
+
 // La dirección se lee antes de ir a la primera, que la reescribe.
 var alAbrir=location.hash||'';
 irA(0);

@@ -61,11 +61,17 @@ class ProyectosRepository(context: Context) {
     /** Mete el proyecto o sustituye al que tuviera su id, y lo escribe. */
     fun guardar(proyecto: Proyecto) {
         val antes = porId(proyecto.id)
-        _proyectos.value = Proyectos.actualizada(_proyectos.value, proyecto)
+        // **Un proyecto nuevo nace con sus tres códigos**: el único, la fecha y este aparato. Ver
+        // [com.forge.pixpin.sincro.Codigos]. Lo que llega de otro aparato ya trae los suyos y no se tocan.
+        val sellado = if (antes != null) proyecto else com.forge.pixpin.sincro.Codigos.sellar(
+            if (proyecto.creado > 0) proyecto else proyecto.copy(creado = System.currentTimeMillis()),
+            com.forge.pixpin.sincro.Codigos.deEsteAparato(app.filesDir)
+        )
+        _proyectos.value = Proyectos.actualizada(_proyectos.value, sellado)
         escribir()
         // **Todo pasa por el chat**: lo nuevo del proyecto se cuenta en su conversación.
         // Ver [com.forge.pixpin.guardados.ChatDeLosProyectos].
-        com.forge.pixpin.guardados.ChatDeLosProyectos.alGuardar(app, antes, proyecto)
+        com.forge.pixpin.guardados.ChatDeLosProyectos.alGuardar(app, antes, sellado)
     }
 
     fun borrar(id: String) {

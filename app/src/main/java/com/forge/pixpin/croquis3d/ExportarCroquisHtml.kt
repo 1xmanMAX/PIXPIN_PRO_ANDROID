@@ -1,6 +1,7 @@
 package com.forge.pixpin.croquis3d
 
 import com.forge.pixpin.motor.ExportarHtml
+import com.forge.pixpin.motor.Malla3D
 import com.forge.pixpin.motor.Pt3
 import java.util.Locale
 
@@ -27,6 +28,9 @@ import java.util.Locale
  *   son las que le dan bulto. El visor descarta las de atrás y sombrea cada una.
  * - **Las imágenes puestas en el espacio**, con su textura metida dentro del archivo y sus
  *   cuatro esquinas.
+ * - **Los modelos importados** (un IFC de Revit, un OBJ): sus triángulos ya puestos en el
+ *   mundo, en binario —base64 de `Float32Array` y `Uint32Array`—, que en texto un edificio
+ *   pesaría diez veces más y tardaría segundos en leerse. Con un tope, [TOPE_DE_TRIANGULOS_WEB].
  * - **El sol**, si está encendido: es lo que decide de qué lado se alumbran los sólidos.
  * - Los grupos que se usan, las vistas guardadas y la caja de todo.
  *
@@ -50,14 +54,23 @@ object ExportarCroquisHtml {
         /** La foto del croquis tal como se ve al exportar (`data:image/jpeg;base64,…`), para
          *  enseñarla al instante mientras la página arranca. Opcional. */
         portada: String? = null,
-        imagenIncrustada: (String) -> String? = { null }
+        imagenIncrustada: (String) -> String? = { null },
+        /** Los triángulos de un modelo importado, por su ruta. Ver [Modelo3D]. */
+        malla: (String) -> Malla3D? = { null }
     ): String? {
         val trazos = croquis.trazos.filter { !it.oculto && it.puntos.size >= 2 }
         // Las hojas no se esconden ni van en grupos: en el croquis son la mesa de dibujo.
         val hojas = croquis.laminas.filter { it.tiras().isNotEmpty() }
         val imagenes = croquis.imagenes.filter { !it.oculto && it.esquinas.size >= 4 }
             .mapNotNull { im -> imagenIncrustada(im.ruta)?.let { im to it } }
-        if (trazos.isEmpty() && hojas.isEmpty() && imagenes.isEmpty()) return null
+        var cabenTriangulos = TOPE_DE_TRIANGULOS_WEB
+        val modelos = croquis.modelos.filter { !it.oculto }.mapNotNull { m ->
+            malla(m.ruta)?.takeIf { it.cuantosTriangulos in 1..cabenTriangulos }?.let {
+                cabenTriangulos -= it.cuantosTriangulos
+                m to it
+            }
+        }
+        if (trazos.isEmpty() && hojas.isEmpty() && imagenes.isEmpty() && modelos.isEmpty()) return null
 
         val d = StringBuilder(1 shl 16)
         val caja = Caja()
@@ -71,6 +84,7 @@ object ExportarCroquisHtml {
         val usados = LinkedHashSet<String>()
         trazos.forEach { t -> t.grupo?.let { usados.add(it) } }
         imagenes.forEach { (im, _) -> im.grupo?.let { usados.add(it) } }
+        modelos.forEach { (m, _) -> m.grupo?.let { usados.add(it) } }
         val nombres = croquis.grupos.associate { it.id to it.nombre }
         d.append(",\"gr\":[")
         usados.forEachIndexed { i, id ->
@@ -168,6 +182,16 @@ object ExportarCroquisHtml {
         }
         d.append(']')
 
+        d.append(",\"mo\":[")
+        modelos.forEachIndexed { i, (m, ma) ->
+            if (i > 0) d.append(',')
+            d.append("{\"n\":\"").append(escaparJson(m.nombre)).append('"')
+            m.grupo?.let { g -> d.append(",\"g\":\"").append(escaparJson(g)).append('"') }
+            modeloBinario(d, m, ma, caja)
+            d.append('}')
+        }
+        d.append(']')
+
         d.append(",\"vi\":[")
         croquis.vistas.forEachIndexed { i, v ->
             if (i > 0) d.append(',')
@@ -188,6 +212,52 @@ object ExportarCroquisHtml {
         return d.toString()
     }
 
+    /**
+     * Cuántos triángulos de modelos caben en una página: más que esto son decenas de megas de
+     * archivo y un navegador de teléfono que no llega a abrirlo. Lo que no quepa no se mete.
+     */
+    const val TOPE_DE_TRIANGULOS_WEB = 600_000
+
+    /**
+     * Un modelo en binario: `v` los vértices ya en el mundo (tres `float32` cada uno), `t` los
+     * índices (`uint32`, con el sentido ya corregido si su colocación refleja), `k` el color
+     * de cada triángulo (`uint32` ARGB), y `cj` su caja en el mundo.
+     */
+    private fun modeloBinario(d: StringBuilder, m: Modelo3D, ma: Malla3D, caja: Caja) {
+        val src = ma.vertices
+        val nv = src.size / 3
+        val v = java.nio.ByteBuffer.allocate(nv * 12).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val cm = Caja()
+        // La colocación es lineal: se aplica con sus números a pelo, sin un Pt3 por vértice.
+        val ex = m.ejeX; val ey = m.ejeY; val ez = m.ejeZ; val o = m.origen; val c = m.centro
+        var i = 0
+        while (i < src.size) {
+            val a = src[i] - c.x; val b = src[i + 1] - c.y; val cc = src[i + 2] - c.z
+            val x = o.x + ex.x * a + ey.x * b + ez.x * cc
+            val y = o.y + ex.y * a + ey.y * b + ez.y * cc
+            val z = o.z + ex.z * a + ey.z * b + ez.z * cc
+            v.putFloat(x.toFloat()); v.putFloat(y.toFloat()); v.putFloat(z.toFloat())
+            i += 3
+        }
+        m.esquinas().forEach { cm.mete(it); caja.mete(it) }
+        val refleja = ex.x * (ey.y * ez.z - ey.z * ez.y) - ey.x * (ex.y * ez.z - ex.z * ez.y) + ez.x * (ex.y * ey.z - ex.z * ey.y) < 0
+        val tri = ma.triangulos
+        val t = java.nio.ByteBuffer.allocate(tri.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        var k = 0
+        while (k < tri.size) {
+            t.putInt(tri[k])
+            if (refleja) { t.putInt(tri[k + 2]); t.putInt(tri[k + 1]) } else { t.putInt(tri[k + 1]); t.putInt(tri[k + 2]) }
+            k += 3
+        }
+        val col = java.nio.ByteBuffer.allocate(ma.cuantosTriangulos * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        for (j in 0 until ma.cuantosTriangulos) col.putInt(ma.colores.getOrElse(j) { -0x424243 })
+        val b64 = java.util.Base64.getEncoder()
+        d.append(",\"v\":\"").append(b64.encodeToString(v.array())).append('"')
+        d.append(",\"t\":\"").append(b64.encodeToString(t.array())).append('"')
+        d.append(",\"k\":\"").append(b64.encodeToString(col.array())).append('"')
+        d.append(",\"cj\":").append(cm.json())
+    }
+
     /** El croquis como una página de un documento web. Ver [ExportarHtml.HojaWeb]. */
     fun hoja(
         croquis: Croquis,
@@ -196,9 +266,10 @@ object ExportarCroquisHtml {
         imagenIncrustada: (String) -> String? = { null },
         /** El papel que se está viendo, si el croquis no ha elegido uno. Ver [FONDO_DE_FABRICA]. */
         papel: String? = null,
-        portada: String? = null
+        portada: String? = null,
+        malla: (String) -> Malla3D? = { null }
     ): ExportarHtml.HojaWeb.Espacio? =
-        datos(croquis, camara, portada, imagenIncrustada)?.let {
+        datos(croquis, camara, portada, imagenIncrustada, malla)?.let {
             ExportarHtml.HojaWeb.Espacio(
                 nombre, it, croquis.colorDelFondo ?: papel ?: FONDO_DE_FABRICA
             )
@@ -211,8 +282,9 @@ object ExportarCroquisHtml {
         titulo: String,
         imagenIncrustada: (String) -> String? = { null },
         papel: String? = null,
-        portada: String? = null
-    ): String? = hoja(croquis, camara, "", imagenIncrustada, papel, portada)
+        portada: String? = null,
+        malla: (String) -> Malla3D? = { null }
+    ): String? = hoja(croquis, camara, "", imagenIncrustada, papel, portada, malla)
         ?.let { ExportarHtml.paginas(listOf(it), titulo) }
 
     /** El papel del croquis cuando no se ha elegido ninguno: la pizarra del tema oscuro. */

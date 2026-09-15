@@ -15,6 +15,14 @@ class EnLosProyectosTest {
         hojas = listOf(Hoja(id = "h1", pagina = 0, deMensaje = "m42"))
     )
 
+    /** El PDF del que nace un proyecto es su primer mensaje y está en verde (13-sep-2026). */
+    @Test fun `el pdf del que nace el proyecto esta`() {
+        val dePdf = Proyecto(id = "p3", nombre = "Plano", tocado = 0, pdfOrigen = "/f/proyectos/doc.pdf", pdfLimpio = "/f/proyectos/limpio.pdf")
+        assertTrue(Proyectos.estaEnLosProyectos(listOf(dePdf), mensaje = "m1", archivo = "/f/proyectos/limpio.pdf"))
+        assertTrue(Proyectos.estaEnLosProyectos(listOf(dePdf), mensaje = "m1", archivo = "/f/proyectos/doc.pdf"))
+        assertFalse("otro archivo que se llame igual no", Proyectos.estaEnLosProyectos(listOf(dePdf), mensaje = "m1", archivo = "/f/guardados/limpio.pdf"))
+    }
+
     @Test fun `un dibujo que es hoja de un proyecto esta`() {
         assertTrue(Proyectos.estaEnLosProyectos(listOf(conDibujo), dibujo = "d7"))
         assertFalse(Proyectos.estaEnLosProyectos(listOf(conDibujo), dibujo = "otro"))

@@ -138,6 +138,7 @@ import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -342,6 +343,7 @@ class Croquis3DActivity : ComponentActivity() {
         // vería el tirón— y se quedan en memoria mientras la vista esté abierta.
         val imagenes = remember { mutableStateMapOf<String, android.graphics.Bitmap>() }
         CargarLasImagenes(imagenes)
+        CargarLosModelos()
 
         // Traer una imagen de la galería: se copia al almacén de la aplicación —lo de fuera
         // se mueve y se borra— y se pone en el espacio con la proporción que traiga.
@@ -1051,6 +1053,77 @@ class Croquis3DActivity : ComponentActivity() {
      * cada muestra de un arrastre. Lo que tiene que enterarse de eso es esta función, no la
      * pantalla.
      */
+    /** Los modelos del croquis, a memoria fuera del hilo de la pantalla. Ver [AlmacenDeMallas]. */
+    @Composable
+    private fun CargarLosModelos() {
+        val rutas = controlador.croquis.modelos.map { it.ruta }.distinct()
+        LaunchedEffect(rutas) {
+            withContext(Dispatchers.IO) { rutas.forEach { AlmacenDeMallas.cargar(it) } }
+        }
+    }
+
+    /**
+     * **Traer un modelo de Revit** (14-sep-2026): se lee el IFC —o el OBJ— fuera del hilo de la
+     * pantalla, se guardan sus triángulos en un archivo propio y se pone en el croquis a escala
+     * real, apoyado en el suelo y elegido para colocarlo.
+     */
+    private fun importarModelo(uri: android.net.Uri) {
+        val nombre = runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: "modelo"
+        val esIfc = com.forge.pixpin.motor.LectorIfc.esIfc(nombre)
+        val esObj = com.forge.pixpin.motor.LectorObj.esObj(nombre)
+        if (!esIfc && !esObj) {
+            val ext = nombre.substringAfterLast('.', "").lowercase()
+            val porque = when (ext) {
+                "rvt", "rfa" -> "Un .rvt no se puede leer fuera de Revit: en Revit, Archivo → Exportar → IFC, y trae ese archivo"
+                "fbx", "dwg", "nwc", "nwd" -> "Ese formato aún no se lee: expórtalo desde Revit como IFC (Archivo → Exportar → IFC)"
+                "ifczip" -> "Es un IFC comprimido: expórtalo sin comprimir, o descomprímelo"
+                else -> "Solo se leen modelos IFC (el de Revit) y OBJ"
+            }
+            Toast.makeText(this, porque, Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(this, "Leyendo el modelo…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val hecho = withContext(Dispatchers.IO) {
+                runCatching {
+                    val tmp = java.io.File(cacheDir, "modelo-${System.currentTimeMillis()}.${if (esIfc) "ifc" else "obj"}")
+                    contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } }
+                        ?: error("No se pudo abrir el archivo")
+                    try {
+                        val malla = if (esIfc) com.forge.pixpin.motor.LectorIfc.leer(tmp)
+                        else com.forge.pixpin.motor.LectorObj.leer(tmp)
+                        val carpeta = java.io.File(java.io.File(filesDir, "croquis3d"), "modelos").apply { mkdirs() }
+                        val destino = java.io.File(carpeta, "m-${System.currentTimeMillis()}.malla")
+                        malla.guardar(destino)
+                        AlmacenDeMallas.cargar(destino.absolutePath)
+                        Triple(destino.absolutePath, malla.caja(), malla.cuantosTriangulos)
+                    } finally {
+                        tmp.delete()
+                    }
+                }
+            }
+            hecho.onSuccess { (ruta, caja, triangulos) ->
+                controlador.ponerModelo(ruta, nombre.substringBeforeLast('.'), caja, triangulos)
+                controlador.herramienta = Herramienta3D.SELECCION
+                Toast.makeText(
+                    this@Croquis3DActivity,
+                    "«${nombre.substringBeforeLast('.')}»: ${"%,d".format(triangulos)} triángulos, " +
+                        "%.1f × %.1f × %.1f m".format(caja[3] - caja[0], caja[4] - caja[1], caja[5] - caja[2]),
+                    Toast.LENGTH_LONG
+                ).show()
+            }.onFailure { e ->
+                val porque = (e as? com.forge.pixpin.motor.LectorIfc.NoSeLee)?.message
+                    ?: if (e is OutOfMemoryError) "El modelo es demasiado grande para la memoria del teléfono"
+                    else "No se pudo leer el modelo"
+                Toast.makeText(this@Croquis3DActivity, porque, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     @Composable
     private fun CargarLasImagenes(
         imagenes: androidx.compose.runtime.snapshots.SnapshotStateMap<String, android.graphics.Bitmap>
@@ -1940,6 +2013,9 @@ class Croquis3DActivity : ComponentActivity() {
      */
     @Composable
     private fun LoDeDibujar(alTraerImagen: () -> Unit) {
+        val traerModelo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) importarModelo(uri)
+        }
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically
@@ -1970,6 +2046,13 @@ class Croquis3DActivity : ComponentActivity() {
                 icono = Icons.Filled.AddPhotoAlternate,
                 descripcion = getString(R.string.croquis_imagen)
             ) { alTraerImagen() }
+            FileteDePie()
+            // **Un modelo 3D**: el IFC que exporta Revit, o un OBJ. Ver [importarModelo].
+            Alternable(
+                encendido = false,
+                icono = Icons.Filled.ViewInAr,
+                descripcion = "Modelo 3D (Revit IFC, OBJ)"
+            ) { traerModelo.launch(arrayOf("*/*")) }
             FileteDePie()
             // **Una gráfica en el espacio**: superficie o curva por su fórmula. Ver [Graficas3D].
             Alternable(
@@ -2049,7 +2132,8 @@ class Croquis3DActivity : ComponentActivity() {
 
     private fun paginaWeb(portada: String?): java.io.File? {
         val html = ExportarCroquisHtml.pagina(
-            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada
+            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada,
+            malla = AlmacenDeMallas::malla
         ) ?: return null
         val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
         return java.io.File(carpeta, "$elCroquis.html").also { it.writeText(html) }
@@ -2057,7 +2141,7 @@ class Croquis3DActivity : ComponentActivity() {
 
     /** El OBJ y su MTL juntos en un ZIP: el MTL lleva los colores y sin él muchos visores lo abren en gris. */
     private fun modeloEnZip(): java.io.File? {
-        val salida = ExportarObj.escribir(controlador.croquis, elCroquis) ?: return null
+        val salida = ExportarObj.escribir(controlador.croquis, elCroquis, AlmacenDeMallas::malla) ?: return null
         val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
         val zip = java.io.File(carpeta, "$elCroquis (modelo 3D).zip")
         java.util.zip.ZipOutputStream(zip.outputStream()).use { z ->
@@ -2128,7 +2212,8 @@ class Croquis3DActivity : ComponentActivity() {
         // Las imágenes puestas en el espacio viajan dentro del archivo: sin eso, el croquis
         // exportado sale sin sus texturas. Ver [ExportarCroquisHtml.datos].
         val html = ExportarCroquisHtml.pagina(
-            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada
+            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada,
+            malla = AlmacenDeMallas::malla
         )
         if (html == null) {
             Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
@@ -2155,7 +2240,7 @@ class Croquis3DActivity : ComponentActivity() {
      * en gris.
      */
     private fun exportarElModelo() {
-        val salida = ExportarObj.escribir(controlador.croquis, elCroquis)
+        val salida = ExportarObj.escribir(controlador.croquis, elCroquis, AlmacenDeMallas::malla)
         if (salida == null) {
             Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
             return

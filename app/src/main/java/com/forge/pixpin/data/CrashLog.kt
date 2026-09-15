@@ -20,7 +20,52 @@ object CrashLog {
 
     private fun file(context: Context) = File(context.filesDir, "crash.txt")
 
+    /**
+     * **Qué pantalla estaba abierta.** Una muerte por falta de memoria no deja traza: el
+     * sistema mata el proceso y solo guarda «sin memoria». Sin saber dónde se estaba, el
+     * informe no dice nada (así llegó el del 14-sep-2026). Se apunta al entrar en cada
+     * pantalla —una escritura pequeña, sin esperar— y se lee al recoger la muerte.
+     */
+    fun anotarPantalla(context: Context, nombre: String) {
+        runCatching {
+            val rt = Runtime.getRuntime()
+            val usadoMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
+            context.getSharedPreferences("crashlog", Context.MODE_PRIVATE).edit()
+                .putString("pantalla", nombre)
+                .putLong("pantalla_cuando", System.currentTimeMillis())
+                .putLong("pantalla_heap_mb", usadoMb)
+                .apply()
+        }
+    }
+
+    /**
+     * La pantalla que se apuntó **en la vida anterior del proceso**. Se lee al instalar, antes
+     * de que la primera pantalla de esta vida la sobrescriba.
+     */
+    @Volatile private var pantallaAnterior: String? = null
+
     fun install(context: Context) {
+        runCatching {
+            val p = context.getSharedPreferences("crashlog", Context.MODE_PRIVATE)
+            val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+            pantallaAnterior = p.getString("pantalla", null)?.let {
+                "$it (desde ${stamp.format(Date(p.getLong("pantalla_cuando", 0L)))}, " +
+                    "heap Java ${p.getLong("pantalla_heap_mb", 0L)} MB)"
+            }
+        }
+        if (context is android.app.Application) {
+            context.registerActivityLifecycleCallbacks(object :
+                android.app.Application.ActivityLifecycleCallbacks {
+                override fun onActivityResumed(a: android.app.Activity) =
+                    anotarPantalla(context, a.javaClass.simpleName)
+                override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
+                override fun onActivityStarted(a: android.app.Activity) {}
+                override fun onActivityPaused(a: android.app.Activity) {}
+                override fun onActivityStopped(a: android.app.Activity) {}
+                override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+                override fun onActivityDestroyed(a: android.app.Activity) {}
+            })
+        }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             runCatching { write(context, thread, error) }
@@ -112,7 +157,23 @@ object CrashLog {
                             else -> "código ${m.reason}"
                         } + " (estado ${m.status})"
                     )
-                    m.description?.let { appendLine("Descripción: $it") }
+                    m.description?.takeIf { it.isNotBlank() }?.let { appendLine("Descripción: $it") }
+                    // **En primer plano o de fondo.** De fondo, que el sistema mate una app
+                    // para hacer sitio es lo normal en Android y no es un fallo; en primer
+                    // plano, es que la app pidió demasiado.
+                    appendLine(
+                        "Estaba: " + when {
+                            m.importance <= android.app.ActivityManager.RunningAppProcessInfo
+                                .IMPORTANCE_FOREGROUND -> "en primer plano (usándose)"
+                            m.importance <= android.app.ActivityManager.RunningAppProcessInfo
+                                .IMPORTANCE_VISIBLE -> "visible (encima de otra app)"
+                            m.importance <= android.app.ActivityManager.RunningAppProcessInfo
+                                .IMPORTANCE_SERVICE -> "de fondo con un servicio"
+                            else -> "de fondo, en caché"
+                        } + " (importancia ${m.importance})"
+                    )
+                    appendLine("Memoria al morir: PSS ${m.pss / 1024} MB, RSS ${m.rss / 1024} MB")
+                    pantallaAnterior?.let { appendLine("Última pantalla abierta: $it") }
                     // La traza que el sistema guardó, si la hay (ANR y nativos).
                     runCatching {
                         m.traceInputStream?.use { flujo ->

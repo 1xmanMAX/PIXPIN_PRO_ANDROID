@@ -87,23 +87,18 @@ class SincroTest {
     }
 
     @Test
-    fun `si cambiaron los dos se pregunta`() {
+    fun `si cambiaron los dos se fusiona sin preguntar`() {
         val p = Diferencia.plan(
             listOf(ap("1a", "mio")), listOf(ap("1a", "suyo")), mapOf("1a" to "viejo")
         )
-        assertEquals(
-            listOf(Diferencia.Paso.Preguntar("1a", Diferencia.Choque.LOS_DOS_CAMBIARON)), p
-        )
+        assertEquals(listOf(Diferencia.Paso.Fusionar("1a")), p)
     }
 
     @Test
-    fun `sin haber sincronizado antes un empate es un empate`() {
-        // Sin base no hay forma de saber quién se movió: los dos contenidos son igual de
-        // legítimos y hay que preguntar.
+    fun `sin haber sincronizado antes dos distintos se fusionan`() {
+        // Sin base no se sabe quién se movió: se junta todo, que perder algo es peor que tener de más.
         val p = Diferencia.plan(listOf(ap("1a", "mio")), listOf(ap("1a", "suyo")))
-        assertEquals(
-            listOf(Diferencia.Paso.Preguntar("1a", Diferencia.Choque.LOS_DOS_CAMBIARON)), p
-        )
+        assertEquals(listOf(Diferencia.Paso.Fusionar("1a")), p)
     }
 
     // ------------------------------------------------------------- lo borrado
@@ -122,27 +117,34 @@ class SincroTest {
     }
 
     @Test
-    fun `borrado en uno e intacto en el otro se pregunta`() {
-        // Borrar es una decisión, no un descuido: nunca se deshace en silencio.
+    fun `borrado en uno e intacto en el otro se borra en los dos`() {
         val p = Diferencia.plan(
             listOf(ap("1a", "x", borrado = true)), listOf(ap("1a", "x")), mapOf("1a" to "x")
         )
-        assertEquals(
-            listOf(Diferencia.Paso.Preguntar("1a", Diferencia.Choque.BORRADO_CONTRA_INTACTO)), p
-        )
+        assertEquals(listOf(Diferencia.Paso.Mandar("1a")), p)
+        val alReves = Diferencia.plan(listOf(ap("1a", "x")), listOf(ap("1a", "x", borrado = true)), mapOf("1a" to "x"))
+        assertEquals(listOf(Diferencia.Paso.Traer("1a")), alReves)
     }
 
     @Test
-    fun `borrado en uno y cambiado en el otro se dice que fue cambiado`() {
-        // No es lo mismo borrar algo que el otro no tocó que borrarlo mientras lo mejoraba, y
-        // al usuario hay que contárselo distinto.
+    fun `borrado en uno y cambiado en el otro se queda lo cambiado`() {
+        // Borrar quita lo que uno vio: una mejora que el otro no vio sobrevive (add-wins).
         val p = Diferencia.plan(
             listOf(ap("1a", "x", borrado = true)), listOf(ap("1a", "mejorado")),
             mapOf("1a" to "x")
         )
-        assertEquals(
-            listOf(Diferencia.Paso.Preguntar("1a", Diferencia.Choque.BORRADO_CONTRA_CAMBIADO)), p
-        )
+        assertEquals(listOf(Diferencia.Paso.Traer("1a")), p)
+        // Y sin base con que saber si se tocó, también se queda.
+        assertEquals(listOf(Diferencia.Paso.Mandar("1a")), Diferencia.plan(listOf(ap("1a", "y")), listOf(ap("1a", "x", borrado = true))))
+    }
+
+    @Test
+    fun `una marca de borrado de antes de los codigos se reconoce por su sena`() {
+        val vivo = Diferencia.Apunte("K7Q2ABCDEF", 0, 0, "x", alias = "47a")
+        val marca = Diferencia.Apunte(Diferencia.MARCA_VIEJA + "47a", 0, 0, "borrado", borrado = true, alias = "47a")
+        // Lo acordado antes iba por la seña.
+        val p = Diferencia.plan(listOf(marca), listOf(vivo), mapOf("47a" to "x"))
+        assertEquals(listOf(Diferencia.Paso.Mandar("K7Q2ABCDEF")), p)
     }
 
     @Test

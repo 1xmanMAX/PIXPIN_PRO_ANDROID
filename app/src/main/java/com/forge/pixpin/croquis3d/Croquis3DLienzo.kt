@@ -1485,6 +1485,22 @@ internal fun DrawScope.pintarLaEscena(
     for ((l, _) in lasHojas) {
         pintarLamina(l, camara, w, h, contraste)
     }
+    // **Los modelos importados** (un IFC de Revit…), encima de la mesa y debajo de lo que se
+    // dibuja: se dibuja sobre ellos. Leer la versión aquí hace que se repinte al cargar uno.
+    // Ver [PintorDeMalla].
+    @Suppress("UNUSED_VARIABLE") val cargados = AlmacenDeMallas.version.intValue
+    if (croquis.modelos.isNotEmpty()) {
+        drawIntoCanvas { lienzoNativo ->
+            for (m in croquis.modelos) {
+                if (m.oculto) continue
+                val pintor = AlmacenDeMallas.cargadas[m.ruta] ?: continue
+                pintor.pintar(
+                    lienzoNativo.nativeCanvas, m, camara, w, h, luzDePluma,
+                    m.id in seleccion, LaCalidad.moviendo
+                )
+            }
+        }
+    }
     // Lo que puede asomar por fuera de la caja de un trazo: su grueso, y algo más si alumbra.
     fun loQueAsoma(t: Trazo3D): Double =
         (t.calibre ?: (t.grosor / camara.zoom)) * RESPLANDOR

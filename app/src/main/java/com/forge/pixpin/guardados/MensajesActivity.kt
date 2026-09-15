@@ -72,6 +72,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -110,6 +111,7 @@ import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
@@ -204,6 +206,8 @@ class MensajesActivity : ComponentActivity() {
     // estaba —en la conversación general— y parecía que el botón no llevaba a ninguna
     // parte. Guardado como estado, la pantalla se entera y cambia de conversación.
     private var chatDe by mutableStateOf<String?>(null)
+    /** El lienzo del chat al que se le está cambiando el nombre. */
+    private var renombrandoMensaje by mutableStateOf<Mensaje?>(null)
     private var nombreDelChat by mutableStateOf("")
 
     /**
@@ -264,6 +268,19 @@ class MensajesActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Pantalla() {
+        renombrandoMensaje?.let { m ->
+            com.forge.pixpin.ui.DialogoDeNombre(m.nombre, onCerrar = { renombrandoMensaje = null }, titulo = "Nombre del lienzo") { nuevo ->
+                renombrandoMensaje = null
+                val app = application as? com.forge.pixpin.PixPinApp ?: return@DialogoDeNombre
+                val dibujo = m.referencia ?: return@DialogoDeNombre
+                lifecycleScope.launch(Dispatchers.IO) {
+                    NombreDelLienzo.deDibujo(app, dibujo, nuevo)
+                    // Un lienzo adjuntado que aún no es hoja de nadie: al menos el mensaje.
+                    almacen.actualizar(m.id) { it.copy(nombre = nuevo.trim().take(80).ifBlank { it.nombre }) }
+                    MensajesStore.cambios.value = MensajesStore.cambios.value + 1
+                }
+            }
+        }
         // **Leer el archivo no puede ir en la composición.** Estaba con `remember { cargar() }`,
         // que abre el archivo y lo analiza **en el hilo de la interfaz** justo al abrir la
         // pantalla: con doscientas cosas guardadas eso es la pantalla en blanco un rato,
@@ -422,8 +439,7 @@ class MensajesActivity : ComponentActivity() {
             com.forge.pixpin.motor.DialogoDeFuncionesWeb(
                 marcadas = marcadas,
                 onCambio = { clave, puesta ->
-                    val ahora = marcadas.toMutableSet()
-                    if (puesta) ahora += clave else ahora -= clave
+                    val ahora = com.forge.pixpin.motor.ExportarHtml.conGrupo(marcadas, clave, puesta)
                     lifecycleScope.launch { app?.settings?.setFuncionesWeb(ahora) }
                 },
                 onCompartir = {
@@ -474,9 +490,15 @@ class MensajesActivity : ComponentActivity() {
         // depende de lo que se escriba. Separados, escribir solo paga la búsqueda.
         val deEsteChat = remember(mensajes, chatDe) { delChat(mensajes, chatDe) }
         val deLaSeccion = remember(deEsteChat, seccion) { deSeccion(deEsteChat, seccion) }
-        val visibles = remember(deLaSeccion, consulta, porEtiqueta) {
-            val buscados =
-                if (consulta.isNullOrBlank()) deLaSeccion else buscar(deLaSeccion, consulta!!)
+        val visibles = remember(deLaSeccion, consulta, porEtiqueta, mensajes) {
+            // **Desde el chat general se busca en todos** (14-sep-2026): los lienzos, fotos y
+            // notas de todos los proyectos, por su nombre y su texto. Dentro del chat de un
+            // proyecto, solo en ese.
+            val buscados = when {
+                consulta.isNullOrBlank() -> deLaSeccion
+                chatDe == null -> buscar(deSeccion(mensajes, seccion), consulta!!)
+                else -> buscar(deLaSeccion, consulta!!)
+            }
             porEmoji(buscados, porEtiqueta)
         }
         val tramos = remember(visibles) { porDias(visibles) { diaDe(it) } }
@@ -2470,6 +2492,22 @@ class MensajesActivity : ComponentActivity() {
                         menuAbierto = false
                         com.forge.pixpin.ui.AbrirCon.abrir(this@MensajesActivity, File(ruta))
                     }
+                    // **Aligerar un PDF que ya estaba aquí.** Lo que entra se aligera solo, pero
+                    // los documentos de antes se quedaron como entraron, y volver a compartirlos
+                    // uno a uno para que pasen por la puerta es absurdo (usuario, 14-sep-2026).
+                    if (ruta.endsWith(".pdf", ignoreCase = true)) {
+                        DelMenu(com.forge.pixpin.R.string.guardados_aligerar, Icons.Filled.Compress) {
+                            menuAbierto = false
+                            aligerarPdfDelMensaje(m, ruta)
+                        }
+                    }
+                }
+                // **Cambiar el nombre de un lienzo** (14-sep-2026): el del mensaje y el de su hoja
+                // en los proyectos, que es por lo que lo encuentra el buscador. Ver [NombreDelLienzo].
+                if (m.clase == Clase.DIBUJO && m.referencia != null) {
+                    DelMenu(com.forge.pixpin.R.string.proyecto_renombrar, Icons.Filled.Edit) {
+                        menuAbierto = false; renombrandoMensaje = m
+                    }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
                     menuAbierto = false; acciones.pinear()
@@ -2898,7 +2936,7 @@ class MensajesActivity : ComponentActivity() {
                     when (m.clase) {
                         Clase.NOTA -> {}
                         Clase.IMAGEN -> Column {
-                            Miniatura(m, soloFoto, recarga, ampliada)
+                            Miniatura(m, soloFoto, recarga, ampliada, numero)
                             // **De dónde salió la zona**: toca y lleva al lienzo de origen.
                             // **Más a la vista** (13-sep-2026): una pastilla con el enlace, «Viene de» y
                             // de dónde, y la flecha que dice que se toca para ir.
@@ -3119,7 +3157,7 @@ class MensajesActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (numero > 0) {
-                                ChapaDelNumero(numero, m.letra)
+                                ChapaDelNumero(numero, sufijoDelCodigo(m))
                                 Spacer(Modifier.size(4.dp))
                             }
                             m.emoji?.let {
@@ -3162,7 +3200,15 @@ class MensajesActivity : ComponentActivity() {
         m: Mensaje,
         conHoraEncima: Boolean = false,
         recarga: Int = 0,
-        ampliada: com.forge.pixpin.ui.ZoomDeHoja? = null
+        ampliada: com.forge.pixpin.ui.ZoomDeHoja? = null,
+        /**
+         * Con qué número se nombra el mensaje, para enseñarlo **encima de la foto**.
+         *
+         * Una foto sola no tiene burbuja ni renglón de hora, así que se quedaba sin su código:
+         * las demás se podían nombrar —«el 47»— y las fotos no, que es justo lo que más se
+         * nombra de un chat de obra (usuario, 14-sep-2026). Ver [ChapaDelNumero].
+         */
+        numero: Int = 0
     ) {
         // **La foto se descodifica fuera del hilo de la pantalla.**
         //
@@ -3376,6 +3422,16 @@ class MensajesActivity : ComponentActivity() {
                             tint = androidx.compose.ui.graphics.Color.White
                         )
                         Spacer(Modifier.size(3.dp))
+                    }
+                    // El código del mensaje, delante de la hora: aquí va en blanco y sin
+                    // chapa, que sobre la píldora oscura ya se lee.
+                    if (numero > 0) {
+                        Text(
+                            "#" + numero + sufijoDelCodigo(m),
+                            fontSize = TAMANO_DE_LA_HORA,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f)
+                        )
+                        Spacer(Modifier.size(4.dp))
                     }
                     Text(
                         horaDe(m.cuando),
@@ -4220,7 +4276,7 @@ class MensajesActivity : ComponentActivity() {
             m.clase == Clase.PAGINA || m.clase == Clase.DIBUJO || m.clase == Clase.PROYECTO ||
             m.clase == Clase.TABLA || m.clase == Clase.CROQUIS
         if (!esArchivo) return
-        val esta = remember(proyectos, m.id, m.referencia) {
+        val esta = remember(proyectos, m.id, m.referencia, m.ruta) {
             com.forge.pixpin.motor.Proyectos.estaEnLosProyectos(
                 proyectos,
                 mensaje = m.id,
@@ -4229,7 +4285,8 @@ class MensajesActivity : ComponentActivity() {
                 dibujo = if (m.clase == Clase.PROYECTO || m.clase == Clase.TABLA || m.clase == Clase.CROQUIS) null else m.dibujoDeLaFoto,
                 proyecto = m.referencia.takeIf { m.clase == Clase.PROYECTO },
                 tabla = m.referencia.takeIf { m.clase == Clase.TABLA },
-                croquis = m.referencia.takeIf { m.clase == Clase.CROQUIS }
+                croquis = m.referencia.takeIf { m.clase == Clase.CROQUIS },
+                archivo = m.ruta.takeIf { m.clase == Clase.ARCHIVO }
             )
         }
         // **Con un halo blanco**, para que se vea igual sobre la burbuja clara, la oscura y
@@ -5172,18 +5229,24 @@ class MensajesActivity : ComponentActivity() {
         // existe; como dibujo se abre en el editor, que es donde se hizo.
         val pagina = hoja.pagina ?: run {
             val dibujo = hoja.dibujo ?: return
+            val mensaje = Mensaje(
+                id = UUID.randomUUID().toString(),
+                cuando = System.currentTimeMillis(),
+                clase = Clase.DIBUJO,
+                proyecto = chatDe,
+                nombre = p.nombre + " · " + getString(
+                    com.forge.pixpin.R.string.proyecto_pagina,
+                    p.hojas.indexOf(hoja) + 1
+                ),
+                referencia = dibujo
+            )
+            // **De otro proyecto, con su propia copia** (14-sep-2026): el lienzo pasa a ser
+            // una hoja de este proyecto, y compartir el mismo dibujo haría que borrar o
+            // dibujar aquí tocara también el del otro. Ver [MensajesStore.anadir].
             almacen.anadir(
-                Mensaje(
-                    id = UUID.randomUUID().toString(),
-                    cuando = System.currentTimeMillis(),
-                    clase = Clase.DIBUJO,
-                    proyecto = chatDe,
-                    nombre = p.nombre + " · " + getString(
-                        com.forge.pixpin.R.string.proyecto_pagina,
-                        p.hojas.indexOf(hoja) + 1
-                    ),
-                    referencia = dibujo
-                )
+                if (p.id != chatDe && chatDe != null) {
+                    runCatching { RamaDeMensaje.separar(this, mensaje, mensaje) }.getOrDefault(mensaje)
+                } else mensaje
             )
             return
         }
@@ -5226,6 +5289,38 @@ class MensajesActivity : ComponentActivity() {
      * bloqueada, y si el archivo viene de una nube el `openInputStream` puede tardar
      * segundos: no es un tirón, es la aplicación muerta y el sistema ofreciendo cerrarla.
      */
+    /**
+     * **Aligera el PDF de un mensaje ahí donde está**, y pone al día lo que pesa.
+     *
+     * Trabajo de disco y de CPU —se rasterizan sus fotos—, así que fuera del hilo de la pantalla; y
+     * se dice cuánto bajó, o que no había nada que quitar, porque si no parece que no haya hecho
+     * nada. Ver [com.forge.pixpin.pdf.ComprimirPdf].
+     */
+    private fun aligerarPdfDelMensaje(m: Mensaje, ruta: String) {
+        Toast.makeText(this, com.forge.pixpin.R.string.guardados_aligerando, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val antes = withContext(Dispatchers.IO) { File(ruta).length() }
+            val ganado = withContext(Dispatchers.IO) {
+                com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(File(ruta))
+            }
+            if (ganado > 0) {
+                val ahora = withContext(Dispatchers.IO) { File(ruta).length() }
+                // El peso del mensaje es el del archivo: si no, la lista seguiría diciendo el viejo.
+                withContext(Dispatchers.IO) {
+                    almacen.reescribir(almacen.leer().map { if (it.id == m.id) it.copy(bytes = ahora) else it })
+                }
+                recargarLaLista?.invoke()
+                Toast.makeText(
+                    this@MensajesActivity,
+                    "PDF aligerado: ${com.forge.pixpin.motor.Detalle.legible(antes)} → ${com.forge.pixpin.motor.Detalle.legible(ahora)}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(this@MensajesActivity, com.forge.pixpin.R.string.guardados_aligerar_nada, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     private fun guardarArchivo(uri: Uri) {
         lifecycleScope.launch(Dispatchers.IO) { copiarLoElegido(uri) }
     }
@@ -5237,10 +5332,24 @@ class MensajesActivity : ComponentActivity() {
             contentResolver.openInputStream(uri)?.use { entrada ->
                 temporal.outputStream().use { entrada.copyTo(it) }
             } ?: return
+            val antes = temporal.length()
             val ruta = almacen.copiarAdjunto(temporal, nombre)
-            val bytes = temporal.length()
             temporal.delete()
             if (ruta == null) return
+            // **Lo que pesa ya guardado**, no lo que pesaba al llegar: un PDF se aligera al entrar
+            // y el mensaje tiene que decir el peso de verdad. Ver [MensajesStore.copiarAdjunto].
+            val bytes = File(ruta).length()
+            // Y se dice, que si no parece que no haya pasado nada: cinco megas que entran pesando
+            // uno es justo lo que el usuario no veía (14-sep-2026).
+            if (bytes in 1 until (antes * 9 / 10)) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@MensajesActivity,
+                        "PDF aligerado: ${com.forge.pixpin.motor.Detalle.legible(antes)} → ${com.forge.pixpin.motor.Detalle.legible(bytes)}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
             val esImagen = contentResolver.getType(uri)?.startsWith("image/") == true
             almacen.anadir(
                 Mensaje(
@@ -5985,6 +6094,32 @@ class MensajesActivity : ComponentActivity() {
                 when {
                     ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
                         com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
+                    // **Un PowerPoint se convierte en proyecto** (14-sep-2026): una hoja por
+                    // diapositiva, para anotarla y presentarla. Ver [DiapositivasAPdf].
+                    com.forge.pixpin.motor.Diapositivas.esPresentacion(m.nombre) ||
+                        com.forge.pixpin.motor.Diapositivas.esPresentacion(ruta) -> lifecycleScope.launch {
+                        val app = application as? com.forge.pixpin.PixPinApp ?: return@launch
+                        Toast.makeText(this@MensajesActivity, "Preparando las diapositivas…", Toast.LENGTH_SHORT).show()
+                        val ahora = System.currentTimeMillis()
+                        val hecho = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val documento = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+                                val paginas = DiapositivasAPdf.convertir(File(ruta), m.nombre.ifBlank { File(ruta).name }, documento)
+                                app.proyectos.deEstePdf(
+                                    documento.absolutePath, m.nombre.substringBeforeLast('.').ifBlank { "Presentación" }, paginas, ahora
+                                )
+                            }
+                        }
+                        hecho.onSuccess { p ->
+                            com.forge.pixpin.volverALosProyectos(this@MensajesActivity, p?.id)
+                        }.onFailure { e ->
+                            Toast.makeText(
+                                this@MensajesActivity,
+                                (e as? com.forge.pixpin.motor.Diapositivas.NoSeLee)?.message ?: "No se pudo leer la presentación",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
                     // **Un Excel se abre en Tablas**, con una pestaña por hoja, y no en otra
                     // aplicación. Ver [LibroDelChat].
                     LibroDelChat.esLibro(m) -> lifecycleScope.launch {
@@ -6346,7 +6481,8 @@ private val ROJO_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFFE53935)
  */
 @Composable
 private fun ChapaDelNumero(numero: Int, letra: String? = null) {
-    // Con la letra del aparato donde nació, si la tiene: «#47a». Ver [Mensaje.letra].
+    // Con el código del aparato donde nació: «#47·K7Q2» (o la letra de antes, «#47a»). Ver
+    // [com.forge.pixpin.sincro.Codigos.deChat].
     Text(
         "#" + numero + letra.orEmpty(),
         fontSize = 10.sp,
@@ -6357,6 +6493,10 @@ private fun ChapaDelNumero(numero: Int, letra: String? = null) {
             .padding(horizontal = 4.dp, vertical = 1.dp)
     )
 }
+
+/** Lo que va detrás del número en el código de chat: `·K7Q2`, o la letra de antes. */
+internal fun sufijoDelCodigo(m: Mensaje): String =
+    m.aparato?.let { "${com.forge.pixpin.sincro.Codigos.PUNTO}$it" } ?: m.letra.orEmpty()
 
 /**
  * **Con qué número se nombra cada mensaje**, por conversación.

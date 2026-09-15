@@ -101,6 +101,12 @@ object DrawSvg {
      */
     private const val TOLERANCIA_DEL_CONTORNO = 0.3
 
+    /** Calidad del papel escaneado en la página web. Ver [Lapicero.papelLigero]. */
+    private const val CALIDAD_DEL_PAPEL_WEB = 80
+
+    /** Desde qué valor de cada canal un píxel del papel es blanco: el gris del escáner, no la tinta. */
+    private const val UMBRAL_DE_BLANCO = 236
+
     /** Calidad del WEBP de las imágenes con transparencia. Ver [Lapicero.comoDatos]. */
     private const val CALIDAD_WEBP = 85
 
@@ -216,7 +222,9 @@ object DrawSvg {
             DrawTheme.esDeNoche(scene.backgroundColor)
         )
         val cuerpo = StringBuilder()
-        if (!papelAparte) papel?.let { cuerpo.append(pincel.papel(papelFino ?: it, it.width, it.height)) }
+        if (!papelAparte) papel?.let {
+            cuerpo.append(if (papelFino != null) pincel.papelLigero(papelFino, it.width, it.height) else pincel.papel(it, it.width, it.height))
+        }
         for ((i, e) in pintables.withIndex()) {
             if (e.type == ElementType.SPOTLIGHT) continue
             cuerpo.append(pincel.elemento(e, pintables.subList(0, i)))
@@ -807,6 +815,44 @@ object DrawSvg {
             // viene uno más fino, se coloca aquí mismo y el navegador lo enseña al ampliar.
             return "<image x=\"0\" y=\"0\" width=\"$ancho\" height=\"$alto\" " +
                 "xlink:href=\"$datos\"/>\n"
+        }
+
+        /**
+         * **El papel de la página web, ligero.** Lo mismo que [papel] con dos cosas que hacen los
+         * compresores de escaneos: el fondo casi blanco —el gris sucio del escáner, que no es
+         * información y es lo que más cuesta comprimir— pasa a blanco puro, y se guarda en WEBP,
+         * que a la misma vista pesa bastante menos que el JPEG. Solo para la web (usuario, 14-sep-2026).
+         */
+        fun papelLigero(bmp: Bitmap, ancho: Int, alto: Int): String {
+            val limpio = runCatching { blanquearElFondo(bmp) }.getOrNull() ?: bmp
+            val datos = runCatching {
+                val salida = ByteArrayOutputStream()
+                val formato = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+                    Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+                limpio.compress(formato, CALIDAD_DEL_PAPEL_WEB, salida)
+                "data:image/webp;base64," + Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
+            }.getOrNull() ?: return papel(bmp, ancho, alto)
+            return "<image x=\"0\" y=\"0\" width=\"$ancho\" height=\"$alto\" " +
+                "xlink:href=\"$datos\"/>\n"
+        }
+
+        /** Los píxeles casi blancos, blancos del todo. Devuelve un mapa de bits nuevo. */
+        private fun blanquearElFondo(bmp: Bitmap): Bitmap {
+            val w = bmp.width
+            val h = bmp.height
+            val copia = bmp.copy(Bitmap.Config.ARGB_8888, true)
+            val fila = IntArray(w)
+            for (y in 0 until h) {
+                copia.getPixels(fila, 0, w, 0, y, w, 1)
+                for (x in 0 until w) {
+                    val c = fila[x]
+                    if ((c shr 16 and 0xFF) >= UMBRAL_DE_BLANCO && (c shr 8 and 0xFF) >= UMBRAL_DE_BLANCO && (c and 0xFF) >= UMBRAL_DE_BLANCO) {
+                        fila[x] = -1
+                    }
+                }
+                copia.setPixels(fila, 0, w, 0, y, w, 1)
+            }
+            return copia
         }
 
         private fun comoDatos(bmp: Bitmap, opaco: Boolean = !tieneTransparencia(bmp)): String? =

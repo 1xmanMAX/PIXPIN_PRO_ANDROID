@@ -77,6 +77,12 @@
     <string name="proyecto_web_corto">Web</string>
     <string name="proyecto_desmarcar_corto">Soltar</string>
     <string name="proyecto_desmarcar">Quitar las marcas</string>
+    <string name="guardados_aligerar">Aligerar el PDF</string>
+    <string name="guardados_aligerando">Aligerando el PDF…</string>
+    <string name="guardados_aligerar_nada">Ya estaba todo lo ligero que se puede</string>
+    <string name="proyecto_fusionar_corto">Fusionar</string>
+    <string name="proyecto_fusionar">Juntar las páginas marcadas en un mismo lienzo</string>
+    <string name="proyecto_fusionar_fallo">No se pudieron juntar esas páginas</string>
     <string name="proyecto_quitar_corto">Quitar</string>
     <string name="proyecto_quitar">Quitar del proyecto lo marcado</string>
     <string name="proyecto_quitar_titulo">¿Quitar %1$d páginas del proyecto?</string>
@@ -219,6 +225,8 @@
     <string name="croquis_capa_nueva">+ capa</string>
     <string name="croquis_capa_fondo">Fondo</string>
     <string name="croquis_grupo_n">Grupo %1$s</string>
+    <string name="croquis_modelos">Modelos</string>
+    <string name="croquis_modelo_triangulos">%1$,d triángulos</string>
     <string name="croquis_sin_grupos">Toca «+ capa» y lo que dibujes irá en ella. Una capa se esconde, se mueve y se borra de una pieza.</string>
     <string name="croquis_imagen">Traer una imagen al espacio</string>
     <string name="croquis_vistas">Vistas</string>

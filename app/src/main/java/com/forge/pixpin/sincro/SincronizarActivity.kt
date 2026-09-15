@@ -109,19 +109,11 @@ class SincronizarActivity : ComponentActivity() {
     private sealed interface Fase {
         data object Nada : Fase
         data class Conectando(val texto: String) : Fase
-        data class Eligiendo(val otro: Aparato, val filas: List<Fila>, val listo: CompletableDeferred<Pair<Set<String>, Maestro>?>) : Fase
+        data class Eligiendo(val otro: Aparato, val filas: List<Fila>, val listo: CompletableDeferred<Set<String>?>) : Fase
         data class Trabajando(val texto: String, val hechos: Long = 0, val total: Long = 0, val velocidad: String = "") : Fase
-        data class Preguntando(val otro: Aparato, val chat: String, val preguntas: List<Sesion.Pregunta>, val listo: CompletableDeferred<Map<String, Boolean>?>) : Fase
         data class Terminado(val titulo: String, val texto: String, val aviso: String? = null) : Fase
         data class Fallo(val texto: String) : Fase
     }
-
-    /**
-     * **Qué gana en lo que cambió en los dos aparatos** (lo pidió el usuario el 13-sep-2026: «llevo la
-     * tableta a la universidad y al volver quiero que mande ella»). Lo nuevo de cada lado se suma
-     * siempre; esto solo decide los empates.
-     */
-    enum class Maestro(val texto: String) { PREGUNTAR("Preguntar"), ESTE("Este aparato"), OTRO("El otro"), RECIENTE("Lo más reciente") }
 
     /** Un chat en la lista de elegir: dónde está y cuándo se tocó en cada lado. */
     private data class Fila(val id: String, val nombre: String, val aqui: Chat?, val alli: Chat?, val marcado: Boolean)
@@ -236,12 +228,10 @@ class SincronizarActivity : ComponentActivity() {
                             val m = mios[id]; val s = suyos[id]
                             Fila(id, (m ?: s)!!.nombre, m, s, antes?.contains(id) ?: true)
                         }
-                        val eleccion = CompletableDeferred<Pair<Set<String>, Maestro>?>()
+                        val eleccion = CompletableDeferred<Set<String>?>()
                         fase = Fase.Eligiendo(otro, filas, eleccion)
-                        val elegido = eleccion.await()
-                        if (elegido == null) { sesion.adios(); fase = Fase.Nada; return@use }
-                        val (elegidos, maestro) = elegido
-                        maestroDeEstaVuelta = maestro
+                        val elegidos = eleccion.await()
+                        if (elegidos == null) { sesion.adios(); fase = Fase.Nada; return@use }
                         disco.guardarElegidos(otro.id, elegidos)
 
                         val hecho = Sesion.Hecho()
@@ -250,16 +240,16 @@ class SincronizarActivity : ComponentActivity() {
                             val nombreDelChat = filas.first { it.id == chat }.nombre
                             fase = Fase.Trabajando("Comparando «$nombreDelChat»…")
                             val prep = sesion.preparar(chat)
-                            val decisiones = preguntar(otro, nombreDelChat, prep.preguntas) ?: run { sesion.adios(); fase = Fase.Nada; return@use }
+                            // **Sin preguntas ni maestro** (15-sep-2026): lo cambiado en los dos se
+                            // junta. Ver [Fusion].
                             fase = Fase.Trabajando("Juntando «$nombreDelChat»…")
-                            sesion.aplicar(prep, decisiones, hecho)
+                            sesion.aplicar(prep, hecho)
                             val archivos = sesion.prepararArchivos(prep)
-                            val decisiones2 = preguntar(otro, nombreDelChat, archivos.preguntas) ?: run { sesion.adios(); fase = Fase.Nada; return@use }
                             val total = archivos.bytes
                             var hechos = 0L
                             var ultimo = 0L
                             val t0 = System.currentTimeMillis()
-                            sesion.aplicarArchivos(archivos, decisiones2, hecho) { n ->
+                            sesion.aplicarArchivos(archivos, hecho) { n ->
                                 hechos += n
                                 val ahora = System.currentTimeMillis()
                                 if (ahora - ultimo > 150) {
@@ -277,12 +267,17 @@ class SincronizarActivity : ComponentActivity() {
                             "${hecho.traidos} traídos".takeIf { hecho.traidos > 0 },
                             "${hecho.enviados} enviados".takeIf { hecho.enviados > 0 },
                             "${hecho.borrados} borrados".takeIf { hecho.borrados > 0 },
-                            "${hecho.archivos} archivos".takeIf { hecho.archivos > 0 }
+                            "${hecho.archivos} archivos".takeIf { hecho.archivos > 0 },
+                            "${hecho.fusionados} juntados de los dos".takeIf { hecho.fusionados > 0 }
                         )
                         val movido = sesion.enviados + sesion.recibidos
                         val texto = (if (partes.isEmpty()) "Ya estaban iguales." else partes.joinToString(" · ") + ".") +
                             "\n${tamanoLegible(movido).ifBlank { "0 B" }} en ${"%.1f".format(segundos)} s."
                         val avisos = listOfNotNull(
+                            hecho.rescatados.takeIf { it > 0 }?.let {
+                                "$it ${if (it == 1) "cosa borrada en un aparato se quedó" else "cosas borradas en un aparato se quedaron"} porque en el otro se había cambiado después."
+                            },
+                            hecho.ahorrados.takeIf { it > 64_000 }?.let { "Solo viajaron los cambios: ${tamanoLegible(it)} que no hizo falta mandar." },
                             hecho.saltados.takeIf { it.isNotEmpty() }?.let {
                                 "No se pasó ${it.distinct().joinToString { n -> "«$n»" }} porque se estaba guardando en ese momento. Vuelve a sincronizar."
                             },
@@ -298,22 +293,6 @@ class SincronizarActivity : ComponentActivity() {
             }
             version++
         }
-    }
-
-    private var maestroDeEstaVuelta = Maestro.PREGUNTAR
-
-    private suspend fun preguntar(otro: Aparato, chat: String, preguntas: List<Sesion.Pregunta>): Map<String, Boolean>? {
-        if (preguntas.isEmpty()) return emptyMap()
-        // Con un aparato maestro no se pregunta: manda él (o lo más reciente).
-        when (maestroDeEstaVuelta) {
-            Maestro.ESTE -> return preguntas.associate { it.clave to true }
-            Maestro.OTRO -> return preguntas.associate { it.clave to false }
-            Maestro.RECIENTE -> return preguntas.associate { it.clave to ((it.mio?.cuando ?: 0L) >= (it.suyo?.cuando ?: 0L)) }
-            Maestro.PREGUNTAR -> {}
-        }
-        val listo = CompletableDeferred<Map<String, Boolean>?>()
-        fase = Fase.Preguntando(otro, chat, preguntas, listo)
-        return listo.await()
     }
 
     /**
@@ -394,14 +373,13 @@ class SincronizarActivity : ComponentActivity() {
         val cambioDeIdentidad by Presencia.version.collectAsState()
         val identidad = remember(cambioDeIdentidad, version) { disco.identidad.leer(nombrePorOmision()) }
 
-        BackHandler(enabled = fase is Fase.Eligiendo || fase is Fase.Preguntando || fase is Fase.Terminado || fase is Fase.Fallo) {
+        BackHandler(enabled = fase is Fase.Eligiendo || fase is Fase.Terminado || fase is Fase.Fallo) {
             cerrarFase()
         }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             when (val f = fase) {
                 is Fase.Eligiendo -> Eligiendo(identidad, f)
-                is Fase.Preguntando -> Preguntas(f)
                 else -> Portada(identidad)
             }
         }
@@ -713,7 +691,6 @@ class SincronizarActivity : ComponentActivity() {
     private fun Eligiendo(identidad: Identidad, f: Fase.Eligiendo) {
         val marcados = remember(f) { mutableStateMapOf<String, Boolean>().apply { f.filas.forEach { put(it.id, it.marcado) } } }
         var pestana by remember(f) { mutableIntStateOf(0) }
-        var maestro by remember(f) { mutableStateOf(Maestro.PREGUNTAR) }
         val cuantos = marcados.count { it.value }
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -769,34 +746,18 @@ class SincronizarActivity : ComponentActivity() {
                 }
             }
             HorizontalDivider()
-            // **Qué manda si algo cambió en los dos.** Lo nuevo de cada lado se suma siempre.
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Text("Si algo cambió en los dos, gana:", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(6.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (m in Maestro.entries) {
-                        val puesto = m == maestro
-                        val texto = if (m == Maestro.OTRO) f.otro.nombre else m.texto
-                        Box(
-                            Modifier.clip(RoundedCornerShape(10.dp))
-                                .background(if (puesto) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                .clickable { maestro = m }
-                                .padding(horizontal = 10.dp, vertical = 7.dp)
-                        ) {
-                            Text(texto, style = MaterialTheme.typography.labelMedium, maxLines = 1,
-                                color = if (puesto) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                Text("Lo que solo está en uno se copia al otro: nada se pierde.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-            }
+            // **Nadie manda** (15-sep-2026): lo de cada lado se suma y lo cambiado en los dos se junta.
+            Text(
+                "Lo que cambió en los dos se junta: figura a figura, celda a celda, párrafo a párrafo. Si los dos tocaron lo mismo, gana el último cambio, y lo de antes queda en «Copias de seguridad».",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            )
             HorizontalDivider()
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { f.filas.forEach { marcados[it.id] = true } }) { Text("Todo") }
                 TextButton(onClick = { f.filas.forEach { marcados[it.id] = false } }) { Text("Nada") }
                 Spacer(Modifier.weight(1f))
-                Button(enabled = cuantos > 0, onClick = { f.listo.complete(marcados.filterValues { it }.keys.toSet() to maestro) }, modifier = Modifier.height(48.dp)) {
+                Button(enabled = cuantos > 0, onClick = { f.listo.complete(marcados.filterValues { it }.keys.toSet()) }, modifier = Modifier.height(48.dp)) {
                     Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Sincronizar $cuantos")
@@ -805,76 +766,9 @@ class SincronizarActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * **Cuál conservar.** Solo sale cuando los dos aparatos tocaron lo mismo desde la última vez,
-     * o uno lo borró. Viene marcado lo último que se editó —o el borrado, que es una decisión— y
-     * lo elegido se copia a los dos lados.
-     */
-    @Composable
-    private fun Preguntas(f: Fase.Preguntando) {
-        val eleccion = remember(f) { mutableStateMapOf<String, Boolean>().apply { f.preguntas.forEach { put(it.clave, it.porOmision) } } }
-        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Text("Cambiado en los dos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("«${f.chat}». Elige cuál se queda: quedará igual en este aparato y en ${f.otro.nombre}.",
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(f.preguntas, key = { it.clave }) { p ->
-                    Caja {
-                        Text(p.titulo, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            when (p.porque) {
-                                Diferencia.Choque.LOS_DOS_CAMBIARON -> "Editado en los dos"
-                                Diferencia.Choque.BORRADO_CONTRA_INTACTO -> "Borrado en uno"
-                                Diferencia.Choque.BORRADO_CONTRA_CAMBIADO -> "Borrado en uno y editado en el otro"
-                            },
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        val cuandoMio = p.mio?.cuando ?: 0
-                        val cuandoSuyo = p.suyo?.cuando ?: 0
-                        for ((esMio, vista) in listOf(true to p.mio, false to p.suyo)) {
-                            val elegido = eleccion[p.clave] == esMio
-                            val masNuevo = if (esMio) cuandoMio > cuandoSuyo else cuandoSuyo > cuandoMio
-                            Row(
-                                Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(12.dp))
-                                    .background(if (elegido) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-                                    .clickable { eleccion[p.clave] = esMio }.padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(selected = elegido, onClick = { eleccion[p.clave] = esMio })
-                                Column(Modifier.weight(1f)) {
-                                    Text(if (esMio) "El de este aparato" else "El de ${f.otro.nombre}", fontWeight = FontWeight.Medium)
-                                    val detalle = when {
-                                        vista == null -> ""
-                                        vista.borrado -> "Borrado"
-                                        else -> listOf(
-                                            if (masNuevo) "Más reciente" else "Anterior",
-                                            tamanoLegible(vista.bytes)
-                                        ).filter { it.isNotBlank() }.joinToString(" · ")
-                                    }
-                                    Text(detalle, style = MaterialTheme.typography.bodySmall,
-                                        color = if (masNuevo && vista?.borrado != true) VERDE else MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            HorizontalDivider()
-            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { f.listo.complete(null) }) { Text("Parar") }
-                Spacer(Modifier.weight(1f))
-                Button(onClick = { f.listo.complete(eleccion.toMap()) }, modifier = Modifier.height(48.dp)) { Text("Seguir") }
-            }
-        }
-    }
-
     private fun cerrarFase() {
         when (val f = fase) {
             is Fase.Eligiendo -> f.listo.complete(null)
-            is Fase.Preguntando -> f.listo.complete(null)
             else -> fase = Fase.Nada
         }
     }

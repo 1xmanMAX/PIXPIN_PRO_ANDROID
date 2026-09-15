@@ -29,6 +29,13 @@ object FileStore {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(dest).use { output -> input.copyTo(output) }
             } ?: return null
+            // **Un PDF se aligera en cuanto entra.** Esto es una copia nuestra, dentro de
+            // `files/pins`, no el archivo del usuario: lo que se toca es lo que se queda en el
+            // teléfono y lo que luego viaja. Se llama desde un hilo de disco (OverlayManager).
+            // Ver [com.forge.pixpin.pdf.ComprimirPdf].
+            if (dest.name.endsWith(".pdf", ignoreCase = true)) {
+                com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(dest)
+            }
             // Si el MIME es genérico, intenta inferirlo de la extensión.
             val resolvedMime = if (mime == "application/octet-stream" && extension.isNotBlank()) {
                 guessMimeFromExtension(extension) ?: mime

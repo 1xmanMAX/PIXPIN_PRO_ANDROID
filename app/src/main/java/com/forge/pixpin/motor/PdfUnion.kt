@@ -34,8 +34,8 @@ object PdfUnion {
      * nuevo. [indices] cuentan desde cero y salen en ese orden. Es lo que deja compartir la
      * página 3 de un plano sin rasterizarla.
      */
-    fun soloPaginas(origen: ByteArray, indices: List<Int>): ByteArray? =
-        if (indices.isEmpty()) null else anadirPaginas(enBlanco(), origen, indices)
+    fun soloPaginas(origen: ByteArray, indices: List<Int>, cadaFlujo: ((PdfValor.Flujo) -> PdfValor.Flujo)? = null): ByteArray? =
+        if (indices.isEmpty()) null else anadirPaginas(enBlanco(), origen, indices, cadaFlujo)
 
     /** Un PDF válido sin ninguna página: la base sobre la que se pegan otras. */
     fun enBlanco(): ByteArray {
@@ -61,7 +61,13 @@ object PdfUnion {
      * El primer archivo con las páginas del segundo detrás, o null si no se pudo. Con [cuales],
      * solo esas páginas del segundo (desde cero, en ese orden).
      */
-    fun anadirPaginas(primero: ByteArray, segundo: ByteArray, cuales: List<Int>? = null): ByteArray? = runCatching {
+    fun anadirPaginas(
+        primero: ByteArray,
+        segundo: ByteArray,
+        cuales: List<Int>? = null,
+        /** Un cambio a cada flujo que se copia: lo usa la compresión para las fotos. */
+        cadaFlujo: ((PdfValor.Flujo) -> PdfValor.Flujo)? = null
+    ): ByteArray? = runCatching {
         val a = leerPdf(primero) ?: return null
         val b = leerPdf(segundo) ?: return null
         if (a.cifrado || b.cifrado) return null
@@ -84,7 +90,10 @@ object PdfUnion {
             is PdfValor.Ref -> PdfValor.Ref(numeroPara(v.numero), 0)
             is PdfValor.Lista -> PdfValor.Lista(v.valores.map { trasladar(it) })
             is PdfValor.Dicc -> PdfValor.Dicc(v.entradas.mapValues { trasladar(it.value) })
-            is PdfValor.Flujo -> PdfValor.Flujo(trasladar(v.dicc) as PdfValor.Dicc, v.datos)
+            is PdfValor.Flujo -> {
+                val puesto = cadaFlujo?.let { runCatching { it(v) }.getOrNull() } ?: v
+                PdfValor.Flujo(trasladar(puesto.dicc) as PdfValor.Dicc, puesto.datos)
+            }
             else -> v
         }
 

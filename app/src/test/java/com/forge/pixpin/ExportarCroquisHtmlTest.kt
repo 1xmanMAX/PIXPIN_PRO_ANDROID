@@ -153,7 +153,7 @@ class ExportarCroquisHtmlTest {
         val croquis = Croquis(imagenes = listOf(imagen))
         // Sin manera de leerla, la imagen no viaja y el croquis se queda sin nada que enseñar.
         assertNull(ExportarCroquisHtml.datos(croquis, Camara3D()))
-        val datos = ExportarCroquisHtml.datos(croquis, Camara3D()) { "data:image/png;base64,AAA" }!!
+        val datos = ExportarCroquisHtml.datos(croquis, Camara3D(), imagenIncrustada = { "data:image/png;base64,AAA" })!!
         assertTrue(datos.contains("\"u\":\"data:image/png;base64,AAA\""))
         assertTrue(datos.contains("\"e\":[0,0,0,4,0,0,4,0,3,0,0,3]"))
     }

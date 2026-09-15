@@ -35,7 +35,7 @@ object ExportarWebDe {
             imagenDeRuta = { ruta -> ImageStore.load(ruta) },
             // La misma página al detalle, para verla en la web; sin lo anotado, que lo
             // pinta el SVG. Ver [com.forge.pixpin.motor.DrawSvg.aTexto].
-            paginaFinaDelPdf = { pagina, _ -> pdf?.let { PdfDoc.paraLaWeb(it, pagina) } },
+            paginaFinaDelPdf = { pagina, _ -> pdf?.let { paginaLigera(it, pagina) } },
             // Y como líneas si el PDF es vectorial. Ver [PlanoWeb].
             planoDelPdf = { pagina -> pdf?.let { PlanoWeb.deArchivo(it, pagina) } },
             paginaDelPdf = { pagina, dibujo ->
@@ -51,7 +51,8 @@ object ExportarWebDe {
                         croquis, Camara3D(), "Croquis",
                         imagenIncrustada = { ruta -> imagenIncrustada(ruta) },
                         // El papel que se ve en la aplicación cuando el croquis no eligió uno.
-                        papel = if (deNoche) ExportarCroquisHtml.FONDO_DE_FABRICA else "#ffffff"
+                        papel = if (deNoche) ExportarCroquisHtml.FONDO_DE_FABRICA else "#ffffff",
+                        malla = { ruta -> com.forge.pixpin.croquis3d.AlmacenDeMallas.malla(ruta) }
                     )
                 }
             },
@@ -59,6 +60,28 @@ object ExportarWebDe {
             tablaDe = { id -> com.forge.pixpin.motor.TablasEnDisco.de(contexto.filesDir).cargar(id) }
         )
     }
+
+    /**
+     * **La página del PDF a los píxeles que de verdad tiene**, para la web.
+     *
+     * Antes salía siempre a cuatro mil de ancho: un escaneo de cuatro páginas eran 10 MB de HTML
+     * (usuario, 14-sep-2026). Ahora se pide a [PPP_WEB] puntos por pulgada del tamaño real de la
+     * hoja —un A4 son unos dos mil—, y nunca a más de lo que trae la foto escaneada, que por
+     * encima solo se inventan píxeles. Ver [ComprimirPdf.anchoNativo] y [com.forge.pixpin.motor.DrawSvg].
+     */
+    private fun paginaLigera(ruta: String, pagina: Int): android.graphics.Bitmap? {
+        val (an, al) = PdfDoc.medidaEnPuntos(ruta, pagina) ?: return PdfDoc.paraLaWeb(ruta, pagina)
+        val porTamano = kotlin.math.ceil(an / 72.0 * PPP_WEB).toInt()
+        val nativo = com.forge.pixpin.pdf.ComprimirPdf.anchoNativo(ruta, pagina)
+        var ancho = minOf(porTamano, nativo ?: Int.MAX_VALUE).coerceIn(PdfDoc.PAGE_WIDTH, PdfDoc.ANCHO_PARA_LA_WEB)
+        // Y un tope de píxeles, por si la hoja es muy alargada.
+        val alto = ancho * al / an
+        if (ancho * alto > MAX_PIXELES_WEB) ancho = kotlin.math.sqrt(MAX_PIXELES_WEB * an / al).toInt()
+        return PdfDoc.render(ruta, pagina, ancho) ?: PdfDoc.paraLaWeb(ruta, pagina)
+    }
+
+    private const val PPP_WEB = 250.0
+    private const val MAX_PIXELES_WEB = 16_000_000.0
 
     /**
      * Qué lleva la página, para decirlo al compartirla: hojas, audios, imágenes y peso.

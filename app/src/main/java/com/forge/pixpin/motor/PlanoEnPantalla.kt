@@ -138,8 +138,39 @@ class PlanoEnPantalla private constructor(
      * usan cuando el lienzo va por la tarjeta ([Canvas.isHardwareAccelerated]); al exportar
      * y en las pruebas, que van por software, se sigue por las láminas.
      */
+    /**
+     * **Un nodo que sabe volver a grabarse.**
+     *
+     * El sistema tira la lista de órdenes de los nodos que lleva rato sin reproducir —las
+     * tandas que quedaron fuera de la vista mientras se estaba acercado— y deja las de los
+     * demás. Por eso, al alejarse, solo se veían las letras y lo que había estado en foco
+     * (usuario, 13-sep-2026). Antes se comprobaba el conjunto y, si faltaba uno, se volvía a
+     * grabar **todo** en un obrero: segundos de plano a medias con un plano grande, y otra vez
+     * a la primera de cambio. Ahora cada nodo lleva consigo lo que pinta y se regraba **él
+     * solo, en el mismo fotograma en que hace falta**: una tanda es un `drawLines`, o sea nada.
+     */
+    private inner class Nodo(nombre: String, private val pinta: (Canvas) -> Unit) {
+
+        val nodo: android.graphics.RenderNode = android.graphics.RenderNode(nombre).apply {
+            setPosition(0, 0, ancho.toInt() + 1, alto.toInt() + 1)
+            clipToBounds = false
+        }
+
+        /** Graba si hace falta y dice si se puede reproducir. */
+        fun listo(): Boolean {
+            if (nodo.hasDisplayList()) return true
+            return runCatching {
+                val lienzo = nodo.beginRecording()
+                try { pinta(lienzo) } finally { nodo.endRecording() }
+                nodo.hasDisplayList()
+            }.getOrDefault(false)
+        }
+
+        fun soltar() = nodo.discardDisplayList()
+    }
+
     private class Grabado(
-        val nodo: android.graphics.RenderNode,
+        val nodo: Nodo,
         val x0: Float, val y0: Float, val x1: Float, val y1: Float
     )
 
@@ -152,7 +183,7 @@ class PlanoEnPantalla private constructor(
      */
     private class Grabados(
         /** El papel blanco, y nada más. */
-        val papel: android.graphics.RenderNode,
+        val papel: Nodo,
         /**
          * **Una foto por nodo, con su caja**, para poder saltarse las que no se ven.
          *
@@ -162,19 +193,11 @@ class PlanoEnPantalla private constructor(
          */
         val fotos: List<Grabado>,
         /** Las manchas de color, que van **encima** de las fotos: por eso son un nodo aparte. */
-        val manchas: android.graphics.RenderNode,
+        val manchas: Nodo,
         val cerca: List<Grabado>,
         val lejos: List<Grabado>,
-        val rotulos: android.graphics.RenderNode
-    ) {
-        fun vivos(): Boolean {
-            if (!papel.hasDisplayList() || !manchas.hasDisplayList() || !rotulos.hasDisplayList()) return false
-            for (f in fotos) if (!f.nodo.hasDisplayList()) return false
-            for (t in cerca) if (!t.nodo.hasDisplayList()) return false
-            for (t in lejos) if (!t.nodo.hasDisplayList()) return false
-            return true
-        }
-    }
+        val rotulos: Nodo
+    )
     @Volatile
     private var grabados: Grabados? = null
     @Volatile
@@ -247,23 +270,16 @@ class PlanoEnPantalla private constructor(
             // **Y que lo grabado siga estando.**
             //
             // Un `RenderNode` guarda su lista de órdenes en el hilo de pintado del sistema, y
-            // **el sistema la tira cuando la ventana se va al fondo**. Al volver, el objeto
-            // sigue ahí y parece bueno, pero reproducirlo no pinta nada: el plano
-            // desaparecía de la pantalla y no volvía. Es lo que reportó el usuario el
-            // 9-sep-2026 —«salgo del canvas, vuelvo, y ya no está la imagen del PDF»— y no se
-            // arreglaba solo porque nadie volvía a grabar. `hasDisplayList` es justo la
-            // pregunta «¿sigues teniendo lo tuyo?».
-            // **Y todo lo grabado, no solo el papel.** El sistema tira las listas de los nodos que
-            // lleva rato sin reproducir —las tandas de rayas que quedaron fuera de la vista mientras
-            // se estaba acercado— y el papel seguía teniendo la suya: al alejarse solo se veían las
-            // letras y lo que había estado en foco (lo reportó el usuario el 13-sep-2026). Si falta
-            // cualquiera, se vuelve a grabar.
-            if (g != null && g.vivos()) {
-                pintarGrabado(canvas, vista, zoom, g); return
-            }
+            // **el sistema la tira** cuando la ventana se va al fondo o cuando el nodo lleva
+            // rato sin reproducirse. Al volver, el objeto sigue ahí y parece bueno, pero
+            // reproducirlo no pinta nada: el plano desaparecía de la pantalla y no volvía
+            // (usuario, 9-sep-2026: «salgo del canvas, vuelvo, y ya no está la imagen del
+            // PDF»), y al alejarse tras haber estado acercado solo quedaban las letras y lo
+            // que había estado en foco (usuario, 13-sep-2026), porque de lo demás se habían
+            // tirado las listas. Ahora **cada nodo se regraba él solo cuando le toca salir**
+            // ([Nodo.listo]), así que no hay nada que comprobar aquí ni que rehacer entero.
             if (g != null) {
-                grabados = null
-                obreroDeGrabar = null       // si no, `pedirGrabado` no volvería a intentarlo
+                pintarGrabado(canvas, vista, zoom, g); return
             }
             if (ambito != null) pedirGrabado(ambito)
             // Mientras se graba, las láminas de siempre.
@@ -369,17 +385,21 @@ class PlanoEnPantalla private constructor(
         val vx0 = vista.x1.toFloat(); val vy0 = vista.y1.toFloat()
         val vx1 = vista.x2.toFloat(); val vy1 = vista.y2.toFloat()
         fun tocaLaVista(g: Grabado) = !(g.x1 < vx0 || g.x0 > vx1 || g.y1 < vy0 || g.y0 > vy1)
-        canvas.drawRenderNode(g.papel)
+        // `listo()` graba al que le falte su lista; ver [Nodo]. Reproducir solo lo que toca
+        // la vista es lo que hace que un plano de un millón de rayas vaya a sesenta, y lo que
+        // hace que el sistema tire las listas de las demás: por eso las dos cosas van juntas.
+        fun pinta(n: Nodo) { if (n.listo()) canvas.drawRenderNode(n.nodo) }
+        pinta(g.papel)
         // Las fotos, solo las que tocan. El orden es el mismo que al dibujar a pelo: el papel
         // debajo, las fotos encima y las manchas sobre ellas. Ver [dibujar].
-        for (f in g.fotos) if (tocaLaVista(f)) canvas.drawRenderNode(f.nodo)
-        canvas.drawRenderNode(g.manchas)
+        for (f in g.fotos) if (tocaLaVista(f)) pinta(f.nodo)
+        pinta(g.manchas)
         val tandas = if (lejos) g.lejos else g.cerca
         for (t in tandas) {
             if (!tocaLaVista(t)) continue
-            canvas.drawRenderNode(t.nodo)
+            pinta(t.nodo)
         }
-        canvas.drawRenderNode(g.rotulos)
+        pinta(g.rotulos)
         canvas.restore()
     }
 
@@ -393,14 +413,9 @@ class PlanoEnPantalla private constructor(
         }
     }
 
-    private fun nodo(nombre: String, pinta: (Canvas) -> Unit): android.graphics.RenderNode {
-        val n = android.graphics.RenderNode(nombre)
-        n.setPosition(0, 0, ancho.toInt() + 1, alto.toInt() + 1)
-        n.clipToBounds = false
-        val lienzo = n.beginRecording()
-        try { pinta(lienzo) } finally { n.endRecording() }
-        return n
-    }
+    /** Un nodo ya grabado. Si el sistema le tira la lista, [Nodo.listo] la rehace. */
+    private fun nodo(nombre: String, pinta: (Canvas) -> Unit): Nodo =
+        Nodo(nombre, pinta).also { it.listo() }
 
     private fun grabarTodo(): Grabados {
         val hoja = Bounds(0.0, 0.0, ancho, alto)
@@ -579,11 +594,10 @@ class PlanoEnPantalla private constructor(
         obreroDeGrabar?.cancel()
         obreroDeGrabar = null
         grabados?.let { g ->
-            g.papel.discardDisplayList(); g.manchas.discardDisplayList()
-            g.rotulos.discardDisplayList()
-            g.fotos.forEach { it.nodo.discardDisplayList() }
-            g.cerca.forEach { it.nodo.discardDisplayList() }
-            g.lejos.forEach { it.nodo.discardDisplayList() }
+            g.papel.soltar(); g.manchas.soltar(); g.rotulos.soltar()
+            g.fotos.forEach { it.nodo.soltar() }
+            g.cerca.forEach { it.nodo.soltar() }
+            g.lejos.forEach { it.nodo.soltar() }
         }
         grabados = null
         obrero?.cancel()

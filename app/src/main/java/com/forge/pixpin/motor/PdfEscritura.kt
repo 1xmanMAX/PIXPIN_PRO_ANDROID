@@ -95,6 +95,115 @@ object PdfEscritura {
         }.getOrNull()
     }
 
+    /**
+     * **El mismo PDF, escrito de nuevo entero, con lo que se quiera cambiado.**
+     *
+     * Es lo que hace falta para **aligerar** un documento: una actualización incremental
+     * ([incremental]) no puede hacerlo —deja los bytes viejos delante y el archivo crece— y
+     * rehacerlo por sus páginas pierde lo que vive en el catálogo: los marcadores, los
+     * formularios, las capas de AutoCAD. Así que se copian **todos los objetos**, uno a uno y
+     * tal cual, y [cambiar] decide si alguno sale distinto (null = igual).
+     *
+     * Tres cosas se quedan fuera a propósito:
+     *
+     * - Los **paquetes de objetos** (`/Type /ObjStm`) y los **índices** (`/Type /XRef`): aquí todo
+     *   se escribe suelto y con tabla clásica, así que esos objetos ya no los mira nadie y dejarlos
+     *   sería cargar con ellos.
+     * - El diccionario de **linearización**, que habla de posiciones que ya no existen.
+     * - Los objetos que no se pueden leer: se marcan como libres, que es lo que son.
+     */
+    fun completo(archivo: PdfArchivo, cambiar: (Int, PdfValor) -> PdfValor?): ByteArray? {
+        if (archivo.cifrado) return null
+        val ultimo = archivo.indice.keys.maxOrNull() ?: return null
+        if (ultimo <= 0 || ultimo > 5_000_000) return null
+        val raiz = archivo.trailer.entradas["Root"] ?: return null
+        val salida = ByteArrayOutputStream(archivo.bytes.size + 64 * 1024)
+        salida.ascii("%PDF-1.7\n")
+        // Un comentario con bytes altos: dice a quien lo lea que el archivo lleva binario dentro.
+        salida.write(byteArrayOf('%'.code.toByte(), -127, -126, -125, -124, '\n'.code.toByte()))
+        val donde = LinkedHashMap<Int, Long>()
+        for (n in 1..ultimo) {
+            val valor = runCatching { archivo.objeto(n) }.getOrNull() ?: continue
+            if (seSalta(valor)) continue
+            val final = aGeneracionCero(runCatching { cambiar(n, valor) }.getOrNull() ?: valor)
+            donde[n] = salida.size().toLong()
+            salida.ascii("$n 0 obj\n")
+            salida.write(serializar(final))
+            salida.ascii("\nendobj\n")
+        }
+        if (donde.isEmpty()) return null
+        return runCatching {
+            escribirTablaDeTodo(salida, donde, raiz, archivo)
+            salida.toByteArray()
+        }.getOrNull()
+    }
+
+    /**
+     * **Todas las referencias, a la generación cero.**
+     *
+     * Al reescribir, cada objeto se escribe como `n 0 obj`; si dentro de otro quedara un `12 2 R`
+     * —una revisión vieja—, el lector buscaría una generación que ya no existe. Unos lectores lo
+     * perdonan y otros no, y el que importa aquí es el del teléfono de otro.
+     */
+    private fun aGeneracionCero(valor: PdfValor): PdfValor = when (valor) {
+        is PdfValor.Ref -> if (valor.generacion == 0) valor else PdfValor.Ref(valor.numero, 0)
+        is PdfValor.Lista -> PdfValor.Lista(valor.valores.map { aGeneracionCero(it) })
+        is PdfValor.Dicc -> PdfValor.Dicc(valor.entradas.mapValues { (_, v) -> aGeneracionCero(v) })
+        is PdfValor.Flujo -> PdfValor.Flujo(aGeneracionCero(valor.dicc) as PdfValor.Dicc, valor.datos)
+        else -> valor
+    }
+
+    /** Lo que no se copia al reescribir: ver [completo]. */
+    private fun seSalta(valor: PdfValor): Boolean {
+        val dicc = when (valor) {
+            is PdfValor.Flujo -> valor.dicc
+            is PdfValor.Dicc -> valor
+            else -> return false
+        }
+        val tipo = (dicc.entradas["Type"] as? PdfValor.Nombre)?.valor
+        return tipo == "ObjStm" || tipo == "XRef" || dicc.entradas.containsKey("Linearized")
+    }
+
+    /**
+     * La tabla del archivo reescrito: **todas** las entradas, y las que faltan como libres.
+     *
+     * No vale la tabla por tramos de [escribirTablaClasica] —esa es para una actualización, donde
+     * se apuntan solo los objetos nuevos—: aquí el índice es el único que hay, así que va del 0 al
+     * último y los huecos se marcan libres, que es lo que dice el formato.
+     */
+    private fun escribirTablaDeTodo(
+        salida: ByteArrayOutputStream,
+        donde: Map<Int, Long>,
+        raiz: PdfValor,
+        archivo: PdfArchivo
+    ) {
+        val ultimo = donde.keys.max()
+        val inicio = salida.size().toLong()
+        val texto = StringBuilder("xref\n0 ${ultimo + 1}\n0000000000 65535 f \n")
+        for (n in 1..ultimo) {
+            val sitio = donde[n]
+            texto.append(
+                if (sitio == null) "0000000000 00000 f \n"
+                else String.format(Locale.ROOT, "%010d %05d n \n", sitio, 0)
+            )
+        }
+        texto.append("trailer\n")
+        salida.write(texto.toString().toByteArray(Charsets.ISO_8859_1))
+        salida.write(
+            serializar(
+                PdfValor.Dicc(
+                    buildMap {
+                        put("Size", PdfValor.Numero((ultimo + 1).toDouble()))
+                        put("Root", raiz)
+                        archivo.trailer.entradas["Info"]?.let { put("Info", it) }
+                        archivo.trailer.entradas["ID"]?.let { put("ID", it) }
+                    }
+                )
+            )
+        )
+        salida.write("\nstartxref\n$inicio\n%%EOF\n".toByteArray(Charsets.ISO_8859_1))
+    }
+
     // ---------------------------------------------------------------------
     // Los dos tipos de índice
     // ---------------------------------------------------------------------

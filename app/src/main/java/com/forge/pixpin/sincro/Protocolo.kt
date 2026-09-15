@@ -16,17 +16,25 @@ import kotlinx.serialization.json.Json
  *
  * Cada chat se sincroniza en dos pasos:
  *
- * 1. **Los mensajes y el proyecto.** Se comparan las señas; lo que cambió en un solo lado pasa
- *    solo, lo que cambió en los dos se pregunta. El proyecto se junta sin preguntar ([Mezcla]).
+ * 1. **Los mensajes y el proyecto.** Se comparan por su código único ([Codigos]); lo que cambió en
+ *    un solo lado pasa solo, lo que cambió en los dos **se fusiona** ([Fusion]). El proyecto se junta
+ *    igual ([Mezcla]).
  * 2. **Los archivos**, ya con los dos chats iguales: los adjuntos, los lienzos, las tablas, el PDF.
- *    Un lienzo dibujado en los dos lados se pregunta, nombrado por su mensaje.
+ *    Un lienzo dibujado en los dos lados se junta figura por figura; una tabla, celda por celda.
  *
- * Al acabar, los dos guardan **lo acordado** ([Base]), que es lo que deja saber la próxima vez
- * quién se movió.
+ * **No se pregunta nada ni manda ningún aparato** (15-sep-2026). Y **solo viajan los cambios**: de
+ * un lienzo, tabla o croquis que ya se acordó, se manda qué figuras cambiaron respecto a lo acordado
+ * ([Fusion.diferencia]), como hace git con las líneas; lo entero solo si el otro no tiene esa base.
+ *
+ * Al acabar, los dos guardan **lo acordado** ([Base]) y su contenido, que es lo que deja saber la
+ * próxima vez quién se movió y juntar lo que se movió en los dos.
  */
 object Protocolo {
-    /** 2: cada archivo lleva detrás su resumen, y lo acordado se apunta solo si quedó igual en los dos. */
-    const val VERSION = 2
+    /**
+     * 2: cada archivo lleva detrás su resumen, y lo acordado se apunta solo si quedó igual en los dos.
+     * 3: códigos únicos, fusión sin preguntar y parches (15-sep-2026).
+     */
+    const val VERSION = 3
     const val JSON_: Byte = 1
     const val TROZO: Byte = 2
 
@@ -70,7 +78,13 @@ object Protocolo {
         val proyecto: String? = null,
         val ruta: String? = null,
         val bytes: Long = 0,
-        val base: Base? = null
+        val base: Base? = null,
+        /** Un parche ([Fusion.diferencia]) en JSON. */
+        val parche: String? = null,
+        /** El resumen de aquello sobre lo que va el parche: lo acordado, o lo que el otro tiene ahora. */
+        val desde: String? = null,
+        /** El resumen que tiene que salir al poner el parche. */
+        val resumen: String? = null
     )
 
     @Serializable
@@ -87,7 +101,11 @@ object Protocolo {
         /** Detrás de un archivo: el resumen de lo que se mandó. */
         val resumen: String? = null,
         /** El archivo se estaba escribiendo mientras se mandaba: no vale, se deja para la próxima. */
-        val saltado: Boolean = false
+        val saltado: Boolean = false,
+        /** Lo que cambió, cuando se pidió así. */
+        val parche: String? = null,
+        /** No tengo aquello sobre lo que va el parche: hay que mandarlo entero. */
+        val faltaBase: Boolean = false
     )
 
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
@@ -255,10 +273,12 @@ class Respondedor(
     }
 
     private fun responder(canal: Canal, otro: Aparato) {
-        val yo = disco.identidad.leer()
         // Lo que es de cada chat, calculado al preguntar por sus archivos: sin esto, cada archivo
         // pedido volvería a recorrer el chat y sus lienzos enteros.
         var alcance: Pair<String, Set<String>>? = null
+        // Los resúmenes ya calculados en esta conexión: la segunda vez que se piden no se releen
+        // los lienzos. Lo que se escribe aquí se olvida.
+        val conocidos = HashMap<String, ArchivoInfo>()
         while (true) {
             val p = runCatching { Protocolo.leerPeticion(canal) }.getOrElse { if (it is java.io.EOFException) return else throw it }
             try {
@@ -268,7 +288,9 @@ class Respondedor(
                     "inventario" -> {
                         val chat = p.chat!!
                         estado("Comparando «${nombreDe(chat)}» con ${otro.nombre}…")
-                        yo.letra?.let { disco.sellar(it) }
+                        // **Antes de tocar nada, cómo estaba.** Ver [Copias].
+                        Copias(disco).hacer(chat, "Antes de sincronizar con ${otro.nombre}", ahora())
+                        disco.sellar()
                         disco.adoptarDocumentos()
                         Protocolo.enviar(canal, Protocolo.Respuesta(
                             apuntes = disco.apuntes(chat),
@@ -277,7 +299,7 @@ class Respondedor(
                         ))
                     }
                     "mensajes" -> {
-                        val suyos = disco.mensajesPorSena(p.chat!!)
+                        val suyos = disco.mensajesPorClave(p.chat!!)
                         Protocolo.enviar(canal, Protocolo.Respuesta(mensajes = p.senas.mapNotNull { suyos[it]?.let(disco::portatil) }))
                     }
                     "aplicar" -> {
@@ -287,15 +309,33 @@ class Respondedor(
                         Protocolo.enviar(canal, Protocolo.Respuesta())
                     }
                     "archivos" -> {
-                        val lista = disco.archivos(p.chat!!)
+                        val lista = disco.archivos(p.chat!!, conocidos)
+                        lista.forEach { conocidos[it.ruta] = it }
                         alcance = p.chat to lista.map { it.ruta }.toSet()
                         Protocolo.enviar(canal, Protocolo.Respuesta(archivos = lista))
                     }
                     "pon" -> {
                         val rel = p.ruta!!
                         estado("Recibiendo ${rel.substringAfterLast('/')}")
+                        conocidos.remove(rel)
                         val entero = disco.escribirArchivo(rel) { salida -> Protocolo.recibirTrozos(canal, p.bytes, salida) {} != null }
                         Protocolo.enviar(canal, Protocolo.Respuesta(saltado = !entero))
+                    }
+                    "parche" -> {
+                        val rel = p.ruta!!
+                        require(disco.permitida(rel) && disco.esTexto(rel)) { "No se puede parchear: $rel" }
+                        estado("Recibiendo cambios de ${rel.substringAfterLast('/')}")
+                        conocidos.remove(rel)
+                        val puesto = Parches.poner(disco, rel, p.desde, p.parche, p.resumen)
+                        Protocolo.enviar(canal, Protocolo.Respuesta(faltaBase = !puesto))
+                    }
+                    "damecambios" -> {
+                        val rel = p.ruta!!
+                        val suyos = alcance?.takeIf { it.first == p.chat }?.second ?: disco.alcance(p.chat!!).keys
+                        require(disco.permitida(rel) && disco.esTexto(rel) && rel in suyos) { "No es de este chat: $rel" }
+                        estado("Mandando cambios de ${rel.substringAfterLast('/')}")
+                        val hecho = Parches.sacar(disco, rel, p.desde)
+                        Protocolo.enviar(canal, if (hecho == null) Protocolo.Respuesta(faltaBase = true) else Protocolo.Respuesta(parche = hecho.first, resumen = hecho.second))
                     }
                     "dame" -> {
                         val rel = p.ruta!!
@@ -307,7 +347,9 @@ class Respondedor(
                         sale.mandar(canal) {}
                     }
                     "base" -> {
-                        disco.guardarBase(otro.id, p.chat!!, p.base ?: Base())
+                        val base = p.base ?: Base()
+                        disco.guardarBase(otro.id, p.chat!!, base)
+                        disco.guardarObjetosDeBase(p.chat, base)
                         disco.apuntarVez(otro.id, ahora())
                         Protocolo.enviar(canal, Protocolo.Respuesta())
                         estado("«${nombreDe(p.chat)}» al día con ${otro.nombre}")
@@ -342,23 +384,9 @@ class Sesion private constructor(
     val enviados get() = canal.enviados
     val recibidos get() = canal.recibidos
 
-    /** Una pregunta para el usuario. [clave] es la seña o la ruta. */
-    data class Pregunta(
-        val clave: String,
-        val porque: Diferencia.Choque,
-        val titulo: String,
-        val mio: Vista?,
-        val suyo: Vista?,
-        /** Lo que viene marcado: `true` es quedarse con lo de este aparato. */
-        val porOmision: Boolean
-    )
-
-    data class Vista(val texto: String, val cuando: Long, val bytes: Long = 0, val borrado: Boolean = false)
-
     class Preparado internal constructor(
         val chat: String,
         val pasos: List<Diferencia.Paso>,
-        val preguntas: List<Pregunta>,
         internal val base: Base,
         internal val suyoProyecto: String?,
         internal val mios: Map<String, Diferencia.Apunte>,
@@ -368,9 +396,8 @@ class Sesion private constructor(
     class PreparadoArchivos internal constructor(
         val chat: String,
         val pasos: List<Diferencia.Paso>,
-        val preguntas: List<Pregunta>,
-        internal val base: Base,
-        internal val proyecto: String?,
+        /** Lo acordado de cada archivo, ya traducido a resúmenes canónicos. */
+        internal val acordado: Map<String, String>,
         internal val mios: Map<String, ArchivoInfo>,
         internal val suyos: Map<String, ArchivoInfo>
     ) {
@@ -379,14 +406,23 @@ class Sesion private constructor(
     }
 
     /**
-     * **Lo que pasó de un lado a otro en esta vuelta, con su resumen**: `m:<chat>:<seña>` y
+     * **Lo que pasó de un lado a otro en esta vuelta, con su resumen**: `m:<chat>:<clave>` y
      * `f:<chat>:<ruta>`. Si al cerrar un lado ya lo ha vuelto a tocar, lo acordado es esto —lo
      * que los dos tuvieron— y así la vuelta siguiente sabe quién se movió después.
      */
     private val pasados = HashMap<String, String>()
 
+    /** Los resúmenes de los archivos de este aparato ya calculados en esta vuelta. Ver [Disco.archivos]. */
+    private val conocidos = HashMap<String, ArchivoInfo>()
+
     data class Hecho(
         var traidos: Int = 0, var enviados: Int = 0, var borrados: Int = 0, var archivos: Int = 0,
+        /** Lo que cambió en los dos aparatos y se juntó. */
+        var fusionados: Int = 0,
+        /** Lo borrado en un lado que se quedó porque en el otro se cambió. */
+        var rescatados: Int = 0,
+        /** Bytes que no hizo falta mandar porque viajaron solo los cambios. */
+        var ahorrados: Long = 0,
         /** Lo que se estaba guardando mientras se mandaba y queda para la próxima vuelta. */
         val saltados: MutableList<String> = ArrayList()
     )
@@ -399,95 +435,100 @@ class Sesion private constructor(
         return Protocolo.leerRespuesta(canal).chats
     }
 
-    /** Paso 1: qué pasa con los mensajes de [chat], y qué hay que preguntar. */
+    /** Paso 1: qué pasa con los mensajes de [chat]. */
     fun preparar(chat: String): Preparado {
-        disco.identidad.leer().letra?.let { disco.sellar(it) }
+        // **Antes de tocar nada, cómo estaba.** Ver [Copias].
+        Copias(disco).hacer(chat, "Antes de sincronizar con ${otro.nombre}")
+        disco.sellar()
         disco.adoptarDocumentos()
+        conocidos.clear()
+        chatDeLaVuelta = chat
         Protocolo.enviar(canal, Protocolo.Peticion("inventario", chat = chat))
         val r = Protocolo.leerRespuesta(canal)
         val mia = disco.base(otro.id, chat)
         // **Lo acordado solo vale si los dos recuerdan lo mismo.** Si una vuelta se cortó a medias
-        // uno lo guardó y el otro no: entonces se hace como la primera vez, que pregunta de más
-        // pero nunca pisa nada.
+        // uno lo guardó y el otro no: entonces se hace como la primera vez, que junta todo y nunca
+        // pisa nada.
         val base = if (mia != null && mia.sello == r.selloDeBase) mia else Base()
-        val mios = disco.apuntes(chat).associateBy { it.sena }
-        val suyos = r.apuntes.associateBy { it.sena }
+        // Las marcas de borrado de antes de los códigos, ya con el código único del mensaje que borran:
+        // los pasos del plan van por ese código y aquí hay que encontrarlas por él.
+        val deAqui = disco.apuntes(chat)
+        val mios = Diferencia.conMarcasViejas(deAqui, r.apuntes).associateBy { it.sena }
+        val suyos = Diferencia.conMarcasViejas(r.apuntes, deAqui).associateBy { it.sena }
         val pasos = Diferencia.plan(mios.values.toList(), suyos.values.toList(), base.mensajes)
-        val dudosas = pasos.filterIsInstance<Diferencia.Paso.Preguntar>()
-        val deAqui = disco.mensajesPorSena(chat)
-        val deAlli = if (dudosas.isEmpty()) emptyMap() else {
-            dudosas.map { it.sena }.chunked(Protocolo.MENSAJES_POR_TANDA).flatMap { tanda ->
-                Protocolo.enviar(canal, Protocolo.Peticion("mensajes", chat = chat, senas = tanda))
-                Protocolo.leerRespuesta(canal).mensajes
-            }.mapNotNull { j ->
-                runCatching { Disco.JSON.decodeFromString(com.forge.pixpin.guardados.Mensaje.serializer(), j) }.getOrNull()
-            }.associateBy { disco.senaDe(it) ?: "" }
-        }
-        val preguntas = dudosas.map { p ->
-            val a = mios.getValue(p.sena)
-            val b = suyos.getValue(p.sena)
-            fun vista(ap: Diferencia.Apunte, m: com.forge.pixpin.guardados.Mensaje?) =
-                if (ap.borrado) Vista("Borrado", ap.tocado, borrado = true)
-                else Vista(textoDe(m), m?.cuando ?: ap.creado, m?.bytes ?: 0)
-            val m = deAqui[p.sena] ?: deAlli[p.sena]
-            Pregunta(
-                clave = p.sena,
-                porque = p.porque,
-                titulo = "#${p.sena} · " + textoDe(m),
-                mio = vista(a, deAqui[p.sena]),
-                suyo = vista(b, deAlli[p.sena]),
-                // Borrar es una decisión: por omisión gana el borrado. Si no, lo de este aparato.
-                porOmision = when {
-                    a.borrado -> true
-                    b.borrado -> false
-                    else -> true
-                }
-            )
-        }
-        return Preparado(chat, pasos, preguntas, base, r.proyecto, mios, suyos)
+        return Preparado(chat, pasos, base, r.proyecto, mios, suyos)
     }
 
-    /**
-     * Aplica el paso 1 con lo que eligió el usuario: [decisiones] es seña → `true` para quedarse con
-     * lo de este aparato. Una pregunta sin responder se queda con lo que venía marcado.
-     */
-    fun aplicar(prep: Preparado, decisiones: Map<String, Boolean>, hecho: Hecho) {
+    private fun pedirMensajes(chat: String, claves: List<String>): List<String> =
+        claves.chunked(Protocolo.MENSAJES_POR_TANDA).flatMap { tanda ->
+            Protocolo.enviar(canal, Protocolo.Peticion("mensajes", chat = chat, senas = tanda))
+            Protocolo.leerRespuesta(canal).mensajes
+        }
+
+    /** Aplica el paso 1: trae, manda, borra y **fusiona** mensajes, y junta el proyecto. */
+    fun aplicar(prep: Preparado, hecho: Hecho) {
         val traer = ArrayList<String>()
         val mandar = ArrayList<String>()
+        val fusionar = ArrayList<String>()
         for (p in prep.pasos) when (p) {
             is Diferencia.Paso.Traer -> traer += p.sena
             is Diferencia.Paso.Mandar -> mandar += p.sena
-            is Diferencia.Paso.Preguntar -> when (decisiones[p.sena] ?: prep.preguntas.firstOrNull { it.clave == p.sena }?.porOmision) {
-                true -> mandar += p.sena
-                false -> traer += p.sena
-                null -> {}
-            }
-            is Diferencia.Paso.Borrar -> {}
+            is Diferencia.Paso.Fusionar -> fusionar += p.sena
         }
         val chat = prep.chat
         // Lo que me traigo: los vivos se piden; los borrados allí se borran aquí.
         val traerVivos = traer.filter { prep.suyos[it]?.borrado == false }
         val borrarAqui = traer.filter { prep.suyos[it]?.borrado == true }
-        val llegan = traerVivos.chunked(Protocolo.MENSAJES_POR_TANDA).flatMap { tanda ->
-            Protocolo.enviar(canal, Protocolo.Peticion("mensajes", chat = chat, senas = tanda))
-            Protocolo.leerRespuesta(canal).mensajes
+        val llegan = pedirMensajes(chat, traerVivos)
+
+        // **Lo cambiado en los dos, junto** campo a campo, y el texto por párrafos.
+        val juntos = ArrayList<String>()
+        if (fusionar.isNotEmpty()) {
+            val suyos = pedirMensajes(chat, fusionar).mapNotNull { j ->
+                runCatching { Disco.JSON.decodeFromString(com.forge.pixpin.guardados.Mensaje.serializer(), j) }.getOrNull()?.let { Codigos.unico(it) to j }
+            }.toMap()
+            val mios = disco.mensajesPorClave(chat)
+            val cuenta = Fusion.Cuenta()
+            for (clave in fusionar) {
+                val mio = mios[clave] ?: continue
+                val suyo = suyos[clave] ?: continue
+                val acordado = prep.base.mensajes[clave] ?: prep.mios[clave]?.alias?.let { prep.base.mensajes[it] }
+                val base = acordado?.let { disco.objeto(it) }?.let(::json)
+                val junto = Fusion.json(base, json(disco.portatil(mio)), json(suyo), Fusion.Criterio(mioMasNuevo = true, desfase = desfase), cuenta)
+                    ?: continue
+                juntos += junto.toString()
+            }
+            hecho.fusionados += juntos.size
+            hecho.rescatados += cuenta.rescatados
         }
-        disco.aplicarMensajes(chat, llegan, borrarAqui)
+        disco.aplicarMensajes(chat, llegan + juntos, borrarAqui)
         hecho.traidos += llegan.size
         hecho.borrados += borrarAqui.size
 
         // Lo que mando.
-        val mios = disco.mensajesPorSena(chat)
-        val poner = mandar.filter { prep.mios[it]?.borrado == false }.mapNotNull { mios[it]?.let(disco::portatil) }
+        val mios = disco.mensajesPorClave(chat)
+        val poner = mandar.filter { prep.mios[it]?.borrado == false }.mapNotNull { mios[it]?.let(disco::portatil) } + juntos
         val borrarAlli = mandar.filter { prep.mios[it]?.borrado == true }
 
-        // El proyecto, juntado.
-        val base = disco.proyectoDe(prep.base.proyecto)
+        // El proyecto, juntado. Para saber qué hojas se cambiaron en cada lado hacen falta los
+        // resúmenes de sus archivos.
         val mio = disco.leerProyectos().firstOrNull { it.id == chat }
         val suyo = disco.proyectoDe(prep.suyoProyecto)
-        val junto = Mezcla.proyecto(mio, suyo, base)
+        var junto = mio ?: suyo
+        if (mio != null && suyo != null && mio != suyo) {
+            Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
+            val deAlli = Protocolo.leerRespuesta(canal).archivos.associateBy { it.ruta }
+            val deAqui = misArchivos(chat)
+            val acordado = traducir(prep.base.archivos, deAqui, deAlli)
+            junto = Mezcla.proyecto(
+                mio, suyo, disco.proyectoDe(prep.base.proyecto),
+                cambiadasAqui = Mezcla.cambiadas(mio, deAqui.mapValues { it.value.resumen }, acordado),
+                cambiadasAlli = Mezcla.cambiadas(suyo, deAlli.mapValues { it.value.resumen }, acordado),
+                desfase = desfase
+            )
+        }
         if (junto != null && junto != mio) disco.guardarProyecto(junto)
-        val proyectoParaAlla = junto?.takeIf { it != suyo }?.let(disco::aPortatil)
+        val proyectoParaAlla = disco.leerProyectos().firstOrNull { it.id == chat }?.takeIf { it != suyo }?.let(disco::aPortatil)
 
         val tandas = poner.chunked(Protocolo.MENSAJES_POR_TANDA)
         if (tandas.size > 1) for (tanda in tandas.dropLast(1)) {
@@ -498,66 +539,157 @@ class Sesion private constructor(
             Protocolo.enviar(canal, Protocolo.Peticion("aplicar", chat = chat, poner = tandas.lastOrNull().orEmpty(), borrar = borrarAlli, proyecto = proyectoParaAlla))
             Protocolo.leerRespuesta(canal)
         }
-        hecho.enviados += poner.size
+        hecho.enviados += poner.size - juntos.size
         hecho.borrados += borrarAlli.size
         val ahoraAqui = disco.apuntes(chat).associateBy { it.sena }
-        for (sena in traer + mandar) ahoraAqui[sena]?.let { pasados["m:$chat:$sena"] = it.resumen }
+        for (clave in traer + mandar + fusionar) ahoraAqui[clave]?.let { pasados["m:$chat:$clave"] = it.resumen }
     }
+
+    private fun misArchivos(chat: String): Map<String, ArchivoInfo> =
+        disco.archivos(chat, conocidos).onEach { conocidos[it.ruta] = it }.associateBy { it.ruta }
+
+    /**
+     * **Lo acordado antes del 15-sep-2026** se apuntó con el resumen de los bytes tal cual; ahora es
+     * el del JSON canónico. Si lo acordado es el crudo de un lado, se cambia por su canónico.
+     */
+    private fun traducir(acordado: Map<String, String>, mios: Map<String, ArchivoInfo>, suyos: Map<String, ArchivoInfo>): Map<String, String> =
+        acordado.mapValues { (rel, r) ->
+            val m = mios[rel]; val s = suyos[rel]
+            when {
+                m != null && m.crudo == r -> m.resumen
+                s != null && s.crudo == r -> s.resumen
+                else -> r
+            }
+        }
 
     /** Paso 2: con los chats ya iguales, qué archivos hay que mover. */
     fun prepararArchivos(prep: Preparado): PreparadoArchivos {
         val chat = prep.chat
         Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
         val suyos = Protocolo.leerRespuesta(canal).archivos.associateBy { it.ruta }
-        val mios = disco.archivos(chat).associateBy { it.ruta }
+        val mios = misArchivos(chat)
+        val acordado = traducir(prep.base.archivos, mios, suyos)
         fun apunte(a: ArchivoInfo) = Diferencia.Apunte(a.ruta, a.tocado, a.tocado, a.resumen)
-        val pasos = Diferencia.plan(mios.values.map(::apunte), suyos.values.map(::apunte), prep.base.archivos)
+        val pasos = Diferencia.plan(mios.values.map(::apunte), suyos.values.map(::apunte), acordado)
             .filter { disco.permitida(it.sena) }
-        val preguntas = pasos.filterIsInstance<Diferencia.Paso.Preguntar>().map { p ->
-            val a = mios.getValue(p.sena)
-            val b = suyos.getValue(p.sena)
-            Pregunta(
-                clave = p.sena,
-                porque = p.porque,
-                titulo = (a.etiqueta.ifBlank { b.etiqueta }).ifBlank { p.sena.substringAfterLast('/') },
-                mio = Vista(p.sena.substringAfterLast('/'), a.tocado, a.bytes),
-                suyo = Vista(p.sena.substringAfterLast('/'), b.tocado, b.bytes),
-                // **El último que se editó**, que es lo que el usuario dijo que esperaba ver marcado.
-                porOmision = a.tocado >= b.tocado
-            )
-        }
-        return PreparadoArchivos(chat, pasos, preguntas, prep.base, disco.proyectoPortatil(chat), mios, suyos)
+        return PreparadoArchivos(chat, pasos, acordado, mios, suyos)
     }
 
-    fun aplicarArchivos(prep: PreparadoArchivos, decisiones: Map<String, Boolean>, hecho: Hecho, avance: (Long) -> Unit = {}) {
+    fun aplicarArchivos(prep: PreparadoArchivos, hecho: Hecho, avance: (Long) -> Unit = {}) {
+        val cuenta = Fusion.Cuenta()
         for (p in prep.pasos) {
-            val mandar = when (p) {
-                is Diferencia.Paso.Mandar -> true
-                is Diferencia.Paso.Traer -> false
-                is Diferencia.Paso.Preguntar -> decisiones[p.sena] ?: prep.preguntas.firstOrNull { it.clave == p.sena }?.porOmision ?: continue
-                is Diferencia.Paso.Borrar -> continue
-            }
             val rel = p.sena
-            if (mandar) {
-                val sale = Protocolo.salida(disco, rel)
-                Protocolo.enviar(canal, Protocolo.Peticion("pon", chat = prep.chat, ruta = rel, bytes = sale.largo))
-                val resumen = sale.mandar(canal, avance)
-                if (Protocolo.leerRespuesta(canal).saltado || resumen == null) { hecho.saltados += nombreDe(prep, rel); continue }
-                pasados["f:${prep.chat}:$rel"] = resumen
-            } else {
-                Protocolo.enviar(canal, Protocolo.Peticion("dame", chat = prep.chat, ruta = rel))
-                val cabecera = Protocolo.leerRespuesta(canal)
-                var resumen: String? = null
-                val entero = disco.escribirArchivo(rel) { salida -> Protocolo.recibirTrozos(canal, cabecera.bytes, salida, avance).also { resumen = it } != null }
-                if (!entero) { hecho.saltados += nombreDe(prep, rel); continue }
-                pasados["f:${prep.chat}:$rel"] = resumen!!
+            val texto = disco.esTexto(rel)
+            val mio = prep.mios[rel]
+            val suyo = prep.suyos[rel]
+            val acordado = prep.acordado[rel]
+            val puesto: String? = when {
+                p is Diferencia.Paso.Fusionar && texto && mio != null && suyo != null -> fusionarArchivo(prep, rel, mio, suyo, acordado, cuenta, hecho)
+                // Un PDF o una foto no se juntan: se queda la versión tocada más tarde (la otra sigue en la copia).
+                p is Diferencia.Paso.Fusionar -> if ((mio?.tocado ?: 0L) >= (suyo?.tocado ?: 0L) - desfase) mandarArchivo(rel, suyo, acordado, avance, hecho) else traerArchivo(rel, mio, acordado, avance, hecho)
+                p is Diferencia.Paso.Mandar -> mandarArchivo(rel, suyo, acordado, avance, hecho)
+                else -> traerArchivo(rel, mio, acordado, avance, hecho)
             }
+            if (puesto == null) { hecho.saltados += nombreDe(prep, rel); continue }
+            conocidos.remove(rel)
+            pasados["f:${prep.chat}:$rel"] = puesto
             hecho.archivos++
         }
+        hecho.rescatados += cuenta.rescatados
+    }
+
+    /** Manda mi versión: solo los cambios si el otro tiene lo acordado, o entera. Devuelve el resumen puesto. */
+    private fun mandarArchivo(rel: String, suyo: ArchivoInfo?, acordado: String?, avance: (Long) -> Unit, hecho: Hecho): String? {
+        if (disco.esTexto(rel) && suyo != null && acordado != null) {
+            val base = disco.textoBase(rel, acordado)
+            if (base != null) {
+                val actual = disco.textoDe(rel)
+                val resumen = sha256(Canonico.de(actual).toByteArray())
+                val parche = Fusion.diferencia(json(base), json(actual))?.toString() ?: "null"
+                if (mandarParche(rel, acordado, parche, resumen)) {
+                    hecho.ahorrados += (actual.length - parche.length).coerceAtLeast(0)
+                    return resumen
+                }
+            }
+        }
+        val sale = Protocolo.salida(disco, rel)
+        Protocolo.enviar(canal, Protocolo.Peticion("pon", chat = chatDeLaVuelta, ruta = rel, bytes = sale.largo))
+        val resumen = sale.mandar(canal, avance)
+        if (Protocolo.leerRespuesta(canal).saltado || resumen == null) return null
+        return if (disco.esTexto(rel)) disco.resumenDeArchivo(rel) else resumen
+    }
+
+    private fun mandarParche(rel: String, desde: String, parche: String, resumen: String): Boolean {
+        Protocolo.enviar(canal, Protocolo.Peticion("parche", chat = chatDeLaVuelta, ruta = rel, desde = desde, parche = parche, resumen = resumen))
+        return !Protocolo.leerRespuesta(canal).faltaBase
+    }
+
+    /** Me traigo la suya: solo los cambios si tengo lo acordado, o entera. */
+    private fun traerArchivo(rel: String, mio: ArchivoInfo?, acordado: String?, avance: (Long) -> Unit, hecho: Hecho): String? {
+        if (disco.esTexto(rel) && mio != null && acordado != null && disco.textoBase(rel, acordado) != null) {
+            val (suyo, resumen) = pedirCambios(rel, acordado) ?: (null to null)
+            if (suyo != null && resumen != null && sha256(Canonico.de(suyo).toByteArray()) == resumen) {
+                disco.escribirTexto(rel, suyo)
+                hecho.ahorrados += suyo.length
+                return resumen
+            }
+        }
+        Protocolo.enviar(canal, Protocolo.Peticion("dame", chat = chatDeLaVuelta, ruta = rel))
+        val cabecera = Protocolo.leerRespuesta(canal)
+        val entero = disco.escribirArchivo(rel) { salida -> Protocolo.recibirTrozos(canal, cabecera.bytes, salida, avance) != null }
+        return if (entero) disco.resumenDeArchivo(rel) else null
+    }
+
+    /** Su versión, reconstruida con lo acordado y los cambios que manda. Null si no tiene esa base. */
+    private fun pedirCambios(rel: String, desde: String): Pair<String, String>? {
+        val base = disco.textoBase(rel, desde) ?: return null
+        Protocolo.enviar(canal, Protocolo.Peticion("damecambios", chat = chatDeLaVuelta, ruta = rel, desde = desde))
+        val r = Protocolo.leerRespuesta(canal)
+        if (r.faltaBase || r.resumen == null) return null
+        val suyo = Fusion.aplicar(json(base), r.parche?.let(::json)) ?: return null
+        return suyo.toString() to r.resumen
+    }
+
+    /** Su versión entera, a memoria. */
+    private fun traerEntero(rel: String): String? {
+        Protocolo.enviar(canal, Protocolo.Peticion("dame", chat = chatDeLaVuelta, ruta = rel))
+        val cabecera = Protocolo.leerRespuesta(canal)
+        val bytes = java.io.ByteArrayOutputStream()
+        Protocolo.recibirTrozos(canal, cabecera.bytes, bytes) {} ?: return null
+        return bytes.toString(Charsets.UTF_8.name())
     }
 
     /**
-     * **Guarda lo acordado en los dos lados**, mirando otra vez cómo quedaron.
+     * **Un lienzo, tabla o croquis cambiado en los dos: se junta** con lo acordado y queda igual en
+     * los dos. Lo mío se escribe aquí, y al otro le va lo que le falta respecto a lo suyo.
+     */
+    private fun fusionarArchivo(prep: PreparadoArchivos, rel: String, mio: ArchivoInfo, suyo: ArchivoInfo, acordado: String?, cuenta: Fusion.Cuenta, hecho: Hecho): String? {
+        val deAlli = (acordado?.let { pedirCambios(rel, it) }?.first) ?: traerEntero(rel) ?: return null
+        val base = acordado?.let { disco.textoBase(rel, it) }?.let(::json)
+        val aqui = disco.textoDe(rel)
+        val criterio = Fusion.Criterio(mioMasNuevo = mio.tocado >= suyo.tocado - desfase, desfase = desfase)
+        val junto = Fusion.json(base, json(aqui), json(deAlli), criterio, cuenta) ?: return null
+        val textoJunto = junto.toString()
+        val resumen = sha256(Canonico.de(textoJunto).toByteArray())
+        disco.escribirTexto(rel, textoJunto)
+        val suyoAhora = sha256(Canonico.de(deAlli).toByteArray())
+        if (resumen != suyoAhora) {
+            val parche = Fusion.diferencia(json(deAlli), junto)?.toString() ?: "null"
+            if (!mandarParche(rel, suyoAhora, parche, resumen)) {
+                if (mandarArchivo(rel, null, null, {}, hecho) == null) return null
+            }
+        }
+        hecho.fusionados++
+        return resumen
+    }
+
+    private var chatDeLaVuelta: String? = null
+
+    private fun json(texto: String): kotlinx.serialization.json.JsonElement = kotlinx.serialization.json.Json.parseToJsonElement(texto)
+
+    /**
+     * **Guarda lo acordado en los dos lados**, mirando otra vez cómo quedaron, y su contenido para
+     * fusionar la próxima vez.
      *
      * Solo se apunta lo que de verdad está igual en los dos. Lo que no —un archivo que se saltó
      * porque se estaba guardando, algo que el usuario tocó mientras tanto— se queda con lo que se
@@ -571,7 +703,11 @@ class Sesion private constructor(
         val inv = Protocolo.leerRespuesta(canal)
         Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
         val suyos = Protocolo.leerRespuesta(canal).archivos.associate { it.ruta to it.resumen }
-        val mios = disco.archivos(chat).associate { it.ruta to it.resumen }
+        conocidos.clear()
+        val mios = misArchivos(chat).mapValues { it.value.resumen }
+        val misApuntes = disco.apuntes(chat)
+        // Lo acordado antes de los códigos iba por seña: lo que ya va por código no se arrastra.
+        val alias = (misApuntes + inv.apuntes).mapNotNullTo(HashSet()) { it.alias }
         fun acordado(tipo: String, m: Map<String, String>, s: Map<String, String>, viejo: Map<String, String>): Map<String, String> {
             val salida = HashMap<String, String>()
             for (k in m.keys + s.keys + viejo.keys) {
@@ -580,20 +716,21 @@ class Sesion private constructor(
                 when {
                     a != null && a == b -> salida[k] = a
                     pasado != null && (a == pasado || b == pasado) -> salida[k] = pasado
-                    viejo[k] != null -> salida[k] = viejo.getValue(k)
+                    viejo[k] != null && !(tipo == "m" && k in alias) -> salida[k] = viejo.getValue(k)
                 }
             }
             return salida
         }
         val miProyecto = disco.proyectoPortatil(chat)
         val base = Base(
-            mensajes = acordado("m", disco.apuntes(chat).associate { it.sena to it.resumen }, inv.apuntes.associate { it.sena to it.resumen }, antes.mensajes),
+            mensajes = acordado("m", misApuntes.associate { it.sena to it.resumen }, inv.apuntes.associate { it.sena to it.resumen }, antes.mensajes),
             archivos = acordado("f", mios, suyos, antes.archivos),
             proyecto = if (miProyecto != null && inv.proyecto != null && Canonico.de(miProyecto) == Canonico.de(inv.proyecto)) miProyecto else antes.proyecto
         )
         Protocolo.enviar(canal, Protocolo.Peticion("base", chat = chat, base = base))
         Protocolo.leerRespuesta(canal)
         disco.guardarBase(otro.id, chat, base)
+        disco.guardarObjetosDeBase(chat, base)
         disco.apuntarVez(otro.id, ahora)
     }
 
@@ -663,7 +800,7 @@ class Sesion private constructor(
                 val yoConLetra = hola.miembros.firstOrNull { it.id == id.yo.id }
                     ?: throw IOException("El otro aparato no me dio letra")
                 disco.identidad.guardar(Identidad(yo = yoConLetra, codigo = elCodigo, miembros = hola.miembros))
-                yoConLetra.letra?.firstOrNull()?.let { disco.sellar(it) }
+                disco.sellar()
             } else {
                 val juntos = Grupo.juntar(id.miembros.ifEmpty { listOf(id.yo) }, hola.miembros, quienHabla = hola.yo)
                 disco.identidad.guardar(id.copy(miembros = juntos))
@@ -671,5 +808,38 @@ class Sesion private constructor(
             disco.avisar(Disco.Cambio.IDENTIDAD)
             return Sesion(canal, disco, hola.yo, desfase, hola.puerto)
         }
+    }
+}
+
+/**
+ * **Poner y sacar cambios de un archivo de texto** (lienzo, tabla, croquis) respecto a una versión
+ * que los dos tienen: lo acordado la última vez, o lo que el otro tiene ahora. Ver [Fusion.diferencia].
+ */
+internal object Parches {
+
+    /**
+     * Pone [parche] sobre la versión [desde] de [rel] y lo escribe, si sale lo que tiene que salir
+     * ([resumen]). Devuelve `false` si aquí no está esa versión o no cuadra: hay que mandarlo entero.
+     */
+    fun poner(disco: Disco, rel: String, desde: String?, parche: String?, resumen: String?): Boolean {
+        if (desde == null || parche == null || resumen == null) return false
+        val base = disco.textoBase(rel, desde) ?: return false
+        val puesto = runCatching {
+            Fusion.aplicar(kotlinx.serialization.json.Json.parseToJsonElement(base), kotlinx.serialization.json.Json.parseToJsonElement(parche))
+        }.getOrNull() ?: return false
+        val texto = puesto.toString()
+        if (sha256(Canonico.de(texto).toByteArray()) != resumen) return false
+        return disco.escribirTexto(rel, texto)
+    }
+
+    /** Lo que cambió de la versión [desde] a la de ahora, y el resumen de la de ahora. Null si no está esa versión. */
+    fun sacar(disco: Disco, rel: String, desde: String?): Pair<String, String>? {
+        if (desde == null) return null
+        val base = disco.textoBase(rel, desde) ?: return null
+        val actual = disco.textoDe(rel)
+        val parche = runCatching {
+            Fusion.diferencia(kotlinx.serialization.json.Json.parseToJsonElement(base), kotlinx.serialization.json.Json.parseToJsonElement(actual))
+        }.getOrNull()
+        return (parche?.toString() ?: "null") to sha256(Canonico.de(actual).toByteArray())
     }
 }

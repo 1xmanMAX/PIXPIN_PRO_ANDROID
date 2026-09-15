@@ -127,9 +127,11 @@ data class Croquis(
      * las dos —el estudio de una fachada a las siete y a las once— y apagar una es apagarla,
      * no perder la otra.
      */
-    val luna: Sol3D? = null
+    val luna: Sol3D? = null,
+    /** Los modelos 3D importados (un IFC de Revit, un OBJ…). Ver [Modelo3D]. */
+    val modelos: List<Modelo3D> = emptyList()
 ) {
-    val vacio: Boolean get() = trazos.isEmpty() && laminas.isEmpty() && imagenes.isEmpty()
+    val vacio: Boolean get() = trazos.isEmpty() && laminas.isEmpty() && imagenes.isEmpty() && modelos.isEmpty()
 
     /**
      * Lo que se ve, que es lo único que hay que encuadrar y ordenar por hondura.
@@ -141,12 +143,13 @@ data class Croquis(
      */
     fun puntos(): List<Pt3> {
         val dibujado = trazos.filterNot { it.oculto }.flatMap { it.puntos } +
-            imagenes.filterNot { it.oculto }.flatMap { it.esquinas }
+            imagenes.filterNot { it.oculto }.flatMap { it.esquinas } +
+            modelos.filterNot { it.oculto }.flatMap { it.esquinas() }
         return dibujado.ifEmpty { laminas.flatMap { it.esquinas() } }
     }
 
     /** Si hay algo escondido, para poder ofrecer enseñarlo otra vez. */
-    val hayOcultos: Boolean get() = trazos.any { it.oculto } || imagenes.any { it.oculto }
+    val hayOcultos: Boolean get() = trazos.any { it.oculto } || imagenes.any { it.oculto } || modelos.any { it.oculto }
 }
 
 /**
@@ -546,6 +549,51 @@ data class Imagen3D(
     val oculto: Boolean = false,
     val grupo: String? = null
 )
+
+/**
+ * **Un modelo 3D importado** (14-sep-2026): un edificio de Revit traído de su IFC, o un OBJ.
+ *
+ * Los triángulos no van en el croquis —un edificio son cientos de miles y el croquis entero
+ * se guarda en JSON y se copia a cada deshacer—: van en su archivo aparte ([ruta], ver
+ * [com.forge.pixpin.motor.Malla3D.guardar]), y aquí solo dónde está puesto. Un punto `v` del
+ * modelo cae en el mundo en `origen + ejeX·(v.x − centro.x) + ejeY·(v.y − centro.y) +
+ * ejeZ·(v.z − centro.z)`: moverlo, girarlo y escalarlo es cambiar esos cuatro vectores, igual
+ * que a las esquinas de una imagen.
+ */
+@Serializable
+data class Modelo3D(
+    val id: String,
+    val ruta: String,
+    val nombre: String,
+    val origen: Pt3,
+    val ejeX: Pt3,
+    val ejeY: Pt3,
+    val ejeZ: Pt3,
+    /** El punto del modelo que cae en [origen]: el centro de su base. */
+    val centro: Pt3,
+    /** Su caja, en sus unidades: `minX, minY, minZ, maxX, maxY, maxZ`. */
+    val caja: List<Double>,
+    val triangulos: Int = 0,
+    val oculto: Boolean = false,
+    val grupo: String? = null
+) {
+    fun alMundo(x: Double, y: Double, z: Double): Pt3 {
+        val a = x - centro.x; val b = y - centro.y; val c = z - centro.z
+        return Pt3(
+            origen.x + ejeX.x * a + ejeY.x * b + ejeZ.x * c,
+            origen.y + ejeX.y * a + ejeY.y * b + ejeZ.y * c,
+            origen.z + ejeX.z * a + ejeY.z * b + ejeZ.z * c
+        )
+    }
+
+    /** Las ocho esquinas de su caja, en el mundo. */
+    fun esquinas(): List<Pt3> {
+        if (caja.size < 6) return listOf(origen)
+        val r = ArrayList<Pt3>(8)
+        for (x in listOf(caja[0], caja[3])) for (y in listOf(caja[1], caja[4])) for (z in listOf(caja[2], caja[5])) r += alMundo(x, y, z)
+        return r
+    }
+}
 
 /** Un trazo del lápiz: por dónde pasó, en el mundo, y con qué punta. */
 @Serializable

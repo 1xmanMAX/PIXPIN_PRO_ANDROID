@@ -5,11 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,7 +30,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.atan2
@@ -79,16 +80,51 @@ fun Mando(
     zoom: Double,
     /** Algo ha cambiado: que se repinte y se guarde. */
     alCambiar: () -> Unit,
+    /** La X: cerrar el mando y que vuelva todo lo demás. Ver [BolitaDelMando]. */
+    alCerrar: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Dónde se ha dejado el tirador de girar. Se queda donde se suelta: es la marca de
-    // cuánto se lleva girado en este rato.
-    var anguloDelTirador by remember { mutableStateOf(ARRANQUE_DEL_TIRADOR) }
+    // **El tirador de girar es una palanca** (14-sep-2026): se lleva por el borde, la figura
+    // gira lo que se lleve, y al soltar vuelve a su sitio. Antes se quedaba donde se soltaba,
+    // y entonces la siguiente vez había que ir a buscarlo a otro sitio del borde.
+    var anguloDelTirador by remember { mutableStateOf(REPOSO_DEL_TIRADOR) }
+    // Lo girado en este arrastre, para pintar el arco de lo que se lleva.
+    var giroDelArrastre by remember { mutableStateOf(0.0) }
+    // **La bolita del medio se mueve con el dedo** y vuelve al centro al soltar, como la
+    // palanca de un mando de juegos. Solo es lo que se ve: la figura va 1:1 con el dedo.
+    var bolita by remember { mutableStateOf(Offset.Zero) }
     var agarrado by remember { mutableStateOf<AgarreDelMando?>(null) }
+
+    // Al soltar, la palanca y la bolita vuelven a su sitio.
+    LaunchedEffect(agarrado) {
+        if (agarrado != null) return@LaunchedEffect
+        val desde = anguloDelTirador
+        val bolitaDesde = bolita
+        if (desde == REPOSO_DEL_TIRADOR && bolitaDesde == Offset.Zero) return@LaunchedEffect
+        // Por el camino corto: la palanca no da la vuelta entera para volver.
+        var d = REPOSO_DEL_TIRADOR - desde
+        while (d > Math.PI) d -= 2 * Math.PI
+        while (d < -Math.PI) d += 2 * Math.PI
+        androidx.compose.animation.core.animate(
+            0f, 1f,
+            animationSpec = androidx.compose.animation.core.spring(
+                dampingRatio = 0.62f, stiffness = 700f
+            )
+        ) { t, _ ->
+            anguloDelTirador = desde + d * t
+            bolita = bolitaDesde * (1f - t)
+        }
+        anguloDelTirador = REPOSO_DEL_TIRADOR
+        bolita = Offset.Zero
+        giroDelArrastre = 0.0
+    }
 
     val cuerpo = MaterialTheme.colorScheme.surfaceVariant
     val tinta = MaterialTheme.colorScheme.onSurfaceVariant
     val realce = MaterialTheme.colorScheme.primary
+    // **Con el joystick agarrado no queda nada más**: ni flechas, ni palanca, ni cajitas, ni
+    // botones. Cualquier otra cosa a la vista es algo que se puede coger sin querer.
+    val soloElJoystick = agarrado == AgarreDelMando.LIBRE
 
     Box(modifier.size(LADO.dp), contentAlignment = Alignment.Center) {
         Canvas(
@@ -108,6 +144,11 @@ fun Mando(
                             ultimoAngulo = anguloDe(donde - centro)
                             ultimoRadio = (donde - centro).getDistance()
                             ultimoDesvio = donde - centro
+                            giroDelArrastre = 0.0
+                            if (agarrado == AgarreDelMando.GIRAR) {
+                                // La palanca salta bajo el dedo: se coge por todo el aro.
+                                anguloDelTirador = ultimoAngulo
+                            }
                         },
                         onDrag = { cambio, arrastre ->
                             cambio.consume()
@@ -124,6 +165,7 @@ fun Mando(
                                     while (d < -Math.PI) d += 2 * Math.PI
                                     ultimoAngulo = angulo
                                     anguloDelTirador = angulo
+                                    giroDelArrastre += d
                                     controller.girarLaSeleccion(d)
                                 }
 
@@ -142,9 +184,7 @@ fun Mando(
                                 AgarreDelMando.DEFORMAR -> {
                                     // **Cada lado por su cuenta.** Se mira cuánto se ha
                                     // apartado el dedo del centro a lo ancho y a lo alto, y
-                                    // cada uno estira lo suyo: tirando en diagonal hacia
-                                    // arriba sube más de lo que ensancha, que es lo que se
-                                    // está viendo hacer con la mano.
+                                    // cada uno estira lo suyo.
                                     val ahora = cambio.position - centro
                                     val antes = ultimoDesvio
                                     val minimo = radio * 0.2f
@@ -159,9 +199,17 @@ fun Mando(
                                     ultimoDesvio = ahora
                                 }
 
-                                AgarreDelMando.LIBRE -> controller.moverLaSeleccion(
-                                    arrastre.x.toDouble(), arrastre.y.toDouble(), zoom
-                                )
+                                AgarreDelMando.LIBRE -> {
+                                    // La bolita va con el dedo hasta el borde del disco y ahí
+                                    // se queda; la figura sigue al dedo sin tope.
+                                    val tope = radio * (1f - BOLITA_DEL_MEDIO)
+                                    val nueva = bolita + arrastre
+                                    val largo = nueva.getDistance()
+                                    bolita = if (largo > tope) nueva * (tope / largo) else nueva
+                                    controller.moverLaSeleccion(
+                                        arrastre.x.toDouble(), arrastre.y.toDouble(), zoom
+                                    )
+                                }
 
                                 AgarreDelMando.FLECHA_X -> controller.moverLaSeleccionPorElEje(
                                     enHorizontal = true,
@@ -196,50 +244,57 @@ fun Mando(
 
             drawCircle(cuerpo.copy(alpha = 0.92f), radius = radio, center = centro)
             drawCircle(
-                tinta.copy(alpha = if (agarrado == AgarreDelMando.LIBRE) 0.55f else 0.28f),
+                tinta.copy(alpha = if (soloElJoystick) 0.55f else 0.28f),
                 radius = radio, center = centro, style = Stroke(width = 1.5f)
             )
 
-            // Las dos flechas. **Y con una agarrada, la otra se quita de en medio**:
-            // mientras se mueve por un eje la otra no se puede usar, y lo único que hace es
-            // tapar la que sí — que es justo el sitio que uno está mirando.
+            // Las dos flechas. **Y con una agarrada, la otra se quita de en medio**.
             val moviendo = agarrado in LAS_FLECHAS
-            for (flecha in LAS_FLECHAS) {
-                if (moviendo && agarrado != flecha) continue
-                flechaDelMando(centro, radio, flecha, agarrado == flecha)
+            if (!soloElJoystick) {
+                for (flecha in LAS_FLECHAS) {
+                    if (moviendo && agarrado != flecha) continue
+                    flechaDelMando(centro, radio, flecha, agarrado == flecha)
+                }
             }
 
-            // **El redondito del medio: ese es el joystick.**
-            //
-            // Mover libre siempre fue tocar el hueco entre las flechas, pero un hueco no se
-            // ve — había que saberlo. Con la bolita puesta, lo que hace el mando se lee de un
-            // vistazo: un joystick en el centro para ir a donde sea, y dos puntas en el borde
-            // para ir por su eje. Se apaga mientras se arrastra por un eje, que entonces no
-            // es lo que manda.
+            // **El redondito del medio: el joystick**, que se va con el dedo.
             if (!moviendo) {
-                val bolita = radio * BOLITA_DEL_MEDIO
-                drawCircle(tinta.copy(alpha = 0.85f), radius = bolita, center = centro)
+                val r = radio * BOLITA_DEL_MEDIO
+                val donde = centro + bolita
+                if (soloElJoystick) {
+                    // Una raya del centro a la bolita dice hacia dónde se está empujando.
+                    drawLine(tinta.copy(alpha = 0.35f), centro, donde, strokeWidth = r * 0.5f)
+                }
                 drawCircle(
-                    cuerpo.copy(alpha = 0.9f),
-                    radius = bolita * 0.45f, center = centro
+                    if (soloElJoystick) realce else tinta.copy(alpha = 0.85f),
+                    radius = if (soloElJoystick) r * 1.15f else r, center = donde
                 )
+                drawCircle(cuerpo.copy(alpha = 0.9f), radius = r * 0.45f, center = donde)
             }
 
-            // El tirador de girar, montado en el borde y tumbado como el borde.
-            val enElBorde = centro + porElAngulo(anguloDelTirador, radio)
-            val ancho = lado * TIRADOR_LARGO
-            val alto = lado * TIRADOR_ANCHO
-            rotate(
-                degrees = Math.toDegrees(anguloDelTirador).toFloat() + 90f,
-                pivot = enElBorde
-            ) {
-                drawRoundRect(
-                    if (agarrado == AgarreDelMando.GIRAR) realce else realce.copy(alpha = 0.75f),
-                    topLeft = Offset(enElBorde.x - ancho / 2, enElBorde.y - alto / 2),
-                    size = Size(ancho, alto),
-                    cornerRadius = CornerRadius(alto / 2)
+            if (soloElJoystick) return@Canvas
+
+            // **La palanca de girar**, montada en el borde y tumbada como el borde. Mientras
+            // se lleva, un arco desde su sitio de reposo dice cuánto se ha girado ya, y una
+            // sombra se queda en el sitio al que va a volver.
+            if (agarrado == AgarreDelMando.GIRAR) {
+                val barrido = Math.toDegrees(giroDelArrastre).toFloat().coerceIn(-359f, 359f)
+                val inicio = Math.toDegrees(anguloDelTirador).toFloat() - barrido
+                drawArc(
+                    realce.copy(alpha = 0.45f),
+                    startAngle = inicio,
+                    sweepAngle = barrido,
+                    useCenter = false,
+                    topLeft = Offset(centro.x - radio, centro.y - radio),
+                    size = Size(radio * 2, radio * 2),
+                    style = Stroke(width = lado * TIRADOR_ANCHO)
                 )
+                tiradorDeGirar(centro, radio, lado, REPOSO_DEL_TIRADOR, realce.copy(alpha = 0.25f))
             }
+            tiradorDeGirar(
+                centro, radio, lado, anguloDelTirador,
+                if (agarrado == AgarreDelMando.GIRAR) realce else realce.copy(alpha = 0.75f)
+            )
 
             // La cajita de redimensionar, fuera y suelta.
             val caja = centroDeLaCaja(lado)
@@ -261,8 +316,7 @@ fun Mando(
             }
             cajita(caja, AgarreDelMando.ESCALAR)
 
-            // Y la de estirar, en la esquina de enfrente: dos flechas en cruz, porque lo que
-            // hace es tirar de lo ancho y de lo alto por separado.
+            // Y la de estirar, en la esquina de enfrente: dos flechas en cruz.
             val otra = centroDeLaOtraCaja(lado)
             cajita(otra, AgarreDelMando.DEFORMAR)
             val brazo = ladoDeLaCaja * 0.28f
@@ -287,26 +341,86 @@ fun Mando(
             )
         }
 
-        // Cuántos hay elegidos, y copiarlos. En las dos esquinas que no usa nadie: el
-        // tirador vive arriba a la izquierda del disco y las cajitas arriba.
-        Text(
-            "${controller.selectedIds.size}",
-            color = tinta,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.align(Alignment.BottomEnd)
-        )
-        Box(
-            Modifier
-                .align(Alignment.BottomStart)
-                .size(BOTON.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
-                .clickable { controller.copiarLaSeleccion(); alCambiar() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text("⧉", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+        if (!soloElJoystick) {
+            // Cuántos hay elegidos, copiarlos y cerrar: abajo, donde no hay piezas del disco.
+            Text(
+                "${controller.selectedIds.size}",
+                color = tinta,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 8.dp)
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .size(BOTON.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
+                    .clickable { controller.copiarLaSeleccion(); alCambiar() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⧉", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+            }
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .size(BOTON_CERRAR.dp)
+                    .clip(CircleShape)
+                    .background(cuerpo.copy(alpha = 0.95f))
+                    .clickable { alCerrar() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✕", fontSize = 17.sp, color = tinta, fontWeight = FontWeight.Medium)
+            }
         }
+    }
+}
+
+/**
+ * **La bolita de la esquina**: lo que sale al elegir algo, en vez del mando entero.
+ *
+ * El mando entero en la esquina tapaba lo que hubiera ahí cada vez que se elegía algo, se
+ * fuera a mover o no. Ahora se elige y solo asoma esto; un toque abre el mando en el centro
+ * de la pantalla, con todo lo demás fuera. Ver [Mando].
+ */
+@Composable
+fun BolitaDelMando(alAbrir: () -> Unit, modifier: Modifier = Modifier) {
+    val realce = MaterialTheme.colorScheme.primary
+    val cuerpo = MaterialTheme.colorScheme.surfaceVariant
+    Box(
+        modifier
+            .size(BOLITA_DE_LA_ESQUINA.dp)
+            .clip(CircleShape)
+            .background(cuerpo.copy(alpha = 0.95f))
+            .clickable { alAbrir() },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.size((BOLITA_DE_LA_ESQUINA * 0.62f).dp)) {
+            val r = size.minDimension / 2
+            drawCircle(realce.copy(alpha = 0.8f), radius = r, style = Stroke(width = 2f))
+            drawCircle(realce, radius = r * 0.36f)
+        }
+    }
+}
+
+/** La palanca de girar, en el borde y tumbada como el borde. */
+private fun DrawScope.tiradorDeGirar(
+    centro: Offset,
+    radio: Float,
+    lado: Float,
+    angulo: Double,
+    color: Color
+) {
+    val enElBorde = centro + porElAngulo(angulo, radio)
+    val ancho = lado * TIRADOR_LARGO
+    val alto = lado * TIRADOR_ANCHO
+    rotate(degrees = Math.toDegrees(angulo).toFloat() + 90f, pivot = enElBorde) {
+        drawRoundRect(
+            color,
+            topLeft = Offset(enElBorde.x - ancho / 2, enElBorde.y - alto / 2),
+            size = Size(ancho, alto),
+            cornerRadius = CornerRadius(alto / 2)
+        )
     }
 }
 
@@ -372,8 +486,13 @@ private fun DrawScope.flechaDelMando(
 /**
  * Qué se ha agarrado al empezar a arrastrar.
  *
- * El orden importa: primero lo pequeño y de fuera —las cajitas y el tirador—, y el disco al
- * final. Mirándolo al revés, el disco se quedaría con todo lo que le cayera encima.
+ * El orden importa: primero lo pequeño y de fuera —las cajitas y las puntas de los ejes—,
+ * luego el aro de girar, y el disco al final. Mirándolo al revés, el disco se quedaría con
+ * todo lo que le cayera encima.
+ *
+ * **Los ejes solo se cogen por su punta** (14-sep-2026). Antes valía cualquier sitio cerca
+ * de su raya, desde el centro, y como el joystick también empieza en el centro, empujar la
+ * bolita un poco hacia la derecha o hacia arriba cogía un eje sin querer.
  */
 internal fun queSeHaAgarrado(donde: Offset, lado: Float): AgarreDelMando? {
     val centro = centroDelDisco(lado)
@@ -385,36 +504,22 @@ internal fun queSeHaAgarrado(donde: Offset, lado: Float): AgarreDelMando? {
         return AgarreDelMando.DEFORMAR
     }
 
+    for (flecha in LAS_FLECHAS) {
+        if ((donde - puntaDeLaFlecha(centro, radio, flecha)).getDistance() <= alcance) return flecha
+    }
+
     val fuera = (donde - centro).getDistance()
-    // El tirador se coge por todo el borde, no solo donde está pintado: es un aro estrecho, y
+    // La palanca se coge por todo el borde, no solo donde está pintada: es un aro estrecho, y
     // pedir puntería a un dedo sobre un aro de cuatro milímetros es pedirle que falle.
     if (fuera > radio * ARO_DE_GIRAR && fuera <= radio + alcance) return AgarreDelMando.GIRAR
 
-    if (fuera <= radio) {
-        // Dentro, la flecha más cercana **a su raya**, no la de su sector: entre las dos hay
-        // sitio de sobra para mover libre, que es lo que se hace casi siempre.
-        val cerca = LAS_FLECHAS.minByOrNull { deLaFlecha(donde, centro, radio, it) }
-        if (cerca != null && deLaFlecha(donde, centro, radio, cerca) <= alcance) return cerca
-        return AgarreDelMando.LIBRE
-    }
+    if (fuera <= radio) return AgarreDelMando.LIBRE
     return null
 }
 
-/** A qué distancia pasa un toque de la raya de una flecha. */
-private fun deLaFlecha(
-    donde: Offset,
-    centro: Offset,
-    radio: Float,
-    cual: AgarreDelMando
-): Float {
-    // Hasta el morro de verdad: se agarra donde se ve.
-    val hasta = centro + porElAngulo(cual.angulo, radio + radio * PUNTA_DE_LA_FLECHA * 2f / 3f)
-    return distanceToSegment(
-        Pt(donde.x.toDouble(), donde.y.toDouble()),
-        Pt(centro.x.toDouble(), centro.y.toDouble()),
-        Pt(hasta.x.toDouble(), hasta.y.toDouble())
-    ).toFloat()
-}
+/** El centro del triangulito de un eje: sobre el borde del disco. Ver [flechaDelMando]. */
+private fun puntaDeLaFlecha(centro: Offset, radio: Float, cual: AgarreDelMando): Offset =
+    centro + porElAngulo(cual.angulo, radio + radio * PUNTA_DE_LA_FLECHA * 0.4f)
 
 /** Lo que se puede agarrar del mando. */
 internal enum class AgarreDelMando {
@@ -460,15 +565,23 @@ private fun porElAngulo(angulo: Double, largo: Float) =
 
 private fun anguloDe(v: Offset): Double = atan2(v.y.toDouble(), v.x.toDouble())
 
-/** El lado del mando entero y el del botón de copiar, en `dp`. */
-private const val LADO = 176
-private const val BOTON = 32
+/**
+ * El lado del mando entero, el del botón de copiar y el de la X, en `dp`.
+ *
+ * Más grande que cuando vivía en la esquina (176): ahora sale solo y en el centro, así que
+ * puede dar más recorrido al dedo sin tapar ningún otro mando.
+ */
+private const val LADO = 264
+private const val BOTON = 38
+private const val BOTON_CERRAR = 40
 
+/** La bolita que sale en la esquina con algo elegido. Ver [BolitaDelMando]. */
+private const val BOLITA_DE_LA_ESQUINA = 46f
 
 /** Dónde cae el disco dentro del cuadro del mando y lo gordo que es, en tanto por uno. */
-private const val CENTRO_X = 0.44f
-private const val CENTRO_Y = 0.56f
-private const val RADIO = 0.32f
+private const val CENTRO_X = 0.5f
+private const val CENTRO_Y = 0.47f
+private const val RADIO = 0.30f
 
 /**
  * La flecha: hasta dónde llega su raya, lo larga que es su punta y lo gorda que va.
@@ -494,35 +607,17 @@ private const val BOLITA_DEL_MEDIO = 0.22f
 private const val TIRADOR_LARGO = 0.115f
 private const val TIRADOR_ANCHO = 0.055f
 
-/** Dónde arranca el tirador: en la diagonal de arriba a la izquierda. */
-private val ARRANQUE_DEL_TIRADOR = -Math.PI * 3 / 4
+/**
+ * Dónde descansa la palanca de girar y adónde vuelve al soltarla: abajo a la izquierda, lejos
+ * de las dos cajitas de arriba y de las puntas de los ejes.
+ */
+private val REPOSO_DEL_TIRADOR = Math.PI * 3 / 4
 
 /** La cajita de redimensionar: lo grande que es, por dónde cae y cuánto se separa. */
 private const val CAJA = 0.115f
 private const val SEPARACION_DE_LA_CAJA = 0.155f
 private val ANGULO_DE_LA_CAJA = -Math.PI / 4
 private val ANGULO_DE_LA_OTRA_CAJA = -3 * Math.PI / 4
-
-/**
- * **Lo que le sobra de caja al mando por la derecha y por abajo.**
- *
- * El cuadro del mando mide [LADO] pero lo que se ve no está centrado en él: el disco cae en
- * el `(0,44 · 0,56)` y los dos botones cuelgan hacia arriba, así que por la derecha y por
- * abajo queda caja vacía. Puesto en la esquina de la pantalla, lo que tocaba la esquina era
- * **el aire**, y el mando parecía quedarse corto y torcido hacia dentro — se leía como que
- * seguía a la izquierda.
- *
- * Sale de las mismas constantes que colocan las piezas, así que mover una pieza no puede
- * dejar esto desajustado. Quien lo ponga en una esquina se lo resta.
- */
-internal val LO_QUE_SOBRA_A_LA_DERECHA: Dp =
-    (LADO - maxOf(
-        (CENTRO_X + RADIO) * LADO,
-        (CENTRO_X * LADO + kotlin.math.cos(ANGULO_DE_LA_CAJA).toFloat() *
-            (RADIO + SEPARACION_DE_LA_CAJA) * LADO) + BOTON / 2f
-    )).dp
-
-internal val LO_QUE_SOBRA_ABAJO: Dp = (LADO - (CENTRO_Y + RADIO) * LADO).dp
 
 /** Desde qué parte del radio para fuera se coge el aro de girar. */
 private const val ARO_DE_GIRAR = 0.88f

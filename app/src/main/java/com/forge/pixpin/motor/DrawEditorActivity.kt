@@ -14,6 +14,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +90,9 @@ import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Texture
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -170,6 +174,10 @@ class DrawEditorActivity : ComponentActivity() {
         private const val EXTRA_IMAGEN = "draw_imagen"
         private const val EXTRA_PDF = "draw_pdf"
         private const val EXTRA_PAGINA = "draw_pagina"
+        /** Abrir ya presentando: pasar de página en una presentación abre la siguiente así. */
+        private const val EXTRA_PRESENTAR = "draw_presentar"
+        /** Abrir ya editando, sin pasar por el modo visualización. Ver [modoVista]. */
+        private const val EXTRA_EDITAR = "draw_editar"
 
         /**
          * Abre el editor de un pin.
@@ -197,14 +205,18 @@ class DrawEditorActivity : ComponentActivity() {
          */
         fun abrirPaginaDePdf(
             context: Context, id: String, rutaDibujo: String?, pdf: String, pagina: Int,
-            desdeProyecto: String? = null
+            desdeProyecto: String? = null,
+            presentar: Boolean = false,
+            editar: Boolean = false
         ) {
-            abrir(context, id, rutaDibujo, null, pdf, pagina, desdeProyecto)
+            abrir(context, id, rutaDibujo, null, pdf, pagina, desdeProyecto, presentar, editar)
         }
 
         private fun abrir(
             context: Context, id: String, rutaDibujo: String?, imagenPath: String?,
-            pdf: String?, pagina: Int, desdeProyecto: String? = null
+            pdf: String?, pagina: Int, desdeProyecto: String? = null,
+            presentar: Boolean = false,
+            editar: Boolean = false
         ) {
             context.startActivity(
                 Intent(context, DrawEditorActivity::class.java).apply {
@@ -216,6 +228,8 @@ class DrawEditorActivity : ComponentActivity() {
                     putExtra(EXTRA_IMAGEN, imagenPath)
                     putExtra(EXTRA_PDF, pdf)
                     putExtra(EXTRA_PAGINA, pagina)
+                    if (presentar) putExtra(EXTRA_PRESENTAR, true)
+                    if (editar) putExtra(EXTRA_EDITAR, true)
                     // De dónde se vino, para volver ahí al cerrar. Ver [EXTRA_DESDE_PROYECTO].
                     if (desdeProyecto != null) {
                         putExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO, desdeProyecto)
@@ -329,8 +343,14 @@ class DrawEditorActivity : ComponentActivity() {
                     // plano y todo va lento. Mientras se lee se ve la página de una pieza, que
                     // es lo que ya pintaba el mosaico al empezar. Ver [traerElPlanoEnLineas].
                     lifecycleScope.launch {
-                        val quiere = (application as? com.forge.pixpin.PixPinApp)
-                            ?.settings?.settings?.first()?.planoEnLineas ?: true
+                        val puestos = (application as? com.forge.pixpin.PixPinApp)
+                            ?.settings?.settings?.first()
+                        // **Y lo que se haya dicho de esta página en concreto**: una sola puede
+                        // querer imagen aunque el resto vaya en líneas. Ver
+                        // [com.forge.pixpin.data.Settings.paginasComoImagen].
+                        val estaComoImagen = puestos?.paginasComoImagen
+                            ?.contains(com.forge.pixpin.data.claveDePagina(ruta, paginaDeFondo)) == true
+                        val quiere = (puestos?.planoEnLineas ?: true) && !estaComoImagen
                         val hecho = quiere && traerElPlanoEnLineas(ruta, it.width.toDouble())
                         if (!hecho) prepararElMosaico(ruta, it.width.toDouble(), it.height.toDouble())
                     }
@@ -344,6 +364,15 @@ class DrawEditorActivity : ComponentActivity() {
 
         ensenarAMedirElTexto()
         aPantallaCompleta()
+        // **Se entra mirando** (14-sep-2026): un lienzo con algo dentro, o una página de un PDF,
+        // se abre en el modo visualización —mover, ampliar, imprimir, presentar— y se pasa a
+        // editar con un toque. Un lienzo vacío se abre editando: ahí no hay nada que ver.
+        if (!intent.getBooleanExtra(EXTRA_EDITAR, false) &&
+            (pdfDeFondo != null || controller.scene.contenidoVisible.isNotEmpty())
+        ) {
+            entrarEnVista()
+        }
+        if (intent.getBooleanExtra(EXTRA_PRESENTAR, false)) empezarAPresentar()
         setContent {
             // El negro de verdad tiñe **todo el editor**, no solo el lienzo: con
             // el lienzo negro y las barras grises se ve un recuadro negro
@@ -1032,6 +1061,8 @@ class DrawEditorActivity : ComponentActivity() {
          * Se entra y se sale con el mismo toque de cuatro dedos. Ver [elToqueDeCuatroDedos].
          */
         var soloElDibujo by remember { mutableStateOf(false) }
+        // El mando de lo elegido, abierto en el centro con todo lo demás fuera. Ver [Mando].
+        var mandoAbierto by remember { mutableStateOf(false) }
         // El agarre del botón flotante de la pantalla completa. Ver [BotonFlotante].
         val agarre = remember { AgarreDelBoton() }
         var tinta by remember { mutableStateOf(Tinta.LAPIZ) }
@@ -1070,6 +1101,8 @@ class DrawEditorActivity : ComponentActivity() {
          */
         androidx.activity.compose.BackHandler {
             when {
+                presentando -> terminarDePresentar()
+                mandoAbierto -> mandoAbierto = false
                 adhesivoALaVista -> adhesivoALaVista = false
                 grupoDesplegado != null -> grupoDesplegado = null
                 ajustesAbiertos -> ajustesAbiertos = false
@@ -1114,6 +1147,15 @@ class DrawEditorActivity : ComponentActivity() {
                     )
                 )
         ) {
+            // Los colores marcados en la rueda. Van en los ajustes y no en el dibujo: son de
+            // quien dibuja. Ver [Settings.coloresMarcados].
+            val marcasDeColor = remember(ajustes.coloresMarcados) {
+                ajustes.coloresMarcados.split(',')
+                    .map { it.trim() }
+                    .filter { it.startsWith("#") && it.length == 7 }
+                    .take(MARCAS_DE_COLOR)
+            }
+
             DrawCanvas(
                 controller = controller,
                 // El gesto va **encima del lienzo y en la pasada inicial**, sin consumir
@@ -1190,6 +1232,21 @@ class DrawEditorActivity : ComponentActivity() {
                 // mantenido. Ver [DrawCanvas.pantallaCompleta] y [BotonFlotante].
                 pantallaCompleta = soloElDibujo,
                 onHerramientaRapida = { controller.selectTool(it); cambiado() },
+                // **Los instrumentos del abanico**, puestos donde se posó el lápiz y ya marcados
+                // para moverlos con el mando. Ver [DrawCanvas.onInstrumentoRapido].
+                onInstrumentoRapido = { id, donde ->
+                    val estilo = controller.scene.style
+                    val figura = figurasDeFabrica(estilo) { texto, tamano ->
+                        medirTexto(texto, estilo.fontFamily, tamano)
+                    }.firstOrNull { it.id == id }
+                    if (figura != null) {
+                        val punto = controller.scene.viewport.toScene(donde.x.toDouble(), donde.y.toDouble())
+                        controller.insertar(estampar(figura, punto))
+                        guardar()
+                        cambiado()
+                    }
+                },
+                marcasDeColor = marcasDeColor,
                 onGrosorRapido = { grosor ->
                     aplicarEstilo(controller.estiloActivo().copy(strokeWidth = grosor))
                     cambiado()
@@ -1254,56 +1311,60 @@ class DrawEditorActivity : ComponentActivity() {
             // del cromo, que va y viene con el gesto de los cuatro dedos.
             val seleccionado = controller.selectedElements()
             val aplican = propiedadesPara(controller.tool, seleccionado)
-            // Los colores marcados en la rueda. Van en los ajustes y no en el dibujo: son de
-            // quien dibuja. Ver [Settings.coloresMarcados].
-            val marcasDeColor = remember(ajustes.coloresMarcados) {
-                ajustes.coloresMarcados.split(',')
-                    .map { it.trim() }
-                    .filter { it.startsWith("#") && it.length == 7 }
-                    .take(MARCAS_DE_COLOR)
-            }
-
             // **Y todos los mandos se van con cuatro dedos.**
             //
             // Lo de aquí dentro es el cromo: el mando de lo elegido, las barras, el lateral,
             // el visor y los paneles. Lo de fuera es el dibujo y lo que se está escribiendo,
             // que son las dos cosas que tienen que seguir estando. Ver
             // [elToqueDeCuatroDedos].
-            if (!soloElDibujo) {
-                // **El mando de lo elegido**, el mismo que el del croquis en el espacio.
-                //
-                // **En la esquina de abajo**, del lado de la mano. Estaba a media altura del
-                // canto y ahí estorbaba: media pantalla a ese lado es por donde uno arrastra
-                // lo que acaba de elegir, así que el mando se ponía encima de la figura que
-                // venía a mover. En la esquina no tapa nada y el pulgar sigue llegando.
-                //
-                // Sigue el lado de [zurdo] como todo lo demás del editor: para quien dibuja
-                // con la izquierda, la esquina que cae bajo el pulgar es la otra.
-                //
-                // Solo sale con algo elegido, porque sin nada elegido no manda nada. Ver
-                // [Mando].
+            // **El mando abierto, solo y en el centro.** Todo el cromo se va mientras está
+            // puesto —como en la pantalla completa— y vuelve con su X. Si lo elegido se
+            // pierde (se toca fuera, se borra), el mando no tiene a qué mandar y se cierra.
+            if (mandoAbierto && controller.selectedIds.isEmpty()) mandoAbierto = false
+            if (mandoAbierto) {
+                Mando(
+                    controller = controller,
+                    zoom = controller.scene.viewport.zoom,
+                    alCambiar = { cambiado() },
+                    alCerrar = { mandoAbierto = false },
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+            // En pantalla completa también: lo que se pone desde el abanico —un plano, una
+            // recta— nace marcado y hay que poder moverlo sin salir. Ver [BolitaDelMando].
+            if (soloElDibujo && !presentando && !mandoAbierto && controller.selectedIds.isNotEmpty()) {
+                BolitaDelMando(
+                    alAbrir = { mandoAbierto = true },
+                    modifier = Modifier
+                        .align(if (zurdo) Alignment.BottomStart else Alignment.BottomEnd)
+                        .padding(18.dp)
+                )
+            }
+            // **El modo visualización**: solo su barra. Ver [BarraDeVista].
+            if (modoVista && !soloElDibujo && !presentando) {
+                @Suppress("UNUSED_EXPRESSION") tick
+                BarraDeVista(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 10.dp, start = 8.dp, end = 8.dp)
+                )
+            }
+            if (!soloElDibujo && !mandoAbierto && !presentando && !modoVista) {
+                // **Con algo elegido, solo una bolita en la esquina** (14-sep-2026). El mando
+                // entero salía directamente y tapaba esa esquina cada vez que se elegía algo,
+                // se fuera a mover o no. Un toque en la bolita abre el mando en el centro y
+                // quita todo lo demás. Ver [Mando] y [BolitaDelMando].
                 if (controller.selectedIds.isNotEmpty()) {
-                    Mando(
-                        controller = controller,
-                        zoom = controller.scene.viewport.zoom,
-                        alCambiar = { cambiado() },
+                    BolitaDelMando(
+                        alAbrir = { mandoAbierto = true },
                         modifier = Modifier
-                            // **Siempre en la esquina de abajo a la derecha**, en los dos
-                            // lienzos, y sin seguir el lado de la mano: es el mando que se
-                            // busca con la vista y tiene que estar donde uno ya sabe, no
-                            // donde le toque según un ajuste.
                             .align(Alignment.BottomEnd)
-                            // **Menos lo que al mando le sobra de caja.** Su dibujo no está
-                            // centrado en su cuadro —ver [LO_QUE_SOBRA_A_LA_DERECHA]— así que
-                            // sin descontarlo lo que tocaba la esquina era el aire y el mando
-                            // se leía torcido hacia dentro.
-                            .offset(x = LO_QUE_SOBRA_A_LA_DERECHA, y = LO_QUE_SOBRA_ABAJO)
-                            // Levantado lo que mide lo de abajo, medido y no supuesto.
                             .padding(
-                                horizontal = 2.dp,
-                                vertical = with(LocalDensity.current) {
+                                end = 14.dp,
+                                bottom = with(LocalDensity.current) {
                                     altoDeLoDeAbajo.toDp()
-                                } + 10.dp
+                                } + 14.dp
                             )
                     )
                 }
@@ -1326,6 +1387,17 @@ class DrawEditorActivity : ComponentActivity() {
                                 10.dp
                         )
                 )
+                // **El nombre del lienzo, a la vista y a un toque de cambiarlo** (14-sep-2026).
+                // Un PDF ya lleva su rótulo con el documento y la página. Ver [NombreDelLienzo].
+                if (pdfDeFondo == null && controller.tool != Tool.ZONA) {
+                    RotuloDelLienzo(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(
+                                top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } + 10.dp
+                            )
+                    )
+                }
                 @Suppress("UNUSED_EXPRESSION") tick
                 if (controller.tool == Tool.ZONA) {
                     PastillaDeLaZona(
@@ -1853,11 +1925,42 @@ class DrawEditorActivity : ComponentActivity() {
             // **El botón flotante, solo en pantalla completa.** Se aprieta con la mano
             // que no dibuja mientras el lápiz elige o ajusta en el lienzo, y se mueve por
             // su asa. Ver [BotonFlotante].
-            if (soloElDibujo) BotonFlotante(zurdo, agarre)
+            if (soloElDibujo && !presentando) BotonFlotante(zurdo, agarre)
 
             // **Los candados de la pantalla completa** (13-sep-2026): uno clava la vista —ni
             // moverse ni ampliar; con lápiz, los dedos no hacen nada—, otro solo el aumento.
-            if (soloElDibujo) {
+            // **La presentación**: la zona de pasar (solo en modo pasar, que con lápiz el dedo
+            // anota) y la pastilla. Ver [empezarAPresentar].
+            if (presentando) {
+                @Suppress("UNUSED_EXPRESSION") tick
+                if (modoDePresentacion == com.forge.pixpin.ui.ModoDePresentacion.PASAR) {
+                    com.forge.pixpin.ui.ZonaDePasar(
+                        onAnterior = { encuadrarLaDiapositiva(-1); cambiado() },
+                        onSiguiente = { encuadrarLaDiapositiva(1); cambiado() },
+                        onMedio = { pastillaALaVista = !pastillaALaVista }
+                    )
+                }
+                val app = application as? com.forge.pixpin.PixPinApp
+                val todos = app?.proyectos?.proyectos?.collectAsState()?.value
+                val totalDelPdf = pdfDeFondo?.let { r ->
+                    todos?.let { Proyectos.deEstePdf(it, r)?.hojas?.size }
+                } ?: 0
+                val (actual, total) = diapositivaDeAhora(totalDelPdf)
+                com.forge.pixpin.ui.PastillaDePresentacion(
+                    visible = pastillaALaVista || modoDePresentacion != com.forge.pixpin.ui.ModoDePresentacion.PASAR,
+                    actual = actual,
+                    total = total,
+                    modo = modoDePresentacion,
+                    onModo = { ponerModoDePresentacion(it); cambiado() },
+                    onAnterior = { encuadrarLaDiapositiva(-1); cambiado() },
+                    onSiguiente = { encuadrarLaDiapositiva(1); cambiado() },
+                    onSalir = { terminarDePresentar(); cambiado() },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 18.dp)
+                )
+            }
+            if (soloElDibujo && !presentando) {
                 CandadosDePantallaCompleta(
                     vistaFija = vistaFija,
                     zoomBloqueado = zoomBloqueado,
@@ -1892,8 +1995,7 @@ class DrawEditorActivity : ComponentActivity() {
                 DialogoDeFuncionesWeb(
                     marcadas = marcadas,
                     onCambio = { clave, puesta ->
-                        val ahora = marcadas.toMutableSet()
-                        if (puesta) ahora += clave else ahora -= clave
+                        val ahora = com.forge.pixpin.motor.ExportarHtml.conGrupo(marcadas, clave, puesta)
                         lifecycleScope.launch {
                             (application as? com.forge.pixpin.PixPinApp)?.settings?.setFuncionesWeb(ahora)
                         }
@@ -1940,6 +2042,7 @@ class DrawEditorActivity : ComponentActivity() {
                 val detalle by androidx.compose.runtime.produceState(Pair(emptyList<Pair<String, String>>(), emptyList<Pair<String, String>>()), tick) {
                     value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val archivo = Detalle.delLienzo(this@DrawEditorActivity, dibujoId)
+                        val nombreVisible = nombreDelLienzo()
                         val app = application as? com.forge.pixpin.PixPinApp
                         val proyecto = app?.proyectos?.let { repo ->
                             intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)?.let { repo.porId(it) }
@@ -1947,7 +2050,7 @@ class DrawEditorActivity : ComponentActivity() {
                         }
                         val delProyecto = proyecto?.let { Detalle.delProyecto(this@DrawEditorActivity, it) }
                         Pair(
-                            listOf("Nombre" to archivo.nombre, "Peso" to Detalle.legible(archivo.bytes)),
+                            listOf("Nombre" to nombreVisible, "Archivo" to archivo.nombre, "Peso" to Detalle.legible(archivo.bytes)),
                             delProyecto?.let { listOf("Nombre" to it.nombre, "Hojas" to "${it.hojas}", "Peso" to Detalle.legible(it.bytes)) } ?: emptyList()
                         )
                     }
@@ -1987,6 +2090,14 @@ class DrawEditorActivity : ComponentActivity() {
                             tickDelMosaico++
                         }
                     },
+                    // **Y esta página en concreto.** Solo aparece con el plano en líneas
+                    // puesto: apagado ya va todo como imagen y la pregunta no tendría sentido.
+                    paginaComoImagen = if (pdfDeFondo != null && ajustes.planoEnLineas) {
+                        ajustes.paginasComoImagen.contains(claveDeEstaPagina())
+                    } else {
+                        null
+                    },
+                    onPaginaComoImagen = { comoImagen -> ponerEstaPaginaComoImagen(comoImagen) },
                     presionFirme = controller.estiloActivo().presionFirme,
                     onPresionFirme = { firme ->
                         aplicarEstilo(controller.estiloActivo().copy(presionFirme = firme))
@@ -2319,6 +2430,11 @@ class DrawEditorActivity : ComponentActivity() {
             // **La hoja de compartir de toda la aplicación** (13-sep-2026): los formatos, qué
             // páginas —el lienzo completo o cada marco— y cuánto pesará. Ver [com.forge.pixpin.ui.HojaDeCompartir].
             @Suppress("UNUSED_EXPRESSION") formatos
+            // **Volver a mirar**: el modo visualización. Imprimir y presentar viven solo allí
+            // (lo pidió el usuario el 15-sep-2026: editando estorbaban). Ver [entrarEnVista].
+            IconButton(onClick = { entrarEnVista(); cambiado() }) {
+                Icon(Icons.Filled.Visibility, contentDescription = "Modo visualización")
+            }
             IconButton(onClick = { abrirCompartir() }, enabled = !exportando) {
                 if (exportando) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Filled.IosShare, contentDescription = "Compartir")
@@ -2339,6 +2455,75 @@ class DrawEditorActivity : ComponentActivity() {
      * no le quita sitio a nada. Y translúcido, porque es una referencia y no una
      * herramienta — se lee cuando se busca y se ignora el resto del tiempo.
      */
+    /**
+     * **El nombre del lienzo**, el que se le puso (14-sep-2026): el de su hoja en el proyecto,
+     * o el del proyecto y la página, o en último caso su identificador. Es el que sale en
+     * Detalles y el que llevan los archivos que se exportan, en vez de `dib-1726…`.
+     */
+    private fun nombreDelLienzo(): String {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return dibujoId
+        val todos = app.proyectos.proyectos.value
+        val real = pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) } ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+        val hoja = real?.hojas?.firstOrNull { it.dibujo == dibujoId || (pdfDeFondo != null && it.pagina == paginaDeFondo) }
+        return hoja?.nombre?.ifBlank { null }
+            ?: real?.let { if (paginaDeFondo >= 0) "${it.nombre} · página ${paginaDeFondo + 1}" else it.nombre }
+            ?: dibujoId.ifBlank { "dibujo" }
+    }
+
+    /** El nombre del lienzo, apto para un nombre de archivo. */
+    private fun nombreDeArchivo(): String =
+        nombreDelLienzo().replace(Regex("[\\\\/:*?\"<>|\\n\\r]"), "_").trim().take(80).ifBlank { "dibujo" }
+
+    /** Pide el nombre del lienzo (o de la hoja de esta página) y lo pone en todas partes. */
+    private var renombrandoLienzo by mutableStateOf(false)
+
+    @Composable
+    private fun DialogoDelNombreDelLienzo(actual: String) {
+        if (!renombrandoLienzo) return
+        com.forge.pixpin.ui.DialogoDeNombre(actual, onCerrar = { renombrandoLienzo = false }, titulo = "Nombre del lienzo") { nuevo ->
+            renombrandoLienzo = false
+            val app = application as? com.forge.pixpin.PixPinApp ?: return@DialogoDeNombre
+            val ruta = pdfDeFondo
+            val proyecto = ruta?.let { Proyectos.deEstePdf(app.proyectos.proyectos.value, it) }
+            val hoja = proyecto?.let { Proyectos.hojaDePagina(it, paginaDeFondo) }
+            lifecycleScope.launch(Dispatchers.IO) {
+                if (proyecto != null && hoja != null) {
+                    com.forge.pixpin.guardados.NombreDelLienzo.deHoja(app, proyecto.id, hoja.id, nuevo)
+                } else {
+                    com.forge.pixpin.guardados.NombreDelLienzo.deDibujo(app, dibujoId, nuevo)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun RotuloDelLienzo(modifier: Modifier = Modifier) {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val todos by app.proyectos.proyectos.collectAsState()
+        // Solo los lienzos de un proyecto tienen nombre que cambiar: un pin suelto no.
+        val nombre = remember(todos) {
+            todos.firstNotNullOfOrNull { q -> q.hojas.firstOrNull { it.dibujo == dibujoId } }?.nombre
+        } ?: return
+        Surface(
+            onClick = { renombrandoLienzo = true },
+            modifier = modifier,
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+            shadowElevation = 3.dp
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                Text(
+                    nombre.ifBlank { "Sin nombre" },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+                Icon(Icons.Filled.Edit, contentDescription = "Cambiar el nombre", modifier = Modifier.padding(start = 6.dp).size(14.dp))
+            }
+        }
+        DialogoDelNombreDelLienzo(nombre)
+    }
+
     @Composable
     private fun RotuloDeLaHoja(modifier: Modifier = Modifier) {
         val ruta = pdfDeFondo ?: return
@@ -2387,7 +2572,12 @@ class DrawEditorActivity : ComponentActivity() {
                         },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                    modifier = Modifier
+                        .clickable { renombrandoLienzo = true }
+                        .padding(horizontal = 4.dp, vertical = 6.dp)
+                )
+                DialogoDelNombreDelLienzo(
+                    proyecto?.let { Proyectos.hojaDePagina(it, paginaDeFondo) }?.nombre.orEmpty()
                 )
                 IconButton(
                     onClick = { irALaHoja(paginaDeFondo + 1) },
@@ -2398,6 +2588,26 @@ class DrawEditorActivity : ComponentActivity() {
                         Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = getString(R.string.hoja_siguiente),
                         modifier = Modifier.size(18.dp)
+                    )
+                }
+                // **Vector o imagen, a un toque** (14-sep-2026). El interruptor vivía en
+                // Ajustes → Dibujo y no se encontraba cuando hacía falta: justo cuando un
+                // PDF se ve mal. Aquí dice cómo se está viendo esta página y lo cambia.
+                // Ver [alternarModoDelPdf].
+                val enVector = planoVectorial != null
+                Surface(
+                    onClick = { alternarModoDelPdf() },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (enVector) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.padding(end = 6.dp)
+                ) {
+                    Text(
+                        if (leyendoLineas) "…" else if (enVector) "Vector" else "Imagen",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (enVector) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                     )
                 }
             }
@@ -2426,7 +2636,15 @@ class DrawEditorActivity : ComponentActivity() {
                 Proyectos.conDibujo(proyecto, hoja.id, dibujo, System.currentTimeMillis())
             )
         }
-        abrirPaginaDePdf(this, dibujo, ExcalidrawStore.rutaDe(this, dibujo), ruta, pagina)
+        abrirPaginaDePdf(
+            this, dibujo, ExcalidrawStore.rutaDe(this, dibujo), ruta, pagina, presentar = presentando,
+            editar = !modoVista
+        )
+        // Sin animación entre diapositivas: en una presentación, el deslizamiento de ventana
+        // se ve como que la app se cierra y se vuelve a abrir.
+        if (presentando) {
+            @Suppress("DEPRECATION") overridePendingTransition(0, 0)
+        }
         finish()
     }
 
@@ -3821,8 +4039,45 @@ class DrawEditorActivity : ComponentActivity() {
      * Es la vía de «esto lo tiene que poder abrir cualquiera»: un `.excalidraw`
      * solo lo entiende Excalidraw y un PNG grande pesa y no se imprime bien.
      */
+    /**
+     * **Imprimir lo que se ve.** Sin PDF debajo, el lienzo se encaja en el papel que se elija
+     * en el diálogo; con PDF, la página del documento con lo anotado encima.
+     */
+    private fun imprimir() {
+        guardar()
+        val ruta = pdfDeFondo
+        val pintada = fondo
+        if (ruta == null || pintada == null) {
+            com.forge.pixpin.guardados.Imprimir.lienzo(this, controller.scene, nombreDeArchivo(), ::bitmapDe)
+            return
+        }
+        val pagina = paginaDeFondo
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching {
+                    val original = File(ruta).readBytes()
+                    DrawPdf.anotarPagina(
+                        this@DrawEditorActivity, original, pagina, controller.scene,
+                        pintada.width.toDouble(), pintada.height.toDouble(),
+                        imageProvider = ::bitmapDe, hojaPintada = pintada
+                    ) ?: original
+                }.getOrNull()
+            }
+            if (bytes == null) {
+                android.widget.Toast.makeText(
+                    this@DrawEditorActivity, "No se pudo preparar la página para imprimir",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            com.forge.pixpin.guardados.Imprimir.paginaDePdf(
+                this@DrawEditorActivity, bytes, pagina, File(ruta).nameWithoutExtension + " p${pagina + 1}"
+            )
+        }
+    }
+
     private fun compartirPdf() = exportando(DrawPdf.MIME_TYPE) {
-        DrawPdf.aArchivo(this, controller.scene, dibujoId, ::bitmapDe)
+        DrawPdf.aArchivo(this, controller.scene, nombreDeArchivo(), ::bitmapDe)
     }
 
     /**
@@ -3907,6 +4162,213 @@ class DrawEditorActivity : ComponentActivity() {
      * de lectura, y se comprueba que el resultado siga sirviendo —que no se haya cerrado el
      * dibujo entretanto— antes de tocar nada.
      */
+    /** La seña de la página que se tiene debajo. Ver [com.forge.pixpin.data.claveDePagina]. */
+    private fun claveDeEstaPagina(): String =
+        com.forge.pixpin.data.claveDePagina(pdfDeFondo, paginaDeFondo)
+
+    /**
+     * **Esta página, como imagen o como líneas**, y recordado para la próxima vez que se abra.
+     *
+     * Es el mismo cambio que hace el interruptor general, pero para una sola página: se suelta
+     * lo que hubiera y se monta el otro camino sin cerrar el dibujo. Ver
+     * [com.forge.pixpin.data.Settings.paginasComoImagen].
+     */
+    // ---- Modo visualización ----
+
+    /** Mirando: sin la barra de herramientas, solo mover, imprimir, presentar y editar. */
+    private var modoVista by mutableStateOf(false)
+    private var herramientaAntesDeVer: Tool? = null
+
+    private fun entrarEnVista() {
+        if (!modoVista) herramientaAntesDeVer = controller.tool.takeIf { it != Tool.HAND }
+        modoVista = true
+        controller.setSelection(emptySet())
+        controller.selectTool(Tool.HAND)
+    }
+
+    private fun pasarAEditar() {
+        modoVista = false
+        controller.selectTool(herramientaAntesDeVer ?: Tool.FREEDRAW)
+    }
+
+    /**
+     * **La barra del modo visualización**: salir, el nombre (y las páginas de un PDF),
+     * imprimir, presentar y editar. Nada más: lo demás es para editar.
+     */
+    @Composable
+    private fun BarraDeVista(modifier: Modifier = Modifier) {
+        // En dos pisos: los botones y, debajo, el nombre y las páginas. En uno solo no cabe en
+        // el ancho de un teléfono.
+        androidx.compose.foundation.layout.Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+            BotonesDeVista()
+            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+            if (pdfDeFondo != null) RotuloDeLaHoja() else RotuloDelLienzo()
+        }
+    }
+
+    @Composable
+    private fun BotonesDeVista() {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            shadowElevation = 4.dp
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+                IconButton(onClick = { cerrarYVolver() }) {
+                    Icon(Icons.Filled.Close, contentDescription = getString(R.string.cd_close))
+                }
+                IconButton(onClick = { encuadrar() }) {
+                    Icon(Icons.Filled.CenterFocusWeak, contentDescription = "Encuadrar")
+                }
+                IconButton(onClick = { imprimir() }) {
+                    Icon(Icons.Filled.Print, contentDescription = "Imprimir")
+                }
+                IconButton(onClick = { empezarAPresentar() }) {
+                    Icon(Icons.Filled.Slideshow, contentDescription = "Presentar")
+                }
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { pasarAEditar() },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.padding(start = 2.dp, end = 4.dp)
+                ) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("Editar", modifier = Modifier.padding(start = 6.dp))
+                }
+            }
+        }
+    }
+
+    // ---- Presentación ----
+
+    /** Presentando: diapositiva a pantalla completa y la pastilla de pasar. Ver [empezarAPresentar]. */
+    private var presentando by mutableStateOf(false)
+    private var modoDePresentacion by mutableStateOf(com.forge.pixpin.ui.ModoDePresentacion.PASAR)
+    private var pastillaALaVista by mutableStateOf(true)
+    private var herramientaAntesDePresentar: Tool? = null
+
+    /**
+     * **Presentar** (14-sep-2026): fuera todas las barras, la diapositiva encajada en la
+     * pantalla, la pantalla sin apagarse, y abajo una pastilla para pasar y para anotar.
+     *
+     * Una diapositiva es la página del PDF de fondo —un PowerPoint importado entra como PDF—
+     * o, en un lienzo con hojas, cada hoja. Lo que se anota encima se guarda como siempre.
+     */
+    private fun empezarAPresentar() {
+        herramientaAntesDePresentar = controller.tool
+        presentando = true
+        pastillaALaVista = true
+        modoDePresentacion = com.forge.pixpin.ui.ModoDePresentacion.PASAR
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        encuadrarLaDiapositiva(0)
+    }
+
+    private fun terminarDePresentar() {
+        presentando = false
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        herramientaAntesDePresentar?.let { controller.selectTool(it) }
+        guardar()
+    }
+
+    private fun ponerModoDePresentacion(modo: com.forge.pixpin.ui.ModoDePresentacion) {
+        modoDePresentacion = modo
+        controller.selectTool(
+            when (modo) {
+                com.forge.pixpin.ui.ModoDePresentacion.PASAR -> Tool.HAND
+                com.forge.pixpin.ui.ModoDePresentacion.LAPIZ -> Tool.FREEDRAW
+                com.forge.pixpin.ui.ModoDePresentacion.RESALTADOR -> Tool.HIGHLIGHTER
+                com.forge.pixpin.ui.ModoDePresentacion.BORRADOR -> Tool.ERASER
+            }
+        )
+    }
+
+    /** Encaja la diapositiva de ahora ([delta] = 0) o pasa a la de al lado. */
+    private fun encuadrarLaDiapositiva(delta: Int) {
+        if (pdfDeFondo != null) {
+            if (delta != 0) {
+                guardar()
+                irALaHoja(paginaDeFondo + delta)
+            } else {
+                medidaDeLaPagina?.let { (w, h) -> encajarLaPagina(w, h) }
+            }
+            return
+        }
+        if (hojasEnOrden(controller.scene).isNotEmpty()) {
+            pasarDeHoja(delta)
+            // Pasar de hoja la deja marcada; presentando, el recuadro de selección estorba.
+            controller.setSelection(emptySet())
+        } else if (delta == 0) {
+            encuadrar()
+        }
+    }
+
+    /** La diapositiva de ahora y cuántas hay, contando desde uno. */
+    private fun diapositivaDeAhora(total: Int): Pair<Int, Int> {
+        if (pdfDeFondo != null) return (paginaDeFondo + 1) to total
+        val hojas = hojasEnOrden(controller.scene)
+        if (hojas.isEmpty()) return 1 to 1
+        val m = resources.displayMetrics
+        val centro = controller.scene.viewport.toScene(m.widthPixels / 2.0, m.heightPixels / 2.0)
+        val i = hojas.indices.minByOrNull {
+            val b = getElementBounds(hojas[it])
+            kotlin.math.hypot(b.midX - centro.x, b.midY - centro.y)
+        } ?: 0
+        return (i + 1) to hojas.size
+    }
+
+    /** Mientras se leen las líneas de la página al pasar a vector. */
+    private var leyendoLineas by mutableStateOf(false)
+
+    /**
+     * **Vector ⇄ imagen para la página que se está viendo.** Si se ve en vector, esta página
+     * pasa a imagen. Si se ve como imagen, se intenta en vector —encendiendo el ajuste general
+     * si estaba apagado— y, si la página es un escaneo y no tiene líneas que leer, se dice en
+     * vez de dejar el botón sin hacer nada.
+     */
+    private fun alternarModoDelPdf() {
+        val ruta = pdfDeFondo ?: return
+        val ancho = fondo?.width?.toDouble() ?: return
+        if (leyendoLineas) return
+        if (planoVectorial != null) {
+            ponerEstaPaginaComoImagen(true)
+            return
+        }
+        val app = application as? com.forge.pixpin.PixPinApp
+        leyendoLineas = true
+        lifecycleScope.launch {
+            app?.settings?.setPlanoEnLineas(true)
+            app?.settings?.setPaginaComoImagen(claveDeEstaPagina(), false)
+            val hecho = runCatching { traerElPlanoEnLineas(ruta, ancho) }.getOrDefault(false)
+            leyendoLineas = false
+            if (!hecho) {
+                android.widget.Toast.makeText(
+                    this@DrawEditorActivity,
+                    "Esta página no tiene líneas que leer (es un escaneo o una foto): se queda como imagen",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                app?.settings?.setPaginaComoImagen(claveDeEstaPagina(), true)
+            }
+        }
+    }
+
+    private fun ponerEstaPaginaComoImagen(comoImagen: Boolean) {
+        val clave = claveDeEstaPagina()
+        lifecycleScope.launch {
+            (application as? com.forge.pixpin.PixPinApp)?.settings?.setPaginaComoImagen(clave, comoImagen)
+        }
+        val ruta = pdfDeFondo ?: return
+        val ancho = fondo?.width?.toDouble() ?: return
+        val alto = fondo?.height?.toDouble() ?: return
+        if (comoImagen) {
+            planoVectorial?.soltar()
+            planoVectorial = null
+            planoParaLaWeb = null
+            if (mosaico == null) prepararElMosaico(ruta, ancho, alto)
+        } else if (planoVectorial == null) {
+            lifecycleScope.launch { traerElPlanoEnLineas(ruta, ancho) }
+        }
+        tickDelMosaico++
+    }
+
     private suspend fun traerElPlanoEnLineas(ruta: String, ancho: Double): Boolean {
         val hecho = withContext(Dispatchers.IO) {
             runCatching {
@@ -3940,7 +4402,7 @@ class DrawEditorActivity : ComponentActivity() {
         if (pdfDeFondo != null) fondo else null
 
     private fun compartirSvg() = exportando(DrawSvg.MIME_TYPE) {
-        DrawSvg.aArchivo(this, controller.scene, dibujoId, ::bitmapDe, papelDeFondo())
+        DrawSvg.aArchivo(this, controller.scene, nombreDeArchivo(), ::bitmapDe, papelDeFondo())
     }
 
     /**
@@ -4003,7 +4465,7 @@ class DrawEditorActivity : ComponentActivity() {
             hojas, titulo = getString(R.string.formato_html_titulo), opciones = opciones
         )
         val carpeta = File(cacheDir, "share").apply { mkdirs() }
-        File(carpeta, "$dibujoId.html").also { it.writeText(pagina) }
+        File(carpeta, "${nombreDeArchivo()}.html").also { it.writeText(pagina) }
     }
 
     /**
@@ -4025,7 +4487,7 @@ class DrawEditorActivity : ComponentActivity() {
                 ?: return@exportando null
             val archivo = runCatching {
                 val carpeta = File(cacheDir, "share").apply { mkdirs() }
-                File(carpeta, "$dibujoId.${formato.extension}").also { destino ->
+                File(carpeta, "${nombreDeArchivo()}.${formato.extension}").also { destino ->
                     destino.outputStream().use { bitmap.compress(formato.compresor, 100, it) }
                 }
             }.getOrNull()
@@ -4119,7 +4581,7 @@ class DrawEditorActivity : ComponentActivity() {
         // esa subcarpeta (`res/xml/file_paths.xml`), y desde fuera el archivo
         // daría un fallo de permisos.
         val carpeta = File(cacheDir, "share").apply { mkdirs() }
-        val nombre = dibujoId.ifBlank { "dibujo" }
+        val nombre = nombreDelLienzo()
         val suelto = Proyecto(
             id = "suelto-$dibujoId", nombre = nombre, tocado = System.currentTimeMillis(),
             hojas = listOf(Hoja(id = "hoja-$dibujoId", nombre = nombre, dibujo = dibujoId, pagina = paginaDeFondo.takeIf { it >= 0 })),
