@@ -112,6 +112,9 @@ fun VentanaDeAjustes(
     /** El trazo a mano sale firme. Ver [Element.presionFirme]. */
     presionFirme: Boolean,
     onPresionFirme: (Boolean) -> Unit,
+    /** Qué hacer con la barra de arriba en pantalla completa. Ver [com.forge.pixpin.data.BarraDeArriba]. */
+    barraDeArriba: com.forge.pixpin.data.BarraDeArriba = com.forge.pixpin.data.BarraDeArriba.NADA,
+    onBarraDeArriba: (com.forge.pixpin.data.BarraDeArriba) -> Unit = {},
     /** La llave de paso de las luces del dibujo. Ver [LucesDelDibujo]. */
     luces: LucesDelDibujo,
     onLuces: (LucesDelDibujo) -> Unit,
@@ -270,6 +273,32 @@ fun VentanaDeAjustes(
                             // Escribir y dibujar piden cosas contrarias, y por eso es un
                             // interruptor y no una decisión de la aplicación.
                             Interruptor("Trazo firme", "Sin presión: el grosor no cambia al apretar.", presionFirme, onPresionFirme)
+                        }
+                        // **Que no baje la cortina en pantalla completa** (16-sep-2026). Las
+                        // tres opciones se le ofrecen al usuario porque ninguna sale gratis:
+                        // ver [com.forge.pixpin.data.BarraDeArriba]. Lo eligió él así.
+                        Seccion(
+                            "Barra de notificaciones",
+                            "Dibujando a pantalla completa (cuatro dedos), deslizar desde el borde de arriba baja la barra de la hora y la batería encima del dibujo."
+                        ) {
+                            val opciones = com.forge.pixpin.data.BarraDeArriba.entries
+                            Segmentos(
+                                listOf("Dejarla", "Fijar pantalla", "Franja"),
+                                opciones.indexOf(barraDeArriba).coerceAtLeast(0)
+                            ) { onBarraDeArriba(opciones[it]) }
+                            Text(
+                                when (barraDeArriba) {
+                                    com.forge.pixpin.data.BarraDeArriba.NADA ->
+                                        "Como siempre: la barra puede bajar."
+                                    com.forge.pixpin.data.BarraDeArriba.FIJAR ->
+                                        "Android fija la aplicación y no deja bajarla. Pregunta cada vez que entras y, mientras dura, no deja ir a inicio ni a las aplicaciones recientes."
+                                    com.forge.pixpin.data.BarraDeArriba.FRANJA ->
+                                        "Una franja invisible de un dedo arriba se traga el deslizamiento. Sin avisos, pero esa franja no dibuja y hay teléfonos donde puede no bastar. Necesita el permiso de dibujar sobre otras aplicaciones."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
                         }
                         // **Los gestos, escritos donde se buscan.** No se descubren solos, y
                         // la ventana de ajustes es el sitio al que uno viene a mirar.

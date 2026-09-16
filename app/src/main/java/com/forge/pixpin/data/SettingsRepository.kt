@@ -148,6 +148,12 @@ data class Settings(
      */
     val modoNoche: ModoNoche = ModoNoche.SISTEMA,
 
+    /**
+     * Qué se hace en pantalla completa para que no baje la cortina de notificaciones.
+     * Ver [BarraDeArriba] y [com.forge.pixpin.motor.DrawEditorActivity.fijarLaPantalla].
+     */
+    val barraDeArriba: BarraDeArriba = BarraDeArriba.NADA,
+
     /** Con qué se pasan a texto los audios: [MOTOR_VOSK] (rápido, 38 MB) o [MOTOR_WHISPER] (más fino, 105 MB). */
     val motorDeVoz: String = MOTOR_VOSK,
 
@@ -352,6 +358,7 @@ class SettingsRepository(private val context: Context) {
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
         val MODO_NOCHE = stringPreferencesKey("modo_noche")
+        val BARRA_DE_ARRIBA = stringPreferencesKey("barra_de_arriba")
         val MOTOR_DE_VOZ = stringPreferencesKey("motor_de_voz")
         val IDIOMA_DE_VOZ = stringPreferencesKey("idioma_de_voz")
         val SEGUNDO_IDIOMA_DE_VOZ = stringPreferencesKey("segundo_idioma_de_voz")
@@ -385,6 +392,8 @@ class SettingsRepository(private val context: Context) {
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
             modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
                 .getOrDefault(ModoNoche.SISTEMA),
+            barraDeArriba = runCatching { BarraDeArriba.valueOf(prefs[Keys.BARRA_DE_ARRIBA] ?: "") }
+                .getOrDefault(BarraDeArriba.NADA),
             motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_VOSK,
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
@@ -473,6 +482,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setModoNoche(valor: ModoNoche) {
         context.dataStore.edit { it[Keys.MODO_NOCHE] = valor.name }
+    }
+
+    suspend fun setBarraDeArriba(valor: BarraDeArriba) {
+        context.dataStore.edit { it[Keys.BARRA_DE_ARRIBA] = valor.name }
     }
 
     suspend fun setMotorDeVoz(valor: String) {
@@ -664,6 +677,24 @@ enum class DondeSeDibuja { EDITOR, PIN, CAPA, CAPTURA }
  * preguntar antes si hay plano.
  */
 fun claveDePagina(ruta: String?, pagina: Int): String = if (ruta.isNullOrBlank()) "" else "$ruta#$pagina"
+
+/**
+ * **Qué hacer con la barra de arriba en pantalla completa** (16-sep-2026).
+ *
+ * Escondidas las barras, Android **siempre** deja sacarlas deslizando desde el canto de arriba,
+ * y el segundo deslizamiento baja la cortina de notificaciones encima del dibujo. No hay forma
+ * limpia de quitar ese gesto —las exclusiones de gestos solo valen para los laterales—, así que
+ * quedan dos apaños, y cada uno tiene su pero. Lo elige el usuario:
+ *
+ * - [NADA]: lo de siempre. La cortina puede bajar.
+ * - [FIJAR]: se fija la tarea ([android.app.Activity.startLockTask]). Android bloquea la cortina
+ *   de verdad, pero **pregunta cada vez** que se entra y mientras tanto no deja ir a inicio ni a
+ *   las aplicaciones recientes.
+ * - [FRANJA]: una tira invisible pegada al borde de arriba, puesta como ventana sobre la pantalla
+ *   con el permiso de dibujar sobre otras aplicaciones. Se traga el deslizamiento antes de que
+ *   llegue al sistema. Sin avisos, pero depende del teléfono.
+ */
+enum class BarraDeArriba { NADA, FIJAR, FRANJA }
 
 /** Cuándo va la interfaz en modo noche. Ver [Settings.modoNoche]. */
 enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO }

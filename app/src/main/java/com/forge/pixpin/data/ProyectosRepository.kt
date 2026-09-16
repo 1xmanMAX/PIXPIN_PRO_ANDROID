@@ -74,10 +74,21 @@ class ProyectosRepository(context: Context) {
         com.forge.pixpin.guardados.ChatDeLosProyectos.alGuardar(app, antes, sellado)
     }
 
+    /**
+     * **Borrar un proyecto, y que se entere el resto de tus aparatos** (16-sep-2026).
+     *
+     * Antes esto solo lo quitaba de la lista: sus mensajes, sus lienzos y su chat seguían ahí, y
+     * la siguiente sincronización lo devolvía entero desde el otro aparato. Ahora se hace **copia
+     * de seguridad primero** —queda en «Copias de seguridad», por si se borró sin querer—, se
+     * borran sus mensajes (que es lo que deja marca de cada uno) y se deja la **lápida** que viaja
+     * y hace que también desaparezca en los demás aparatos. Ver
+     * [com.forge.pixpin.sincro.Disco.borrarChat] y [com.forge.pixpin.sincro.LapidaDeChat].
+     */
     fun borrar(id: String) {
         // La copia limpia se va con su proyecto: sin él no la mira nadie, y son
         // archivos del tamaño de un PDF.
         porId(id)?.pdfLimpio?.let { runCatching { File(it).delete() } }
+        runCatching { com.forge.pixpin.sincro.Disco(app.filesDir).borrarChat(id, "Antes de borrar el proyecto") }
         _proyectos.value = _proyectos.value.filter { it.id != id }
         escribir()
     }

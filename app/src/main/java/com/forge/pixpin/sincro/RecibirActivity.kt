@@ -9,6 +9,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -94,6 +97,8 @@ class RecibirActivity : ComponentActivity() {
 
     private var estado by mutableStateOf<Estado>(Estado.Pidiendo)
     private var camaraPermitida by mutableStateOf(false)
+    /** En el sentido de siempre: lo que hay que enseñar para que **me** envíen. Ver [esperarAQueMeManden]. */
+    private var miQr by mutableStateOf<Pair<String, android.graphics.Bitmap>?>(null)
     private var trabajo: Job? = null
     private var red: Red? = null
 
@@ -126,20 +131,7 @@ class RecibirActivity : ComponentActivity() {
                     } catch (e: java.io.EOFException) {
                         throw IllegalStateException("El código no es el bueno. Revísalo.")
                     }
-                    val oferta = receptor.oferta
-                    val sustituye = oferta.elementos.mapNotNull { e -> Recepcion.queSustituye(this@RecibirActivity, e)?.let { e.identidad to it } }.toMap()
-                    val decision = CompletableDeferred<Map<String, Boolean>?>()
-                    estado = Estado.Oferta(oferta, sustituye, decision)
-                    val comoNuevo = decision.await()
-                    if (comoNuevo == null) { receptor.rechazar(); finish(); return@use }
-                    estado = Estado.Recibiendo(oferta.de, 0, oferta.elementos.sumOf { it.bytes })
-                    var ultimo = 0L
-                    val llegados = receptor.aceptar(File(cacheDir, "recibido/${System.currentTimeMillis()}")) { hechos, total ->
-                        val ahora = System.currentTimeMillis()
-                        if (ahora - ultimo > 120 || hechos == total) { ultimo = ahora; estado = Estado.Recibiendo(oferta.de, hechos, total) }
-                    }
-                    val guardados = llegados.mapNotNull { (e, archivo) -> Recepcion.guardar(this@RecibirActivity, e, archivo, oferta, comoNuevo = comoNuevo[e.identidad] == true) }
-                    estado = Estado.Hecho(oferta.de, guardados)
+                    tramitar(receptor)
                 }
             } catch (e: Exception) {
                 estado = Estado.Fallo(
@@ -150,6 +142,28 @@ class RecibirActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * **De la oferta a lo guardado.** Da igual quién haya llamado a quién: llegados a aquí hay un
+     * [Envio.Receptor] abierto, se enseña lo que trae, se acepta o no, y se guarda.
+     */
+    private suspend fun tramitar(receptor: Envio.Receptor) {
+        val oferta = receptor.oferta
+        oferta.rechazado?.let { throw IllegalStateException(it) }
+        val sustituye = oferta.elementos.mapNotNull { e -> Recepcion.queSustituye(this@RecibirActivity, e)?.let { e.identidad to it } }.toMap()
+        val decision = CompletableDeferred<Map<String, Boolean>?>()
+        estado = Estado.Oferta(oferta, sustituye, decision)
+        val comoNuevo = decision.await()
+        if (comoNuevo == null) { receptor.rechazar(); finish(); return }
+        estado = Estado.Recibiendo(oferta.de, 0, oferta.elementos.sumOf { it.bytes })
+        var ultimo = 0L
+        val llegados = receptor.aceptar(File(cacheDir, "recibido/${System.currentTimeMillis()}")) { hechos, total ->
+            val ahora = System.currentTimeMillis()
+            if (ahora - ultimo > 120 || hechos == total) { ultimo = ahora; estado = Estado.Recibiendo(oferta.de, hechos, total) }
+        }
+        val guardados = llegados.mapNotNull { (e, archivo) -> Recepcion.guardar(this@RecibirActivity, e, archivo, oferta, comoNuevo = comoNuevo[e.identidad] == true) }
+        estado = Estado.Hecho(oferta.de, guardados)
     }
 
     /** Directo a la dirección del QR si la hay; si no responde, buscando por la red. */
@@ -206,6 +220,43 @@ class RecibirActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **Que me envíen a mí: yo espero y enseño mi QR** (16-sep-2026, idea del usuario).
+     *
+     * Es el envío del revés. Para mandarle algo a un ordenador o a varias personas concretas, en
+     * vez de dictarles un código a todos, cada uno abre esto y enseña su pantalla: quien manda
+     * pasa la cámara y ya. Aquí se abre la puerta, se anuncia en la red y se espera; quien llama
+     * es el otro, así que el canal lo empieza él ([Envio.Receptor.conectar] con `inicia = false`).
+     */
+    private fun esperarAQueMeManden() {
+        if (red != null) return
+        val yo = IdentidadEnDisco(filesDir).leer(android.os.Build.MODEL.orEmpty().ifBlank { "Este aparato" }).yo
+        val codigo = Envio.nuevoCodigo()
+        val r = Red(this).also { red = it }
+        r.escuchar(0) { socket, entrada ->
+            if (red !== r) return@escuchar
+            trabajo = lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val receptor = Envio.Receptor.conectar(entrada, socket.getOutputStream(), codigo, yo, inicia = false)
+                    tramitar(receptor)
+                } catch (e: Exception) {
+                    estado = Estado.Fallo(e.message ?: e.javaClass.simpleName)
+                }
+            }
+            // El hilo de la red se queda aquí hasta que se acabe de recibir: si vuelve, el socket
+            // se cierra y la transferencia se corta a medias.
+            runCatching { trabajo?.let { kotlinx.coroutines.runBlocking { it.join() } } }
+        }
+        lifecycleScope.launch {
+            val etiqueta = withContext(Dispatchers.Default) { Envio.etiqueta(codigo) }
+            r.anunciar(Envio.TIPO_RECIBIR, "PixPin ${yo.nombre}", mapOf("g" to etiqueta, "n" to yo.nombre.take(40)))
+            val qr = withContext(Dispatchers.Default) {
+                Qr.imagen(Envio.textoDelQrDeRecepcion(codigo, Red.miDireccion(this@RecibirActivity), r.puerto))
+            }
+            miQr = codigo to qr
+        }
+    }
+
     @Composable
     private fun Pidiendo() {
         var codigo by remember { mutableStateOf("") }
@@ -250,6 +301,41 @@ class RecibirActivity : ComponentActivity() {
         )
         Spacer(Modifier.height(12.dp))
         Button(enabled = Envio.valido(codigo), onClick = { recibir(codigo, null, 0) }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Recibir") }
+
+        // **El otro sentido**: que quien manda me escanee a mí. Ver [esperarAQueMeManden].
+        Spacer(Modifier.height(20.dp))
+        androidx.compose.material3.HorizontalDivider(Modifier.widthIn(max = 320.dp))
+        Spacer(Modifier.height(16.dp))
+        val mio = miQr
+        if (mio == null) {
+            Text(
+                "¿Prefieres que te escaneen? Enseña tu propio código y que quien envía pase la cámara por él.",
+                style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = { esperarAQueMeManden() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Text("Enseñar mi código para que me envíen")
+            }
+        } else {
+            Text("Que te escaneen esto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(10.dp))
+            Image(
+                mio.second.asImageBitmap(), contentDescription = "Mi código",
+                modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(1f)
+                    .clip(RoundedCornerShape(18.dp)).background(Color.White).padding(10.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                Envio.legible(mio.first),
+                style = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace)
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Esperando a que te envíen algo. También vale dictar este código en «Enviar → Escanear a quien recibe».",
+                style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 
     @Composable

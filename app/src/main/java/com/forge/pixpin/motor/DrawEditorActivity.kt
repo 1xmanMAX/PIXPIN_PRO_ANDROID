@@ -45,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.AlignHorizontalCenter
 import androidx.compose.material.icons.filled.AlignHorizontalLeft
 import androidx.compose.material.icons.filled.AlignHorizontalRight
@@ -405,6 +406,43 @@ class DrawEditorActivity : ComponentActivity() {
         if (hasFocus) aPantallaCompleta()
     }
 
+    /** La tira que se traga el deslizamiento del borde, si se ha elegido. Ver [FranjaDeArriba]. */
+    private val franjaDeArriba by lazy { FranjaDeArriba(this) }
+
+    /**
+     * **Que no baje la cortina de notificaciones mientras se dibuja a pantalla completa.**
+     *
+     * Queja del usuario del 15-sep-2026: escribiendo muy arriba en «solo el dibujo» bajaba la
+     * barra de la hora y la batería, y luego el lápiz ya no escribía bien. Esconder las barras no
+     * basta: en modo inmersivo Android **siempre** deja sacarlas deslizando desde el canto, y no
+     * hay forma de excluir el borde de arriba —las exclusiones de gestos solo valen para los
+     * laterales—. Los dos apaños que quedan tienen su pero, así que **lo elige el usuario** en
+     * Ajustes → Dibujo (pidió las tres opciones el 16-sep-2026):
+     * [com.forge.pixpin.data.BarraDeArriba.FIJAR] fija la tarea (bloqueo de verdad, pero Android
+     * pregunta cada vez y no deja ir a inicio) y [com.forge.pixpin.data.BarraDeArriba.FRANJA]
+     * pone la tira invisible de [FranjaDeArriba] (sin avisos, pero depende del teléfono).
+     *
+     * Se deshace siempre al salir, elija lo que elija: si se cambia el ajuste con la pantalla ya
+     * fijada, esto la suelta antes de montar lo otro.
+     */
+    private fun protegerElBordeDeArriba(
+        activo: Boolean,
+        como: com.forge.pixpin.data.BarraDeArriba
+    ) {
+        fijarLaPantalla(activo && como == com.forge.pixpin.data.BarraDeArriba.FIJAR)
+        if (activo && como == com.forge.pixpin.data.BarraDeArriba.FRANJA) franjaDeArriba.poner()
+        else franjaDeArriba.quitar()
+    }
+
+    private fun fijarLaPantalla(fijar: Boolean) {
+        val am = getSystemService(android.app.ActivityManager::class.java) ?: return
+        val fijada = am.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
+        runCatching {
+            if (fijar && !fijada) startLockTask()
+            else if (!fijar && fijada) stopLockTask()
+        }
+    }
+
     private fun aPantallaCompleta() {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         val controlador =
@@ -688,6 +726,16 @@ class DrawEditorActivity : ComponentActivity() {
     /** Pide repintar el lienzo tras un cambio que no vino del dedo. */
     private fun cambiadoDesdeFuera() { tickDelMosaico++ }
 
+    /**
+     * **Vuelve a leer el lienzo del disco**, después de que algo de fuera lo haya cambiado: lo que
+     * trajo [PonerseAlDia]. El archivo ya está junto; aquí solo se recoge. Ver [AlDia].
+     */
+    private fun recargarDelDisco() {
+        val escena = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(this, dibujoId)) ?: return
+        controller.load(escena)
+        cambiadoDesdeFuera()
+    }
+
     /** Sin interruptor: la foto queda encima, un poco corrida y seleccionada, para arrastrarla. */
     private fun colocarCopiaDeLaZona(foto: Bitmap, b: Bounds) {
         runCatching {
@@ -926,6 +974,9 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // La tira vive en el gestor de ventanas, no en la pantalla: si no se quita aquí, se
+        // queda flotando sobre lo que venga después. Ver [FranjaDeArriba].
+        franjaDeArriba.quitar()
         // Los trozos del plano son megas de mapas de bits: se sueltan al cerrar, que es lo
         // que hace que abrir y cerrar planos grandes no vaya llenando la memoria.
         mosaico?.soltar()
@@ -938,6 +989,9 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        // Lo mismo al irse a otra pantalla: la tira se vuelve a poner al volver, porque el
+        // efecto que la monta se relanza con la composición. Ver [protegerElBordeDeArriba].
+        franjaDeArriba.quitar()
         // Primero lo escrito, que es de lo que se saca todo lo demás.
         guardarYa()
         devolverAlPdf()
@@ -1115,6 +1169,11 @@ class DrawEditorActivity : ComponentActivity() {
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
         val zurdo = ajustes.zurdo
+        // **Que no baje la cortina de notificaciones mientras se dibuja**, si así se ha pedido.
+        // Ver [protegerElBordeDeArriba] y [com.forge.pixpin.data.BarraDeArriba].
+        LaunchedEffect(soloElDibujo, ajustes.barraDeArriba) {
+            protegerElBordeDeArriba(soloElDibujo, ajustes.barraDeArriba)
+        }
         // **Los ajustes del imán llegan al controlador.** Sin esto, apagar una
         // clase en la pantalla de ajustes no hacía nada aquí: el controlador se
         // quedaba con los valores de fábrica.
@@ -1398,6 +1457,17 @@ class DrawEditorActivity : ComponentActivity() {
                             )
                     )
                 }
+                // **Ponerme al día con este lienzo** (16-sep-2026). Va junto al nombre y solo si
+                // este lienzo es de un proyecto y hay grupo: en un dibujo suelto no hay con quién
+                // ponerse al día. Ver [PonerseAlDia].
+                BotonDePonerseAlDia(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } + 10.dp,
+                            end = 12.dp
+                        )
+                )
                 @Suppress("UNUSED_EXPRESSION") tick
                 if (controller.tool == Tool.ZONA) {
                     PastillaDeLaZona(
@@ -2098,6 +2168,12 @@ class DrawEditorActivity : ComponentActivity() {
                         null
                     },
                     onPaginaComoImagen = { comoImagen -> ponerEstaPaginaComoImagen(comoImagen) },
+                    barraDeArriba = ajustes.barraDeArriba,
+                    onBarraDeArriba = { como ->
+                        lifecycleScope.launch {
+                            (application as? com.forge.pixpin.PixPinApp)?.settings?.setBarraDeArriba(como)
+                        }
+                    },
                     presionFirme = controller.estiloActivo().presionFirme,
                     onPresionFirme = { firme ->
                         aplicarEstilo(controller.estiloActivo().copy(presionFirme = firme))
@@ -2496,6 +2572,44 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
+    /** Si está abierta la ventana de ponerse al día con este lienzo. Ver [PonerseAlDia]. */
+    private var alDiaAbierto by mutableStateOf(false)
+
+    /**
+     * **El botón de traer la última versión de este lienzo**, y su ventana.
+     *
+     * Sale cuando el lienzo pertenece a un proyecto —el chat por el que viaja— y este aparato está
+     * en un grupo de sincronización. El archivo es el del lienzo tal como lo nombra la
+     * sincronización: la ruta relativa a `files`. Ver [AlDia].
+     */
+    @Composable
+    private fun BotonDePonerseAlDia(modifier: Modifier = Modifier) {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val todos by app.proyectos.proyectos.collectAsState()
+        val proyecto = remember(todos, dibujoId, pdfDeFondo) {
+            pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) } ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+        } ?: return
+        val enGrupo = remember { runCatching { com.forge.pixpin.sincro.Red.disco(this).identidad.leer().enGrupo }.getOrDefault(false) }
+        if (!enGrupo) return
+        val rel = "pins/draw/$dibujoId.excalidraw.gz"
+        androidx.compose.material3.FilledTonalIconButton(
+            // **Lo de aquí se escribe antes de preguntar**: lo que se junta es el archivo, y si
+            // el lienzo se queda a medio guardar se juntaría con la versión de hace un minuto.
+            onClick = { guardarYa(); alDiaAbierto = true },
+            modifier = modifier.size(38.dp)
+        ) {
+            Icon(Icons.Filled.Sync, contentDescription = "Ponerme al día con este lienzo", modifier = Modifier.size(18.dp))
+        }
+        if (alDiaAbierto) {
+            PonerseAlDia(
+                chat = proyecto.id,
+                rel = rel,
+                onCerrar = { alDiaAbierto = false },
+                alTraer = { recargarDelDisco() }
+            )
+        }
+    }
+
     @Composable
     private fun RotuloDelLienzo(modifier: Modifier = Modifier) {
         val app = application as? com.forge.pixpin.PixPinApp ?: return
@@ -2509,6 +2623,7 @@ class DrawEditorActivity : ComponentActivity() {
             modifier = modifier,
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
             shadowElevation = 3.dp
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
@@ -2540,6 +2655,7 @@ class DrawEditorActivity : ComponentActivity() {
             modifier = modifier,
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
             shadowElevation = 3.dp
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2925,7 +3041,8 @@ class DrawEditorActivity : ComponentActivity() {
         Surface(
             shape = RoundedCornerShape(12.dp),
             shadowElevation = 4.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f)
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+            contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -3376,6 +3493,9 @@ class DrawEditorActivity : ComponentActivity() {
      * Ver [com.forge.pixpin.EXTRA_DESDE_PROYECTO].
      */
     private fun cerrarYVolver() {
+        // Una tarea fijada no deja irse a ninguna otra pantalla, y una ventana sobre la pantalla
+        // se queda flotando encima de lo que venga. Ver [protegerElBordeDeArriba].
+        protegerElBordeDeArriba(false, com.forge.pixpin.data.BarraDeArriba.NADA)
         val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
         // **Y si no se vino de ningún proyecto, se vuelve a la aplicación igualmente.**
         //
@@ -4211,6 +4331,7 @@ class DrawEditorActivity : ComponentActivity() {
         Surface(
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
             shadowElevation = 4.dp
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {

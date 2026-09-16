@@ -667,6 +667,7 @@ class Croquis3DActivity : ComponentActivity() {
                     Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 4.dp),
                     shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     tonalElevation = 3.dp
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -726,7 +727,8 @@ class Croquis3DActivity : ComponentActivity() {
                 Surface(
                     Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 ) {
                     Row(
                         Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -974,6 +976,7 @@ class Croquis3DActivity : ComponentActivity() {
                                 },
                             shape = RoundedCornerShape(17.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             tonalElevation = 3.dp
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -1229,6 +1232,7 @@ class Croquis3DActivity : ComponentActivity() {
                 },
             shape = RoundedCornerShape(17.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             tonalElevation = 3.dp
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -1354,7 +1358,8 @@ class Croquis3DActivity : ComponentActivity() {
         Surface(
             Modifier.padding(start = 8.dp),
             shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.9f)
+            color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface
         ) {
             Row(
                 Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -2740,6 +2745,7 @@ class Croquis3DActivity : ComponentActivity() {
             modifier,
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             tonalElevation = 3.dp
         ) {
             Column(

@@ -42,6 +42,22 @@ data class Marca(
     val uid: String? = null
 )
 
+/**
+ * **La lápida de un proyecto entero**: se borró aquí, y eso tiene que viajar.
+ *
+ * Los mensajes ya tenían la suya ([Marca]); los proyectos no, y por eso borrar uno **no borraba
+ * casi nada** —se iba de la lista y el resto de sus archivos y todos sus mensajes se quedaban— y
+ * la siguiente sincronización lo traía de vuelta entero desde el otro aparato. Lo dijo el usuario
+ * el 16-sep-2026 y eligió que borrar borre en todos sus aparatos, con la copia de seguridad
+ * delante por si acaso. Ver [Disco.borrarChat].
+ *
+ * Lleva **cuándo** se borró porque de ahí sale la única regla que salva trabajo: si en el otro
+ * aparato se tocó el proyecto **después** de borrarlo aquí, vuelve. Borrar no puede pisar lo que
+ * alguien escribió después sin saberlo.
+ */
+@Serializable
+data class LapidaDeChat(val chat: String, val cuando: Long, val aparato: String = "")
+
 /** Lo que se acordó con un aparato la última vez que se sincronizó un chat. */
 @Serializable
 data class Base(
@@ -302,6 +318,64 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     // --------------------------------------------------------- marcas de borrado
 
     private val archivoDeMarcas get() = File(carpeta, "borrados.jsonl")
+
+    // ------------------------------------------------- los proyectos borrados
+
+    private val archivoDeLapidas get() = File(carpeta, "chatsborrados.jsonl")
+
+    /** Los proyectos borrados en este aparato. Ver [LapidaDeChat]. */
+    fun lapidas(): List<LapidaDeChat> {
+        val f = archivoDeLapidas
+        if (!f.exists()) return emptyList()
+        // La última línea de cada chat manda: borrar, volver a recibirlo y volver a borrarlo
+        // deja tres líneas y la que vale es la de ahora.
+        return f.readLines().mapNotNull { l -> runCatching { JSON.decodeFromString(LapidaDeChat.serializer(), l) }.getOrNull() }
+            .associateBy { it.chat }.values.toList()
+    }
+
+    fun lapidaDe(chat: String): LapidaDeChat? = lapidas().firstOrNull { it.chat == chat }
+
+    fun anotarLapida(chat: String, cuando: Long = System.currentTimeMillis(), aparato: String = "") =
+        synchronized(LAPIDAS) {
+            archivoDeLapidas.parentFile?.mkdirs()
+            archivoDeLapidas.appendText(JSON.encodeToString(LapidaDeChat.serializer(), LapidaDeChat(chat, cuando, aparato)) + "\n")
+        }
+
+    /**
+     * **Se levanta la lápida**: el proyecto vuelve a estar vivo aquí.
+     *
+     * Pasa cuando el otro aparato lo había tocado después de que se borrara —entonces se
+     * conserva— y cuando llega otra vez a propósito, por Wi-Fi o abriendo un `.pixpin`: recibir
+     * algo es decir que se quiere.
+     */
+    fun quitarLapida(chat: String) = synchronized(LAPIDAS) {
+        val f = archivoDeLapidas
+        if (!f.exists()) return
+        val quedan = f.readLines().mapNotNull { l -> runCatching { JSON.decodeFromString(LapidaDeChat.serializer(), l) }.getOrNull() }
+            .filter { it.chat != chat }
+        val tmp = File(carpeta, "chatsborrados.jsonl.tmp")
+        tmp.writeText(quedan.joinToString("") { JSON.encodeToString(LapidaDeChat.serializer(), it) + "\n" })
+        if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+    }
+
+    /**
+     * **Borra el proyecto entero aquí**: copia de seguridad, sus mensajes a la papelera, la
+     * lápida, y fuera de la lista.
+     *
+     * Los mensajes se borran por el camino de siempre ([aplicarMensajes]), que es el que deja
+     * marca de cada uno: sin eso volverían solos en la vuelta siguiente aunque el proyecto no
+     * volviera, y el proyecto se reharía a partir de ellos. **Los archivos no se tocan**: son lo
+     * que la copia necesita para devolverlo si el usuario se arrepiente, y ya no los cuenta ni
+     * los manda nadie porque nada los alcanza. Ver [Copias] y [alcance].
+     */
+    fun borrarChat(chat: String, motivo: String, cuando: Long = System.currentTimeMillis(), aparato: String = "") {
+        Copias(this).hacer(chat, motivo, cuando)
+        val claves = mensajesPorClave(chat).keys.toList()
+        if (claves.isNotEmpty()) aplicarMensajes(chat, emptyList(), claves)
+        synchronized(PROYECTOS) { escribirProyectos(leerProyectos().filter { it.id != chat }) }
+        anotarLapida(chat, cuando, aparato)
+        alCambiar(Cambio.PROYECTOS)
+    }
 
     fun marcas(): List<Marca> {
         val f = archivoDeMarcas
@@ -729,6 +803,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         const val BORRADO = "borrado"
         val JSON = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         private val MARCAS = Any()
+        private val LAPIDAS = Any()
         private val PROYECTOS = Any()
         private val CACHE = Any()
         private val DIRECCIONES = Any()

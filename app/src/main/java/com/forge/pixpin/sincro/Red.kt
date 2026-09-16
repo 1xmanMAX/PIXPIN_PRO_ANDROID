@@ -51,7 +51,14 @@ class Red(private val context: Context) {
      * el mismo chat a la vez es justo lo que hay que evitar. Un «PING» se contesta y se cierra
      * sin más: es como la pantalla comprueba si un aparato recordado sigue ahí.
      */
-    fun escuchar(puertoPreferido: Int, atender: (Socket, InputStream) -> Unit) {
+    /**
+     * Con [enParalelo], cada conexión se atiende en su propio hilo. Lo usa el envío a varios
+     * aparatos (16-sep-2026): ahí quien manda se queda esperando a aprobar a cada uno, y con una
+     * sola cola el segundo que llega ni siquiera aparecería en la lista hasta acabar con el
+     * primero. La sincronización sigue de una en una **a propósito**: dos conversaciones
+     * escribiendo el mismo chat a la vez es lo que se quiere evitar.
+     */
+    fun escuchar(puertoPreferido: Int, enParalelo: Boolean = false, atender: (Socket, InputStream) -> Unit) {
         if (servidor != null) return
         val s = runCatching { ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(puertoPreferido)) } }
             .getOrElse { ServerSocket(0) }
@@ -59,7 +66,8 @@ class Red(private val context: Context) {
         Thread({
             while (!s.isClosed) {
                 val cliente = runCatching { s.accept() }.getOrNull() ?: break
-                runCatching {
+                val trabajo = Runnable {
+                    runCatching {
                     cliente.use { c ->
                         c.soTimeout = 10_000
                         c.tcpNoDelay = true
@@ -74,9 +82,11 @@ class Red(private val context: Context) {
                             // Largo: mientras el otro decide qué sincronizar o cuál conservar, aquí no llega nada.
                             c.soTimeout = 30 * 60_000
                             atender(c, entrada)
+                            }
                         }
                     }
                 }
+                if (enParalelo) Thread(trabajo, "pixpin-red-atiende").start() else trabajo.run()
             }
         }, "pixpin-red-escucha").start()
     }

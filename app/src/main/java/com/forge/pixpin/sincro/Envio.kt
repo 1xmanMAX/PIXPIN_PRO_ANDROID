@@ -48,13 +48,30 @@ object Envio {
     fun textoDelQr(codigo: String, host: String?, puerto: Int): String =
         "pixpin-envio:1:$codigo:${host.orEmpty()}:$puerto"
 
-    data class DelQr(val codigo: String, val host: String?, val puerto: Int)
+    /**
+     * **Y el QR del otro sentido** (16-sep-2026, idea del usuario): el que enseña **quien va a
+     * recibir**, para que quien envía lo escanee y le mande.
+     *
+     * Para qué: mandarle algo a un ordenador o a tres personas concretas. Con el sentido de
+     * siempre hay que dictarles el código a todos y esperar a que lo tecleen; así cada uno enseña
+     * su pantalla, quien manda pasa la cámara por ellas y ya está. Es el mismo protocolo con los
+     * papeles cambiados: quien recibe **espera** y quien envía **llama**, así que el canal lo
+     * empieza el que llama. Ver [Emisor.atender] y [Receptor.conectar], parámetro `inicia`.
+     */
+    const val TIPO_RECIBIR = "_pixpinrecibe._tcp."
+
+    fun textoDelQrDeRecepcion(codigo: String, host: String?, puerto: Int): String =
+        "pixpin-recibe:1:$codigo:${host.orEmpty()}:$puerto"
+
+    data class DelQr(val codigo: String, val host: String?, val puerto: Int, val esperaRecibir: Boolean = false)
 
     fun leerQr(texto: String): DelQr? {
         val p = texto.trim().split(':')
-        if (p.size < 5 || p[0] != "pixpin-envio") return null
+        if (p.size < 5) return null
+        val recibir = p[0] == "pixpin-recibe"
+        if (p[0] != "pixpin-envio" && !recibir) return null
         val codigo = p[2].takeIf(::valido) ?: return null
-        return DelQr(codigo, p[3].ifBlank { null }, p[4].toIntOrNull() ?: 0)
+        return DelQr(codigo, p[3].ifBlank { null }, p[4].toIntOrNull() ?: 0, esperaRecibir = recibir)
     }
 
     /** Una cosa que se manda. */
@@ -93,7 +110,18 @@ object Envio {
     const val LIENZO = "lienzo"
 
     @Serializable
-    data class Oferta(val de: String, val deId: String, val elementos: List<Elemento>, val deCodigo: String = "")
+    data class Oferta(
+        val de: String,
+        val deId: String,
+        val elementos: List<Elemento>,
+        val deCodigo: String = "",
+        /**
+         * **Quien envía no aprobó a este aparato.** Desde que un envío puede ir a varios
+         * (16-sep-2026), quien manda ve la lista de los que se conectan y aprueba a los que quiere;
+         * al que no, se le dice y se le cierra, en vez de cortarle sin más. Ver [Emisor.atender].
+         */
+        val rechazado: String? = null
+    )
 
     @Serializable
     internal data class Aviso(val t: String, val nombre: String = "", val id: String = "", val bytes: Long = 0, val error: String? = null)
@@ -108,7 +136,13 @@ object Envio {
         return a
     }
 
-    enum class Final { ENVIADO, RECHAZADO }
+    enum class Final {
+        ENVIADO,
+        /** El otro aparato dijo que no. */
+        RECHAZADO,
+        /** Este aparato no aprobó al otro: ni se le ofreció. */
+        SIN_APROBAR
+    }
 
     /**
      * **Quien envía.** Atiende una conexión: se presenta, dice qué manda, y si le aceptan, lo manda.
@@ -116,14 +150,31 @@ object Envio {
      */
     class Emisor(private val yo: Aparato, private val cosas: List<Pair<Elemento, File>>) {
 
+        /**
+         * [alConocer] recibe el nombre de quien se conectó y **decide si se le manda**: puede
+         * quedarse esperando a que el usuario apruebe. Si dice que no, al otro se le contesta con
+         * una oferta [Oferta.rechazado] —sabe que no le han aprobado, no que se cayó la red—.
+         */
         fun atender(
             entrada: InputStream, salida: OutputStream, codigo: String,
-            alConocer: (String) -> Unit = {}, avance: (hechos: Long, total: Long) -> Unit = { _, _ -> }
+            alConocer: (String) -> Boolean = { true }, avance: (hechos: Long, total: Long) -> Unit = { _, _ -> },
+            /** Cierto cuando es **este** aparato el que llama, porque quien recibe estaba esperando. */
+            inicia: Boolean = false
         ): Final {
-            val canal = Canal.abrir(entrada, salida, clave(codigo), inicia = false)
+            val canal = Canal.abrir(entrada, salida, clave(codigo), inicia = inicia)
             val hola = leer(canal)
             if (hola.t != "hola") throw IOException("Faltó el saludo")
-            alConocer(hola.nombre)
+            if (!alConocer(hola.nombre)) {
+                canal.enviar(
+                    Protocolo.JSON_,
+                    Protocolo.json.encodeToString(
+                        Oferta.serializer(),
+                        Oferta(yo.nombre, yo.id, emptyList(), yo.codigo, rechazado = "${yo.nombre} no aprobó el envío a este aparato.")
+                    ).toByteArray()
+                )
+                canal.vaciar()
+                return Final.SIN_APROBAR
+            }
             val oferta = Oferta(yo.nombre, yo.id, cosas.map { it.first }, yo.codigo)
             canal.enviar(Protocolo.JSON_, Protocolo.json.encodeToString(Oferta.serializer(), oferta).toByteArray())
             val respuesta = leer(canal)
@@ -171,8 +222,12 @@ object Envio {
         }
 
         companion object {
-            fun conectar(entrada: InputStream, salida: OutputStream, codigo: String, yo: Aparato): Receptor {
-                val canal = Canal.abrir(entrada, salida, clave(codigo), inicia = true)
+            fun conectar(
+                entrada: InputStream, salida: OutputStream, codigo: String, yo: Aparato,
+                /** Falso cuando es el otro el que llama: este aparato estaba esperando a que le enviaran. */
+                inicia: Boolean = true
+            ): Receptor {
+                val canal = Canal.abrir(entrada, salida, clave(codigo), inicia = inicia)
                 mandar(canal, Aviso("hola", nombre = yo.nombre, id = yo.id))
                 val (tipo, datos) = canal.recibir()
                 if (tipo != Protocolo.JSON_) throw IOException("Se esperaba la oferta")

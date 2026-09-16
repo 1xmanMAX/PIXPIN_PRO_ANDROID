@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -31,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,22 +67,53 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * **Enviar por Wi-Fi, una sola vez.** Ver [Envio].
+ * **Enviar por Wi-Fi a los aparatos que quieras.** Ver [Envio].
  *
  * Llega de tres sitios: «Compartir» en cualquier aplicación (uno o varios archivos), el menú de un
  * proyecto (el proyecto entero) y el botón «Enviar» de Sincronizar (elegir archivos). Enseña un
- * código y su QR, espera a que el otro lo use, manda, y al acabar **cierra y olvida el código**.
+ * código y su QR; cada aparato que lo use sale en la lista y se le manda cuando se aprueba. El
+ * código vale mientras esta pantalla esté abierta: al cerrarla deja de existir. Ver [Destino].
  */
 class EnviarActivity : ComponentActivity() {
 
     private sealed interface Estado {
         data object Preparando : Estado
         data class Esperando(val codigo: String, val qr: Bitmap, val intentosMalos: Int = 0) : Estado
-        data class Conectado(val quien: String) : Estado
-        data class Enviando(val quien: String, val hechos: Long, val total: Long) : Estado
-        data class Hecho(val quien: String) : Estado
-        data class Rechazado(val quien: String) : Estado
         data class Fallo(val texto: String) : Estado
+    }
+
+    /**
+     * **Un aparato que se ha conectado con el código** (16-sep-2026, pedido por el usuario: «que
+     * se pueda con varios, que me muestre qué dispositivos están enlistados y poder aprobar el
+     * envío a los que quiera»).
+     *
+     * Antes el código valía **una vez**: el primero que llegaba se lo llevaba y la puerta se
+     * cerraba. Ahora la puerta sigue abierta hasta que se cierra la pantalla, cada uno que llega
+     * sale en la lista **esperando aprobación**, y solo se le manda cuando se le da al botón. El
+     * hilo que lo atiende se queda parado en [aprobacion] mientras tanto — por eso la escucha del
+     * envío va en paralelo, ver [Red.escuchar].
+     */
+    private data class Destino(
+        val id: Long,
+        val nombre: String,
+        val fase: Fase,
+        val hechos: Long = 0,
+        val total: Long = 0,
+        val texto: String = ""
+    ) {
+        enum class Fase { PIDIENDO, ENVIANDO, HECHO, RECHAZADO, SIN_APROBAR, FALLO }
+    }
+
+    private var destinos by mutableStateOf<List<Destino>>(emptyList())
+    /** Con la cámara abierta para escanear a quien va a recibir. Ver [mandarA]. */
+    private var escaneando by mutableStateOf(false)
+    private var camaraPermitida by mutableStateOf(false)
+    /** Los códigos ya escaneados, para que pasar la cámara dos veces por el mismo no mande dos. */
+    private val yaEscaneados = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val aprobaciones = java.util.concurrent.ConcurrentHashMap<Long, java.util.concurrent.CompletableFuture<Boolean>>()
+
+    private fun cambiar(id: Long, como: (Destino) -> Destino) {
+        runOnUiThread { destinos = destinos.map { if (it.id == id) como(it) else it } }
     }
 
     private var estado by mutableStateOf<Estado>(Estado.Preparando)
@@ -96,6 +129,9 @@ class EnviarActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        camaraPermitida = androidx.core.content.ContextCompat.checkSelfPermission(
+            this, Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         setContent { PixPinTheme { Pantalla() } }
         if (savedInstanceState != null) { finish(); return }
         val proyecto = intent.getStringExtra(EXTRA_PROYECTO)
@@ -117,6 +153,46 @@ class EnviarActivity : ComponentActivity() {
                 }
                 if (uris.isEmpty()) { estado = Estado.Fallo("No llegó ningún archivo que enviar."); return }
                 lifecycleScope.launch { preparar { deUris(uris) } }
+            }
+        }
+    }
+
+    private val pedirCamara = registerForActivityResult(ActivityResultContracts.RequestPermission()) { camaraPermitida = it }
+
+    /**
+     * **Mandarle a quien está esperando** (16-sep-2026, idea del usuario): aquí los papeles se
+     * cambian —quien recibe abrió la puerta y enseña su QR, y este aparato **llama**—. Para
+     * mandarle algo a un ordenador o a tres personas concretas sin dictarle el código a nadie: se
+     * pasa la cámara por sus pantallas y cada una se pone en la lista.
+     *
+     * Escanear **es** la aprobación: no se vuelve a preguntar. Ver [Envio.textoDelQrDeRecepcion].
+     */
+    private fun mandarA(leido: Envio.DelQr) {
+        if (!yaEscaneados.add(leido.codigo)) return
+        val lista = cosas
+        if (lista.isEmpty()) return
+        val id = System.nanoTime()
+        destinos = destinos + Destino(id, "Aparato ${Envio.legible(leido.codigo)}", Destino.Fase.ENVIANDO)
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val host = leido.host ?: throw IllegalStateException("Ese código no dice dónde está el aparato. Que lo enseñe otra vez.")
+                Red.conectar(java.net.InetAddress.getByName(host), leido.puerto).use { socket ->
+                    val final = Envio.Emisor(yo(), lista).atender(
+                        socket.getInputStream(), socket.getOutputStream(), leido.codigo,
+                        alConocer = { nombre ->
+                            cambiar(id) { it.copy(nombre = nombre.ifBlank { it.nombre }) }
+                            true
+                        },
+                        avance = { hechos, total -> cambiar(id) { it.copy(hechos = hechos, total = total) } },
+                        inicia = true
+                    )
+                    cambiar(id) {
+                        it.copy(fase = if (final == Envio.Final.ENVIADO) Destino.Fase.HECHO else Destino.Fase.RECHAZADO)
+                    }
+                }
+            } catch (e: Exception) {
+                yaEscaneados.remove(leido.codigo)
+                cambiar(id) { it.copy(fase = Destino.Fase.FALLO, texto = e.message ?: e.javaClass.simpleName) }
             }
         }
     }
@@ -227,21 +303,35 @@ class EnviarActivity : ComponentActivity() {
         val etiqueta = withContext(Dispatchers.Default) { Envio.etiqueta(codigo) }
         val r = Red(this).also { red = it }
         var malos = 0
-        r.escuchar(0) { socket, entrada ->
+        r.escuchar(0, enParalelo = true) { socket, entrada ->
             if (red !== r) return@escuchar
+            val id = System.nanoTime()
             try {
                 val final = Envio.Emisor(quien, lista).atender(
                     entrada, socket.getOutputStream(), codigo,
-                    alConocer = { nombre -> estado = Estado.Conectado(nombre.ifBlank { "El otro aparato" }) },
-                    avance = { hechos, total ->
-                        val q = (estado as? Estado.Conectado)?.quien ?: (estado as? Estado.Enviando)?.quien ?: "el otro aparato"
-                        estado = Estado.Enviando(q, hechos, total)
-                    }
+                    alConocer = { nombre ->
+                        val como = nombre.ifBlank { "Un aparato" }
+                        runOnUiThread { destinos = destinos + Destino(id, como, Destino.Fase.PIDIENDO) }
+                        val espera = java.util.concurrent.CompletableFuture<Boolean>()
+                        aprobaciones[id] = espera
+                        // Aquí se para este hilo hasta que se toque «Enviar» o «No». Media hora es
+                        // lo que aguanta el socket; pasada, se cae solo y el otro lo verá.
+                        val si = runCatching { espera.get(29, java.util.concurrent.TimeUnit.MINUTES) }.getOrDefault(false)
+                        aprobaciones.remove(id)
+                        if (si) cambiar(id) { it.copy(fase = Destino.Fase.ENVIANDO) }
+                        si
+                    },
+                    avance = { hechos, total -> cambiar(id) { it.copy(fase = Destino.Fase.ENVIANDO, hechos = hechos, total = total) } }
                 )
-                val q = (estado as? Estado.Enviando)?.quien ?: (estado as? Estado.Conectado)?.quien ?: "El otro aparato"
-                estado = if (final == Envio.Final.ENVIADO) Estado.Hecho(q) else Estado.Rechazado(q)
-                // **Una sola vez**: hecho o rechazado, el código deja de existir.
-                runOnUiThread { r.cerrar() }
+                cambiar(id) {
+                    it.copy(fase = when (final) {
+                        Envio.Final.ENVIADO -> Destino.Fase.HECHO
+                        Envio.Final.RECHAZADO -> Destino.Fase.RECHAZADO
+                        Envio.Final.SIN_APROBAR -> Destino.Fase.SIN_APROBAR
+                    })
+                }
+                // **La puerta sigue abierta**: el mismo código vale para el siguiente aparato,
+                // hasta que se cierre esta pantalla.
             } catch (e: Canal.CodigoDistinto) {
                 malos++
                 if (malos >= Envio.INTENTOS) {
@@ -249,8 +339,13 @@ class EnviarActivity : ComponentActivity() {
                     runOnUiThread { r.cerrar() }
                 } else (estado as? Estado.Esperando)?.let { estado = it.copy(intentosMalos = malos) }
             } catch (e: Exception) {
-                estado = Estado.Fallo("Se cortó mientras se enviaba: ${e.message ?: e.javaClass.simpleName}")
-                runOnUiThread { r.cerrar() }
+                // Que se caiga uno no tumba el envío: los demás siguen.
+                aprobaciones.remove(id)
+                if (destinos.any { it.id == id }) {
+                    cambiar(id) { it.copy(fase = Destino.Fase.FALLO, texto = e.message ?: e.javaClass.simpleName) }
+                } else {
+                    estado = Estado.Fallo("Se cortó: ${e.message ?: e.javaClass.simpleName}")
+                }
             }
         }
         r.anunciar(Envio.TIPO, "PixPin ${quien.nombre}", mapOf("g" to etiqueta, "n" to quien.nombre.take(40)))
@@ -274,23 +369,131 @@ class EnviarActivity : ComponentActivity() {
                 Spacer(Modifier.height(8.dp))
                 LoQueSeEnvia()
                 Spacer(Modifier.height(16.dp))
+                LosAparatos()
+                ElEscaner()
                 when (val e = estado) {
                     Estado.Preparando -> Cargando("Preparando…")
                     is Estado.Esperando -> Esperando(e)
-                    is Estado.Conectado -> Cargando("${e.quien} se ha conectado.\nEsperando a que acepte…")
-                    is Estado.Enviando -> {
-                        Text("Enviando a ${e.quien}", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(progress = { if (e.total > 0) e.hechos.toFloat() / e.total else 0f }, modifier = Modifier.fillMaxWidth())
-                        Spacer(Modifier.height(6.dp))
-                        Text("${tamanoLegible(e.hechos).ifBlank { "0 B" }} de ${tamanoLegible(e.total)}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    is Estado.Hecho -> Final("Enviado a ${e.quien}", "El código ya no sirve: para enviar otra cosa, empieza otro envío.", bien = true)
-                    is Estado.Rechazado -> Final("${e.quien} no lo aceptó", "No se envió nada y el código ya no sirve.", bien = false)
                     is Estado.Fallo -> Final("No se pudo", e.texto, bien = false)
                 }
             }
         }
+    }
+
+    /**
+     * **Los aparatos que se han conectado con el código**, y el botón de aprobar a cada uno.
+     *
+     * El código **no caduca al primer envío**: mientras esta pantalla esté abierta puede
+     * conectarse quien quiera, y se le manda solo si se aprueba. Ver [Destino].
+     */
+    @Composable
+    private fun LosAparatos() {
+        if (destinos.isEmpty()) return
+        Caja {
+            Text(
+                if (destinos.size == 1) "Un aparato" else "${destinos.size} aparatos",
+                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            for (d in destinos) {
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(d.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            when (d.fase) {
+                                Destino.Fase.PIDIENDO -> "Quiere recibir lo que envías"
+                                Destino.Fase.ENVIANDO ->
+                                    if (d.total > 0) "Enviando · ${tamanoLegible(d.hechos)} de ${tamanoLegible(d.total)}"
+                                    else "Esperando a que lo acepte…"
+                                Destino.Fase.HECHO -> "Enviado"
+                                Destino.Fase.RECHAZADO -> "No lo aceptó"
+                                Destino.Fase.SIN_APROBAR -> "No aprobado"
+                                Destino.Fase.FALLO -> "Se cortó: ${d.texto}"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (d.fase == Destino.Fase.HECHO) VERDE else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (d.fase == Destino.Fase.ENVIANDO && d.total > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = { d.hechos.toFloat() / d.total },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    if (d.fase == Destino.Fase.PIDIENDO) {
+                        androidx.compose.material3.TextButton(onClick = { responder(d.id, false) }) { Text("No") }
+                        Spacer(Modifier.width(4.dp))
+                        Button(onClick = { responder(d.id, true) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp)) {
+                            Text("Enviar")
+                        }
+                    }
+                }
+            }
+            if (destinos.count { it.fase == Destino.Fase.PIDIENDO } > 1) {
+                Button(
+                    onClick = { destinos.filter { it.fase == Destino.Fase.PIDIENDO }.forEach { responder(it.id, true) } },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                ) { Text("Enviar a todos los que esperan") }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+
+    /**
+     * **La cámara para escanear a quien recibe.** El otro camino —enseñar el código y que lo
+     * tecleen— sigue debajo: son dos formas del mismo envío y se eligen sobre la marcha.
+     */
+    @Composable
+    private fun ElEscaner() {
+        if (cosas.isEmpty()) return
+        if (!escaneando) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    escaneando = true
+                    if (!camaraPermitida) pedirCamara.launch(Manifest.permission.CAMERA)
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Escanear a quien recibe")
+            }
+            Spacer(Modifier.height(16.dp))
+            return
+        }
+        Text("Pasa la cámara por el código de cada uno", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "En el otro aparato: Recibir por Wi-Fi → «Enseñar mi código para que me envíen». Puedes escanear varios seguidos.",
+            style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier.widthIn(max = 320.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (camaraPermitida) {
+                Qr.Escaner(Modifier.fillMaxSize()) { texto ->
+                    val leido = Envio.leerQr(texto) ?: return@Escaner
+                    // Solo los que **esperan recibir**: el QR del otro sentido es para escanearlo
+                    // desde «Recibir», no desde aquí.
+                    if (leido.esperaRecibir) mandarA(leido)
+                }
+            } else {
+                Text("Hace falta permiso de cámara.", textAlign = TextAlign.Center)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.material3.TextButton(onClick = { escaneando = false }) { Text("Dejar de escanear") }
+        Spacer(Modifier.height(16.dp))
+    }
+
+    /** La respuesta a un aparato que espera: suelta el hilo que lo atiende. */
+    private fun responder(id: Long, si: Boolean) {
+        aprobaciones[id]?.complete(si)
+        if (!si) destinos = destinos.map { if (it.id == id) it.copy(fase = Destino.Fase.SIN_APROBAR) else it }
     }
 
     @Composable
@@ -345,7 +548,11 @@ class EnviarActivity : ComponentActivity() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
-            Text("Esperando… El código solo sirve para este envío.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Esperando… Pueden conectarse varios aparatos; a cada uno le das tú al botón. El código deja de valer al cerrar esta pantalla.",
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center
+            )
         }
     }
 

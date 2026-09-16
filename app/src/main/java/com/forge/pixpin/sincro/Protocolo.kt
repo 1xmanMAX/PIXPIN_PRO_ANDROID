@@ -33,8 +33,9 @@ object Protocolo {
     /**
      * 2: cada archivo lleva detrás su resumen, y lo acordado se apunta solo si quedó igual en los dos.
      * 3: códigos únicos, fusión sin preguntar y parches (15-sep-2026).
+     * 4: borrar un proyecto viaja: lápidas de chat (16-sep-2026). Ver [Disco.LapidaDeChat].
      */
-    const val VERSION = 3
+    const val VERSION = 4
     const val JSON_: Byte = 1
     const val TROZO: Byte = 2
 
@@ -105,7 +106,9 @@ object Protocolo {
         /** Lo que cambió, cuando se pidió así. */
         val parche: String? = null,
         /** No tengo aquello sobre lo que va el parche: hay que mandarlo entero. */
-        val faltaBase: Boolean = false
+        val faltaBase: Boolean = false,
+        /** Los proyectos borrados en el otro aparato. Ver [LapidaDeChat]. */
+        val lapidas: List<LapidaDeChat> = emptyList()
     )
 
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
@@ -285,6 +288,16 @@ class Respondedor(
                 when (p.t) {
                     "adios" -> { Protocolo.enviar(canal, Protocolo.Respuesta()); canal.vaciar(); return }
                     "catalogo" -> Protocolo.enviar(canal, Protocolo.Respuesta(chats = disco.chats()))
+                    // **Qué proyectos se borraron aquí**, para que el otro no los devuelva.
+                    "lapidas" -> Protocolo.enviar(canal, Protocolo.Respuesta(lapidas = disco.lapidas()))
+                    // **Bórralo tú también.** Lo pide el que dirige cuando aquí está vivo pero
+                    // allí se borró y aquí no se ha tocado desde entonces. Ver [Disco.borrarChat].
+                    "borrarchat" -> {
+                        val chat = p.chat!!
+                        estado("Borrando «${nombreDe(chat)}», borrado en ${otro.nombre}…")
+                        disco.borrarChat(chat, "Antes de borrarlo, borrado en ${otro.nombre}", ahora(), otro.id)
+                        Protocolo.enviar(canal, Protocolo.Respuesta())
+                    }
                     "inventario" -> {
                         val chat = p.chat!!
                         estado("Comparando «${nombreDe(chat)}» con ${otro.nombre}…")
@@ -305,7 +318,13 @@ class Respondedor(
                     "aplicar" -> {
                         val chat = p.chat!!
                         disco.aplicarMensajes(chat, p.poner, p.borrar)
-                        disco.proyectoDe(p.proyecto)?.let { disco.guardarProyecto(it) }
+                        disco.proyectoDe(p.proyecto)?.let {
+                            // Si llega el proyecto es que allí decidieron que sigue vivo —lo
+                            // tocaron después de que aquí se borrara—: se levanta la lápida o la
+                            // vuelta siguiente lo borraría otra vez. Ver [Disco.quitarLapida].
+                            disco.quitarLapida(chat)
+                            disco.guardarProyecto(it)
+                        }
                         Protocolo.enviar(canal, Protocolo.Respuesta())
                     }
                     "archivos" -> {
@@ -381,6 +400,18 @@ class Sesion private constructor(
     /** En qué puerto escucha el otro. */
     val puertoDelOtro: Int = 0
 ) {
+    /** Los proyectos que el otro aparato tiene borrados. Ver [LapidaDeChat]. */
+    fun lapidas(): List<LapidaDeChat> {
+        Protocolo.enviar(canal, Protocolo.Peticion("lapidas"))
+        return Protocolo.leerRespuesta(canal).lapidas
+    }
+
+    /** Le dice al otro que borre ese proyecto, porque aquí se borró y allí no se ha tocado. */
+    fun borrarAlla(chat: String) {
+        Protocolo.enviar(canal, Protocolo.Peticion("borrarchat", chat = chat))
+        Protocolo.leerRespuesta(canal)
+    }
+
     val enviados get() = canal.enviados
     val recibidos get() = canal.recibidos
 
@@ -561,6 +592,52 @@ class Sesion private constructor(
                 else -> r
             }
         }
+
+    /**
+     * **Qué tiene el otro de un solo archivo**, sin mover nada. Ver [com.forge.pixpin.sincro.AlDia].
+     */
+    fun infoDe(chat: String, rel: String): ArchivoInfo? {
+        Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
+        return Protocolo.leerRespuesta(canal).archivos.firstOrNull { it.ruta == rel }
+    }
+
+    /**
+     * **Solo este archivo**: el plan de una sincronización normal, recortado a un lienzo.
+     *
+     * Es lo que hace rápido ponerse al día antes de escribir: no se comparan los mensajes del
+     * chat, ni el proyecto, ni los demás archivos. Lo que se acordó la última vez se lee de la
+     * base, igual que siempre, así que sigue viajando solo el parche.
+     */
+    fun soloEsteArchivo(chat: String, rel: String): PreparadoArchivos {
+        Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
+        val suyos = Protocolo.leerRespuesta(canal).archivos.filter { it.ruta == rel }.associateBy { it.ruta }
+        val mios = misArchivos(chat).filterKeys { it == rel }
+        val base = disco.base(otro.id, chat) ?: Base()
+        val acordado = traducir(base.archivos.filterKeys { it == rel }, mios, suyos)
+        fun apunte(a: ArchivoInfo) = Diferencia.Apunte(a.ruta, a.tocado, a.tocado, a.resumen)
+        val pasos = Diferencia.plan(mios.values.map(::apunte), suyos.values.map(::apunte), acordado)
+            .filter { disco.permitida(it.sena) }
+        return PreparadoArchivos(chat, pasos, acordado, mios, suyos)
+    }
+
+    /**
+     * **Apunta ese archivo como acordado**, si quedó igual en los dos.
+     *
+     * Sin esto, la sincronización entera de después vería los dos lados movidos respecto a lo
+     * acordado y volvería a fusionarlo: saldría lo mismo, pero mandando el archivo entero en vez
+     * del parche. Lo demás de la base no se toca.
+     */
+    fun apuntarArchivo(chat: String, rel: String) {
+        val suyo = infoDe(chat, rel) ?: return
+        val mio = disco.archivos(chat, HashMap()).firstOrNull { it.ruta == rel } ?: return
+        if (mio.resumen != suyo.resumen) return
+        val base = disco.base(otro.id, chat) ?: Base()
+        val nueva = base.copy(archivos = base.archivos + (rel to mio.resumen))
+        Protocolo.enviar(canal, Protocolo.Peticion("base", chat = chat, base = nueva))
+        Protocolo.leerRespuesta(canal)
+        disco.guardarBase(otro.id, chat, nueva)
+        disco.guardarObjetosDeBase(chat, nueva)
+    }
 
     /** Paso 2: con los chats ya iguales, qué archivos hay que mover. */
     fun prepararArchivos(prep: Preparado): PreparadoArchivos {

@@ -735,6 +735,7 @@ private fun PaginaDeProyecto(
 ) {
     val contexto = LocalContext.current
     var renombrando by remember { mutableStateOf(false) }
+    var borrando by remember { mutableStateOf(false) }
     var menu by remember(p.id) { mutableStateOf(false) }
     val tick = remember(p) { p.tocado }
 
@@ -976,10 +977,32 @@ private fun PaginaDeProyecto(
                                         tint = MaterialTheme.colorScheme.error
                                     )
                                 },
-                                onClick = { menu = false; app.proyectos.borrar(p.id) }
+                                onClick = { menu = false; borrando = true }
                             )
                         }
                     }
+                }
+
+                // **Borrar avisa, desde que borrar viaja** (16-sep-2026). Antes era local y
+                // reversible de hecho (el otro aparato lo devolvía); ahora desaparece de todos.
+                // Ver [com.forge.pixpin.sincro.Disco.borrarChat].
+                if (borrando) {
+                    AlertDialog(
+                        onDismissRequest = { borrando = false },
+                        title = { Text("¿Borrar «${p.nombre}»?") },
+                        text = {
+                            Text(
+                                "Se borra también en tus otros aparatos la próxima vez que sincronices. " +
+                                    "Queda una copia en el menú del proyecto → «Copias de seguridad» por si te arrepientes."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { borrando = false; app.proyectos.borrar(p.id) }) {
+                                Text("Borrar", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = { TextButton(onClick = { borrando = false }) { Text("Cancelar") } }
+                    )
                 }
 
                 if (renombrando) {

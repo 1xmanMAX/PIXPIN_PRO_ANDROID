@@ -298,6 +298,9 @@ object Recepcion {
             // **El chat primero**, y después el proyecto: así lo que el proyecto trae ya tiene su
             // mensaje y no se inventa otro. Ver [ChatQueViaja].
             chatQueLlega(context, contenido, nuevo, oferta)
+            // Recibirlo a propósito es decir que se quiere: si estaba borrado aquí, deja de
+            // estarlo, o la siguiente sincronización lo borraría otra vez. Ver [Disco.quitarLapida].
+            runCatching { Red.disco(context).quitarLapida(nuevo.id) }
             app.proyectos.guardar(nuevo)
             return Guardado(if (comoNuevo) "Proyecto «${nuevo.nombre}» creado como nuevo" else "Proyecto «${nuevo.nombre}» añadido", proyecto = nuevo.id)
         }
@@ -323,6 +326,7 @@ object Recepcion {
         )
         quitarDelChatLoQueYaNoEsta(context, nuevo)
         chatQueLlega(context, contenido, nuevo, oferta)
+        runCatching { Red.disco(context).quitarLapida(nuevo.id) }
         app.proyectos.guardar(nuevo)
         return Guardado("Proyecto «${nuevo.nombre}» puesto al día con la versión recibida", proyecto = nuevo.id, sustituido = true)
     }

@@ -206,92 +206,260 @@ class SincronizarActivity : ComponentActivity() {
 
     // ---------------------------------------------------------- sincronizar
 
+    /** Lo que salió de una vuelta con un aparato. */
+    private data class Vuelta(
+        val nombre: String,
+        val bytes: Long,
+        val segundos: Double,
+        val avisos: List<String>,
+        val cancelada: Boolean = false
+    )
+
     private fun sincronizarCon(host: String, puerto: Int, nombre: String) {
         if (trabajo?.isActive == true) return
         trabajo = lifecycleScope.launch(Dispatchers.IO) {
-            fase = Fase.Conectando("Conectando con $nombre…")
+            val hecho = Sesion.Hecho()
             try {
-                Red.conectar(InetAddress.getByName(host), puerto).use { socket ->
-                    val sesion = try {
-                        Sesion.conectar(socket.getInputStream(), socket.getOutputStream(), disco, miPuerto = red.puerto)
-                    } catch (e: EOFException) {
-                        throw IllegalStateException("$nombre no aceptó la conexión: ¿tiene el mismo código de grupo?")
-                    }
-                    try {
-                        val otro = sesion.otro
-                        disco.apuntarDireccion(otro.id, host, sesion.puertoDelOtro.takeIf { it > 0 } ?: puerto)
-                        val mios = disco.chats().associateBy { it.id }
-                        val suyos = sesion.catalogo().associateBy { it.id }
-                        val antes = disco.elegidos(otro.id)
-                        val ids = (mios.keys + suyos.keys).distinct()
-                        val filas = ids.map { id ->
-                            val m = mios[id]; val s = suyos[id]
-                            Fila(id, (m ?: s)!!.nombre, m, s, antes?.contains(id) ?: true)
-                        }
-                        val eleccion = CompletableDeferred<Set<String>?>()
-                        fase = Fase.Eligiendo(otro, filas, eleccion)
-                        val elegidos = eleccion.await()
-                        if (elegidos == null) { sesion.adios(); fase = Fase.Nada; return@use }
-                        disco.guardarElegidos(otro.id, elegidos)
-
-                        val hecho = Sesion.Hecho()
-                        val empezo = System.currentTimeMillis()
-                        for (chat in ids.filter { it in elegidos }) {
-                            val nombreDelChat = filas.first { it.id == chat }.nombre
-                            fase = Fase.Trabajando("Comparando «$nombreDelChat»…")
-                            val prep = sesion.preparar(chat)
-                            // **Sin preguntas ni maestro** (15-sep-2026): lo cambiado en los dos se
-                            // junta. Ver [Fusion].
-                            fase = Fase.Trabajando("Juntando «$nombreDelChat»…")
-                            sesion.aplicar(prep, hecho)
-                            val archivos = sesion.prepararArchivos(prep)
-                            val total = archivos.bytes
-                            var hechos = 0L
-                            var ultimo = 0L
-                            val t0 = System.currentTimeMillis()
-                            sesion.aplicarArchivos(archivos, hecho) { n ->
-                                hechos += n
-                                val ahora = System.currentTimeMillis()
-                                if (ahora - ultimo > 150) {
-                                    ultimo = ahora
-                                    val seg = (ahora - t0).coerceAtLeast(1) / 1000.0
-                                    fase = Fase.Trabajando("Pasando archivos de «$nombreDelChat»", hechos, total, tamanoLegible((hechos / seg).toLong()) + "/s")
-                                }
-                            }
-                            fase = Fase.Trabajando("Terminando «$nombreDelChat»…")
-                            sesion.cerrar(prep)
-                        }
-                        sesion.adios()
-                        val segundos = (System.currentTimeMillis() - empezo) / 1000.0
-                        val partes = listOfNotNull(
-                            "${hecho.traidos} traídos".takeIf { hecho.traidos > 0 },
-                            "${hecho.enviados} enviados".takeIf { hecho.enviados > 0 },
-                            "${hecho.borrados} borrados".takeIf { hecho.borrados > 0 },
-                            "${hecho.archivos} archivos".takeIf { hecho.archivos > 0 },
-                            "${hecho.fusionados} juntados de los dos".takeIf { hecho.fusionados > 0 }
-                        )
-                        val movido = sesion.enviados + sesion.recibidos
-                        val texto = (if (partes.isEmpty()) "Ya estaban iguales." else partes.joinToString(" · ") + ".") +
-                            "\n${tamanoLegible(movido).ifBlank { "0 B" }} en ${"%.1f".format(segundos)} s."
-                        val avisos = listOfNotNull(
-                            hecho.rescatados.takeIf { it > 0 }?.let {
-                                "$it ${if (it == 1) "cosa borrada en un aparato se quedó" else "cosas borradas en un aparato se quedaron"} porque en el otro se había cambiado después."
-                            },
-                            hecho.ahorrados.takeIf { it > 64_000 }?.let { "Solo viajaron los cambios: ${tamanoLegible(it)} que no hizo falta mandar." },
-                            hecho.saltados.takeIf { it.isNotEmpty() }?.let {
-                                "No se pasó ${it.distinct().joinToString { n -> "«$n»" }} porque se estaba guardando en ese momento. Vuelve a sincronizar."
-                            },
-                            avisoDelReloj(otro, sesion.desfase)
-                        )
-                        fase = Fase.Terminado("Al día con ${otro.nombre}", texto, avisos.joinToString("\n\n").ifBlank { null })
-                    } finally {
-                        sesion.soltar()
-                    }
+                val v = unaVuelta(host, puerto, nombre, preguntar = true, hecho = hecho, rotulo = "")
+                fase = when {
+                    v.cancelada -> Fase.Nada
+                    else -> Fase.Terminado(
+                        "Al día con ${v.nombre}",
+                        contarLoHecho(hecho, v.bytes, v.segundos),
+                        (avisosDeLoHecho(hecho) + v.avisos).joinToString("\n\n").ifBlank { null }
+                    )
                 }
             } catch (e: Exception) {
                 fase = Fase.Fallo(explicar(e, nombre))
             }
             version++
+        }
+    }
+
+    /**
+     * **Todos mis aparatos de una vez** (16-sep-2026, pedido por el usuario).
+     *
+     * Se habla con ellos **uno detrás de otro, sin preguntar nada**: a la vez no se puede ni
+     * conviene —cada aparato atiende una sola sincronización a la vez a propósito, porque dos
+     * conversaciones escribiendo el mismo chat desde dos hilos es justo el fallo que se quiere
+     * evitar ([Protocolo.ocupar])—, y como ya no hay preguntas ni maestro ([Fusion]), una vuelta
+     * no necesita a nadie delante. Lo que se sincroniza es lo elegido la última vez con cada uno,
+     * y si nunca se eligió, todo.
+     *
+     * **Dos rondas cuando hay tres o más aparatos**, y esta es la razón: en la primera, este
+     * aparato queda con todo —lo suyo, lo de la tableta y lo del portátil—, pero la tableta se
+     * quedó con lo que había **antes** de hablar con el portátil. La segunda vuelta reparte eso,
+     * y cuesta poco porque solo viajan los cambios (parches). Con dos aparatos, una basta.
+     *
+     * Si uno falla —apagado, fuera de la Wi-Fi— se sigue con los demás y se dice al final cuál
+     * quedó pendiente: media sincronización no rompe nada, solo deja cosas para la próxima.
+     */
+    private fun sincronizarConTodos(lista: List<Miembro>) {
+        if (trabajo?.isActive == true) return
+        val aparatos = lista.filter { it.host != null }
+        if (aparatos.isEmpty()) return
+        trabajo = lifecycleScope.launch(Dispatchers.IO) {
+            val hecho = Sesion.Hecho()
+            val avisos = LinkedHashSet<String>()
+            val fallaron = LinkedHashMap<String, String>()
+            val alDia = LinkedHashSet<String>()
+            var bytes = 0L
+            val empezo = System.currentTimeMillis()
+            val rondas = if (aparatos.size >= 2) 2 else 1
+            for (ronda in 1..rondas) {
+                for (m in aparatos) {
+                    val host = m.host ?: continue
+                    // Uno que ya falló no se reintenta en la segunda ronda: si estaba apagado,
+                    // lo sigue estando, y cada intento cuesta el tiempo de agotar la conexión.
+                    if (m.nombre in fallaron) continue
+                    val rotulo = if (rondas > 1) "Ronda $ronda de $rondas · " else ""
+                    try {
+                        val v = unaVuelta(host, m.puerto, m.nombre, preguntar = false, hecho = hecho, rotulo = rotulo)
+                        if (v.cancelada) { fase = Fase.Nada; return@launch }
+                        bytes += v.bytes
+                        avisos += v.avisos
+                        alDia += v.nombre
+                    } catch (e: Exception) {
+                        fallaron[m.nombre] = explicar(e, m.nombre)
+                    }
+                }
+            }
+            val segundos = (System.currentTimeMillis() - empezo) / 1000.0
+            fase = if (alDia.isEmpty()) {
+                Fase.Fallo(fallaron.values.joinToString("\n\n").ifBlank { "No se pudo con ninguno." })
+            } else {
+                val titulo =
+                    if (alDia.size == 1) "Al día con ${alDia.first()}"
+                    else "Al día con ${alDia.size} aparatos"
+                val pendientes = fallaron.keys.joinToString { "«$it»" }
+                Fase.Terminado(
+                    titulo,
+                    contarLoHecho(hecho, bytes, segundos) +
+                        (if (alDia.size > 1) "\n${alDia.joinToString(" · ")}" else ""),
+                    (avisosDeLoHecho(hecho) + avisos.toList() + listOfNotNull(
+                        pendientes.takeIf { it.isNotBlank() }?.let {
+                            "Quedó pendiente $it: " + fallaron.values.first()
+                        }
+                    )).joinToString("\n\n").ifBlank { null }
+                )
+            }
+            version++
+        }
+    }
+
+    /**
+     * **Los proyectos borrados, antes de sincronizar nada** (16-sep-2026).
+     *
+     * Un proyecto borrado en un aparato tiene lápida ([LapidaDeChat]) y el otro no lo sabe: si no
+     * se mira esto primero, la vuelta lo devuelve entero, que es lo que pasaba. Con la lápida hay
+     * tres casos, y el tercero es el que evita perder trabajo:
+     *
+     * - Borrado aquí y allí **no se ha tocado desde entonces** → se borra allí también.
+     * - Borrado allí y aquí sin tocar → se borra aquí.
+     * - Borrado en uno pero **tocado en el otro después** → vuelve: se levanta la lápida y se
+     *   sincroniza como si nada. Borrar en un aparato no puede pisar lo que se escribió luego en
+     *   otro sin saberlo.
+     *
+     * Devuelve los chats que quedan borrados, que son los que **no** hay que sincronizar: hacerlo
+     * los resucitaría por sus mensajes.
+     */
+    private fun resolverBorrados(
+        sesion: Sesion,
+        mios: Map<String, Chat>,
+        suyos: Map<String, Chat>
+    ): Set<String> {
+        val misLapidas = disco.lapidas().associateBy { it.chat }
+        val susLapidas = sesion.lapidas().associateBy { it.chat }
+        if (misLapidas.isEmpty() && susLapidas.isEmpty()) return emptySet()
+        val fuera = HashSet<String>()
+        // El reloj del otro puede ir desviado: se compara en la misma hora que la de aquí.
+        fun suHora(t: Long) = t - sesion.desfase
+        for ((chat, lapida) in misLapidas) {
+            val suyo = suyos[chat]
+            if (suyo == null) { fuera += chat; continue }
+            if (suHora(suyo.tocado) > lapida.cuando) {
+                disco.quitarLapida(chat)
+            } else {
+                fase = Fase.Trabajando("Borrando «${suyo.nombre}» en ${sesion.otro.nombre}…")
+                sesion.borrarAlla(chat)
+                fuera += chat
+            }
+        }
+        for ((chat, lapida) in susLapidas) {
+            if (chat in misLapidas) { fuera += chat; continue }
+            val mio = mios[chat] ?: continue
+            if (mio.tocado > suHora(lapida.cuando)) continue
+            fase = Fase.Trabajando("Borrando «${mio.nombre}», borrado en ${sesion.otro.nombre}…")
+            disco.borrarChat(chat, "Antes de borrarlo, borrado en ${sesion.otro.nombre}", aparato = sesion.otro.id)
+            fuera += chat
+        }
+        return fuera
+    }
+
+    /** Lo que merece un aviso aparte al final: lo rescatado y lo que no hizo falta mandar. */
+    private fun avisosDeLoHecho(hecho: Sesion.Hecho): List<String> = listOfNotNull(
+        hecho.rescatados.takeIf { it > 0 }?.let {
+            "$it ${if (it == 1) "cosa borrada en un aparato se quedó" else "cosas borradas en un aparato se quedaron"} porque en el otro se había cambiado después."
+        },
+        hecho.ahorrados.takeIf { it > 64_000 }?.let { "Solo viajaron los cambios: ${tamanoLegible(it)} que no hizo falta mandar." }
+    )
+
+    /** Lo que se le cuenta al usuario de una sincronización, sea con uno o con todos. */
+    private fun contarLoHecho(hecho: Sesion.Hecho, bytes: Long, segundos: Double): String {
+        val partes = listOfNotNull(
+            "${hecho.traidos} traídos".takeIf { hecho.traidos > 0 },
+            "${hecho.enviados} enviados".takeIf { hecho.enviados > 0 },
+            "${hecho.borrados} borrados".takeIf { hecho.borrados > 0 },
+            "${hecho.archivos} archivos".takeIf { hecho.archivos > 0 },
+            "${hecho.fusionados} juntados de los dos".takeIf { hecho.fusionados > 0 }
+        )
+        return (if (partes.isEmpty()) "Ya estaban iguales." else partes.joinToString(" · ") + ".") +
+            "\n${tamanoLegible(bytes).ifBlank { "0 B" }} en ${"%.1f".format(segundos)} s."
+    }
+
+    /**
+     * **Una vuelta con un aparato.** Con [preguntar] sale la pantalla de elegir qué chats; sin
+     * ella se va con lo elegido la última vez con ese aparato (o con todo, la primera vez), que
+     * es lo que hace posible ir seguido por varios. [rotulo] va delante de lo que se enseña
+     * mientras trabaja, para saber por dónde va la ronda.
+     */
+    private suspend fun unaVuelta(
+        host: String,
+        puerto: Int,
+        nombre: String,
+        preguntar: Boolean,
+        hecho: Sesion.Hecho,
+        rotulo: String
+    ): Vuelta {
+        fase = Fase.Conectando("${rotulo}Conectando con $nombre…")
+        Red.conectar(InetAddress.getByName(host), puerto).use { socket ->
+            val sesion = try {
+                Sesion.conectar(socket.getInputStream(), socket.getOutputStream(), disco, miPuerto = red.puerto)
+            } catch (e: EOFException) {
+                throw IllegalStateException("$nombre no aceptó la conexión: ¿tiene el mismo código de grupo?")
+            }
+            try {
+                val otro = sesion.otro
+                disco.apuntarDireccion(otro.id, host, sesion.puertoDelOtro.takeIf { it > 0 } ?: puerto)
+                val mios = disco.chats().associateBy { it.id }
+                val suyos = sesion.catalogo().associateBy { it.id }
+                val antes = disco.elegidos(otro.id)
+                val borrados = resolverBorrados(sesion, mios, suyos)
+                val ids = (mios.keys + suyos.keys).distinct().filter { it !in borrados }
+                val filas = ids.map { id ->
+                    val m = mios[id]; val s = suyos[id]
+                    Fila(id, (m ?: s)!!.nombre, m, s, antes?.contains(id) ?: true)
+                }
+                val elegidos: Set<String>
+                if (preguntar) {
+                    val eleccion = CompletableDeferred<Set<String>?>()
+                    fase = Fase.Eligiendo(otro, filas, eleccion)
+                    val puesto = eleccion.await()
+                    if (puesto == null) { sesion.adios(); return Vuelta(otro.nombre, 0, 0.0, emptyList(), cancelada = true) }
+                    elegidos = puesto
+                    disco.guardarElegidos(otro.id, elegidos)
+                } else {
+                    elegidos = antes ?: ids.toSet()
+                }
+
+                val empezo = System.currentTimeMillis()
+                for (chat in ids.filter { it in elegidos }) {
+                    val nombreDelChat = filas.first { it.id == chat }.nombre
+                    fase = Fase.Trabajando("${rotulo}Comparando «$nombreDelChat» con $nombre…")
+                    val prep = sesion.preparar(chat)
+                    // **Sin preguntas ni maestro** (15-sep-2026): lo cambiado en los dos se
+                    // junta. Ver [Fusion].
+                    fase = Fase.Trabajando("${rotulo}Juntando «$nombreDelChat»…")
+                    sesion.aplicar(prep, hecho)
+                    val archivos = sesion.prepararArchivos(prep)
+                    val total = archivos.bytes
+                    var hechos = 0L
+                    var ultimo = 0L
+                    val t0 = System.currentTimeMillis()
+                    sesion.aplicarArchivos(archivos, hecho) { n ->
+                        hechos += n
+                        val ahora = System.currentTimeMillis()
+                        if (ahora - ultimo > 150) {
+                            ultimo = ahora
+                            val seg = (ahora - t0).coerceAtLeast(1) / 1000.0
+                            fase = Fase.Trabajando("${rotulo}Pasando archivos de «$nombreDelChat»", hechos, total, tamanoLegible((hechos / seg).toLong()) + "/s")
+                        }
+                    }
+                    fase = Fase.Trabajando("${rotulo}Terminando «$nombreDelChat»…")
+                    sesion.cerrar(prep)
+                }
+                sesion.adios()
+                val segundos = (System.currentTimeMillis() - empezo) / 1000.0
+                val avisos = listOfNotNull(
+                    hecho.saltados.takeIf { it.isNotEmpty() }?.let {
+                        "No se pasó ${it.distinct().joinToString { n -> "«$n»" }} porque se estaba guardando en ese momento. Vuelve a sincronizar."
+                    },
+                    avisoDelReloj(otro, sesion.desfase)
+                )
+                return Vuelta(otro.nombre, sesion.enviados + sesion.recibidos, segundos, avisos)
+            } finally {
+                sesion.soltar()
+            }
         }
     }
 
@@ -575,6 +743,28 @@ class SincronizarActivity : ComponentActivity() {
                         OutlinedButton(onClick = { sincronizarCon(m.host, m.puerto, m.nombre) }) { Text("Probar") }
                     }
                 }
+            }
+            // **Todos de una vez** (16-sep-2026): con tres aparatos, sincronizar de uno en uno
+            // son seis pulsaciones y hay que acordarse del orden. Ver [sincronizarConTodos].
+            val disponibles = lista.filter { it.cerca && it.host != null }
+            if (disponibles.size > 1) {
+                Button(
+                    onClick = { sincronizarConTodos(disponibles) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(48.dp)
+                ) {
+                    Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sincronizar con todos (${disponibles.size})")
+                }
+                Text(
+                    if (disponibles.size > 2) {
+                        "Sin preguntar nada, uno detrás de otro y en dos rondas, para que todos acaben con todo."
+                    } else {
+                        "Sin preguntar nada: va con lo que elegiste la última vez con cada uno."
+                    },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 6.dp)
+                )
             }
             if (lista.any { !it.cerca }) {
                 Text(
