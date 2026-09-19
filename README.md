@@ -1,49 +1,77 @@
 # PixPin Android
 
-Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó ahí es hoy
-también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
-un croquis que se dibuja en el espacio.
+**Un cuaderno de ingeniería para Android**: escribir y dibujar con lápiz, anotar PDF y planos,
+guardar todo en un chat contigo mismo, leer documentos, dibujar en 3D, hacer tablas con fórmulas —
+y sacarlo en **HTML**, que abre cualquiera sin instalar nada. **Sin cuentas, sin servidores y sin
+analítica.**
 
-**Android 10+** · Kotlin + Compose · 2.536 pruebas · **sin cuentas, sin servidores y sin analítica**;
-internet solo se usa si tú pulsas bajar un modelo de voz o compartir como enlace. Sincronizar y
-enviar van por **tu Wi-Fi**, sin pasar por internet
+**Android 10+** · Kotlin + Compose · 2.536 pruebas · se instala por APK
 
-[**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md)
+[**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md) · [**Dejar un comentario**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/issues)
 
-> Proyecto personal, no oficial. No afiliado a PixPin ni a DepthPixel. Se instala por APK.
+<!-- CAPTURA 1 (portada): docs/capturas/01-portada.png — el editor con un plano o un apunte anotado -->
+
+> Proyecto personal, no oficial. No afiliado a PixPin ni a DepthPixel.
 
 ---
 
-## Las cuatro cosas que hace
+## Por qué existe
+
+Soy estudiante de ingeniería. Durante toda la carrera quise tener una buena aplicación para
+escribir a mano: en el iPad existen propuestas muy populares, como GoodNotes o Notability, pero
+en Android no encontré nada equivalente. Probé varias, y a casi todas les pasaba lo mismo: se
+quedaban en lo básico. Servían para rayar encima de un PDF y poco más.
+
+Yo necesitaba más que eso. Necesitaba anotar planos y apuntes, medir sobre ellos, juntar en un
+mismo sitio el PDF de clase, las fotos de la pizarra, el audio de la explicación y mis notas;
+pasarle todo eso a un compañero **sin obligarle a instalar nada**; y tenerlo igual en el teléfono
+y en la tableta **sin entregarle mis apuntes a ninguna empresa**.
+
+Así que terminé haciéndola yo, con la ayuda de inteligencia artificial y de otras herramientas que
+me permitieron llegar mucho más lejos de lo que habría llegado solo. PixPin es el resultado: la
+aplicación que me hubiera gustado encontrar el primer día de clase. La uso a diario, la sigo
+mejorando, y **si la pruebas me ayudas mucho dejándome un comentario** —qué te falta, qué te
+estorba, qué se rompe— en [las incidencias del repositorio](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/issues).
+
+## Lo que la hace distinta
 
 | | |
 |---|---|
-| **Capturar y anotar** | Recorta la pantalla, dibuja encima y deja el resultado flotando sobre cualquier app |
-| **Guardar** | Un chat contigo mismo: fotos, PDF, notas de voz que se transcriben solas |
-| **Proyectos** | Un plano en PDF, sus hojas anotadas, sus notas y sus croquis, todo junto |
-| **Croquis 3D** | Dibujar en el espacio y girar alrededor de lo dibujado |
-| **Multitarea** | Hasta tres lienzos vivos a la vez, con gestos de tres y cuatro dedos y grupos de pestañas guardados |
-| **Sincronizar y enviar** | Tus aparatos al día por la Wi-Fi de casa, y pasar algo a otra persona con un código o un QR |
+| **Todo sale en HTML** | Un dibujo, un proyecto entero, un croquis 3D o una tabla se exportan como **una página web en un solo archivo**: se abre en cualquier teléfono u ordenador, sin conexión y sin instalar nada. Y sigue viva: quien la recibe puede anotar encima, medir, editar la tabla y **volver a guardarla** |
+| **Compartir con un enlace** | Cualquier cosa —la página, un PDF, una imagen— se sube a un servicio abierto **por tiempo limitado** (de 1 hora a 3 días) y se comparte como un enlace que se toca y se abre |
+| **Sincronizar sin cuenta** | Tus aparatos se ponen al día entre ellos por **tu Wi-Fi**, cifrado y sin pasar por internet. No hay registro, ni nube, ni ninguna compañía que pueda ver o rastrear lo que escribes |
+| **Enviar archivos pesados, rápido** | Con un código o un QR le pasas a otra persona un proyecto entero o un archivo grande por la red local, de un aparato a otro, a la velocidad de la Wi-Fi |
+| **Un chat como interfaz** | Guardar algo es mandártelo, como en WhatsApp o Telegram: ya sabemos usarlo, y ordena solo por lo que uno recuerda de verdad, que es cuándo fue |
+| **Lee lo que te mandan** | PDF, Word, EPUB, PowerPoint, Excel, páginas web, Markdown e imágenes se abren dentro, y salen en «Abrir con» de Android |
+| **No es solo un lienzo 2D** | Croquis en el espacio (3D, con modelos IFC y OBJ), tablas con fórmulas, notas en Markdown, voz que se pasa a texto en el teléfono |
+| **Multitarea propia** | Hasta tres lienzos vivos uno al lado de otro, con gestos de tres y cuatro dedos, y grupos de pestañas guardados |
+| **A tu medida** | Cada herramienta del lienzo y casi cada función se **enciende o se apaga** en los ajustes: la barra lleva solo lo que usas |
 
 Todo funciona **con el avión puesto**. Nada sale del teléfono si tú no lo compartes.
 
+## Índice
+
+1. [Escribir y dibujar](#1-escribir-y-dibujar) — el lienzo, el lápiz, los gestos, la multitarea
+2. [Guardar y leer](#2-guardar-y-leer) — el chat, los documentos, la voz
+3. [Proyectos](#3-proyectos) — planos en PDF, universos, croquis 3D, tablas
+4. [Compartir y sincronizar](#4-compartir-y-sincronizar) — HTML, enlaces, Wi-Fi, sin cuentas
+5. [Capturar y fijar](#5-capturar-y-fijar) — recortes de pantalla y pines flotantes
+6. [Instalar, permisos y compilar](#6-instalar-permisos-y-compilar)
+7. [Por dentro](#7-por-dentro) — arquitectura, limitaciones, roadmap
+
 ---
 
-## Dónde se dibuja
+## 1. Escribir y dibujar
+
+### Dónde se dibuja
 
 ![Las cuatro pantallas donde vive el mismo motor](docs/img/superficies.svg)
 
 El mismo dibujo se abre en las cuatro: los elementos son los mismos bytes.
 
-## Capturar
+<!-- CAPTURA 2: docs/capturas/02-lienzo.png — el lienzo con un apunte real y las barras de cristal -->
 
-![Bola flotante, region libre, ventana y captura larga](docs/img/captura.svg)
-
-## Pines
-
-![Tipos de pin flotante](docs/img/pines.svg)
-
-## El motor de dibujo
+### El motor de dibujo
 
 Figuras, lápiz de presión, texto con Markdown, mosaico y foco para tapar, cotas que calculan,
 bote con agujeros, alfileres, guías, escala gráfica y transportador.
@@ -54,16 +82,14 @@ bote con agujeros, alfileres, guías, escala gráfica y transportador.
 
 > Cada herramienta y cada mecanismo, en dibujos: **[docs/motor.md](docs/motor.md)**.
 
-## Gestos y lápiz
+### Gestos y lápiz
 
 ![Un dedo dibuja, dos encuadran, el segundo hace la figura perfecta](docs/img/gestos.svg)
 
 Un dedo dibuja, dos encuadran y **nunca dibujan**. El lápiz arranca en el primer contacto, lee
 todas las muestras del sistema y la presión; con lápiz a la vista, el dedo pasa a mover el papel.
 
----
-
-## Multitarea: varios lienzos a la vez
+### Multitarea: varios lienzos a la vez
 
 Android no tiene una multitarea cómoda **dentro** de una app, así que PixPin trae la suya, hecha
 a imagen de la de los plegables: **hasta tres lienzos abiertos, todos vivos**, uno al lado de otro.
@@ -88,7 +114,19 @@ a imagen de la de los plegables: **hasta tres lienzos abiertos, todos vivos**, u
 - Las **páginas de un PDF** entran en la tira como un lienzo más; lo anotado vuelve al documento
   **en segundo plano**, sin tirón al cambiar de lienzo.
 
-## Guardar: el chat
+<!-- CAPTURA 3: docs/capturas/03-multitarea.png — dos lienzos lado a lado con el asa · CAPTURA 4: 04-baraja.png — la baraja en abanico -->
+
+### A tu medida
+
+![Modo de captura, barra a tu gusto, guardado automático y modo seguro](docs/img/ajustes.svg)
+
+Cada herramienta del lienzo, cada gesto rápido y casi cada función se activa o se desactiva desde
+los ajustes. Quien solo quiere lápiz, borrador y texto tiene una barra de tres botones; quien
+acota planos enciende las cotas, la escala y el transportador.
+
+## 2. Guardar y leer
+
+### Guardar: el chat
 
 ![El chat de notas guardadas, con secciones, transcripcion y un chat por proyecto](docs/img/guardados.svg)
 
@@ -102,9 +140,9 @@ ya está, y ordena sola por lo único que uno recuerda de verdad, que es cuándo
 | Buzón | Lo que llega compartido de otras apps cae aquí, no en la lista, y caduca solo |
 | Emoji | Uno por mensaje, se pone después: encontrar sin recordar ni una palabra |
 | Comentar | Una frase al lado de un PDF diciendo por qué se guardó |
-| Por proyecto | Cada proyecto tiene su chat; lo que entra ahí se une solo a sus hojas |
+| Por proyecto | Cada proyecto tiene su chat. Lo que mandas ahí **no entra solo** en el proyecto: sale con un punto rojo y lo añades tú desde su menú, y el punto pasa a verde |
 
-### Documentos que se abren dentro
+#### Documentos que se abren dentro
 
 Un **PDF**, una **página web** (`.html`, también las que exporta PixPin), un **Word** (`.docx`) y
 un **libro** (`.epub`) se leen sin salir de la aplicación, a pantalla completa y sin barras: solo
@@ -121,7 +159,9 @@ Todos estos tipos —y las imágenes, las hojas de cálculo y las notas en Markd
 con»** del sistema, y PixPin pregunta qué hacer: **abrirlo** (se guarda una copia en Guardados, sin
 duplicar), **enviarlo por Wi-Fi** o **ponerlo como pin**.
 
-## La voz
+<!-- CAPTURA 5: docs/capturas/05-chat.png — el chat con una foto, un PDF, una nota de voz transcrita y los puntos rojo/verde -->
+
+### La voz
 
 ![De la voz al texto: PCM, cortes por frases, tandas de veinte segundos y tres motores](docs/img/voz.svg)
 
@@ -140,7 +180,7 @@ dos modos: dejar **cada trozo como se dijo**, o ponerlo **todo en el primero**, 
 demás. Lo que suene a otro alfabeto, a coletilla de subtítulos o a palabra repetida sin parar
 se descarta: eso no lo dijiste tú.
 
-### Y al revés
+#### Y al revés
 
 | | |
 |---|---|
@@ -148,7 +188,9 @@ se descarta: eso no lo dijiste tú.
 | **Pronunciar** | Mantienes pulsado, hablas, sueltas y **te oyes al momento**. Cada toma pisa la anterior; la que convenza se guarda y se transcribe en el idioma que practicas, para ver qué se entendió. Con una guía delante: un texto, una imagen, un PDF página a página o una nota |
 | **Conversación** | Varias personas por turnos, un micrófono por cabeza. El texto sale con los nombres, y **se acuerda de quién habló cuándo**: al repetir la transcripción vuelven a salir |
 
-## Proyectos y planos
+## 3. Proyectos
+
+### Proyectos y planos
 
 Un proyecto es un montón de hojas: las páginas de un PDF, lienzos en blanco, notas en Markdown
 y croquis 3D. Se marcan las que interesan y **la caja de exportar está arriba, una sola**, aunque
@@ -165,7 +207,18 @@ marques hojas de proyectos distintos.
 | **Sistema solar** | Todos los proyectos en un mapa: cada proyecto es un sol, sus hojas, notas y emojis lo orbitan, y las conexiones entre soles tiran como una cuerda. Tocar un sol entra en su propio sistema |
 | **Copias de seguridad** | Antes de recibir o sincronizar se guarda cómo estaba el proyecto; se vuelve a cualquier versión, y los lienzos que se quedaron sin proyecto se devuelven |
 
-## El croquis en el espacio
+### Universos: el sistema solar como organizador
+
+Todos los proyectos se ven en un mapa: cada proyecto es un sol y las conexiones entre soles tiran
+como una cuerda. **Dentro de un proyecto el universo entra vacío** y se llena a mano, como un
+tablero: archivos del chat, hojas, notas, rótulos de letras, figuras, imágenes y emojis, cada cosa
+donde la dejas, con **vínculos** entre ellas. Cualquier cosa puede abrir **su propio subespacio**
+—un sistema solar con ese archivo de sol— y así hacia dentro, sin fondo. Los archivos no se copian
+ni se borran: el universo solo los señala.
+
+<!-- CAPTURA 6: docs/capturas/06-universo.png — un universo con archivos, notas y vínculos -->
+
+### El croquis en el espacio
 
 ![Dibujar en el espacio: el trazo se queda en el mundo, se gira alrededor, hay cuerpos y sol](docs/img/croquis3d.svg)
 
@@ -181,7 +234,59 @@ agrupa, sale en la lista, en el OBJ exportado y en la página web.
 **◉ En el sitio** pone la cámara de atrás de fondo y el croquis encima a tamaño real, con la
 lente de verdad del aparato: mueves el teléfono y la vista se mueve con él.
 
-## Sincronizar tus aparatos, sin servidor
+### Tablas con fórmulas
+
+Una hoja de cálculo pequeña dentro de la app: celdas, fórmulas, pegar desde Excel o Google Sheets,
+y un Excel (`.xlsx`) recibido se abre aquí con una pestaña por hoja. Una tabla se exporta como
+**página web que sigue calculando**: quien la recibe cambia un número y las fórmulas se rehacen,
+sin instalar nada; también sale como CSV.
+
+### Zonas y sublienzos
+
+La herramienta **Zona** saca una foto de lo que encuadras —el PDF de fondo nítido y lo dibujado— para
+arrastrarla. Con el interruptor **al chat**, la zona va al chat del proyecto como un **sublienzo**:
+un lienzo propio para resolver encima, con «Viene de: PDF «Plano» → página 3» y una marca en el
+origen que lleva a él. En proyectos, los sublienzos se pliegan bajo su página, y en el lector de PDF
+se ven al lado de cada página alejándola con dos dedos.
+
+## 4. Compartir y sincronizar
+
+### La página web: todo en un archivo que abre cualquiera
+
+![Un archivo HTML con dibujos, croquis 3D y notas, una sola barra, y se puede anotar y volver a guardar](docs/img/web.svg)
+
+Todo va dentro del archivo —fuentes, fotos y audios en base64—, así que **se abre sin conexión y
+no caduca**. Arriba lleva un **índice** con la hoja que se mira y enlaces a todas (`#hoja-3`). Quien la reciba puede rayar encima, medir, apagar capas y **guardar**: la página se
+reescribe a sí misma con lo que rayó, y sigue siendo un solo archivo.
+
+En una página de croquis, el visor trae suelo con rejilla, sombra proyectada, niebla,
+giradiscos, guía de gestos y **bajar el OBJ** desde la propia página. Sin traer ni una
+biblioteca de fuera: son unos kilobytes de WebGL propio.
+
+#### Como archivo o como enlace
+
+Mandar un `.html` o un PDF llega como documento: hay que bajarlo y abrirlo a mano. Por eso al
+compartir **cualquier cosa** —la página, el PDF, el `.pixpin`, el OBJ, una imagen— se puede
+pedir un **enlace**, que se toca y se abre. Se elige cuánto dura: **1 hora**, 12 horas, un día
+o tres días. Si el elegido está caído se prueban los demás.
+
+Lo que la app dice que dura un enlace es lo que **el servicio publica**, comprobado en sus
+propias páginas: litterbox («expire after 1 Hour / 12 Hours / 1 Day / 3 Days», 1 GB) y temp.sh
+(«files expire after 3 days», 4 GB). Se dejaron fuera los que no lo dicen o no caducan: catbox
+guarda hasta dos años sin visitas, y kappa.lol no publica plazo ninguno.
+
+> Subir es **lo único de toda la app que manda algo fuera del teléfono**, y solo al pulsar el
+> botón. El servicio no es nuestro y cualquiera con el enlace puede abrirlo mientras dure, así
+> que la pantalla lo dice antes de subir nada. Compartir como archivo no sale del aparato.
+
+### Una sola hoja de compartir en toda la app
+
+Compartir desde el lienzo, un proyecto, el chat, el croquis o una tabla abre **la misma hoja**:
+imagen, PDF, SVG, página web, editable `.pixpin` o Wi-Fi; **qué páginas** (el lienzo completo o cada
+marco, varias para PDF y una para imagen) y **cuánto pesará**, calculado de verdad. Al final se abre
+el **panel de compartir de tu teléfono**. Las páginas del PDF de un proyecto salen vectoriales.
+
+### Sincronizar tus aparatos, sin servidor y sin cuenta
 
 **Tres códigos por cada cosa.** Todo lo que pasa por el chat —un lienzo, una tabla, un PDF, una
 nota— nace con un **código único** oculto, un **código de chat** (el número y el código del aparato
@@ -204,7 +309,7 @@ sincronizan cuando pulsas el botón. **Como git, y sin que mande ningún aparato
 Cómo lo resuelven Excalidraw, Figma y la literatura (CRDT, OR-Set, diff3, relojes híbridos), y qué
 se tomó de cada uno: [`docs/plan-sincronizacion.md`](docs/plan-sincronizacion.md).
 
-## Enviar una sola vez por Wi-Fi
+### Enviar una sola vez por Wi-Fi
 
 Desde **Compartir** de cualquier app, desde un proyecto, un lienzo o un mensaje: sale un **código de
 seis cifras y un QR**. Quien recibe lo escanea en *Sincronizar → Recibir*, ve qué le llega y acepta.
@@ -214,52 +319,22 @@ Al terminar el código deja de existir. **El chat viaja con lo que se manda**, c
 **«Actualizar el que tengo»** y **«Crear como nuevo»** (con códigos nuevos: desde ahí es otra cosa).
 Si los códigos no coinciden, entra aparte sin tocar nada: ante la duda, duplicar y no pisar.
 
-## Compartir: una sola hoja en toda la app
+> **Con un ordenador**: sincronizar y enviar por Wi-Fi funcionan hoy **entre aparatos Android con
+> PixPin**. Con Windows, Mac o Linux el puente es la página web: el HTML exportado —o su enlace— se
+> abre, se anota y se vuelve a guardar en cualquier navegador. Un cliente de escritorio para la
+> sincronización está en el roadmap.
 
-Compartir desde el lienzo, un proyecto, el chat, el croquis o una tabla abre **la misma hoja**:
-imagen, PDF, SVG, página web, editable `.pixpin` o Wi-Fi; **qué páginas** (el lienzo completo o cada
-marco, varias para PDF y una para imagen) y **cuánto pesará**, calculado de verdad. Al final se abre
-el **panel de compartir de tu teléfono**. Las páginas del PDF de un proyecto salen vectoriales.
+## 5. Capturar y fijar
 
-## Zonas y sublienzos
+### Capturar
 
-La herramienta **Zona** saca una foto de lo que encuadras —el PDF de fondo nítido y lo dibujado— para
-arrastrarla. Con el interruptor **al chat**, la zona va al chat del proyecto como un **sublienzo**:
-un lienzo propio para resolver encima, con «Viene de: PDF «Plano» → página 3» y una marca en el
-origen que lleva a él. En proyectos, los sublienzos se pliegan bajo su página, y en el lector de PDF
-se ven al lado de cada página alejándola con dos dedos.
+![Bola flotante, region libre, ventana y captura larga](docs/img/captura.svg)
 
-## Compartir: la página web
+### Pines
 
-![Un archivo HTML con dibujos, croquis 3D y notas, una sola barra, y se puede anotar y volver a guardar](docs/img/web.svg)
+![Tipos de pin flotante](docs/img/pines.svg)
 
-Todo va dentro del archivo —fuentes, fotos y audios en base64—, así que **se abre sin conexión y
-no caduca**. Arriba lleva un **índice** con la hoja que se mira y enlaces a todas (`#hoja-3`). Quien la reciba puede rayar encima, medir, apagar capas y **guardar**: la página se
-reescribe a sí misma con lo que rayó, y sigue siendo un solo archivo.
-
-En una página de croquis, el visor trae suelo con rejilla, sombra proyectada, niebla,
-giradiscos, guía de gestos y **bajar el OBJ** desde la propia página. Sin traer ni una
-biblioteca de fuera: son unos kilobytes de WebGL propio.
-
-### Como archivo o como enlace
-
-Mandar un `.html` o un PDF llega como documento: hay que bajarlo y abrirlo a mano. Por eso al
-compartir **cualquier cosa** —la página, el PDF, el `.pixpin`, el OBJ, una imagen— se puede
-pedir un **enlace**, que se toca y se abre. Se elige cuánto dura: **1 hora**, 12 horas, un día
-o tres días. Si el elegido está caído se prueban los demás.
-
-Lo que la app dice que dura un enlace es lo que **el servicio publica**, comprobado en sus
-propias páginas: litterbox («expire after 1 Hour / 12 Hours / 1 Day / 3 Days», 1 GB) y temp.sh
-(«files expire after 3 days», 4 GB). Se dejaron fuera los que no lo dicen o no caducan: catbox
-guarda hasta dos años sin visitas, y kappa.lol no publica plazo ninguno.
-
-> Subir es **lo único de toda la app que manda algo fuera del teléfono**, y solo al pulsar el
-> botón. El servicio no es nuestro y cualquiera con el enlace puede abrirlo mientras dure, así
-> que la pantalla lo dice antes de subir nada. Compartir como archivo no sale del aparato.
-
----
-
-## Gestos sobre un pin
+### Gestos sobre un pin
 
 | | |
 |---|---|
@@ -269,7 +344,7 @@ guarda hasta dos años sin visitas, y kappa.lol no publica plazo ninguno.
 | Toque · doble toque | Copiar o abrir · minimizar |
 | Pulsación larga | Barra: through · dibujar · editar · PDF · pizarra · pegatina · guardar · cerrar |
 
-## Bola flotante
+### Bola flotante
 
 | | |
 |---|---|
@@ -277,7 +352,7 @@ guarda hasta dos años sin visitas, y kappa.lol no publica plazo ninguno.
 | Pulsación larga | Ocultar o mostrar todos los pines |
 | Arrastrar | Mover; se imanta al borde |
 
-## Mini-apps: la palabra es el comando
+### Mini-apps: la palabra es el comando
 
 Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 
@@ -291,7 +366,15 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 | `board` · `pizarra` | Pizarra con cuatro fondos y pautas |
 | `croquis` · `cad` · `sketch` | Hoja A4 para dibujar acotado |
 
-## Permisos
+## 6. Instalar, permisos y compilar
+
+### Instalar
+
+1. Descarga el APK de la [última versión](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest).
+2. Permite orígenes desconocidos.
+3. Concede los permisos de la primera tarjeta y pulsa **Comenzar**.
+
+### Permisos
 
 | Permiso | Para qué | |
 |---|---|---|
@@ -304,15 +387,7 @@ Se copia la palabra, se pinea, y sale la herramienta. Tiene que ir sola.
 | Cámara | El modo «en el sitio» del croquis | opcional |
 | Notificaciones · batería | Accesos rápidos · que no maten el servicio | recomendado |
 
----
-
-## Instalar
-
-1. Descarga el APK de la [última versión](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest).
-2. Permite orígenes desconocidos.
-3. Concede los permisos de la primera tarjeta y pulsa **Comenzar**.
-
-## Compilar
+### Compilar
 
 ```bash
 export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
@@ -332,7 +407,7 @@ sdk.dir=C\:\\Users\\TU_USUARIO\\AppData\\Local\\Android\\Sdk
 > El `build.gradle.kts` raíz manda la carpeta de compilación a `pixpin-build`, para poder tener
 > el proyecto en una carpeta sincronizada. Si no te hace falta, borra ese bloque.
 
-### Por qué el APK pesa 52 MB
+#### Por qué el APK pesa 52 MB
 
 Son **los motores de voz**, no el código. R8 no puede recortar un binario ya compilado:
 
@@ -343,9 +418,9 @@ Son **los motores de voz**, no el código. R8 no puede recortar un binario ya co
 | `libsherpa-onnx-jni.so` | 4,8 MB |
 | **Todo el código de la app** | **5,8 MB** |
 
----
+## 7. Por dentro
 
-## Dentro
+### Arquitectura
 
 ```
 com.forge.pixpin/
@@ -376,9 +451,7 @@ com.forge.pixpin/
 La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.536 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
----
-
-## Trece reglas de Android que moldearon el diseño
+### Trece reglas de Android que moldearon el diseño
 
 1. El **consentimiento de captura va antes** del servicio: al revés, `startForeground()` lanza `SecurityException`.
 2. Un token de captura sirve para **una sola** `createVirtualDisplay()`.
@@ -394,7 +467,7 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 12. Los gestos de Compose **se comen el arranque** del trazo y dan una muestra por fotograma.
 13. **No hay API de captura con scroll**: solo queda coser fotogramas.
 
-## Limitaciones
+### Limitaciones
 
 - **Imposibles en Android**: proyectar la ventana viva de otra app, atajos de teclado globales, arrastrar el contenido de un pin a otra app.
 - **Contenido protegido** (banca, DRM): sale en negro.
@@ -404,7 +477,7 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 - La **captura con scroll** cose fotogramas: con cabeceras fijas o sin textura puede fallar.
 - Lo más reciente **está sin verificar en un móvil**: la geometría y los formatos tienen pruebas, el aspecto no.
 
-## Roadmap
+### Roadmap
 
 | | |
 |---|---|
@@ -416,8 +489,10 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 | ✅ 9.5 | Tablas con fórmulas, sincronizar sin servidor, enviar por Wi-Fi, compartir unificado, zonas y sublienzos |
 | ✅ 9.6 | Modelos IFC/OBJ en el croquis, presentar e imprimir, `.pptx`, copias de seguridad, **tres códigos y sincronizar fusionando** |
 | ✅ 9.7 | Sistema solar de proyectos y tema Cosmos, **multitarea de lienzos** con baraja en abanico y grupos de pestañas, gestos rápidos |
+| ✅ 9.8 | **Universos** (el sistema solar como organizador), lector de **Word, EPUB y HTML** con letra ajustable y marcadores, **«Abrir con»**, el chat ya no une solo al proyecto |
 | 10 | **Editar PDFs**: devolver la página anotada al original conservando su texto |
-| 11 | OCR y QR · contenido de Office: el `.docx` ya se lee dentro de la app (texto, tablas e imágenes, sin la maquetación de la página), como el `.xlsx` en Tablas y el `.pptx` en hojas; queda buscar dentro |
+| 11 | **Cliente de escritorio** (Windows) para sincronizar y enviar por Wi-Fi con el ordenador |
+| 12 | OCR y QR · contenido de Office: el `.docx` ya se lee dentro de la app (texto, tablas e imágenes, sin la maquetación de la página), como el `.xlsx` en Tablas y el `.pptx` en hojas; queda buscar dentro |
 
 **Descartados a propósito**: **leer** DWG (GPLv3, SDK comercial o nube), visor de DXF (un plano
 real dio 59 MB y 133.102 entidades), Office con maquetado, **leer** SVG (haría falta un parser:
@@ -427,15 +502,20 @@ segundo plano).
 > Ojo con el SVG: lo descartado es **leerlo**. Escribirlo no necesita nada, porque el motor ya
 > genera las figuras como `M`/`L`/`C`, que es el repertorio exacto de un camino SVG.
 
----
-
-## Documentación
+### Documentación
 
 - [`docs/motor.md`](docs/motor.md) — **catálogo visual**: cada función del motor de dibujo, en dibujos
 - [`docs/formato-pixpin.md`](docs/formato-pixpin.md) — el formato `.pixpin` por dentro
 - [`docs/plan-sincronizacion.md`](docs/plan-sincronizacion.md) — sincronizar sin servidor: los tres códigos, la fusión a tres bandas, los parches y sus fuentes
 - [`docs/plan-compartir-y-zonas.md`](docs/plan-compartir-y-zonas.md) — la hoja de compartir, lienzos por Wi-Fi, zonas y sublienzos
 - [`docs/superpowers/specs/`](docs/superpowers/specs/) — diseño original y decisiones de cada fase
+
+## Comentarios
+
+La aplicación sigue creciendo y la mejoro con lo que me cuentan quienes la usan. Si la pruebas,
+**déjame un comentario**: abre una [incidencia](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/issues)
+con lo que te falta, lo que te sobra o lo que se rompió (si puedes, con el modelo del teléfono y
+una captura). Todo se lee.
 
 ## Licencia
 
