@@ -447,6 +447,32 @@ fun TarjetaDeConfiguracion(
                 }
             }
 
+            // **Los grupos de pestañas guardados, desde el menú** (19-sep-2026): un toque abre el
+            // grupo entero en la multitarea. Se guardan desde la baraja (cuatro dedos arriba).
+            val abiertos = (context.applicationContext as? PixPinApp)?.lienzosAbiertos
+            val grupos = abiertos?.grupos?.collectAsState()?.value.orEmpty()
+            if (grupos.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Grupos guardados",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    grupos.forEach { g ->
+                        TextButton(onClick = {
+                            abiertos?.abrirGrupo(g.id)?.let { com.forge.pixpin.ui.abrirLoAbierto(context, it) }
+                        }) {
+                            Icon(Icons.Filled.Layers, contentDescription = null, Modifier.size(18.dp))
+                            Text(g.nombre + " · " + g.lienzos.size, maxLines = 1, modifier = Modifier.padding(start = 6.dp))
+                        }
+                    }
+                }
+            }
+
             if (sinProyectos) {
                 Spacer(Modifier.height(16.dp))
                 Text(

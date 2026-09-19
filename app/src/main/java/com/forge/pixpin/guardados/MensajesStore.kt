@@ -79,14 +79,15 @@ class MensajesStore(private val context: Context) {
      * comparar lo que has leído (`PronunciarActivity`, que pasa `transcribir = true`).
      */
     fun anadir(mensaje: Mensaje, transcribir: Boolean = false, idioma: String? = null) {
-        // **Lo que entra en el chat de un proyecto entra en el proyecto.** Una foto de la
-        // obra o el PDF del cliente se guardan en la conversación del proyecto porque es lo
-        // que está a mano, y de ahí a las hojas iba un menú: ahora van solos, como hoja, sin
-        // tocar nada (lo pidió el usuario el 5-sep-2026). Se hace **fuera del hilo** que
-        // guarda —un PDF de cuarenta páginas se rasteriza— y se apunta el mensaje ya como
-        // unido para que el menú no lo ofrezca otra vez. Ver [UnirAlProyecto.seUneSolo].
-        // Lo que llega ya unido (el PDF con el que nació el proyecto, una zona) no se vuelve a unir.
-        val seUne = mensaje.proyecto != null && !mensaje.unido && UnirAlProyecto.seUneSolo(mensaje)
+        // **Lo que entra en el chat de un proyecto ya NO entra solo en el proyecto** (usuario,
+        // 19-sep-2026). Desde el 5-sep una foto o un PDF mandados al chat de un proyecto se hacían
+        // hoja sin preguntar, y el proyecto se llenaba de cosas que solo se querían tener a mano en
+        // la conversación. Ahora el mensaje se queda en el chat con su **punto rojo** y se añade
+        // **a mano**, desde su menú («Añadir al proyecto»); entonces el punto pasa a verde. Ver
+        // `MensajesActivity.unirA` y [UnirAlProyecto.sePuedeUnir].
+        //
+        // Lo que llega ya unido (el PDF con el que nació el proyecto, una zona, lo que trae la
+        // sincronización o un `.pixpin`) sigue como estaba: su relación no se toca aquí.
         // **Un lienzo que llega de otro proyecto entra en este** (14-sep-2026): reenviado o
         // adjuntado desde otro proyecto, el mensaje se quedaba en el chat y el lienzo no salía
         // en las hojas. Un lienzo del propio proyecto ya es una hoja y no se toca.
@@ -94,7 +95,7 @@ class MensajesStore(private val context: Context) {
         val destino = mensaje.proyecto?.let { app?.proyectos?.porId(it) }
         val lienzoDeFuera = !mensaje.unido && mensaje.clase == Clase.DIBUJO && destino != null &&
             mensaje.referencia != null && destino.hojas.none { it.dibujo == mensaje.referencia }
-        var apuntado = if (seUne || lienzoDeFuera) mensaje.copy(unido = true) else mensaje
+        var apuntado = if (lienzoDeFuera) mensaje.copy(unido = true) else mensaje
         // **Su número en la conversación**, que no se reutiliza jamás: uno más que el mayor
         // que haya, y nunca menos que cuantos hay —eso es lo que deja seguir la cuenta de
         // los mensajes de antes, que no llevan número, sin renumerar nada. Ver [Mensaje.numero].
@@ -121,7 +122,6 @@ class MensajesStore(private val context: Context) {
         runCatching {
             synchronized(CERROJO) { archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n") }
         }
-        if (seUne) unirAlProyecto(apuntado)
         if (lienzoDeFuera && app != null && destino != null) {
             val m = apuntado
             app.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -262,28 +262,6 @@ class MensajesStore(private val context: Context) {
     private fun avisar(texto: String) {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             android.widget.Toast.makeText(context, texto, android.widget.Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun unirAlProyecto(m: Mensaje) {
-        val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return
-        val proyecto = m.proyecto ?: return
-        app.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val cuantas = runCatching {
-                UnirAlProyecto.unir(context, app.proyectos, proyecto, listOf(m), System.currentTimeMillis())
-            }.getOrDefault(0)
-            if (cuantas > 0) {
-                val nombre = app.proyectos.porId(proyecto)?.nombre.orEmpty()
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    android.widget.Toast.makeText(
-                        context,
-                        context.resources.getQuantityString(
-                            com.forge.pixpin.R.plurals.guardados_unidas, cuantas, cuantas, nombre
-                        ),
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
         }
     }
 

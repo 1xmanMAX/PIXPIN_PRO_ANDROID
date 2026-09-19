@@ -506,7 +506,10 @@
     <string name="guardados_reenviar_a">Reenviar a…</string>
     <string name="guardados_reenviado">Reenviado</string>
     <string name="guardados_anadido_a">Añadido a %1$s</string>
-    <string name="guardados_unir_al_proyecto">Unir al proyecto</string>
+    <!-- El visor de páginas web guardadas. Ver ui/VisorHtmlActivity.kt. -->
+    <string name="visor_html_no">No se pudo abrir la página</string>
+    <string name="visor_html_no_compartir">No se pudo compartir</string>
+    <string name="guardados_unir_al_proyecto">Añadir al proyecto</string>
     <string name="guardados_devolver_al_proyecto">Volver a añadir al proyecto</string>
     <string name="guardados_transcribir">Pasar a texto</string>
     <string name="guardados_pasando_texto">Pasando a texto · %1$d %%</string>

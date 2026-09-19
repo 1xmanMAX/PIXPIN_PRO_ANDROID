@@ -194,10 +194,10 @@ data class Mensaje(
     val enBuzon: Boolean = false,
 
     /**
-     * Ya está metido en las hojas de su proyecto. Lo que entra en el chat de un proyecto
-     * —fotos, PDF, notas en `.md`— se une solo al proyecto al guardarse (ver
-     * [MensajesStore.anadir] y [UnirAlProyecto]); con esto el menú no vuelve a ofrecer
-     * «unir» lo que ya está unido, que daría la hoja dos veces.
+     * Ya está metido en las hojas de su proyecto. Desde el 19-sep-2026 nada entra solo: lo
+     * pone quien lo añade a mano desde el menú del mensaje (`MensajesActivity.unirA`), y lo
+     * trae puesto lo que nace del proyecto o llega por sincronización. Con esto el menú no
+     * vuelve a ofrecer «Añadir al proyecto» lo que ya está, que daría la hoja dos veces.
      */
     val unido: Boolean = false,
 

@@ -147,6 +147,13 @@ class LienzosAbiertos(context: Context) {
 
     fun mover(de: Int, a: Int) = escribir(Abiertos.mover(_lista.value, de, a))
 
+    /**
+     * **Salir cierra la multitarea** (19-sep-2026): al volver a entrar en un lienzo se empieza
+     * de cero, con él solo. Lo que se quiera conservar se guarda antes como grupo. Pasar de una
+     * pestaña a otra **no** es salir: eso lo hace el relevo, que no llama aquí.
+     */
+    fun cerrarTodos() = escribir(emptyList())
+
     fun recargar() {
         _lista.value = leer()
     }

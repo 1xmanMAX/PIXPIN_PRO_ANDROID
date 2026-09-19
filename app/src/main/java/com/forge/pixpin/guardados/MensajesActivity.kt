@@ -388,6 +388,14 @@ class MensajesActivity : ComponentActivity() {
                 val cuantas = UnirAlProyecto.unir(
                     this@MensajesActivity, app.proyectos, proyectoId, lista, System.currentTimeMillis()
                 )
+                // **Añadido a mano, queda apuntado como unido** (19-sep-2026): desde que el chat
+                // ya no mete nada solo en el proyecto, esto es lo que antes hacía `anadir` al
+                // guardar. Sin ello el menú seguiría ofreciendo «Añadir al proyecto» —y saldría
+                // dos veces—, y si luego se quita la hoja no se ofrecería devolverla. Solo en el
+                // chat del propio proyecto: desde la conversación general una foto puede ir a
+                // varios. Ver [UnirAlProyecto.seUneSolo] y [UnirAlProyecto.sePuedeDevolver].
+                if (cuantas > 0) lista.filter { !it.unido && it.proyecto == proyectoId && UnirAlProyecto.seUneSolo(it) }
+                    .forEach { m -> almacen.actualizar(m.id) { it.copy(unido = true) } }
                 val nombre = app.proyectos.porId(proyectoId)?.nombre.orEmpty()
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
@@ -6107,6 +6115,51 @@ class MensajesActivity : ComponentActivity() {
                 when {
                     ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
                         com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
+                    // **Un Word se lee aquí dentro** (19-sep-2026): se saca lo que dice —texto, tablas
+                    // e imágenes, sin la maquetación de la página— a un HTML que enseña el mismo visor
+                    // de las páginas web. Convertir es abrir un ZIP y leer XML: fuera del hilo que
+                    // pinta. Va antes que la rama del HTML para que mande el nombre del mensaje.
+                    // Ver [com.forge.pixpin.motor.DocxAHtml].
+                    com.forge.pixpin.motor.DocxAHtml.esDocx(m.nombre) ||
+                        com.forge.pixpin.motor.DocxAHtml.esDocx(ruta) -> lifecycleScope.launch {
+                        val titulo = m.nombre.ifBlank { File(ruta).name }
+                        val hecho = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val original = File(ruta)
+                                // El nombre lleva la fecha y el peso del original: si el documento
+                                // cambia, no se enseña la conversión vieja; si no, se aprovecha.
+                                val huella = "$ruta|${original.lastModified()}|${original.length()}".hashCode()
+                                val carpeta = File(cacheDir, "visor-docx").apply { mkdirs() }
+                                val pagina = File(carpeta, "$huella.html")
+                                if (!pagina.exists() || pagina.length() == 0L) {
+                                    // Caché de usar y tirar: solo se guarda la última.
+                                    carpeta.listFiles()?.forEach { it.delete() }
+                                    pagina.writeText(com.forge.pixpin.motor.DocxAHtml.convertir(original, titulo))
+                                }
+                                pagina
+                            }
+                        }
+                        hecho.onSuccess { pagina ->
+                            // Arriba, el nombre del documento; al compartir sale el `.docx` y no la
+                            // página fabricada; y sin JavaScript, que esa página no lo lleva.
+                            com.forge.pixpin.ui.VisorHtmlActivity.abrir(
+                                this@MensajesActivity, pagina.absolutePath, titulo,
+                                comparte = ruta, sinGuion = true
+                            )
+                        }.onFailure { e ->
+                            Toast.makeText(
+                                this@MensajesActivity,
+                                (e as? com.forge.pixpin.motor.DocxAHtml.NoSeLee)?.message ?: "No se pudo leer el documento",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            abrirFuera(ruta)
+                        }
+                    }
+                    // **Una página web se ve aquí dentro también** (19-sep-2026): casi siempre es
+                    // una «Página web» exportada por PixPin. Ver [com.forge.pixpin.ui.VisorHtmlActivity].
+                    com.forge.pixpin.ui.VisorHtmlActivity.esHtml(ruta) ||
+                        com.forge.pixpin.ui.VisorHtmlActivity.esHtml(m.nombre) ->
+                        com.forge.pixpin.ui.VisorHtmlActivity.abrir(this, ruta, m.nombre)
                     // **Un PowerPoint se convierte en proyecto** (14-sep-2026): una hoja por
                     // diapositiva, para anotarla y presentarla. Ver [DiapositivasAPdf].
                     com.forge.pixpin.motor.Diapositivas.esPresentacion(m.nombre) ||

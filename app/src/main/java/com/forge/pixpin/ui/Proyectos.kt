@@ -1297,7 +1297,7 @@ private fun PistaDeChat(desplazamiento: Animatable<Float, AnimationVector1D>) {
  *
  * Dos caras, según haya algo marcado o no:
  *
- * - **Sin nada marcado**: el chat, volver a poner el PDF en pantalla, y **una caja con lo
+ * - **Sin nada marcado**: el chat y **una caja con lo
  *   que se añade** —hoja del lienzo, nota y croquis 3D—. Van juntas dentro de un borde
  *   porque son la misma pregunta («¿qué le meto al proyecto?») con tres respuestas, y
  *   sueltas entre las demás se leían como cinco botones sin relación (lo pidió el usuario
@@ -1323,11 +1323,10 @@ private fun BarraDeAcciones(
         BotonDeAccion(
             Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onClick = onChat
         )
-        if (p.pdfOrigen != null) {
-            BotonDeAccion(
-                Icons.Filled.PushPin, R.string.proyecto_pdf_corto, R.string.proyecto_pinear
-            ) { volverAPinear(app, p) }
-        }
+        // **Aquí estuvo «volver a pinear el PDF», y ya no** (usuario, 19-sep-2026): con seis la
+        // barra se saturaba. Con cinco los botones se reparten bien; el sexto solo salía en los
+        // proyectos con PDF y descolocaba a los demás. [volverAPinear] se queda donde estaba,
+        // por si vuelve a hacer falta desde otro sitio.
         // Una hoja del lienzo. En un proyecto con PDF también: una hoja en blanco al lado de
         // las páginas es donde se hace el detalle que el plano no trae.
         BotonDeAccion(Icons.Filled.Add, R.string.proyecto_hoja_corta, R.string.proyecto_hoja_nueva) {

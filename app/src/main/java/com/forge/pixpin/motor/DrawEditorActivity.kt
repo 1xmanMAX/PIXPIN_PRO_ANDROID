@@ -4136,6 +4136,9 @@ class DrawEditorActivity : ComponentActivity() {
         // compartir, de abrir un archivo—, porque ahí lo que espera cualquiera es volver a
         // quien se lo mandó. Ver [EXTRA_DESDE_DENTRO].
         val deDentro = intent?.getBooleanExtra(EXTRA_DESDE_DENTRO, false) == true
+        // Salir de verdad cierra todas las pestañas. Ver [com.forge.pixpin.data.LienzosAbiertos.cerrarTodos].
+        guardarLosDeLaTira()
+        abiertos.cerrarTodos()
         if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
         else if (deDentro && isTaskRoot) com.forge.pixpin.volverALosProyectos(this, null)
         finish()

@@ -315,11 +315,12 @@ fun PantallaDeGalaxia(
         val suyo = proyectos.firstOrNull { it.id == id }
         val gg = galaxia
         if (suyo != null && gg != null) {
-            GalaxiaDelProyecto(
+            // **Dentro, el universo del proyecto** (19-sep-2026): entra vacío y se llena a mano,
+            // como un organizador. Antes aquí orbitaban solas todas las hojas
+            // ([GalaxiaDelProyecto]); ahora las hojas se traen con «+ → Hoja». Ver [Universos].
+            PantallaDeUniverso(
                 app = contexto.applicationContext as com.forge.pixpin.PixPinApp,
                 proyecto = suyo,
-                galaxia = gg,
-                onGuardar = { guardar(it) },
                 onVolver = { dentroDe = null },
                 onChat = { com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, suyo.id, suyo.nombre) }
             )

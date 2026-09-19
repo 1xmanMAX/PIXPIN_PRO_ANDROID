@@ -397,6 +397,14 @@
             android:taskAffinity="${applicationId}.lector"
             android:documentLaunchMode="intoExisting" />
 
+        <!-- **El visor de páginas web**: un `.html` de la conversación —casi siempre una
+             «Página web» exportada por PixPin— se ve aquí dentro. Sin tarea propia: se abre
+             encima del chat y atrás vuelve a él. Ver [VisorHtmlActivity]. -->
+        <activity
+            android:name=".ui.VisorHtmlActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
         <activity
             android:name=".mini.MiniActivity"
             android:exported="false"

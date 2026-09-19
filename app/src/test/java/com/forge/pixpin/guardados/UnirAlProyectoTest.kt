@@ -62,8 +62,12 @@ class UnirAlProyectoTest {
         assertEquals(1, ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(context, hojas[2].dibujo!!))!!.elements.size)
     }
 
+    /**
+     * Desde el 19-sep-2026 **nada entra solo**: esto ya solo dice qué se apunta como unido al
+     * añadirlo a mano desde el menú del mensaje. Ver [UnirAlProyecto.seUneSolo].
+     */
     @Test
-    fun `solo entra solo lo que viene de fuera`() {
+    fun `solo se apunta como unido lo que viene de fuera`() {
         val foto = Mensaje(id = "f", cuando = 1, clase = Clase.IMAGEN, ruta = "/x/foto.jpg", nombre = "foto.jpg")
         val pdf = Mensaje(id = "p", cuando = 2, clase = Clase.ARCHIVO, ruta = "/x/planos.pdf", nombre = "planos.pdf")
         val nota = Mensaje(id = "n", cuando = 3, clase = Clase.NOTA, texto = "hola, ¿a qué hora?")

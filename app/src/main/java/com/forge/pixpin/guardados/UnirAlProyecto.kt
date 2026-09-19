@@ -15,7 +15,8 @@ import com.forge.pixpin.motor.Scene
 import java.io.File
 
 /**
- * **Lo que cae en la conversación de un proyecto se une al proyecto.**
+ * **Lo que cae en la conversación de un proyecto se puede unir al proyecto** —a mano, desde
+ * el menú del mensaje; solo ya no entra nada (usuario, 19-sep-2026)—.
  *
  * Una foto de la obra, el PDF que mandó el cliente, una nota escrita a vuelapluma: llegan
  * al chat porque es donde se guarda todo sin pensar, y después cuesta llevarlos a las hojas
@@ -52,10 +53,14 @@ object UnirAlProyecto {
     }
 
     /**
-     * Lo que **entra solo** en el proyecto al caer en su chat: lo que viene de fuera —una
-     * foto, un PDF, un archivo de notas—. Una nota escrita en el chat o un dibujo adjunto
-     * no: «hola, ¿a qué hora?» no es una hoja, y un dibujo del propio proyecto pegado en su
-     * chat ya está en el proyecto. Esos se unen a mano, desde el menú.
+     * Lo que viene de fuera —una foto, un PDF, un Excel, un archivo de notas— y que, una vez
+     * añadido al proyecto de su chat, **queda apuntado como unido** ([Mensaje.unido]).
+     *
+     * Hasta el 19-sep-2026 esto era «lo que entra solo»: caer en el chat de un proyecto lo hacía
+     * hoja sin preguntar. El usuario lo pidió al revés —el mensaje se queda en el chat con el
+     * punto rojo y se añade a mano desde su menú—, así que ya nadie lo llama al guardar; lo usa
+     * `MensajesActivity.unirA` para apuntar lo añadido. Una nota escrita en el chat o un dibujo
+     * adjunto no cuentan: se pueden unir las veces que haga falta.
      */
     fun seUneSolo(m: Mensaje): Boolean =
         sePuedeUnir(m) && (m.clase == Clase.IMAGEN || m.clase == Clase.ARCHIVO)

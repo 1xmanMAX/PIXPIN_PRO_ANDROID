@@ -4,7 +4,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.512 pruebas · **sin cuentas, sin servidores y sin analítica**;
+**Android 10+** · Kotlin + Compose · 2.527 pruebas · **sin cuentas, sin servidores y sin analítica**;
 internet solo se usa si tú pulsas bajar un modelo de voz o compartir como enlace. Sincronizar y
 enviar van por **tu Wi-Fi**, sin pasar por internet
 
@@ -302,7 +302,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.512 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.527 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -356,7 +356,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.512 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.527 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---
@@ -400,7 +400,7 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 | ✅ 9.6 | Modelos IFC/OBJ en el croquis, presentar e imprimir, `.pptx`, copias de seguridad, **tres códigos y sincronizar fusionando** |
 | ✅ 9.7 | Sistema solar de proyectos y tema Cosmos, **multitarea de lienzos** con baraja en abanico y grupos de pestañas, gestos rápidos |
 | 10 | **Editar PDFs**: devolver la página anotada al original conservando su texto |
-| 11 | OCR y QR · contenido de DOCX/XLSX/PPTX |
+| 11 | OCR y QR · contenido de Office: el `.docx` ya se lee dentro de la app (texto, tablas e imágenes, sin la maquetación de la página), como el `.xlsx` en Tablas y el `.pptx` en hojas; queda buscar dentro |
 
 **Descartados a propósito**: **leer** DWG (GPLv3, SDK comercial o nube), visor de DXF (un plano
 real dio 59 MB y 133.102 entidades), Office con maquetado, **leer** SVG (haría falta un parser:

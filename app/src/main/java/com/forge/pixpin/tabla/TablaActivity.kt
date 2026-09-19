@@ -251,6 +251,8 @@ class TablaActivity : ComponentActivity() {
 
     private fun cerrarYVolver() {
         val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
+        // Salir de verdad cierra la multitarea; pasar a otra pestaña no pasa por aquí.
+        (application as? com.forge.pixpin.PixPinApp)?.lienzosAbiertos?.cerrarTodos()
         if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
         finish()
     }
