@@ -73,8 +73,8 @@ class MultilienzoTest {
         assertTrue(l("t-1").esLienzo)
         assertTrue(!tabla.esLienzo && !croquis.esLienzo && !pdf.esLienzo)
         // El id lleva la clase delante: un dibujo que se llamara igual que la tabla no la pisa.
-        val lista = listOf(l("t-1"), tabla, croquis, pdf).fold(emptyList<LienzoAbierto>()) { acc, x -> Abiertos.con(acc, x) }
-        assertEquals(4, lista.size)
+        val lista = listOf(l("t-1"), tabla, croquis).fold(emptyList<LienzoAbierto>()) { acc, x -> Abiertos.con(acc, x) }
+        assertEquals(3, lista.size)
         assertEquals("t-1", tabla.ruta)
         assertEquals("/x/plano.pdf", pdf.pdf)
     }
@@ -203,8 +203,8 @@ class MultilienzoTest {
     }
 
     @Test
-    fun `la pestaña se puede tocar y hay cinco lienzos como mucho`() {
+    fun `la pestaña se puede tocar y hay tres lienzos como mucho`() {
         assertTrue(Multilienzo.PESTANA >= 24f)
-        assertEquals(5, Abiertos.CUANTOS)
+        assertEquals(3, Abiertos.CUANTOS)
     }
 }

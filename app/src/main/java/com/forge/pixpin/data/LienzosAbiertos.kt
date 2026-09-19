@@ -49,8 +49,12 @@ data class GrupoDeAbiertos(
  * usuario deja en la vista de todos los lienzos; abrir uno nuevo lo pone al final.
  */
 object Abiertos {
-    /** Cuántos pueden estar abiertos a la vez: cinco, que lo pidió así el usuario (18-sep-2026). */
-    const val CUANTOS = 5
+    /**
+     * Cuántos pueden estar abiertos a la vez en la multitarea: **tres** (usuario, 19-sep-2026;
+     * antes cinco, y antes doce). Con cuatro o cinco la tira distrae más de lo que ayuda. Abrir
+     * más lienzos **por separado** —cada uno en su ventana de recientes— sigue como siempre.
+     */
+    const val CUANTOS = 3
 
     const val LIENZO = "lienzo"
     const val TABLA = "tabla"

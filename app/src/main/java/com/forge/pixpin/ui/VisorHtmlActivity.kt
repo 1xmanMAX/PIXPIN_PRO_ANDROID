@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
@@ -88,6 +91,8 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val EXTRA_COMPARTE = "comparte"
         private const val EXTRA_SIN_GUION = "sinGuion"
         private const val EXTRA_MENSAJE = "mensaje"
+        private const val EXTRA_EN_SU_SITIO = "enSuSitio"
+        private const val EXTRA_DOCUMENTO = "documento"
 
         /** Lo que tarda la burbuja en esconderse sola, en milisegundos. */
         private const val LO_QUE_DURA_LA_BURBUJA = 3500L
@@ -103,6 +108,14 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val GUION_DEL_VISOR = """(function(){
   if(window.__pixpinVisor) return; window.__pixpinVisor=1;
   window.print=function(){ PixPinVisor.imprimir(); };
+  function huella(t){ var h=5381,i=t.length; while(i) h=(h*33)^t.charCodeAt(--i); return (h>>>0)+':'+t.length; }
+  var tocado=false, base=null;
+  function ahora(){ try{ return typeof window.paginaAnotada==='function'?huella(window.paginaAnotada()):null; }catch(e){ return null; } }
+  setTimeout(function(){ base=ahora(); },600);
+  document.addEventListener('input',function(){ tocado=true; },true);
+  document.addEventListener('change',function(){ tocado=true; },true);
+  window.__pixpinHayCambios=function(){ var a=ahora(); return a!==null&&base!==null ? a!==base : tocado; };
+  window.__pixpinGuardado=function(){ base=ahora(); tocado=false; };
   function bajar(a){
     try{
       fetch(a.href).then(function(r){ return r.blob(); }).then(function(b){
@@ -143,7 +156,17 @@ class VisorHtmlActivity : ComponentActivity() {
             context: Context, ruta: String, nombre: String,
             comparte: String? = null, sinGuion: Boolean = false,
             /** El mensaje del chat del que sale: es al que se le cambia el nombre desde la burbuja. */
-            mensaje: String? = null
+            mensaje: String? = null,
+            /**
+             * La página **no se copia**: se enseña donde está, con lo que tenga al lado. Es para un
+             * libro (`.epub`) ya desempaquetado en su carpeta de la caché, con sus imágenes.
+             */
+            enSuSitio: Boolean = false,
+            /**
+             * Es un **documento para leer** (un Word, un libro): el menú ofrece verlo como saldría
+             * impreso y meterlo en un proyecto como un PDF.
+             */
+            documento: Boolean = false
         ) {
             val intent = Intent(context, VisorHtmlActivity::class.java)
                 .putExtra(EXTRA_RUTA, ruta)
@@ -151,6 +174,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 .putExtra(EXTRA_SIN_GUION, sinGuion)
             if (comparte != null) intent.putExtra(EXTRA_COMPARTE, comparte)
             if (mensaje != null) intent.putExtra(EXTRA_MENSAJE, mensaje)
+            intent.putExtra(EXTRA_EN_SU_SITIO, enSuSitio).putExtra(EXTRA_DOCUMENTO, documento)
             context.startActivity(intent)
         }
     }
@@ -164,6 +188,15 @@ class VisorHtmlActivity : ComponentActivity() {
 
     /** El mensaje del chat al que se le cambia el nombre, si se vino de uno. */
     private var mensaje: String? = null
+    private var enSuSitio = false
+    private var esDocumento = false
+
+    /** El archivo de verdad: el que se reescribe cuando la página se guarda a sí misma. */
+    private var elOriginal: File? = null
+
+    /** Sube cada vez que el dedo toca la página, y cada vez que la mueve: la burbuja los mira. */
+    private var toquesEnLaPagina by mutableStateOf(0)
+    private var movidasDeLaPagina by mutableStateOf(0)
 
     /** Lo que la página ha puesto a pantalla completa (presentar), y cómo decirle que se acabó. */
     private var aPantalla: android.view.View? = null
@@ -179,6 +212,9 @@ class VisorHtmlActivity : ComponentActivity() {
         comparte = intent?.getStringExtra(EXTRA_COMPARTE)?.let { File(it) }
         sinGuion = intent?.getBooleanExtra(EXTRA_SIN_GUION, false) == true
         mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
+        enSuSitio = intent?.getBooleanExtra(EXTRA_EN_SU_SITIO, false) == true
+        esDocumento = intent?.getBooleanExtra(EXTRA_DOCUMENTO, false) == true
+        elOriginal = File(ruta)
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -195,30 +231,40 @@ class VisorHtmlActivity : ComponentActivity() {
         var copia by remember(original) { mutableStateOf<File?>(null) }
         var fallo by remember(original) { mutableStateOf(false) }
         LaunchedEffect(original) {
-            val hecha = withContext(Dispatchers.IO) { runCatching { copiaParaVer(original) }.getOrNull() }
+            val hecha = withContext(Dispatchers.IO) { runCatching { if (enSuSitio) original.takeIf { it.exists() } else copiaParaVer(original) }.getOrNull() }
             if (hecha == null) fallo = true else copia = hecha
         }
         // **Atrás vuelve primero dentro de la página** —un índice con sus hojas es ir y volver—
         // y solo cuando no queda a dónde volver, sale.
-        BackHandler {
+        var preguntandoSiSalir by remember { mutableStateOf(false) }
+        fun salir() {
             when {
                 aPantalla != null -> dejarLaPantallaCompleta()
                 web?.canGoBack() == true -> web?.goBack()
-                else -> finish()
+                // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
+                sinGuion || web == null -> finish()
+                else -> web?.evaluateJavascript("(function(){try{return window.__pixpinHayCambios?window.__pixpinHayCambios():false;}catch(e){return false;}})()") { r ->
+                    if (r == "true") preguntandoSiSalir = true else finish()
+                }
             }
         }
+        BackHandler { salir() }
 
-        // **La página, de canto a canto, y los mandos flotando encima** (19-sep-2026): antes había
-        // una barra arriba con el nombre, que le quitaba sitio a la página y no se parecía al
-        // resto de la aplicación. Ahora es como en los lienzos: una burbuja con el nombre —tocarla
-        // lo cambia—, con volver, imprimir y compartir a los lados. Se esconde sola para no tapar
-        // la barra que traiga la propia página, y una rayita arriba la devuelve.
+        // **Solo la página, y su nombre flotando** (19-sep-2026, segunda vuelta). Sin botones:
+        // se sale con atrás y se guarda con el botón de la propia página. El nombre es una
+        // pastilla **siempre semitransparente** que sale al entrar y al tocar la pantalla, se va
+        // sola a los pocos segundos y **se va en el acto al mover el contenido**. Tocarla lo deja
+        // cambiar ahí mismo, **sin la extensión**, que no se puede cambiar. Lo demás —imprimir,
+        // compartir, la vista de impresión— cabe en los tres puntos de su lado.
         var suNombre by remember { mutableStateOf(nombre) }
         var aLaVista by remember { mutableStateOf(true) }
         var cambiando by remember { mutableStateOf(false) }
-        var toques by remember { mutableStateOf(0) }
-        LaunchedEffect(aLaVista, toques, cambiando) {
-            if (aLaVista && !cambiando) {
+        var menu by remember { mutableStateOf(false) }
+        var ocupado by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(toquesEnLaPagina) { if (toquesEnLaPagina > 0) aLaVista = true }
+        LaunchedEffect(movidasDeLaPagina) { if (movidasDeLaPagina > 0 && !cambiando && !menu) aLaVista = false }
+        LaunchedEffect(aLaVista, toquesEnLaPagina, cambiando, menu) {
+            if (aLaVista && !cambiando && !menu) {
                 kotlinx.coroutines.delay(LO_QUE_DURA_LA_BURBUJA)
                 aLaVista = false
             }
@@ -237,73 +283,147 @@ class VisorHtmlActivity : ComponentActivity() {
                         factory = { contexto -> nuevoWeb(contexto, pagina) }
                     )
                 }
-                if (!presentando) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = aLaVista,
-                        enter = androidx.compose.animation.fadeIn(),
-                        exit = androidx.compose.animation.fadeOut(),
-                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 10.dp, end = 10.dp)
+                if (!presentando) androidx.compose.animation.AnimatedVisibility(
+                    visible = aLaVista,
+                    enter = androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.fadeOut(),
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
+                ) {
+                    Row(
+                        Modifier
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .background(androidx.compose.ui.graphics.Color(0x8C14182B))
+                            .padding(start = 14.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-                            Row(Modifier.padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { finish() }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = getString(R.string.cancel))
+                        val blanco = androidx.compose.ui.graphics.Color.White
+                        if (cambiando) {
+                            var texto by remember { mutableStateOf(sinExtension(suNombre)) }
+                            val foco = remember { androidx.compose.ui.focus.FocusRequester() }
+                            LaunchedEffect(Unit) { foco.requestFocus() }
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = texto,
+                                onValueChange = { texto = it.take(80).replace("\n", "") },
+                                singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(color = blanco, fontWeight = FontWeight.Bold, fontSize = androidx.compose.ui.unit.TextUnit.Unspecified),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(blanco),
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                                    cambiando = false
+                                    val limpio = conSuExtension(texto.trim(), suNombre)
+                                    if (texto.isNotBlank() && limpio != suNombre) { suNombre = limpio; renombrar(limpio) }
+                                }),
+                                modifier = Modifier.weight(1f, fill = false).widthIn(min = 120.dp).focusRequester(foco).padding(vertical = 10.dp)
+                            )
+                        } else {
+                            Text(
+                                sinExtension(suNombre), color = blanco, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false).clickable { cambiando = true }.padding(vertical = 10.dp)
+                            )
+                        }
+                        // **En una página web, solo el nombre** (lo pidió el usuario): imprimir,
+                        // guardar y presentar son los botones de la propia página, que aquí ya
+                        // funcionan. Un Word o un libro no traen botones, así que los suyos —vista
+                        // de impresión, al proyecto, imprimir, compartir— van en estos tres puntos.
+                        if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
+                        else Box {
+                            IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Más", tint = blanco.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                            }
+                            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                if (esDocumento) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Vista de impresión") },
+                                        onClick = { menu = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } }
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Al proyecto, como PDF") },
+                                        onClick = { menu = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } }
+                                    )
                                 }
-                                Text(
-                                    suNombre, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .weight(1f, fill = false)
-                                        .clickable { cambiando = true }
-                                        .padding(horizontal = 6.dp, vertical = 10.dp)
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("Imprimir") }, onClick = { menu = false; imprimir(suNombre) })
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(getString(R.string.guardados_compartir)) },
+                                    onClick = { menu = false; compartir(comparte ?: original, suNombre) }
                                 )
-                                IconButton(onClick = { toques++; imprimir(suNombre) }) {
-                                    Icon(Icons.Filled.Print, contentDescription = "Imprimir")
-                                }
-                                IconButton(onClick = { toques++; compartir(comparte ?: original, suNombre) }) {
-                                    Icon(Icons.Filled.Share, contentDescription = getString(R.string.guardados_compartir))
-                                }
                             }
                         }
                     }
-                    // La rayita que devuelve la burbuja: pequeña, arriba y en el centro.
-                    if (!aLaVista) Box(
+                }
+                ocupado?.let { que ->
+                    Row(
                         Modifier
-                            .align(Alignment.TopCenter)
-                            .statusBarsPadding()
-                            .clickable(
-                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                indication = null
-                            ) { aLaVista = true }
-                            .padding(horizontal = 28.dp, vertical = 8.dp)
+                            .align(Alignment.Center)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                            .background(androidx.compose.ui.graphics.Color(0xCC14182B))
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            Modifier
-                                .size(width = 40.dp, height = 5.dp)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                                .background(androidx.compose.ui.graphics.Color(0x99808080))
-                        )
+                        androidx.compose.material3.CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = androidx.compose.ui.graphics.Color.White)
+                        Text(que, color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 12.dp))
                     }
                 }
             }
         }
-        if (cambiando) {
-            var texto by remember { mutableStateOf(suNombre) }
+        if (preguntandoSiSalir) {
             androidx.compose.material3.AlertDialog(
-                onDismissRequest = { cambiando = false },
-                title = { Text("Nombre") },
-                text = { androidx.compose.material3.OutlinedTextField(texto, { texto = it.take(80) }, singleLine = true) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
-                        cambiando = false
-                        val limpio = conSuExtension(texto.trim(), suNombre)
-                        if (limpio.isNotBlank() && limpio != suNombre) {
-                            suNombre = limpio
-                            renombrar(limpio)
-                        }
-                    }) { Text("Guardar") }
-                },
-                dismissButton = { androidx.compose.material3.TextButton(onClick = { cambiando = false }) { Text("Cancelar") } }
+                onDismissRequest = { preguntandoSiSalir = false },
+                title = { Text("Hay cambios sin guardar") },
+                text = { Text("Si sales ahora se pierden. Para conservarlos, vuelve y pulsa guardar en la página.") },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { preguntandoSiSalir = false; finish() }) { Text("Salir") } },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { preguntandoSiSalir = false }) { Text("Volver") } }
             )
+        }
+    }
+
+    /** El nombre como se enseña y se edita: sin la extensión, que no se puede cambiar. */
+    private fun sinExtension(nombre: String): String {
+        val ext = nombre.substringAfterLast('.', "")
+        return if (ext.isNotBlank() && ext.length <= 5 && nombre.length > ext.length + 1) nombre.dropLast(ext.length + 1) else nombre
+    }
+
+    /**
+     * **El documento, como saldría impreso**: se le pide al `WebView` el PDF que mandaría a la
+     * impresora (A4) y se abre en el lector de PDF, que ya enseña páginas. Con [alProyecto], ese
+     * PDF entra en los proyectos como cualquier otro: una hoja por página, para anotarlo en los
+     * lienzos. Ver [android.print.PdfDesdeWeb].
+     */
+    private fun comoPdf(nombre: String, alProyecto: Boolean, alAcabar: () -> Unit) {
+        val vista = web
+        if (vista == null) { alAcabar(); return }
+        val titulo = sinExtension(nombre).ifBlank { "Documento" }
+        val ahora = System.currentTimeMillis()
+        val destino = if (alProyecto) File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+        else File(File(cacheDir, "visor-pdf").apply { deleteRecursively(); mkdirs() }, "impresion.pdf")
+        val atributos = android.print.PrintAttributes.Builder()
+            .setMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4)
+            .setResolution(android.print.PrintAttributes.Resolution("pdf", "pdf", 300, 300))
+            .setMinMargins(android.print.PrintAttributes.Margins(590, 590, 590, 590))
+            .build()
+        android.print.PdfDesdeWeb.escribir(vista.createPrintDocumentAdapter(titulo), atributos, destino) { bien ->
+            if (!bien) {
+                alAcabar()
+                Toast.makeText(this, "No se pudo pasar a PDF", Toast.LENGTH_SHORT).show()
+                return@escribir
+            }
+            if (!alProyecto) {
+                alAcabar()
+                com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, destino.absolutePath, "$titulo · impresión")
+                return@escribir
+            }
+            lifecycleScope.launch {
+                val hecho = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val paginas = android.graphics.pdf.PdfRenderer(
+                            android.os.ParcelFileDescriptor.open(destino, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+                        ).use { it.pageCount }
+                        (application as com.forge.pixpin.PixPinApp).proyectos.deEstePdf(destino.absolutePath, titulo, paginas, ahora)
+                    }.getOrNull()
+                }
+                alAcabar()
+                if (hecho == null) Toast.makeText(this@VisorHtmlActivity, "No se pudo crear el proyecto", Toast.LENGTH_SHORT).show()
+                else { com.forge.pixpin.volverALosProyectos(this@VisorHtmlActivity, hecho.id); finish() }
+            }
         }
     }
 
@@ -379,6 +499,29 @@ class VisorHtmlActivity : ComponentActivity() {
         @android.webkit.JavascriptInterface
         fun guardar(nombre: String, enBase64: String) {
             if (enBase64.length > TOPE_DE_LO_BAJADO) return
+            // **Guardar es guardar** (19-sep-2026): si lo que baja la página es ella misma —un
+            // `.html`, el botón de guardar de una página exportada—, se reescribe el archivo de
+            // verdad, el del chat, y no se saca ninguna hoja de compartir. Antes de escribir se
+            // comprueba que lo que llega es una página entera: es la trampa del «HTML que se
+            // come su guion», y un archivo a medias dejaría el original muerto.
+            val destino = elOriginal
+            if (esHtml(nombre) && destino != null && !enSuSitio && !sinGuion) {
+                lifecycleScope.launch {
+                    val bien = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val bytes = android.util.Base64.decode(enBase64, android.util.Base64.DEFAULT)
+                            val texto = String(bytes, Charsets.UTF_8)
+                            require(bytes.size > 200 && texto.contains("</html>", ignoreCase = true))
+                            val tmp = File(destino.path + ".tmp")
+                            tmp.writeBytes(bytes)
+                            check(tmp.renameTo(destino) || runCatching { tmp.copyTo(destino, overwrite = true); tmp.delete(); true }.getOrDefault(false))
+                        }.isSuccess
+                    }
+                    if (bien) web?.evaluateJavascript("window.__pixpinGuardado&&window.__pixpinGuardado();", null)
+                    Toast.makeText(this@VisorHtmlActivity, if (bien) "Guardado" else "No se pudo guardar", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
             lifecycleScope.launch {
                 val archivo = withContext(Dispatchers.IO) {
                     runCatching {
@@ -397,7 +540,7 @@ class VisorHtmlActivity : ComponentActivity() {
      * El `WebView` ya cargado con [pagina]. Los permisos, uno a uno y a la vista: lo que no
      * está aquí encendido está apagado. Ver el porqué en la documentación de la clase.
      */
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
     private fun nuevoWeb(contexto: Context, pagina: File): WebView = WebView(contexto).apply {
         settings.javaScriptEnabled = !sinGuion
         settings.domStorageEnabled = !sinGuion
@@ -416,6 +559,20 @@ class VisorHtmlActivity : ComponentActivity() {
         settings.useWideViewPort = true
         webViewClient = Cliente(pagina.parentFile ?: pagina)
         webChromeClient = Cromo()
+        // El dedo sobre la página: un toque enseña el nombre, moverla lo esconde. No se consume nada.
+        val margen = android.view.ViewConfiguration.get(contexto).scaledTouchSlop
+        var x0 = 0f
+        var y0 = 0f
+        var seMovio = false
+        setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false }
+                android.view.MotionEvent.ACTION_MOVE ->
+                    if (!seMovio && (kotlin.math.abs(e.x - x0) > margen || kotlin.math.abs(e.y - y0) > margen)) { seMovio = true; movidasDeLaPagina++ }
+                android.view.MotionEvent.ACTION_UP -> if (!seMovio) toquesEnLaPagina++
+            }
+            false
+        }
         if (!sinGuion) addJavascriptInterface(Puente(), "PixPinVisor")
         loadUrl(Uri.fromFile(pagina).toString())
         web = this

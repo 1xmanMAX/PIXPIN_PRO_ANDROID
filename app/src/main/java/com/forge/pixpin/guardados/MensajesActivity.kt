@@ -6120,6 +6120,41 @@ class MensajesActivity : ComponentActivity() {
                     // de las páginas web. Convertir es abrir un ZIP y leer XML: fuera del hilo que
                     // pinta. Va antes que la rama del HTML para que mande el nombre del mensaje.
                     // Ver [com.forge.pixpin.motor.DocxAHtml].
+                    // **Un libro (`.epub`) se lee aquí dentro** (19-sep-2026): se desempaqueta en su
+                    // carpeta de la caché —capítulos en una sola página, con sus imágenes al lado— y
+                    // se enseña en el mismo visor, **donde está** y sin JavaScript. Ver
+                    // [com.forge.pixpin.motor.EpubAHtml].
+                    com.forge.pixpin.motor.EpubAHtml.esEpub(m.nombre) ||
+                        com.forge.pixpin.motor.EpubAHtml.esEpub(ruta) -> lifecycleScope.launch {
+                        val titulo = m.nombre.ifBlank { File(ruta).name }
+                        val hecho = withContext(Dispatchers.IO) {
+                            runCatching {
+                                val original = File(ruta)
+                                val huella = "$ruta|${original.lastModified()}|${original.length()}".hashCode()
+                                val raiz = File(cacheDir, "visor-epub")
+                                val carpeta = File(raiz, huella.toString())
+                                val pagina = File(carpeta, "pagina.html")
+                                if (!pagina.exists() || pagina.length() == 0L) {
+                                    // Caché de usar y tirar: solo se guarda el último libro.
+                                    raiz.listFiles()?.forEach { if (it != carpeta) it.deleteRecursively() }
+                                    com.forge.pixpin.motor.EpubAHtml.convertir(original, carpeta, titulo.substringBeforeLast('.'))
+                                } else pagina
+                            }
+                        }
+                        hecho.onSuccess { pagina ->
+                            com.forge.pixpin.ui.VisorHtmlActivity.abrir(
+                                this@MensajesActivity, pagina.absolutePath, titulo,
+                                comparte = ruta, sinGuion = true, mensaje = m.id, enSuSitio = true, documento = true
+                            )
+                        }.onFailure { e ->
+                            Toast.makeText(
+                                this@MensajesActivity,
+                                (e as? com.forge.pixpin.motor.EpubAHtml.NoSeLee)?.message ?: "No se pudo leer el libro",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            abrirFuera(ruta)
+                        }
+                    }
                     com.forge.pixpin.motor.DocxAHtml.esDocx(m.nombre) ||
                         com.forge.pixpin.motor.DocxAHtml.esDocx(ruta) -> lifecycleScope.launch {
                         val titulo = m.nombre.ifBlank { File(ruta).name }
@@ -6144,7 +6179,7 @@ class MensajesActivity : ComponentActivity() {
                             // página fabricada; y sin JavaScript, que esa página no lo lleva.
                             com.forge.pixpin.ui.VisorHtmlActivity.abrir(
                                 this@MensajesActivity, pagina.absolutePath, titulo,
-                                comparte = ruta, sinGuion = true, mensaje = m.id
+                                comparte = ruta, sinGuion = true, mensaje = m.id, documento = true
                             )
                         }.onFailure { e ->
                             Toast.makeText(

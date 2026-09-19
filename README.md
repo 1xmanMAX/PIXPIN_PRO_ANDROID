@@ -4,7 +4,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.524 pruebas · **sin cuentas, sin servidores y sin analítica**;
+**Android 10+** · Kotlin + Compose · 2.532 pruebas · **sin cuentas, sin servidores y sin analítica**;
 internet solo se usa si tú pulsas bajar un modelo de voz o compartir como enlace. Sincronizar y
 enviar van por **tu Wi-Fi**, sin pasar por internet
 
@@ -22,7 +22,7 @@ enviar van por **tu Wi-Fi**, sin pasar por internet
 | **Guardar** | Un chat contigo mismo: fotos, PDF, notas de voz que se transcriben solas |
 | **Proyectos** | Un plano en PDF, sus hojas anotadas, sus notas y sus croquis, todo junto |
 | **Croquis 3D** | Dibujar en el espacio y girar alrededor de lo dibujado |
-| **Multitarea** | Hasta cinco lienzos vivos a la vez, con gestos de tres y cuatro dedos y grupos de pestañas guardados |
+| **Multitarea** | Hasta tres lienzos vivos a la vez, con gestos de tres y cuatro dedos y grupos de pestañas guardados |
 | **Sincronizar y enviar** | Tus aparatos al día por la Wi-Fi de casa, y pasar algo a otra persona con un código o un QR |
 
 Todo funciona **con el avión puesto**. Nada sale del teléfono si tú no lo compartes.
@@ -66,7 +66,7 @@ todas las muestras del sistema y la presión; con lápiz a la vista, el dedo pas
 ## Multitarea: varios lienzos a la vez
 
 Android no tiene una multitarea cómoda **dentro** de una app, así que PixPin trae la suya, hecha
-a imagen de la de los plegables: **hasta cinco lienzos abiertos, todos vivos**, uno al lado de otro.
+a imagen de la de los plegables: **hasta tres lienzos abiertos, todos vivos**, uno al lado de otro.
 
 | Gesto | Qué hace |
 |---|---|
@@ -103,6 +103,15 @@ ya está, y ordena sola por lo único que uno recuerda de verdad, que es cuándo
 | Emoji | Uno por mensaje, se pone después: encontrar sin recordar ni una palabra |
 | Comentar | Una frase al lado de un PDF diciendo por qué se guardó |
 | Por proyecto | Cada proyecto tiene su chat; lo que entra ahí se une solo a sus hojas |
+
+### Documentos que se abren dentro
+
+Un **PDF**, una **página web** (`.html`, también las que exporta PixPin), un **Word** (`.docx`) y
+un **libro** (`.epub`) se leen sin salir de la aplicación, a pantalla completa y sin barras: solo
+el nombre en una pastilla semitransparente que sale al tocar y se va al mover la página; tocarla
+cambia el nombre. En una página exportada funcionan sus propios botones —**guardar** reescribe el
+archivo, **imprimir** y **presentar**—, y salir con cambios sin guardar avisa. Un Word o un libro
+se pueden ver **como saldrían impresos** y meter en un proyecto **como PDF**, para anotarlos.
 
 ## La voz
 
@@ -302,7 +311,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.524 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.532 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -356,7 +365,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.524 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.532 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---

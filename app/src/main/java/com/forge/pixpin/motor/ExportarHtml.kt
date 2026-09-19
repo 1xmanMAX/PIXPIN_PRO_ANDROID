@@ -1883,6 +1883,8 @@ function paginaAnotada(){
   }
   return salida;
 }
+// Para quien enseña esta página por dentro de una aplicación: así sabe si hay cambios sin guardar.
+window.paginaAnotada=paginaAnotada;
 function nombreDelArchivo(){
   var n=(document.body.dataset.nombre||document.title||'dibujo').replace(/[\\/:*?"<>|]+/g,'-').trim();
   return (n||'dibujo')+'.html';
