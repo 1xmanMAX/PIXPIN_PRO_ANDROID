@@ -1,5 +1,8 @@
 package com.forge.pixpin.croquis3d
 
+import com.forge.pixpin.ui.theme.apartarDeLaCamara
+import com.forge.pixpin.ui.theme.bajarSiTocaLaCamara
+import com.forge.pixpin.ui.theme.fondoDeCristal
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -194,7 +197,7 @@ class Croquis3DActivity : ComponentActivity() {
         // **Y si se ha venido desde una lámina, la vista de esa lámina.** Se pone entera y
         // sin viaje: no se está volviendo de un sitio, se está llegando.
         intent?.getStringExtra(LA_VISTA)?.let { controlador.ponerLaVista(it) }
-        setContent { PixPinTheme { Pantalla() } }
+        setContent { PixPinTheme(cielo = false) { Pantalla() } }
     }
 
     /**
@@ -666,9 +669,10 @@ class Croquis3DActivity : ComponentActivity() {
                 Surface(
                     Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = 4.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    tonalElevation = 3.dp
+                    color = com.forge.pixpin.ui.theme.Cristal.barra,
+                    contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+                    tonalElevation = 0.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
@@ -682,7 +686,8 @@ class Croquis3DActivity : ComponentActivity() {
                     }
                 }
 
-                Row(Modifier.align(Alignment.TopStart)) {
+                // Lejos de una cámara de esquina (17-sep-2026). Ver [com.forge.pixpin.ui.theme.apartarDeLaCamara].
+                Row(Modifier.align(Alignment.TopStart).apartarDeLaCamara()) {
                     IconButton(onClick = { cerrarYVolver() }, modifier = Modifier.padding(8.dp)) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
@@ -712,7 +717,7 @@ class Croquis3DActivity : ComponentActivity() {
                 // mundo. Se gira con la cámara y sus caras llevan a las vistas técnicas.
                 Croquis3DCubo(
                     controlador,
-                    Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp)
+                    Modifier.align(Alignment.TopEnd).apartarDeLaCamara().padding(top = 4.dp, end = 4.dp)
                 )
 
                 // **El aumento y sus dos candados.**
@@ -725,10 +730,11 @@ class Croquis3DActivity : ComponentActivity() {
                 // Arriba y en el medio: se mira de vez en cuando y se toca poco, así que no
                 // merece sitio abajo, donde está lo que se usa a todas horas.
                 Surface(
-                    Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    Modifier.align(Alignment.TopCenter).padding(top = 6.dp).bajarSiTocaLaCamara(),
+                    shape = RoundedCornerShape(18.dp),
+                    color = com.forge.pixpin.ui.theme.Cristal.barra,
+                    contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
                 ) {
                     Row(
                         Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1231,9 +1237,9 @@ class Croquis3DActivity : ComponentActivity() {
                     }
                 },
             shape = RoundedCornerShape(17.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            tonalElevation = 3.dp
+            color = com.forge.pixpin.ui.theme.Cristal.barra,
+            contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Box(
@@ -1310,10 +1316,7 @@ class Croquis3DActivity : ComponentActivity() {
             // panel lateral del lienzo plano, y por lo mismo. Ver [ElColorQueHay].
             Column(
                 Modifier
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-                        RoundedCornerShape(20.dp)
-                    )
+                    .fondoDeCristal(RoundedCornerShape(22.dp))
                     .padding(vertical = 6.dp, horizontal = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -2589,10 +2592,7 @@ class Croquis3DActivity : ComponentActivity() {
                 .padding(vertical = 2.dp)
                 .size(38.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (puesta) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    else Color.Transparent
-                )
+                .background(if (puesta) com.forge.pixpin.ui.theme.Cristal.puesto else Color.Transparent)
                 .clickable {
                     controlador.pincel = cual
                     // Elegir una tinta **es** ponerse a dibujar con ella: nadie coge el
@@ -2744,9 +2744,10 @@ class Croquis3DActivity : ComponentActivity() {
         Surface(
             modifier,
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            tonalElevation = 3.dp
+            color = com.forge.pixpin.ui.theme.Cristal.barra,
+            contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+            tonalElevation = 0.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
         ) {
             Column(
                 Modifier.padding(vertical = 5.dp, horizontal = 3.dp),
@@ -2887,10 +2888,7 @@ class Croquis3DActivity : ComponentActivity() {
                 .padding(2.dp)
                 .size(lado)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (puesta) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    else Color.Transparent
-                )
+                .background(if (puesta) com.forge.pixpin.ui.theme.Cristal.puesto else Color.Transparent)
                 .clickable {
                     controlador.herramienta = cual
                     // Salir de la flecha suelta lo elegido: dejarlo marcado mientras se
@@ -2902,9 +2900,9 @@ class Croquis3DActivity : ComponentActivity() {
             Icon(
                 icono,
                 contentDescription = getString(nombre),
-                tint = if (puesta) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
+                tint = if (puesta) com.forge.pixpin.ui.theme.Cristal.tintaPuesta
+                else com.forge.pixpin.ui.theme.Cristal.tinta,
+                modifier = Modifier.size(24.dp)
             )
         }
     }
@@ -2930,19 +2928,16 @@ class Croquis3DActivity : ComponentActivity() {
                 .padding(2.dp)
                 .size(lado)
                 .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (encendido) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    else Color.Transparent
-                )
+                .background(if (encendido) com.forge.pixpin.ui.theme.Cristal.puesto else Color.Transparent)
                 .clickable(onClick = alTocar),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 icono,
                 contentDescription = descripcion,
-                tint = if (encendido) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
+                tint = if (encendido) com.forge.pixpin.ui.theme.Cristal.tintaPuesta
+                else com.forge.pixpin.ui.theme.Cristal.tinta,
+                modifier = Modifier.size(24.dp)
             )
         }
     }

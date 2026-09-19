@@ -184,6 +184,14 @@ fun BotonFlotante(zurdo: Boolean, agarre: AgarreDelBoton, modifier: Modifier = M
             if (x.isNaN() || y.isNaN()) {
                 x = if (zurdo) medida.width - ancho - margen else margen
                 y = medida.height - alto - margen
+            } else {
+                // **Al girar, el sitio guardado se mete dentro** (17-sep-2026). Solo se
+                // recortaba al pintar: un botón dejado abajo en vertical valía y = 2000 px, en
+                // horizontal se pintaba pegado al borde, y arrastrarlo hacia arriba restaba de
+                // esos 2000 sin que se moviera nada hasta pasar el tope — parecía que solo se
+                // podía mover a lo largo del borde de abajo.
+                x = x.coerceIn(0f, (medida.width - ancho).coerceAtLeast(0f))
+                y = y.coerceIn(0f, (medida.height - alto).coerceAtLeast(0f))
             }
         }
     ) {
@@ -209,8 +217,10 @@ fun BotonFlotante(zurdo: Boolean, agarre: AgarreDelBoton, modifier: Modifier = M
                             onDragEnd = { prefs.edit().putFloat(CLAVE_X, x).putFloat(CLAVE_Y, y).apply() }
                         ) { cambio, arrastre ->
                             cambio.consume()
-                            x += arrastre.x
-                            y += arrastre.y
+                            // Recortado en cada paso, no solo al pintar: si no, pasarse del
+                            // borde deja un trecho muerto al volver.
+                            x = (x + arrastre.x).coerceIn(0f, (sitio.width - ancho).coerceAtLeast(0f))
+                            y = (y + arrastre.y).coerceIn(0f, (sitio.height - alto).coerceAtLeast(0f))
                         }
                     },
                 contentAlignment = Alignment.Center

@@ -112,9 +112,6 @@ fun VentanaDeAjustes(
     /** El trazo a mano sale firme. Ver [Element.presionFirme]. */
     presionFirme: Boolean,
     onPresionFirme: (Boolean) -> Unit,
-    /** Qué hacer con la barra de arriba en pantalla completa. Ver [com.forge.pixpin.data.BarraDeArriba]. */
-    barraDeArriba: com.forge.pixpin.data.BarraDeArriba = com.forge.pixpin.data.BarraDeArriba.NADA,
-    onBarraDeArriba: (com.forge.pixpin.data.BarraDeArriba) -> Unit = {},
     /** La llave de paso de las luces del dibujo. Ver [LucesDelDibujo]. */
     luces: LucesDelDibujo,
     onLuces: (LucesDelDibujo) -> Unit,
@@ -265,7 +262,7 @@ fun VentanaDeAjustes(
                             if (paginaComoImagen != null) {
                                 Interruptor(
                                     "Esta página como imagen",
-                                    "Solo la página que se está viendo: se rasteriza por cuadros, como un escaneo. Se recuerda para la próxima vez que se abra.",
+                                    "Apagado, esta página se ve en vector: nítida a cualquier aumento. Encendido, se rasteriza como un escaneo. Solo sale si la página tiene líneas que leer.",
                                     paginaComoImagen,
                                     onPaginaComoImagen
                                 )
@@ -273,32 +270,6 @@ fun VentanaDeAjustes(
                             // Escribir y dibujar piden cosas contrarias, y por eso es un
                             // interruptor y no una decisión de la aplicación.
                             Interruptor("Trazo firme", "Sin presión: el grosor no cambia al apretar.", presionFirme, onPresionFirme)
-                        }
-                        // **Que no baje la cortina en pantalla completa** (16-sep-2026). Las
-                        // tres opciones se le ofrecen al usuario porque ninguna sale gratis:
-                        // ver [com.forge.pixpin.data.BarraDeArriba]. Lo eligió él así.
-                        Seccion(
-                            "Barra de notificaciones",
-                            "Dibujando a pantalla completa (cuatro dedos), deslizar desde el borde de arriba baja la barra de la hora y la batería encima del dibujo."
-                        ) {
-                            val opciones = com.forge.pixpin.data.BarraDeArriba.entries
-                            Segmentos(
-                                listOf("Dejarla", "Fijar pantalla", "Franja"),
-                                opciones.indexOf(barraDeArriba).coerceAtLeast(0)
-                            ) { onBarraDeArriba(opciones[it]) }
-                            Text(
-                                when (barraDeArriba) {
-                                    com.forge.pixpin.data.BarraDeArriba.NADA ->
-                                        "Como siempre: la barra puede bajar."
-                                    com.forge.pixpin.data.BarraDeArriba.FIJAR ->
-                                        "Android fija la aplicación y no deja bajarla. Pregunta cada vez que entras y, mientras dura, no deja ir a inicio ni a las aplicaciones recientes."
-                                    com.forge.pixpin.data.BarraDeArriba.FRANJA ->
-                                        "Una franja invisible de un dedo arriba se traga el deslizamiento. Sin avisos, pero esa franja no dibuja y hay teléfonos donde puede no bastar. Necesita el permiso de dibujar sobre otras aplicaciones."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
                         }
                         // **Los gestos, escritos donde se buscan.** No se descubren solos, y
                         // la ventana de ajustes es el sitio al que uno viene a mirar.
@@ -320,31 +291,10 @@ fun VentanaDeAjustes(
                             // ofrecerlo siempre haría pensar que hace falta.
                             if (onSoltarClavados != null) Fila("Soltar lo clavado", "Soltar", onSoltarClavados)
                         }
-                        // **La llave de paso de las luces.** Una para todo el dibujo: lo que
-                        // uno hace con las luces de un plano es subirlas todas o apagarlas
-                        // todas. Ver [LucesDelDibujo].
-                        Seccion(
-                            "Luces",
-                            "Apagadas, la tinta de luz se pinta como tinta normal. Pasado el cien por cien se sale del blanco y el papel se apaga un poco."
-                        ) {
-                            Interruptor(
-                                if (luces.encendidas) "Luces encendidas" else "Luces apagadas",
-                                null,
-                                luces.encendidas
-                            ) { puestas ->
-                                // Encendiéndolas con la fuerza a cero volverían apagadas y el
-                                // interruptor parecería roto: se les devuelve la de fábrica.
-                                onLuces(
-                                    luces.copy(
-                                        encendidas = puestas,
-                                        fuerza = if (luces.fuerza <= 0.02) 1.0 else luces.fuerza
-                                    )
-                                )
-                            }
-                            if (luces.encendidas) LaFuerzaDeLasLuces(luces.fuerza) {
-                                onLuces(luces.copy(fuerza = it))
-                            }
-                        }
+                        // **La sección de Luces se quitó** (16-sep-2026): el usuario dijo que esa
+                        // función «no está funcionando en el canvas». La llave sigue en el
+                        // dibujo ([LucesDelDibujo]) y la tinta de luz se pinta como siempre; lo
+                        // que se va es el mando, que prometía algo que no se veía.
                         // **Las marcas del grosor y de la opacidad se ponen aquí.** Un mando no
                         // tiene mango que tocar, así que guardar es esto: lo que hay puesto,
                         // con un botón. Ver [MarcasGuardadas] y [MarcasDelDeslizador].

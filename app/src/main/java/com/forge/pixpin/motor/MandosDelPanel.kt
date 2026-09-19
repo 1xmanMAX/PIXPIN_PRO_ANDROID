@@ -1,5 +1,6 @@
 package com.forge.pixpin.motor
 
+import com.forge.pixpin.ui.theme.fondoDeCristal
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -212,9 +213,8 @@ internal fun MandoDelPanel(
         }
         Surface(
             shape = CircleShape,
-            color = if (conPastilla) MaterialTheme.colorScheme.surfaceVariant
-            else Color.Transparent,
-            shadowElevation = if (!conPastilla) 0.dp else if (agarrado) 10.dp else 3.dp,
+            // Botón redondo de cristal (17-sep-2026); cogido, algo más marcado.
+            color = if (!conPastilla) Color.Transparent else if (agarrado) com.forge.pixpin.ui.theme.Cristal.barra else com.forge.pixpin.ui.theme.Cristal.boton,
             modifier = Modifier
                 .graphicsLayer { scaleX = engorde; scaleY = engorde }
                 .size(bola)
@@ -383,13 +383,16 @@ internal fun LaRuedaDelColor(
      * vistazo hacia dónde llevar el dedo, y al pasar cerca se cae dentro. Ver [marcaImantada].
      */
     marcas: List<String> = emptyList(),
-    /** Lo clara que va la rueda: la de la tinta que hay puesta. */
+    /**
+     * Lo clara que sale la tinta elegida aquí. **No pinta la rueda** —que va siempre viva, ver
+     * arriba—, solo se guarda para quien elige con ella.
+     */
     claridad: Float = 1f,
     /**
-     * **Con el papel oscuro, la rueda enseña los colores como se van a ver** (pasados por el
-     * filtro de noche, [DrawTheme.filtrar]). Lo que se guarda sigue siendo el color de día.
+     * Ya no hace nada: la paleta no cambia con el papel (16-sep-2026, pedido del usuario). Se
+     * deja para no tocar a los diez sitios que la llaman.
      */
-    noche: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") noche: Boolean = false,
     /**
      * Lo que mide de lado a lado, **la sombra incluida**.
      *
@@ -403,12 +406,19 @@ internal fun LaRuedaDelColor(
     /** Dónde ha quedado su centro en la ventana. Ver [MandoDelPanel.alMedirElCentro]. */
     alMedirElCentro: ((Offset) -> Unit)? = null
 ) {
-    val tonos = remember(claridad, noche) {
-        List(TONOS_DE_LA_RUEDA + 1) {
-            Color(DrawTheme.filtrar(deHsv(floatArrayOf(it * 360f / TONOS_DE_LA_RUEDA, 1f, claridad)), noche))
-        }
+    // **La rueda va siempre viva, y su centro blanco** (16-sep-2026).
+    //
+    // Antes se pintaba con la claridad de la tinta que hubiera puesta, así que con la tinta
+    // negra de fábrica el disco entero salía casi negro: eso es lo que el usuario vio en un
+    // lienzo blanco —«se ve algo raro con el centro negro»— y con razón, porque una rueda negra
+    // no enseña ningún color que elegir. La rueda dice **qué tono**; lo claro o lo oscuro lo
+    // dice la tira de abajo, que es de negro a blanco. Y **no se pasa por el filtro del papel**:
+    // la paleta es la paleta, no cambia porque el lienzo sea oscuro. Lo que se adapta, y solo si
+    // haría falta, es la tinta al pintarla ([DrawTheme.adaptar]).
+    val tonos = remember {
+        List(TONOS_DE_LA_RUEDA + 1) { Color(deHsv(floatArrayOf(it * 360f / TONOS_DE_LA_RUEDA, 1f, 1f))) }
     }
-    val centroDeLaRueda = remember(claridad, noche) { Color(DrawTheme.filtrar(deHsv(floatArrayOf(0f, 0f, claridad)), noche)) }
+    val centroDeLaRueda = Color.White
     val elegir by rememberUpdatedState(alElegir)
     val tocable = if (alElegir == null) Modifier else Modifier.pointerInput(Unit) {
         fun senalar(donde: Offset) {
@@ -468,7 +478,7 @@ internal fun LaRuedaDelColor(
             val hsv = enHsv(parseColor(hex, 255))
             val donde = enLaRueda(hsv[0], hsv[1], disco)
             val en = Offset(centro.x + donde.x.toFloat(), centro.y + donde.y.toFloat())
-            drawCircle(Color(DrawTheme.filtrar(parseColor(hex, 255), noche)), radius = PUNTO_DE_LA_MARCA, center = en)
+            drawCircle(Color(parseColor(hex, 255)), radius = PUNTO_DE_LA_MARCA, center = en)
             drawCircle(
                 Color.Black.copy(alpha = 0.45f),
                 radius = PUNTO_DE_LA_MARCA, center = en, style = Stroke(2.6f)
@@ -567,7 +577,7 @@ internal fun ElTallerDelColor(
                                         .padding(3.dp)
                                         .size(20.dp)
                                         .clip(CircleShape)
-                                        .background(Color(DrawTheme.filtrar(parseColor(c, 255), noche)))
+                                        .background(Color(parseColor(c, 255)))
                                         .border(
                                             if (esEste) 2.dp else 1.dp,
                                             if (esEste) MaterialTheme.colorScheme.primary
@@ -707,10 +717,7 @@ fun CajaDeDeshacer(
 ) {
     Column(
         modifier
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = FONDO_DEL_PANEL),
-                RoundedCornerShape(CANTO_DEL_PANEL)
-            )
+            .fondoDeCristal(RoundedCornerShape(CANTO_DEL_PANEL))
             .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(SEPARACION)
@@ -743,8 +750,7 @@ private fun PuntoDeAccion(
 ) {
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shadowElevation = if (encendido) 3.dp else 0.dp,
+        color = com.forge.pixpin.ui.theme.Cristal.boton,
         modifier = Modifier
             .size(bola)
             .semantics { contentDescription = descripcion }
@@ -756,9 +762,8 @@ private fun PuntoDeAccion(
             Icon(
                 if (atras) Icons.Filled.Undo else Icons.Filled.Redo,
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    .copy(alpha = if (encendido) 1f else 0.45f)
+                modifier = Modifier.size(20.dp),
+                tint = com.forge.pixpin.ui.theme.Cristal.tinta.copy(alpha = if (encendido) 1f else 0.45f)
             )
         }
     }

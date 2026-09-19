@@ -370,7 +370,6 @@ class EnviarActivity : ComponentActivity() {
                 LoQueSeEnvia()
                 Spacer(Modifier.height(16.dp))
                 LosAparatos()
-                ElEscaner()
                 when (val e = estado) {
                     Estado.Preparando -> Cargando("Preparando…")
                     is Estado.Esperando -> Esperando(e)
@@ -447,21 +446,6 @@ class EnviarActivity : ComponentActivity() {
     @Composable
     private fun ElEscaner() {
         if (cosas.isEmpty()) return
-        if (!escaneando) {
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    escaneando = true
-                    if (!camaraPermitida) pedirCamara.launch(Manifest.permission.CAMERA)
-                },
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Escanear a quien recibe")
-            }
-            Spacer(Modifier.height(16.dp))
-            return
-        }
         Text("Pasa la cámara por el código de cada uno", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(4.dp))
         Text(
@@ -485,8 +469,6 @@ class EnviarActivity : ComponentActivity() {
                 Text("Hace falta permiso de cámara.", textAlign = TextAlign.Center)
             }
         }
-        Spacer(Modifier.height(8.dp))
-        androidx.compose.material3.TextButton(onClick = { escaneando = false }) { Text("Dejar de escanear") }
         Spacer(Modifier.height(16.dp))
     }
 
@@ -516,6 +498,20 @@ class EnviarActivity : ComponentActivity() {
 
     @Composable
     private fun Esperando(e: Estado.Esperando) {
+        // **Una cosa o la otra** (16-sep-2026): o enseño mi código, o escaneo el de quien va a
+        // recibir. Las dos a la vez complicaban la pantalla y encendían la cámara sin falta.
+        // Ver [DosModos] y [mandarA].
+        DosModos(
+            izquierda = "Enseñar mi código",
+            derecha = "Escanear a quien recibe",
+            esLaIzquierda = !escaneando,
+            onElegir = { laIzquierda ->
+                escaneando = !laIzquierda
+                if (escaneando && !camaraPermitida) pedirCamara.launch(Manifest.permission.CAMERA)
+            }
+        )
+        Spacer(Modifier.height(16.dp))
+        if (escaneando) { ElEscaner(); return }
         Text("En el otro teléfono: PixPin → Sincronizar → Recibir", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
         Spacer(Modifier.height(14.dp))
         Box(

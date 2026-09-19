@@ -9,6 +9,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.forge.pixpin.PixPinApp
@@ -179,23 +183,53 @@ fun PixPinTheme(
      * decirlo, lo que tenga el ajuste.
      */
     oled: Boolean? = null,
+    /**
+     * Si se pone el cielo del tema Cosmos detrás. Las pantallas que se tapan enteras con su
+     * propio lienzo (el editor, el croquis) dicen que no: pintarlo debajo sería trabajo tirado
+     * en cada fotograma.
+     */
+    cielo: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val app = LocalContext.current.applicationContext as? PixPinApp
+    val contexto = LocalContext.current
+    val app = contexto.applicationContext as? PixPinApp
     val ajustes by (app?.settings?.settings ?: kotlinx.coroutines.flow.flowOf(null))
         .collectAsState(initial = app?.ajustes)
-    val oscuro = darkTheme ?: deNocheSegun(ajustes?.modoNoche ?: ModoNoche.SISTEMA)
+    val modo = ajustes?.modoNoche ?: ModoNoche.COSMOS
+    // **El cosmos**: el aspecto del sistema solar para toda la aplicación. Ver [esquemaCosmos].
+    val cosmos = darkTheme == null && modo == ModoNoche.COSMOS
+    val oscuro = darkTheme ?: deNocheSegun(modo)
     val negro = oled ?: (ajustes?.oledNegro ?: false)
-    CompositionLocalProvider(LocalDeNoche provides oscuro) {
-        MaterialTheme(
-            colorScheme = when {
-                oscuro && negro -> OledColors
-                oscuro -> DarkColors
-                else -> LightColors
-            },
-            content = content
-        )
+    // El cielo solo detrás de una pantalla opaca: ni en las ventanas sobre otras apps ni en las
+    // pantallas transparentes (captura, grabadora), que dejan ver lo de debajo a propósito.
+    val conCielo = cosmos && cielo && remember(contexto) { ventanaOpaca(contexto) }
+    val esquema = when {
+        cosmos -> remember(conCielo) { esquemaCosmos(conCielo) }
+        oscuro && negro -> OledColors
+        oscuro -> DarkColors
+        else -> LightColors
     }
+    CompositionLocalProvider(LocalDeNoche provides oscuro, LocalCosmos provides cosmos) {
+        MaterialTheme(colorScheme = esquema) {
+            if (conCielo) {
+                Box(Modifier.fillMaxSize()) {
+                    FondoCosmico(Modifier.matchParentSize())
+                    content()
+                }
+            } else {
+                content()
+            }
+        }
+    }
+}
+
+/** Si [contexto] es una pantalla con la ventana opaca. Una ventana sobre otras apps no lo es. */
+private fun ventanaOpaca(contexto: android.content.Context): Boolean {
+    var c: android.content.Context? = contexto
+    while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
+    val actividad = c as? android.app.Activity ?: return false
+    val a = actividad.theme.obtainStyledAttributes(intArrayOf(android.R.attr.windowIsTranslucent))
+    return try { !a.getBoolean(0, false) } finally { a.recycle() }
 }
 
 /**
@@ -209,4 +243,5 @@ private fun deNocheSegun(modo: ModoNoche): Boolean = when (modo) {
     ModoNoche.CLARO -> false
     ModoNoche.OSCURO -> true
     ModoNoche.AUTO -> rememberAOscuras()
+    ModoNoche.COSMOS -> true
 }

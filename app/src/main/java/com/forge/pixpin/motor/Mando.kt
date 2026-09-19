@@ -2,6 +2,7 @@ package com.forge.pixpin.motor
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -385,13 +386,14 @@ fun Mando(
  */
 @Composable
 fun BolitaDelMando(alAbrir: () -> Unit, modifier: Modifier = Modifier) {
-    val realce = MaterialTheme.colorScheme.primary
-    val cuerpo = MaterialTheme.colorScheme.surfaceVariant
+    val realce = com.forge.pixpin.ui.theme.Cristal.puesto
+    // De cristal, como los botones redondos de las cabeceras.
     Box(
         modifier
             .size(BOLITA_DE_LA_ESQUINA.dp)
             .clip(CircleShape)
-            .background(cuerpo.copy(alpha = 0.95f))
+            .background(com.forge.pixpin.ui.theme.Cristal.barra)
+            .border(1.dp, com.forge.pixpin.ui.theme.Cristal.filo, CircleShape)
             .clickable { alAbrir() },
         contentAlignment = Alignment.Center
     ) {

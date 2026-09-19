@@ -39,6 +39,15 @@ class PixPinApp : Application() {
     val proyectos: ProyectosRepository by lazy { ProyectosRepository(this) }
 
     /**
+     * **Los lienzos que uno tiene abiertos**, la rueda de la multitarea de dentro de la
+     * aplicación (17-sep-2026). Uno por proceso: lo escriben varios editores.
+     * Ver [com.forge.pixpin.data.LienzosAbiertos].
+     */
+    val lienzosAbiertos: com.forge.pixpin.data.LienzosAbiertos by lazy {
+        com.forge.pixpin.data.LienzosAbiertos(this)
+    }
+
+    /**
      * Los ajustes tal como estaban la última vez que cambiaron.
      *
      * Existe para quien **no puede esperar**: exportar una imagen decide el

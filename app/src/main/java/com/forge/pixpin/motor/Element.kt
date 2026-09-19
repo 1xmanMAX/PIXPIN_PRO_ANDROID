@@ -448,7 +448,36 @@ enum class MaterialDeTinta {
     @SerialName("cruzado") CRUZADO,
 
     /** Punteado: la tierra, la arena, el relleno. */
-    @SerialName("puntos") PUNTOS;
+    @SerialName("puntos") PUNTOS,
+
+    /**
+     * **Tiza**: el trazo con grano grueso y desigual, como la tiza o el carboncillo.
+     *
+     * El cuerpo va más flojo que en la lisa y encima lleva motas: lo que se lee no es un color
+     * más claro, es **textura** — se ve el papel por dentro del trazo.
+     */
+    @SerialName("tiza") TIZA,
+
+    /**
+     * **Lápiz 2B**: blando y suave. Grano fino y muy tupido, y el cuerpo a media tinta: es el
+     * trazo de apunte, el que se hace para pensar y luego se repasa.
+     */
+    @SerialName("lapiz2b") LAPIZ_2B,
+
+    /**
+     * **Rotulador seco**: el marcador que se está acabando. Rayas a lo largo del trazo con
+     * huecos entre ellas, así que la raya sale cortada a lo largo en vez de maciza.
+     */
+    @SerialName("seco") SECO,
+
+    /**
+     * **Trama gruesa**: como el rayado, pero con líneas más gordas y más separadas. Para
+     * rellenos de plano que tienen que leerse de lejos, donde el rayado fino se empasta.
+     */
+    @SerialName("trama") TRAMA;
+
+    /** Si el cuerpo del trazo va más flojo de lo normal, porque lo que se ve es el grano. */
+    val esPorosa: Boolean get() = this == TIZA || this == LAPIZ_2B || this == SECO
 
     /** Si suma luz: entonces no lleva grano, porque lo que se ve es el resplandor. */
     val alumbra: Boolean get() = this == LUZ || this == HDR

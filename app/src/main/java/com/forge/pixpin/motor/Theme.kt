@@ -28,6 +28,17 @@ object DrawTheme {
     const val FONDO_NOCHE = "#121212"
 
     /**
+     * El azul del tema Cosmos (17-sep-2026). En pantalla, con ese tema puesto, este papel y la
+     * pizarra se ven con el cielo difuminado detrás en vez de liso; al guardar y exportar sale
+     * este color liso. Ver [seVeComoCielo].
+     */
+    const val FONDO_COSMOS = "#0b0f24"
+
+    /** Si con el tema Cosmos este papel se enseña como cielo. */
+    fun seVeComoCielo(fondo: String): Boolean =
+        fondo.trim().lowercase().let { it == FONDO_COSMOS || it == FONDO_NOCHE }
+
+    /**
      * El negro de verdad, para pantallas OLED.
      *
      * En un OLED, el negro puro **no enciende el píxel**: no es un gris muy
@@ -231,6 +242,7 @@ object DrawTheme {
         "Menta" to "#e9f5ec",
         "Azul claro" to "#e8f1fb",
         "Gris" to "#d8dade",
+        "Cosmos" to FONDO_COSMOS,
         "Pizarra" to FONDO_NOCHE,
         "Azul noche" to "#14213d",
         "Verde pizarra" to "#1f3b33",

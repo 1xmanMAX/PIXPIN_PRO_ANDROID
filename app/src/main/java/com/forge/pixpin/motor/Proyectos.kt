@@ -443,6 +443,14 @@ object Proyectos {
      */
     fun sinPaginas(proyecto: Proyecto, claves: Set<String>, cuando: Long): Quita {
         val fuera = HashSet<String>()
+        // **Un croquis del espacio no es una hoja**: vive en [Proyecto.croquis] y sale en la
+        // rejilla como página con el id `c3d-<croquis>` ([HojasDelProyecto.croquisComoPaginas]).
+        // Como aquí solo se miraban las hojas, marcarlo y darle a quitar no hacía **nada** —lo
+        // dijo el usuario el 16-sep-2026: «quito un croquis 3D de proyectos y no se borra»—.
+        // Se quita de esa lista; el archivo del croquis no se toca, como con los lienzos.
+        val croquisFuera = claves.mapNotNull { c ->
+            c.substringBefore("/").takeIf { it.startsWith(PREFIJO_CROQUIS) }?.removePrefix(PREFIJO_CROQUIS)
+        }.toSet()
         val marcos = HashMap<String, MutableSet<String>>()
         for (hoja in proyecto.hojas) {
             val suyas = claves.filter { it.startsWith(hoja.id + "/") }
@@ -463,7 +471,13 @@ object Proyectos {
         }
         val sinEllas = if (fuera.isEmpty()) proyecto
             else proyecto.copy(hojas = proyecto.hojas.filter { it.id !in fuera }, tocado = cuando, quitadas = marcadas(proyecto, fuera))
-        return Quita(sinEllas, marcos)
+        val sinCroquis = if (croquisFuera.isEmpty()) sinEllas
+            else sinEllas.copy(
+                croquis = sinEllas.croquis.filter { it !in croquisFuera },
+                tocado = cuando,
+                quitadas = marcadas(sinEllas, croquisFuera.map { "$PREFIJO_CROQUIS$it" })
+            )
+        return Quita(sinCroquis, marcos)
     }
 
     /**
@@ -498,6 +512,9 @@ object Proyectos {
         return if (antes == null) proyectos + limpio
         else proyectos.map { if (it.id == limpio.id) limpio else it }
     }
+
+    /** Con qué empieza el id de la página de un croquis del espacio. Ver [HojasDelProyecto.croquisComoPaginas]. */
+    const val PREFIJO_CROQUIS = "c3d-"
 
     /** Cuántas marcas de hojas quitadas se recuerdan por proyecto. */
     const val MARCAS_DE_QUITADAS = 400

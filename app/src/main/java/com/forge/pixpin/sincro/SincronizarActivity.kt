@@ -572,11 +572,15 @@ class SincronizarActivity : ComponentActivity() {
 
             EsteAparato(identidad)
 
+            // **Enviar y recibir, arriba** (16-sep-2026). Estaban al final de la pantalla, debajo
+            // de los aparatos del grupo, y el usuario ni los veía: «al final aparece recibir
+            // archivos, no le di clic». Es lo que más se usa y no necesita grupo, así que va
+            // delante de todo lo demás.
+            Titulo("Enviar o recibir archivos")
+            EnviarORecibir()
+
             Titulo("Tus aparatos")
             if (identidad.enGrupo) ConGrupo(identidad) else SinGrupo()
-
-            Titulo("Pasar algo a otra persona")
-            EnviarORecibir()
 
             val registro by Presencia.registro.collectAsState()
             val atendiendo by Presencia.atendiendo.collectAsState()
@@ -846,7 +850,7 @@ class SincronizarActivity : ComponentActivity() {
     private fun EnviarORecibir() {
         Caja {
             Text(
-                "Una sola vez, a cualquiera con PixPin en tu misma Wi-Fi. No hace falta grupo.",
+                "A cualquiera con PixPin en tu misma Wi-Fi, sin grupo y sin internet: un lienzo, un proyecto o cualquier archivo.",
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(Modifier.height(12.dp))
@@ -864,7 +868,8 @@ class SincronizarActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "También desde «Compartir» en cualquier app, y desde el menú de cada proyecto.",
+                "En cada una eliges cómo: enseñar tu código para que lo escaneen, o escanear el del otro. " +
+                    "También se envía desde «Compartir» en cualquier app y desde el menú de cada proyecto.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -1038,6 +1043,54 @@ internal fun Caja(relleno: PaddingValues = PaddingValues(16.dp), contenido: @Com
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(relleno)) { contenido() }
+    }
+}
+
+/**
+ * **Una cosa o la otra, no las dos** (16-sep-2026, pedido por el usuario).
+ *
+ * Enviar y recibir tienen dos caminos cada uno —enseñar mi código o escanear el del otro—, y
+ * estaban los dos en la misma pantalla, uno debajo del otro: la cámara arriba y el QR propio
+ * abajo. Su queja: eso complica la pantalla, y además la cámara se queda encendida aunque se vaya
+ * a usar el otro camino. Con este mando se elige uno y **desaparece el otro**.
+ */
+@Composable
+internal fun DosModos(
+    izquierda: String,
+    derecha: String,
+    esLaIzquierda: Boolean,
+    onElegir: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(4.dp)
+    ) {
+        @Composable
+        fun Mitad(texto: String, puesto: Boolean, al: () -> Unit) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (puesto) MaterialTheme.colorScheme.surface else Color.Transparent)
+                    .clickable(enabled = !puesto, onClick = al)
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    texto,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (puesto) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (puesto) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1
+                )
+            }
+        }
+        Mitad(izquierda, esLaIzquierda) { onElegir(true) }
+        Mitad(derecha, !esLaIzquierda) { onElegir(false) }
     }
 }
 

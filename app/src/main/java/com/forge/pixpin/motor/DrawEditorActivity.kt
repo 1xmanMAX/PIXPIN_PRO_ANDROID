@@ -1,5 +1,7 @@
 package com.forge.pixpin.motor
 
+import com.forge.pixpin.ui.theme.bajarSiTocaLaCamara
+import com.forge.pixpin.ui.theme.apartarDeLaCamara
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -66,6 +68,7 @@ import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.HorizontalDistribute
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
@@ -117,9 +120,11 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
@@ -133,6 +138,10 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -148,6 +157,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -160,6 +170,13 @@ import kotlinx.coroutines.withContext
 class DrawEditorActivity : ComponentActivity() {
 
     companion object {
+        /** Lo que se guarda al pasar de un lienzo a otro: vive más que la pantalla. */
+        private val EN_SEGUNDO_PLANO = kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+        )
+        private val TURNO_DE_GUARDAR = kotlinx.coroutines.sync.Mutex()
+        /** Si cada página («ruta#página») se puede ver en vector, mientras viva el proceso. */
+        private val VECTORIZABLES = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
         /**
          * Cuánto se espera a que la mano pare antes de escribir a disco.
          *
@@ -168,6 +185,16 @@ class DrawEditorActivity : ComponentActivity() {
          * cuarenta. Ver [guardar].
          */
         private const val ESPERA_PARA_GUARDAR = 350L
+
+
+        /** Cuánto hay que correr los cuatro dedos para saltar de lienzo, en dp. */
+        private const val UMBRAL_DEL_SALTO = 40f
+
+        /** El tamaño de cada columna de la tira, en píxeles («tamano_<id>»). */
+        private const val CLAVE_TAMANO = "tamano_"
+
+        /** Si la tira va apilada (arriba y abajo) en vez de en fila. */
+        private const val CLAVE_APILADOS = "apilados"
 
         private const val EXTRA_ID = "draw_id"
         const val EXTRA_DESDE_DENTRO = "desde_dentro"
@@ -249,8 +276,14 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
-    private lateinit var dibujoId: String
-    private val controller = DrawController()
+    private var dibujoId by mutableStateOf("")
+    /**
+     * **El lienzo que manda**, el que reciben la barra y los paneles.
+     *
+     * Es `var` desde el 17-sep-2026: en la tira hay **varios lienzos vivos a la vez**, cada uno
+     * con su controlador, y enfocar otro es cambiar este. Ver [enfocar] y [controladorDe].
+     */
+    private var controller by mutableStateOf(DrawController())
 
     /** El PDF que se está anotando y qué página, si es que se está anotando uno. */
     private var pdfDeFondo: String? = null
@@ -374,6 +407,9 @@ class DrawEditorActivity : ComponentActivity() {
             entrarEnVista()
         }
         if (intent.getBooleanExtra(EXTRA_PRESENTAR, false)) empezarAPresentar()
+        // Este lienzo entra en la rueda de la multitarea. Ver [apuntarComoAbierto].
+        apuntarComoAbierto()
+        apilados = prefsDeMultilienzo.getBoolean(CLAVE_APILADOS, false)
         setContent {
             // El negro de verdad tiñe **todo el editor**, no solo el lienzo: con
             // el lienzo negro y las barras grises se ve un recuadro negro
@@ -381,7 +417,7 @@ class DrawEditorActivity : ComponentActivity() {
             val ajustes by (application as? com.forge.pixpin.PixPinApp)?.settings?.settings
                 ?.collectAsState(initial = com.forge.pixpin.data.Settings())
                 ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
-            PixPinTheme { Editor() }
+            PixPinTheme(cielo = false) { Editor() }
         }
     }
 
@@ -404,43 +440,6 @@ class DrawEditorActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) aPantallaCompleta()
-    }
-
-    /** La tira que se traga el deslizamiento del borde, si se ha elegido. Ver [FranjaDeArriba]. */
-    private val franjaDeArriba by lazy { FranjaDeArriba(this) }
-
-    /**
-     * **Que no baje la cortina de notificaciones mientras se dibuja a pantalla completa.**
-     *
-     * Queja del usuario del 15-sep-2026: escribiendo muy arriba en «solo el dibujo» bajaba la
-     * barra de la hora y la batería, y luego el lápiz ya no escribía bien. Esconder las barras no
-     * basta: en modo inmersivo Android **siempre** deja sacarlas deslizando desde el canto, y no
-     * hay forma de excluir el borde de arriba —las exclusiones de gestos solo valen para los
-     * laterales—. Los dos apaños que quedan tienen su pero, así que **lo elige el usuario** en
-     * Ajustes → Dibujo (pidió las tres opciones el 16-sep-2026):
-     * [com.forge.pixpin.data.BarraDeArriba.FIJAR] fija la tarea (bloqueo de verdad, pero Android
-     * pregunta cada vez y no deja ir a inicio) y [com.forge.pixpin.data.BarraDeArriba.FRANJA]
-     * pone la tira invisible de [FranjaDeArriba] (sin avisos, pero depende del teléfono).
-     *
-     * Se deshace siempre al salir, elija lo que elija: si se cambia el ajuste con la pantalla ya
-     * fijada, esto la suelta antes de montar lo otro.
-     */
-    private fun protegerElBordeDeArriba(
-        activo: Boolean,
-        como: com.forge.pixpin.data.BarraDeArriba
-    ) {
-        fijarLaPantalla(activo && como == com.forge.pixpin.data.BarraDeArriba.FIJAR)
-        if (activo && como == com.forge.pixpin.data.BarraDeArriba.FRANJA) franjaDeArriba.poner()
-        else franjaDeArriba.quitar()
-    }
-
-    private fun fijarLaPantalla(fijar: Boolean) {
-        val am = getSystemService(android.app.ActivityManager::class.java) ?: return
-        val fijada = am.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
-        runCatching {
-            if (fijar && !fijada) startLockTask()
-            else if (!fijar && fijada) stopLockTask()
-        }
     }
 
     private fun aPantallaCompleta() {
@@ -585,19 +584,28 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     /** Deja esa zona de la escena centrada y a la vista. */
+    /** Lo que mide el lienzo que manda en su columna, en píxeles. Ver [encajarEn]. */
+    private var medidaDelLienzo = androidx.compose.ui.unit.IntSize.Zero
+
     private fun encajarEn(x: Double, y: Double, ancho: Double, alto: Double) {
         if (ancho <= 0 || alto <= 0) return
+        // **Con la medida del lienzo, no de la pantalla** (18-sep-2026): en una columna de la
+        // tira la pantalla es más ancha que el lienzo y el encuadre caía descentrado.
         val m = resources.displayMetrics
+        val anchoVista = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: m.widthPixels.toDouble()
+        val altoVista = medidaDelLienzo.height.takeIf { it > 0 }?.toDouble() ?: m.heightPixels.toDouble()
         val aire = 0.94
-        val zoom = minOf(m.widthPixels / ancho, m.heightPixels / alto) * aire
+        val zoom = minOf(anchoVista / ancho, altoVista / alto) * aire
         if (!zoom.isFinite() || zoom <= 0) return
         controller.setViewport(
             Viewport(
-                scrollX = (m.widthPixels / zoom - ancho) / 2 - x,
-                scrollY = (m.heightPixels / zoom - alto) / 2 - y,
+                scrollX = (anchoVista / zoom - ancho) / 2 - x,
+                scrollY = (altoVista / zoom - alto) / 2 - y,
                 zoom = zoom
             )
         )
+        // Y se ve al instante: sin esto el lienzo esperaba al siguiente toque para repintarse.
+        tickDelMosaico++
     }
 
     /**
@@ -648,12 +656,9 @@ class DrawEditorActivity : ComponentActivity() {
     private fun PastillaDeLaZona(modifier: Modifier = Modifier) {
         // Con el color del texto dicho: un fondo con transparencia no le deja a la superficie
         // adivinar cuál toca, y de noche salía texto negro sobre negro.
-        Surface(
+        com.forge.pixpin.ui.theme.SuperficieDeCristal(
             modifier = modifier,
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shadowElevation = 3.dp
+            forma = RoundedCornerShape(18.dp)
         ) {
             Row(Modifier.padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(androidx.compose.material.icons.Icons.Filled.Screenshot, contentDescription = null, Modifier.size(18.dp))
@@ -974,9 +979,6 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // La tira vive en el gestor de ventanas, no en la pantalla: si no se quita aquí, se
-        // queda flotando sobre lo que venga después. Ver [FranjaDeArriba].
-        franjaDeArriba.quitar()
         // Los trozos del plano son megas de mapas de bits: se sueltan al cerrar, que es lo
         // que hace que abrir y cerrar planos grandes no vaya llenando la memoria.
         mosaico?.soltar()
@@ -989,9 +991,7 @@ class DrawEditorActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        // Lo mismo al irse a otra pantalla: la tira se vuelve a poner al volver, porque el
-        // efecto que la monta se relanza con la composición. Ver [protegerElBordeDeArriba].
-        franjaDeArriba.quitar()
+        guardarLosDeLaTira()
         // Primero lo escrito, que es de lo que se saca todo lo demás.
         guardarYa()
         devolverAlPdf()
@@ -1015,6 +1015,13 @@ class DrawEditorActivity : ComponentActivity() {
         var altoDeLoDeAbajo by remember { mutableIntStateOf(0) }
         /** Y lo que ocupa la barra de arriba, para que el rótulo no le quede detrás. */
         var altoDeLaBarraDeArriba by remember { mutableIntStateOf(0) }
+        // **Lo que va centrado bajo la barra no se monta en las islas de los lados** (17-sep-2026).
+        // El rótulo y las islas de lo marcado y de las hojas iban a la misma altura, y en un
+        // teléfono estrecho se pisaban —más con una imagen elegida, que trae el candado—. Se
+        // miden los tres y, solo si no caben, el rótulo baja una fila. Ver [dondeVaElRotulo].
+        var anchoDeLaIslaDeLoMarcado by remember { mutableIntStateOf(0) }
+        var anchoDeLaIslaDeHojas by remember { mutableIntStateOf(0) }
+        var anchoDelRotulo by remember { mutableIntStateOf(0) }
         /**
          * **El aumento, al día en cada fotograma del pellizco.**
          *
@@ -1116,7 +1123,104 @@ class DrawEditorActivity : ComponentActivity() {
          */
         var soloElDibujo by remember { mutableStateOf(false) }
         // El mando de lo elegido, abierto en el centro con todo lo demás fuera. Ver [Mando].
+        // Se declara aquí arriba porque de él depende si hay barras, y de las barras depende
+        // cuánto sitio le queda a la tira de lienzos. Ver [hayBarraAbajo].
         var mandoAbierto by remember { mutableStateOf(false) }
+        // ---- La multitarea de dentro (17-sep-2026). Ver [com.forge.pixpin.ui.Multilienzo] ----
+        val losAbiertos by abiertos.lista.collectAsState()
+        var viendoTodos by remember { mutableStateOf(false) }
+        var pidiendoOtroLienzo by remember { mutableStateOf(false) }
+        val verTodos = rememberUpdatedState<() -> Unit> { viendoTodos = true }
+        // **La tira**: dónde está corrida, en un `Animatable` que vive en la actividad para que
+        // [enfocar] pueda deslizarla. Se lee al medir, así que correrla no recompone ningún lienzo.
+        // Ver [com.forge.pixpin.ui.TiraDeLienzos].
+        val d = LocalDensity.current
+        val medidasDePantalla = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
+        val configuracion = androidx.compose.ui.platform.LocalConfiguration.current
+        // De pie la tira va en columna (arriba y abajo); tumbada y con sitio, de dos en dos.
+        // **En fila de fábrica, también de pie**; y **apilados** (uno arriba y otro abajo) si el
+        // usuario lo pidió desde la baraja arrastrando una tarjeta hacia abajo. Apilados, la tira
+        // vive entre las barras, así la pestaña del de abajo asoma encima de la barra de abajo.
+        val dePie = com.forge.pixpin.ui.Multilienzo.enColumna(configuracion.screenWidthDp, configuracion.screenHeightDp)
+        // En columna donde el usuario lo pida con el botón de la baraja, también tumbado.
+        enColumna = apilados
+        porPantalla = com.forge.pixpin.ui.Multilienzo.porPantalla(configuracion.screenWidthDp, configuracion.screenHeightDp)
+        // **Qué barras hay ahora mismo.** Lo medido se queda apuntado aunque la barra se vaya
+        // —nadie lo pone a cero—, así que preguntarle a la medida no vale: hay que preguntarle a
+        // quien decide si se compone. Sin esto, la tira apartaba sitio para una barra que no
+        // estaba (con los mandos escondidos) o se metía debajo de la que sí (mirando).
+        val hayBarraArriba = !soloElDibujo && !presentando && (!mandoAbierto || modoVista)
+        val hayBarraAbajo = !soloElDibujo && !mandoAbierto && !presentando && !modoVista
+        // **Por arriba la tira llega hasta el canto de la pantalla** (18-sep-2026): la barra de
+        // arriba flota encima, como con un lienzo solo. Por abajo sí se aparta, para que la
+        // pestaña del de abajo asome sobre las herramientas.
+        val sitioDeArriba = 0
+        // **La pantalla es fija y entera; lo que crece con las barras son las pestañas**
+        // (19-sep-2026). Antes la tira acababa encima de la barra de abajo, y el alto «de
+        // pantalla» cambiaba según hubiera herramientas o no. Ver [Multilienzo.maximo].
+        val sitioDeAbajo = 0
+        pantallaPx = if (enColumna) (medidasDePantalla.height - sitioDeArriba - sitioDeAbajo).coerceAtLeast(1)
+        else medidasDePantalla.width
+        pestanaPx = with(d) { com.forge.pixpin.ui.Multilienzo.PESTANA.dp.roundToPx() }
+        airePx = with(d) { com.forge.pixpin.ui.Multilienzo.AIRE.dp.roundToPx() }
+        // **La pestaña de arriba tiene que poder tocarse por debajo de la barra**: en columna
+        // mide lo que la barra más una pestaña. Tumbada no hay barra que la tape por el lado.
+        antesPx = pestanaPx + if (enColumna && hayBarraArriba) altoDeLaBarraDeArriba else 0
+        despuesPx = pestanaPx + if (enColumna && hayBarraAbajo) altoDeLoDeAbajo else 0
+        // Los tamaños guardados de cada columna, y de golpe en este lienzo al entrar: nada de
+        // animación de entrada.
+        LaunchedEffect(losAbiertos.size, pantallaPx, enColumna) {
+            for (l in losAbiertos) {
+                val guardado = prefsDeMultilienzo.getInt(CLAVE_TAMANO + l.id, 0)
+                if (guardado > 0) tamanosDeLaTira[l.id] = guardado
+            }
+            val i = losAbiertos.indexOfFirst { it.id == dibujoId }
+            if (i >= 0 && pantallaPx > 0) {
+                tiraCorrida.snapTo(com.forge.pixpin.ui.Multilienzo.limitar(sitioDeLaTira(i), tamanosActuales(), airePx, pestanaPx, pantallaPx))
+            }
+        }
+        // **Los cuatro dedos saltan al de al lado, entero.** Mientras se arrastra la tira sigue
+        // al dedo; al soltar se va al siguiente o al anterior según hacia dónde fue el gesto,
+        // y se asienta con la pestaña justo en el canto. Nada de quedarse a medias.
+        val correrLaTira = rememberUpdatedState<(Float) -> Unit> { dx ->
+            val cuantos = abiertos.lista.value.size
+            if (pantallaPx > 0 && cuantos > 1) {
+                if (arrastreDeLaTira == null) {
+                    arrastreDeLaTira = 0f
+                    desdeDondeSeArrastra = abiertos.lista.value.indexOfFirst { it.id == dibujoId }.coerceAtLeast(0)
+                }
+                arrastreDeLaTira = (arrastreDeLaTira ?: 0f) + dx
+                // **En el acto, sin esperar al fotograma siguiente**: lanzado sin más, cada paso
+                // del dedo se ponía a la cola y la tira iba un fotograma por detrás, a tirones.
+                lifecycleScope.launch(
+                    androidx.compose.ui.platform.AndroidUiDispatcher.Main,
+                    kotlinx.coroutines.CoroutineStart.UNDISPATCHED
+                ) {
+                    tiraCorrida.snapTo(
+                        com.forge.pixpin.ui.Multilienzo.limitar(tiraCorrida.value - dx, tamanosActuales(), airePx, pestanaPx, pantallaPx)
+                    )
+                }
+            }
+        }
+        val soltarLaTira = rememberUpdatedState<() -> Unit> {
+            val lista = abiertos.lista.value
+            val corrido = arrastreDeLaTira ?: 0f
+            arrastreDeLaTira = null
+            if (pantallaPx > 0 && lista.size > 1) {
+                val i = com.forge.pixpin.ui.Multilienzo.alSoltar(
+                    desdeDondeSeArrastra, corrido, UMBRAL_DEL_SALTO * d.density, lista.size
+                )
+                val cual = lista.getOrNull(i)
+                if (cual != null && cual.id != dibujoId) enfocarSinRomper(cual)
+                else animarLaTira {
+                    tiraCorrida.animateTo(com.forge.pixpin.ui.Multilienzo.limitar(sitioDeLaTira(i), tamanosActuales(), airePx, pestanaPx, pantallaPx))
+                }
+            }
+        }
+        // A pantalla completa manda el dibujo: ni tira ni vecinos.
+        // **La tira está en todos los escenarios**: con las barras escondidas y en el modo
+        // visualización también, que lo pidió el usuario. Solo presentando se queda solo.
+        val aSolas = presentando
         // El agarre del botón flotante de la pantalla completa. Ver [BotonFlotante].
         val agarre = remember { AgarreDelBoton() }
         var tinta by remember { mutableStateOf(Tinta.LAPIZ) }
@@ -1169,11 +1273,6 @@ class DrawEditorActivity : ComponentActivity() {
             ?.collectAsState(initial = com.forge.pixpin.data.Settings())
             ?: remember { mutableStateOf(com.forge.pixpin.data.Settings()) }
         val zurdo = ajustes.zurdo
-        // **Que no baje la cortina de notificaciones mientras se dibuja**, si así se ha pedido.
-        // Ver [protegerElBordeDeArriba] y [com.forge.pixpin.data.BarraDeArriba].
-        LaunchedEffect(soloElDibujo, ajustes.barraDeArriba) {
-            protegerElBordeDeArriba(soloElDibujo, ajustes.barraDeArriba)
-        }
         // **Los ajustes del imán llegan al controlador.** Sin esto, apagar una
         // clase en la pantalla de ajustes no hacía nada aquí: el controlador se
         // quedaba con los valores de fábrica.
@@ -1196,16 +1295,18 @@ class DrawEditorActivity : ComponentActivity() {
         // veía como un recuadro que no llegaba a los bordes: al arrastrar algo
         // hacia abajo se metía debajo del cromo y parecía salirse de una hoja.
         // No había tal hoja — el lienzo es infinito— sino un hueco mal repartido.
+        // **Con el tema Cosmos, el papel oscuro es el cielo** (17-sep-2026): el mismo fondo
+        // difuminado de los proyectos en vez del gris liso. Solo en pantalla: se guarda y se
+        // exporta el color liso. Ver [DrawTheme.seVeComoCielo].
+        val comoCielo = com.forge.pixpin.ui.theme.LocalCosmos.current && DrawTheme.seVeComoCielo(papel)
         Box(
             Modifier.fillMaxSize()
-                .background(
-                    Color(
-                        android.graphics.Color.parseColor(
-                            papel
-                        )
-                    )
+                .then(
+                    if (comoCielo) Modifier
+                    else Modifier.background(Color(android.graphics.Color.parseColor(papel)))
                 )
         ) {
+            if (comoCielo) com.forge.pixpin.ui.theme.FondoCosmico(Modifier.matchParentSize())
             // Los colores marcados en la rueda. Van en los ajustes y no en el dibujo: son de
             // quien dibuja. Ver [Settings.coloresMarcados].
             val marcasDeColor = remember(ajustes.coloresMarcados) {
@@ -1215,31 +1316,131 @@ class DrawEditorActivity : ComponentActivity() {
                     .take(MARCAS_DE_COLOR)
             }
 
+            // **La tira de lienzos** (17-sep-2026): todos en fila, del alto de la pantalla, y la
+            // ventana se corre con cuatro dedos. Envuelve **solo al lienzo**: las barras se
+            // quedan fuera, flotando enteras, que es lo que pidió el usuario. Ver
+            // [com.forge.pixpin.ui.TiraDeLienzos].
+            com.forge.pixpin.ui.TiraDeLienzos(
+                lienzos = if (aSolas) emptyList() else losAbiertos,
+                actual = dibujoId,
+                corrida = tiraCorrida,
+                tamanos = tamanosDeLaTira,
+                enColumna = enColumna,
+                porPantalla = porPantalla,
+                onMandar = { enfocarSinRomper(it) },
+                onOtro = { pidiendoOtroLienzo = true },
+                arriba = sitioDeArriba,
+                pestanaDeAntes = antesPx,
+                pestanaDeDespues = despuesPx,
+                abajo = sitioDeAbajo,
+                onTamanos = {
+                    val e = prefsDeMultilienzo.edit()
+                    for ((id, t) in tamanosDeLaTira) e.putInt(CLAVE_TAMANO + id, t)
+                    e.apply()
+                }
+            ) { cual, hueco ->
+            // Lo que no es un lienzo va de tarjeta: tocarla lleva a su pantalla. Ver [enfocar].
+            if (!cual.esLienzo) {
+                com.forge.pixpin.ui.TarjetaDeOtraCosa(cual, hueco)
+                return@TiraDeLienzos
+            }
+            // **Todos los lienzos de la tira están vivos.** El que manda lleva los gestos y la
+            // barra; los demás se dibujan igual y, al tocarlos, pasan a mandar ellos. Una página
+            // de un PDF se queda en imagen hasta que se enfoca: su papel es de la pantalla entera.
+            if (cual.id != dibujoId) {
+                run {
+                    // **Con su propio papel**: sin esto el vecino se pintaba con el papel del que
+                    // manda —un lienzo verde asomaba negro— porque el papel era del fondo de la
+                    // pantalla y no de cada lienzo.
+                    val suPapel = remember(cual.id) { controladorDe(cual).scene.backgroundColor }
+                    Box(
+                        hueco
+                            .fillMaxSize()
+                            .background(Color(DrawTheme.colorDe(suPapel)))
+                            .pointerInput(cual.id) {
+                                // En la pasada inicial y sin consumir: el toque también llega al
+                                // lienzo, así que enfocar y empezar a trazar es el mismo gesto.
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val evento = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                                        if (evento.changes.any { it.pressed }) { enfocarSinRomper(cual); break }
+                                    }
+                                }
+                            }
+                    ) {
+                        DrawCanvas(
+                            controller = controladorDe(cual),
+                            modifier = Modifier.fillMaxSize(),
+                            imageProvider = ::bitmapDe,
+                            dark = DrawTheme.esDeNoche(suPapel),
+                            zurdo = zurdo,
+                            cuadricula = cuadricula,
+                            onChange = { },
+                            // Una página de PDF lleva su página de telón, como el que manda.
+                            backdrop = telonDe(cual),
+                            papelALaVista = cual.pdf != null
+                        )
+                    }
+                }
+                return@TiraDeLienzos
+            }
             DrawCanvas(
                 controller = controller,
                 // El gesto va **encima del lienzo y en la pasada inicial**, sin consumir
                 // mientras no haya cuatro dedos: así trazar y encuadrar siguen igual. Ver
                 // [elToqueDeCuatroDedos].
-                modifier = Modifier
+                modifier = hueco
                     .fillMaxSize()
-                    // **Dos dedos deshacen, tres rehacen.** Sobre un texto marcado, dos
-                    // dedos lo abren para escribir, que es lo que hacían antes.
+                    // Lo que mide de verdad este lienzo en su columna: es con lo que se encuadra.
+                    .onSizeChanged { medidaDelLienzo = it }
+                    .then(if (comoCielo) Modifier else Modifier.background(Color(android.graphics.Color.parseColor(papel))))
+                    // **Dos dedos deshacen.** Sobre un texto marcado, dos dedos lo abren para
+                    // escribir, que es lo que hacían antes.
                     .elToqueDeVariosDedos { dedos ->
+                        // Mirando no se deshace ni se abre un texto: es solo mirar.
+                        if (modoVista) return@elToqueDeVariosDedos
                         if (dedos == 2) {
                             val texto = controller.selectedElements()
                                 .firstOrNull { it.type == ElementType.TEXT }
                             if (texto != null) editandoTexto = texto.id
                             else if (controller.canUndo) { controller.undo(); cambiado() }
-                        } else if (dedos == 3 && controller.canRedo) {
-                            controller.redo(); cambiado()
                         }
+                        // **Tres dedos ya no rehacen** (18-sep-2026). Tres dedos son ahora la
+                        // tira de lienzos, y un salto que se queda corto —los dedos apenas se
+                        // mueven— se leía como toque y rehacía algo sin que nadie lo pidiera:
+                        // «que se desactiven todas las funciones de edición, esto produce que se
+                        // raya algo y al final pierdo el tiempo borrándolo». Rehacer está en la
+                        // barra de arriba, al lado de deshacer. Ver [elArrastreDeTresDedos].
                     }
-                    // **Y tres dedos hacia arriba sacan la hoja adhesiva.** No se pisa con el
-                    // toque de tres de aquí arriba: aquel solo cuenta si los dedos no se van a
-                    // ningún sitio, así que subir lo invalida por su propia definición. Ver
-                    // [elTironDeTresDedos] y [NotaAdhesiva].
-                    .elTironDeTresDedos { adhesivoALaVista = true }
+                    // **Tres dedos corren la tira, por el eje en que esté** (18-sep-2026): a los
+                    // lados en fila, arriba y abajo apilados —subirlos trae el lienzo de abajo—.
+                    // El tirón de tres dedos que sacaba la hoja adhesiva **se quitó**: ocupaba
+                    // justo ese gesto y el usuario lo quería para cambiar de lienzo. La hoja
+                    // ahora se abre desde el carrusel de arriba. Ver [NotaAdhesiva].
+                    .elArrastreDeTresDedos(
+                        enColumna = enColumna,
+                        alCorrer = { dx -> correrLaTira.value(dx) },
+                        alAcabar = { soltarLaTira.value() }
+                    )
                     .elToqueDeCuatroDedos(
+                        // **Cuatro dedos hacia arriba**: la baraja con todos.
+                        alDeslizar = { hacia ->
+                            controller.cancel()
+                            if (hacia == HaciaDonde.ARRIBA) verTodos.value()
+                        },
+                        // **Y a los lados, correr la tira**, como quien mueve una lista de
+                        // imágenes: sigue al dedo y no hay animación de pasar página.
+                        // **Abrir los cuatro dedos: este lienzo lo más grande posible**, pero
+                        // dejando asomar la pestaña del de al lado, que es lo que pidió el
+                        // usuario para poder volver de un toque. Cerrarlos: a un hueco.
+                        alAbrirLosDedos = {
+                            controller.cancel()
+                            ponerTamano(dibujoId, pantallaPx)
+                        },
+                        alCerrarLosDedos = {
+                            controller.cancel()
+                            ponerTamano(dibujoId, unidadDeLaTira())
+                        },
                         alJuntarse = {
                             // El primer dedo llega unas milésimas antes que los otros tres,
                             // así que a estas alturas ya hay un punto empezado: sin esto,
@@ -1362,6 +1563,7 @@ class DrawEditorActivity : ComponentActivity() {
                 modoLapiz = modoLapiz,
                 onLapizDetectado = { if (lapizAutomatico) modoLapiz = true }
             )
+            }
 
             EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
 
@@ -1386,7 +1588,9 @@ class DrawEditorActivity : ComponentActivity() {
                     zoom = controller.scene.viewport.zoom,
                     alCambiar = { cambiado() },
                     alCerrar = { mandoAbierto = false },
-                    modifier = Modifier.align(Alignment.Center)
+                    // Centrado a lo ancho pero **más abajo que el medio** (18-sep-2026): en el
+                    // centro justo tapaba lo que se estaba moviendo, y abajo cae bajo el pulgar.
+                    modifier = Modifier.align(androidx.compose.ui.BiasAlignment(0f, 0.55f))
                 )
             }
             // En pantalla completa también: lo que se pone desde el abanico —un plano, una
@@ -1405,8 +1609,12 @@ class DrawEditorActivity : ComponentActivity() {
                 BarraDeVista(
                     Modifier
                         .align(Alignment.TopCenter)
+                        // Mirando, la barra de arriba es esta: es la que tiene que apartar la
+                        // tira. Ver [hayBarraArriba].
+                        .onSizeChanged { altoDeLaBarraDeArriba = it.height }
                         .statusBarsPadding()
                         .padding(top = 10.dp, start = 8.dp, end = 8.dp)
+                        .bajarSiTocaLaCamara()
                 )
             }
             if (!soloElDibujo && !mandoAbierto && !presentando && !modoVista) {
@@ -1438,45 +1646,45 @@ class DrawEditorActivity : ComponentActivity() {
                 // de página de un PDF quedaba tapado justo cuando sirve para algo. Se aparta
                 // lo que la barra mida **de verdad**, que cambia con las herramientas que
                 // haya y con el alto de la pantalla.
-                RotuloDeLaHoja(
+                val hayQueAjustar = gruposPara(seleccionado).isNotEmpty() ||
+                    seleccionado.singleOrNull()?.isLinear == true
+                val alRotulo = dondeVaElRotulo(
+                    altoDeLaBarra = altoDeLaBarraDeArriba,
+                    anchoDePantalla = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width,
+                    anchoDelRotulo = anchoDelRotulo,
+                    anchoDeLosLados = maxOf(
+                        if (hayQueAjustar) anchoDeLaIslaDeLoMarcado else 0,
+                        if (controller.scene.marcos.isNotEmpty()) anchoDeLaIslaDeHojas else 0
+                    )
+                )
+                // Con el panel de ajustes abierto debajo de su isla, un rótulo bajado lo pisaría.
+                val rotuloAVista = !(alRotulo.bajado && panelAbierto && hayQueAjustar)
+                if (rotuloAVista) RotuloDeLaHoja(
                     Modifier
                         .align(Alignment.TopCenter)
-                        .padding(
-                            top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } +
-                                10.dp
-                        )
+                        .padding(top = alRotulo.arriba)
+                        .onSizeChanged { anchoDelRotulo = it.width }
                 )
                 // **El nombre del lienzo, a la vista y a un toque de cambiarlo** (14-sep-2026).
                 // Un PDF ya lleva su rótulo con el documento y la página. Ver [NombreDelLienzo].
-                if (pdfDeFondo == null && controller.tool != Tool.ZONA) {
+                if (rotuloAVista && pdfDeFondo == null && controller.tool != Tool.ZONA) {
                     RotuloDelLienzo(
                         Modifier
                             .align(Alignment.TopCenter)
-                            .padding(
-                                top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } + 10.dp
-                            )
+                            .padding(top = alRotulo.arriba)
+                            .onSizeChanged { anchoDelRotulo = it.width }
                     )
                 }
-                // **Ponerme al día con este lienzo** (16-sep-2026). Va junto al nombre y solo si
-                // este lienzo es de un proyecto y hay grupo: en un dibujo suelto no hay con quién
-                // ponerse al día. Ver [PonerseAlDia].
-                BotonDePonerseAlDia(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(
-                            top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } + 10.dp,
-                            end = 12.dp
-                        )
-                )
+                // **Ponerme al día con este lienzo** (16-sep-2026) va **dentro del rótulo**, al
+                // lado del nombre o de las páginas (17-sep-2026): suelto arriba a la derecha se
+                // montaba encima de la barra de páginas en los teléfonos estrechos. Ver
+                // [BotonDePonerseAlDia].
                 @Suppress("UNUSED_EXPRESSION") tick
                 if (controller.tool == Tool.ZONA) {
                     PastillaDeLaZona(
                         Modifier
                             .align(Alignment.TopCenter)
-                            .padding(
-                                top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } +
-                                    (if (pdfDeFondo != null) 58.dp else 10.dp)
-                            )
+                            .padding(top = alRotulo.arriba + (if (pdfDeFondo != null) 48.dp else 0.dp))
                     )
                 }
                 pidiendoProyectoParaLaZona?.let { (foto, b) -> ElegirProyectoParaLaZona(foto, b) }
@@ -1489,8 +1697,6 @@ class DrawEditorActivity : ComponentActivity() {
                 // voltear, agrupar, alinear y los números de una raya —y todo eso
                 // necesita algo seleccionado—. Sin nada marcado el botón abriría un
                 // panel vacío, así que no sale.
-                val hayQueAjustar = gruposPara(seleccionado).isNotEmpty() ||
-                    seleccionado.singleOrNull()?.isLinear == true
 
                 // **Dos cajas y no una.** Pegada al canto lo que se pulsa a ciegas
                 // —salir, deshacer, rehacer—, que no se puede mover de sitio; al
@@ -1520,6 +1726,7 @@ class DrawEditorActivity : ComponentActivity() {
                                     ?: controller.addTabla(centroDeLaVista()).also { cambiado() }.id
                             },
                             onAjustes = { ajustesAbiertos = !ajustesAbiertos },
+                            onRecado = { adhesivoALaVista = true },
                             formatos = formatosDeSalida(),
                             exportando = exportando,
                             onAProyecto = { aUnProyecto() }
@@ -1531,6 +1738,8 @@ class DrawEditorActivity : ComponentActivity() {
                         .align(Alignment.TopStart)
                         .fillMaxWidth()
                         .onSizeChanged { altoDeLaBarraDeArriba = it.height }
+                        // Lejos de una cámara de esquina. Ver [com.forge.pixpin.ui.theme.apartarDeLaCamara].
+                        .apartarDeLaCamara()
                         // **Pegada al canto por su lado.** Contra el borde de la
                         // pantalla hay un tope físico: el pulgar llega hasta el final
                         // y ahí está el botón. Separada, hay que apuntar.
@@ -1575,6 +1784,7 @@ class DrawEditorActivity : ComponentActivity() {
                             .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
                             .padding(horizontal = 8.dp)
                             .padding(top = BAJO_LA_BARRA)
+                            .onSizeChanged { anchoDeLaIslaDeLoMarcado = it.width }
                     ) {
                         BotonesAjustes(tick, panelAbierto, { cambiado() }) { panelAbierto = !panelAbierto }
                     }
@@ -1595,6 +1805,7 @@ class DrawEditorActivity : ComponentActivity() {
                             .align(if (zurdo) Alignment.TopEnd else Alignment.TopStart)
                             .padding(horizontal = 8.dp)
                             .padding(top = BAJO_LA_BARRA)
+                            .onSizeChanged { anchoDeLaIslaDeHojas = it.width }
                     ) {
                         Row {
                             IconButton(onClick = { pasarDeHoja(-1); cambiado() }) {
@@ -1747,9 +1958,20 @@ class DrawEditorActivity : ComponentActivity() {
                     Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 10.dp)
-                        // Lo que ocupa, para que el mando de la esquina se levante justo lo
-                        // necesario y no se le monte encima. Ver [Mando].
-                        .onSizeChanged { altoDeLoDeAbajo = it.height },
+                        // **Lo que ocupa desde el canto de abajo**, no lo que mide.
+                        //
+                        // Con `onSizeChanged` aquí se medía el contenido **por dentro** del
+                        // margen: la cuenta salía corta y la tira de lienzos apilados metía la
+                        // pestaña del de abajo justo debajo de la barra (18-sep-2026, «la
+                        // sección que se muestra está tapada por la barra inferior»). Mirando
+                        // dónde está su canto superior en la ventana sale el hueco de verdad,
+                        // margen y aparte lo que la barra se ponga por dentro. Ver [Mando] y
+                        // [com.forge.pixpin.ui.TiraDeLienzos].
+                        .onGloballyPositioned { sitio ->
+                            val ventana = sitio.findRootCoordinates().size.height
+                            val ocupa = (ventana - sitio.positionInWindow().y).toInt().coerceAtLeast(0)
+                            if (ocupa != altoDeLoDeAbajo) altoDeLoDeAbajo = ocupa
+                        },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     VisorDeZoom(
@@ -1767,17 +1989,6 @@ class DrawEditorActivity : ComponentActivity() {
                         tick,
                         onImagen = { selectorImagen() },
                         noche = noche,
-                        onAlternarNoche = {
-                            // El botón de noche es el papel: pone el oscuro o devuelve el
-                            // blanco. Ver [DrawTheme.PAPELES].
-                            controller.ponerElPapel(
-                                if (noche) DrawTheme.FONDO_DIA
-                                else DrawTheme.fondoDe(true, ajustes.oledNegro)
-                            )
-                            // Pedir el claro de noche es pedirlo de verdad: ver [papel].
-                            papelClaroForzado = noche
-                            cambiado()
-                        },
                         cambiado = { cambiado() },
                         grupoDesplegado = grupoDesplegado,
                         onDesplegarGrupo = { grupoDesplegado = it }
@@ -2107,6 +2318,7 @@ class DrawEditorActivity : ComponentActivity() {
             // La ventana de ajustes: también sin velo, que se deja abierta a un
             // lado mientras se sigue dibujando.
             if (ajustesAbiertos) {
+                LaunchedEffect(Unit) { comprobarSiVaEnVector() }
                 // Lo que pesa este dibujo y su proyecto, medido fuera del hilo principal:
                 // sumar un proyecto es abrir cada uno de sus lienzos. Ver [Detalle].
                 val detalle by androidx.compose.runtime.produceState(Pair(emptyList<Pair<String, String>>(), emptyList<Pair<String, String>>()), tick) {
@@ -2160,20 +2372,10 @@ class DrawEditorActivity : ComponentActivity() {
                             tickDelMosaico++
                         }
                     },
-                    // **Y esta página en concreto.** Solo aparece con el plano en líneas
-                    // puesto: apagado ya va todo como imagen y la pregunta no tendría sentido.
-                    paginaComoImagen = if (pdfDeFondo != null && ajustes.planoEnLineas) {
-                        ajustes.paginasComoImagen.contains(claveDeEstaPagina())
-                    } else {
-                        null
-                    },
-                    onPaginaComoImagen = { comoImagen -> ponerEstaPaginaComoImagen(comoImagen) },
-                    barraDeArriba = ajustes.barraDeArriba,
-                    onBarraDeArriba = { como ->
-                        lifecycleScope.launch {
-                            (application as? com.forge.pixpin.PixPinApp)?.settings?.setBarraDeArriba(como)
-                        }
-                    },
+                    // **Vector o imagen, esta página** (17-sep-2026): solo si se puede leer en
+                    // líneas. Un escaneo no tiene nada que elegir. Ver [paginaEnVector].
+                    paginaComoImagen = if (pdfDeFondo != null && paginaEnVector == true) planoVectorial == null else null,
+                    onPaginaComoImagen = { comoImagen -> if (comoImagen != (planoVectorial == null)) alternarModoDelPdf() },
                     presionFirme = controller.estiloActivo().presionFirme,
                     onPresionFirme = { firme ->
                         aplicarEstilo(controller.estiloActivo().copy(presionFirme = firme))
@@ -2290,34 +2492,111 @@ class DrawEditorActivity : ComponentActivity() {
             }
         }
 
+        // **Todos los lienzos, con cuatro dedos hacia arriba.** Ver [com.forge.pixpin.ui.VistaDeTodos].
+        if (viendoTodos) {
+            com.forge.pixpin.ui.VistaDeTodos(
+                lienzos = losAbiertos,
+                actual = dibujoId,
+                onAbrir = { viendoTodos = false; if (it.id != dibujoId) enfocarSinRomper(it) },
+                onCerrar = { abiertos.cerrar(it.id) },
+                onOrdenar = { de, a -> abiertos.mover(de, a) },
+                onSalir = { viendoTodos = false },
+                onOtro = { pidiendoOtroLienzo = true },
+                // **Los grupos de pestañas**: guardar lo abierto y volver a ello de un toque.
+                grupos = abiertos.grupos.collectAsState().value,
+                onGuardarGrupo = { abiertos.guardarGrupo(it) },
+                onAbrirGrupo = { g ->
+                    viendoTodos = false
+                    guardarYa()
+                    abiertos.abrirGrupo(g.id)?.let { primero ->
+                        // Si el primero es el que ya está en pantalla, la tira se rehace sola.
+                        if (primero.id != dibujoId) com.forge.pixpin.ui.relevarPor(this@DrawEditorActivity, primero)
+                    }
+                },
+                onBorrarGrupo = { abiertos.borrarGrupo(it.id) },
+                // **El botón de la baraja**: la tira en fila o en columna. La baraja sigue abierta.
+                apilados = apilados,
+                onCambiarElOrden = {
+                    apilados = !apilados
+                    prefsDeMultilienzo.edit().putBoolean(CLAVE_APILADOS, apilados).apply()
+                },
+                // **La tarjeta es el lienzo tal como se dejó**, encogido: la misma vista, el mismo
+                // encuadre, como la captura de una app en la multitarea. Una página de PDF va con
+                // su miniatura, que su papel es de la pantalla entera.
+                // **Cada tarjeta mide lo que su columna** (uno, dos o tres huecos) y enseña el
+                // lienzo **tal cual se ve en ella**: mismo encuadre, mismo tamaño, centrado.
+                // **La tarjeta tiene la forma de su columna**, y por eso el lienzo la llena de
+                // canto a canto: ancho partido por alto de lo que ocupa en la tira.
+                formaDeTarjeta = { cual ->
+                    val suyo = tamanoDe(cual.id)
+                    val anchoCol = if (enColumna) medidasDePantalla.width else suyo
+                    val altoCol = if (enColumna) suyo else medidasDePantalla.height
+                    anchoCol.toFloat() / altoCol.coerceAtLeast(1)
+                },
+                contenido = { cual ->
+                    run {
+                        val papelSuyo = remember(cual.id) { controladorDe(cual).scene.backgroundColor }
+                        // Lo que mide su columna en la tira, en píxeles: así se ve lo mismo.
+                        val suyo = tamanoDe(cual.id)
+                        val anchoCol = if (enColumna) medidasDePantalla.width else suyo
+                        val altoCol = if (enColumna) suyo else medidasDePantalla.height
+                        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            // **Llenar, no encajar.** La tarjeta ya tiene la forma de la columna
+                            // (ver `formaDeTarjeta`), así que las dos cuentas dan lo mismo; con
+                            // el mayor, si alguna vez no cuadran del todo —una tarjeta que topa
+                            // con el ancho de la pantalla— sobra un pelo por un lado y se
+                            // recorta, en vez de dejar las franjas de fondo que veía el usuario.
+                            val escala = maxOf(
+                                with(d) { maxWidth.toPx() } / anchoCol.coerceAtLeast(1),
+                                with(d) { maxHeight.toPx() } / altoCol.coerceAtLeast(1)
+                            )
+                            Box(
+                                Modifier
+                                    .requiredSize(with(d) { anchoCol.toDp() }, with(d) { altoCol.toDp() })
+                                    .graphicsLayer {
+                                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
+                                        scaleX = escala; scaleY = escala
+                                    }
+                                    .background(Color(DrawTheme.colorDe(papelSuyo)))
+                            ) {
+                                DrawCanvas(
+                                    controller = controladorDe(cual),
+                                    modifier = Modifier.fillMaxSize(),
+                                    imageProvider = ::bitmapDe,
+                                    dark = DrawTheme.esDeNoche(papelSuyo),
+                                    cuadricula = cuadricula,
+                                    backdrop = telonDe(cual),
+                                    papelALaVista = cual.pdf != null
+                                )
+                                // **Que el dedo no dibuje en la tarjeta, pero sin comerse el
+                                // gesto**: esta caja es la que recibe el toque en vez del lienzo
+                                // y no lo consume, así la fila de tarjetas se sigue deslizando.
+                                Box(Modifier.fillMaxSize().pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } })
+                            }
+                        }
+                    }
+                }
+            )
+        }
+        // Con un solo lienzo abierto, el gesto ofrece abrir otro y meterlo en la rueda.
+        if (pidiendoOtroLienzo) {
+            com.forge.pixpin.ui.ElegirOtroLienzo(
+                candidatos = candidatosParaAbrir(),
+                onAbrir = { pidiendoOtroLienzo = false; irAlLienzo(it) },
+                onNuevo = { pidiendoOtroLienzo = false; abrirUnLienzoNuevo() },
+                onCerrar = { pidiendoOtroLienzo = false }
+            )
+        }
+
     }
 
     /** Una barra flotante: el recurso que usa el original para no comer lienzo. */
     @Composable
     private fun Isla(modifier: Modifier = Modifier, contenido: @Composable () -> Unit) {
-        // La sombra de su `--shadow-island` es de tres capas muy suaves; en
-        // Compose solo hay una, así que se baja y se le añade el filo de un
-        // punto que ellos ponen con `0 0 0 1px`. Una sombra dura sobre un
-        // lienzo blanco se ve como un recorte pegado encima.
-        Surface(
-            modifier = modifier,
-            shape = RoundedCornerShape(12.dp),
-            // **Del color de un contenedor levantado, no del fondo de la aplicación.**
-            //
-            // Iba del `surface` de fábrica, que es exactamente el color del fondo: con el
-            // tema oscuro y el lienzo en negro, la isla era un rectángulo negro sobre negro
-            // y lo único que la separaba era el filo de un punto. Los botones de dentro
-            // parecían flotar sueltos sobre el dibujo, y los apagados no se veían en
-            // absoluto. `surfaceContainerHigh` está para esto: una superficie que se levanta
-            // sobre la de debajo, y que se despega tanto sobre un lienzo blanco como sobre
-            // uno negro.
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-            ),
-            shadowElevation = 3.dp
-        ) {
-            Box(Modifier.padding(horizontal = 2.dp, vertical = 1.dp)) { contenido() }
+        // **De cristal** (17-sep-2026): la pastilla translúcida del sistema solar, la misma en
+        // todas las barras de la aplicación. Ver [com.forge.pixpin.ui.theme.SuperficieDeCristal].
+        com.forge.pixpin.ui.theme.SuperficieDeCristal(modifier, RoundedCornerShape(22.dp)) {
+            Box(Modifier.padding(horizontal = 4.dp, vertical = 3.dp)) { contenido() }
         }
     }
 
@@ -2392,16 +2671,22 @@ class DrawEditorActivity : ComponentActivity() {
         onFiguras: () -> Unit,
         onTablas: () -> Unit,
         onAjustes: () -> Unit,
+        /**
+         * **La hoja adhesiva**, que antes salía con un tirón de tres dedos hacia arriba. Ese
+         * gesto pasó a cambiar de lienzo (18-sep-2026), así que el recado necesitaba un botón:
+         * sin él no había forma de abrirlo. Ver [NotaAdhesiva].
+         */
+        onRecado: () -> Unit = {},
         /** Las formas de sacar el dibujo, para el botón de compartir. Ver [formatosDeSalida]. */
         formatos: List<FormatoDeSalida> = emptyList(),
         exportando: Boolean = false,
         onAProyecto: () -> Unit = {}
     ) {
         @Suppress("UNUSED_EXPRESSION") tick
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        // **Los botones saltan la cámara** del centro al deslizar (17-sep-2026). Ver
+        // [com.forge.pixpin.ui.theme.FilaQueSaltaLaCamara].
+        val deslizado = rememberScrollState()
+        com.forge.pixpin.ui.theme.FilaQueSaltaLaCamara(deslizado, Modifier.horizontalScroll(deslizado)) {
             // **Volver a lo que estás dibujando.**
             //
             // Es lo que más falta hacía. El lienzo es infinito, así que
@@ -2499,6 +2784,10 @@ class DrawEditorActivity : ComponentActivity() {
                     contentDescription = getString(R.string.tabla_abrir)
                 )
             }
+            // **El recado**: la hoja adhesiva sobre el dibujo. Ver [onRecado].
+            IconButton(onClick = onRecado) {
+                Icon(Icons.Filled.StickyNote2, contentDescription = "Hoja adhesiva")
+            }
             // **Exportar, en la barra y con el icono de compartir** —el cuadro con la flecha
             // hacia arriba, como en iOS—. Estaba escondido en una pestaña de los ajustes; lo
             // pidió el usuario el 12-sep-2026: se toca y los formatos salen ahí mismo. Sigue
@@ -2592,14 +2881,13 @@ class DrawEditorActivity : ComponentActivity() {
         val enGrupo = remember { runCatching { com.forge.pixpin.sincro.Red.disco(this).identidad.leer().enGrupo }.getOrDefault(false) }
         if (!enGrupo) return
         val rel = "pins/draw/$dibujoId.excalidraw.gz"
-        androidx.compose.material3.FilledTonalIconButton(
-            // **Lo de aquí se escribe antes de preguntar**: lo que se junta es el archivo, y si
-            // el lienzo se queda a medio guardar se juntaría con la versión de hace un minuto.
-            onClick = { guardarYa(); alDiaAbierto = true },
-            modifier = modifier.size(38.dp)
-        ) {
-            Icon(Icons.Filled.Sync, contentDescription = "Ponerme al día con este lienzo", modifier = Modifier.size(18.dp))
-        }
+        // **Lo de aquí se escribe antes de preguntar**: lo que se junta es el archivo, y si
+        // el lienzo se queda a medio guardar se juntaría con la versión de hace un minuto.
+        com.forge.pixpin.ui.theme.BotonRedondo(
+            Icons.Filled.Sync, "Ponerme al día con este lienzo",
+            { guardarYa(); alDiaAbierto = true },
+            modifier = modifier, tamano = 36.dp
+        )
         if (alDiaAbierto) {
             PonerseAlDia(
                 chat = proyecto.id,
@@ -2610,6 +2898,31 @@ class DrawEditorActivity : ComponentActivity() {
         }
     }
 
+    /** Dónde va el rótulo del centro: [arriba] desde el canto, y si ha tenido que [bajado]. */
+    private data class SitioDelRotulo(val arriba: androidx.compose.ui.unit.Dp, val bajado: Boolean)
+
+    /**
+     * **El rótulo del centro, sin pisar las islas de los lados.** Si cabe entre ellas va justo
+     * bajo la barra; si no, una fila más abajo. Se decide con los anchos medidos, así que en una
+     * tableta no baja nunca y en un teléfono estrecho solo cuando hay islas.
+     */
+    @Composable
+    private fun dondeVaElRotulo(
+        altoDeLaBarra: Int,
+        anchoDePantalla: Int,
+        anchoDelRotulo: Int,
+        anchoDeLosLados: Int
+    ): SitioDelRotulo {
+        val d = LocalDensity.current
+        val bajoLaBarra = with(d) { altoDeLaBarra.toDp() } + 10.dp
+        val margen = with(d) { (8.dp + 6.dp).roundToPx() }
+        val choca = anchoDeLosLados > 0 && anchoDelRotulo > 0 &&
+            (anchoDePantalla - anchoDelRotulo) / 2 < anchoDeLosLados + margen
+        if (!choca) return SitioDelRotulo(bajoLaBarra, false)
+        val islas = maxOf(BAJO_LA_BARRA, with(d) { altoDeLaBarra.toDp() }) + ALTO_DE_UNA_ISLA + 6.dp
+        return SitioDelRotulo(maxOf(bajoLaBarra, islas), true)
+    }
+
     @Composable
     private fun RotuloDelLienzo(modifier: Modifier = Modifier) {
         val app = application as? com.forge.pixpin.PixPinApp ?: return
@@ -2618,13 +2931,14 @@ class DrawEditorActivity : ComponentActivity() {
         val nombre = remember(todos) {
             todos.firstNotNullOfOrNull { q -> q.hojas.firstOrNull { it.dibujo == dibujoId } }?.nombre
         } ?: return
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Surface(
             onClick = { renombrandoLienzo = true },
-            modifier = modifier,
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shadowElevation = 3.dp
+            shape = RoundedCornerShape(18.dp),
+            color = com.forge.pixpin.ui.theme.Cristal.barra,
+            contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+            shadowElevation = 0.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                 Text(
@@ -2635,6 +2949,8 @@ class DrawEditorActivity : ComponentActivity() {
                 )
                 Icon(Icons.Filled.Edit, contentDescription = "Cambiar el nombre", modifier = Modifier.padding(start = 6.dp).size(14.dp))
             }
+        }
+        BotonDePonerseAlDia(Modifier.padding(start = 6.dp))
         }
         DialogoDelNombreDelLienzo(nombre)
     }
@@ -2651,12 +2967,9 @@ class DrawEditorActivity : ComponentActivity() {
         val total = proyecto?.hojas?.size ?: 0
         val nombre = proyecto?.nombre ?: File(ruta).nameWithoutExtension
 
-        Surface(
+        com.forge.pixpin.ui.theme.SuperficieDeCristal(
             modifier = modifier,
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shadowElevation = 3.dp
+            forma = RoundedCornerShape(18.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // **Y se pasa de hoja aquí mismo.**
@@ -2706,28 +3019,335 @@ class DrawEditorActivity : ComponentActivity() {
                         modifier = Modifier.size(18.dp)
                     )
                 }
-                // **Vector o imagen, a un toque** (14-sep-2026). El interruptor vivía en
-                // Ajustes → Dibujo y no se encontraba cuando hacía falta: justo cuando un
-                // PDF se ve mal. Aquí dice cómo se está viendo esta página y lo cambia.
-                // Ver [alternarModoDelPdf].
-                val enVector = planoVectorial != null
-                Surface(
-                    onClick = { alternarModoDelPdf() },
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (enVector) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.tertiaryContainer,
-                    modifier = Modifier.padding(end = 6.dp)
-                ) {
-                    Text(
-                        if (leyendoLineas) "…" else if (enVector) "Vector" else "Imagen",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (enVector) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                    )
+                // El chip «Vector/Imagen» que había aquí pasó a Ajustes y solo sale si la
+                // página se puede leer en líneas (17-sep-2026). Ver [paginaEnVector].
+                BotonDePonerseAlDia(Modifier.padding(end = 4.dp))
+            }
+        }
+    }
+
+    // ---- La multitarea de dentro: los lienzos abiertos (17-sep-2026) ----
+
+    /**
+     * **Un controlador por lienzo de la tira**: todos están vivos, como las ventanas partidas de
+     * Xiaomi que enseñó el usuario. Se carga la escena la primera vez que se pide y se queda.
+     */
+    private val sesiones = HashMap<String, DrawController>()
+
+    /** La página de PDF de telón de cada lienzo de la tira, ya dibujada. Pocas: son grandes. */
+    private val telones = object : LinkedHashMap<String, Bitmap>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?) = size > 4
+    }
+
+    /** El telón de una página de PDF de la tira (null si no es una página), cargado una vez. */
+    @Composable
+    private fun telonDe(l: com.forge.pixpin.data.LienzoAbierto): Bitmap? {
+        val ruta = l.pdf ?: return null
+        if (l.pagina < 0) return null
+        val clave = "$ruta#${l.pagina}"
+        telones[clave]?.let { return it }
+        val estado = androidx.compose.runtime.produceState<Bitmap?>(null, clave) {
+            value = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                runCatching { com.forge.pixpin.motor.PdfDoc.render(ruta, l.pagina, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH) }.getOrNull()
+            }?.also { telones[clave] = it }
+        }
+        return estado.value
+    }
+
+    private fun controladorDe(l: com.forge.pixpin.data.LienzoAbierto): DrawController {
+        if (l.id == dibujoId) return controller
+        return sesiones.getOrPut(l.id) {
+            val ruta = l.ruta ?: ExcalidrawStore.rutaDe(this, l.id)
+            // Nace mirando si la pantalla está mirando: un vecino que aparece a media tira no
+            // puede ser la rendija por la que se cuela un trazo. Ver [repartirElModoVista].
+            DrawController(ExcalidrawStore.cargar(ruta) ?: Scene()).also { it.soloMirar = modoVista }
+        }
+    }
+
+    /**
+     * **Enfocar otro lienzo de la tira**: pasa a ser el que manda, sin cerrar la pantalla y sin
+     * animación. Una página de un PDF sí necesita abrir la suya: lleva su papel de fondo, su
+     * mosaico y su devolución al documento, y eso es de la pantalla entera.
+     */
+    private fun enfocar(l: com.forge.pixpin.data.LienzoAbierto) {
+        if (l.id == dibujoId) return
+        // Una tabla, un croquis 3D o un PDF entero tienen su pantalla: se va a ella.
+        if (!l.esLienzo) {
+            guardarYa()
+            com.forge.pixpin.ui.relevarPor(this, l)
+            return
+        }
+        // **Guardar lo que se deja, en segundo plano** (18-sep-2026): escribir el dibujo y, sobre
+        // todo, rehacer el PDF entero se hacía aquí mismo, y pasar de una página de PDF a otro
+        // lienzo daba un tirón. La escena es inmutable: se captura y viaja. Si la pantalla se
+        // pausa entretanto, `guardarLosDeLaTira` vuelve a escribir el dibujo por la vía segura.
+        guardarLoQueSeDejaEnSegundoPlano()
+        // **Una página de PDF también se enfoca sin cerrar la pantalla** (18-sep-2026): antes
+        // abría otra actividad y el usuario veía un parpadeo y un salto. Lo anotado en la
+        // página que se deja vuelve a su PDF, y la nueva trae su papel, sus líneas o su mosaico,
+        // igual que al abrirla. Ver [cambiarElFondo].
+        if (l.pdf != null || pdfDeFondo != null) cambiarElFondo(l)
+        sesiones[dibujoId] = controller
+        val suyo = controladorDe(l)
+        dibujoId = l.id
+        controller = suyo
+        // **No se vuelve a apuntar en la lista**: ya está abierto, solo se pasa a él. Apuntarlo
+        // cambiaba la lista y la tira daba un salto.
+        // El que llega manda con el modo que tenga la pantalla, no con el que trajera él.
+        repartirElModoVista()
+        val i = abiertos.lista.value.indexOfFirst { it.id == l.id }
+        if (i >= 0 && pantallaPx > 0) {
+            animarLaTira {
+                tiraCorrida.animateTo(
+                    com.forge.pixpin.ui.Multilienzo.limitar(sitioDeLaTira(i), tamanosActuales(), airePx, pestanaPx, pantallaPx)
+                )
+            }
+        }
+    }
+
+    private fun guardarLoQueSeDejaEnSegundoPlano() {
+        guardadoPendiente?.cancel()
+        guardadoPendiente = null
+        val contexto = applicationContext
+        val id = dibujoId
+        val escena = controller.scene
+        val app = application as? com.forge.pixpin.PixPinApp
+        val proyecto = pdfDeFondo?.takeIf { faltaDevolverAlPdf }
+            ?.let { ruta -> app?.let { Proyectos.deEstePdf(it.proyectos.proyectos.value, ruta) } }
+        faltaDevolverAlPdf = false
+        EN_SEGUNDO_PLANO.launch {
+            // De uno en uno: dos rehechos del mismo PDF a la vez se pisarían el archivo.
+            TURNO_DE_GUARDAR.withLock {
+                runCatching { ExcalidrawStore.guardar(contexto, id, escena) }
+                if (proyecto != null) {
+                    val bien = PdfDelProyecto.rehacer(contexto, proyecto) { fileId ->
+                        escena.files[fileId]?.path?.let { ImageStore.load(it) }
+                    }
+                    // Que ha ido bien no se dice a cada cambio de lienzo; que ha fallado, sí.
+                    if (!bien) kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(contexto, R.string.pdf_no_se_pudo, android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
+    }
+
+    /** La tira de lienzos: dónde está corrida, y las medidas con las que se calcula. */
+    private val tiraCorrida = androidx.compose.animation.core.Animatable(0f)
+    private var pantallaPx = 0
+    private var pestanaPx = 0
+    /** La pestaña del lienzo de antes: en columna lleva encima la barra de arriba. */
+    private var antesPx = 0
+    /** Y la del de después: en columna lleva debajo la barra de abajo. */
+    private var despuesPx = 0
+    private var airePx = 0
+    private var enColumna = false
+
+    /** Apilados (uno arriba y otro abajo), como lo dejó el usuario desde la baraja. */
+    private var apilados by mutableStateOf(false)
+    private var porPantalla = 1
+    /** Lo que llevan corrido los cuatro dedos en este gesto, o null si no hay gesto. */
+    private var arrastreDeLaTira: Float? = null
+    private var desdeDondeSeArrastra = 0
+
+    /**
+     * **Animar la tira necesita un reloj de fotogramas.** Lanzarlo en `lifecycleScope` a secas
+     * tumbaba la aplicación («A MonotonicFrameClock is not available»): fue el fallo que mandó el
+     * usuario el 18-sep-2026 al tocar una tarjeta. `AndroidUiDispatcher.Main` lo trae.
+     */
+    private fun animarLaTira(bloque: suspend () -> Unit) {
+        lifecycleScope.launch(androidx.compose.ui.platform.AndroidUiDispatcher.Main) { bloque() }
+    }
+
+    /** El tamaño de cada columna de la tira, por id y en píxeles. Libre; se lee al medir. */
+    private val tamanosDeLaTira = androidx.compose.runtime.mutableStateMapOf<String, Int>()
+
+    private fun unidadDeLaTira() = com.forge.pixpin.ui.Multilienzo.unidad(pantallaPx, pestanaPx, airePx, porPantalla, antesPx, despuesPx)
+
+    private fun tamanoDe(id: String) = tamanoValido(id, tamanosDeLaTira[id] ?: unidadDeLaTira())
+
+    /** [t] dentro de los topes del lienzo [id], que dependen de si tiene vecino a cada lado. */
+    private fun tamanoValido(id: String, t: Int): Int {
+        val lista = abiertos.lista.value
+        return com.forge.pixpin.ui.Multilienzo.tamanoLibre(
+            t, pantallaPx, pestanaPx, antesPx, lista.indexOfFirst { it.id == id }.coerceAtLeast(0), lista.size, despuesPx
+        )
+    }
+
+    private fun ponerTamano(id: String, t: Int) {
+        if (abiertos.lista.value.size <= 1 || pantallaPx <= 0) return
+        tamanosDeLaTira[id] = tamanoValido(id, t)
+        prefsDeMultilienzo.edit().putInt(CLAVE_TAMANO + id, tamanosDeLaTira[id]!!).apply()
+        val i = abiertos.lista.value.indexOfFirst { it.id == id }
+        if (i >= 0) animarLaTira {
+            tiraCorrida.animateTo(com.forge.pixpin.ui.Multilienzo.limitar(sitioDeLaTira(i), tamanosActuales(), airePx, pestanaPx, pantallaPx))
+        }
+    }
+
+    private fun tamanosActuales(): IntArray {
+        val lista = abiertos.lista.value
+        return IntArray(lista.size) { tamanoDe(lista[it].id) }
+    }
+
+    private fun sitioDeLaTira(i: Int) =
+        com.forge.pixpin.ui.Multilienzo.paraVer(i, tamanosActuales(), airePx, antesPx)
+
+    /** Enfocar, y si algo se rompe por el camino, no tumbar la aplicación: se abre por la vía lenta. */
+    private fun enfocarSinRomper(l: com.forge.pixpin.data.LienzoAbierto) {
+        runCatching { enfocar(l) }.onFailure {
+            android.util.Log.e("PixPinTira", "al enfocar", it)
+            runCatching { irAlLienzo(l) }
+        }
+    }
+
+    /**
+     * **Cambia el papel de fondo al enfocar otro lienzo de la tira**: se devuelve al PDF lo
+     * anotado en la página que se deja, se sueltan sus trozos, y si el nuevo es una página se
+     * prepara como al abrirla. Es lo mismo que hacen `onCreate` y `onDestroy`, sin cerrar nada.
+     */
+    private fun cambiarElFondo(l: com.forge.pixpin.data.LienzoAbierto) {
+        if (pdfDeFondo != null) devolverAlPdf()
+        mosaico?.soltar(); mosaico = null
+        planoVectorial?.soltar(); planoVectorial = null
+        laminaFina?.soltar(); laminaFina = null
+        planoParaLaWeb = null
+        medidaDeLaPagina = null
+        fondo = null
+        paginaEnVector = null
+        pdfDeFondo = l.pdf
+        paginaDeFondo = l.pagina
+        val ruta = l.pdf
+        if (ruta != null && l.pagina >= 0) {
+            // La página ya está dibujada si el lienzo se veía en la tira: no se rasteriza otra vez.
+            val pagina = telones["$ruta#${l.pagina}"]
+                ?: com.forge.pixpin.motor.PdfDoc.render(ruta, l.pagina, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH)
+            fondo = pagina
+            if (pagina != null) {
+                medidaDeLaPagina = pagina.width.toDouble() to pagina.height.toDouble()
+                val ancho = pagina.width.toDouble()
+                val alto = pagina.height.toDouble()
+                lifecycleScope.launch {
+                    val puestos = (application as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()
+                    val estaComoImagen = puestos?.paginasComoImagen
+                        ?.contains(com.forge.pixpin.data.claveDePagina(ruta, l.pagina)) == true
+                    val quiere = (puestos?.planoEnLineas ?: true) && !estaComoImagen
+                    val hecho = quiere && traerElPlanoEnLineas(ruta, ancho)
+                    if (!hecho && pdfDeFondo == ruta) prepararElMosaico(ruta, ancho, alto)
+                }
+            }
+        }
+        tickDelMosaico++
+    }
+
+    /** Lo dibujado en los otros lienzos de la tira también se guarda. */
+    private fun guardarLosDeLaTira() {
+        for ((id, c) in sesiones) {
+            if (id == dibujoId) continue
+            runCatching { ExcalidrawStore.guardar(this, id, c.scene) }
+        }
+    }
+
+    /** La rueda de lienzos abiertos. Ver [com.forge.pixpin.data.LienzosAbiertos]. */
+    private val abiertos by lazy {
+        (application as com.forge.pixpin.PixPinApp).lienzosAbiertos
+    }
+
+    private val prefsDeMultilienzo by lazy {
+        getSharedPreferences("multilienzo", Context.MODE_PRIVATE)
+    }
+
+    /**
+     * **Apunta este lienzo como abierto**, con el nombre con el que se le conoce: el de su hoja
+     * en el proyecto, o el del documento y la página si es un PDF.
+     */
+    private fun apuntarComoAbierto() {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        val todos = app.proyectos.proyectos.value
+        val proyecto = pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) }
+            ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+        val hoja = proyecto?.hojas?.firstOrNull { it.dibujo == dibujoId }
+        val nombre = when {
+            !hoja?.nombre.isNullOrBlank() -> hoja!!.nombre
+            pdfDeFondo != null -> (proyecto?.nombre ?: "PDF") + " · " + (paginaDeFondo + 1)
+            else -> proyecto?.nombre ?: "Lienzo"
+        }
+        abiertos.abrir(
+            com.forge.pixpin.data.LienzoAbierto(
+                id = dibujoId,
+                nombre = nombre,
+                ruta = intent.getStringExtra(EXTRA_RUTA),
+                proyecto = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO) ?: proyecto?.id,
+                pdf = pdfDeFondo,
+                pagina = paginaDeFondo
+            )
+        )
+    }
+
+    /**
+     * **Se va al lienzo [l]**, como quien pasa de pantalla.
+     *
+     * Se cierra este y se abre el otro, igual que al pasar de hoja ([irALaHoja]): una actividad
+     * nueva entra con su dibujo y su encuadre hechos, y **pasa por `onPause`**, que es donde lo
+     * anotado vuelve al PDF. Lo escrito se fuerza antes, que si no se iría con lo de hace un rato.
+     */
+    private fun irAlLienzo(l: com.forge.pixpin.data.LienzoAbierto) {
+        if (l.id == dibujoId) return
+        guardarYa()
+        val desde = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO) ?: l.proyecto
+        if (l.pdf != null && l.pagina >= 0) {
+            abrirPaginaDePdf(this, l.id, l.ruta, l.pdf, l.pagina, desde)
+        } else {
+            abrir(this, l.id, l.ruta ?: ExcalidrawStore.rutaDe(this, l.id), null, desde)
+        }
+        // **Sin animación**: cambiar de lienzo es correrse por la tira, no pasar de pantalla. Con
+        // la animación de Android parecía que todo se iba siempre hacia el mismo lado.
+        sinAnimacion()
+        finish()
+        sinAnimacion()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sinAnimacion() {
+        runCatching { overridePendingTransition(0, 0) }
+    }
+
+    /** Los lienzos del proyecto que aún no están en la rueda, para ofrecerlos. */
+    private fun candidatosParaAbrir(): List<com.forge.pixpin.data.LienzoAbierto> {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return emptyList()
+        val todos = app.proyectos.proyectos.value
+        val proyecto = pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) }
+            ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+            ?: return emptyList()
+        val yaEstan = abiertos.lista.value.map { it.id }.toSet()
+        return proyecto.hojas.mapNotNull { h ->
+            val dib = h.dibujo ?: return@mapNotNull null
+            if (dib in yaEstan) return@mapNotNull null
+            com.forge.pixpin.data.LienzoAbierto(
+                id = dib,
+                nombre = h.nombre.ifBlank { proyecto.nombre + (h.pagina?.let { " · " + (it + 1) } ?: "") },
+                proyecto = proyecto.id,
+                pdf = if (h.pagina != null) proyecto.pdfOrigen else null,
+                pagina = h.pagina ?: -1
+            )
+        }
+    }
+
+    /** Un lienzo en blanco: si se está en un proyecto, entra en él como una hoja más. */
+    private fun abrirUnLienzoNuevo() {
+        val app = application as? com.forge.pixpin.PixPinApp
+        val todos = app?.proyectos?.proyectos?.value.orEmpty()
+        val proyecto = pdfDeFondo?.let { Proyectos.deEstePdf(todos, it) }
+            ?: Detalle.proyectoDelLienzo(todos, dibujoId)
+        val ahora = System.currentTimeMillis()
+        val dibujo = "dib-$ahora"
+        if (app != null && proyecto != null) {
+            app.proyectos.guardar(Proyectos.conHoja(proyecto, Hoja(id = "h-$ahora", dibujo = dibujo), ahora))
+        }
+        irAlLienzo(
+            com.forge.pixpin.data.LienzoAbierto(
+                id = dibujo, nombre = "Lienzo nuevo", proyecto = proyecto?.id
+            )
+        )
     }
 
     /**
@@ -3002,10 +3622,11 @@ class DrawEditorActivity : ComponentActivity() {
     ) {
         Surface(
             modifier = modifier,
-            shape = RoundedCornerShape(14.dp),
-            shadowElevation = 4.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-            contentColor = MaterialTheme.colorScheme.onSurface
+            shape = RoundedCornerShape(18.dp),
+            shadowElevation = 0.dp,
+            color = com.forge.pixpin.ui.theme.Cristal.barra,
+            contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CandadoDePantalla(vistaFija, if (vistaFija) "Vista fija" else "Mover", onVistaFija)
@@ -3039,10 +3660,11 @@ class DrawEditorActivity : ComponentActivity() {
     ) {
         val porcentaje = (zoom * 100).toInt()
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            shadowElevation = 4.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onSurface
+            shape = RoundedCornerShape(18.dp),
+            shadowElevation = 0.dp,
+            color = com.forge.pixpin.ui.theme.Cristal.barra,
+            contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -3195,7 +3817,6 @@ class DrawEditorActivity : ComponentActivity() {
         tick: Int,
         onImagen: () -> Unit,
         noche: Boolean,
-        onAlternarNoche: () -> Unit,
         cambiado: () -> Unit,
         grupoDesplegado: List<Tool>? = null,
         onDesplegarGrupo: ((List<Tool>?) -> Unit)? = null
@@ -3231,7 +3852,6 @@ class DrawEditorActivity : ComponentActivity() {
                 onUndo = { controller.undo(); cambiado() },
                 onImage = onImagen,
                 dark = noche,
-                onToggleDark = onAlternarNoche,
                 escala = controller.scene.escala,
                 onQuitarEscala = { controller.clearScale(); cambiado() },
                 seriePuntos = controller.seriePuntos,
@@ -3493,9 +4113,6 @@ class DrawEditorActivity : ComponentActivity() {
      * Ver [com.forge.pixpin.EXTRA_DESDE_PROYECTO].
      */
     private fun cerrarYVolver() {
-        // Una tarea fijada no deja irse a ninguna otra pantalla, y una ventana sobre la pantalla
-        // se queda flotando encima de lo que venga. Ver [protegerElBordeDeArriba].
-        protegerElBordeDeArriba(false, com.forge.pixpin.data.BarraDeArriba.NADA)
         val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
         // **Y si no se vino de ningún proyecto, se vuelve a la aplicación igualmente.**
         //
@@ -4304,11 +4921,28 @@ class DrawEditorActivity : ComponentActivity() {
         modoVista = true
         controller.setSelection(emptySet())
         controller.selectTool(Tool.HAND)
+        repartirElModoVista()
     }
 
     private fun pasarAEditar() {
         modoVista = false
         controller.selectTool(herramientaAntesDeVer ?: Tool.FREEDRAW)
+        repartirElModoVista()
+    }
+
+    /**
+     * **El modo visualización es de la pantalla, no de un lienzo.** Se reparte a todos los
+     * controladores de la tira —el que manda y los vecinos vivos— porque cada uno tiene su
+     * herramienta: sin esto, mirando se podía arrastrar algo del vecino de al lado, y traerlo al
+     * medio lo devolvía editable. Ver [DrawController.soloMirar].
+     */
+    private fun repartirElModoVista() {
+        controller.soloMirar = modoVista
+        if (modoVista) controller.setSelection(emptySet())
+        for ((_, c) in sesiones) {
+            c.soloMirar = modoVista
+            if (modoVista) c.setSelection(emptySet())
+        }
     }
 
     /**
@@ -4328,34 +4962,12 @@ class DrawEditorActivity : ComponentActivity() {
 
     @Composable
     private fun BotonesDeVista() {
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shadowElevation = 4.dp
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
-                IconButton(onClick = { cerrarYVolver() }) {
-                    Icon(Icons.Filled.Close, contentDescription = getString(R.string.cd_close))
-                }
-                IconButton(onClick = { encuadrar() }) {
-                    Icon(Icons.Filled.CenterFocusWeak, contentDescription = "Encuadrar")
-                }
-                IconButton(onClick = { imprimir() }) {
-                    Icon(Icons.Filled.Print, contentDescription = "Imprimir")
-                }
-                IconButton(onClick = { empezarAPresentar() }) {
-                    Icon(Icons.Filled.Slideshow, contentDescription = "Presentar")
-                }
-                androidx.compose.material3.FilledTonalButton(
-                    onClick = { pasarAEditar() },
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.padding(start = 2.dp, end = 4.dp)
-                ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Text("Editar", modifier = Modifier.padding(start = 6.dp))
-                }
-            }
+        com.forge.pixpin.ui.theme.BarraDeCristal {
+            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Close, "Cerrar", { cerrarYVolver() }, descripcion = getString(R.string.cd_close))
+            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.CenterFocusWeak, "Encuadrar", { encuadrar() })
+            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Print, "Imprimir", { imprimir() })
+            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Slideshow, "Mostrar", { empezarAPresentar() }, descripcion = "Presentar")
+            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Edit, "Editar", { pasarAEditar() }, puesto = true)
         }
     }
 
@@ -4436,6 +5048,30 @@ class DrawEditorActivity : ComponentActivity() {
         return (i + 1) to hojas.size
     }
 
+    /**
+     * **Si esta página del PDF se puede ver en vector**: null mientras no se sabe. Decide si
+     * Ajustes ofrece «Vector / Imagen» (17-sep-2026: el usuario no quiere la opción donde no
+     * sirve, ni a la vista en el lienzo). Se averigua al abrir los ajustes, no al abrir la
+     * página: leer las líneas de un plano cuesta. Ver [comprobarSiVaEnVector].
+     */
+    private var paginaEnVector by mutableStateOf<Boolean?>(null)
+
+    private fun comprobarSiVaEnVector() {
+        val ruta = pdfDeFondo ?: return
+        if (planoVectorial != null) { paginaEnVector = true; return }
+        val clave = "$ruta#$paginaDeFondo"
+        VECTORIZABLES[clave]?.let { paginaEnVector = it; return }
+        lifecycleScope.launch {
+            val vale = withContext(Dispatchers.IO) {
+                runCatching {
+                    PlanoDePdf.deArchivo(ruta, paginaDeFondo)?.let { it.valeLaPena && it.sinEntender == 0 } ?: false
+                }.getOrDefault(false)
+            }
+            VECTORIZABLES[clave] = vale
+            if (pdfDeFondo == ruta) paginaEnVector = vale
+        }
+    }
+
     /** Mientras se leen las líneas de la página al pasar a vector. */
     private var leyendoLineas by mutableStateOf(false)
 
@@ -4508,6 +5144,7 @@ class DrawEditorActivity : ComponentActivity() {
         // El obrero que pinta la lámina, y a quién avisar cuando esté. Ver
         // [PlanoEnPantalla.pintar].
         planoVectorial = leido.conObrero(lifecycleScope) { runOnUiThread { tickDelMosaico++ } }
+        paginaEnVector = true
         // Los cuadros y la lámina, si los había, ya no hacen falta: sueltan su memoria y dejan
         // de rasterizar. Es justo lo que se quería quitar de en medio — que acercarse dejara
         // de tener que cargar nada.

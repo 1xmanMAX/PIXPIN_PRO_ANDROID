@@ -557,6 +557,20 @@ fun DrawCanvas(
                         val evento = awaitPointerEvent()
                         val activos = evento.changes.filter { it.pressed }
                         if (activos.isEmpty()) break
+                        // **Con tres dedos el lienzo se calla** (18-sep-2026): el tercero llega
+                        // unas milésimas después de los otros dos y, sin esto, el encuadre
+                        // de dos dedos seguía moviendo el papel debajo del gesto de la tira.
+                        // Lo que hubiera empezado se cancela y no se toca nada hasta soltar.
+                        if (maxOf(activos.count { it.type != PointerType.Stylus }, ManoEntera.dedos) >= DEDOS_QUE_CALLAN) {
+                            if (gestureStarted) {
+                                controller.cancelarDelTodo()
+                                gestureStarted = false
+                                trazandoAMano = false
+                            }
+                            dedo = null
+                            evento.changes.forEach { it.consume() }
+                            continue
+                        }
                         // **El lápiz que se posa con un dedo apoyado es un atajo.**
                         //
                         // Con un dedo, el lápiz no traza: abre la tira de colores sobre su
@@ -719,6 +733,8 @@ fun DrawCanvas(
                 var dondeSePuso = Offset.Zero
 
                 var ultimoToque = cuandoEmpezo
+                // El gesto se ha callado por los tres dedos: de aquí al final, nada.
+                var callado = false
                 while (true) {
                     val event = awaitPointerEvent()
                     event.changes.firstOrNull()?.let { c ->
@@ -735,6 +751,46 @@ fun DrawCanvas(
                     val active = event.changes.filter { it.pressed }
                         .let { if (esLapiz) it.filter { c -> c.type == PointerType.Stylus } else it }
                     if (active.isEmpty()) break
+
+                    // **Con tres dedos el lienzo se calla, y del todo** (18-sep-2026).
+                    //
+                    // Esto ya estaba en la rama del modo lápiz, y faltaba aquí, que es por donde
+                    // pasa el dedo a secas: los tres dedos de la tira llegan de uno en uno, así
+                    // que el primero ya había empezado a trazar —o a mover lo que hubiera
+                    // debajo— y los dos siguientes se leían como el pellizco de encuadrar. De
+                    // ahí las rayas que aparecían solas y el papel que se iba de sitio al
+                    // cambiar de lienzo: «se raya algo y al final pierdo el tiempo borrándolo».
+                    //
+                    // Lo empezado se deshace —[DrawController.cancel] devuelve la escena a como
+                    // estaba— y **no se vuelve a tocar nada hasta soltar**: ni trazo, ni
+                    // encuadre, ni el toque de dos dedos al levantarlos.
+                    // **Los tres dedos pueden caer en lienzos distintos de la tira**: este ve uno o
+                    // dos y creía que era un trazo o un encuadre —de ahí la lupa que salía al
+                    // correr la tira—. [ManoEntera] cuenta los de toda la pantalla.
+                    if (maxOf(active.count { it.type != PointerType.Stylus }, ManoEntera.dedos) >= DEDOS_QUE_CALLAN) {
+                        if (gestureStarted) {
+                            controller.cancelarDelTodo()
+                            gestureStarted = false
+                            trazandoAMano = false
+                            touched()
+                        }
+                        dedo = null
+                        // Y el papel vuelve a donde estaba al posarse el primer dedo: entre el
+                        // segundo y el tercero ya se había leído un encuadre de dos dedos.
+                        if (!callado && controller.scene.viewport != vp) {
+                            controller.setViewport(vp)
+                            touched()
+                        }
+                        callado = true
+                        event.changes.forEach { it.consume() }
+                        continue
+                    }
+                    // Una vez callado, el gesto está muerto aunque queden uno o dos dedos: los
+                    // que sobran son los que la mano no ha levantado todavía.
+                    if (callado) {
+                        event.changes.forEach { it.consume() }
+                        continue
+                    }
 
                     if (active.size > 1) {
                         // **El segundo dedo significa dos cosas distintas, y no
@@ -941,7 +997,7 @@ fun DrawCanvas(
                 // encima la marca igualmente, que es el gesto de «sé lo que
                 // estoy haciendo» de siempre, y con ella marcada el botón del
                 // candado abierto ya la suelta.
-                val fueLarga = !seMovio && !huboDosDedos &&
+                val fueLarga = !seMovio && !huboDosDedos && !callado &&
                     (ultimoToque - cuandoEmpezo) >= MILIS_DE_PULSACION_LARGA
                 if (fueLarga && controller.tool == Tool.SELECTION &&
                     controller.selectedIds.isEmpty()
@@ -949,7 +1005,7 @@ fun DrawCanvas(
                     if (controller.marcarClavadoEn(start, UMBRAL_DEL_DEDO / vp.zoom)) touched()
                 }
                 // Dos dedos que se posan y se levantan sin mover nada: atajo.
-                if (huboDosDedos && !huboEncuadre) onTwoFingerTap()
+                if (huboDosDedos && !huboEncuadre && !callado) onTwoFingerTap()
             }
         }
     ) {
@@ -1287,7 +1343,7 @@ fun DrawCanvas(
                     drawCircle(Color.Black.copy(alpha = 0.25f), disco + sombra, m.centro)
                     drawCircle(Brush.sweepGradient(m.tonos, m.centro), disco, m.centro)
                     // El gris del centro: la viveza sale de lo lejos que está el lápiz.
-                    val gris = Color(DrawTheme.filtrar(deHsv(floatArrayOf(0f, 0f, m.claridad)), dark))
+                    val gris = Color.White
                     drawCircle(
                         Brush.radialGradient(listOf(gris, gris.copy(alpha = 0f)), m.centro, disco),
                         disco, m.centro
@@ -1299,7 +1355,7 @@ fun DrawCanvas(
                         val en = enLaRueda(hsv[0], hsv[1], disco)
                         val p = m.centro + Offset(en.x.toFloat(), en.y.toFloat())
                         val r = 6.dp.toPx()
-                        drawCircle(Color(DrawTheme.filtrar(parseColor(marca, 255), dark)), r, p)
+                        drawCircle(Color(parseColor(marca, 255)), r, p)
                         drawCircle(Color.Black.copy(alpha = 0.45f), r, p, style = Stroke(2.6f))
                         drawCircle(Color.White.copy(alpha = 0.95f), r + 1f, p, style = Stroke(1.6f))
                     }
@@ -1318,7 +1374,15 @@ fun DrawCanvas(
         }
 
         // La lupa: el trozo que el dedo está tapando, ampliado y aparte.
-        dedo?.let { pos ->
+        // **Solo con figuras, no a mano alzada** (17-sep-2026): escribiendo, la lupa tapa lo
+        // que se escribe y no ayuda a nada —no hay un punto que clavar—. Vuelve si el trazo
+        // se ha convertido en raya, óvalo o rectángulo, que ahí sí se apunta a un sitio.
+        val lupaAMano = trazandoAMano && !controller.enderezandoSolo &&
+            !controller.redondeandoSolo && !controller.rectangulandoSolo
+        // **Y solo si cabe** (18-sep-2026): en una columna estrecha de la tira el lienzo puede
+        // ser más pequeño que la lupa, y el cálculo de dónde ponerla se quedaba sin sitio
+        // («Cannot coerce value to an empty range»): fue el fallo que mandó el usuario.
+        dedo?.takeUnless { lupaAMano || !cabeLaLupa(size.width, size.height, LUPA_DP.dp.toPx(), 8.dp.toPx()) }?.let { pos ->
             val lado = LUPA_DP.dp.toPx()
             val margen = 8.dp.toPx()
 
@@ -1505,6 +1569,10 @@ private const val ANGULO_LETRA = 11f
 private val SELECTION_FILL = Color(0x186965DB)
 private val BINDING_COLOR = Color(0xFF1971C2)
 
+/** Si la lupa, con su margen, entra en un lienzo de [ancho] × [alto]. */
+internal fun cabeLaLupa(ancho: Float, alto: Float, lado: Float, margen: Float): Boolean =
+    ancho > lado + 2 * margen && alto > lado + 2 * margen
+
 /** Lado de la lupa, en dp: lo justo para ver el punto sin comerse el lienzo. */
 private const val LUPA_DP = 96
 
@@ -1586,14 +1654,41 @@ fun Modifier.elToqueDeCuatroDedos(
     /** Los cuatro dedos acaban de juntarse: lo que hubiera empezado a trazarse se cancela. */
     alJuntarse: () -> Unit,
     /** Y se han levantado sin moverse: es el toque. */
-    alTocar: () -> Unit
+    alTocar: () -> Unit,
+    /**
+     * **Y si se van a algún sitio, es la multitarea** (17-sep-2026): al lado se cambia de
+     * lienzo y arriba salen todos. Salta **en cuanto se pasa el margen**, con los dedos aún
+     * puestos, que es lo que hace que el gesto se sienta inmediato; el toque se descarta solo,
+     * porque moverse ya lo invalida. Ver [com.forge.pixpin.ui.Multilienzo].
+     */
+    alDeslizar: (HaciaDonde) -> Unit = {},
+    /**
+     * **Y lo que se corren a los lados, mientras se corren.** Es lo que mueve la tira de
+     * lienzos: sigue al dedo, sin saltos ni animación. Ver [com.forge.pixpin.ui.TiraDeLienzos].
+     */
+    alCorrer: (Float) -> Unit = {},
+    /** Se han levantado después de correr: es cuando la tira se asienta en un lienzo. */
+    alAcabarDeCorrer: () -> Unit = {},
+    /**
+     * **El pellizco de los cuatro dedos**, como en el teléfono del vídeo que mandó el usuario
+     * (18-sep-2026): abrirlos pone este lienzo a pantalla entera; cerrarlos lo devuelve a la
+     * fila con sus pestañas. Se mide por lo que se separan de su centro, una vez por gesto.
+     */
+    alAbrirLosDedos: () -> Unit = {},
+    alCerrarLosDedos: () -> Unit = {}
 ): Modifier = pointerInput(Unit) {
     val margen = viewConfiguration.touchSlop * MARGEN_DEL_TOQUE
     awaitPointerEventScope {
         var juntos = false
         var cuando = 0L
         var donde = Offset.Zero
+        var ultimo = Offset.Zero
         var valido = false
+        var deslizado = false
+        var corrido = false
+        // Lo abiertos que estaban los dedos al juntarse, y si ya se ha pellizcado.
+        var aberturaInicial = 0f
+        var pellizcado = false
         while (true) {
             val evento = awaitPointerEvent(PointerEventPass.Initial)
             val apoyados = evento.changes.filter { it.pressed }
@@ -1609,12 +1704,44 @@ fun Modifier.elToqueDeCuatroDedos(
                 // haber hecho nada raro.
                 cuando = evento.changes.maxOf { it.uptimeMillis }
                 donde = centroDe(apoyados)
+                ultimo = donde
+                aberturaInicial = aberturaDe(apoyados, donde)
             }
             if (!juntos) continue
             // A partir de aquí el gesto es nuestro: nada de lo que pase con estos dedos tiene
             // que llegar al lienzo.
             evento.changes.forEach { it.consume() }
             if (apoyados.isNotEmpty()) {
+                if (todos) {
+                    val centro = centroDe(apoyados)
+                    val d = centro - donde
+                    // **El pellizco manda sobre el resto**: en cuanto los dedos se abren o se
+                    // cierran lo bastante, es eso y nada más en este gesto.
+                    if (!pellizcado && !corrido && aberturaInicial > 0f) {
+                        val ahora = aberturaDe(apoyados, centro) / aberturaInicial
+                        if (ahora >= ABRIR_LOS_DEDOS) { pellizcado = true; valido = false; alAbrirLosDedos() }
+                        else if (ahora <= CERRAR_LOS_DEDOS) { pellizcado = true; valido = false; alCerrarLosDedos() }
+                    }
+                    when {
+                        pellizcado -> Unit
+                        // Hacia arriba, una sola vez: la baraja con todos.
+                        !deslizado && haciaDonde(d.x, d.y, PARA_DESLIZAR.toPx()) == HaciaDonde.ARRIBA -> {
+                            deslizado = true
+                            valido = false
+                            alDeslizar(HaciaDonde.ARRIBA)
+                        }
+                        // A los lados: **la tira sigue al dedo**, tanto como se mueva y hacia
+                        // donde se mueva. Nada de un salto por gesto.
+                        else -> {
+                            val paso = centro.x - ultimo.x
+                            if (kotlin.math.abs(paso) > 0.01f) {
+                                if (kotlin.math.abs(d.x) > margen) { valido = false; corrido = true }
+                                alCorrer(paso)
+                            }
+                        }
+                    }
+                    ultimo = centro
+                }
                 // **Y solo se mide mientras están los cuatro.**
                 //
                 // El centro se sacaba de los dedos que quedaran, y al levantarlos se levantan
@@ -1622,16 +1749,36 @@ fun Modifier.elToqueDeCuatroDedos(
                 // muchísimo más que el margen— así que el gesto se invalidaba **siempre** al
                 // soltar. Eso era lo de «no esconde nada»: se detectaba bien y se descartaba
                 // en el último fotograma.
-                if (todos && (centroDe(apoyados) - donde).getDistance() > margen) valido = false
                 continue
             }
             // Todos fuera: se cierra el gesto.
             val ultimo = evento.changes.maxOfOrNull { it.uptimeMillis } ?: cuando
             if (valido && ultimo - cuando <= LO_QUE_DURA_UN_TOQUE_DE_CUATRO) alTocar()
+            if (corrido) alAcabarDeCorrer()
             juntos = false
             valido = false
+            deslizado = false
+            corrido = false
+            pellizcado = false
         }
     }
+}
+
+/** Hacia dónde se han ido los cuatro dedos. Ver [elToqueDeCuatroDedos]. */
+enum class HaciaDonde { IZQUIERDA, DERECHA, ARRIBA }
+
+/** Cuánto hay que arrastrar los cuatro dedos para que cuente. */
+private val PARA_DESLIZAR = 56.dp
+
+/**
+ * Qué gesto sale de haber movido los cuatro dedos [dx], [dy], o null si es poco. Manda el eje
+ * en el que más se han ido: en diagonal no se adivina, se elige el claro.
+ */
+internal fun haciaDonde(dx: Float, dy: Float, minimo: Float): HaciaDonde? = when {
+    kotlin.math.abs(dx) < minimo && kotlin.math.abs(dy) < minimo -> null
+    kotlin.math.abs(dx) >= kotlin.math.abs(dy) -> if (dx > 0) HaciaDonde.DERECHA else HaciaDonde.IZQUIERDA
+    dy < 0 -> HaciaDonde.ARRIBA
+    else -> null
 }
 
 /**
@@ -1665,6 +1812,7 @@ fun Modifier.elToqueDeVariosDedos(
         while (true) {
             val evento = awaitPointerEvent(PointerEventPass.Initial)
             val dedos = evento.changes.filter { it.pressed && it.type != PointerType.Stylus }
+            ManoEntera.dedos = dedos.size
             if (dedos.size >= 2 && dedos.size > maximo) {
                 if (!enMarcha) {
                     enMarcha = true
@@ -1697,62 +1845,84 @@ fun Modifier.elToqueDeVariosDedos(
 }
 
 /**
- * **El tirón de tres dedos hacia arriba: saca la hoja adhesiva.**
- *
- * Convive con [elToqueDeVariosDedos] sin pelearse, y no por casualidad: aquel solo cuenta como
- * toque si los dedos **no se van a ningún sitio**, así que un tirón invalida el toque por su
- * propia definición. Uno es «tres dedos y sueltas», el otro «tres dedos y subes».
- *
- * Se pide que suban de verdad —más hacia arriba que a los lados— y que **no se separen**: tres
- * dedos que se abren mientras suben son una mano acomodándose sobre el cristal, no un tirón.
- * Y se avisa **una sola vez por gesto**: sin eso, seguir subiendo sacaría una hoja por
- * fotograma.
- *
- * Como todo lo que decide un gesto aquí, se mide **en la pantalla** y no en el espacio del
- * dibujo: lo que la mano hace no cambia porque el lienzo esté más o menos acercado.
+ * Cuántos dedos hay en **toda la pantalla**, contados por quien envuelve a los lienzos de la tira
+ * (en la pasada inicial, antes de que ninguno vea el evento). Cada lienzo solo ve los suyos.
  */
-fun Modifier.elTironDeTresDedos(alSubir: () -> Unit): Modifier = pointerInput(Unit) {
+internal object ManoEntera {
+    @Volatile var dedos = 0
+}
+
+/**
+ * **Tres dedos corren la tira de lienzos**, como en el plegable del vídeo del usuario
+ * («三指滑动切换», 18-sep-2026). Se lee en la pasada inicial: un toque de tres que no se mueve
+ * sigue siendo rehacer.
+ *
+ * **Por el eje de la tira** ([enColumna], 18-sep-2026): en fila, tres dedos a un lado; apilados
+ * uno encima de otro, tres dedos arriba y abajo —subirlos trae el lienzo de abajo, que es lo que
+ * pidió el usuario—. Antes, subir tres dedos sacaba la hoja adhesiva y por eso no se podía usar
+ * para cambiar de lienzo; ese tirón se quitó.
+ *
+ * **Salta en cuanto los tres se mueven por su eje**, con el margen de un arrastre normal y sin
+ * pedir que ganen de sobra al otro: exigía el doble y el usuario tenía que repetir el gesto
+ * varias veces. Y una vez corriendo sigue aunque un dedo se levante antes que los otros, que la
+ * mano nunca suelta los tres a la vez.
+ */
+fun Modifier.elArrastreDeTresDedos(
+    enColumna: Boolean,
+    alCorrer: (Float) -> Unit,
+    alAcabar: () -> Unit
+): Modifier = pointerInput(enColumna) {
     val margen = viewConfiguration.touchSlop
-    val subida = margen * LO_QUE_SUBE_UN_TIRON
     awaitPointerEventScope {
         var enMarcha = false
-        var maximo = 0
+        var corriendo = false
         var donde = Offset.Zero
-        var separados = 0f
-        var valido = false
-        var avisado = false
+        var ultimo = Offset.Zero
+        var maximo = 0
         while (true) {
             val evento = awaitPointerEvent(PointerEventPass.Initial)
             val dedos = evento.changes.filter { it.pressed && it.type != PointerType.Stylus }
+            ManoEntera.dedos = dedos.size
             if (dedos.size >= 2 && dedos.size > maximo) {
-                if (!enMarcha) { enMarcha = true; valido = true; avisado = false }
+                if (!enMarcha) enMarcha = true
                 maximo = dedos.size
                 donde = centroDe(dedos)
-                separados = loSeparadosQueEstan(dedos)
+                ultimo = donde
             }
             if (!enMarcha) continue
-            if (dedos.size >= DEDOS_PARA_ESCONDER) valido = false
-            if (dedos.isEmpty()) { enMarcha = false; maximo = 0; valido = false; continue }
-            if (valido && !avisado && maximo == 3 && dedos.size == 3) {
-                // Abrir o cerrar la mano no es subir: eso es un pellizco con tres dedos.
-                if (kotlin.math.abs(loSeparadosQueEstan(dedos) - separados) > margen * 2) {
-                    valido = false
-                    continue
+            if (dedos.isEmpty()) {
+                if (corriendo) alAcabar()
+                enMarcha = false; corriendo = false; maximo = 0
+                continue
+            }
+            // Con cuatro manda el otro gesto; con dos se encuadra. Corriendo ya, vale con los
+            // que queden: los dedos no se levantan a la vez.
+            if (maximo != 3) continue
+            if (!corriendo && dedos.size != 3) continue
+            val centro = centroDe(dedos)
+            // El eje de la tira: tumbada manda la x, apilada manda la y.
+            fun porSuEje(p: Offset) = if (enColumna) p.y else p.x
+            fun porElOtro(p: Offset) = if (enColumna) p.x else p.y
+            if (!corriendo) {
+                val ido = centro - donde
+                if (kotlin.math.abs(porSuEje(ido)) > margen &&
+                    kotlin.math.abs(porSuEje(ido)) >= kotlin.math.abs(porElOtro(ido))
+                ) {
+                    corriendo = true
+                    ultimo = centro
                 }
-                val ido = centroDe(dedos) - donde
-                // Arriba es y negativa, y tiene que ganarle claramente al movimiento lateral:
-                // si no, una mano que barre en diagonal sacaría la hoja sin querer.
-                if (-ido.y > subida && -ido.y > kotlin.math.abs(ido.x) * 1.5f) {
-                    avisado = true
-                    alSubir()
-                }
+            }
+            if (corriendo) {
+                evento.changes.forEach { it.consume() }
+                // **Lo que se ha movido cada dedo, no el centro**: al levantarse uno, el centro
+                // de los que quedan pega un salto y la tira daba un tirón a medio camino.
+                val paso = dedos.map { porSuEje(it.position) - porSuEje(it.previousPosition) }.average().toFloat()
+                if (kotlin.math.abs(paso) > 0.01f) alCorrer(paso)
+                ultimo = centro
             }
         }
     }
 }
-
-/** Cuántos márgenes de arrastre hay que subir para que sea un tirón y no un temblor. */
-private const val LO_QUE_SUBE_UN_TIRON = 4f
 
 /** Cuánto puede durar un toque de dos o tres dedos. */
 private const val LO_QUE_DURA_UN_TOQUE = 350L
@@ -1857,9 +2027,15 @@ private const val ICONO_DEL_ABANICO = 26
 /** Lo cerca que hay que pasar de una marca de color en la rueda del abanico para caer en ella, en dp. */
 private const val IMAN_DE_LAS_MARCAS = 14
 
-/** El barrido de tonos de la rueda del color, a la claridad de la tinta puesta. */
-private fun tonosDeLaRueda(claridad: Float, noche: Boolean): List<Color> =
-    List(TONOS_DEL_AJUSTE + 1) { Color(DrawTheme.filtrar(deHsv(floatArrayOf(it * 360f / TONOS_DEL_AJUSTE, 1f, claridad)), noche)) }
+/**
+ * El barrido de tonos de la rueda del color: **siempre vivo**, como el del panel.
+ *
+ * Iba a la claridad de la tinta puesta y con el filtro del papel, así que con la tinta negra la
+ * rueda salía negra y no enseñaba ningún color (usuario, 16-sep-2026). La rueda dice el tono; lo
+ * claro lo dice el arrastre hacia arriba. Ver [LaRuedaDelColor].
+ */
+private fun tonosDeLaRueda(@Suppress("UNUSED_PARAMETER") claridad: Float, @Suppress("UNUSED_PARAMETER") noche: Boolean): List<Color> =
+    List(TONOS_DEL_AJUSTE + 1) { Color(deHsv(floatArrayOf(it * 360f / TONOS_DEL_AJUSTE, 1f, 1f))) }
 
 private const val TONOS_DEL_AJUSTE = 24
 
@@ -1872,6 +2048,14 @@ private fun centroDe(dedos: List<PointerInputChange>): Offset =
     if (dedos.isEmpty()) Offset.Zero
     else dedos.fold(Offset.Zero) { a, c -> a + c.position } / dedos.size.toFloat()
 
+/** Lo abiertos que están los dedos: lo que distan, de media, de su centro. */
+private fun aberturaDe(dedos: List<PointerInputChange>, centro: Offset): Float =
+    if (dedos.isEmpty()) 0f else dedos.fold(0f) { a, c -> a + (c.position - centro).getDistance() } / dedos.size
+
+/** Cuánto tienen que abrirse o cerrarse los cuatro dedos respecto de cómo se posaron. */
+private const val ABRIR_LOS_DEDOS = 1.35f
+private const val CERRAR_LOS_DEDOS = 0.7f
+
 /**
  * Cuántos dedos hacen falta y cuánto puede durar el toque.
  *
@@ -1880,6 +2064,12 @@ private fun centroDe(dedos: List<PointerInputChange>): Offset =
  * rato —que es lo que hace quien está apartando la mano— acabaría escondiendo los mandos.
  */
 private const val DEDOS_PARA_ESCONDER = 4
+
+/**
+ * **Cuántos dedos callan el lienzo**: tres. Son los de la tira de lienzos, y mientras estén
+ * puestos el dibujo no recibe nada — ni trazo, ni encuadre, ni selección.
+ */
+private const val DEDOS_QUE_CALLAN = 3
 private const val LO_QUE_DURA_UN_TOQUE_DE_CUATRO = 900L
 
 /** Y cuánto se les deja moverse, en veces el umbral del sistema. */

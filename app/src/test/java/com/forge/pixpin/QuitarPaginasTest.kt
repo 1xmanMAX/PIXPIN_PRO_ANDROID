@@ -40,6 +40,26 @@ class QuitarPaginasTest {
         assertTrue(Proyectos.sinPaginas(proyecto, todas, 5).proyecto.hojas.none { it.id == "n2" })
     }
 
+    /**
+     * Un croquis del espacio no está en `hojas`, sino en `croquis`, y por eso quitarlo no hacía
+     * nada (usuario, 16-sep-2026). Ver [Proyectos.PREFIJO_CROQUIS].
+     */
+    @Test fun `un croquis del espacio se quita de su lista`() {
+        val conCroquis = proyecto.copy(croquis = listOf("c1", "c2"))
+        val q = Proyectos.sinPaginas(conCroquis, setOf("${Proyectos.PREFIJO_CROQUIS}c1/"), 5)
+        assertEquals(listOf("c2"), q.proyecto.croquis)
+        assertEquals(conCroquis.hojas.size, q.proyecto.hojas.size)
+        assertTrue("${Proyectos.PREFIJO_CROQUIS}c1" in q.proyecto.quitadas)
+        assertEquals(5, q.proyecto.tocado)
+    }
+
+    @Test fun `quitar un croquis y una hoja a la vez`() {
+        val conCroquis = proyecto.copy(croquis = listOf("c1"))
+        val q = Proyectos.sinPaginas(conCroquis, setOf("${Proyectos.PREFIJO_CROQUIS}c1/", "p1//"), 5)
+        assertTrue(q.proyecto.croquis.isEmpty())
+        assertTrue(q.proyecto.hojas.none { it.id == "p1" })
+    }
+
     @Test fun `lo que no esta marcado no se toca`() {
         val q = Proyectos.sinPaginas(proyecto, emptySet(), 5)
         assertEquals(proyecto, q.proyecto)

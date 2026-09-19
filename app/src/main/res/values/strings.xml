@@ -612,8 +612,9 @@
     <string name="tool_relleno">Rellenar</string>
     <string name="tool_recortar">Recortar</string>
     <string name="tool_escala_grafica">Escala gráfica</string>
-    <string name="modo_noche_title">Modo noche</string>
-    <string name="modo_noche_desc">«Automático» lo pone de noche de ocho de la tarde a siete de la mañana, y también de día si la habitación está a oscuras: lo dice el sensor de luz del teléfono.</string>
+    <string name="modo_noche_title">Aspecto</string>
+    <string name="modo_noche_desc">«Cosmos» es el cielo azul del sistema solar de proyectos, en toda la aplicación. «Automático» lo pone de noche de ocho de la tarde a siete de la mañana, y también de día si la habitación está a oscuras: lo dice el sensor de luz del teléfono.</string>
+    <string name="modo_noche_cosmos">Cosmos</string>
     <string name="modo_noche_sistema">Sistema</string>
     <string name="modo_noche_claro">Claro</string>
     <string name="modo_noche_oscuro">Oscuro</string>

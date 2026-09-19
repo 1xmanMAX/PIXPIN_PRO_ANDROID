@@ -108,7 +108,6 @@ class MotorSeparadoTest {
         "PantallaFluida.kt",
         // Una ventana del gestor de ventanas pegada al borde de arriba, para que no baje la
         // cortina de notificaciones dibujando a pantalla completa: puro Android.
-        "FranjaDeArriba.kt",
         // La ventana de «ponerme al día con este lienzo»: interfaz y red. Lo que decide qué
         // versión hay que traer es `sincro/AlDia.kt`.
         "PonerseAlDia.kt"

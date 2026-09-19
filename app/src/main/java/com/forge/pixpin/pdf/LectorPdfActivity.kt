@@ -1,5 +1,6 @@
 package com.forge.pixpin.pdf
 
+import com.forge.pixpin.ui.theme.cristal
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -422,7 +423,10 @@ private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.R
             Modifier
                 .align(Alignment.TopStart)
                 .padding(8.dp)
-                .background(Color.Black.copy(alpha = 0.55f), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                .then(
+                    if (com.forge.pixpin.ui.theme.LocalCosmos.current) Modifier.cristal(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                    else Modifier.background(Color.Black.copy(alpha = 0.55f), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                )
                 .clickable(onClick = alCerrar)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically

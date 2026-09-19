@@ -406,9 +406,21 @@ object ExportarHtml {
             append("<button data-m=\"goma\" title=\"Borrador\" aria-label=\"Borrador\">" + icono("M20 20H8M4.6 14.4l8.8-8.8a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L13 18H8.6l-4-4a1 1 0 0 1 0-1.4zM9.5 9.5l5 5") + "</button>")
         }
         append("<i class=\"p-sep\"></i>")
+        append(boton("p-encajar", "Encajar (0)", "M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"))
         append(boton("p-salir", "Salir (Esc)", "M6 6l12 12M18 6L6 18"))
         append("</div>\n")
         append("<div id=\"cajon\" hidden></div>\n")
+        // **Presentar e imprimir, arriba** (16-sep-2026, pedido por el usuario). Estaban en la
+        // barra de abajo, entre las herramientas de dibujar, y son lo contrario: no se usan
+        // mientras se dibuja, sino cuando ya está. Arriba, lejos de la mano, no se tocan sin
+        // querer y se encuentran donde uno los busca.
+        append("<div id=\"arriba\">")
+        append(boton("presentar", "Presentar (F5)", "M3 4h18v12H3zM12 16v4M8 20h8M10 8l5 2.5-5 2.5z"))
+        if (dibujo) {
+            append(boton("marcar-zona", "Imprimir una zona", "M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M9 9h6v6H9z"))
+        }
+        append(boton("imprimir", "Imprimir (Ctrl+P)", "M7 8V3h10v5M7 17H4v-7h16v7h-3M7 14h10v7H7z"))
+        append("</div>\n")
         append("<div id=\"pizarra\"")
         if (varias) append(" class=\"varias\"")
         append(">\n")
@@ -472,10 +484,6 @@ object ExportarHtml {
         // **Presentar e imprimir** (14-sep-2026), como en la aplicación: la hoja a pantalla
         // completa con una pastilla para pasar y anotar, y el diálogo de impresión del
         // navegador con una hoja por página.
-        append("<div class=\"grupo\">")
-        append(boton("presentar", "Presentar (F5)", "M3 4h18v12H3zM12 16v4M8 20h8M10 8l5 2.5-5 2.5z"))
-        append(boton("imprimir", "Imprimir (Ctrl+P)", "M7 8V3h10v5M7 17H4v-7h16v7h-3M7 14h10v7H7z"))
-        append("</div>")
         if (espacio) {
             append("<div class=\"grupo solo-espacio\">")
             append(boton("vistas", "Vistas", "M3 5h18v11H3zM8 20h8"))
@@ -647,20 +655,23 @@ object ExportarHtml {
         #medida .viva line{stroke:#ff5722;stroke-width:3px}
         #medida .viva text{fill:#ff5722}
         .grupo+.grupo{border-left:1px solid var(--filete);padding-left:6px;margin-left:2px}
-        #barra button{width:40px;height:40px;border:none;border-radius:11px;background:transparent;
+        #barra button,#arriba button{width:40px;height:40px;border:none;border-radius:11px;background:transparent;
           color:inherit;display:inline-flex;align-items:center;justify-content:center;
           cursor:pointer;touch-action:manipulation;padding:0}
-        #barra button:hover{background:var(--filete)}
-        #barra button:active{transform:scale(.93)}
-        #barra button.activo{background:#e03131;color:#fff}
-        #barra button:disabled{opacity:.35;cursor:default}
+        #barra button:hover,#arriba button:hover{background:var(--filete)}
+        #barra button:active,#arriba button:active{transform:scale(.93)}
+        #barra button.activo,#arriba button.activo{background:#e03131;color:#fff}
+        #barra button:disabled,#arriba button:disabled{opacity:.35;cursor:default}
         /* Los botones del zoom sobran con rueda, pero en el espacio y con el dedo son la
            única forma de acercarse sin usar las dos manos. */
         @media (pointer:coarse){
           .solo-raton{display:none}
           body.enElEspacio #mas,body.enElEspacio #menos{display:inline-flex}
         }
-        #paleta{display:flex;flex-direction:column;gap:6px;align-items:center}
+        /* **Color y grosor en la misma línea** (16-sep-2026, pedido del usuario): el grosor
+           estaba en una fila debajo, y son dos mitades de la misma decisión —con qué pinto—.
+           En una pantalla estrecha la fila se parte sola, que es lo que hace `wrap`. */
+        #paleta{display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center}
         /* Sin esto la paleta se ve siempre: `#paleta{display:flex}` pesa más que el
            `[hidden]{display:none}` del navegador y lo tapa. */
         #paleta[hidden]{display:none}
@@ -701,6 +712,18 @@ object ExportarHtml {
         .mini button{flex:1;padding:7px 10px;border-radius:9px;border:1px solid var(--filete);
           background:transparent;color:inherit;cursor:pointer;font:inherit}
         .mini button:hover{background:var(--filete)}
+        /* **Arriba a la derecha**: presentar, marcar una zona e imprimir. Ver [barra]. */
+        /* Mismo cristal, mismo filete, mismos botones que la barra de abajo: son la misma
+           interfaz en dos sitios, y con dos pintas distintas parecen dos aplicaciones
+           (lo dijo el usuario el 16-sep-2026). */
+        #arriba{position:fixed;top:calc(12px + env(safe-area-inset-top));right:12px;z-index:6;display:flex;gap:6px;
+          padding:6px;border-radius:16px;background:var(--vidrio);border:1px solid var(--filete);
+          box-shadow:0 6px 24px rgba(0,0,0,.18);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+          color:var(--tinta)}
+        /* Mientras se marca la zona a imprimir: el dedo marca, no dibuja. */
+        html.marcando #lienzo{cursor:crosshair}
+        #zona-marca{position:fixed;z-index:7;border:2px dashed var(--tinta,#3b82f6);
+          background:rgba(59,130,246,.12);pointer-events:none;border-radius:4px}
         #indice-fijo{position:fixed;top:12px;left:12px;z-index:5;max-width:240px;max-height:70vh;overflow:auto;
           padding:4px 6px;border-radius:14px;background:var(--vidrio);border:1px solid var(--filete);
           box-shadow:0 6px 24px rgba(0,0,0,.12);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
@@ -723,7 +746,7 @@ object ExportarHtml {
           #cajon{top:auto;left:8px;right:8px;width:auto;max-height:52vh;
             bottom:calc(116px + env(safe-area-inset-bottom))}
         }
-        @media (min-width:900px){#barra button{width:38px;height:38px}}
+        @media (min-width:900px){#barra button,#arriba button{width:38px;height:38px}}
         /* **Presentar**: solo la hoja y la pastilla. */
         #presentacion{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));
           transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:2px;padding:4px 6px;
@@ -737,13 +760,23 @@ object ExportarHtml {
         #presentacion button:disabled{opacity:.35}
         #p-cuenta{font-size:14px;min-width:52px;text-align:center}
         .p-sep{width:1px;height:22px;background:rgba(255,255,255,.3);margin:0 4px}
+        /* **Presentando, nada de desenfoque de fondo.**
+           En pantalla completa, Chromium —y con él Brave, que es donde lo vio el usuario el
+           16-sep-2026— compone mal las capas con `backdrop-filter`: al aparecer o desaparecer
+           una (la paleta, que se va al coger el borrador) **pinta negro toda la pantalla** y el
+           dibujo deja de verse hasta salir. El desenfoque es un adorno; el dibujo, no. Se
+           cambia por un fondo sólido, que además se lee mejor sobre una diapositiva. */
+        html.presentando #colores,html.presentando #grosores{
+          backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+          background:rgba(0,0,0,.72)!important;color:#fff;border-color:rgba(255,255,255,.18)!important}
+        html.presentando #arriba,
         html.presentando #barra,html.presentando #pizarra>*:not(#presentacion):not(#paleta),html.presentando #indice-fijo,
           html.presentando #estado,html.presentando #cajon,html.presentando #aviso{display:none!important}
         /* **Imprimir**: una hoja por página, sin mandos. */
         @media print{
           @page{margin:10mm}
           html.vivo,html.vivo body,html,body{overflow:visible!important;height:auto!important;background:#fff!important}
-          #barra,#pizarra,#estado,#cajon,#indice-fijo,#paleta,#aviso,#presentacion{display:none!important}
+          #barra,#pizarra,#estado,#cajon,#indice-fijo,#paleta,#aviso,#presentacion,#arriba,#zona-marca{display:none!important}
           #lienzo{position:static!important}
           .hoja,.hoja[hidden]{position:relative!important;display:block!important;inset:auto!important;
             width:100%!important;height:auto!important;page-break-after:always;break-after:page;overflow:visible!important}
@@ -1263,7 +1296,16 @@ caja.addEventListener('pointermove',function(e){
   var dd=losDedos();
   if(pellizco&&dd.length===2&&e.pointerType!=='pen'){
     var dist=Math.hypot(dd[0].x-dd[1].x,dd[0].y-dd[1].y);
-    if(dist>0&&pellizco.d>0) zoom(pellizco.d/dist,(dd[0].x+dd[1].x)/2,(dd[0].y+dd[1].y)/2);
+    // **La pinza no puede dar saltos** (16-sep-2026). Con la mano apoyada —presentando con la
+    // mano o con el borrador, que es cuando el dedo no dibuja— el navegador manda dos puntos
+    // que aparecen, desaparecen y saltan de un lado a otro de la pantalla: la razón entre dos
+    // medidas seguidas se iba a cien, el encuadre salía disparado a kilómetros del dibujo y la
+    // pantalla se quedaba vacía. Un pellizco de verdad, entre dos avisos, no dobla ni parte por
+    // la mitad la distancia; lo que pase de ahí es la palma y se ignora.
+    if(dist>0&&pellizco.d>0){
+      var f=pellizco.d/dist;
+      if(f>=0.5&&f<=2) zoom(f,(dd[0].x+dd[1].x)/2,(dd[0].y+dd[1].y)/2);
+    }
     pellizco.d=dist;
   } else if(trazo&&trazo.puntero===e.pointerId){
     var lote=muestras(e);
@@ -1352,6 +1394,23 @@ return {
  hayRellenos:plano?plano.hayRellenos:null,
  encajar:encajar,
  zoom:function(f){var r=svg.getBoundingClientRect();zoom(f,r.left+r.width/2,r.top+r.height/2);},
+ // El encuadre de ahora y cómo ponerlo: es lo que deja imprimir solo un trozo. Ver `marcarZona`.
+ vista:function(){return {x:v.x,y:v.y,w:v.w,h:v.h};},
+ // **¿Me he perdido?** Con la mano apoyada, presentando, salen pinzas involuntarias que
+ // llevan el encuadre a kilómetros del dibujo: la pantalla se queda vacía —negra, con este
+ // papel— y presentando no hay botón de encajar a mano, así que no había vuelta atrás
+ // (usuario, 16-sep-2026). Esto dice si lo que se ve ya no toca al dibujo, o si lo que
+ // queda de él en pantalla es una mota.
+ perdido:function(){
+   // **Perdido es no ver nada del dibujo**, y solo eso. Con un «casi nada» se colaban
+   // encuadres legítimos —alejarse del todo, o meterse en un detalle— y la pantalla daba un
+   // salto sola, que es peor que el problema.
+   var ix=Math.min(v.x+v.w,casa.x+casa.w)-Math.max(v.x,casa.x);
+   var iy=Math.min(v.y+v.h,casa.y+casa.h)-Math.max(v.y,casa.y);
+   return ix<=0||iy<=0;
+ },
+ ponerVista:function(c){ v={x:c.x,y:c.y,w:c.w,h:c.h}; aplicar(); },
+ deEscena:function(px,py){ return aEscena(px,py); },
  // **Salir de medir ya no borra las cotas**: para eso están puestas. Lo que se deja a medias
  // —un primer punto sin su pareja— sí se suelta, que no es nada todavía. Se quitan todas con
  // la tecla de escape, y una a una arrastrando su punta sobre la otra. Ver [quitarMedida].
@@ -1918,22 +1977,46 @@ if(pastilla){
   id('p-anterior').onclick=function(){pasar(-1);};
   id('p-siguiente').onclick=function(){pasar(1);};
   id('p-salir').onclick=dejarDePresentar;
+  if(id('p-encajar')) id('p-encajar').onclick=function(){ if(actual&&actual.encajar) actual.encajar(); };
   [].forEach.call(pastilla.querySelectorAll('[data-m]'),function(b){
-    b.onclick=function(){ if(actual&&actual.herramientas.indexOf(b.dataset.m)>=0){ actual.modoActual=b.dataset.m; actual.modo(b.dataset.m); marcarHerramienta(); } };
+    b.onclick=function(){
+      if(!actual||actual.herramientas.indexOf(b.dataset.m)<0) return;
+      actual.modoActual=b.dataset.m; actual.modo(b.dataset.m); marcarHerramienta();
+      // **Un empujón de repintado**: cambiar de herramienta hace aparecer y desaparecer la
+      // paleta, y en pantalla completa hay navegadores que dejan la capa vieja pegada. Tocar
+      // el tamaño de la hoja obliga a componer de nuevo y se limpia.
+      if(actual.medir) actual.medir();
+      cajaLienzo.style.transform='translateZ(0)';
+      void cajaLienzo.offsetHeight;
+      cajaLienzo.style.transform='';
+    };
   });
-  // En la fase de captura y **antes** que el visor: con la mano puesta, el dedo pasa hojas en
-  // vez de mover el dibujo.
+  // **Presentando también se mueve y se amplía** (16-sep-2026). Antes el dedo se le quitaba al
+  // visor en cuanto empezaba —se tragaba el `pointerdown`—, así que presentando no se podía ni
+  // desplazar el dibujo ni hacer pinza: solo pasar hojas. Ahora **no se le quita nada**: el
+  // visor mueve y amplía como siempre, y aquí solo se mira, al levantar el dedo, si aquello fue
+  // un toque o un barrido rápido de un solo dedo; si lo fue, se pasa de hoja y el encuadre se
+  // rehace ([pasar] llama a `encajar`). Con dos dedos —una pinza— no se pasa nunca de hoja.
+  var dedos=0;
   cajaLienzo.addEventListener('pointerdown',function(e){
+    dedos++;
     if(!enModoPasar()) return;
-    toque={x:e.clientX,y:e.clientY,t:Date.now()};
-    e.stopPropagation(); e.preventDefault();
+    toque=dedos===1?{x:e.clientX,y:e.clientY,t:Date.now()}:null;
   },true);
-  cajaLienzo.addEventListener('pointermove',function(e){ if(enModoPasar()&&toque) e.stopPropagation(); },true);
+  cajaLienzo.addEventListener('pointercancel',function(){ dedos=Math.max(0,dedos-1); toque=null; if(dedos===0) noPerderse(); },true);
+  // Al soltar el último dedo, si el dibujo se ha ido de la pantalla, se vuelve a encajar.
+  function noPerderse(){
+    if(!actual||!actual.perdido) return;
+    if(actual.perdido()&&actual.encajar) actual.encajar();
+  }
   cajaLienzo.addEventListener('pointerup',function(e){
-    if(!enModoPasar()||!toque) return;
-    e.stopPropagation();
-    var dx=e.clientX-toque.x, dy=e.clientY-toque.y; toque=null;
-    if(Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)){ pasar(dx<0?1:-1); return; }
+    var eranVarios=dedos>1;
+    dedos=Math.max(0,dedos-1);
+    if(dedos===0) noPerderse();
+    if(!enModoPasar()||!toque||eranVarios){ toque=null; return; }
+    var dx=e.clientX-toque.x, dy=e.clientY-toque.y, t=Date.now()-toque.t; toque=null;
+    // Un barrido es rápido y derecho; uno lento es que estabas moviendo el dibujo y se respeta.
+    if(t<500&&Math.abs(dx)>60&&Math.abs(dx)>Math.abs(dy)*1.5){ pasar(dx<0?1:-1); return; }
     if(Math.abs(dx)<12&&Math.abs(dy)<12){
       var w=innerWidth;
       if(e.clientX<w/3) pasar(-1);
@@ -1965,6 +2048,63 @@ function imprimir(){
   setTimeout(function(){ window.print(); },60);
 }
 if(id('imprimir')) id('imprimir').onclick=imprimir;
+
+// ---- Marcar una zona para imprimir (16-sep-2026) ----
+// Pedido por el usuario: «no me deja imprimir porque no hay marcos; añade marcos temporales
+// para imprimir la zona seleccionada». Un marco de verdad es parte del dibujo y hay que ir a la
+// aplicación a ponerlo; esto es **un rectángulo de usar y tirar**: se arrastra sobre lo que se
+// quiere en el papel y se imprime solo eso. No se guarda ni sale en el dibujo.
+var marcando=false, marcaCaja=null, marcaDesde=null;
+function pintarMarca(a,b){
+  if(!marcaCaja){ marcaCaja=document.createElement('div'); marcaCaja.id='zona-marca'; document.body.appendChild(marcaCaja); }
+  var x=Math.min(a.x,b.x), y=Math.min(a.y,b.y);
+  marcaCaja.style.left=x+'px'; marcaCaja.style.top=y+'px';
+  marcaCaja.style.width=Math.abs(b.x-a.x)+'px'; marcaCaja.style.height=Math.abs(b.y-a.y)+'px';
+}
+function quitarMarca(){ if(marcaCaja){ marcaCaja.remove(); marcaCaja=null; } }
+function dejarDeMarcar(){ marcando=false; marcaDesde=null; raiz.classList.remove('marcando'); quitarMarca(); }
+function marcarZona(){
+  if(!actual||actual.tipo!=='dibujo'||!actual.vista){ estado.textContent='Esto solo vale en una hoja de dibujo'; return; }
+  if(marcando){ dejarDeMarcar(); estado.textContent=''; return; }
+  marcando=true; raiz.classList.add('marcando');
+  estado.textContent='Arrastra sobre lo que quieras imprimir';
+}
+if(id('marcar-zona')) id('marcar-zona').onclick=marcarZona;
+// En captura y antes que el visor: marcando, el dedo marca y no dibuja ni mueve.
+cajaLienzo.addEventListener('pointerdown',function(e){
+  if(!marcando) return;
+  marcaDesde={x:e.clientX,y:e.clientY};
+  pintarMarca(marcaDesde,marcaDesde);
+  e.stopPropagation(); e.preventDefault();
+},true);
+cajaLienzo.addEventListener('pointermove',function(e){
+  if(!marcando||!marcaDesde) return;
+  pintarMarca(marcaDesde,{x:e.clientX,y:e.clientY});
+  e.stopPropagation(); e.preventDefault();
+},true);
+cajaLienzo.addEventListener('pointerup',function(e){
+  if(!marcando||!marcaDesde) return;
+  e.stopPropagation(); e.preventDefault();
+  var a=marcaDesde, b={x:e.clientX,y:e.clientY};
+  dejarDeMarcar();
+  if(Math.abs(b.x-a.x)<24||Math.abs(b.y-a.y)<24){ estado.textContent='Zona demasiado pequeña'; return; }
+  var p1=actual.deEscena(Math.min(a.x,b.x),Math.min(a.y,b.y));
+  var p2=actual.deEscena(Math.max(a.x,b.x),Math.max(a.y,b.y));
+  imprimirZona({x:p1.x,y:p1.y,w:p2.x-p1.x,h:p2.y-p1.y});
+},true);
+// Se imprime **solo esa zona**: se encuadra ahí, se manda a imprimir esta hoja sola y, al
+// volver del diálogo, el dibujo se queda como estaba.
+function imprimirZona(c){
+  var antes=actual.vista(), quien=actual;
+  function devolver(){ removeEventListener('afterprint',devolver); quien.ponerVista(antes); }
+  addEventListener('afterprint',devolver);
+  actual.ponerVista(c);
+  hojas.forEach(function(d){d.classList.remove('a-imprimir');});
+  raiz.classList.add('imprimir-una'); hojas[iHoja].classList.add('a-imprimir');
+  estado.textContent='';
+  setTimeout(function(){ window.print(); },80);
+}
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&marcando){ dejarDeMarcar(); estado.textContent=''; } });
 addEventListener('afterprint',function(){ raiz.classList.remove('imprimir-una'); if(actual&&actual.medir) actual.medir(); });
 
 // La dirección se lee antes de ir a la primera, que la reescribe.

@@ -227,10 +227,12 @@ fun DrawToolbar(
 
     // Misma isla que las demás: esquina de 12, sombra suave y el filo de un
     // punto de su `--shadow-island`. Ver la nota de `Isla` en el editor.
+    // **De cristal** (17-sep-2026), como todas las barras. Ver [com.forge.pixpin.ui.theme.Cristal].
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        shadowElevation = 3.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(22.dp),
+        color = com.forge.pixpin.ui.theme.Cristal.barra,
+        contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+        border = BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo),
         modifier = modifier
     ) {
         Column(
@@ -404,20 +406,11 @@ fun DrawToolbar(
                     }
                 }
 
-                // **El día y la noche, al final de la fila de herramientas.**
-                // Estaba abajo entre el color y el deshacer, que es donde uno
-                // busca lo que cambia el dibujo; y esto no cambia el dibujo,
-                // cambia la luz con la que se mira. Al final de las
-                // herramientas es donde estorba menos y donde se encuentra.
-                if (dark != null && onToggleDark != null) {
-                    Separador()
-                    ToolButton(
-                        if (dark) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                        stringResource(if (dark) R.string.cd_modo_dia else R.string.cd_modo_noche),
-                        false,
-                        onToggleDark
-                    )
-                }
+                // **El botón de día y noche se quitó** (16-sep-2026, pedido del usuario): «ya
+                // hay un cambio dinámico según el color del canvas». Lo que decide cómo se ve
+                // todo es el papel que se elige, y la tinta que no contrastara con él se adapta
+                // sola ([DrawTheme.adaptar]); un interruptor aparte era una segunda manera de
+                // decir lo mismo, y encima podían discrepar.
             }
 
             // La segunda fila **solo si lleva algo**. Sin estilos y sin
@@ -869,20 +862,13 @@ private fun ToolButton(
     // **contenedor** con un borde del color de marca; aquí se pintaba el botón
     // entero del color primario a saco, que a pantalla completa es un bloque de
     // color gritando al lado del dibujo.
+    // **El puesto, en dorado** (17-sep-2026): la marca de la barra de modos del sistema solar.
     val fondo by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            Color.Transparent
-        },
+        targetValue = if (selected) com.forge.pixpin.ui.theme.Cristal.puesto else Color.Transparent,
         label = "fondo"
     )
     val tinta by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
+        targetValue = if (selected) com.forge.pixpin.ui.theme.Cristal.tintaPuesta else com.forge.pixpin.ui.theme.Cristal.tinta,
         label = "tinta"
     )
     Box(
@@ -891,17 +877,6 @@ private fun ToolButton(
             .size(BOTON)
             .clip(RoundedCornerShape(ESQUINA_DEL_BOTON))
             .background(fondo)
-            .then(
-                if (selected) {
-                    Modifier.border(
-                        1.dp,
-                        MaterialTheme.colorScheme.primary,
-                        RoundedCornerShape(ESQUINA_DEL_BOTON)
-                    )
-                } else {
-                    Modifier
-                }
-            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -916,9 +891,9 @@ private fun ToolButton(
  * El icono va algo mayor que su `--lg-icon-size` porque el suyo es para ratón y
  * este es para un dedo.
  */
-private val BOTON = 36.dp
-private val ICONO = 20.dp
-private val ESQUINA_DEL_BOTON = 8.dp
+private val BOTON = 40.dp
+private val ICONO = 22.dp
+private val ESQUINA_DEL_BOTON = 14.dp
 
 @Composable
 private fun Separador(horizontal: Boolean = false) {

@@ -94,6 +94,21 @@ class ImanTest {
         )
     }
 
+    /**
+     * **En el modo sketch, la tinta no se pega a la tinta de al lado** (17-sep-2026).
+     *
+     * Ahí todo lo trazado es guía, y el canto de las guías enganchaba a mano alzada: escribiendo
+     * junto a otra letra, el trazo se iba hacia ella. Lo mismo con una figura, que sí engancha.
+     */
+    @Test
+    fun `a mano alzada no se pega al canto de una guía`() {
+        val escena = Scene(
+            elements = listOf(linea("g", Pt(0.0, 0.0), Pt(200.0, 0.0)).copy(reference = true))
+        )
+        assertNull(Iman.sitio(escena, Pt(100.0, 3.0), 1.0, Iman.Faena.A_MANO, AjustesEnganche()))
+        assertNotNull(Iman.sitio(escena, Pt(100.0, 3.0), 1.0, Iman.Faena.TRAZANDO, AjustesEnganche()))
+    }
+
     /** La faena del punto etiquetado exige un sitio con nombre. */
     @Test
     fun `un sitio notable solo acepta lo que puede llevar nombre`() {

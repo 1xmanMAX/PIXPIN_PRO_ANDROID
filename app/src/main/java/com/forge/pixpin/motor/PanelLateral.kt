@@ -1,5 +1,6 @@
 package com.forge.pixpin.motor
 
+import com.forge.pixpin.ui.theme.fondoDeCristal
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -229,10 +230,7 @@ fun PanelLateralDeEstilo(
             // forma **recorta a sus hijos**, y de aquí tiene que poder salirse
             // la fila de opciones de la bolita, que es lo que hace que elegir un
             // color sea un solo gesto. `background` solo pinta detrás.
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = FONDO_DEL_PANEL),
-                RoundedCornerShape(CANTO_DEL_PANEL)
-            )
+            .fondoDeCristal(RoundedCornerShape(CANTO_DEL_PANEL))
             .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(SEPARACION)
@@ -1204,7 +1202,11 @@ fun DrawScope.dibujarMaterial(cual: MaterialDeTinta, tinta: Color) {
         drawLine(Color.White, izquierda, derecha, gordo * 0.32f, StrokeCap.Round)
         return
     }
-    drawLine(tinta, izquierda, derecha, gordo, StrokeCap.Round)
+    // Las porosas enseñan el cuerpo flojo, como se van a pintar. Ver [Renderer.conMaterial].
+    drawLine(
+        if (cual.esPorosa) tinta.copy(alpha = tinta.alpha * 0.45f) else tinta,
+        izquierda, derecha, gordo, StrokeCap.Round
+    )
     if (cual == MaterialDeTinta.LISA) return
 
     val grano = Color(
@@ -1227,7 +1229,39 @@ fun DrawScope.dibujarMaterial(cual: MaterialDeTinta, tinta: Color) {
             )
         }
     ) {
-        if (cual == MaterialDeTinta.PUNTOS) {
+        if (cual == MaterialDeTinta.TIZA || cual == MaterialDeTinta.LAPIZ_2B) {
+            // Motas con semilla fija: la muestra tiene que salir igual en cada pintada.
+            val tiza = cual == MaterialDeTinta.TIZA
+            val azar = java.util.Random(if (tiza) 20260916L else 20260917L)
+            repeat(if (tiza) 40 else 120) {
+                val x = izquierda.x + azar.nextFloat() * (derecha.x - izquierda.x)
+                val y = medio - gordo / 2 + azar.nextFloat() * gordo
+                val r = pelo * (if (tiza) 1.5f else 0.8f) * (0.5f + azar.nextFloat())
+                drawCircle(grano.copy(alpha = grano.alpha * (0.6f + azar.nextFloat() * 0.4f)), r, Offset(x, y))
+            }
+        } else if (cual == MaterialDeTinta.SECO) {
+            // Rayas a lo largo con huecos, como el marcador que ya no moja.
+            val azar = java.util.Random(20260918L)
+            for (i in 0 until 4) {
+                val y = medio - gordo / 2 + (i + 0.5f) * gordo / 4f
+                var x = izquierda.x - azar.nextFloat() * gordo
+                while (x < derecha.x) {
+                    val largo = gordo * (0.6f + azar.nextFloat() * 1.4f)
+                    drawLine(grano, Offset(x, y), Offset(x + largo, y), strokeWidth = pelo)
+                    x += largo + gordo * (0.3f + azar.nextFloat() * 0.6f)
+                }
+            }
+        } else if (cual == MaterialDeTinta.TRAMA) {
+            var x = izquierda.x - gordo
+            while (x <= derecha.x + gordo) {
+                drawLine(
+                    grano,
+                    Offset(x, medio - gordo / 2), Offset(x + gordo, medio + gordo / 2),
+                    strokeWidth = pelo * 3.4f
+                )
+                x += paso * 2.4f
+            }
+        } else if (cual == MaterialDeTinta.PUNTOS) {
             var x = izquierda.x
             var impar = false
             while (x <= derecha.x) {
@@ -1414,8 +1448,7 @@ private fun <T> ElMandoDeOpciones(
                             // color que va a salir — que es justo lo que se está mirando.
                             Surface(
                                 shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                shadowElevation = if (elegida) 8.dp else 3.dp,
+                                color = com.forge.pixpin.ui.theme.Cristal.boton,
                                 border = if (elegida) {
                                     BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                                 } else {
@@ -1774,8 +1807,8 @@ private fun DeslizadorVertical(
         if (menuDeMarca && guardar != null) {
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shadowElevation = 6.dp,
+                color = com.forge.pixpin.ui.theme.Cristal.barra,
+                border = BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .offset(
@@ -2157,9 +2190,8 @@ private fun BotonDeTexto(
 ) {
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shadowElevation = if (puesto) 6.dp else 2.dp,
-        border = if (puesto) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        color = if (puesto) com.forge.pixpin.ui.theme.Cristal.puesto else com.forge.pixpin.ui.theme.Cristal.boton,
+        contentColor = if (puesto) com.forge.pixpin.ui.theme.Cristal.tintaPuesta else com.forge.pixpin.ui.theme.Cristal.tinta,
         modifier = Modifier.size(bola)
     ) {
         Box(Modifier.clickable { onTocar() }, contentAlignment = Alignment.Center) {
@@ -2172,7 +2204,7 @@ private fun BotonDeTexto(
                 textDecoration = if (tachado) {
                     androidx.compose.ui.text.style.TextDecoration.LineThrough
                 } else null,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = androidx.compose.material3.LocalContentColor.current
             )
         }
     }

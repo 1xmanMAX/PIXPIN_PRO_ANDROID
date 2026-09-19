@@ -228,6 +228,13 @@ class RecibirActivity : ComponentActivity() {
      * pasa la cámara y ya. Aquí se abre la puerta, se anuncia en la red y se espera; quien llama
      * es el otro, así que el canal lo empieza él ([Envio.Receptor.conectar] con `inicia = false`).
      */
+    /** Cierra la puerta abierta por [esperarAQueMeManden] al volver a escanear. */
+    private fun dejarDeEsperar() {
+        red?.cerrar()
+        red = null
+        miQr = null
+    }
+
     private fun esperarAQueMeManden() {
         if (red != null) return
         val yo = IdentidadEnDisco(filesDir).leer(android.os.Build.MODEL.orEmpty().ifBlank { "Este aparato" }).yo
@@ -257,17 +264,42 @@ class RecibirActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **Una cosa o la otra**: o escaneo el código de quien envía, o enseño el mío para que me
+     * envíen. Se elige arriba y solo se ve lo elegido; la cámara ni se enciende si no toca.
+     * Ver [DosModos] y [esperarAQueMeManden].
+     */
     @Composable
     private fun Pidiendo() {
-        var codigo by remember { mutableStateOf("") }
+        var escaneando by remember { mutableStateOf(true) }
+        DosModos(
+            izquierda = "Escanear su código",
+            derecha = "Enseñar el mío",
+            esLaIzquierda = escaneando,
+            onElegir = { laIzquierda ->
+                escaneando = laIzquierda
+                if (laIzquierda) dejarDeEsperar() else esperarAQueMeManden()
+            }
+        )
+        Spacer(Modifier.height(16.dp))
         Caja {
             Row(verticalAlignment = Alignment.Top) {
                 Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
-                Text("Tienes que estar en la misma Wi-Fi que quien envía (o conectado a su zona Wi-Fi).", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (escaneando) "Tienes que estar en la misma Wi-Fi que quien envía (o conectado a su zona Wi-Fi)."
+                    else "Quien te envía pasa su cámara por este código. Tenéis que estar en la misma Wi-Fi.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
         Spacer(Modifier.height(16.dp))
+        if (escaneando) Escaneando() else MiCodigo()
+    }
+
+    @Composable
+    private fun Escaneando() {
+        var codigo by remember { mutableStateOf("") }
         Box(
             Modifier.widthIn(max = 320.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)),
             contentAlignment = Alignment.Center
@@ -275,6 +307,8 @@ class RecibirActivity : ComponentActivity() {
             if (camaraPermitida) {
                 Qr.Escaner(Modifier.fillMaxSize()) { texto ->
                     val leido = Envio.leerQr(texto) ?: return@Escaner
+                    // El QR del otro sentido —uno que espera que le manden— aquí no sirve.
+                    if (leido.esperaRecibir) return@Escaner
                     if (estado is Estado.Pidiendo) recibir(leido.codigo, leido.host, leido.puerto)
                 }
             } else {
@@ -301,39 +335,32 @@ class RecibirActivity : ComponentActivity() {
         )
         Spacer(Modifier.height(12.dp))
         Button(enabled = Envio.valido(codigo), onClick = { recibir(codigo, null, 0) }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Recibir") }
+    }
 
-        // **El otro sentido**: que quien manda me escanee a mí. Ver [esperarAQueMeManden].
-        Spacer(Modifier.height(20.dp))
-        androidx.compose.material3.HorizontalDivider(Modifier.widthIn(max = 320.dp))
-        Spacer(Modifier.height(16.dp))
+    @Composable
+    private fun MiCodigo() {
         val mio = miQr
         if (mio == null) {
+            CircularProgressIndicator()
+            Spacer(Modifier.height(12.dp))
+            Text("Abriendo la puerta…", style = MaterialTheme.typography.bodyMedium)
+            return
+        }
+        Image(
+            mio.second.asImageBitmap(), contentDescription = "Mi código",
+            modifier = Modifier.widthIn(max = 300.dp).fillMaxWidth().aspectRatio(1f)
+                .clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp)
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("o que escriba este código", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(Envio.legible(mio.first), fontFamily = FontFamily.Monospace, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp))
             Text(
-                "¿Prefieres que te escaneen? Enseña tu propio código y que quien envía pase la cámara por él.",
-                style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(onClick = { esperarAQueMeManden() }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
-                Text("Enseñar mi código para que me envíen")
-            }
-        } else {
-            Text("Que te escaneen esto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(10.dp))
-            Image(
-                mio.second.asImageBitmap(), contentDescription = "Mi código",
-                modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(1f)
-                    .clip(RoundedCornerShape(18.dp)).background(Color.White).padding(10.dp)
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                Envio.legible(mio.first),
-                style = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace)
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Esperando a que te envíen algo. También vale dictar este código en «Enviar → Escanear a quien recibe».",
-                style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "Esperando a que te envíen. En el otro aparato: Enviar → «Escanear a quien recibe».",
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }

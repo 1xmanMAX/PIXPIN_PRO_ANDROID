@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -974,10 +975,14 @@ private fun ModoNocheCard() {
                 modifier = Modifier.padding(top = 4.dp)
             )
             Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val opciones = listOf(
+                    com.forge.pixpin.data.ModoNoche.COSMOS to R.string.modo_noche_cosmos,
                     com.forge.pixpin.data.ModoNoche.SISTEMA to R.string.modo_noche_sistema,
                     com.forge.pixpin.data.ModoNoche.CLARO to R.string.modo_noche_claro,
                     com.forge.pixpin.data.ModoNoche.OSCURO to R.string.modo_noche_oscuro,

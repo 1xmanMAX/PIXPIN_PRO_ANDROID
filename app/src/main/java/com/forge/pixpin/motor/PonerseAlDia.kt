@@ -73,10 +73,10 @@ fun PonerseAlDia(chat: String, rel: String, onCerrar: () -> Unit, alTraer: () ->
         text = {
             Column {
                 when {
-                    mirando -> Fila("Preguntando a tus aparatos…", cargando = true)
+                    mirando -> Fila("Buscando tus aparatos en la Wi-Fi…", cargando = true)
                     estados.isEmpty() -> Text(
-                        "No hay otros aparatos en el grupo, o no se ha hablado con ellos todavía. " +
-                            "Añádelos en Sincronizar.",
+                        "No se encontró ninguno. Comprueba que el otro aparato tenga PixPin abierto " +
+                            "y esté en esta misma Wi-Fi; si acaba de encenderse, su anuncio tarda unos segundos.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     else -> for (e in estados) {
@@ -138,6 +138,18 @@ fun PonerseAlDia(chat: String, rel: String, onCerrar: () -> Unit, alTraer: () ->
         },
         dismissButton = {
             Row {
+                // **Buscar otra vez**, que es lo que uno quiere cuando no aparece el que sabe que
+                // está encendido: el anuncio de la red a veces tarda.
+                TextButton(
+                    enabled = !mirando && trayendo == null,
+                    onClick = {
+                        mirando = true
+                        alcance.launch {
+                            estados = withContext(Dispatchers.IO) { AlDia.mirar(contexto, chat, rel) }
+                            mirando = false
+                        }
+                    }
+                ) { Text("Buscar") }
                 TextButton(onClick = { CopiasActivity.abrir(contexto, chat); onCerrar() }) { Text("Revertir") }
                 TextButton(onClick = onCerrar) { Text("Cerrar") }
             }

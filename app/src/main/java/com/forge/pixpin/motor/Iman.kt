@@ -30,7 +30,7 @@ package com.forge.pixpin.motor
  * | Faena | Qué engancha |
  * |---|---|
  * | [Faena.TRAZANDO] | Todo lo configurado: es dibujar una figura nueva |
- * | [Faena.A_MANO] | Solo el canto, y solo de las guías |
+ * | [Faena.A_MANO] | Nada: la tinta a mano no se pega a nada |
  * | [Faena.AFINANDO] | Todo: se está corrigiendo una punta, no trazando |
  * | [Faena.MOVIENDO] | Todo, con más radio: se busca un sitio, no se traza |
  * | [Faena.SITIO_NOTABLE] | Solo lo que puede llevar nombre, y obliga |
@@ -57,13 +57,14 @@ object Iman {
         TRAZANDO,
 
         /**
-         * A mano alzada.
+         * A mano alzada: **no engancha a nada**.
          *
-         * Solo el canto de las guías, y por un motivo concreto: un trazo que
-         * salta a un vértice en mitad del recorrido no se corrige, **se rompe**
-         * —el garabato pega un tirón y sigue—. El canto no da ese problema
-         * porque no es un punto al que ir, es una superficie sobre la que
-         * resbalar.
+         * Un trazo que salta a un vértice en mitad del recorrido no se corrige,
+         * **se rompe** —el garabato pega un tirón y sigue—. Hasta el 17-sep-2026
+         * se dejaba resbalar por el canto de las guías, pero en el modo sketch
+         * todo lo trazado es guía, así que la letra se pegaba a la letra de al
+         * lado. Lo reportó el usuario: la tinta normal no debe tener imán; solo
+         * las figuras y las líneas.
          */
         A_MANO,
 
@@ -100,6 +101,8 @@ object Iman {
         /** Elementos a mirar. Por defecto, lo visible con sus guías. */
         elementos: List<Element> = scene.visibleConReferencias
     ): Anclaje? {
+        // La tinta a mano no se pega a nada. Ver [Faena.A_MANO].
+        if (faena == Faena.A_MANO) return null
         val ajustes = ajustesPara(faena, config)
         if (!ajustes.activo) return null
 

@@ -1,5 +1,7 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.foundation.layout.navigationBarsPadding
+import com.forge.pixpin.ui.theme.cristal
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.nativeCanvas
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -385,6 +388,31 @@ fun PantallaDeProyectos(
         }
     }
 
+    // **La galaxia**: todos los proyectos como planetas en un plano infinito. Ver
+    // [PantallaDeGalaxia]. Ocupa la pantalla entera mientras está abierta.
+    var enGalaxia by rememberSaveable { mutableStateOf(false) }
+    if (enGalaxia && soloEste == null) {
+        PantallaDeGalaxia(
+            proyectos = ordenados,
+            onVolver = { enGalaxia = false },
+            onVer = { id ->
+                enGalaxia = false
+                val i = ordenados.indexOfFirst { it.id == id }
+                if (i >= 0) alcanceDeAjustes.launch { paginador.scrollToPage(i + 1) }
+            }
+        )
+        return
+    }
+    // **Tocar «Proyectos» sube arriba del todo** (17-sep-2026), como la barra de estado en
+    // cualquier lista. Desde lejos se salta casi hasta el principio y se anima solo el último
+    // tramo: animar veinte páginas es medio segundo de tarjetas pasando.
+    val subirArriba: () -> Unit = {
+        alcanceDeAjustes.launch {
+            if (paginador.currentPage > 2) paginador.scrollToPage(2)
+            paginador.animateScrollToPage(0)
+        }
+    }
+
     Scaffold { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
             // **La cabecera se queda fina a propósito.** Todo lo que es del
@@ -395,12 +423,11 @@ fun PantallaDeProyectos(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onVolver) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResourceSafe(R.string.cd_close)
-                    )
-                }
+                // Botones redondos de cristal, como los del sistema solar (17-sep-2026).
+                com.forge.pixpin.ui.theme.BotonRedondo(
+                    Icons.AutoMirrored.Filled.ArrowBack, stringResourceSafe(R.string.cd_close), onVolver, tamano = 44.dp
+                )
+                Spacer(Modifier.width(6.dp))
                 // **La puerta a Mensajes guardados, que si no se queda sin ninguna.**
                 //
                 // La conversación general ya no es lo que abre la aplicación: se llega
@@ -479,7 +506,12 @@ fun PantallaDeProyectos(
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(start = 4.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (soloEste == null) Modifier.clickable(onClick = subirArriba) else Modifier
+                        )
+                        .padding(start = 4.dp, top = 10.dp, bottom = 10.dp)
                 )
                 // **Por cuál vas de cuántos.** Es la señal de que esto sigue
                 // hacia abajo, y no cuesta un fotograma: vive en su propia
@@ -491,19 +523,17 @@ fun PantallaDeProyectos(
                 // Y no se ofrece crear otro cuando se ha venido a uno concreto: la lista
                 // está filtrada a este, así que el botón de más solo puede acabar en un
                 // proyecto vacío que no se ve.
+                if (soloEste == null && ordenados.isNotEmpty()) {
+                    com.forge.pixpin.ui.theme.BotonRedondo(Icons.Filled.AutoAwesome, "Sistema solar de proyectos", { enGalaxia = true }, tamano = 44.dp)
+                    Spacer(Modifier.width(6.dp))
+                }
                 if (soloEste == null) {
                     val plantilla = stringResourceSafe(R.string.proyecto_nuevo_nombre)
-                    IconButton(
-                        onClick = {
-                            recienCreado =
-                                app.proyectos.nuevo(plantilla, System.currentTimeMillis()).id
-                        }
-                    ) {
-                        Icon(
-                            Icons.Filled.Add,
-                            contentDescription = stringResourceSafe(R.string.proyecto_nuevo)
-                        )
-                    }
+                    com.forge.pixpin.ui.theme.BotonRedondo(
+                        Icons.Filled.Add, stringResourceSafe(R.string.proyecto_nuevo),
+                        { recienCreado = app.proyectos.nuevo(plantilla, System.currentTimeMillis()).id },
+                        tamano = 44.dp, puesto = true
+                    )
                 }
             }
 
@@ -606,8 +636,26 @@ fun PantallaDeProyectos(
             // **Con uno solo no hay nada que paginar.** Se enseña la misma
             // tarjeta, sin paginador y sin el asomo de abajo: asomar la página
             // siguiente cuando no hay siguiente es prometer algo que no existe.
+            // **Una sola barra flotante abajo, del proyecto que se está viendo** (17-sep-2026).
+            // Antes iba dentro de cada tarjeta y se repetía en todas; el usuario la quiere
+            // unificada, flotando, como las demás barras. Ver [BarraDeAcciones].
+            val alPie: @Composable androidx.compose.foundation.layout.BoxScope.(Proyecto) -> Unit = { cual ->
+                BarraDeAcciones(
+                    app = app,
+                    p = cual,
+                    onChat = {
+                        com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, cual.id, cual.nombre)
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 10.dp)
+                )
+            }
+
             val unico = if (soloEste != null) ordenados.firstOrNull() else null
             if (unico != null) {
+                Box(Modifier.fillMaxSize()) {
                 PaginaDeProyecto(
                     app = app,
                     p = unico,
@@ -618,11 +666,14 @@ fun PantallaDeProyectos(
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = unico.id },
                     onCompartir = { abrirHoja(listOf(unico to null)) },
-                    modifier = Modifier.fillMaxSize().padding(10.dp)
+                    modifier = Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = SITIO_DE_LA_BARRA)
                 )
+                alPie(unico)
+                }
                 return@Column
             }
 
+            Box(Modifier.fillMaxSize()) {
             VerticalPager(
                 state = paginador,
                 modifier = Modifier.fillMaxSize(),
@@ -630,7 +681,8 @@ fun PantallaDeProyectos(
                 // para que se entienda que esto baja. Un indicador que parpadea
                 // hay que explicarlo; medio centímetro de la tarjeta de abajo,
                 // no — y encima dice cuál viene.
-                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = ASOMO),
+                // Y el hueco de abajo deja ver la barra flotante entera. Ver [BarraDeAcciones].
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = ASOMO + SITIO_DE_LA_BARRA),
                 pageSpacing = 10.dp,
                 // **No se preparan páginas que no se ven.** Con el asomo, la
                 // siguiente ya entra en la ventana y se compone sola: no hace
@@ -677,8 +729,29 @@ fun PantallaDeProyectos(
                     modifier = Modifier.fillMaxSize()
                 )
             }
+            // La barra es del proyecto que se está viendo; en la tarjeta de configuración
+            // (la página cero) no hay proyecto y no sale. **La página se lee dentro**, como en
+            // [ContadorDeProyectos]: leerla aquí rehacía la pantalla entera al pasar de proyecto.
+            BarraDelQueSeVe(paginador, ordenados) { alPie(it) }
+            }
         }
     }
+}
+
+/**
+ * **La barra flotante del proyecto que se está viendo.**
+ *
+ * Aparte para que leer la página del paginador —que cambia con cada deslizada— invalide esto y
+ * nada más. Ver [ContadorDeProyectos], que existe por lo mismo.
+ */
+@Composable
+private fun BarraDelQueSeVe(
+    paginador: PagerState,
+    ordenados: List<Proyecto>,
+    barra: @Composable (Proyecto) -> Unit
+) {
+    val p = ordenados.getOrNull(paginador.currentPage - 1) ?: return
+    barra(p)
 }
 
 /**
@@ -1063,11 +1136,10 @@ private fun PaginaDeProyecto(
                     }
                     }
                 }
-                val pie: @Composable () -> Unit = {
-
-                Spacer(Modifier.height(6.dp))
-                BarraDeAcciones(app = app, p = p, onChat = alChat)
-                }
+                // **La barra de acciones ya no va en la tarjeta** (17-sep-2026): es una sola,
+                // flotando abajo, y manda sobre el proyecto que se esté viendo. Ver
+                // [BarraDeAcciones] en [PantallaDeProyectos].
+                val pie: @Composable () -> Unit = {}
                 if (apaisado) {
                     Row(Modifier.fillMaxSize()) {
                         Column(Modifier.weight(0.42f).fillMaxHeight()) {
@@ -1240,17 +1312,14 @@ private fun PistaDeChat(desplazamiento: Animatable<Float, AnimationVector1D>) {
 private fun BarraDeAcciones(
     app: PixPinApp,
     p: Proyecto,
-    onChat: () -> Unit
+    onChat: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    // Exportar ya no va aquí: la caja de exportar es una sola y está en la cabecera de
-    // la pantalla (ver `PantallaDeProyectos`), para que marcar hojas de dos proyectos no
-    // saque dos cajas.
+    // Exportar no va aquí: la caja de exportar es una sola y está en la cabecera de la
+    // pantalla (ver `PantallaDeProyectos`), para que marcar hojas de dos proyectos no saque
+    // dos cajas. Aquí queda lo de este proyecto: su chat y lo que se le puede añadir.
     val contexto = LocalContext.current
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
+    com.forge.pixpin.ui.theme.BarraDeCristal(modifier) {
         BotonDeAccion(
             Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onClick = onChat
         )
@@ -1259,97 +1328,80 @@ private fun BarraDeAcciones(
                 Icons.Filled.PushPin, R.string.proyecto_pdf_corto, R.string.proyecto_pinear
             ) { volverAPinear(app, p) }
         }
-        CajaDeAcciones(stringResourceSafe(R.string.proyecto_anadir)) {
-            // Una hoja del lienzo. En un proyecto con PDF también: una hoja en blanco al
-            // lado de las páginas es donde se hace el detalle que el plano no trae.
-            BotonDeAccion(
-                Icons.Filled.Add, R.string.proyecto_hoja_corta, R.string.proyecto_hoja_nueva,
-                ancho = ANCHO_EN_CAJA
-            ) {
-                val ahora = System.currentTimeMillis()
-                val hoja = Hoja(id = "h-$ahora", dibujo = "dib-$ahora")
-                app.proyectos.guardar(Proyectos.conHoja(p, hoja, ahora))
+        // Una hoja del lienzo. En un proyecto con PDF también: una hoja en blanco al lado de
+        // las páginas es donde se hace el detalle que el plano no trae.
+        BotonDeAccion(Icons.Filled.Add, R.string.proyecto_hoja_corta, R.string.proyecto_hoja_nueva) {
+            val ahora = System.currentTimeMillis()
+            val hoja = Hoja(id = "h-$ahora", dibujo = "dib-$ahora")
+            app.proyectos.guardar(Proyectos.conHoja(p, hoja, ahora))
+        }
+        // Un proyecto se entrega con texto dentro —la portada, la explicación de un plano, el
+        // presupuesto—. Nace vacía y abre el editor: lo que se escriba vuelve a la hoja al guardar.
+        BotonDeAccion(
+            Icons.AutoMirrored.Filled.Notes, R.string.proyecto_nota_corta, R.string.proyecto_nota_nueva
+        ) {
+            val ahora = System.currentTimeMillis()
+            val id = "n-$ahora"
+            app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = id, nota = ""), ahora))
+            MarkdownEditorActivity.abrir(contexto, id, "", desdeProyecto = p.id)
+        }
+        // **Una tabla con fórmulas.** Nace vacía y el editor la crea al guardar; el proyecto
+        // guarda solo por dónde encontrarla. Ver [com.forge.pixpin.tabla.TablaActivity].
+        BotonDeAccion(
+            Icons.Filled.TableChart, R.string.proyecto_tabla_corta, R.string.proyecto_tabla_nueva
+        ) {
+            val ahora = System.currentTimeMillis()
+            val tabla = "t-$ahora"
+            app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = "h-$ahora", nombre = "Tabla", tabla = tabla), ahora))
+            com.forge.pixpin.tabla.TablaActivity.abrir(contexto, tabla, desdeProyecto = p.id)
+        }
+        // **Los croquis en el espacio del proyecto.**
+        //
+        // Cada vista que se congele ahí entra aquí como una lámina, así que se marca y se
+        // exporta con las otras sin nada aparte. Ver [Croquis3DActivity].
+        //
+        // **Y son varios, como los lienzos.** Con ninguno, el botón crea el primero y lo abre;
+        // con alguno, enseña los que hay, cada uno con **su color**, que es el mismo con el que
+        // salen enmarcadas sus láminas en la lista de la tarjeta.
+        var croquis by remember { mutableStateOf(false) }
+        Box {
+            BotonDeAccion(Icons.Filled.ViewInAr, R.string.proyecto_croquis_corto, R.string.proyecto_croquis) {
+                if (p.croquis.isEmpty()) abrirUnCroquisNuevo(contexto, app, p) else croquis = true
             }
-            // Un proyecto se entrega con texto dentro —la portada, la explicación
-            // de un plano, el presupuesto—. Nace vacía y abre el editor: lo que se
-            // escriba vuelve a la hoja al guardar.
-            BotonDeAccion(
-                Icons.AutoMirrored.Filled.Notes,
-                R.string.proyecto_nota_corta,
-                R.string.proyecto_nota_nueva,
-                ancho = ANCHO_EN_CAJA
-            ) {
-                val ahora = System.currentTimeMillis()
-                val id = "n-$ahora"
-                app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = id, nota = ""), ahora))
-                MarkdownEditorActivity.abrir(contexto, id, "", desdeProyecto = p.id)
-            }
-            // **Una tabla con fórmulas.** Nace vacía y el editor la crea al guardar; el proyecto
-            // guarda solo por dónde encontrarla. Ver [com.forge.pixpin.tabla.TablaActivity].
-            BotonDeAccion(
-                Icons.Filled.TableChart,
-                R.string.proyecto_tabla_corta,
-                R.string.proyecto_tabla_nueva,
-                ancho = ANCHO_EN_CAJA
-            ) {
-                val ahora = System.currentTimeMillis()
-                val tabla = "t-$ahora"
-                app.proyectos.guardar(Proyectos.conHoja(p, Hoja(id = "h-$ahora", nombre = "Tabla", tabla = tabla), ahora))
-                com.forge.pixpin.tabla.TablaActivity.abrir(contexto, tabla, desdeProyecto = p.id)
-            }
-            // **Los croquis en el espacio del proyecto.**
-            //
-            // Cada vista que se congele ahí entra aquí como una lámina, así que se marca y
-            // se exporta con las otras sin nada aparte. Ver [Croquis3DActivity].
-            //
-            // **Y son varios, como los lienzos.** Con ninguno, el botón crea el primero y
-            // lo abre; con alguno, enseña los que hay, cada uno con **su color**, que es el
-            // mismo con el que salen enmarcadas sus láminas en la lista de abajo.
-            var croquis by remember { mutableStateOf(false) }
-            Box {
-                BotonDeAccion(
-                    Icons.Filled.ViewInAr,
-                    R.string.proyecto_croquis_corto,
-                    R.string.proyecto_croquis,
-                    ancho = ANCHO_EN_CAJA
-                ) {
-                    if (p.croquis.isEmpty()) abrirUnCroquisNuevo(contexto, app, p) else croquis = true
-                }
-                DropdownMenu(expanded = croquis, onDismissRequest = { croquis = false }) {
-                    p.croquis.forEachIndexed { i, id ->
-                        DropdownMenuItem(
-                            text = { Text(stringResourceSafe(R.string.proyecto_croquis_n, i + 1)) },
-                            leadingIcon = {
-                                Box(
-                                    Modifier
-                                        .size(12.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            Color(
-                                                HojasDelProyecto.colorDe(Hoja(id = "", croquis = id))
-                                                    ?: 0
-                                            )
-                                        )
-                                )
-                            },
-                            onClick = {
-                                croquis = false
-                                com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
-                                    contexto, p.id, id, desdeProyectos = true
-                                )
-                            }
-                        )
-                    }
+            DropdownMenu(expanded = croquis, onDismissRequest = { croquis = false }) {
+                p.croquis.forEachIndexed { i, id ->
                     DropdownMenuItem(
-                        text = { Text(stringResourceSafe(R.string.proyecto_croquis_nuevo)) },
-                        leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                        onClick = { croquis = false; abrirUnCroquisNuevo(contexto, app, p) }
+                        text = { Text(stringResourceSafe(R.string.proyecto_croquis_n, i + 1)) },
+                        leadingIcon = {
+                            Box(
+                                Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Color(HojasDelProyecto.colorDe(Hoja(id = "", croquis = id)) ?: 0)
+                                    )
+                            )
+                        },
+                        onClick = {
+                            croquis = false
+                            com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
+                                contexto, p.id, id, desdeProyectos = true
+                            )
+                        }
                     )
                 }
+                DropdownMenuItem(
+                    text = { Text(stringResourceSafe(R.string.proyecto_croquis_nuevo)) },
+                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    onClick = { croquis = false; abrirUnCroquisNuevo(contexto, app, p) }
+                )
             }
         }
     }
 }
+
+/** El hueco que la barra flotante necesita abajo. */
+private val SITIO_DE_LA_BARRA: Dp = 80.dp
 
 /** Lo que mide un botón dentro de una [CajaDeAcciones]: cuatro caben junto al chat y el PDF. */
 private val ANCHO_EN_CAJA = 50.dp
@@ -1368,8 +1420,8 @@ private fun CajaDeAcciones(
 ) {
     Column(
         Modifier
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-            .padding(horizontal = 3.dp, vertical = 2.dp)
+            .cristal(RoundedCornerShape(20.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp)
     ) {
         Text(
             rotulo,
@@ -1403,21 +1455,24 @@ private fun BotonDeAccion(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .width(ancho)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp)
     ) {
         Icon(
             icono,
             contentDescription = stringResourceSafe(descripcion),
-            modifier = Modifier.size(22.dp)
+            tint = com.forge.pixpin.ui.theme.Cristal.tinta,
+            modifier = Modifier.size(24.dp)
         )
+        // Una línea y corto: si no cabe, otro nombre. Ver [com.forge.pixpin.ui.theme.NombresCortos].
         Text(
-            stringResourceSafe(etiqueta),
+            com.forge.pixpin.ui.theme.nombreDeBoton(stringResourceSafe(etiqueta)),
             style = MaterialTheme.typography.labelSmall,
+            color = com.forge.pixpin.ui.theme.Cristal.tinta,
             maxLines = 1,
             softWrap = false,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
             modifier = Modifier.padding(top = 3.dp)
         )
     }
@@ -1812,7 +1867,7 @@ private fun abrirUnCroquisNuevo(
  * tienen que abrir exactamente lo mismo: que tocar la hoja grande lleve a otro
  * lado que tocar su miniatura sería una trampa.
  */
-private fun abrirHoja(
+internal fun abrirHoja(
     contexto: android.content.Context,
     app: PixPinApp,
     p: Proyecto,
@@ -2165,6 +2220,30 @@ private fun LaPortadaDelMonton(
             escala = if (enPrimerPlano) 0.6 else 0.18,
             ampliada = null
         )
+    }
+}
+
+/**
+ * **La portada de un planeta de la galaxia** ([PantallaDeGalaxia]): la primera hoja, pequeña y
+ * barata. Sin leer el lienzo para contar sus láminas —eso es de la tarjeta—: un lienzo se pinta
+ * entero o por su marco, a escala de sello.
+ */
+@Composable
+internal fun PortadaDePlaneta(p: Proyecto) {
+    val contexto = LocalContext.current
+    val h = p.hojas.firstOrNull { it.padre == null } ?: return
+    when {
+        p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
+            p.pdfOrigen!!, h.pagina!!, PdfDoc.THUMB_WIDTH, ampliada = null, dibujo = h.dibujo
+        )
+        h.tabla != null -> MiniaturaDeTabla(h.tabla!!, grande = false)
+        h.nota != null -> MiniaturaDeNota(h.nota!!, tamaño = 7f)
+        h.croquis != null && h.vista == null -> Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color(HojasDelProyecto.colorDe(h) ?: 0).copy(alpha = 0.3f))
+        )
+        else -> MiniaturaDeLienzo(contexto, h.dibujo, h.marco, escala = 0.08, ampliada = null)
     }
 }
 

@@ -153,7 +153,7 @@ object HojasDelProyecto {
      */
     fun croquisComoPaginas(proyecto: Proyecto): List<Pagina> =
         proyecto.croquis.mapIndexed { i, id ->
-            Pagina(hoja = Hoja(id = "c3d-$id", croquis = id), nombre = "Croquis ${i + 1}")
+            Pagina(hoja = Hoja(id = "${Proyectos.PREFIJO_CROQUIS}$id", croquis = id), nombre = "Croquis ${i + 1}")
         }
 
     /**

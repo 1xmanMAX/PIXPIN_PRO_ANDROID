@@ -45,16 +45,67 @@ object AlDia {
         val fallaron: Map<String, String>
     )
 
-    /** Los aparatos del grupo a los que se puede llamar ahora mismo, por su última dirección. */
-    fun aparatos(context: Context): List<Estado> {
+    /**
+     * **Los aparatos a los que se puede llamar ahora mismo.**
+     *
+     * Dos fuentes, y hacen falta las dos —con solo la primera, el usuario vio el 16-sep-2026 que
+     * «se queda buscando y no localiza a los que sí están conectados»—:
+     *
+     * 1. **Las direcciones recordadas** de la última vez. Son instantáneas, pero la IP de un
+     *    teléfono cambia al reconectarse a la Wi-Fi, así que hay que comprobarlas: un `PING` de
+     *    poco más de un segundo ([Red.sondear]) en vez de esperar a que una conexión entera se
+     *    agote.
+     * 2. **El anuncio de la red** (mDNS), que es lo que hace la pantalla de Sincronizar y aquí no
+     *    se hacía: sin él, un aparato con dirección nueva **no aparecía nunca**. Lo que se
+     *    encuentra se apunta, así que la próxima vez ya está en la primera fuente.
+     */
+    suspend fun aparatos(context: Context): List<Estado> {
         val disco = Red.disco(context)
         val identidad = disco.identidad.leer()
         if (!identidad.enGrupo) return emptyList()
+        val otros = identidad.miembros.filter { it.id != identidad.yo.id }
+        if (otros.isEmpty()) return emptyList()
         val dirs = disco.direcciones()
-        return identidad.miembros.filter { it.id != identidad.yo.id }.mapNotNull { m ->
-            val (host, puerto) = dirs[m.id] ?: return@mapNotNull null
-            Estado(m.id, m.nombre, host, puerto)
+        val porId = LinkedHashMap<String, Estado>()
+        for (m in otros) {
+            val (host, puerto) = dirs[m.id] ?: continue
+            if (Red.sondear(host, puerto)) porId[m.id] = Estado(m.id, m.nombre, host, puerto)
         }
+        // Los que no contestaron en su dirección de siempre: se buscan por la red.
+        if (porId.size < otros.size) {
+            for (v in buscarPorLaRed(context, identidad)) {
+                val host = v.host.hostAddress ?: continue
+                val nombre = otros.firstOrNull { it.id == v.id }?.nombre ?: v.nombre
+                porId[v.id.ifBlank { nombre }] = Estado(v.id, nombre, host, v.puerto)
+                if (v.id.isNotBlank()) disco.apuntarDireccion(v.id, host, v.puerto)
+            }
+        }
+        return porId.values.toList()
+    }
+
+    /** El anuncio de la red, unos segundos. Hay que pedirlo desde el hilo de la pantalla. */
+    private suspend fun buscarPorLaRed(context: Context, identidad: Identidad): List<Red.Vecino> {
+        val codigo = identidad.codigo ?: return emptyList()
+        val etiqueta = Grupo.etiqueta(Grupo.clave(codigo))
+        val red = Presencia.red
+        val encontrados = java.util.concurrent.ConcurrentHashMap<String, Red.Vecino>()
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            red.buscar(Red.TIPO, { it["g"] == etiqueta && it["id"] != identidad.yo.id }) { lista ->
+                for (v in lista) encontrados[v.id.ifBlank { v.nombre }] = v
+            }
+        }
+        // Lo que tarda un anuncio en llegar: unos segundos. Se corta en cuanto hay alguno y ya
+        // no cambia, para no hacer esperar de más.
+        var iguales = 0
+        var antes = 0
+        var vueltas = 0
+        while (vueltas++ < 16) {
+            kotlinx.coroutines.delay(400)
+            if (encontrados.size == antes) iguales++ else { iguales = 0; antes = encontrados.size }
+            if (antes > 0 && iguales >= 3) break
+        }
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { red.pararBusqueda() }
+        return encontrados.values.toList()
     }
 
     /**
@@ -63,7 +114,7 @@ object AlDia {
      * Un aparato apagado o fuera de la Wi-Fi sale con su [Estado.error] puesto, no desaparece: que
      * no conteste es justo lo que el usuario necesita ver antes de decidir.
      */
-    fun mirar(context: Context, chat: String, rel: String, avance: (Estado) -> Unit = {}): List<Estado> {
+    suspend fun mirar(context: Context, chat: String, rel: String, avance: (Estado) -> Unit = {}): List<Estado> {
         val disco = Red.disco(context)
         return aparatos(context).map { a ->
             val puesto = runCatching {

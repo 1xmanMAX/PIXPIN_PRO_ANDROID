@@ -73,7 +73,7 @@ object SublienzosWeb {
                 .append("\" r=\"").append(Svg.num(grosor * 2.2)).append("\" fill=\"").append(AZUL).append("\"/>\n")
             grupo.append("<rect x=\"").append(Svg.num(p.x)).append("\" y=\"").append(Svg.num(p.y))
                 .append("\" width=\"").append(Svg.num(p.ancho)).append("\" height=\"").append(Svg.num(p.alto))
-                .append("\" rx=\"").append(Svg.num(lado * 0.04)).append("\" fill=\"#ffffff\" stroke=\"").append(AZUL)
+                .append("\" rx=\"").append(Svg.num(lado * 0.04)).append("\" fill=\"").append(papelDe(a.svg)).append("\" stroke=\"").append(AZUL)
                 .append("\" stroke-width=\"").append(Svg.num(grosor)).append("\"/>\n")
             val margen = lado * 0.03
             val usar = a.foto?.let { f -> deLaPagina("pagina-$sello", "$sello-sl$i-", f, a.caja) }
@@ -107,6 +107,23 @@ object SublienzosWeb {
             "width=\"${Svg.num(foto.width)}\" height=\"${Svg.num(foto.height)}\"/></clipPath>" +
             "<g clip-path=\"url(#${prefijo}zona)\"><use href=\"#$grupo\" xlink:href=\"#$grupo\" " +
             "transform=\"matrix(${num4(sx)} 0 0 ${num4(sy)} ${Svg.num(tx)} ${Svg.num(ty)})\"/></g>\n"
+    }
+
+    /**
+     * **De qué color es el papel de ese sublienzo**, para pintar su tarjeta igual.
+     *
+     * La tarjeta iba siempre en blanco, y con un lienzo oscuro el usuario veía «un marco interno
+     * blanco» alrededor del dibujo (16-sep-2026): el sublienzo se pinta dentro con un margen, y
+     * ese margen era la tarjeta. Se lee el primer rectángulo del SVG, que es justo el fondo que
+     * pone [Svg.documento]; si ese sublienzo no lleva fondo —un PDF, que lo pone el visor
+     * aparte—, se queda el blanco de siempre.
+     */
+    internal fun papelDe(svg: String): String {
+        val apertura = Regex("<svg\\b[^>]*>").find(svg) ?: return "#ffffff"
+        val primero = Regex("<rect\\b[^>]*>").find(svg, apertura.range.last) ?: return "#ffffff"
+        // Solo si es lo primero que hay: un rectángulo del dibujo no dice de qué color es el papel.
+        if (svg.substring(apertura.range.last + 1, primero.range.first).isNotBlank()) return "#ffffff"
+        return Regex("fill=\"([^\"]*)\"").find(primero.value)?.groupValues?.get(1)?.ifBlank { null } ?: "#ffffff"
     }
 
     private fun num4(v: Double): String = String.format(java.util.Locale.ROOT, "%.5f", v).trimEnd('0').trimEnd('.')

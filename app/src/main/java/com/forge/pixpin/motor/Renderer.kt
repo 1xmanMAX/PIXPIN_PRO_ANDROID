@@ -2168,7 +2168,12 @@ class Renderer(
                 comoUnTubo(canvas, e, alpha, pintarElTrazo)
 
             else -> {
-                pintarElTrazo(alpha, null)
+                // **Las porosas pintan el cuerpo más flojo** (16-sep-2026): en la tiza, el
+                // lápiz blando y el rotulador seco, lo que se tiene que leer es el grano; con
+                // el cuerpo a plena tinta el grano se pierde encima de un trazo macizo y las
+                // tres se ven iguales que la lisa. Ver [MaterialDeTinta.esPorosa].
+                val cuerpo = if (e.material.esPorosa) (alpha * CUERPO_DE_LAS_POROSAS).toInt() else alpha
+                pintarElTrazo(cuerpo.coerceIn(0, 255), null)
                 elGrano(canvas, e, camino, alpha, relleno)
             }
         }
@@ -2416,6 +2421,42 @@ class Renderer(
             if (cual == MaterialDeTinta.PUNTOS) {
                 pincel.style = Paint.Style.FILL
                 enTela.drawCircle(lado / 2f, lado / 2f, lado * GORDO_DEL_GRANO * 2.4f, pincel)
+            } else if (cual == MaterialDeTinta.TIZA || cual == MaterialDeTinta.LAPIZ_2B) {
+                // **Motas, siempre las mismas.** El azar va con semilla fija: una textura tiene
+                // que salir igual en cada fotograma, o el trazo herviría al repintarse. La tiza
+                // las lleva gordas y sueltas; el lápiz blando, finas y muy juntas.
+                pincel.style = Paint.Style.FILL
+                val tiza = cual == MaterialDeTinta.TIZA
+                val cuantas = if (tiza) 26 else 90
+                val gordura = if (tiza) 0.16f else 0.075f
+                val azar = java.util.Random(if (tiza) 20260916L else 20260917L)
+                repeat(cuantas) {
+                    val x = azar.nextFloat() * lado
+                    val y = azar.nextFloat() * lado
+                    val r = lado * gordura * (0.5f + azar.nextFloat())
+                    pincel.alpha = (if (tiza) 150 else 190) + azar.nextInt(65)
+                    enTela.drawCircle(x, y, r, pincel)
+                }
+                pincel.alpha = 255
+            } else if (cual == MaterialDeTinta.SECO) {
+                // Rayas a lo largo con huecos: el marcador que ya no moja del todo.
+                pincel.style = Paint.Style.STROKE
+                pincel.strokeWidth = lado * GORDO_DEL_GRANO
+                val azar = java.util.Random(20260918L)
+                repeat(5) { i ->
+                    val y = (i + 0.5f) * lado / 5f
+                    var x = -azar.nextFloat() * lado * 0.4f
+                    while (x < lado) {
+                        val largo = lado * (0.25f + azar.nextFloat() * 0.5f)
+                        enTela.drawLine(x, y, x + largo, y, pincel)
+                        x += largo + lado * (0.15f + azar.nextFloat() * 0.35f)
+                    }
+                }
+            } else if (cual == MaterialDeTinta.TRAMA) {
+                // Como el rayado, pero gorda y con el doble de hueco: una sola línea por cuadro.
+                pincel.style = Paint.Style.STROKE
+                pincel.strokeWidth = lado * GORDO_DEL_GRANO * 4.2f
+                enTela.drawLine(0f, lado / 2f, lado.toFloat(), lado / 2f, pincel)
             } else {
                 pincel.style = Paint.Style.STROKE
                 pincel.strokeWidth = lado * GORDO_DEL_GRANO * 2f
@@ -2436,7 +2477,11 @@ class Renderer(
             Matrix().apply {
                 val cuanto = redondo / LADO_DEL_MOSAICO.toFloat()
                 setScale(cuanto, cuanto)
-                if (cual != MaterialDeTinta.PUNTOS) postRotate(GRADOS_DEL_GRANO)
+                // El punteado y las motas no tienen dirección; el rotulador seco va **a lo
+                // largo del trazo**, que es como se descarga de verdad, y no de través.
+                if (cual == MaterialDeTinta.RAYADO || cual == MaterialDeTinta.CRUZADO || cual == MaterialDeTinta.TRAMA) {
+                    postRotate(GRADOS_DEL_GRANO)
+                }
             }
         )
         if (losGranos.size > TELARES_GUARDADOS) {
@@ -3294,6 +3339,9 @@ class Renderer(
          */
         const val LADO_DEL_MOSAICO = 16
         const val GORDO_DEL_GRANO = 0.13f
+
+        /** Lo que baja el cuerpo del trazo en las tintas porosas. Ver [MaterialDeTinta.esPorosa]. */
+        const val CUERPO_DE_LAS_POROSAS = 0.45f
 
         /** De través, que es como se raya una sección a mano. */
         const val GRADOS_DEL_GRANO = 45f

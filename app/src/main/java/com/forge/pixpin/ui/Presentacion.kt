@@ -107,10 +107,12 @@ fun PastillaDePresentacion(
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(visible, modifier, enter = fadeIn(), exit = fadeOut()) {
+        val cosmos = com.forge.pixpin.ui.theme.LocalCosmos.current
         Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = Color.Black.copy(alpha = 0.62f),
-            contentColor = Color.White
+            shape = RoundedCornerShape(28.dp),
+            color = if (cosmos) com.forge.pixpin.ui.theme.Cristal.barra else Color.Black.copy(alpha = 0.62f),
+            contentColor = Color.White,
+            border = if (cosmos) androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo) else null
         ) {
             Row(Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onAnterior, enabled = actual > 1) {
@@ -135,11 +137,12 @@ fun PastillaDePresentacion(
                     Surface(
                         onClick = { onModo(m) },
                         shape = RoundedCornerShape(50),
-                        color = if (puesto) Color.White.copy(alpha = 0.28f) else Color.Transparent,
-                        contentColor = Color.White,
+                        color = if (!puesto) Color.Transparent
+                        else if (cosmos) com.forge.pixpin.ui.theme.Cristal.puesto else Color.White.copy(alpha = 0.28f),
+                        contentColor = if (puesto && cosmos) com.forge.pixpin.ui.theme.Cristal.tintaPuesta else Color.White,
                         modifier = Modifier.padding(2.dp)
                     ) {
-                        Icon(icono, m.name, Modifier.padding(8.dp).size(20.dp))
+                        Icon(icono, m.name, Modifier.padding(9.dp).size(24.dp))
                     }
                 }
                 Separador()

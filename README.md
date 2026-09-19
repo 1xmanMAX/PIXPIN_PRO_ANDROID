@@ -4,7 +4,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.463 pruebas · **sin cuentas, sin servidores y sin analítica**;
+**Android 10+** · Kotlin + Compose · 2.512 pruebas · **sin cuentas, sin servidores y sin analítica**;
 internet solo se usa si tú pulsas bajar un modelo de voz o compartir como enlace. Sincronizar y
 enviar van por **tu Wi-Fi**, sin pasar por internet
 
@@ -22,6 +22,7 @@ enviar van por **tu Wi-Fi**, sin pasar por internet
 | **Guardar** | Un chat contigo mismo: fotos, PDF, notas de voz que se transcriben solas |
 | **Proyectos** | Un plano en PDF, sus hojas anotadas, sus notas y sus croquis, todo junto |
 | **Croquis 3D** | Dibujar en el espacio y girar alrededor de lo dibujado |
+| **Multitarea** | Hasta cinco lienzos vivos a la vez, con gestos de tres y cuatro dedos y grupos de pestañas guardados |
 | **Sincronizar y enviar** | Tus aparatos al día por la Wi-Fi de casa, y pasar algo a otra persona con un código o un QR |
 
 Todo funciona **con el avión puesto**. Nada sale del teléfono si tú no lo compartes.
@@ -61,6 +62,31 @@ Un dedo dibuja, dos encuadran y **nunca dibujan**. El lápiz arranca en el prime
 todas las muestras del sistema y la presión; con lápiz a la vista, el dedo pasa a mover el papel.
 
 ---
+
+## Multitarea: varios lienzos a la vez
+
+Android no tiene una multitarea cómoda **dentro** de una app, así que PixPin trae la suya, hecha
+a imagen de la de los plegables: **hasta cinco lienzos abiertos, todos vivos**, uno al lado de otro.
+
+| Gesto | Qué hace |
+|---|---|
+| **Tres dedos** al lado (o arriba y abajo, en columna) | Corre la tira hasta el lienzo vecino. Con tres dedos el lienzo **se calla**: ni traza, ni marca, ni mueve el papel |
+| **Cuatro dedos** hacia arriba | La **baraja**: todos los abiertos en abanico |
+| Cuatro dedos que **se abren** / **se cierran** | Este lienzo a su tamaño máximo / a un hueco |
+| Tocar la **pestaña** que asoma | Trae al vecino |
+| Arrastrar el **asa** entre dos lienzos | Reparte el tamaño, con un imán suave en tercios y mitades |
+
+- **Cada lienzo tiene su tamaño**, y un tope pensado para que nadie se quede encerrado: la pantalla
+  menos la pestaña de cada vecino —el primero y el último solo guardan una—. Pasado el tope, el
+  lienzo **se estira como una goma** y vuelve. En columna la pestaña crece con las barras de
+  herramientas, para que siempre se pueda tocar por fuera de ellas.
+- **La baraja** enseña cada lienzo tal como se dejó, con la forma que ocupa en la tira: las
+  tarjetas van inclinadas y juntas, la del centro se gira hacia ti, se deslizan con el dedo y se
+  reordenan manteniendo una pulsada. Un botón pasa la tira de **fila** a **columna**.
+- **Grupos de pestañas**: «Guardar grupo» apunta lo que tienes abierto con un nombre, y un toque
+  lo vuelve a abrir entero, en su orden.
+- Las **páginas de un PDF** entran en la tira como un lienzo más; lo anotado vuelve al documento
+  **en segundo plano**, sin tirón al cambiar de lienzo.
 
 ## Guardar: el chat
 
@@ -119,6 +145,7 @@ marques hojas de proyectos distintos.
 | **Salidas** | Página web · PDF de varias hojas · imagen · `.pixpin` editable |
 | **Mirar y presentar** | Un lienzo se abre en **modo visualización**: mover, ampliar, **imprimir** y **presentar** a pantalla completa con un mando en bolita. Para dibujar se pasa a editar |
 | **PowerPoint** | Un `.pptx` se convierte en PDF y entra como proyecto |
+| **Sistema solar** | Todos los proyectos en un mapa: cada proyecto es un sol, sus hojas, notas y emojis lo orbitan, y las conexiones entre soles tiran como una cuerda. Tocar un sol entra en su propio sistema |
 | **Copias de seguridad** | Antes de recibir o sincronizar se guarda cómo estaba el proyecto; se vuelve a cualquier versión, y los lienzos que se quedaron sin proyecto se devuelven |
 
 ## El croquis en el espacio
@@ -275,7 +302,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.463 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.512 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -329,7 +356,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.463 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.512 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---
@@ -371,6 +398,7 @@ en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 | ✅ 9 | El croquis en el espacio, «en el sitio», OBJ y el visor 3D del documento web |
 | ✅ 9.5 | Tablas con fórmulas, sincronizar sin servidor, enviar por Wi-Fi, compartir unificado, zonas y sublienzos |
 | ✅ 9.6 | Modelos IFC/OBJ en el croquis, presentar e imprimir, `.pptx`, copias de seguridad, **tres códigos y sincronizar fusionando** |
+| ✅ 9.7 | Sistema solar de proyectos y tema Cosmos, **multitarea de lienzos** con baraja en abanico y grupos de pestañas, gestos rápidos |
 | 10 | **Editar PDFs**: devolver la página anotada al original conservando su texto |
 | 11 | OCR y QR · contenido de DOCX/XLSX/PPTX |
 

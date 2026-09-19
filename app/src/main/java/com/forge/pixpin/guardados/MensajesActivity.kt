@@ -3057,13 +3057,22 @@ class MensajesActivity : ComponentActivity() {
                     // **Todo lo que va en esa esquina cuenta.** La chapa del número y el
                     // reloj del recordatorio se metieron después y no sumaban aquí: el hueco
                     // se quedaba corto y la esquina se comía la última palabra del mensaje.
-                    val huecoDeLaHora = remember(hora, m.fijado, m.enBuzon, m.emoji, numero, m.recuerdaEn) {
+                    // **La chapa se mide, no se calcula a ojo** (18-sep-2026): la cuenta era «18 dp
+                    // y 5 por cifra», de cuando la chapa era «#47». Desde que lleva el código del
+                    // aparato («#47·K7Q2») mide el doble, el hueco se quedaba corto y el código
+                    // salía **encima del texto** del mensaje: lo vio el usuario en el chat.
+                    val sufijo = sufijoDelCodigo(m)
+                    val huecoDeLaHora = remember(hora, m.fijado, m.enBuzon, m.emoji, numero, sufijo, m.recuerdaEn) {
                         medidor.measure(hora, estiloDeLaHora).size.width +
+                            (if (numero > 0) medidor.measure(
+                                "#$numero$sufijo", androidx.compose.ui.text.TextStyle(fontSize = 10.sp)
+                            ).size.width else 0) +
                             with(densidad) {
                                 var extra = 6.dp
                                 if (m.fijado) extra += 14.dp
                                 if (m.emoji != null) extra += 16.dp
-                                if (numero > 0) extra += (18 + 5 * numero.toString().length).dp
+                                // Lo que la chapa lleva alrededor de su texto: 4 + 4 de relleno y 4 de aire.
+                                if (numero > 0) extra += 14.dp
                                 if (m.recuerdaEn != null) extra += 15.dp
                                 extra.toPx()
                             }
@@ -4789,10 +4798,14 @@ class MensajesActivity : ComponentActivity() {
                 .navigationBarsPadding()
                 .padding(horizontal = MARGEN_DE_LA_ISLA, vertical = SOBRE_EL_HUECO)
         ) {
+            // De cristal con el aspecto Cosmos, como todas las barras (17-sep-2026).
+            val cosmos = com.forge.pixpin.ui.theme.LocalCosmos.current
             Surface(
                 shape = RoundedCornerShape(RADIO_DE_LA_ISLA),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 3.dp,
+                color = if (cosmos) com.forge.pixpin.ui.theme.Cristal.barra else MaterialTheme.colorScheme.surface,
+                contentColor = if (cosmos) com.forge.pixpin.ui.theme.Cristal.tinta else MaterialTheme.colorScheme.onSurface,
+                border = if (cosmos) androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo) else null,
+                shadowElevation = if (cosmos) 0.dp else 3.dp,
                 modifier = Modifier.fillMaxWidth().heightIn(min = ALTO_DE_LA_ISLA)
             ) {
             Row(

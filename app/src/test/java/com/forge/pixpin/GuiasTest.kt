@@ -125,11 +125,12 @@ class GuiasTest {
     // ---- El lápiz sobre la guía ----
 
     /**
-     * **El lápiz también resbala por el canto**, que es lo que convierte la
-     * guía en plantilla de verdad: se apoya y se repasa.
+     * **El lápiz no se pega al canto** (17-sep-2026). Antes resbalaba por él, como una
+     * plantilla; pero en el modo sketch todo lo trazado es guía y la letra se pegaba a la
+     * letra de al lado. Lo pidió el usuario: solo las figuras y las líneas tienen imán.
      */
     @Test
-    fun `el lapiz sigue el canto de la guia`() {
+    fun `el lapiz no se pega al canto de la guia`() {
         val c = DrawController(Scene(elements = listOf(guiaCaja())))
         c.selectTool(Tool.FREEDRAW)
         c.pointerDown(Pt(150.0, 104.0))
@@ -137,12 +138,12 @@ class GuiasTest {
         c.pointerUp(Pt(210.0, 103.0))
 
         val trazo = c.scene.visible.last { it.isFreeDraw }
-        // Los dos puntos han caído sobre el lado de arriba de la guía.
-        assertTrue(absolutePoints(trazo).all { abs(it.y - 100.0) < 0.001 })
+        // Los puntos se quedan donde los puso el dedo, no sobre el lado de la guía.
+        assertTrue(absolutePoints(trazo).none { abs(it.y - 100.0) < 0.001 })
     }
 
     /**
-     * Pero **solo** por el canto: un lápiz que salte a un vértice o a un cruce
+     * Y tampoco a un vértice: un lápiz que salte a un vértice o a un cruce
      * en mitad del recorrido no se corrige, se rompe.
      */
     @Test

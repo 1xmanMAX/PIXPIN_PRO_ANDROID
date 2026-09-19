@@ -202,7 +202,8 @@ fun BarraDeFormatoUi(
  */
 @Composable
 private fun Isla(modifier: Modifier = Modifier, contenido: @Composable RowScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
+    // De cristal, como todas las barras flotantes (17-sep-2026).
+    com.forge.pixpin.ui.theme.SuperficieDeCristal(modifier, RoundedCornerShape(22.dp)) {
         Row(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,

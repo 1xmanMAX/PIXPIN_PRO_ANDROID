@@ -26,6 +26,22 @@ class DrawController(initial: Scene = Scene()) {
     var tool: Tool = Tool.SELECTION
         private set
 
+    /**
+     * **Mirando y nada más**: el dedo solo mueve el papel, sea cual sea la herramienta.
+     *
+     * Es el modo visualización, y vive aquí y no en la pantalla por un motivo concreto
+     * (18-sep-2026): la pantalla tiene **un** modo, pero en la tira hay **un controlador por
+     * lienzo**, cada uno con su herramienta. Poniendo la mano solo en el que mandaba, los
+     * vecinos de la tira seguían editándose —bastaba arrastrar encima de uno para moverle
+     * algo—, y al traer uno al medio volvía con la herramienta que tuviera. Se pedía «que no
+     * se altere el canvas, no importa cuántas veces lo mueva» y se alteraba.
+     *
+     * Con la llave aquí, la puerta es una sola: [pointerDown] no empieza **ningún** gesto que
+     * toque la escena. Marcar, mover, trazar, borrar y clavar quedan fuera; mover el papel y
+     * abrir el enlace de una zona, que no cambian nada, siguen.
+     */
+    var soloMirar: Boolean = false
+
     /** El rectángulo de selección en curso, para que la vista lo pinte. */
     var selectionBox: Bounds? = null
         private set
@@ -43,6 +59,9 @@ class DrawController(initial: Scene = Scene()) {
 
     /** La escena tal como estaba al empezar el gesto: la base del historial. */
     private var sceneAtGestureStart: List<Element> = emptyList()
+    /** Lo marcado y el encuadre al posar el dedo, para [cancelarDelTodo]. */
+    private var marcadoAlEmpezar: Set<String> = emptySet()
+    private var encuadreAlEmpezar: Viewport? = null
 
     val canUndo: Boolean get() = history.canUndo
     val canRedo: Boolean get() = history.canRedo
@@ -196,6 +215,8 @@ class DrawController(initial: Scene = Scene()) {
         zoomDelTrazo = zoom
         cuandoDelToque = if (cuando > 0) cuando else System.nanoTime() / 1_000_000
         sceneAtGestureStart = scene.elements
+        marcadoAlEmpezar = selectedIds
+        encuadreAlEmpezar = scene.viewport
         val threshold = margenDelDedo(zoom)
         // Solo se engancha al DIBUJAR. Al seleccionar, mover o encuadrar el
         // dedo tiene que ir donde va: tirar de él ahí sería un estorbo.
@@ -208,6 +229,13 @@ class DrawController(initial: Scene = Scene()) {
         // **El icono de enlace de una zona se toca con cualquier herramienta**: abre su sublienzo.
         enlaceBajoElDedo(pRaw, zoom)?.let { dibujo ->
             gesture = Gesture.TocandoEnlace(dibujo, pRaw)
+            return
+        }
+
+        // **Mirando, el dedo solo mueve el papel.** Ver [soloMirar]: da igual la herramienta que
+        // llevara puesta este lienzo, aquí no se empieza nada que cambie la escena.
+        if (soloMirar) {
+            gesture = Gesture.Panning(scene.viewport.toScreen(pRaw), scene.viewport)
             return
         }
 
@@ -1272,6 +1300,20 @@ class DrawController(initial: Scene = Scene()) {
         selectionBox = null
         lassoPath = emptyList()
         bindingHighlight = null
+    }
+
+    /**
+     * **Cancelar como si el dedo no se hubiera posado**: además de la escena, vuelven lo marcado
+     * y el encuadre. Es lo que piden los tres dedos de la tira (18-sep-2026): el primero llega
+     * antes que los otros y, con la selección puesta, ya había marcado algo o corrido el papel
+     * —[cancel] a secas deja eso como quedó, que es lo que quiere el pellizco de dos dedos—.
+     */
+    fun cancelarDelTodo() {
+        val habiaGesto = gesture !is Gesture.None
+        cancel()
+        if (!habiaGesto) return
+        selectedIds = marcadoAlEmpezar
+        encuadreAlEmpezar?.let { if (scene.viewport != it) scene = scene.copy(viewport = it) }
     }
 
     // ---------------------------------------------------------------------
@@ -3002,6 +3044,8 @@ class DrawController(initial: Scene = Scene()) {
      * es el gesto de «sé lo que estoy haciendo» de toda la vida.
      */
     fun marcarClavadoEn(p: Pt, threshold: Double): Boolean {
+        // Mirando no se marca nada: aguantar el dedo es aguantar el dedo. Ver [soloMirar].
+        if (soloMirar) return false
         val clavado = scene.visible.lastOrNull {
             it.locked && hitElementItself(p, it, threshold, scene.vista)
         } ?: return false

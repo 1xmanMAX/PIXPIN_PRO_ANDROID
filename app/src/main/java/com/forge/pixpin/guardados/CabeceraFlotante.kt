@@ -117,7 +117,7 @@ fun CabeceraFlotante(
                     .background(fondoDeLaPildora())
                     .border(
                         FILETE_DE_LA_PILDORA,
-                        ColoresDelChat.filete(),
+                        filoDeLaPildora(),
                         RoundedCornerShape(ALTO_DE_LA_PILDORA / 2)
                     )
                     // Aire arriba y abajo: sin él, lo que se meta dentro —un disco, dos
@@ -135,7 +135,7 @@ fun CabeceraFlotante(
                     .background(fondoDeLaPildora())
                     .border(
                         FILETE_DE_LA_PILDORA,
-                        ColoresDelChat.filete(),
+                        filoDeLaPildora(),
                         RoundedCornerShape(ALTO_DE_LA_PILDORA / 2)
                     ),
                 verticalAlignment = Alignment.CenterVertically,
@@ -154,7 +154,7 @@ private fun PastillaRedonda(contenido: @Composable () -> Unit) {
             .size(ALTO_DE_LA_PILDORA)
             .clip(CircleShape)
             .background(fondoDeLaPildora())
-            .border(FILETE_DE_LA_PILDORA, ColoresDelChat.filete(), CircleShape),
+            .border(FILETE_DE_LA_PILDORA, filoDeLaPildora(), CircleShape),
         contentAlignment = Alignment.Center
     ) { contenido() }
 }
@@ -167,7 +167,15 @@ private fun PastillaRedonda(contenido: @Composable () -> Unit) {
  * escalón, y una sombra bajo una cápsula que no se mueve solo añade trabajo al pintar.
  */
 @Composable
-private fun fondoDeLaPildora(): Color = MaterialTheme.colorScheme.surfaceContainerHigh
+private fun fondoDeLaPildora(): Color =
+    // Con el aspecto Cosmos, el cristal de todas las barras (17-sep-2026).
+    if (com.forge.pixpin.ui.theme.LocalCosmos.current) com.forge.pixpin.ui.theme.Cristal.barra
+    else MaterialTheme.colorScheme.surfaceContainerHigh
+
+@Composable
+private fun filoDeLaPildora(): Color =
+    if (com.forge.pixpin.ui.theme.LocalCosmos.current) com.forge.pixpin.ui.theme.Cristal.filo
+    else ColoresDelChat.filete()
 
 /**
  * **El velo que hace legible lo que pasa por debajo de las pastillas.**

@@ -50,9 +50,10 @@ fun BarraDelReproductor(modifier: Modifier = Modifier, alTocarElTitulo: (() -> U
     var arrastrando by remember { mutableStateOf<Float?>(null) }
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp
+        color = com.forge.pixpin.ui.theme.Cristal.barra,
+        contentColor = com.forge.pixpin.ui.theme.Cristal.tinta,
+        border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp)
     ) {
         Column(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
