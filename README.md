@@ -4,7 +4,7 @@ Captura, anota y **fija notas flotantes** sobre cualquier app. Y lo que empezó 
 también un cuaderno: un chat donde guardar, proyectos con planos, voz que se pasa a texto y
 un croquis que se dibuja en el espacio.
 
-**Android 10+** · Kotlin + Compose · 2.532 pruebas · **sin cuentas, sin servidores y sin analítica**;
+**Android 10+** · Kotlin + Compose · 2.536 pruebas · **sin cuentas, sin servidores y sin analítica**;
 internet solo se usa si tú pulsas bajar un modelo de voz o compartir como enlace. Sincronizar y
 enviar van por **tu Wi-Fi**, sin pasar por internet
 
@@ -112,6 +112,13 @@ el nombre en una pastilla semitransparente que sale al tocar y se va al mover la
 cambia el nombre. En una página exportada funcionan sus propios botones —**guardar** reescribe el
 archivo, **imprimir** y **presentar**—, y salir con cambios sin guardar avisa. Un Word o un libro
 se pueden ver **como saldrían impresos** y meter en un proyecto **como PDF**, para anotarlos.
+
+Leyendo un Word o un libro se cambia **el tamaño, el grosor y el tipo de letra**, y se dejan
+**marcadores con emoticono**: salen como puntos en el lateral, se pasa el dedo por ellos —vibra al
+cambiar de uno a otro— y al soltar se va a ese. Al volver, el documento se abre por donde se dejó.
+
+Todos estos tipos salen en **«Abrir con»** del sistema: tocados en el gestor de archivos se abren
+en PixPin y **se guarda una copia en Guardados**, sin duplicar lo que ya estaba.
 
 ## La voz
 
@@ -311,7 +318,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.532 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.536 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -365,7 +372,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.532 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.536 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ---

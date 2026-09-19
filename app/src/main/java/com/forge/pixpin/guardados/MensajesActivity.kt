@@ -246,11 +246,32 @@ class MensajesActivity : ComponentActivity() {
         // Llegando por un intento de fuera, atrás cierra esta pantalla y devuelve a
         // quien la abrió. Solo el paso por la lista de conversaciones marca lo contrario.
         vineDeLaGeneral = false
+        // «Abrir con»: el mensaje recién guardado se abre solo, una vez.
+        intent?.getStringExtra(EXTRA_ABRIR)?.let { id ->
+            intent?.removeExtra(EXTRA_ABRIR)
+            lifecycleScope.launch {
+                val m = withContext(Dispatchers.IO) { runCatching { almacen.leer().firstOrNull { it.id == id } }.getOrNull() }
+                if (m != null) abrir(m)
+            }
+        }
     }
 
     companion object {
         private const val EXTRA_CHAT_DE = "chat_de"
         private const val EXTRA_NOMBRE_DEL_CHAT = "chat_nombre"
+        private const val EXTRA_ABRIR = "abrir_mensaje"
+
+        /**
+         * Abre Guardados **y, encima, el mensaje [mensaje]** con el visor que le toque. Es la
+         * segunda mitad de «Abrir con»: ver [AbrirConPixPinActivity].
+         */
+        fun abrirYAbrir(context: android.content.Context, mensaje: String) {
+            context.startActivity(
+                Intent(context, MensajesActivity::class.java)
+                    .putExtra(EXTRA_ABRIR, mensaje)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
 
         /** Abre la conversación de un proyecto. */
         fun abrirChatDe(context: android.content.Context, proyecto: String, nombre: String) {

@@ -20,6 +20,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.MoreVert
@@ -194,6 +202,69 @@ class VisorHtmlActivity : ComponentActivity() {
     /** El archivo de verdad: el que se reescribe cuando la página se guarda a sí misma. */
     private var elOriginal: File? = null
 
+    // ---- Leer a gusto: la letra y los marcadores. Ver [com.forge.pixpin.motor.Lectura]. ----
+    private val prefsDeLectura by lazy { getSharedPreferences("lectura", Context.MODE_PRIVATE) }
+    private var tamanoDeLetra by mutableStateOf(100)
+    private var grosorDeLetra by mutableStateOf(1)
+    private var tipoDeLetra by mutableStateOf(0)
+    private var marcadores by mutableStateOf(emptyList<com.forge.pixpin.motor.Lectura.Marcador>())
+
+    /** A qué fracción del documento hay que ir en cuanto la página esté cargada, o −1. */
+    private var fraccionPendiente = -1f
+
+    /** Con qué se guarda lo de este documento: el archivo de verdad, no la página fabricada. */
+    private val claveDelDocumento: String get() = "doc:" + (comparte ?: elOriginal)?.absolutePath.orEmpty()
+
+    /** Lo alto que es el documento entero, en píxeles de pantalla. */
+    @Suppress("DEPRECATION")
+    private fun altoDelDocumento(): Float = web?.let { it.contentHeight * it.scale } ?: 0f
+
+    private fun fraccionDeAhora(): Float {
+        val alto = altoDelDocumento()
+        return if (alto <= 0f) 0f else ((web?.scrollY ?: 0) / alto).coerceIn(0f, 1f)
+    }
+
+    /** Lleva lo alto de la pantalla a esa fracción del documento. Si aún no se ha medido, reintenta. */
+    private fun irALaFraccion(f: Float, intentos: Int = 12) {
+        val vista = web ?: return
+        val alto = altoDelDocumento()
+        if (alto <= vista.height && intentos > 0) {
+            vista.postDelayed({ irALaFraccion(f, intentos - 1) }, 120)
+            return
+        }
+        vista.scrollTo(0, (f * alto).toInt().coerceAtLeast(0))
+    }
+
+    private fun guardarMarcadores() {
+        prefsDeLectura.edit().putString(claveDelDocumento + ":marcadores", com.forge.pixpin.motor.Lectura.aTexto(marcadores)).apply()
+    }
+
+    /** Reescribe la página que se enseña con la letra pedida, y la recarga **sin perder el sitio**. */
+    private fun ponerLaLetra(grosor: Int, tipo: Int) {
+        grosorDeLetra = grosor
+        tipoDeLetra = tipo
+        prefsDeLectura.edit().putInt("grosor", grosor).putInt("tipo", tipo).apply()
+        val pagina = laPaginaQueSeVe ?: return
+        fraccionPendiente = fraccionDeAhora()
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo)) }
+            }
+            web?.reload()
+        }
+    }
+
+    private fun ponerElTamano(t: Int) {
+        tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(t)
+        prefsDeLectura.edit().putInt("tamano", tamanoDeLetra).apply()
+        val donde = fraccionDeAhora()
+        web?.settings?.textZoom = tamanoDeLetra
+        // El documento se alarga o se encoge: se vuelve al mismo párrafo, no al mismo píxel.
+        web?.postDelayed({ irALaFraccion(donde) }, 150)
+    }
+
+    private var laPaginaQueSeVe: File? = null
+
     /** Sube cada vez que el dedo toca la página, y cada vez que la mueve: la burbuja los mira. */
     private var toquesEnLaPagina by mutableStateOf(0)
     private var movidasDeLaPagina by mutableStateOf(0)
@@ -215,7 +286,22 @@ class VisorHtmlActivity : ComponentActivity() {
         enSuSitio = intent?.getBooleanExtra(EXTRA_EN_SU_SITIO, false) == true
         esDocumento = intent?.getBooleanExtra(EXTRA_DOCUMENTO, false) == true
         elOriginal = File(ruta)
+        if (esDocumento) {
+            tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
+            grosorDeLetra = prefsDeLectura.getInt("grosor", 1)
+            tipoDeLetra = prefsDeLectura.getInt("tipo", 0)
+            marcadores = com.forge.pixpin.motor.Lectura.deTexto(prefsDeLectura.getString(claveDelDocumento + ":marcadores", null))
+            // Y se vuelve a donde se dejó de leer.
+            fraccionPendiente = prefsDeLectura.getFloat(claveDelDocumento + ":sitio", -1f)
+        }
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
+    }
+
+    override fun onPause() {
+        if (esDocumento && altoDelDocumento() > 0f) {
+            prefsDeLectura.edit().putFloat(claveDelDocumento + ":sitio", fraccionDeAhora()).apply()
+        }
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -232,6 +318,10 @@ class VisorHtmlActivity : ComponentActivity() {
         var fallo by remember(original) { mutableStateOf(false) }
         LaunchedEffect(original) {
             val hecha = withContext(Dispatchers.IO) { runCatching { if (enSuSitio) original.takeIf { it.exists() } else copiaParaVer(original) }.getOrNull() }
+            if (hecha != null && esDocumento && (grosorDeLetra != 1 || tipoDeLetra != 0)) withContext(Dispatchers.IO) {
+                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra)) }
+            }
+            laPaginaQueSeVe = hecha
             if (hecha == null) fallo = true else copia = hecha
         }
         // **Atrás vuelve primero dentro de la página** —un índice con sus hojas es ir y volver—
@@ -261,6 +351,9 @@ class VisorHtmlActivity : ComponentActivity() {
         var cambiando by remember { mutableStateOf(false) }
         var menu by remember { mutableStateOf(false) }
         var ocupado by remember { mutableStateOf<String?>(null) }
+        var conLaLetra by remember { mutableStateOf(false) }
+        var poniendoMarcador by remember { mutableStateOf(false) }
+        var quitandoMarcadores by remember { mutableStateOf(false) }
         LaunchedEffect(toquesEnLaPagina) { if (toquesEnLaPagina > 0) aLaVista = true }
         LaunchedEffect(movidasDeLaPagina) { if (movidasDeLaPagina > 0 && !cambiando && !menu) aLaVista = false }
         LaunchedEffect(aLaVista, toquesEnLaPagina, cambiando, menu) {
@@ -333,6 +426,15 @@ class VisorHtmlActivity : ComponentActivity() {
                             androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 if (esDocumento) {
                                     androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Letra") }, onClick = { menu = false; conLaLetra = true }
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Marcador aquí") }, onClick = { menu = false; poniendoMarcador = true }
+                                    )
+                                    if (marcadores.isNotEmpty()) androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Quitar marcadores") }, onClick = { menu = false; quitandoMarcadores = true }
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
                                         text = { Text("Vista de impresión") },
                                         onClick = { menu = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } }
                                     )
@@ -350,6 +452,15 @@ class VisorHtmlActivity : ComponentActivity() {
                         }
                     }
                 }
+                if (esDocumento && !presentando) {
+                    LateralDeMarcadores(Modifier.align(Alignment.CenterEnd))
+                    if (conLaLetra) PanelDeLetra(Modifier.align(Alignment.BottomCenter)) { conLaLetra = false }
+                    if (poniendoMarcador) ElegirEmoji(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
+                        poniendoMarcador = false
+                        marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
+                        guardarMarcadores()
+                    }
+                }
                 ocupado?.let { que ->
                     Row(
                         Modifier
@@ -365,6 +476,31 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
             }
         }
+        if (quitandoMarcadores) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { quitandoMarcadores = false },
+                title = { Text("Quitar marcadores") },
+                text = {
+                    Column {
+                        marcadores.forEach { m ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    marcadores = marcadores.filterNot { it.id == m.id }
+                                    guardarMarcadores()
+                                    if (marcadores.isEmpty()) quitandoMarcadores = false
+                                }.padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(m.emoji, fontSize = 22.sp)
+                                Text("  " + (m.fraccion * 100).toInt() + " % del documento", modifier = Modifier.weight(1f))
+                                Icon(Icons.Filled.Close, contentDescription = "Quitar", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { quitandoMarcadores = false }) { Text("Hecho") } }
+            )
+        }
         if (preguntandoSiSalir) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { preguntandoSiSalir = false },
@@ -373,6 +509,138 @@ class VisorHtmlActivity : ComponentActivity() {
                 confirmButton = { androidx.compose.material3.TextButton(onClick = { preguntandoSiSalir = false; finish() }) { Text("Salir") } },
                 dismissButton = { androidx.compose.material3.TextButton(onClick = { preguntandoSiSalir = false }) { Text("Volver") } }
             )
+        }
+    }
+
+    /**
+     * **Los marcadores, en el lateral**: un punto por marcador, en el orden del documento, cada uno
+     * con su emoticono. Se pasa el dedo por ellos —**vibra al cambiar de uno a otro**— y al
+     * soltar se va al que quedó debajo, con lo alto de la pantalla justo en el marcador. Un toque
+     * a secas en uno hace lo mismo. En reposo van pequeños y semitransparentes; con el dedo
+     * encima crecen, para ver bien a cuál se va.
+     */
+    @Composable
+    private fun LateralDeMarcadores(modifier: Modifier) {
+        val lista = marcadores
+        if (lista.isEmpty()) return
+        val vibrar = androidx.compose.ui.platform.LocalHapticFeedback.current
+        val listaYa = androidx.compose.runtime.rememberUpdatedState(lista)
+        var bajoElDedo by remember { mutableStateOf(-1) }
+        val paso = 38.dp
+        Column(
+            modifier
+                .padding(end = 2.dp)
+                .pointerInput(Unit) {
+                    val pasoPx = paso.toPx()
+                    awaitEachGesture {
+                        val abajo = awaitFirstDown(requireUnconsumed = false)
+                        abajo.consume()
+                        bajoElDedo = com.forge.pixpin.motor.Lectura.puntoBajoElDedo(abajo.position.y, pasoPx, listaYa.value.size)
+                        vibrar.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            val dedo = e.changes.firstOrNull { it.pressed } ?: break
+                            dedo.consume()
+                            val i = com.forge.pixpin.motor.Lectura.puntoBajoElDedo(dedo.position.y, pasoPx, listaYa.value.size)
+                            if (i != bajoElDedo) {
+                                bajoElDedo = i
+                                vibrar.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            }
+                        }
+                        listaYa.value.getOrNull(bajoElDedo)?.let { irALaFraccion(it.fraccion, intentos = 0) }
+                        bajoElDedo = -1
+                    }
+                },
+            horizontalAlignment = Alignment.End
+        ) {
+            lista.forEachIndexed { i, m ->
+                val elegido = i == bajoElDedo
+                val conDedo = bajoElDedo >= 0
+                Box(Modifier.size(width = if (conDedo) 64.dp else 30.dp, height = paso), contentAlignment = Alignment.CenterEnd) {
+                    Box(
+                        Modifier
+                            .size(if (elegido) 36.dp else if (conDedo) 28.dp else 20.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(androidx.compose.ui.graphics.Color(if (elegido) 0xE614182B else 0x6614182B)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            m.emoji,
+                            fontSize = if (elegido) 20.sp else if (conDedo) 15.sp else 10.sp,
+                            modifier = Modifier.alpha(if (conDedo) 1f else 0.75f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** Tamaño, grosor y tipo de letra: un panel pequeño y semitransparente, abajo. */
+    @Composable
+    private fun PanelDeLetra(modifier: Modifier, onCerrar: () -> Unit) {
+        val blanco = androidx.compose.ui.graphics.Color.White
+        Column(
+            modifier
+                .navigationBarsPadding()
+                .padding(12.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                .background(androidx.compose.ui.graphics.Color(0xD914182B))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Tamaño", color = blanco.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
+                FichaDeLetra("A−", false) { ponerElTamano(tamanoDeLetra - com.forge.pixpin.motor.Lectura.PASO_DEL_TAMANO) }
+                Text("$tamanoDeLetra %", color = blanco, modifier = Modifier.padding(horizontal = 8.dp))
+                FichaDeLetra("A+", false) { ponerElTamano(tamanoDeLetra + com.forge.pixpin.motor.Lectura.PASO_DEL_TAMANO) }
+                IconButton(onClick = onCerrar, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = blanco, modifier = Modifier.size(18.dp))
+                }
+            }
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                com.forge.pixpin.motor.Lectura.GROSORES.forEachIndexed { i, (_, nombre) ->
+                    FichaDeLetra(nombre, i == grosorDeLetra) { ponerLaLetra(i, tipoDeLetra) }
+                }
+            }
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                com.forge.pixpin.motor.Lectura.LETRAS.forEachIndexed { i, (_, nombre) ->
+                    FichaDeLetra(nombre, i == tipoDeLetra) { ponerLaLetra(grosorDeLetra, i) }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun FichaDeLetra(texto: String, puesta: Boolean, onToque: () -> Unit) {
+        Text(
+            texto, color = androidx.compose.ui.graphics.Color.White, maxLines = 1,
+            modifier = Modifier
+                .padding(3.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .background(androidx.compose.ui.graphics.Color.White.copy(alpha = if (puesta) 0.28f else 0.1f))
+                .clickable(onClick = onToque)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        )
+    }
+
+    /** Con qué emoticono se pone el marcador: una fila para elegir de un toque. */
+    @Composable
+    private fun ElegirEmoji(modifier: Modifier, onCerrar: () -> Unit, onElegir: (String) -> Unit) {
+        Row(
+            modifier
+                .navigationBarsPadding()
+                .padding(12.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .background(androidx.compose.ui.graphics.Color(0xD914182B))
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            com.forge.pixpin.motor.Lectura.EMOJIS.forEach { e ->
+                Text(e, fontSize = 24.sp, modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable { onElegir(e) }.padding(8.dp))
+            }
+            IconButton(onClick = onCerrar, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.Close, contentDescription = "Cancelar", tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
+            }
         }
     }
 
@@ -559,6 +827,7 @@ class VisorHtmlActivity : ComponentActivity() {
         settings.useWideViewPort = true
         webViewClient = Cliente(pagina.parentFile ?: pagina)
         webChromeClient = Cromo()
+        if (esDocumento) settings.textZoom = tamanoDeLetra
         // El dedo sobre la página: un toque enseña el nombre, moverla lo esconde. No se consume nada.
         val margen = android.view.ViewConfiguration.get(contexto).scaledTouchSlop
         var x0 = 0f
@@ -607,6 +876,11 @@ class VisorHtmlActivity : ComponentActivity() {
         /** Al acabar de cargar se le enseña a la página a imprimir y a guardar aquí dentro. */
         override fun onPageFinished(view: WebView, url: String?) {
             if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)
+            if (esDocumento && fraccionPendiente >= 0f) {
+                val f = fraccionPendiente
+                fraccionPendiente = -1f
+                view.postDelayed({ irALaFraccion(f) }, 80)
+            }
         }
 
         /** Y lo mismo para lo que la página pide sin navegar: una imagen, un guion, un marco. */
