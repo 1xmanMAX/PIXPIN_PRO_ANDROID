@@ -20,6 +20,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
@@ -81,6 +87,39 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val EXTRA_NOMBRE = "nombre"
         private const val EXTRA_COMPARTE = "comparte"
         private const val EXTRA_SIN_GUION = "sinGuion"
+        private const val EXTRA_MENSAJE = "mensaje"
+
+        /** Lo que tarda la burbuja en esconderse sola, en milisegundos. */
+        private const val LO_QUE_DURA_LA_BURBUJA = 3500L
+
+        /** Lo más grande que se acepta de una descarga de la página, en caracteres de base64 (~30 MB). */
+        private const val TOPE_DE_LO_BAJADO = 40_000_000
+
+        /**
+         * Lo que se le inyecta a la página: `window.print` pasa por el puente, y un enlace con
+         * `download` que apunte a un `blob:` o un `data:` se lee y se entrega por el puente.
+         * En ES5, que el `WebView` de un teléfono viejo no sabe más.
+         */
+        private const val GUION_DEL_VISOR = """(function(){
+  if(window.__pixpinVisor) return; window.__pixpinVisor=1;
+  window.print=function(){ PixPinVisor.imprimir(); };
+  function bajar(a){
+    try{
+      fetch(a.href).then(function(r){ return r.blob(); }).then(function(b){
+        var fr=new FileReader();
+        fr.onload=function(){ PixPinVisor.guardar(a.download||'archivo', String(fr.result).split(',')[1]||''); };
+        fr.readAsDataURL(b);
+      });
+    }catch(e){}
+  }
+  function esDeBajar(a){ return a && a.hasAttribute && a.hasAttribute('download') && /^(blob:|data:)/.test(a.href||''); }
+  var clic=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){ if(esDeBajar(this)){ bajar(this); return; } return clic.apply(this,arguments); };
+  document.addEventListener('click',function(ev){
+    var a=ev.target&&ev.target.closest?ev.target.closest('a'):null;
+    if(esDeBajar(a)){ ev.preventDefault(); bajar(a); }
+  },true);
+})();"""
 
         /** La carpeta de la caché donde se deja la copia que se enseña. */
         private const val CARPETA = "visor-html"
@@ -102,13 +141,16 @@ class VisorHtmlActivity : ComponentActivity() {
          */
         fun abrir(
             context: Context, ruta: String, nombre: String,
-            comparte: String? = null, sinGuion: Boolean = false
+            comparte: String? = null, sinGuion: Boolean = false,
+            /** El mensaje del chat del que sale: es al que se le cambia el nombre desde la burbuja. */
+            mensaje: String? = null
         ) {
             val intent = Intent(context, VisorHtmlActivity::class.java)
                 .putExtra(EXTRA_RUTA, ruta)
                 .putExtra(EXTRA_NOMBRE, nombre)
                 .putExtra(EXTRA_SIN_GUION, sinGuion)
             if (comparte != null) intent.putExtra(EXTRA_COMPARTE, comparte)
+            if (mensaje != null) intent.putExtra(EXTRA_MENSAJE, mensaje)
             context.startActivity(intent)
         }
     }
@@ -120,6 +162,14 @@ class VisorHtmlActivity : ComponentActivity() {
     private var comparte: File? = null
     private var sinGuion = false
 
+    /** El mensaje del chat al que se le cambia el nombre, si se vino de uno. */
+    private var mensaje: String? = null
+
+    /** Lo que la página ha puesto a pantalla completa (presentar), y cómo decirle que se acabó. */
+    private var aPantalla: android.view.View? = null
+    private var alAcabarLaPantalla: android.webkit.WebChromeClient.CustomViewCallback? = null
+    private var presentando by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         aPantallaCompleta()
@@ -128,6 +178,7 @@ class VisorHtmlActivity : ComponentActivity() {
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { File(ruta).name }
         comparte = intent?.getStringExtra(EXTRA_COMPARTE)?.let { File(it) }
         sinGuion = intent?.getBooleanExtra(EXTRA_SIN_GUION, false) == true
+        mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -149,38 +200,195 @@ class VisorHtmlActivity : ComponentActivity() {
         }
         // **Atrás vuelve primero dentro de la página** —un índice con sus hojas es ir y volver—
         // y solo cuando no queda a dónde volver, sale.
-        BackHandler { if (web?.canGoBack() == true) web?.goBack() else finish() }
+        BackHandler {
+            when {
+                aPantalla != null -> dejarLaPantallaCompleta()
+                web?.canGoBack() == true -> web?.goBack()
+                else -> finish()
+            }
+        }
 
-        // Un `Surface` y no un `background`: es el que pone el color del texto a juego con el
-        // fondo. Ver `LetraActivity`.
+        // **La página, de canto a canto, y los mandos flotando encima** (19-sep-2026): antes había
+        // una barra arriba con el nombre, que le quitaba sitio a la página y no se parecía al
+        // resto de la aplicación. Ahora es como en los lienzos: una burbuja con el nombre —tocarla
+        // lo cambia—, con volver, imprimir y compartir a los lados. Se esconde sola para no tapar
+        // la barra que traiga la propia página, y una rayita arriba la devuelve.
+        var suNombre by remember { mutableStateOf(nombre) }
+        var aLaVista by remember { mutableStateOf(true) }
+        var cambiando by remember { mutableStateOf(false) }
+        var toques by remember { mutableStateOf(0) }
+        LaunchedEffect(aLaVista, toques, cambiando) {
+            if (aLaVista && !cambiando) {
+                kotlinx.coroutines.delay(LO_QUE_DURA_LA_BURBUJA)
+                aLaVista = false
+            }
+        }
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { finish() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = getString(R.string.cancel))
-                    }
-                    Text(
-                        nombre, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+            Box(Modifier.fillMaxSize()) {
+                val pagina = copia
+                when {
+                    fallo -> Text(
+                        getString(R.string.visor_html_no),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp)
                     )
-                    IconButton(onClick = { compartir(comparte ?: original, nombre) }) {
-                        Icon(Icons.Filled.Share, contentDescription = getString(R.string.guardados_compartir))
+                    pagina != null -> AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { contexto -> nuevoWeb(contexto, pagina) }
+                    )
+                }
+                if (!presentando) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = aLaVista,
+                        enter = androidx.compose.animation.fadeIn(),
+                        exit = androidx.compose.animation.fadeOut(),
+                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 10.dp, end = 10.dp)
+                    ) {
+                        com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(50)) {
+                            Row(Modifier.padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { finish() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = getString(R.string.cancel))
+                                }
+                                Text(
+                                    suNombre, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .weight(1f, fill = false)
+                                        .clickable { cambiando = true }
+                                        .padding(horizontal = 6.dp, vertical = 10.dp)
+                                )
+                                IconButton(onClick = { toques++; imprimir(suNombre) }) {
+                                    Icon(Icons.Filled.Print, contentDescription = "Imprimir")
+                                }
+                                IconButton(onClick = { toques++; compartir(comparte ?: original, suNombre) }) {
+                                    Icon(Icons.Filled.Share, contentDescription = getString(R.string.guardados_compartir))
+                                }
+                            }
+                        }
+                    }
+                    // La rayita que devuelve la burbuja: pequeña, arriba y en el centro.
+                    if (!aLaVista) Box(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .clickable(
+                                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                indication = null
+                            ) { aLaVista = true }
+                            .padding(horizontal = 28.dp, vertical = 8.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .size(width = 40.dp, height = 5.dp)
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                .background(androidx.compose.ui.graphics.Color(0x99808080))
+                        )
                     }
                 }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    val pagina = copia
-                    when {
-                        fallo -> Text(
-                            getString(R.string.visor_html_no),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.align(Alignment.Center).padding(24.dp)
-                        )
-                        pagina != null -> AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { contexto -> nuevoWeb(contexto, pagina) }
-                        )
-                    }
-                }
+            }
+        }
+        if (cambiando) {
+            var texto by remember { mutableStateOf(suNombre) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { cambiando = false },
+                title = { Text("Nombre") },
+                text = { androidx.compose.material3.OutlinedTextField(texto, { texto = it.take(80) }, singleLine = true) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        cambiando = false
+                        val limpio = conSuExtension(texto.trim(), suNombre)
+                        if (limpio.isNotBlank() && limpio != suNombre) {
+                            suNombre = limpio
+                            renombrar(limpio)
+                        }
+                    }) { Text("Guardar") }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { cambiando = false }) { Text("Cancelar") } }
+            )
+        }
+    }
+
+    /** El nombre nuevo conserva la extensión del de antes: por ella se sabe con qué se abre. */
+    private fun conSuExtension(nuevo: String, antes: String): String {
+        val ext = antes.substringAfterLast('.', "")
+        if (nuevo.isBlank() || ext.isBlank() || ext.length > 5) return nuevo
+        return if (nuevo.endsWith(".$ext", ignoreCase = true)) nuevo else "$nuevo.$ext"
+    }
+
+    /** El nombre se cambia **en el mensaje del chat** del que salió la página; sin él, solo aquí. */
+    private fun renombrar(nombre: String) {
+        val id = mensaje ?: return
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { com.forge.pixpin.guardados.MensajesStore(applicationContext).actualizar(id) { it.copy(nombre = nombre) } }
+        }
+    }
+
+    /**
+     * **Imprimir**: el `WebView` de Android **no tiene `window.print()`** —la función existe y no
+     * hace nada—, así que el botón de imprimir de una página exportada se quedaba mudo. Aquí se
+     * imprime con el servicio del sistema, que es lo que hace un navegador por debajo.
+     */
+    private fun imprimir(nombre: String) {
+        val vista = web ?: return
+        runCatching {
+            val servicio = getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
+            servicio.print(nombre.ifBlank { "PixPin" }, vista.createPrintDocumentAdapter(nombre.ifBlank { "PixPin" }), android.print.PrintAttributes.Builder().build())
+        }.onFailure { Toast.makeText(this, "No se pudo imprimir", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun dejarLaPantallaCompleta() {
+        val vista = aPantalla ?: return
+        (window.decorView as? android.widget.FrameLayout)?.removeView(vista)
+        aPantalla = null
+        presentando = false
+        runCatching { alAcabarLaPantalla?.onCustomViewHidden() }
+        alAcabarLaPantalla = null
+    }
+
+    /**
+     * **Presentar**: la página pide pantalla completa (`requestFullscreen`) y un `WebView` a secas
+     * no sabe darla: hay que recoger la vista que entrega y ponerla encima de todo. Sin esto, el
+     * botón de presentar de la página exportada no hacía nada.
+     */
+    private inner class Cromo : android.webkit.WebChromeClient() {
+        override fun onShowCustomView(view: android.view.View, callback: CustomViewCallback) {
+            if (aPantalla != null) { callback.onCustomViewHidden(); return }
+            aPantalla = view
+            alAcabarLaPantalla = callback
+            presentando = true
+            (window.decorView as? android.widget.FrameLayout)?.addView(
+                view, android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+
+        override fun onHideCustomView() = dejarLaPantallaCompleta()
+    }
+
+    /**
+     * **El puente con la página**: dos recados y nada más. Imprimir, y **guardar** —las páginas
+     * exportadas bajan archivos con un enlace `blob:` y un `WebView` no tiene descargas: el
+     * botón decía «Guardado» y no se guardaba nada—. Lo bajado **no se escribe en ningún sitio
+     * por su cuenta**: sale la hoja de compartir y el usuario decide a dónde va, que una página
+     * llegada de otro no tiene por qué poder dejar archivos en el teléfono.
+     */
+    private inner class Puente {
+        @android.webkit.JavascriptInterface
+        fun imprimir() = runOnUiThread { this@VisorHtmlActivity.imprimir(intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()) }
+
+        @android.webkit.JavascriptInterface
+        fun guardar(nombre: String, enBase64: String) {
+            if (enBase64.length > TOPE_DE_LO_BAJADO) return
+            lifecycleScope.launch {
+                val archivo = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val limpio = nombre.replace(Regex("""[^\p{L}\p{N} ._-]"""), "_").takeLast(80).ifBlank { "archivo" }
+                        File(File(cacheDir, "share").apply { mkdirs() }, limpio).also {
+                            it.writeBytes(android.util.Base64.decode(enBase64, android.util.Base64.DEFAULT))
+                        }
+                    }.getOrNull()
+                } ?: return@launch
+                compartir(archivo, archivo.name)
             }
         }
     }
@@ -207,6 +415,8 @@ class VisorHtmlActivity : ComponentActivity() {
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
         webViewClient = Cliente(pagina.parentFile ?: pagina)
+        webChromeClient = Cromo()
+        if (!sinGuion) addJavascriptInterface(Puente(), "PixPinVisor")
         loadUrl(Uri.fromFile(pagina).toString())
         web = this
     }
@@ -235,6 +445,11 @@ class VisorHtmlActivity : ComponentActivity() {
                 // `data:`, `blob:`, `about:`: lo que la propia página se fabrica.
                 else -> false
             }
+        }
+
+        /** Al acabar de cargar se le enseña a la página a imprimir y a guardar aquí dentro. */
+        override fun onPageFinished(view: WebView, url: String?) {
+            if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)
         }
 
         /** Y lo mismo para lo que la página pide sin navegar: una imagen, un guion, un marco. */

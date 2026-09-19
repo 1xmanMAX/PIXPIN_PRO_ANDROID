@@ -6144,7 +6144,7 @@ class MensajesActivity : ComponentActivity() {
                             // página fabricada; y sin JavaScript, que esa página no lo lleva.
                             com.forge.pixpin.ui.VisorHtmlActivity.abrir(
                                 this@MensajesActivity, pagina.absolutePath, titulo,
-                                comparte = ruta, sinGuion = true
+                                comparte = ruta, sinGuion = true, mensaje = m.id
                             )
                         }.onFailure { e ->
                             Toast.makeText(
@@ -6159,7 +6159,7 @@ class MensajesActivity : ComponentActivity() {
                     // una «Página web» exportada por PixPin. Ver [com.forge.pixpin.ui.VisorHtmlActivity].
                     com.forge.pixpin.ui.VisorHtmlActivity.esHtml(ruta) ||
                         com.forge.pixpin.ui.VisorHtmlActivity.esHtml(m.nombre) ->
-                        com.forge.pixpin.ui.VisorHtmlActivity.abrir(this, ruta, m.nombre)
+                        com.forge.pixpin.ui.VisorHtmlActivity.abrir(this, ruta, m.nombre, mensaje = m.id)
                     // **Un PowerPoint se convierte en proyecto** (14-sep-2026): una hoja por
                     // diapositiva, para anotarla y presentarla. Ver [DiapositivasAPdf].
                     com.forge.pixpin.motor.Diapositivas.esPresentacion(m.nombre) ||
