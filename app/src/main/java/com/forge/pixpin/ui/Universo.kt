@@ -247,7 +247,12 @@ fun PantallaDeUniverso(
             }
             .pointerInput(dondeEstoy) {
                 awaitEachGesture {
-                    val abajo = awaitFirstDown(requireUnconsumed = false)
+                    // **Solo los toques que nadie más ha cogido.** Los botones y las pastillas de
+                    // encima son hijos de esta caja: con `requireUnconsumed = false` su toque
+                    // llegaba también aquí, se leía como «tocar el vacío» y **cerraba la barra de
+                    // añadir en el mismo instante en que el «+» la abría** —el fallo que vio el
+                    // usuario: «el botón del más no funciona»—. Lo mismo deshacía «Vincular».
+                    val abajo = awaitFirstDown(requireUnconsumed = true)
                     val e0 = espacioYa.value
                     val (w0x, w0y) = camara.alMundo(abajo.position.x, abajo.position.y, densidad)
                     val minimo = DEDO_MINIMO / camara.escala.floatValue
