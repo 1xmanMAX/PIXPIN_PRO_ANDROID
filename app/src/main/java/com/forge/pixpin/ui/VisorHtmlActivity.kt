@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
@@ -30,7 +32,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
@@ -356,6 +357,7 @@ class VisorHtmlActivity : ComponentActivity() {
         var quitandoMarcadores by remember { mutableStateOf(false) }
         LaunchedEffect(toquesEnLaPagina) { if (toquesEnLaPagina > 0) aLaVista = true }
         LaunchedEffect(movidasDeLaPagina) { if (movidasDeLaPagina > 0 && !cambiando && !menu) aLaVista = false }
+        @Suppress("UNUSED_VARIABLE") val sinUsar = menu
         LaunchedEffect(aLaVista, toquesEnLaPagina, cambiando, menu) {
             if (aLaVista && !cambiando && !menu) {
                 kotlinx.coroutines.delay(LO_QUE_DURA_LA_BURBUJA)
@@ -414,47 +416,30 @@ class VisorHtmlActivity : ComponentActivity() {
                                 modifier = Modifier.weight(1f, fill = false).clickable { cambiando = true }.padding(vertical = 10.dp)
                             )
                         }
-                        // **En una página web, solo el nombre** (lo pidió el usuario): imprimir,
-                        // guardar y presentar son los botones de la propia página, que aquí ya
-                        // funcionan. Un Word o un libro no traen botones, así que los suyos —vista
-                        // de impresión, al proyecto, imprimir, compartir— van en estos tres puntos.
+                        // **En una página web, solo el nombre**: sus botones son los de la propia
+                        // página. **En un Word o un libro, el nombre, el marcador y el engranaje**
+                        // (tercera vuelta del usuario, 19-sep-2026): los tres puntos se fueron, y
+                        // con ellos imprimir y compartir —se comparte desde el chat—. Los dos
+                        // botones van con la pastilla: salen al tocar y se van al mover.
                         if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
-                        else Box {
-                            IconButton(onClick = { menu = true }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "Más", tint = blanco.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                        else {
+                            IconButton(onClick = { poniendoMarcador = true; conLaLetra = false }, modifier = Modifier.size(38.dp)) {
+                                Icon(Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
-                            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                if (esDocumento) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Letra") }, onClick = { menu = false; conLaLetra = true }
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Marcador aquí") }, onClick = { menu = false; poniendoMarcador = true }
-                                    )
-                                    if (marcadores.isNotEmpty()) androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Quitar marcadores") }, onClick = { menu = false; quitandoMarcadores = true }
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Vista de impresión") },
-                                        onClick = { menu = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } }
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Al proyecto, como PDF") },
-                                        onClick = { menu = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } }
-                                    )
-                                }
-                                androidx.compose.material3.DropdownMenuItem(text = { Text("Imprimir") }, onClick = { menu = false; imprimir(suNombre) })
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(getString(R.string.guardados_compartir)) },
-                                    onClick = { menu = false; compartir(comparte ?: original, suNombre) }
-                                )
+                            IconButton(onClick = { conLaLetra = true; poniendoMarcador = false }, modifier = Modifier.size(38.dp)) {
+                                Icon(Icons.Filled.Settings, contentDescription = "Letra", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
                         }
                     }
                 }
                 if (esDocumento && !presentando) {
                     LateralDeMarcadores(Modifier.align(Alignment.CenterEnd))
-                    if (conLaLetra) PanelDeLetra(Modifier.align(Alignment.BottomCenter)) { conLaLetra = false }
+                    if (conLaLetra) PanelDeLetra(
+                        onCerrar = { conLaLetra = false },
+                        onImpresion = { conLaLetra = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } },
+                        onAlProyecto = { conLaLetra = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } },
+                        onQuitarMarcadores = { conLaLetra = false; quitandoMarcadores = true }
+                    )
                     if (poniendoMarcador) ElegirEmoji(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
                         poniendoMarcador = false
                         marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
@@ -575,35 +560,104 @@ class VisorHtmlActivity : ComponentActivity() {
         }
     }
 
-    /** Tamaño, grosor y tipo de letra: un panel pequeño y semitransparente, abajo. */
+    /**
+     * **El engranaje**: una hoja que se despliega desde abajo, con todo a la vista y a un toque.
+     * El tamaño y el grosor son **una barra de puntos** cada uno —cada punto, un valor; se toca o
+     * se pasa el dedo y vibra al cambiar—, el tipo de letra son fichas, y debajo lo demás.
+     */
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Composable
-    private fun PanelDeLetra(modifier: Modifier, onCerrar: () -> Unit) {
-        val blanco = androidx.compose.ui.graphics.Color.White
-        Column(
-            modifier
-                .navigationBarsPadding()
-                .padding(12.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                .background(androidx.compose.ui.graphics.Color(0xD914182B))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+    private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit) {
+        val lectura = com.forge.pixpin.motor.Lectura
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = onCerrar,
+            containerColor = androidx.compose.ui.graphics.Color(0xF214182B),
+            contentColor = androidx.compose.ui.graphics.Color.White,
+            scrimColor = androidx.compose.ui.graphics.Color.Transparent
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Tamaño", color = blanco.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
-                FichaDeLetra("A−", false) { ponerElTamano(tamanoDeLetra - com.forge.pixpin.motor.Lectura.PASO_DEL_TAMANO) }
-                Text("$tamanoDeLetra %", color = blanco, modifier = Modifier.padding(horizontal = 8.dp))
-                FichaDeLetra("A+", false) { ponerElTamano(tamanoDeLetra + com.forge.pixpin.motor.Lectura.PASO_DEL_TAMANO) }
-                IconButton(onClick = onCerrar, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Filled.Close, contentDescription = "Cerrar", tint = blanco, modifier = Modifier.size(18.dp))
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 18.dp)) {
+                val gris = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Tamaño", color = gris, modifier = Modifier.weight(1f))
+                    Text("$tamanoDeLetra %", color = gris)
+                }
+                BarraDePuntos(
+                    cuantos = lectura.TAMANOS.size,
+                    elegido = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it },
+                    crece = true
+                ) { ponerElTamano(lectura.TAMANOS[it]) }
+
+                Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Grosor", color = gris, modifier = Modifier.weight(1f))
+                    Text(lectura.GROSORES.getOrElse(grosorDeLetra) { lectura.GROSORES[1] }.second, color = gris)
+                }
+                BarraDePuntos(cuantos = lectura.GROSORES.size, elegido = grosorDeLetra, crece = false) { ponerLaLetra(it, tipoDeLetra) }
+
+                Text("Letra", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    lectura.LETRAS.forEachIndexed { i, (_, nombre) -> FichaDeLetra(nombre, i == tipoDeLetra) { ponerLaLetra(grosorDeLetra, i) } }
+                }
+
+                Text("Documento", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    FichaDeLetra("Vista de impresión", false, onImpresion)
+                    FichaDeLetra("Al proyecto", false, onAlProyecto)
+                    if (marcadores.isNotEmpty()) FichaDeLetra("Quitar marcadores", false, onQuitarMarcadores)
                 }
             }
-            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                com.forge.pixpin.motor.Lectura.GROSORES.forEachIndexed { i, (_, nombre) ->
-                    FichaDeLetra(nombre, i == grosorDeLetra) { ponerLaLetra(i, tipoDeLetra) }
+        }
+    }
+
+    /**
+     * Una barra de puntos: cada punto es un valor. Se toca uno, o se pasa el dedo por la barra y
+     * se va cambiando **con un toque de vibración en cada punto**. Con [crece], los puntos van de
+     * pequeño a grande, que es como se lee «tamaño» sin una sola letra.
+     */
+    @Composable
+    private fun BarraDePuntos(cuantos: Int, elegido: Int, crece: Boolean, onElegir: (Int) -> Unit) {
+        val vibrar = androidx.compose.ui.platform.LocalHapticFeedback.current
+        val elegir = androidx.compose.runtime.rememberUpdatedState(onElegir)
+        val elegidoYa = androidx.compose.runtime.rememberUpdatedState(elegido)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.08f))
+                .pointerInput(cuantos) {
+                    awaitEachGesture {
+                        val abajo = awaitFirstDown(requireUnconsumed = false)
+                        fun punto(x: Float) = ((x / size.width) * cuantos).toInt().coerceIn(0, cuantos - 1)
+                        var ultimo = -1
+                        fun poner(i: Int) {
+                            if (i == ultimo) return
+                            ultimo = i
+                            if (i != elegidoYa.value) {
+                                vibrar.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                elegir.value(i)
+                            }
+                        }
+                        poner(punto(abajo.position.x))
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            val dedo = e.changes.firstOrNull { it.pressed } ?: break
+                            dedo.consume()
+                            poner(punto(dedo.position.x))
+                        }
+                    }
                 }
-            }
-            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                com.forge.pixpin.motor.Lectura.LETRAS.forEachIndexed { i, (_, nombre) ->
-                    FichaDeLetra(nombre, i == tipoDeLetra) { ponerLaLetra(grosorDeLetra, i) }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            for (i in 0 until cuantos) {
+                Box(Modifier.weight(1f).size(height = 34.dp, width = 1.dp), contentAlignment = Alignment.Center) {
+                    val lado = if (crece) (7 + 13f * i / (cuantos - 1).coerceAtLeast(1)).dp else 12.dp
+                    Box(
+                        Modifier
+                            .size(if (i == elegido) lado + 8.dp else lado)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(androidx.compose.ui.graphics.Color.White.copy(alpha = if (i == elegido) 1f else 0.35f))
+                    )
                 }
             }
         }

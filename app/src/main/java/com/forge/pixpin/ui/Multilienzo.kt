@@ -397,10 +397,19 @@ fun VistaDeTodos(
         // Por dónde va la lista, en píxeles de la propia lista: la ranura i está en i·paso.
         val corrido = remember { mutableFloatStateOf((lienzos.indexOfFirst { it.id == actual }.coerceAtLeast(0)) * paso) }
         val tope = n * paso
+        // **Con freno** (19-sep-2026): las tarjetas van tan juntas que, siguiendo al dedo punto por
+        // punto, un gesto corto pasaba tres de golpe —«se mueve muy rápido»—. La lista corre
+        // [FRENO_DE_LA_BARAJA] de lo que corre el dedo —un gesto largo, una tarjeta— y **sin
+        // inercia**: al soltar se asienta en la más cercana y ahí se queda.
         val deslizable = androidx.compose.foundation.gestures.rememberScrollableState { delta ->
             val antes = corrido.floatValue
-            corrido.floatValue = (antes - delta).coerceIn(0f, tope)
-            antes - corrido.floatValue
+            corrido.floatValue = (antes - delta * FRENO_DE_LA_BARAJA).coerceIn(0f, tope)
+            if (corrido.floatValue == antes) 0f else delta
+        }
+        val sinInercia = remember {
+            object : androidx.compose.foundation.gestures.FlingBehavior {
+                override suspend fun androidx.compose.foundation.gestures.ScrollScope.performFling(initialVelocity: Float): Float = 0f
+            }
         }
         // Al parar, a la tarjeta más cercana: siempre hay una revelada del todo.
         LaunchedEffect(deslizable.isScrollInProgress, paso) {
@@ -422,7 +431,7 @@ fun VistaDeTodos(
         Box(
             Modifier
                 .fillMaxSize()
-                .scrollable(deslizable, androidx.compose.foundation.gestures.Orientation.Horizontal)
+                .scrollable(deslizable, androidx.compose.foundation.gestures.Orientation.Horizontal, flingBehavior = sinInercia)
         ) {
             lienzos.forEachIndexed { i, l ->
                 key(l.id) {
@@ -765,6 +774,9 @@ private const val GIRO_DEL_ABANICO = 38f
  * a la que las demás le hacen sitio ([APARTE_DEL_CENTRO]).
  */
 private const val PASO_DEL_ABANICO = 0.34f
+
+/** Cuánto corre la baraja por cada punto que corre el dedo. Ver [VistaDeTodos]. */
+private const val FRENO_DE_LA_BARAJA = 0.4f
 
 /** Lo que se apartan las vecinas de la del centro, en anchos de tarjeta: lo justo para verla entera. */
 private const val APARTE_DEL_CENTRO = 0.5f

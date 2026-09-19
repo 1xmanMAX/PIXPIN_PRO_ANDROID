@@ -117,8 +117,9 @@ Leyendo un Word o un libro se cambia **el tamaño, el grosor y el tipo de letra*
 **marcadores con emoticono**: salen como puntos en el lateral, se pasa el dedo por ellos —vibra al
 cambiar de uno a otro— y al soltar se va a ese. Al volver, el documento se abre por donde se dejó.
 
-Todos estos tipos salen en **«Abrir con»** del sistema: tocados en el gestor de archivos se abren
-en PixPin y **se guarda una copia en Guardados**, sin duplicar lo que ya estaba.
+Todos estos tipos —y las imágenes, las hojas de cálculo y las notas en Markdown— salen en **«Abrir
+con»** del sistema, y PixPin pregunta qué hacer: **abrirlo** (se guarda una copia en Guardados, sin
+duplicar), **enviarlo por Wi-Fi** o **ponerlo como pin**.
 
 ## La voz
 

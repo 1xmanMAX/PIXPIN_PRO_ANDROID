@@ -16,6 +16,9 @@ object Lectura {
     const val TAMANO_MAX = 250
     const val PASO_DEL_TAMANO = 10
 
+    /** Los tamaños de la barra de puntos, en tanto por ciento: cada punto, uno. */
+    val TAMANOS = listOf(80, 90, 100, 115, 130, 150, 175, 200, 230)
+
     /** Los grosores, como los entiende CSS, y cómo se llaman en la pantalla. */
     val GROSORES = listOf(300 to "Fina", 400 to "Normal", 600 to "Gruesa", 800 to "Negra")
 
