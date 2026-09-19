@@ -190,6 +190,13 @@ class TablaActivity : ComponentActivity() {
                     if (inicial == null) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
                     } else {
+                        // **En la multitarea, como una pestaña más** (19-sep-2026).
+                        com.forge.pixpin.ui.ConLaRueda(
+                            com.forge.pixpin.data.Abiertos.deTabla(
+                                id, inicial.nombre.ifBlank { "Tabla" },
+                                intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
+                            )
+                        ) {
                         EditorDeTabla(
                             id = id,
                             inicial = inicial,
@@ -202,6 +209,7 @@ class TablaActivity : ComponentActivity() {
                             onRenombrar = { nombre -> renombrarEnProyectos(id, nombre) },
                             onAProyecto = { nombre -> aUnProyecto(id, nombre) }
                         )
+                        }
                     }
                 }
             }

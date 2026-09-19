@@ -148,7 +148,15 @@ fun TarjetaDeOtraCosa(l: LienzoAbierto, modifier: Modifier = Modifier, conTexto:
  * vecino, cuatro hacia arriba abren la baraja, y en la baraja están los grupos guardados.
  */
 @Composable
-fun ConLaRueda(actual: LienzoAbierto, contenido: @Composable () -> Unit) {
+fun ConLaRueda(
+    actual: LienzoAbierto,
+    /**
+     * El croquis 3D **ya usa los tres dedos** para ladear la cámara: ahí la rueda se queda solo
+     * con los cuatro hacia arriba, y al vecino se pasa desde la baraja.
+     */
+    conTresDedos: Boolean = true,
+    contenido: @Composable () -> Unit
+) {
     val contexto = LocalContext.current
     val actividad = contexto as? Activity
     val abiertos = (contexto.applicationContext as? PixPinApp)?.lienzosAbiertos
@@ -175,7 +183,11 @@ fun ConLaRueda(actual: LienzoAbierto, contenido: @Composable () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .elArrastreDeTresDedos(enColumna = false, alCorrer = { corrido[0] += it }, alAcabar = { alAcabar.value() })
+            .then(
+                if (conTresDedos) Modifier.elArrastreDeTresDedos(
+                    enColumna = false, alCorrer = { corrido[0] += it }, alAcabar = { alAcabar.value() }
+                ) else Modifier
+            )
             .elToqueDeCuatroDedos(
                 alJuntarse = {},
                 alTocar = {},

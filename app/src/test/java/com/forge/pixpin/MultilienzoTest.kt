@@ -65,6 +65,34 @@ class MultilienzoTest {
         assertEquals("x${Abiertos.CUANTOS + 5}", lista.last().id)
     }
 
+    @Test
+    fun `una tabla, un croquis y un pdf entran en la lista sin chocar con los lienzos`() {
+        val tabla = Abiertos.deTabla("t-1", "Cuentas", "p1")
+        val croquis = Abiertos.deCroquis("c-1", "3D", "p1")
+        val pdf = Abiertos.dePdf("/x/plano.pdf", "Plano")
+        assertTrue(l("t-1").esLienzo)
+        assertTrue(!tabla.esLienzo && !croquis.esLienzo && !pdf.esLienzo)
+        // El id lleva la clase delante: un dibujo que se llamara igual que la tabla no la pisa.
+        val lista = listOf(l("t-1"), tabla, croquis, pdf).fold(emptyList<LienzoAbierto>()) { acc, x -> Abiertos.con(acc, x) }
+        assertEquals(4, lista.size)
+        assertEquals("t-1", tabla.ruta)
+        assertEquals("/x/plano.pdf", pdf.pdf)
+    }
+
+    @Test
+    fun `un grupo guardado va primero, sustituye al de su nombre y no pasan del tope`() {
+        var grupos = Abiertos.conGrupo(emptyList(), "Obra", listOf(l("a"), l("b")), ahora = 1)
+        grupos = Abiertos.conGrupo(grupos, "Tesis", listOf(l("c")), ahora = 2)
+        assertEquals(listOf("Tesis", "Obra"), grupos.map { it.nombre })
+        grupos = Abiertos.conGrupo(grupos, " obra ", listOf(l("z")), ahora = 3)
+        assertEquals(listOf("obra", "Tesis"), grupos.map { it.nombre })
+        assertEquals(listOf("z"), grupos.first().lienzos.map { it.id })
+        // Sin nombre, se le pone uno.
+        assertEquals("Grupo 3", Abiertos.conGrupo(grupos, "  ", listOf(l("q")), 4).first().nombre)
+        repeat(20) { grupos = Abiertos.conGrupo(grupos, "g$it", listOf(l("a")), 10L + it) }
+        assertEquals(Abiertos.GRUPOS, grupos.size)
+    }
+
     // ---- La tira ----
 
     private val pantalla = 1000

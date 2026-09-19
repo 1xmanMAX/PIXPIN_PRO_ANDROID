@@ -197,7 +197,18 @@ class Croquis3DActivity : ComponentActivity() {
         // **Y si se ha venido desde una lámina, la vista de esa lámina.** Se pone entera y
         // sin viaje: no se está volviendo de un sitio, se está llegando.
         intent?.getStringExtra(LA_VISTA)?.let { controlador.ponerLaVista(it) }
-        setContent { PixPinTheme(cielo = false) { Pantalla() } }
+        // **En la multitarea, como una pestaña más** (19-sep-2026), sin los tres dedos: aquí
+        // ladean la cámara. Ver [com.forge.pixpin.ui.ConLaRueda].
+        val nombreDelProyecto = (application as? com.forge.pixpin.PixPinApp)
+            ?.proyectos?.proyectos?.value?.firstOrNull { it.id == elProyecto }?.nombre
+        val comoPestana = com.forge.pixpin.data.Abiertos.deCroquis(
+            elCroquis, "3D · " + (nombreDelProyecto ?: "Croquis"), elProyecto
+        )
+        setContent {
+            PixPinTheme(cielo = false) {
+                com.forge.pixpin.ui.ConLaRueda(comoPestana, conTresDedos = false) { Pantalla() }
+            }
+        }
     }
 
     /**

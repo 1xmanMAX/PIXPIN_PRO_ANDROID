@@ -3293,6 +3293,10 @@ class DrawEditorActivity : ComponentActivity() {
     private fun irAlLienzo(l: com.forge.pixpin.data.LienzoAbierto) {
         if (l.id == dibujoId) return
         guardarYa()
+        if (!l.esLienzo) {
+            com.forge.pixpin.ui.relevarPor(this, l)
+            return
+        }
         val desde = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO) ?: l.proyecto
         if (l.pdf != null && l.pagina >= 0) {
             abrirPaginaDePdf(this, l.id, l.ruta, l.pdf, l.pagina, desde)
@@ -3319,7 +3323,16 @@ class DrawEditorActivity : ComponentActivity() {
             ?: Detalle.proyectoDelLienzo(todos, dibujoId)
             ?: return emptyList()
         val yaEstan = abiertos.lista.value.map { it.id }.toSet()
-        return proyecto.hojas.mapNotNull { h ->
+        // **Y lo que no es un lienzo**: las tablas, los croquis 3D y el PDF entero del proyecto.
+        val otros = buildList {
+            proyecto.hojas.forEach { h ->
+                h.tabla?.let { add(com.forge.pixpin.data.Abiertos.deTabla(it, "Tabla · " + h.nombre.ifBlank { proyecto.nombre }, proyecto.id)) }
+                h.croquis?.let { add(com.forge.pixpin.data.Abiertos.deCroquis(it, "3D · " + h.nombre.ifBlank { proyecto.nombre }, proyecto.id)) }
+            }
+            proyecto.croquis.forEach { add(com.forge.pixpin.data.Abiertos.deCroquis(it, "3D · " + proyecto.nombre, proyecto.id)) }
+            proyecto.pdfOrigen?.let { add(com.forge.pixpin.data.Abiertos.dePdf(it, "PDF · " + proyecto.nombre, proyecto.id)) }
+        }.distinctBy { it.id }.filterNot { it.id in yaEstan }
+        return otros + proyecto.hojas.mapNotNull { h ->
             val dib = h.dibujo ?: return@mapNotNull null
             if (dib in yaEstan) return@mapNotNull null
             com.forge.pixpin.data.LienzoAbierto(

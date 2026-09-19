@@ -93,7 +93,14 @@ class LectorPdfActivity : ComponentActivity() {
         val ruta = intent?.getStringExtra(EXTRA_RUTA)
         if (ruta == null) { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()
-        setContent { com.forge.pixpin.ui.theme.PixPinTheme { Lector(ruta, nombre) } }
+        // **En la multitarea, como una pestaña más** (19-sep-2026). Ver [com.forge.pixpin.ui.ConLaRueda].
+        setContent {
+            com.forge.pixpin.ui.theme.PixPinTheme {
+                com.forge.pixpin.ui.ConLaRueda(com.forge.pixpin.data.Abiertos.dePdf(ruta, nombre.ifBlank { "PDF" })) {
+                    Lector(ruta, nombre)
+                }
+            }
+        }
     }
 
     @Composable
