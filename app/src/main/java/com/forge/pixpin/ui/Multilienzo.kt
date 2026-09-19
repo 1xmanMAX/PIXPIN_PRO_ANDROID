@@ -237,8 +237,12 @@ object Multilienzo {
         else -> i
     }
 
-    /** El marco de cada lienzo: fino y blanco, para distinguir uno de otro. */
-    val BLANCO = Color.White.copy(alpha = 0.65f)
+    /**
+     * El marco de cada lienzo: **plomo**, ni blanco ni negro. Era blanco y sobre un lienzo de
+     * papel blanco no se veía dónde acababa uno y empezaba el otro (usuario, 19-sep-2026). Un gris
+     * medio opaco contrasta con el papel claro y con el oscuro, y con los de color.
+     */
+    val MARCO = Color(0xFF7D8590)
 }
 
 /** La miniatura de un lienzo, ya pintada. Se recuerdan unas pocas: son mapas de bits. */
@@ -628,7 +632,7 @@ private fun CartaDeMas(
             .padding(top = CABECERA_DE_CARTA.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(Color(0xFF1A2040))
-            .border(1.dp, Multilienzo.BLANCO, RoundedCornerShape(20.dp))
+            .border(1.dp, Multilienzo.MARCO, RoundedCornerShape(20.dp))
             .clickable(onClick = onOtro),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
@@ -742,8 +746,8 @@ private fun CartaDeLaBaraja(
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color(0xFF0E1330))
                 .border(
-                    if (esElActual) 2.dp else 1.dp,
-                    if (esElActual) Cristal.puesto else Multilienzo.BLANCO,
+                    if (esElActual) 2.dp else 1.5.dp,
+                    if (esElActual) Cristal.puesto else Multilienzo.MARCO,
                     RoundedCornerShape(20.dp)
                 ),
             contentAlignment = Alignment.Center
@@ -930,7 +934,7 @@ fun TiraDeLienzos(
                         Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(CANTO_DEL_LIENZO.dp))
-                            .border(1.dp, Multilienzo.BLANCO, RoundedCornerShape(CANTO_DEL_LIENZO.dp))
+                            .border(2.dp, Multilienzo.MARCO, RoundedCornerShape(CANTO_DEL_LIENZO.dp))
                     ) {
                         panel(l, Modifier.fillMaxSize())
                         if (l.id != actual) {
