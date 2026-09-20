@@ -1470,7 +1470,7 @@ class DrawEditorActivity : ComponentActivity() {
                         },
                         alCerrarLosDedos = {
                             controller.cancel()
-                            ponerTamano(dibujoId, unidadDeLaTira())
+                            ponerTamano(dibujoId, deFabricaEnLaTira())
                         },
                         alJuntarse = {
                             // El primer dedo llega unas milésimas antes que los otros tres,
@@ -3195,7 +3195,12 @@ class DrawEditorActivity : ComponentActivity() {
 
     private fun unidadDeLaTira() = com.forge.pixpin.ui.Multilienzo.unidad(pantallaPx, pestanaPx, airePx, porPantalla, antesPx, despuesPx)
 
-    private fun tamanoDe(id: String) = tamanoValido(id, tamanosDeLaTira[id] ?: unidadDeLaTira())
+    /** Lo que mide un lienzo de fábrica: si caben todos, su parte de la pantalla entera. Ver [com.forge.pixpin.ui.Multilienzo.deFabrica]. */
+    private fun deFabricaEnLaTira() = com.forge.pixpin.ui.Multilienzo.deFabrica(
+        abiertos.lista.value.size, porPantalla, pantallaPx, airePx, unidadDeLaTira()
+    )
+
+    private fun tamanoDe(id: String) = tamanoValido(id, tamanosDeLaTira[id] ?: deFabricaEnLaTira())
 
     /** [t] dentro de los topes del lienzo [id], que dependen de si tiene vecino a cada lado. */
     private fun tamanoValido(id: String, t: Int): Int {

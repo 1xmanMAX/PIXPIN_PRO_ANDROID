@@ -135,9 +135,9 @@ class MultilienzoTest {
         assertEquals(-25f, Multilienzo.elastico(-50f, 50f))
         assertEquals(500, Multilienzo.tamanoLibre(500, pantalla, pestana))
         // Cerca de un hueco justo se clava; lejos, se queda como está.
-        assertEquals(300, Multilienzo.imantar(310, unidad, aire, 3))
-        assertEquals(606, Multilienzo.imantar(595, unidad, aire, 3))
-        assertEquals(450, Multilienzo.imantar(450, unidad, aire, 3))
+        assertEquals(300, Multilienzo.imantar(310, unidad, aire, 3, pantalla))
+        assertEquals(606, Multilienzo.imantar(595, unidad, aire, 3, pantalla))
+        assertEquals(450, Multilienzo.imantar(450, unidad, aire, 3, pantalla))
     }
 
     @Test
@@ -161,6 +161,21 @@ class MultilienzoTest {
         assertEquals(listOf(2, 0, 1, 3, 4), (0..4).map { Multilienzo.ranuraDelAbanico(it, enElDedo = 0, hueco = 2) })
         // Sin nadie en el dedo, cada una en su sitio.
         assertEquals(listOf(0, 1, 2), (0..2).map { Multilienzo.ranuraDelAbanico(it, -1, 0) })
+    }
+
+    @Test
+    fun `si caben todos llenan la pantalla, y el imán también lleva al tercio de verdad`() {
+        // Tres lienzos en una pantalla de tres: cada uno su tercio, y entre los tres, la pantalla.
+        val tercio = Multilienzo.parteLlena(pantalla, aire, 3)
+        assertEquals(pantalla, 3 * tercio + 2 * aire + (pantalla - 2 * aire) % 3)
+        val unidad = Multilienzo.unidad(pantalla, pestana, aire, porPantalla = 3)
+        assertEquals(tercio, Multilienzo.deFabrica(3, 3, pantalla, aire, unidad))
+        assertEquals(Multilienzo.parteLlena(pantalla, aire, 2), Multilienzo.deFabrica(2, 3, pantalla, aire, unidad))
+        // Si no caben todos, un hueco con sus pestañas.
+        assertEquals(unidad, Multilienzo.deFabrica(4, 3, pantalla, aire, unidad))
+        // El imán conoce las dos medidas y se queda con la más cercana.
+        assertEquals(tercio, Multilienzo.imantar(tercio + 5, unidad, aire, 3, pantalla))
+        assertEquals(unidad, Multilienzo.imantar(unidad - 4, unidad, aire, 3, pantalla))
     }
 
     @Test

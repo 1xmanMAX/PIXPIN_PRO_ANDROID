@@ -169,16 +169,39 @@ object Multilienzo {
     }
 
     /**
-     * **Un imán suave en los huecos**: si el tamaño cae cerca de uno, dos o tres huecos justos
-     * (a menos de [IMAN] de unidad), se queda ahí. Así se puede ir a ojo y también clavar los
+     * **La parte justa de la pantalla entera**: lo que mide cada uno de [partes] lienzos cuando
+     * entre todos **llenan la pantalla**, sin guardar pestaña para nadie. Es el tercio de verdad
+     * (19-sep-2026): con tres lienzos en una pantalla de tres, el imán llevaba a «un tercio de
+     * la pantalla menos las pestañas» y los tres no la llenaban; si caben todos, no hay a quién
+     * dejarle pestaña.
+     */
+    fun parteLlena(pantalla: Int, aire: Int, partes: Int): Int {
+        val n = partes.coerceAtLeast(1)
+        return ((pantalla - (n - 1) * aire) / n).coerceAtLeast(1)
+    }
+
+    /** Lo que mide de fábrica un lienzo: si caben todos, su parte de la pantalla entera; si no, un hueco. */
+    fun deFabrica(cuantos: Int, porPantalla: Int, pantalla: Int, aire: Int, unidad: Int): Int =
+        if (cuantos in 1..porPantalla) parteLlena(pantalla, aire, cuantos) else unidad
+
+    /**
+     * **Un imán suave**: si el tamaño cae cerca de una medida justa (a menos de [IMAN] de unidad),
+     * se queda en ella. Conoce las dos: los huecos con sus pestañas y las partes de la pantalla
+     * entera ([parteLlena]), y gana la más cercana. Así se va a ojo y también se clavan los
      * tercios sin puntería.
      */
-    fun imantar(t: Int, unidad: Int, aire: Int, porPantalla: Int): Int {
-        for (h in 1..porPantalla.coerceAtLeast(1)) {
-            val justo = tamano(h, unidad, aire, porPantalla)
-            if (kotlin.math.abs(t - justo) <= unidad * IMAN) return justo
+    fun imantar(t: Int, unidad: Int, aire: Int, porPantalla: Int, pantalla: Int): Int {
+        val por = porPantalla.coerceAtLeast(1)
+        val llena = parteLlena(pantalla, aire, por)
+        var mejor = t
+        var cerca = unidad * IMAN
+        for (h in 1..por) {
+            for (justo in intArrayOf(tamano(h, unidad, aire, por), h * llena + (h - 1) * aire)) {
+                val d = kotlin.math.abs(t - justo).toFloat()
+                if (d <= cerca) { cerca = d; mejor = justo }
+            }
         }
-        return t
+        return mejor
     }
 
     private const val IMAN = 0.08f
@@ -422,9 +445,6 @@ fun VistaDeTodos(
                 androidx.compose.animation.core.animate(corrido.floatValue, justo) { v, _ -> corrido.floatValue = v }
             }
         }
-        val enElCentro by remember(paso) {
-            androidx.compose.runtime.derivedStateOf { if (paso > 0f) (corrido.floatValue / paso).roundToInt() else 0 }
-        }
 
         var enElDedo by remember { mutableStateOf<String?>(null) }
         var hueco by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -449,7 +469,12 @@ fun VistaDeTodos(
                         corrido = corrido,
                         paso = paso,
                         aparte = aparte,
-                        altura = if (ranura == enElCentro) 50f else -kotlin.math.abs(ranura - enElCentro).toFloat(),
+                        // **Siempre en el mismo orden, de izquierda a derecha** (19-sep-2026): antes
+                        // la del centro pasaba delante de golpe al cambiar de tarjeta, y como
+                        // estaban montadas se veía una **atravesando** a la otra. Ahora nadie
+                        // cambia de capa: la del centro se ve entera porque las vecinas se le
+                        // apartan, no porque salte por encima. Y deslizar ya no recompone nada.
+                        altura = ranura.toFloat(),
                         onAbrir = { onAbrir(l) },
                         onCerrar = { onCerrar(l) },
                         alMover = { x ->
@@ -479,7 +504,7 @@ fun VistaDeTodos(
                 ANCHO_DE_LA_CARTA_DE_MAS.dp, altoDeLaCarta * 0.7f, onOtro,
                 Modifier
                     .align(Alignment.Center)
-                    .zIndex(if (enElCentro >= n) 50f else -(n - enElCentro).toFloat())
+                    .zIndex(n.toFloat())
                     .graphicsLayer {
                         val d = if (paso > 0f) (n * paso - corrido.floatValue) / paso else 0f
                         val cerca = 1f - kotlin.math.abs(d).coerceAtMost(1f)
@@ -770,7 +795,7 @@ private fun CartaDeLaBaraja(
 }
 
 /** Lo girada que va cada tarjeta del abanico sobre su eje vertical, en grados. */
-private const val GIRO_DEL_ABANICO = 38f
+private const val GIRO_DEL_ABANICO = 45f
 
 /**
  * Cada cuánto va una tarjeta, en anchos de tarjeta. **Pegaditas** (tercera corrección del usuario,
@@ -783,10 +808,13 @@ private const val PASO_DEL_ABANICO = 0.34f
 private const val FRENO_DE_LA_BARAJA = 0.4f
 
 /** Lo que se apartan las vecinas de la del centro, en anchos de tarjeta: lo justo para verla entera. */
-private const val APARTE_DEL_CENTRO = 0.5f
+private const val APARTE_DEL_CENTRO = 0.62f
 
-/** Cuánto se endereza la del centro: de 38° a unos 14°. Se ve bien y **sigue inclinada**, no plana. */
-private const val ENDEREZA_EL_CENTRO = 0.62f
+/**
+ * Cuánto se endereza la del centro: **de 45° a unos 30°** (lo pidió el usuario con esos números,
+ * 19-sep-2026: antes 38° y 14°, «casi planas»). Al pasar a la siguiente vuelve a 45° y la nueva baja a 30°.
+ */
+private const val ENDEREZA_EL_CENTRO = 0.34f
 
 /** El ancho de la tarjeta de «abrir otro», en dp. */
 private const val ANCHO_DE_LA_CARTA_DE_MAS = 76f
@@ -913,13 +941,21 @@ fun TiraDeLienzos(
     val despues = pestanaDeDespues.takeIf { it > 0 } ?: pestana
     val unidad = Multilienzo.unidad(pantalla, pestana, aire, porPantalla, antes, despues)
     fun tope(t: Int, i: Int) = Multilienzo.tamanoLibre(t, pantalla, pestana, antes, i, lienzos.size, despues)
-    fun tamanoDe(i: Int) = tope(tamanos[lienzos[i].id] ?: unidad, i)
+    val deFabrica = Multilienzo.deFabrica(lienzos.size, porPantalla, pantalla, aire, unidad)
+    fun tamanoDe(i: Int) = tope(tamanos[lienzos[i].id] ?: deFabrica, i)
     // **El último no tiene divisor por su canto de fuera** —ahí no hay nadie: va pegado al borde—.
     // Se le cambia el tamaño desde el divisor que lo separa del anterior, **cuando la tira está
     // en su final**: tirar hacia dentro lo agranda, y él sigue pegado al borde.
-    var conElUltimo by remember { mutableStateOf(false) }
-    var pegadoAlFinal by remember { mutableStateOf(false) }
-    var alEmpezarElUltimo by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    //
+    // **Solo se redimensiona el lienzo que manda** (19-sep-2026). Un divisor está entre dos: si el
+    // que manda es el de **después**, el arrastre es suyo y va **al revés** —su canto de este lado
+    // se mueve y el otro se queda donde está—; si no, es del de antes, como siempre. Antes el
+    // divisor era siempre del de antes, y tirar del canto izquierdo del lienzo del medio encogía
+    // al primero en vez de agrandarlo a él.
+    var alReves by remember { mutableStateOf(false) }
+    var alEmpezarAlReves by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var corridaAlEmpezar by remember { mutableFloatStateOf(0f) }
+    var cualAlReves by remember { androidx.compose.runtime.mutableIntStateOf(-1) }
     // **El elástico del divisor**: lo que lleva estirado de más el lienzo [estirado], en píxeles.
     // Se lee al medir; al soltar vuelve a cero con muelle.
     val estiron = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -955,23 +991,20 @@ fun TiraDeLienzos(
             // usuario se quedó sin la barrita (18-sep-2026).
             for (i in 0 until lienzos.size - 1) {
                 key("divisor-" + lienzos[i].id) {
-                    val ultimo = lienzos.size - 1
                     Divisor(
                         enColumna,
                         tamanoAhora = {
-                            // Se decide al empezar a arrastrar: ¿es el divisor del último, con la
-                            // tira en su final?
-                            val largoAhora = Multilienzo.largo(IntArray(lienzos.size) { tamanoDe(it) }, aire)
-                            conElUltimo = i == ultimo - 1 && corrida.value >= (largoAhora - pantalla).toFloat() - 1f
-                            pegadoAlFinal = conElUltimo
-                            if (conElUltimo) tamanoDe(ultimo).also { alEmpezarElUltimo = it } else tamanoDe(i)
+                            // Se decide al empezar a arrastrar: ¿de quién es este divisor ahora?
+                            alReves = lienzos[i + 1].id == actual
+                            cualAlReves = if (alReves) i + 1 else -1
+                            corridaAlEmpezar = corrida.value
+                            if (alReves) tamanoDe(i + 1).also { alEmpezarAlReves = it } else tamanoDe(i)
                         },
                         onTamano = { pedido ->
-                            // Con el último el arrastre va al revés: hacia dentro crece.
-                            val cual = if (conElUltimo) ultimo else i
-                            val nuevo = if (conElUltimo) 2 * alEmpezarElUltimo - pedido else pedido
+                            val cual = if (alReves) i + 1 else i
+                            val nuevo = if (alReves) 2 * alEmpezarAlReves - pedido else pedido
                             val justo = tope(nuevo, cual)
-                            val t = tope(Multilienzo.imantar(justo, unidad, aire, porPantalla), cual)
+                            val t = tope(Multilienzo.imantar(justo, unidad, aire, porPantalla, pantalla), cual)
                             if (t != tamanoDe(cual)) tamanos[lienzos[cual].id] = t
                             // Pasado el tope no crece: **se estira como una goma** y vuelve.
                             estirado = lienzos[cual].id
@@ -979,14 +1012,17 @@ fun TiraDeLienzos(
                             ambito.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { estiron.snapTo(goma) }
                         },
                         onSoltar = {
-                            val eraElUltimo = conElUltimo
+                            val eraAlReves = alReves
+                            val cual = cualAlReves
                             ambito.launch {
                                 estiron.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 400f))
-                                if (eraElUltimo) {
-                                    // La tira se queda donde se ha estado pintando: en su final.
+                                if (eraAlReves && cual in lienzos.indices) {
+                                    // La tira se queda donde se ha estado pintando.
                                     val largoAhora = Multilienzo.largo(IntArray(lienzos.size) { tamanoDe(it) }, aire)
-                                    corrida.snapTo((largoAhora - pantalla).toFloat().coerceAtLeast(0f))
-                                    pegadoAlFinal = false
+                                    val fin = (largoAhora - pantalla).toFloat().coerceAtLeast(0f)
+                                    corrida.snapTo((corridaAlEmpezar + (tamanoDe(cual) - alEmpezarAlReves)).coerceIn(0f, fin))
+                                    alReves = false
+                                    cualAlReves = -1
                                 }
                             }
                             onTamanos()
@@ -1014,7 +1050,13 @@ fun TiraDeLienzos(
         // Nunca más allá de la tira —un lienzo que encoge con la tira en su final dejaba un vacío
         // detrás—, y pegada al final mientras se le cambia el tamaño al último.
         val finDeLaTira = (Multilienzo.largo(suyos, aire) - largoVisible).toFloat().coerceAtLeast(0f)
-        val desplazada = if (pegadoAlFinal) finDeLaTira else corrida.value.coerceIn(0f, finDeLaTira)
+        // Redimensionando al revés, el canto de **este** lado es el que se mueve: la tira se corre
+        // lo que el lienzo crece, para que su otro canto no se mueva de donde está. Y siempre
+        // dentro de la tira: **el primero y el último van pegados a su pared**.
+        val k = cualAlReves
+        val desplazada = if (alReves && k in lienzos.indices) {
+            (corridaAlEmpezar + (suyos[k] - alEmpezarAlReves)).coerceIn(0f, finDeLaTira)
+        } else corrida.value.coerceIn(0f, finDeLaTira)
         val n = lienzos.size
         val cuantosDivisores = (medibles.size - n).coerceAtLeast(0)
         fun fijo(largo: Int) =
