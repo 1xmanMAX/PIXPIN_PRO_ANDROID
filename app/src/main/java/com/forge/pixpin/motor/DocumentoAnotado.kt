@@ -30,7 +30,7 @@ object DocumentoAnotado {
     class Pieza(val svg: String, val x: Double, val y: Double, val ancho: Double, val alto: Double, val ancla: Int)
 
     /** Un marcador ya situado: a qué altura del documento estaba y junto a qué bloque. */
-    class Senal(val emoji: String, val y: Double, val ancla: Int)
+    class Senal(val emoji: String, val y: Double, val ancla: Int, val fraccion: Double = -1.0)
 
     /**
      * El bloque al que se ata algo que estaba a la altura [y]: **el último que empieza por encima**
@@ -89,7 +89,7 @@ object DocumentoAnotado {
             // El marcador, **donde se puso**: en el canto derecho de la columna de texto.
             val xDeLaSenal = if (columna != null) margen + columna + 6 else 4
             senales.forEachIndexed { k, s ->
-                append("<span class=\"ppm\" id=\"ppm$k\" data-i=\"${s.ancla}\" data-y=\"${num(s.y)}\" style=\"${if (columna != null) "left:${xDeLaSenal}px" else "right:${xDeLaSenal}px"};top:${num(s.y)}px\">${s.emoji}</span>")
+                append("<span class=\"ppm\" id=\"ppm$k\" data-i=\"${s.ancla}\" data-y=\"${num(s.y)}\"${if (s.ancla < 0 && s.fraccion >= 0) " data-f=\"${s.fraccion}\"" else ""} style=\"${if (columna != null) "left:${xDeLaSenal}px" else "right:${xDeLaSenal}px"};top:${num(s.y)}px\">${s.emoji}</span>")
             }
             if (senales.isNotEmpty()) {
                 append("<div id=\"pprail\">")
@@ -100,7 +100,7 @@ object DocumentoAnotado {
         val guion = "<script>(function(){var S='$SELECTOR',T=[${tops.joinToString(",") { num(it) }}];" +
             "function poner(){var q=document.body.querySelectorAll(S),n=[];for(var i=0;i<q.length;i++)n.push(q[i].getBoundingClientRect().top+window.scrollY);" +
             "var e=document.querySelectorAll('[data-y]');for(var k=0;k<e.length;k++){var i=+e[k].getAttribute('data-i'),y=+e[k].getAttribute('data-y');" +
-            "var d=(i>=0&&i<n.length&&i<T.length)?n[i]-T[i]:0;e[k].style.top=(y+d)+'px';e[k]._y=y+d}}" +
+            "var f=e[k].getAttribute('data-f');if(f!==null&&i<0)y=(+f)*document.documentElement.scrollHeight;var d=(i>=0&&i<n.length&&i<T.length)?n[i]-T[i]:0;e[k].style.top=(y+d)+'px';e[k]._y=y+d}}" +
             "function ir(id){var m=document.getElementById(id);if(m)window.scrollTo({left:window.scrollX,top:Math.max(0,(m._y||0)-24),behavior:'smooth'})}" +
             "var b=document.querySelectorAll('#pprail button');for(var k=0;k<b.length;k++)(function(x){x.onclick=function(){ir(x.getAttribute('data-m'))}})(b[k]);" +
             "poner();window.addEventListener('load',function(){poner();" +

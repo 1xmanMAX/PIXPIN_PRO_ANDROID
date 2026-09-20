@@ -352,7 +352,8 @@ object DrawSvg {
                 if (e.reference) e.opacity * REFERENCIA_OPACIDAD / 100 else e.opacity
             val alpha = (opacidad * 255 / 100).coerceIn(0, 255)
 
-            val dentro = when (e.type) {
+            val deGrafito = if (e.material == MaterialDeTinta.CUADRITOS && e.type in GRAFITABLES) grafito(e, alpha) else null
+            val dentro = deGrafito ?: when (e.type) {
                 ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
                 ElementType.REGION, ElementType.ARC -> forma(e, alpha)
                 ElementType.LINE, ElementType.ARROW -> lineal(e, alpha)
@@ -521,6 +522,29 @@ object DrawSvg {
                     "fill=\"${Svg.hex(tinta)}\"${opacidad(tinta)}/>\n"
             )
             return cuerpo.toString()
+        }
+
+        private val GRAFITABLES = setOf(
+            ElementType.FREEDRAW, ElementType.LINE, ElementType.RECTANGLE, ElementType.DIAMOND,
+            ElementType.ELLIPSE, ElementType.REGION, ElementType.ARC
+        )
+
+        /**
+         * **El grafito viaja como lo que es: su mapa de casillas.** Como raya lisa dejaba de ser
+         * grafito —y en la página web ni se veía—. Va incrustado sin pérdida y con `pixelated`:
+         * al ampliar en el navegador se ven las casillas, igual que en el lienzo.
+         */
+        private fun grafito(e: Element, alpha: Int): String? {
+            val g = renderizador.elGrafitoDe(e, parseColor(e.strokeColor, 255), parseColor(e.backgroundColor, 255)) ?: return null
+            val salida = java.io.ByteArrayOutputStream()
+            val sinPerdida = android.os.Build.VERSION.SDK_INT >= 30
+            if (sinPerdida) g.mapa.compress(Bitmap.CompressFormat.WEBP_LOSSLESS, 100, salida)
+            else g.mapa.compress(Bitmap.CompressFormat.PNG, 100, salida)
+            val datos = "data:image/${if (sinPerdida) "webp" else "png"};base64," + Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
+            return "<image x=\"${Svg.num(g.x.toDouble())}\" y=\"${Svg.num(g.y.toDouble())}\" " +
+                "width=\"${Svg.num(g.ancho.toDouble())}\" height=\"${Svg.num(g.alto.toDouble())}\" preserveAspectRatio=\"none\" " +
+                "style=\"image-rendering:pixelated\"" + (if (alpha < 255) " opacity=\"${Svg.num(alpha / 255.0)}\"" else "") +
+                " xlink:href=\"$datos\"/>\n"
         }
 
         // -- relleno y trazo ------------------------------------------------

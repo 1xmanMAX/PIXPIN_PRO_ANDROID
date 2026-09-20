@@ -86,6 +86,12 @@ class DrawController(initial: Scene = Scene()) {
         // Un gesto de dos tiempos no sobrevive a cambiar de herramienta: dejarlo a medias
         // haría que el siguiente toque, tres minutos después, torneara algo por sorpresa.
         if (next != Tool.REVOLUCION) figuraATornear = null
+        // Con qué se estaba pintando, para el bote: tras el grafito, rellena de grafito. Ver [rellenar].
+        when (next) {
+            Tool.GRAFITO -> conElGrafitoEnLaMano = true
+            Tool.FREEDRAW, Tool.HIGHLIGHTER -> conElGrafitoEnLaMano = false
+            else -> Unit
+        }
         tool = next
         // La bolita también conserva lo elegido: es una forma de seleccionar más, y su
         // gesto es justo ir sumando — cambiar a ella para seguir cogiendo y perder lo que se
@@ -539,6 +545,14 @@ class DrawController(initial: Scene = Scene()) {
         puntoSinSitio = false
     }
 
+    /**
+     * **El bote rellena con lo que se tenía en la mano.** El grafito es una herramienta y no un
+     * tipo de tinta —así lo quiso el usuario—, de modo que el bote no tiene dónde elegirlo: si lo
+     * último con lo que se pintó fue el grafito, el relleno —liso o rayado— sale de grafito.
+     */
+    var conElGrafitoEnLaMano = false
+        private set
+
     private fun rellenar(p: Pt) {
         // **El bote también vive en un solo mundo.** En modo guía encierran las
         // guías y solo ellas; fuera, el dibujo y solo él. Mezclarlos hacía que
@@ -547,7 +561,9 @@ class DrawController(initial: Scene = Scene()) {
         // andamio porque una raya del dibujo lo cruzaba.
         // **Dentro de una sola figura cerrada, el relleno es el suyo, exacto.** La rejilla queda
         // para los huecos entre varias. Ver [figuraQueSeRellenaSola].
-        figuraQueSeRellenaSola(editables, p)?.let { figura ->
+        // De grafito no vale el fondo propio de la figura —saldría de la tinta de ella—: va una
+        // mancha aparte, que [regionEn] ya saca exacta también dentro de una sola figura.
+        (if (conElGrafitoEnLaMano) null else figuraQueSeRellenaSola(editables, p))?.let { figura ->
             rellenoSinCerrar = false
             // El bote pinta con **el color que hay puesto**, que es el que enseña su mando.
             val color = scene.style.strokeColor
@@ -566,6 +582,7 @@ class DrawController(initial: Scene = Scene()) {
         }
         rellenoSinCerrar = false
         val relleno = nuevaRegion(region, scene.style.copy(backgroundColor = scene.style.strokeColor)).copy(reference = modoReferencia)
+            .let { if (conElGrafitoEnLaMano) it.copy(material = MaterialDeTinta.CUADRITOS) else it }
         scene = scene.copy(elements = conRellenoDebajo(scene.elements, relleno, tocado = p))
     }
 
@@ -1651,7 +1668,8 @@ class DrawController(initial: Scene = Scene()) {
         return newElement(
             ElementType.RECTANGLE, minOf(a.x, bx), minOf(a.y, by), scene.style,
             width = kotlin.math.abs(bx - a.x), height = kotlin.math.abs(by - a.y)
-        ).copy(id = e.id, seed = e.seed, reference = e.reference)
+        // El material viaja: un rectángulo sacado de un trazo de grafito es de grafito.
+        ).copy(id = e.id, seed = e.seed, reference = e.reference, material = e.material)
     }
 
     /** El aumento del último toque, para medir en pantalla lo que llega en escena. */

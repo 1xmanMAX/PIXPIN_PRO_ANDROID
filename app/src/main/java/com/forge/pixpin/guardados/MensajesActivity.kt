@@ -5892,6 +5892,11 @@ class MensajesActivity : ComponentActivity() {
             return com.forge.pixpin.ui.CompartirPaginas.de(this, nombre, listOf(p to null), wifi = wifi, editable = p, extras = listOfNotNull(talCual))
         }
         val formatos = buildList {
+            // **Un Word o un libro: también como página web**, con lo anotado y los marcadores. Lo
+            // mismo que sale desde dentro del documento. Ver [com.forge.pixpin.ui.ExportarDocumentoAnotado].
+            m.ruta?.takeIf { File(it).exists() && com.forge.pixpin.ui.ExportarDocumentoAnotado.esDocumento(m.nombre, it) }?.let { ruta ->
+                add(com.forge.pixpin.ui.ExportarDocumentoAnotado.formato(this@MensajesActivity, File(ruta), m.nombre.ifBlank { File(ruta).name }))
+            }
             talCual?.let { add(it) }
             if (m.texto.isNotBlank()) add(
                 com.forge.pixpin.ui.Compartible.Formato(
