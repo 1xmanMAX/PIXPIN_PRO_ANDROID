@@ -1159,7 +1159,8 @@ private fun LaTintaQueHay(
     haciaLaIzquierda: Boolean,
     bola: Dp
 ) {
-    val materiales = MaterialDeTinta.entries
+    // El grafito no se elige aquí: es una herramienta, no una tinta. Ver [Tool.GRAFITO].
+    val materiales = MaterialDeTinta.entries.filter { it != MaterialDeTinta.CUADRITOS }
     ElMandoDeOpciones(
         descripcion = "Tinta",
         opciones = materiales,

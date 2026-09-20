@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BlurOn
@@ -1046,6 +1047,7 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.FLECHA_LIBRE,
     Tool.BOLITA,
     Tool.HIGHLIGHTER,
+    Tool.GRAFITO,
     Tool.RELLENO,
     Tool.RECORTAR,
     Tool.EXTENDER,
@@ -1103,7 +1105,7 @@ val PIN_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
  * necesitan la pantalla del editor completo ([LECTOR_TOOLS_FUERA]).
  */
 val LECTOR_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
-    Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.ERASER, Tool.TEXT, Tool.ARROW, Tool.RECTANGLE,
+    Tool.FREEDRAW, Tool.GRAFITO, Tool.HIGHLIGHTER, Tool.ERASER, Tool.TEXT, Tool.ARROW, Tool.RECTANGLE,
     Tool.ELLIPSE, Tool.LINE, Tool.SELECTION, Tool.HAND
 )
 
@@ -1146,6 +1148,7 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.HAND -> Icons.Filled.PanTool
     Tool.FREEDRAW -> Icons.Filled.Gesture
     Tool.HIGHLIGHTER -> Icons.Filled.Highlight
+    Tool.GRAFITO -> Icons.Filled.Create
     Tool.ERASER -> Icons.Filled.AutoFixNormal
     Tool.RECTANGLE -> Icons.Filled.CropSquare
     Tool.ELLIPSE -> Icons.Filled.RadioButtonUnchecked
@@ -1184,6 +1187,7 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.HAND -> R.string.tool_hand
     Tool.FREEDRAW -> R.string.tool_freedraw
     Tool.HIGHLIGHTER -> R.string.tool_highlighter
+    Tool.GRAFITO -> R.string.tool_grafito
     Tool.ERASER -> R.string.tool_eraser
     Tool.RECTANGLE -> R.string.tool_rectangle
     Tool.ELLIPSE -> R.string.tool_ellipse

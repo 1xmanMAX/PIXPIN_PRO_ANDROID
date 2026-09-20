@@ -336,6 +336,7 @@
     <string name="tool_hand">Mano</string>
     <string name="tool_freedraw">Lápiz</string>
     <string name="tool_highlighter">Marcador</string>
+    <string name="tool_grafito">Grafito</string>
     <string name="tool_eraser">Borrador</string>
     <string name="tool_rectangle">Rectángulo</string>
     <string name="tool_ellipse">Elipse</string>

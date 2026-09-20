@@ -387,7 +387,7 @@ class DrawController(initial: Scene = Scene()) {
                 olvidarElDedoParado()
             }
 
-            Tool.FREEDRAW, Tool.HIGHLIGHTER -> {
+            Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.GRAFITO -> {
                 // El lápiz tiene su propia escala de grosores: la mancha se
                 // dibuja a 4,25× y con la escala de las formas saldría enorme.
                 var e = newElement(ElementType.FREEDRAW, p.x, p.y, scene.style)
@@ -405,6 +405,8 @@ class DrawController(initial: Scene = Scene()) {
                         strokeWidth = e.strokeWidth * ItemStyle.ENGORDE_DEL_MARCADOR
                     )
                 }
+                // El grafito es el mismo trazo, hecho de otra cosa. Ver [Tool.GRAFITO].
+                if (tool == Tool.GRAFITO) e = e.copy(material = MaterialDeTinta.CUADRITOS)
                 scene = scene.copy(elements = scene.elements + e)
                 gesture = Gesture.Creating(e.id)
                 // El dedo acaba de posarse: desde aquí se cuenta lo que lleva quieto, que
@@ -3485,7 +3487,7 @@ class DrawController(initial: Scene = Scene()) {
         Tool.ELLIPSE -> ElementType.ELLIPSE
         Tool.ARROW, Tool.FLECHA_LIBRE -> ElementType.ARROW
         Tool.LINE -> ElementType.LINE
-        Tool.FREEDRAW, Tool.HIGHLIGHTER -> ElementType.FREEDRAW
+        Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.GRAFITO -> ElementType.FREEDRAW
         Tool.TEXT -> ElementType.TEXT
         Tool.IMAGE -> ElementType.IMAGE
         Tool.MOSAIC -> ElementType.MOSAIC

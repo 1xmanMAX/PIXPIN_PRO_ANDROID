@@ -112,6 +112,14 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val EXTRA_EN_SU_SITIO = "enSuSitio"
         private const val EXTRA_DOCUMENTO = "documento"
 
+        /**
+         * Lo que encoge el documento en la vista alejada: **el texto y un margen** —la columna más
+         * dos tercios: 5/3—, no los dos a la vez (corrección del usuario, 20-sep-2026: con los dos
+         * el texto quedaba demasiado pequeño para leerlo mientras se anota al lado). Se ve el texto
+         * con el margen de la izquierda o con el de la derecha; se pasa de uno a otro deslizando.
+         */
+        private const val ALEJADO = 3f / 5f
+
         /** Lo más que se acerca un documento. Lo menos es 1: el texto de borde a borde. */
         private const val AUMENTO_MAXIMO = 5f
 
@@ -333,7 +341,7 @@ class VisorHtmlActivity : ComponentActivity() {
         vistaEntera = entera
         aumento = 1f
         corridoDelAumento = androidx.compose.ui.geometry.Offset.Zero
-        vista.zoomBy(if (entera) 3f / 7f else 7f / 3f)
+        vista.zoomBy(if (entera) ALEJADO else 1f / ALEJADO)
         // Al volver al texto, la columna al centro.
         if (!entera) vista.postDelayed({
             @Suppress("DEPRECATION")
@@ -396,6 +404,17 @@ class VisorHtmlActivity : ComponentActivity() {
         laCapa.setViewport(com.forge.pixpin.motor.Viewport(scrollX = -vista.scrollX / e, scrollY = -vista.scrollY / e, zoom = e))
     }
 
+    /** En la vista alejada no hay término medio: o el texto con un margen o con el otro. Se va al más cercano. */
+    private fun aUnLado() {
+        val vista = web ?: return
+        val columna = columnaDeAnotar ?: return
+        if (!vistaEntera || anotando) return
+        @Suppress("DEPRECATION")
+        val tope = ((com.forge.pixpin.motor.Lectura.anchoConMargenes(columna) * vista.scale) - vista.width).toInt().coerceAtLeast(0)
+        val meta = if (vista.scrollX < tope / 2) 0 else tope
+        if (meta != vista.scrollX) android.animation.ObjectAnimator.ofInt(vista, "scrollX", vista.scrollX, meta).setDuration(200).start()
+    }
+
     /** Dónde estaba el documento, a lo ancho, al posar el dedo. Para el imán del centro. */
     private var corridoAlPosar = 0
     private var xDelLienzoAlPosar = Double.NaN
@@ -405,7 +424,8 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun encajarEnElCentro() {
         val vista = web ?: return
         val columna = columnaDeAnotar ?: return
-        if (anotando || vistaEntera) return
+        if (anotando) return
+        if (vistaEntera) { aUnLado(); return }
         val margen = com.forge.pixpin.motor.Lectura.margenDe(columna) * vista.scale.toDouble()
         val meta = com.forge.pixpin.motor.Lectura.imanDelCentro(corridoAlPosar.toDouble(), vista.scrollX.toDouble(), margen, margen) ?: return
         android.animation.ObjectAnimator.ofInt(vista, "scrollX", vista.scrollX, meta.toInt()).setDuration(220).start()
@@ -816,7 +836,8 @@ class VisorHtmlActivity : ComponentActivity() {
                 val dedos = e.changes.count { it.pressed }
                 if (dedos == 0) {
                     // En la vista entera, acercarse hasta que el texto llena el ancho es volver al texto.
-                    if (vistaEntera && aumento >= 7f / 3f * 0.92f) ponerLaVistaEntera(false)
+                    if (vistaEntera && aumento >= 1f / ALEJADO * 0.92f) ponerLaVistaEntera(false)
+                    else if (vistaEntera) web?.postDelayed({ aUnLado() }, 140)
                     break
                 }
                 if (dedos < 2) continue
@@ -826,7 +847,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     deMenos *= e.calculateZoom()
                     if (deMenos < 0.82f) { ponerLaVistaEntera(true); deMenos = 1f }
                 }
-                val ahora = (antes * e.calculateZoom()).coerceIn(1f, if (vistaEntera) AUMENTO_MAXIMO * 7f / 3f else AUMENTO_MAXIMO)
+                val ahora = (antes * e.calculateZoom()).coerceIn(1f, if (vistaEntera) AUMENTO_MAXIMO / ALEJADO else AUMENTO_MAXIMO)
                 val centro = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
                 val foco = e.calculateCentroid(useCurrent = false)
                 var movido = if (ahora == antes) corridoDelAumento

@@ -137,7 +137,7 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     Tool.ELLIPSE -> ElementType.ELLIPSE
     Tool.ARROW -> ElementType.ARROW
     Tool.LINE -> ElementType.LINE
-    Tool.FREEDRAW, Tool.HIGHLIGHTER -> ElementType.FREEDRAW
+    Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.GRAFITO -> ElementType.FREEDRAW
     Tool.TEXT -> ElementType.TEXT
     Tool.IMAGE -> ElementType.IMAGE
     Tool.MOSAIC -> ElementType.MOSAIC

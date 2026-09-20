@@ -60,6 +60,14 @@ enum class Tool {
      * demás. Ver [DrawController.pointerDown].
      */
     FLECHA_LIBRE,
+
+    /**
+     * **Grafito** (20-sep-2026): el lápiz de verdad, como **herramienta** y no como un tipo de
+     * tinta —así lo quiso el usuario—. Traza como el lápiz de siempre, pero lo que deja es
+     * grafito sobre una **rejilla fija de cuadritos**: de lejos es un trazo de lápiz; al acercarse
+     * se ven sus píxeles, unos cargados, otros flojos y otros vacíos. Ver `Renderer.pintarElLapiz`.
+     */
+    GRAFITO,
     ERASER,
     HIGHLIGHTER, MOSAIC, LUPA, SPOTLIGHT, SERIAL, FRAME,
 

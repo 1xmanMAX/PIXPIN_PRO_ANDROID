@@ -2751,8 +2751,13 @@ class Renderer(
         val puntos = e.points ?: return false
         if (puntos.size < 2) return false
         val gordo = (e.strokeWidth * GORDO_DEL_LAPIZ).toFloat().coerceAtLeast(1.5f)
-        // A qué resolución se cuece: por escalones de aumento, para no rehacerlo en cada pellizco.
-        var finura = Math.pow(2.0, Math.round(Math.log(zoomActual.coerceIn(0.2, 6.0)) / Math.log(2.0)).toDouble()).toFloat()
+        // **Una rejilla fija, la misma para todo el dibujo** (quinta versión, 20-sep-2026). Se
+        // cocía a la resolución del aumento, y por eso al acercarse el trazo se rehacía más fino
+        // y **nunca se veían los píxeles**: «un lápiz muy falso», dijo el usuario, que lo que
+        // pide es justo lo contrario —«que exista un número fijo de cuadrados y solo se pinten
+        // esos»—. Ahora un cuadrito es **una unidad del dibujo** (un píxel de pantalla al 100 %),
+        // siempre en el mismo sitio; acercarse lo agranda sin suavizarlo y alejarse lo funde.
+        var finura = 1f
         val margen = gordo
         var x0 = Float.MAX_VALUE; var y0 = Float.MAX_VALUE; var x1 = -Float.MAX_VALUE; var y1 = -Float.MAX_VALUE
         for (q in puntos) {
@@ -2760,6 +2765,8 @@ class Renderer(
             if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y
         }
         x0 -= margen; y0 -= margen; x1 += margen; y1 += margen
+        // Encajado en la rejilla: los cuadritos de dos trazos vecinos caen en las mismas casillas.
+        x0 = Math.floor(x0 / 4.0).toFloat() * 4f; y0 = Math.floor(y0 / 4.0).toFloat() * 4f
         while (((x1 - x0) * finura > LADO_MAXIMO_DEL_LAPIZ || (y1 - y0) * finura > LADO_MAXIMO_DEL_LAPIZ) && finura > 0.05f) finura /= 2f
         val ancho = ((x1 - x0) * finura).toInt().coerceAtLeast(1)
         val alto = ((y1 - y0) * finura).toInt().coerceAtLeast(1)
@@ -2770,6 +2777,7 @@ class Renderer(
         val cocido = losLapices[e.id]?.takeIf { it.huella == huella && !it.mapa.isRecycled } ?: run {
             val mapa = runCatching { Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return false
             estamparElLapiz(Canvas(mapa), e, puntos, gordo, finura, x0, y0, tinta)
+            elDienteDelPapel(mapa, x0, y0, finura)
             losLapices.remove(e.id)?.let { pesoDeLosLapices -= it.mapa.byteCount }
             val nuevo = LapizCocido(mapa, huella)
             losLapices[e.id] = nuevo
@@ -2785,9 +2793,10 @@ class Renderer(
             nuevo
         }
         paint.reset()
-        paint.isFilterBitmap = true
+        // De cerca, **sin suavizar**: cada cuadrito, de canto vivo. De lejos sí, que si no centellea.
+        paint.isFilterBitmap = zoomActual < 1.0
         paint.alpha = alpha
-        elSitioDelLapiz.set(x0, y0, x1, y1)
+        elSitioDelLapiz.set(x0, y0, x0 + ancho / finura, y0 + alto / finura)
         canvas.drawBitmap(cocido.mapa, null, elSitioDelLapiz, paint)
         return true
     }
@@ -2841,18 +2850,37 @@ class Renderer(
             ax = bx; ay = by
             @Suppress("UNUSED_VALUE") run { bx = ax; by = ay }
         }
-        // **El papel**: lo estampado se queda solo donde el papel «coge» grafito. La textura va
-        // clavada a la escena —no al trazo—, así que dos trazos vecinos comparten el mismo papel.
-        val papel = BitmapShader(elPapelDelLapiz(), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
-        papel.setLocalMatrix(Matrix().apply {
-            setScale(finura * GRANO_DEL_PAPEL, finura * GRANO_DEL_PAPEL)
-            postTranslate(-x0 * finura, -y0 * finura)
-        })
-        pincel.reset()
-        pincel.isFilterBitmap = true
-        pincel.shader = papel
-        pincel.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
-        lienzo.drawPaint(pincel)
+        // (El diente del papel se pone después, cuadrito a cuadrito: ver [elDienteDelPapel].)
+    }
+
+    /**
+     * **El diente del papel, cuadrito a cuadrito.** Cada casilla de la rejilla coge el grafito a
+     * su manera —unas todo, otras menos, **alguna nada**— y siempre igual: sale de su sitio en el
+     * dibujo, no del trazo, así que es el mismo papel para todos y no cambia al repintar. Lo que
+     * queda por debajo de un mínimo se va: un velo casi invisible no es un cuadrito, es suciedad.
+     */
+    private fun elDienteDelPapel(mapa: Bitmap, x0: Float, y0: Float, finura: Float) {
+        val w = mapa.width
+        val h = mapa.height
+        val pix = IntArray(w * h)
+        mapa.getPixels(pix, 0, w, 0, 0, w, h)
+        val ox = Math.round(x0 * finura)
+        val oy = Math.round(y0 * finura)
+        for (y in 0 until h) for (x in 0 until w) {
+            val c = pix[y * w + x]
+            val a = c ushr 24
+            if (a == 0) continue
+            // Un revoltijo barato y fijo de la casilla (x, y) del dibujo.
+            var n = (x + ox) * 374761393 + (y + oy) * 668265263
+            n = (n xor (n ushr 13)) * 1274126177
+            val azar = ((n xor (n ushr 16)) and 0xFFFF) / 65535f
+            val coge = if (azar < 0.13f) 0f else 0.35f + 0.65f * ((azar - 0.13f) / 0.87f)
+            val carga = (a * coge).toInt()
+            val final = if (carga < 14) 0 else minOf(255, (carga * 1.5f).toInt())
+            // `getPixels` ya entrega el color sin premultiplicar: solo cambia el alfa.
+            pix[y * w + x] = if (final == 0) 0 else (final shl 24) or (c and 0x00FFFFFF)
+        }
+        mapa.setPixels(pix, 0, w, 0, 0, w, h)
     }
 
     /** **La forma del sello**: un cuadrado rascado, como el «2B pencil» de la ficha. Solo alfa; se hace una vez. */
@@ -2887,40 +2915,6 @@ class Renderer(
         return soloAlfa
     }
 
-    /** **El grano del papel**: ruido de varias escalas, contrastado, y casando en los bordes. Una vez. */
-    private fun elPapelDelLapiz(): Bitmap {
-        PAPEL_DEL_LAPIZ?.let { return it }
-        val n = LADO_DEL_PAPEL
-        val r = java.util.Random(20260920L)
-        val suma = FloatArray(n * n)
-        // Cada octava: una rejilla de azar, interpolada suave y **envuelta**, para que el mosaico case.
-        // **Solo grano fino.** Con manchas grandes (octavas de 5 y 11 celdas) el papel tenía zonas
-        // enteras que no cogían grafito y una raya fina **se cortaba** al cruzarlas: el usuario lo
-        // vio en la simulación —«hay zonas en las que no se pinta»—. Un lápiz no se corta: el
-        // papel le quita como mucho la mitad ([coge] no baja de 0,5) y siempre a escala de grano.
-        for ((celdas, peso) in listOf(40 to 0.30f, 90 to 0.45f, 170 to 0.35f)) {
-            val rejilla = FloatArray(celdas * celdas) { r.nextFloat() }
-            for (y in 0 until n) for (x in 0 until n) {
-                val fx = x * celdas / n.toFloat(); val fy = y * celdas / n.toFloat()
-                val xa = fx.toInt() % celdas; val ya = fy.toInt() % celdas
-                val xb = (xa + 1) % celdas; val yb = (ya + 1) % celdas
-                val tx = (fx - fx.toInt()).let { it * it * (3 - 2 * it) }
-                val ty = (fy - fy.toInt()).let { it * it * (3 - 2 * it) }
-                val arriba = rejilla[ya * celdas + xa] + (rejilla[ya * celdas + xb] - rejilla[ya * celdas + xa]) * tx
-                val abajo = rejilla[yb * celdas + xa] + (rejilla[yb * celdas + xb] - rejilla[yb * celdas + xa]) * tx
-                suma[y * n + x] += peso * (arriba + (abajo - arriba) * ty)
-            }
-        }
-        val pix = IntArray(n * n)
-        for (i in pix.indices) {
-            val coge = ((suma[i] - 0.33f) * 2.2f).coerceIn(0.5f, 1f)
-            pix[i] = Color.argb((coge * 255).toInt(), 255, 255, 255)
-        }
-        val mapa = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
-        mapa.setPixels(pix, 0, n, 0, 0, n, n)
-        PAPEL_DEL_LAPIZ = mapa
-        return mapa
-    }
 
     /**
      * La lupa: un trozo del dibujo, enseñado en grande.
@@ -3642,15 +3636,11 @@ class Renderer(
         /** *Opacity* 79 %. */
         const val OPACIDAD_DEL_LAPIZ = 0.79f
         const val LADO_DEL_SELLO = 48
-        const val LADO_DEL_PAPEL = 256
-        /** Cuántas unidades de escena ocupa un texel del papel: el grano es fino, de lápiz, no de tiza. */
-        const val GRANO_DEL_PAPEL = 0.45f
         /** Tope de sellos por trazo y de lado del mapa cocido, y lo que pueden pesar todos juntos. */
         const val SELLOS_POR_TRAZO = 9000.0
         const val LADO_MAXIMO_DEL_LAPIZ = 2048f
         const val PESO_DE_LOS_LAPICES = 96L * 1024 * 1024
         @Volatile private var SELLO_DEL_LAPIZ: Bitmap? = null
-        @Volatile private var PAPEL_DEL_LAPIZ: Bitmap? = null
 
         const val CUADRITOS_A_LO_ANCHO = 11f
 
