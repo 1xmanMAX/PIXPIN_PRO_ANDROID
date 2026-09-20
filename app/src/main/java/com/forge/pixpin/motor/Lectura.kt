@@ -39,21 +39,39 @@ object Lectura {
      * documento ya dice qué letra quiere; los títulos conservan su negrita propia salvo que el
      * grosor pedido sea aún mayor.
      */
-    fun estilo(grosor: Int, letra: Int): String {
+    /**
+     * Cuánto margen se abre a cada lado de la columna de texto para anotar: **dos tercios de su
+     * ancho**, que es lo que pidió el usuario (20-sep-2026).
+     */
+    fun margenDe(columna: Int): Int = columna * 2 / 3
+
+    /** Lo que mide el documento entero con sus dos márgenes: la columna y dos tercios a cada lado. */
+    fun anchoConMargenes(columna: Int): Int = columna + 2 * margenDe(columna)
+
+    fun estilo(grosor: Int, letra: Int, columna: Int? = null): String {
         val peso = GROSORES.getOrElse(grosor) { GROSORES[1] }.first
         val familia = LETRAS.getOrElse(letra) { LETRAS[0] }.first
         val titulos = maxOf(peso, 700)
         return "<style id=\"$ID_DEL_ESTILO\">" +
             "body,p,li,td,th,div,span,blockquote{font-family:$familia !important;font-weight:$peso !important}" +
             "h1,h2,h3,h4,h5,h6,b,strong{font-family:$familia !important;font-weight:$titulos !important}" +
+            // **Para anotar**: la columna de texto se queda **del ancho que tenía** —en píxeles, no
+            // «el ancho de la pantalla», para que girar el aparato no recoloque el texto bajo lo
+            // anotado— y a cada lado se abre un margen en blanco donde escribir.
+            (columna?.let {
+                "html{width:${anchoConMargenes(it)}px !important;overflow-x:auto !important}" +
+                    "body{box-sizing:border-box !important;width:${it}px !important;max-width:none !important;" +
+                    "margin-left:${margenDe(it)}px !important;margin-right:${margenDe(it)}px !important}"
+            } ?: "") +
             "</style>"
     }
 
     /** La página con el estilo puesto (y sin el que tuviera de antes): justo antes de `</head>`. */
-    fun conEstilo(pagina: String, grosor: Int, letra: Int): String {
+    fun conEstilo(pagina: String, grosor: Int, letra: Int, columna: Int? = null): String {
         val limpia = pagina.replace(Regex("<style id=\"$ID_DEL_ESTILO\">.*?</style>", RegexOption.DOT_MATCHES_ALL), "")
         val i = limpia.indexOf("</head>", ignoreCase = true)
-        return if (i < 0) estilo(grosor, letra) + limpia else limpia.substring(0, i) + estilo(grosor, letra) + limpia.substring(i)
+        val hoja = estilo(grosor, letra, columna)
+        return if (i < 0) hoja + limpia else limpia.substring(0, i) + hoja + limpia.substring(i)
     }
 
     /** Con uno más, **en el orden del documento**, que es el de los puntos del lateral. */
@@ -73,6 +91,13 @@ object Lectura {
         val f = p.getOrNull(1)?.toFloatOrNull() ?: return@mapNotNull null
         Marcador(id, f.coerceIn(0f, 1f), p.getOrNull(2).orEmpty().ifBlank { EMOJIS[0] })
     }.sortedBy { it.fraccion }
+
+    /**
+     * **Dónde puede estar la vista** de un documento de [ancho]×[alto] en una pantalla de
+     * [vistaAncho]×[vistaAlto]: dentro, sin salirse por ningún lado. Todo en las mismas unidades.
+     */
+    fun dentroDelDocumento(x: Double, y: Double, ancho: Double, alto: Double, vistaAncho: Double, vistaAlto: Double): Pair<Double, Double> =
+        x.coerceIn(0.0, (ancho - vistaAncho).coerceAtLeast(0.0)) to y.coerceIn(0.0, (alto - vistaAlto).coerceAtLeast(0.0))
 
     const val ID_DEL_ESTILO = "pixpin-lector"
     const val MARCADORES = 24

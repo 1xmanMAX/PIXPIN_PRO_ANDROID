@@ -1,5 +1,9 @@
 package com.forge.pixpin.pdf
 
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Edit
 import kotlinx.coroutines.launch
@@ -126,34 +130,28 @@ class LectorPdfActivity : ComponentActivity() {
         // se pasea— con la lista escondida detrás. Atrás, o la flecha, vuelve. Ver [VistaDeLaPagina].
         var aSolas by remember(rutaPedida) { mutableStateOf<Int?>(null) }
         androidx.activity.compose.BackHandler(enabled = aSolas != null) { aSolas = null }
-        // **El editor rápido**: la página que se anota, el proyecto de este PDF (se crea la primera
-        // vez, como hace el lienzo) y las veces que se ha vuelto de anotar, para repintar las hojas.
-        var anotando by remember(rutaPedida) { mutableStateOf<Int?>(null) }
-        var suProyecto by remember(rutaPedida) { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
-        var vueltas by remember { mutableStateOf(0) }
+        // **El editor rápido: anotar sobre todas las hojas, en la misma lista** (20-sep-2026,
+        // segunda vuelta). Ver [CapasDelPdf] y [CapaDePagina].
+        var anotando by remember(rutaPedida) { mutableStateOf(false) }
+        val capas = remember(rutaPedida) { CapasDelPdf(this@LectorPdfActivity, rutaPedida) }
+        // Solo para llevar la herramienta y el estilo de la barra: cada hoja tiene su lienzo.
+        val maestro = remember { com.forge.pixpin.motor.DrawController().also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) } }
+        var tickDeLaBarra by remember { mutableStateOf(0) }
         val alcance = androidx.compose.runtime.rememberCoroutineScope()
-        fun anotar(pagina: Int) {
-            val app = application as? com.forge.pixpin.PixPinApp ?: return
-            alcance.launch {
-                val p = withContext(Dispatchers.IO) {
-                    runCatching {
-                        app.proyectos.deEstePdf(ruta, nombre.substringBeforeLast('.').ifBlank { "PDF" }, cuantas, System.currentTimeMillis())
-                    }.getOrNull()
-                }
-                if (p == null) android.widget.Toast.makeText(this@LectorPdfActivity, "No se pudo preparar el PDF para anotar", android.widget.Toast.LENGTH_SHORT).show()
-                else { suProyecto = p; anotando = pagina.coerceIn(0, (cuantas - 1).coerceAtLeast(0)) }
-            }
-        }
+        fun dejarDeAnotar() { anotando = false; capas.guardarTodo() }
+        androidx.activity.compose.BackHandler(enabled = anotando) { dejarDeAnotar() }
+        androidx.compose.runtime.DisposableEffect(capas) { onDispose { capas.guardarTodo() } }
         val quiereAnotarAlAbrir = remember { intent?.getBooleanExtra(EXTRA_ANOTAR, false) == true }
-        LaunchedEffect(cuantas) {
-            if (quiereAnotarAlAbrir && cuantas > 0 && anotando == null && vueltas == 0) anotar(0)
-        }
+        LaunchedEffect(cuantas) { if (quiereAnotarAlAbrir && cuantas > 0) anotando = true }
         LaunchedEffect(rutaPedida) {
             withContext(Dispatchers.IO) {
                 val doc = runCatching { SublienzosDelPdf.documentoDe(this@LectorPdfActivity, rutaPedida) }.getOrDefault(rutaPedida)
                 val n = PdfDoc.pageCount(doc)
                 val r = runCatching { SublienzosDelPdf.de(this@LectorPdfActivity, doc) }.getOrDefault(emptyMap())
-                withContext(Dispatchers.Main) { ruta = doc; recortes = r; cuantas = n }
+                // **Se enseña la copia limpia**, si el PDF es de un proyecto: lo anotado lo pinta
+                // la capa de cada hoja, y sobre el documento ya anotado saldría dos veces.
+                val limpio = capas.documentoLimpio()
+                withContext(Dispatchers.Main) { ruta = limpio ?: doc; recortes = r; cuantas = n }
             }
         }
         // **El aumento es del documento, no de una página.** Acercarse para leer una cota y que
@@ -233,6 +231,8 @@ class LectorPdfActivity : ComponentActivity() {
                             // mucho, hasta que su borde toca el borde.
                             val topeX = (ahora - 1f) * size.width / 2f
                             val topeY = (ahora - 1f) * size.height / 2f
+                            // Anotando, un dedo dibuja: los dos dedos son los que pasan las hojas.
+                            if (anotando) estado.dispatchRawDelta(-evento.calculatePan().y / ahora)
                             val conPan = movido + evento.calculatePan()
                             desplazado = Offset(
                                 conPan.x.coerceIn(-topeX, topeX),
@@ -267,15 +267,16 @@ class LectorPdfActivity : ComponentActivity() {
                             )
                     ) {
                         items((0 until cuantas).toList()) { i ->
-                            androidx.compose.runtime.key(vueltas) { Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i } }
+                            Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), encima = {
+                                CapaDePagina(capas, i, anchoPx, anotando, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
+                            }) { aSolas = i }
                         }
                     }
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
                 }
             }
-            // **El lápiz del editor rápido**: pequeño y semitransparente, abajo a un lado. Anota la
-            // página que se está mirando.
-            if (cuantas > 0 && aSolas == null && anotando == null) {
+            // **El lápiz del editor rápido**: pequeño y semitransparente, abajo a un lado.
+            if (cuantas > 0 && aSolas == null && !anotando) {
                 Box(
                     Modifier
                         .align(Alignment.BottomEnd)
@@ -284,40 +285,63 @@ class LectorPdfActivity : ComponentActivity() {
                         .size(52.dp)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(Color(0x9914182B))
-                        .clickable {
-                            val centro = estado.layoutInfo.viewportEndOffset / 2
-                            val bajo = estado.layoutInfo.visibleItemsInfo.firstOrNull { centro >= it.offset && centro <= it.offset + it.size }?.index
-                            anotar(bajo ?: estado.firstVisibleItemIndex)
-                        },
+                        .clickable { anotando = true },
                     contentAlignment = Alignment.Center
                 ) {
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.Edit, contentDescription = "Anotar esta página",
+                        androidx.compose.material.icons.Icons.Filled.Edit, contentDescription = "Anotar",
                         tint = Color.White, modifier = Modifier.size(22.dp)
                     )
                 }
             }
-            val pagina = anotando
-            val proyecto = suProyecto
-            if (pagina != null && proyecto != null) {
-                com.forge.pixpin.ui.EditorRapido(
-                    app = application as com.forge.pixpin.PixPinApp,
-                    proyecto = proyecto,
-                    pagina = pagina,
-                    cuantas = cuantas,
-                    onPagina = { anotando = it },
-                    onCerrar = { cambiado ->
-                        anotando = null
-                        if (cambiado) alcance.launch {
-                            // El PDF se rehace en segundo plano: un respiro, y las hojas se vuelven a pedir.
-                            kotlinx.coroutines.delay(900)
-                            PaginasEnMemoria.olvidar(ruta)
-                            proyecto.pdfOrigen?.let { if (it != ruta) { PaginasEnMemoria.olvidar(it); ruta = it } }
-                            vueltas++
-                        }
+            if (anotando) {
+                val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+                var enProyecto by remember { mutableStateOf(capas.esDeUnProyecto()) }
+                Row(
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 8.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(Color(0xB314182B))
+                        .padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Listo", color = Color.White,
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { dejarDeAnotar() }.padding(horizontal = 12.dp, vertical = 9.dp)
+                    )
+                    // **Solo si se pide**: la edición rápida no crea ningún proyecto. Con esto el
+                    // PDF pasa a proyectos con lo anotado, para seguir con el editor completo.
+                    if (!enProyecto) Text(
+                        "Al proyecto", color = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable {
+                            alcance.launch {
+                                val bien = withContext(Dispatchers.IO) { capas.pasarAProyecto(nombre.substringBeforeLast('.').ifBlank { "PDF" }, cuantas) }
+                                enProyecto = bien
+                                android.widget.Toast.makeText(
+                                    this@LectorPdfActivity, if (bien) "Ya está en proyectos, con lo anotado" else "No se pudo crear el proyecto",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }.padding(horizontal = 12.dp, vertical = 9.dp)
+                    )
+                }
+                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                    @Suppress("UNUSED_EXPRESSION") tickDeLaBarra
+                    com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                        com.forge.pixpin.motor.DrawToolbar(
+                            tool = maestro.tool,
+                            onTool = { maestro.selectTool(it); tickDeLaBarra++ },
+                            style = maestro.scene.style,
+                            onStyle = { nuevo -> maestro.cambiarEstilo(nuevo) { it }; capas.ultima()?.cambiarEstilo(nuevo) { it }; tickDeLaBarra++ },
+                            canUndo = capas.ultima()?.canUndo == true,
+                            onUndo = { capas.ultima()?.undo(); capas.ensuciarLaUltima(); tickDeLaBarra++ },
+                            permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                            grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                        )
                     }
-                )
-                return@Box
+                }
             }
             if (nombre.isNotBlank()) {
                 Text(
@@ -350,7 +374,10 @@ class LectorPdfActivity : ComponentActivity() {
     @Composable
     private fun Hoja(
         ruta: String, i: Int, zoom: Float, anchoPx: Int,
-        suyos: List<SublienzosDelPdf.Recorte> = emptyList(), alAbrirSublienzos: () -> Unit = {}
+        suyos: List<SublienzosDelPdf.Recorte> = emptyList(),
+        /** Lo que va encima de la hoja, ajustado a ella: la capa de lo anotado. */
+        encima: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+        alAbrirSublienzos: () -> Unit = {}
     ) {
         // A más aumento, más puntos: acercarse a una hoja ya dibujada la estiraría y se vería
         // blanda justo cuando uno se acerca para leer una cota. Por escalones, para no
@@ -395,6 +422,7 @@ class LectorPdfActivity : ComponentActivity() {
             } else {
                 Spacer(Modifier.fillMaxWidth().aspectRatio(proporcion.coerceAtLeast(0.1f)))
             }
+            encima()
         }
     }
 }
@@ -403,6 +431,154 @@ class LectorPdfActivity : ComponentActivity() {
  * **Las páginas ya pintadas, en memoria.** Volver de la vista a solas, o pasar otra vez por una
  * hoja, no la rasteriza de nuevo: se enseña la que ya había. Un octavo de la memoria de la app.
  */
+/**
+ * **Lo anotado sobre un PDF, hoja por hoja, con el motor del lienzo** (20-sep-2026).
+ *
+ * El usuario lo pidió como «un editor de PDF normal»: todas las hojas a la vista, se pasa de una a
+ * otra haciendo scroll y se anota en cualquiera, con las herramientas del lienzo que haya elegido
+ * en Ajustes. Y tres condiciones que salen de cómo falló la primera versión (aislaba una hoja,
+ * creaba un proyecto sin pedirlo, y lo anotado no se veía al volver):
+ *
+ * - **Cada hoja tiene su dibujo**, en las mismas unidades que usa el editor completo para una
+ *   página (la hoja a [PdfDoc.PAGE_WIDTH] de ancho). Si el PDF **es de un proyecto**, es el dibujo
+ *   de esa hoja —lo que se anote aquí se edita luego desde proyectos, y al revés—; si no, es un
+ *   dibujo suelto del propio PDF (`pdf-<huella>-p<n>`).
+ * - **No se crea ningún proyecto** por anotar. Solo con «Al proyecto» ([pasarAProyecto]), que
+ *   además le entrega al proyecto nuevo los dibujos ya hechos.
+ * - **Lo anotado se pinta siempre encima de cada hoja**, leyendo su dibujo: no depende de rehacer
+ *   el archivo. Por eso el lector enseña la copia **limpia** de un PDF de proyecto.
+ */
+private class CapasDelPdf(private val actividad: ComponentActivity, private val rutaPedida: String) {
+    private val app = actividad.application as? com.forge.pixpin.PixPinApp
+    private val huella = rutaPedida.hashCode().toUInt().toString(16)
+    private val abiertas = HashMap<Int, com.forge.pixpin.motor.DrawController>()
+    private val sucias = HashSet<Int>()
+    private var ultimaTocada = -1
+    /** Para que las capas que solo se pintan se repinten cuando cambia algo. */
+    val version = androidx.compose.runtime.mutableIntStateOf(0)
+
+    private fun proyecto(): com.forge.pixpin.motor.Proyecto? =
+        app?.proyectos?.proyectos?.value?.firstOrNull { it.pdfOrigen == rutaPedida || it.pdfLimpio == rutaPedida }
+
+    fun esDeUnProyecto() = proyecto() != null
+
+    fun documentoLimpio(): String? = proyecto()?.pdfLimpio?.takeIf { java.io.File(it).exists() }
+
+    /** El dibujo de la hoja [i]. En un proyecto, el de su hoja; se le pone uno si aún no tenía. */
+    private fun idDe(i: Int, paraEscribir: Boolean): String {
+        val p = proyecto() ?: return "pdf-$huella-p$i"
+        val hoja = p.hojas.firstOrNull { it.pagina == i } ?: return "pdf-$huella-p$i"
+        hoja.dibujo?.let { return it }
+        val suelto = "pdf-$huella-p$i"
+        if (paraEscribir) app?.proyectos?.guardar(com.forge.pixpin.motor.Proyectos.conDibujo(p, hoja.id, suelto, System.currentTimeMillis()))
+        return suelto
+    }
+
+    /** Trabajo de disco la primera vez. */
+    fun controladorDe(i: Int): com.forge.pixpin.motor.DrawController = synchronized(abiertas) {
+        abiertas.getOrPut(i) {
+            val escena = com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, idDe(i, false)))
+            com.forge.pixpin.motor.DrawController(escena ?: com.forge.pixpin.motor.Scene()).also { it.pedirLaMedida = false }
+        }
+    }
+
+    fun tocada(i: Int) { ultimaTocada = i }
+    fun ultima(): com.forge.pixpin.motor.DrawController? = synchronized(abiertas) { abiertas[ultimaTocada] }
+    fun ensuciar(i: Int) { synchronized(sucias) { sucias.add(i) }; version.intValue++ }
+    fun ensuciarLaUltima() { if (ultimaTocada >= 0) ensuciar(ultimaTocada) }
+
+    /** Escribe lo cambiado y, si el PDF es de un proyecto, rehace su documento. Fuera del hilo de la pantalla. */
+    fun guardarTodo() {
+        val pendientes = synchronized(sucias) { sucias.toList().also { sucias.clear() } }
+        if (pendientes.isEmpty()) return
+        val escenas = synchronized(abiertas) { pendientes.mapNotNull { i -> abiertas[i]?.let { i to it.scene } } }
+        val contexto = actividad.applicationContext
+        val ids = escenas.map { (i, _) -> idDe(i, true) }
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            escenas.forEachIndexed { k, (_, escena) -> runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, ids[k], escena) } }
+            proyecto()?.let { p -> runCatching { com.forge.pixpin.motor.PdfDelProyecto.rehacer(contexto, p) } }
+        }
+    }
+
+    /** **Solo cuando se pide**: el PDF pasa a ser un proyecto, y sus hojas se quedan con lo ya anotado. */
+    fun pasarAProyecto(nombre: String, paginas: Int): Boolean = runCatching {
+        val repo = app?.proyectos ?: return false
+        // Primero a disco, que el proyecto va a leer los dibujos de ahí.
+        val todo = synchronized(abiertas) { abiertas.map { (i, c) -> i to c.scene } }
+        todo.forEach { (i, escena) -> com.forge.pixpin.motor.ExcalidrawStore.guardar(actividad, "pdf-$huella-p$i", escena) }
+        synchronized(sucias) { sucias.clear() }
+        var p = repo.deEstePdf(rutaPedida, nombre, paginas, System.currentTimeMillis())
+        for (hoja in p.hojas) {
+            val i = hoja.pagina ?: continue
+            if (hoja.dibujo != null) continue
+            val suelto = "pdf-$huella-p$i"
+            if (!java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, suelto)).exists()) continue
+            p = com.forge.pixpin.motor.Proyectos.conDibujo(p, hoja.id, suelto, System.currentTimeMillis())
+        }
+        repo.guardar(p)
+        runCatching { com.forge.pixpin.motor.PdfDelProyecto.rehacer(actividad, p) }
+        true
+    }.getOrDefault(false)
+}
+
+/** El pintor de las capas que solo se miran: uno para todas las hojas, con su caché de formas. */
+private val PINTOR_DE_CAPAS by lazy { com.forge.pixpin.motor.Renderer() }
+
+/**
+ * **La capa de una hoja.** Leyendo —o con la mano puesta— **solo se pinta**, y no coge ningún toque:
+ * la lista se desliza como siempre. Anotando, es el [com.forge.pixpin.motor.DrawCanvas] de
+ * siempre, con la vista clavada a la hoja; al posar el dedo coge la herramienta y el estilo de la
+ * barra. Un dedo dibuja; **dos dedos pasan las hojas** y amplían, que de eso se encarga el lector.
+ */
+@Composable
+private fun CapaDePagina(
+    capas: CapasDelPdf, i: Int, anchoPx: Int, anotando: Boolean,
+    maestro: com.forge.pixpin.motor.DrawController, modifier: Modifier, alCambiar: () -> Unit
+) {
+    val lienzo by androidx.compose.runtime.produceState<com.forge.pixpin.motor.DrawController?>(null, capas, i) {
+        value = withContext(Dispatchers.IO) { runCatching { capas.controladorDe(i) }.getOrNull() }
+    }
+    val c = lienzo ?: return
+    // La hoja mide PAGE_WIDTH en las unidades del dibujo, y en pantalla lo que mida la lista.
+    val zoom = anchoPx.toDouble() / PdfDoc.PAGE_WIDTH
+    LaunchedEffect(c, anchoPx) { c.setViewport(com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = 0.0, zoom = zoom)) }
+    val conLaMano = maestro.tool == com.forge.pixpin.motor.Tool.HAND
+    if (!anotando || conLaMano) {
+        androidx.compose.foundation.Canvas(modifier) {
+            @Suppress("UNUSED_EXPRESSION") capas.version.intValue
+            if (c.scene.elements.none { !it.isDeleted }) return@Canvas
+            PINTOR_DE_CAPAS.renderScene(
+                drawContext.canvas.nativeCanvas,
+                c.scene.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = 0.0, zoom = size.width.toDouble() / PdfDoc.PAGE_WIDTH)),
+                size.width.toDouble(), size.height.toDouble()
+            )
+        }
+        return
+    }
+    Box(
+        modifier.pointerInput(c) {
+            awaitPointerEventScope {
+                while (true) {
+                    val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    if (e.changes.any { it.pressed && !it.previousPressed }) {
+                        capas.tocada(i)
+                        val herramienta = maestro.tool
+                        if (herramienta !in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA && herramienta != c.tool) c.selectTool(herramienta)
+                        if (c.scene.style != maestro.scene.style) c.cambiarEstilo(maestro.scene.style) { it }
+                    }
+                }
+            }
+        }
+    ) {
+        com.forge.pixpin.motor.DrawCanvas(
+            controller = c,
+            modifier = Modifier.fillMaxSize(),
+            onChange = { trazando -> if (!trazando) { capas.ensuciar(i); alCambiar() } },
+            vistaFija = true
+        )
+    }
+}
+
 private object PaginasEnMemoria {
     private val cache = object : android.util.LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount

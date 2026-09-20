@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -230,11 +233,17 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun irALaFraccion(f: Float, intentos: Int = 12) {
         val vista = web ?: return
         val alto = altoDelDocumento()
-        if (alto <= vista.height && intentos > 0) {
+        if (alto <= vista.height && intentos > 0 && !(intentos < 6 && alto > 0f)) {
             vista.postDelayed({ irALaFraccion(f, intentos - 1) }, 120)
             return
         }
-        vista.scrollTo(0, (f * alto).toInt().coerceAtLeast(0))
+        @Suppress("DEPRECATION")
+        val x = columnaDeAnotar?.let { (com.forge.pixpin.motor.Lectura.margenDe(it) * vista.scale).toInt() } ?: 0
+        vista.scrollTo(x, (f * alto).toInt().coerceAtLeast(0))
+        if (entrarAlCargar) {
+            entrarAlCargar = false
+            vista.post { ponerLaCapaDondeElDocumento(); anotando = true }
+        }
     }
 
     private fun guardarMarcadores() {
@@ -250,7 +259,7 @@ class VisorHtmlActivity : ComponentActivity() {
         fraccionPendiente = fraccionDeAhora()
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo)) }
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo, columnaDeAnotar)) }
             }
             web?.reload()
         }
@@ -266,6 +275,90 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     private var laPaginaQueSeVe: File? = null
+
+    // ---- Anotar encima del documento, con el motor del lienzo. Ver [CapaDeAnotar]. ----
+
+    /** El ancho de la columna de texto, en píxeles CSS, desde que se anotó por primera vez; null si nunca. */
+    private var columnaDeAnotar by mutableStateOf<Int?>(null)
+    private var anotando by mutableStateOf(false)
+    /** Hay que entrar a anotar en cuanto la página recargada (ya con márgenes) esté lista. */
+    private var entrarAlCargar = false
+    /** Por dónde va el documento y a qué escala, para pintar la capa en su sitio mientras se lee. */
+    private var corridoX by mutableStateOf(0)
+    private var corridoY by mutableStateOf(0)
+    private var escalaWeb by mutableStateOf(1f)
+    private var cambiosEnLaCapa by mutableStateOf(0)
+
+    /** Lo anotado sobre este documento: un dibujo del motor de siempre, guardado como cualquier otro. */
+    private val idDeLaCapa: String get() = "capa-doc-" + claveDelDocumento.hashCode().toUInt().toString(16)
+    private val laCapa: com.forge.pixpin.motor.DrawController by lazy {
+        com.forge.pixpin.motor.DrawController(
+            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, idDeLaCapa))
+                ?: com.forge.pixpin.motor.Scene()
+        ).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+    }
+    private val hayAnotaciones: Boolean get() = columnaDeAnotar != null && laCapa.scene.elements.any { !it.isDeleted }
+
+    private fun guardarLaCapa() {
+        if (columnaDeAnotar == null) return
+        val escena = laCapa.scene
+        val id = idDeLaCapa
+        val contexto = applicationContext
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) } }
+    }
+
+    /**
+     * **El lápiz.** La primera vez el documento se ensancha —la columna de texto se queda como
+     * está y se abren dos tercios de margen a cada lado— y desde entonces **la letra queda
+     * fijada**: si cambiara, el texto se recolocaría y lo anotado se quedaría en el aire.
+     */
+    @Suppress("DEPRECATION")
+    private fun empezarAAnotar() {
+        val vista = web ?: return
+        if (columnaDeAnotar != null) { ponerLaCapaDondeElDocumento(); anotando = true; return }
+        val columna = (vista.width / vista.scale.coerceAtLeast(0.1f)).toInt().coerceAtLeast(200)
+        columnaDeAnotar = columna
+        prefsDeLectura.edit()
+            .putInt(claveDelDocumento + ":columna", columna)
+            .putString(claveDelDocumento + ":letra", "$tamanoDeLetra,$grosorDeLetra,$tipoDeLetra")
+            .apply()
+        val pagina = laPaginaQueSeVe ?: return
+        fraccionPendiente = fraccionDeAhora()
+        entrarAlCargar = true
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna)) }
+            }
+            vista.settings.loadWithOverviewMode = false
+            vista.reload()
+        }
+    }
+
+    /** La vista del lienzo, donde está ahora el documento: mismas unidades (píxeles CSS), misma escala. */
+    @Suppress("DEPRECATION")
+    private fun ponerLaCapaDondeElDocumento() {
+        val vista = web ?: return
+        val e = vista.scale.coerceAtLeast(0.1f).toDouble()
+        escalaWeb = e.toFloat()
+        laCapa.setViewport(com.forge.pixpin.motor.Viewport(scrollX = -vista.scrollX / e, scrollY = -vista.scrollY / e, zoom = e))
+    }
+
+    /** Anotando manda el lienzo: el documento va a donde él vaya, sin salirse de sus bordes. */
+    private fun llevarElDocumentoConLaCapa() {
+        val vista = web ?: return
+        val columna = columnaDeAnotar ?: return
+        val v = laCapa.scene.viewport
+        val e = v.zoom.coerceAtLeast(0.1)
+        val (x, y) = com.forge.pixpin.motor.Lectura.dentroDelDocumento(
+            -v.scrollX, -v.scrollY,
+            com.forge.pixpin.motor.Lectura.anchoConMargenes(columna).toDouble(), vista.contentHeight.toDouble(),
+            vista.width / e, vista.height / e
+        )
+        if (x != -v.scrollX || y != -v.scrollY) laCapa.setViewport(v.copy(scrollX = -x, scrollY = -y))
+        val px = (x * e).toInt()
+        val py = (y * e).toInt()
+        if (px != vista.scrollX || py != vista.scrollY) vista.scrollTo(px, py)
+    }
 
     /** Sube cada vez que el dedo toca la página, y cada vez que la mueve: la burbuja los mira. */
     private var toquesEnLaPagina by mutableStateOf(0)
@@ -295,11 +388,19 @@ class VisorHtmlActivity : ComponentActivity() {
             marcadores = com.forge.pixpin.motor.Lectura.deTexto(prefsDeLectura.getString(claveDelDocumento + ":marcadores", null))
             // Y se vuelve a donde se dejó de leer.
             fraccionPendiente = prefsDeLectura.getFloat(claveDelDocumento + ":sitio", -1f)
+            // **Un documento anotado conserva su letra y su columna**, las de cuando se anotó.
+            prefsDeLectura.getInt(claveDelDocumento + ":columna", 0).takeIf { it > 0 }?.let { columna ->
+                columnaDeAnotar = columna
+                prefsDeLectura.getString(claveDelDocumento + ":letra", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
+                    ?.takeIf { it.size == 3 }?.let { (t, g, l) -> tamanoDeLetra = t; grosorDeLetra = g; tipoDeLetra = l }
+                if (fraccionPendiente < 0f) fraccionPendiente = 0f
+            }
         }
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
     override fun onPause() {
+        guardarLaCapa()
         if (esDocumento && altoDelDocumento() > 0f) {
             prefsDeLectura.edit().putFloat(claveDelDocumento + ":sitio", fraccionDeAhora()).apply()
         }
@@ -320,8 +421,8 @@ class VisorHtmlActivity : ComponentActivity() {
         var fallo by remember(original) { mutableStateOf(false) }
         LaunchedEffect(original) {
             val hecha = withContext(Dispatchers.IO) { runCatching { if (enSuSitio) original.takeIf { it.exists() } else copiaParaVer(original) }.getOrNull() }
-            if (hecha != null && esDocumento && (grosorDeLetra != 1 || tipoDeLetra != 0)) withContext(Dispatchers.IO) {
-                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra)) }
+            if (hecha != null && esDocumento && (grosorDeLetra != 1 || tipoDeLetra != 0 || columnaDeAnotar != null)) withContext(Dispatchers.IO) {
+                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra, columnaDeAnotar)) }
             }
             laPaginaQueSeVe = hecha
             if (hecha == null) fallo = true else copia = hecha
@@ -332,6 +433,7 @@ class VisorHtmlActivity : ComponentActivity() {
         fun salir() {
             when {
                 aPantalla != null -> dejarLaPantallaCompleta()
+                anotando -> { anotando = false; guardarLaCapa() }
                 web?.canGoBack() == true -> web?.goBack()
                 // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
                 sinGuion || web == null -> finish()
@@ -379,8 +481,9 @@ class VisorHtmlActivity : ComponentActivity() {
                         factory = { contexto -> nuevoWeb(contexto, pagina) }
                     )
                 }
+                if (esDocumento && columnaDeAnotar != null) CapaDeAnotar()
                 if (!presentando) androidx.compose.animation.AnimatedVisibility(
-                    visible = aLaVista,
+                    visible = aLaVista && !anotando,
                     enter = androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.fadeOut(),
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
@@ -424,9 +527,8 @@ class VisorHtmlActivity : ComponentActivity() {
                         // botones van con la pastilla: salen al tocar y se van al mover.
                         if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
                         else {
-                            // **Anotar**: el documento pasa a páginas con margen a los dos lados y se
-                            // anota con el motor del lienzo. Ver [anotar].
-                            IconButton(onClick = { ocupado = "Preparando para anotar…"; anotar(suNombre) { ocupado = null } }, modifier = Modifier.size(38.dp)) {
+                            // **Anotar**: una capa del motor del lienzo encima del documento. Ver [CapaDeAnotar].
+                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }, modifier = Modifier.size(38.dp)) {
                                 Icon(Icons.Filled.Edit, contentDescription = "Anotar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
                             IconButton(onClick = { poniendoMarcador = true; conLaLetra = false }, modifier = Modifier.size(38.dp)) {
@@ -438,7 +540,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         }
                     }
                 }
-                if (esDocumento && !presentando) {
+                if (esDocumento && !presentando && !anotando) {
                     LateralDeMarcadores(Modifier.align(Alignment.CenterEnd))
                     if (conLaLetra) PanelDeLetra(
                         onCerrar = { conLaLetra = false },
@@ -500,6 +602,97 @@ class VisorHtmlActivity : ComponentActivity() {
                 confirmButton = { androidx.compose.material3.TextButton(onClick = { preguntandoSiSalir = false; finish() }) { Text("Salir") } },
                 dismissButton = { androidx.compose.material3.TextButton(onClick = { preguntandoSiSalir = false }) { Text("Volver") } }
             )
+        }
+    }
+
+    /**
+     * **La capa de anotar, encima del documento** (20-sep-2026, segunda vuelta).
+     *
+     * El usuario lo quería así y no de otra forma: **en el mismo visor**, sobre el texto tal como
+     * se lee —una columna hasta el fondo—, con dos tercios de margen a cada lado para escribir, y
+     * **con el motor del lienzo**: las mismas herramientas y tintas, sin duplicar nada. (La
+     * primera versión pasaba el documento a un PDF por páginas; lo rechazó: «secciones muy
+     * pequeñas» y cambiar de una a otra tardaba.)
+     *
+     * Son dos caras de la misma capa:
+     * - **Leyendo**, la capa **solo se pinta** —con el [com.forge.pixpin.motor.Renderer] de
+     *   siempre— en el sitio y a la escala del documento; no coge ningún toque, así que el
+     *   documento se desplaza como siempre y lo anotado va con él.
+     * - **Anotando**, encima va el [com.forge.pixpin.motor.DrawCanvas] entero con su barra
+     *   (las herramientas del editor rápido, elegidas en Ajustes). Un dedo dibuja y dos mueven,
+     *   como en el lienzo; con lápiz, el dedo mueve. **Manda el lienzo** y el documento le sigue:
+     *   cada fotograma se lleva el `WebView` a donde esté la vista del lienzo, sin salirse del
+     *   documento. El aumento va fijado: las unidades del dibujo son los píxeles del documento.
+     */
+    @Composable
+    private fun CapaDeAnotar() {
+        val deNoche = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val fotos = remember { HashMap<String, android.graphics.Bitmap?>() }
+        val foto: (String) -> android.graphics.Bitmap? = { f -> fotos.getOrPut(f) { laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } } }
+        if (!anotando) {
+            if (!hayAnotaciones) return
+            val pintor = remember(deNoche) { com.forge.pixpin.motor.Renderer(foto, dark = deNoche) }
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                @Suppress("UNUSED_EXPRESSION") cambiosEnLaCapa
+                val e = escalaWeb.coerceAtLeast(0.1f).toDouble()
+                val escena = laCapa.scene.copy(
+                    viewport = com.forge.pixpin.motor.Viewport(scrollX = -corridoX / e, scrollY = -corridoY / e, zoom = e)
+                )
+                drawContext.canvas.nativeCanvas.let { pintor.renderScene(it, escena, size.width.toDouble(), size.height.toDouble()) }
+            }
+            return
+        }
+        val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+        var conLapiz by remember { mutableStateOf(false) }
+        var tick by remember { mutableStateOf(0) }
+        // El documento sigue al lienzo, fotograma a fotograma, mientras se anota.
+        LaunchedEffect(Unit) {
+            while (true) {
+                androidx.compose.runtime.withFrameNanos { }
+                llevarElDocumentoConLaCapa()
+            }
+        }
+        Box(Modifier.fillMaxSize()) {
+            @Suppress("UNUSED_EXPRESSION") tick
+            com.forge.pixpin.motor.DrawCanvas(
+                controller = laCapa,
+                modifier = Modifier.fillMaxSize(),
+                imageProvider = foto,
+                dark = deNoche,
+                onChange = { trazando -> if (!trazando) { tick++; cambiosEnLaCapa++ } },
+                zoomBloqueado = true,
+                modoLapiz = conLapiz,
+                onLapizDetectado = { conLapiz = true }
+            )
+            Row(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .background(androidx.compose.ui.graphics.Color(0xB314182B))
+                    .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++ }
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
+                Text("Listo", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 6.dp))
+            }
+            Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                    com.forge.pixpin.motor.DrawToolbar(
+                        tool = laCapa.tool,
+                        onTool = { laCapa.selectTool(it); tick++ },
+                        style = laCapa.scene.style,
+                        onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tick++ },
+                        canUndo = laCapa.canUndo,
+                        onUndo = { laCapa.undo(); tick++; cambiosEnLaCapa++ },
+                        permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                        grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                    )
+                }
+            }
         }
     }
 
@@ -575,6 +768,7 @@ class VisorHtmlActivity : ComponentActivity() {
     @Composable
     private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit) {
         val lectura = com.forge.pixpin.motor.Lectura
+        val fijada = hayAnotaciones
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = onCerrar,
             containerColor = androidx.compose.ui.graphics.Color(0xF214182B),
@@ -583,6 +777,11 @@ class VisorHtmlActivity : ComponentActivity() {
         ) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 18.dp)) {
                 val gris = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)
+                if (fijada) Text(
+                    "La letra está fijada: este documento tiene anotaciones, y si cambiara se quedarían en el aire.",
+                    color = androidx.compose.ui.graphics.Color(0xFFFFD27A), style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Tamaño", color = gris, modifier = Modifier.weight(1f))
                     Text("$tamanoDeLetra %", color = gris)
@@ -591,17 +790,17 @@ class VisorHtmlActivity : ComponentActivity() {
                     cuantos = lectura.TAMANOS.size,
                     elegido = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it },
                     crece = true
-                ) { ponerElTamano(lectura.TAMANOS[it]) }
+                ) { if (!fijada) ponerElTamano(lectura.TAMANOS[it]) }
 
                 Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Grosor", color = gris, modifier = Modifier.weight(1f))
                     Text(lectura.GROSORES.getOrElse(grosorDeLetra) { lectura.GROSORES[1] }.second, color = gris)
                 }
-                BarraDePuntos(cuantos = lectura.GROSORES.size, elegido = grosorDeLetra, crece = false) { ponerLaLetra(it, tipoDeLetra) }
+                BarraDePuntos(cuantos = lectura.GROSORES.size, elegido = grosorDeLetra, crece = false) { if (!fijada) ponerLaLetra(it, tipoDeLetra) }
 
                 Text("Letra", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
                 Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    lectura.LETRAS.forEachIndexed { i, (_, nombre) -> FichaDeLetra(nombre, i == tipoDeLetra) { ponerLaLetra(grosorDeLetra, i) } }
+                    lectura.LETRAS.forEachIndexed { i, (_, nombre) -> FichaDeLetra(nombre, i == tipoDeLetra) { if (!fijada) ponerLaLetra(grosorDeLetra, i) } }
                 }
 
                 Text("Documento", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
@@ -708,55 +907,6 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun sinExtension(nombre: String): String {
         val ext = nombre.substringAfterLast('.', "")
         return if (ext.isNotBlank() && ext.length <= 5 && nombre.length > ext.length + 1) nombre.dropLast(ext.length + 1) else nombre
-    }
-
-    /**
-     * **Anotar un Word o un libro** (20-sep-2026). El usuario lo pidió como «un lienzo muy largo,
-     * limitado de ancho, con el texto en el centro y **dos tercios más a cada lado** para anotar»,
-     * con dos condiciones: **el mismo motor del lienzo** y que la letra **no cambie de tamaño**
-     * mientras haya anotaciones, que si no se descolocan.
-     *
-     * Las dos salen solas haciendo lo que la aplicación ya sabe hacer: el documento se pasa a un
-     * **PDF de páginas anchas** —la columna de texto en medio y dos tercios de su ancho en blanco
-     * a cada lado— con la letra que haya puesta **en ese momento**, y ese PDF se anota con el
-     * editor rápido del lector, que es el lienzo de siempre sobre cada página. La letra queda
-     * fijada porque el PDF ya está hecho; lo anotado vive en un proyecto, así que se sigue
-     * editando desde proyectos con el editor completo; y no hay un solo lienzo kilométrico que
-     * tener entero en memoria: solo la página que se mira.
-     *
-     * **La segunda vez no se rehace nada**: el documento recuerda su PDF y se vuelve a él, con lo
-     * anotado. (Si se quiere otra letra, «Vista de impresión» y «Al proyecto» hacen uno nuevo.)
-     */
-    private fun anotar(nombre: String, alAcabar: () -> Unit) {
-        val clave = claveDelDocumento + ":anotado"
-        prefsDeLectura.getString(clave, null)?.takeIf { File(it).exists() }?.let { yaHecho ->
-            alAcabar()
-            com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, yaHecho, sinExtension(nombre), anotando = true)
-            return
-        }
-        val vista = web
-        if (vista == null) { alAcabar(); return }
-        val titulo = sinExtension(nombre).ifBlank { "Documento" }
-        val ahora = System.currentTimeMillis()
-        val destino = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
-        // En milésimas de pulgada. La columna de texto, la de un A4 con sus márgenes (6,3");
-        // la página, esa columna más dos tercios a cada lado: 6,3 × 7/3 = 14,7".
-        val columna = 6300
-        val lado = columna * 2 / 3
-        val atributos = android.print.PrintAttributes.Builder()
-            .setMediaSize(android.print.PrintAttributes.MediaSize("pixpin_anotar", "Para anotar", columna + 2 * lado, 11693))
-            .setResolution(android.print.PrintAttributes.Resolution("pdf", "pdf", 300, 300))
-            .setMinMargins(android.print.PrintAttributes.Margins(lado, 590, lado, 590))
-            .build()
-        android.print.PdfDesdeWeb.escribir(vista.createPrintDocumentAdapter(titulo), atributos, destino) { bien ->
-            alAcabar()
-            if (!bien) {
-                Toast.makeText(this, "No se pudo preparar para anotar", Toast.LENGTH_SHORT).show()
-                return@escribir
-            }
-            prefsDeLectura.edit().putString(clave, destino.absolutePath).apply()
-            com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, destino.absolutePath, titulo, anotando = true)
-        }
     }
 
     /**
@@ -937,6 +1087,8 @@ class VisorHtmlActivity : ComponentActivity() {
         webViewClient = Cliente(pagina.parentFile ?: pagina)
         webChromeClient = Cromo()
         if (esDocumento) settings.textZoom = tamanoDeLetra
+        if (columnaDeAnotar != null) settings.loadWithOverviewMode = false
+        setOnScrollChangeListener { _, x, y, _, _ -> corridoX = x; corridoY = y }
         // El dedo sobre la página: un toque enseña el nombre, moverla lo esconde. No se consume nada.
         val margen = android.view.ViewConfiguration.get(contexto).scaledTouchSlop
         var x0 = 0f
@@ -983,7 +1135,11 @@ class VisorHtmlActivity : ComponentActivity() {
         }
 
         /** Al acabar de cargar se le enseña a la página a imprimir y a guardar aquí dentro. */
+        override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) { escalaWeb = newScale }
+
         override fun onPageFinished(view: WebView, url: String?) {
+            @Suppress("DEPRECATION")
+            escalaWeb = view.scale
             if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)
             if (esDocumento && fraccionPendiente >= 0f) {
                 val f = fraccionPendiente

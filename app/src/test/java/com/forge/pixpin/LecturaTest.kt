@@ -42,6 +42,28 @@ class LecturaTest {
     }
 
     @Test
+    fun `para anotar se abren dos tercios a cada lado y la columna se queda en píxeles`() {
+        assertEquals(240, Lectura.margenDe(360))
+        assertEquals(840, Lectura.anchoConMargenes(360))
+        val hoja = Lectura.estilo(1, 0, columna = 360)
+        assertTrue(hoja.contains("width:360px") && hoja.contains("margin-left:240px") && hoja.contains("width:840px"))
+        // Sin columna, ni rastro de márgenes.
+        assertTrue(!Lectura.estilo(1, 0).contains("margin-left"))
+        // Y poner y quitar no acumula hojas de estilo.
+        val pagina = "<html><head></head><body>x</body></html>"
+        val con = Lectura.conEstilo(pagina, 1, 0, 360)
+        assertEquals(1, Regex("pixpin-lector").findAll(Lectura.conEstilo(con, 1, 0, null)).count())
+    }
+
+    @Test
+    fun `la vista no se sale del documento`() {
+        assertEquals(0.0 to 0.0, Lectura.dentroDelDocumento(-50.0, -9.0, 840.0, 5000.0, 360.0, 700.0))
+        assertEquals(480.0 to 4300.0, Lectura.dentroDelDocumento(9999.0, 9999.0, 840.0, 5000.0, 360.0, 700.0))
+        // Un documento más corto que la pantalla no se mueve.
+        assertEquals(0.0 to 0.0, Lectura.dentroDelDocumento(10.0, 10.0, 300.0, 300.0, 360.0, 700.0))
+    }
+
+    @Test
     fun `el tamaño de la letra tiene topes`() {
         assertEquals(Lectura.TAMANO_MIN, Lectura.tamanoValido(10))
         assertEquals(Lectura.TAMANO_MAX, Lectura.tamanoValido(900))

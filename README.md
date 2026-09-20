@@ -5,7 +5,7 @@ guardar todo en un chat contigo mismo, leer documentos, dibujar en 3D, hacer tab
 y sacarlo en **HTML**, que abre cualquiera sin instalar nada. **Sin cuentas, sin servidores y sin
 analítica.**
 
-**Android 10+** · Kotlin + Compose · 2.543 pruebas · se instala por APK
+**Android 10+** · Kotlin + Compose · 2.545 pruebas · se instala por APK
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md) · [**Dejar un comentario**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/issues)
 
@@ -155,12 +155,14 @@ Leyendo un Word o un libro se cambia **el tamaño, el grosor y el tipo de letra*
 **marcadores con emoticono**: salen como puntos en el lateral, se pasa el dedo por ellos —vibra al
 cambiar de uno a otro— y al soltar se va a ese. Al volver, el documento se abre por donde se dejó.
 
-**Editor rápido.** Sin salir del lector, el lápiz de abajo pone **el mismo motor del lienzo**
-sobre la página que se mira: mismas herramientas, mismas tintas, y el **mismo dibujo** que abre el
-editor completo desde proyectos, así que lo anotado se edita luego en cualquiera de los dos. Qué
-herramientas lleva se elige en Ajustes, arrastrando. Un **Word o un libro** se anotan igual: pasan a
-páginas con la columna de texto en el centro y **dos tercios de margen a cada lado** para escribir,
-con la letra fijada para que las anotaciones no se muevan de su sitio.
+**Editor rápido.** Sin salir del lector se anota con **el mismo motor del lienzo**: las mismas
+herramientas y tintas, las que elijas en Ajustes arrastrando. En un **PDF**, el lápiz deja anotar
+sobre **todas las hojas a la vez**, como en cualquier editor de PDF: un dedo dibuja, dos pasan las
+hojas. No crea ningún proyecto; si luego lo quieres en proyectos, «Al proyecto» se lo lleva con lo
+anotado, y ahí se sigue con el editor completo. En un **Word o un libro**, la capa va encima del
+propio texto, que se desplaza hasta el final como siempre, con **dos tercios de margen a cada
+lado** para escribir; desde que hay algo anotado la letra queda fijada, para que nada se mueva de
+su sitio.
 
 Todos estos tipos —y las imágenes, las hojas de cálculo y las notas en Markdown— salen en **«Abrir
 con»** del sistema, y PixPin pregunta qué hacer: **abrirlo** (se guarda una copia en Guardados, sin
@@ -401,7 +403,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.543 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.545 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -455,7 +457,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.543 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.545 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ### Trece reglas de Android que moldearon el diseño
