@@ -195,6 +195,8 @@ class DrawEditorActivity : ComponentActivity() {
 
         /** Si la tira va apilada (arriba y abajo) en vez de en fila. */
         private const val CLAVE_APILADOS = "apilados"
+        /** El dibujo donde espera lo anotado en la hojita. Ver [Hojita]. */
+        private const val ID_DE_LA_HOJITA = "hojita-rapida"
 
         private const val EXTRA_ID = "draw_id"
         const val EXTRA_DESDE_DENTRO = "desde_dentro"
@@ -410,6 +412,7 @@ class DrawEditorActivity : ComponentActivity() {
         // Este lienzo entra en la rueda de la multitarea. Ver [apuntarComoAbierto].
         apuntarComoAbierto()
         apilados = prefsDeMultilienzo.getBoolean(CLAVE_APILADOS, false)
+        papelDeLaHojita = prefsDeMultilienzo.getString("papel_hojita", null)?.takeIf { it in Hojita.PAPELES } ?: Hojita.PAPELES.first()
         setContent {
             // El negro de verdad tiñe **todo el editor**, no solo el lienzo: con
             // el lienzo negro y las barras grises se ve un recuadro negro
@@ -741,19 +744,47 @@ class DrawEditorActivity : ComponentActivity() {
         cambiadoDesdeFuera()
     }
 
+    /**
+     * La foto de la zona **recortada con las esquinas redondas y con su filo pintado dentro**. El
+     * redondeo es suave —un 5 % del lado corto, entre 10 y 36 píxeles—: el de antes (el de los
+     * rectángulos del lienzo, hasta un cuarto del lado) era «muy redondeado» para un recorte.
+     */
+    private fun enRedondoYConFilo(foto: Bitmap, colorDelFilo: Int): Bitmap {
+        val w = foto.width
+        val h = foto.height
+        val radio = (minOf(w, h) * 0.05f).coerceIn(10f, 36f)
+        val grosor = (minOf(w, h) * 0.006f).coerceIn(2f, 5f)
+        val salida = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val lienzo = android.graphics.Canvas(salida)
+        val caja = android.graphics.RectF(0f, 0f, w.toFloat(), h.toFloat())
+        val relleno = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.BitmapShader(foto, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+        }
+        lienzo.drawRoundRect(caja, radio, radio, relleno)
+        val filo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = grosor
+            color = colorDelFilo
+        }
+        caja.inset(grosor / 2f, grosor / 2f)
+        lienzo.drawRoundRect(caja, radio - grosor / 2f, radio - grosor / 2f, filo)
+        return salida
+    }
+
     /** Sin interruptor: la foto queda encima, un poco corrida y seleccionada, para arrastrarla. */
     private fun colocarCopiaDeLaZona(foto: Bitmap, b: Bounds) {
         runCatching {
+            // **Un marco que se vea**: negro sobre papel claro, blanco sobre papel oscuro. Sobre una
+            // página de PDF (blanca) siempre negro. Va **dentro de la foto**, recortada en redondo.
+            val oscuro = pdfDeFondo == null && DrawTheme.esDeNoche(controller.scene.backgroundColor)
+            val foto = enRedondoYConFilo(foto, if (oscuro) android.graphics.Color.WHITE else 0xFF1E1E1E.toInt())
             val temporal = File(cacheDir, "zona_${System.currentTimeMillis()}.png")
             temporal.outputStream().use { foto.compress(Bitmap.CompressFormat.PNG, 100, it) }
             val file = ExcalidrawStore.guardarImagen(this, temporal, "image/png") ?: return
             temporal.delete()
             bitmaps[file.id] = foto
             val corrido = 24.0 / controller.scene.viewport.zoom.coerceAtLeast(0.0001)
-            // **Un marco que se vea**: negro sobre papel claro, blanco sobre papel oscuro. Sobre una
-            // página de PDF (blanca) siempre negro.
-            val oscuro = pdfDeFondo == null && DrawTheme.esDeNoche(controller.scene.backgroundColor)
-            controller.ponerCopiaDeZona(file, b, corrido, if (oscuro) "#ffffff" else "#1e1e1e")
+            controller.ponerCopiaDeZona(file, b, corrido, colorDelMarco = null)
             guardar()
             cambiadoDesdeFuera()
         }
@@ -1993,6 +2024,22 @@ class DrawEditorActivity : ComponentActivity() {
                         grupoDesplegado = grupoDesplegado,
                         onDesplegarGrupo = { grupoDesplegado = it }
                     )
+                    // **La hojita, debajo de la barra**, que sube para dejarle sitio (19-sep-2026).
+                    // Se dibuja en ella con lo que haya puesto en esa misma barra. Ver
+                    // [com.forge.pixpin.motor.Hojita].
+                    if (adhesivoALaVista) {
+                        Spacer(Modifier.height(6.dp))
+                        com.forge.pixpin.ui.HojitaDeNotas(
+                            controlador = laHojita,
+                            delLienzo = controller,
+                            papel = papelDeLaHojita,
+                            onPapel = { papelDeLaHojita = it; prefsDeMultilienzo.edit().putString("papel_hojita", it).apply() },
+                            imageProvider = ::bitmapDe,
+                            onCambio = { guardarLaHojita() },
+                            onInsertar = { vista -> insertarLaHojita(vista); adhesivoALaVista = false; cambiado() },
+                            onCerrar = { adhesivoALaVista = false }
+                        )
+                    }
                 }
 
                 // **Las hermanas del grupo, en vertical y al lado de la mano.**
@@ -2298,22 +2345,6 @@ class DrawEditorActivity : ComponentActivity() {
                         }
                     }
                 )
-            }
-            // **La hoja adhesiva**, arriba del todo y sin velo: se garabatea mirando lo que
-            // hay debajo, que es de lo que va un recado. Ver [NotaAdhesiva].
-            if (adhesivoALaVista) {
-                androidx.compose.foundation.layout.Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment = androidx.compose.ui.Alignment.TopCenter
-                ) {
-                    NotaAdhesiva(
-                        onCerrar = { adhesivoALaVista = false },
-                        onPegar = { trazos, ancho, alto, papel, tinta ->
-                            adhesivoALaVista = false
-                            pegarElAdhesivo(trazos, ancho, alto, papel, tinta)
-                        }
-                    )
-                }
             }
             // La ventana de ajustes: también sin velo, que se deja abierta a un
             // lado mientras se sigue dibujando.
@@ -4732,6 +4763,32 @@ class DrawEditorActivity : ComponentActivity() {
      * Se coloca en el **centro de lo que se está mirando**: en un lienzo infinito el origen de
      * la escena puede quedar a kilómetros de donde está la vista.
      */
+    /** El lienzo de la hojita: vive con la pantalla y se guarda aparte, para que lo anotado espere. */
+    private val laHojita: DrawController by lazy {
+        DrawController(ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(this, ID_DE_LA_HOJITA)) ?: Scene())
+    }
+    private var papelDeLaHojita by mutableStateOf(Hojita.PAPELES.first())
+
+    private fun guardarLaHojita() {
+        val escena = laHojita.scene
+        val contexto = applicationContext
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { ExcalidrawStore.guardar(contexto, ID_DE_LA_HOJITA, escena) } }
+    }
+
+    /** La hojita entra en el lienzo, en el centro de lo que se mira, y se queda vacía para la siguiente. */
+    private fun insertarLaHojita(vista: Bounds) {
+        val v = controller.scene.viewport
+        val centro = v.toScene(medidaDelLienzo.width / 2.0, medidaDelLienzo.height / 2.0)
+        val piezas = Hojita.paraInsertar(
+            laHojita.scene.elements, vista, papelDeLaHojita,
+            en = Pt(centro.x - vista.width / 2, centro.y - vista.height / 2), estilo = controller.scene.style
+        )
+        controller.insertarCon(piezas, laHojita.scene.files)
+        laHojita.load(Scene(style = laHojita.scene.style))
+        guardarLaHojita()
+        guardar()
+    }
+
     private fun pegarElAdhesivo(
         trazos: List<List<androidx.compose.ui.geometry.Offset>>,
         ancho: Int, alto: Int, papel: Int, tinta: Int

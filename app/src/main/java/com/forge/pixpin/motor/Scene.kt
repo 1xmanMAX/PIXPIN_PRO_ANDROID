@@ -198,7 +198,8 @@ data class ItemStyle(
     val fillStyle: FillStyle = FillStyle.SOLID,
     val strokeWidth: Double = 2.0,
     val strokeStyle: StrokeStyle = StrokeStyle.SOLID,
-    val roughness: Int = Element.ROUGHNESS_ARTIST,
+    /** De fábrica, **sin temblor**: lo pidió el usuario (19-sep-2026). Antes era el pulso medio. */
+    val roughness: Int = Element.ROUGHNESS_ARCHITECT,
     val opacity: Int = 100,
     /** De qué está hecha la tinta: lisa, encendida o con grano. Ver [MaterialDeTinta]. */
     val material: MaterialDeTinta = MaterialDeTinta.LISA,

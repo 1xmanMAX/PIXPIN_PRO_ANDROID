@@ -543,6 +543,19 @@ class DrawController(initial: Scene = Scene()) {
         // el andamio recortara los rellenos del dibujo por sitios donde no hay
         // nada pintado —y al revés, que no se pudiera rellenar un hueco del
         // andamio porque una raya del dibujo lo cruzaba.
+        // **Dentro de una sola figura cerrada, el relleno es el suyo, exacto.** La rejilla queda
+        // para los huecos entre varias. Ver [figuraQueSeRellenaSola].
+        figuraQueSeRellenaSola(editables, p)?.let { figura ->
+            rellenoSinCerrar = false
+            val color = if (isTransparent(scene.style.backgroundColor)) scene.style.strokeColor else scene.style.backgroundColor
+            scene = scene.copy(
+                elements = scene.elements
+                    // Una mancha de rejilla que hubiera ahí de antes se va: no se apilan pinturas.
+                    .filterNot { it.isRegion && !it.isDeleted && !it.locked && it.reference == figura.reference && puntoEnRegion(it, p) }
+                    .map { if (it.id == figura.id) it.copy(backgroundColor = color, fillStyle = scene.style.fillStyle) else it }
+            )
+            return
+        }
         val region = regionEn(editables, p, ajustesRelleno)
         if (region == null) {
             rellenoSinCerrar = true
@@ -565,6 +578,9 @@ class DrawController(initial: Scene = Scene()) {
      * la selección salían amontonados encima del cursor, justo donde estabas
      * escribiendo.
      */
+    /** Si tocar una figura con la herramienta de texto escribe **dentro** de ella. Ver [plantarTexto]. */
+    var textoDentroDeFiguras = false
+
     private fun plantarTexto(p: Pt, threshold: Double) {
         val debajo = getElementAtPosition(editables, p, threshold, scene.vista)
 
@@ -588,7 +604,14 @@ class DrawController(initial: Scene = Scene()) {
         // transparente sin robarle el toque a lo que tenga detrás— y con esa
         // regla, tocar el centro de un rectángulo vacío no encontraba nada. Para
         // escribir dentro, el sitio natural es justamente el centro.
-        val contenedor = editables.lastOrNull {
+        //
+        // **Apagado de fábrica** (19-sep-2026): el usuario prefiere el texto **suelto** —«anotar el
+        // texto por separado, la figura por separado, seleccionarlos y unirlos»—, porque dentro
+        // de la figura el texto queda obligado a su zona. Con [textoDentroDeFiguras] apagado, tocar
+        // una figura con la herramienta de texto planta un texto libre encima. Lo que ya estaba
+        // escrito dentro de una figura —o llega así de un archivo de Excalidraw— se sigue
+        // editando tocando el propio texto, que es la rama de arriba.
+        val contenedor = if (!textoDentroDeFiguras) null else editables.lastOrNull {
             admiteTextoDentro(it.type) && !it.locked && isPointInElement(p, it)
         }
         if (contenedor != null) {
@@ -2399,18 +2422,23 @@ class DrawController(initial: Scene = Scene()) {
      * juntos, encima de todo y un poco corridos de su sitio. **No cambia de herramienta**: con la Zona
      * puesta se saca otra, o se arrastra esta. [colorDelMarco] contrasta con el fondo.
      */
-    fun ponerCopiaDeZona(file: SceneFile, b: Bounds, desplazamiento: Double, colorDelMarco: String) {
+    fun ponerCopiaDeZona(file: SceneFile, b: Bounds, desplazamiento: Double, colorDelMarco: String?) {
         val before = scene.elements
         val grupo = GRUPO_DE_ZONA + randomId()
         val x = b.x1 + desplazamiento
         val y = b.y1 + desplazamiento
         val foto = newImageElement(file.id, x, y, b.width, b.height, scene.style).copy(groupIds = listOf(grupo))
-        val marco = newElement(ElementType.RECTANGLE, x, y, scene.style, b.width, b.height).copy(
-            strokeColor = colorDelMarco, backgroundColor = Element.TRANSPARENT,
-            strokeStyle = StrokeStyle.SOLID, strokeWidth = 2.0, roughness = 0, groupIds = listOf(grupo)
-        )
-        scene = scene.copy(elements = scene.elements + foto + marco, files = scene.files + (file.id to file))
-        selectedIds = setOf(foto.id, marco.id)
+        // **Sin color, el marco ya viene en la foto** (19-sep-2026): el marco era un rectángulo de
+        // esquinas redondas puesto sobre una foto de esquinas cuadradas, y los picos de la foto
+        // asomaban por fuera. Quien llama recorta la foto en redondo y le pinta el filo.
+        val marco = colorDelMarco?.let {
+            newElement(ElementType.RECTANGLE, x, y, scene.style, b.width, b.height).copy(
+                strokeColor = it, backgroundColor = Element.TRANSPARENT,
+                strokeStyle = StrokeStyle.SOLID, strokeWidth = 2.0, roughness = 0, groupIds = listOf(grupo)
+            )
+        }
+        scene = scene.copy(elements = scene.elements + listOfNotNull(foto, marco), files = scene.files + (file.id to file))
+        selectedIds = setOfNotNull(foto.id, marco?.id)
         anotar(before)
     }
 
@@ -3002,6 +3030,12 @@ class DrawController(initial: Scene = Scene()) {
             selectedIds = elementos.map { it.id }.toSet()
         }
         anotar(before)
+    }
+
+    /** Como [insertar], trayendo además las imágenes que esos elementos usen. Ver [Hojita]. */
+    fun insertarCon(elementos: List<Element>, archivos: Map<String, SceneFile>) {
+        if (archivos.isNotEmpty()) scene = scene.copy(files = scene.files + archivos)
+        insertar(elementos)
     }
 
     /**

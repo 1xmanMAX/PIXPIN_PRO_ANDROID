@@ -139,6 +139,52 @@ fun regionEn(
 }
 
 /**
+ * **La figura cerrada que se rellena ella sola, exacta**, o null si el hueco tocado no es de una
+ * sola figura.
+ *
+ * Lo pidió el usuario (19-sep-2026): las figuras son vectoriales, así que su relleno «debería ser
+ * exacto», y la rejilla —que está para los huecos **entre** varias figuras— no puede serlo: pinta
+ * un polígono que se arrima al trazo, con sus escalones. Pero el caso de todos los días es el
+ * fácil: se toca **dentro de un rectángulo, una elipse, un rombo o un lazo cerrado y dentro no hay
+ * nada más**. Ahí no hay nada que buscar: el hueco *es* la figura, y su propio fondo la rellena
+ * con su forma de verdad —curvas, esquinas redondas y giro incluidos—, se mueve y se estira con
+ * ella, y no deja ni una rendija ni un reborde.
+ *
+ * Vale solo si nada más se mete en la figura: ninguna otra pared la cruza ni tiene un extremo
+ * dentro. Si lo hay —una raya que la parte en dos, un círculo dentro—, el hueco ya no es la figura
+ * entera y se devuelve null para que decida la rejilla, con sus agujeros.
+ */
+fun figuraQueSeRellenaSola(elementos: List<Element>, p: Pt): Element? {
+    val paredes = elementos.filter { !it.isDeleted && esPared(it) }
+    val candidata = paredes.mapNotNull { e ->
+        if (e.locked) return@mapNotNull null
+        val anillo = contornosDe(e).firstOrNull { it.cerrado && it.puntos.size >= 3 }?.puntos ?: return@mapNotNull null
+        if (cruzaImpar(p, anillo)) e to anillo else null
+    }.minByOrNull { abs(areaDe(it.second)) } ?: return null
+    val (figura, anillo) = candidata
+    val caja = boundsOfPoints(anillo)
+    val lados = (anillo + anillo.first()).zipWithNext()
+    for (otra in paredes) {
+        if (otra.id == figura.id || !boundsOverlap(caja, getElementBounds(otra))) continue
+        for ((a, b) in segmentosDe(otra)) {
+            if (cruzaImpar(a, anillo) || cruzaImpar(b, anillo)) return null
+            if (lados.any { (c, d) -> seCortan(a, b, c, d) }) return null
+        }
+    }
+    return figura
+}
+
+/** Si el tramo a–b y el c–d se cruzan (tocarse en un extremo cuenta). */
+private fun seCortan(a: Pt, b: Pt, c: Pt, d: Pt): Boolean {
+    fun lado(p: Pt, q: Pt, r: Pt) = (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)
+    val d1 = lado(c, d, a)
+    val d2 = lado(c, d, b)
+    val d3 = lado(a, b, c)
+    val d4 = lado(a, b, d)
+    return (d1 > 0) != (d2 > 0) && (d3 > 0) != (d4 > 0)
+}
+
+/**
  * ¿Este elemento hace de pared?
  *
  * La regla es «lo que dibuja una línea encierra; lo que es un fondo, no». La

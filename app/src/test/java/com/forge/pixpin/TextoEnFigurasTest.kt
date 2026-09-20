@@ -208,6 +208,7 @@ class TextoEnFigurasEnElEditorTest {
     @Test
     fun `el texto nace dentro de la figura`() {
         val c = conUnRectangulo()
+        c.textoDentroDeFiguras = true
         c.selectTool(Tool.TEXT)
         c.pointerDown(Pt(100.0, 50.0))
         c.pointerUp(Pt(100.0, 50.0))
@@ -219,10 +220,23 @@ class TextoEnFigurasEnElEditorTest {
         assertEquals(listOf(t.id), caja.boundElements!!.map { it.id })
     }
 
+    /** De fábrica, el texto va suelto: tocar la figura no lo mete dentro. */
+    @Test
+    fun `de fábrica el texto sobre una figura nace suelto`() {
+        val c = conUnRectangulo()
+        c.selectTool(Tool.TEXT)
+        c.pointerDown(Pt(100.0, 50.0))
+        c.pointerUp(Pt(100.0, 50.0))
+        assertEquals(1, textos(c).size)
+        assertEquals(null, textos(c)[0].containerId)
+        assertTrue(c.scene.byId("caja")!!.boundElements.isNullOrEmpty())
+    }
+
     /** Volver a tocarla sigue escribiendo en el suyo, no crea otro. */
     @Test
     fun `tocar dos veces no crea dos textos`() {
         val c = conUnRectangulo()
+        c.textoDentroDeFiguras = true
         c.selectTool(Tool.TEXT)
         c.pointerDown(Pt(100.0, 50.0)); c.pointerUp(Pt(100.0, 50.0))
         c.pointerDown(Pt(90.0, 40.0)); c.pointerUp(Pt(90.0, 40.0))
@@ -233,6 +247,7 @@ class TextoEnFigurasEnElEditorTest {
     @Test
     fun `la caja crece con el texto y no encoge`() {
         val c = conUnRectangulo()
+        c.textoDentroDeFiguras = true
         c.selectTool(Tool.TEXT)
         c.pointerDown(Pt(100.0, 50.0)); c.pointerUp(Pt(100.0, 50.0))
         val t = textos(c)[0].id
@@ -252,6 +267,7 @@ class TextoEnFigurasEnElEditorTest {
     @Test
     fun `el texto se va con su figura`() {
         val c = conUnRectangulo()
+        c.textoDentroDeFiguras = true
         c.selectTool(Tool.TEXT)
         c.pointerDown(Pt(100.0, 50.0)); c.pointerUp(Pt(100.0, 50.0))
         c.updateText(textos(c)[0].id, "hola", 40.0, 20.0)
@@ -271,6 +287,7 @@ class TextoEnFigurasEnElEditorTest {
     @Test
     fun `borrar la figura borra su texto`() {
         val c = conUnRectangulo()
+        c.textoDentroDeFiguras = true
         c.selectTool(Tool.TEXT)
         c.pointerDown(Pt(100.0, 50.0)); c.pointerUp(Pt(100.0, 50.0))
         c.updateText(textos(c)[0].id, "hola", 40.0, 20.0)

@@ -1,5 +1,10 @@
 package com.forge.pixpin.ui.theme
 
+import kotlinx.coroutines.launch
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.LaunchedEffect
 import android.os.Build
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.WindowInsets
@@ -149,34 +154,66 @@ fun FilaQueSaltaLaCamara(
     val camaras = rememberCamaras()
     var caja by remember { mutableStateOf<Rect?>(null) }
     val conCamara = camaras.isNotEmpty()
+    // Lo que mide cada botón, para echar la cuenta fuera de la colocación; y lo que cada uno lleva
+    // saltado ahora mismo, **animado**: al pasar por la cámara el botón no aparece de golpe al
+    // otro lado, se desliza hasta allí con muelle, como quien rodea un obstáculo.
+    var anchosMedidos by remember { mutableStateOf(IntArray(0)) }
+    val saltos = remember { mutableStateListOf<androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>>() }
+    if (conCamara) LaunchedEffect(camaras) {
+        kotlinx.coroutines.coroutineScope {
+            snapshotFlow { Triple(desplazamiento.value, caja, anchosMedidos) }.collect { (corrido, sitio, anchos) ->
+                while (saltos.size < anchos.size) saltos.add(androidx.compose.animation.core.Animatable(0f))
+                if (sitio == null) return@collect
+                val huecos = camaras
+                    .filter { it.top < sitio.bottom && it.bottom > sitio.top }
+                    .sortedBy { it.left }
+                    .map { it.left..it.right }
+                val xs = EsquivaDeCamara.colocar(anchos, 0, sitio.left - corrido, huecos)
+                var llano = 0
+                for (k in anchos.indices) {
+                    val meta = (xs[k] - llano).toFloat()
+                    llano += anchos[k]
+                    if (saltos[k].targetValue != meta) launch {
+                        saltos[k].animateTo(meta, androidx.compose.animation.core.spring(dampingRatio = 0.75f, stiffness = 380f))
+                    }
+                }
+            }
+        }
+    }
     Layout(
         contenido,
         if (conCamara) modifier.onGloballyPositioned {
-            // Dónde empieza la fila sin deslizar: su sitio más lo ya deslizado.
-            val b = it.boundsInWindow()
-            caja = Rect(b.left + desplazamiento.value, b.top, b.right, b.bottom)
+            // **Dónde empieza la fila sin deslizar**: su sitio de verdad más lo ya deslizado. Con
+            // `boundsInWindow()` —lo que había— el sitio venía **recortado** a lo que se ve, así
+            // que en cuanto se deslizaba la cuenta se iba corriendo con el dedo y los botones ya
+            // no saltaban donde estaba la cámara: solo funcionaba sin deslizar, que es justo lo
+            // que vio el usuario (19-sep-2026). `positionInWindow()` no recorta.
+            val p = it.positionInWindow()
+            val izquierda = p.x + desplazamiento.value
+            val nueva = Rect(izquierda, p.y, izquierda + it.size.width, p.y + it.size.height)
+            if (nueva != caja) caja = nueva
         } else modifier
     ) { medibles, restricciones ->
         val suelta = restricciones.copy(minWidth = 0)
         val piezas = medibles.map { it.measure(suelta) }
         val alto = piezas.maxOfOrNull { it.height } ?: 0
         val anchos = IntArray(piezas.size) { piezas[it].width }
+        if (conCamara && !anchos.contentEquals(anchosMedidos)) anchosMedidos = anchos
         val sitio = caja
         val huecos = if (sitio == null) emptyList() else camaras
             .filter { it.top < sitio.bottom && it.bottom > sitio.top }
-            .sortedBy { it.left }
-            .map { it.left..it.right }
-        val reserva = huecos.sumOf { (it.endInclusive - it.start + 2 * EsquivaDeCamara.HOLGURA).toDouble() }.toInt() +
+        val reserva = huecos.sumOf { (it.right - it.left + 2 * EsquivaDeCamara.HOLGURA).toDouble() }.toInt() +
             if (huecos.isEmpty()) 0 else (anchos.maxOrNull() ?: 0)
         val ancho = anchos.sum() + reserva
         layout(ancho.coerceIn(restricciones.minWidth, restricciones.maxWidth), alto) {
-            val xs = if (huecos.isEmpty() || sitio == null) {
-                var x = 0
-                IntArray(anchos.size) { i -> x.also { x += anchos[i] } }
-            } else {
-                EsquivaDeCamara.colocar(anchos, 0, sitio.left - desplazamiento.value, huecos)
+            var x = 0
+            piezas.forEachIndexed { i, p ->
+                val salto = saltos.getOrNull(i)
+                // El salto va en la capa: moverlo no vuelve a medir ni a colocar a nadie.
+                if (salto == null) p.place(x, (alto - p.height) / 2)
+                else p.placeWithLayer(x, (alto - p.height) / 2) { translationX = salto.value }
+                x += anchos[i]
             }
-            piezas.forEachIndexed { i, p -> p.place(xs[i], (alto - p.height) / 2) }
         }
     }
 }

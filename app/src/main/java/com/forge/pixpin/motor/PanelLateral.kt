@@ -1524,10 +1524,12 @@ private val RELLENOS_QUE_SE_OFRECEN = listOf(
     FillStyle.HACHURE, FillStyle.CROSS_HATCH, FillStyle.ZIGZAG, FillStyle.SOLID
 )
 
-/** Los tres pulsos del original, de recto a temblón. */
-private val PULSOS = listOf(
-    Element.ROUGHNESS_ARCHITECT, Element.ROUGHNESS_ARTIST, Element.ROUGHNESS_CARTOONIST
-)
+/**
+ * **Dos pulsos: recto y algo temblón.** El original trae un tercero, el más temblón, y el usuario lo
+ * quitó (19-sep-2026): «demuestra demasiado error». Un dibujo que ya lo traiga se sigue pintando
+ * como es; aquí solo deja de poder elegirse. De fábrica, **recto** (ver [ItemStyle.roughness]).
+ */
+private val PULSOS = listOf(Element.ROUGHNESS_ARCHITECT, Element.ROUGHNESS_ARTIST)
 
 /**
  * Las tres formas de una flecha, como **una sola cosa que se elige**.

@@ -139,4 +139,14 @@ class CopiaDeZonaTest {
         c.pointerUp(Pt(150.0, 30.0))
         assertTrue(c.scene.elements.all { it.x == 110.0 })
     }
+
+    @Test
+    fun `sin color de marco la copia es solo la foto, que ya lo trae pintado`() {
+        val c = DrawController()
+        c.selectTool(Tool.ZONA)
+        c.ponerCopiaDeZona(SceneFile("f1", "image/png", "/x.png", 0L), Bounds(0.0, 0.0, 100.0, 50.0), 10.0, null)
+        assertEquals(1, c.scene.elements.size)
+        assertTrue(c.scene.elements.single().groupIds.single().startsWith(GRUPO_DE_ZONA))
+        assertEquals(setOf(c.scene.elements.single().id), c.selectedIds)
+    }
 }

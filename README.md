@@ -5,7 +5,7 @@ guardar todo en un chat contigo mismo, leer documentos, dibujar en 3D, hacer tab
 y sacarlo en **HTML**, que abre cualquiera sin instalar nada. **Sin cuentas, sin servidores y sin
 analítica.**
 
-**Android 10+** · Kotlin + Compose · 2.536 pruebas · se instala por APK
+**Android 10+** · Kotlin + Compose · 2.542 pruebas · se instala por APK
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md) · [**Dejar un comentario**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/issues)
 
@@ -394,7 +394,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.536 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.542 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -448,7 +448,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.536 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.542 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ### Trece reglas de Android que moldearon el diseño
