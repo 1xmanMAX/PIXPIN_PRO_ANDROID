@@ -477,11 +477,12 @@ enum class MaterialDeTinta {
     @SerialName("trama") TRAMA,
 
     /**
-     * **Lápiz de cuadritos** (20-sep-2026): el grafito, hecho de cuadrados. El trazo no lleva
-     * cuerpo: es **una nube de cuadritos de distintos tonos**, unos más cargados y otros casi
-     * nada, con huecos entre ellos. De cerca se ven los cuadros, uno a uno y nítidos, como en
-     * las capturas que mandó el usuario de un lápiz muy ampliado; de lejos se funden en el gris
-     * desigual de un lápiz de verdad. Son siempre los mismos cuadros: no hierven al repintar.
+     * **Lápiz** (20-sep-2026): grafito de verdad. No es un trazo con grano encima: es **un sello
+     * rascado estampado a lo largo del trazo**, casi transparente, con el tamaño y la carga atados
+     * a la presión, sobre una textura de papel —que es como lo hacen las aplicaciones de pintar—.
+     * Por eso repasar oscurece, apretar carga y los cantos se deshacen. Ver `Renderer.pintarElLapiz`.
+     * (El nombre de guardado, «cuadritos», es el de su primera versión: muy ampliado, eso es lo
+     * que se ve.) En lo que no es un trazo a mano —una caja, una línea— va como tramado de cuadros.
      */
     @SerialName("cuadritos") CUADRITOS;
 

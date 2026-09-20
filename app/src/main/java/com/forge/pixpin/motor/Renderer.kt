@@ -2343,6 +2343,10 @@ class Renderer(
         if (contorno.isEmpty) return
 
         val gordo = anchoDeLaTinta(e, alpha)
+        if (e.material == MaterialDeTinta.CUADRITOS) {
+            losCuadritos(canvas, e, contorno, gordo, alpha)
+            return
+        }
         // **El paso sale del ancho del trazo y de nada más. Del aumento, no.**
         //
         // Dependía del aumento por las dos puntas —un suelo y un techo en píxeles de pantalla—
@@ -2354,20 +2358,9 @@ class Renderer(
         // Clavado al trazo, el mosaico vive en el dibujo: acercarse lo agranda —se pixela, que
         // es lo que hace cualquier textura al ampliarla— pero **son siempre los mismos
         // cuadros**. Que no desaparezca al alejarse lo resuelve el filtrado, no el tamaño.
-        val cuadritos = e.material == MaterialDeTinta.CUADRITOS
-        // En el lápiz de cuadritos el mosaico son [LADO_DEL_MOSAICO] cuadros de lado, y a lo ancho
-        // del trazo tienen que caber unos cinco: eso es lo que hace que se lea como grafito.
-        val paso = if (cuadritos) (gordo * LADO_DE_LOS_CUADRITOS / CUADRITOS_A_LO_ANCHO).coerceIn(24f, 1024f)
-        else (gordo * PASO_DEL_GRANO).coerceIn(PASO_MINIMO_DEL_GRANO, PASO_MAXIMO_DEL_GRANO)
-        // **La lógica de un lápiz**: una pasada no tapa, deja una capa; **otra pasada encima
-        // oscurece**, y otra más, hasta el negro del grafito —cada trazo se pinta sobre los de
-        // debajo, así que sale solo de ir translúcido—. Y **apretar carga más**: con un lápiz de
-        // verdad (presión real, no simulada) la media de la presión del trazo sube o baja su carga.
-        val pasada = if (!cuadritos) 1f else {
-            val presion = e.pressures?.takeIf { !e.simulatePressure && it.isNotEmpty() }?.average()?.toFloat()
-            CARGA_DE_UNA_PASADA * (presion?.let { (0.5f + 0.9f * it).coerceIn(0.45f, 1.45f) } ?: 1f)
-        }
-        val tinta = parseColor(e.strokeColor, (alpha * pasada).toInt().coerceIn(0, 255))
+        val paso = (gordo * PASO_DEL_GRANO)
+            .coerceIn(PASO_MINIMO_DEL_GRANO, PASO_MAXIMO_DEL_GRANO)
+        val tinta = parseColor(e.strokeColor, alpha)
         val oscuro = tema(
             Color.argb(
                 alpha,
@@ -2380,17 +2373,10 @@ class Renderer(
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.FILL
-        // Los cuadritos, **sin suavizar**: ampliados tienen que seguir siendo cuadrados de canto
-        // vivo, no manchas. Y con la tinta tal cual, que los tonos ya los pone cada cuadro.
-        paint.isFilterBitmap = !cuadritos
-        // **El canto se deshace**, como el de un lápiz: el contorno se difumina y, como lo que se
-        // pinta son cuadros, lo que se ve es que hacia fuera van quedando cada vez más flojos. Un
-        // lápiz no tiene borde; es lo que más delataba a esta tinta como «trazo recortado».
-        if (cuadritos) paint.maskFilter = elDifuminadoDe(gordo)
-        paint.shader = laTelaDelGrano(e.material, if (cuadritos) tema(tinta) else oscuro, paso)
+        paint.isFilterBitmap = true
+        paint.shader = laTelaDelGrano(e.material, oscuro, paso)
         canvas.drawPath(contorno, paint)
         paint.shader = null
-        paint.maskFilter = null
     }
 
     /**
@@ -2432,56 +2418,14 @@ class Renderer(
             // grosores grandes, grandes. Con un tamaño fijo hay **una por material y color** —
             // un kilobyte cada una— y lo grande o pequeña que sale la dice la matriz de la
             // brocha, que no cuesta memoria ninguna.
-            // El lápiz de cuadritos lleva un mosaico mayor: con dieciséis cuadros la repetición se ve.
-            val lado = if (cual == MaterialDeTinta.CUADRITOS) LADO_DE_LOS_CUADRITOS else LADO_DEL_MOSAICO
+            val lado = LADO_DEL_MOSAICO
             val mapa = Bitmap.createBitmap(lado, lado, Bitmap.Config.ARGB_8888)
             val enTela = Canvas(mapa)
             val pincel = Paint().apply {
                 isAntiAlias = true
                 this.color = color
             }
-            if (cual == MaterialDeTinta.CUADRITOS) {
-                // **Un cuadro por píxel del mosaico**, y que **parezca lápiz de verdad** (el usuario
-                // insistió). Un lápiz no deja motas al azar: deja grafito **donde el papel tiene
-                // relieve**. Así que la carga de cada cuadro sale de dos cosas multiplicadas: un
-                // **grano de papel** suave —manchas de unos ocho cuadros, que son las que hacen
-                // los claros y los empastes— y el azar de cada cuadro. Donde el papel «hunde», no
-                // hay cuadro; donde «sobresale», va cargado y algo más oscuro. Con semilla fija y
-                // el grano casando en los bordes: son siempre los mismos cuadros y no se ve la junta.
-                val azar = java.util.Random(20260920L)
-                val celdas = 8
-                val relieve = Array(celdas) { FloatArray(celdas) { azar.nextFloat() } }
-                fun papel(x: Int, y: Int): Float {
-                    val fx = x * celdas / lado.toFloat()
-                    val fy = y * celdas / lado.toFloat()
-                    val x0 = fx.toInt() % celdas
-                    val y0 = fy.toInt() % celdas
-                    val x1 = (x0 + 1) % celdas
-                    val y1 = (y0 + 1) % celdas
-                    val tx = (fx - fx.toInt()).let { it * it * (3 - 2 * it) }
-                    val ty = (fy - fy.toInt()).let { it * it * (3 - 2 * it) }
-                    val arriba = relieve[y0][x0] + (relieve[y0][x1] - relieve[y0][x0]) * tx
-                    val abajo = relieve[y1][x0] + (relieve[y1][x1] - relieve[y1][x0]) * tx
-                    return arriba + (abajo - arriba) * ty
-                }
-                // **Sin huecos** (segunda corrección del usuario: «hay como vacíos, no luce como un
-                // lápiz»). Un lápiz **cubre**: lo que cambia de un punto a otro es cuánto grafito
-                // queda, no si queda. Así que todos los cuadros llevan tinta, entre media carga y
-                // entera, y el relieve del papel solo la modula. Lo que hace que se vea el papel
-                // por debajo no son agujeros: es que la pasada entera va **translúcida**
-                // ([CARGA_DE_UNA_PASADA]), y por eso repasar oscurece. Ver [elGrano].
-                for (y in 0 until lado) for (x in 0 until lado) {
-                    val carga = (0.5f + 0.38f * papel(x, y) + 0.12f * azar.nextFloat()).coerceIn(0f, 1f)
-                    val tono = 0.8f + 0.2f * carga
-                    mapa.setPixel(
-                        x, y,
-                        Color.argb(
-                            (Color.alpha(color) * carga).toInt().coerceIn(0, 255),
-                            (Color.red(color) * tono).toInt(), (Color.green(color) * tono).toInt(), (Color.blue(color) * tono).toInt()
-                        )
-                    )
-                }
-            } else if (cual == MaterialDeTinta.PUNTOS) {
+            if (cual == MaterialDeTinta.PUNTOS) {
                 pincel.style = Paint.Style.FILL
                 enTela.drawCircle(lado / 2f, lado / 2f, lado * GORDO_DEL_GRANO * 2.4f, pincel)
             } else if (cual == MaterialDeTinta.TIZA || cual == MaterialDeTinta.LAPIZ_2B) {
@@ -2538,7 +2482,7 @@ class Renderer(
         val brocha = BitmapShader(tela, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         brocha.setLocalMatrix(
             Matrix().apply {
-                val cuanto = redondo / (if (cual == MaterialDeTinta.CUADRITOS) LADO_DE_LOS_CUADRITOS else LADO_DEL_MOSAICO).toFloat()
+                val cuanto = redondo / LADO_DEL_MOSAICO.toFloat()
                 setScale(cuanto, cuanto)
                 // El punteado y las motas no tienen dirección; el rotulador seco va **a lo
                 // largo del trazo**, que es como se descarga de verdad, y no de través.
@@ -2555,14 +2499,86 @@ class Renderer(
         return brocha
     }
 
-    /** El difuminado del canto del lápiz de cuadritos, por grueso: crear uno por trazo y fotograma sería basura. */
-    private val losDifuminados = HashMap<Int, android.graphics.BlurMaskFilter>()
+    /**
+     * **El lápiz de cuadritos, como el de las capturas del usuario** (tercera versión, 20-sep-2026).
+     *
+     * Las dos primeras no le parecieron un lápiz, y tenía razón: deshacían el canto
+     * **difuminándolo** —alfa suave— y un lápiz muy ampliado no es eso. En sus capturas el trazo
+     * es de cuadros **de canto vivo y tinta entera**, cada uno con su tono, muy tupidos en el
+     * centro, y hacia fuera **no se aclaran: escasean**. El borde es un tramado, no un degradado.
+     *
+     * Eso se pinta sin mirar píxel a píxel con **pasadas anidadas**: el mismo contorno, cada vez
+     * más ensanchado, relleno con un mosaico cada vez **más ralo** —93 % de cuadros en el cuerpo,
+     * luego 70, 48, 28, 14 y 6 en la última orla—. Todos los mosaicos salen de **la misma tirada
+     * de dados** (un cuadro está si su número es menor que la densidad), así que cada uno contiene
+     * al siguiente y repintar un cuadro encima de sí mismo no cambia nada: la suma es el tramado.
+     *
+     * Y la lógica del lápiz:
+     * - **Repasar oscurece**: cada trazo lleva su mosaico **corrido** a un sitio propio (sale de
+     *   su id), así que un segundo trazo encima no cae en los mismos cuadros: rellena huecos del
+     *   primero y la zona se carga, como el grafito.
+     * - **Apretar carga más**: con presión de verdad, su media sube o baja la densidad de todas
+     *   las pasadas. El grueso ya lo lleva el contorno del trazo.
+     */
+    private fun losCuadritos(canvas: Canvas, e: Element, contorno: Path, gordo: Float, alpha: Int) {
+        val presion = e.pressures?.takeIf { !e.simulatePressure && it.isNotEmpty() }?.average()?.toFloat()
+        // Tres cargas bastan, y así los mosaicos se reaprovechan entre trazos.
+        val carga = when {
+            presion == null -> 1f
+            presion < 0.33f -> 0.6f
+            presion < 0.66f -> 0.82f
+            else -> 1f
+        }
+        val lado = (gordo / CUADRITOS_A_LO_ANCHO).coerceIn(0.35f, 24f)
+        val color = tema(parseColor(e.strokeColor, alpha))
+        val azar = e.id.hashCode()
+        val dx = ((azar ushr 3) and 31) * lado
+        val dy = ((azar ushr 9) and 31) * lado
+        paint.reset()
+        paint.isAntiAlias = false
+        paint.isFilterBitmap = false
+        paint.strokeJoin = Paint.Join.ROUND
+        for (k in DENSIDADES_DE_LOS_CUADRITOS.indices) {
+            val extra = ORLAS_DE_LOS_CUADRITOS[k] * gordo
+            paint.style = if (extra <= 0f) Paint.Style.FILL else Paint.Style.FILL_AND_STROKE
+            paint.strokeWidth = extra
+            val tela = laTelaDeCuadritos(color, (DENSIDADES_DE_LOS_CUADRITOS[k] * carga).coerceAtMost(0.97f))
+            val brocha = BitmapShader(tela, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+            brocha.setLocalMatrix(elMoldeDeLosCuadritos.apply { setScale(lado, lado); postTranslate(dx, dy) })
+            paint.shader = brocha
+            canvas.drawPath(contorno, paint)
+        }
+        paint.shader = null
+    }
 
-    private fun elDifuminadoDe(gordo: Float): android.graphics.BlurMaskFilter {
-        val radio = (gordo * 0.28f).coerceIn(0.6f, 40f)
-        val llave = (radio * 4).toInt()
-        if (losDifuminados.size > 64) losDifuminados.clear()
-        return losDifuminados.getOrPut(llave) { android.graphics.BlurMaskFilter(radio, android.graphics.BlurMaskFilter.Blur.NORMAL) }
+    private val elMoldeDeLosCuadritos = Matrix()
+
+    /** Los mosaicos del lápiz de cuadritos, por color y densidad: 16 KB cada uno. */
+    private val lasTelasDeCuadritos = HashMap<Long, Bitmap>()
+
+    /** Un cuadro por píxel; está si su número de la tirada queda por debajo de [densidad]. */
+    private fun laTelaDeCuadritos(color: Int, densidad: Float): Bitmap {
+        val llave = (color.toLong() and 0xFFFFFFFFL) xor ((densidad * 1000).toLong() shl 32)
+        lasTelasDeCuadritos[llave]?.let { return it }
+        if (lasTelasDeCuadritos.size > 96) lasTelasDeCuadritos.clear()
+        val lado = LADO_DE_LOS_CUADRITOS
+        val mapa = Bitmap.createBitmap(lado, lado, Bitmap.Config.ARGB_8888)
+        // Dos tiradas con semilla fija: si está, y de qué tono. Siempre los mismos cuadros.
+        val siEsta = java.util.Random(20260920L)
+        val tono = java.util.Random(20260921L)
+        val pixeles = IntArray(lado * lado)
+        for (i in pixeles.indices) {
+            val dado = siEsta.nextFloat()
+            val t = 0.5f + 0.5f * tono.nextFloat()
+            if (dado < densidad) {
+                pixeles[i] = Color.argb(
+                    Color.alpha(color), (Color.red(color) * t).toInt(), (Color.green(color) * t).toInt(), (Color.blue(color) * t).toInt()
+                )
+            }
+        }
+        mapa.setPixels(pixeles, 0, lado, 0, 0, lado, lado)
+        lasTelasDeCuadritos[llave] = mapa
+        return mapa
     }
 
     /** El contorno del trazo, reaprovechado entre figuras. Ver [elGrano]. */
@@ -2691,6 +2707,9 @@ class Renderer(
         // forma: encima le comería el borde por dentro.
         if (rellenaSuLazo(e)) drawFill(canvas, e, shape, alpha)
 
+        // **El lápiz se estampa**, no se rellena. Ver [pintarElLapiz].
+        if (e.material == MaterialDeTinta.CUADRITOS && pintarElLapiz(canvas, e, alpha)) return
+
         conMaterial(canvas, e, shape.strokePath, alpha, relleno = true) { a, color ->
             fillPaint.reset()
             fillPaint.isAntiAlias = true
@@ -2698,6 +2717,209 @@ class Renderer(
             fillPaint.color = color ?: tema(parseColor(e.strokeColor, a))
             canvas.drawPath(shape.strokePath, fillPaint)
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // El lápiz de sellos
+    // ---------------------------------------------------------------------
+
+    /**
+     * **El lápiz, hecho como lo hacen las aplicaciones de pintar** (cuarta versión, 20-sep-2026).
+     *
+     * Las tres primeras intentaban imitar el *aspecto* —cuadritos, tramado— y al usuario no le
+     * parecieron un lápiz. Entonces mandó la ficha del pincel «2B» de la aplicación de dibujo de
+     * su tableta, y ahí está el mecanismo: **no es una raya, es un sello**. Una forma pequeña y
+     * rascada (*Shape: 2B pencil*) se estampa a lo largo del trazo cada **10 % de su tamaño**
+     * (*Spacing*), casi transparente (*Opacity* 79 % por una carga baja), con el tamaño y la carga
+     * **atados a la presión**, y todo pasa por una **textura de papel** (*Base texture*). Lo que
+     * él veía como «cuadritos» era ese resultado muy ampliado.
+     *
+     * Hecho igual, sale solo todo lo que pedía: donde los sellos se pisan el trazo se carga y en
+     * los cantos escasea; **repasar oscurece**, porque es más grafito encima; apretar engorda y
+     * carga; y el papel asoma por el grano. Los sellos giran al azar —con semilla del propio
+     * trazo: no hierve al repintar— para que no se vea la forma repetida.
+     *
+     * **Se cuece una vez.** Un trazo son cientos o miles de sellos, y estamparlos en cada
+     * fotograma sería inmanejable con un dibujo lleno de lápiz. Cada trazo se estampa en un mapa
+     * de bits propio, a la resolución del aumento al que se mira, y lo que se pinta cada
+     * fotograma es ese mapa. Se rehace si el trazo cambia o si el aumento salta de escalón, y los
+     * más viejos se sueltan cuando pesan demasiado ([PESO_DE_LOS_LAPICES]).
+     *
+     * Devuelve falso si no pudo (un trazo enorme sin memoria): entonces se pinta liso.
+     */
+    private fun pintarElLapiz(canvas: Canvas, e: Element, alpha: Int): Boolean {
+        val puntos = e.points ?: return false
+        if (puntos.size < 2) return false
+        val gordo = (e.strokeWidth * GORDO_DEL_LAPIZ).toFloat().coerceAtLeast(1.5f)
+        // A qué resolución se cuece: por escalones de aumento, para no rehacerlo en cada pellizco.
+        var finura = Math.pow(2.0, Math.round(Math.log(zoomActual.coerceIn(0.2, 6.0)) / Math.log(2.0)).toDouble()).toFloat()
+        val margen = gordo
+        var x0 = Float.MAX_VALUE; var y0 = Float.MAX_VALUE; var x1 = -Float.MAX_VALUE; var y1 = -Float.MAX_VALUE
+        for (q in puntos) {
+            val x = (e.x + q.x).toFloat(); val y = (e.y + q.y).toFloat()
+            if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y
+        }
+        x0 -= margen; y0 -= margen; x1 += margen; y1 += margen
+        while (((x1 - x0) * finura > LADO_MAXIMO_DEL_LAPIZ || (y1 - y0) * finura > LADO_MAXIMO_DEL_LAPIZ) && finura > 0.05f) finura /= 2f
+        val ancho = ((x1 - x0) * finura).toInt().coerceAtLeast(1)
+        val alto = ((y1 - y0) * finura).toInt().coerceAtLeast(1)
+        val tinta = tema(parseColor(e.strokeColor, 255))
+        val huella = (puntos.size * 31L + e.version) * 31L + tinta + (e.strokeWidth * 100).toLong() * 7L + (finura * 64).toLong() * 131L +
+            (e.x * 8).toLong() * 17L + (e.y * 8).toLong() * 19L
+
+        val cocido = losLapices[e.id]?.takeIf { it.huella == huella && !it.mapa.isRecycled } ?: run {
+            val mapa = runCatching { Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return false
+            estamparElLapiz(Canvas(mapa), e, puntos, gordo, finura, x0, y0, tinta)
+            losLapices.remove(e.id)?.let { pesoDeLosLapices -= it.mapa.byteCount }
+            val nuevo = LapizCocido(mapa, huella)
+            losLapices[e.id] = nuevo
+            pesoDeLosLapices += mapa.byteCount
+            // Los más viejos, fuera: `LinkedHashMap` en orden de acceso.
+            val it = losLapices.entries.iterator()
+            while (pesoDeLosLapices > PESO_DE_LOS_LAPICES && it.hasNext()) {
+                val viejo = it.next()
+                if (viejo.key == e.id) continue
+                pesoDeLosLapices -= viejo.value.mapa.byteCount
+                it.remove()
+            }
+            nuevo
+        }
+        paint.reset()
+        paint.isFilterBitmap = true
+        paint.alpha = alpha
+        elSitioDelLapiz.set(x0, y0, x1, y1)
+        canvas.drawBitmap(cocido.mapa, null, elSitioDelLapiz, paint)
+        return true
+    }
+
+    private class LapizCocido(val mapa: Bitmap, val huella: Long)
+
+    private val losLapices = LinkedHashMap<String, LapizCocido>(32, 0.75f, true)
+    private var pesoDeLosLapices = 0L
+    private val elSitioDelLapiz = android.graphics.RectF()
+    private val elMoldeDelSello = Matrix()
+
+    /** Estampa el trazo entero en [lienzo], que mide lo que el trazo a [finura] píxeles por unidad. */
+    private fun estamparElLapiz(
+        lienzo: Canvas, e: Element, puntos: List<Pt>, gordo: Float, finura: Float, x0: Float, y0: Float, tinta: Int
+    ) {
+        val sello = elSelloDelLapiz()
+        val presiones = e.pressures?.takeIf { !e.simulatePressure && it.size == puntos.size }
+        val azar = java.util.Random(e.id.hashCode().toLong())
+        // El largo, para que un trazo larguísimo no pida decenas de miles de sellos.
+        var largo = 0.0
+        for (i in 1 until puntos.size) largo += Math.hypot(puntos[i].x - puntos[i - 1].x, puntos[i].y - puntos[i - 1].y)
+        val paso = maxOf(gordo * ESPACIADO_DEL_LAPIZ, (largo / SELLOS_POR_TRAZO).toFloat(), 0.4f / finura)
+        val pincel = Paint().apply { isFilterBitmap = true; color = tinta }
+        var recorrido = 0.0
+        var pendiente = 0f
+        var ax = puntos[0].x; var ay = puntos[0].y
+        for (i in 1 until puntos.size) {
+            var bx = puntos[i].x; var by = puntos[i].y
+            var tramo = Math.hypot(bx - ax, by - ay).toFloat()
+            while (tramo > 0f && pendiente + tramo >= paso) {
+                val t = (paso - pendiente) / tramo
+                ax += (bx - ax) * t; ay += (by - ay) * t
+                recorrido += (paso - pendiente)
+                tramo = Math.hypot(bx - ax, by - ay).toFloat()
+                pendiente = 0f
+                // La presión: la del lápiz si la hay; con el dedo, media, afinando en las dos puntas.
+                val p = presiones?.let { (it[i - 1] + (it[i] - it[i - 1]) * t).toFloat().coerceIn(0.05f, 1f) } ?: run {
+                    val desdeLaPunta = minOf(recorrido, largo - recorrido).toFloat() / (gordo * 3f)
+                    0.55f * desdeLaPunta.coerceIn(0.25f, 1f)
+                }
+                val lado = gordo * (0.55f + 0.45f * p) * finura
+                val escala = lado / LADO_DEL_SELLO
+                elMoldeDelSello.setRotate(azar.nextFloat() * 360f, LADO_DEL_SELLO / 2f, LADO_DEL_SELLO / 2f)
+                elMoldeDelSello.postScale(escala, escala)
+                elMoldeDelSello.postTranslate(((e.x + ax).toFloat() - x0) * finura - lado / 2f, ((e.y + ay).toFloat() - y0) * finura - lado / 2f)
+                pincel.alpha = (255 * OPACIDAD_DEL_LAPIZ * (0.16f + 0.34f * p)).toInt().coerceIn(1, 255)
+                lienzo.drawBitmap(sello, elMoldeDelSello, pincel)
+            }
+            pendiente += tramo
+            recorrido += tramo
+            ax = bx; ay = by
+            @Suppress("UNUSED_VALUE") run { bx = ax; by = ay }
+        }
+        // **El papel**: lo estampado se queda solo donde el papel «coge» grafito. La textura va
+        // clavada a la escena —no al trazo—, así que dos trazos vecinos comparten el mismo papel.
+        val papel = BitmapShader(elPapelDelLapiz(), Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
+        papel.setLocalMatrix(Matrix().apply {
+            setScale(finura * GRANO_DEL_PAPEL, finura * GRANO_DEL_PAPEL)
+            postTranslate(-x0 * finura, -y0 * finura)
+        })
+        pincel.reset()
+        pincel.isFilterBitmap = true
+        pincel.shader = papel
+        pincel.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
+        lienzo.drawPaint(pincel)
+    }
+
+    /** **La forma del sello**: un cuadrado rascado, como el «2B pencil» de la ficha. Solo alfa; se hace una vez. */
+    private fun elSelloDelLapiz(): Bitmap {
+        SELLO_DEL_LAPIZ?.let { return it }
+        val n = LADO_DEL_SELLO
+        val base = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        val enBase = Canvas(base)
+        val r = java.util.Random(7L)
+        val raya = Paint().apply { isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = 1f; color = Color.WHITE }
+        repeat(300) {
+            val x = n * (0.14f + 0.72f * r.nextFloat()); val y = n * (0.14f + 0.72f * r.nextFloat())
+            val a = r.nextFloat() * Math.PI.toFloat(); val l = n * (0.04f + 0.24f * r.nextFloat())
+            raya.alpha = 110 + r.nextInt(146)
+            val dx = Math.cos(a.toDouble()).toFloat() * l; val dy = Math.sin(a.toDouble()).toFloat() * l
+            enBase.drawLine(x - dx, y - dy, x + dx, y + dy, raya)
+        }
+        // Moteado, y la caída hacia los cantos del cuadrado: sin ella el sello dejaría esquinas.
+        val pix = IntArray(n * n)
+        base.getPixels(pix, 0, n, 0, 0, n, n)
+        val medio = (n - 1) / 2f
+        for (y in 0 until n) for (x in 0 until n) {
+            val caida = (1.3f - maxOf(Math.abs(x - medio), Math.abs(y - medio)) / (n * 0.40f)).coerceIn(0f, 1f)
+            val mota = (90 + r.nextInt(166)) / 255f
+            val alfa = (Color.alpha(pix[y * n + x]) * caida * mota).toInt().coerceIn(0, 255)
+            pix[y * n + x] = Color.argb(alfa, 255, 255, 255)
+        }
+        base.setPixels(pix, 0, n, 0, 0, n, n)
+        val soloAlfa = base.extractAlpha()
+        base.recycle()
+        SELLO_DEL_LAPIZ = soloAlfa
+        return soloAlfa
+    }
+
+    /** **El grano del papel**: ruido de varias escalas, contrastado, y casando en los bordes. Una vez. */
+    private fun elPapelDelLapiz(): Bitmap {
+        PAPEL_DEL_LAPIZ?.let { return it }
+        val n = LADO_DEL_PAPEL
+        val r = java.util.Random(20260920L)
+        val suma = FloatArray(n * n)
+        // Cada octava: una rejilla de azar, interpolada suave y **envuelta**, para que el mosaico case.
+        // **Solo grano fino.** Con manchas grandes (octavas de 5 y 11 celdas) el papel tenía zonas
+        // enteras que no cogían grafito y una raya fina **se cortaba** al cruzarlas: el usuario lo
+        // vio en la simulación —«hay zonas en las que no se pinta»—. Un lápiz no se corta: el
+        // papel le quita como mucho la mitad ([coge] no baja de 0,5) y siempre a escala de grano.
+        for ((celdas, peso) in listOf(40 to 0.30f, 90 to 0.45f, 170 to 0.35f)) {
+            val rejilla = FloatArray(celdas * celdas) { r.nextFloat() }
+            for (y in 0 until n) for (x in 0 until n) {
+                val fx = x * celdas / n.toFloat(); val fy = y * celdas / n.toFloat()
+                val xa = fx.toInt() % celdas; val ya = fy.toInt() % celdas
+                val xb = (xa + 1) % celdas; val yb = (ya + 1) % celdas
+                val tx = (fx - fx.toInt()).let { it * it * (3 - 2 * it) }
+                val ty = (fy - fy.toInt()).let { it * it * (3 - 2 * it) }
+                val arriba = rejilla[ya * celdas + xa] + (rejilla[ya * celdas + xb] - rejilla[ya * celdas + xa]) * tx
+                val abajo = rejilla[yb * celdas + xa] + (rejilla[yb * celdas + xb] - rejilla[yb * celdas + xa]) * tx
+                suma[y * n + x] += peso * (arriba + (abajo - arriba) * ty)
+            }
+        }
+        val pix = IntArray(n * n)
+        for (i in pix.indices) {
+            val coge = ((suma[i] - 0.33f) * 2.2f).coerceIn(0.5f, 1f)
+            pix[i] = Color.argb((coge * 255).toInt(), 255, 255, 255)
+        }
+        val mapa = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        mapa.setPixels(pix, 0, n, 0, 0, n, n)
+        PAPEL_DEL_LAPIZ = mapa
+        return mapa
     }
 
     /**
@@ -3412,10 +3634,32 @@ class Renderer(
          */
         const val LADO_DEL_MOSAICO = 16
         /** Cuántos cuadritos caben a lo ancho de un trazo del lápiz de cuadritos. */
-        const val CUADRITOS_A_LO_ANCHO = 7f
+        // ---- El lápiz de sellos. Los números, de la ficha del pincel «2B» que mandó el usuario. ----
+        /** Lo que mide el sello respecto del grueso del trazo: un lápiz deja una huella más ancha que su raya. */
+        const val GORDO_DEL_LAPIZ = 2.4
+        /** *Spacing* 10 %: cada cuánto se estampa, en tamaños de sello. */
+        const val ESPACIADO_DEL_LAPIZ = 0.10f
+        /** *Opacity* 79 %. */
+        const val OPACIDAD_DEL_LAPIZ = 0.79f
+        const val LADO_DEL_SELLO = 48
+        const val LADO_DEL_PAPEL = 256
+        /** Cuántas unidades de escena ocupa un texel del papel: el grano es fino, de lápiz, no de tiza. */
+        const val GRANO_DEL_PAPEL = 0.45f
+        /** Tope de sellos por trazo y de lado del mapa cocido, y lo que pueden pesar todos juntos. */
+        const val SELLOS_POR_TRAZO = 9000.0
+        const val LADO_MAXIMO_DEL_LAPIZ = 2048f
+        const val PESO_DE_LOS_LAPICES = 96L * 1024 * 1024
+        @Volatile private var SELLO_DEL_LAPIZ: Bitmap? = null
+        @Volatile private var PAPEL_DEL_LAPIZ: Bitmap? = null
 
-        /** Lo que cubre una sola pasada del lápiz de cuadritos. Por debajo de uno, para que repasar oscurezca. */
-        const val CARGA_DE_UNA_PASADA = 0.62f
+        const val CUADRITOS_A_LO_ANCHO = 11f
+
+        /** Cuántos cuadros lleva cada pasada del lápiz de cuadritos, del cuerpo a la última orla… */
+        val DENSIDADES_DE_LOS_CUADRITOS = floatArrayOf(0.93f, 0.70f, 0.48f, 0.28f, 0.14f, 0.06f)
+
+        /** …y cuánto se ensancha el contorno en cada una, en gruesos del trazo. */
+        val ORLAS_DE_LOS_CUADRITOS = floatArrayOf(0f, 0.18f, 0.38f, 0.62f, 0.9f, 1.25f)
+
 
         /** Los cuadros de lado del mosaico del lápiz de cuadritos. */
         const val LADO_DE_LOS_CUADRITOS = 64
