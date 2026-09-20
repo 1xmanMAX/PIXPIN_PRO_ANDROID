@@ -2167,6 +2167,9 @@ class Renderer(
             MaterialDeTinta.LUZ, MaterialDeTinta.HDR ->
                 comoUnTubo(canvas, e, alpha, pintarElTrazo)
 
+            // **Sin cuerpo**: el lápiz de cuadritos es solo su grano. Ver [MaterialDeTinta.CUADRITOS].
+            MaterialDeTinta.CUADRITOS -> elGrano(canvas, e, camino, alpha, relleno)
+
             else -> {
                 // **Las porosas pintan el cuerpo más flojo** (16-sep-2026): en la tiza, el
                 // lápiz blando y el rotulador seco, lo que se tiene que leer es el grano; con
@@ -2351,8 +2354,11 @@ class Renderer(
         // Clavado al trazo, el mosaico vive en el dibujo: acercarse lo agranda —se pixela, que
         // es lo que hace cualquier textura al ampliarla— pero **son siempre los mismos
         // cuadros**. Que no desaparezca al alejarse lo resuelve el filtrado, no el tamaño.
-        val paso = (gordo * PASO_DEL_GRANO)
-            .coerceIn(PASO_MINIMO_DEL_GRANO, PASO_MAXIMO_DEL_GRANO)
+        val cuadritos = e.material == MaterialDeTinta.CUADRITOS
+        // En el lápiz de cuadritos el mosaico son [LADO_DEL_MOSAICO] cuadros de lado, y a lo ancho
+        // del trazo tienen que caber unos cinco: eso es lo que hace que se lea como grafito.
+        val paso = if (cuadritos) (gordo * LADO_DE_LOS_CUADRITOS / CUADRITOS_A_LO_ANCHO).coerceIn(24f, 1024f)
+        else (gordo * PASO_DEL_GRANO).coerceIn(PASO_MINIMO_DEL_GRANO, PASO_MAXIMO_DEL_GRANO)
         val tinta = parseColor(e.strokeColor, alpha)
         val oscuro = tema(
             Color.argb(
@@ -2366,10 +2372,17 @@ class Renderer(
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.FILL
-        paint.isFilterBitmap = true
-        paint.shader = laTelaDelGrano(e.material, oscuro, paso)
+        // Los cuadritos, **sin suavizar**: ampliados tienen que seguir siendo cuadrados de canto
+        // vivo, no manchas. Y con la tinta tal cual, que los tonos ya los pone cada cuadro.
+        paint.isFilterBitmap = !cuadritos
+        // **El canto se deshace**, como el de un lápiz: el contorno se difumina y, como lo que se
+        // pinta son cuadros, lo que se ve es que hacia fuera van quedando cada vez más flojos. Un
+        // lápiz no tiene borde; es lo que más delataba a esta tinta como «trazo recortado».
+        if (cuadritos) paint.maskFilter = elDifuminadoDe(gordo)
+        paint.shader = laTelaDelGrano(e.material, if (cuadritos) tema(tinta) else oscuro, paso)
         canvas.drawPath(contorno, paint)
         paint.shader = null
+        paint.maskFilter = null
     }
 
     /**
@@ -2411,14 +2424,51 @@ class Renderer(
             // grosores grandes, grandes. Con un tamaño fijo hay **una por material y color** —
             // un kilobyte cada una— y lo grande o pequeña que sale la dice la matriz de la
             // brocha, que no cuesta memoria ninguna.
-            val lado = LADO_DEL_MOSAICO
+            // El lápiz de cuadritos lleva un mosaico mayor: con dieciséis cuadros la repetición se ve.
+            val lado = if (cual == MaterialDeTinta.CUADRITOS) LADO_DE_LOS_CUADRITOS else LADO_DEL_MOSAICO
             val mapa = Bitmap.createBitmap(lado, lado, Bitmap.Config.ARGB_8888)
             val enTela = Canvas(mapa)
             val pincel = Paint().apply {
                 isAntiAlias = true
                 this.color = color
             }
-            if (cual == MaterialDeTinta.PUNTOS) {
+            if (cual == MaterialDeTinta.CUADRITOS) {
+                // **Un cuadro por píxel del mosaico**, y que **parezca lápiz de verdad** (el usuario
+                // insistió). Un lápiz no deja motas al azar: deja grafito **donde el papel tiene
+                // relieve**. Así que la carga de cada cuadro sale de dos cosas multiplicadas: un
+                // **grano de papel** suave —manchas de unos ocho cuadros, que son las que hacen
+                // los claros y los empastes— y el azar de cada cuadro. Donde el papel «hunde», no
+                // hay cuadro; donde «sobresale», va cargado y algo más oscuro. Con semilla fija y
+                // el grano casando en los bordes: son siempre los mismos cuadros y no se ve la junta.
+                val azar = java.util.Random(20260920L)
+                val celdas = 8
+                val relieve = Array(celdas) { FloatArray(celdas) { azar.nextFloat() } }
+                fun papel(x: Int, y: Int): Float {
+                    val fx = x * celdas / lado.toFloat()
+                    val fy = y * celdas / lado.toFloat()
+                    val x0 = fx.toInt() % celdas
+                    val y0 = fy.toInt() % celdas
+                    val x1 = (x0 + 1) % celdas
+                    val y1 = (y0 + 1) % celdas
+                    val tx = (fx - fx.toInt()).let { it * it * (3 - 2 * it) }
+                    val ty = (fy - fy.toInt()).let { it * it * (3 - 2 * it) }
+                    val arriba = relieve[y0][x0] + (relieve[y0][x1] - relieve[y0][x0]) * tx
+                    val abajo = relieve[y1][x0] + (relieve[y1][x1] - relieve[y1][x0]) * tx
+                    return arriba + (abajo - arriba) * ty
+                }
+                for (y in 0 until lado) for (x in 0 until lado) {
+                    val carga = ((0.25f + 0.95f * papel(x, y)) * (0.35f + 0.65f * azar.nextFloat())).coerceIn(0f, 1f)
+                    if (carga < 0.3f) continue
+                    val tono = 0.6f + 0.4f * carga
+                    mapa.setPixel(
+                        x, y,
+                        Color.argb(
+                            (Color.alpha(color) * carga).toInt().coerceIn(0, 255),
+                            (Color.red(color) * tono).toInt(), (Color.green(color) * tono).toInt(), (Color.blue(color) * tono).toInt()
+                        )
+                    )
+                }
+            } else if (cual == MaterialDeTinta.PUNTOS) {
                 pincel.style = Paint.Style.FILL
                 enTela.drawCircle(lado / 2f, lado / 2f, lado * GORDO_DEL_GRANO * 2.4f, pincel)
             } else if (cual == MaterialDeTinta.TIZA || cual == MaterialDeTinta.LAPIZ_2B) {
@@ -2475,7 +2525,7 @@ class Renderer(
         val brocha = BitmapShader(tela, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
         brocha.setLocalMatrix(
             Matrix().apply {
-                val cuanto = redondo / LADO_DEL_MOSAICO.toFloat()
+                val cuanto = redondo / (if (cual == MaterialDeTinta.CUADRITOS) LADO_DE_LOS_CUADRITOS else LADO_DEL_MOSAICO).toFloat()
                 setScale(cuanto, cuanto)
                 // El punteado y las motas no tienen dirección; el rotulador seco va **a lo
                 // largo del trazo**, que es como se descarga de verdad, y no de través.
@@ -2490,6 +2540,16 @@ class Renderer(
         }
         losGranos[llave] = brocha
         return brocha
+    }
+
+    /** El difuminado del canto del lápiz de cuadritos, por grueso: crear uno por trazo y fotograma sería basura. */
+    private val losDifuminados = HashMap<Int, android.graphics.BlurMaskFilter>()
+
+    private fun elDifuminadoDe(gordo: Float): android.graphics.BlurMaskFilter {
+        val radio = (gordo * 0.28f).coerceIn(0.6f, 40f)
+        val llave = (radio * 4).toInt()
+        if (losDifuminados.size > 64) losDifuminados.clear()
+        return losDifuminados.getOrPut(llave) { android.graphics.BlurMaskFilter(radio, android.graphics.BlurMaskFilter.Blur.NORMAL) }
     }
 
     /** El contorno del trazo, reaprovechado entre figuras. Ver [elGrano]. */
@@ -3338,6 +3398,11 @@ class Renderer(
          * tamaño de grano estirando la brocha. Ver [laTelaDelGrano].
          */
         const val LADO_DEL_MOSAICO = 16
+        /** Cuántos cuadritos caben a lo ancho de un trazo del lápiz de cuadritos. */
+        const val CUADRITOS_A_LO_ANCHO = 7f
+
+        /** Los cuadros de lado del mosaico del lápiz de cuadritos. */
+        const val LADO_DE_LOS_CUADRITOS = 64
         const val GORDO_DEL_GRANO = 0.13f
 
         /** Lo que baja el cuerpo del trazo en las tintas porosas. Ver [MaterialDeTinta.esPorosa]. */

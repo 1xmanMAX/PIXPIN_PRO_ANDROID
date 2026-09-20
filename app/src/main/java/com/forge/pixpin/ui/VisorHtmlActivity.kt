@@ -316,6 +316,32 @@ class VisorHtmlActivity : ComponentActivity() {
     private var aumento by mutableStateOf(1f)
     private var corridoDelAumento by mutableStateOf(androidx.compose.ui.geometry.Offset.Zero)
 
+    /**
+     * **Alejarse hasta ver el texto con sus dos márgenes** (20-sep-2026). Con márgenes para anotar,
+     * «de borde a borde» ya no es lo más lejos que interesa: lo más lejos es **la columna y los dos
+     * tercios de cada lado a la vez**, para ver de un golpe el texto y lo que hay anotado junto a
+     * él. Estirar la capa no sirve para eso —encogería lo que ya se ve, no enseñaría más—, así que
+     * aquí se le pide al documento que se pinte **más pequeño** (3/7: la columna entre la columna
+     * más sus márgenes) y nuestro aumento vuelve a contar desde 1 sobre esa vista. Es un cambio de
+     * una vez, al pasar el pellizco de un lado a otro, no algo continuo: nada tiembla.
+     */
+    private var vistaEntera by mutableStateOf(false)
+
+    private fun ponerLaVistaEntera(entera: Boolean) {
+        val vista = web ?: return
+        if (columnaDeAnotar == null || entera == vistaEntera) return
+        vistaEntera = entera
+        aumento = 1f
+        corridoDelAumento = androidx.compose.ui.geometry.Offset.Zero
+        vista.zoomBy(if (entera) 3f / 7f else 7f / 3f)
+        // Al volver al texto, la columna al centro.
+        if (!entera) vista.postDelayed({
+            @Suppress("DEPRECATION")
+            columnaDeAnotar?.let { vista.scrollTo((com.forge.pixpin.motor.Lectura.margenDe(it) * vista.scale).toInt(), vista.scrollY) }
+            if (anotando) ponerLaCapaDondeElDocumento()
+        }, 160)
+    }
+
     /** Lo anotado sobre este documento: un dibujo del motor de siempre, guardado como cualquier otro. */
     private val idDeLaCapa: String get() = "capa-doc-" + claveDelDocumento.hashCode().toUInt().toString(16)
     private val laCapa: com.forge.pixpin.motor.DrawController by lazy {
@@ -379,7 +405,7 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun encajarEnElCentro() {
         val vista = web ?: return
         val columna = columnaDeAnotar ?: return
-        if (anotando) return
+        if (anotando || vistaEntera) return
         val margen = com.forge.pixpin.motor.Lectura.margenDe(columna) * vista.scale.toDouble()
         val meta = com.forge.pixpin.motor.Lectura.imanDelCentro(corridoAlPosar.toDouble(), vista.scrollX.toDouble(), margen, margen) ?: return
         android.animation.ObjectAnimator.ofInt(vista, "scrollX", vista.scrollX, meta.toInt()).setDuration(220).start()
@@ -388,6 +414,7 @@ class VisorHtmlActivity : ComponentActivity() {
     /** **Anotando**: lo mismo, moviendo la vista del lienzo, que es quien lleva el documento. */
     private fun encajarElLienzoEnElCentro() {
         val columna = columnaDeAnotar ?: return
+        if (vistaEntera) { xDelLienzoAlPosar = Double.NaN; return }
         val margen = com.forge.pixpin.motor.Lectura.margenDe(columna).toDouble()
         val ahora = -laCapa.scene.viewport.scrollX
         val antes = xDelLienzoAlPosar.takeIf { !it.isNaN() } ?: ahora
@@ -783,13 +810,23 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun Modifier.pellizcoDelDocumento(): Modifier = pointerInput(Unit) {
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            var deMenos = 1f
             while (true) {
                 val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
                 val dedos = e.changes.count { it.pressed }
-                if (dedos == 0) break
+                if (dedos == 0) {
+                    // En la vista entera, acercarse hasta que el texto llena el ancho es volver al texto.
+                    if (vistaEntera && aumento >= 7f / 3f * 0.92f) ponerLaVistaEntera(false)
+                    break
+                }
                 if (dedos < 2) continue
                 val antes = aumento
-                val ahora = (antes * e.calculateZoom()).coerceIn(1f, AUMENTO_MAXIMO)
+                // Seguir cerrando los dedos con el texto ya de borde a borde: a la vista entera.
+                if (!vistaEntera && columnaDeAnotar != null && antes <= 1.001f) {
+                    deMenos *= e.calculateZoom()
+                    if (deMenos < 0.82f) { ponerLaVistaEntera(true); deMenos = 1f }
+                }
+                val ahora = (antes * e.calculateZoom()).coerceIn(1f, if (vistaEntera) AUMENTO_MAXIMO * 7f / 3f else AUMENTO_MAXIMO)
                 val centro = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
                 val foco = e.calculateCentroid(useCurrent = false)
                 var movido = if (ahora == antes) corridoDelAumento
@@ -1198,7 +1235,8 @@ class VisorHtmlActivity : ComponentActivity() {
         // Un plano exportado se mira acercándose: el pellizco, sin los botones de + y −.
         settings.builtInZoomControls = !esDocumento
         settings.displayZoomControls = false
-        if (esDocumento) settings.setSupportZoom(false)
+        // El aumento del `WebView` solo lo usamos nosotros, para [ponerLaVistaEntera]: los dos dedos no le llegan.
+        if (esDocumento) { settings.setSupportZoom(true); settings.builtInZoomControls = true }
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
         webViewClient = Cliente(pagina.parentFile ?: pagina)
@@ -1262,7 +1300,10 @@ class VisorHtmlActivity : ComponentActivity() {
         }
 
         /** Al acabar de cargar se le enseña a la página a imprimir y a guardar aquí dentro. */
-        override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) { escalaWeb = newScale }
+        override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
+            escalaWeb = newScale
+            if (anotando) view.post { ponerLaCapaDondeElDocumento() }
+        }
 
         override fun onPageFinished(view: WebView, url: String?) {
             @Suppress("DEPRECATION")

@@ -474,7 +474,16 @@ enum class MaterialDeTinta {
      * **Trama gruesa**: como el rayado, pero con líneas más gordas y más separadas. Para
      * rellenos de plano que tienen que leerse de lejos, donde el rayado fino se empasta.
      */
-    @SerialName("trama") TRAMA;
+    @SerialName("trama") TRAMA,
+
+    /**
+     * **Lápiz de cuadritos** (20-sep-2026): el grafito, hecho de cuadrados. El trazo no lleva
+     * cuerpo: es **una nube de cuadritos de distintos tonos**, unos más cargados y otros casi
+     * nada, con huecos entre ellos. De cerca se ven los cuadros, uno a uno y nítidos, como en
+     * las capturas que mandó el usuario de un lápiz muy ampliado; de lejos se funden en el gris
+     * desigual de un lápiz de verdad. Son siempre los mismos cuadros: no hierven al repintar.
+     */
+    @SerialName("cuadritos") CUADRITOS;
 
     /** Si el cuerpo del trazo va más flojo de lo normal, porque lo que se ve es el grano. */
     val esPorosa: Boolean get() = this == TIZA || this == LAPIZ_2B || this == SECO

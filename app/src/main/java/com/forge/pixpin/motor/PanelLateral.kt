@@ -1204,7 +1204,7 @@ fun DrawScope.dibujarMaterial(cual: MaterialDeTinta, tinta: Color) {
     }
     // Las porosas enseñan el cuerpo flojo, como se van a pintar. Ver [Renderer.conMaterial].
     drawLine(
-        if (cual.esPorosa) tinta.copy(alpha = tinta.alpha * 0.45f) else tinta,
+        if (cual == MaterialDeTinta.CUADRITOS) Color.Transparent else if (cual.esPorosa) tinta.copy(alpha = tinta.alpha * 0.45f) else tinta,
         izquierda, derecha, gordo, StrokeCap.Round
     )
     if (cual == MaterialDeTinta.LISA) return
@@ -1229,7 +1229,23 @@ fun DrawScope.dibujarMaterial(cual: MaterialDeTinta, tinta: Color) {
             )
         }
     ) {
-        if (cual == MaterialDeTinta.TIZA || cual == MaterialDeTinta.LAPIZ_2B) {
+        if (cual == MaterialDeTinta.CUADRITOS) {
+            // La muestra del lápiz de cuadritos: los mismos cuadros, con sus tonos.
+            val azar = java.util.Random(20260920L)
+            val lado = gordo / 5f
+            var x = izquierda.x - gordo / 2
+            while (x < derecha.x + gordo / 2) {
+                var y = medio - gordo / 2
+                while (y < medio + gordo / 2) {
+                    if (azar.nextFloat() >= 0.34f) {
+                        val carga = 0.2f + 0.8f * azar.nextFloat()
+                        drawRect(tinta.copy(alpha = tinta.alpha * carga), Offset(x, y), androidx.compose.ui.geometry.Size(lado, lado))
+                    }
+                    y += lado
+                }
+                x += lado
+            }
+        } else if (cual == MaterialDeTinta.TIZA || cual == MaterialDeTinta.LAPIZ_2B) {
             // Motas con semilla fija: la muestra tiene que salir igual en cada pintada.
             val tiza = cual == MaterialDeTinta.TIZA
             val azar = java.util.Random(if (tiza) 20260916L else 20260917L)
