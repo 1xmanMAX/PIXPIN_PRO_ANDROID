@@ -107,6 +107,10 @@ fun regionEn(
     val segmentos = paredes.flatMap { segmentosDe(it) }
     if (segmentos.isEmpty()) return null
 
+    // **Primero, exacto**: la cara del plano que forman los propios tramos. La rejilla queda para
+    // lo que no cierra del todo —rendijas de más de un par de unidades—. Ver [caraExacta].
+    caraExacta(segmentos, p)?.let { return it }
+
     val rejilla = Rejilla.para(segmentos, p, ajustes) ?: return null
     for ((a, b) in segmentos) rejilla.pintarPared(a, b)
 

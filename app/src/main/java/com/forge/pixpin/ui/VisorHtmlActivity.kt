@@ -104,6 +104,8 @@ import kotlinx.coroutines.withContext
 class VisorHtmlActivity : ComponentActivity() {
 
     companion object {
+        /** Lo más ancha que sale una foto en la página exportada: más no lo enseña ninguna columna. */
+        private const val ANCHO_DE_FOTO = 1100
         private const val EXTRA_RUTA = "ruta"
         private const val EXTRA_NOMBRE = "nombre"
         private const val EXTRA_COMPARTE = "comparte"
@@ -662,6 +664,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         onCerrar = { conLaLetra = false },
                         onImpresion = { conLaLetra = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } },
                         onAlProyecto = { conLaLetra = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } },
+                        onExportar = { conLaLetra = false; ocupado = "Haciendo la página…"; exportarComoPagina(suNombre) { ocupado = null } },
                         onQuitarMarcadores = { conLaLetra = false; quitandoMarcadores = true }
                     )
                     if (poniendoMarcador) ElegirEmoji(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
@@ -940,7 +943,7 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Composable
-    private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit) {
+    private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onExportar: () -> Unit, onQuitarMarcadores: () -> Unit) {
         val lectura = com.forge.pixpin.motor.Lectura
         val fijada = hayAnotaciones
         androidx.compose.material3.ModalBottomSheet(
@@ -981,6 +984,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
                     FichaDeLetra("Vista de impresión", false, onImpresion)
                     FichaDeLetra("Al proyecto", false, onAlProyecto)
+                    FichaDeLetra("Exportar web", false, onExportar)
                     if (marcadores.isNotEmpty()) FichaDeLetra("Quitar marcadores", false, onQuitarMarcadores)
                 }
             }
@@ -1129,6 +1133,109 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /** El nombre nuevo conserva la extensión del de antes: por ella se sabe con qué se abre. */
+    /**
+     * **El documento, con lo anotado y los marcadores, como página web.** La arma
+     * [com.forge.pixpin.motor.DocumentoAnotado]; aquí se mide el documento, se escribe lo anotado
+     * como SVG —por bloques, cada uno atado a su párrafo— y se manda por la hoja de compartir.
+     */
+    private fun exportarComoPagina(nombre: String, alAcabar: () -> Unit) {
+        val vista = web
+        val pagina = laPaginaQueSeVe
+        if (vista == null || pagina == null) { alAcabar(); return }
+        val hacer = com.forge.pixpin.motor.DocumentoAnotado
+        val deNoche = esDeNoche()
+        val columna = columnaDeAnotar
+        val escena = if (columna != null) laCapa.scene else null
+        val losMarcadores = marcadores
+        vista.evaluateJavascript(hacer.MEDIR) { crudo ->
+            lifecycleScope.launch {
+                val uri = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val medido = org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String)
+                        val tops = medido.getJSONArray("t").let { a -> List(a.length()) { a.getDouble(it) } }
+                        val alto = medido.getDouble("h")
+                        val piezas = escena?.let { e ->
+                            val papel = e.copy(backgroundColor = if (deNoche) "#15171c" else "#ffffff")
+                            val foto: (String) -> android.graphics.Bitmap? = { f -> e.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } }
+                            hacer.porAnclas(e.elements, tops).mapNotNull { (ancla, grupo) ->
+                                val svg = com.forge.pixpin.motor.DrawSvg.aTexto(this@VisorHtmlActivity, papel.copy(elements = grupo), foto, papelAparte = true)
+                                    ?: return@mapNotNull null
+                                val c = hacer.cajaDe(svg) ?: return@mapNotNull null
+                                com.forge.pixpin.motor.DocumentoAnotado.Pieza(svg, c[0], c[1], c[2], c[3], ancla)
+                            }
+                        }.orEmpty()
+                        val senales = losMarcadores.sortedBy { it.fraccion }.map { m ->
+                            val y = m.fraccion * alto
+                            com.forge.pixpin.motor.DocumentoAnotado.Senal(m.emoji, y, hacer.anclaDe(y, tops))
+                        }
+                        val hecha = hacer.pagina(conLasFotosDentro(pagina.readText(), pagina.parentFile), columna, tops, piezas, senales, tamanoDeLetra)
+                        val limpio = (sinExtension(nombre).ifBlank { "documento" } + " (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
+                        val destino = File(File(cacheDir, "share").apply { mkdirs() }, limpio)
+                        destino.writeText(hecha)
+                        FileProvider.getUriForFile(this@VisorHtmlActivity, "$packageName.fileprovider", destino)
+                    }.getOrNull()
+                }
+                alAcabar()
+                val salio = uri != null && runCatching {
+                    startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/html"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            },
+                            null
+                        )
+                    )
+                }.isSuccess
+                if (!salio) Toast.makeText(this@VisorHtmlActivity, "No se pudo exportar", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * **Las fotos del libro, dentro de la página y a dieta.** El EPUB las tiene sueltas en su
+     * carpeta, y una página que se manda sola las perdería. Entran en base64; las grandes —más
+     * anchas de lo que ninguna columna enseña— se encogen y se recomprimen antes, que es lo que
+     * hace que el archivo «sea de bajo peso» aunque el libro traiga fotos de cámara.
+     */
+    private fun conLasFotosDentro(html: String, carpeta: File?): String {
+        if (carpeta == null) return html
+        val raiz = runCatching { carpeta.canonicalPath }.getOrDefault(carpeta.absolutePath) + File.separator
+        val hechas = HashMap<String, String?>()
+        return Regex("(<img\\b[^>]*?\\ssrc=)([\"'])([^\"']+)\\2", RegexOption.IGNORE_CASE).replace(html) { m ->
+            val ruta = m.groupValues[3]
+            if (ruta.startsWith("data:", true) || ruta.startsWith("http", true)) return@replace m.value
+            val dentro = hechas.getOrPut(ruta) {
+                runCatching {
+                    val f = File(carpeta, Uri.decode(ruta.substringBefore('#').substringBefore('?')))
+                    if (!f.canonicalPath.startsWith(raiz) || !f.isFile) return@runCatching null
+                    val medidas = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeFile(f.path, medidas)
+                    val esSvg = f.extension.equals("svg", true)
+                    if (esSvg) return@runCatching "data:image/svg+xml;base64," + android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+                    if (medidas.outWidth <= 0) return@runCatching null
+                    if (medidas.outWidth <= ANCHO_DE_FOTO && f.length() < 120_000) {
+                        return@runCatching "data:${medidas.outMimeType ?: "image/*"};base64," + android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+                    }
+                    var muestra = 1
+                    while (medidas.outWidth / (muestra * 2) >= ANCHO_DE_FOTO) muestra *= 2
+                    val foto = android.graphics.BitmapFactory.decodeFile(f.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = muestra })
+                        ?: return@runCatching null
+                    val justa = if (foto.width > ANCHO_DE_FOTO)
+                        android.graphics.Bitmap.createScaledBitmap(foto, ANCHO_DE_FOTO, (foto.height.toLong() * ANCHO_DE_FOTO / foto.width).toInt().coerceAtLeast(1), true)
+                    else foto
+                    val salida = java.io.ByteArrayOutputStream()
+                    @Suppress("DEPRECATION")
+                    val webp = if (android.os.Build.VERSION.SDK_INT >= 30) android.graphics.Bitmap.CompressFormat.WEBP_LOSSY else android.graphics.Bitmap.CompressFormat.WEBP
+                    justa.compress(webp, 74, salida)
+                    "data:image/webp;base64," + android.util.Base64.encodeToString(salida.toByteArray(), android.util.Base64.NO_WRAP)
+                }.getOrNull()
+            } ?: return@replace m.value
+            m.groupValues[1] + "\"" + dentro + "\""
+        }
+    }
+
     private fun conSuExtension(nuevo: String, antes: String): String {
         val ext = antes.substringAfterLast('.', "")
         if (nuevo.isBlank() || ext.isBlank() || ext.length > 5) return nuevo

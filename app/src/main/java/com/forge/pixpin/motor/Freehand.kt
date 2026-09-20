@@ -145,7 +145,9 @@ data class StrokeOptions(
     /** El trazo está terminado: el último punto se respeta tal cual. */
     val last: Boolean = false,
     val capStart: Boolean = true,
-    val capEnd: Boolean = true
+    val capEnd: Boolean = true,
+    /** Quita el error del digitalizador en lo trazado deprisa. Ver [asentarLoRapido]. */
+    val asentarLoRapido: Boolean = false
 )
 
 /** Las opciones con las que Excalidraw dibuja un elemento de lápiz. */
@@ -158,7 +160,8 @@ fun strokeOptionsFor(e: Element): StrokeOptions = StrokeOptions(
     smoothing = FreedrawTuning.SMOOTHING,
     streamline = FreedrawTuning.streamlineDe(e.roughness),
     simulatePressure = e.simulatePressure,
-    last = true
+    last = true,
+    asentarLoRapido = true
 )
 
 /**
@@ -224,6 +227,43 @@ fun getStroke(
  * la media retrasaría el trazo respecto al dedo, que es lo que se nota como
  * «va detrás».
  */
+/**
+ * **Una raya tirada deprisa sale derecha** (20-sep-2026).
+ *
+ * El usuario lo vio con todas las tintas: una línea rápida salía «medio ondulada, levemente, pero
+ * se nota». No es su pulso —un gesto rápido es recto por naturaleza—: es el **digitalizador**,
+ * que entrega cada muestra con un error de un píxel o dos, y a esa velocidad las muestras caen
+ * tan separadas que el `streamline` —que tira de cada punto hacia el anterior— ya no las junta y
+ * el error se queda dibujado como una onda.
+ *
+ * Así que se asienta **solo lo rápido**: cada punto se acerca al medio de sus dos vecinos tanto
+ * más cuanto más separados están. Escribiendo —muestras a dos o tres unidades— no se toca nada, y
+ * la letra no se redondea; en una raya lanzada —a quince o treinta— el error desaparece y queda
+ * la recta o la curva amplia que se trazó. Las puntas no se mueven, ni cambia el número de
+ * puntos: las presiones siguen casando una a una.
+ */
+fun asentarLoRapido(points: List<Pt>): List<Pt> {
+    if (points.size < 4) return points
+    var de = points
+    repeat(PASADAS_DE_ASIENTO) {
+        val a = ArrayList<Pt>(de.size)
+        a.add(de[0])
+        for (i in 1 until de.size - 1) {
+            val p = de[i]; val q = de[i - 1]; val r = de[i + 1]
+            val paso = (kotlin.math.hypot(p.x - q.x, p.y - q.y) + kotlin.math.hypot(r.x - p.x, r.y - p.y)) / 2
+            val cuanto = ((paso - PASO_LENTO) / (PASO_RAPIDO - PASO_LENTO)).coerceIn(0.0, 1.0) * 0.5
+            a.add(if (cuanto == 0.0) p else Pt(p.x + ((q.x + r.x) / 2 - p.x) * cuanto, p.y + ((q.y + r.y) / 2 - p.y) * cuanto))
+        }
+        a.add(de.last())
+        de = a
+    }
+    return de
+}
+
+private const val PASADAS_DE_ASIENTO = 3
+private const val PASO_LENTO = 5.0
+private const val PASO_RAPIDO = 16.0
+
 fun getStrokePoints(
     points: List<Pt>, pressures: List<Double>?, o: StrokeOptions
 ): List<StrokePoint> {
@@ -232,8 +272,9 @@ fun getStrokePoints(
     val t = MIN_STREAMLINE_T + (1 - o.streamline) * STREAMLINE_T_RANGE
 
     // Cada entrada es punto + presión, que puede faltar.
+    val asentados = if (o.asentarLoRapido) asentarLoRapido(points) else points
     var pts: List<Pair<Pt, Double?>> =
-        points.mapIndexed { i, p -> p to pressures?.getOrNull(i) }
+        asentados.mapIndexed { i, p -> p to pressures?.getOrNull(i) }
 
     // Con solo dos puntos se meten intermedios: si no, un trazo corto sale a
     // rayas cuando los extremos se afilan.

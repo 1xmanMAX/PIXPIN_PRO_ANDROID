@@ -549,7 +549,8 @@ class DrawController(initial: Scene = Scene()) {
         // para los huecos entre varias. Ver [figuraQueSeRellenaSola].
         figuraQueSeRellenaSola(editables, p)?.let { figura ->
             rellenoSinCerrar = false
-            val color = if (isTransparent(scene.style.backgroundColor)) scene.style.strokeColor else scene.style.backgroundColor
+            // El bote pinta con **el color que hay puesto**, que es el que enseña su mando.
+            val color = scene.style.strokeColor
             scene = scene.copy(
                 elements = scene.elements
                     // Una mancha de rejilla que hubiera ahí de antes se va: no se apilan pinturas.
@@ -564,7 +565,7 @@ class DrawController(initial: Scene = Scene()) {
             return
         }
         rellenoSinCerrar = false
-        val relleno = nuevaRegion(region, scene.style).copy(reference = modoReferencia)
+        val relleno = nuevaRegion(region, scene.style.copy(backgroundColor = scene.style.strokeColor)).copy(reference = modoReferencia)
         scene = scene.copy(elements = conRellenoDebajo(scene.elements, relleno, tocado = p))
     }
 

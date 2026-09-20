@@ -1132,6 +1132,8 @@ class Renderer(
     private fun pintarRecortadoALaVista(canvas: Canvas, e: Element, alpha: Int): Boolean {
         if (pintandoLupa) return false
         if (maxOf(e.width, e.height) * zoomActual <= LIMITE_DEL_RASTERIZADOR) return false
+        // El grafito se recorta él solo, por casillas: aquí saldría liso. Ver [pintarElLapiz].
+        if (e.type == ElementType.FREEDRAW && e.material == MaterialDeTinta.CUADRITOS && e.angle == 0.0) return false
 
         // La vista, llevada al mundo sin girar del elemento: el lienzo ya viene
         // rotado por [renderElement], así que aquí se dibuja sin girar y lo que
@@ -2748,8 +2750,10 @@ class Renderer(
      * Devuelve falso si no pudo (un trazo enorme sin memoria): entonces se pinta liso.
      */
     private fun pintarElLapiz(canvas: Canvas, e: Element, alpha: Int): Boolean {
-        val puntos = e.points ?: return false
-        if (puntos.size < 2) return false
+        val crudos = e.points ?: return false
+        if (crudos.size < 2) return false
+        // Lo tirado deprisa, derecho: el error del digitalizador no es pulso. Ver [asentarLoRapido].
+        val puntos = asentarLoRapido(asentarLoRapido(crudos))
         val gordo = (e.strokeWidth * GORDO_DEL_LAPIZ).toFloat().coerceAtLeast(1.5f)
         // **Una rejilla fija, la misma para todo el dibujo** (quinta versión, 20-sep-2026). Se
         // cocía a la resolución del aumento, y por eso al acercarse el trazo se rehacía más fino
@@ -2796,8 +2800,21 @@ class Renderer(
         // De cerca, **sin suavizar**: cada cuadrito, de canto vivo. De lejos sí, que si no centellea.
         paint.isFilterBitmap = zoomActual < 1.0
         paint.alpha = alpha
-        elSitioDelLapiz.set(x0, y0, x0 + ancho / finura, y0 + alto / finura)
-        canvas.drawBitmap(cocido.mapa, null, elSitioDelLapiz, paint)
+        // **Solo el trozo que se ve.** A mucho aumento el mapa entero mediría en pantalla más de
+        // lo que el rasterizador admite, y por eso lo enorme se iba por [pintarRecortadoALaVista]
+        // —que pinta la raya lisa: «al acercar mucho se vuelve tinta normal»—. Se recorta aquí,
+        // por casillas enteras, y lo que llega al lienzo queda acotado por la pantalla.
+        var cx0 = 0; var cy0 = 0; var cx1 = cocido.mapa.width; var cy1 = cocido.mapa.height
+        if (e.angle == 0.0 && !paraExportar && !pintandoLupa) {
+            cx0 = (Math.floor((vistaEscenaX1 - x0) * finura).toInt() - 1).coerceIn(0, cx1)
+            cy0 = (Math.floor((vistaEscenaY1 - y0) * finura).toInt() - 1).coerceIn(0, cy1)
+            cx1 = (Math.ceil((vistaEscenaX2 - x0) * finura).toInt() + 1).coerceIn(cx0, cx1)
+            cy1 = (Math.ceil((vistaEscenaY2 - y0) * finura).toInt() + 1).coerceIn(cy0, cy1)
+            if (cx1 <= cx0 || cy1 <= cy0) return true
+        }
+        elTrozoDelLapiz.set(cx0, cy0, cx1, cy1)
+        elSitioDelLapiz.set(x0 + cx0 / finura, y0 + cy0 / finura, x0 + cx1 / finura, y0 + cy1 / finura)
+        canvas.drawBitmap(cocido.mapa, elTrozoDelLapiz, elSitioDelLapiz, paint)
         return true
     }
 
@@ -2806,6 +2823,7 @@ class Renderer(
     private val losLapices = LinkedHashMap<String, LapizCocido>(32, 0.75f, true)
     private var pesoDeLosLapices = 0L
     private val elSitioDelLapiz = android.graphics.RectF()
+    private val elTrozoDelLapiz = android.graphics.Rect()
     private val elMoldeDelSello = Matrix()
 
     /** Estampa el trazo entero en [lienzo], que mide lo que el trazo a [finura] píxeles por unidad. */
@@ -2837,7 +2855,9 @@ class Renderer(
                     val desdeLaPunta = minOf(recorrido, largo - recorrido).toFloat() / (gordo * 3f)
                     0.55f * desdeLaPunta.coerceIn(0.25f, 1f)
                 }
-                val lado = gordo * (0.55f + 0.45f * p) * finura
+                // **Empieza y acaba delgadito**, con lápiz o con dedo; el cuerpo, a su grosor.
+                val punta = (minOf(recorrido, largo - recorrido).toFloat() / (gordo * LARGO_DE_LA_PUNTA)).coerceIn(0f, 1f)
+                val lado = gordo * (0.55f + 0.45f * p) * (PUNTA_DEL_GRAFITO + (1f - PUNTA_DEL_GRAFITO) * punta * (2f - punta)) * finura
                 val escala = lado / LADO_DEL_SELLO
                 elMoldeDelSello.setRotate(azar.nextFloat() * 360f, LADO_DEL_SELLO / 2f, LADO_DEL_SELLO / 2f)
                 elMoldeDelSello.postScale(escala, escala)
@@ -2855,9 +2875,8 @@ class Renderer(
 
     /**
      * **El diente del papel, cuadrito a cuadrito.** Cada casilla de la rejilla coge el grafito a
-     * su manera —unas todo, otras menos, **alguna nada**— y siempre igual: sale de su sitio en el
-     * dibujo, no del trazo, así que es el mismo papel para todos y no cambia al repintar. Lo que
-     * queda por debajo de un mínimo se va: un velo casi invisible no es un cuadrito, es suciedad.
+     * su manera —unas todo, otras menos, **alguna casi nada**— y siempre igual: sale de su sitio en
+     * el dibujo, no del trazo, así que es el mismo papel para todos y no cambia al repintar.
      */
     private fun elDienteDelPapel(mapa: Bitmap, x0: Float, y0: Float, finura: Float) {
         val w = mapa.width
@@ -2874,11 +2893,27 @@ class Renderer(
             var n = (x + ox) * 374761393 + (y + oy) * 668265263
             n = (n xor (n ushr 13)) * 1274126177
             val azar = ((n xor (n ushr 16)) and 0xFFFF) / 65535f
-            val coge = if (azar < 0.13f) 0f else 0.35f + 0.65f * ((azar - 0.13f) / 0.87f)
-            val carga = (a * coge).toInt()
-            val final = if (carga < 14) 0 else minOf(255, (carga * 1.5f).toInt())
-            // `getPixels` ya entrega el color sin premultiplicar: solo cambia el alfa.
-            pix[y * w + x] = if (final == 0) 0 else (final shl 24) or (c and 0x00FFFFFF)
+            // **Ninguna casilla se niega del todo** (20-sep-2026). Antes el 13 % cogía cero, y como
+            // el papel es el mismo para todos los trazos, esas casillas seguían blancas por muchas
+            // veces que se repasara: «un grafito de verdad pinta», dijo el usuario. Ahora el diente
+            // es una **resistencia**: la casilla dura coge poquísimo de cada pasada, pero coge, y la
+            // cuenta es la de capas que se suman —`1 − (1 − a)^coge`—, así que cada repaso le
+            // añade un poco a la vacía y otro poco a la tenue, y a fuerza de pasar todo se iguala.
+            val coge = if (azar < 0.13f) 0.06f + 0.08f * (azar / 0.13f) else 0.35f + 0.65f * ((azar - 0.13f) / 0.87f)
+            val carga = if (a >= 255) 1.0 else 1.0 - Math.pow(1.0 - a / 255.0, coge.toDouble())
+            val final = minOf(255, (carga * 1.2 * 255.0).toInt()).let { if (it < 2) 0 else it }
+            // (`getPixels` ya entrega el color sin premultiplicar.)
+            // **Y el tono, un pelo distinto en cada casilla.** Repasado hasta llenarse, el grafito
+            // no queda como una tinta plana: «no es un material perfecto». La variación va en el
+            // **color** y no en la carga, porque la carga se iguala al apilar trazos y esto no.
+            val otro = ((n xor (n ushr 7)) * 40503 ushr 8) and 0xFF
+            val tono = (otro - 128) / 128f * TONO_DEL_GRAFITO
+            val hacia = if (tono > 0f) 255 else 0
+            val t = Math.abs(tono)
+            val r = ((c shr 16 and 0xFF) * (1 - t) + hacia * t).toInt()
+            val g = ((c shr 8 and 0xFF) * (1 - t) + hacia * t).toInt()
+            val b = ((c and 0xFF) * (1 - t) + hacia * t).toInt()
+            pix[y * w + x] = if (final == 0) 0 else (final shl 24) or (r shl 16) or (g shl 8) or b
         }
         mapa.setPixels(pix, 0, w, 0, 0, w, h)
     }
@@ -3639,6 +3674,11 @@ class Renderer(
         /** Tope de sellos por trazo y de lado del mapa cocido, y lo que pueden pesar todos juntos. */
         const val SELLOS_POR_TRAZO = 9000.0
         const val LADO_MAXIMO_DEL_LAPIZ = 2048f
+        /** Cuánto se aclara u oscurece una casilla del grafito respecto a su color. */
+        const val TONO_DEL_GRAFITO = 0.10f
+        /** El grosor en la misma punta, como parte del cuerpo; y en cuántos gruesos se llega al cuerpo. */
+        const val PUNTA_DEL_GRAFITO = 0.22f
+        const val LARGO_DE_LA_PUNTA = 3.5f
         const val PESO_DE_LOS_LAPICES = 96L * 1024 * 1024
         @Volatile private var SELLO_DEL_LAPIZ: Bitmap? = null
 

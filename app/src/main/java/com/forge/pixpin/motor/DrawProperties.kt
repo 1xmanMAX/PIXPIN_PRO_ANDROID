@@ -101,6 +101,9 @@ fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
         return seleccion.flatMap { propiedadesDe(it) }.toSet()
     }
     val tipo = tipoQueCrea(tool) ?: return emptySet()
+    // **El bote pinta con el color que hay puesto**, así que ofrece el mando del color: sin él,
+    // con el bote en la mano no había manera de elegir de qué color rellenar.
+    if (tool == Tool.RELLENO) return propiedadesDeTipo(tipo) - Propiedad.FONDO + Propiedad.TRAZO
     return propiedadesDeTipo(tipo)
 }
 
