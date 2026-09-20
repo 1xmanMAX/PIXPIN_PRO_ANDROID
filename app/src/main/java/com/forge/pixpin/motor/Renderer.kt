@@ -2359,7 +2359,15 @@ class Renderer(
         // del trazo tienen que caber unos cinco: eso es lo que hace que se lea como grafito.
         val paso = if (cuadritos) (gordo * LADO_DE_LOS_CUADRITOS / CUADRITOS_A_LO_ANCHO).coerceIn(24f, 1024f)
         else (gordo * PASO_DEL_GRANO).coerceIn(PASO_MINIMO_DEL_GRANO, PASO_MAXIMO_DEL_GRANO)
-        val tinta = parseColor(e.strokeColor, alpha)
+        // **La lógica de un lápiz**: una pasada no tapa, deja una capa; **otra pasada encima
+        // oscurece**, y otra más, hasta el negro del grafito —cada trazo se pinta sobre los de
+        // debajo, así que sale solo de ir translúcido—. Y **apretar carga más**: con un lápiz de
+        // verdad (presión real, no simulada) la media de la presión del trazo sube o baja su carga.
+        val pasada = if (!cuadritos) 1f else {
+            val presion = e.pressures?.takeIf { !e.simulatePressure && it.isNotEmpty() }?.average()?.toFloat()
+            CARGA_DE_UNA_PASADA * (presion?.let { (0.5f + 0.9f * it).coerceIn(0.45f, 1.45f) } ?: 1f)
+        }
+        val tinta = parseColor(e.strokeColor, (alpha * pasada).toInt().coerceIn(0, 255))
         val oscuro = tema(
             Color.argb(
                 alpha,
@@ -2456,10 +2464,15 @@ class Renderer(
                     val abajo = relieve[y1][x0] + (relieve[y1][x1] - relieve[y1][x0]) * tx
                     return arriba + (abajo - arriba) * ty
                 }
+                // **Sin huecos** (segunda corrección del usuario: «hay como vacíos, no luce como un
+                // lápiz»). Un lápiz **cubre**: lo que cambia de un punto a otro es cuánto grafito
+                // queda, no si queda. Así que todos los cuadros llevan tinta, entre media carga y
+                // entera, y el relieve del papel solo la modula. Lo que hace que se vea el papel
+                // por debajo no son agujeros: es que la pasada entera va **translúcida**
+                // ([CARGA_DE_UNA_PASADA]), y por eso repasar oscurece. Ver [elGrano].
                 for (y in 0 until lado) for (x in 0 until lado) {
-                    val carga = ((0.25f + 0.95f * papel(x, y)) * (0.35f + 0.65f * azar.nextFloat())).coerceIn(0f, 1f)
-                    if (carga < 0.3f) continue
-                    val tono = 0.6f + 0.4f * carga
+                    val carga = (0.5f + 0.38f * papel(x, y) + 0.12f * azar.nextFloat()).coerceIn(0f, 1f)
+                    val tono = 0.8f + 0.2f * carga
                     mapa.setPixel(
                         x, y,
                         Color.argb(
@@ -3400,6 +3413,9 @@ class Renderer(
         const val LADO_DEL_MOSAICO = 16
         /** Cuántos cuadritos caben a lo ancho de un trazo del lápiz de cuadritos. */
         const val CUADRITOS_A_LO_ANCHO = 7f
+
+        /** Lo que cubre una sola pasada del lápiz de cuadritos. Por debajo de uno, para que repasar oscurezca. */
+        const val CARGA_DE_UNA_PASADA = 0.62f
 
         /** Los cuadros de lado del mosaico del lápiz de cuadritos. */
         const val LADO_DE_LOS_CUADRITOS = 64
