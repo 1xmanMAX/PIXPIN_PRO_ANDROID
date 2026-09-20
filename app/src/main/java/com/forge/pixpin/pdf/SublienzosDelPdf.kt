@@ -161,6 +161,8 @@ internal fun HojaConSublienzos(
     recortes: List<SublienzosDelPdf.Recorte>,
     abierta: Boolean,
     alPedirlos: () -> Unit = {},
+    /** Lo que va encima de la hoja, ajustado a ella: la capa de lo anotado en el lector. */
+    encima: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
     alAbrir: (SublienzosDelPdf.Recorte) -> Unit
 ) {
     val ancho = if (abierta && recortes.isNotEmpty()) 0.56f else 1f
@@ -221,6 +223,8 @@ internal fun HojaConSublienzos(
                         )
                     }
                 }
+                // Debajo del aviso, para que el aviso se siga pudiendo tocar.
+                encima()
                 if (!abierta && recortes.isNotEmpty()) {
                     Text(
                         "${recortes.size} ${if (recortes.size == 1) "sublienzo" else "sublienzos"} · aleja o toca",

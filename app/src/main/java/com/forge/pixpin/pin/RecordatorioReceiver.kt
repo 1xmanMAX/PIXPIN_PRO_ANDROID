@@ -56,6 +56,14 @@ class RecordatorioReceiver : BroadcastReceiver() {
             val almacen = com.forge.pixpin.guardados.MensajesStore(context)
             val mensaje = runCatching { almacen.leer().firstOrNull { it.id == id } }.getOrNull() ?: return
             runCatching { almacen.actualizar(id) { it.copy(recuerdaEn = null) } }
+            // **Una nota de voz con hora es una llamada secreta**: suena como una llamada y el
+            // recado se oye por el auricular. Ver [LlamadaSecretaActivity].
+            val grabacion = mensaje.ruta?.takeIf { mensaje.clase == com.forge.pixpin.guardados.Clase.VOZ && java.io.File(it).exists() }
+            if (grabacion != null) {
+                val quien = mensaje.nombre.substringBeforeLast('.').ifBlank { "Llamada" }
+                val abierta = runCatching { LlamadaSecretaActivity.abrir(context, grabacion, quien) }.isSuccess
+                if (abierta) return
+            }
             val texto = mensaje.texto.ifBlank { mensaje.nombre }
                 .ifBlank { context.getString(com.forge.pixpin.R.string.guardados_titulo) }
             app.overlayManager.pinTexto(texto)

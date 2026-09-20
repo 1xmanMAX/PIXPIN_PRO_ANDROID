@@ -20,6 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material.icons.filled.Check
@@ -106,6 +111,9 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val EXTRA_MENSAJE = "mensaje"
         private const val EXTRA_EN_SU_SITIO = "enSuSitio"
         private const val EXTRA_DOCUMENTO = "documento"
+
+        /** Lo más que se acerca un documento. Lo menos es 1: el texto de borde a borde. */
+        private const val AUMENTO_MAXIMO = 5f
 
         /** Lo que tarda la burbuja en esconderse sola, en milisegundos. */
         private const val LO_QUE_DURA_LA_BURBUJA = 3500L
@@ -259,7 +267,7 @@ class VisorHtmlActivity : ComponentActivity() {
         fraccionPendiente = fraccionDeAhora()
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo, columnaDeAnotar)) }
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo, columnaDeAnotar, esDeNoche())) }
             }
             web?.reload()
         }
@@ -276,6 +284,11 @@ class VisorHtmlActivity : ComponentActivity() {
 
     private var laPaginaQueSeVe: File? = null
 
+    /** Si el aparato está en modo oscuro: decide el papel del documento y, con él, la tinta de lo anotado. */
+    private fun esDeNoche(): Boolean =
+        (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+
     // ---- Anotar encima del documento, con el motor del lienzo. Ver [CapaDeAnotar]. ----
 
     /** El ancho de la columna de texto, en píxeles CSS, desde que se anotó por primera vez; null si nunca. */
@@ -288,6 +301,20 @@ class VisorHtmlActivity : ComponentActivity() {
     private var corridoY by mutableStateOf(0)
     private var escalaWeb by mutableStateOf(1f)
     private var cambiosEnLaCapa by mutableStateOf(0)
+    /** Lo que se redibuja en los mandos de anotar; y si se ha visto un lápiz (entonces el dedo mueve). */
+    private var tickDeAnotar by mutableStateOf(0)
+    private var conLapiz by mutableStateOf(false)
+
+    /**
+     * **El aumento de un documento es nuestro, no del `WebView`** (20-sep-2026). Con el suyo, el
+     * texto se ampliaba por su cuenta —en otro hilo— y la capa de lo anotado se enteraba tarde:
+     * mientras se pellizcaba, **la tinta «vibraba»** y solo se quedaba quieta al parar. Ahora el
+     * documento y la capa van **dentro de la misma capa de pintado**, y el pellizco la estira
+     * entera: no hay dos cosas que poner de acuerdo, así que nada tiembla. De 1 —el texto de borde
+     * a borde, como se abre; **no se aleja más que eso**— a [AUMENTO_MAXIMO], leyendo y anotando.
+     */
+    private var aumento by mutableStateOf(1f)
+    private var corridoDelAumento by mutableStateOf(androidx.compose.ui.geometry.Offset.Zero)
 
     /** Lo anotado sobre este documento: un dibujo del motor de siempre, guardado como cualquier otro. */
     private val idDeLaCapa: String get() = "capa-doc-" + claveDelDocumento.hashCode().toUInt().toString(16)
@@ -327,7 +354,7 @@ class VisorHtmlActivity : ComponentActivity() {
         entrarAlCargar = true
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna)) }
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna, esDeNoche())) }
             }
             vista.settings.loadWithOverviewMode = false
             vista.reload()
@@ -341,6 +368,37 @@ class VisorHtmlActivity : ComponentActivity() {
         val e = vista.scale.coerceAtLeast(0.1f).toDouble()
         escalaWeb = e.toFloat()
         laCapa.setViewport(com.forge.pixpin.motor.Viewport(scrollX = -vista.scrollX / e, scrollY = -vista.scrollY / e, zoom = e))
+    }
+
+    /** Dónde estaba el documento, a lo ancho, al posar el dedo. Para el imán del centro. */
+    private var corridoAlPosar = 0
+    private var xDelLienzoAlPosar = Double.NaN
+
+    /** **Leyendo**: si el gesto venía hacia el centro, el documento se va al centro. Ver [com.forge.pixpin.motor.Lectura.imanDelCentro]. */
+    @Suppress("DEPRECATION")
+    private fun encajarEnElCentro() {
+        val vista = web ?: return
+        val columna = columnaDeAnotar ?: return
+        if (anotando) return
+        val margen = com.forge.pixpin.motor.Lectura.margenDe(columna) * vista.scale.toDouble()
+        val meta = com.forge.pixpin.motor.Lectura.imanDelCentro(corridoAlPosar.toDouble(), vista.scrollX.toDouble(), margen, margen) ?: return
+        android.animation.ObjectAnimator.ofInt(vista, "scrollX", vista.scrollX, meta.toInt()).setDuration(220).start()
+    }
+
+    /** **Anotando**: lo mismo, moviendo la vista del lienzo, que es quien lleva el documento. */
+    private fun encajarElLienzoEnElCentro() {
+        val columna = columnaDeAnotar ?: return
+        val margen = com.forge.pixpin.motor.Lectura.margenDe(columna).toDouble()
+        val ahora = -laCapa.scene.viewport.scrollX
+        val antes = xDelLienzoAlPosar.takeIf { !it.isNaN() } ?: ahora
+        xDelLienzoAlPosar = Double.NaN
+        val meta = com.forge.pixpin.motor.Lectura.imanDelCentro(antes, ahora, margen, margen) ?: return
+        lifecycleScope.launch(androidx.compose.ui.platform.AndroidUiDispatcher.Main) {
+            androidx.compose.animation.core.animate(ahora.toFloat(), meta.toFloat()) { v, _ ->
+                laCapa.setViewport(laCapa.scene.viewport.copy(scrollX = -v.toDouble()))
+                tickDeAnotar++
+            }
+        }
     }
 
     /** Anotando manda el lienzo: el documento va a donde él vaya, sin salirse de sus bordes. */
@@ -421,8 +479,8 @@ class VisorHtmlActivity : ComponentActivity() {
         var fallo by remember(original) { mutableStateOf(false) }
         LaunchedEffect(original) {
             val hecha = withContext(Dispatchers.IO) { runCatching { if (enSuSitio) original.takeIf { it.exists() } else copiaParaVer(original) }.getOrNull() }
-            if (hecha != null && esDocumento && (grosorDeLetra != 1 || tipoDeLetra != 0 || columnaDeAnotar != null)) withContext(Dispatchers.IO) {
-                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra, columnaDeAnotar)) }
+            if (hecha != null && esDocumento) withContext(Dispatchers.IO) {
+                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra, columnaDeAnotar, esDeNoche())) }
             }
             laPaginaQueSeVe = hecha
             if (hecha == null) fallo = true else copia = hecha
@@ -476,12 +534,23 @@ class VisorHtmlActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.align(Alignment.Center).padding(24.dp)
                     )
-                    pagina != null -> AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { contexto -> nuevoWeb(contexto, pagina) }
-                    )
+                    pagina != null -> Box(
+                        Modifier
+                            .fillMaxSize()
+                            .then(if (esDocumento) Modifier.pellizcoDelDocumento() else Modifier)
+                            .graphicsLayer {
+                                scaleX = aumento; scaleY = aumento
+                                translationX = corridoDelAumento.x; translationY = corridoDelAumento.y
+                            }
+                    ) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { contexto -> nuevoWeb(contexto, pagina) }
+                        )
+                        if (esDocumento && columnaDeAnotar != null) CapaDeAnotar()
+                    }
                 }
-                if (esDocumento && columnaDeAnotar != null) CapaDeAnotar()
+                if (esDocumento && anotando) MandosDeAnotar()
                 if (!presentando) androidx.compose.animation.AnimatedVisibility(
                     visible = aLaVista && !anotando,
                     enter = androidx.compose.animation.fadeIn(),
@@ -626,13 +695,12 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     @Composable
     private fun CapaDeAnotar() {
-        val deNoche = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val deNoche = esDeNoche()
         val fotos = remember { HashMap<String, android.graphics.Bitmap?>() }
         val foto: (String) -> android.graphics.Bitmap? = { f -> fotos.getOrPut(f) { laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } } }
         if (!anotando) {
             if (!hayAnotaciones) return
-            val pintor = remember(deNoche) { com.forge.pixpin.motor.Renderer(foto, dark = deNoche) }
+            val pintor = remember(deNoche) { com.forge.pixpin.motor.Renderer(foto, com.forge.pixpin.motor.DrawFonts.provider(this), dark = deNoche) }
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                 @Suppress("UNUSED_EXPRESSION") cambiosEnLaCapa
                 val e = escalaWeb.coerceAtLeast(0.1f).toDouble()
@@ -643,9 +711,6 @@ class VisorHtmlActivity : ComponentActivity() {
             }
             return
         }
-        val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
-        var conLapiz by remember { mutableStateOf(false) }
-        var tick by remember { mutableStateOf(0) }
         // El documento sigue al lienzo, fotograma a fotograma, mientras se anota.
         LaunchedEffect(Unit) {
             while (true) {
@@ -654,44 +719,87 @@ class VisorHtmlActivity : ComponentActivity() {
             }
         }
         Box(Modifier.fillMaxSize()) {
-            @Suppress("UNUSED_EXPRESSION") tick
+            @Suppress("UNUSED_EXPRESSION") tickDeAnotar
             com.forge.pixpin.motor.DrawCanvas(
                 controller = laCapa,
                 modifier = Modifier.fillMaxSize(),
                 imageProvider = foto,
                 dark = deNoche,
-                onChange = { trazando -> if (!trazando) { tick++; cambiosEnLaCapa++ } },
+                onChange = { trazando ->
+                    // Al posarse se apunta por dónde iba la vista; al soltar, el imán del centro.
+                    if (trazando) { if (xDelLienzoAlPosar.isNaN()) xDelLienzoAlPosar = -laCapa.scene.viewport.scrollX }
+                    else { tickDeAnotar++; cambiosEnLaCapa++; encajarElLienzoEnElCentro() }
+                },
+                // El aumento lo lleva el pellizco del documento, que estira esto y el texto a la vez.
                 zoomBloqueado = true,
                 modoLapiz = conLapiz,
                 onLapizDetectado = { conLapiz = true }
             )
-            Row(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 8.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                    .background(androidx.compose.ui.graphics.Color(0xB314182B))
-                    .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++ }
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Check, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
-                Text("Listo", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 6.dp))
+        }
+    }
+
+    /** «Listo», la barra de herramientas y el cuadro del texto: **fuera** de la capa que se estira. */
+    @Composable
+    private fun androidx.compose.foundation.layout.BoxScope.MandosDeAnotar() {
+        val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+        @Suppress("UNUSED_EXPRESSION") tickDeAnotar
+        EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
+        Row(
+            Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 8.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .background(androidx.compose.ui.graphics.Color(0xB314182B))
+                .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++ }
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Check, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
+            Text("Listo", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 6.dp))
+        }
+        Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                com.forge.pixpin.motor.DrawToolbar(
+                    tool = laCapa.tool,
+                    onTool = { laCapa.selectTool(it); tickDeAnotar++ },
+                    style = laCapa.scene.style,
+                    onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
+                    canUndo = laCapa.canUndo,
+                    onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
+                    permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                )
             }
-            Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-                com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-                    com.forge.pixpin.motor.DrawToolbar(
-                        tool = laCapa.tool,
-                        onTool = { laCapa.selectTool(it); tick++ },
-                        style = laCapa.scene.style,
-                        onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tick++ },
-                        canUndo = laCapa.canUndo,
-                        onUndo = { laCapa.undo(); tick++; cambiosEnLaCapa++ },
-                        permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                        grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
-                    )
-                }
+        }
+    }
+
+    /**
+     * **El pellizco de un documento.** Con dos dedos se amplía —nunca por debajo de 1— y el punto
+     * entre los dedos se queda quieto. Leyendo, esos dos dedos también pasean por lo ampliado y
+     * el gesto se consume, para que el texto no se desplace a la vez. Anotando **solo amplía**: el
+     * paseo de los dos dedos es del lienzo, que es quien lleva el documento. Un dedo no se toca.
+     */
+    private fun Modifier.pellizcoDelDocumento(): Modifier = pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            while (true) {
+                val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                val dedos = e.changes.count { it.pressed }
+                if (dedos == 0) break
+                if (dedos < 2) continue
+                val antes = aumento
+                val ahora = (antes * e.calculateZoom()).coerceIn(1f, AUMENTO_MAXIMO)
+                val centro = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+                val foco = e.calculateCentroid(useCurrent = false)
+                var movido = if (ahora == antes) corridoDelAumento
+                else foco - centro - (foco - centro - corridoDelAumento) * (ahora / antes)
+                if (!anotando) movido += e.calculatePan()
+                val topeX = (ahora - 1f) * size.width / 2f
+                val topeY = (ahora - 1f) * size.height / 2f
+                aumento = ahora
+                corridoDelAumento = androidx.compose.ui.geometry.Offset(movido.x.coerceIn(-topeX, topeX), movido.y.coerceIn(-topeY, topeY))
+                if (!anotando) e.changes.forEach { if (it.pressed) it.consume() }
             }
         }
     }
@@ -741,16 +849,24 @@ class VisorHtmlActivity : ComponentActivity() {
                 val elegido = i == bajoElDedo
                 val conDedo = bajoElDedo >= 0
                 Box(Modifier.size(width = if (conDedo) 64.dp else 30.dp, height = paso), contentAlignment = Alignment.CenterEnd) {
+                    // **El elegido salta delante del dedo** (20-sep-2026): crecía, pero debajo del
+                    // dedo, y no se veía cuál era. Ahora sale hacia dentro de la pantalla, grande, y
+                    // al pasar al siguiente vuelve a su sitio y salta el otro.
+                    val salto = androidx.compose.animation.core.animateDpAsState(
+                        if (elegido) (-78).dp else 0.dp,
+                        androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 700f), label = "salto"
+                    )
                     Box(
                         Modifier
-                            .size(if (elegido) 36.dp else if (conDedo) 28.dp else 20.dp)
+                            .offset(x = salto.value)
+                            .size(if (elegido) 52.dp else if (conDedo) 28.dp else 20.dp)
                             .clip(androidx.compose.foundation.shape.CircleShape)
                             .background(androidx.compose.ui.graphics.Color(if (elegido) 0xE614182B else 0x6614182B)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             m.emoji,
-                            fontSize = if (elegido) 20.sp else if (conDedo) 15.sp else 10.sp,
+                            fontSize = if (elegido) 30.sp else if (conDedo) 15.sp else 10.sp,
                             modifier = Modifier.alpha(if (conDedo) 1f else 0.75f)
                         )
                     }
@@ -1080,14 +1196,21 @@ class VisorHtmlActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         settings.allowUniversalAccessFromFileURLs = false
         // Un plano exportado se mira acercándose: el pellizco, sin los botones de + y −.
-        settings.builtInZoomControls = true
+        settings.builtInZoomControls = !esDocumento
         settings.displayZoomControls = false
+        if (esDocumento) settings.setSupportZoom(false)
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
         webViewClient = Cliente(pagina.parentFile ?: pagina)
         webChromeClient = Cromo()
         if (esDocumento) settings.textZoom = tamanoDeLetra
         if (columnaDeAnotar != null) settings.loadWithOverviewMode = false
+        // Que el visor no oscurezca por su cuenta un documento al que ya se le ha puesto su papel:
+        // saldría invertido dos veces. Ver [com.forge.pixpin.motor.Lectura.estilo].
+        if (esDocumento) runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 33) settings.isAlgorithmicDarkeningAllowed = false
+            else if (android.os.Build.VERSION.SDK_INT >= 29) @Suppress("DEPRECATION") settings.forceDark = android.webkit.WebSettings.FORCE_DARK_OFF
+        }
         setOnScrollChangeListener { _, x, y, _, _ -> corridoX = x; corridoY = y }
         // El dedo sobre la página: un toque enseña el nombre, moverla lo esconde. No se consume nada.
         val margen = android.view.ViewConfiguration.get(contexto).scaledTouchSlop
@@ -1096,10 +1219,14 @@ class VisorHtmlActivity : ComponentActivity() {
         var seMovio = false
         setOnTouchListener { _, e ->
             when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false }
+                android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false; corridoAlPosar = scrollX }
                 android.view.MotionEvent.ACTION_MOVE ->
                     if (!seMovio && (kotlin.math.abs(e.x - x0) > margen || kotlin.math.abs(e.y - y0) > margen)) { seMovio = true; movidasDeLaPagina++ }
-                android.view.MotionEvent.ACTION_UP -> if (!seMovio) toquesEnLaPagina++
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (!seMovio) toquesEnLaPagina++
+                    // Un respiro, por si la página sigue con la inercia del gesto; luego, el imán.
+                    else postDelayed({ encajarEnElCentro() }, 140)
+                }
             }
             false
         }

@@ -327,6 +327,8 @@ class LectorPdfActivity : ComponentActivity() {
                         }.padding(horizontal = 12.dp, vertical = 9.dp)
                     )
                 }
+                // El texto plantado en una hoja se escribe aquí. Ver [com.forge.pixpin.ui.EscribirEnElLienzo].
+                capas.ultima()?.let { c -> com.forge.pixpin.ui.EscribirEnElLienzo(c, tickDeLaBarra) { capas.ensuciarLaUltima(); tickDeLaBarra++ } }
                 Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
                     @Suppress("UNUSED_EXPRESSION") tickDeLaBarra
                     com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
@@ -409,7 +411,7 @@ class LectorPdfActivity : ComponentActivity() {
         val actual = mapa
         if (suyos.isNotEmpty()) {
             // En la lista solo los recuadros y el aviso: las miniaturas, en la vista a solas.
-            HojaConSublienzos(actual, proporcion, suyos, abierta = false, alPedirlos = alAbrirSublienzos) { }
+            HojaConSublienzos(actual, proporcion, suyos, abierta = false, alPedirlos = alAbrirSublienzos, encima = encima) { }
             return
         }
         Box(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -522,7 +524,11 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
 }
 
 /** El pintor de las capas que solo se miran: uno para todas las hojas, con su caché de formas. */
-private val PINTOR_DE_CAPAS by lazy { com.forge.pixpin.motor.Renderer() }
+private var elPintorDeCapas: com.forge.pixpin.motor.Renderer? = null
+
+/** Con la letra de verdad del lienzo, que si no un texto anotado se pintaría con otra y no cuadraría. */
+private fun pintorDeCapas(contexto: Context): com.forge.pixpin.motor.Renderer =
+    elPintorDeCapas ?: com.forge.pixpin.motor.Renderer(typefaces = com.forge.pixpin.motor.DrawFonts.provider(contexto.applicationContext)).also { elPintorDeCapas = it }
 
 /**
  * **La capa de una hoja.** Leyendo —o con la mano puesta— **solo se pinta**, y no coge ningún toque:
@@ -543,11 +549,12 @@ private fun CapaDePagina(
     val zoom = anchoPx.toDouble() / PdfDoc.PAGE_WIDTH
     LaunchedEffect(c, anchoPx) { c.setViewport(com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = 0.0, zoom = zoom)) }
     val conLaMano = maestro.tool == com.forge.pixpin.motor.Tool.HAND
+    val pintor = pintorDeCapas(androidx.compose.ui.platform.LocalContext.current)
     if (!anotando || conLaMano) {
         androidx.compose.foundation.Canvas(modifier) {
             @Suppress("UNUSED_EXPRESSION") capas.version.intValue
             if (c.scene.elements.none { !it.isDeleted }) return@Canvas
-            PINTOR_DE_CAPAS.renderScene(
+            pintor.renderScene(
                 drawContext.canvas.nativeCanvas,
                 c.scene.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = 0.0, zoom = size.width.toDouble() / PdfDoc.PAGE_WIDTH)),
                 size.width.toDouble(), size.height.toDouble()

@@ -62,7 +62,10 @@ object LectorIfc {
             val canal = raf.channel
             if (canal.size() > Int.MAX_VALUE) throw NoSeLee("El IFC es demasiado grande (más de 2 GB)")
             val mapa = canal.map(FileChannel.MapMode.READ_ONLY, 0, canal.size())
-            val cabeza = ByteArray(minOf(64, canal.size().toInt())).also { mapa.get(0, it) }
+            // `get(índice, array)` es de Java 13 y en Android **no existe hasta la versión 15**: en un
+            // teléfono más viejo esto tiraba la aplicación al abrir cualquier IFC (lo cazó el lint,
+            // 20-sep-2026). Con un duplicado se lee desde el principio sin mover la posición del mapa.
+            val cabeza = ByteArray(minOf(64, canal.size().toInt())).also { mapa.duplicate().get(it) }
             val texto = String(cabeza, Charsets.ISO_8859_1)
             if (!texto.contains("ISO-10303-21")) {
                 if (texto.startsWith("PK")) throw NoSeLee("Es un IFC comprimido (.ifczip): descomprímelo o expórtalo sin comprimir")

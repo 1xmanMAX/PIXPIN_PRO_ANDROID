@@ -94,6 +94,8 @@ fun HojitaDeNotas(
             imageProvider = imageProvider,
             onChange = { trazando -> if (!trazando) { tick++; onCambio() } }
         )
+        // El texto se escribe en un cuadro aparte. Ver [EscribirEnElLienzo].
+        EscribirEnElLienzo(controlador, tick) { tick++; onCambio() }
         Row(
             Modifier.align(Alignment.TopEnd).padding(6.dp),
             verticalAlignment = Alignment.CenterVertically

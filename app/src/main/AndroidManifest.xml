@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -221,6 +224,20 @@
                 <data android:pathPattern=".*\\.pixpin" />
             </intent-filter>
         </activity>
+        <!--
+            La llamada secreta: un recordatorio que suena como una llamada y se oye por el
+            auricular. Sale encima del bloqueo. Ver LlamadaSecretaActivity.
+        -->
+        <activity
+            android:name=".pin.LlamadaSecretaActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:screenOrientation="portrait"
+            android:taskAffinity="${applicationId}.llamada"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
         <!--
             «Abrir con» PixPin: lo que la aplicación sabe leer, tocado desde el gestor de archivos
             o desde otra aplicación. Guarda una copia en Guardados y lo abre en su visor. Por tipo

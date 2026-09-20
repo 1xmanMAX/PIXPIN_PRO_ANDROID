@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Draw
@@ -2542,9 +2543,12 @@ class MensajesActivity : ComponentActivity() {
                     menuAbierto = false; acciones.pinear()
                 }
                 DelMenu(
+                    // En una nota de voz, recordar es **llamarse**: a esa hora suena como una
+                    // llamada y la nota se oye por el auricular. Ver [com.forge.pixpin.pin.LlamadaSecretaActivity].
                     if (m.recuerdaEn != null) com.forge.pixpin.R.string.guardados_recordar_quitar
+                    else if (m.clase == Clase.VOZ) com.forge.pixpin.R.string.guardados_llamada
                     else com.forge.pixpin.R.string.guardados_recordar,
-                    Icons.Filled.Alarm
+                    if (m.clase == Clase.VOZ && m.recuerdaEn == null) Icons.Filled.Call else Icons.Filled.Alarm
                 ) { menuAbierto = false; acciones.recordar() }
                 acciones.rescatar?.let { rescatar ->
                     DelMenu(com.forge.pixpin.R.string.guardados_rescatar,
@@ -6658,6 +6662,28 @@ private fun DialogoDeRecordatorio(
         title = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.guardados_recordar)) },
         text = {
             Column {
+                // **A una hora concreta** («a las 10 de la mañana»): los atajos no bastan para una
+                // llamada que tiene que sonar en un momento dado. Si esa hora ya pasó hoy, es mañana.
+                val contexto = androidx.compose.ui.platform.LocalContext.current
+                Text(
+                    androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.guardados_recordar_hora),
+                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            val c = java.util.Calendar.getInstance()
+                            android.app.TimePickerDialog(contexto, { _, hora, minuto ->
+                                val elegida = java.util.Calendar.getInstance().apply {
+                                    set(java.util.Calendar.HOUR_OF_DAY, hora); set(java.util.Calendar.MINUTE, minuto)
+                                    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+                                    if (timeInMillis <= System.currentTimeMillis()) add(java.util.Calendar.DAY_OF_YEAR, 1)
+                                }
+                                onElegir(elegida.timeInMillis)
+                            }, c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(contexto)).show()
+                        }
+                        .padding(horizontal = 8.dp, vertical = 14.dp)
+                )
                 for ((texto, cuando) in opciones) {
                     Text(
                         texto,

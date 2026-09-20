@@ -5,7 +5,7 @@ guardar todo en un chat contigo mismo, leer documentos, dibujar en 3D, hacer tab
 y sacarlo en **HTML**, que abre cualquiera sin instalar nada. **Sin cuentas, sin servidores y sin
 analítica.**
 
-**Android 10+** · Kotlin + Compose · 2.545 pruebas · se instala por APK
+**Android 10+** · Kotlin + Compose · 2.547 pruebas · se instala por APK
 
 [**⬇ Descargar el APK**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest) · [**Catálogo visual del motor de dibujo**](docs/motor.md) · [**Dejar un comentario**](https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/issues)
 
@@ -169,6 +169,15 @@ con»** del sistema, y PixPin pregunta qué hacer: **abrirlo** (se guarda una co
 duplicar), **enviarlo por Wi-Fi** o **ponerlo como pin**.
 
 <!-- CAPTURA 5: docs/capturas/05-chat.png — el chat con una foto, un PDF, una nota de voz transcrita y los puntos rojo/verde -->
+
+### La llamada secreta
+
+Un recordatorio que solo oyes tú. A una **nota de voz** del chat se le pone una hora («Llamada
+secreta» en su menú, con la hora exacta que quieras) y, cuando llega, el teléfono **suena como si
+te llamaran** —también bloqueado—. Contestas, te lo llevas a la oreja y lo que oyes es **tu propia
+grabación, por el auricular** de las llamadas y no por el altavoz: nadie alrededor se entera del
+recado, y a nadie le extraña que contestes una llamada. La pantalla se apaga junto a la cara,
+cuelga sola al acabar, y si no contestas queda un aviso de llamada perdida.
 
 ### La voz
 
@@ -403,7 +412,7 @@ export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"   # JDK 17+
 
 ./gradlew assembleRelease      # el APK que se instala a mano
 ./gradlew assembleRelease -Prapido   # sin R8: compila mucho antes, para probar
-./gradlew testDebugUnitTest    # 2.545 pruebas, en la JVM
+./gradlew testDebugUnitTest    # 2.547 pruebas, en la JVM
 ./gradlew lintDebug
 ```
 
@@ -457,7 +466,7 @@ com.forge.pixpin/
 | `ExportarHtml` · `VisorEspacio` | El documento web y su visor 3D, en JavaScript sin dependencias |
 | `SubirArchivo` | Compartir como enlace: multipart a mano y servicios de reserva con caducidad publicada |
 
-La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.545 pruebas**
+La lógica delicada vive en objetos puros para poder probarla sin dispositivo: **2.547 pruebas**
 en la JVM. Lo que se ve y se toca solo se valida en un móvil real.
 
 ### Trece reglas de Android que moldearon el diseño

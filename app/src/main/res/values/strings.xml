@@ -356,6 +356,8 @@
     <string name="guardados_a_texto">Pasar a texto</string>
     <string name="guardados_ver_texto">Ver el texto</string>
     <string name="guardados_recordar">Recordármelo</string>
+    <string name="guardados_llamada">Llamada secreta</string>
+    <string name="guardados_recordar_hora">Elegir la hora…</string>
     <string name="guardados_recordar_quitar">Quitar el recordatorio</string>
     <string name="guardados_recordar_puesto">Te lo recuerdo %1$s</string>
     <string name="guardados_recordar_quitado">Recordatorio quitado</string>

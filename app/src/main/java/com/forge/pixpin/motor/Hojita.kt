@@ -13,15 +13,15 @@ package com.forge.pixpin.motor
  *   —su papel y, encima, lo anotado **en vectorial**, agrupado—, que se mueve y se estira entera
  *   y sigue siendo editable trazo a trazo si se desagrupa.
  *
- * Las herramientas que necesitan a la pantalla —escribir texto, traer una imagen, la zona, acotar
- * dictando la medida— no entran aquí: con una de esas puesta, la hojita se queda con la última que sí.
+ * Las herramientas que necesitan a la pantalla —traer una imagen, la zona, acotar dictando la
+ * medida— no entran aquí: con una de esas puesta, la hojita se queda con la última que sí.
  */
 object Hojita {
     /** Los papeles: claros, para que la tinta de siempre se lea. El primero, el amarillo de toda la vida. */
     val PAPELES = listOf("#fff3a3", "#ffffff", "#d7f5dd", "#dbeafe", "#ffe0e6")
 
     /** Lo que no se puede usar en la hojita: pide un diálogo o un sitio que aquí no hay. */
-    val FUERA = setOf(Tool.TEXT, Tool.IMAGE, Tool.ZONA, Tool.MEASURE, Tool.SCALE, Tool.FRAME, Tool.LUPA)
+    val FUERA = setOf(Tool.IMAGE, Tool.ZONA, Tool.MEASURE, Tool.SCALE, Tool.FRAME, Tool.LUPA)
 
     /**
      * **Lo que entra en el lienzo al insertar**: un rectángulo con el color del papel y, encima, lo

@@ -48,7 +48,7 @@ object Lectura {
     /** Lo que mide el documento entero con sus dos márgenes: la columna y dos tercios a cada lado. */
     fun anchoConMargenes(columna: Int): Int = columna + 2 * margenDe(columna)
 
-    fun estilo(grosor: Int, letra: Int, columna: Int? = null): String {
+    fun estilo(grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null): String {
         val peso = GROSORES.getOrElse(grosor) { GROSORES[1] }.first
         val familia = LETRAS.getOrElse(letra) { LETRAS[0] }.first
         val titulos = maxOf(peso, 700)
@@ -63,14 +63,22 @@ object Lectura {
                     "body{box-sizing:border-box !important;width:${it}px !important;max-width:none !important;" +
                     "margin-left:${margenDe(it)}px !important;margin-right:${margenDe(it)}px !important}"
             } ?: "") +
+            // **El papel, decidido aquí y no por la página**: claro u oscuro según el aparato, sin
+            // dejarlo a lo que el visor entienda por «modo oscuro». La tinta de lo anotado se elige
+            // con el mismo dato, así que **siempre contrasta con el papel que hay de verdad**.
+            (when (oscuro) {
+                true -> "html,body{background:#15171c !important;color:#e6e6ea !important}a{color:#8ab4f8 !important}"
+                false -> "html,body{background:#ffffff !important;color:#1b1b1f !important}"
+                null -> ""
+            }) +
             "</style>"
     }
 
     /** La página con el estilo puesto (y sin el que tuviera de antes): justo antes de `</head>`. */
-    fun conEstilo(pagina: String, grosor: Int, letra: Int, columna: Int? = null): String {
+    fun conEstilo(pagina: String, grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null): String {
         val limpia = pagina.replace(Regex("<style id=\"$ID_DEL_ESTILO\">.*?</style>", RegexOption.DOT_MATCHES_ALL), "")
         val i = limpia.indexOf("</head>", ignoreCase = true)
-        val hoja = estilo(grosor, letra, columna)
+        val hoja = estilo(grosor, letra, columna, oscuro)
         return if (i < 0) hoja + limpia else limpia.substring(0, i) + hoja + limpia.substring(i)
     }
 
@@ -98,6 +106,24 @@ object Lectura {
      */
     fun dentroDelDocumento(x: Double, y: Double, ancho: Double, alto: Double, vistaAncho: Double, vistaAlto: Double): Pair<Double, Double> =
         x.coerceIn(0.0, (ancho - vistaAncho).coerceAtLeast(0.0)) to y.coerceIn(0.0, (alto - vistaAlto).coerceAtLeast(0.0))
+
+    /**
+     * **El imán del centro.** Con márgenes a los lados, lo que hay que ver siempre es el texto: se
+     * puede ir a un margen y quedarse en él, pero **en cuanto se empuja de vuelta hacia el centro,
+     * la vista se va al centro** y encaja. [antes] y [ahora] son dónde estaba la vista al posar el
+     * dedo y al soltarlo; [centro], dónde queda el texto de borde a borde. Devuelve a dónde ir, o
+     * null para quedarse. Lo pidió así el usuario (20-sep-2026).
+     */
+    fun imanDelCentro(antes: Double, ahora: Double, centro: Double, margen: Double): Double? {
+        val lejos = kotlin.math.abs(ahora - centro)
+        if (lejos < 0.5) return null
+        // Muy cerca del centro se encaja siempre; si no, solo si se venía hacia él.
+        val casi = lejos <= margen * CERCA_DEL_CENTRO
+        val hacia = lejos < kotlin.math.abs(antes - centro) - 1.0
+        return if (casi || hacia) centro else null
+    }
+
+    private const val CERCA_DEL_CENTRO = 0.12
 
     const val ID_DEL_ESTILO = "pixpin-lector"
     const val MARCADORES = 24

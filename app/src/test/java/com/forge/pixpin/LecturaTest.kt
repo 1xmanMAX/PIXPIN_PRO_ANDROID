@@ -56,6 +56,28 @@ class LecturaTest {
     }
 
     @Test
+    fun `el papel del documento lo decide la app, claro u oscuro`() {
+        assertTrue(Lectura.estilo(1, 0, oscuro = true).contains("background:#15171c"))
+        assertTrue(Lectura.estilo(1, 0, oscuro = false).contains("background:#ffffff"))
+        assertTrue(!Lectura.estilo(1, 0).contains("background:"))
+    }
+
+    @Test
+    fun `el centro tira de la vista cuando se vuelve hacia él, y deja quedarse en un margen`() {
+        val centro = 240.0
+        val margen = 240.0
+        // Ir hacia un margen: se queda donde se deje.
+        assertEquals(null, Lectura.imanDelCentro(antes = 240.0, ahora = 60.0, centro = centro, margen = margen))
+        assertEquals(null, Lectura.imanDelCentro(60.0, 0.0, centro, margen))
+        // Empujar de vuelta hacia el centro: al centro.
+        assertEquals(centro, Lectura.imanDelCentro(0.0, 90.0, centro, margen))
+        assertEquals(centro, Lectura.imanDelCentro(480.0, 400.0, centro, margen))
+        // Casi en el centro, encaja aunque no se viniera hacia él; y ya en él, nada.
+        assertEquals(centro, Lectura.imanDelCentro(240.0, 255.0, centro, margen))
+        assertEquals(null, Lectura.imanDelCentro(100.0, 240.0, centro, margen))
+    }
+
+    @Test
     fun `la vista no se sale del documento`() {
         assertEquals(0.0 to 0.0, Lectura.dentroDelDocumento(-50.0, -9.0, 840.0, 5000.0, 360.0, 700.0))
         assertEquals(480.0 to 4300.0, Lectura.dentroDelDocumento(9999.0, 9999.0, 840.0, 5000.0, 360.0, 700.0))
