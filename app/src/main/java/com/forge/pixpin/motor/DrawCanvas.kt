@@ -252,6 +252,23 @@ fun DrawCanvas(
      * mover nada de sitio —que sería mentir sobre dónde estás dibujando— sino
      * enseñar ese trozo aparte, ampliado, en una esquina que no tapa la mano.
      */
+    // **Los toques, en cuanto llegan, no en el fotograma siguiente** (20-sep-2026). Android junta
+    // los movimientos del dedo y los entrega una vez por fotograma; para escribir va bien, pero al
+    // **mover el papel** se nota: el lienzo va siempre un fotograma por detrás del dedo —«un
+    // retraso mínimo, pero existe», dijo el usuario en su tableta—. Desde Android 11 se puede
+    // pedir la entrega sin esperar, que es lo que hacen las aplicaciones de dibujo. No cambia lo
+    // que se pinta ni cuántas veces: solo con qué antigüedad llega el dedo al pintar.
+    val laVista = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(laVista) {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            runCatching { laVista.requestUnbufferedDispatch(android.view.InputDevice.SOURCE_CLASS_POINTER) }
+        }
+        onDispose {
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                runCatching { laVista.requestUnbufferedDispatch(android.view.InputDevice.SOURCE_CLASS_NONE) }
+            }
+        }
+    }
     var dedo by remember { mutableStateOf<Offset?>(null) }
 
     /** La tira de colores del gesto rápido, mientras el lápiz la recorre. Ver [coloresRapidos]. */

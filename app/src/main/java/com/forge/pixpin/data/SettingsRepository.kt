@@ -124,6 +124,13 @@ data class Settings(
     val pinGroups: String? = null,
     val capaGroups: String? = null,
     /**
+     * Las herramientas del **editor rápido** de los lectores (PDF, Word, libros), y cómo se agrupan.
+     * Mismo trato que [pinTools]: null es «no lo he tocado» y mandan las de fábrica. Es la misma
+     * barra y el mismo motor que el lienzo; aquí solo se elige cuáles se llevan. 20-sep-2026.
+     */
+    val lectorTools: Set<String>? = null,
+    val lectorGroups: String? = null,
+    /**
      * Y la del editor a pantalla completa.
      *
      * Ahí sitio hay, así que de fábrica salen **todas**; pero «todas» no es lo
@@ -289,6 +296,9 @@ data class Settings(
     val capaGroupList: List<List<com.forge.pixpin.motor.Tool>>
         get() = com.forge.pixpin.motor.gruposDe(capaGroups, capaToolSet)
 
+    val lectorGroupList: List<List<com.forge.pixpin.motor.Tool>>
+        get() = com.forge.pixpin.motor.gruposDe(lectorGroups, lectorToolSet)
+
     val editorGroupList: List<List<com.forge.pixpin.motor.Tool>>
         get() = com.forge.pixpin.motor.gruposDe(editorGroups, editorToolSet)
 
@@ -304,6 +314,10 @@ data class Settings(
     /** Las de la capa sobre la pantalla. */
     val capaToolSet: Set<com.forge.pixpin.motor.Tool>
         get() = herramientas(capaTools, com.forge.pixpin.motor.CAPA_TOOLS_POR_DEFECTO)
+
+    /** Las del editor rápido de los lectores. */
+    val lectorToolSet: Set<com.forge.pixpin.motor.Tool>
+        get() = herramientas(lectorTools, com.forge.pixpin.motor.LECTOR_TOOLS_POR_DEFECTO)
 
     /** Las del editor a pantalla completa: de fábrica, todas. */
     val editorToolSet: Set<com.forge.pixpin.motor.Tool>
@@ -349,6 +363,8 @@ class SettingsRepository(private val context: Context) {
         val CAPA_TOOLS = stringSetPreferencesKey("capa_tools")
         val PIN_GROUPS = stringPreferencesKey("pin_groups")
         val CAPA_GROUPS = stringPreferencesKey("capa_groups")
+        val LECTOR_TOOLS = stringSetPreferencesKey("lector_tools")
+        val LECTOR_GROUPS = stringPreferencesKey("lector_groups")
         val EDITOR_TOOLS = stringSetPreferencesKey("editor_tools")
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
@@ -381,6 +397,8 @@ class SettingsRepository(private val context: Context) {
             capaTools = prefs[Keys.CAPA_TOOLS],
             pinGroups = prefs[Keys.PIN_GROUPS],
             capaGroups = prefs[Keys.CAPA_GROUPS],
+            lectorTools = prefs[Keys.LECTOR_TOOLS],
+            lectorGroups = prefs[Keys.LECTOR_GROUPS],
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
@@ -466,6 +484,17 @@ class SettingsRepository(private val context: Context) {
             it[Keys.CAPA_TOOLS] = grupos.flatten().map { t -> t.name }.toSet()
             it[Keys.CAPA_GROUPS] = com.forge.pixpin.motor.escribirGrupos(grupos)
         }
+    }
+
+    suspend fun setBarraDelLector(grupos: List<List<com.forge.pixpin.motor.Tool>>) {
+        context.dataStore.edit {
+            it[Keys.LECTOR_TOOLS] = grupos.flatten().map { t -> t.name }.toSet()
+            it[Keys.LECTOR_GROUPS] = com.forge.pixpin.motor.escribirGrupos(grupos)
+        }
+    }
+
+    suspend fun resetBarraDelLector() {
+        context.dataStore.edit { it.remove(Keys.LECTOR_TOOLS); it.remove(Keys.LECTOR_GROUPS) }
     }
 
     suspend fun setOledNegro(valor: Boolean) {

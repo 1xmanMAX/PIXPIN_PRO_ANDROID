@@ -1097,6 +1097,20 @@ val PIN_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
 )
 
 /**
+ * Las del **editor rápido** de los lectores, de fábrica: lo de anotar un documento —lápiz, marcador,
+ * borrador, flecha, caja, elipse, línea, seleccionar, mover— y nada más. Es la misma barra y el mismo
+ * motor que el lienzo; las demás se añaden arrastrando en Ajustes. Fuera quedan siempre las que
+ * necesitan la pantalla del editor completo ([LECTOR_TOOLS_FUERA]).
+ */
+val LECTOR_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
+    Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.ERASER, Tool.ARROW, Tool.RECTANGLE,
+    Tool.ELLIPSE, Tool.LINE, Tool.SELECTION, Tool.HAND
+)
+
+/** Lo que el editor rápido no puede llevar: pide un diálogo o un sitio que solo tiene el editor completo. */
+val LECTOR_TOOLS_FUERA: Set<Tool> = setOf(Tool.TEXT, Tool.IMAGE, Tool.ZONA, Tool.SCALE, Tool.FRAME, Tool.LUPA)
+
+/**
  * Con qué se dibuja **encima de la pantalla** mientras nadie diga otra cosa.
  *
  * Más que en el pin porque hay más sitio: la capa ocupa la pantalla entera y su

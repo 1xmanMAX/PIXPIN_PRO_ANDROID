@@ -563,6 +563,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
                 BarraDelPinCard()
                 Spacer(Modifier.height(12.dp))
                 BarraDeLaCapaCard()
+                BarraDelLectorCard()
             }
 
             GrupoDeAjustes(
@@ -900,6 +901,26 @@ private fun BarraDelEditorCard() {
         puestas = settings.editorToolSet,
         onCambio = { scope.launch { app.settings.setBarraDelEditor(it) } },
         onReset = { scope.launch { app.settings.resetBarraDelEditor() } }
+    )
+}
+
+/**
+ * Lo mismo, para el **editor rápido** de los lectores: qué herramientas del lienzo se llevan a
+ * anotar un PDF, un Word o un libro sin salir de él. Arrastrando, como las otras barras.
+ */
+@Composable
+private fun BarraDelLectorCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    BarraCard(
+        titulo = R.string.lector_tools_title,
+        descripcion = R.string.lector_tools_desc,
+        grupos = settings.lectorGroupList,
+        puestas = settings.lectorToolSet,
+        onCambio = { scope.launch { app.settings.setBarraDelLector(it) } },
+        onReset = { scope.launch { app.settings.resetBarraDelLector() } }
     )
 }
 

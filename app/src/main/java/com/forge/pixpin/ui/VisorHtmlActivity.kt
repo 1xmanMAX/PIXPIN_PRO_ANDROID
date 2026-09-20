@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -423,6 +424,11 @@ class VisorHtmlActivity : ComponentActivity() {
                         // botones van con la pastilla: salen al tocar y se van al mover.
                         if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
                         else {
+                            // **Anotar**: el documento pasa a páginas con margen a los dos lados y se
+                            // anota con el motor del lienzo. Ver [anotar].
+                            IconButton(onClick = { ocupado = "Preparando para anotar…"; anotar(suNombre) { ocupado = null } }, modifier = Modifier.size(38.dp)) {
+                                Icon(Icons.Filled.Edit, contentDescription = "Anotar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                            }
                             IconButton(onClick = { poniendoMarcador = true; conLaLetra = false }, modifier = Modifier.size(38.dp)) {
                                 Icon(Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
@@ -702,6 +708,55 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun sinExtension(nombre: String): String {
         val ext = nombre.substringAfterLast('.', "")
         return if (ext.isNotBlank() && ext.length <= 5 && nombre.length > ext.length + 1) nombre.dropLast(ext.length + 1) else nombre
+    }
+
+    /**
+     * **Anotar un Word o un libro** (20-sep-2026). El usuario lo pidió como «un lienzo muy largo,
+     * limitado de ancho, con el texto en el centro y **dos tercios más a cada lado** para anotar»,
+     * con dos condiciones: **el mismo motor del lienzo** y que la letra **no cambie de tamaño**
+     * mientras haya anotaciones, que si no se descolocan.
+     *
+     * Las dos salen solas haciendo lo que la aplicación ya sabe hacer: el documento se pasa a un
+     * **PDF de páginas anchas** —la columna de texto en medio y dos tercios de su ancho en blanco
+     * a cada lado— con la letra que haya puesta **en ese momento**, y ese PDF se anota con el
+     * editor rápido del lector, que es el lienzo de siempre sobre cada página. La letra queda
+     * fijada porque el PDF ya está hecho; lo anotado vive en un proyecto, así que se sigue
+     * editando desde proyectos con el editor completo; y no hay un solo lienzo kilométrico que
+     * tener entero en memoria: solo la página que se mira.
+     *
+     * **La segunda vez no se rehace nada**: el documento recuerda su PDF y se vuelve a él, con lo
+     * anotado. (Si se quiere otra letra, «Vista de impresión» y «Al proyecto» hacen uno nuevo.)
+     */
+    private fun anotar(nombre: String, alAcabar: () -> Unit) {
+        val clave = claveDelDocumento + ":anotado"
+        prefsDeLectura.getString(clave, null)?.takeIf { File(it).exists() }?.let { yaHecho ->
+            alAcabar()
+            com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, yaHecho, sinExtension(nombre), anotando = true)
+            return
+        }
+        val vista = web
+        if (vista == null) { alAcabar(); return }
+        val titulo = sinExtension(nombre).ifBlank { "Documento" }
+        val ahora = System.currentTimeMillis()
+        val destino = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+        // En milésimas de pulgada. La columna de texto, la de un A4 con sus márgenes (6,3");
+        // la página, esa columna más dos tercios a cada lado: 6,3 × 7/3 = 14,7".
+        val columna = 6300
+        val lado = columna * 2 / 3
+        val atributos = android.print.PrintAttributes.Builder()
+            .setMediaSize(android.print.PrintAttributes.MediaSize("pixpin_anotar", "Para anotar", columna + 2 * lado, 11693))
+            .setResolution(android.print.PrintAttributes.Resolution("pdf", "pdf", 300, 300))
+            .setMinMargins(android.print.PrintAttributes.Margins(lado, 590, lado, 590))
+            .build()
+        android.print.PdfDesdeWeb.escribir(vista.createPrintDocumentAdapter(titulo), atributos, destino) { bien ->
+            alAcabar()
+            if (!bien) {
+                Toast.makeText(this, "No se pudo preparar para anotar", Toast.LENGTH_SHORT).show()
+                return@escribir
+            }
+            prefsDeLectura.edit().putString(clave, destino.absolutePath).apply()
+            com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, destino.absolutePath, titulo, anotando = true)
+        }
     }
 
     /**

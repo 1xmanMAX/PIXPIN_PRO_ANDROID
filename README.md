@@ -155,6 +155,13 @@ Leyendo un Word o un libro se cambia **el tamaño, el grosor y el tipo de letra*
 **marcadores con emoticono**: salen como puntos en el lateral, se pasa el dedo por ellos —vibra al
 cambiar de uno a otro— y al soltar se va a ese. Al volver, el documento se abre por donde se dejó.
 
+**Editor rápido.** Sin salir del lector, el lápiz de abajo pone **el mismo motor del lienzo**
+sobre la página que se mira: mismas herramientas, mismas tintas, y el **mismo dibujo** que abre el
+editor completo desde proyectos, así que lo anotado se edita luego en cualquiera de los dos. Qué
+herramientas lleva se elige en Ajustes, arrastrando. Un **Word o un libro** se anotan igual: pasan a
+páginas con la columna de texto en el centro y **dos tercios de margen a cada lado** para escribir,
+con la letra fijada para que las anotaciones no se muevan de su sitio.
+
 Todos estos tipos —y las imágenes, las hojas de cálculo y las notas en Markdown— salen en **«Abrir
 con»** del sistema, y PixPin pregunta qué hacer: **abrirlo** (se guarda una copia en Guardados, sin
 duplicar), **enviarlo por Wi-Fi** o **ponerlo como pin**.

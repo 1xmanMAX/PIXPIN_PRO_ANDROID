@@ -1,5 +1,10 @@
 package com.forge.pixpin.pdf
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Edit
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.forge.pixpin.ui.theme.cristal
 import android.content.Context
 import android.content.Intent
@@ -75,11 +80,15 @@ class LectorPdfActivity : ComponentActivity() {
         private const val EXTRA_RUTA = "ruta"
         private const val EXTRA_NOMBRE = "nombre"
 
-        fun abrir(context: Context, ruta: String, nombre: String) {
+        private const val EXTRA_ANOTAR = "anotar"
+
+        /** Con [anotando], se abre ya con el editor rápido puesto sobre la primera página. */
+        fun abrir(context: Context, ruta: String, nombre: String, anotando: Boolean = false) {
             context.startActivity(
                 Intent(context, LectorPdfActivity::class.java)
                     .putExtra(EXTRA_RUTA, ruta)
                     .putExtra(EXTRA_NOMBRE, nombre)
+                    .putExtra(EXTRA_ANOTAR, anotando)
             )
         }
     }
@@ -117,6 +126,28 @@ class LectorPdfActivity : ComponentActivity() {
         // se pasea— con la lista escondida detrás. Atrás, o la flecha, vuelve. Ver [VistaDeLaPagina].
         var aSolas by remember(rutaPedida) { mutableStateOf<Int?>(null) }
         androidx.activity.compose.BackHandler(enabled = aSolas != null) { aSolas = null }
+        // **El editor rápido**: la página que se anota, el proyecto de este PDF (se crea la primera
+        // vez, como hace el lienzo) y las veces que se ha vuelto de anotar, para repintar las hojas.
+        var anotando by remember(rutaPedida) { mutableStateOf<Int?>(null) }
+        var suProyecto by remember(rutaPedida) { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
+        var vueltas by remember { mutableStateOf(0) }
+        val alcance = androidx.compose.runtime.rememberCoroutineScope()
+        fun anotar(pagina: Int) {
+            val app = application as? com.forge.pixpin.PixPinApp ?: return
+            alcance.launch {
+                val p = withContext(Dispatchers.IO) {
+                    runCatching {
+                        app.proyectos.deEstePdf(ruta, nombre.substringBeforeLast('.').ifBlank { "PDF" }, cuantas, System.currentTimeMillis())
+                    }.getOrNull()
+                }
+                if (p == null) android.widget.Toast.makeText(this@LectorPdfActivity, "No se pudo preparar el PDF para anotar", android.widget.Toast.LENGTH_SHORT).show()
+                else { suProyecto = p; anotando = pagina.coerceIn(0, (cuantas - 1).coerceAtLeast(0)) }
+            }
+        }
+        val quiereAnotarAlAbrir = remember { intent?.getBooleanExtra(EXTRA_ANOTAR, false) == true }
+        LaunchedEffect(cuantas) {
+            if (quiereAnotarAlAbrir && cuantas > 0 && anotando == null && vueltas == 0) anotar(0)
+        }
         LaunchedEffect(rutaPedida) {
             withContext(Dispatchers.IO) {
                 val doc = runCatching { SublienzosDelPdf.documentoDe(this@LectorPdfActivity, rutaPedida) }.getOrDefault(rutaPedida)
@@ -236,11 +267,57 @@ class LectorPdfActivity : ComponentActivity() {
                             )
                     ) {
                         items((0 until cuantas).toList()) { i ->
-                            Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i }
+                            androidx.compose.runtime.key(vueltas) { Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i } }
                         }
                     }
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
                 }
+            }
+            // **El lápiz del editor rápido**: pequeño y semitransparente, abajo a un lado. Anota la
+            // página que se está mirando.
+            if (cuantas > 0 && aSolas == null && anotando == null) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(18.dp)
+                        .size(52.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0x9914182B))
+                        .clickable {
+                            val centro = estado.layoutInfo.viewportEndOffset / 2
+                            val bajo = estado.layoutInfo.visibleItemsInfo.firstOrNull { centro >= it.offset && centro <= it.offset + it.size }?.index
+                            anotar(bajo ?: estado.firstVisibleItemIndex)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.Edit, contentDescription = "Anotar esta página",
+                        tint = Color.White, modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            val pagina = anotando
+            val proyecto = suProyecto
+            if (pagina != null && proyecto != null) {
+                com.forge.pixpin.ui.EditorRapido(
+                    app = application as com.forge.pixpin.PixPinApp,
+                    proyecto = proyecto,
+                    pagina = pagina,
+                    cuantas = cuantas,
+                    onPagina = { anotando = it },
+                    onCerrar = { cambiado ->
+                        anotando = null
+                        if (cambiado) alcance.launch {
+                            // El PDF se rehace en segundo plano: un respiro, y las hojas se vuelven a pedir.
+                            kotlinx.coroutines.delay(900)
+                            PaginasEnMemoria.olvidar(ruta)
+                            proyecto.pdfOrigen?.let { if (it != ruta) { PaginasEnMemoria.olvidar(it); ruta = it } }
+                            vueltas++
+                        }
+                    }
+                )
+                return@Box
             }
             if (nombre.isNotBlank()) {
                 Text(
@@ -334,6 +411,12 @@ private object PaginasEnMemoria {
 
     /** La mejor que haya de esa página, sin esperar. */
     fun alguna(ruta: String, i: Int): Bitmap? = anchos["$ruta#$i"]?.let { cache.get("$ruta#$i#$it") }
+
+    /** Lo guardado de [ruta] ya no vale: el documento ha cambiado (se ha anotado). */
+    fun olvidar(ruta: String) {
+        anchos.keys.filter { it.startsWith("$ruta#") }.forEach { anchos.remove(it) }
+        cache.snapshot().keys.filter { it.startsWith("$ruta#") }.forEach { cache.remove(it) }
+    }
 
     /** Trabajo de disco. */
     fun pintar(ruta: String, i: Int, ancho: Int): Bitmap? {
