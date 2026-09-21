@@ -2169,14 +2169,24 @@ class DrawController(initial: Scene = Scene()) {
         // sus bordes, no dónde queda su centro.
         desdeElCentro = type != ElementType.FRAME &&
             (shapesFromCenter || (ellipseFromCenter && type == ElementType.ELLIPSE))
-        val e = newElement(type, p.x, p.y, scene.style).copy(reference = modoReferencia)
+        val e = deGrafitoSiToca(newElement(type, p.x, p.y, scene.style).copy(reference = modoReferencia))
         scene = scene.copy(elements = scene.elements + e)
         gesture = Gesture.Creating(e.id)
     }
 
+    /**
+     * **Con el grafito en la mano, las figuras también son de grafito** (21-sep-2026): el
+     * rectángulo, el rombo, el óvalo, la línea y la flecha de sus herramientas, igual que ya lo
+     * eran el bote y las figuras del gesto de pararse. Se deja al coger el lápiz o el resaltador.
+     */
+    private fun deGrafitoSiToca(e: Element): Element =
+        if (conElGrafitoEnLaMano && e.type in FIGURAS_DE_GRAFITO) e.copy(material = MaterialDeTinta.CUADRITOS) else e
+
     private fun beginCreateLinear(type: ElementType, p: Pt) {
-        val e = newElement(type, p.x, p.y, scene.style)
-            .copy(points = listOf(Pt(0.0, 0.0), Pt(0.0, 0.0)), reference = modoReferencia)
+        val e = deGrafitoSiToca(
+            newElement(type, p.x, p.y, scene.style)
+                .copy(points = listOf(Pt(0.0, 0.0), Pt(0.0, 0.0)), reference = modoReferencia)
+        )
         scene = scene.copy(elements = scene.elements + e)
         gesture = Gesture.Creating(e.id)
     }
@@ -3750,3 +3760,6 @@ const val COLOR_DE_LA_ZONA = "#1971c2"
 
 /** El prefijo del grupo de una copia de zona (la foto y su marco). Ver [DrawController.ponerCopiaDeZona]. */
 const val GRUPO_DE_ZONA = "zona-"
+
+/** Las figuras que salen de grafito con él en la mano. Ver [DrawController.deGrafitoSiToca]. */
+val FIGURAS_DE_GRAFITO = setOf(ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE, ElementType.LINE, ElementType.ARROW)

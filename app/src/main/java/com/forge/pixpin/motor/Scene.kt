@@ -188,7 +188,12 @@ enum class Tool {
         get() = this == ARROW || this == LINE || this == MEASURE || this == SCALE
 
     /** Las que dibujan siguiendo el dedo. */
-    val isFreehand: Boolean get() = this == FREEDRAW || this == HIGHLIGHTER
+    /**
+     * El grafito también (21-sep-2026): faltaba, y por eso con él no saltaba el gesto de pararse
+     * —la recta, el compás, el rectángulo de la «L»— ni se pegaba al imán: las dos cosas se
+     * encienden mirando esto. Es un lápiz como los otros, hecho de otra cosa.
+     */
+    val isFreehand: Boolean get() = this == FREEDRAW || this == HIGHLIGHTER || this == GRAFITO
 }
 
 /**
