@@ -628,6 +628,9 @@ class DrawEditorActivity : ComponentActivity() {
     private var marcas by mutableStateOf(emptyList<com.forge.pixpin.motor.Marca>())
     private var poniendoMarca by mutableStateOf(false)
 
+    /** Lo que ocupa el panel lateral de estilo, para que el riel no se le meta debajo. */
+    private var anchoDelPanelLateral by mutableIntStateOf(0)
+
     private fun prefsDeMarcas() = getSharedPreferences("marcas", MODE_PRIVATE)
 
     private fun cargarLasMarcas() {
@@ -1159,6 +1162,11 @@ class DrawEditorActivity : ComponentActivity() {
          * recompone nada. Es el mismo acuerdo que la rueda del color con su tono.
          */
         val zoomVivo = remember { mutableFloatStateOf(controller.scene.viewport.zoom.toFloat()) }
+        // **El encuadre, con el dedo puesto.** El tick solo sube al soltar, así que lo que se
+        // dibuja encima del lienzo —los marcadores— se quedaba clavado en la pantalla mientras
+        // se movía el dibujo, en vez de ir pegado a su sitio. Esto no lleva el encuadre: solo
+        // avisa de que ha cambiado, y quien lo dibuja lee el de verdad. Ver [CapaDeMarcas].
+        val pulsoDeLaVista = remember { mutableIntStateOf(0) }
         var editandoTexto by remember { mutableStateOf<String?>(null) }
         // **El papel manda, y el modo noche sale de él.**
         //
@@ -1204,6 +1212,7 @@ class DrawEditorActivity : ComponentActivity() {
             // Escribir estado desde aquí es legal porque `cambiado` responde siempre a un
             // evento y no se llama nunca componiendo.
             zoomVivo.floatValue = controller.scene.viewport.zoom.toFloat()
+            pulsoDeLaVista.intValue++
             if (!mientrasSeTraza) tick++
             guardar()
         }
@@ -1696,11 +1705,17 @@ class DrawEditorActivity : ComponentActivity() {
 
             // **Los marcadores del lienzo**, encima del dibujo y pegados a su sitio. Ver [CapaDeMarcas].
             if (!presentando) {
-                CapaDeMarcas(tick)
+                CapaDeMarcas(tick, pulsoDeLaVista)
                 // **Al lado contrario de la mano**: el de la mano lo ocupa el panel de estilo.
+                // **Siempre a la derecha**, como en el visor de documentos y en el lector de PDF:
+                // lo pidió el usuario —«que la interfaz sea igual en todas partes»—. Con la mano
+                // zurda el panel de estilo ocupa ese canto, así que el riel se aparta lo que
+                // mida, en vez de quedarse debajo.
                 if (!soloElDibujo) com.forge.pixpin.ui.RielDeMarcas(
                     marcas.size, { i -> marcas[i].emoji },
-                    Modifier.align(if (zurdo) Alignment.CenterStart else Alignment.CenterEnd)
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = if (zurdo) with(LocalDensity.current) { anchoDelPanelLateral.toDp() } else 0.dp)
                 ) { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } }
             }
 
@@ -1990,7 +2005,11 @@ class DrawEditorActivity : ComponentActivity() {
                 // una sola vez, y en caja aparte porque no son lo mismo: arriba, con qué se
                 // dibuja; abajo, qué hacer con lo dibujado. Ver [CajaDeDeshacer].
                 Column(
-                    Modifier.align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart),
+                    Modifier
+                        .align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart)
+                        // Lo que ocupa: es lo que tiene que apartarse el riel de marcadores
+                        // cuando los dos caen en el mismo canto.
+                        .onSizeChanged { if (it.width != anchoDelPanelLateral) anchoDelPanelLateral = it.width },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (aplican.isNotEmpty() && editandoTexto == null) {
@@ -2766,25 +2785,38 @@ class DrawEditorActivity : ComponentActivity() {
      * toque largo lo quita. Lo que está fuera de la pantalla no se compone.
      */
     @Composable
-    private fun CapaDeMarcas(tick: Int) {
+    private fun CapaDeMarcas(tick: Int, pulsoDeLaVista: androidx.compose.runtime.MutableIntState) {
         @Suppress("UNUSED_EXPRESSION") tick
         if (marcas.isEmpty()) return
-        val v = controller.scene.viewport
         val d = LocalDensity.current
         val ancho = medidaDelLienzo.width
         val alto = medidaDelLienzo.height
         // Lo que se está arrastrando, en píxeles de pantalla: mientras dura, manda esto y no el punto.
         var arrastrando by remember { mutableStateOf<Pair<Long, androidx.compose.ui.geometry.Offset>?>(null) }
+        // Dónde cae ahora mismo, en la pantalla: se pregunta **al colocar**, leyendo el encuadre
+        // de verdad. El pulso solo sirve para que se vuelva a colocar mientras el dedo mueve el
+        // dibujo; sin él, esto se quedaba con el encuadre de la última recomposición.
+        fun enPantallaAhora(m: com.forge.pixpin.motor.Marca): androidx.compose.ui.geometry.Offset {
+            arrastrando?.takeIf { it.first == m.id }?.let { return it.second }
+            val p = controller.scene.viewport.toScreen(Pt(m.x, m.y))
+            return androidx.compose.ui.geometry.Offset(p.x.toFloat(), p.y.toFloat())
+        }
         for (m in marcas) {
-            val enPantalla = arrastrando?.takeIf { it.first == m.id }?.second
-                ?: v.toScreen(Pt(m.x, m.y)).let { androidx.compose.ui.geometry.Offset(it.x.toFloat(), it.y.toFloat()) }
-            val fuera = ancho > 0 && alto > 0 &&
-                (enPantalla.x < -80 || enPantalla.y < -80 || enPantalla.x > ancho + 80 || enPantalla.y > alto + 80)
-            if (fuera) continue
             key(m.id) {
                 Box(
                     Modifier
-                        .offset { androidx.compose.ui.unit.IntOffset((enPantalla.x - with(d) { 18.dp.toPx() }).toInt(), (enPantalla.y - with(d) { 18.dp.toPx() }).toInt()) }
+                        .offset {
+                            @Suppress("UNUSED_EXPRESSION") pulsoDeLaVista.intValue
+                            val donde = enPantallaAhora(m)
+                            val radio = 18.dp.toPx()
+                            // Lo que cae fuera de la pantalla se aparta del todo en vez de
+                            // dejarse en el canto, que es donde se tocaría sin querer.
+                            if (ancho > 0 && alto > 0 &&
+                                (donde.x < -radio * 4 || donde.y < -radio * 4 ||
+                                    donde.x > ancho + radio * 4 || donde.y > alto + radio * 4)
+                            ) return@offset androidx.compose.ui.unit.IntOffset(-9999, -9999)
+                            androidx.compose.ui.unit.IntOffset((donde.x - radio).toInt(), (donde.y - radio).toInt())
+                        }
                         .size(36.dp)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(Color(0xCC14182B))
@@ -2793,7 +2825,7 @@ class DrawEditorActivity : ComponentActivity() {
                         // cualquier otra herramienta un toque va a su sitio y ya.
                         .then(if (controller.tool != Tool.SELECTION) Modifier else Modifier.pointerInput(m.id) {
                             detectDragGestures(
-                                onDragStart = { arrastrando = m.id to enPantalla },
+                                onDragStart = { arrastrando = m.id to enPantallaAhora(m) },
                                 onDrag = { cambio, movido ->
                                     cambio.consume()
                                     arrastrando = arrastrando?.let { it.first to (it.second + movido) }
