@@ -130,6 +130,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -1696,23 +1697,11 @@ class DrawEditorActivity : ComponentActivity() {
             // **Los marcadores del lienzo**, encima del dibujo y pegados a su sitio. Ver [CapaDeMarcas].
             if (!presentando) {
                 CapaDeMarcas(tick)
-                if (!soloElDibujo) {
-                    com.forge.pixpin.ui.RielDeMarcas(
-                        marcas.size, { i -> marcas[i].emoji },
-                        Modifier.align(Alignment.CenterEnd).padding(end = 2.dp)
-                    ) { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } }
-                    if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
-                        Modifier.align(Alignment.BottomCenter),
-                        onCerrar = { poniendoMarca = false }
-                    ) { emoji ->
-                        poniendoMarca = false
-                        // Nace **en el centro de lo que se está mirando**, que es lo que uno acaba
-                        // de decidir marcar; de ahí se arrastra a donde toque.
-                        val centro = centroDeLaVista()
-                        marcas = com.forge.pixpin.motor.Marcas.con(marcas, centro.x, centro.y, emoji, System.currentTimeMillis())
-                        guardarLasMarcas()
-                    }
-                }
+                // **Al lado contrario de la mano**: el de la mano lo ocupa el panel de estilo.
+                if (!soloElDibujo) com.forge.pixpin.ui.RielDeMarcas(
+                    marcas.size, { i -> marcas[i].emoji },
+                    Modifier.align(if (zurdo) Alignment.CenterStart else Alignment.CenterEnd)
+                ) { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } }
             }
 
             // Lo que hay marcado y lo que se le puede tocar: lo miran tanto los mandos
@@ -2041,16 +2030,6 @@ class DrawEditorActivity : ComponentActivity() {
                             noche = noche
                         )
                     }
-                    CajaDeDeshacer(
-                        puedeDeshacer = controller.canUndo,
-                        puedeRehacer = controller.canRedo,
-                        onDeshacer = { controller.undo(); cambiado() },
-                        onRehacer = { controller.redo(); cambiado() },
-                        modifier = Modifier.padding(
-                            horizontal = SEPARACION_DEL_BORDE,
-                            vertical = 4.dp
-                        )
-                    )
                 }
 
                 // **El taller del color, al lado del lateral.**
@@ -2122,17 +2101,55 @@ class DrawEditorActivity : ComponentActivity() {
                         },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    VisorDeZoom(
-                        // **El aumento se lee del vivo, no del tick.** El tick solo sube al
-                        // levantar el dedo —rehace el editor entero— así que el porcentaje se
-                        // quedaba clavado mientras se pellizcaba, que es justo cuando se está
-                        // mirando. Ver [zoomVivo].
-                        zoom = zoomVivo.floatValue,
-                        bloqueado = zoomBloqueado,
-                        onBloquear = { zoomBloqueado = !zoomBloqueado },
-                        onCien = { alZoomCien(); cambiado() }
-                    )
+                    // **Deshacer y rehacer, aquí abajo y en la esquina** (21-sep-2026). Estaban
+                    // en el lateral, a media altura, y ahí **tapaban el riel de marcadores**: el
+                    // usuario no podía tocar sus emoticonos. Abajo siguen donde está la mano, no
+                    // le quitan sitio a nada y suben con todo lo de abajo cuando aparece la fila
+                    // de emoticonos, que es lo que pidió. En fila con el zoom, que queda centrado.
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        val deshacer: @Composable () -> Unit = {
+                            CajaDeDeshacer(
+                                puedeDeshacer = controller.canUndo,
+                                puedeRehacer = controller.canRedo,
+                                onDeshacer = { controller.undo(); cambiado() },
+                                onRehacer = { controller.redo(); cambiado() },
+                                enFila = true,
+                                modifier = Modifier.padding(horizontal = SEPARACION_DEL_BORDE)
+                            )
+                        }
+                        // La misma caja, invisible, al otro lado: así el zoom cae en el centro
+                        // de la pantalla y no descolocado hacia el lado contrario a la mano.
+                        val hueco: @Composable () -> Unit = {
+                            Box(Modifier.alpha(0f)) { deshacer() }
+                        }
+                        if (zurdo) deshacer() else hueco()
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            VisorDeZoom(
+                                // **El aumento se lee del vivo, no del tick.** El tick solo sube al
+                                // levantar el dedo —rehace el editor entero— así que el porcentaje se
+                                // quedaba clavado mientras se pellizcaba, que es justo cuando se está
+                                // mirando. Ver [zoomVivo].
+                                zoom = zoomVivo.floatValue,
+                                bloqueado = zoomBloqueado,
+                                onBloquear = { zoomBloqueado = !zoomBloqueado },
+                                onCien = { alZoomCien(); cambiado() }
+                            )
+                        }
+                        if (zurdo) hueco() else deshacer()
+                    }
                     Spacer(Modifier.height(6.dp))
+                    // **Los emoticonos, encima de la barra de herramientas y debajo del zoom**
+                    // (21-sep-2026): salían detrás de la barra y no se podían tocar. Aquí dentro
+                    // hacen hueco —todo lo de abajo sube mientras están— y al cerrarse, baja.
+                    if (poniendoMarca) {
+                        com.forge.pixpin.ui.ElegirEmojiDeMarca(onCerrar = { poniendoMarca = false }) { emoji ->
+                            poniendoMarca = false
+                            val centro = centroDeLaVista()
+                            marcas = com.forge.pixpin.motor.Marcas.con(marcas, centro.x, centro.y, emoji, System.currentTimeMillis())
+                            guardarLasMarcas()
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
                     BarraHerramientas(
                         tick,
                         onImagen = { selectorImagen() },
@@ -2771,7 +2788,10 @@ class DrawEditorActivity : ComponentActivity() {
                         .size(36.dp)
                         .clip(androidx.compose.foundation.shape.CircleShape)
                         .background(Color(0xCC14182B))
-                        .pointerInput(m.id) {
+                        // **Solo se mueve con la herramienta de selección** (21-sep-2026):
+                        // dibujando, el dedo que pasaba por encima se lo llevaba puesto. Con
+                        // cualquier otra herramienta un toque va a su sitio y ya.
+                        .then(if (controller.tool != Tool.SELECTION) Modifier else Modifier.pointerInput(m.id) {
                             detectDragGestures(
                                 onDragStart = { arrastrando = m.id to enPantalla },
                                 onDrag = { cambio, movido ->
@@ -2787,7 +2807,7 @@ class DrawEditorActivity : ComponentActivity() {
                                 },
                                 onDragCancel = { arrastrando = null }
                             )
-                        }
+                        })
                         .pointerInput(m.id) {
                             detectTapGestures(
                                 onLongPress = {

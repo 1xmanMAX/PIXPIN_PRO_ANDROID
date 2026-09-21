@@ -713,12 +713,25 @@ fun CajaDeDeshacer(
     onDeshacer: () -> Unit,
     onRehacer: () -> Unit,
     bola: Dp = BOLA,
+    /** Tumbada, para la franja de abajo: ahí lo que sobra es alto, no ancho. */
+    enFila: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val fondo = modifier
+        .fondoDeCristal(RoundedCornerShape(CANTO_DEL_PANEL))
+        .padding(
+            vertical = if (enFila) 4.dp else 8.dp,
+            horizontal = if (enFila) 8.dp else 4.dp
+        )
+    if (enFila) {
+        Row(fondo, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(SEPARACION)) {
+            PuntoDeAccion(true, "Deshacer", puedeDeshacer, bola, onDeshacer)
+            PuntoDeAccion(false, "Rehacer", puedeRehacer, bola, onRehacer)
+        }
+        return
+    }
     Column(
-        modifier
-            .fondoDeCristal(RoundedCornerShape(CANTO_DEL_PANEL))
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+        fondo,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(SEPARACION)
     ) {

@@ -432,8 +432,9 @@ class LectorPdfActivity : ComponentActivity() {
                     Modifier.align(Alignment.CenterEnd)
                 ) { i -> marcas.getOrNull(i)?.let { m -> alcance.launch { irALaMarca(m) } } }
             }
+            // Por encima de los dos botones de la esquina: pegada al canto los tapaba.
             if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
-                Modifier.align(Alignment.BottomCenter),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
                 onCerrar = { poniendoMarca = false }
             ) { emoji ->
                 poniendoMarca = false
