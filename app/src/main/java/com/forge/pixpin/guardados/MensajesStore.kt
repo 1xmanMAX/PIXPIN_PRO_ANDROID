@@ -266,6 +266,24 @@ class MensajesStore(private val context: Context) {
     }
 
     /**
+     * **El peso que se enseña, el del archivo de verdad** (21-sep-2026). Un PDF se aligera
+     * **después** de entrar, en segundo plano ([com.forge.pixpin.pdf.PdfSqueezeService]), y el
+     * mensaje seguía diciendo lo que pesaba al llegar. Aquí se mira el archivo de cada PDF y, si
+     * no cuadra, se corrige. Devuelve si cambió algo. Trabajo de disco.
+     */
+    fun ponerPesosAlDia(): Boolean = synchronized(CERROJO) {
+        val antes = leer()
+        var cambio = false
+        val ahora = antes.map { m ->
+            val ruta = m.ruta?.takeIf { it.endsWith(".pdf", ignoreCase = true) } ?: return@map m
+            val pesa = File(ruta).takeIf { it.isFile }?.length() ?: return@map m
+            if (pesa > 0 && pesa != m.bytes) { cambio = true; m.copy(bytes = pesa) } else m
+        }
+        if (cambio) reescribir(ahora)
+        cambio
+    }
+
+    /**
      * Reescribe la lista entera.
      *
      * Para borrar, fijar y editar. Se escribe en un archivo aparte y se cambia al final:

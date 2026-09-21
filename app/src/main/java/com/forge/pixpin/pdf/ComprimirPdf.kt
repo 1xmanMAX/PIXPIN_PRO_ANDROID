@@ -72,6 +72,15 @@ object ComprimirPdf {
     const val NIVEL_POR_DEFECTO = EQUILIBRADO
     val NIVELES = listOf(NO_COMPRIMIR, SIN_PERDIDA, EQUILIBRADO, PEQUENO, EXTREMO)
 
+    /** Cómo se llama cada nivel y qué hace, para enseñarlo: en Ajustes y al aligerar a mano. */
+    val ROTULOS = mapOf(
+        NO_COMPRIMIR to ("No comprimir" to "El PDF se guarda tal como llega."),
+        SIN_PERDIDA to ("Sin pérdida" to "Ni un píxel cambia: solo se ordena y se aprieta por dentro. Gana poco en escaneos, más en documentos de oficina."),
+        EQUILIBRADO to ("Equilibrado" to "No se nota a la vista: fotos a 200 ppp, cada una comprobada. Un escaneo queda en torno a la cuarta parte."),
+        PEQUENO to ("Pequeño" to "Para leer en pantalla: 150 ppp, y en los escaneos el texto se separa del papel y sigue nítido. En torno a la sexta parte."),
+        EXTREMO to ("Extremo" to "Lo mínimo que se sigue leyendo bien: el texto nítido, el papel y las fotos muy simplificados. Menos de la décima parte en escaneos.")
+    )
+
     /** El nivel puesto. Lo mantiene al día la aplicación desde los ajustes. */
     @Volatile var nivel: String = NIVEL_POR_DEFECTO
 
@@ -116,9 +125,9 @@ object ComprimirPdf {
      * Comprime [archivo] **en su sitio** si merece la pena. Devuelve cuántos bytes se ahorraron
      * (0 si se quedó igual). Trabajo de disco y de CPU: fuera del hilo principal.
      */
-    fun enSuSitio(archivo: File, esperando: Boolean = false): Long = runCatching {
+    fun enSuSitio(archivo: File, esperando: Boolean = false, nivelPedido: String? = null): Long = runCatching {
         // Pedido a mano se aligera aunque el ajuste diga que al entrar no: para eso se ha pedido.
-        val cuanto = if (esperando && nivel == NO_COMPRIMIR) NIVEL_POR_DEFECTO else nivel
+        val cuanto = nivelPedido ?: if (esperando && nivel == NO_COMPRIMIR) NIVEL_POR_DEFECTO else nivel
         if (cuanto == NO_COMPRIMIR) return 0
         // **pdfsqueeze, en su proceso.** Al entrar un PDF no se espera: se aligera después y el
         // archivo se cambia en su sitio. Pedido a mano ([esperando]), sí. Ver [PdfSqueezeService].

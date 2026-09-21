@@ -73,6 +73,17 @@ class PixPinApp : Application() {
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
         if (nombreDelProceso().endsWith(com.forge.pixpin.pdf.PdfSqueezeService.PROCESO)) return
         com.forge.pixpin.pdf.ComprimirPdf.despues = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.encolar(this, archivo, nivel) }
+        // Un PDF aligerado después de entrar: el chat tiene que decir lo que pesa ahora.
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: android.content.Context?, i: android.content.Intent?) {
+                    scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.guardados.MensajesStore(this@PixPinApp).ponerPesosAlDia() } }
+                }
+            },
+            android.content.IntentFilter(com.forge.pixpin.pdf.PdfSqueezeService.ALIGERADO),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         com.forge.pixpin.pdf.ComprimirPdf.alMomento = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.ahora(this, archivo, nivel) }
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].

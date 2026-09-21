@@ -491,6 +491,10 @@ class MensajesActivity : ComponentActivity() {
         androidx.compose.runtime.LaunchedEffect(Unit) {
             MensajesStore.cambios.drop(1).collect { recargar++ }
         }
+        // Y al abrir el chat, por si algún PDF se aligeró con la aplicación cerrada.
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) { runCatching { almacen.ponerPesosAlDia() } }
+        }
         androidx.compose.runtime.DisposableEffect(Unit) {
             recargarLaLista = { recargar++ }
             onDispose { recargarLaLista = null }
@@ -2157,6 +2161,7 @@ class MensajesActivity : ComponentActivity() {
             )
         }
 
+        CuantoAligerar()
         paginasDe?.let { pr ->
             // **Todas sus hojas, no solo las que vienen de un PDF.**
             //
@@ -2528,7 +2533,7 @@ class MensajesActivity : ComponentActivity() {
                     if (ruta.endsWith(".pdf", ignoreCase = true)) {
                         DelMenu(com.forge.pixpin.R.string.guardados_aligerar, Icons.Filled.Compress) {
                             menuAbierto = false
-                            aligerarPdfDelMensaje(m, ruta)
+                            aAligerar = m to ruta
                         }
                     }
                 }
@@ -5342,12 +5347,46 @@ class MensajesActivity : ComponentActivity() {
      * se dice cuánto bajó, o que no había nada que quitar, porque si no parece que no haya hecho
      * nada. Ver [com.forge.pixpin.pdf.ComprimirPdf].
      */
-    private fun aligerarPdfDelMensaje(m: Mensaje, ruta: String) {
+    /** El PDF para el que se está eligiendo cuánto aligerar. Ver [CuantoAligerar]. */
+    private var aAligerar by mutableStateOf<Pair<Mensaje, String>?>(null)
+
+    /**
+     * **Cuánto, elegido en el momento** (21-sep-2026): los niveles de pdfsqueeze, con el de
+     * Ajustes señalado. Un escaneo de apuntes aguanta «extremo»; un plano con fotos, no.
+     */
+    @Composable
+    private fun CuantoAligerar() {
+        val (m, ruta) = aAligerar ?: return
+        val deAjustes = com.forge.pixpin.pdf.ComprimirPdf.nivel
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { aAligerar = null },
+            title = { Text("¿Cuánto aligerarlo?") },
+            text = {
+                Column {
+                    com.forge.pixpin.pdf.ComprimirPdf.NIVELES.filter { it != com.forge.pixpin.pdf.ComprimirPdf.NO_COMPRIMIR }.forEach { nivel ->
+                        val (nombre, que) = com.forge.pixpin.pdf.ComprimirPdf.ROTULOS.getValue(nivel)
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .clickable { aAligerar = null; aligerarPdfDelMensaje(m, ruta, nivel) }
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Text(nombre + if (nivel == deAjustes) "  ·  el de Ajustes" else "", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { aAligerar = null }) { Text("Cancelar") } }
+        )
+    }
+
+    private fun aligerarPdfDelMensaje(m: Mensaje, ruta: String, nivel: String? = null) {
         Toast.makeText(this, com.forge.pixpin.R.string.guardados_aligerando, Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val antes = withContext(Dispatchers.IO) { File(ruta).length() }
             val ganado = withContext(Dispatchers.IO) {
-                com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(File(ruta), esperando = true)
+                com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(File(ruta), esperando = true, nivelPedido = nivel)
             }
             if (ganado > 0) {
                 val ahora = withContext(Dispatchers.IO) { File(ruta).length() }

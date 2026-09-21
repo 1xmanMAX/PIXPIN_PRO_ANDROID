@@ -44,6 +44,8 @@ class PdfSqueezeService : Service() {
         cola.execute {
             val ganado = runCatching { aligerar(archivo, nivel) }.getOrDefault(0L)
             runCatching { aviso?.writeText(ganado.toString()) }
+            // A la aplicación —que es otro proceso—: que ponga al día el peso que enseña el chat.
+            if (ganado > 0) runCatching { sendBroadcast(Intent(ALIGERADO).setPackage(packageName)) }
             if (decirlo && ganado > 0) Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     applicationContext,
@@ -104,6 +106,8 @@ class PdfSqueezeService : Service() {
         private const val NIVEL = "nivel"
         private const val AVISO = "aviso"
         private const val DECIRLO = "decirlo"
+        /** Se acaba de aligerar un PDF: lo oye [com.forge.pixpin.PixPinApp]. */
+        const val ALIGERADO = "com.forge.pixpin.PDF_ALIGERADO"
         /** El nombre del proceso, como en el manifiesto. */
         const val PROCESO = ":pdfsqueeze"
 

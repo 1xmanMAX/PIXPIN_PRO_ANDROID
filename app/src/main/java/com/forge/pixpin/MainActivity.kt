@@ -546,6 +546,11 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
                 CaptureModeCard()
                 Spacer(Modifier.height(12.dp))
                 FormatoDeCopiaCard()
+            }
+
+            // **A la vista y con su nombre** (21-sep-2026): estaba dentro de «Capturar» y el
+            // usuario no la encontró, con razón; un PDF no es una captura.
+            GrupoDeAjustes("PDF", "Cuánto se comprimen al guardarlos en PixPin") {
                 CompresionDePdfCard()
             }
 
@@ -1607,13 +1612,7 @@ private fun CompresionDePdfCard() {
     val app = context.applicationContext as PixPinApp
     val scope = rememberCoroutineScope()
     val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
-    val niveles = listOf(
-        com.forge.pixpin.pdf.ComprimirPdf.NO_COMPRIMIR to ("No comprimir" to "El PDF se guarda tal como llega."),
-        com.forge.pixpin.pdf.ComprimirPdf.SIN_PERDIDA to ("Sin pérdida" to "Ni un píxel cambia: solo se ordena y se aprieta por dentro. Gana poco en escaneos, más en documentos de oficina."),
-        com.forge.pixpin.pdf.ComprimirPdf.EQUILIBRADO to ("Equilibrado" to "No se nota a la vista: fotos a 200 ppp, cada una comprobada. Un escaneo queda en torno a la cuarta parte."),
-        com.forge.pixpin.pdf.ComprimirPdf.PEQUENO to ("Pequeño" to "Para leer en pantalla: 150 ppp, y en los escaneos el texto se separa del papel y sigue nítido. En torno a la sexta parte."),
-        com.forge.pixpin.pdf.ComprimirPdf.EXTREMO to ("Extremo" to "Lo mínimo que se sigue leyendo bien: el texto nítido, el papel y las fotos muy simplificados. Menos de la décima parte en escaneos.")
-    )
+    val niveles = com.forge.pixpin.pdf.ComprimirPdf.NIVELES.map { it to com.forge.pixpin.pdf.ComprimirPdf.ROTULOS.getValue(it) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Compresión de los PDF", style = MaterialTheme.typography.titleSmall)
