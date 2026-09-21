@@ -61,7 +61,7 @@ class RecordatorioReceiver : BroadcastReceiver() {
             val grabacion = mensaje.ruta?.takeIf { mensaje.clase == com.forge.pixpin.guardados.Clase.VOZ && java.io.File(it).exists() }
             if (grabacion != null) {
                 val quien = mensaje.nombre.substringBeforeLast('.').ifBlank { "Llamada" }
-                val abierta = runCatching { LlamadaSecretaActivity.abrir(context, grabacion, quien) }.isSuccess
+                val abierta = runCatching { LlamadaSecretaActivity.llamar(context, grabacion, quien) }.isSuccess
                 if (abierta) return
             }
             val texto = mensaje.texto.ifBlank { mensaje.nombre }

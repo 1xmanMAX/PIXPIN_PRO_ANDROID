@@ -365,7 +365,9 @@ class DrawEditorActivity : ComponentActivity() {
         paginaDeFondo = intent.getIntExtra(EXTRA_PAGINA, -1)
         pdfDeFondo?.let { ruta ->
             if (paginaDeFondo >= 0) {
-                fondo = com.forge.pixpin.motor.PdfDoc.render(
+                // Aunque el documento se hubiera estropeado. Ver [PdfDelProyecto.paginaSana].
+                fondo = PdfDelProyecto.paginaSana(
+                    this, (application as? com.forge.pixpin.PixPinApp)?.proyectos?.proyectos?.value?.let { Proyectos.deEstePdf(it, ruta) },
                     ruta, paginaDeFondo, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH
                 )
                 fondo?.let {
@@ -3256,7 +3258,10 @@ class DrawEditorActivity : ComponentActivity() {
         if (ruta != null && l.pagina >= 0) {
             // La página ya está dibujada si el lienzo se veía en la tira: no se rasteriza otra vez.
             val pagina = telones["$ruta#${l.pagina}"]
-                ?: com.forge.pixpin.motor.PdfDoc.render(ruta, l.pagina, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH)
+                ?: PdfDelProyecto.paginaSana(
+                    this, (application as? com.forge.pixpin.PixPinApp)?.proyectos?.proyectos?.value?.let { Proyectos.deEstePdf(it, ruta) },
+                    ruta, l.pagina, com.forge.pixpin.motor.PdfDoc.PAGE_WIDTH
+                )
             fondo = pagina
             if (pagina != null) {
                 medidaDeLaPagina = pagina.width.toDouble() to pagina.height.toDouble()
@@ -3329,6 +3334,7 @@ class DrawEditorActivity : ComponentActivity() {
     private fun irAlLienzo(l: com.forge.pixpin.data.LienzoAbierto) {
         if (l.id == dibujoId) return
         guardarYa()
+        abiertos.anunciarRelevo()
         if (!l.esLienzo) {
             com.forge.pixpin.ui.relevarPor(this, l)
             return
@@ -3421,6 +3427,7 @@ class DrawEditorActivity : ComponentActivity() {
                 Proyectos.conDibujo(proyecto, hoja.id, dibujo, System.currentTimeMillis())
             )
         }
+        abiertos.anunciarRelevo()
         abrirPaginaDePdf(
             this, dibujo, ExcalidrawStore.rutaDe(this, dibujo), ruta, pagina, presentar = presentando,
             editar = !modoVista

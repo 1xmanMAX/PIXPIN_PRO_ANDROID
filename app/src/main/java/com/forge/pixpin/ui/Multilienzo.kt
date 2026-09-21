@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.material.icons.filled.Add
@@ -702,6 +703,10 @@ private fun CartaDeLaBaraja(
         if (!arrastrando) x.animateTo(suSitio, androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 500f))
     }
     val levantada = androidx.compose.animation.core.animateFloatAsState(if (arrastrando) 1f else 0f, label = "levantada")
+    // **Se cierra también echándola hacia arriba**, como en los recientes de Android: la X es
+    // pequeña, va en una tarjeta girada y el usuario no conseguía cerrar algunas (20-sep-2026).
+    val subida = remember { androidx.compose.animation.core.Animatable(0f) }
+    val cerrar = androidx.compose.runtime.rememberUpdatedState(onCerrar)
 
     Column(
         modifier
@@ -714,6 +719,8 @@ private fun CartaDeLaBaraja(
                 val d = if (paso > 0f) (x.value - corrido.floatValue) / paso else 0f
                 val cerca = maxOf(1f - kotlin.math.abs(d).coerceAtMost(1f), levantada.value)
                 translationX = (x.value - corrido.floatValue) + d.coerceIn(-1f, 1f) * aparte * (1f - levantada.value)
+                translationY = subida.value
+                alpha = (1f + subida.value / (size.height * 0.6f)).coerceIn(0.15f, 1f)
                 rotationY = GIRO_DEL_ABANICO * (1f - ENDEREZA_EL_CENTRO * cerca)
                 cameraDistance = 14f * density
                 val crece = 0.88f + 0.12f * cerca + 0.05f * levantada.value
@@ -734,6 +741,18 @@ private fun CartaDeLaBaraja(
                     ambito.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { x.snapTo(nuevo + corridoPorElCanto) }
                 }
             }
+            .pointerInput(lienzo.id) {
+                detectVerticalDragGestures(
+                    onDragEnd = {
+                        if (subida.value < -size.height * 0.22f) cerrar.value()
+                        ambito.launch { subida.animateTo(0f) }
+                    },
+                    onDragCancel = { ambito.launch { subida.animateTo(0f) } }
+                ) { cambio, dy ->
+                    cambio.consume()
+                    ambito.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { subida.snapTo((subida.value + dy).coerceAtMost(0f)) }
+                }
+            }
             .pointerInput(lienzo.id) { detectTapGestures { onAbrir() } }
     ) {
         // Arriba, la X y el nombre. **La X va a la izquierda**: la derecha de cada tarjeta queda
@@ -745,15 +764,14 @@ private fun CartaDeLaBaraja(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.16f))
-                    .clickable(onClick = onCerrar),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Close, "Cerrar este lienzo", tint = Color.White, modifier = Modifier.size(14.dp))
+            // El sitio donde se acierta es más grande que el redondel que se ve.
+            Box(Modifier.size(CABECERA_DE_CARTA.dp).clickable(onClick = onCerrar), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.size(24.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Close, "Cerrar este lienzo", tint = Color.White, modifier = Modifier.size(15.dp))
+                }
             }
             Text(
                 lienzo.nombre.ifBlank { "Sin nombre" },

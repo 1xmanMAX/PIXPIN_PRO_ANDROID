@@ -42,6 +42,21 @@ object PdfDelProyecto {
         context: Context,
         proyecto: Proyecto,
         imageProvider: (String) -> Bitmap? = { null }
+    ): Boolean = synchronized(CANDADO) { rehacerDeUnoEnUno(context, proyecto, imageProvider) }
+
+    /**
+     * **De uno en uno** (20-sep-2026). El lector rehace el documento en segundo plano al dejar de
+     * anotar, y el editor al salir: si coincidían, los dos escribían **el mismo archivo temporal
+     * a la vez** y el PDF del proyecto quedaba hecho de trozos de los dos. Un PDF así no se
+     * abre, y lo que veía el usuario era su página anotada **sin el fondo**. Ahora hay candado,
+     * el temporal es de cada cual, y no se pisa el documento con algo que no se deje leer.
+     */
+    private val CANDADO = Any()
+
+    private fun rehacerDeUnoEnUno(
+        context: Context,
+        proyecto: Proyecto,
+        imageProvider: (String) -> Bitmap?
     ): Boolean = runCatching {
         val destino = proyecto.pdfOrigen?.let { File(it) } ?: return false
         val limpio = proyecto.pdfLimpio?.let { File(it) }?.takeIf { it.exists() }
@@ -100,13 +115,28 @@ object PdfDelProyecto {
 
         // En un temporal y se cambia al final: si algo se tuerce a mitad, el
         // PDF de alguien no puede quedarse a medias.
-        val temporal = File(destino.parentFile, "${destino.name}.nuevo")
+        if (leerPdf(bytes)?.pagina(0) == null) return false
+        val temporal = File(destino.parentFile, "${destino.name}.${System.nanoTime()}.nuevo")
         temporal.writeBytes(bytes)
-        if (temporal.length() <= 0) return false
+        if (temporal.length() <= 0) { temporal.delete(); return false }
         temporal.copyTo(destino, overwrite = true)
         temporal.delete()
         true
     }.getOrDefault(false)
+
+    /**
+     * **La página, aunque el documento esté roto.** Si el PDF del proyecto no se deja pintar —le
+     * pasó a los que se estropearon antes del candado—, se **rehace desde la copia limpia** y se
+     * vuelve a intentar; y si ni así, se pinta la copia limpia, que lo anotado va encima de todos
+     * modos. El fondo no desaparece nunca mientras exista la copia.
+     */
+    fun paginaSana(context: Context, proyecto: Proyecto?, ruta: String, pagina: Int, ancho: Int): Bitmap? {
+        PdfDoc.render(ruta, pagina, ancho)?.let { return it }
+        val limpio = proyecto?.pdfLimpio?.takeIf { File(it).exists() } ?: return null
+        runCatching { File(limpio).copyTo(File(ruta), overwrite = true) }
+        rehacer(context, proyecto)
+        return PdfDoc.render(ruta, pagina, ancho) ?: PdfDoc.render(limpio, pagina, ancho)
+    }
 
     /** Lo que se lee en el panel de capas de un lector de escritorio. */
     private const val NOMBRE_DE_CAPA = "PixPin — página"

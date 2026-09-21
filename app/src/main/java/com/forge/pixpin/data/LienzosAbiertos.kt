@@ -145,7 +145,29 @@ class LienzosAbiertos(context: Context) {
         }
     }
 
-    fun abrir(uno: LienzoAbierto) = escribir(Abiertos.con(_lista.value, uno.copy(visto = System.currentTimeMillis())))
+    /**
+     * **Entrar desde fuera empieza de cero; pasar de pestaña, no** (20-sep-2026). Las pestañas
+     * solo se vaciaban al salir con el botón de atrás; saliendo de otro modo —el inicio, los
+     * recientes, otra aplicación— se quedaban guardadas, y al abrir luego un lienzo cualquiera
+     * aparecía acompañado de aquel croquis 3D de antes: «no debería abrir una multitarea, porque
+     * no estoy añadiendo nada». Ahora quien abre algo **desde la propia multitarea** lo avisa
+     * antes ([anunciarRelevo]); lo que llega sin aviso y no estaba ya abierto es una sesión nueva,
+     * con él solo.
+     */
+    fun abrir(uno: LienzoAbierto) {
+        val ahora = System.currentTimeMillis()
+        val yaEstaba = _lista.value.any { it.id == uno.id }
+        val deLaTira = ahora - relevoAnunciado < VALE_EL_ANUNCIO
+        relevoAnunciado = 0L
+        val base = if (yaEstaba || deLaTira) _lista.value else emptyList()
+        escribir(Abiertos.con(base, uno.copy(visto = ahora)))
+    }
+
+    /** Lo que se abre a continuación viene de la tira, de la baraja o de «añadir otro»: se suma. */
+    fun anunciarRelevo() { relevoAnunciado = System.currentTimeMillis() }
+
+    @Volatile private var relevoAnunciado = 0L
+    private val VALE_EL_ANUNCIO = 15_000L
 
     fun cerrar(id: String) = escribir(Abiertos.sin(_lista.value, id))
 

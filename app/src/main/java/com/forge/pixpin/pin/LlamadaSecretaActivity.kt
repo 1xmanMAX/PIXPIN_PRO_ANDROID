@@ -81,6 +81,52 @@ class LlamadaSecretaActivity : ComponentActivity() {
         private const val EXTRA_NOMBRE = "nombre"
         private const val SEGUNDOS_SONANDO = 45
 
+        private const val CANAL = "llamadas"
+        private const val AVISO = 7741
+
+        private fun laIntencion(context: Context, audio: String, nombre: String) =
+            Intent(context, LlamadaSecretaActivity::class.java)
+                .putExtra(EXTRA_AUDIO, audio)
+                .putExtra(EXTRA_NOMBRE, nombre)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+
+        /**
+         * **Como llaman las aplicaciones de llamadas**: con un aviso de pantalla completa. Abrir
+         * la pantalla a pelo desde la alarma lo corta el sistema cuando la aplicación está en
+         * segundo plano —y más en las capas de Huawei o Xiaomi—: no daba error, simplemente no
+         * salía nada y el usuario se quedaba sin su «llamada». El aviso de categoría llamada sí
+         * pasa: con el aparato bloqueado abre la pantalla entera, y en uso sale arriba para tocarlo.
+         */
+        fun llamar(context: Context, audio: String, nombre: String) {
+            val avisos = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (Build.VERSION.SDK_INT >= 26) {
+                avisos.createNotificationChannel(
+                    android.app.NotificationChannel(CANAL, "Llamadas", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
+                        setSound(null, null); enableVibration(false)
+                        lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                    }
+                )
+            }
+            val pendiente = android.app.PendingIntent.getActivity(
+                context, AVISO, laIntencion(context, audio, nombre),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val aviso = androidx.core.app.NotificationCompat.Builder(context, CANAL)
+                .setSmallIcon(android.R.drawable.sym_call_incoming)
+                .setContentTitle(nombre)
+                .setContentText("Llamada entrante")
+                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_CALL)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
+                .setOngoing(true).setAutoCancel(true)
+                .setContentIntent(pendiente)
+                .setFullScreenIntent(pendiente, true)
+                .setTimeoutAfter(60_000)
+                .build()
+            runCatching { avisos.notify(AVISO, aviso) }
+            // Y a pelo también: donde el sistema lo deja, sale al instante.
+            runCatching { abrir(context, audio, nombre) }
+        }
+
         fun abrir(context: Context, audio: String, nombre: String) {
             context.startActivity(
                 Intent(context, LlamadaSecretaActivity::class.java)
@@ -109,6 +155,8 @@ class LlamadaSecretaActivity : ComponentActivity() {
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
         )
+        // La pantalla ya está: el aviso que la trajo sobra.
+        runCatching { (getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(AVISO) }
         val ruta = intent?.getStringExtra(EXTRA_AUDIO)
         if (ruta == null || !java.io.File(ruta).exists()) { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { "Llamada" }

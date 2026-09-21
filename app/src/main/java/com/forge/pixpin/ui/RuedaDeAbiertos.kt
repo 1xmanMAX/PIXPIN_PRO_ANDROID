@@ -58,6 +58,7 @@ import com.forge.pixpin.motor.elToqueDeCuatroDedos
 
 /** Abre [l] en la pantalla que le toca. Quien llama cierra la suya si quiere que sea un relevo. */
 fun abrirLoAbierto(context: Context, l: LienzoAbierto, desdeProyecto: String? = l.proyecto) {
+    (context.applicationContext as? PixPinApp)?.lienzosAbiertos?.anunciarRelevo()
     when (l.clase) {
         Abiertos.TABLA -> com.forge.pixpin.tabla.TablaActivity.abrir(context, l.ruta, desdeProyecto = desdeProyecto)
         Abiertos.CROQUIS -> com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
