@@ -5347,7 +5347,7 @@ class MensajesActivity : ComponentActivity() {
         lifecycleScope.launch {
             val antes = withContext(Dispatchers.IO) { File(ruta).length() }
             val ganado = withContext(Dispatchers.IO) {
-                com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(File(ruta))
+                com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(File(ruta), esperando = true)
             }
             if (ganado > 0) {
                 val ahora = withContext(Dispatchers.IO) { File(ruta).length() }

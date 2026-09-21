@@ -54,6 +54,41 @@ import kotlin.math.roundToInt
  */
 object ComprimirPdf {
 
+    // ------------------------------------------------------------------ el nivel
+
+    /**
+     * **Cuánto se aprieta**, que lo elige el usuario en Ajustes (21-sep-2026). Son los perfiles de
+     * pdfsqueeze —su biblioteca—; medidos con el `.so` del APK en un teléfono, sobre un escaneo de
+     * seis hojas a 200 ppp (7,3 MB): sin pérdida 100 % en 2,6 s (un escaneo en JPEG no tiene
+     * nada que quitar sin tocar las fotos), equilibrado 27 % en 3 s, pequeño 16 % en 5 s, extremo
+     * 7 % en 3,4 s —y en extremo el texto sale más nítido que en equilibrado, porque va como
+     * máscara a toda resolución (MRC) y lo que se degrada es el papel—.
+     */
+    const val NO_COMPRIMIR = "no"
+    const val SIN_PERDIDA = "lossless"
+    const val EQUILIBRADO = "balanced"
+    const val PEQUENO = "small"
+    const val EXTREMO = "extreme"
+    const val NIVEL_POR_DEFECTO = EQUILIBRADO
+    val NIVELES = listOf(NO_COMPRIMIR, SIN_PERDIDA, EQUILIBRADO, PEQUENO, EXTREMO)
+
+    /** El nivel puesto. Lo mantiene al día la aplicación desde los ajustes. */
+    @Volatile var nivel: String = NIVEL_POR_DEFECTO
+
+    /** Las opciones de pdfsqueeze: el perfil, y dos hilos, que las fotos descomprimidas viven en memoria. */
+    fun opcionesDe(nivel: String): String =
+        "{\"profile\":\"${nivel.takeIf { it in NIVELES && it != NO_COMPRIMIR } ?: NIVEL_POR_DEFECTO}\",\"threads\":2}"
+
+    /** Lo que tiene que bajar para cambiar el archivo: sin pérdida cualquier ganancia cuenta; con pérdida, un 15 %. */
+    fun loQueTieneQueBajar(nivel: String): Double = if (nivel == SIN_PERDIDA) 0.98 else 0.85
+
+    /** Aligerar después, sin esperar; true si quedó pedido. Lo pone la aplicación. Ver [PdfSqueezeService.encolar]. */
+    @Volatile var despues: ((File, String) -> Boolean)? = null
+
+    /** Aligerar y esperar: los bytes ganados, o null si no se pudo. Ver [PdfSqueezeService.ahora]. */
+    @Volatile var alMomento: ((File, String) -> Long?)? = null
+
+
     /**
      * **Puntos por pulgada a los que quedan las fotos.**
      *
@@ -81,7 +116,15 @@ object ComprimirPdf {
      * Comprime [archivo] **en su sitio** si merece la pena. Devuelve cuántos bytes se ahorraron
      * (0 si se quedó igual). Trabajo de disco y de CPU: fuera del hilo principal.
      */
-    fun enSuSitio(archivo: File): Long = runCatching {
+    fun enSuSitio(archivo: File, esperando: Boolean = false): Long = runCatching {
+        // Pedido a mano se aligera aunque el ajuste diga que al entrar no: para eso se ha pedido.
+        val cuanto = if (esperando && nivel == NO_COMPRIMIR) NIVEL_POR_DEFECTO else nivel
+        if (cuanto == NO_COMPRIMIR) return 0
+        // **pdfsqueeze, en su proceso.** Al entrar un PDF no se espera: se aligera después y el
+        // archivo se cambia en su sitio. Pedido a mano ([esperando]), sí. Ver [PdfSqueezeService].
+        if (esperando) alMomento?.invoke(archivo, cuanto)?.let { return it }
+        else if (despues?.invoke(archivo, cuanto) == true) return 0
+        if (cuanto == SIN_PERDIDA) return 0
         val original = archivo.readBytes()
         val ligero = comprimir(original) ?: return 0
         if (ligero.size > original.size * 0.85) return 0
@@ -93,37 +136,8 @@ object ComprimirPdf {
         (original.size - ligero.size).toLong()
     }.getOrDefault(0L)
 
-    /**
-     * **El motor de verdad: pdfsqueeze** (21-sep-2026), la biblioteca en Rust del propio usuario
-     * (github.com/1xmanMAX/Thesis), que va dentro de la aplicación como `libpdfsqueeze.so`. Hace lo
-     * que lo de aquí abajo no sabe: decide **imagen por imagen** —prueba varias codificaciones y
-     * se queda con la más pequeña que pase una medida de parecido (SSIM)—, separa el texto del
-     * papel en los escaneos (MRC, con la máscara en JBIG2) y comprueba lo que entrega: mismas
-     * páginas, mismo texto, y nunca más grande que lo que entró.
-     *
-     * Con el perfil `balanced` («no se nota»: SSIM ≥ 0,97) y dos hilos, que las imágenes
-     * descomprimidas viven en memoria y un teléfono no es un ordenador. Null si la biblioteca no
-     * está —las pruebas en la JVM, un aparato de 32 bits—, si no pudo con el documento o **si no
-     * acabó a tiempo**: entonces sigue el compresor en Kotlin de siempre.
-     */
-    internal fun conPdfsqueeze(bytes: ByteArray): ByteArray? = try { motorAparte?.invoke(bytes) } catch (e: Throwable) { null }
-
-    /**
-     * Quien corre pdfsqueeze: **otro proceso, con el tiempo contado** ([PdfSqueezeService]). Lo
-     * pone la aplicación al arrancar; sin ponerlo —las pruebas en la JVM— solo hay Kotlin. No se
-     * llama a la biblioteca desde aquí: tardaba lo que tardaba en mitad de guardar lo compartido,
-     * y un fallo suyo tumbaba la aplicación entera.
-     */
-    @Volatile var motorAparte: ((ByteArray) -> ByteArray?)? = null
-
     /** Los bytes comprimidos, o null si no hay nada que ganar o no se puede con garantías. */
     fun comprimir(bytes: ByteArray): ByteArray? {
-        conPdfsqueeze(bytes)?.let { ligero ->
-            // Lo mismo que se le pide al de Kotlin: que lo escrito se vuelva a leer, con sus páginas.
-            val antes = leerPdf(bytes)?.paginas()?.size
-            val despues = leerPdf(ligero)?.paginas()?.size
-            if (antes == null || antes == despues) return ligero
-        }
         val pdf = leerPdf(bytes) ?: return null
         if (pdf.cifrado) return null
         // El tope de píxeles de una foto: la página más grande a [PPP]. Una foto no se ve más

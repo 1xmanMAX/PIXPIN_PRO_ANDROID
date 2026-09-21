@@ -72,7 +72,8 @@ class PixPinApp : Application() {
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
         if (nombreDelProceso().endsWith(com.forge.pixpin.pdf.PdfSqueezeService.PROCESO)) return
-        com.forge.pixpin.pdf.ComprimirPdf.motorAparte = { bytes -> com.forge.pixpin.pdf.PdfSqueezeService.comprimir(this, bytes) }
+        com.forge.pixpin.pdf.ComprimirPdf.despues = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.encolar(this, archivo, nivel) }
+        com.forge.pixpin.pdf.ComprimirPdf.alMomento = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.ahora(this, archivo, nivel) }
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
         com.forge.pixpin.sincro.Presencia.instalar(this)
@@ -86,7 +87,7 @@ class PixPinApp : Application() {
         // apunta: se recoge al arrancar y acaba en el mismo informe.
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
         settings = SettingsRepository(this)
-        scope.launch { settings.settings.collect { ajustes = it } }
+        scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }
         // **Reponer los PDF que se hayan quedado sin archivo.**
         //
         // Esto estaba escrito, probado y documentado —el propio comentario de

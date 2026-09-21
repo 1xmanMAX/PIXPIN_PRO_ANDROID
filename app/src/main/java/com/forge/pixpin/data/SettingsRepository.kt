@@ -88,6 +88,8 @@ data class Settings(
      */
     val pinFont: Int = com.forge.pixpin.motor.ItemStyle.FONT_EXCALIFONT,
     val copyFormat: CopyFormat = CopyFormat.PNG,
+    /** Cuánto se aprieta un PDF al entrar. Ver [com.forge.pixpin.pdf.ComprimirPdf.NIVELES]. */
+    val compresionPdf: String = com.forge.pixpin.pdf.ComprimirPdf.NIVEL_POR_DEFECTO,
     /** Lo mismo que [pinTools], pero para la capa que se dibuja sobre la pantalla. */
     val capaTools: Set<String>? = null,
     /**
@@ -382,6 +384,7 @@ class SettingsRepository(private val context: Context) {
         val FUNCIONES_WEB = stringSetPreferencesKey("funciones_web")
         val ZURDO = booleanPreferencesKey("zurdo")
         val COPY_FORMAT = stringPreferencesKey("copy_format")
+        val COMPRESION_PDF = stringPreferencesKey("compresion_pdf")
         val PALABRAS = stringPreferencesKey("palabras_magicas")
     }
 
@@ -434,6 +437,8 @@ class SettingsRepository(private val context: Context) {
             copyFormat = runCatching {
                 CopyFormat.valueOf(prefs[Keys.COPY_FORMAT] ?: CopyFormat.PNG.name)
             }.getOrDefault(CopyFormat.PNG),
+            compresionPdf = prefs[Keys.COMPRESION_PDF]?.takeIf { it in com.forge.pixpin.pdf.ComprimirPdf.NIVELES }
+                ?: com.forge.pixpin.pdf.ComprimirPdf.NIVEL_POR_DEFECTO,
             palabrasMagicas = prefs[Keys.PALABRAS]
         )
     }
@@ -665,6 +670,10 @@ class SettingsRepository(private val context: Context) {
     /** Vuelve a las de fábrica, que no es lo mismo que guardarlas: ver [resetPinTools]. */
     suspend fun resetPalabras() {
         context.dataStore.edit { it.remove(Keys.PALABRAS) }
+    }
+
+    suspend fun setCompresionPdf(nivel: String) {
+        context.dataStore.edit { it[Keys.COMPRESION_PDF] = nivel }
     }
 
     suspend fun setCopyFormat(format: CopyFormat) {

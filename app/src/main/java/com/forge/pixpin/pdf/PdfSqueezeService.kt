@@ -3,78 +3,143 @@ package com.forge.pixpin.pdf
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.widget.Toast
+import com.forge.pixpin.motor.PdfDoc
 import java.io.File
+import java.util.concurrent.Executors
 
 /**
- * **pdfsqueeze, en un proceso aparte y con el tiempo contado** (21-sep-2026).
+ * **pdfsqueeze, en un proceso aparte** (21-sep-2026) — la biblioteca en Rust del usuario
+ * (github.com/1xmanMAX/Thesis), que va en el APK como `libpdfsqueeze.so`.
  *
- * La biblioteca entró llamándose desde el mismo hilo que guarda lo que se comparte a PixPin, y el
- * usuario lo notó enseguida: compartía un PDF, tocaba «nuevo proyecto» y no pasaba nada. Un
- * compresor que prueba varias codificaciones por imagen tarda lo que tarda —decenas de segundos
- * en un escaneo—, y si el código nativo se cae se lleva la aplicación entera por delante.
+ * Entró llamándose desde el mismo hilo que guarda lo que se comparte a PixPin, y el usuario lo
+ * notó enseguida: compartía un PDF, tocaba «nuevo proyecto» y no pasaba nada. Medido en un
+ * teléfono con el `.so` del APK: 3–8 segundos un documento corriente, y crece con las hojas.
+ * Así que ahora hay **dos caminos**, los dos aquí, en el proceso `:pdfsqueeze` —si el código
+ * nativo se cae, se cae solo y la aplicación sigue abierta—:
  *
- * Así que corre **aquí**, en el proceso `:pdfsqueeze`: si se cae, se cae solo. Quien lo pide
- * ([comprimir]) espera un tiempo razonable mirando un archivo de aviso; si no llega, mata este
- * proceso y sigue con el compresor en Kotlin. Lo compartido entra siempre.
+ * - **Al entrar un PDF** ([encolar]): el archivo se guarda tal cual, al instante, y se aligera
+ *   **después**, sin que nadie espere. Al acabar se cambia en su sitio —de un golpe, con
+ *   `rename`— junto con sus copias idénticas de la carpeta de proyectos (la «copia limpia»).
+ * - **Cuando se pide a mano** ([ahora]): se espera el resultado, que ahí sí hay alguien mirando.
+ *
+ * Si pdfsqueeze no puede con un documento, lo aligera el compresor en Kotlin de siempre.
  */
 class PdfSqueezeService : Service() {
+    private val cola = Executors.newSingleThreadExecutor()
+    private val enCurso = java.util.concurrent.atomic.AtomicInteger(0)
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val entrada = intent?.getStringExtra(ENTRADA)?.let { File(it) }
-        val salida = intent?.getStringExtra(SALIDA)?.let { File(it) }
-        if (entrada == null || salida == null) { stopSelf(startId); return START_NOT_STICKY }
-        Thread {
-            try {
-                val bytes = entrada.readBytes()
-                val ligero = dev.pdfsqueeze.PdfSqueeze.compress(bytes, "{\"profile\":\"balanced\",\"threads\":2}")
-                if (ligero.isNotEmpty() && ligero.size < bytes.size) salida.writeBytes(ligero)
-            } catch (e: Throwable) {
-                salida.delete()
+        val archivo = intent?.getStringExtra(ARCHIVO)?.let { File(it) }
+        val nivel = intent?.getStringExtra(NIVEL) ?: ComprimirPdf.NIVEL_POR_DEFECTO
+        val aviso = intent?.getStringExtra(AVISO)?.let { File(it) }
+        val decirlo = intent?.getBooleanExtra(DECIRLO, false) == true
+        if (archivo == null) { stopSelf(startId); return START_NOT_STICKY }
+        enCurso.incrementAndGet()
+        cola.execute {
+            val ganado = runCatching { aligerar(archivo, nivel) }.getOrDefault(0L)
+            runCatching { aviso?.writeText(ganado.toString()) }
+            if (decirlo && ganado > 0) Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    applicationContext,
+                    "PDF aligerado: ${com.forge.pixpin.motor.Detalle.legible(archivo.length() + ganado)} → ${com.forge.pixpin.motor.Detalle.legible(archivo.length())}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
-            runCatching { File(salida.path + HECHO).writeText("ok") }
-            stopSelf(startId)
-        }.start()
+            if (enCurso.decrementAndGet() == 0) stopSelf()
+        }
         return START_NOT_STICKY
     }
 
+    /** Aligera [archivo] en su sitio, y sus copias idénticas. Devuelve los bytes ganados. */
+    private fun aligerar(archivo: File, nivel: String): Long {
+        if (!archivo.isFile) return 0
+        val original = archivo.readBytes()
+        val ligero = (try {
+            dev.pdfsqueeze.PdfSqueeze.compress(original, ComprimirPdf.opcionesDe(nivel))
+        } catch (e: Throwable) {
+            null
+        })?.takeIf { it.isNotEmpty() && it.size < original.size }
+            // Sin pérdida no hay plan B con pérdida: si pdfsqueeze no pudo, se queda como está.
+            ?: (if (nivel == ComprimirPdf.SIN_PERDIDA) null else ComprimirPdf.comprimir(original))
+            ?: return 0
+        if (ligero.size > original.size * ComprimirPdf.loQueTieneQueBajar(nivel)) return 0
+        // Las copias idénticas, **miradas antes de cambiar nada**: la copia limpia de un proyecto
+        // nace del mismo archivo un instante después de entrar.
+        val gemelos = (archivo.parentFile?.listFiles().orEmpty().toList() +
+            File(filesDir, "proyectos").listFiles().orEmpty().toList())
+            .filter { it != archivo && it.isFile && it.name.endsWith(".pdf", true) && it.length() == original.size.toLong() }
+            .distinctBy { it.absolutePath }
+            .filter { runCatching { it.readBytes().contentEquals(original) }.getOrDefault(false) }
+        // Si mientras tanto alguien lo cambió —se anotó, llegó otra versión—, no se pisa.
+        if (archivo.length() != original.size.toLong()) return 0
+        if (!ponerEnSuSitio(archivo, ligero, PdfDoc.pageCount(archivo.path))) return 0
+        for (g in gemelos) if (g.length() == original.size.toLong()) ponerEnSuSitio(g, ligero, -1)
+        return (original.size - ligero.size).toLong()
+    }
+
+    /** Escribe al lado, comprueba que Android lo abre con las mismas páginas, y cambia de un golpe. */
+    private fun ponerEnSuSitio(destino: File, bytes: ByteArray, paginas: Int): Boolean {
+        val temporal = File(destino.parentFile, destino.name + ".ligero")
+        return try {
+            temporal.writeBytes(bytes)
+            val ahora = PdfDoc.pageCount(temporal.path)
+            if (ahora <= 0 || (paginas > 0 && ahora != paginas)) return false
+            if (!temporal.renameTo(destino)) temporal.copyTo(destino, overwrite = true)
+            true
+        } catch (e: Throwable) {
+            false
+        } finally {
+            temporal.delete()
+        }
+    }
+
     companion object {
-        private const val ENTRADA = "entrada"
-        private const val SALIDA = "salida"
-        private const val HECHO = ".hecho"
+        private const val ARCHIVO = "archivo"
+        private const val NIVEL = "nivel"
+        private const val AVISO = "aviso"
+        private const val DECIRLO = "decirlo"
         /** El nombre del proceso, como en el manifiesto. */
         const val PROCESO = ":pdfsqueeze"
 
-        /** Lo que se espera como mucho: dos segundos, más uno por mega, hasta doce. */
-        fun espera(bytes: Int): Long = (2_000L + bytes / 1024L).coerceAtMost(12_000L)
+        /** Lo aligera **después**, sin esperar. False si Android no deja arrancar el servicio (segundo plano). */
+        fun encolar(contexto: Context, archivo: File, nivel: String): Boolean = try {
+            contexto.startService(
+                Intent(contexto, PdfSqueezeService::class.java)
+                    .putExtra(ARCHIVO, archivo.absolutePath).putExtra(NIVEL, nivel).putExtra(DECIRLO, true)
+            ) != null
+        } catch (e: Throwable) {
+            false
+        }
 
-        /** Los bytes aligerados, o null si no se pudo a tiempo. Bloquea: fuera del hilo de la pantalla. */
-        fun comprimir(contexto: Context, bytes: ByteArray): ByteArray? {
-            val carpeta = File(contexto.cacheDir, "pdfsqueeze").apply { mkdirs() }
-            carpeta.listFiles()?.forEach { it.delete() }
-            val entrada = File(carpeta, "entrada.pdf")
-            val salida = File(carpeta, "salida.pdf")
-            val hecho = File(salida.path + HECHO)
-            val servicio = Intent(contexto, PdfSqueezeService::class.java)
-                .putExtra(ENTRADA, entrada.path).putExtra(SALIDA, salida.path)
+        /**
+         * Lo aligera **y espera**: los bytes ganados, o null si no se pudo pedir o no acabó en
+         * [tope] milisegundos (entonces se mata ese proceso, que es solo suyo). Bloquea.
+         */
+        fun ahora(contexto: Context, archivo: File, nivel: String, tope: Long = 180_000L): Long? {
+            val aviso = File(File(contexto.cacheDir, "pdfsqueeze").apply { mkdirs() }, "aviso-${System.nanoTime()}")
             return try {
-                entrada.writeBytes(bytes)
-                // Desde segundo plano Android no deja arrancar servicios: entonces, sin él.
-                contexto.startService(servicio)
-                val tope = System.currentTimeMillis() + espera(bytes.size)
-                while (!hecho.exists() && System.currentTimeMillis() < tope) Thread.sleep(60)
-                if (hecho.exists() && salida.isFile) salida.readBytes().takeIf { it.isNotEmpty() && it.size < bytes.size } else null
+                contexto.startService(
+                    Intent(contexto, PdfSqueezeService::class.java)
+                        .putExtra(ARCHIVO, archivo.absolutePath).putExtra(NIVEL, nivel).putExtra(AVISO, aviso.absolutePath)
+                ) ?: return null
+                val hasta = System.currentTimeMillis() + tope
+                while (!aviso.exists() && System.currentTimeMillis() < hasta) Thread.sleep(80)
+                if (!aviso.exists()) { matarElProceso(contexto); return null }
+                Thread.sleep(30)
+                aviso.readText().trim().toLongOrNull()
             } catch (e: Throwable) {
                 null
             } finally {
-                if (!hecho.exists()) matarElProceso(contexto)
-                runCatching { contexto.stopService(servicio) }
-                carpeta.listFiles()?.forEach { it.delete() }
+                aviso.delete()
             }
         }
 
-        /** Un compresor nativo a medias no se para por las buenas: se mata su proceso, que es solo suyo. */
         private fun matarElProceso(contexto: Context) {
             runCatching {
                 val gestor = contexto.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager

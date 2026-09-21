@@ -546,6 +546,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
                 CaptureModeCard()
                 Spacer(Modifier.height(12.dp))
                 FormatoDeCopiaCard()
+                CompresionDePdfCard()
             }
 
             GrupoDeAjustes(
@@ -1589,6 +1590,47 @@ private fun FormatoDeCopiaCard() {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **Cuánto se aprieta un PDF al entrar** (21-sep-2026). Los niveles son los de pdfsqueeze, la
+ * biblioteca del usuario; los números, medidos en un teléfono. Ver [com.forge.pixpin.pdf.ComprimirPdf].
+ */
+@Composable
+private fun CompresionDePdfCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    val niveles = listOf(
+        com.forge.pixpin.pdf.ComprimirPdf.NO_COMPRIMIR to ("No comprimir" to "El PDF se guarda tal como llega."),
+        com.forge.pixpin.pdf.ComprimirPdf.SIN_PERDIDA to ("Sin pérdida" to "Ni un píxel cambia: solo se ordena y se aprieta por dentro. Gana poco en escaneos, más en documentos de oficina."),
+        com.forge.pixpin.pdf.ComprimirPdf.EQUILIBRADO to ("Equilibrado" to "No se nota a la vista: fotos a 200 ppp, cada una comprobada. Un escaneo queda en torno a la cuarta parte."),
+        com.forge.pixpin.pdf.ComprimirPdf.PEQUENO to ("Pequeño" to "Para leer en pantalla: 150 ppp, y en los escaneos el texto se separa del papel y sigue nítido. En torno a la sexta parte."),
+        com.forge.pixpin.pdf.ComprimirPdf.EXTREMO to ("Extremo" to "Lo mínimo que se sigue leyendo bien: el texto nítido, el papel y las fotos muy simplificados. Menos de la décima parte en escaneos.")
+    )
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Compresión de los PDF", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Al guardar un PDF en PixPin se aligera solo, en segundo plano, con pdfsqueeze. El original que tengas fuera de PixPin no se toca.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            niveles.forEach { (nivel, textos) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { scope.launch { app.settings.setCompresionPdf(nivel) } }.padding(vertical = 6.dp)
+                ) {
+                    RadioButton(selected = settings.compresionPdf == nivel, onClick = { scope.launch { app.settings.setCompresionPdf(nivel) } })
+                    Column(Modifier.padding(start = 4.dp)) {
+                        Text(textos.first, style = MaterialTheme.typography.bodyMedium)
+                        Text(textos.second, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
