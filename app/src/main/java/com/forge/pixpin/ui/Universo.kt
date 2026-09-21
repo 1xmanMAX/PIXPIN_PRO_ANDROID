@@ -419,6 +419,11 @@ fun PantallaDeUniverso(
                 }
             } else if (anadiendo) {
                 Fila {
+                    // **Armarlo con la forma del chat** (21-sep-2026, pedido por el usuario):
+                    // cada archivo, un sistema solar; lo que se le responde, sus planetas; las
+                    // páginas de un PDF, planetas, y lo comentado en una página, sus satélites.
+                    // Ver [com.forge.pixpin.ui.desdeElChat].
+                    Chip("Traer el chat") { dialogo = Dialogo.TraerElChat }
                     Chip("Del chat") { dialogo = Dialogo.DelChat }
                     Chip("Hoja") { dialogo = Dialogo.Hojas }
                     Chip("Nota") { dialogo = Dialogo.Texto(Cuerpo.NOTA, null) }
@@ -498,6 +503,32 @@ fun PantallaDeUniverso(
             },
             onCerrar = { dialogo = null }
         )
+        Dialogo.TraerElChat -> {
+            val cuantos = remember(mensajes) { mensajes.count { it.clase != Clase.NOTA || it.respondeA != null } }
+            AlertDialog(
+                onDismissRequest = { dialogo = null },
+                title = { Text("Traer el chat") },
+                text = {
+                    Text(
+                        if (mensajes.isEmpty()) "En el chat de este proyecto aún no hay nada."
+                        else "Cada archivo del chat será un sistema solar; lo que le respondiste, sus planetas; " +
+                            "y en un PDF, cada página es un planeta y lo que comentaste en ella, su satélite.\n\n" +
+                            "Hay $cuantos en el chat. Lo que ya has colocado se queda donde está, y lo que quitaste no vuelve."
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = mensajes.isNotEmpty(),
+                        onClick = {
+                            dialogo = null
+                            guardar(universos.desdeElChat(proyecto.id, nodosDelChat(mensajes), System.currentTimeMillis(), quitadosDe(universos, proyecto.id, mensajes)))
+                            camara.puesta = false
+                        }
+                    ) { Text("Armar") }
+                },
+                dismissButton = { TextButton(onClick = { dialogo = null }) { Text("Cancelar") } }
+            )
+        }
         is Dialogo.Quitar -> AlertDialog(
             onDismissRequest = { dialogo = null },
             title = { Text("¿Quitar con su espacio?") },
@@ -515,6 +546,7 @@ private sealed interface Dialogo {
     data class Texto(val clase: String, val cuerpo: Cuerpo?) : Dialogo
     data object Figuras : Dialogo
     data object DelChat : Dialogo
+    data object TraerElChat : Dialogo
     data object Hojas : Dialogo
     data class Quitar(val cuerpo: Cuerpo) : Dialogo
 }
@@ -617,7 +649,15 @@ private fun Pintado(c: Cuerpo, mensajes: List<Mensaje>, proyecto: Proyecto, radi
         }
         Cuerpo.MENSAJE -> {
             val m = mensajes.firstOrNull { it.id == c.ref }
-            val foto = if (m?.clase == Clase.IMAGEN) miniaturaDe(m.ruta) else null
+            // **La miniatura que ya existe, sin copiar nada** (21-sep-2026). Una página de un PDF
+            // o un dibujo ya tienen su miniatura hecha —la del chat y la de proyectos, en la
+            // misma caché—: aquí se **pide la misma**, no se rehace ni se guarda otra copia. Si
+            // no está, se dibuja una vez y queda para los tres sitios. Ver [PdfMiniaturas].
+            val foto = when {
+                m?.clase == Clase.IMAGEN -> miniaturaDe(m.ruta)
+                m != null -> miniaturaDelMensaje(m)
+                else -> null
+            }
             // Un mensaje que ya no está en el chat se pinta apagado: se puede quitar, no abrir.
             Bola(if (m == null && mensajes.isNotEmpty()) Color(0xFF555B70) else color, radio, foto, null, c.texto, elegido, conEspacio, m?.let { iconoDelMensaje(it) } ?: Icons.AutoMirrored.Filled.InsertDriveFile)
         }
@@ -714,6 +754,35 @@ private fun Chip(texto: String, puesto: Boolean = false, onToque: () -> Unit) {
     )
 }
 
+/**
+ * **La miniatura de un mensaje que no es una foto**: la página de un PDF con lo anotado encima, o
+ * un dibujo. Sale de la **misma caché** que usan el chat y la zona de proyectos —en memoria y en
+ * disco—, así que enseñarla aquí no cuesta un archivo más ni una lectura más: la primera vez la
+ * dibuja quien llegue antes y las otras dos pantallas se la encuentran hecha.
+ */
+@Composable
+private fun miniaturaDelMensaje(m: Mensaje): Bitmap? {
+    val contexto = LocalContext.current
+    val foto by produceState<Bitmap?>(null, m.id, m.ruta) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                when {
+                    m.clase == Clase.PAGINA && m.ruta != null && m.pagina != null ->
+                        com.forge.pixpin.guardados.paginaAnotada(
+                            contexto, m.ruta!!, m.pagina!!, m.referencia,
+                            m.referencia?.let { com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, it) },
+                            LADO_DE_MINIATURA
+                        )
+                    m.ruta?.endsWith(".pdf", ignoreCase = true) == true ->
+                        com.forge.pixpin.motor.PdfMiniaturas.de(contexto, m.ruta!!, 0, LADO_DE_MINIATURA)
+                    else -> null
+                }
+            }.getOrNull()
+        }
+    }
+    return foto
+}
+
 /** Una foto en pequeño, leída fuera del hilo de la pantalla y a un tamaño que no pese. */
 @Composable
 private fun miniaturaDe(ruta: String?): Bitmap? {
@@ -736,6 +805,41 @@ private fun radioDe(c: Cuerpo): Float = when (c.clase) {
     Cuerpo.IMAGEN -> RADIO_DEL_CUERPO * 1.2f
     else -> RADIO_DEL_CUERPO
 } * c.tamano
+
+/**
+ * **El chat, como lo entiende el universo.** Un mensaje que contesta a otro cuelga de él; los
+ * demás cuelgan del proyecto. Una página de un PDF ya viene en el chat como mensaje suyo —clase
+ * [Clase.PAGINA]— así que las páginas **son** respuestas al documento y caen solas en su sitio.
+ * Ver [desdeElChat].
+ */
+private fun nodosDelChat(mensajes: List<Mensaje>): List<NodoDelChat> {
+    val hay = mensajes.mapTo(HashSet()) { it.id }
+    // Una página suelta, sin su documento en el chat, colgaría del vacío: se sube al proyecto.
+    return mensajes.map { m ->
+        NodoDelChat(
+            id = m.id,
+            nombre = nombreDelMensaje(m),
+            respondeA = (m.respondeA ?: m.referencia?.takeIf { m.clase == Clase.PAGINA })?.takeIf { it in hay },
+            ruta = m.ruta.takeIf { m.clase == Clase.IMAGEN },
+            pagina = m.pagina?.plus(1),
+            esDocumento = m.clase == Clase.ARCHIVO && m.nombre.endsWith(".pdf", ignoreCase = true),
+            esTexto = m.clase == Clase.NOTA
+        )
+    }
+}
+
+/**
+ * **Lo que el usuario quitó del universo y sigue en el chat.** Sin esto, «armar» lo repondría y
+ * quitar algo no serviría de nada. Se sabe por descarte: está en el chat, no está en ningún
+ * espacio de este proyecto, y el universo ya se armó alguna vez (hay algo puesto).
+ */
+private fun quitadosDe(universos: Universos, proyecto: String, mensajes: List<Mensaje>): Set<String> {
+    val raiz = Universos.deProyecto(proyecto)
+    val suyos = universos.dentroDe(raiz) + raiz
+    val puestos = suyos.flatMap { universos.espacio(it).cuerpos }.mapNotNullTo(HashSet()) { it.ref }
+    if (puestos.isEmpty()) return emptySet()
+    return mensajes.mapNotNull { it.id.takeIf { id -> id !in puestos } }.toSet()
+}
 
 private fun nombreDelMensaje(m: Mensaje): String =
     m.nombre.ifBlank { m.texto.lineSequence().firstOrNull().orEmpty().take(40) }.ifBlank {
