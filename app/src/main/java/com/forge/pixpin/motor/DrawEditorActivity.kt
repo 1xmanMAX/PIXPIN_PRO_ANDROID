@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +61,7 @@ import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CenterFocusWeak
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CropSquare
@@ -116,6 +119,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -325,6 +329,7 @@ class DrawEditorActivity : ComponentActivity() {
             window.decorView.isAutoHandwritingEnabled = false
         }
         dibujoId = intent.getStringExtra(EXTRA_ID) ?: System.currentTimeMillis().toString()
+        cargarLasMarcas()
 
         val cargada = ExcalidrawStore.cargar(intent.getStringExtra(EXTRA_RUTA)) ?: Scene()
         controller.load(cargada)
@@ -563,6 +568,25 @@ class DrawEditorActivity : ComponentActivity() {
      * se entrega es la hoja, y un garabato suelto a dos metros no tiene que
      * decidir el encuadre de nadie.
      */
+    /**
+     * **A ese punto, con el emoticono arriba.** Lo pidió así el usuario: no centrado, arriba —lo
+     * que hay debajo de una marca es lo que uno fue a ver, igual que en el visor de documentos,
+     * donde el marcador queda en lo alto de la pantalla—. El aumento no se toca: se marca un
+     * sitio, no un encuadre. Ver [com.forge.pixpin.motor.Marcas.vistaConLaMarcaArriba].
+     */
+    private fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
+        val v = controller.scene.viewport
+        val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: return
+        controller.setViewport(
+            com.forge.pixpin.motor.Marcas.vistaConLaMarcaArriba(
+                m, v.zoom, ancho,
+                // Por debajo de la barra de arriba: pegado al canto quedaría tapado por ella.
+                margen = (ALTO_DE_LA_MARCA_ARRIBA * resources.displayMetrics.density).toDouble()
+            )
+        )
+        cambiadoDesdeFuera()
+    }
+
     private fun encuadrar() {
         medidaDeLaPagina?.let { (ancho, alto) ->
             encajarLaPagina(ancho, alto)
@@ -591,6 +615,27 @@ class DrawEditorActivity : ComponentActivity() {
     /** Deja esa zona de la escena centrada y a la vista. */
     /** Lo que mide el lienzo que manda en su columna, en píxeles. Ver [encajarEn]. */
     private var medidaDelLienzo = androidx.compose.ui.unit.IntSize.Zero
+
+    // ---- Marcadores del lienzo. Ver [com.forge.pixpin.motor.Marcas]. ----
+
+    /**
+     * **Los sitios marcados de este lienzo** (21-sep-2026). El usuario los pidió «como se
+     * implementó en los visores de epub y docx», con la misma interfaz, pero aquí un marcador es
+     * **un punto del lienzo** y no una altura: se planta, se arrastra donde uno quiera, y al
+     * elegirlo en el riel la vista va a él dejándolo arriba. Ver [CapaDeMarcas] y [irALaMarca].
+     */
+    private var marcas by mutableStateOf(emptyList<com.forge.pixpin.motor.Marca>())
+    private var poniendoMarca by mutableStateOf(false)
+
+    private fun prefsDeMarcas() = getSharedPreferences("marcas", MODE_PRIVATE)
+
+    private fun cargarLasMarcas() {
+        marcas = com.forge.pixpin.motor.Marcas.deTexto(prefsDeMarcas().getString("lienzo:" + dibujoId, null))
+    }
+
+    private fun guardarLasMarcas() {
+        prefsDeMarcas().edit().putString("lienzo:" + dibujoId, com.forge.pixpin.motor.Marcas.aTexto(marcas)).apply()
+    }
 
     private fun encajarEn(x: Double, y: Double, ancho: Double, alto: Double) {
         if (ancho <= 0 || alto <= 0) return
@@ -735,6 +780,9 @@ class DrawEditorActivity : ComponentActivity() {
 
     /** Pide repintar el lienzo tras un cambio que no vino del dedo. */
     private fun cambiadoDesdeFuera() { tickDelMosaico++ }
+
+    /** A qué altura de la pantalla queda el emoticono al ir a su marca, en dp. Ver [irALaMarca]. */
+    private val ALTO_DE_LA_MARCA_ARRIBA = 104f
 
     /**
      * **Vuelve a leer el lienzo del disco**, después de que algo de fuera lo haya cambiado: lo que
@@ -1644,6 +1692,28 @@ class DrawEditorActivity : ComponentActivity() {
             }
 
             EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
+
+            // **Los marcadores del lienzo**, encima del dibujo y pegados a su sitio. Ver [CapaDeMarcas].
+            if (!presentando) {
+                CapaDeMarcas(tick)
+                if (!soloElDibujo) {
+                    com.forge.pixpin.ui.RielDeMarcas(
+                        marcas.size, { i -> marcas[i].emoji },
+                        Modifier.align(Alignment.CenterEnd).padding(end = 2.dp)
+                    ) { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } }
+                    if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
+                        Modifier.align(Alignment.BottomCenter),
+                        onCerrar = { poniendoMarca = false }
+                    ) { emoji ->
+                        poniendoMarca = false
+                        // Nace **en el centro de lo que se está mirando**, que es lo que uno acaba
+                        // de decidir marcar; de ahí se arrastra a donde toque.
+                        val centro = centroDeLaVista()
+                        marcas = com.forge.pixpin.motor.Marcas.con(marcas, centro.x, centro.y, emoji, System.currentTimeMillis())
+                        guardarLasMarcas()
+                    }
+                }
+            }
 
             // Lo que hay marcado y lo que se le puede tocar: lo miran tanto los mandos
             // como los paneles que salen debajo, así que se sacan una sola vez y **fuera**
@@ -2669,6 +2739,73 @@ class DrawEditorActivity : ComponentActivity() {
 
     }
 
+    /**
+     * **Los marcadores, sobre el lienzo y agarrados a él.**
+     *
+     * Cada uno se pinta donde está su punto —se mueve y se amplía con el dibujo, como una figura
+     * más— pero **no es parte del dibujo**: no se exporta, no se imprime y no estorba a lo que se
+     * traza, porque solo coge el dedo el redondel del emoticono. Arrastrándolo se lleva a otro
+     * sitio (lo pidió el usuario: «que me permita mover el emoticono a través del canvas») y un
+     * toque largo lo quita. Lo que está fuera de la pantalla no se compone.
+     */
+    @Composable
+    private fun CapaDeMarcas(tick: Int) {
+        @Suppress("UNUSED_EXPRESSION") tick
+        if (marcas.isEmpty()) return
+        val v = controller.scene.viewport
+        val d = LocalDensity.current
+        val ancho = medidaDelLienzo.width
+        val alto = medidaDelLienzo.height
+        // Lo que se está arrastrando, en píxeles de pantalla: mientras dura, manda esto y no el punto.
+        var arrastrando by remember { mutableStateOf<Pair<Long, androidx.compose.ui.geometry.Offset>?>(null) }
+        for (m in marcas) {
+            val enPantalla = arrastrando?.takeIf { it.first == m.id }?.second
+                ?: v.toScreen(Pt(m.x, m.y)).let { androidx.compose.ui.geometry.Offset(it.x.toFloat(), it.y.toFloat()) }
+            val fuera = ancho > 0 && alto > 0 &&
+                (enPantalla.x < -80 || enPantalla.y < -80 || enPantalla.x > ancho + 80 || enPantalla.y > alto + 80)
+            if (fuera) continue
+            key(m.id) {
+                Box(
+                    Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset((enPantalla.x - with(d) { 18.dp.toPx() }).toInt(), (enPantalla.y - with(d) { 18.dp.toPx() }).toInt()) }
+                        .size(36.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0xCC14182B))
+                        .pointerInput(m.id) {
+                            detectDragGestures(
+                                onDragStart = { arrastrando = m.id to enPantalla },
+                                onDrag = { cambio, movido ->
+                                    cambio.consume()
+                                    arrastrando = arrastrando?.let { it.first to (it.second + movido) }
+                                },
+                                onDragEnd = {
+                                    val donde = arrastrando?.second
+                                    arrastrando = null
+                                    val p = donde?.let { controller.scene.viewport.toScene(it.x.toDouble(), it.y.toDouble()) } ?: return@detectDragGestures
+                                    marcas = com.forge.pixpin.motor.Marcas.movida(marcas, m.id, p.x, p.y)
+                                    guardarLasMarcas()
+                                },
+                                onDragCancel = { arrastrando = null }
+                            )
+                        }
+                        .pointerInput(m.id) {
+                            detectTapGestures(
+                                onLongPress = {
+                                    marcas = com.forge.pixpin.motor.Marcas.sin(marcas, m.id)
+                                    guardarLasMarcas()
+                                    Toast.makeText(this@DrawEditorActivity, "Marcador quitado", Toast.LENGTH_SHORT).show()
+                                },
+                                onTap = { irALaMarca(m) }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(m.emoji, fontSize = 20.sp)
+                }
+            }
+        }
+    }
+
     /** Una barra flotante: el recurso que usa el original para no comer lienzo. */
     @Composable
     private fun Isla(modifier: Modifier = Modifier, contenido: @Composable () -> Unit) {
@@ -2778,6 +2915,14 @@ class DrawEditorActivity : ComponentActivity() {
                 Icon(
                     Icons.Filled.CenterFocusWeak,
                     contentDescription = getString(R.string.cd_encuadrar)
+                )
+            }
+            // **Marcar este sitio.** El mismo marcador con emoticono de los lectores; aquí, un
+            // punto del lienzo al que se vuelve de un toque. Ver [CapaDeMarcas].
+            IconButton(onClick = { poniendoMarca = !poniendoMarca }) {
+                Icon(
+                    Icons.Filled.BookmarkAdd,
+                    contentDescription = "Marcador aquí"
                 )
             }
             // **Añadir hoja**, que es lo que convierte el lienzo en un cuaderno.
@@ -3169,6 +3314,7 @@ class DrawEditorActivity : ComponentActivity() {
         sesiones[dibujoId] = controller
         val suyo = controladorDe(l)
         dibujoId = l.id
+        cargarLasMarcas()
         controller = suyo
         // **No se vuelve a apuntar en la lista**: ya está abierto, solo se pasa a él. Apuntarlo
         // cambiaba la lista y la tira daba un salto.

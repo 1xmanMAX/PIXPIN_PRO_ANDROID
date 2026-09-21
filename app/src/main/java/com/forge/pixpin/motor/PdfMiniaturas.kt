@@ -166,7 +166,12 @@ object PdfMiniaturas {
             turno.withLock {
                 // Se vuelve a mirar dentro del candado: mientras se esperaba
                 // turno, la tanda de al lado ha podido dibujar justo esta.
-                enMemoria.get(k) ?: PdfDoc.render(pdf, pagina, ancho)?.also {
+                // **Y si el documento está roto, se repara y se vuelve a intentar** (21-sep-2026).
+                // Los PDF que se estropearon con las dos escrituras a la vez —el fallo del fondo
+                // perdido— se arreglaban al abrirlos en el editor, pero **en la portada seguían
+                // sin verse**: ahí se pintaba el documento anotado, que es el que se rompió. Ver
+                // [PdfDelProyecto.paginaSanaDe].
+                enMemoria.get(k) ?: PdfDelProyecto.paginaSanaDe(context, pdf, pagina, ancho)?.also {
                     enMemoria.put(k, it)
                     guardar(enDisco, it)
                 }

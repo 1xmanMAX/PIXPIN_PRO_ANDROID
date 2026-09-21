@@ -690,7 +690,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         onAlProyecto = { conLaLetra = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } },
                         onQuitarMarcadores = { conLaLetra = false; quitandoMarcadores = true }
                     )
-                    if (poniendoMarcador) ElegirEmoji(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
+                    if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
                         poniendoMarcador = false
                         marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
                         guardarMarcadores()
@@ -889,73 +889,15 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /**
-     * **Los marcadores, en el lateral**: un punto por marcador, en el orden del documento, cada uno
-     * con su emoticono. Se pasa el dedo por ellos —**vibra al cambiar de uno a otro**— y al
-     * soltar se va al que quedó debajo, con lo alto de la pantalla justo en el marcador. Un toque
-     * a secas en uno hace lo mismo. En reposo van pequeños y semitransparentes; con el dedo
-     * encima crecen, para ver bien a cuál se va.
+     * Los marcadores del documento, en el riel común de toda la aplicación: el mismo que llevan
+     * el lienzo 2D y el lector de PDF. Ver [com.forge.pixpin.ui.RielDeMarcas].
      */
     @Composable
     private fun LateralDeMarcadores(modifier: Modifier) {
         val lista = marcadores
         if (lista.isEmpty()) return
-        val vibrar = androidx.compose.ui.platform.LocalHapticFeedback.current
-        val listaYa = androidx.compose.runtime.rememberUpdatedState(lista)
-        var bajoElDedo by remember { mutableStateOf(-1) }
-        val paso = 38.dp
-        Column(
-            modifier
-                .padding(end = 2.dp)
-                .pointerInput(Unit) {
-                    val pasoPx = paso.toPx()
-                    awaitEachGesture {
-                        val abajo = awaitFirstDown(requireUnconsumed = false)
-                        abajo.consume()
-                        bajoElDedo = com.forge.pixpin.motor.Lectura.puntoBajoElDedo(abajo.position.y, pasoPx, listaYa.value.size)
-                        vibrar.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        while (true) {
-                            val e = awaitPointerEvent()
-                            val dedo = e.changes.firstOrNull { it.pressed } ?: break
-                            dedo.consume()
-                            val i = com.forge.pixpin.motor.Lectura.puntoBajoElDedo(dedo.position.y, pasoPx, listaYa.value.size)
-                            if (i != bajoElDedo) {
-                                bajoElDedo = i
-                                vibrar.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            }
-                        }
-                        listaYa.value.getOrNull(bajoElDedo)?.let { irALaFraccion(it.fraccion, intentos = 0) }
-                        bajoElDedo = -1
-                    }
-                },
-            horizontalAlignment = Alignment.End
-        ) {
-            lista.forEachIndexed { i, m ->
-                val elegido = i == bajoElDedo
-                val conDedo = bajoElDedo >= 0
-                Box(Modifier.size(width = if (conDedo) 64.dp else 30.dp, height = paso), contentAlignment = Alignment.CenterEnd) {
-                    // **El elegido salta delante del dedo** (20-sep-2026): crecía, pero debajo del
-                    // dedo, y no se veía cuál era. Ahora sale hacia dentro de la pantalla, grande, y
-                    // al pasar al siguiente vuelve a su sitio y salta el otro.
-                    val salto = androidx.compose.animation.core.animateDpAsState(
-                        if (elegido) (-78).dp else 0.dp,
-                        androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 700f), label = "salto"
-                    )
-                    Box(
-                        Modifier
-                            .offset(x = salto.value)
-                            .size(if (elegido) 52.dp else if (conDedo) 28.dp else 20.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(androidx.compose.ui.graphics.Color(if (elegido) 0xE614182B else 0x6614182B)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            m.emoji,
-                            fontSize = if (elegido) 30.sp else if (conDedo) 15.sp else 10.sp,
-                            modifier = Modifier.alpha(if (conDedo) 1f else 0.75f)
-                        )
-                    }
-                }
-            }
+        RielDeMarcas(lista.size, { i -> lista[i].emoji }, modifier) { i ->
+            lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) }
         }
     }
 
@@ -1082,26 +1024,6 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /** Con qué emoticono se pone el marcador: una fila para elegir de un toque. */
-    @Composable
-    private fun ElegirEmoji(modifier: Modifier, onCerrar: () -> Unit, onElegir: (String) -> Unit) {
-        Row(
-            modifier
-                .navigationBarsPadding()
-                .padding(12.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                .background(androidx.compose.ui.graphics.Color(0xD914182B))
-                .horizontalScroll(androidx.compose.foundation.rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            com.forge.pixpin.motor.Lectura.EMOJIS.forEach { e ->
-                Text(e, fontSize = 24.sp, modifier = Modifier.clip(androidx.compose.foundation.shape.CircleShape).clickable { onElegir(e) }.padding(8.dp))
-            }
-            IconButton(onClick = onCerrar, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = "Cancelar", tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
-            }
-        }
-    }
 
     /** El nombre como se enseña y se edita: sin la extensión, que no se puede cambiar. */
     private fun sinExtension(nombre: String): String {

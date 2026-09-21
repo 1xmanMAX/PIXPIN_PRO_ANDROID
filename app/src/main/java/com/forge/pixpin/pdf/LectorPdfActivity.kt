@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Edit
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.size
@@ -191,6 +192,33 @@ class LectorPdfActivity : ComponentActivity() {
         var altoDeLaCaja by remember { mutableStateOf(0) }
         val densidad = LocalDensity.current
         var compartiendo by remember { mutableStateOf(false) }
+        // **Marcadores, los mismos que en el visor de Word y en el lienzo** (21-sep-2026). Aquí
+        // un marcador es una página y en qué parte de ella; el riel lleva a ese punto dejándolo
+        // arriba. Ver [com.forge.pixpin.motor.Marcas] y [com.forge.pixpin.ui.RielDeMarcas].
+        val prefsDeMarcas = remember { getSharedPreferences("marcas", MODE_PRIVATE) }
+        val claveDeMarcas = remember(rutaPedida) { "pdf:" + rutaPedida }
+        var marcas by remember(rutaPedida) {
+            mutableStateOf(com.forge.pixpin.motor.Marcas.deTexto(prefsDeMarcas.getString(claveDeMarcas, null)))
+        }
+        var poniendoMarca by remember { mutableStateOf(false) }
+        fun guardarLasMarcas() {
+            prefsDeMarcas.edit().putString(claveDeMarcas, com.forge.pixpin.motor.Marcas.aTexto(marcas)).apply()
+        }
+        /** Qué página se está mirando y por dónde va, para plantar ahí el marcador. */
+        fun dondeEstoy(): Pair<Int, Double> {
+            val primera = estado.layoutInfo.visibleItemsInfo.firstOrNull() ?: return 0 to 0.0
+            val alto = primera.size.takeIf { it > 0 } ?: 1
+            // Lo que asoma por arriba de esa hoja es lo que ya ha pasado de largo.
+            return primera.index to ((-primera.offset).toDouble() / alto).coerceIn(0.0, 1.0)
+        }
+        /** A esa página y a esa altura, con la marca **arriba**: es lo que se fue a ver. */
+        suspend fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
+            val pagina = com.forge.pixpin.motor.Marcas.paginaDe(m)
+            val dentro = com.forge.pixpin.motor.Marcas.altoEnLaPagina(m)
+            val alto = estado.layoutInfo.visibleItemsInfo.firstOrNull { it.index == pagina }?.size
+                ?: estado.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0
+            estado.animateScrollToItem(pagina.coerceIn(0, (cuantas - 1).coerceAtLeast(0)), (dentro * alto).toInt())
+        }
         Box(
             Modifier
                 .fillMaxSize()
@@ -302,6 +330,27 @@ class LectorPdfActivity : ComponentActivity() {
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
                 }
             }
+            // **Marcar esta hoja**, encima del lápiz: el mismo marcador con emoticono de los
+            // lectores y del lienzo. Un toque largo en el riel no quita aquí; se quitan desde
+            // la lista de abajo. Ver [com.forge.pixpin.ui.RielDeMarcas].
+            if (cuantas > 0 && aSolas == null && !anotando) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(start = 18.dp, end = 18.dp, bottom = 78.dp)
+                        .size(44.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0x9914182B))
+                        .clickable { poniendoMarca = !poniendoMarca },
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí",
+                        tint = Color.White, modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
             // **El lápiz del editor rápido**: pequeño y semitransparente, abajo a un lado.
             if (cuantas > 0 && aSolas == null && !anotando) {
                 Box(
@@ -375,6 +424,23 @@ class LectorPdfActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
+            // El riel va a la derecha y **solo mirando**: anotando, ese canto es del lápiz.
+            if (cuantas > 0 && aSolas == null && !anotando && marcas.isNotEmpty()) {
+                com.forge.pixpin.ui.RielDeMarcas(
+                    marcas.size, { i -> marcas[i].emoji },
+                    Modifier.align(Alignment.CenterEnd)
+                ) { i -> marcas.getOrNull(i)?.let { m -> alcance.launch { irALaMarca(m) } } }
+            }
+            if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
+                Modifier.align(Alignment.BottomCenter),
+                onCerrar = { poniendoMarca = false }
+            ) { emoji ->
+                poniendoMarca = false
+                val (pagina, dentro) = dondeEstoy()
+                val (x, y) = com.forge.pixpin.motor.Marcas.enLaPagina(pagina, dentro)
+                marcas = com.forge.pixpin.motor.Marcas.con(marcas, x, y, emoji, System.currentTimeMillis())
+                guardarLasMarcas()
             }
             if (compartiendo && cuantas > 0) {
                 val titulo = nombre.substringBeforeLast('.').ifBlank { "PDF" }

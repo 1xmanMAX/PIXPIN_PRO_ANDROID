@@ -84,7 +84,13 @@ object PdfDelProyecto {
                 context, bytes, pagina, escena,
                 pintada.width.toDouble(), pintada.height.toDouble(),
                 nombreDeLaCapa = "$NOMBRE_DE_CAPA ${pagina + 1}",
-                imageProvider = imageProvider,
+                // **Las fotos pegadas dentro de una anotación, también.** El proveedor recibe el
+                // `fileId`, y quien sabe su ruta es la escena: sin esto, rehacer el documento
+                // desde donde no hay proveedor —el lector, la reparación de una portada— dejaba
+                // las anotaciones con foto cojas. Ver [com.forge.pixpin.pin.ImageStore].
+                imageProvider = { id ->
+                    imageProvider(id) ?: escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                },
                 hojaPintada = pintada
             )
             if (!pintada.isRecycled) pintada.recycle()
@@ -130,10 +136,21 @@ object PdfDelProyecto {
      * vuelve a intentar; y si ni así, se pinta la copia limpia, que lo anotado va encima de todos
      * modos. El fondo no desaparece nunca mientras exista la copia.
      */
+    /**
+     * Lo mismo sin saber de qué proyecto es: lo busca por la ruta del documento. Es lo que usan
+     * las **miniaturas**, que solo tienen la ruta. Ver [paginaSana].
+     */
+    fun paginaSanaDe(context: Context, ruta: String, pagina: Int, ancho: Int): Bitmap? {
+        val proyecto = (context.applicationContext as? com.forge.pixpin.PixPinApp)
+            ?.proyectos?.proyectos?.value?.let { Proyectos.deEstePdf(it, ruta) }
+        return paginaSana(context, proyecto, ruta, pagina, ancho)
+    }
+
     fun paginaSana(context: Context, proyecto: Proyecto?, ruta: String, pagina: Int, ancho: Int): Bitmap? {
         PdfDoc.render(ruta, pagina, ancho)?.let { return it }
         val limpio = proyecto?.pdfLimpio?.takeIf { File(it).exists() } ?: return null
         runCatching { File(limpio).copyTo(File(ruta), overwrite = true) }
+        // Con las fotos pegadas dentro: rehacer sin ellas dejaría las anotaciones cojas.
         rehacer(context, proyecto)
         return PdfDoc.render(ruta, pagina, ancho) ?: PdfDoc.render(limpio, pagina, ancho)
     }
