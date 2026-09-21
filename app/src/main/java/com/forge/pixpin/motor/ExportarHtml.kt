@@ -820,6 +820,16 @@ object ExportarHtml {
         html.presentando #arriba,
         html.presentando #barra,html.presentando #pizarra>*:not(#presentacion):not(#paleta),html.presentando #indice-fijo,
           html.presentando #estado,html.presentando #cajon,html.presentando #aviso{display:none!important}
+        #impresion{display:none}
+        html.presentando .marcos{display:none}
+        #elegir-marcos{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35)}
+        #elegir-marcos .caja{background:var(--vidrio);color:var(--tinta);border:1px solid var(--filete);border-radius:18px;
+          padding:16px 18px;min-width:240px;max-width:88vw;max-height:80vh;overflow:auto;
+          -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);font:15px system-ui,sans-serif}
+        #elegir-marcos label{display:flex;gap:10px;align-items:center;padding:7px 0;cursor:pointer}
+        #elegir-marcos .fila{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+        #elegir-marcos button{all:unset;cursor:pointer;padding:8px 14px;border-radius:12px;border:1px solid var(--filete)}
+        #elegir-marcos button[data-a=si]{background:#e53935;color:#fff;border-color:#e53935}
         /* **Imprimir**: una hoja por página, sin mandos. */
         @media print{
           @page{margin:10mm}
@@ -830,6 +840,13 @@ object ExportarHtml {
             width:100%!important;height:auto!important;page-break-after:always;break-after:page;overflow:visible!important}
           #lienzo .hoja>svg{width:100%!important;height:auto!important;max-height:95vh}
           html.imprimir-una .hoja:not(.a-imprimir){display:none!important}
+          /* Marco a marco: cada uno, una página. Ver `imprimirMarcos`. */
+          html.imprimir-marcos #lienzo{display:none!important}
+          html.imprimir-marcos #impresion{display:block!important}
+          #impresion .pagina{page-break-after:always;break-after:page}
+          #impresion .pagina:last-child{page-break-after:auto;break-after:auto}
+          #impresion svg{width:100%!important;height:auto!important;max-height:95vh;display:block}
+          .marcos,#elegir-marcos{display:none!important}
           .hoja:last-child{page-break-after:auto;break-after:auto}
         }
     """.trimIndent()
@@ -2176,7 +2193,65 @@ if(pastilla){
 // ---- Imprimir (14-sep-2026) ----
 // El diálogo del navegador, con el papel que se elija; la hoja de estilo de impresión pone
 // una hoja por página. Con varias hojas se pregunta si todas o solo la que se mira.
+// **Los marcos del lienzo son sus páginas** (21-sep-2026). El lienzo entero trae sus marcos
+// en `g.marcos`; al imprimir se pregunta cuáles —por número— y cada uno sale en su hoja,
+// encuadrado, en vez de todo el lienzo encogido en una.
+function marcosDe(d){ return d?[].slice.call(d.querySelectorAll('svg g.marcos .marco')):[]; }
+function quitarImpresion(){ var v=id('impresion'); if(v) v.remove(); raiz.classList.remove('imprimir-marcos'); }
+function imprimirMarcos(d, cuales, entero){
+  quitarImpresion();
+  var svg=d.querySelector('svg'); if(!svg) return;
+  var caja=document.createElement('div'); caja.id='impresion';
+  function pagina(vb){
+    var s=svg.cloneNode(true), g=s.querySelector('g.marcos');
+    if(g) g.remove();
+    s.removeAttribute('width'); s.removeAttribute('height'); s.removeAttribute('style');
+    s.setAttribute('viewBox',vb); s.setAttribute('preserveAspectRatio','xMidYMid meet');
+    var p=document.createElement('div'); p.className='pagina'; p.appendChild(s); caja.appendChild(p);
+  }
+  if(entero){ var b=svg.getBBox(); pagina([b.x,b.y,b.width,b.height].join(' ')); }
+  cuales.forEach(function(m){
+    pagina([m.getAttribute('x'),m.getAttribute('y'),m.getAttribute('width'),m.getAttribute('height')].join(' '));
+  });
+  if(!caja.children.length) return;
+  document.body.appendChild(caja);
+  raiz.classList.add('imprimir-marcos');
+  setTimeout(function(){ window.print(); },80);
+}
+function elegirMarcos(d, ms){
+  var v=document.createElement('div'); v.id='elegir-marcos';
+  var caja=document.createElement('div'); caja.className='caja';
+  var t=document.createElement('b'); t.textContent='Qué imprimir'; caja.appendChild(t);
+  function fila(texto, puesta, clave){
+    var l=document.createElement('label'), c=document.createElement('input');
+    c.type='checkbox'; c.checked=puesta; c.dataset.k=clave;
+    l.appendChild(c); l.appendChild(document.createTextNode(texto)); caja.appendChild(l);
+  }
+  fila('Lienzo completo', false, 'entero');
+  ms.forEach(function(m,i){
+    var n=m.getAttribute('data-nombre');
+    fila('Página '+(i+1)+(n?' · '+n:''), true, String(i));
+  });
+  var f=document.createElement('div'); f.className='fila';
+  f.innerHTML='<button data-a="no">Cancelar</button><button data-a="si">Imprimir</button>';
+  caja.appendChild(f); v.appendChild(caja); document.body.appendChild(v);
+  v.addEventListener('click',function(e){
+    var a=e.target&&e.target.dataset?e.target.dataset.a:null;
+    if(e.target===v||a==='no'){ v.remove(); return; }
+    if(a!=='si') return;
+    var entero=false, cuales=[];
+    [].forEach.call(caja.querySelectorAll('input'),function(c){
+      if(!c.checked) return;
+      if(c.dataset.k==='entero') entero=true; else cuales.push(ms[+c.dataset.k]);
+    });
+    v.remove();
+    if(entero||cuales.length) imprimirMarcos(d, cuales, entero);
+  });
+}
 function imprimir(){
+  quitarImpresion();
+  var losMarcos=(actual&&actual.tipo==='dibujo')?marcosDe(hojas[iHoja]):[];
+  if(losMarcos.length){ elegirMarcos(hojas[iHoja], losMarcos); return; }
   hojas.forEach(function(d){d.classList.remove('a-imprimir');});
   raiz.classList.remove('imprimir-una');
   if(pagina.length>1&&!confirm('¿Imprimir todas las hojas?\n\nAceptar: todas · Cancelar: solo la que estás viendo')){
@@ -2243,7 +2318,7 @@ function imprimirZona(c){
   setTimeout(function(){ window.print(); },80);
 }
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&marcando){ dejarDeMarcar(); estado.textContent=''; } });
-addEventListener('afterprint',function(){ raiz.classList.remove('imprimir-una'); if(actual&&actual.medir) actual.medir(); });
+addEventListener('afterprint',function(){ quitarImpresion(); raiz.classList.remove('imprimir-una'); if(actual&&actual.medir) actual.medir(); });
 
 // La dirección se lee antes de ir a la primera, que la reescribe.
 var alAbrir=location.hash||'';

@@ -401,6 +401,16 @@ class Sesion private constructor(
     val puertoDelOtro: Int = 0
 ) {
     /** Los proyectos que el otro aparato tiene borrados. Ver [LapidaDeChat]. */
+    /**
+     * **Lo mío manda** (21-sep-2026): sincronizar de una sola dirección, para los casos raros. El
+     * usuario vació su portátil creyendo que el teléfono lo volvería a llenar, y juntar —que es
+     * lo normal— hizo lo contrario: los borrados del portátil eran lo más reciente y ganaron.
+     * Con esto puesto, **aquí no se borra ni se cambia nada**: mis mensajes vivos vuelven al otro
+     * aunque allí estén borrados, lo cambiado en los dos queda como aquí, el proyecto es el mío
+     * y mis archivos pisan a los suyos. Lo que solo tiene el otro se conserva y se trae.
+     */
+    var loMioManda = false
+
     fun lapidas(): List<LapidaDeChat> {
         Protocolo.enviar(canal, Protocolo.Peticion("lapidas"))
         return Protocolo.leerRespuesta(canal).lapidas
@@ -507,6 +517,11 @@ class Sesion private constructor(
             is Diferencia.Paso.Fusionar -> fusionar += p.sena
         }
         val chat = prep.chat
+        // Lo mío manda: lo cambiado en los dos no se junta, se manda; y lo borrado allí que aquí
+        // sigue vivo no se borra aquí: vuelve allí. Ver [loMioManda].
+        if (loMioManda) { mandar += fusionar; fusionar.clear() }
+        val vuelven = if (loMioManda) traer.filter { prep.suyos[it]?.borrado == true && prep.mios[it]?.borrado == false } else emptyList()
+        if (vuelven.isNotEmpty()) { traer -= vuelven.toSet(); mandar += vuelven }
         // Lo que me traigo: los vivos se piden; los borrados allí se borran aquí.
         val traerVivos = traer.filter { prep.suyos[it]?.borrado == false }
         val borrarAqui = traer.filter { prep.suyos[it]?.borrado == true }
@@ -546,7 +561,7 @@ class Sesion private constructor(
         val mio = disco.leerProyectos().firstOrNull { it.id == chat }
         val suyo = disco.proyectoDe(prep.suyoProyecto)
         var junto = mio ?: suyo
-        if (mio != null && suyo != null && mio != suyo) {
+        if (mio != null && suyo != null && mio != suyo && !loMioManda) {
             Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
             val deAlli = Protocolo.leerRespuesta(canal).archivos.associateBy { it.ruta }
             val deAqui = misArchivos(chat)
@@ -661,6 +676,8 @@ class Sesion private constructor(
             val suyo = prep.suyos[rel]
             val acordado = prep.acordado[rel]
             val puesto: String? = when {
+                // Lo mío manda: lo que tengo yo, va; solo se trae lo que aquí no existe.
+                loMioManda && mio != null -> mandarArchivo(rel, suyo, acordado, avance, hecho)
                 p is Diferencia.Paso.Fusionar && texto && mio != null && suyo != null -> fusionarArchivo(prep, rel, mio, suyo, acordado, cuenta, hecho)
                 // Un PDF o una foto no se juntan: se queda la versión tocada más tarde (la otra sigue en la copia).
                 p is Diferencia.Paso.Fusionar -> if ((mio?.tocado ?: 0L) >= (suyo?.tocado ?: 0L) - desfase) mandarArchivo(rel, suyo, acordado, avance, hecho) else traerArchivo(rel, mio, acordado, avance, hecho)

@@ -94,6 +94,11 @@ class CopiasActivity : ComponentActivity() {
         val sueltos by produceState(emptyList<Copias.Suelto>(), vuelta) {
             value = withContext(Dispatchers.IO) { copias.lienzosSueltos() }
         }
+        val borrados by produceState(emptyList<Copias.Copia>(), vuelta) {
+            value = withContext(Dispatchers.IO) { copias.proyectosBorrados() }
+        }
+        // Los lienzos de un proyecto borrado vuelven **con él**, no sueltos a otro proyecto.
+        val sueltosDeVerdad = sueltos.filter { s -> borrados.none { it.chat == s.deProyecto } }
         var aRestaurar by remember { mutableStateOf<Copias.Copia?>(null) }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -114,18 +119,62 @@ class CopiasActivity : ComponentActivity() {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (borrados.isNotEmpty()) {
+                        item {
+                            Titulo(
+                                "Proyectos borrados",
+                                "Se recuperan enteros: con su nombre, sus hojas en su orden, su PDF y su chat. Y dejan de estar borrados, así que sincronizar no los vuelve a quitar."
+                            )
+                        }
+                        items(borrados, key = { "b-" + it.chat }) { c ->
+                            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("«${c.nombre}»", style = MaterialTheme.typography.bodyLarge, maxLines = 1)
+                                        Text(
+                                            "${c.hojas} hojas · ${c.mensajes.size} mensajes · copia de ${cuando(c.cuando)}",
+                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Button(onClick = {
+                                        alcance.launch {
+                                            val bien = withContext(Dispatchers.IO) { copias.restaurar(c) }
+                                            app.proyectos.recargar()
+                                            Toast.makeText(
+                                                this@CopiasActivity,
+                                                if (bien) "«${c.nombre}» ha vuelto entero" else "No se pudo recuperar «${c.nombre}»",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            vuelta++
+                                        }
+                                    }) { Text("Recuperar") }
+                                }
+                            }
+                        }
+                        if (borrados.size > 1) item {
+                            OutlinedButton(onClick = {
+                                alcance.launch {
+                                    val cuantos = withContext(Dispatchers.IO) { borrados.count { copias.restaurar(it) } }
+                                    app.proyectos.recargar()
+                                    Toast.makeText(this@CopiasActivity, "Recuperados $cuantos de ${borrados.size} proyectos", Toast.LENGTH_SHORT).show()
+                                    vuelta++
+                                }
+                            }, modifier = Modifier.fillMaxWidth()) { Text("Recuperar todos") }
+                        }
+                    }
                     item {
                         Titulo(
                             "Lienzos sin proyecto",
-                            if (sueltos.isEmpty()) "No hay ninguno: todos los lienzos del teléfono están en algún proyecto."
-                            else "Siguen en el teléfono pero no están en ningún proyecto. Tócalo para verlo; «Devolver» lo pone otra vez en " +
-                                (proyecto?.let { "«${it.nombre}»" } ?: "su proyecto") + "."
+                            if (sueltosDeVerdad.isEmpty()) "No hay ninguno: todos los lienzos del teléfono están en algún proyecto."
+                            else "Siguen en el teléfono pero no están en ningún proyecto. Tócalo para verlo; «Devolver» lo pone otra vez en su proyecto de siempre" +
+                                (proyecto?.let { " (o en «${it.nombre}», si ya no se sabe cuál era)" } ?: "") + "."
                         )
                     }
-                    items(sueltos, key = { "s-" + it.dibujo }) { s ->
-                        FilaSuelta(s, destino = proyecto?.nombre ?: s.deProyecto?.let { app.proyectos.porId(it)?.nombre }) {
+                    items(sueltosDeVerdad, key = { "s-" + it.dibujo }) { s ->
+                        // **A su proyecto de siempre**, si sigue existiendo; al que está abierto, solo si no.
+                        FilaSuelta(s, destino = s.deProyecto?.let { app.proyectos.porId(it)?.nombre } ?: proyecto?.nombre) {
                             alcance.launch {
-                                val donde = proyecto ?: s.deProyecto?.let { app.proyectos.porId(it) }
+                                val donde = s.deProyecto?.let { app.proyectos.porId(it) } ?: proyecto
                                 if (donde == null) {
                                     Toast.makeText(this@CopiasActivity, "Abre esta pantalla desde el proyecto al que quieres devolverlo", Toast.LENGTH_LONG).show()
                                     return@launch

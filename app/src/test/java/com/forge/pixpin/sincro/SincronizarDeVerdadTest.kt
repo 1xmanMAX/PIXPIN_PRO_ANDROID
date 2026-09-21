@@ -123,10 +123,12 @@ class SincronizarDeVerdadTest {
     private fun sincronizar(
         chats: List<String> = listOf(Disco.GENERAL),
         antesDeCerrar: () -> Unit = {},
+        loMioManda: Boolean = false,
         bytes: (Long) -> Unit = {}
     ): Sesion.Hecho {
         val hecho = Sesion.Hecho()
         conectado(telefono, tableta) { s ->
+            s.loMioManda = loMioManda
             for (chat in chats) {
                 val prep = s.preparar(chat)
                 s.aplicar(prep, hecho)
@@ -384,6 +386,38 @@ class SincronizarDeVerdadTest {
         assertTrue(textoDelDibujo(telefono, "d1").contains("999"))
         assertTrue("la segunda vuelta mueve $segunda bytes y la primera $primera", segunda * 3 < primera)
         assertTrue(hecho.ahorrados > 0)
+    }
+
+    /**
+     * El caso del usuario (21-sep-2026): vació un aparato creyendo que el otro lo volvería a
+     * llenar. Juntando, lo borrado —que es lo más reciente— gana; con «lo mío manda», el que
+     * manda no pierde nada y al otro le vuelve el proyecto entero, ya sin su marca de borrado.
+     */
+    @Test
+    fun `con lo mio manda, lo que el otro borro le vuelve entero y aqui no se borra nada`() {
+        emparejar()
+        dibujo(telefono, "d1", "hoja uno")
+        proyecto(telefono, Proyecto("pr-1", "Tesis", hojas = listOf(Hoja("h1", "Planta", dibujo = "d1")), tocado = 5))
+        mensaje(telefono, "b1", "Planta", clase = Clase.DIBUJO, proyecto = "pr-1", referencia = "d1")
+        mensaje(telefono, "b2", "una nota", proyecto = "pr-1")
+        sincronizar(listOf("pr-1"))
+        assertEquals("Tesis", tableta.leerProyectos().single().nombre)
+
+        // La tableta lo borra todo, más tarde que cualquier cambio del teléfono.
+        tableta.borrarChat("pr-1", "Antes de borrarlo", cuando = reloj++)
+        assertTrue(tableta.leerProyectos().isEmpty())
+        assertNotNull(tableta.lapidaDe("pr-1"))
+        val antes = senas(telefono, "pr-1")
+
+        sincronizar(listOf("pr-1"), loMioManda = true)
+
+        assertEquals("Tesis", telefono.leerProyectos().single().nombre)
+        assertEquals(antes, senas(telefono, "pr-1"))
+        assertEquals("Tesis", tableta.leerProyectos().single().nombre)
+        assertEquals(listOf("h1"), tableta.leerProyectos().single().hojas.map { it.id })
+        assertEquals(antes, senas(tableta, "pr-1"))
+        assertTrue(textoDelDibujo(tableta, "d1").contains("hoja uno"))
+        assertNull(tableta.lapidaDe("pr-1"))
     }
 
     @Test

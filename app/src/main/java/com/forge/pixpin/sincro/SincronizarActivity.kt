@@ -109,14 +109,33 @@ class SincronizarActivity : ComponentActivity() {
     private sealed interface Fase {
         data object Nada : Fase
         data class Conectando(val texto: String) : Fase
-        data class Eligiendo(val otro: Aparato, val filas: List<Fila>, val listo: CompletableDeferred<Set<String>?>) : Fase
+        data class Eligiendo(
+            val otro: Aparato, val filas: List<Fila>, val listo: CompletableDeferred<Set<String>?>,
+            /** **Lo mío manda**: en vez de juntar, este aparato pisa al otro. Ver [Sesion.loMioManda]. */
+            val loMioManda: androidx.compose.runtime.MutableState<Boolean> = mutableStateOf(false),
+            /** Los proyectos que una vuelta normal borraría allí. */
+            val seBorranAlli: List<String> = emptyList()
+        ) : Fase
         data class Trabajando(val texto: String, val hechos: Long = 0, val total: Long = 0, val velocidad: String = "") : Fase
         data class Terminado(val titulo: String, val texto: String, val aviso: String? = null) : Fase
         data class Fallo(val texto: String) : Fase
     }
 
     /** Un chat en la lista de elegir: dónde está y cuándo se tocó en cada lado. */
-    private data class Fila(val id: String, val nombre: String, val aqui: Chat?, val alli: Chat?, val marcado: Boolean)
+    private data class Fila(
+        val id: String, val nombre: String, val aqui: Chat?, val alli: Chat?, val marcado: Boolean,
+        /** Borrado en el otro y aquí sin tocar desde entonces: una vuelta normal lo borra aquí. */
+        val seBorraAqui: Boolean = false
+    )
+
+    /** Lo que hay que hacer con los proyectos borrados, **sin hacerlo todavía**. Ver [planDeBorrados]. */
+    private class Borrados(
+        val alla: List<String>, val aqui: List<String>, val levantar: List<String>,
+        /** Borrados en los dos, o aquí y que el otro no tiene: no hay nada que sincronizar. */
+        val yaFuera: Set<String>,
+        /** Todos los que tienen lápida aquí y el otro conserva. */
+        val miosConLapida: List<String>
+    )
 
     /** Un aparato del grupo en la lista. */
     private data class Miembro(val id: String, val nombre: String, val letra: String?, val host: String?, val puerto: Int, val cerca: Boolean)
@@ -323,33 +342,57 @@ class SincronizarActivity : ComponentActivity() {
      * Devuelve los chats que quedan borrados, que son los que **no** hay que sincronizar: hacerlo
      * los resucitaría por sus mensajes.
      */
-    private fun resolverBorrados(
-        sesion: Sesion,
-        mios: Map<String, Chat>,
-        suyos: Map<String, Chat>
-    ): Set<String> {
+    /**
+     * **Primero se decide, luego se pregunta, y solo entonces se borra** (21-sep-2026). Antes se
+     * borraba aquí mismo, **antes de enseñar la lista de qué sincronizar**: el usuario vació su
+     * portátil pensando que el teléfono lo volvería a llenar, abrió sincronizar, y lo que pasó fue
+     * que se le borró todo el teléfono sin que nadie le preguntara. Ahora esto solo hace la
+     * cuenta; la lista avisa de lo que se va a borrar, y [ejecutarBorrados] lo hace después, según
+     * se haya elegido juntar o «lo mío manda».
+     */
+    private fun planDeBorrados(sesion: Sesion, mios: Map<String, Chat>, suyos: Map<String, Chat>): Borrados {
         val misLapidas = disco.lapidas().associateBy { it.chat }
         val susLapidas = sesion.lapidas().associateBy { it.chat }
-        if (misLapidas.isEmpty() && susLapidas.isEmpty()) return emptySet()
-        val fuera = HashSet<String>()
+        val alla = ArrayList<String>(); val aqui = ArrayList<String>(); val levantar = ArrayList<String>()
+        val yaFuera = HashSet<String>(); val miosConLapida = ArrayList<String>()
         // El reloj del otro puede ir desviado: se compara en la misma hora que la de aquí.
         fun suHora(t: Long) = t - sesion.desfase
         for ((chat, lapida) in misLapidas) {
             val suyo = suyos[chat]
-            if (suyo == null) { fuera += chat; continue }
-            if (suHora(suyo.tocado) > lapida.cuando) {
-                disco.quitarLapida(chat)
-            } else {
-                fase = Fase.Trabajando("Borrando «${suyo.nombre}» en ${sesion.otro.nombre}…")
-                sesion.borrarAlla(chat)
-                fuera += chat
-            }
+            if (suyo == null) { yaFuera += chat; continue }
+            miosConLapida += chat
+            if (suHora(suyo.tocado) > lapida.cuando) levantar += chat else alla += chat
         }
         for ((chat, lapida) in susLapidas) {
-            if (chat in misLapidas) { fuera += chat; continue }
+            if (chat in misLapidas) { yaFuera += chat; continue }
             val mio = mios[chat] ?: continue
             if (mio.tocado > suHora(lapida.cuando)) continue
-            fase = Fase.Trabajando("Borrando «${mio.nombre}», borrado en ${sesion.otro.nombre}…")
+            aqui += chat
+        }
+        return Borrados(alla, aqui, levantar, yaFuera, miosConLapida)
+    }
+
+    /**
+     * Hace lo decidido y devuelve los chats que quedan borrados —los que **no** hay que sincronizar,
+     * que sus mensajes los resucitarían—. Con [loMioManda], **aquí no se borra nada**: lo borrado
+     * en el otro y vivo aquí se le vuelve a mandar entero (recibir el proyecto le levanta la
+     * lápida), y lo borrado aquí se borra allí aunque allí lo tocaran después.
+     */
+    private fun ejecutarBorrados(
+        sesion: Sesion, plan: Borrados, mios: Map<String, Chat>, suyos: Map<String, Chat>, loMioManda: Boolean,
+        /** Lo marcado: un proyecto desmarcado en la lista no se borra aquí. */
+        elegidos: Set<String>
+    ): Set<String> {
+        val fuera = HashSet(plan.yaFuera)
+        val alla = if (loMioManda) plan.miosConLapida else plan.alla
+        if (!loMioManda) plan.levantar.forEach { disco.quitarLapida(it) }
+        for (chat in alla) {
+            fase = Fase.Trabajando("Borrando «${suyos[chat]?.nombre ?: chat}» en ${sesion.otro.nombre}…")
+            sesion.borrarAlla(chat)
+            fuera += chat
+        }
+        if (!loMioManda) for (chat in plan.aqui.filter { it in elegidos }) {
+            fase = Fase.Trabajando("Borrando «${mios[chat]?.nombre ?: chat}», borrado en ${sesion.otro.nombre}…")
             disco.borrarChat(chat, "Antes de borrarlo, borrado en ${sesion.otro.nombre}", aparato = sesion.otro.id)
             fuera += chat
         }
@@ -404,23 +447,30 @@ class SincronizarActivity : ComponentActivity() {
                 val mios = disco.chats().associateBy { it.id }
                 val suyos = sesion.catalogo().associateBy { it.id }
                 val antes = disco.elegidos(otro.id)
-                val borrados = resolverBorrados(sesion, mios, suyos)
-                val ids = (mios.keys + suyos.keys).distinct().filter { it !in borrados }
-                val filas = ids.map { id ->
+                val plan = planDeBorrados(sesion, mios, suyos)
+                val candidatos = (mios.keys + suyos.keys).distinct().filter { it !in plan.yaFuera && it !in plan.miosConLapida || it in plan.levantar }
+                val filas = candidatos.map { id ->
                     val m = mios[id]; val s = suyos[id]
-                    Fila(id, (m ?: s)!!.nombre, m, s, antes?.contains(id) ?: true)
+                    Fila(id, (m ?: s)!!.nombre, m, s, antes?.contains(id) ?: true, seBorraAqui = id in plan.aqui)
                 }
                 val elegidos: Set<String>
+                var loMioManda = false
                 if (preguntar) {
                     val eleccion = CompletableDeferred<Set<String>?>()
-                    fase = Fase.Eligiendo(otro, filas, eleccion)
+                    val pregunta = Fase.Eligiendo(otro, filas, eleccion, seBorranAlli = plan.alla.map { suyos[it]?.nombre ?: it })
+                    fase = pregunta
                     val puesto = eleccion.await()
                     if (puesto == null) { sesion.adios(); return Vuelta(otro.nombre, 0, 0.0, emptyList(), cancelada = true) }
                     elegidos = puesto
-                    disco.guardarElegidos(otro.id, elegidos)
+                    loMioManda = pregunta.loMioManda.value
+                    // Lo mío manda es cosa de una vez: lo marcado entonces no se recuerda como lo de siempre.
+                    if (!loMioManda) disco.guardarElegidos(otro.id, elegidos)
                 } else {
-                    elegidos = antes ?: ids.toSet()
+                    elegidos = antes ?: candidatos.toSet()
                 }
+                sesion.loMioManda = loMioManda
+                val borrados = ejecutarBorrados(sesion, plan, mios, suyos, loMioManda, elegidos)
+                val ids = candidatos.filter { it !in borrados }
 
                 val empezo = System.currentTimeMillis()
                 for (chat in ids.filter { it in elegidos }) {
@@ -581,6 +631,21 @@ class SincronizarActivity : ComponentActivity() {
 
             Titulo("Tus aparatos")
             if (identidad.enGrupo) ConGrupo(identidad) else SinGrupo()
+
+            // **La papelera, a mano y sin pasar por un proyecto** (21-sep-2026): se abría desde el
+            // menú de un proyecto, y si lo borrado eran todos no quedaba por dónde entrar.
+            Titulo("Papelera")
+            Caja {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Proyectos borrados, lienzos sin proyecto y cómo estaba todo antes de cada sincronización.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { CopiasActivity.abrir(this@SincronizarActivity, null) }) { Text("Abrir") }
+                }
+            }
 
             val registro by Presencia.registro.collectAsState()
             val atendiendo by Presencia.atendiendo.collectAsState()
@@ -930,6 +995,8 @@ class SincronizarActivity : ComponentActivity() {
                             Text(fila.nombre, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val gris = MaterialTheme.colorScheme.onSurfaceVariant
                             val (texto, color) = when {
+                                fila.seBorraAqui && f.loMioManda.value -> "Borrado en ${f.otro.nombre} · se le vuelve a mandar" to VERDE
+                                fila.seBorraAqui -> "Borrado en ${f.otro.nombre} · SE BORRARÁ AQUÍ (queda copia)" to ROJO
                                 delOtro == null -> "Solo aquí · se copiará a $otroNombre" to gris
                                 suyo.tocado > delOtro.tocado -> "Más reciente" to VERDE
                                 suyo.tocado < delOtro.tocado -> "Anterior" to gris
@@ -942,8 +1009,25 @@ class SincronizarActivity : ComponentActivity() {
             }
             HorizontalDivider()
             // **Nadie manda** (15-sep-2026): lo de cada lado se suma y lo cambiado en los dos se junta.
+            // Salvo que se pida, para los casos raros (21-sep-2026): vacié un aparato y quiero
+            // que el otro lo vuelva a llenar, no que se vacíe también.
+            DosModos(
+                "Juntar", "Lo mío manda", esLaIzquierda = !f.loMioManda.value,
+                onElegir = { izquierda -> f.loMioManda.value = !izquierda },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            val seBorranAqui = f.filas.filter { it.seBorraAqui && marcados[it.id] == true }
+            if (!f.loMioManda.value && (seBorranAqui.isNotEmpty() || f.seBorranAlli.isNotEmpty())) Text(
+                listOfNotNull(
+                    seBorranAqui.takeIf { it.isNotEmpty() }?.let { l -> "Se borrará AQUÍ, porque se borró en ${f.otro.nombre}: " + l.joinToString { "«${it.nombre}»" } + ". Desmárcalo para dejarlo, o elige «Lo mío manda» para volver a mandárselo." },
+                    f.seBorranAlli.takeIf { it.isNotEmpty() }?.let { l -> "Se borrará en ${f.otro.nombre}, porque lo borraste aquí: " + l.joinToString { "«$it»" } + "." }
+                ).joinToString("\n"),
+                style = MaterialTheme.typography.bodySmall, color = ROJO, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
             Text(
-                "Lo que cambió en los dos se junta: figura a figura, celda a celda, párrafo a párrafo. Si los dos tocaron lo mismo, gana el último cambio, y lo de antes queda en «Copias de seguridad».",
+                if (f.loMioManda.value) "De una sola dirección: lo de ${identidad.yo.nombre} pisa a ${f.otro.nombre}. Aquí no se borra ni se cambia nada; allí, lo que sea distinto queda como aquí y lo que borraron vuelve. Lo que solo tenga ${f.otro.nombre} se conserva. Queda copia de lo pisado."
+                else "Lo que cambió en los dos se junta: figura a figura, celda a celda, párrafo a párrafo. Si los dos tocaron lo mismo, gana el último cambio, y lo de antes queda en «Copias de seguridad».",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
             )
@@ -955,7 +1039,7 @@ class SincronizarActivity : ComponentActivity() {
                 Button(enabled = cuantos > 0, onClick = { f.listo.complete(marcados.filterValues { it }.keys.toSet()) }, modifier = Modifier.height(48.dp)) {
                     Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Sincronizar $cuantos")
+                    Text(if (f.loMioManda.value) "Mandar $cuantos" else "Sincronizar $cuantos")
                 }
             }
         }

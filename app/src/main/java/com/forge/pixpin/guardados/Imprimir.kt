@@ -21,6 +21,7 @@ import com.forge.pixpin.motor.Scene
 import com.forge.pixpin.motor.encuadreEnPagina
 import com.forge.pixpin.motor.getCommonBounds
 import com.forge.pixpin.motor.getElementBounds
+import com.forge.pixpin.motor.isFrame
 import java.io.FileOutputStream
 
 /**
@@ -43,9 +44,17 @@ object Imprimir {
         actividad: Activity,
         escena: Scene,
         nombre: String,
-        imagenes: (String) -> Bitmap?
+        imagenes: (String) -> Bitmap?,
+        /** Con [marcos]: si además va el lienzo completo, en la primera hoja. */
+        entero: Boolean = false,
+        /** Los marcos elegidos, en su orden. Null: los que tengan algo, como siempre. */
+        marcos: List<Element>? = null
     ) {
-        val hojas = hojasDe(escena)
+        val hojas = if (marcos == null) hojasDe(escena) else {
+            val todo = escena.visible.filter { !it.isFrame || it.papel != null }
+            (if (entero && todo.isNotEmpty()) listOf(getCommonBounds(escena.visible) to todo) else emptyList()) +
+                marcos.map { m -> getElementBounds(m) to (listOfNotNull(m.takeIf { it.papel != null }) + escena.contenidoDe(m)) }
+        }
         if (hojas.isEmpty()) {
             android.widget.Toast.makeText(actividad, "No hay nada que imprimir", android.widget.Toast.LENGTH_SHORT).show()
             return

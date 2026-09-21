@@ -141,6 +141,9 @@ class Copias(private val disco: Disco) {
             }
             val mensajes = copia.mensajes.mapNotNull { runCatching { Disco.JSON.decodeFromString(Mensaje.serializer(), it) }.getOrNull() }
             disco.reponerMensajes(mensajes)
+            // **Si el proyecto estaba borrado, deja de estarlo** (21-sep-2026): con la lápida
+            // puesta, la siguiente sincronización lo volvía a borrar nada más recuperarlo.
+            disco.quitarLapida(copia.chat)
             copia.proyecto?.let { Proyectos.json.decodeFromString(Proyecto.serializer(), it) }?.let { deEntonces ->
                 val ahoraP = disco.leerProyectos().firstOrNull { it.id == deEntonces.id }
                 val usados = deEntonces.hojas.mapTo(HashSet()) { it.id }
@@ -152,6 +155,23 @@ class Copias(private val disco: Disco) {
             disco.avisar(Disco.Cambio.ARCHIVOS)
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * **Los proyectos borrados que se pueden recuperar enteros** (21-sep-2026): los que tienen
+     * copia y ya no están en la lista. De cada uno, su copia más completa —la de más hojas, y a
+     * igualdad la más nueva—: la de «antes de borrarlo» lo es casi siempre, pero si se borró dos
+     * veces la segunda copia puede ser de un proyecto ya a medias.
+     *
+     * El usuario recuperó un teléfono entero lienzo a lienzo con «Devolver», y todo cayó en un
+     * solo proyecto: faltaba esto, devolver **el proyecto**, con su nombre, su orden y su chat.
+     */
+    fun proyectosBorrados(): List<Copia> {
+        val vivos = disco.leerProyectos().mapTo(HashSet()) { it.id }
+        return todas().filter { it.proyecto != null && it.chat !in vivos }
+            .groupBy { it.chat }
+            .map { (_, suyas) -> suyas.maxWith(compareBy({ it.hojas }, { it.cuando })) }
+            .sortedByDescending { it.cuando }
     }
 
     fun borrar(copia: Copia) = synchronized(CERROJO) {

@@ -903,6 +903,51 @@ class DrawEditorActivity : ComponentActivity() {
         DrawEditorActivity.abrir(this, dibujo, ExcalidrawStore.rutaDe(this, dibujo), null, desdeProyecto = proyecto?.id)
     }
 
+    /** Eligiendo qué marcos se imprimen. Ver [QueImprimir]. */
+    private var eligiendoQueImprimir by mutableStateOf(false)
+
+    /**
+     * **Qué se imprime de un lienzo con marcos** (21-sep-2026). El usuario: «los frames tienen que
+     * ponerse como si fueran páginas de un PDF… que aparezcan todos los frames ahí, por número».
+     * Salen todos, numerados como en el lienzo —de arriba abajo—, marcados de entrada; y el
+     * lienzo completo como una opción más, sin marcar.
+     */
+    @Composable
+    private fun QueImprimir() {
+        val hojas = remember { hojasEnOrden(controller.scene) }
+        var entero by remember { mutableStateOf(false) }
+        var puestas by remember { mutableStateOf(hojas.map { it.id }.toSet()) }
+        AlertDialog(
+            onDismissRequest = { eligiendoQueImprimir = false },
+            title = { Text("Qué imprimir") },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    Row(Modifier.fillMaxWidth().clickable { entero = !entero }, verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(checked = entero, onCheckedChange = { entero = it })
+                        Text("Lienzo completo")
+                    }
+                    hojas.forEachIndexed { i, m ->
+                        val puesta = m.id in puestas
+                        Row(Modifier.fillMaxWidth().clickable { puestas = if (puesta) puestas - m.id else puestas + m.id }, verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Checkbox(checked = puesta, onCheckedChange = { puestas = if (it) puestas + m.id else puestas - m.id })
+                            Text("Página ${i + 1}" + (m.name?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), maxLines = 1)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = entero || puestas.isNotEmpty(), onClick = {
+                    eligiendoQueImprimir = false
+                    com.forge.pixpin.guardados.Imprimir.lienzo(
+                        this, controller.scene, nombreDeArchivo(), ::bitmapDe,
+                        entero = entero, marcos = hojas.filter { it.id in puestas }
+                    )
+                }) { Text("Imprimir") }
+            },
+            dismissButton = { TextButton(onClick = { eligiendoQueImprimir = false }) { Text("Cancelar") } }
+        )
+    }
+
     /** Lo que se está compartiendo, con la hoja abierta. */
     private var compartiendo by mutableStateOf<com.forge.pixpin.ui.Compartible?>(null)
 
@@ -2320,6 +2365,7 @@ class DrawEditorActivity : ComponentActivity() {
             }
 
             compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
+            if (eligiendoQueImprimir) QueImprimir()
             if (pidiendoFuncionesWeb) {
                 val marcadas = ajustes.funcionesWeb ?: ExportarHtml.Opciones.NOMBRES.toSet()
                 DialogoDeFuncionesWeb(
@@ -4870,6 +4916,8 @@ class DrawEditorActivity : ComponentActivity() {
         val ruta = pdfDeFondo
         val pintada = fondo
         if (ruta == null || pintada == null) {
+            // **Con marcos, se pregunta cuáles**: son las páginas del lienzo. Ver [QueImprimir].
+            if (hojasEnOrden(controller.scene).isNotEmpty()) { eligiendoQueImprimir = true; return }
             com.forge.pixpin.guardados.Imprimir.lienzo(this, controller.scene, nombreDeArchivo(), ::bitmapDe)
             return
         }
@@ -5293,7 +5341,7 @@ class DrawEditorActivity : ComponentActivity() {
             val fina = if (plano != null) null else pdfDeFondo?.takeIf { paginaDeFondo >= 0 }
                 ?.let { PdfDoc.paraLaWeb(it, paginaDeFondo) }
             val svg = DrawSvg.aTexto(
-                this, escena, ::bitmapDe, papel, fina, papelAparte = plano != null
+                this, escena, ::bitmapDe, papel, fina, papelAparte = plano != null, marcosComoPaginas = true
             ) ?: return@exportando null
             listOf(ExportarHtml.HojaWeb.Dibujo(if (deMarcos.isEmpty()) "" else "Lienzo", svg, fondo, plano, escala = escena.escala))
         } else emptyList()

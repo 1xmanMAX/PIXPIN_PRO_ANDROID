@@ -171,6 +171,14 @@ object DrawSvg {
          */
         soloEstaHoja: Element? = null,
         /**
+         * **Los marcos, a la vista y con su número** (21-sep-2026). Un marco es la hoja, no una
+         * raya, y por eso no se dibujaba; pero en la página web del lienzo entero hacen falta:
+         * el usuario no veía sus marcos y, sobre todo, **imprimir** no tenía de dónde sacar las
+         * páginas. Van en un grupo aparte (`g.marcos`), que el visor lee para imprimir marco a
+         * marco y que no sale en el papel. Solo con el lienzo entero.
+         */
+        marcosComoPaginas: Boolean = false,
+        /**
          * **El papel va aparte y no como imagen dentro del SVG.**
          *
          * Con un plano leído como geometría (ver `PlanoWeb`), el papel lo pinta el visor en su
@@ -248,6 +256,19 @@ object DrawSvg {
         // color del lienzo que lo tapa todo; con el papel aparte —el plano pintado debajo, en
         // su propio lienzo— ese rectángulo tapaba justo el plano, y la página exportada salía
         // en blanco con solo las anotaciones encima. Ver [papelAparte] y `VisorPlano`.
+        if (marcosComoPaginas && soloEstaHoja == null && scene.marco == null) {
+            val hojas = hojasEnOrden(scene).filter { getElementBounds(it).let { c -> c.width > 0 && c.height > 0 } }
+            if (hojas.isNotEmpty()) {
+                cuerpo.append("<g class=\"marcos\" fill=\"none\" stroke=\"#9a9aa6\" stroke-width=\"2\">\n")
+                for ((i, m) in hojas.withIndex()) {
+                    val c = getElementBounds(m)
+                    cuerpo.append("<rect class=\"marco\" data-n=\"${i + 1}\" data-nombre=\"${Svg.escapar(m.name.orEmpty())}\" ")
+                    cuerpo.append("x=\"${Svg.num(c.x1)}\" y=\"${Svg.num(c.y1)}\" width=\"${Svg.num(c.width)}\" height=\"${Svg.num(c.height)}\" rx=\"8\"/>\n")
+                    cuerpo.append("<text x=\"${Svg.num(c.x2 - 10)}\" y=\"${Svg.num(c.y2 - 10)}\" text-anchor=\"end\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#9a9aa6\" stroke=\"none\">${i + 1}</text>\n")
+                }
+                cuerpo.append("</g>\n")
+            }
+        }
         val fondo = if (papelAparte) null else Svg.hex(parseColor(scene.backgroundColor))
         // Los glifos, delante: un `<use>` puede apuntar a algo que venga después, pero hay
         // lectores de SVG que agradecen encontrarlo antes.

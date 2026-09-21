@@ -211,7 +211,7 @@ object ExportarProyectoWeb {
                     val escena = escenaDe(hoja.dibujo!!) ?: continue
                     val marco = p.marco?.let { id -> escena.marcos.firstOrNull { it.id == id } }
                     val svg = DrawSvg.aTexto(
-                        context, escena, proveedorDe(escena), soloEstaHoja = marco
+                        context, escena, proveedorDe(escena), soloEstaHoja = marco, marcosComoPaginas = true
                     )
                     if (svg != null) {
                         val conSublienzos = if (marco == null) SublienzosWeb.adjuntar(svg, adjuntosDe(hoja, escena, reutilizarLaPagina = true), "h${salida.size}") else svg
