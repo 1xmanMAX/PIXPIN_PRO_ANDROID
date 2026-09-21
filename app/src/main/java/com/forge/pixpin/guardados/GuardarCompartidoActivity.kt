@@ -127,6 +127,9 @@ class GuardarCompartidoActivity : ComponentActivity() {
 
     /** Lo guarda todo en el chat elegido (null = la general), avisa y se va. */
     private suspend fun guardarEn(almacen: MensajesStore, proyecto: String?, temporales: List<Temporal>, texto: String) {
+        // **Que se note que el toque llegó**: un PDF se aligera al entrar y eso son unos segundos
+        // sin nada en pantalla, que se leían como «no funciona» (usuario, 21-sep-2026).
+        if (temporales.any { it.nombre.endsWith(".pdf", ignoreCase = true) }) Toast.makeText(this, "Guardando en PixPin…", Toast.LENGTH_SHORT).show()
         val guardados = withContext(Dispatchers.IO) {
             var cuantos = 0
             temporales.forEach { if (darDeAlta(almacen, it, proyecto)) cuantos++ }

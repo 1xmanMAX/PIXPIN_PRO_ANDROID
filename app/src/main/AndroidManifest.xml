@@ -318,6 +318,11 @@
         </provider>
 
         <service
+            android:name=".pdf.PdfSqueezeService"
+            android:exported="false"
+            android:process=":pdfsqueeze" />
+
+        <service
             android:name=".floating.PinHostService"
             android:exported="false"
             android:foregroundServiceType="specialUse" />

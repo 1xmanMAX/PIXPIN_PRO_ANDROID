@@ -44,6 +44,8 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             else -> emptyList()
         }
         if (uris.isEmpty()) { avisar(false); finish(); return }
+        // Esta pantalla no enseña nada mientras trabaja: que al menos se note que el toque llegó.
+        android.widget.Toast.makeText(this, "Creando el proyecto…", android.widget.Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val hecho = withContext(Dispatchers.IO) { runCatching { proyectoDe(app, uris) }.getOrNull() }
             avisar(hecho != null)

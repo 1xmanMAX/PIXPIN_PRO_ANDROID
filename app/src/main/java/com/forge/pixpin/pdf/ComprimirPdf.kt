@@ -103,23 +103,18 @@ object ComprimirPdf {
      *
      * Con el perfil `balanced` («no se nota»: SSIM ≥ 0,97) y dos hilos, que las imágenes
      * descomprimidas viven en memoria y un teléfono no es un ordenador. Null si la biblioteca no
-     * está —las pruebas en la JVM, un aparato de 32 bits— o si no pudo con el documento: entonces
-     * sigue el compresor en Kotlin de siempre.
+     * está —las pruebas en la JVM, un aparato de 32 bits—, si no pudo con el documento o **si no
+     * acabó a tiempo**: entonces sigue el compresor en Kotlin de siempre.
      */
-    internal fun conPdfsqueeze(bytes: ByteArray): ByteArray? {
-        if (!hayPdfsqueeze) return null
-        return try {
-            dev.pdfsqueeze.PdfSqueeze.compress(bytes, "{\"profile\":\"balanced\",\"threads\":2}")
-                .takeIf { it.isNotEmpty() && it.size < bytes.size }
-        } catch (e: Throwable) {
-            null
-        }
-    }
+    internal fun conPdfsqueeze(bytes: ByteArray): ByteArray? = try { motorAparte?.invoke(bytes) } catch (e: Throwable) { null }
 
-    /** Se mira una vez: cargar una biblioteca que no está es caro, y fallaría en cada documento. */
-    private val hayPdfsqueeze: Boolean by lazy {
-        try { dev.pdfsqueeze.PdfSqueeze.version().isNotEmpty() } catch (e: Throwable) { false }
-    }
+    /**
+     * Quien corre pdfsqueeze: **otro proceso, con el tiempo contado** ([PdfSqueezeService]). Lo
+     * pone la aplicación al arrancar; sin ponerlo —las pruebas en la JVM— solo hay Kotlin. No se
+     * llama a la biblioteca desde aquí: tardaba lo que tardaba en mitad de guardar lo compartido,
+     * y un fallo suyo tumbaba la aplicación entera.
+     */
+    @Volatile var motorAparte: ((ByteArray) -> ByteArray?)? = null
 
     /** Los bytes comprimidos, o null si no hay nada que ganar o no se puede con garantías. */
     fun comprimir(bytes: ByteArray): ByteArray? {

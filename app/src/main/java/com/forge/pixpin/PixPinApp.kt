@@ -62,9 +62,17 @@ class PixPinApp : Application() {
     var ajustes: com.forge.pixpin.data.Settings = com.forge.pixpin.data.Settings()
         private set
 
+    private fun nombreDelProceso(): String =
+        if (android.os.Build.VERSION.SDK_INT >= 28) android.app.Application.getProcessName()
+        else runCatching { java.io.File("/proc/self/cmdline").readText().trim('\u0000', ' ') }.getOrDefault("")
+
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
+        // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
+        if (nombreDelProceso().endsWith(com.forge.pixpin.pdf.PdfSqueezeService.PROCESO)) return
+        com.forge.pixpin.pdf.ComprimirPdf.motorAparte = { bytes -> com.forge.pixpin.pdf.PdfSqueezeService.comprimir(this, bytes) }
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
         com.forge.pixpin.sincro.Presencia.instalar(this)
