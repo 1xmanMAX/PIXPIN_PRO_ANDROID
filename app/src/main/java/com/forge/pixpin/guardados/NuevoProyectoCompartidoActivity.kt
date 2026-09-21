@@ -45,13 +45,32 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
         }
         if (uris.isEmpty()) { avisar(false); finish(); return }
         // Esta pantalla no enseña nada mientras trabaja: que al menos se note que el toque llegó.
-        android.widget.Toast.makeText(this, "Creando el proyecto…", android.widget.Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
+            // **Un modelo 3D abre el croquis en el espacio**, no un proyecto: es lo que uno
+            // espera al tocar un .ifc exportado de Revit. Lo preguntó el usuario —«¿cómo abro un
+            // modelo IFC en el canvas 3D?, no veo cómo»—: el botón estaba, pero escondido en la
+            // barra de abajo. Ver [com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo].
+            val modelo = withContext(Dispatchers.IO) { runCatching { elModeloDe(uris) }.getOrNull() }
+            if (modelo != null) {
+                com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(this@NuevoProyectoCompartidoActivity, modelo.first, modelo.second)
+                finishAndRemoveTask()
+                return@launch
+            }
+            android.widget.Toast.makeText(this@NuevoProyectoCompartidoActivity, "Creando el proyecto…", android.widget.Toast.LENGTH_SHORT).show()
             val hecho = withContext(Dispatchers.IO) { runCatching { proyectoDe(app, uris) }.getOrNull() }
             avisar(hecho != null)
             if (hecho != null) com.forge.pixpin.volverALosProyectos(this@NuevoProyectoCompartidoActivity, hecho.id)
             finishAndRemoveTask()
         }
+    }
+
+    /** Lo compartido, si es un modelo 3D: la copia en caché y su nombre. Null si no lo es. */
+    private fun elModeloDe(uris: List<Uri>): Pair<File, String>? {
+        val uri = uris.singleOrNull() ?: return null
+        val nombre = nombreDe(uri)
+        if (!com.forge.pixpin.motor.LectorIfc.esIfc(nombre) && !com.forge.pixpin.motor.LectorObj.esObj(nombre)) return null
+        val (archivo, _, _) = copiar(uri) ?: return null
+        return archivo to nombre
     }
 
     /** El proyecto que sale de lo compartido, ya guardado; null si no se pudo. */

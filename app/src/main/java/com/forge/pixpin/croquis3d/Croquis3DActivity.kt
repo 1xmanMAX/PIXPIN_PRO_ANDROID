@@ -199,6 +199,23 @@ class Croquis3DActivity : ComponentActivity() {
         // **Y si se ha venido desde una lámina, la vista de esa lámina.** Se pone entera y
         // sin viaje: no se está volviendo de un sitio, se está llegando.
         intent?.getStringExtra(LA_VISTA)?.let { controlador.ponerLaVista(it) }
+        // **Abierto con un modelo dentro**: un `.ifc` o un `.obj` tocado en el explorador o
+        // compartido a PixPin. Ver [abrirConModelo].
+        intent?.getStringExtra(EL_MODELO)?.let { ruta ->
+            val archivo = java.io.File(ruta)
+            val nombre = intent?.getStringExtra(EL_NOMBRE_DEL_MODELO) ?: archivo.name
+            importarModelo({ archivo.inputStream() }, nombre)
+            // **Solo se borra si es una copia nuestra.** Lo que se guarda es la malla, así que la
+            // copia de la caché sobra; pero abriendo un modelo **del chat** el archivo es el
+            // adjunto de verdad y borrarlo sería llevarse el original.
+            val esCopiaNuestra = runCatching {
+                archivo.canonicalPath.startsWith(cacheDir.canonicalPath + java.io.File.separator)
+            }.getOrDefault(false)
+            if (esCopiaNuestra) lifecycleScope.launch {
+                kotlinx.coroutines.delay(60_000)
+                runCatching { archivo.delete() }
+            }
+        }
         // **En la multitarea, como una pestaña más** (19-sep-2026), sin los tres dedos: aquí
         // ladean la cámara. Ver [com.forge.pixpin.ui.ConLaRueda].
         val nombreDelProyecto = (application as? com.forge.pixpin.PixPinApp)
@@ -1095,6 +1112,15 @@ class Croquis3DActivity : ComponentActivity() {
                 if (c.moveToFirst()) c.getString(0) else null
             }
         }.getOrNull() ?: "modelo"
+        importarModelo({ contentResolver.openInputStream(uri) }, nombre)
+    }
+
+    /**
+     * **El modelo, venga de donde venga** (21-sep-2026): del botón de la barra, o de abrir un
+     * `.ifc` desde el explorador y de compartirlo a PixPin, que es por donde lo buscó el usuario
+     * («¿cómo abro un modelo IFC?, no veo cómo»). Ver [abrirConModelo].
+     */
+    private fun importarModelo(abrir: () -> java.io.InputStream?, nombre: String) {
         val esIfc = com.forge.pixpin.motor.LectorIfc.esIfc(nombre)
         val esObj = com.forge.pixpin.motor.LectorObj.esObj(nombre)
         if (!esIfc && !esObj) {
@@ -1113,7 +1139,7 @@ class Croquis3DActivity : ComponentActivity() {
             val hecho = withContext(Dispatchers.IO) {
                 runCatching {
                     val tmp = java.io.File(cacheDir, "modelo-${System.currentTimeMillis()}.${if (esIfc) "ifc" else "obj"}")
-                    contentResolver.openInputStream(uri)?.use { i -> tmp.outputStream().use { i.copyTo(it) } }
+                    abrir()?.use { i -> tmp.outputStream().use { i.copyTo(it) } }
                         ?: error("No se pudo abrir el archivo")
                     try {
                         val malla = if (esIfc) com.forge.pixpin.motor.LectorIfc.leer(tmp)
@@ -2062,18 +2088,20 @@ class Croquis3DActivity : ComponentActivity() {
                 FileteDePie()
             }
 
+            // **Un modelo 3D, el primero**: el IFC que exporta Revit, o un OBJ. Iba detrás y el
+            // usuario no lo encontraba —«¿cómo abro un modelo IFC?, no veo cómo»—; esta fila se
+            // desliza, así que lo que va al final puede no verse siquiera. Ver [importarModelo].
+            Alternable(
+                encendido = false,
+                icono = Icons.Filled.ViewInAr,
+                descripcion = "Traer modelo 3D (Revit IFC, OBJ)"
+            ) { traerModelo.launch(arrayOf("*/*")) }
+            FileteDePie()
             Alternable(
                 encendido = false,
                 icono = Icons.Filled.AddPhotoAlternate,
                 descripcion = getString(R.string.croquis_imagen)
             ) { alTraerImagen() }
-            FileteDePie()
-            // **Un modelo 3D**: el IFC que exporta Revit, o un OBJ. Ver [importarModelo].
-            Alternable(
-                encendido = false,
-                icono = Icons.Filled.ViewInAr,
-                descripcion = "Modelo 3D (Revit IFC, OBJ)"
-            ) { traerModelo.launch(arrayOf("*/*")) }
             FileteDePie()
             // **Una gráfica en el espacio**: superficie o curva por su fórmula. Ver [Graficas3D].
             Alternable(
@@ -3169,6 +3197,8 @@ private val RECORRIDO_DE_LA_LUZ = 180f
         /** De qué proyecto es este croquis, y cuál de sus croquis es. */
         private const val EL_PROYECTO = "proyecto"
         private const val EL_CROQUIS = "croquis"
+        private const val EL_MODELO = "el_modelo"
+        private const val EL_NOMBRE_DEL_MODELO = "el_nombre_del_modelo"
         private const val LA_VISTA = "vista"
 
         /**
@@ -3179,6 +3209,21 @@ private val RECORRIDO_DE_LA_LUZ = 180f
          * varios, como tiene varios lienzos— y entonces cada vista que se congele entra en
          * él como una hoja. Ver [HojaDeLaVista].
          */
+        /**
+         * **Un croquis nuevo con un modelo dentro**: es lo que pasa al abrir un `.ifc` o un
+         * `.obj` desde el explorador o al compartirlo a PixPin. [archivo] es una copia nuestra;
+         * el croquis la lee y la borra. Ver [importarModelo].
+         */
+        fun abrirConModelo(context: Context, archivo: java.io.File, nombre: String) {
+            context.startActivity(
+                Intent(context, Croquis3DActivity::class.java)
+                    .setData(android.net.Uri.parse("pixpin://croquis/nuevo-${System.currentTimeMillis()}"))
+                    .putExtra(EL_MODELO, archivo.absolutePath)
+                    .putExtra(EL_NOMBRE_DEL_MODELO, nombre)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+
         fun abrir(
             context: Context,
             proyecto: String? = null,

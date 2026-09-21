@@ -224,6 +224,23 @@
                 <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.pixpin" />
             </intent-filter>
+            <!--
+                Modelos 3D: un .ifc de Revit o un .obj abren el croquis en el espacio con el
+                modelo dentro. Por extensión, que su tipo MIME no lo conoce casi ningún
+                explorador. Ver NuevoProyectoCompartidoActivity y Croquis3DActivity.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.ifc" />
+                <data android:pathPattern=".*\\.IFC" />
+                <data android:pathPattern=".*\\.obj" />
+                <data android:pathPattern=".*\\.OBJ" />
+            </intent-filter>
         </activity>
         <!--
             La llamada secreta: un recordatorio que suena como una llamada y se oye por el

@@ -6184,6 +6184,15 @@ class MensajesActivity : ComponentActivity() {
                 when {
                     ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
                         com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
+                    // **Un modelo 3D abre el croquis en el espacio** (21-sep-2026, pedido por el
+                    // usuario: «si el archivo ifc está en el chat, que abra directamente»). El
+                    // croquis lee el archivo y se queda con la malla; el del chat no se toca.
+                    // Ver [com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo].
+                    com.forge.pixpin.motor.LectorIfc.esIfc(m.nombre) || com.forge.pixpin.motor.LectorIfc.esIfc(ruta) ||
+                        com.forge.pixpin.motor.LectorObj.esObj(m.nombre) || com.forge.pixpin.motor.LectorObj.esObj(ruta) ->
+                        com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(
+                            this, File(ruta), m.nombre.ifBlank { File(ruta).name }
+                        )
                     // **Un Word se lee aquí dentro** (19-sep-2026): se saca lo que dice —texto, tablas
                     // e imágenes, sin la maquetación de la página— a un HTML que enseña el mismo visor
                     // de las páginas web. Convertir es abrir un ZIP y leer XML: fuera del hilo que
