@@ -2031,6 +2031,11 @@ class Croquis3DActivity : ComponentActivity() {
                     }
                     PestanaDelCroquis.DETALLE -> ElDetalle()
                     PestanaDelCroquis.PIEZAS -> Column {
+                        // **Lo del modelo traído de Revit**, si hay alguno: la caja de sección y
+                        // sus elementos por tipo. Ver [PanelDelModelo].
+                        if (controlador.croquis.modelos.isNotEmpty()) {
+                            PanelDelModelo(controlador, Modifier.fillMaxWidth().padding(bottom = 6.dp))
+                        }
                         Croquis3DLista(controlador, Modifier.fillMaxWidth())
                         Croquis3DVistas(
                             controlador, imagenes, Modifier.fillMaxWidth().padding(top = 6.dp),

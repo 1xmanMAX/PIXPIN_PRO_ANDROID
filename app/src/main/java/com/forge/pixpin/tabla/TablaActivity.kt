@@ -364,9 +364,15 @@ private fun ListaDeTablas(
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onCerrar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
-                    Text("Tablas", style = MaterialTheme.typography.titleLarge)
+                // La misma isla de cristal que lleva el lienzo arriba. Ver [Cristal].
+                com.forge.pixpin.ui.theme.SuperficieDeCristal(
+                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    RoundedCornerShape(22.dp)
+                ) {
+                    Row(Modifier.padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onCerrar) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
+                        Text("Tablas", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(end = 12.dp))
+                    }
                 }
                 val lista = tablas
                 if (lista != null && lista.isEmpty()) {
@@ -736,6 +742,14 @@ private fun EditorDeTabla(
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
             // ---- Cabecera ----
+            //
+            // **En islas de cristal, como el lienzo** (21-sep-2026, pedido por el usuario: «que
+            // todos lleven un mismo lenguaje de diseño»). Antes eran filas planas con líneas de
+            // separación, que es de otra aplicación. Ver [com.forge.pixpin.ui.theme.Cristal].
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                RoundedCornerShape(22.dp)
+            ) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (tabla.version > 0) guardarYa(); onCerrar() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Guardar y volver")
@@ -791,7 +805,12 @@ private fun EditorDeTabla(
                     }
                 }
             }
+            }
             // ---- Barra de fórmula ----
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
+                RoundedCornerShape(18.dp)
+            ) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -841,6 +860,7 @@ private fun EditorDeTabla(
                     IconButton(onClick = { cargarBarra(); focos.clearFocus() }) { Icon(Icons.Filled.Close, "Cancelar") }
                     IconButton(onClick = { confirmar(); focos.clearFocus() }) { Icon(Icons.Filled.Check, "Aceptar") }
                 }
+            }
             }
             if (version >= 0 && tabla.protegida) {
                 Row(
@@ -920,7 +940,13 @@ private fun EditorDeTabla(
                 }
             }
             // ---- Herramientas ----
-            HorizontalDivider()
+            //
+            // La misma pastilla de cristal que la barra del lienzo, y **se desliza** cuando no
+            // caben: es lo que ya hace el carrusel del editor. Ver [BarraDeCristal].
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                RoundedCornerShape(22.dp)
+            ) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -995,6 +1021,7 @@ private fun EditorDeTabla(
                 TextButton(onClick = { tabla.insertar(false, estado.f1, 1); cambio(); cargarBarra() }) { Text("+ fila") }
                 TextButton(onClick = { tabla.insertar(true, estado.c1, 1); cambio(); cargarBarra() }) { Text("+ col") }
                 Spacer(Modifier.width(8.dp))
+            }
             }
         }
     }

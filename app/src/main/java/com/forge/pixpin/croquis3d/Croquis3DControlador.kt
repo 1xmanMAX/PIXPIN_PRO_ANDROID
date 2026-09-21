@@ -1920,6 +1920,39 @@ class Croquis3DControlador {
         if (ocultar) elegir(seleccion - id)
     }
 
+    /**
+     * **La caja de sección de un modelo**, como la de Revit: [lado] es 0..2 para los mínimos
+     * (X, Y, Z) y 3..5 para los máximos, y [cuanto] va de 0 a 1 sobre su caja. Lo que queda
+     * fuera deja de pintarse, así que bajar un lado corta el edificio por ahí. Ver [Modelo3D].
+     */
+    fun moverLaSeccion(id: String, lado: Int, cuanto: Double) {
+        val m = croquis.modelos.firstOrNull { it.id == id } ?: return
+        croquis = croquis.copy(modelos = croquis.modelos.map { if (it.id == id) m.conLaCaja(lado, cuanto) else it })
+    }
+
+    /** Quita la caja: el modelo entero vuelve a verse. */
+    fun quitarLaSeccion(id: String) {
+        if (croquis.modelos.none { it.id == id && it.seccion != null }) return
+        anotar()
+        croquis = croquis.copy(modelos = croquis.modelos.map { if (it.id == id) it.copy(seccion = null) else it })
+    }
+
+    /** El color de un tipo de elemento (IFCBEAM, IFCWALL…); null vuelve al del modelo. */
+    fun pintarElTipo(id: String, tipo: String, color: String?) {
+        val m = croquis.modelos.firstOrNull { it.id == id } ?: return
+        anotar()
+        val ahora = if (color == null) m.coloresPorTipo - tipo else m.coloresPorTipo + (tipo to color)
+        croquis = croquis.copy(modelos = croquis.modelos.map { if (it.id == id) it.copy(coloresPorTipo = ahora) else it })
+    }
+
+    /** Enciende o apaga un tipo de elemento entero. */
+    fun ocultarElTipo(id: String, tipo: String, ocultar: Boolean) {
+        val m = croquis.modelos.firstOrNull { it.id == id } ?: return
+        anotar()
+        val ahora = if (ocultar) m.tiposOcultos + tipo else m.tiposOcultos - tipo
+        croquis = croquis.copy(modelos = croquis.modelos.map { if (it.id == id) it.copy(tiposOcultos = ahora) else it })
+    }
+
     fun quitarElModelo(id: String) {
         if (croquis.modelos.none { it.id == id }) return
         anotar()

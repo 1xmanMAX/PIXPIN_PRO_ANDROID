@@ -6,6 +6,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
@@ -167,6 +168,25 @@ fun BarraDeCristal(
         modifier.cristal().padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(separacion),
         verticalAlignment = Alignment.CenterVertically,
+        content = contenido
+    )
+}
+
+/**
+ * **La misma barra, de pie.** Girado el teléfono lo que sobra es ancho y lo que falta es alto:
+ * una barra tumbada abajo se come la franja donde de verdad se ven las hojas. Ver
+ * `BarraDeAcciones` en la pantalla de proyectos.
+ */
+@Composable
+fun BarraDeCristalVertical(
+    modifier: Modifier = Modifier,
+    separacion: Dp = 4.dp,
+    contenido: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier.cristal().padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(separacion),
+        horizontalAlignment = Alignment.CenterHorizontally,
         content = contenido
     )
 }

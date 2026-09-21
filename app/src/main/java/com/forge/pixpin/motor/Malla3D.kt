@@ -28,6 +28,32 @@ class Malla3D(
 
     val cuantosTriangulos: Int get() = triangulos.size / 3
 
+    /**
+     * **Si esto es una lámina y no un sólido cerrado.** En un sólido cada arista la comparten
+     * dos caras; en una superficie suelta —un terreno, una fachada exportada a OBJ— la mayoría
+     * de las aristas son borde. Decide si se pueden descartar las caras de atrás: hacerlo en una
+     * lámina la haría desaparecer al mirarla por el otro lado. Ver `PintorDeMalla`.
+     */
+    fun tieneCarasSueltas(): Boolean {
+        val t = cuantosTriangulos
+        if (t == 0) return true
+        // La arista, por el par de vértices ordenado: si aparece dos veces, está cosida.
+        val vistas = HashSet<Long>(t * 4)
+        val sueltas = HashSet<Long>(t * 2)
+        fun arista(p: Int, q: Int) {
+            val a = minOf(p, q).toLong(); val b = maxOf(p, q).toLong()
+            val clave = (a shl 32) or b
+            if (!vistas.add(clave)) sueltas.remove(clave) else sueltas.add(clave)
+        }
+        for (k in 0 until t) {
+            val a = triangulos[k * 3]; val b = triangulos[k * 3 + 1]; val c = triangulos[k * 3 + 2]
+            arista(a, b); arista(b, c); arista(c, a)
+        }
+        // Un sólido de verdad no tiene casi ninguna suelta; se deja holgura por los restos de
+        // cortar huecos, que dejan alguna arista sin pareja sin dejar de ser un sólido.
+        return sueltas.size > vistas.size * BORDES_DE_UNA_LAMINA
+    }
+
     /** La caja que lo encierra: `minX, minY, minZ, maxX, maxY, maxZ`. */
     fun caja(): DoubleArray {
         if (vertices.isEmpty()) return DoubleArray(6)
@@ -102,8 +128,35 @@ class Malla3D(
             return nv / 3 - 1
         }
 
+        /**
+         * **Y los que no tienen superficie, fuera** (21-sep-2026). Un IFC de Revit trae
+         * triángulos sin área —vértices repetidos o casi, restos de cortar huecos— y, sobre
+         * todo, **agujas**: larguísimas y finísimas. Al pintarlas con suavizado, cada una sale
+         * como **una raya oscura cruzando la losa**; es lo que el usuario vio en su edificio (134
+         * agujas y 94 degenerados en un modelo de 12.334 triángulos). No aportan nada: una cara
+         * de área cero no se ve, solo ensucia.
+         */
+        private fun sinSuperficie(a: Int, b: Int, cc: Int): Boolean {
+            val ia = a * 3; val ib = b * 3; val ic = cc * 3
+            if (ia + 2 >= nv || ib + 2 >= nv || ic + 2 >= nv) return true
+            val ux = v[ib] - v[ia]; val uy = v[ib + 1] - v[ia + 1]; val uz = v[ib + 2] - v[ia + 2]
+            val wx = v[ic] - v[ia]; val wy = v[ic + 1] - v[ia + 1]; val wz = v[ic + 2] - v[ia + 2]
+            val nx = uy * wz - uz * wy; val ny = uz * wx - ux * wz; val nz = ux * wy - uy * wx
+            // El doble del área, y el lado mayor al cuadrado: lo que decide es la proporción
+            // entre los dos, que no depende del tamaño del edificio ni de sus unidades.
+            val doble = kotlin.math.sqrt((nx * nx + ny * ny + nz * nz).toDouble())
+            if (doble <= AREA_MINIMA) return true
+            val l1 = ux * ux + uy * uy + uz * uz
+            val l2 = wx * wx + wy * wy + wz * wz
+            val dx = v[ic] - v[ib]; val dy = v[ic + 1] - v[ib + 1]; val dz = v[ic + 2] - v[ib + 2]
+            val l3 = dx * dx + dy * dy + dz * dz
+            val mayor = maxOf(l1, l2, l3).toDouble()
+            return mayor > 0.0 && doble / mayor < DELGADEZ_MINIMA
+        }
+
         fun triangulo(a: Int, b: Int, cc: Int, color: Int) {
             if (a == b || b == cc || a == cc) return
+            if (sinSuperficie(a, b, cc)) return
             if (nt + 3 > t.size) t = t.copyOf(t.size * 2)
             val k = nt / 3
             if (k >= c.size) c = c.copyOf(c.size * 2)
@@ -120,6 +173,17 @@ class Malla3D(
         }
 
         fun malla(): Malla3D = Malla3D(v.copyOf(nv), t.copyOf(nt), c.copyOf(nt / 3), piezas.toList())
+
+        companion object {
+            /** Doble del área por debajo de la cual un triángulo no es una cara. En metros². */
+            const val AREA_MINIMA = 1e-9
+            /**
+             * Cuánta superficie tiene que tener para su lado mayor. Un triángulo equilátero da
+             * 0,87; una aguja, casi cero. Con 1/2000 se van las agujas de verdad y se quedan
+             * hasta las lonjas más estiradas de una triangulación normal.
+             */
+            const val DELGADEZ_MINIMA = 5e-4
+        }
     }
 }
 
@@ -131,6 +195,9 @@ class Malla3D(
  * y se corta por orejas; los agujeros se unen antes al contorno por el puente más corto que
  * no cruza nada, que es lo que hace `earcut` y la mayoría de visores.
  */
+/** A partir de esta proporción de aristas sin pareja, lo de dentro no es un sólido cerrado. */
+private const val BORDES_DE_UNA_LAMINA = 0.15
+
 object Triangular {
 
     /**

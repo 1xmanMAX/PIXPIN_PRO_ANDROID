@@ -575,8 +575,41 @@ data class Modelo3D(
     val caja: List<Double>,
     val triangulos: Int = 0,
     val oculto: Boolean = false,
-    val grupo: String? = null
+    val grupo: String? = null,
+    /**
+     * **La caja de sección**, como la de Revit (21-sep-2026, pedida por el usuario): seis
+     * números entre 0 y 1 —minX, minY, minZ, maxX, maxY, maxZ— sobre la caja del modelo. Lo que
+     * cae fuera no se pinta, así que bajar un lado **es cortar el edificio por ahí**. Null: sin
+     * caja, todo a la vista. Ver [conLaCaja] y `PintorDeMalla`.
+     */
+    val seccion: List<Double>? = null,
+    /**
+     * **De qué color va cada tipo de elemento** (IFCWALL, IFCBEAM…), si se ha pintado a mano
+     * desde la lista. Lo que no esté aquí va con el color que traiga el modelo.
+     */
+    val coloresPorTipo: Map<String, String> = emptyMap(),
+    /** Los tipos apagados desde la lista: no se pintan. */
+    val tiposOcultos: Set<String> = emptySet()
 ) {
+    /** La sección puesta en las unidades del modelo: `minX, minY, minZ, maxX, maxY, maxZ`. */
+    fun seccionEnElModelo(): DoubleArray? {
+        val s = seccion ?: return null
+        if (s.size < 6 || caja.size < 6) return null
+        val an = caja[3] - caja[0]; val al = caja[4] - caja[1]; val pr = caja[5] - caja[2]
+        return doubleArrayOf(
+            caja[0] + s[0] * an, caja[1] + s[1] * al, caja[2] + s[2] * pr,
+            caja[0] + s[3] * an, caja[1] + s[4] * al, caja[2] + s[5] * pr
+        )
+    }
+
+    /** Con la caja movida por un lado; se respeta que el mínimo no pase del máximo. */
+    fun conLaCaja(lado: Int, cuanto: Double): Modelo3D {
+        val s = (seccion ?: SECCION_ENTERA).toMutableList()
+        val v = cuanto.coerceIn(0.0, 1.0)
+        if (lado < 3) s[lado] = minOf(v, s[lado + 3] - HOLGURA_DE_LA_SECCION)
+        else s[lado] = maxOf(v, s[lado - 3] + HOLGURA_DE_LA_SECCION)
+        return copy(seccion = s)
+    }
     fun alMundo(x: Double, y: Double, z: Double): Pt3 {
         val a = x - centro.x; val b = y - centro.y; val c = z - centro.z
         return Pt3(
@@ -584,6 +617,13 @@ data class Modelo3D(
             origen.y + ejeX.y * a + ejeY.y * b + ejeZ.y * c,
             origen.z + ejeX.z * a + ejeY.z * b + ejeZ.z * c
         )
+    }
+
+    companion object {
+        /** La caja sin cortar nada. */
+        val SECCION_ENTERA = listOf(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+        /** Lo menos que puede quedar de una rebanada, para que la caja no se cierre del todo. */
+        const val HOLGURA_DE_LA_SECCION = 0.02
     }
 
     /** Las ocho esquinas de su caja, en el mundo. */

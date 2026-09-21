@@ -99,6 +99,43 @@ class PintorDeMalla(val malla: Malla3D) {
 
     private val pintura = Paint(Paint.ANTI_ALIAS_FLAG)
 
+    /**
+     * **De qué pieza es cada triángulo**, y qué tipo de elemento IFC es esa pieza. Es lo que deja
+     * pintar de un color todas las vigas, o apagar todos los muros, desde la lista de elementos.
+     */
+    private val tipoDe: Array<String> = run {
+        val r = Array(t) { "" }
+        for (p in malla.piezas) for (k in p.desde until minOf(p.hasta, t)) r[k] = p.tipo
+        r
+    }
+
+    /**
+     * **Si se descartan las caras de atrás.** Se decide **una vez por modelo**, mirando si sus
+     * sólidos están cerrados y bien orientados: en un IFC de Revit lo están, pero un OBJ suelto
+     * —una fachada, un terreno, una superficie— puede ser una lámina de una sola cara, y ahí
+     * descartarlas la haría desaparecer desde un lado. Ver [caraSueltas].
+     */
+    private val recortarCarasDeAtras: Boolean = !malla.tieneCarasSueltas()
+
+    /**
+     * **Hacia dónde miran las normales de este modelo**: +1 si hacia fuera del sólido, −1 si
+     * hacia dentro. Sale del **volumen con signo** de la malla (teorema de la divergencia): con
+     * las caras bien orientadas hacia fuera, sale positivo. Un exportador que las escriba al
+     * revés no tiene por qué ser un error —lo que no vale es suponerlo—, así que se mide.
+     */
+    private val haciaFuera: Float = run {
+        val v = malla.vertices; val ix = malla.triangulos
+        var seis = 0.0
+        for (k in 0 until t) {
+            val a = ix[k * 3] * 3; val b = ix[k * 3 + 1] * 3; val c = ix[k * 3 + 2] * 3
+            val ax = v[a].toDouble(); val ay = v[a + 1].toDouble(); val az = v[a + 2].toDouble()
+            val bx = v[b].toDouble(); val by = v[b + 1].toDouble(); val bz = v[b + 2].toDouble()
+            val cx2 = v[c].toDouble(); val cy2 = v[c + 1].toDouble(); val cz2 = v[c + 2].toDouble()
+            seis += ax * (by * cz2 - bz * cy2) - ay * (bx * cz2 - bz * cx2) + az * (bx * cy2 - by * cx2)
+        }
+        if (seis < 0) -1f else 1f
+    }
+
     fun pintar(
         lienzo: Canvas,
         modelo: Modelo3D,
@@ -167,7 +204,8 @@ class PintorDeMalla(val malla: Malla3D) {
 
         // ---- El sombreado, fijo al mundo: solo cambia si se gira el modelo o la luz ----
         val lx = luz.x; val ly = luz.y; val lz = luz.z
-        val firma = (modelo.ejeX.hashCode() * 31 + modelo.ejeY.hashCode()) * 31 + modelo.ejeZ.hashCode() + luz.hashCode() * 7 + (if (elegido) 1 else 0)
+        val firma = (modelo.ejeX.hashCode() * 31 + modelo.ejeY.hashCode()) * 31 + modelo.ejeZ.hashCode() +
+            luz.hashCode() * 7 + (if (elegido) 1 else 0) + modelo.coloresPorTipo.hashCode() * 13
         if (sombreado.size != t || firma != sombreadoDe) {
             if (sombreado.size != t) sombreado = IntArray(t)
             val col = malla.colores
@@ -180,7 +218,10 @@ class PintorDeMalla(val malla: Malla3D) {
                 val l = sqrt(mx * mx + my * my + mz * mz).coerceAtLeast(1e-12)
                 val d = abs((mx * lx + my * ly + mz * lz) / l)
                 val luzHacia = 0.58 + 0.42 * d
-                val c = col[k]
+                // El color de la lista manda sobre el que traiga el modelo. Ver [Modelo3D.coloresPorTipo].
+                val c = modelo.coloresPorTipo[tipoDe[k]]?.let { texto ->
+                    runCatching { android.graphics.Color.parseColor(texto) }.getOrDefault(col[k])
+                } ?: col[k]
                 var r = ((c shr 16) and 0xFF) * luzHacia
                 var g = ((c shr 8) and 0xFF) * luzHacia
                 var b = (c and 0xFF) * luzHacia
@@ -196,8 +237,39 @@ class PintorDeMalla(val malla: Malla3D) {
         if (trazo.size < tanda * 6) { trazo = FloatArray(tanda * 6); tintas = IntArray(tanda * 3) }
         var n = 0
         val anchoF = ancho.toFloat(); val altoF = alto.toFloat()
+        // **La caja de sección**: lo que cae fuera no se pinta, así que bajar un lado corta el
+        // modelo por ahí. Se mira por el centro del triángulo —cortar cada uno contra los seis
+        // planos costaría más que pintarlos—, de modo que el corte queda dentado a la escala de
+        // un triángulo; en un edificio, centímetros. Ver [Modelo3D.seccionEnElModelo].
+        val corte = modelo.seccionEnElModelo()
+        val hayTiposApagados = modelo.tiposOcultos.isNotEmpty()
         for (s in 0 until usados) {
             val k = orden[s]
+            // **La cara de atrás no se pinta** (21-sep-2026).
+            //
+            // Aquí no hay búfer de profundidad: se pinta de lejos a cerca ordenando por el
+            // centro de cada triángulo, y eso miente en cuanto dos piezas se solapan de canto —un
+            // muro largo y una losa ancha tienen el centro donde no está lo que tapa—. Era lo que
+            // reportó el usuario: piezas que salen mal **según desde dónde se miren**. Quitando
+            // las caras que dan la espalda se va la mitad de los triángulos, y con ellos **el
+            // interior de cada sólido**, que es justo lo que se colaba.
+            //
+            // Se decide con la normal del triángulo y la dirección en que crece la hondura, las
+            // dos en coordenadas del modelo: así no depende de cómo esté proyectada la pantalla.
+            // [haciaFuera] dice de qué lado miran las normales de este modelo.
+            if (recortarCarasDeAtras) {
+                val n3 = k * 3
+                val mira = normales[n3] * fx + normales[n3 + 1] * fy + normales[n3 + 2] * fz
+                if (mira * haciaFuera > 0f) continue
+            }
+            if (corte != null) {
+                val c3 = k * 3
+                val px = centros[c3]; val py = centros[c3 + 1]; val pz = centros[c3 + 2]
+                if (px < corte[0] || py < corte[1] || pz < corte[2] ||
+                    px > corte[3] || py > corte[4] || pz > corte[5]
+                ) continue
+            }
+            if (hayTiposApagados && tipoDe[k] in modelo.tiposOcultos) continue
             val a = ix[k * 3] * 2; val b = ix[k * 3 + 1] * 2; val c = ix[k * 3 + 2] * 2
             val ax = pantalla[a]; val ay = pantalla[a + 1]
             val bx = pantalla[b]; val by = pantalla[b + 1]

@@ -103,6 +103,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -206,6 +207,13 @@ fun PantallaDeProyectos(
      */
     irA: String? = null
 ) {
+    // **Girado**: la pantalla se reparte de otra manera y la barra se pone de pie. Ver [alPie].
+    val girado = LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val ajustesDeLaMano by app.settings.settings.collectAsState(initial = app.ajustes)
+    val zurdo = ajustesDeLaMano.zurdo
+    // **Y sin la barra de estado**: con el teléfono girado, la franja de la hora se lleva un
+    // dedo de los cuatro que hay de alto. Vuelve sola al enderezarlo. Ver [SinBarraDeEstado].
+    SinBarraDeEstado(girado)
     val proyectos by app.proyectos.proyectos.collectAsState()
     val todos = Proyectos.ordenados(proyectos)
     val ordenados = if (soloEste == null) todos else todos.filter { it.id == soloEste }
@@ -639,6 +647,10 @@ fun PantallaDeProyectos(
             // **Una sola barra flotante abajo, del proyecto que se está viendo** (17-sep-2026).
             // Antes iba dentro de cada tarjeta y se repetía en todas; el usuario la quiere
             // unificada, flotando, como las demás barras. Ver [BarraDeAcciones].
+            // **Girado, la barra se pone de pie en el lateral de la mano** (21-sep-2026, pedido
+            // por el usuario). Tumbada abajo se comía la franja de alto, que es justo lo que
+            // falta con el teléfono girado; de pie no le quita nada a las hojas y queda bajo el
+            // pulgar. El lado lo dice el ajuste de zurdo, como en el editor.
             val alPie: @Composable androidx.compose.foundation.layout.BoxScope.(Proyecto) -> Unit = { cual ->
                 BarraDeAcciones(
                     app = app,
@@ -646,10 +658,17 @@ fun PantallaDeProyectos(
                     onChat = {
                         com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, cual.id, cual.nombre)
                     },
+                    dePie = girado,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
+                        .align(
+                            when {
+                                !girado -> Alignment.BottomCenter
+                                zurdo -> Alignment.CenterStart
+                                else -> Alignment.CenterEnd
+                            }
+                        )
                         .navigationBarsPadding()
-                        .padding(bottom = 10.dp)
+                        .then(if (girado) Modifier.padding(horizontal = 6.dp) else Modifier.padding(bottom = 10.dp))
                 )
             }
 
@@ -666,7 +685,12 @@ fun PantallaDeProyectos(
                     onExportarWeb = { pidiendoFuncionesWeb = true },
                     onExportarPaquete = { exportandoPaquete = unico.id },
                     onCompartir = { abrirHoja(listOf(unico to null)) },
-                    modifier = Modifier.fillMaxSize().padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = SITIO_DE_LA_BARRA)
+                    modifier = Modifier.fillMaxSize().padding(
+                        start = if (girado && zurdo) SITIO_DE_LA_BARRA_DE_PIE else 10.dp,
+                        end = if (girado && !zurdo) SITIO_DE_LA_BARRA_DE_PIE else 10.dp,
+                        top = 10.dp,
+                        bottom = if (girado) 10.dp else SITIO_DE_LA_BARRA
+                    )
                 )
                 alPie(unico)
                 }
@@ -682,7 +706,11 @@ fun PantallaDeProyectos(
                 // hay que explicarlo; medio centímetro de la tarjeta de abajo,
                 // no — y encima dice cuál viene.
                 // Y el hueco de abajo deja ver la barra flotante entera. Ver [BarraDeAcciones].
-                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = ASOMO + SITIO_DE_LA_BARRA),
+                contentPadding = PaddingValues(
+                    start = if (girado && zurdo) SITIO_DE_LA_BARRA_DE_PIE else 10.dp,
+                    end = if (girado && !zurdo) SITIO_DE_LA_BARRA_DE_PIE else 10.dp,
+                    bottom = if (girado) ASOMO else ASOMO + SITIO_DE_LA_BARRA
+                ),
                 pageSpacing = 10.dp,
                 // **No se preparan páginas que no se ven.** Con el asomo, la
                 // siguiente ya entra en la ventana y se compone sola: no hace
@@ -1313,13 +1341,15 @@ private fun BarraDeAcciones(
     app: PixPinApp,
     p: Proyecto,
     onChat: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** De pie y pegada a un lado: es como va con el teléfono girado. Ver [PaginaDeProyecto]. */
+    dePie: Boolean = false
 ) {
     // Exportar no va aquí: la caja de exportar es una sola y está en la cabecera de la
     // pantalla (ver `PantallaDeProyectos`), para que marcar hojas de dos proyectos no saque
     // dos cajas. Aquí queda lo de este proyecto: su chat y lo que se le puede añadir.
     val contexto = LocalContext.current
-    com.forge.pixpin.ui.theme.BarraDeCristal(modifier) {
+    val botones: @Composable () -> Unit = {
         BotonDeAccion(
             Icons.AutoMirrored.Filled.Chat, R.string.proyecto_chat, R.string.proyecto_chat, onClick = onChat
         )
@@ -1397,10 +1427,37 @@ private fun BarraDeAcciones(
             }
         }
     }
+    // **Tumbada abajo o de pie a un lado**, según cómo se esté sujetando el teléfono. Lo de
+    // dentro es lo mismo; lo único que cambia es en qué dirección se apilan los botones.
+    if (dePie) com.forge.pixpin.ui.theme.BarraDeCristalVertical(modifier) { botones() }
+    else com.forge.pixpin.ui.theme.BarraDeCristal(modifier) { botones() }
+}
+
+/**
+ * **La barra de la hora, fuera mientras dure** (21-sep-2026). Solo la de arriba: la de
+ * navegación de abajo se queda, que es por donde se sale. Al salir de la pantalla —o al
+ * enderezar el teléfono— vuelve como estaba, aunque la ventana ya no exista.
+ */
+@Composable
+private fun SinBarraDeEstado(esconderla: Boolean) {
+    val vista = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.DisposableEffect(esconderla, vista) {
+        val ventana = (vista.context as? android.app.Activity)?.window
+        val mandos = ventana?.let { androidx.core.view.WindowInsetsControllerCompat(it, it.decorView) }
+        if (esconderla && mandos != null) {
+            mandos.hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            mandos.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose { if (esconderla) runCatching { mandos?.show(androidx.core.view.WindowInsetsCompat.Type.statusBars()) } }
+    }
 }
 
 /** El hueco que la barra flotante necesita abajo. */
 private val SITIO_DE_LA_BARRA: Dp = 80.dp
+
+/** Y el que necesita de pie, a un lado, con el teléfono girado. */
+private val SITIO_DE_LA_BARRA_DE_PIE: Dp = 78.dp
 
 /** Lo que mide un botón dentro de una [CajaDeAcciones]: cuatro caben junto al chat y el PDF. */
 private val ANCHO_EN_CAJA = 50.dp
