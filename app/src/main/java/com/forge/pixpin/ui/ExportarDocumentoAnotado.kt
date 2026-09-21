@@ -17,6 +17,7 @@ import com.forge.pixpin.motor.Lectura
 import com.forge.pixpin.pin.ImageStore
 import java.io.ByteArrayOutputStream
 import java.io.File
+import kotlinx.coroutines.flow.first
 
 /**
  * **Un Word o un libro, con lo anotado y los marcadores, como página web: desde donde sea.**
@@ -31,6 +32,7 @@ import java.io.File
  */
 object ExportarDocumentoAnotado {
     private const val ANCHO_DE_FOTO = 1100
+    private const val COLUMNA_SIN_MEDIR = 420
 
     fun esDocumento(nombre: String?, ruta: String?): Boolean =
         DocxAHtml.esDocx(nombre) || DocxAHtml.esDocx(ruta) || EpubAHtml.esEpub(nombre) || EpubAHtml.esEpub(ruta)
@@ -51,13 +53,14 @@ object ExportarDocumentoAnotado {
             "web-anotada", Icons.Filled.Language, "Página web", Compartible.NINGUNA,
             generar = {
                 antes?.invoke()
-                hacer(c.applicationContext, original, nombre, paginaVista)?.let {
-                    Compartible.Salida(it, "text/html", "El texto, con lo anotado y los marcadores")
+                val funciones = (c.applicationContext as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb
+                hacer(c.applicationContext, original, nombre, paginaVista, funciones)?.let {
+                    Compartible.Salida(it, "text/html", "El texto, con lo anotado, y se sigue anotando")
                 }
             }
         )
 
-    fun hacer(c: Context, original: File, nombre: String, paginaVista: File? = null): File? = runCatching {
+    fun hacer(c: Context, original: File, nombre: String, paginaVista: File? = null, funciones: Set<String>? = null): File? = runCatching {
         val p = prefs(c)
         val clave = claveDe(original)
         val columna = p.getInt("$clave:columna", 0).takeIf { it > 0 }
@@ -78,7 +81,8 @@ object ExportarDocumentoAnotado {
             }
             else -> DocxAHtml.convertir(original, nombre) to null
         }
-        val conLetra = Lectura.conEstilo(html, grosor, tipo, columna, deNoche)
+        // La columna la pone la hoja del documento web (ver [DocumentoAnotado.hoja]); aquí, solo la letra y el papel.
+        val conLetra = Lectura.conEstilo(html, grosor, tipo, null, deNoche)
 
         val medidas = p.getString("$clave:medidas", null)?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
         val tops = medidas?.optJSONArray("t")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty()
@@ -98,7 +102,17 @@ object ExportarDocumentoAnotado {
             val y = m.fraccion * alto
             DocumentoAnotado.Senal(m.emoji, y, if (alto > 0) DocumentoAnotado.anclaDe(y, tops) else -1, m.fraccion.toDouble())
         }
-        val hecha = DocumentoAnotado.pagina(conLasFotosDentro(conLetra, carpeta), columna, tops, piezas, senales, tamano)
+        // **Con los mandos de toda página web de la aplicación**: lápiz, resaltador, borrador,
+        // deshacer y guardar, los que estén puestos en Ajustes → Exportar. Un documento que
+        // nunca se abrió para anotar no tiene columna medida: va con una de lectura cómoda.
+        val ancho = columna ?: COLUMNA_SIN_MEDIR
+        val hoja = DocumentoAnotado.hoja(
+            titulo, conLasFotosDentro(conLetra, carpeta), ancho, Lectura.margenDe(ancho), tops, piezas, senales,
+            tamano, if (deNoche) "#15171c" else "#ffffff"
+        )
+        val hecha = com.forge.pixpin.motor.ExportarHtml.paginas(
+            listOf(hoja), titulo, "$titulo (anotado)", com.forge.pixpin.motor.ExportarHtml.Opciones.de(funciones)
+        )
         val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
         File(File(c.cacheDir, "share").apply { mkdirs() }, limpio).also { it.writeText(hecha) }
     }.getOrNull()

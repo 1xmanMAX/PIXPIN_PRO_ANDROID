@@ -93,8 +93,42 @@ object ComprimirPdf {
         (original.size - ligero.size).toLong()
     }.getOrDefault(0L)
 
+    /**
+     * **El motor de verdad: pdfsqueeze** (21-sep-2026), la biblioteca en Rust del propio usuario
+     * (github.com/1xmanMAX/Thesis), que va dentro de la aplicación como `libpdfsqueeze.so`. Hace lo
+     * que lo de aquí abajo no sabe: decide **imagen por imagen** —prueba varias codificaciones y
+     * se queda con la más pequeña que pase una medida de parecido (SSIM)—, separa el texto del
+     * papel en los escaneos (MRC, con la máscara en JBIG2) y comprueba lo que entrega: mismas
+     * páginas, mismo texto, y nunca más grande que lo que entró.
+     *
+     * Con el perfil `balanced` («no se nota»: SSIM ≥ 0,97) y dos hilos, que las imágenes
+     * descomprimidas viven en memoria y un teléfono no es un ordenador. Null si la biblioteca no
+     * está —las pruebas en la JVM, un aparato de 32 bits— o si no pudo con el documento: entonces
+     * sigue el compresor en Kotlin de siempre.
+     */
+    internal fun conPdfsqueeze(bytes: ByteArray): ByteArray? {
+        if (!hayPdfsqueeze) return null
+        return try {
+            dev.pdfsqueeze.PdfSqueeze.compress(bytes, "{\"profile\":\"balanced\",\"threads\":2}")
+                .takeIf { it.isNotEmpty() && it.size < bytes.size }
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    /** Se mira una vez: cargar una biblioteca que no está es caro, y fallaría en cada documento. */
+    private val hayPdfsqueeze: Boolean by lazy {
+        try { dev.pdfsqueeze.PdfSqueeze.version().isNotEmpty() } catch (e: Throwable) { false }
+    }
+
     /** Los bytes comprimidos, o null si no hay nada que ganar o no se puede con garantías. */
     fun comprimir(bytes: ByteArray): ByteArray? {
+        conPdfsqueeze(bytes)?.let { ligero ->
+            // Lo mismo que se le pide al de Kotlin: que lo escrito se vuelva a leer, con sus páginas.
+            val antes = leerPdf(bytes)?.paginas()?.size
+            val despues = leerPdf(ligero)?.paginas()?.size
+            if (antes == null || antes == despues) return ligero
+        }
         val pdf = leerPdf(bytes) ?: return null
         if (pdf.cifrado) return null
         // El tope de píxeles de una foto: la página más grande a [PPP]. Una foto no se ve más

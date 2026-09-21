@@ -45,6 +45,17 @@ object Lectura {
      */
     fun margenDe(columna: Int): Int = columna * 2 / 3
 
+    /**
+     * **El margen de un PDF, para anotar** (21-sep-2026): tres cuartos del ancho de la hoja a cada
+     * lado, como pidió el usuario —«es como que extiende el PDF a esas zonas»—. En un Word el
+     * margen son dos tercios de la columna ([margenDe]); una hoja de PDF ya trae sus propios
+     * blancos y lo que se escribe al lado suele ser más largo.
+     */
+    const val MARGEN_DEL_PDF = 0.75f
+
+    /** Lo más que se aleja un PDF: **la hoja y un margen**, el de un lado o el del otro. */
+    const val ALEJADO_DEL_PDF = 1f / (1f + MARGEN_DEL_PDF)
+
     /** Lo que mide el documento entero con sus dos márgenes: la columna y dos tercios a cada lado. */
     fun anchoConMargenes(columna: Int): Int = columna + 2 * margenDe(columna)
 

@@ -73,6 +73,28 @@ object ExportarHtml {
          */
         class Nota(nombre: String, val html: String, fondo: String) : HojaWeb(nombre, fondo)
         /**
+         * **Un Word, un libro o un PDF para anotar** (21-sep-2026): una columna de ancho fijo
+         * —el texto, o las páginas— con un margen en blanco a cada lado donde escribir. Lleva
+         * los mismos mandos que una nota, porque lo es: se raya encima y se guarda igual.
+         *
+         * [estilo] es su CSS **ya acotado a `.doc`** (ver [DocumentoAnotado.acotar]): la hoja de
+         * un documento dice `body{…}` y `p{…}`, y suelta aquí dentro le cambiaría la letra a la
+         * barra. [capa] es lo anotado en la aplicación, por piezas atadas a su bloque, y los
+         * marcadores; [tops], a qué altura caía cada bloque al exportar, para que el guion corra
+         * cada pieza lo que se haya corrido el suyo con otra letra. [letra] es el cuerpo en px.
+         */
+        class Documento(
+            nombre: String,
+            val estilo: String,
+            val cuerpo: String,
+            val capa: String,
+            val columna: Int,
+            val margen: Int,
+            val tops: List<Double>,
+            val letra: Double,
+            fondo: String
+        ) : HojaWeb(nombre, fondo)
+        /**
          * **Una tabla con fórmulas.** Viaja lo escrito —el JSON de [TablaDeCalculo]— y la
          * tabla ya calculada para leerse sin guion; en el navegador sigue calculando, se edita,
          * se pega desde Excel y se guarda. Ver [VisorTabla].
@@ -210,13 +232,14 @@ object ExportarHtml {
         // ningún dibujo en el documento. Lo que no lleva es el visor del SVG: eso sí es de
         // los dibujos. Ver [crearNota].
         // Una tabla también se raya: el lápiz va encima de las celdas. Ver `crearTabla`.
-        val hayPintable = hayDibujo || hojas.any { it is HojaWeb.Nota || it is HojaWeb.Tabla }
+        val hayPintable = hayDibujo || hojas.any { it is HojaWeb.Nota || it is HojaWeb.Tabla || it is HojaWeb.Documento }
         val hayTabla = hojas.any { it is HojaWeb.Tabla }
         val tamano = hojas.sumOf {
             when (it) {
                 is HojaWeb.Dibujo -> it.svg.length + (it.plano?.length ?: 0)
                 is HojaWeb.Espacio -> it.datos.length
                 is HojaWeb.Nota -> it.html.length
+                is HojaWeb.Documento -> it.cuerpo.length + it.capa.length + it.estilo.length
                 is HojaWeb.Tabla -> it.tabla.celdas.size * 60
             }
         }
@@ -229,6 +252,7 @@ object ExportarHtml {
             append("<title>").append(escapar(titulo)).append("</title>\n")
             append("<style>").append(ESTILO.replace("FONDO", fondo))
             if (hayTabla) append('\n').append(VisorTabla.ESTILO)
+            for (hoja in hojas) if (hoja is HojaWeb.Documento) append('\n').append(hoja.estilo)
             append("</style>\n</head>\n")
             // **El tema va con la página.** Un documento puede llevar una lámina sobre papel
             // blanco y un croquis sobre pizarra; con un solo juego de colores para todo, en
@@ -262,7 +286,7 @@ object ExportarHtml {
                 append(
                     when (hoja) {
                         is HojaWeb.Espacio -> "espacio"
-                        is HojaWeb.Nota -> "nota"
+                        is HojaWeb.Nota, is HojaWeb.Documento -> "nota"
                         is HojaWeb.Dibujo -> "dibujo"
                         is HojaWeb.Tabla -> "tabla"
                     }
@@ -298,6 +322,20 @@ object ExportarHtml {
                         append("<script type=\"application/json\" class=\"datos\">")
                             .append(hoja.datos.replace("</", "<\\/"))
                             .append("</script>")
+                    // La caja mide la columna más sus dos márgenes; la tinta va **dentro**, así
+                    // se desplaza y se amplía con el documento. Ver `crearNota`.
+                    is HojaWeb.Documento -> {
+                        append("<div class=\"doc-caja\" data-columna=\"").append(hoja.columna)
+                        append("\" data-margen=\"").append(hoja.margen)
+                        append("\" data-letra=\"").append(hoja.letra)
+                        append("\" data-bloques=\"").append(DocumentoAnotado.SELECTOR)
+                        append("\" data-tops=\"").append(hoja.tops.joinToString(",") { (Math.round(it * 10) / 10.0).toString() })
+                        append("\" style=\"width:").append(hoja.columna + 2 * hoja.margen).append("px\">")
+                        append("<article class=\"doc\" style=\"width:").append(hoja.columna)
+                        append("px;margin-left:").append(hoja.margen).append("px;font-size:").append(hoja.letra).append("px\">")
+                        append(hoja.cuerpo).append("</article>").append(hoja.capa)
+                        append("\n<svg class=\"tinta\"><g id=\"").append(ID_DEL_CROQUIS).append("\"></g></svg></div>")
+                    }
                     is HojaWeb.Nota ->
                         append("<article class=\"nota\">").append(hoja.html).append("</article>")
                             .append("\n<svg class=\"tinta\"><g id=\"")
@@ -565,6 +603,16 @@ object ExportarHtml {
            seleccionar y los enlaces se siguen pudiendo tocar. */
         .tinta{position:absolute;left:0;top:0;width:100%;pointer-events:none;overflow:visible}
         #lienzo.pintando .tinta{pointer-events:auto;touch-action:none;cursor:crosshair}
+        /* Un documento para anotar: la columna y sus márgenes. Ver [HojaWeb.Documento]. */
+        .doc-caja{position:relative;margin:0 auto;padding-bottom:140px;transform-origin:0 0}
+        .doc{box-sizing:border-box;overflow-wrap:break-word}
+        .doc-caja .ppa{position:absolute;pointer-events:none;overflow:visible;z-index:1;width:auto;height:auto}
+        .doc-caja .ppm{position:absolute;z-index:2;font-size:20px;line-height:1;transform:translateY(-4px)}
+        .doc-caja .tinta{z-index:3;height:100%}
+        .pprail{position:fixed;right:6px;top:50%;transform:translateY(-50%);z-index:4;display:flex;flex-direction:column;gap:6px;
+          padding:6px 4px;border-radius:16px;background:var(--vidrio);border:1px solid var(--filete)}
+        .pprail button{all:unset;cursor:pointer;font-size:18px;line-height:1;padding:3px;text-align:center}
+        html.presentando .pprail{display:none}
         .nota{max-width:44rem;margin:0 auto;padding:28px 20px 140px;line-height:1.65;
           font-size:16px;word-wrap:break-word}
         .nota h1,.nota h2,.nota h3,.nota h4,.nota h5,.nota h6{line-height:1.25;margin:1.4em 0 .5em}
@@ -1472,15 +1520,69 @@ var pagina=hojas.map(function(d){
 // con la mano, la capa no recibe el dedo y el texto vuelve a ser texto. Ver `.tinta`.
 function crearNota(d){
   var NS='http://www.w3.org/2000/svg';
-  var art=d.querySelector('.nota'), svg=d.querySelector('svg.tinta'), tam=16;
+  // **Un documento para anotar** —Word, libro o PDF— es una nota con la columna de ancho fijo
+  // y un margen a cada lado: se amplía entero (texto, márgenes y tinta a la vez) en vez de
+  // cambiar la letra, y lo anotado va atado a su bloque. Ver [HojaWeb.Documento].
+  var caja=d.querySelector('.doc-caja'), esDoc=!!caja, z=1, N=[];
+  var art=d.querySelector('.nota')||d.querySelector('.doc'), svg=d.querySelector('svg.tinta'), tam=16;
   var croquis=svg&&svg.querySelector('#croquis');
   if(svg&&!croquis){croquis=document.createElementNS(NS,'g');croquis.id='croquis';svg.appendChild(croquis);}
   var hecho=[], rehecho=[], modo='mano', trazo=null;
-  function poner(v){ tam=Math.min(Math.max(v,11),30); if(art) art.style.fontSize=tam+'px'; medir(); }
+  function poner(v){
+    if(esDoc){
+      // El centro de lo que se mira se queda en su sitio al ampliar.
+      var cx=(d.scrollLeft+d.clientWidth/2)/z, cy=(d.scrollTop+d.clientHeight/2)/z;
+      tam=Math.min(Math.max(v,4),64); z=tam/16;
+      caja.style.transform=z===1?'':'scale('+z+')';
+      medir();
+      d.scrollLeft=cx*z-d.clientWidth/2; d.scrollTop=cy*z-d.clientHeight/2;
+      return;
+    }
+    tam=Math.min(Math.max(v,11),30); if(art) art.style.fontSize=tam+'px'; medir();
+  }
+  // A qué altura cae ahora cada bloque del documento, en píxeles suyos (sin la ampliación).
+  function alturas(){
+    var q=art.querySelectorAll(caja.dataset.bloques||'p'), c=caja.getBoundingClientRect().top, n=[];
+    for(var i=0;i<q.length;i++) n.push((q[i].getBoundingClientRect().top-c)/z);
+    return n;
+  }
+  // **Cada cosa, junto a su párrafo.** Otro navegador tiene otras letras y el texto no mide
+  // lo mismo de alto: lo anotado en la aplicación se corre lo que se haya corrido su bloque
+  // desde que se exportó, y lo rayado aquí, lo que se haya corrido desde que se rayó.
+  function colocar(){
+    N=alturas();
+    var T=(caja.dataset.tops||'').split(',').filter(String).map(Number);
+    var e=caja.querySelectorAll('[data-y]');
+    for(var k=0;k<e.length;k++){
+      var i=+e[k].getAttribute('data-i'), y=+e[k].getAttribute('data-y'), f=e[k].getAttribute('data-f');
+      if(f!==null&&i<0) y=(+f)*caja.offsetHeight;
+      var c=(i>=0&&i<N.length&&i<T.length)?N[i]-T[i]:0;
+      e[k].style.top=(y+c)+'px'; e[k]._y=y+c;
+    }
+    [].forEach.call(croquis.children,function(r){
+      if(!r.hasAttribute('data-i')) return;
+      var i=+r.getAttribute('data-i'), dy=i<N.length?N[i]-(+r.getAttribute('data-t')):0;
+      r.dy=Math.abs(dy)<0.05?0:dy;
+      if(r.dy) r.setAttribute('transform','translate(0,'+r3(r.dy)+')'); else r.removeAttribute('transform');
+    });
+  }
   // La capa mide lo que mida el texto, no lo que mida la ventana: lo rayado tiene que
   // quedarse donde se rayó aunque después se desplace la nota o cambie el tamaño de la letra.
   function medir(){
     if(!svg||!art) return;
+    if(esDoc){
+      // La caja se amplía con `transform`, que no mueve lo de alrededor: lo que ocupa de más o
+      // de menos se le dice al desplazamiento con los márgenes.
+      var W=caja.offsetWidth, H=caja.offsetHeight;
+      svg.setAttribute('width',W); svg.setAttribute('height',H);
+      svg.setAttribute('viewBox','0 0 '+W+' '+H);
+      svg.style.height=H+'px';
+      caja.style.marginLeft=Math.max(0,(d.clientWidth-W*z)/2)+'px';
+      caja.style.marginRight=(W*z-W)+'px';
+      caja.style.marginBottom=(H*z-H)+'px';
+      colocar();
+      return;
+    }
     var alto=Math.max(art.scrollHeight,d.clientHeight);
     svg.setAttribute('height',alto);
     svg.setAttribute('viewBox','0 0 '+d.clientWidth+' '+alto);
@@ -1488,9 +1590,16 @@ function crearNota(d){
   }
   function donde(e){
     var r=svg.getBoundingClientRect();
-    return {x:e.clientX-r.left, y:e.clientY-r.top};
+    return {x:(e.clientX-r.left)/z, y:(e.clientY-r.top)/z};
   }
   function r3(x){return Math.round(x*1000)/1000;}
+  // Una raya que ya venía en el archivo —guardada en otra sesión— se borra como las demás:
+  // sus puntos se leen de su `d`, que aquí es siempre M y L.
+  function puntosDe(r){
+    var m=(r.getAttribute('d')||'').match(/-?[\d.]+/g)||[], o=[];
+    for(var i=0;i+1<m.length;i+=2) o.push({x:+m[i],y:+m[i+1]});
+    return o;
+  }
   // Lo que puso el lápiz, recta a recta, y a medio píxel: ver `anadirPunto` del dibujo.
   function anadirPunto(t,p){
     var pts=t.puntos, n=pts.length;
@@ -1509,7 +1618,7 @@ function crearNota(d){
     for(var i=0;i<rayas.length;i++){
       var r=rayas[i], pts=r.puntos||[], gordo=(+r.getAttribute('stroke-width')||2)/2+10;
       for(var j=0;j<pts.length;j++){
-        if(Math.hypot(pts[j].x-p.x,pts[j].y-p.y)<=gordo){
+        if(Math.hypot(pts[j].x-p.x,pts[j].y+(r.dy||0)-p.y)<=gordo){
           hecho.push({que:'borra',raya:r,antes:r.nextSibling}); rehecho.length=0;
           croquis.removeChild(r); api.refrescar(); break;
         }
@@ -1545,18 +1654,45 @@ function crearNota(d){
     function soltar(){
       if(!trazo) return;
       if(trazo.puntos.length<2) croquis.removeChild(trazo);
-      else { hecho.push({que:'pinta',raya:trazo}); rehecho.length=0; api.refrescar(); }
+      else {
+        // Atada al bloque junto al que se rayó, y a qué altura caía él entonces. Ver `colocar`.
+        if(esDoc&&N.length){
+          var y=trazo.puntos[0].y, b=-1;
+          for(var i=0;i<N.length;i++) if(N[i]<=y+6&&(b<0||N[i]>=N[b])) b=i;
+          if(b>=0){ trazo.setAttribute('data-i',b); trazo.setAttribute('data-t',r3(N[b])); }
+        }
+        hecho.push({que:'pinta',raya:trazo}); rehecho.length=0; api.refrescar();
+      }
       trazo=null;
     }
     svg.addEventListener('pointerup',soltar);
     svg.addEventListener('pointercancel',soltar);
-    [].forEach.call(croquis.children,function(r){ r.puntos=[]; });
+    [].forEach.call(croquis.children,function(r){ r.puntos=puntosDe(r); });
   }
+  function encajarDoc(){
+    // Se abre **viendo el texto de borde a borde**, como en la aplicación, con lo anotado a los
+    // lados a un gesto; en una pantalla donde cabe todo, entero y a su tamaño.
+    var col=+caja.dataset.columna, m=+caja.dataset.margen, cw=d.clientWidth||col;
+    z=1; poner(16*(cw>=col+2*m?1:Math.min(Math.max(cw/col,0.3),1.25)));
+    d.scrollLeft=Math.max(0,m*z-Math.max(0,(cw-col*z)/2)); d.scrollTop=0;
+  }
+  if(esDoc){
+    [].forEach.call(d.querySelectorAll('.pprail button'),function(b){
+      b.onclick=function(){
+        var m=document.getElementById(b.getAttribute('data-m'));
+        if(m) d.scrollTo({left:d.scrollLeft,top:Math.max(0,(m._y||0)*z-24),behavior:'smooth'});
+      };
+    });
+    window.addEventListener('load',function(){ if(!d.hidden) medir(); });
+    if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ if(!d.hidden) medir(); });
+  }
+  var encajado=false;
   return {
     tipo:'nota',
-    activar:medir, desactivar:function(){}, medir:medir,
-    encajar:function(){ poner(16); d.scrollTop=0; },
-    zoom:function(f){ poner(Math.round(tam/f)); },
+    activar:function(){ if(esDoc&&!encajado){ encajado=true; encajarDoc(); } else medir(); },
+    desactivar:function(){}, medir:medir,
+    encajar:function(){ if(esDoc) return encajarDoc(); poner(16); d.scrollTop=0; },
+    zoom:function(f){ poner(esDoc?tam/f:Math.round(tam/f)); },
     modo:function(m){ modo=m; },
     pintando:function(){ return modo!=='mano'; },
     herramientas:['mano','lapiz','marcador','goma'].filter(function(h){

@@ -6,8 +6,8 @@ package com.forge.pixpin.motor
  * Lo pidió el usuario: exportar el documento **como se ve al abrirlo** —el texto en medio, lo
  * anotado a los lados, los marcadores en su sitio— en un solo HTML ligero, y que al tocar un
  * marcador lleve a su zona. La página ya es HTML (la que fabrican [DocxAHtml] y [EpubAHtml], con
- * la letra y los márgenes de [Lectura.estilo]); aquí se le pone **encima** lo anotado, como SVG
- * —vectorial: pesa poco y no se emborrona al ampliar—, y un guion mínimo.
+ * la letra de [Lectura.estilo]); aquí se le pone **encima** lo anotado, como SVG —vectorial: pesa
+ * poco y no se emborrona al ampliar—, y entra como una hoja del documento web ([hoja]).
  *
  * **Lo anotado va atado al párrafo, no al píxel.** Otro navegador tiene otras letras y el texto
  * no mide lo mismo de alto; una capa entera clavada en coordenadas se iría despegando hacia
@@ -61,60 +61,89 @@ object DocumentoAnotado {
     /** El SVG listo para ir dentro de una página: sin la cabecera XML, que ahí estorba. */
     fun sinCabecera(svg: String): String = svg.substringAfter("?>", svg).trim()
 
-    fun pagina(
-        html: String, columna: Int?, tops: List<Double>, piezas: List<Pieza>, senales: List<Senal>, tamano: Int = 100
-    ): String {
-        val margen = columna?.let { Lectura.margenDe(it) } ?: 0
-        val estilo = buildString {
-            append("<style id=\"pixpin-anotado\">")
-            append("html{position:relative !important;margin-left:auto !important;margin-right:auto !important;")
-            append("-webkit-text-size-adjust:$tamano% !important;text-size-adjust:$tamano% !important}")
-            append("body{position:static !important}")
-            append(".ppa{position:absolute;pointer-events:none;overflow:visible;z-index:5}")
-            append(".ppm{position:absolute;z-index:6;font-size:20px;line-height:1;transform:translateY(-4px)}")
-            append("#pprail{position:fixed;right:6px;top:50%;transform:translateY(-50%);z-index:9;display:flex;flex-direction:column;gap:6px;")
-            append("padding:6px 4px;border-radius:16px;background:rgba(127,127,127,.22);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}")
-            append("#pprail button{all:unset;cursor:pointer;font-size:18px;line-height:1;padding:3px;text-align:center}")
-            append("@media print{#pprail{display:none}}")
-            append("</style>")
-        }
-        val capa = buildString {
-            for (p in piezas) {
-                val cuerpo = sinCabecera(p.svg).replaceFirst(
+    /**
+     * **El mismo documento, como hoja del documento web de siempre** (21-sep-2026). El usuario
+     * pidió que lo exportado lleve «los controles del HTML»: lápiz, resaltador, borrador,
+     * deshacer, guardar. Así que en vez de una página aparte con su guion mínimo, como al principio, el
+     * Word o el libro entra en [ExportarHtml] como una hoja más, y los mandos le vienen dados.
+     * [html] es la página entera, con su `<style>`; aquí se separa la hoja de estilo —que se
+     * acota— del cuerpo, y lo anotado se pone encima ([capaDe]).
+     */
+    fun hoja(
+        nombre: String, html: String, columna: Int, margen: Int, tops: List<Double>,
+        piezas: List<Pieza>, senales: List<Senal>, tamano: Int, fondo: String, clave: String = "d"
+    ): ExportarHtml.HojaWeb.Documento {
+        val estilos = Regex("<style[^>]*>(.*?)</style>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        val css = estilos.findAll(html).joinToString("\n") { it.groupValues[1] }
+        val desde = Regex("<body[^>]*>", RegexOption.IGNORE_CASE).find(html)?.range?.last?.plus(1) ?: 0
+        val hasta = html.lastIndexOf("</body>", ignoreCase = true).takeIf { it >= desde } ?: html.length
+        val cuerpo = estilos.replace(html.substring(desde, hasta), "")
+            .replace(Regex("<script\\b.*?</script>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
+        // El cuerpo de la letra: el de la hoja de estilo del documento, por lo que se agrandó al leer.
+        val base = Regex("body\\{[^}]*?font:\\s*(\\d+(?:\\.\\d+)?)px").find(css)?.groupValues?.get(1)?.toDoubleOrNull() ?: 16.0
+        val capa = capaDe(piezas, senales, columna, margen, clave)
+        return ExportarHtml.HojaWeb.Documento(
+            nombre, acotar(css), cuerpo, capa, columna, margen, tops, base * tamano / 100.0, fondo
+        )
+    }
+
+    /** Lo anotado, por piezas atadas a su bloque, y los marcadores con su riel. Ver [ExportarHtml.HojaWeb.Documento]. */
+    fun capaDe(piezas: List<Pieza>, senales: List<Senal>, columna: Int, margen: Int, clave: String = "d"): String = buildString {
+        for (p in piezas) {
+            append(
+                sinCabecera(p.svg).replaceFirst(
                     "<svg ",
                     "<svg class=\"ppa\" data-i=\"${p.ancla}\" data-y=\"${num(p.y)}\" style=\"left:${num(p.x)}px;top:${num(p.y)}px;width:${num(p.ancho)}px;height:${num(p.alto)}px\" "
                 )
-                append(cuerpo)
-            }
-            // El marcador, **donde se puso**: en el canto derecho de la columna de texto.
-            val xDeLaSenal = if (columna != null) margen + columna + 6 else 4
-            senales.forEachIndexed { k, s ->
-                append("<span class=\"ppm\" id=\"ppm$k\" data-i=\"${s.ancla}\" data-y=\"${num(s.y)}\"${if (s.ancla < 0 && s.fraccion >= 0) " data-f=\"${s.fraccion}\"" else ""} style=\"${if (columna != null) "left:${xDeLaSenal}px" else "right:${xDeLaSenal}px"};top:${num(s.y)}px\">${s.emoji}</span>")
-            }
-            if (senales.isNotEmpty()) {
-                append("<div id=\"pprail\">")
-                senales.forEachIndexed { k, s -> append("<button data-m=\"ppm$k\" title=\"Ir al marcador\">${s.emoji}</button>") }
-                append("</div>")
-            }
+            )
         }
-        val guion = "<script>(function(){var S='$SELECTOR',T=[${tops.joinToString(",") { num(it) }}];" +
-            "function poner(){var q=document.body.querySelectorAll(S),n=[];for(var i=0;i<q.length;i++)n.push(q[i].getBoundingClientRect().top+window.scrollY);" +
-            "var e=document.querySelectorAll('[data-y]');for(var k=0;k<e.length;k++){var i=+e[k].getAttribute('data-i'),y=+e[k].getAttribute('data-y');" +
-            "var f=e[k].getAttribute('data-f');if(f!==null&&i<0)y=(+f)*document.documentElement.scrollHeight;var d=(i>=0&&i<n.length&&i<T.length)?n[i]-T[i]:0;e[k].style.top=(y+d)+'px';e[k]._y=y+d}}" +
-            "function ir(id){var m=document.getElementById(id);if(m)window.scrollTo({left:window.scrollX,top:Math.max(0,(m._y||0)-24),behavior:'smooth'})}" +
-            "var b=document.querySelectorAll('#pprail button');for(var k=0;k<b.length;k++)(function(x){x.onclick=function(){ir(x.getAttribute('data-m'))}})(b[k]);" +
-            "poner();window.addEventListener('load',function(){poner();" +
-            (if (margen > 0) "if(document.documentElement.scrollWidth>window.innerWidth+2)window.scrollTo($margen,0);" else "") +
-            "});window.addEventListener('resize',poner);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(poner)})()</script>"
+        senales.forEachIndexed { k, s ->
+            append("<span class=\"ppm\" id=\"ppm-$clave-$k\" data-i=\"${s.ancla}\" data-y=\"${num(s.y)}\"")
+            if (s.ancla < 0 && s.fraccion >= 0) append(" data-f=\"${s.fraccion}\"")
+            append(" style=\"left:${margen + columna + 6}px;top:${num(s.y)}px\">${s.emoji}</span>")
+        }
+        if (senales.isNotEmpty()) {
+            append("<div class=\"pprail\">")
+            senales.forEachIndexed { k, s -> append("<button data-m=\"ppm-$clave-$k\" title=\"Ir al marcador\">${s.emoji}</button>") }
+            append("</div>")
+        }
+    }
 
-        // La ventana del móvil, **del ancho de la columna**: se abre viendo el texto de borde a
-        // borde, como en la aplicación, y lo anotado queda a los lados, a un gesto.
-        val ventana = "<meta name=\"viewport\" content=\"width=${columna ?: "device-width"}\">"
-        var salida = html.replace(Regex("<meta[^>]*name=[\"']viewport[\"'][^>]*>", RegexOption.IGNORE_CASE), "")
-        val cabeza = salida.indexOf("</head>", ignoreCase = true)
-        salida = if (cabeza < 0) ventana + estilo + salida else salida.substring(0, cabeza) + ventana + estilo + salida.substring(cabeza)
-        val pie = salida.lastIndexOf("</body>", ignoreCase = true)
-        return if (pie < 0) salida + capa + guion else salida.substring(0, pie) + capa + guion + salida.substring(pie)
+    /**
+     * **La hoja de estilo del documento, encerrada en `.doc`.** Dice `body{…}`, `p{…}`, `a{…}`;
+     * suelta dentro del documento web le cambiaría la letra y los colores a la barra y a las
+     * demás hojas. Cada selector se cuelga de `.doc`, y `html`/`body` pasan a ser `.doc` mismo.
+     * Las reglas de `@media` se acotan por dentro; `@page` y compañía, que no tienen a qué
+     * aplicarse, se van. Es para las hojas que escribe la aplicación, no para CSS cualquiera.
+     */
+    fun acotar(css: String, raiz: String = ".doc"): String {
+        val sale = StringBuilder()
+        var i = 0
+        while (i < css.length) {
+            val abre = css.indexOf('{', i)
+            if (abre < 0) break
+            val selector = css.substring(i, abre).trim()
+            // La llave que cierra **esta** regla, contando las de dentro.
+            var hondo = 1; var j = abre + 1
+            while (j < css.length && hondo > 0) { if (css[j] == '{') hondo++ else if (css[j] == '}') hondo--; j++ }
+            val dentro = css.substring(abre + 1, (j - 1).coerceAtLeast(abre + 1))
+            when {
+                selector.startsWith("@media") || selector.startsWith("@supports") ->
+                    sale.append(selector).append('{').append(acotar(dentro, raiz)).append('}')
+                selector.startsWith("@") -> Unit
+                else -> {
+                    sale.append(
+                        selector.split(',').joinToString(",") { uno ->
+                            val u = uno.trim()
+                            val m = Regex("^(html|body)(?![\\w-])").find(u)
+                            if (m != null) raiz + u.substring(m.range.last + 1) else "$raiz $u"
+                        }
+                    ).append('{').append(dentro).append('}')
+                }
+            }
+            i = j
+        }
+        return sale.toString()
     }
 
     private fun num(v: Double): String {

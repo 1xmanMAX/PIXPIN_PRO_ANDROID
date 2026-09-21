@@ -33,6 +33,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import com.forge.pixpin.motor.Lectura
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -176,10 +181,21 @@ class LectorPdfActivity : ComponentActivity() {
         }
         val estado = rememberLazyListState()
         val anchoPx = LocalWindowInfo.current.containerSize.width
+        // **La hoja, en el centro, y un margen en blanco a cada lado donde anotar** (21-sep-2026).
+        // La lista mide la hoja más sus dos márgenes —más ancha que la pantalla, centrada—; a su
+        // tamaño se ve la hoja de borde a borde, como siempre, y los márgenes quedan a un gesto
+        // de dos dedos. Alejándose cabe la hoja con **un** margen, el de un lado o el del otro
+        // ([Lectura.ALEJADO_DEL_PDF]); entonces la lista crece de alto lo mismo que encoge, y
+        // sigue llenando la pantalla.
+        val margenPx = anchoPx * Lectura.MARGEN_DEL_PDF
+        var altoDeLaCaja by remember { mutableStateOf(0) }
+        val densidad = LocalDensity.current
+        var compartiendo by remember { mutableStateOf(false) }
         Box(
             Modifier
                 .fillMaxSize()
                 .background(Color(0xFF1B1B1B))
+                .onSizeChanged { altoDeLaCaja = it.height }
                 // **El pellizco se coge solo con dos dedos, y entonces sí se consume.**
                 //
                 // Estaba con `detectTransformGestures` sobre la lista, y la lista se comía los
@@ -200,7 +216,12 @@ class LectorPdfActivity : ComponentActivity() {
                         while (true) {
                             val evento = awaitPointerEvent()
                             val dedos = evento.changes.count { it.pressed }
-                            if (dedos == 0) { pellizcando = false; break }
+                            if (dedos == 0) {
+                                pellizcando = false
+                                // **El imán del centro**: soltando cerca de la hoja, encaja en ella.
+                                if (zoom in 0.999f..1.001f && kotlin.math.abs(desplazado.x) < size.width * 0.12f) desplazado = Offset.Zero
+                                break
+                            }
                             if (dedos >= 2) { cogido = true; pellizcando = true }
                             if (!cogido) continue
                             val antes = zoom
@@ -218,7 +239,7 @@ class LectorPdfActivity : ComponentActivity() {
                                 }
                             }
                             if (decidido) { evento.changes.forEach { if (it.pressed) it.consume() }; continue }
-                            val ahora = (antes * factor).coerceIn(1f, 6f)
+                            val ahora = (antes * factor).coerceIn(Lectura.ALEJADO_DEL_PDF, 6f)
                             val centro = Offset(size.width / 2f, size.height / 2f)
                             val foco = evento.calculateCentroid(useCurrent = false)
                             // **El punto entre los dedos se queda quieto.** Sin esto el
@@ -229,8 +250,9 @@ class LectorPdfActivity : ComponentActivity() {
                             zoom = ahora
                             // Y que no se pueda echar el documento fuera de la pantalla: como
                             // mucho, hasta que su borde toca el borde.
-                            val topeX = (ahora - 1f) * size.width / 2f
-                            val topeY = (ahora - 1f) * size.height / 2f
+                            // De lado, hasta el canto del margen; de alto, lo de siempre.
+                            val topeX = (((1f + 2f * Lectura.MARGEN_DEL_PDF) * ahora - 1f) * size.width / 2f).coerceAtLeast(0f)
+                            val topeY = ((ahora - 1f) * size.height / 2f).coerceAtLeast(0f)
                             // Anotando, un dedo dibuja: los dos dedos son los que pasan las hojas.
                             if (anotando) estado.dispatchRawDelta(-evento.calculatePan().y / ahora)
                             val conPan = movido + evento.calculatePan()
@@ -238,7 +260,6 @@ class LectorPdfActivity : ComponentActivity() {
                                 conPan.x.coerceIn(-topeX, topeX),
                                 conPan.y.coerceIn(-topeY, topeY)
                             )
-                            if (ahora <= 1.001f) desplazado = Offset.Zero
                             evento.changes.forEach { if (it.pressed) it.consume() }
                         }
                     }
@@ -259,7 +280,8 @@ class LectorPdfActivity : ComponentActivity() {
                         state = estado,
                         userScrollEnabled = aSolas == null,
                         modifier = Modifier
-                            .fillMaxSize()
+                            .requiredWidth(with(densidad) { (anchoPx + 2 * margenPx).toDp() })
+                            .requiredHeight(with(densidad) { (altoDeLaCaja / zoom.coerceAtMost(1f)).coerceAtLeast(1f).toDp() })
                             .graphicsLayer(
                                 scaleX = zoom, scaleY = zoom,
                                 translationX = desplazado.x, translationY = desplazado.y,
@@ -267,9 +289,14 @@ class LectorPdfActivity : ComponentActivity() {
                             )
                     ) {
                         items((0 until cuantas).toList()) { i ->
-                            Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), encima = {
-                                CapaDePagina(capas, i, anchoPx, anotando, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
-                            }) { aSolas = i }
+                            // El margen es papel: lo anotado ahí lleva la tinta de una hoja clara.
+                            Box(Modifier.fillMaxWidth().background(PAPEL_DEL_MARGEN)) {
+                                Box(Modifier.padding(horizontal = with(densidad) { margenPx.toDp() })) {
+                                    Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i }
+                                }
+                                // La capa coge **la hoja y sus dos márgenes**.
+                                CapaDePagina(capas, i, anotando, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
+                            }
                         }
                     }
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
@@ -311,6 +338,10 @@ class LectorPdfActivity : ComponentActivity() {
                         "Listo", color = Color.White,
                         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { dejarDeAnotar() }.padding(horizontal = 12.dp, vertical = 9.dp)
                     )
+                    Text(
+                        "Exportar", color = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { capas.guardarTodo(); compartiendo = true }.padding(horizontal = 12.dp, vertical = 9.dp)
+                    )
                     // **Solo si se pide**: la edición rápida no crea ningún proyecto. Con esto el
                     // PDF pasa a proyectos con lo anotado, para seguir con el editor completo.
                     if (!enProyecto) Text(
@@ -344,6 +375,18 @@ class LectorPdfActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
+            if (compartiendo && cuantas > 0) {
+                val titulo = nombre.substringBeforeLast('.').ifBlank { "PDF" }
+                com.forge.pixpin.ui.HojaDeCompartir(
+                    remember(ruta, titulo) {
+                        com.forge.pixpin.ui.Compartible(
+                            titulo, formatos = listOf(
+                                com.forge.pixpin.ui.ExportarPdfAnotado.formato(this@LectorPdfActivity, ruta, titulo, cuantas) { i -> capas.escenaDe(i) }
+                            )
+                        )
+                    }
+                ) { compartiendo = false }
             }
             if (nombre.isNotBlank()) {
                 Text(
@@ -484,6 +527,12 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
         }
     }
 
+    /** Lo anotado en la hoja [i], abierta o no: para exportar. Null si no hay nada. */
+    fun escenaDe(i: Int): com.forge.pixpin.motor.Scene? =
+        (synchronized(abiertas) { abiertas[i]?.scene }
+            ?: com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, idDe(i, false))))
+            ?.takeIf { e -> e.elements.any { !it.isDeleted } }
+
     fun tocada(i: Int) { ultimaTocada = i }
     fun ultima(): com.forge.pixpin.motor.DrawController? = synchronized(abiertas) { abiertas[ultimaTocada] }
     fun ensuciar(i: Int) { synchronized(sucias) { sucias.add(i) }; version.intValue++ }
@@ -538,32 +587,34 @@ private fun pintorDeCapas(contexto: Context): com.forge.pixpin.motor.Renderer =
  */
 @Composable
 private fun CapaDePagina(
-    capas: CapasDelPdf, i: Int, anchoPx: Int, anotando: Boolean,
+    capas: CapasDelPdf, i: Int, anotando: Boolean,
     maestro: com.forge.pixpin.motor.DrawController, modifier: Modifier, alCambiar: () -> Unit
 ) {
     val lienzo by androidx.compose.runtime.produceState<com.forge.pixpin.motor.DrawController?>(null, capas, i) {
         value = withContext(Dispatchers.IO) { runCatching { capas.controladorDe(i) }.getOrNull() }
     }
     val c = lienzo ?: return
-    // La hoja mide PAGE_WIDTH en las unidades del dibujo, y en pantalla lo que mida la lista.
-    val zoom = anchoPx.toDouble() / PdfDoc.PAGE_WIDTH
-    LaunchedEffect(c, anchoPx) { c.setViewport(com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = 0.0, zoom = zoom)) }
+    // La hoja mide PAGE_WIDTH en las unidades del dibujo y **empieza en el cero**, como en el
+    // editor completo; el margen de la izquierda son las equis negativas. Ver [vistaDeLaCapa].
+    var anchoDeLaCapa by remember { mutableStateOf(0) }
+    LaunchedEffect(c, anchoDeLaCapa) { if (anchoDeLaCapa > 0) c.setViewport(vistaDeLaCapa(anchoDeLaCapa.toDouble())) }
+    val medido = modifier.onSizeChanged { anchoDeLaCapa = it.width }
     val conLaMano = maestro.tool == com.forge.pixpin.motor.Tool.HAND
     val pintor = pintorDeCapas(androidx.compose.ui.platform.LocalContext.current)
     if (!anotando || conLaMano) {
-        androidx.compose.foundation.Canvas(modifier) {
+        androidx.compose.foundation.Canvas(medido) {
             @Suppress("UNUSED_EXPRESSION") capas.version.intValue
             if (c.scene.elements.none { !it.isDeleted }) return@Canvas
             pintor.renderScene(
                 drawContext.canvas.nativeCanvas,
-                c.scene.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = 0.0, zoom = size.width.toDouble() / PdfDoc.PAGE_WIDTH)),
+                c.scene.copy(viewport = vistaDeLaCapa(size.width.toDouble())),
                 size.width.toDouble(), size.height.toDouble()
             )
         }
         return
     }
     Box(
-        modifier.pointerInput(c) {
+        medido.pointerInput(c) {
             awaitPointerEventScope {
                 while (true) {
                     val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -585,6 +636,14 @@ private fun CapaDePagina(
         )
     }
 }
+
+/** La vista de una capa de [ancho] píxeles: la hoja en medio y un margen de [Lectura.MARGEN_DEL_PDF] a cada lado. */
+private fun vistaDeLaCapa(ancho: Double): com.forge.pixpin.motor.Viewport {
+    val unidades = PdfDoc.PAGE_WIDTH * (1.0 + 2.0 * Lectura.MARGEN_DEL_PDF)
+    return com.forge.pixpin.motor.Viewport(scrollX = PdfDoc.PAGE_WIDTH * Lectura.MARGEN_DEL_PDF.toDouble(), scrollY = 0.0, zoom = ancho / unidades)
+}
+
+private val PAPEL_DEL_MARGEN = Color(0xFFF3F3F0)
 
 private object PaginasEnMemoria {
     private val cache = object : android.util.LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {

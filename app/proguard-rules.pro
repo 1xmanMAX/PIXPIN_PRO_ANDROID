@@ -36,3 +36,7 @@
 -keep class com.k2fsa.sherpa.onnx.** { *; }
 -keepclassmembers class com.k2fsa.sherpa.onnx.** { *; }
 -dontwarn com.sun.jna.**
+
+# pdfsqueeze (github.com/1xmanMAX/Thesis): la biblioteca nativa busca estas funciones por su nombre.
+-keep class dev.pdfsqueeze.PdfSqueeze { *; }
+-keepclasseswithmembernames class dev.pdfsqueeze.** { native <methods>; }
