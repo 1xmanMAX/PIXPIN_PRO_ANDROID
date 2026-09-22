@@ -43,6 +43,14 @@ jobs:
       - name: SDK de Android 36
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
 
+      # La máquina de GitHub no trae clave de depuración, y `apk-para-repartir.sh` firma con ella.
+      - name: Clave de depuración
+        run: |
+          mkdir -p ~/.android
+          [ -f ~/.android/debug.keystore ] || keytool -genkeypair -v -keystore ~/.android/debug.keystore \
+            -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 \
+            -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+
       - name: Compilar
         run: ./gradlew :app:assembleRelease --stacktrace
 
