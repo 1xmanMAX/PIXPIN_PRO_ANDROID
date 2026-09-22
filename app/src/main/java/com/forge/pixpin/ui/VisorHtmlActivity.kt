@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -301,11 +303,20 @@ class VisorHtmlActivity : ComponentActivity() {
     // ---- Escuchar el documento, con la voz de Google del teléfono. Ver [LectorEnVoz]. ----
     private val lector by lazy {
         LectorEnVoz(this).also { l ->
-            l.alCambiarDeParrafo = { i -> web?.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(i, seguir = !anotando), null) }
+            l.alCambiarDeParrafo = { i -> resaltarElQueSuena(i, seguir = !anotando) }
         }
     }
     /** La barra de escuchar está a la vista. */
     private var escuchando by mutableStateOf(false)
+    /** En qué fracción del documento empieza el párrafo que suena, o −1. La flecha del riel va ahí. */
+    private var fraccionQueSuena by mutableStateOf(-1f)
+
+    /** Resalta el párrafo [i] que suena y apunta dónde cae, para la flecha del riel. */
+    private fun resaltarElQueSuena(i: Int, seguir: Boolean) {
+        web?.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(i, seguir)) { r ->
+            fraccionQueSuena = r?.toFloatOrNull()?.takeIf { i >= 0 } ?: -1f
+        }
+    }
     private var arrancandoLaVoz by mutableStateOf(false)
 
     /**
@@ -362,7 +373,7 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun dejarDeEscuchar() {
         lector.parar()
         escuchando = false
-        web?.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(-1, seguir = false), null)
+        resaltarElQueSuena(-1, seguir = false)
     }
 
     /** La pantalla del motor donde se bajan las voces sin conexión; si no se abre, los ajustes de voz. */
@@ -800,6 +811,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
                 if (esDocumento && !presentando && !anotando) {
                     LateralDeMarcadores(Modifier.align(Alignment.CenterEnd))
+                    RielDeLectura(Modifier.align(Alignment.CenterStart))
                     if (compartiendo) {
                         val original = comparte ?: elOriginal
                         if (original != null) HojaDeCompartir(
@@ -1037,6 +1049,51 @@ class VisorHtmlActivity : ComponentActivity() {
         if (lista.isEmpty()) return
         RielDeMarcas(lista.size, { i -> lista[i].emoji }, modifier) { i ->
             lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) }
+        }
+    }
+
+    /**
+     * **El riel de lectura** (22-sep-2026, pedido por el usuario): una línea fina en el lateral
+     * izquierdo —el derecho es de los marcadores— con **una flechita que va bajando a medida que se
+     * lee**. Leyendo a ojo sigue a lo desplazado ([com.forge.pixpin.motor.Lectura.progreso]);
+     * escuchando, **al párrafo que suena**, y la línea se pinta del ámbar del resaltado hasta él.
+     */
+    @Composable
+    private fun RielDeLectura(modifier: Modifier) {
+        // Lo desplazado y la escala (que cambia al cargar la página) hacen que se vuelva a medir.
+        @Suppress("UNUSED_EXPRESSION") corridoY
+        @Suppress("UNUSED_EXPRESSION") escalaWeb
+        val vista = web ?: return
+        val alto = altoDelDocumento()
+        if (alto <= vista.height) return
+        val suena = escuchando && fraccionQueSuena >= 0f
+        val meta = if (suena) fraccionQueSuena
+        else com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), alto, vista.height.toFloat())
+        val f by androidx.compose.animation.core.animateFloatAsState(meta, label = "riel")
+        val ambar = androidx.compose.ui.graphics.Color(0xFFFFC440)
+        val blanco = androidx.compose.ui.graphics.Color.White
+        // El papel decide el color de la línea: clara sobre el oscuro, oscura sobre el blanco.
+        val linea = if (esDeNoche()) blanco else androidx.compose.ui.graphics.Color(0xFF14182B)
+        androidx.compose.foundation.Canvas(
+            modifier
+                .fillMaxHeight(0.72f)
+                .width(14.dp)
+        ) {
+            val x = 3.dp.toPx()
+            val grueso = 2.dp.toPx()
+            val y = f * size.height
+            drawLine(linea.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
+            // Lo ya leído, más marcado.
+            drawLine((if (suena) ambar else linea).copy(alpha = if (suena) 0.9f else 0.5f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, y), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
+            // La flechita, apuntando hacia el texto.
+            val lado = 9.dp.toPx()
+            val punta = androidx.compose.ui.graphics.Path().apply {
+                moveTo(x - grueso, y - lado / 2f)
+                lineTo(x - grueso + lado, y)
+                lineTo(x - grueso, y + lado / 2f)
+                close()
+            }
+            drawPath(punta, if (suena) ambar else linea.copy(alpha = 0.75f))
         }
     }
 
@@ -1498,7 +1555,7 @@ class VisorHtmlActivity : ComponentActivity() {
             // Una página recargada (otra letra, los márgenes de anotar) pierde los números de sus párrafos.
             if (esDocumento && escuchando) view.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) {
                 val i = lector.estado.value.parrafo
-                if (i >= 0) view.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(i, seguir = false), null)
+                if (i >= 0) resaltarElQueSuena(i, seguir = false)
             }
             if (esDocumento && fraccionPendiente >= 0f) {
                 val f = fraccionPendiente

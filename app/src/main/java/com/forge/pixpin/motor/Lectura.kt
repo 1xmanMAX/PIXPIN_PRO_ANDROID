@@ -146,6 +146,17 @@ object Lectura {
 
     private const val CERCA_DEL_CENTRO = 0.12
 
+    /**
+     * **Por dónde va la lectura**, de 0 a 1, para la flecha del riel del lateral (22-sep-2026,
+     * pedido por el usuario): [corrido] es lo desplazado, [alto] lo que mide el documento y [vista]
+     * lo que se ve de él, todo en las mismas unidades. Arriba del todo es 0 y **al final, 1**: la
+     * flecha llega abajo cuando ya se ve la última línea, no cuando esta sube hasta arriba.
+     */
+    fun progreso(corrido: Float, alto: Float, vista: Float): Float {
+        val recorrido = alto - vista
+        return if (recorrido <= 0f) 0f else (corrido / recorrido).coerceIn(0f, 1f)
+    }
+
     const val ID_DEL_ESTILO = "pixpin-lector"
     const val MARCADORES = 24
 }

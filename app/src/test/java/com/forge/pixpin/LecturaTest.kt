@@ -7,6 +7,17 @@ import org.junit.Test
 
 class LecturaTest {
     @Test
+    fun `la flecha del riel va de arriba abajo y llega al final con la ultima linea a la vista`() {
+        assertEquals(0f, Lectura.progreso(0f, 5000f, 1000f))
+        assertEquals(0.5f, Lectura.progreso(2000f, 5000f, 1000f))
+        assertEquals(1f, Lectura.progreso(4000f, 5000f, 1000f))
+        // Sin salirse, y un documento que cabe entero no tiene recorrido.
+        assertEquals(1f, Lectura.progreso(9000f, 5000f, 1000f))
+        assertEquals(0f, Lectura.progreso(-50f, 5000f, 1000f))
+        assertEquals(0f, Lectura.progreso(0f, 800f, 1000f))
+    }
+
+    @Test
     fun `el estilo se pone antes de cerrar la cabecera y no se acumula`() {
         val pagina = "<html><head><title>x</title></head><body><p>hola</p></body></html>"
         val una = Lectura.conEstilo(pagina, grosor = 2, letra = 1)

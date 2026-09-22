@@ -154,6 +154,9 @@ se pueden ver **como saldrían impresos** y meter en un proyecto **como PDF**, p
 Leyendo un Word o un libro se cambia **el tamaño, el grosor y el tipo de letra**, y se dejan
 **marcadores con emoticono**: salen como puntos en el lateral, se pasa el dedo por ellos —vibra al
 cambiar de uno a otro— y al soltar se va a ese. Al volver, el documento se abre por donde se dejó.
+En el lateral izquierdo, **una línea fina con una flechita que va bajando a medida que se lee**:
+arriba es el principio y abajo el final; escuchando, la flecha va con el párrafo que suena y lo
+ya leído se pinta en ámbar.
 
 **Escuchar un Word o un libro.** El botón de la voz lo lee en alto desde lo que asoma arriba de la
 pantalla, con **el motor de voz de Google que ya trae el teléfono** y **solo con sus voces sin

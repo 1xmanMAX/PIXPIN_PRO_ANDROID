@@ -120,7 +120,9 @@ class VozAltaTest {
     @Test
     fun `el resaltado apunta al parrafo pedido`() {
         assertTrue(VozAlta.resaltar(7, seguir = true).contains("[data-pixpin-voz=\"7\"]"))
-        assertTrue(VozAlta.resaltar(7, seguir = false).contains("if(!false||"))
+        assertTrue(VozAlta.resaltar(7, seguir = false).contains("if(false&&"))
+        // Devuelve dónde cae el párrafo, para la flecha del riel.
+        assertTrue(VozAlta.resaltar(7, seguir = true).contains("return Math.max(0,Math.min(1,f))"))
         assertTrue(VozAlta.PREPARAR.contains("pixpin-tinta"))
     }
 }

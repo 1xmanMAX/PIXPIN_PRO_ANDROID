@@ -200,15 +200,19 @@ object VozAlta {
      * El guion que resalta el párrafo [parrafo] y, con [seguir], lo trae a la vista si se ha salido
      * —pero solo si el anterior se estaba viendo: si el lector se ha ido a otra parte del
      * documento, no se le arrastra de vuelta—. Con −1 solo quita el resaltado.
+     *
+     * Devuelve **en qué fracción del documento empieza ese párrafo** (de 0 a 1), para la flecha
+     * del riel de lectura; −1 si no está.
      */
     fun resaltar(parrafo: Int, seguir: Boolean): String = """(function(){
   var antes=document.querySelector('.pixpin-leyendo'), seVeia=true;
   if(antes){ var ra=antes.getBoundingClientRect(); seVeia=ra.bottom>0&&ra.top<window.innerHeight; antes.classList.remove('pixpin-leyendo'); }
-  var el=document.querySelector('[data-pixpin-voz="$parrafo"]'); if(!el) return;
+  var el=document.querySelector('[data-pixpin-voz="$parrafo"]'); if(!el) return -1;
   el.classList.add('pixpin-leyendo');
-  if(!$seguir||!seVeia) return;
   var r=el.getBoundingClientRect(), h=window.innerHeight;
-  if(r.top<h*0.08||r.bottom>h*0.85) window.scrollTo(window.pageXOffset, window.pageYOffset+r.top-h*0.25);
+  var f=(r.top+window.pageYOffset)/Math.max(1,document.documentElement.scrollHeight);
+  if($seguir&&seVeia&&(r.top<h*0.08||r.bottom>h*0.85)) window.scrollTo(window.pageXOffset, window.pageYOffset+r.top-h*0.25);
+  return Math.max(0,Math.min(1,f));
 })()"""
 
     /** Las palabras más corrientes de cada lengua, para [idiomaDelTexto]. */
