@@ -45,6 +45,14 @@
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
 
+    <!-- Leer en voz alta un Word o un libro: desde Android 11 los motores de voz (el de Google)
+         solo se ven si se declara que se buscan. Ver ui/LectorEnVoz.kt. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".PixPinApp"
         android:allowBackup="true"

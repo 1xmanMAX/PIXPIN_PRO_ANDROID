@@ -48,6 +48,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
@@ -292,6 +297,79 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     private var laPaginaQueSeVe: File? = null
+
+    // ---- Escuchar el documento, con la voz de Google del teléfono. Ver [LectorEnVoz]. ----
+    private val lector by lazy {
+        LectorEnVoz(this).also { l ->
+            l.alCambiarDeParrafo = { i -> web?.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(i, seguir = !anotando), null) }
+        }
+    }
+    /** La barra de escuchar está a la vista. */
+    private var escuchando by mutableStateOf(false)
+    private var arrancandoLaVoz by mutableStateOf(false)
+
+    /**
+     * **Escuchar desde aquí**: se numeran los párrafos de la página, se arranca el motor con la voz
+     * sin conexión del idioma del texto y se empieza por **el primer párrafo que asoma arriba**.
+     * Si el motor ya estaba arrancado, solo se vuelven a contar los párrafos.
+     */
+    private fun empezarAEscuchar() {
+        val vista = web ?: return
+        if (arrancandoLaVoz) return
+        arrancandoLaVoz = true
+        vista.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) { crudo ->
+            val json = runCatching { org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String) }.getOrNull()
+            val lista = json?.optJSONArray("t")
+            val textos = (0 until (lista?.length() ?: 0)).map { lista!!.optString(it) }
+            if (textos.isEmpty()) {
+                arrancandoLaVoz = false
+                Toast.makeText(this, "Este documento no tiene texto que leer", Toast.LENGTH_SHORT).show()
+                return@evaluateJavascript
+            }
+            val desde = json!!.optInt("desde", 0)
+            if (lector.estado.value.listo) {
+                arrancandoLaVoz = false
+                lector.documento(textos)
+                lector.leer(desde)
+                escuchando = true
+                return@evaluateJavascript
+            }
+            val muestra = textos.asSequence().drop(desde).take(40).joinToString(" ").take(4000)
+            val idioma = com.forge.pixpin.motor.VozAlta.idiomaParaLeer(muestra, json.optString("lang"), java.util.Locale.getDefault().toLanguageTag())
+            val velocidad = prefsDeLectura.getFloat("voz:velocidad", 1f)
+            lector.arrancar(idioma, velocidad) { arranque ->
+                arrancandoLaVoz = false
+                when (arranque) {
+                    is LectorEnVoz.Arranque.Bien -> { lector.documento(textos); lector.leer(desde); escuchando = true }
+                    is LectorEnVoz.Arranque.SinMotor ->
+                        Toast.makeText(this, "No hay motor de voz en el teléfono. Instala «Servicios de voz de Google».", Toast.LENGTH_LONG).show()
+                    is LectorEnVoz.Arranque.SinVoz -> {
+                        val lengua = java.util.Locale.forLanguageTag(arranque.idioma).let { it.getDisplayLanguage(it) }.ifBlank { arranque.idioma }
+                        Toast.makeText(
+                            this,
+                            if (arranque.bajable) "Baja la voz sin conexión de «$lengua» y vuelve a tocar escuchar"
+                            else "No hay voz sin conexión de «$lengua» en el teléfono",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        abrirLasVoces(arranque.motor)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Se deja de escuchar: se calla, se quita el resaltado y se va la barra. */
+    private fun dejarDeEscuchar() {
+        lector.parar()
+        escuchando = false
+        web?.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(-1, seguir = false), null)
+    }
+
+    /** La pantalla del motor donde se bajan las voces sin conexión; si no se abre, los ajustes de voz. */
+    private fun abrirLasVoces(motor: String? = if (lector.hayGoogle()) com.forge.pixpin.motor.VozAlta.MOTOR_DE_GOOGLE else null) {
+        val abierta = LectorEnVoz.paraBajarVoces(motor).any { runCatching { startActivity(it) }.isSuccess }
+        if (!abierta) Toast.makeText(this, "No se pudieron abrir los ajustes de voz", Toast.LENGTH_SHORT).show()
+    }
 
     /** Si el aparato está en modo oscuro: decide el papel del documento y, con él, la tinta de lo anotado. */
     private fun esDeNoche(): Boolean =
@@ -568,6 +646,7 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        lector.soltar()
         // Un `WebView` que no se destruye se queda con su proceso de pintar y su guion vivos.
         web?.let { runCatching { it.stopLoading(); it.destroy() } }
         web = null
@@ -594,6 +673,7 @@ class VisorHtmlActivity : ComponentActivity() {
             when {
                 aPantalla != null -> dejarLaPantallaCompleta()
                 anotando -> { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
+                escuchando -> dejarDeEscuchar()
                 web?.canGoBack() == true -> web?.goBack()
                 // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
                 sinGuion || web == null -> finish()
@@ -705,6 +785,10 @@ class VisorHtmlActivity : ComponentActivity() {
                             IconButton(onClick = { poniendoMarcador = true; conLaLetra = false }, modifier = Modifier.size(38.dp)) {
                                 Icon(Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
+                            // **Escuchar**: la voz de Google del teléfono lee desde lo que asoma arriba. Ver [empezarAEscuchar].
+                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAEscuchar() }, modifier = Modifier.size(38.dp)) {
+                                Icon(Icons.Filled.RecordVoiceOver, contentDescription = "Escuchar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                            }
                             IconButton(onClick = { compartiendo = true; conLaLetra = false; poniendoMarcador = false }, modifier = Modifier.size(38.dp)) {
                                 Icon(IconoDeCompartir, contentDescription = "Compartir", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
@@ -740,8 +824,10 @@ class VisorHtmlActivity : ComponentActivity() {
                         onCerrar = { conLaLetra = false },
                         onImpresion = { conLaLetra = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } },
                         onAlProyecto = { conLaLetra = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } },
-                        onQuitarMarcadores = { conLaLetra = false; quitandoMarcadores = true }
+                        onQuitarMarcadores = { conLaLetra = false; quitandoMarcadores = true },
+                        onVoces = { conLaLetra = false; abrirLasVoces() }
                     )
+                    if (escuchando && !poniendoMarcador) BarraDeEscuchar(Modifier.align(Alignment.BottomCenter))
                     if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
                         poniendoMarcador = false
                         marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
@@ -955,13 +1041,59 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /**
+     * **La barra de escuchar**, abajo y de cristal como la del reproductor del chat: atrás un
+     * párrafo, play/pausa, adelante uno, la velocidad (rota al tocarla) y cerrar. Debajo, qué voz
+     * lee y por dónde va. Se queda aunque la pastilla del nombre se esconda.
+     */
+    @Composable
+    private fun BarraDeEscuchar(modifier: Modifier) {
+        val e by lector.estado.collectAsState()
+        val tinta = com.forge.pixpin.ui.theme.Cristal.tinta
+        Box(modifier.navigationBarsPadding().padding(bottom = 10.dp, start = 12.dp, end = 12.dp)) {
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                Column(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { lector.saltar(-1) }) {
+                            Icon(Icons.Filled.SkipPrevious, contentDescription = "Párrafo anterior", tint = tinta)
+                        }
+                        IconButton(onClick = { if (e.leyendo) lector.pausar() else lector.seguir() }) {
+                            Icon(
+                                if (e.leyendo) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (e.leyendo) "Pausa" else "Leer", tint = tinta, modifier = Modifier.size(30.dp)
+                            )
+                        }
+                        IconButton(onClick = { lector.saltar(1) }) {
+                            Icon(Icons.Filled.SkipNext, contentDescription = "Párrafo siguiente", tint = tinta)
+                        }
+                        androidx.compose.material3.TextButton(onClick = {
+                            val v = com.forge.pixpin.motor.VozAlta.siguienteVelocidad(e.velocidad)
+                            prefsDeLectura.edit().putFloat("voz:velocidad", v).apply()
+                            lector.ponerVelocidad(v)
+                        }) {
+                            Text(com.forge.pixpin.motor.VozAlta.rotulo(e.velocidad), color = tinta, fontWeight = FontWeight.Bold)
+                        }
+                        IconButton(onClick = { dejarDeEscuchar() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Dejar de escuchar", tint = tinta)
+                        }
+                    }
+                    val donde = if (e.cuantos > 0 && e.parrafo >= 0) " · ${e.parrafo + 1} de ${e.cuantos}" else ""
+                    Text(
+                        e.voz + donde, color = tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 6.dp, start = 10.dp, end = 10.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    /**
      * **El engranaje**: una hoja que se despliega desde abajo, con todo a la vista y a un toque.
      * El tamaño y el grosor son **una barra de puntos** cada uno —cada punto, un valor; se toca o
      * se pasa el dedo y vibra al cambiar—, el tipo de letra son fichas, y debajo lo demás.
      */
     @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Composable
-    private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit) {
+    private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit, onVoces: () -> Unit) {
         val lectura = com.forge.pixpin.motor.Lectura
         val fijada = hayAnotaciones
         androidx.compose.material3.ModalBottomSheet(
@@ -1003,6 +1135,12 @@ class VisorHtmlActivity : ComponentActivity() {
                     FichaDeLetra("Vista de impresión", false, onImpresion)
                     FichaDeLetra("Al proyecto", false, onAlProyecto)
                     if (marcadores.isNotEmpty()) FichaDeLetra("Quitar marcadores", false, onQuitarMarcadores)
+                }
+
+                // Las voces sin conexión se bajan en el propio motor de Google, no en PixPin.
+                Text("Escuchar", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    FichaDeLetra("Voces sin conexión", false, onVoces)
                 }
             }
         }
@@ -1357,6 +1495,11 @@ class VisorHtmlActivity : ComponentActivity() {
             // La página recién cargada no tiene la tinta: se le pone. Ver [ponerLaTintaEnLaPagina].
             tintaEnLaPagina = false
             if (esDocumento && columnaDeAnotar != null) ponerLaTintaEnLaPagina()
+            // Una página recargada (otra letra, los márgenes de anotar) pierde los números de sus párrafos.
+            if (esDocumento && escuchando) view.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) {
+                val i = lector.estado.value.parrafo
+                if (i >= 0) view.evaluateJavascript(com.forge.pixpin.motor.VozAlta.resaltar(i, seguir = false), null)
+            }
             if (esDocumento && fraccionPendiente >= 0f) {
                 val f = fraccionPendiente
                 fraccionPendiente = -1f

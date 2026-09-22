@@ -155,6 +155,14 @@ Leyendo un Word o un libro se cambia **el tamaño, el grosor y el tipo de letra*
 **marcadores con emoticono**: salen como puntos en el lateral, se pasa el dedo por ellos —vibra al
 cambiar de uno a otro— y al soltar se va a ese. Al volver, el documento se abre por donde se dejó.
 
+**Escuchar un Word o un libro.** El botón de la voz lo lee en alto desde lo que asoma arriba de la
+pantalla, con **el motor de voz de Google que ya trae el teléfono** y **solo con sus voces sin
+conexión**: el texto no sale del aparato. El idioma se adivina por el propio texto (un Word en
+inglés se lee con la voz inglesa), el párrafo que suena se resalta y la página lo sigue, y una
+barra abajo lleva pausa, párrafo anterior y siguiente, y la velocidad (de 0,75× a 2×). Si falta
+la voz del idioma, PixPin abre la pantalla de Google para bajarla; también desde el engranaje,
+«Voces sin conexión».
+
 **Editor rápido.** Sin salir del lector se anota con **el mismo motor del lienzo**: las mismas
 herramientas y tintas, las que elijas en Ajustes arrastrando. En un **PDF**, el lápiz deja anotar
 sobre **todas las hojas a la vez**, como en cualquier editor de PDF: un dedo dibuja, dos pasan las
