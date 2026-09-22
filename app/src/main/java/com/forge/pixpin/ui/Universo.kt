@@ -58,6 +58,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
@@ -159,12 +161,27 @@ fun PantallaDeUniverso(
     fun cambiar(e: Espacio) = guardar(universos.con(e))
 
     // El chat del proyecto: de ahí salen los archivos, y con él se sabe si un cuerpo sigue vivo.
-    val mensajes by produceState(emptyList<Mensaje>(), proyecto.id) {
+    // **Al día siempre**: se vuelve a leer en cuanto el chat cambia, aquí o en otra pantalla.
+    val cambiosDelChat by MensajesStore.cambios.collectAsState()
+    val mensajes by produceState(emptyList<Mensaje>(), proyecto.id, cambiosDelChat) {
         value = withContext(Dispatchers.IO) {
             runCatching { MensajesStore(contexto).leer().filter { it.proyecto == proyecto.id } }.getOrDefault(emptyList())
         }
     }
     val paginas = remember(proyecto) { HojasDelProyecto.paginas(proyecto) { null } }
+
+    // **El universo es el chat, dibujado** (22-sep-2026, pedido por el usuario: «que siempre se
+    // vaya actualizando»). Cada vez que el chat cambia se rehace lo que falte: un archivo nuevo
+    // aparece como sistema solar, y una respuesta, como planeta en órbita del suyo. No se toca lo
+    // que el usuario colocó, ni vuelve lo que quitó. Ver [desdeElChat].
+    LaunchedEffect(mensajes) {
+        if (mensajes.isEmpty()) return@LaunchedEffect
+        val armado = universos.desdeElChat(
+            proyecto.id, nodosDelChat(mensajes), System.currentTimeMillis(),
+            quitadosDe(universos, proyecto.id, mensajes)
+        )
+        if (armado != universos) guardar(armado)
+    }
 
     var elegido by remember(dondeEstoy) { mutableStateOf<String?>(null) }
     var vinculando by remember(dondeEstoy) { mutableStateOf(false) }
@@ -336,8 +353,23 @@ fun PantallaDeUniverso(
             }
             .drawBehind {
                 dibujarCielo(camara, densidad)
-                // Los vínculos: una raya de centro a centro.
                 val e = camara.escala.floatValue * densidad
+                // **Las órbitas**: un aro por cada anillo de cuerpos, tenue y detrás de todo.
+                // No es un adorno: es lo que dice que lo de fuera gira alrededor de lo de dentro.
+                val centro = Offset(camara.x.floatValue, camara.y.floatValue)
+                val aros = espacio.cuerpos
+                    .filter { espacio.vinculos.any { v -> v.une(Espacio.SOL, it.id) } }
+                    .map { c -> kotlin.math.hypot(sitioDe(c).x, sitioDe(c).y) }
+                    .filter { it > 1f }
+                    .map { Math.round(it / 20f) * 20f }
+                    .distinct()
+                for (r in aros) {
+                    drawCircle(
+                        Color.White.copy(alpha = 0.07f), radius = r * e, center = centro,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                    )
+                }
+                // Los vínculos: una raya de centro a centro.
                 for (v in espacio.vinculos) {
                     val a = centroDe(v.a, espacio) ?: continue
                     val b = centroDe(v.b, espacio) ?: continue
@@ -419,11 +451,8 @@ fun PantallaDeUniverso(
                 }
             } else if (anadiendo) {
                 Fila {
-                    // **Armarlo con la forma del chat** (21-sep-2026, pedido por el usuario):
-                    // cada archivo, un sistema solar; lo que se le responde, sus planetas; las
-                    // páginas de un PDF, planetas, y lo comentado en una página, sus satélites.
-                    // Ver [com.forge.pixpin.ui.desdeElChat].
-                    Chip("Traer el chat") { dialogo = Dialogo.TraerElChat }
+                    // El chat ya no se «trae»: el universo se arma solo con su forma, y al día.
+                    // Ver [com.forge.pixpin.ui.desdeElChat] y el efecto de arriba.
                     Chip("Del chat") { dialogo = Dialogo.DelChat }
                     Chip("Hoja") { dialogo = Dialogo.Hojas }
                     Chip("Nota") { dialogo = Dialogo.Texto(Cuerpo.NOTA, null) }
@@ -503,32 +532,6 @@ fun PantallaDeUniverso(
             },
             onCerrar = { dialogo = null }
         )
-        Dialogo.TraerElChat -> {
-            val cuantos = remember(mensajes) { mensajes.count { it.clase != Clase.NOTA || it.respondeA != null } }
-            AlertDialog(
-                onDismissRequest = { dialogo = null },
-                title = { Text("Traer el chat") },
-                text = {
-                    Text(
-                        if (mensajes.isEmpty()) "En el chat de este proyecto aún no hay nada."
-                        else "Cada archivo del chat será un sistema solar; lo que le respondiste, sus planetas; " +
-                            "y en un PDF, cada página es un planeta y lo que comentaste en ella, su satélite.\n\n" +
-                            "Hay $cuantos en el chat. Lo que ya has colocado se queda donde está, y lo que quitaste no vuelve."
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        enabled = mensajes.isNotEmpty(),
-                        onClick = {
-                            dialogo = null
-                            guardar(universos.desdeElChat(proyecto.id, nodosDelChat(mensajes), System.currentTimeMillis(), quitadosDe(universos, proyecto.id, mensajes)))
-                            camara.puesta = false
-                        }
-                    ) { Text("Armar") }
-                },
-                dismissButton = { TextButton(onClick = { dialogo = null }) { Text("Cancelar") } }
-            )
-        }
         is Dialogo.Quitar -> AlertDialog(
             onDismissRequest = { dialogo = null },
             title = { Text("¿Quitar con su espacio?") },
@@ -546,7 +549,6 @@ private sealed interface Dialogo {
     data class Texto(val clase: String, val cuerpo: Cuerpo?) : Dialogo
     data object Figuras : Dialogo
     data object DelChat : Dialogo
-    data object TraerElChat : Dialogo
     data object Hojas : Dialogo
     data class Quitar(val cuerpo: Cuerpo) : Dialogo
 }
@@ -823,7 +825,8 @@ private fun nodosDelChat(mensajes: List<Mensaje>): List<NodoDelChat> {
             ruta = m.ruta.takeIf { m.clase == Clase.IMAGEN },
             pagina = m.pagina?.plus(1),
             esDocumento = m.clase == Clase.ARCHIVO && m.nombre.endsWith(".pdf", ignoreCase = true),
-            esTexto = m.clase == Clase.NOTA
+            esTexto = m.clase == Clase.NOTA,
+            soloEmoji = m.clase == Clase.NOTA && esSoloEmoji(m.texto)
         )
     }
 }
@@ -839,6 +842,30 @@ private fun quitadosDe(universos: Universos, proyecto: String, mensajes: List<Me
     val puestos = suyos.flatMap { universos.espacio(it).cuerpos }.mapNotNullTo(HashSet()) { it.ref }
     if (puestos.isEmpty()) return emptySet()
     return mensajes.mapNotNull { it.id.takeIf { id -> id !in puestos } }.toSet()
+}
+
+/**
+ * **Si un mensaje es solo emoticonos** (con sus modificadores y espacios). Un «👍» no es una nota
+ * con texto: es un gesto, y en el universo se ve como el emoji suelto que es.
+ */
+private fun esSoloEmoji(texto: String): Boolean {
+    val limpio = texto.trim()
+    if (limpio.isEmpty() || limpio.length > 16) return false
+    var hayEmoji = false
+    var i = 0
+    while (i < limpio.length) {
+        val p = limpio.codePointAt(i)
+        val tipo = Character.getType(p)
+        when {
+            p == 0x200D || p == 0xFE0F || p == 0xFE0E || (p in 0x1F3FB..0x1F3FF) -> Unit // uniones y tonos de piel
+            Character.isWhitespace(p) -> Unit
+            tipo == Character.SURROGATE.toInt() || tipo == Character.OTHER_SYMBOL.toInt() -> hayEmoji = true
+            p >= 0x1F000 -> hayEmoji = true
+            else -> return false
+        }
+        i += Character.charCount(p)
+    }
+    return hayEmoji
 }
 
 private fun nombreDelMensaje(m: Mensaje): String =
@@ -892,8 +919,14 @@ private fun abrirMensajeDelUniverso(contexto: Context, app: PixPinApp, proyecto:
 }
 
 private const val ARCHIVO_DE_UNIVERSOS = "universos.json"
-private const val RADIO_DEL_SOL = 46f
-private const val RADIO_DEL_CUERPO = 34f
+/**
+ * **El sol es inmenso** (21-sep-2026, pedido por el usuario: «el sol tiene que ser grande,
+ * grande al centro, y los demás un poco más pequeños»). Es lo que hace que un espacio se lea de
+ * un vistazo: en el centro, lo que manda; alrededor, lo que cuelga de él. Y como todo esto se
+ * amplía con dos dedos, que sea grande no quita sitio: quita duda.
+ */
+private const val RADIO_DEL_SOL = 110f
+private const val RADIO_DEL_CUERPO = 30f
 private const val LADO_DE_MINIATURA = 192
 
 private val COLORES_DE_CUERPO = listOf(

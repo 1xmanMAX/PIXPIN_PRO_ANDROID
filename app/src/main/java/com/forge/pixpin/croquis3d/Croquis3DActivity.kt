@@ -1155,11 +1155,13 @@ class Croquis3DActivity : ComponentActivity() {
                 }
             }
             hecho.onSuccess { (ruta, caja, triangulos) ->
-                controlador.ponerModelo(ruta, nombre.substringBeforeLast('.'), caja, triangulos)
+                val corto = nombre.substringBeforeLast('.')
+                val esNuevo = controlador.ponerModelo(ruta, corto, caja, triangulos)
                 controlador.herramienta = Herramienta3D.SELECCION
                 Toast.makeText(
                     this@Croquis3DActivity,
-                    "«${nombre.substringBeforeLast('.')}»: ${"%,d".format(triangulos)} triángulos, " +
+                    if (!esNuevo) "«$corto» ya estaba en este croquis: aquí lo tienes"
+                    else "«$corto»: ${"%,d".format(triangulos)} triángulos, " +
                         "%.1f × %.1f × %.1f m".format(caja[3] - caja[0], caja[4] - caja[1], caja[5] - caja[2]),
                     Toast.LENGTH_LONG
                 ).show()

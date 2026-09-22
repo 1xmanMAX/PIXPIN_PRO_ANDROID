@@ -35,7 +35,11 @@ class UniversoDesdeElChatTest {
         val u = armado()
         val raiz = u.espacio(Universos.deProyecto("pr-1"))
         assertEquals(setOf("pdf", "foto", "suelto"), raiz.cuerpos.mapNotNull { it.ref }.toSet())
-        assertTrue("todos son mensajes", raiz.cuerpos.all { it.clase == Cuerpo.MENSAJE })
+        // Lo que tiene archivo detrás es un cuerpo de mensaje; un comentario se ve como la nota
+        // que es (22-sep-2026), y todo cuelga del sol con su vínculo: la órbita se ve.
+        assertTrue("los archivos son mensajes", raiz.cuerpos.filter { it.ref != "suelto" }.all { it.clase == Cuerpo.MENSAJE })
+        assertEquals(Cuerpo.NOTA, raiz.cuerpos.first { it.ref == "suelto" }.clase)
+        assertTrue("todos atados al sol", raiz.cuerpos.all { c -> raiz.vinculos.any { it.une(com.forge.pixpin.ui.Espacio.SOL, c.id) } })
         // Un comentario suelto no puede parecer un archivo: nace pequeño.
         assertTrue(raiz.cuerpos.first { it.ref == "suelto" }.tamano < 1f)
         assertEquals(1.2f, raiz.cuerpos.first { it.ref == "pdf" }.tamano, 1e-6f)

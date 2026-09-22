@@ -177,6 +177,10 @@ object MotorWhisper {
         val principal = idiomaDe(idioma)
         val otro = segundo.takeIf { it.isNotBlank() }?.let { idiomaDe(it) }?.takeIf { it != principal }
         val adivinar = otro != null && !todoEnUno
+        // **Traducir, solo al inglés.** La tarea `translate` de Whisper lleva **siempre** al
+        // inglés, no «al idioma que se le fuerce»: con «todo en uno» y el primero en español, lo
+        // que hacía era escribir en inglés lo dicho en español. Ahora, si el destino no es el
+        // inglés, se transcribe cada trozo en el primero, que es lo más cercano que sabe hacer.
         val tarea = if (todoEnUno && otro != null && principal == "en") "translate" else "transcribe"
         val salida = ArrayList<Transcriptor.Segmento>()
         synchronized(this) {
@@ -192,13 +196,22 @@ object MotorWhisper {
                     var texto: String
                     if (adivinar && muestras.size >= MINIMO_PARA_ADIVINAR_SEGUNDOS * Transcriptor.HERCIOS) {
                         val r = decodificar(rec, muestras)
-                        val oido = r.lang.trim().lowercase()
-                        if (oido == principal || oido == otro) {
+                        // Whisper dice el idioma como «<|es|>»: se queda solo la letra.
+                        val oido = r.lang.trim().lowercase().trim('<', '>', '|')
+                        // **Lo adivinado tiene que ser de los dos que se pusieron, y tiene que
+                        // sostenerse**: un modelo pequeño con un trozo corto adivina lenguas que
+                        // no vienen a cuento, y entonces el texto sale en un idioma que nadie
+                        // habló. Si no es creíble, se rehace forzando el primero, que es el que
+                        // el usuario dijo que iba a hablar (22-sep-2026: «le pongo español y lo
+                        // transcribe en otro idioma»).
+                        val vale = (oido == principal || oido == otro) && Transcriptor.creible(r.text.trim(), oido)
+                        if (vale) {
                             lengua = oido
                             texto = r.text
                         } else {
                             rec.setConfig(conElPrincipal)
                             texto = decodificar(rec, muestras).text
+                            lengua = principal
                             rec.setConfig(sinIdioma)
                         }
                     } else if (adivinar) {
@@ -210,6 +223,15 @@ object MotorWhisper {
                         texto = decodificar(rec, muestras).text
                     }
                     texto = texto.trim()
+                    // **Y si aun así no se sostiene, se intenta una vez más con el primero antes
+                    // de tirarlo**: perder un trozo de la grabación se ve como «no transcribe
+                    // bien», que es peor que una frase regular.
+                    if (texto.isNotEmpty() && !Transcriptor.creible(texto, lengua) && lengua != principal) {
+                        rec.setConfig(conElPrincipal)
+                        texto = decodificar(rec, muestras).text.trim()
+                        lengua = principal
+                        rec.setConfig(if (adivinar) sinIdioma else conElPrincipal)
+                    }
                     if (Transcriptor.creible(texto, lengua)) salida += Transcriptor.Segmento(Transcriptor.msDe(desde), texto)
                     avance((i + 1).toFloat() / tandas.size)
                 }

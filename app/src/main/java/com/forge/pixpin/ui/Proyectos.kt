@@ -905,7 +905,11 @@ private fun PaginaDeProyecto(
     // uno es lo que es —**una cosa con un nombre y una portada**— y las páginas están a un
     // toque. Lo pidió el usuario (7-sep-2026). Se recuerda por proyecto mientras dure la
     // pantalla: el que abriste sigue abierto al volver de anotar una hoja.
-    var desplegado by rememberSaveable(p.id) { mutableStateOf(false) }
+    // **Y ya no se pliega** (22-sep-2026): el usuario lo quitó —«el agrupar grande, quítalo»—.
+    // Entrar a un proyecto y tener que abrirlo otra vez para ver sus hojas era un toque de más
+    // en el gesto que más se hace. El plegado **pequeño** —los sublienzos bajo su página— se
+    // queda: ese sí agrupa algo que se entiende. Ver [Plegado] y [ElMonton], que queda sin usar.
+    val desplegado = true
 
     val alcance = rememberCoroutineScope()
     val desplazamiento = remember(p.id) { Animatable(0f) }
@@ -975,24 +979,7 @@ private fun PaginaDeProyecto(
                     }
 
                     if (paginas.isNotEmpty()) {
-                        // **Plegar y desplegar el montón.** Solo cuando hay algo que plegar,
-                        // y al lado del cambio de vista, que es donde uno busca «cómo se ve
-                        // esto». Ver [ElMonton].
-                        if (paginas.isNotEmpty()) {
-                            IconButton(
-                                onClick = { desplegado = !desplegado },
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Icon(
-                                    if (desplegado) Icons.Filled.UnfoldLess else Icons.Filled.UnfoldMore,
-                                    contentDescription = stringResourceSafe(
-                                        if (desplegado) R.string.proyecto_plegar
-                                        else R.string.proyecto_toca_para_abrir
-                                    ),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                        // El botón de plegar el montón se fue con el montón (22-sep-2026).
                         IconButton(onClick = { rejilla = !rejilla }, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 if (rejilla) Icons.Filled.ViewCarousel else Icons.Filled.GridView,
@@ -1131,14 +1118,6 @@ private fun PaginaDeProyecto(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-
-                        !desplegado -> ElMonton(
-                            app = app,
-                            p = p,
-                            paginas = paginas,
-                            enPrimerPlano = enPrimerPlano,
-                            onAbrir = { desplegado = true }
-                        )
 
                         rejilla -> RejillaDeHojas(
                             app = app,

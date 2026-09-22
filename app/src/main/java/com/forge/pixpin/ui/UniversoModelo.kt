@@ -177,7 +177,9 @@ data class NodoDelChat(
     /** Si lo que hay dentro son páginas de un documento (un PDF del chat). */
     val esDocumento: Boolean = false,
     /** Si es solo texto —un comentario suelto— y no un archivo. */
-    val esTexto: Boolean = false
+    val esTexto: Boolean = false,
+    /** Si ese texto es **solo emoticonos**: entonces se ve como emoji, sin caja de nota. */
+    val soloEmoji: Boolean = false
 )
 
 /**
@@ -222,25 +224,40 @@ fun Universos.desdeElChat(
         val espacio = u.espacio(enEspacio)
         val hijos = porPadre[nodo.id].orEmpty()
         // Si ya está puesto se respeta **tal cual**: su sitio, su tamaño y su color son del usuario.
-        val existente = espacio.cuerpos.firstOrNull { it.clase == Cuerpo.MENSAJE && it.ref == nodo.id }
+        val existente = espacio.cuerpos.firstOrNull { it.ref == nodo.id }
+        // **Lo que es texto se ve como texto** (21-sep-2026, pedido por el usuario): un comentario
+        // no es un archivo, así que se pinta como la nota que es, y un emoticono, como el emoji
+        // suelto. Lo que tiene archivo detrás sigue siendo un cuerpo de mensaje, con su miniatura.
+        val clase = when {
+            nodo.soloEmoji -> Cuerpo.EMOJI
+            nodo.esTexto -> Cuerpo.NOTA
+            else -> Cuerpo.MENSAJE
+        }
         val cuerpo = existente ?: Cuerpo(
             id = "c:${reloj++}",
-            clase = Cuerpo.MENSAJE,
+            clase = clase,
             texto = nodo.nombre,
             ref = nodo.id,
             ruta = nodo.ruta,
             // **Un comentario nace pequeño; un archivo, entero.** Lo que lleva algo dentro se ve
             // un pelo más grande, que es lo que invita a entrar.
             tamano = when {
-                nodo.esTexto -> 0.6f
+                nodo.esTexto -> 0.75f
                 hijos.isNotEmpty() || nodo.esDocumento -> 1.2f
                 else -> 1f
             }
         ).let { nuevo ->
-            val sitio = espacio.sitioLibre()
-            nuevo.copy(x = sitio.x, y = sitio.y)
+            // **En órbita alrededor de su sol**, no en cualquier hueco: lo que responde a algo se
+            // pone en un anillo a su alrededor, repartido, que es lo que hace que se lea de un
+            // vistazo quién contesta a quién. Ver [enOrbita].
+            val cuantos = espacio.cuerpos.count { it.clase != Cuerpo.ROTULO }
+            val sitio = enOrbita(cuantos, hondura)
+            nuevo.copy(x = sitio.first, y = sitio.second)
         }
-        if (existente == null) u = u.con(u.espacio(enEspacio).conCuerpo(cuerpo))
+        if (existente == null) {
+            // Y **atado al sol con una raya**: la órbita se ve, y se sigue viendo si se mueve.
+            u = u.con(u.espacio(enEspacio).conCuerpo(cuerpo).alternarVinculo(Espacio.SOL, cuerpo.id))
+        }
         if (hijos.isEmpty()) return
         // Lo que le contesta vive dentro de él: hace falta su espacio.
         val (conEspacio, dentro) = u.conSubespacio(enEspacio, cuerpo.id, reloj++)
@@ -257,3 +274,18 @@ fun Universos.desdeElChat(
 
 /** Hasta dónde se sigue un hilo hacia dentro. Ver [desdeElChat]. */
 const val HONDURA_MAXIMA = 12
+
+/**
+ * **Dónde cae el que hace el número [cual] en la órbita.** Un anillo por tanda de ocho, cada uno
+ * más lejos, y el ángulo se va girando para que dos vueltas no se tapen. En dp del mundo.
+ */
+fun enOrbita(cual: Int, hondura: Int = 0): Pair<Float, Float> {
+    val porVuelta = 8
+    val vuelta = cual / porVuelta
+    val radio = RADIO_DE_LA_PRIMERA_ORBITA * (1f + vuelta * 0.55f)
+    val angulo = (cual % porVuelta) * (2.0 * Math.PI / porVuelta) + vuelta * 0.4 + hondura * 0.7
+    return (radio * kotlin.math.cos(angulo)).toFloat() to (radio * kotlin.math.sin(angulo)).toFloat()
+}
+
+/** Lo lejos que orbita el primer anillo, en dp del mundo. */
+const val RADIO_DE_LA_PRIMERA_ORBITA = 190f

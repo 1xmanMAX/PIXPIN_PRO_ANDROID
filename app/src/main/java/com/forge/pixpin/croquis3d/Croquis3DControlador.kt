@@ -1887,7 +1887,26 @@ class Croquis3DControlador {
      * donde mira la cámara, a escala real —un cuadro del suelo es un metro— y ya elegido, para
      * colocarlo con el mando. [caja] en metros, `minX, minY, minZ, maxX, maxY, maxZ`.
      */
-    fun ponerModelo(ruta: String, nombre: String, caja: DoubleArray, triangulos: Int) {
+    /**
+     * **El modelo entra una sola vez, y se ve** (22-sep-2026, dos fallos que reportó el usuario).
+     *
+     * - **«Se superpone»**: traer otra vez el mismo archivo apilaba otra copia encima de la
+     *   anterior, en el mismo sitio. Cada importación escribe una malla nueva, así que la ruta no
+     *   sirve para reconocerlo: se compara por lo que **es** —mismo nombre, mismos triángulos y
+     *   la misma caja—. Si ya está, no se añade: se elige y se encuadra, que es lo que uno iba a
+     *   buscar. Devuelve si se añadió uno nuevo.
+     * - **«Desaparece»**: un edificio son decenas de metros, y a [METRO] unidades por metro eso es
+     *   mucho más grande que lo que se está mirando. Puesto en el centro de la vista, seguía
+     *   estando fuera de ella. Ahora la vista se lleva al modelo recién puesto.
+     */
+    fun ponerModelo(ruta: String, nombre: String, caja: DoubleArray, triangulos: Int): Boolean {
+        val lista = caja.toList()
+        croquis.modelos.firstOrNull { it.nombre == nombre && it.triangulos == triangulos && it.caja == lista }?.let { ya ->
+            if (ya.oculto) ocultarElModelo(ya.id, false)
+            elegir(setOf(ya.id))
+            encuadrarEl(ya)
+            return false
+        }
         val centroDelModelo = Pt3((caja[0] + caja[3]) / 2, (caja[1] + caja[4]) / 2, caja[2])
         val donde = Pt3(camara.centro.x, camara.centro.y, 0.0)
         val m = METRO
@@ -1896,11 +1915,27 @@ class Croquis3DControlador {
             id = randomId(), ruta = ruta, nombre = nombre,
             origen = donde,
             ejeX = Pt3(m, 0.0, 0.0), ejeY = Pt3(0.0, m, 0.0), ejeZ = Pt3(0.0, 0.0, m),
-            centro = centroDelModelo, caja = caja.toList(), triangulos = triangulos,
+            centro = centroDelModelo, caja = lista, triangulos = triangulos,
             grupo = capaActiva
         )
         croquis = croquis.copy(modelos = croquis.modelos + modelo)
         elegir(setOf(modelo.id))
+        encuadrarEl(modelo)
+        return true
+    }
+
+    /** Lleva la vista a ese modelo, entero y centrado. Ver [ponerModelo]. */
+    fun encuadrarEl(m: Modelo3D) {
+        val esquinas = m.esquinas()
+        if (esquinas.isEmpty()) return
+        val centro = Pt3(
+            esquinas.sumOf { it.x } / esquinas.size,
+            esquinas.sumOf { it.y } / esquinas.size,
+            esquinas.sumOf { it.z } / esquinas.size
+        )
+        val radio = esquinas.maxOf { largo(menos(it, centro)) }.coerceAtLeast(1.0)
+        val cabe = minOf(ancho, alto) / (radio * 2.4)
+        camara = camara.copy(centro = centro, zoom = cabe.coerceIn(Camara3D.ZOOM_MINIMO, Camara3D.ZOOM_MAXIMO))
     }
 
     // Los modelos, desde la lista: un edificio no se señala bien con la bolita cuando está

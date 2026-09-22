@@ -2544,7 +2544,14 @@ class MensajesActivity : ComponentActivity() {
                         menuAbierto = false; renombrandoMensaje = m
                     }
                 }
-                DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
+                // **Solo lo que la burbuja no tiene ya a mano** (22-sep-2026, pedido por el
+                // usuario: «muchas de esas opciones ya están repetidas»). Una foto, una hoja, un
+                // archivo y un lienzo llevan su botón de sacar a la pantalla en la propia burbuja
+                // ([AtajoEnLaEsquina], [FilaDeArchivo]); la nota de voz, el de pasarla a texto
+                // ([BotonDeTexto]). Ahí el menú calla: dos caminos al mismo sitio no ayudan,
+                // alargan la lista. Sacar a la pantalla queda para lo que no lleva botón: una nota
+                // de texto y una nota de voz.
+                if (!tieneBotonDePinear(m)) DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
                     menuAbierto = false; acciones.pinear()
                 }
                 DelMenu(
@@ -2609,8 +2616,10 @@ class MensajesActivity : ComponentActivity() {
                         }
                     }
                 }
+                // Pasar a texto solo si ya lo tiene —entonces es **volver** a pasarlo—: sin texto,
+                // el botón de la burbuja hace justo esto. Ver arriba.
                 acciones.transcribir?.let { transcribir ->
-                    DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
+                    if (!m.transcripcion.isNullOrBlank()) DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
                             Icons.Filled.Subtitles) {
                         menuAbierto = false; transcribir()
                     }
@@ -5671,6 +5680,14 @@ class MensajesActivity : ComponentActivity() {
             else -> fechaDe(cuando) + " " + hora
         }
     }
+
+    /**
+     * Si la burbuja de este mensaje ya lleva su botón de sacar a la pantalla: la foto y la hoja
+     * lo tienen en su esquina ([AtajoEnLaEsquina]) y lo demás con archivo, en su fila
+     * ([FilaDeArchivo]). La nota de texto y la de voz son las únicas sin él.
+     */
+    private fun tieneBotonDePinear(m: Mensaje): Boolean =
+        m.clase != Clase.NOTA && m.clase != Clase.VOZ && m.clase != Clase.MINIAPP
 
     private fun pinear(m: Mensaje, avisar: Boolean = true) {
         val gestor = (application as? PixPinApp)?.overlayManager ?: return

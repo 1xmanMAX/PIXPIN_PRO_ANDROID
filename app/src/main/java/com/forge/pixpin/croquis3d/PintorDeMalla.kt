@@ -91,6 +91,8 @@ class PintorDeMalla(val malla: Malla3D) {
     private var cubos = IntArray(0)
     private var claves = IntArray(0)
     private var sombreado = IntArray(0)
+    /** La hondura de cada triángulo en el fotograma: se reaprovecha, no se fabrica por vuelta. */
+    private var hondos = FloatArray(0)
 
     private var ordenDe: Long = 0
     private var cuantosEnOrden = 0
@@ -195,7 +197,11 @@ class PintorDeMalla(val malla: Malla3D) {
         val largoF = sqrt(fx * fx + fy * fy + fz * fz).coerceAtLeast(1e-12f)
         val m0 = fx / largoF; val m1 = fy / largoF; val m2 = fz / largoF
         val llave = modelo.hashCode().toLong() * 31 + usados
-        val mismaMirada = m0 * ultimaMirada[0] + m1 * ultimaMirada[1] + m2 * ultimaMirada[2] > 0.99995f
+        // **Y se rehace en cuanto la vista gira un pelo** (22-sep-2026). Con el umbral muy alto,
+        // girando despacio el orden se quedaba viejo fotograma tras fotograma y las piezas se
+        // tapaban mal —«al mover la vista se triangula mal»—. Rehacerlo es un reparto en cubos,
+        // lineal: cuesta menos que un error a la vista.
+        val mismaMirada = m0 * ultimaMirada[0] + m1 * ultimaMirada[1] + m2 * ultimaMirada[2] > 0.99999f
         if (!(mismaMirada && llave == ordenDe && cuantosEnOrden == usados)) {
             ordenar(usados, moviendo, fx, fy, fz)
             ordenDe = llave; cuantosEnOrden = usados
@@ -299,10 +305,21 @@ class PintorDeMalla(val malla: Malla3D) {
     private fun ordenar(usados: Int, moviendo: Boolean, fx: Float, fy: Float, fz: Float) {
         if (orden.size < t) { orden = IntArray(t); claves = IntArray(t) }
         var min = Float.MAX_VALUE; var max = -Float.MAX_VALUE
-        val hondos = FloatArray(usados)
+        // **Por el vértice más lejano, no por el centro** (22-sep-2026). Con el centro, una losa
+        // ancha y un muro que la cruza se ordenan por dos puntos que no son los que se solapan, y
+        // según el ángulo uno tapaba al otro sin venir a cuento. El vértice más hondo es el
+        // criterio de toda la vida del algoritmo del pintor, y aquí sale casi gratis: son tres
+        // productos que ya se hacen para el centro.
+        if (hondos.size < usados) hondos = FloatArray(usados)
+        val v = malla.vertices
+        val ix = malla.triangulos
         for (s in 0 until usados) {
             val k = if (moviendo) porTamano[s] else s
-            val h = centros[k * 3] * fx + centros[k * 3 + 1] * fy + centros[k * 3 + 2] * fz
+            val a = ix[k * 3] * 3; val b = ix[k * 3 + 1] * 3; val c = ix[k * 3 + 2] * 3
+            val ha = v[a] * fx + v[a + 1] * fy + v[a + 2] * fz
+            val hb = v[b] * fx + v[b + 1] * fy + v[b + 2] * fz
+            val hc = v[c] * fx + v[c + 1] * fy + v[c + 2] * fz
+            val h = if (ha > hb) (if (ha > hc) ha else hc) else (if (hb > hc) hb else hc)
             hondos[s] = h
             if (h < min) min = h
             if (h > max) max = h

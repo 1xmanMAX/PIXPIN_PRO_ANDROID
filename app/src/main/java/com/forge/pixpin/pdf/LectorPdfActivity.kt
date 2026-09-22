@@ -188,7 +188,19 @@ class LectorPdfActivity : ComponentActivity() {
         // de dos dedos. Alejándose cabe la hoja con **un** margen, el de un lado o el del otro
         // ([Lectura.ALEJADO_DEL_PDF]); entonces la lista crece de alto lo mismo que encoge, y
         // sigue llenando la pantalla.
+        // **Los espacios para anotar, a botón** (22-sep-2026, pedido por el usuario). Antes salían
+        // los dos siempre y el documento quedaba estrecho en medio sin haberlo pedido. Ahora se
+        // añade el de la izquierda, el de la derecha o los dos, y se guardan por documento: el
+        // botón de la esquina los enciende y los apaga. Ver [EspaciosDelLado].
+        val prefsDelLector = remember { getSharedPreferences("lectura", MODE_PRIVATE) }
+        val claveDeEspacios = remember(rutaPedida) { "pdf:$rutaPedida:espacios" }
+        var espacios by remember(rutaPedida) { mutableStateOf(prefsDelLector.getInt(claveDeEspacios, 0)) }
+        fun ponerEspacios(v: Int) { espacios = v; prefsDelLector.edit().putInt(claveDeEspacios, v).apply() }
+        val hayIzquierda = espacios and ESPACIO_IZQUIERDA != 0
+        val hayDerecha = espacios and ESPACIO_DERECHA != 0
         val margenPx = anchoPx * Lectura.MARGEN_DEL_PDF
+        val izquierdaPx = if (hayIzquierda) margenPx else 0f
+        val derechaPx = if (hayDerecha) margenPx else 0f
         var altoDeLaCaja by remember { mutableStateOf(0) }
         val densidad = LocalDensity.current
         var compartiendo by remember { mutableStateOf(false) }
@@ -267,7 +279,9 @@ class LectorPdfActivity : ComponentActivity() {
                                 }
                             }
                             if (decidido) { evento.changes.forEach { if (it.pressed) it.consume() }; continue }
-                            val ahora = (antes * factor).coerceIn(Lectura.ALEJADO_DEL_PDF, 6f)
+                            // Sin espacios no hay nada a los lados que enseñar: no se aleja de más.
+                            val minimo = if (espacios == 0) 1f else Lectura.ALEJADO_DEL_PDF
+                            val ahora = (antes * factor).coerceIn(minimo, 6f)
                             val centro = Offset(size.width / 2f, size.height / 2f)
                             val foco = evento.calculateCentroid(useCurrent = false)
                             // **El punto entre los dedos se queda quieto.** Sin esto el
@@ -279,7 +293,8 @@ class LectorPdfActivity : ComponentActivity() {
                             // Y que no se pueda echar el documento fuera de la pantalla: como
                             // mucho, hasta que su borde toca el borde.
                             // De lado, hasta el canto del margen; de alto, lo de siempre.
-                            val topeX = (((1f + 2f * Lectura.MARGEN_DEL_PDF) * ahora - 1f) * size.width / 2f).coerceAtLeast(0f)
+                            val deLosLados = (izquierdaPx + derechaPx) / anchoPx.coerceAtLeast(1).toFloat()
+                            val topeX = (((1f + deLosLados) * ahora - 1f) * size.width / 2f).coerceAtLeast(0f)
                             val topeY = ((ahora - 1f) * size.height / 2f).coerceAtLeast(0f)
                             // Anotando, un dedo dibuja: los dos dedos son los que pasan las hojas.
                             if (anotando) estado.dispatchRawDelta(-evento.calculatePan().y / ahora)
@@ -308,27 +323,54 @@ class LectorPdfActivity : ComponentActivity() {
                         state = estado,
                         userScrollEnabled = aSolas == null,
                         modifier = Modifier
-                            .requiredWidth(with(densidad) { (anchoPx + 2 * margenPx).toDp() })
+                            .requiredWidth(with(densidad) { (anchoPx + izquierdaPx + derechaPx).toDp() })
                             .requiredHeight(with(densidad) { (altoDeLaCaja / zoom.coerceAtMost(1f)).coerceAtLeast(1f).toDp() })
+
                             .graphicsLayer(
                                 scaleX = zoom, scaleY = zoom,
                                 translationX = desplazado.x, translationY = desplazado.y,
                                 alpha = if (aSolas == null) 1f else 0f
                             )
                     ) {
+                        // Con una sola hoja, hueco arriba y abajo para poder moverla a gusto.
+                        if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
+                        // **Una hoja sola se queda en medio** (22-sep-2026): la lista la pegaba
+                        // arriba y no había forma de bajarla, porque sin nada que desplazar no hay
+                        // desplazamiento. Con hueco arriba y abajo se mueve a gusto.
                         items((0 until cuantas).toList()) { i ->
                             // El margen es papel: lo anotado ahí lleva la tinta de una hoja clara.
                             Box(Modifier.fillMaxWidth().background(PAPEL_DEL_MARGEN)) {
-                                Box(Modifier.padding(horizontal = with(densidad) { margenPx.toDp() })) {
+                                Box(
+                                    Modifier.padding(
+                                        start = with(densidad) { izquierdaPx.toDp() },
+                                        end = with(densidad) { derechaPx.toDp() }
+                                    )
+                                ) {
                                     Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i }
                                 }
                                 // La capa coge **la hoja y sus dos márgenes**.
                                 CapaDePagina(capas, i, anotando, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
                             }
                         }
+                        if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
                     }
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
                 }
+            }
+            // **Los espacios para anotar, uno por lado** (22-sep-2026). Cada botón es un cuadro
+            // partido por la mitad: la mitad llena es el papel y la vacía, el espacio que se
+            // añade de ese lado. Tocarlo lo pone; tocarlo otra vez lo quita. Van en las dos
+            // esquinas de abajo, cada uno del lado al que añade, que es lo que hace que se
+            // entienda sin leer nada. Ver [EspaciosDelLado].
+            if (cuantas > 0 && aSolas == null) {
+                EspacioDelLado(
+                    puesto = hayIzquierda, izquierda = true,
+                    modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 18.dp, bottom = 18.dp)
+                ) { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }
+                if (!anotando) EspacioDelLado(
+                    puesto = hayDerecha, izquierda = false,
+                    modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 18.dp, bottom = 140.dp)
+                ) { ponerEspacios(espacios xor ESPACIO_DERECHA) }
             }
             // **Marcar esta hoja**, encima del lápiz: el mismo marcador con emoticono de los
             // lectores y del lienzo. Un toque largo en el riel no quita aquí; se quitan desde
@@ -703,6 +745,38 @@ private fun CapaDePagina(
         )
     }
 }
+
+/**
+ * **El botón de añadir espacio a un lado**: un cuadro partido, con la mitad del papel llena y la
+ * del espacio vacía —o al revés, según a qué lado añade—. Puesto, se pinta encendido.
+ */
+@Composable
+private fun EspacioDelLado(puesto: Boolean, izquierda: Boolean, modifier: Modifier = Modifier, alTocar: () -> Unit) {
+    Box(
+        modifier
+            .size(44.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(Color(if (puesto) 0xCC1E88E5 else 0x9914182B))
+            .clickable { alTocar() },
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
+            val borde = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
+            drawRect(Color.White.copy(alpha = 0.9f), style = borde)
+            // La mitad del papel, llena; la del espacio que se añade, vacía.
+            val mitad = size.width / 2
+            drawRect(
+                Color.White.copy(alpha = 0.9f),
+                topLeft = Offset(if (izquierda) mitad else 0f, 0f),
+                size = androidx.compose.ui.geometry.Size(mitad, size.height)
+            )
+        }
+    }
+}
+
+/** Qué espacios hay puestos, en bits. Ver [EspacioDelLado]. */
+private const val ESPACIO_IZQUIERDA = 1
+private const val ESPACIO_DERECHA = 2
 
 /** La vista de una capa de [ancho] píxeles: la hoja en medio y un margen de [Lectura.MARGEN_DEL_PDF] a cada lado. */
 private fun vistaDeLaCapa(ancho: Double): com.forge.pixpin.motor.Viewport {

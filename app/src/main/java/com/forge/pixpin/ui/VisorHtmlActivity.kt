@@ -259,7 +259,7 @@ class VisorHtmlActivity : ComponentActivity() {
         vista.scrollTo(x, (f * alto).toInt().coerceAtLeast(0))
         if (entrarAlCargar) {
             entrarAlCargar = false
-            vista.post { ponerLaCapaDondeElDocumento(); anotando = true }
+            vista.post { ponerLaCapaDondeElDocumento(); esconderLaTintaDeLaPagina(); anotando = true }
         }
     }
 
@@ -311,6 +311,8 @@ class VisorHtmlActivity : ComponentActivity() {
     private var corridoY by mutableStateOf(0)
     private var escalaWeb by mutableStateOf(1f)
     private var cambiosEnLaCapa by mutableStateOf(0)
+    /** Si la tinta ya está dentro de la página: entonces el lienzo de leer no la pinta. Ver [ponerLaTintaEnLaPagina]. */
+    private var tintaEnLaPagina by mutableStateOf(false)
     /** Lo que se redibuja en los mandos de anotar; y si se ha visto un lápiz (entonces el dedo mueve). */
     private var tickDeAnotar by mutableStateOf(0)
     private var conLapiz by mutableStateOf(false)
@@ -371,6 +373,56 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /**
+     * **Lo anotado va dentro de la página, no encima** (22-sep-2026: «las anotaciones que hago
+     * con el lápiz se mueven»). Leyendo, la capa se pintaba en un lienzo de Compose con el
+     * desplazamiento que el `WebView` avisa —y lo avisa **mientras se pinta**, así que el lienzo
+     * se enteraba un fotograma tarde: al desplazar, la tinta iba un paso por detrás del texto, y
+     * al soltar lo alcanzaba—. Ahora la tinta es un SVG del motor de siempre ([com.forge.pixpin.motor.DrawSvg],
+     * el mismo que sale al exportar) **metido en el documento**: se desplaza y se amplía con él,
+     * en la misma superficie, y no hay dos cosas que poner de acuerdo. Anotando se esconde: ahí
+     * pinta el [com.forge.pixpin.motor.DrawCanvas] entero, y el documento le sigue a él.
+     *
+     * Las unidades del dibujo son píxeles CSS del documento, y un `position:absolute` colgado
+     * del cuerpo cuenta desde la esquina del documento: la caja del SVG va tal cual.
+     */
+    private fun ponerLaTintaEnLaPagina() {
+        val vista = web ?: return
+        if (columnaDeAnotar == null) return
+        val escena = laCapa.scene
+        val deNoche = esDeNoche()
+        lifecycleScope.launch {
+            val svg = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (escena.elements.none { !it.isDeleted }) return@runCatching ""
+                    // El papel dice de qué color es la tinta, como al exportar. Ver `ExportarDocumentoAnotado`.
+                    val papel = escena.copy(backgroundColor = if (deNoche) "#15171c" else "#ffffff")
+                    val foto: (String) -> android.graphics.Bitmap? = { f -> escena.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } }
+                    val texto = com.forge.pixpin.motor.DrawSvg.aTexto(this@VisorHtmlActivity, papel, foto, papelAparte = true) ?: return@runCatching ""
+                    val caja = com.forge.pixpin.motor.DocumentoAnotado.cajaDe(texto) ?: return@runCatching ""
+                    com.forge.pixpin.motor.DocumentoAnotado.sinCabecera(texto).replaceFirst(
+                        "<svg ",
+                        "<svg style=\"position:absolute;left:${caja[0]}px;top:${caja[1]}px;width:${caja[2]}px;height:${caja[3]}px;pointer-events:none\" "
+                    )
+                }.getOrDefault("")
+            }
+            if (web !== vista) return@launch
+            val guion = "(function(){var d=document.getElementById('pixpin-tinta');" +
+                "if(!d){d=document.createElement('div');d.id='pixpin-tinta';" +
+                "d.style.cssText='position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:2147483646';" +
+                "document.body.appendChild(d);}" +
+                "d.innerHTML=" + org.json.JSONObject.quote(svg) + ";" +
+                "d.style.display=" + (if (anotando) "'none'" else "''") + ";})()"
+            vista.evaluateJavascript(guion) { if (!anotando) tintaEnLaPagina = true }
+        }
+    }
+
+    /** Anotando, la tinta de la página se esconde —la pinta el lienzo— y al acabar se vuelve a poner, al día. */
+    private fun esconderLaTintaDeLaPagina() {
+        tintaEnLaPagina = false
+        web?.evaluateJavascript("(function(){var d=document.getElementById('pixpin-tinta');if(d)d.style.display='none';})()", null)
+    }
+
+    /**
      * **El lápiz.** La primera vez el documento se ensancha —la columna de texto se queda como
      * está y se abren dos tercios de margen a cada lado— y desde entonces **la letra queda
      * fijada**: si cambiara, el texto se recolocaría y lo anotado se quedaría en el aire.
@@ -378,7 +430,7 @@ class VisorHtmlActivity : ComponentActivity() {
     @Suppress("DEPRECATION")
     private fun empezarAAnotar() {
         val vista = web ?: return
-        if (columnaDeAnotar != null) { ponerLaCapaDondeElDocumento(); anotando = true; return }
+        if (columnaDeAnotar != null) { ponerLaCapaDondeElDocumento(); esconderLaTintaDeLaPagina(); anotando = true; return }
         val columna = (vista.width / vista.scale.coerceAtLeast(0.1f)).toInt().coerceAtLeast(200)
         columnaDeAnotar = columna
         prefsDeLectura.edit()
@@ -541,7 +593,7 @@ class VisorHtmlActivity : ComponentActivity() {
         fun salir() {
             when {
                 aPantalla != null -> dejarLaPantallaCompleta()
-                anotando -> { anotando = false; guardarLaCapa() }
+                anotando -> { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
                 web?.canGoBack() == true -> web?.goBack()
                 // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
                 sinGuion || web == null -> finish()
@@ -772,7 +824,8 @@ class VisorHtmlActivity : ComponentActivity() {
         val fotos = remember { HashMap<String, android.graphics.Bitmap?>() }
         val foto: (String) -> android.graphics.Bitmap? = { f -> fotos.getOrPut(f) { laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } } }
         if (!anotando) {
-            if (!hayAnotaciones) return
+            // Solo el rato entre «Listo» y que la página tenga su SVG: luego la tinta es de la página.
+            if (!hayAnotaciones || tintaEnLaPagina) return
             val pintor = remember(deNoche) { com.forge.pixpin.motor.Renderer(foto, com.forge.pixpin.motor.DrawFonts.provider(this), dark = deNoche) }
             androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                 @Suppress("UNUSED_EXPRESSION") cambiosEnLaCapa
@@ -824,7 +877,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 .padding(top = 8.dp)
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
                 .background(androidx.compose.ui.graphics.Color(0xB314182B))
-                .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++ }
+                .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++; ponerLaTintaEnLaPagina() }
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1301,6 +1354,9 @@ class VisorHtmlActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             escalaWeb = view.scale
             if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)
+            // La página recién cargada no tiene la tinta: se le pone. Ver [ponerLaTintaEnLaPagina].
+            tintaEnLaPagina = false
+            if (esDocumento && columnaDeAnotar != null) ponerLaTintaEnLaPagina()
             if (esDocumento && fraccionPendiente >= 0f) {
                 val f = fraccionPendiente
                 fraccionPendiente = -1f
