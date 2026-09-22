@@ -55,6 +55,9 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
@@ -327,6 +330,7 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun empezarAEscuchar() {
         val vista = web ?: return
         if (arrancandoLaVoz) return
+        dejarDeAutoDesplazar()
         arrancandoLaVoz = true
         vista.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) { crudo ->
             val json = runCatching { org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String) }.getOrNull()
@@ -364,6 +368,121 @@ class VisorHtmlActivity : ComponentActivity() {
                         ).show()
                         abrirLasVoces(arranque.motor)
                     }
+                }
+            }
+        }
+    }
+
+    // ---- La página que sube sola, a la velocidad que uno lea. Ver [com.forge.pixpin.motor.AutoDesplazar]. ----
+    /** La barra del desplazamiento automático está a la vista. */
+    private var autoDesplazando by mutableStateOf(false)
+    /** Y la página está subiendo (con la barra puesta se puede pausar). */
+    private var autoEnMarcha by mutableStateOf(false)
+    private var palabrasPorMinuto by mutableStateOf(com.forge.pixpin.motor.AutoDesplazar.POR_DEFECTO)
+    /** Las palabras del documento, contadas al empezar; −1 mientras no se sabe. */
+    private var palabrasDelDocumento by mutableStateOf(-1)
+
+    private fun empezarAAutoDesplazar() {
+        if (escuchando) dejarDeEscuchar()
+        palabrasPorMinuto = com.forge.pixpin.motor.AutoDesplazar.valida(
+            prefsDeLectura.getInt("auto:ppm", com.forge.pixpin.motor.AutoDesplazar.POR_DEFECTO)
+        )
+        web?.evaluateJavascript(com.forge.pixpin.motor.AutoDesplazar.CONTAR) { r ->
+            palabrasDelDocumento = r?.toIntOrNull() ?: 0
+            if (palabrasDelDocumento <= 0) {
+                Toast.makeText(this, "Este documento no tiene texto que leer", Toast.LENGTH_SHORT).show()
+                return@evaluateJavascript
+            }
+            autoDesplazando = true
+            autoEnMarcha = true
+        }
+    }
+
+    private fun dejarDeAutoDesplazar() {
+        autoEnMarcha = false
+        autoDesplazando = false
+    }
+
+    private fun cambiarLaVelocidadDeLeer(sentido: Int) {
+        palabrasPorMinuto = com.forge.pixpin.motor.AutoDesplazar.otra(palabrasPorMinuto, sentido)
+        prefsDeLectura.edit().putInt("auto:ppm", palabrasPorMinuto).apply()
+    }
+
+    /**
+     * **El bucle que sube la página**, un poco en cada fotograma. Lee el alto del documento en cada
+     * vuelta (cambia al agrandar la letra o al acabar de cargar) y guarda lo que no llega a un
+     * píxel para la siguiente, así a poca velocidad no va a saltos ni se para. Si el dedo mueve la
+     * página, sigue desde donde la deje. Al llegar al final se para solo.
+     */
+    @Composable
+    private fun BucleDeAutoDesplazar() {
+        val enMarcha = autoEnMarcha && !anotando && !presentando && !escuchando
+        LaunchedEffect(enMarcha) {
+            if (!enMarcha) return@LaunchedEffect
+            var antes = -1L
+            var sobra = 0f
+            while (true) {
+                val ahora = androidx.compose.runtime.withFrameNanos { it }
+                val vista = web ?: break
+                if (antes > 0) {
+                    val v = com.forge.pixpin.motor.AutoDesplazar.pixelesPorSegundo(palabrasPorMinuto, palabrasDelDocumento, altoDelDocumento())
+                    sobra += v * ((ahora - antes) / 1e9f).coerceAtMost(0.1f)
+                    val n = sobra.toInt()
+                    if (n > 0) { vista.scrollBy(0, n); sobra -= n }
+                    if (!vista.canScrollVertically(1)) { autoEnMarcha = false; break }
+                }
+                antes = ahora
+            }
+        }
+    }
+
+    /**
+     * **La barra del desplazamiento automático**, abajo y de cristal como la de escuchar: más lento,
+     * la velocidad en palabras por minuto, más rápido, pausa y cerrar. Debajo, **en cuánto se
+     * termina a esa velocidad y a qué hora**. El rótulo se calcula aparte ([derivedStateOf]): la
+     * página se mueve en cada fotograma, pero la barra solo se repinta cuando cambia el minuto.
+     */
+    @Composable
+    private fun BarraDeAutoDesplazar(modifier: Modifier) {
+        val tinta = com.forge.pixpin.ui.theme.Cristal.tinta
+        val quedan by remember {
+            androidx.compose.runtime.derivedStateOf {
+                val vista = web
+                val progreso = if (vista == null) 0f
+                else com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), altoDelDocumento(), vista.height.toFloat())
+                val minutos = com.forge.pixpin.motor.AutoDesplazar.minutosQueQuedan(palabrasDelDocumento, progreso, palabrasPorMinuto)
+                val cal = java.util.Calendar.getInstance()
+                val ahora = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+                if (minutos <= 0f) "Terminado"
+                else "Terminas en " + com.forge.pixpin.motor.AutoDesplazar.rotulo(minutos) +
+                    " · a las " + com.forge.pixpin.motor.AutoDesplazar.horaDeTerminar(ahora, minutos)
+            }
+        }
+        Box(modifier.navigationBarsPadding().padding(bottom = 10.dp, start = 12.dp, end = 12.dp)) {
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                Column(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { cambiarLaVelocidadDeLeer(-1) }) {
+                            Icon(Icons.Filled.Remove, contentDescription = "Más despacio", tint = tinta)
+                        }
+                        Text("$palabrasPorMinuto palabras/min", color = tinta, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { cambiarLaVelocidadDeLeer(1) }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Más deprisa", tint = tinta)
+                        }
+                        IconButton(onClick = { autoEnMarcha = !autoEnMarcha }) {
+                            Icon(
+                                if (autoEnMarcha) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (autoEnMarcha) "Pausa" else "Seguir", tint = tinta, modifier = Modifier.size(30.dp)
+                            )
+                        }
+                        IconButton(onClick = { dejarDeAutoDesplazar() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Dejar de desplazar", tint = tinta)
+                        }
+                    }
+                    Text(
+                        quedan, color = tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 6.dp, start = 10.dp, end = 10.dp)
+                    )
                 }
             }
         }
@@ -685,6 +804,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 aPantalla != null -> dejarLaPantallaCompleta()
                 anotando -> { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
                 escuchando -> dejarDeEscuchar()
+                autoDesplazando -> dejarDeAutoDesplazar()
                 web?.canGoBack() == true -> web?.goBack()
                 // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
                 sinGuion || web == null -> finish()
@@ -744,6 +864,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     }
                 }
                 if (esDocumento && anotando) MandosDeAnotar()
+                if (esDocumento) BucleDeAutoDesplazar()
                 if (!presentando) androidx.compose.animation.AnimatedVisibility(
                     visible = aLaVista && !anotando,
                     enter = androidx.compose.animation.fadeIn(),
@@ -800,6 +921,10 @@ class VisorHtmlActivity : ComponentActivity() {
                             IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAEscuchar() }, modifier = Modifier.size(38.dp)) {
                                 Icon(Icons.Filled.RecordVoiceOver, contentDescription = "Escuchar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
+                            // **Que suba sola**, a las palabras por minuto de cada uno. Ver [empezarAAutoDesplazar].
+                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAAutoDesplazar() }, modifier = Modifier.size(38.dp)) {
+                                Icon(Icons.Filled.KeyboardDoubleArrowDown, contentDescription = "Desplazar sola", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                            }
                             IconButton(onClick = { compartiendo = true; conLaLetra = false; poniendoMarcador = false }, modifier = Modifier.size(38.dp)) {
                                 Icon(IconoDeCompartir, contentDescription = "Compartir", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
@@ -840,6 +965,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         onVoces = { conLaLetra = false; abrirLasVoces() }
                     )
                     if (escuchando && !poniendoMarcador) BarraDeEscuchar(Modifier.align(Alignment.BottomCenter))
+                    if (autoDesplazando && !escuchando && !poniendoMarcador) BarraDeAutoDesplazar(Modifier.align(Alignment.BottomCenter))
                     if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
                         poniendoMarcador = false
                         marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
@@ -1060,16 +1186,17 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     @Composable
     private fun RielDeLectura(modifier: Modifier) {
-        // Lo desplazado y la escala (que cambia al cargar la página) hacen que se vuelva a medir.
-        @Suppress("UNUSED_EXPRESSION") corridoY
-        @Suppress("UNUSED_EXPRESSION") escalaWeb
         val vista = web ?: return
-        val alto = altoDelDocumento()
-        if (alto <= vista.height) return
+        // **Lo desplazado se lee al pintar, no al componer**: la página se mueve en cada fotograma
+        // —más aún subiendo sola— y así solo se repinta la línea. Si el documento cabe entero se
+        // mira aparte, y solo recompone cuando eso cambia (la escala cambia al cargar la página).
+        val cabe by remember(vista) {
+            androidx.compose.runtime.derivedStateOf { escalaWeb; corridoY; altoDelDocumento() <= vista.height }
+        }
+        if (cabe) return
         val suena = escuchando && fraccionQueSuena >= 0f
-        val meta = if (suena) fraccionQueSuena
-        else com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), alto, vista.height.toFloat())
-        val f by androidx.compose.animation.core.animateFloatAsState(meta, label = "riel")
+        // Escuchando, la flecha salta de párrafo en párrafo y se anima; leyendo, va pegada a lo desplazado.
+        val alParrafo by androidx.compose.animation.core.animateFloatAsState(if (suena) fraccionQueSuena else 0f, label = "riel")
         val ambar = androidx.compose.ui.graphics.Color(0xFFFFC440)
         val blanco = androidx.compose.ui.graphics.Color.White
         // El papel decide el color de la línea: clara sobre el oscuro, oscura sobre el blanco.
@@ -1081,6 +1208,8 @@ class VisorHtmlActivity : ComponentActivity() {
         ) {
             val x = 3.dp.toPx()
             val grueso = 2.dp.toPx()
+            val f = if (suena) alParrafo
+            else com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), altoDelDocumento(), vista.height.toFloat())
             val y = f * size.height
             drawLine(linea.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
             // Lo ya leído, más marcado.

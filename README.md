@@ -158,6 +158,11 @@ En el lateral izquierdo, **una línea fina con una flechita que va bajando a med
 arriba es el principio y abajo el final; escuchando, la flecha va con el párrafo que suena y lo
 ya leído se pinta en ámbar.
 
+**Que la página suba sola.** El botón de las dos flechas hacia abajo desplaza el Word o el libro
+a la velocidad de cada uno, **en palabras por minuto** (de 80 a 700, con − y +; se recuerda), así
+que no cambia al agrandar la letra. La barra de abajo dice **en cuánto se termina a esa velocidad
+y a qué hora**; se pausa, se sigue desde donde se deje el dedo y se para sola al llegar al final.
+
 **Escuchar un Word o un libro.** El botón de la voz lo lee en alto desde lo que asoma arriba de la
 pantalla, con **el motor de voz de Google que ya trae el teléfono** y **solo con sus voces sin
 conexión**: el texto no sale del aparato. El idioma se adivina por el propio texto (un Word en
