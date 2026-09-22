@@ -1,0 +1,69 @@
+# **El APK de prueba, compilado en GitHub y publicado como prerelease.**
+#
+# Desde el entorno de Claude no siempre se puede subir un archivo a una release, así que esto lo
+# hace GitHub: compila `assembleRelease`, lo pasa por `herramientas/apk-para-repartir.sh` (la
+# firma v1 que pide el instalador de archivos descargados) y lo publica como
+# `v<versión>-prueba`, igual que las anteriores. Se lanza a mano desde la pestaña Actions, o solo
+# al empujar a las ramas de abajo.
+#
+# Ojo: firma con la clave de depuración **de la máquina que compila**, que es nueva cada vez. Un
+# APK firmado con otra clave no se instala encima del que ya hay en el teléfono.
+name: APK de prueba
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/epub-docs-google-reader-80pkmm
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-de-prueba-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Toda la historia: las notas salen del último cambio de versión, no del último commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: SDK de Android 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      - name: Compilar
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Firmar para repartir
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          # El proyecto deja lo compilado en `pixpin-build`, fuera de app/build.
+          sh herramientas/apk-para-repartir.sh "PixPin-$VERSION.apk"
+
+      - name: Publicar la prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$VERSION-prueba"
+          NOTAS=$(git log -1 --format=%B -- app/build.gradle.kts | sed '/^Co-Authored-By:/d;/^Claude-Session:/d')
+          # Si ya estaba (se volvió a empujar con la misma versión), se reemplaza el APK.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "PixPin-$VERSION.apk" --clobber
+          else
+            gh release create "$TAG" "PixPin-$VERSION.apk" --prerelease \
+              --target "$GITHUB_SHA" --title "v$VERSION (prueba)" --notes "$NOTAS"
+          fi
+          echo "https://github.com/${{ github.repository }}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
