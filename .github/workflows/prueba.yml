@@ -3,18 +3,15 @@
 # Desde el entorno de Claude no siempre se puede subir un archivo a una release, así que esto lo
 # hace GitHub: compila `assembleRelease`, lo pasa por `herramientas/apk-para-repartir.sh` (la
 # firma v1 que pide el instalador de archivos descargados) y lo publica como
-# `v<versión>-prueba`, igual que las anteriores. Se lanza a mano desde la pestaña Actions, o solo
-# al empujar a las ramas de abajo.
+# `v<versión>-prueba`, igual que las anteriores. Se lanza solo a mano, desde la pestaña Actions.
 #
 # La clave: ver el paso «Clave de depuración». Sin el secreto CLAVE_DE_DEPURACION, el APK sale
 # firmado con una clave nueva y no se instala encima del que ya hay en el teléfono.
 name: APK de prueba
 
+# Solo a mano (pestaña Actions → «APK de prueba» → Run workflow): empujar código no compila nada.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/epub-docs-google-reader-80pkmm
 
 permissions:
   contents: write
