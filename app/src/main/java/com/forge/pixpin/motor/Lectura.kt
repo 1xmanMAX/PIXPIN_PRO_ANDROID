@@ -72,7 +72,17 @@ object Lectura {
             (columna?.let {
                 "html{width:${anchoConMargenes(it)}px !important;overflow-x:auto !important}" +
                     "body{box-sizing:border-box !important;width:${it}px !important;max-width:none !important;" +
-                    "margin-left:${margenDe(it)}px !important;margin-right:${margenDe(it)}px !important}"
+                    "margin-left:${margenDe(it)}px !important;margin-right:${margenDe(it)}px !important}" +
+                    // **Las tablas anchas, enteras** (22-sep-2026, pedido por el usuario). Leyendo,
+                    // una tabla más ancha que la columna va en una caja con su propio scroll de
+                    // lado (`.tabla{overflow-x:auto}` en [DocxAHtml]): se ve un trozo y se corre
+                    // con el dedo. Anotando eso es una trampa: lo anotado se ata a la página, no a
+                    // ese scroll de dentro, y al correr la tabla después la anotación se queda en
+                    // el aire. Con la columna fijada, la caja deja de recortar y la tabla se
+                    // extiende hacia el margen de la derecha —hasta la columna más ese margen,
+                    // que es lo que hay de papel—; más ancha, envuelve el texto de sus celdas.
+                    ".tabla{overflow:visible !important}" +
+                    "table{max-width:${it + margenDe(it)}px !important}"
             } ?: "") +
             // **El papel, decidido aquí y no por la página**: claro u oscuro según el aparato, sin
             // dejarlo a lo que el visor entienda por «modo oscuro». La tinta de lo anotado se elige
