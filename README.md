@@ -181,6 +181,12 @@ mismo motor de Google, gratis y más naturales (el texto sí sale entonces a Goo
 siempre). Y el botón del teléfono de la barra lo pone **por el auricular de las llamadas**, para
 oírlo con el teléfono en la oreja en un sitio con ruido.
 
+**Voces de Microsoft.** En el engranaje, **«Voces de Microsoft»** lee con las voces neuronales de
+«Leer en voz alta» de Microsoft Edge: más de 300, 45 en español, gratis y muy naturales; con
+**«Elegir voz»** se escoge cuál, y se recuerda por idioma. No es un servicio oficial —se habla con
+él como lo hace Edge— y el texto va a Microsoft; si falla o no hay red, sigue sola la voz de
+Google. Lo ya escuchado se guarda: volver a oír un párrafo no gasta red.
+
 **Editor rápido.** Sin salir del lector se anota con **el mismo motor del lienzo**: las mismas
 herramientas y tintas, las que elijas en Ajustes arrastrando. En un **PDF**, el lápiz deja anotar
 sobre **todas las hojas a la vez**, como en cualquier editor de PDF: un dedo dibuja, dos pasan las

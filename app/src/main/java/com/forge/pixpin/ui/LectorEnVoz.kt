@@ -11,6 +11,8 @@ import android.speech.tts.Voice
 import com.forge.pixpin.motor.VozAlta
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
@@ -80,6 +82,112 @@ class LectorEnVoz private constructor(context: Context) {
     private var trozoActual = 0
     private var encoladoHasta = -1
 
+    // ---- Las voces de Microsoft Edge ([EdgeVoz], [VozDeEdge]; 22-sep-2026). Con ellas no habla
+    // el motor del teléfono: cada párrafo llega como un MP3 y suena en un `MediaPlayer`. Se piden
+    // [POR_DELANTE] párrafos por adelantado, para que no haya silencios entre uno y otro. Si
+    // Microsoft no responde, se vuelve sola la voz de Google ([caerAGoogle]). ----
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+    /** La voz de Microsoft que lee («es-ES-ElviraNeural»), o null: entonces la de Google. */
+    private var edge: String? = null
+    private val audiosEdge = HashMap<Int, kotlinx.coroutines.Deferred<java.io.File?>>()
+    private var reproductor: android.media.MediaPlayer? = null
+    /** Por dónde iba el párrafo al pausar, con Microsoft: se sigue desde ahí y no desde su principio. */
+    private var msPausado = 0
+    /** La etiqueta de la voz de Google, para volver a ella. */
+    private var etiquetaDeGoogle = ""
+    /** El motor del teléfono tiene voz para este idioma (si no, con Microsoft no hay de reserva). */
+    private var hayVozDeGoogle = false
+    /** Lo pide el visor antes de [arrancar]: con Microsoft, que falte la voz de Google no impide empezar. */
+    var prefiereEdge = false
+
+    /** El idioma con el que se arrancó, para elegir la voz de Microsoft. */
+    val idioma: String get() = idiomaActual
+    val vozDeEdge: String? get() = edge
+
+    /**
+     * **Leer con la voz [voz] de Microsoft** (o con la de Google, con null). Si estaba sonando,
+     * vuelve a empezar el párrafo con la nueva. [etiqueta] es lo que se enseña: «Elvira · Microsoft».
+     */
+    fun usarEdge(voz: String?, etiqueta: String = "") {
+        if (voz == edge) return
+        val sonaba = _estado.value.leyendo
+        if (sonaba) pausar()
+        olvidarLosAudios()
+        edge = voz
+        _estado.value = _estado.value.copy(voz = if (voz != null) etiqueta else etiquetaDeGoogle)
+        if (sonaba) leer(actual)
+    }
+
+    private fun olvidarLosAudios() {
+        audiosEdge.values.forEach { it.cancel() }
+        audiosEdge.clear()
+    }
+
+    private fun pedirEdge(p: Int, voz: String): kotlinx.coroutines.Deferred<java.io.File?>? {
+        val texto = parrafos.getOrNull(p) ?: return null
+        return audiosEdge.getOrPut(p) {
+            scope.async(kotlinx.coroutines.Dispatchers.IO) { runCatching { VozDeEdge.archivo(app, texto, voz) }.getOrNull() }
+        }
+    }
+
+    private fun soltarElReproductor() {
+        val r = reproductor ?: return
+        reproductor = null
+        runCatching { r.setOnCompletionListener(null); r.setOnErrorListener(null); r.stop() }
+        runCatching { r.release() }
+    }
+
+    /** Suena el párrafo [p] con Microsoft, desde [ms]; al acabar, el siguiente. */
+    private fun sonarConEdge(p: Int, ms: Int) {
+        val mia = lectura
+        val voz = edge ?: return
+        (p..p + POR_DELANTE).forEach { pedirEdge(it, voz) }
+        scope.launch {
+            val f = pedirEdge(p, voz)?.await()
+            if (mia != lectura) return@launch
+            val mp = f?.takeIf { it.length() > 0 }?.let { archivo ->
+                runCatching {
+                    android.media.MediaPlayer().apply {
+                        setAudioAttributes(atributos())
+                        // Con la pantalla apagada, que el procesador no se duerma a media frase.
+                        setWakeMode(app, android.os.PowerManager.PARTIAL_WAKE_LOCK)
+                        setDataSource(archivo.path)
+                        prepare()
+                    }
+                }.getOrNull()
+            }
+            if (mp == null) { caerAGoogle(p); return@launch }
+            reproductor = mp
+            if (ms > 0) mp.seekTo(ms)
+            runCatching { mp.playbackParams = mp.playbackParams.setSpeed(_estado.value.velocidad) }
+            mp.setOnCompletionListener { if (mia == lectura) { if (p >= parrafos.lastIndex) alAcabarElDocumento() else leer(p + 1) } }
+            mp.setOnErrorListener { _, _, _ -> if (mia == lectura) caerAGoogle(p); true }
+            mp.start()
+        }
+    }
+
+    /** **Microsoft no respondió**: se sigue con la voz de Google, desde ese mismo párrafo. */
+    private fun caerAGoogle(p: Int) {
+        soltarElReproductor()
+        olvidarLosAudios()
+        edge = null
+        _estado.value = _estado.value.copy(voz = etiquetaDeGoogle.ifBlank { "Sin voz" } + " · Microsoft no respondió")
+        if (tts != null && hayVozDeGoogle) leer(p)
+        else { lectura++; soltarElAudio(); _estado.value = _estado.value.copy(leyendo = false) }
+    }
+
+    /** Se acabó el documento: el verde se quita, y la próxima vez se empieza por donde se mire. */
+    private fun alAcabarElDocumento() {
+        soltarElReproductor()
+        _estado.value = _estado.value.copy(leyendo = false)
+        actual = 0
+        trozoActual = 0
+        msPausado = 0
+        soltarElAudio()
+        _estado.value.clave.takeIf { it.isNotEmpty() }?.let { prefs.edit().remove(com.forge.pixpin.motor.Lectura.claveDeVoz(it)).apply() }
+        _estado.value = _estado.value.copy(parrafo = -1)
+    }
+
     /** Avisa cada vez que suena otro párrafo, para resaltarlo en la página. Lo pone el visor que lo tiene abierto. */
     var alCambiarDeParrafo: ((Int) -> Unit)? = null
 
@@ -120,7 +228,7 @@ class LectorEnVoz private constructor(context: Context) {
         if (_estado.value.auricular == si) return
         _estado.value = _estado.value.copy(auricular = si)
         tts?.let { t -> runCatching { t.setAudioAttributes(atributos()) } }
-        if (_estado.value.leyendo) leer(actual, trozoActual)
+        if (_estado.value.leyendo) leer(actual, trozoActual, reproductor?.currentPosition ?: 0)
     }
 
     private fun atributos(): AudioAttributes =
@@ -233,17 +341,26 @@ class LectorEnVoz private constructor(context: Context) {
         }
         val elegida = VozAlta.mejorVoz(voces, idioma, enLinea && hayRed())
         if (elegida == null) {
+            hayVozDeGoogle = false
+            // Con Microsoft se puede empezar igual: solo falta la voz de reserva.
+            if (prefiereEdge) {
+                etiquetaDeGoogle = ""
+                _estado.value = _estado.value.copy(listo = true, velocidad = velocidad)
+                return Arranque.Bien
+            }
             val bajable = VozAlta.hayQueBajarla(voces, idioma)
             soltar()
             return Arranque.SinVoz(idioma, bajable, motor)
         }
+        hayVozDeGoogle = true
         todas.firstOrNull { it.name == elegida.nombre }?.let { t.voice = it }
         runCatching { t.setAudioAttributes(atributos()) }
         t.setSpeechRate(velocidad)
         t.setOnUtteranceProgressListener(Oyente())
         val etiqueta = Locale.forLanguageTag(elegida.idioma).let { it.getDisplayLanguage(it).replaceFirstChar { c -> c.titlecase(it) } } +
             (if (motor == VozAlta.MOTOR_DE_GOOGLE) " · Google" else "") + (if (elegida.local) " · sin conexión" else " · en línea")
-        _estado.value = _estado.value.copy(listo = true, velocidad = velocidad, voz = etiqueta)
+        etiquetaDeGoogle = etiqueta
+        _estado.value = _estado.value.copy(listo = true, velocidad = velocidad, voz = if (edge == null) etiqueta else _estado.value.voz)
         return Arranque.Bien
     }
 
@@ -253,21 +370,28 @@ class LectorEnVoz private constructor(context: Context) {
         parrafos = textos
         fracciones = donde
         trozosDe.clear()
+        olvidarLosAudios()
+        msPausado = 0
         _estado.value = _estado.value.copy(cuantos = textos.size, parrafo = -1, clave = clave, titulo = titulo)
     }
 
     /** Empieza a leer en el párrafo [desde] (y en su trozo [trozo]). */
-    fun leer(desde: Int, trozo: Int = 0) {
-        val t = tts ?: return
-        if (parrafos.isEmpty()) return
+    fun leer(desde: Int, trozo: Int = 0, ms: Int = 0) {
+        val t = tts
+        if (parrafos.isEmpty() || (t == null && edge == null)) return
         if (!pedirElAudio()) return
         ponerLaSalida()
         lectura++
-        t.stop()
+        t?.stop()
+        soltarElReproductor()
         actual = desde.coerceIn(0, parrafos.lastIndex)
         trozoActual = trozo
-        encoladoHasta = actual - 1
-        encolarHasta(actual + POR_DELANTE, desdeTrozo = trozo)
+        msPausado = 0
+        if (edge != null) sonarConEdge(actual, ms)
+        else {
+            encoladoHasta = actual - 1
+            encolarHasta(actual + POR_DELANTE, desdeTrozo = trozo)
+        }
         _estado.value = _estado.value.copy(leyendo = true, parrafo = actual)
         apuntarElVerde(actual)
         alCambiarDeParrafo?.invoke(actual)
@@ -287,6 +411,8 @@ class LectorEnVoz private constructor(context: Context) {
     fun pausar() {
         lectura++
         tts?.stop()
+        reproductor?.let { msPausado = runCatching { it.currentPosition }.getOrDefault(0) }
+        soltarElReproductor()
         devolverLaSalida()
         _estado.value = _estado.value.copy(leyendo = false)
     }
@@ -295,7 +421,7 @@ class LectorEnVoz private constructor(context: Context) {
     fun alternar() { if (_estado.value.leyendo) pausar() else seguir() }
 
     fun seguir() {
-        if (_estado.value.parrafo < 0) leer(0) else leer(actual, trozoActual)
+        if (_estado.value.parrafo < 0) leer(0) else leer(actual, trozoActual, if (edge != null) msPausado else 0)
     }
 
     /** Un párrafo adelante (+1) o atrás (−1), desde su principio. */
@@ -309,6 +435,8 @@ class LectorEnVoz private constructor(context: Context) {
     fun ponerVelocidad(v: Float) {
         tts?.setSpeechRate(v)
         _estado.value = _estado.value.copy(velocidad = v)
+        // Con Microsoft, el MP3 se acelera ahí mismo, sin volver a pedirlo.
+        reproductor?.let { mp -> runCatching { if (mp.isPlaying) mp.playbackParams = mp.playbackParams.setSpeed(v) }; return }
         // La velocidad nueva vale para lo que se encole; lo ya encolado se vuelve a pedir.
         if (_estado.value.leyendo) leer(actual, trozoActual)
     }
@@ -317,6 +445,7 @@ class LectorEnVoz private constructor(context: Context) {
     fun parar() {
         lectura++
         tts?.stop()
+        soltarElReproductor()
         soltarElAudio()
         _estado.value = _estado.value.copy(leyendo = false)
     }
@@ -326,6 +455,9 @@ class LectorEnVoz private constructor(context: Context) {
         lectura++
         runCatching { tts?.stop(); tts?.shutdown() }
         tts = null
+        soltarElReproductor()
+        olvidarLosAudios()
+        edge = null
         soltarElAudio()
         paraVolver = null
         _estado.value = _estado.value.copy(listo = false, leyendo = false, clave = "", titulo = "")
@@ -370,15 +502,7 @@ class LectorEnVoz private constructor(context: Context) {
             principal.post {
                 if (l != lectura) return@post
                 // El último trozo del último párrafo: se acabó el documento.
-                if (p >= parrafos.lastIndex && k >= trozosDelParrafo(p).lastIndex) {
-                    _estado.value = _estado.value.copy(leyendo = false)
-                    actual = 0
-                    trozoActual = 0
-                    soltarElAudio()
-                    // Acabado entero: el verde se quita, la próxima vez se empieza por donde se mire.
-                    _estado.value.clave.takeIf { it.isNotEmpty() }?.let { prefs.edit().remove(com.forge.pixpin.motor.Lectura.claveDeVoz(it)).apply() }
-                    _estado.value = _estado.value.copy(parrafo = -1)
-                }
+                if (p >= parrafos.lastIndex && k >= trozosDelParrafo(p).lastIndex) alAcabarElDocumento()
             }
         }
 

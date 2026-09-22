@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
@@ -380,23 +381,20 @@ class VisorHtmlActivity : ComponentActivity() {
             val donde = (0 until (fr?.length() ?: 0)).map { fr!!.optDouble(it, 0.0).toFloat() }
             // **Se sigue por el marcador verde**, donde se dejó de escuchar; si no hay, por lo que asoma arriba.
             val desde = marcaDeVoz?.first?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
-            if (lector.estado.value.listo) {
-                arrancandoLaVoz = false
-                darleElDocumento(textos, donde)
-                lector.ponerEnLinea(vocesEnLinea)
-                lector.porElAuricular(prefsDeLectura.getBoolean("voz:auricular", false))
-                lector.leer(desde)
-                escuchando = true
-                LeyendoEnVozService.arrancar(this)
-                return@evaluateJavascript
-            }
             val muestra = textos.asSequence().drop(desde).take(40).joinToString(" ").take(4000)
             val idioma = com.forge.pixpin.motor.VozAlta.idiomaParaLeer(muestra, json.optString("lang"), java.util.Locale.getDefault().toLanguageTag())
+            if (lector.estado.value.listo) {
+                arrancandoLaVoz = false
+                lector.ponerEnLinea(vocesEnLinea)
+                aLeer(textos, donde, desde, idioma)
+                return@evaluateJavascript
+            }
             val velocidad = prefsDeLectura.getFloat("voz:velocidad", 1f)
+            lector.prefiereEdge = vocesDeMicrosoft
             lector.arrancar(idioma, velocidad, vocesEnLinea) { arranque ->
                 arrancandoLaVoz = false
                 when (arranque) {
-                    is LectorEnVoz.Arranque.Bien -> { darleElDocumento(textos, donde); lector.porElAuricular(prefsDeLectura.getBoolean("voz:auricular", false)); lector.leer(desde); escuchando = true; LeyendoEnVozService.arrancar(this) }
+                    is LectorEnVoz.Arranque.Bien -> aLeer(textos, donde, desde, idioma)
                     is LectorEnVoz.Arranque.SinMotor ->
                         Toast.makeText(this, "No hay motor de voz en el teléfono. Instala «Servicios de voz de Google».", Toast.LENGTH_LONG).show()
                     is LectorEnVoz.Arranque.SinVoz -> {
@@ -412,6 +410,88 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Con el motor ya arrancado: el documento, la salida, **la voz de Microsoft si se quiere** —que
+     * hay que elegir, y la primera vez pedir su lista— y a sonar.
+     */
+    private fun aLeer(textos: List<String>, donde: List<Float>, desde: Int, idioma: String) {
+        darleElDocumento(textos, donde)
+        lector.porElAuricular(prefsDeLectura.getBoolean("voz:auricular", false))
+        escuchando = true
+        LeyendoEnVozService.arrancar(this)
+        if (!vocesDeMicrosoft) { lector.usarEdge(null); lector.leer(desde); return }
+        lifecycleScope.launch {
+            ponerLaVozDeMicrosoft(idioma)
+            lector.leer(desde)
+        }
+    }
+
+    // ---- Las voces de Microsoft Edge. Ver [com.forge.pixpin.motor.EdgeVoz]. ----
+    /** Leer con las voces de Microsoft (gratis, no oficial, el texto va a Microsoft); se recuerda. */
+    private var vocesDeMicrosoft by mutableStateOf(false)
+    /** La lista para elegir voz, abierta. */
+    private var eligiendoVozDeMicrosoft by mutableStateOf(false)
+
+    private fun claveDeVozDeMicrosoft(idioma: String) = "voz:edge:" + com.forge.pixpin.motor.VozAlta.partes(idioma).first
+
+    /** Elige la voz de Microsoft del idioma —la que escogió el usuario, o la del país— y se la da al lector. */
+    private suspend fun ponerLaVozDeMicrosoft(idioma: String) {
+        val voces = VozDeEdge.voces(this)
+        val v = com.forge.pixpin.motor.EdgeVoz.elegir(voces, idioma, prefsDeLectura.getString(claveDeVozDeMicrosoft(idioma), null))
+        if (v == null) {
+            Toast.makeText(
+                this,
+                if (voces.isEmpty()) "Microsoft no responde: se lee con la voz de Google" else "Microsoft no tiene voz de ese idioma: se lee con la de Google",
+                Toast.LENGTH_LONG
+            ).show()
+            lector.usarEdge(null)
+            return
+        }
+        lector.usarEdge(v.nombre, "${v.corto} · Microsoft · en línea")
+    }
+
+    private fun idiomaDeAhora(): String = lector.idioma.ifBlank { java.util.Locale.getDefault().toLanguageTag() }
+
+    /** **Elegir la voz de Microsoft**: las del idioma que se lee, las del país primero. */
+    @Composable
+    private fun ElegirVozDeMicrosoft() {
+        val idioma = remember { idiomaDeAhora() }
+        var voces by remember { mutableStateOf<List<com.forge.pixpin.motor.EdgeVoz.Voz>?>(null) }
+        LaunchedEffect(Unit) { voces = com.forge.pixpin.motor.EdgeVoz.deLaLengua(VozDeEdge.voces(this@VisorHtmlActivity), idioma) }
+        val puesta = lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idioma), null)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { eligiendoVozDeMicrosoft = false },
+            title = { Text("Voz de Microsoft") },
+            text = {
+                val lista = voces
+                when {
+                    lista == null -> androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp))
+                    lista.isEmpty() -> Text("Sin red, o Microsoft no tiene voces de este idioma.")
+                    else -> androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                        items(lista.size) { i ->
+                            val v = lista[i]
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    prefsDeLectura.edit().putString(claveDeVozDeMicrosoft(idioma), v.nombre).apply()
+                                    if (lector.estado.value.listo) lector.usarEdge(v.nombre, "${v.corto} · Microsoft · en línea")
+                                    eligiendoVozDeMicrosoft = false
+                                }.padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(v.corto, fontWeight = if (v.nombre == puesta) FontWeight.Bold else FontWeight.Normal, modifier = Modifier.weight(1f))
+                                Text(
+                                    v.idioma + " · " + (if (v.genero == "Female") "mujer" else if (v.genero == "Male") "hombre" else v.genero),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { eligiendoVozDeMicrosoft = false }) { Text("Cerrar") } }
+        )
     }
 
     // ---- La página que sube sola, a la velocidad que uno lea. Ver [com.forge.pixpin.motor.AutoDesplazar]. ----
@@ -809,7 +889,11 @@ class VisorHtmlActivity : ComponentActivity() {
                 if (fraccionPendiente < 0f) fraccionPendiente = 0f
             }
         }
-        if (esDocumento) { leerLaMarcaDeVoz(); vocesEnLinea = prefsDeLectura.getBoolean("voz:enLinea", false) }
+        if (esDocumento) {
+            leerLaMarcaDeVoz()
+            vocesEnLinea = prefsDeLectura.getBoolean("voz:enLinea", false)
+            vocesDeMicrosoft = prefsDeLectura.getBoolean("voz:edge", false)
+        }
         engancharALaVoz()
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
@@ -1044,6 +1128,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
             }
         }
+        if (eligiendoVozDeMicrosoft) ElegirVozDeMicrosoft()
         if (quitandoMarcadores) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { quitandoMarcadores = false },
@@ -1413,6 +1498,20 @@ class VisorHtmlActivity : ComponentActivity() {
                             Toast.LENGTH_LONG
                         ).show()
                     }
+                    // **Las de Microsoft Edge**: más de 300 voces neuronales, gratis; no es un servicio oficial.
+                    FichaDeLetra("Voces de Microsoft", vocesDeMicrosoft) {
+                        vocesDeMicrosoft = !vocesDeMicrosoft
+                        prefsDeLectura.edit().putBoolean("voz:edge", vocesDeMicrosoft).apply()
+                        if (!vocesDeMicrosoft) lector.usarEdge(null)
+                        else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
+                        Toast.makeText(
+                            this@VisorHtmlActivity,
+                            if (vocesDeMicrosoft) "Voces de Microsoft Edge: muy naturales y gratis, pero el texto va a Microsoft y no es un servicio oficial. Si falla, la de Google."
+                            else "Con las voces de Google",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    if (vocesDeMicrosoft) FichaDeLetra("Elegir voz", false) { eligiendoVozDeMicrosoft = true }
                 }
             }
         }

@@ -20,8 +20,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 166
-        versionName = "0.89.0"
+        versionCode = 167
+        versionName = "0.90.0"
     }
 
     buildTypes {
@@ -114,6 +114,8 @@ dependencies {
     implementation("androidx.camera:camera-view:1.5.0")
     // El QR del envío por Wi-Fi: dibujarlo y leerlo. Solo el núcleo de ZXing, sin servicios de Google.
     implementation("com.google.zxing:core:3.5.3")
+    // Las voces de Microsoft Edge para leer en alto: hablan por WebSocket. Ver ui/VozDeEdge.kt.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
