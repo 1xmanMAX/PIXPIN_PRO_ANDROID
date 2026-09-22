@@ -37,6 +37,15 @@ class VozAltaTest {
     }
 
     @Test
+    fun `con las voces en linea se prefiere la de la red y si no hay la de siempre`() {
+        assertEquals("es-es-x-eea-network", VozAlta.mejorVoz(voces, "es-ES", enLinea = true)?.nombre)
+        assertEquals("fr-fr-x-frc-network", VozAlta.mejorVoz(voces, "fr-FR", enLinea = true)?.nombre)
+        // En «es-US» no hay de la red: la del mismo país antes que la de la red de otro.
+        assertEquals("es-us-x-esc-local", VozAlta.mejorVoz(voces, "es-US", enLinea = true)?.nombre)
+        assertNull(VozAlta.mejorVoz(voces, "en-GB", enLinea = true))
+    }
+
+    @Test
     fun `las partes de una etiqueta de idioma`() {
         assertEquals("es" to "ES", VozAlta.partes("es_es"))
         assertEquals("en" to "", VozAlta.partes("EN"))

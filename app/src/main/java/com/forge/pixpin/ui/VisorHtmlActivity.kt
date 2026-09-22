@@ -58,6 +58,8 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
@@ -304,13 +306,46 @@ class VisorHtmlActivity : ComponentActivity() {
     private var laPaginaQueSeVe: File? = null
 
     // ---- Escuchar el documento, con la voz de Google del teléfono. Ver [LectorEnVoz]. ----
-    private val lector by lazy {
-        LectorEnVoz(this).also { l ->
-            l.alCambiarDeParrafo = { i -> resaltarElQueSuena(i, seguir = !anotando) }
-        }
-    }
+    //
+    // **El lector es de la app, no de esta pantalla** ([LectorEnVoz.delApp]): al salir del visor
+    // sigue leyendo, con la notificación de reproductor de [LeyendoEnVozService]. Esta pantalla solo
+    // se engancha a él para resaltar lo que suena, y al volver a abrir el mismo documento se
+    // engancha otra vez ([engancharALaVoz]).
+    private val lector by lazy { LectorEnVoz.delApp(this) }
+    private val alSonarOtroParrafo: (Int) -> Unit = { i -> resaltarElQueSuena(i, seguir = !anotando) }
+    /** Al cargar la página, llevarla al párrafo que suena: se volvió a abrir un documento que se estaba escuchando. */
+    private var irAlQueSuena = false
     /** La barra de escuchar está a la vista. */
     private var escuchando by mutableStateOf(false)
+    /**
+     * **El marcador verde**: el párrafo y el sitio donde se dejó de escuchar este documento, o null.
+     * Lo apunta el lector ([LectorEnVoz]); aquí se lee para enseñarlo y para empezar por él.
+     */
+    private var marcaDeVoz by mutableStateOf<Pair<Int, Float>?>(null)
+    private fun leerLaMarcaDeVoz() {
+        marcaDeVoz = com.forge.pixpin.motor.Lectura.vozDeTexto(prefsDeLectura.getString(com.forge.pixpin.motor.Lectura.claveDeVoz(claveDelDocumento), null))
+    }
+    /** Voces en línea de Google (mejores, pero el texto sale del teléfono); se recuerda. */
+    private var vocesEnLinea by mutableStateOf(false)
+
+    /** Si lo que suena es este documento, se engancha la pantalla: barra, resaltado y riel. */
+    private fun engancharALaVoz() {
+        val e = lector.estado.value
+        if (!esDocumento || !e.listo || e.clave != claveDelDocumento) return
+        lector.alCambiarDeParrafo = alSonarOtroParrafo
+        lector.paraVolver = Intent(intent)
+        escuchando = true
+        irAlQueSuena = true
+        fraccionPendiente = -1f
+    }
+
+    /** Lo que se le cuenta al lector al empezar: qué documento es, cómo se llama y cómo volver a él. */
+    private fun darleElDocumento(textos: List<String>, donde: List<Float>) {
+        val titulo = sinExtension(intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { (comparte ?: elOriginal)?.name.orEmpty() })
+        lector.documento(textos, claveDelDocumento, titulo, donde)
+        lector.alCambiarDeParrafo = alSonarOtroParrafo
+        lector.paraVolver = Intent(intent)
+    }
     /** En qué fracción del documento empieza el párrafo que suena, o −1. La flecha del riel va ahí. */
     private var fraccionQueSuena by mutableStateOf(-1f)
 
@@ -341,21 +376,27 @@ class VisorHtmlActivity : ComponentActivity() {
                 Toast.makeText(this, "Este documento no tiene texto que leer", Toast.LENGTH_SHORT).show()
                 return@evaluateJavascript
             }
-            val desde = json!!.optInt("desde", 0)
+            val fr = json!!.optJSONArray("f")
+            val donde = (0 until (fr?.length() ?: 0)).map { fr!!.optDouble(it, 0.0).toFloat() }
+            // **Se sigue por el marcador verde**, donde se dejó de escuchar; si no hay, por lo que asoma arriba.
+            val desde = marcaDeVoz?.first?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
             if (lector.estado.value.listo) {
                 arrancandoLaVoz = false
-                lector.documento(textos)
+                darleElDocumento(textos, donde)
+                lector.ponerEnLinea(vocesEnLinea)
+                lector.porElAuricular(prefsDeLectura.getBoolean("voz:auricular", false))
                 lector.leer(desde)
                 escuchando = true
+                LeyendoEnVozService.arrancar(this)
                 return@evaluateJavascript
             }
             val muestra = textos.asSequence().drop(desde).take(40).joinToString(" ").take(4000)
             val idioma = com.forge.pixpin.motor.VozAlta.idiomaParaLeer(muestra, json.optString("lang"), java.util.Locale.getDefault().toLanguageTag())
             val velocidad = prefsDeLectura.getFloat("voz:velocidad", 1f)
-            lector.arrancar(idioma, velocidad) { arranque ->
+            lector.arrancar(idioma, velocidad, vocesEnLinea) { arranque ->
                 arrancandoLaVoz = false
                 when (arranque) {
-                    is LectorEnVoz.Arranque.Bien -> { lector.documento(textos); lector.leer(desde); escuchando = true }
+                    is LectorEnVoz.Arranque.Bien -> { darleElDocumento(textos, donde); lector.porElAuricular(prefsDeLectura.getBoolean("voz:auricular", false)); lector.leer(desde); escuchando = true; LeyendoEnVozService.arrancar(this) }
                     is LectorEnVoz.Arranque.SinMotor ->
                         Toast.makeText(this, "No hay motor de voz en el teléfono. Instala «Servicios de voz de Google».", Toast.LENGTH_LONG).show()
                     is LectorEnVoz.Arranque.SinVoz -> {
@@ -488,9 +529,14 @@ class VisorHtmlActivity : ComponentActivity() {
         }
     }
 
-    /** Se deja de escuchar: se calla, se quita el resaltado y se va la barra. */
+    /** Se deja de escuchar (la X): se suelta el lector, se quita el resaltado y se van la barra y la notificación. */
     private fun dejarDeEscuchar() {
-        lector.parar()
+        lector.soltar()
+        soltarLaBarra()
+    }
+
+    /** La pantalla deja de enseñar la voz: sin barra ni resaltado. El lector, si sigue, es de otro. */
+    private fun soltarLaBarra() {
         escuchando = false
         resaltarElQueSuena(-1, seguir = false)
     }
@@ -763,6 +809,8 @@ class VisorHtmlActivity : ComponentActivity() {
                 if (fraccionPendiente < 0f) fraccionPendiente = 0f
             }
         }
+        if (esDocumento) { leerLaMarcaDeVoz(); vocesEnLinea = prefsDeLectura.getBoolean("voz:enLinea", false) }
+        engancharALaVoz()
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -776,7 +824,8 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        lector.soltar()
+        // **Salir no calla la voz**: sigue con la notificación. Solo se desengancha esta pantalla.
+        if (lector.alCambiarDeParrafo === alSonarOtroParrafo) lector.alCambiarDeParrafo = null
         // Un `WebView` que no se destruye se queda con su proceso de pintar y su guion vivos.
         web?.let { runCatching { it.stopLoading(); it.destroy() } }
         web = null
@@ -803,7 +852,6 @@ class VisorHtmlActivity : ComponentActivity() {
             when {
                 aPantalla != null -> dejarLaPantallaCompleta()
                 anotando -> { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
-                escuchando -> dejarDeEscuchar()
                 autoDesplazando -> dejarDeAutoDesplazar()
                 web?.canGoBack() == true -> web?.goBack()
                 // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
@@ -814,6 +862,15 @@ class VisorHtmlActivity : ComponentActivity() {
             }
         }
         BackHandler { salir() }
+        // Si el lector se suelta desde la notificación, o pasa a leer otro documento, esta pantalla
+        // deja de enseñarlo.
+        LaunchedEffect(Unit) {
+            lector.estado.collect { e ->
+                if (escuchando && (!e.listo || e.clave != claveDelDocumento)) soltarLaBarra()
+                // El verde se mueve con lo que suena de este documento.
+                if (esDocumento && e.clave == claveDelDocumento) leerLaMarcaDeVoz()
+            }
+        }
 
         // **Solo la página, y su nombre flotando** (19-sep-2026, segunda vuelta). Sin botones:
         // se sale con atrás y se guarda con el botón de la propia página. El nombre es una
@@ -1171,7 +1228,8 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     @Composable
     private fun LateralDeMarcadores(modifier: Modifier) {
-        val lista = marcadores
+        // Los del usuario y, entre ellos, **el verde de donde se dejó de escuchar**.
+        val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
         if (lista.isEmpty()) return
         RielDeMarcas(lista.size, { i -> lista[i].emoji }, modifier) { i ->
             lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) }
@@ -1258,6 +1316,22 @@ class VisorHtmlActivity : ComponentActivity() {
                         }) {
                             Text(com.forge.pixpin.motor.VozAlta.rotulo(e.velocidad), color = tinta, fontWeight = FontWeight.Bold)
                         }
+                        // **Por el auricular de las llamadas**, para sitios ruidosos: el teléfono a la oreja.
+                        IconButton(onClick = {
+                            val si = !e.auricular
+                            prefsDeLectura.edit().putBoolean("voz:auricular", si).apply()
+                            lector.porElAuricular(si)
+                            Toast.makeText(
+                                this@VisorHtmlActivity,
+                                if (si) "Por el auricular: pon el teléfono en la oreja, como en una llamada" else "Por el altavoz",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }) {
+                            Icon(
+                                if (e.auricular) Icons.Filled.PhoneInTalk else Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = if (e.auricular) "Suena por el auricular" else "Suena por el altavoz", tint = tinta
+                            )
+                        }
                         IconButton(onClick = { dejarDeEscuchar() }) {
                             Icon(Icons.Filled.Close, contentDescription = "Dejar de escuchar", tint = tinta)
                         }
@@ -1327,6 +1401,18 @@ class VisorHtmlActivity : ComponentActivity() {
                 Text("Escuchar", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
                 Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
                     FichaDeLetra("Voces sin conexión", false, onVoces)
+                    // **En línea**: las voces de la red del mismo motor de Google, gratis y más naturales.
+                    FichaDeLetra("Voces en línea", vocesEnLinea) {
+                        vocesEnLinea = !vocesEnLinea
+                        prefsDeLectura.edit().putBoolean("voz:enLinea", vocesEnLinea).apply()
+                        lector.ponerEnLinea(vocesEnLinea)
+                        Toast.makeText(
+                            this@VisorHtmlActivity,
+                            if (vocesEnLinea) "Voces en línea de Google: suenan mejor, pero el texto se manda a Google. Sin red, la de siempre."
+                            else "Solo voces sin conexión: el texto no sale del teléfono",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }
@@ -1684,7 +1770,8 @@ class VisorHtmlActivity : ComponentActivity() {
             // Una página recargada (otra letra, los márgenes de anotar) pierde los números de sus párrafos.
             if (esDocumento && escuchando) view.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) {
                 val i = lector.estado.value.parrafo
-                if (i >= 0) resaltarElQueSuena(i, seguir = false)
+                if (i >= 0) resaltarElQueSuena(i, seguir = irAlQueSuena)
+                irAlQueSuena = false
             }
             if (esDocumento && fraccionPendiente >= 0f) {
                 val f = fraccionPendiente

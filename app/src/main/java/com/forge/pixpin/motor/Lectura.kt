@@ -157,6 +157,31 @@ object Lectura {
         return if (recorrido <= 0f) 0f else (corrido / recorrido).coerceIn(0f, 1f)
     }
 
+    /**
+     * **El marcador verde de la voz** (22-sep-2026, pedido por el usuario): dónde se dejó de
+     * escuchar un documento. Hay **uno solo** por documento —se mueve con lo que se va oyendo— y
+     * **no se guarda con los demás marcadores**: lo apunta el lector aunque el visor esté cerrado,
+     * en su propia clave ([claveDeVoz]), como «párrafo:fracción». El visor lo junta al enseñarlos.
+     */
+    const val EMOJI_DE_VOZ = "🟢"
+
+    fun claveDeVoz(claveDelDocumento: String) = "$claveDelDocumento:voz"
+
+    fun vozATexto(parrafo: Int, fraccion: Float) = "$parrafo:${fraccion.coerceIn(0f, 1f)}"
+
+    fun vozDeTexto(texto: String?): Pair<Int, Float>? {
+        val p = texto?.split(':') ?: return null
+        if (p.size != 2) return null
+        val parrafo = p[0].toIntOrNull()?.takeIf { it >= 0 } ?: return null
+        val f = p[1].toFloatOrNull() ?: return null
+        return parrafo to f.coerceIn(0f, 1f)
+    }
+
+    /** Los marcadores con el verde de la voz en su sitio: nunca más de un verde. */
+    fun conMarcaDeVoz(lista: List<Marcador>, fraccion: Float?): List<Marcador> =
+        (lista.filter { it.emoji != EMOJI_DE_VOZ } + listOfNotNull(fraccion?.let { Marcador(-1L, it.coerceIn(0f, 1f), EMOJI_DE_VOZ) }))
+            .sortedBy { it.fraccion }
+
     const val ID_DEL_ESTILO = "pixpin-lector"
     const val MARCADORES = 24
 }

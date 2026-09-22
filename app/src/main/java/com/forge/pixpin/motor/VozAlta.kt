@@ -38,16 +38,21 @@ object VozAlta {
     )
 
     /**
-     * **La voz sin conexión que más se parece a [idioma]**: primero la del mismo idioma y país,
-     * luego la del mismo idioma con otro acento; entre iguales, la de más calidad. Nunca una de la
-     * red ni una que no esté bajada. Null si no hay ninguna.
+     * **La voz que más se parece a [idioma]**: primero la del mismo idioma y país, luego la del
+     * mismo idioma con otro acento; entre iguales, la de más calidad. Nunca una que no esté bajada.
+     *
+     * Sin [enLinea], **solo las sin conexión**. Con [enLinea] (el usuario lo pidió el 22-sep-2026:
+     * las voces en línea de Google, que suenan mejor y son gratis dentro del mismo motor), **se
+     * prefieren las de la red**, y si no hay de ese idioma, la sin conexión de siempre. Null si no
+     * hay ninguna.
      */
-    fun mejorVoz(voces: List<Voz>, idioma: String): Voz? {
+    fun mejorVoz(voces: List<Voz>, idioma: String, enLinea: Boolean = false): Voz? {
         val (lengua, pais) = partes(idioma)
         return voces
-            .filter { it.local && it.instalada && partes(it.idioma).first == lengua }
+            .filter { (it.local || enLinea) && it.instalada && partes(it.idioma).first == lengua }
             .sortedWith(
                 compareByDescending<Voz> { partes(it.idioma).second == pais && pais.isNotEmpty() }
+                    .thenByDescending { enLinea && !it.local }
                     .thenByDescending { it.calidad }
                     .thenBy { it.nombre }
             )
@@ -171,7 +176,8 @@ object VozAlta {
     /**
      * El guion que prepara la página para leerla: numera cada bloque de texto que no tenga otro
      * dentro (un párrafo, un título, un punto de una lista, una celda) y devuelve, en JSON, sus
-     * textos, el primero que asoma arriba de la pantalla y el `lang` de la página. En ES5.
+     * textos, dónde empieza cada uno (de 0 a 1, para el marcador verde), el primero que asoma arriba
+     * de la pantalla y el `lang` de la página. En ES5.
      */
     const val PREPARAR = """(function(){
   var sel='p,li,h1,h2,h3,h4,h5,h6,blockquote,pre,td,th,dt,dd,figcaption,caption,div';
@@ -180,7 +186,8 @@ object VozAlta {
     s.textContent='.pixpin-leyendo{background:rgba(255,196,64,.30)!important;box-shadow:0 0 0 3px rgba(255,196,64,.30)!important;border-radius:3px!important}';
     (document.head||document.body).appendChild(s);
   }
-  var todos=document.body.querySelectorAll(sel), out=[], arriba=-1;
+  var todos=document.body.querySelectorAll(sel), out=[], fr=[], arriba=-1;
+  var alto=Math.max(1,document.documentElement.scrollHeight), y0=window.pageYOffset;
   for(var i=0;i<todos.length;i++){
     var el=todos[i];
     el.removeAttribute('data-pixpin-voz');
@@ -189,11 +196,12 @@ object VozAlta {
     var t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'');
     if(!t) continue;
     el.setAttribute('data-pixpin-voz',out.length);
-    if(arriba<0){ var r=el.getBoundingClientRect(); if(r.bottom>4) arriba=out.length; }
-    out.push(t);
+    var r=el.getBoundingClientRect();
+    if(arriba<0&&r.bottom>4) arriba=out.length;
+    out.push(t); fr.push(Math.max(0,Math.min(1,(r.top+y0)/alto)));
   }
   window.__pixpinVozAntes=-1;
-  return JSON.stringify({t:out,desde:arriba<0?0:arriba,lang:document.documentElement.lang||''});
+  return JSON.stringify({t:out,f:fr,desde:arriba<0?0:arriba,lang:document.documentElement.lang||''});
 })()"""
 
     /**

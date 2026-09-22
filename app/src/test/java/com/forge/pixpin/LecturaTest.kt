@@ -18,6 +18,18 @@ class LecturaTest {
     }
 
     @Test
+    fun `el marcador verde de la voz es uno solo y se guarda aparte`() {
+        val lista = listOf(Lectura.Marcador(1, 0.2f, "⭐"), Lectura.Marcador(2, 0.9f, Lectura.EMOJI_DE_VOZ))
+        val con = Lectura.conMarcaDeVoz(lista, 0.5f)
+        assertEquals(listOf("⭐", Lectura.EMOJI_DE_VOZ), con.map { it.emoji })
+        assertEquals(0.5f, con[1].fraccion)
+        assertEquals(listOf("⭐"), Lectura.conMarcaDeVoz(lista, null).map { it.emoji })
+        assertEquals(12 to 0.25f, Lectura.vozDeTexto(Lectura.vozATexto(12, 0.25f)))
+        assertEquals(null, Lectura.vozDeTexto("basura"))
+        assertEquals(null, Lectura.vozDeTexto(null))
+    }
+
+    @Test
     fun `el estilo se pone antes de cerrar la cabecera y no se acumula`() {
         val pagina = "<html><head><title>x</title></head><body><p>hola</p></body></html>"
         val una = Lectura.conEstilo(pagina, grosor = 2, letra = 1)

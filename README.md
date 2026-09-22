@@ -171,6 +171,16 @@ barra abajo lleva pausa, párrafo anterior y siguiente, y la velocidad (de 0,75�
 la voz del idioma, PixPin abre la pantalla de Google para bajarla; también desde el engranaje,
 «Voces sin conexión».
 
+**Sigue sonando al salir**, como un audio: con el visor cerrado o el teléfono bloqueado, la
+notificación y la pantalla de bloqueo llevan pausa, párrafo anterior y siguiente, y los mandos de
+los auriculares también valen; quitarlos pausa, y una llamada también. Tocar la notificación
+vuelve al documento, por el párrafo que suena. **Un marcador verde** 🟢 entre los marcadores del
+lateral apunta dónde se dejó de escuchar —uno solo, que se mueve con lo que se va oyendo— y la
+próxima vez se sigue desde él. En el engranaje, **«Voces en línea»** usa las voces de la red del
+mismo motor de Google, gratis y más naturales (el texto sí sale entonces a Google; sin red, la de
+siempre). Y el botón del teléfono de la barra lo pone **por el auricular de las llamadas**, para
+oírlo con el teléfono en la oreja en un sitio con ruido.
+
 **Editor rápido.** Sin salir del lector se anota con **el mismo motor del lienzo**: las mismas
 herramientas y tintas, las que elijas en Ajustes arrastrando. En un **PDF**, el lápiz deja anotar
 sobre **todas las hojas a la vez**, como en cualquier editor de PDF: un dedo dibuja, dos pasan las
