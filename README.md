@@ -182,7 +182,8 @@ notificación y la pantalla de bloqueo llevan pausa, párrafo anterior y siguien
 los auriculares también valen; quitarlos pausa, y una llamada también. Tocar la notificación
 vuelve al documento, por el párrafo que suena. **Un marcador verde** 🟢 entre los marcadores del
 lateral apunta dónde se dejó de escuchar —uno solo, que se mueve con lo que se va oyendo— y la
-próxima vez se sigue desde él. En el engranaje, **«Voces en línea»** usa las voces de la red del
+próxima vez se sigue desde él. **Se puede poner a mano**: en el botón del marcador, «🟢 leer aquí»
+lo lleva a lo que asoma arriba (también en un PDF, a esa hoja), y escuchar empieza desde ahí. En el engranaje, **«Voces en línea»** usa las voces de la red del
 mismo motor de Google, gratis y más naturales (el texto sí sale entonces a Google; sin red, la de
 siempre). Y el botón del teléfono de la barra lo pone **por el auricular de las llamadas**, para
 oírlo con el teléfono en la oreja en un sitio con ruido.

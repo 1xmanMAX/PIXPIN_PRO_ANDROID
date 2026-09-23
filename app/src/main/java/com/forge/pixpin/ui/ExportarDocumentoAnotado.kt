@@ -136,7 +136,11 @@ object ExportarDocumentoAnotado {
         if (carpeta == null) return html
         val raiz = runCatching { carpeta.canonicalPath }.getOrDefault(carpeta.absolutePath) + File.separator
         val hechas = HashMap<String, String?>()
-        return Regex("(<img\\b[^>]*?\\ssrc=)([\"'])([^\"']+)\\2", RegexOption.IGNORE_CASE).replace(html) { m ->
+        // Las `<img src>` y **las `<image href>` de un SVG** (23-sep-2026): muchos EPUB ponen así la
+        // portada y las ilustraciones —`<svg><image xlink:href="…"/></svg>`— y solo se metían las
+        // primeras; las otras se quedaban apuntando a un archivo que no viaja con la página, y el
+        // navegador enseñaba el icono de imagen rota.
+        return Regex("(<(?:img\\b[^>]*?\\ssrc|image\\b[^>]*?\\s(?:xlink:)?href)=)([\"'])([^\"']+)\\2", RegexOption.IGNORE_CASE).replace(html) { m ->
             val ruta = m.groupValues[3]
             if (ruta.startsWith("data:", true) || ruta.startsWith("http", true)) return@replace m.value
             val dentro = hechas.getOrPut(ruta) {
@@ -146,9 +150,19 @@ object ExportarDocumentoAnotado {
                     if (f.extension.equals("svg", true)) return@runCatching "data:image/svg+xml;base64," + Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)
                     val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFile(f.path, medidas)
-                    if (medidas.outWidth <= 0) return@runCatching null
+                    // Android no la sabe leer (un JPEG en CMYK, un formato raro): va tal cual, con el
+                    // tipo por la extensión, y que la pinte el navegador. Antes se quedaba fuera y rota.
+                    if (medidas.outWidth <= 0) {
+                        val tipo = when (f.extension.lowercase()) {
+                            "jpg", "jpeg", "jpe" -> "image/jpeg"; "png" -> "image/png"; "gif" -> "image/gif"
+                            "webp" -> "image/webp"; "avif" -> "image/avif"; "bmp" -> "image/bmp"
+                            else -> return@runCatching null
+                        }
+                        if (f.length() > 4_000_000) return@runCatching null
+                        return@runCatching "data:$tipo;base64," + Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)
+                    }
                     if (medidas.outWidth <= ANCHO_DE_FOTO && f.length() < 120_000) {
-                        return@runCatching "data:${medidas.outMimeType ?: "image/*"};base64," + Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)
+                        return@runCatching "data:${medidas.outMimeType ?: "image/jpeg"};base64," + Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)
                     }
                     var muestra = 1
                     while (medidas.outWidth / (muestra * 2) >= ANCHO_DE_FOTO) muestra *= 2

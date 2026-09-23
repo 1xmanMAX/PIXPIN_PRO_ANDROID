@@ -121,7 +121,16 @@ fun RielDeMarcas(
 
 /** La fila de emoticonos para elegir cuál se planta. La misma en los tres sitios. */
 @Composable
-fun ElegirEmojiDeMarca(modifier: Modifier = Modifier, onCerrar: () -> Unit, onElegir: (String) -> Unit) {
+fun ElegirEmojiDeMarca(
+    modifier: Modifier = Modifier,
+    /**
+     * **Con el marcador verde delante** (23-sep-2026, lectores): «leer desde aquí». Solo hay uno
+     * por documento, así que ponerlo lo **mueve** de donde estuviera. Ver [Lectura.EMOJI_DE_VOZ].
+     */
+    conVerde: Boolean = false,
+    onCerrar: () -> Unit,
+    onElegir: (String) -> Unit
+) {
     Row(
         modifier
             .navigationBarsPadding()
@@ -132,6 +141,17 @@ fun ElegirEmojiDeMarca(modifier: Modifier = Modifier, onCerrar: () -> Unit, onEl
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (conVerde) {
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(Color(0x3322C55E))
+                    .clickable(onClickLabel = "Empezar a leer aquí") { onElegir(Lectura.EMOJI_DE_VOZ) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(Lectura.EMOJI_DE_VOZ, fontSize = 22.sp, color = Color.White)
+                Text(" leer aquí", fontSize = 13.sp, color = Color.White)
+            }
+        }
         Lectura.EMOJIS.forEach { e ->
             Text(e, fontSize = 24.sp, color = Color.White, modifier = Modifier.clip(CircleShape).clickable { onElegir(e) }.padding(8.dp))
         }

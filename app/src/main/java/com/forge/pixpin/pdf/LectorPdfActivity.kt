@@ -490,7 +490,12 @@ class LectorPdfActivity : ComponentActivity() {
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.BookmarkAdd, "Marcador aquí") { poniendoMarca = !poniendoMarca },
                         // **Escuchar**: el PDF pasado a texto, en el lector de Word, que es quien tiene la voz.
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.RecordVoiceOver, "Escuchar") {
-                            com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(this@LectorPdfActivity, rutaPedida, nombre, escuchar = true)
+                            // Desde el marcador verde, si lo hay; si no, desde donde se deje la última vez.
+                            val verde = marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ }
+                            com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(
+                                this@LectorPdfActivity, rutaPedida, nombre, escuchar = true,
+                                desdeHoja = verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) + 1 } ?: 0
+                            )
                         },
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.KeyboardDoubleArrowDown, "Desplazar sola") {
                             autoDesplazando = true; autoEnMarcha = true
@@ -577,13 +582,18 @@ class LectorPdfActivity : ComponentActivity() {
             // Por encima de los dos botones de la esquina: pegada al canto los tapaba.
             if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
+                conVerde = true,
                 onCerrar = { poniendoMarca = false }
             ) { emoji ->
                 poniendoMarca = false
                 val (pagina, dentro) = dondeEstoy()
                 val (x, y) = com.forge.pixpin.motor.Marcas.enLaPagina(pagina, dentro)
-                marcas = com.forge.pixpin.motor.Marcas.con(marcas, x, y, emoji, System.currentTimeMillis())
+                // **El verde es uno solo**: ponerlo en otra hoja lo mueve. Escuchar empieza por él.
+                val verde = emoji == Lectura.EMOJI_DE_VOZ
+                val sinVerde = if (verde) marcas.filterNot { it.emoji == Lectura.EMOJI_DE_VOZ } else marcas
+                marcas = com.forge.pixpin.motor.Marcas.con(sinVerde, x, y, emoji, System.currentTimeMillis())
                 guardarLasMarcas()
+                if (verde) android.widget.Toast.makeText(this@LectorPdfActivity, "Marcador verde en la hoja ${pagina + 1}: se leerá desde aquí", android.widget.Toast.LENGTH_SHORT).show()
             }
             if (compartiendo && cuantas > 0) {
                 val titulo = nombre.substringBeforeLast('.').ifBlank { "PDF" }
@@ -608,7 +618,11 @@ class LectorPdfActivity : ComponentActivity() {
                 onIzquierda = { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }, onDerecha = { ponerEspacios(espacios xor ESPACIO_DERECHA) },
                 comoTexto = { escuchar ->
                     conElEngranaje = false
-                    com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(this@LectorPdfActivity, rutaPedida, nombre, escuchar = escuchar)
+                    val verde = if (escuchar) marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ } else null
+                    com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(
+                        this@LectorPdfActivity, rutaPedida, nombre, escuchar = escuchar,
+                        desdeHoja = verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) + 1 } ?: 0
+                    )
                 },
                 onExportar = { conElEngranaje = false; capas.guardarTodo(); compartiendo = true },
                 onAlProyecto = if (capas.esDeUnProyecto()) null else ({ conElEngranaje = false; alProyecto() }),

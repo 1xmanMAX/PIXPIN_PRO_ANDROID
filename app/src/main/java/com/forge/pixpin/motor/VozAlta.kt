@@ -210,12 +210,14 @@ object VozAlta {
     }
     soltar(bl,tanda);
   }
-  var todos=document.body.querySelectorAll(con), out=[], fr=[], arriba=-1;
+  var todos=document.body.querySelectorAll(con), out=[], fr=[], hj=[], arriba=-1;
   var alto=Math.max(1,document.documentElement.scrollHeight), y0=window.pageYOffset;
   for(var i=0;i<todos.length;i++){
     var el=todos[i];
     el.removeAttribute('data-pixpin-voz');
     if(el.closest&&el.closest('#pixpin-tinta')) continue;
+    // Lo escondido para los lectores de pantalla (la marca «Hoja 3» de un PDF pasado a texto) no se lee.
+    if(el.closest&&el.closest('[aria-hidden="true"]')) continue;
     if(el.querySelector(con)) continue;
     var t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'');
     if(!t) continue;
@@ -223,9 +225,10 @@ object VozAlta {
     var r=el.getBoundingClientRect();
     if(arriba<0&&r.bottom>4) arriba=out.length;
     out.push(t); fr.push(Math.max(0,Math.min(1,(r.top+y0)/alto)));
+    var dh=el.closest?el.closest('[data-hoja]'):null; hj.push(dh?+dh.getAttribute('data-hoja'):0);
   }
   window.__pixpinVozAntes=-1;
-  return JSON.stringify({t:out,f:fr,desde:arriba<0?0:arriba,lang:document.documentElement.lang||''});
+  return JSON.stringify({t:out,f:fr,h:hj,desde:arriba<0?0:arriba,lang:document.documentElement.lang||''});
 })()"""
 
     /**

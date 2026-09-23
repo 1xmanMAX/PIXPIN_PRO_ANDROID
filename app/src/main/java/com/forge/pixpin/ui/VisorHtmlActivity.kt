@@ -129,6 +129,7 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val EXTRA_EN_SU_SITIO = "enSuSitio"
         private const val EXTRA_DOCUMENTO = "documento"
         private const val EXTRA_ESCUCHAR = "escuchar"
+        private const val EXTRA_DESDE_HOJA = "desdeHoja"
 
         /**
          * **Un PDF pasado a texto, en este lector** (23-sep-2026): el mismo camino que un Word, con
@@ -136,7 +137,11 @@ class VisorHtmlActivity : ComponentActivity() {
          * conversión ([com.forge.pixpin.motor.PdfAHtml]) se guarda por archivo, fecha y peso: la
          * segunda vez abre al momento. Con [escuchar], empieza a leerlo en alto nada más abrir.
          */
-        fun abrirPdfComoTexto(actividad: androidx.activity.ComponentActivity, ruta: String, nombre: String, escuchar: Boolean = false, mensaje: String? = null) {
+        fun abrirPdfComoTexto(
+            actividad: androidx.activity.ComponentActivity, ruta: String, nombre: String, escuchar: Boolean = false, mensaje: String? = null,
+            /** La hoja (desde 1) por la que empezar a escuchar: la del marcador verde del PDF. 0, la de siempre. */
+            desdeHoja: Int = 0
+        ) {
             Toast.makeText(actividad, "Pasando el PDF a texto…", Toast.LENGTH_SHORT).show()
             actividad.lifecycleScope.launch {
                 val hecho = withContext(Dispatchers.IO) {
@@ -157,7 +162,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     val intent = Intent(actividad, VisorHtmlActivity::class.java)
                         .putExtra(EXTRA_RUTA, pagina.absolutePath).putExtra(EXTRA_NOMBRE, nombre)
                         .putExtra(EXTRA_SIN_GUION, true).putExtra(EXTRA_COMPARTE, ruta)
-                        .putExtra(EXTRA_DOCUMENTO, true).putExtra(EXTRA_ESCUCHAR, escuchar)
+                        .putExtra(EXTRA_DOCUMENTO, true).putExtra(EXTRA_ESCUCHAR, escuchar).putExtra(EXTRA_DESDE_HOJA, desdeHoja)
                     if (mensaje != null) intent.putExtra(EXTRA_MENSAJE, mensaje)
                     actividad.startActivity(intent)
                 }.onFailure { e ->
@@ -421,7 +426,13 @@ class VisorHtmlActivity : ComponentActivity() {
             val fr = json!!.optJSONArray("f")
             val donde = (0 until (fr?.length() ?: 0)).map { fr!!.optDouble(it, 0.0).toFloat() }
             // **Se sigue por el marcador verde**, donde se dejó de escuchar; si no hay, por lo que asoma arriba.
-            val desde = marcaDeVoz?.first?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
+            // Abierto desde el PDF de hojas con su verde puesto: desde el primer párrafo de esa hoja.
+            val hojas = json.optJSONArray("h")
+            val deLaHoja = hojaPedida.takeIf { it > 0 }?.let { n ->
+                (0 until (hojas?.length() ?: 0)).firstOrNull { hojas!!.optInt(it) >= n }
+            }
+            hojaPedida = 0
+            val desde = deLaHoja ?: marcaDeVoz?.first?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
             val muestra = textos.asSequence().drop(desde).take(40).joinToString(" ").take(4000)
             val idioma = com.forge.pixpin.motor.VozAlta.idiomaParaLeer(muestra, json.optString("lang"), java.util.Locale.getDefault().toLanguageTag())
             if (lector.estado.value.listo) {
@@ -939,6 +950,31 @@ class VisorHtmlActivity : ComponentActivity() {
 
     /** Abierto para escuchar: se empieza en cuanto carga la página. */
     private var escucharAlCargar = false
+    /** Abierto desde el PDF de hojas con su marcador verde: la hoja desde la que leer, o 0. */
+    private var hojaPedida = 0
+
+    /**
+     * **El marcador verde, aquí** (23-sep-2026, pedido por el usuario: «poder mover el bookmark verde
+     * donde quiero que empiece a leer»). Va al primer párrafo que asoma arriba; como solo hay uno
+     * por documento, se quita de donde estuviera. Escuchando este documento, la voz salta ahí ya.
+     */
+    private fun ponerElVerdeAqui() {
+        val vista = web ?: return
+        vista.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) { crudo ->
+            val json = runCatching { org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String) }.getOrNull() ?: return@evaluateJavascript
+            val cuantos = json.optJSONArray("t")?.length() ?: 0
+            if (cuantos == 0) { Toast.makeText(this, "Este documento no tiene texto que leer", Toast.LENGTH_SHORT).show(); return@evaluateJavascript }
+            val desde = json.optInt("desde", 0).coerceIn(0, cuantos - 1)
+            val f = json.optJSONArray("f")?.optDouble(desde, -1.0)?.toFloat()?.takeIf { it >= 0f } ?: fraccionDeAhora()
+            prefsDeLectura.edit().putString(com.forge.pixpin.motor.Lectura.claveDeVoz(claveDelDocumento), com.forge.pixpin.motor.Lectura.vozATexto(desde, f)).apply()
+            leerLaMarcaDeVoz()
+            val e = lector.estado.value
+            if (escuchando && e.listo && e.clave == claveDelDocumento) {
+                if (e.leyendo) lector.leer(desde) else lector.saltar(desde - e.parrafo.coerceAtLeast(0))
+            }
+            Toast.makeText(this, "Marcador verde aquí: se leerá desde este punto", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     /** Si lo que se lee es un PDF pasado a texto ([com.forge.pixpin.motor.PdfAHtml]): entonces su «en hojas» es el PDF mismo. */
     private val vinoDeUnPdf: Boolean get() = com.forge.pixpin.motor.PdfAHtml.esPdf((comparte ?: elOriginal)?.name)
@@ -963,6 +999,7 @@ class VisorHtmlActivity : ComponentActivity() {
         enSuSitio = intent?.getBooleanExtra(EXTRA_EN_SU_SITIO, false) == true
         esDocumento = intent?.getBooleanExtra(EXTRA_DOCUMENTO, false) == true
         escucharAlCargar = intent?.getBooleanExtra(EXTRA_ESCUCHAR, false) == true
+        hojaPedida = intent?.getIntExtra(EXTRA_DESDE_HOJA, 0) ?: 0
         elOriginal = File(ruta)
         if (esDocumento) {
             tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
@@ -1216,10 +1253,13 @@ class VisorHtmlActivity : ComponentActivity() {
                         enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     ) { MandosDeLosLados(Modifier) }
-                    if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
+                    if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), conVerde = true, onCerrar = { poniendoMarcador = false }) { emoji ->
                         poniendoMarcador = false
-                        marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
-                        guardarMarcadores()
+                        if (emoji == com.forge.pixpin.motor.Lectura.EMOJI_DE_VOZ) ponerElVerdeAqui()
+                        else {
+                            marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
+                            guardarMarcadores()
+                        }
                     }
                 }
                 ocupado?.let { que ->
