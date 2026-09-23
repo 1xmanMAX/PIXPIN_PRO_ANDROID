@@ -7,6 +7,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.horizontalScroll
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -122,6 +127,53 @@ class LectorPdfActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **El engranaje del PDF**, con los mismos apartados que el del lector de Word
+     * ([com.forge.pixpin.ui.VisorHtmlActivity]): Vista, Lectura, Voz y Documento. La letra no, que
+     * un PDF de hojas no se puede cambiar; para eso está «Ver como texto».
+     */
+    @Composable
+    private fun EngranajeDelPdf(
+        onCerrar: () -> Unit,
+        sinLado: Boolean, onSinLado: (Boolean) -> Unit,
+        izquierda: Boolean, derecha: Boolean, onIzquierda: () -> Unit, onDerecha: () -> Unit,
+        comoTexto: (escuchar: Boolean) -> Unit,
+        onExportar: () -> Unit, onAlProyecto: (() -> Unit)?, onQuitarMarcadores: (() -> Unit)?
+    ) {
+        val prefs = remember { getSharedPreferences("lectura", MODE_PRIVATE) }
+        com.forge.pixpin.ui.EngranajeDeLector(onCerrar) {
+            com.forge.pixpin.ui.ApartadoDeLector("Vista")
+            com.forge.pixpin.ui.FilaDeLector("Ver como texto", "como un Word") { comoTexto(false) }
+
+            com.forge.pixpin.ui.ApartadoDeLector("Lectura")
+            com.forge.pixpin.ui.InterruptorDeLector("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado, onSinLado)
+            com.forge.pixpin.ui.InterruptorDeLector("Espacio a la izquierda", "Papel en blanco para anotar", izquierda) { onIzquierda() }
+            com.forge.pixpin.ui.InterruptorDeLector("Espacio a la derecha", null, derecha) { onDerecha() }
+
+            com.forge.pixpin.ui.ApartadoDeLector("Voz")
+            com.forge.pixpin.ui.FilaDeLector("Escuchar este PDF", null) { comoTexto(true) }
+            var enLinea by remember { mutableStateOf(prefs.getBoolean("voz:enLinea", false)) }
+            com.forge.pixpin.ui.InterruptorDeLector("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", enLinea) {
+                enLinea = it; prefs.edit().putBoolean("voz:enLinea", it).apply()
+            }
+            var microsoft by remember { mutableStateOf(prefs.getBoolean("voz:edge", false)) }
+            com.forge.pixpin.ui.InterruptorDeLector("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", microsoft) {
+                microsoft = it; prefs.edit().putBoolean("voz:edge", it).apply()
+            }
+            var auricular by remember { mutableStateOf(prefs.getBoolean("voz:auricular", false)) }
+            com.forge.pixpin.ui.InterruptorDeLector("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
+                auricular = it; prefs.edit().putBoolean("voz:auricular", it).apply()
+            }
+
+            com.forge.pixpin.ui.ApartadoDeLector("Documento")
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                com.forge.pixpin.ui.BotonDeTextoDeLector("Exportar", onExportar)
+                if (onAlProyecto != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Al proyecto", onAlProyecto)
+                if (onQuitarMarcadores != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Quitar marcadores", onQuitarMarcadores)
+            }
+        }
+    }
+
     @Composable
     private fun Lector(rutaPedida: String, nombre: String) {
         // **El del proyecto, con lo anotado**, si lo que se abrió es su copia limpia (el mensaje del chat).
@@ -213,6 +265,35 @@ class LectorPdfActivity : ComponentActivity() {
             mutableStateOf(com.forge.pixpin.motor.Marcas.deTexto(prefsDeMarcas.getString(claveDeMarcas, null)))
         }
         var poniendoMarca by remember { mutableStateOf(false) }
+
+        // ---- **Lo mismo que el lector de Word y libros** (23-sep-2026, pedido por el usuario: «todos
+        // son visores rápidos: la misma interfaz y las mismas funciones»). La pastilla de arriba
+        // que sale al tocar y se va sola, el engranaje por apartados, los mandos de los lados con el
+        // candado, un dedo que lleva el documento de lado y la página que sube sola. Las piezas son
+        // las comunes de [com.forge.pixpin.ui.MandosDeLector]; los ajustes, los mismos (`lectura`). ----
+        var aLaVista by remember { mutableStateOf(true) }
+        var toques by remember { mutableStateOf(0) }
+        LaunchedEffect(aLaVista, toques) { if (aLaVista) { kotlinx.coroutines.delay(3500); aLaVista = false } }
+        LaunchedEffect(estado.isScrollInProgress) { if (estado.isScrollInProgress) aLaVista = false }
+        var conElEngranaje by remember { mutableStateOf(false) }
+        var quitandoMarcas by remember { mutableStateOf(false) }
+        var sinLado by remember { mutableStateOf(prefsDelLector.getBoolean("sinLado", false)) }
+        var autoDesplazando by remember { mutableStateOf(false) }
+        var autoEnMarcha by remember { mutableStateOf(false) }
+        var palabrasPorMinuto by remember {
+            mutableStateOf(com.forge.pixpin.motor.AutoDesplazar.valida(prefsDelLector.getInt("auto:ppm", com.forge.pixpin.motor.AutoDesplazar.POR_DEFECTO)))
+        }
+        var palabrasDelPdf by remember(rutaPedida) { mutableStateOf(-1) }
+        fun alProyecto(despues: (Boolean) -> Unit = {}) {
+            alcance.launch {
+                val bien = withContext(Dispatchers.IO) { capas.pasarAProyecto(nombre.substringBeforeLast('.').ifBlank { "PDF" }, cuantas) }
+                android.widget.Toast.makeText(
+                    this@LectorPdfActivity, if (bien) "Ya está en proyectos, con lo anotado" else "No se pudo crear el proyecto",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+                despues(bien)
+            }
+        }
         fun guardarLasMarcas() {
             prefsDeMarcas.edit().putString(claveDeMarcas, com.forge.pixpin.motor.Marcas.aTexto(marcas)).apply()
         }
@@ -249,6 +330,12 @@ class LectorPdfActivity : ComponentActivity() {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false)
                         var cogido = false
+                        var recorrido = 0f
+                        /** Hasta dónde se puede llevar de lado el documento a este aumento, con los espacios que haya. */
+                        fun topeX(z: Float): Float {
+                            val lados = ((if (espacios and ESPACIO_IZQUIERDA != 0) 1 else 0) + (if (espacios and ESPACIO_DERECHA != 0) 1 else 0)) * Lectura.MARGEN_DEL_PDF
+                            return (((1f + lados) * z - 1f) * size.width / 2f).coerceAtLeast(0f)
+                        }
                         // **Alejar una página con recortes la abre a solas.** Solo con el documento
                         // a su tamaño: acercado, el pellizco sigue siendo el zoom.
                         var acumulado = 1f
@@ -257,13 +344,29 @@ class LectorPdfActivity : ComponentActivity() {
                             val evento = awaitPointerEvent()
                             val dedos = evento.changes.count { it.pressed }
                             if (dedos == 0) {
+                                // Un toque (sin mover y sin pellizco): sale la pastilla.
+                                if (!cogido && recorrido < viewConfiguration.touchSlop) { aLaVista = true; toques++ }
                                 pellizcando = false
                                 // **El imán del centro**: soltando cerca de la hoja, encaja en ella.
                                 if (zoom in 0.999f..1.001f && kotlin.math.abs(desplazado.x) < size.width * 0.12f) desplazado = Offset.Zero
                                 break
                             }
                             if (dedos >= 2) { cogido = true; pellizcando = true }
-                            if (!cogido) continue
+                            // **Un dedo, también de lado** (23-sep-2026: «con un solo dedo moverme a
+                            // todas partes»). De alto lo lleva la lista, como siempre; de lado, si el
+                            // documento es más ancho que la pantalla —acercado o con espacios—, este
+                            // gesto. No se consume nada: la lista sigue recibiendo el dedo. Con el
+                            // candado puesto, a lo ancho se queda donde está.
+                            if (!cogido) {
+                                val c = evento.changes.firstOrNull { it.pressed }
+                                if (c != null && !anotando) {
+                                    val d = c.position - c.previousPosition
+                                    recorrido += d.getDistance()
+                                    val tope = topeX(zoom)
+                                    if (!sinLado && tope > 0f && d.x != 0f) desplazado = Offset((desplazado.x + d.x).coerceIn(-tope, tope), desplazado.y)
+                                }
+                                continue
+                            }
                             val antes = zoom
                             val factor = evento.calculateZoom()
                             if (antes <= 1.001f && !decidido && recortes.isNotEmpty()) {
@@ -300,7 +403,8 @@ class LectorPdfActivity : ComponentActivity() {
                             if (anotando) estado.dispatchRawDelta(-evento.calculatePan().y / ahora)
                             val conPan = movido + evento.calculatePan()
                             desplazado = Offset(
-                                conPan.x.coerceIn(-topeX, topeX),
+                                // Con el candado, a lo ancho no se mueve: solo amplía y sube o baja.
+                                (if (sinLado) desplazado.x else conPan.x).coerceIn(-topeX, topeX),
                                 conPan.y.coerceIn(-topeY, topeY)
                             )
                             evento.changes.forEach { if (it.pressed) it.consume() }
@@ -357,60 +461,45 @@ class LectorPdfActivity : ComponentActivity() {
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
                 }
             }
-            // **Los espacios para anotar, uno por lado** (22-sep-2026). Cada botón es un cuadro
-            // partido por la mitad: la mitad llena es el papel y la vacía, el espacio que se
-            // añade de ese lado. Tocarlo lo pone; tocarlo otra vez lo quita. Van en las dos
-            // esquinas de abajo, cada uno del lado al que añade, que es lo que hace que se
-            // entienda sin leer nada. Ver [EspaciosDelLado].
-            if (cuantas > 0 && aSolas == null) {
-                EspacioDelLado(
-                    puesto = hayIzquierda, izquierda = true,
-                    modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 18.dp, bottom = 18.dp)
-                ) { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }
-                if (!anotando) EspacioDelLado(
-                    puesto = hayDerecha, izquierda = false,
-                    modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 18.dp, bottom = 140.dp)
-                ) { ponerEspacios(espacios xor ESPACIO_DERECHA) }
-            }
-            // **Marcar esta hoja**, encima del lápiz: el mismo marcador con emoticono de los
-            // lectores y del lienzo. Un toque largo en el riel no quita aquí; se quitan desde
-            // la lista de abajo. Ver [com.forge.pixpin.ui.RielDeMarcas].
-            if (cuantas > 0 && aSolas == null && !anotando) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .navigationBarsPadding()
-                        .padding(start = 18.dp, end = 18.dp, bottom = 78.dp)
-                        .size(44.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(Color(0x9914182B))
-                        .clickable { poniendoMarca = !poniendoMarca },
-                    contentAlignment = Alignment.Center
+            // **Los mandos de los lados** (espacio a la izquierda, candado, espacio a la derecha) y
+            // **la pastilla de arriba**: los mismos del lector de Word. Salen al tocar y se van solos.
+            if (cuantas > 0 && aSolas == null && !anotando && !autoDesplazando && !poniendoMarca) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = aLaVista, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
-                    androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí",
-                        tint = Color.White, modifier = Modifier.size(20.dp)
+                    com.forge.pixpin.ui.MandosDeLosLadosDeLector(
+                        pasosIzq = if (hayIzquierda) 1 else 0, pasosDer = if (hayDerecha) 1 else 0, tope = 1, sinLado = sinLado,
+                        onIzquierda = { mas -> if (mas != hayIzquierda) ponerEspacios(espacios xor ESPACIO_IZQUIERDA); toques++ },
+                        onDerecha = { mas -> if (mas != hayDerecha) ponerEspacios(espacios xor ESPACIO_DERECHA); toques++ },
+                        onCandado = {
+                            sinLado = !sinLado
+                            prefsDelLector.edit().putBoolean("sinLado", sinLado).apply()
+                            toques++
+                            android.widget.Toast.makeText(this@LectorPdfActivity, if (sinLado) "De lado, bloqueado: solo sube y baja" else "Se mueve a todas partes", android.widget.Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
             }
-            // **El lápiz del editor rápido**: pequeño y semitransparente, abajo a un lado.
             if (cuantas > 0 && aSolas == null && !anotando) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .navigationBarsPadding()
-                        .padding(18.dp)
-                        .size(52.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(Color(0x9914182B))
-                        .clickable { anotando = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Filled.Edit, contentDescription = "Anotar",
-                        tint = Color.White, modifier = Modifier.size(22.dp)
-                    )
-                }
+                com.forge.pixpin.ui.PastillaDeLector(
+                    visible = aLaVista,
+                    nombre = nombre.substringBeforeLast('.').ifBlank { "PDF" },
+                    botones = listOf(
+                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Edit, "Anotar") { anotando = true },
+                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.BookmarkAdd, "Marcador aquí") { poniendoMarca = !poniendoMarca },
+                        // **Escuchar**: el PDF pasado a texto, en el lector de Word, que es quien tiene la voz.
+                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.RecordVoiceOver, "Escuchar") {
+                            com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(this@LectorPdfActivity, rutaPedida, nombre, escuchar = true)
+                        },
+                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.KeyboardDoubleArrowDown, "Desplazar sola") {
+                            autoDesplazando = true; autoEnMarcha = true
+                        },
+                        com.forge.pixpin.ui.BotonDeLector(com.forge.pixpin.ui.IconoDeCompartir, "Compartir") { capas.guardarTodo(); compartiendo = true },
+                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Settings, "Ajustes") { conElEngranaje = true }
+                    ),
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
             if (anotando) {
                 val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
@@ -491,23 +580,94 @@ class LectorPdfActivity : ComponentActivity() {
                     remember(ruta, titulo) {
                         com.forge.pixpin.ui.Compartible(
                             titulo, formatos = listOf(
-                                com.forge.pixpin.ui.ExportarPdfAnotado.formato(this@LectorPdfActivity, ruta, titulo, cuantas) { i -> capas.escenaDe(i) }
+                                com.forge.pixpin.ui.ExportarPdfAnotado.formato(this@LectorPdfActivity, ruta, titulo, cuantas) { i -> capas.escenaDe(i) },
+                                // **Y como texto**: el PDF pasado a un documento que se reflowea, con lo
+                                // anotado leyéndolo como texto. Ver [com.forge.pixpin.motor.PdfAHtml].
+                                com.forge.pixpin.ui.ExportarDocumentoAnotado.formato(this@LectorPdfActivity, java.io.File(rutaPedida), nombre, rotulo = "Página web (texto)")
                             )
                         )
                     }
                 ) { compartiendo = false }
             }
-            if (nombre.isNotBlank()) {
-                Text(
-                    nombre,
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp)
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+            // ---- El engranaje, la lista para quitar marcadores y la página que sube sola. ----
+            if (conElEngranaje) EngranajeDelPdf(
+                onCerrar = { conElEngranaje = false },
+                sinLado = sinLado, onSinLado = { sinLado = it; prefsDelLector.edit().putBoolean("sinLado", it).apply() },
+                izquierda = hayIzquierda, derecha = hayDerecha,
+                onIzquierda = { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }, onDerecha = { ponerEspacios(espacios xor ESPACIO_DERECHA) },
+                comoTexto = { escuchar ->
+                    conElEngranaje = false
+                    com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(this@LectorPdfActivity, rutaPedida, nombre, escuchar = escuchar)
+                },
+                onExportar = { conElEngranaje = false; capas.guardarTodo(); compartiendo = true },
+                onAlProyecto = if (capas.esDeUnProyecto()) null else ({ conElEngranaje = false; alProyecto() }),
+                onQuitarMarcadores = if (marcas.isEmpty()) null else ({ conElEngranaje = false; quitandoMarcas = true })
+            )
+            if (quitandoMarcas) androidx.compose.material3.AlertDialog(
+                onDismissRequest = { quitandoMarcas = false },
+                title = { Text("Quitar marcadores") },
+                text = {
+                    androidx.compose.foundation.layout.Column {
+                        marcas.forEach { m ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    marcas = marcas.filterNot { it.id == m.id }
+                                    guardarLasMarcas()
+                                    if (marcas.isEmpty()) quitandoMarcas = false
+                                }.padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(m.emoji, style = MaterialTheme.typography.titleLarge)
+                                Text("  Hoja " + (com.forge.pixpin.motor.Marcas.paginaDe(m) + 1), modifier = Modifier.weight(1f))
+                                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Close, contentDescription = "Quitar", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { quitandoMarcas = false }) { Text("Hecho") } }
+            )
+            if (autoDesplazando && cuantas > 0) {
+                // Las palabras del PDF, una vez: con ellas, la velocidad en palabras por minuto. Ver [com.forge.pixpin.motor.AutoDesplazar].
+                LaunchedEffect(ruta) {
+                    if (palabrasDelPdf < 0) palabrasDelPdf = withContext(Dispatchers.IO) {
+                        runCatching { com.forge.pixpin.motor.PdfAHtml.contarPalabras(java.io.File(ruta).readBytes()) }.getOrDefault(0)
+                            .takeIf { it > 0 } ?: (cuantas * com.forge.pixpin.motor.PdfAHtml.POR_HOJA_SI_NO_HAY)
+                    }
+                }
+                val enMarcha = autoEnMarcha && !anotando && aSolas == null && palabrasDelPdf > 0
+                LaunchedEffect(enMarcha) {
+                    if (!enMarcha) return@LaunchedEffect
+                    var antes = -1L
+                    var sobra = 0f
+                    while (true) {
+                        val ahora = androidx.compose.runtime.withFrameNanos { it }
+                        if (antes > 0) {
+                            val altoDeHoja = estado.layoutInfo.visibleItemsInfo.maxOfOrNull { it.size } ?: 0
+                            val v = com.forge.pixpin.motor.AutoDesplazar.pixelesPorSegundo(palabrasPorMinuto, palabrasDelPdf, (altoDeHoja.toFloat() * cuantas))
+                            sobra += v * ((ahora - antes) / 1e9f).coerceAtMost(0.1f)
+                            val n = sobra.toInt()
+                            if (n > 0) { estado.dispatchRawDelta(n.toFloat()); sobra -= n }
+                            if (!estado.canScrollForward) { autoEnMarcha = false; break }
+                        }
+                        antes = ahora
+                    }
+                }
+                val quedan by remember {
+                    androidx.compose.runtime.derivedStateOf {
+                        val alto = estado.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.takeIf { it > 0 } ?: 1
+                        val progreso = ((estado.firstVisibleItemIndex + estado.firstVisibleItemScrollOffset.toFloat() / alto) / cuantas).coerceIn(0f, 1f)
+                        com.forge.pixpin.ui.rotuloDeLoQueQueda(palabrasDelPdf, progreso, palabrasPorMinuto)
+                    }
+                }
+                com.forge.pixpin.ui.BarraDeAutoDesplazarDeLector(
+                    palabrasPorMinuto, autoEnMarcha, if (palabrasDelPdf < 0) "Contando las palabras…" else quedan,
+                    onMenos = { palabrasPorMinuto = com.forge.pixpin.motor.AutoDesplazar.otra(palabrasPorMinuto, -1); prefsDelLector.edit().putInt("auto:ppm", palabrasPorMinuto).apply() },
+                    onMas = { palabrasPorMinuto = com.forge.pixpin.motor.AutoDesplazar.otra(palabrasPorMinuto, 1); prefsDelLector.edit().putInt("auto:ppm", palabrasPorMinuto).apply() },
+                    onAlternar = { autoEnMarcha = !autoEnMarcha },
+                    onCerrar = { autoEnMarcha = false; autoDesplazando = false },
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 )
+                androidx.activity.compose.BackHandler { autoEnMarcha = false; autoDesplazando = false }
             }
         }
     }
@@ -746,35 +906,7 @@ private fun CapaDePagina(
     }
 }
 
-/**
- * **El botón de añadir espacio a un lado**: un cuadro partido, con la mitad del papel llena y la
- * del espacio vacía —o al revés, según a qué lado añade—. Puesto, se pinta encendido.
- */
-@Composable
-private fun EspacioDelLado(puesto: Boolean, izquierda: Boolean, modifier: Modifier = Modifier, alTocar: () -> Unit) {
-    Box(
-        modifier
-            .size(44.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
-            .background(Color(if (puesto) 0xCC1E88E5 else 0x9914182B))
-            .clickable { alTocar() },
-        contentAlignment = Alignment.Center
-    ) {
-        androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
-            val borde = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
-            drawRect(Color.White.copy(alpha = 0.9f), style = borde)
-            // La mitad del papel, llena; la del espacio que se añade, vacía.
-            val mitad = size.width / 2
-            drawRect(
-                Color.White.copy(alpha = 0.9f),
-                topLeft = Offset(if (izquierda) mitad else 0f, 0f),
-                size = androidx.compose.ui.geometry.Size(mitad, size.height)
-            )
-        }
-    }
-}
-
-/** Qué espacios hay puestos, en bits. Ver [EspacioDelLado]. */
+/** Qué espacios hay puestos, en bits. Ver [com.forge.pixpin.ui.MandosDeLosLadosDeLector]. */
 private const val ESPACIO_IZQUIERDA = 1
 private const val ESPACIO_DERECHA = 2
 

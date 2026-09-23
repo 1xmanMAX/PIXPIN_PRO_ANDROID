@@ -94,7 +94,9 @@ object ExportarHtml {
             val letra: Double,
             fondo: String,
             /** El espacio de la derecha, si no es igual al de la izquierda ([margen]). */
-            val margenDerecho: Int = margen
+            val margenDerecho: Int = margen,
+            /** El idioma del texto (`es`, `en`…): el «Leer en voz alta» del navegador elige la voz con él. */
+            val idioma: String? = null
         ) : HojaWeb(nombre, fondo)
         /**
          * **Una tabla con fórmulas.** Viaja lo escrito —el JSON de [TablaDeCalculo]— y la
@@ -334,7 +336,9 @@ object ExportarHtml {
                         append("\" data-bloques=\"").append(DocumentoAnotado.SELECTOR)
                         append("\" data-tops=\"").append(hoja.tops.joinToString(",") { (Math.round(it * 10) / 10.0).toString() })
                         append("\" style=\"width:").append(hoja.columna + hoja.margen + hoja.margenDerecho).append("px\">")
-                        append("<article class=\"doc\" style=\"width:").append(hoja.columna)
+                        append("<article class=\"doc\"")
+                        hoja.idioma?.let { append(" lang=\"").append(it.replace("\"", "")).append("\"") }
+                        append(" style=\"width:").append(hoja.columna)
                         append("px;margin-left:").append(hoja.margen).append("px;font-size:").append(hoja.letra).append("px\">")
                         append(hoja.cuerpo).append("</article>").append(hoja.capa)
                         append("\n<svg class=\"tinta\"><g id=\"").append(ID_DEL_CROQUIS).append("\"></g></svg></div>")

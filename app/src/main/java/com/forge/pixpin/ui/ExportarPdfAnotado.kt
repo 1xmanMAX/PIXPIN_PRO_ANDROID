@@ -36,11 +36,17 @@ object ExportarPdfAnotado {
     private const val PAPEL = "#f3f3f0"
 
     private const val ESTILO =
-        ".doc{line-height:0}.doc img{display:block;width:100%;height:auto;margin:0 0 ${ENTRE_HOJAS}px;background:#fff}"
+        ".doc{line-height:0}.doc img{display:block;width:100%;height:auto;margin:0 0 ${ENTRE_HOJAS}px;background:#fff}" +
+            // **El texto de la hoja, encima y transparente** (23-sep-2026, pedido por el usuario: que el
+            // «Leer en voz alta» de Edge lo lea). Cada línea en su sitio, como la capa de texto de los
+            // visores de PDF de los navegadores: no se ve, pero está —se lee en alto, se selecciona y
+            // se copia—. Ver [capaDeTexto].
+            ".hoja-pdf{position:relative}.texto-pdf{position:absolute;left:0;top:0;right:0;bottom:0;line-height:1;color:transparent}" +
+            ".texto-pdf span{position:absolute;white-space:pre;cursor:text}.texto-pdf ::selection{background:rgba(0,90,255,.25);color:transparent}"
 
     fun formato(c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?) =
         Compartible.Formato(
-            "web-pdf-anotado", Icons.Filled.Language, "Página web", Compartible.NINGUNA,
+            "web-pdf-anotado", Icons.Filled.Language, "Página web (hojas)", Compartible.NINGUNA,
             generar = {
                 val funciones = (c.applicationContext as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb
                 hacer(c.applicationContext, ruta, titulo, paginas, escenaDe, funciones)?.let {
@@ -60,11 +66,20 @@ object ExportarPdfAnotado {
         val piezas = ArrayList<DocumentoAnotado.Pieza>()
         var y = 0.0
         val cuerpo = StringBuilder()
+        // El PDF leído una vez, para sacar el texto de cada hoja; y su idioma, para la voz del navegador.
+        val leido = runCatching { com.forge.pixpin.motor.leerPdf(File(ruta).readBytes()) }.getOrNull()?.takeIf { !it.cifrado }
+        val textos = (0 until paginas).map { i -> leido?.let { runCatching { com.forge.pixpin.motor.PlanoDePdf.de(it, i) }.getOrNull() } }
+        val idioma = com.forge.pixpin.motor.VozAlta.idiomaDelTexto(
+            textos.asSequence().filterNotNull().flatMap { it.textos.asSequence() }.take(800).joinToString(" ") { it.texto },
+            java.util.Locale.getDefault().language.ifBlank { "es" }
+        )
         for (i in 0 until paginas) {
             val foto = PdfDoc.render(ruta, i, ancho) ?: continue
             val alto = COLUMNA.toDouble() * foto.height / foto.width
-            cuerpo.append("<img alt=\"Hoja ").append(i + 1).append("\" width=\"").append(COLUMNA)
+            cuerpo.append("<div class=\"hoja-pdf\"><img alt=\"Hoja ").append(i + 1).append("\" width=\"").append(COLUMNA)
                 .append("\" height=\"").append(Math.round(alto)).append("\" src=\"").append(enJpeg(foto)).append("\">")
+            textos[i]?.let { cuerpo.append(capaDeTexto(it, idioma)) }
+            cuerpo.append("</div>")
             foto.recycle()
             val ancla = tops.size
             tops += y
@@ -87,6 +102,28 @@ object ExportarPdfAnotado {
         val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
         File(File(c.cacheDir, "share").apply { mkdirs() }, limpio).also { it.writeText(hecha) }
     }.getOrNull()
+
+    /**
+     * **Las líneas de la hoja**, cada una en su sitio sobre la foto, en píxeles de la columna. Las
+     * medidas del PDF van en puntos; la hoja mide [COLUMNA] de ancho en la página.
+     */
+    private fun capaDeTexto(plano: com.forge.pixpin.motor.PlanoDePdf.Plano, idioma: String): String {
+        val lineas = com.forge.pixpin.motor.PdfAHtml.lineas(com.forge.pixpin.motor.PdfAHtml.trozosDe(plano.textos))
+        if (lineas.isEmpty() || plano.ancho <= 0) return ""
+        val k = COLUMNA / plano.ancho
+        val sb = StringBuilder("<div class=\"texto-pdf\" lang=\"").append(idioma).append("\">")
+        for (l in lineas) {
+            val tam = l.alto * k
+            // La línea base menos lo que sube la letra: la caja de la línea empieza un poco más arriba.
+            sb.append("<span style=\"left:").append(num(l.x0 * k)).append("px;top:").append(num(l.y * k - tam * 0.86))
+                .append("px;font-size:").append(num(tam)).append("px\">")
+                .append(l.texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+                .append("</span> ")
+        }
+        return sb.append("</div>").toString()
+    }
+
+    private fun num(v: Double) = (Math.round(v * 10) / 10.0).toString()
 
     private fun enJpeg(foto: Bitmap): String {
         val salida = ByteArrayOutputStream()

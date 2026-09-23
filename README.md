@@ -79,6 +79,8 @@ bote con agujeros, alfileres, guías, escala gráfica y transportador.
 **Grafito**, el lápiz de verdad: escritura libre —no se endereza ni se corrige al pararse, y la
 curva pasa por cada punto que da el lápiz, sin esquinas— y **siete durezas de mina**, de la 4H
 (fina y clara) a la 8B (gorda y negra), con la HB en medio; se eligen en el panel lateral.
+Los gestos rápidos siguen: un segundo quieto con un trazo grande lo vuelve recta o rectángulo, y
+clavar la punta abre el compás; escribiendo, una letra no se convierte nunca.
 
 ![Rectangulo, elipse, rombo, linea, lapiz, marcador, texto y esquinas](docs/img/herramientas-dibujar.svg)
 
@@ -192,6 +194,15 @@ cualquier dirección. Abajo, con la pastilla, tres mandos pequeños: **espacio a
 dejes) y **espacio a la derecha**. Lo anotado se corre con el texto al abrir espacio a la
 izquierda. El engranaje está rediseñado en cuatro apartados cortos —Letra, Lectura, Voz,
 Documento— con deslizadores, interruptores y botones pequeños.
+
+**Los tres lectores, iguales.** Word, libro y PDF llevan la misma pastilla arriba (anotar,
+marcador, escuchar, página que sube sola, compartir y engranaje), el mismo engranaje por apartados
+y los mismos mandos de los lados con el candado. Un **PDF se puede ver como texto** —se saca de
+dentro del PDF, con sus títulos y párrafos— y así se lee, se escucha y se anota como un Word; y
+un **Word o un libro se ven como PDF**, en hojas. La página web que se exporta de cualquiera de
+ellos lleva el texto de verdad y su idioma, así que **el «Leer en voz alta» de Edge la lee**; la
+de un PDF en hojas lleva el texto encima de cada hoja, invisible, que además se selecciona y se
+copia.
 
 **Voces de Microsoft.** En el engranaje, **«Voces de Microsoft»** lee con las voces neuronales de
 «Leer en voz alta» de Microsoft Edge: más de 300, 45 en español, gratis y muy naturales; con

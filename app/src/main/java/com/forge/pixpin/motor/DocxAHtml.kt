@@ -305,7 +305,7 @@ object DocxAHtml {
     }
 
     /** Pensado para un teléfono: columna estrecha, letra del sistema, y los colores del modo noche si toca. */
-    private const val ESTILO =
+    internal const val ESTILO =
         "html{-webkit-text-size-adjust:100%}" +
             "body{margin:0;background:#fff;color:#1b1b1f;font:16px/1.55 system-ui,-apple-system,Roboto,sans-serif}" +
             "main{max-width:46em;margin:0 auto;padding:18px 16px 48px;overflow-wrap:break-word}" +

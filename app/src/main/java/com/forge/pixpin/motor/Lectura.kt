@@ -62,11 +62,14 @@ object Lectura {
     /**
      * **Espacio a un lado, a gusto** (23-sep-2026, pedido por el usuario: «un botón en cada lado
      * para añadir espacio a la derecha o a la izquierda, según como quiera»). Cada toque abre un
-     * tercio de la columna; no más de dos columnas por lado, que el papel no sea infinito.
+     * tercio de la columna, **y como mucho dos**: los dos tercios de siempre ([margenDe]), que
+     * es sitio de sobra para apuntar —más, dijo el usuario, «puede ser molesto»—. Y se quita igual.
      */
     fun pasoDeEspacio(columna: Int): Int = (columna / 3).coerceAtLeast(40)
 
-    fun espacioValido(espacio: Int, columna: Int): Int = espacio.coerceIn(0, columna * 2)
+    fun espacioMaximo(columna: Int): Int = maxOf(margenDe(columna), pasoDeEspacio(columna))
+
+    fun espacioValido(espacio: Int, columna: Int): Int = espacio.coerceIn(0, espacioMaximo(columna))
 
     fun estilo(grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null, izq: Int? = null, der: Int? = null): String {
         val peso = GROSORES.getOrElse(grosor) { GROSORES[1] }.first

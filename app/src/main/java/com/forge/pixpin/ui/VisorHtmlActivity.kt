@@ -129,6 +129,43 @@ class VisorHtmlActivity : ComponentActivity() {
         private const val EXTRA_MENSAJE = "mensaje"
         private const val EXTRA_EN_SU_SITIO = "enSuSitio"
         private const val EXTRA_DOCUMENTO = "documento"
+        private const val EXTRA_ESCUCHAR = "escuchar"
+
+        /**
+         * **Un PDF pasado a texto, en este lector** (23-sep-2026): el mismo camino que un Word, con
+         * todo lo suyo —letra, voz, página que sube sola, espacios, anotar, exportar con texto—. La
+         * conversión ([com.forge.pixpin.motor.PdfAHtml]) se guarda por archivo, fecha y peso: la
+         * segunda vez abre al momento. Con [escuchar], empieza a leerlo en alto nada más abrir.
+         */
+        fun abrirPdfComoTexto(actividad: androidx.activity.ComponentActivity, ruta: String, nombre: String, escuchar: Boolean = false, mensaje: String? = null) {
+            Toast.makeText(actividad, "Pasando el PDF a texto…", Toast.LENGTH_SHORT).show()
+            actividad.lifecycleScope.launch {
+                val hecho = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val original = File(ruta)
+                        val huella = "$ruta|${original.lastModified()}|${original.length()}".hashCode()
+                        val carpeta = File(actividad.cacheDir, "visor-pdf-texto").apply { mkdirs() }
+                        val pagina = File(carpeta, "$huella.html")
+                        if (!pagina.exists() || pagina.length() == 0L) {
+                            // Caché de usar y tirar: solo las últimas.
+                            carpeta.listFiles()?.sortedByDescending { it.lastModified() }?.drop(4)?.forEach { it.delete() }
+                            pagina.writeText(com.forge.pixpin.motor.PdfAHtml.convertir(original.readBytes(), nombre.substringBeforeLast('.'), java.util.Locale.getDefault().toLanguageTag()))
+                        }
+                        pagina
+                    }
+                }
+                hecho.onSuccess { pagina ->
+                    val intent = Intent(actividad, VisorHtmlActivity::class.java)
+                        .putExtra(EXTRA_RUTA, pagina.absolutePath).putExtra(EXTRA_NOMBRE, nombre)
+                        .putExtra(EXTRA_SIN_GUION, true).putExtra(EXTRA_COMPARTE, ruta)
+                        .putExtra(EXTRA_DOCUMENTO, true).putExtra(EXTRA_ESCUCHAR, escuchar)
+                    if (mensaje != null) intent.putExtra(EXTRA_MENSAJE, mensaje)
+                    actividad.startActivity(intent)
+                }.onFailure { e ->
+                    Toast.makeText(actividad, (e as? com.forge.pixpin.motor.PdfAHtml.NoSeLee)?.message ?: "No se pudo sacar el texto de este PDF", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
 
         /**
          * Lo que encoge el documento en la vista alejada: **el texto y un margen** —la columna más
@@ -576,48 +613,22 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     @Composable
     private fun BarraDeAutoDesplazar(modifier: Modifier) {
-        val tinta = com.forge.pixpin.ui.theme.Cristal.tinta
+        // El rótulo se calcula aparte ([derivedStateOf]): la página se mueve en cada fotograma,
+        // pero la barra solo se repinta cuando cambia el minuto.
         val quedan by remember {
             androidx.compose.runtime.derivedStateOf {
                 val vista = web
                 val progreso = if (vista == null) 0f
                 else com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), altoDelDocumento(), vista.height.toFloat())
-                val minutos = com.forge.pixpin.motor.AutoDesplazar.minutosQueQuedan(palabrasDelDocumento, progreso, palabrasPorMinuto)
-                val cal = java.util.Calendar.getInstance()
-                val ahora = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-                if (minutos <= 0f) "Terminado"
-                else "Terminas en " + com.forge.pixpin.motor.AutoDesplazar.rotulo(minutos) +
-                    " · a las " + com.forge.pixpin.motor.AutoDesplazar.horaDeTerminar(ahora, minutos)
+                rotuloDeLoQueQueda(palabrasDelDocumento, progreso, palabrasPorMinuto)
             }
         }
-        Box(modifier.navigationBarsPadding().padding(bottom = 10.dp, start = 12.dp, end = 12.dp)) {
-            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-                Column(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { cambiarLaVelocidadDeLeer(-1) }) {
-                            Icon(Icons.Filled.Remove, contentDescription = "Más despacio", tint = tinta)
-                        }
-                        Text("$palabrasPorMinuto palabras/min", color = tinta, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { cambiarLaVelocidadDeLeer(1) }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Más deprisa", tint = tinta)
-                        }
-                        IconButton(onClick = { autoEnMarcha = !autoEnMarcha }) {
-                            Icon(
-                                if (autoEnMarcha) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (autoEnMarcha) "Pausa" else "Seguir", tint = tinta, modifier = Modifier.size(30.dp)
-                            )
-                        }
-                        IconButton(onClick = { dejarDeAutoDesplazar() }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Dejar de desplazar", tint = tinta)
-                        }
-                    }
-                    Text(
-                        quedan, color = tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 6.dp, start = 10.dp, end = 10.dp)
-                    )
-                }
-            }
-        }
+        BarraDeAutoDesplazarDeLector(
+            palabrasPorMinuto, autoEnMarcha, quedan,
+            onMenos = { cambiarLaVelocidadDeLeer(-1) }, onMas = { cambiarLaVelocidadDeLeer(1) },
+            onAlternar = { autoEnMarcha = !autoEnMarcha }, onCerrar = { dejarDeAutoDesplazar() },
+            modifier = modifier
+        )
     }
 
     /** Se deja de escuchar (la X): se suelta el lector, se quita el resaltado y se van la barra y la notificación. */
@@ -921,6 +932,18 @@ class VisorHtmlActivity : ComponentActivity() {
         }
     }
 
+    private fun pasosDe(espacio: Int): Int =
+        columnaDeAnotar?.let { Math.round(espacio.toFloat() / com.forge.pixpin.motor.Lectura.pasoDeEspacio(it)) } ?: 0
+
+    private fun topeDePasos(): Int =
+        columnaDeAnotar?.let { com.forge.pixpin.motor.Lectura.espacioMaximo(it) / com.forge.pixpin.motor.Lectura.pasoDeEspacio(it) } ?: 2
+
+    /** Abierto para escuchar: se empieza en cuanto carga la página. */
+    private var escucharAlCargar = false
+
+    /** Si lo que se lee es un PDF pasado a texto ([com.forge.pixpin.motor.PdfAHtml]): entonces su «en hojas» es el PDF mismo. */
+    private val vinoDeUnPdf: Boolean get() = com.forge.pixpin.motor.PdfAHtml.esPdf((comparte ?: elOriginal)?.name)
+
     /** A qué altura de lado volver tras recargar por [anadirEspacio], o −1. */
     private var xTrasRecargar = -1
 
@@ -940,6 +963,7 @@ class VisorHtmlActivity : ComponentActivity() {
         mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
         enSuSitio = intent?.getBooleanExtra(EXTRA_EN_SU_SITIO, false) == true
         esDocumento = intent?.getBooleanExtra(EXTRA_DOCUMENTO, false) == true
+        escucharAlCargar = intent?.getBooleanExtra(EXTRA_ESCUCHAR, false) == true
         elOriginal = File(ruta)
         if (esDocumento) {
             tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
@@ -952,8 +976,8 @@ class VisorHtmlActivity : ComponentActivity() {
             sinLado = prefsDeLectura.getBoolean("sinLado", false)
             prefsDeLectura.getInt(claveDelDocumento + ":columna", 0).takeIf { it > 0 }?.let { columna ->
                 columnaDeAnotar = columna
-                espacioIzq = prefsDeLectura.getInt(claveDelDocumento + ":izq", com.forge.pixpin.motor.Lectura.margenDe(columna))
-                espacioDer = prefsDeLectura.getInt(claveDelDocumento + ":der", com.forge.pixpin.motor.Lectura.margenDe(columna))
+                espacioIzq = com.forge.pixpin.motor.Lectura.espacioValido(prefsDeLectura.getInt(claveDelDocumento + ":izq", com.forge.pixpin.motor.Lectura.margenDe(columna)), columna)
+                espacioDer = com.forge.pixpin.motor.Lectura.espacioValido(prefsDeLectura.getInt(claveDelDocumento + ":der", com.forge.pixpin.motor.Lectura.margenDe(columna)), columna)
                 prefsDeLectura.getString(claveDelDocumento + ":letra", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
                     ?.takeIf { it.size == 3 }?.let { (t, g, l) -> tamanoDeLetra = t; grosorDeLetra = g; tipoDeLetra = l }
                 if (fraccionPendiente < 0f) fraccionPendiente = 0f
@@ -1542,19 +1566,18 @@ class VisorHtmlActivity : ComponentActivity() {
         val fijada = hayAnotaciones
         val blanco = androidx.compose.ui.graphics.Color.White
         val gris = blanco.copy(alpha = 0.6f)
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = onCerrar,
-            containerColor = androidx.compose.ui.graphics.Color(0xF214182B),
-            contentColor = blanco,
-            scrimColor = androidx.compose.ui.graphics.Color.Transparent
-        ) {
-            Column(
-                Modifier.fillMaxWidth().navigationBarsPadding()
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                    .padding(horizontal = 18.dp).padding(bottom = 14.dp)
-            ) {
+        EngranajeDeLector(onCerrar) {
+            run {
+                // ---- Vista: el mismo documento en hojas, como un PDF ----
+                ApartadoDeLector("Vista")
+                if (vinoDeUnPdf) FilaDeLector("Ver el PDF original, en hojas", null) {
+                    onCerrar()
+                    (comparte ?: elOriginal)?.let { com.forge.pixpin.pdf.LectorPdfActivity.abrir(this@VisorHtmlActivity, it.absolutePath, intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()) }
+                    finish()
+                } else FilaDeLector("Ver como PDF, en hojas", null, onImpresion)
+
                 // ---- Letra ----
-                Apartado("Letra")
+                ApartadoDeLector("Letra")
                 if (fijada) Text(
                     "Fijada: el documento tiene anotaciones y, si la letra cambiara, se quedarían en el aire.",
                     color = androidx.compose.ui.graphics.Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall,
@@ -1562,12 +1585,12 @@ class VisorHtmlActivity : ComponentActivity() {
                 )
                 val indiceDeTamano = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it }
                 var tamano by remember(indiceDeTamano) { mutableStateOf(indiceDeTamano.toFloat()) }
-                Deslizador(
+                DeslizadorDeLector(
                     "Tamaño", "${lectura.TAMANOS[tamano.toInt()]} %", tamano, lectura.TAMANOS.lastIndex, !fijada,
                     onCambio = { tamano = it }, onSoltar = { ponerElTamano(lectura.TAMANOS[tamano.toInt()]) }
                 )
                 var grosor by remember(grosorDeLetra) { mutableStateOf(grosorDeLetra.toFloat()) }
-                Deslizador(
+                DeslizadorDeLector(
                     "Grosor", lectura.GROSORES.getOrElse(grosor.toInt()) { lectura.GROSORES[1] }.second, grosor, lectura.GROSORES.lastIndex, !fijada,
                     onCambio = { grosor = it }, onSoltar = { if (grosor.toInt() != grosorDeLetra) ponerLaLetra(grosor.toInt(), tipoDeLetra) }
                 )
@@ -1576,8 +1599,8 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
 
                 // ---- Lectura ----
-                Apartado("Lectura")
-                Interruptor("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado) {
+                ApartadoDeLector("Lectura")
+                InterruptorDeLector("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado) {
                     sinLado = it
                     prefsDeLectura.edit().putBoolean("sinLado", it).apply()
                 }
@@ -1585,19 +1608,19 @@ class VisorHtmlActivity : ComponentActivity() {
                     Text("Espacio para anotar", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    MasMenos("Izquierda", espacioIzq, columnaDeAnotar, { anadirEspacio(izquierda = true, mas = false) }) { anadirEspacio(izquierda = true) }
+                    MasMenosDeLector("Izquierda", pasosDe(espacioIzq), topeDePasos(), { anadirEspacio(izquierda = true, mas = false) }) { anadirEspacio(izquierda = true) }
                     androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                    MasMenos("Derecha", espacioDer, columnaDeAnotar, { anadirEspacio(izquierda = false, mas = false) }) { anadirEspacio(izquierda = false) }
+                    MasMenosDeLector("Derecha", pasosDe(espacioDer), topeDePasos(), { anadirEspacio(izquierda = false, mas = false) }) { anadirEspacio(izquierda = false) }
                 }
 
                 // ---- Voz ----
-                Apartado("Voz")
-                Interruptor("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", vocesEnLinea) {
+                ApartadoDeLector("Voz")
+                InterruptorDeLector("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", vocesEnLinea) {
                     vocesEnLinea = it
                     prefsDeLectura.edit().putBoolean("voz:enLinea", it).apply()
                     lector.ponerEnLinea(it)
                 }
-                Interruptor("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
+                InterruptorDeLector("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
                     vocesDeMicrosoft = it
                     prefsDeLectura.edit().putBoolean("voz:edge", it).apply()
                     if (!it) lector.usarEdge(null)
@@ -1606,108 +1629,23 @@ class VisorHtmlActivity : ComponentActivity() {
                 if (vocesDeMicrosoft) {
                     val puesta = (lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idiomaDeAhora()), null))
                         ?.let { n -> n.substringAfter('-').substringAfter('-').removeSuffix("Neural") } ?: "la del país"
-                    Fila("Voz de Microsoft", puesta) { eligiendoVozDeMicrosoft = true }
+                    FilaDeLector("Voz de Microsoft", puesta) { eligiendoVozDeMicrosoft = true }
                 }
                 val voz by lector.estado.collectAsState()
                 val auricular = if (voz.listo) voz.auricular else prefsDeLectura.getBoolean("voz:auricular", false)
-                Interruptor("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
+                InterruptorDeLector("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
                     prefsDeLectura.edit().putBoolean("voz:auricular", it).apply()
                     lector.porElAuricular(it)
                 }
-                Fila("Bajar voces sin conexión", null, onVoces)
+                FilaDeLector("Bajar voces sin conexión", null, onVoces)
 
                 // ---- Documento ----
-                Apartado("Documento")
+                ApartadoDeLector("Documento")
                 Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    BotonDeTexto("Vista de impresión", onImpresion)
-                    BotonDeTexto("Al proyecto", onAlProyecto)
-                    if (marcadores.isNotEmpty()) BotonDeTexto("Quitar marcadores", onQuitarMarcadores)
+                    BotonDeTextoDeLector("Al proyecto", onAlProyecto)
+                    if (marcadores.isNotEmpty()) BotonDeTextoDeLector("Quitar marcadores", onQuitarMarcadores)
                 }
             }
-        }
-    }
-
-    /** El título de un apartado del engranaje: pequeño, en gris, con aire encima. */
-    @Composable
-    private fun Apartado(titulo: String) {
-        Text(
-            titulo.uppercase(), color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f),
-            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
-        )
-    }
-
-    /** Un deslizador de pasos, con su nombre a la izquierda y el valor a la derecha. Se aplica al soltar. */
-    @Composable
-    private fun Deslizador(nombre: String, valor: String, actual: Float, ultimo: Int, activo: Boolean, onCambio: (Float) -> Unit, onSoltar: () -> Unit) {
-        Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
-            androidx.compose.material3.Slider(
-                value = actual, onValueChange = { onCambio(Math.round(it).toFloat()) }, onValueChangeFinished = onSoltar,
-                valueRange = 0f..ultimo.toFloat(), steps = (ultimo - 1).coerceAtLeast(0), enabled = activo,
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = androidx.compose.ui.graphics.Color.White,
-                    activeTrackColor = androidx.compose.ui.graphics.Color(0xFF8AB4F8),
-                    inactiveTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.18f),
-                    activeTickColor = androidx.compose.ui.graphics.Color.Transparent,
-                    inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent
-                ),
-                modifier = Modifier.weight(1f)
-            )
-            Text(valor, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium,
-                maxLines = 1, modifier = Modifier.width(62.dp).padding(start = 8.dp))
-        }
-    }
-
-    /** Sí o no: el nombre, una línea pequeña de qué hace, y el interruptor (algo menor que el de serie). */
-    @Composable
-    private fun Interruptor(nombre: String, nota: String?, puesto: Boolean, onCambio: (Boolean) -> Unit) {
-        Row(
-            Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                .clickable { onCambio(!puesto) }.padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(nombre, style = MaterialTheme.typography.bodyMedium)
-                if (nota != null) Text(nota, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
-            }
-            androidx.compose.material3.Switch(
-                checked = puesto, onCheckedChange = onCambio,
-                modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
-            )
-        }
-    }
-
-    /** Una fila que abre algo: el nombre, lo que hay puesto y una flechita. */
-    @Composable
-    private fun Fila(nombre: String, valor: String?, onToque: () -> Unit) {
-        Row(
-            Modifier.fillMaxWidth().height(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).clickable(onClick = onToque),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            if (valor != null) Text(valor, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-            Text("  ›", color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f))
-        }
-    }
-
-    /** Un − y un + con el nombre y cuánto hay (en tercios de columna), para el espacio de un lado. */
-    @Composable
-    private fun MasMenos(nombre: String, valor: Int, columna: Int?, onMenos: () -> Unit, onMas: () -> Unit) {
-        val pasos = columna?.let { c -> Math.round(valor.toFloat() / com.forge.pixpin.motor.Lectura.pasoDeEspacio(c)) } ?: 0
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(nombre, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-            IconButton(onClick = onMenos, modifier = Modifier.size(34.dp)) { Icon(Icons.Filled.Remove, contentDescription = "Menos espacio a la ${nombre.lowercase()}", modifier = Modifier.size(18.dp)) }
-            Text("$pasos", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-            IconButton(onClick = onMas, modifier = Modifier.size(34.dp)) { Icon(Icons.Filled.Add, contentDescription = "Más espacio a la ${nombre.lowercase()}", modifier = Modifier.size(18.dp)) }
-        }
-    }
-
-    /** Un botón que hace algo, solo texto, con el tamaño justo. */
-    @Composable
-    private fun BotonDeTexto(texto: String, onToque: () -> Unit) {
-        androidx.compose.material3.TextButton(onClick = onToque, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-            Text(texto, color = androidx.compose.ui.graphics.Color(0xFF8AB4F8), style = MaterialTheme.typography.labelLarge)
         }
     }
 
@@ -1719,37 +1657,21 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     @Composable
     private fun MandosDeLosLados(modifier: Modifier) {
-        val fondo = androidx.compose.ui.graphics.Color(0x8C14182B)
-        val blanco = androidx.compose.ui.graphics.Color.White
-        @Composable
-        fun Boton(descripcion: String, onToque: () -> Unit, contenido: @Composable () -> Unit) {
-            Row(
-                Modifier.height(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(fondo)
-                    .clickable(onClickLabel = descripcion, onClick = onToque).padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) { contenido() }
-        }
-        Row(
-            modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Boton("Más espacio a la izquierda", { anadirEspacio(izquierda = true) }) {
-                Text("⟵", color = blanco); Icon(Icons.Filled.Add, contentDescription = null, tint = blanco, modifier = Modifier.size(16.dp))
-            }
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            Boton(if (sinLado) "Desbloquear el desplazamiento de lado" else "Bloquear el desplazamiento de lado", {
+        val paso = columnaDeAnotar?.let { com.forge.pixpin.motor.Lectura.pasoDeEspacio(it) } ?: 1
+        val tope = columnaDeAnotar?.let { com.forge.pixpin.motor.Lectura.espacioMaximo(it) / paso } ?: 2
+        MandosDeLosLadosDeLector(
+            pasosIzq = if (columnaDeAnotar == null) 0 else Math.round(espacioIzq.toFloat() / paso),
+            pasosDer = if (columnaDeAnotar == null) 0 else Math.round(espacioDer.toFloat() / paso),
+            tope = tope, sinLado = sinLado,
+            onIzquierda = { mas -> anadirEspacio(izquierda = true, mas = mas) },
+            onDerecha = { mas -> anadirEspacio(izquierda = false, mas = mas) },
+            onCandado = {
                 sinLado = !sinLado
                 prefsDeLectura.edit().putBoolean("sinLado", sinLado).apply()
                 Toast.makeText(this@VisorHtmlActivity, if (sinLado) "De lado, bloqueado: solo sube y baja" else "Se mueve a todas partes", Toast.LENGTH_SHORT).show()
-            }) {
-                Icon(if (sinLado) Icons.Filled.Lock else Icons.Filled.LockOpen, contentDescription = null, tint = if (sinLado) androidx.compose.ui.graphics.Color(0xFFFFC440) else blanco, modifier = Modifier.size(16.dp))
-                Text(" ⟷", color = blanco)
-            }
-            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-            Boton("Más espacio a la derecha", { anadirEspacio(izquierda = false) }) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = blanco, modifier = Modifier.size(16.dp)); Text("⟶", color = blanco)
-            }
-        }
+            },
+            modifier = modifier
+        )
     }
 
     /**
@@ -2094,6 +2016,8 @@ class VisorHtmlActivity : ComponentActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
+            // Abierto para escuchar (desde el PDF de hojas): en cuanto está la página, a leer.
+            if (esDocumento && escucharAlCargar) { escucharAlCargar = false; view.postDelayed({ empezarAEscuchar() }, 400) }
             @Suppress("DEPRECATION")
             escalaWeb = view.scale
             if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)

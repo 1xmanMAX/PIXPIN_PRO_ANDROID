@@ -24,7 +24,9 @@ class LecturaTest {
         val suyo = Lectura.estilo(1, 0, columna = 300, izq = 0, der = 400)
         assertTrue(suyo.contains("margin-left:0px") && suyo.contains("margin-right:400px") && suyo.contains("html{width:700px"))
         assertEquals(100, Lectura.pasoDeEspacio(300))
-        assertEquals(600, Lectura.espacioValido(900, 300))
+        // Como mucho los dos tercios de la columna: dos toques.
+        assertEquals(200, Lectura.espacioValido(900, 300))
+        assertEquals(200, Lectura.espacioValido(2 * Lectura.pasoDeEspacio(300), 300))
         assertEquals(0, Lectura.espacioValido(-100, 300))
     }
 

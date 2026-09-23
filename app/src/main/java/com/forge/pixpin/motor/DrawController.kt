@@ -1527,6 +1527,9 @@ class DrawController(initial: Scene = Scene()) {
     var rectangulandoSolo = false
         private set
 
+    /** La quietud que ya se miró y no dio figura: no se vuelve a mirar en cada fotograma. */
+    private var descartadoDesde = -1L
+
     /** Desde cuándo el dedo no se mueve, y desde dónde —en pantalla—. */
     private var quietoDesde = 0L
     private var quietoEn: Pt? = null
@@ -1551,16 +1554,17 @@ class DrawController(initial: Scene = Scene()) {
      */
     fun latido(cuando: Long): Boolean {
         if (enderezandoSolo || redondeandoSolo || rectangulandoSolo) return false
-        // **El grafito es escritura libre** (23-sep-2026, el usuario: «elimina completamente la
-        // corrección del grafito»). Escribiendo, la mano se para a cada letra, y medio segundo
-        // quieto convertía lo escrito en una raya que además tiraba del lápiz. Como la flecha
-        // libre: nunca se endereza ni se redondea sola. Para una recta de grafito, la
-        // herramienta de línea con el grafito en la mano ([deGrafitoSiToca]).
-        if (tool == Tool.GRAFITO) return false
         val g = gesture as? Gesture.Creating ?: return false
         val e = scene.byId(g.elementId)?.takeIf { it.isFreeDraw } ?: return false
-        if (quietoEn == null || cuando - quietoDesde < ESPERA_PARA_LA_RECTA) return false
-        return pararseYQueSalgaLimpio(e)
+        // **Con el grafito, más tiempo quieto** (23-sep-2026). Es escritura libre: la mano se para
+        // a cada letra, y con el medio segundo del lápiz lo escrito se volvía raya —«me lo
+        // corrige»—. Pero los gestos los quiere igual (círculo, rectángulo, rectas), así que
+        // piden un segundo entero, y la raya y el rectángulo además un trazo grande (ver
+        // [pararseYQueSalgaLimpio]). Una vez mirado y descartado, no se vuelve a mirar hasta que
+        // la mano se mueva.
+        val espera = if (tool == Tool.GRAFITO) ESPERA_DEL_GRAFITO else ESPERA_PARA_LA_RECTA
+        if (quietoEn == null || cuando - quietoDesde < espera || descartadoDesde == quietoDesde) return false
+        return pararseYQueSalgaLimpio(e).also { if (!it) descartadoDesde = quietoDesde }
     }
 
     /**
@@ -1579,6 +1583,13 @@ class DrawController(initial: Scene = Scene()) {
         // querido clavar la punta es cuánto se le ha movido el dedo — a cualquier aumento.
         val esUnPunto = puntos.all {
             kotlin.math.hypot(it.x - arranque.x, it.y - arranque.y) * z <= LO_QUE_ES_UN_TOQUE
+        }
+        // **Escribiendo con grafito, una letra no es una raya**: la raya y el rectángulo piden un
+        // trazo que en pantalla mida al menos [TRAZO_DE_FIGURA_DEL_GRAFITO]. El compás no: clavar
+        // la punta sin moverla no pasa escribiendo.
+        if (tool == Tool.GRAFITO && !esUnPunto) {
+            val caja = boundsOfPoints(puntos)
+            if (kotlin.math.hypot(caja.width, caja.height) * z < TRAZO_DE_FIGURA_DEL_GRAFITO) return false
         }
         // **Y al saltar el gesto, las dos puntas buscan sitio.**
         //
@@ -2210,7 +2221,6 @@ class DrawController(initial: Scene = Scene()) {
             // traza a pulso para rodear algo no puede convertirse en una recta al pararse
             // la mano. Va antes que los dos gestos, que es lo que los desactiva.
             tool == Tool.FLECHA_LIBRE -> e.withPoint(p)
-            tool == Tool.GRAFITO && e.isFreeDraw -> e.withPoint(p, pressure)
 
             rectangulandoSolo -> arranqueDelTrazo?.let { comoUnRectangulo(e, it, p) } ?: e
 
@@ -3726,6 +3736,12 @@ private sealed interface Gesture {
  * gestos que aprender.
  */
 const val ESPERA_PARA_LA_RECTA = 550L
+
+/** Con el grafito, un segundo: escribiendo, la mano se para a cada letra. Ver [DrawController.latido]. */
+const val ESPERA_DEL_GRAFITO = 1000L
+
+/** Lo que mide en pantalla (px) un trazo de grafito para que pararse lo vuelva raya o rectángulo. */
+const val TRAZO_DE_FIGURA_DEL_GRAFITO = 160.0
 
 /** Lo que hay que dejar el dedo quieto sobre un instrumento (plano, recta, espacio) para moverlo. */
 const val ESPERA_PARA_MOVER_UN_INSTRUMENTO = 450L

@@ -73,7 +73,9 @@ object DocumentoAnotado {
         nombre: String, html: String, columna: Int, margen: Int, tops: List<Double>,
         piezas: List<Pieza>, senales: List<Senal>, tamano: Int, fondo: String, clave: String = "d",
         /** El espacio de la derecha, si no es el mismo que el de la izquierda ([margen]). */
-        margenDerecho: Int = margen
+        margenDerecho: Int = margen,
+        /** El idioma del texto, para la voz del navegador. Null: se adivina por el propio texto. */
+        idioma: String? = null
     ): ExportarHtml.HojaWeb.Documento {
         val estilos = Regex("<style[^>]*>(.*?)</style>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
         val css = estilos.findAll(html).joinToString("\n") { it.groupValues[1] }
@@ -85,7 +87,9 @@ object DocumentoAnotado {
         val base = Regex("body\\{[^}]*?font:\\s*(\\d+(?:\\.\\d+)?)px").find(css)?.groupValues?.get(1)?.toDoubleOrNull() ?: 16.0
         val capa = capaDe(piezas, senales, columna, margen, clave)
         return ExportarHtml.HojaWeb.Documento(
-            nombre, acotar(css), cuerpo, capa, columna, margen, tops, base * tamano / 100.0, fondo, margenDerecho
+            nombre, acotar(css), cuerpo, capa, columna, margen, tops, base * tamano / 100.0, fondo, margenDerecho,
+            // Un Word dice siempre `lang="es"` (ver [DocxAHtml]): el idioma de verdad sale del texto.
+            idioma ?: VozAlta.idiomaDelTexto(cuerpo.replace(Regex("<[^>]+>"), " ").take(6000), "es")
         )
     }
 

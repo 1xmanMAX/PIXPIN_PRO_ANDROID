@@ -48,9 +48,12 @@ object ExportarDocumentoAnotado {
     }
 
     /** El formato «Página web» de la hoja de compartir. [antes] deja al visor medir justo antes. */
-    fun formato(c: Context, original: File, nombre: String, paginaVista: File? = null, antes: (suspend () -> Unit)? = null) =
+    fun formato(
+        c: Context, original: File, nombre: String, paginaVista: File? = null,
+        rotulo: String = "Página web", antes: (suspend () -> Unit)? = null
+    ) =
         Compartible.Formato(
-            "web-anotada", Icons.Filled.Language, "Página web", Compartible.NINGUNA,
+            "web-anotada", Icons.Filled.Language, rotulo, Compartible.NINGUNA,
             generar = {
                 antes?.invoke()
                 val funciones = (c.applicationContext as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb
@@ -79,6 +82,9 @@ object ExportarDocumentoAnotado {
                 val pagina = EpubAHtml.convertir(original, dir, titulo)
                 pagina.readText() to dir
             }
+            // Un PDF leído como texto ([com.forge.pixpin.motor.PdfAHtml]): se vuelve a sacar igual.
+            com.forge.pixpin.motor.PdfAHtml.esPdf(nombre) || com.forge.pixpin.motor.PdfAHtml.esPdf(original.name) ->
+                com.forge.pixpin.motor.PdfAHtml.convertir(original.readBytes(), titulo, java.util.Locale.getDefault().toLanguageTag()) to null
             else -> DocxAHtml.convertir(original, nombre) to null
         }
         // La columna la pone la hoja del documento web (ver [DocumentoAnotado.hoja]); aquí, solo la letra y el papel.
