@@ -186,13 +186,37 @@ object VozAlta {
     s.textContent='.pixpin-leyendo{background:rgba(255,196,64,.30)!important;box-shadow:0 0 0 3px rgba(255,196,64,.30)!important;border-radius:3px!important}';
     (document.head||document.body).appendChild(s);
   }
-  var todos=document.body.querySelectorAll(sel), out=[], fr=[], arriba=-1;
+  // El texto suelto de un bloque que tiene otros dentro (un punto de lista con su sublista):
+  // se envuelve en un trozo propio para que se lea en su orden, y no se pierda.
+  var con=sel+',.pixpin-trozo';
+  function soltar(b,tanda){
+    var hay=false;
+    for(var k=0;k<tanda.length;k++){ if((tanda[k].textContent||'').replace(/\s+/g,'')){ hay=true; break; } }
+    if(!hay) return;
+    var sp=document.createElement('span'); sp.className='pixpin-trozo';
+    b.insertBefore(sp,tanda[0]);
+    for(var k2=0;k2<tanda.length;k2++) sp.appendChild(tanda[k2]);
+  }
+  var bloques=document.body.querySelectorAll(sel);
+  for(var q=0;q<bloques.length;q++){
+    var bl=bloques[q];
+    if(!bl.querySelector(con)) continue;
+    if(bl.closest&&bl.closest('#pixpin-tinta')) continue;
+    var hijos=[].slice.call(bl.childNodes), tanda=[];
+    for(var h=0;h<hijos.length;h++){
+      var n=hijos[h];
+      if(n.nodeType==1&&(n.matches(con)||n.querySelector(con))){ soltar(bl,tanda); tanda=[]; }
+      else tanda.push(n);
+    }
+    soltar(bl,tanda);
+  }
+  var todos=document.body.querySelectorAll(con), out=[], fr=[], arriba=-1;
   var alto=Math.max(1,document.documentElement.scrollHeight), y0=window.pageYOffset;
   for(var i=0;i<todos.length;i++){
     var el=todos[i];
     el.removeAttribute('data-pixpin-voz');
     if(el.closest&&el.closest('#pixpin-tinta')) continue;
-    if(el.querySelector(sel)) continue;
+    if(el.querySelector(con)) continue;
     var t=(el.innerText||el.textContent||'').replace(/\s+/g,' ').replace(/^\s+|\s+$/g,'');
     if(!t) continue;
     el.setAttribute('data-pixpin-voz',out.length);

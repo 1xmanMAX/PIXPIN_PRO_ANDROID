@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -1055,6 +1054,8 @@ class VisorHtmlActivity : ComponentActivity() {
                 if (escuchando && (!e.listo || e.clave != claveDelDocumento)) soltarLaBarra()
                 // El verde se mueve con lo que suena de este documento.
                 if (esDocumento && e.clave == claveDelDocumento) leerLaMarcaDeVoz()
+                // Acabado el documento (el lector vuelve al principio sin sonar): fuera el resaltado.
+                if (escuchando && e.clave == claveDelDocumento && !e.leyendo && e.parrafo < 0) resaltarElQueSuena(-1, seguir = false)
             }
         }
 
@@ -1449,43 +1450,17 @@ class VisorHtmlActivity : ComponentActivity() {
     @Composable
     private fun RielDeLectura(modifier: Modifier) {
         val vista = web ?: return
-        // **Lo desplazado se lee al pintar, no al componer**: la página se mueve en cada fotograma
-        // —más aún subiendo sola— y así solo se repinta la línea. Si el documento cabe entero se
-        // mira aparte, y solo recompone cuando eso cambia (la escala cambia al cargar la página).
+        // Si el documento cabe entero no hay riel; eso solo cambia al cargar o al cambiar la escala.
         val cabe by remember(vista) {
             androidx.compose.runtime.derivedStateOf { escalaWeb; corridoY; altoDelDocumento() <= vista.height }
         }
         if (cabe) return
-        val suena = escuchando && fraccionQueSuena >= 0f
-        // Escuchando, la flecha salta de párrafo en párrafo y se anima; leyendo, va pegada a lo desplazado.
-        val alParrafo by androidx.compose.animation.core.animateFloatAsState(if (suena) fraccionQueSuena else 0f, label = "riel")
-        val ambar = androidx.compose.ui.graphics.Color(0xFFFFC440)
-        val blanco = androidx.compose.ui.graphics.Color.White
-        // El papel decide el color de la línea: clara sobre el oscuro, oscura sobre el blanco.
-        val linea = if (esDeNoche()) blanco else androidx.compose.ui.graphics.Color(0xFF14182B)
-        androidx.compose.foundation.Canvas(
-            modifier
-                .fillMaxHeight(0.72f)
-                .width(14.dp)
-        ) {
-            val x = 3.dp.toPx()
-            val grueso = 2.dp.toPx()
-            val f = if (suena) alParrafo
-            else com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), altoDelDocumento(), vista.height.toFloat())
-            val y = f * size.height
-            drawLine(linea.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
-            // Lo ya leído, más marcado.
-            drawLine((if (suena) ambar else linea).copy(alpha = if (suena) 0.9f else 0.5f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, y), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
-            // La flechita, apuntando hacia el texto.
-            val lado = 9.dp.toPx()
-            val punta = androidx.compose.ui.graphics.Path().apply {
-                moveTo(x - grueso, y - lado / 2f)
-                lineTo(x - grueso + lado, y)
-                lineTo(x - grueso, y + lado / 2f)
-                close()
-            }
-            drawPath(punta, if (suena) ambar else linea.copy(alpha = 0.75f))
-        }
+        RielDeLecturaDeLector(
+            progreso = { com.forge.pixpin.motor.Lectura.progreso(corridoY.toFloat(), altoDelDocumento(), vista.height.toFloat()) },
+            suena = fraccionQueSuena.takeIf { escuchando && it >= 0f },
+            noche = esDeNoche(),
+            modifier = modifier
+        )
     }
 
     /**

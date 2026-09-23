@@ -22,6 +22,28 @@ class PdfAHtmlTest {
     }
 
     @Test
+    fun `a dos columnas se lee la izquierda entera y luego la derecha, con el titulo delante`() {
+        val trozos = ArrayList<Trozo>()
+        trozos += Trozo(72.0, 60.0, 520.0, 20.0, "Un título que cruza las dos columnas")
+        for (k in 0 until 10) {
+            val y = 100.0 + k * 14
+            trozos += Trozo(72.0, y, 280.0, 11.0, "izquierda $k de la columna que va primero")
+            trozos += Trozo(310.0, y, 520.0, 11.0, "derecha $k de la columna que va después")
+        }
+        assertEquals(305.0, PdfAHtml.pasilloDeColumnas(trozos)!!, 12.0)
+        val l = PdfAHtml.lineasEnOrden(trozos)
+        assertEquals("Un título que cruza las dos columnas", l.first().texto)
+        assertEquals((0 until 10).map { "izquierda $it de la columna que va primero" } + (0 until 10).map { "derecha $it de la columna que va después" },
+            l.drop(1).map { it.texto })
+        // Y los párrafos no se cortan en cada línea de la columna derecha por estar a la derecha.
+        val p = PdfAHtml.parrafos(l, 11.0, 0)
+        assertEquals(2, p.size)
+        assertTrue(p[1].texto.startsWith("izquierda 0") && p[1].texto.endsWith("derecha 9 de la columna que va después"))
+        // A una columna, nada de pasillo.
+        assertEquals(null, PdfAHtml.pasilloDeColumnas(trozos.filter { it.x < 300 }))
+    }
+
+    @Test
     fun `las lineas se juntan en parrafos y el guion de fin de linea se deshace`() {
         fun linea(y: Double, texto: String, x1: Double = 520.0, x0: Double = 72.0, alto: Double = 11.0) =
             PdfAHtml.Linea(y, x0, x1, alto, texto, false)

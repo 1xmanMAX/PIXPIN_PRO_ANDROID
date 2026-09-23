@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -287,4 +288,32 @@ fun rotuloDeLoQueQueda(palabras: Int, progreso: Float, ppm: Int): String {
     val ahora = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
     return if (minutos <= 0f) "Terminado"
     else "Terminas en " + com.forge.pixpin.motor.AutoDesplazar.rotulo(minutos) + " · a las " + com.forge.pixpin.motor.AutoDesplazar.horaDeTerminar(ahora, minutos)
+}
+
+/**
+ * **El riel de lectura**: una línea fina en el lateral con una flechita que baja a medida que se
+ * lee. [progreso] se lee **al pintar**, no al componer —la página se mueve en cada fotograma, y así
+ * solo se repinta la línea—. Con [suena] (de 0 a 1, o null), la flecha va al párrafo que suena, se
+ * anima y lo leído se pinta en ámbar. [noche] decide el color: clara sobre oscuro, oscura sobre blanco.
+ */
+@Composable
+fun RielDeLecturaDeLector(progreso: () -> Float, suena: Float?, noche: Boolean, modifier: Modifier = Modifier) {
+    val alParrafo = androidx.compose.animation.core.animateFloatAsState(suena ?: 0f, label = "riel")
+    val linea = if (noche) Color.White else Color(0xFF14182B)
+    androidx.compose.foundation.Canvas(modifier.fillMaxHeight(0.72f).width(14.dp)) {
+        val x = 3.dp.toPx()
+        val grueso = 2.dp.toPx()
+        val f = if (suena != null) alParrafo.value else progreso()
+        val y = f.coerceIn(0f, 1f) * size.height
+        drawLine(linea.copy(alpha = 0.22f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
+        // Lo ya leído, más marcado.
+        drawLine((if (suena != null) AMBAR else linea).copy(alpha = if (suena != null) 0.9f else 0.5f),
+            androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, y), grueso, androidx.compose.ui.graphics.StrokeCap.Round)
+        // La flechita, apuntando hacia el texto.
+        val lado = 9.dp.toPx()
+        val punta = androidx.compose.ui.graphics.Path().apply {
+            moveTo(x - grueso, y - lado / 2f); lineTo(x - grueso + lado, y); lineTo(x - grueso, y + lado / 2f); close()
+        }
+        drawPath(punta, if (suena != null) AMBAR else linea.copy(alpha = 0.75f))
+    }
 }

@@ -198,7 +198,8 @@ Documento— con deslizadores, interruptores y botones pequeños.
 **Los tres lectores, iguales.** Word, libro y PDF llevan la misma pastilla arriba (anotar,
 marcador, escuchar, página que sube sola, compartir y engranaje), el mismo engranaje por apartados
 y los mismos mandos de los lados con el candado. Un **PDF se puede ver como texto** —se saca de
-dentro del PDF, con sus títulos y párrafos— y así se lee, se escucha y se anota como un Word; y
+dentro del PDF, con sus títulos y párrafos, y a dos columnas en su orden— y así se lee, se
+escucha y se anota como un Word; y
 un **Word o un libro se ven como PDF**, en hojas. La página web que se exporta de cualquiera de
 ellos lleva el texto de verdad y su idioma, así que **el «Leer en voz alta» de Edge la lee**; la
 de un PDF en hojas lleva el texto encima de cada hoja, invisible, que además se selecciona y se

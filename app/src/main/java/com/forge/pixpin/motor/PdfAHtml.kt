@@ -26,7 +26,8 @@ object PdfAHtml {
         val negrita: Boolean = false, val cursiva: Boolean = false
     )
 
-    data class Linea(val y: Double, val x0: Double, val x1: Double, val alto: Double, val texto: String, val negrita: Boolean)
+    /** Una línea: [columna] 0 es de ancho completo; 1 y 2, la columna izquierda y la derecha. */
+    data class Linea(val y: Double, val x0: Double, val x1: Double, val alto: Double, val texto: String, val negrita: Boolean, val columna: Int = 0)
 
     /** Un párrafo ya hecho: [nivel] 0 es texto; 1, 2 o 3, título de ese nivel. */
     data class Parrafo(val texto: String, val nivel: Int, val pagina: Int)
@@ -75,6 +76,71 @@ object PdfAHtml {
         }.filter { it.texto.isNotEmpty() }
     }
 
+    /**
+     * **El pasillo entre dos columnas**, si lo hay: la x de su centro. Se busca, hacia el medio de
+     * lo escrito, una franja vertical por la que casi no pasa texto —solo algún título que la
+     * cruza— con bastante texto a los dos lados. Null si la hoja va a una columna.
+     */
+    fun pasilloDeColumnas(trozos: List<Trozo>): Double? {
+        if (trozos.size < 8) return null
+        val x0 = trozos.minOf { it.x }; val x1 = trozos.maxOf { it.fin }
+        val ancho = x1 - x0
+        if (ancho <= 0) return null
+        val cubos = 200
+        val paso = ancho / cubos
+        val cobertura = IntArray(cubos)
+        for (t in trozos) {
+            val a = ((t.x - x0) / paso).toInt().coerceIn(0, cubos - 1)
+            val b = ((t.fin - x0) / paso).toInt().coerceIn(0, cubos - 1)
+            for (i in a..b) cobertura[i]++
+        }
+        val maximo = cobertura.max()
+        val vacio = maxOf(1, maximo / 10)
+        val cuerpo = trozos.map { it.alto }.sorted()[trozos.size / 2]
+        // La franja vacía más ancha con el centro entre el 30 % y el 70 % de lo escrito.
+        var mejor: Pair<Int, Int>? = null
+        var i = 0
+        while (i < cubos) {
+            if (cobertura[i] > vacio) { i++; continue }
+            var j = i
+            while (j + 1 < cubos && cobertura[j + 1] <= vacio) j++
+            val centro = (i + j) / 2.0 / cubos
+            if (centro in 0.3..0.7 && (j - i + 1) * paso >= cuerpo * 0.8 && (mejor == null || j - i > mejor.second - mejor.first)) mejor = i to j
+            i = j + 1
+        }
+        val (a, b) = mejor ?: return null
+        val pasillo = x0 + (a + b + 1) / 2.0 * paso
+        // Y texto de verdad a los dos lados: una columna de cuatro palabras no es una columna.
+        val izquierda = trozos.filter { it.fin <= pasillo }.sumOf { it.texto.length }
+        val derecha = trozos.filter { it.x >= pasillo }.sumOf { it.texto.length }
+        val total = trozos.sumOf { it.texto.length }.coerceAtLeast(1)
+        return pasillo.takeIf { izquierda > total * 0.2 && derecha > total * 0.2 }
+    }
+
+    /**
+     * **Las líneas en el orden en que se leen** (23-sep-2026: «un PDF a dos columnas sale
+     * mezclado»). A una columna, [lineas] tal cual. A dos, lo que cruza el pasillo (un título de
+     * ancho completo) va en su sitio, y entre medias **toda la columna izquierda y después la
+     * derecha**.
+     */
+    fun lineasEnOrden(trozos: List<Trozo>): List<Linea> {
+        val pasillo = pasilloDeColumnas(trozos) ?: return lineas(trozos)
+        val holgura = trozos.map { it.alto }.sorted()[trozos.size / 2] * 0.3
+        val anchas = lineas(trozos.filter { it.x < pasillo - holgura && it.fin > pasillo + holgura })
+        val izquierda = lineas(trozos.filter { it.fin <= pasillo + holgura && !(it.x < pasillo - holgura && it.fin > pasillo + holgura) }).map { it.copy(columna = 1) }
+        val derecha = lineas(trozos.filter { it.x >= pasillo - holgura && it.fin > pasillo + holgura && !(it.x < pasillo - holgura) }).map { it.copy(columna = 2) }
+        val sale = ArrayList<Linea>()
+        var desde = Double.NEGATIVE_INFINITY
+        for (tramo in anchas.sortedBy { it.y } + listOf<Linea?>(null)) {
+            val hasta = tramo?.y ?: Double.POSITIVE_INFINITY
+            sale += izquierda.filter { it.y >= desde && it.y < hasta }
+            sale += derecha.filter { it.y >= desde && it.y < hasta }
+            if (tramo != null) sale += tramo
+            desde = hasta
+        }
+        return sale
+    }
+
     /** El tamaño de la letra del cuerpo: el que más letras lleva. */
     fun altoDelCuerpo(lineas: List<Linea>): Double =
         lineas.groupBy { Math.round(it.alto * 2) / 2.0 }.maxByOrNull { (_, l) -> l.sumOf { it.texto.length } }?.key ?: 10.0
@@ -90,8 +156,12 @@ object PdfAHtml {
             (b.y - a.y).takeIf { it > 0 && Math.abs(a.alto - cuerpo) < cuerpo * 0.15 && Math.abs(b.alto - cuerpo) < cuerpo * 0.15 && it < cuerpo * 3 }
         }.sorted()
         val normal = saltos.getOrNull(saltos.size / 2) ?: (cuerpo * 1.3)
-        val izquierda = lineas.filter { Math.abs(it.alto - cuerpo) < cuerpo * 0.15 }.map { it.x0 }.sorted().let { it.getOrNull(it.size / 4) } ?: lineas.minOf { it.x0 }
-        val derecha = lineas.maxOf { it.x1 }
+        // El borde izquierdo y derecho del texto, **en cada columna**: a dos columnas, la derecha
+        // empieza en medio de la hoja y eso no es sangría.
+        val izquierdaDe = lineas.groupBy { it.columna }.mapValues { (_, l) ->
+            l.filter { Math.abs(it.alto - cuerpo) < cuerpo * 0.15 }.map { it.x0 }.sorted().let { it.getOrNull(it.size / 4) } ?: l.minOf { it.x0 }
+        }
+        val derechaDe = lineas.groupBy { it.columna }.mapValues { (_, l) -> l.maxOf { it.x1 } }
 
         val sale = ArrayList<Parrafo>()
         var actual = StringBuilder()
@@ -105,11 +175,17 @@ object PdfAHtml {
         }
         for (l in lineas) {
             val a = anterior
-            val corta = a != null && a.x1 < izquierda + (derecha - izquierda) * 0.75 && a.texto.trimEnd().lastOrNull() in FINALES
+            val izqA = a?.let { izquierdaDe.getValue(it.columna) } ?: 0.0
+            val derA = a?.let { derechaDe.getValue(it.columna) } ?: 0.0
+            val izqL = izquierdaDe.getValue(l.columna)
+            val corta = a != null && a.x1 < izqA + (derA - izqA) * 0.75 && a.texto.trimEnd().lastOrNull() in FINALES
+            // Al pasar de una columna a la otra la línea sube: eso no es salto, el párrafo sigue.
+            val mismaColumna = a != null && a.columna == l.columna
             val nuevo = a == null ||
-                l.y - a.y > normal * 1.45 ||
+                (mismaColumna && l.y - a.y > normal * 1.45) ||
+                (a.columna == 0) != (l.columna == 0) ||
                 Math.abs(l.alto - a.alto) > cuerpo * 0.2 ||
-                (l.x0 - izquierda > l.alto * 1.2 && a.x0 - izquierda < l.alto * 0.5) ||
+                (l.x0 - izqL > l.alto * 1.2 && a.x0 - izqA < l.alto * 0.5) ||
                 corta
             if (nuevo) cerrar()
             if (primera == null) { primera = l; actual.append(l.texto) }
@@ -168,7 +244,7 @@ object PdfAHtml {
         val archivo = leerPdf(bytes) ?: throw NoSeLee("No se pudo leer el PDF")
         if (archivo.cifrado) throw NoSeLee("El PDF está protegido con contraseña")
         val porHoja = archivo.paginas().indices.map { i ->
-            lineas(trozosDe(PlanoDePdf.de(archivo, i)?.textos.orEmpty()))
+            lineasEnOrden(trozosDe(PlanoDePdf.de(archivo, i)?.textos.orEmpty()))
         }
         val cuerpo = altoDelCuerpo(porHoja.flatten())
         val parrafos = porHoja.flatMapIndexed { i, l -> parrafos(l, cuerpo, i) }

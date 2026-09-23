@@ -556,6 +556,17 @@ class LectorPdfActivity : ComponentActivity() {
                     }
                 }
             }
+            // **El riel de lectura**, a la izquierda como en el lector de Word: la flechita baja con
+            // las hojas que se van leyendo. Ver [com.forge.pixpin.ui.RielDeLecturaDeLector].
+            if (cuantas > 1 && aSolas == null && !anotando) com.forge.pixpin.ui.RielDeLecturaDeLector(
+                progreso = {
+                    val alto = estado.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.takeIf { it > 0 } ?: 1
+                    if (!estado.canScrollForward) 1f
+                    else (estado.firstVisibleItemIndex + estado.firstVisibleItemScrollOffset.toFloat() / alto) / cuantas
+                },
+                suena = null, noche = true,
+                modifier = Modifier.align(Alignment.CenterStart)
+            )
             // El riel va a la derecha y **solo mirando**: anotando, ese canto es del lápiz.
             if (cuantas > 0 && aSolas == null && !anotando && marcas.isNotEmpty()) {
                 com.forge.pixpin.ui.RielDeMarcas(
