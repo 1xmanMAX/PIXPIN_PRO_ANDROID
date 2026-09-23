@@ -118,9 +118,38 @@ object EdgeVoz {
             .sortedWith(compareByDescending<Voz> { pais.isNotEmpty() && VozAlta.partes(it.idioma).second == pais }.thenBy { it.idioma }.thenBy { it.nombre })
     }
 
-    /** **La voz que se usa**: la que eligió el usuario si es de esa lengua; si no, la primera del país. */
+    /**
+     * **Las voces de IA de Microsoft**, las «multilingües» —las mismas de Copilot—: leen cualquier
+     * idioma con la misma voz, y son las más naturales del catálogo. De las doce que hay, las seis
+     * que mejor suenan, en este orden.
+     */
+    val MULTILINGUES = listOf(
+        "en-US-AvaMultilingualNeural", "en-US-AndrewMultilingualNeural", "en-US-EmmaMultilingualNeural",
+        "en-US-BrianMultilingualNeural", "fr-FR-VivienneMultilingualNeural", "de-DE-SeraphinaMultilingualNeural"
+    )
+
+    /** Cuántas del propio idioma se ofrecen, además de las multilingües. */
+    const val NATIVAS = 4
+
+    /**
+     * **Solo las mejores** (23-sep-2026, el usuario: «el listado es absurdamente grande; limítalo a
+     * algunas de las mejores»): hasta [NATIVAS] del idioma —las del país primero— y las
+     * [MULTILINGUES]. De 322 a unas diez.
+     */
+    fun lasMejores(voces: List<Voz>, idioma: String): List<Voz> {
+        val nativas = deLaLengua(voces.filter { "Multilingual" !in it.nombre }, idioma).take(NATIVAS)
+        val deIa = MULTILINGUES.mapNotNull { n -> voces.firstOrNull { it.nombre == n } }
+        return nativas + deIa
+    }
+
+    fun esMultilingue(v: Voz) = "Multilingual" in v.nombre
+
+    /**
+     * **La voz que se usa**: la que eligió el usuario si está entre [lasMejores]; si no, la primera
+     * del país, y si el idioma no tiene ninguna, la primera multilingüe (lee cualquier idioma).
+     */
     fun elegir(voces: List<Voz>, idioma: String, preferida: String?): Voz? {
-        val suyas = deLaLengua(voces, idioma)
+        val suyas = lasMejores(voces, idioma)
         return suyas.firstOrNull { it.nombre == preferida } ?: suyas.firstOrNull()
     }
 

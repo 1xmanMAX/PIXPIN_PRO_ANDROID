@@ -464,7 +464,7 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun ElegirVozDeMicrosoft() {
         val idioma = remember { idiomaDeAhora() }
         var voces by remember { mutableStateOf<List<com.forge.pixpin.motor.EdgeVoz.Voz>?>(null) }
-        LaunchedEffect(Unit) { voces = com.forge.pixpin.motor.EdgeVoz.deLaLengua(VozDeEdge.voces(this@VisorHtmlActivity), idioma) }
+        LaunchedEffect(Unit) { voces = com.forge.pixpin.motor.EdgeVoz.lasMejores(VozDeEdge.voces(this@VisorHtmlActivity), idioma) }
         val puesta = lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idioma), null)
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { eligiendoVozDeMicrosoft = false },
@@ -477,6 +477,12 @@ class VisorHtmlActivity : ComponentActivity() {
                     else -> androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 380.dp)) {
                         items(lista.size) { i ->
                             val v = lista[i]
+                            // Dos apartados: las del idioma y las de IA, que leen cualquiera.
+                            val primeraDeIa = com.forge.pixpin.motor.EdgeVoz.esMultilingue(v) && (i == 0 || !com.forge.pixpin.motor.EdgeVoz.esMultilingue(lista[i - 1]))
+                            if (primeraDeIa) Text(
+                                "DE IA · LEEN CUALQUIER IDIOMA", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = if (i == 0) 0.dp else 12.dp, bottom = 2.dp)
+                            )
                             Row(
                                 Modifier.fillMaxWidth().clickable {
                                     prefsDeLectura.edit().putString(claveDeVozDeMicrosoft(idioma), v.nombre).apply()

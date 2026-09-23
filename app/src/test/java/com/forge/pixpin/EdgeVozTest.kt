@@ -45,6 +45,19 @@ class EdgeVozTest {
     }
 
     @Test
+    fun `solo las mejores, las del idioma primero y las multilingues detras`() {
+        val muchas = (1..30).map { EdgeVoz.Voz("es-ES-Voz${it}Neural", "es-ES", "Female") } +
+            EdgeVoz.MULTILINGUES.reversed().map { EdgeVoz.Voz(it, it.take(5), "Female") } +
+            EdgeVoz.Voz("fr-FR-DeniseNeural", "fr-FR", "Female")
+        val lista = EdgeVoz.lasMejores(muchas, "es-ES")
+        assertEquals(EdgeVoz.NATIVAS + EdgeVoz.MULTILINGUES.size, lista.size)
+        assertTrue(lista.take(EdgeVoz.NATIVAS).all { it.idioma == "es-ES" })
+        assertEquals(EdgeVoz.MULTILINGUES, lista.drop(EdgeVoz.NATIVAS).map { it.nombre })
+        // Una preferida que ya no está entre las mejores no se usa.
+        assertEquals(lista.first().nombre, EdgeVoz.elegir(muchas, "es-ES", "es-ES-Voz29Neural")?.nombre)
+    }
+
+    @Test
     fun `se elige la voz preferida y si no la del pais`() {
         val voces = EdgeVoz.deLista(
             """[{"ShortName":"es-MX-DaliaNeural","Locale":"es-MX","Gender":"Female"},
@@ -56,7 +69,8 @@ class EdgeVozTest {
         assertEquals("es-ES-AlvaroNeural", EdgeVoz.elegir(voces, "es-ES", null)?.nombre)
         assertEquals("es-MX-DaliaNeural", EdgeVoz.elegir(voces, "es-MX", null)?.nombre)
         assertEquals("es-ES-ElviraNeural", EdgeVoz.elegir(voces, "es-PE", "es-ES-ElviraNeural")?.nombre)
-        assertNull(EdgeVoz.elegir(voces, "fr-FR", null))
+        // En francés no hay nativa en esta lista: la multilingüe, que lee cualquier idioma.
+        assertEquals("en-US-EmmaMultilingualNeural", EdgeVoz.elegir(voces, "fr-FR", null)?.nombre)
         assertEquals("Emma multilingüe", voces[3].corto)
         assertEquals(emptyList<EdgeVoz.Voz>(), EdgeVoz.deLista("no es json"))
     }
