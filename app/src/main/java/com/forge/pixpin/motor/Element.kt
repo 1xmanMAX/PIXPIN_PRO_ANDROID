@@ -400,6 +400,26 @@ enum class StrokeStyle {
 }
 
 /**
+ * **La dureza del lápiz de grafito** (23-sep-2026, pedido por el usuario: «tipos de lápices, HB,
+ * 2B… todos los que existen»). La escala de siempre: la H es dura —mina fina, trazo claro, el
+ * grano del papel se nota— y la B blanda —mina gorda, trazo oscuro que tapa el grano y se
+ * acumula enseguida al repasar—. HB es el punto medio y es como pintaba el grafito hasta ahora.
+ *
+ * Tres números por dureza, todos respecto a HB: [oscuro] multiplica la carga de cada sello,
+ * [gordo] el ancho de la mina y [agarre] lo que coge cada casilla del papel (menos = más grano).
+ */
+@Serializable
+enum class DurezaDeGrafito(val rotulo: String, val oscuro: Float, val gordo: Float, val agarre: Float) {
+    @SerialName("4H") H4("4H", 0.42f, 0.70f, 0.55f),
+    @SerialName("2H") H2("2H", 0.60f, 0.80f, 0.70f),
+    @SerialName("HB") HB("HB", 1.00f, 1.00f, 1.00f),
+    @SerialName("2B") B2("2B", 1.25f, 1.10f, 1.15f),
+    @SerialName("4B") B4("4B", 1.55f, 1.25f, 1.30f),
+    @SerialName("6B") B6("6B", 1.85f, 1.40f, 1.45f),
+    @SerialName("8B") B8("8B", 2.20f, 1.55f, 1.60f);
+}
+
+/**
  * **De qué está hecha la tinta.** Lisa, encendida o con grano.
  *
  * Es la misma idea que el material de la tinta del croquis en el espacio, traída al lienzo
@@ -880,6 +900,10 @@ data class Element(
     /** De qué está hecha su tinta. Ver [MaterialDeTinta]. */
     @SerialName("material")
     val material: MaterialDeTinta = MaterialDeTinta.LISA,
+
+    /** **Solo el grafito**: la dureza de la mina. Null es HB, como pintaba antes de haberla. */
+    @SerialName("dureza")
+    val dureza: DurezaDeGrafito? = null,
 
     // --- Solo MOSAIC ---
     /** Desenfocar en vez de pixelar. Son las dos formas de tapar de PixPin. */

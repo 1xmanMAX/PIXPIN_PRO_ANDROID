@@ -412,7 +412,7 @@ class DrawController(initial: Scene = Scene()) {
                     )
                 }
                 // El grafito es el mismo trazo, hecho de otra cosa. Ver [Tool.GRAFITO].
-                if (tool == Tool.GRAFITO) e = e.copy(material = MaterialDeTinta.CUADRITOS)
+                if (tool == Tool.GRAFITO) e = e.copy(material = MaterialDeTinta.CUADRITOS, dureza = scene.style.dureza)
                 scene = scene.copy(elements = scene.elements + e)
                 gesture = Gesture.Creating(e.id)
                 // El dedo acaba de posarse: desde aquí se cuenta lo que lleva quieto, que
@@ -1551,6 +1551,12 @@ class DrawController(initial: Scene = Scene()) {
      */
     fun latido(cuando: Long): Boolean {
         if (enderezandoSolo || redondeandoSolo || rectangulandoSolo) return false
+        // **El grafito es escritura libre** (23-sep-2026, el usuario: «elimina completamente la
+        // corrección del grafito»). Escribiendo, la mano se para a cada letra, y medio segundo
+        // quieto convertía lo escrito en una raya que además tiraba del lápiz. Como la flecha
+        // libre: nunca se endereza ni se redondea sola. Para una recta de grafito, la
+        // herramienta de línea con el grafito en la mano ([deGrafitoSiToca]).
+        if (tool == Tool.GRAFITO) return false
         val g = gesture as? Gesture.Creating ?: return false
         val e = scene.byId(g.elementId)?.takeIf { it.isFreeDraw } ?: return false
         if (quietoEn == null || cuando - quietoDesde < ESPERA_PARA_LA_RECTA) return false
@@ -1669,7 +1675,7 @@ class DrawController(initial: Scene = Scene()) {
             ElementType.RECTANGLE, minOf(a.x, bx), minOf(a.y, by), scene.style,
             width = kotlin.math.abs(bx - a.x), height = kotlin.math.abs(by - a.y)
         // El material viaja: un rectángulo sacado de un trazo de grafito es de grafito.
-        ).copy(id = e.id, seed = e.seed, reference = e.reference, material = e.material)
+        ).copy(id = e.id, seed = e.seed, reference = e.reference, material = e.material, dureza = e.dureza)
     }
 
     /** El aumento del último toque, para medir en pantalla lo que llega en escena. */
@@ -2180,7 +2186,7 @@ class DrawController(initial: Scene = Scene()) {
      * eran el bote y las figuras del gesto de pararse. Se deja al coger el lápiz o el resaltador.
      */
     private fun deGrafitoSiToca(e: Element): Element =
-        if (conElGrafitoEnLaMano && e.type in FIGURAS_DE_GRAFITO) e.copy(material = MaterialDeTinta.CUADRITOS) else e
+        if (conElGrafitoEnLaMano && e.type in FIGURAS_DE_GRAFITO) e.copy(material = MaterialDeTinta.CUADRITOS, dureza = scene.style.dureza) else e
 
     private fun beginCreateLinear(type: ElementType, p: Pt) {
         val e = deGrafitoSiToca(
@@ -2204,6 +2210,7 @@ class DrawController(initial: Scene = Scene()) {
             // traza a pulso para rodear algo no puede convertirse en una recta al pararse
             // la mano. Va antes que los dos gestos, que es lo que los desactiva.
             tool == Tool.FLECHA_LIBRE -> e.withPoint(p)
+            tool == Tool.GRAFITO && e.isFreeDraw -> e.withPoint(p, pressure)
 
             rectangulandoSolo -> arranqueDelTrazo?.let { comoUnRectangulo(e, it, p) } ?: e
 

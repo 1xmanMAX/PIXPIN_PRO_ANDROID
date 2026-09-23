@@ -216,6 +216,8 @@ data class ItemStyle(
     val opacity: Int = 100,
     /** De qué está hecha la tinta: lisa, encendida o con grano. Ver [MaterialDeTinta]. */
     val material: MaterialDeTinta = MaterialDeTinta.LISA,
+    /** La dureza del grafito con que se dibuja: se recuerda como el color. Ver [DurezaDeGrafito]. */
+    val dureza: DurezaDeGrafito = DurezaDeGrafito.HB,
     val roundness: Roundness? = Roundness(Roundness.ADAPTIVE_RADIUS),
     val startArrowhead: Arrowhead? = null,
     val endArrowhead: Arrowhead? = Arrowhead.ARROW,
@@ -891,6 +893,7 @@ fun estiloDe(e: Element): ItemStyle {
         roughness = e.roughness,
         opacity = e.opacity,
         material = e.material,
+        dureza = e.dureza ?: DurezaDeGrafito.HB,
         roundness = e.roundness,
         startArrowhead = e.startArrowhead,
         endArrowhead = e.endArrowhead,
@@ -952,6 +955,7 @@ fun conEstilo(e: Element, s: ItemStyle): Element {
     if (Propiedad.MOSAICO in aplican) out = out.copy(mosaicBlur = s.mosaicBlur)
     if (Propiedad.OPACIDAD in aplican) out = out.copy(opacity = s.opacity)
     if (Propiedad.MATERIAL in aplican) out = out.copy(material = s.material)
+    if (out.material == MaterialDeTinta.CUADRITOS) out = out.copy(dureza = s.dureza)
     if (Propiedad.FUENTE in aplican) {
         out = out.copy(fontSize = s.fontSize, fontFamily = s.fontFamily)
     }
@@ -996,6 +1000,7 @@ fun conCambios(destino: ItemStyle, anterior: ItemStyle, nuevo: ItemStyle): ItemS
     if (nuevo.roughness != anterior.roughness) out = out.copy(roughness = nuevo.roughness)
     if (nuevo.opacity != anterior.opacity) out = out.copy(opacity = nuevo.opacity)
     if (nuevo.material != anterior.material) out = out.copy(material = nuevo.material)
+    if (nuevo.dureza != anterior.dureza) out = out.copy(dureza = nuevo.dureza)
     if (nuevo.roundness != anterior.roundness) out = out.copy(roundness = nuevo.roundness)
     if (nuevo.startArrowhead != anterior.startArrowhead) {
         out = out.copy(startArrowhead = nuevo.startArrowhead)

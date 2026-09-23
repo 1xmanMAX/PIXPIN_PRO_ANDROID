@@ -2754,9 +2754,15 @@ class Renderer(
     private fun cocerElLapiz(e: Element, tinta: Int): LapizCocido? {
         val crudos = e.points ?: return null
         if (crudos.size < 2) return null
-        // Lo tirado deprisa, derecho: el error del digitalizador no es pulso. Ver [asentarLoRapido].
-        val puntos = asentarLoRapido(asentarLoRapido(crudos))
-        val gordo = (e.strokeWidth * GORDO_DEL_LAPIZ).toFloat().coerceAtLeast(1.5f)
+        val dureza = e.dureza ?: DurezaDeGrafito.HB
+        val gordo = (e.strokeWidth * GORDO_DEL_LAPIZ * dureza.gordo).toFloat().coerceAtLeast(1.5f)
+        // **Sin corregir nada** (23-sep-2026, el usuario: «el grafito es escritura libre»). Antes
+        // pasaba dos veces por [asentarLoRapido], que acerca cada muestra rápida al medio de sus
+        // vecinas: aplanaba las curvas rápidas en tramos rectos —«un polígono, se nota en las
+        // esquinas»— y el trazo no quedaba donde se puso. Ahora van **las muestras tal cual**, y
+        // entre una y otra la curva que pasa por todas ([CurvaDelTrazo]), no una recta.
+        val presCrudas = e.pressures?.takeIf { !e.simulatePressure && it.size == crudos.size }
+        val (puntos, presiones) = CurvaDelTrazo.porLosPuntos(crudos, presCrudas, maxOf(gordo * 0.3, 0.75).toDouble())
         // **Una rejilla fija, la misma para todo el dibujo** (quinta versión, 20-sep-2026). Se
         // cocía a la resolución del aumento, y por eso al acercarse el trazo se rehacía más fino
         // y **nunca se veían los píxeles**: «un lápiz muy falso», dijo el usuario, que lo que
@@ -2776,13 +2782,13 @@ class Renderer(
         while (((x1 - x0) * finura > LADO_MAXIMO_DEL_LAPIZ || (y1 - y0) * finura > LADO_MAXIMO_DEL_LAPIZ) && finura > 0.05f) finura /= 2f
         val ancho = ((x1 - x0) * finura).toInt().coerceAtLeast(1)
         val alto = ((y1 - y0) * finura).toInt().coerceAtLeast(1)
-        val huella = (puntos.size * 31L + e.version) * 31L + tinta + (e.strokeWidth * 100).toLong() * 7L + (finura * 64).toLong() * 131L +
-            (e.x * 8).toLong() * 17L + (e.y * 8).toLong() * 19L
+        val huella = ((crudos.size * 31L + e.version) * 31L + tinta + (e.strokeWidth * 100).toLong() * 7L + (finura * 64).toLong() * 131L +
+            (e.x * 8).toLong() * 17L + (e.y * 8).toLong() * 19L) * 31L + dureza.ordinal
 
         return losLapices[e.id]?.takeIf { it.huella == huella && !it.mapa.isRecycled } ?: run {
             val mapa = runCatching { Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return null
-            estamparElLapiz(Canvas(mapa), e, puntos, gordo, finura, x0, y0, tinta)
-            elDienteDelPapel(mapa, x0, y0, finura)
+            estamparElLapiz(Canvas(mapa), e, puntos, presiones, gordo, finura, x0, y0, tinta, dureza)
+            elDienteDelPapel(mapa, x0, y0, finura, dureza)
             losLapices.remove(e.id)?.let { pesoDeLosLapices -= it.mapa.byteCount }
             val nuevo = LapizCocido(mapa, huella, x0, y0, finura)
             losLapices[e.id] = nuevo
@@ -2846,7 +2852,8 @@ class Renderer(
     private fun cocerLaFigura(e: Element, shape: CachedShape, tinta: Int, fondo: Int): LapizCocido? {
         val conFondo = e.hasBackground && !isTransparent(e.backgroundColor)
         // Las figuras miden su grosor en el doble de escala que el lápiz. Ver [ItemStyle.freedrawWidthFor].
-        val gordo = (e.strokeWidth * 0.5 * GORDO_DEL_LAPIZ).toFloat().coerceAtLeast(1.5f)
+        val dureza = e.dureza ?: DurezaDeGrafito.HB
+        val gordo = (e.strokeWidth * 0.5 * GORDO_DEL_LAPIZ * dureza.gordo).toFloat().coerceAtLeast(1.5f)
         shape.strokePath.computeBounds(laCajaDeLaFigura, true)
         shape.outlinePath.computeBounds(otraCaja, true)
         if (!otraCaja.isEmpty) { if (laCajaDeLaFigura.isEmpty) laCajaDeLaFigura.set(otraCaja) else laCajaDeLaFigura.union(otraCaja) }
@@ -2861,7 +2868,8 @@ class Renderer(
         val alto = ((y1 - y0) * finura).toInt().coerceAtLeast(1)
         val huella = ((((e.version * 31L + tinta) * 31L + (if (conFondo) fondo else 0)) * 31L + e.fillStyle.hashCode()) * 31L +
             (e.strokeWidth * 100).toLong()) * 31L + (e.x * 8).toLong() * 17L + (e.y * 8).toLong() * 19L +
-            (e.width * 8).toLong() * 23L + (e.height * 8).toLong() * 29L + (finura * 64).toLong() * 131L + e.type.ordinal
+            (e.width * 8).toLong() * 23L + (e.height * 8).toLong() * 29L + (finura * 64).toLong() * 131L + e.type.ordinal +
+            dureza.ordinal * 1_000_003L
         return losLapices[e.id]?.takeIf { it.huella == huella && !it.mapa.isRecycled } ?: run {
             val mapa = runCatching { Bitmap.createBitmap(ancho, alto, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return null
             val lienzo = Canvas(mapa)
@@ -2876,12 +2884,12 @@ class Renderer(
                 } else {
                     lienzo.save()
                     lienzo.clipPath(shape.outlinePath)
-                    estamparElCamino(lienzo, rayado, gordo * 0.6f, finura, fondo, azar, conPuntas = false)
+                    estamparElCamino(lienzo, rayado, gordo * 0.6f, finura, fondo, azar, conPuntas = false, dureza)
                     lienzo.restore()
                 }
             }
-            estamparElCamino(lienzo, shape.strokePath, gordo, finura, tinta, azar, conPuntas = true)
-            elDienteDelPapel(mapa, x0, y0, finura)
+            estamparElCamino(lienzo, shape.strokePath, gordo, finura, tinta, azar, conPuntas = true, dureza)
+            elDienteDelPapel(mapa, x0, y0, finura, dureza)
             guardarLoCocido(e.id, LapizCocido(mapa, huella, x0, y0, finura))
         }
     }
@@ -2904,7 +2912,10 @@ class Renderer(
     private val elSitioDelSello = FloatArray(2)
 
     /** Recorre [camino] —todos sus tramos— a sellos, en unidades del dibujo: [lienzo] ya viene colocado. */
-    private fun estamparElCamino(lienzo: Canvas, camino: Path, gordo: Float, finura: Float, tinta: Int, azar: java.util.Random, conPuntas: Boolean) {
+    private fun estamparElCamino(
+        lienzo: Canvas, camino: Path, gordo: Float, finura: Float, tinta: Int, azar: java.util.Random, conPuntas: Boolean,
+        dureza: DurezaDeGrafito = DurezaDeGrafito.HB
+    ) {
         val sello = elSelloDelLapiz()
         val pincel = Paint().apply { isFilterBitmap = true; color = tinta }
         var total = 0f
@@ -2912,7 +2923,7 @@ class Renderer(
         do { total += elMedidor.length } while (elMedidor.nextContour())
         val paso = maxOf(gordo * ESPACIADO_DEL_LAPIZ, (total / SELLOS_POR_TRAZO).toFloat(), 0.4f / finura)
         val p = 0.6f
-        pincel.alpha = (255 * OPACIDAD_DEL_LAPIZ * (0.16f + 0.34f * p)).toInt().coerceIn(1, 255)
+        pincel.alpha = (255 * OPACIDAD_DEL_LAPIZ * (0.16f + 0.34f * p) * dureza.oscuro).toInt().coerceIn(1, 255)
         elMedidor.setPath(camino, false)
         do {
             val largo = elMedidor.length
@@ -2958,10 +2969,10 @@ class Renderer(
 
     /** Estampa el trazo entero en [lienzo], que mide lo que el trazo a [finura] píxeles por unidad. */
     private fun estamparElLapiz(
-        lienzo: Canvas, e: Element, puntos: List<Pt>, gordo: Float, finura: Float, x0: Float, y0: Float, tinta: Int
+        lienzo: Canvas, e: Element, puntos: List<Pt>, presiones: List<Double>?, gordo: Float, finura: Float, x0: Float, y0: Float,
+        tinta: Int, dureza: DurezaDeGrafito
     ) {
         val sello = elSelloDelLapiz()
-        val presiones = e.pressures?.takeIf { !e.simulatePressure && it.size == puntos.size }
         val azar = java.util.Random(e.id.hashCode().toLong())
         // El largo, para que un trazo larguísimo no pida decenas de miles de sellos.
         var largo = 0.0
@@ -2992,7 +3003,7 @@ class Renderer(
                 elMoldeDelSello.setRotate(azar.nextFloat() * 360f, LADO_DEL_SELLO / 2f, LADO_DEL_SELLO / 2f)
                 elMoldeDelSello.postScale(escala, escala)
                 elMoldeDelSello.postTranslate(((e.x + ax).toFloat() - x0) * finura - lado / 2f, ((e.y + ay).toFloat() - y0) * finura - lado / 2f)
-                pincel.alpha = (255 * OPACIDAD_DEL_LAPIZ * (0.16f + 0.34f * p)).toInt().coerceIn(1, 255)
+                pincel.alpha = (255 * OPACIDAD_DEL_LAPIZ * (0.16f + 0.34f * p) * dureza.oscuro).toInt().coerceIn(1, 255)
                 lienzo.drawBitmap(sello, elMoldeDelSello, pincel)
             }
             pendiente += tramo
@@ -3008,7 +3019,7 @@ class Renderer(
      * su manera —unas todo, otras menos, **alguna casi nada**— y siempre igual: sale de su sitio en
      * el dibujo, no del trazo, así que es el mismo papel para todos y no cambia al repintar.
      */
-    private fun elDienteDelPapel(mapa: Bitmap, x0: Float, y0: Float, finura: Float) {
+    private fun elDienteDelPapel(mapa: Bitmap, x0: Float, y0: Float, finura: Float, dureza: DurezaDeGrafito = DurezaDeGrafito.HB) {
         val w = mapa.width
         val h = mapa.height
         val pix = IntArray(w * h)
@@ -3029,7 +3040,8 @@ class Renderer(
             // es una **resistencia**: la casilla dura coge poquísimo de cada pasada, pero coge, y la
             // cuenta es la de capas que se suman —`1 − (1 − a)^coge`—, así que cada repaso le
             // añade un poco a la vacía y otro poco a la tenue, y a fuerza de pasar todo se iguala.
-            val coge = if (azar < 0.13f) 0.06f + 0.08f * (azar / 0.13f) else 0.35f + 0.65f * ((azar - 0.13f) / 0.87f)
+            // La mina dura coge menos de cada casilla (más grano); la blanda tapa el grano. Ver [DurezaDeGrafito].
+            val coge = (if (azar < 0.13f) 0.06f + 0.08f * (azar / 0.13f) else 0.35f + 0.65f * ((azar - 0.13f) / 0.87f)) * dureza.agarre
             val carga = if (a >= 255) 1.0 else 1.0 - Math.pow(1.0 - a / 255.0, coge.toDouble())
             val final = minOf(255, (carga * 1.2 * 255.0).toInt()).let { if (it < 2) 0 else it }
             // (`getPixels` ya entrega el color sin premultiplicar.)

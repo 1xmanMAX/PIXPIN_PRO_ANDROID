@@ -316,6 +316,9 @@ fun PanelLateralDeEstilo(
             // [LucesDelDibujo].
         }
 
+        // **La dureza del grafito**: de la 4H, fina y clara, a la 8B, gorda y negra. Ver [DurezaDeGrafito].
+        if (Propiedad.DUREZA in aplican) LaDurezaQueHay(estilo, onEstilo, neutro, haciaLaIzquierda, bola)
+
         if (Propiedad.ESQUINAS in aplican) {
             // Dos: en pico o redondeadas. La bolita vale igual para dos que
             // para cinco, y así todo se toca de la misma manera.
@@ -1174,6 +1177,43 @@ private fun LaTintaQueHay(
 }
 
 /**
+ * **La dureza de la mina**, como en la caja de lápices: cada opción lleva su nombre (2H, HB, 4B…)
+ * y una rayita tan clara y tan gorda como la que va a salir.
+ */
+@Composable
+private fun LaDurezaQueHay(
+    estilo: ItemStyle,
+    onEstilo: (ItemStyle) -> Unit,
+    tinta: Color,
+    haciaLaIzquierda: Boolean,
+    bola: Dp
+) {
+    val durezas = DurezaDeGrafito.entries
+    ElMandoDeOpciones(
+        descripcion = "Dureza del lápiz",
+        opciones = durezas,
+        actual = durezas.indexOf(estilo.dureza).coerceAtLeast(0),
+        onElegir = { onEstilo(estilo.copy(dureza = durezas[it])) },
+        haciaLaIzquierda = haciaLaIzquierda,
+        bola = bola
+    ) { d ->
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            androidx.compose.material3.Text(
+                d.rotulo, color = tinta, fontSize = 10.sp, lineHeight = 10.sp,
+                fontWeight = if (d == DurezaDeGrafito.HB) androidx.compose.ui.text.font.FontWeight.Bold else null
+            )
+            Canvas(Modifier.size(width = 22.dp, height = 6.dp)) {
+                drawLine(
+                    tinta.copy(alpha = (0.3f * d.oscuro).coerceIn(0.12f, 1f)),
+                    Offset(2f, size.height / 2), Offset(size.width - 2f, size.height / 2),
+                    size.height * 0.45f * d.gordo, StrokeCap.Round
+                )
+            }
+        }
+    }
+}
+
+/**
  * Un trazo de muestra hecho de ese material.
  *
  * No pasa por el motor de pintado —una muestra de veinte píxeles no necesita el contorno
@@ -1583,7 +1623,7 @@ private val EN_EL_LATERAL = setOf(
     Propiedad.RELLENO, Propiedad.LINEA,
     Propiedad.ESQUINAS, Propiedad.FORMA_FLECHA, Propiedad.MOSAICO, Propiedad.LUPA,
     Propiedad.VOLUMEN,
-    Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.LUPA, Propiedad.ZONA, Propiedad.OSCURECER,
+    Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.DUREZA, Propiedad.LUPA, Propiedad.ZONA, Propiedad.OSCURECER,
     Propiedad.OPACIDAD, Propiedad.FUENTE
 )
 

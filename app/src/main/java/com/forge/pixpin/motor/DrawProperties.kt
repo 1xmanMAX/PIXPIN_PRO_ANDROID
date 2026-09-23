@@ -38,6 +38,9 @@ enum class Propiedad {
     /** Recta, curva o de codos. Solo la flecha. */
     FORMA_FLECHA,
 
+    /** **La dureza del grafito**: 4H … HB … 8B. Solo lo que es de grafito. Ver [DurezaDeGrafito]. */
+    DUREZA,
+
     /**
      * **Qué pieza es un volumen y si va macizo o de alambre.** Solo el sólido.
      *
@@ -104,6 +107,7 @@ fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
     // **El bote pinta con el color que hay puesto**, así que ofrece el mando del color: sin él,
     // con el bote en la mano no había manera de elegir de qué color rellenar.
     if (tool == Tool.RELLENO) return propiedadesDeTipo(tipo) - Propiedad.FONDO + Propiedad.TRAZO
+    if (tool == Tool.GRAFITO) return propiedadesDeTipo(tipo) + Propiedad.DUREZA
     return propiedadesDeTipo(tipo)
 }
 
@@ -120,7 +124,8 @@ fun propiedadesDe(e: Element): Set<Propiedad> {
     val base = propiedadesDeTipo(e.type)
     val abierta = (e.type == ElementType.LINE || e.type == ElementType.FREEDRAW) &&
         !isPathALoop(e.points)
-    return if (!abierta) base else base - Propiedad.FONDO - Propiedad.RELLENO
+    val conDureza = if (e.material == MaterialDeTinta.CUADRITOS) base + Propiedad.DUREZA else base
+    return if (!abierta) conDureza else conDureza - Propiedad.FONDO - Propiedad.RELLENO
 }
 
 /**

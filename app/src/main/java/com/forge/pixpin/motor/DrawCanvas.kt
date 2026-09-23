@@ -974,6 +974,17 @@ fun DrawCanvas(
                     }
                     if (change.positionChange() != Offset.Zero && gestureStarted) {
                         val v = controller.scene.viewport
+                        // **Las muestras de entre fotogramas, también** (23-sep-2026). El lápiz
+                        // manda muchas más que fotogramas hay, y aquí solo llegaba la última de
+                        // cada uno: en un trazo rápido quedaban lejos, y unidas eran un polígono
+                        // —«se nota en las esquinas», con el grafito—. Solo al trazar a mano: a
+                        // una figura le basta dónde está el dedo ahora.
+                        if (trazandoAMano) for (h in change.historical) {
+                            controller.pointerMove(
+                                v.toScene(h.position.x.toDouble(), h.position.y.toDouble()),
+                                change.pressure.toDouble(), v.zoom, h.uptimeMillis
+                            )
+                        }
                         last = v.toScene(
                             change.position.x.toDouble(), change.position.y.toDouble()
                         )
