@@ -106,9 +106,12 @@ object ExportarDocumentoAnotado {
         // deshacer y guardar, los que estén puestos en Ajustes → Exportar. Un documento que
         // nunca se abrió para anotar no tiene columna medida: va con una de lectura cómoda.
         val ancho = columna ?: COLUMNA_SIN_MEDIR
+        // Los espacios de cada lado, los que se abrieron al leer (dos tercios si nunca se tocaron).
+        val izq = columna?.let { p.getInt("$clave:izq", Lectura.margenDe(it)) } ?: Lectura.margenDe(ancho)
+        val der = columna?.let { p.getInt("$clave:der", Lectura.margenDe(it)) } ?: Lectura.margenDe(ancho)
         val hoja = DocumentoAnotado.hoja(
-            titulo, conLasFotosDentro(conLetra, carpeta), ancho, Lectura.margenDe(ancho), tops, piezas, senales,
-            tamano, if (deNoche) "#15171c" else "#ffffff"
+            titulo, conLasFotosDentro(conLetra, carpeta), ancho, izq, tops, piezas, senales,
+            tamano, if (deNoche) "#15171c" else "#ffffff", margenDerecho = der
         )
         val hecha = com.forge.pixpin.motor.ExportarHtml.paginas(
             listOf(hoja), titulo, "$titulo (anotado)", com.forge.pixpin.motor.ExportarHtml.Opciones.de(funciones)

@@ -76,6 +76,10 @@ El mismo dibujo se abre en las cuatro: los elementos son los mismos bytes.
 Figuras, lápiz de presión, texto con Markdown, mosaico y foco para tapar, cotas que calculan,
 bote con agujeros, alfileres, guías, escala gráfica y transportador.
 
+**Grafito**, el lápiz de verdad: escritura libre —no se endereza ni se corrige al pararse, y la
+curva pasa por cada punto que da el lápiz, sin esquinas— y **siete durezas de mina**, de la 4H
+(fina y clara) a la 8B (gorda y negra), con la HB en medio; se eligen en el panel lateral.
+
 ![Rectangulo, elipse, rombo, linea, lapiz, marcador, texto y esquinas](docs/img/herramientas-dibujar.svg)
 
 ![Cota, escalar, escala grafica y angulos internos](docs/img/herramientas-medir.svg)
@@ -180,6 +184,14 @@ próxima vez se sigue desde él. En el engranaje, **«Voces en línea»** usa la
 mismo motor de Google, gratis y más naturales (el texto sí sale entonces a Google; sin red, la de
 siempre). Y el botón del teléfono de la barra lo pone **por el auricular de las llamadas**, para
 oírlo con el teléfono en la oreja en un sitio con ruido.
+
+**Zoom libre y a todas partes con un dedo.** Leyendo un Word o un libro, dos dedos acercan y
+alejan sin tope —alejando se ven los espacios de los lados— y un dedo lleva el documento en
+cualquier dirección. Abajo, con la pastilla, tres mandos pequeños: **espacio a la izquierda**,
+**el candado del lado** (con él puesto el dedo solo sube y baja, y a lo ancho se queda donde lo
+dejes) y **espacio a la derecha**. Lo anotado se corre con el texto al abrir espacio a la
+izquierda. El engranaje está rediseñado en cuatro apartados cortos —Letra, Lectura, Voz,
+Documento— con deslizadores, interruptores y botones pequeños.
 
 **Voces de Microsoft.** En el engranaje, **«Voces de Microsoft»** lee con las voces neuronales de
 «Leer en voz alta» de Microsoft Edge: más de 300, 45 en español, gratis y muy naturales; con

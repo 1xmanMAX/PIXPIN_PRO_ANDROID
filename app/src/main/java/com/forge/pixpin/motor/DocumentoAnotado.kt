@@ -71,7 +71,9 @@ object DocumentoAnotado {
      */
     fun hoja(
         nombre: String, html: String, columna: Int, margen: Int, tops: List<Double>,
-        piezas: List<Pieza>, senales: List<Senal>, tamano: Int, fondo: String, clave: String = "d"
+        piezas: List<Pieza>, senales: List<Senal>, tamano: Int, fondo: String, clave: String = "d",
+        /** El espacio de la derecha, si no es el mismo que el de la izquierda ([margen]). */
+        margenDerecho: Int = margen
     ): ExportarHtml.HojaWeb.Documento {
         val estilos = Regex("<style[^>]*>(.*?)</style>", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
         val css = estilos.findAll(html).joinToString("\n") { it.groupValues[1] }
@@ -83,7 +85,7 @@ object DocumentoAnotado {
         val base = Regex("body\\{[^}]*?font:\\s*(\\d+(?:\\.\\d+)?)px").find(css)?.groupValues?.get(1)?.toDoubleOrNull() ?: 16.0
         val capa = capaDe(piezas, senales, columna, margen, clave)
         return ExportarHtml.HojaWeb.Documento(
-            nombre, acotar(css), cuerpo, capa, columna, margen, tops, base * tamano / 100.0, fondo
+            nombre, acotar(css), cuerpo, capa, columna, margen, tops, base * tamano / 100.0, fondo, margenDerecho
         )
     }
 

@@ -18,6 +18,17 @@ class LecturaTest {
     }
 
     @Test
+    fun `cada lado lleva su espacio y sin decir nada son los dos tercios de siempre`() {
+        val igual = Lectura.estilo(1, 0, columna = 300)
+        assertTrue(igual.contains("margin-left:200px") && igual.contains("margin-right:200px") && igual.contains("html{width:700px"))
+        val suyo = Lectura.estilo(1, 0, columna = 300, izq = 0, der = 400)
+        assertTrue(suyo.contains("margin-left:0px") && suyo.contains("margin-right:400px") && suyo.contains("html{width:700px"))
+        assertEquals(100, Lectura.pasoDeEspacio(300))
+        assertEquals(600, Lectura.espacioValido(900, 300))
+        assertEquals(0, Lectura.espacioValido(-100, 300))
+    }
+
+    @Test
     fun `el marcador verde de la voz es uno solo y se guarda aparte`() {
         val lista = listOf(Lectura.Marcador(1, 0.2f, "⭐"), Lectura.Marcador(2, 0.9f, Lectura.EMOJI_DE_VOZ))
         val con = Lectura.conMarcaDeVoz(lista, 0.5f)

@@ -38,6 +38,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.sp
@@ -59,6 +61,8 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -268,8 +272,9 @@ class VisorHtmlActivity : ComponentActivity() {
             return
         }
         @Suppress("DEPRECATION")
-        val x = columnaDeAnotar?.let { (com.forge.pixpin.motor.Lectura.margenDe(it) * vista.scale).toInt() } ?: 0
-        vista.scrollTo(x, (f * alto).toInt().coerceAtLeast(0))
+        val x = columnaDeAnotar?.let { (espacioIzq * vista.scale).toInt() } ?: 0
+        val xQueToca = xTrasRecargar.takeIf { it >= 0 }?.also { xTrasRecargar = -1 } ?: x
+        vista.scrollTo(xQueToca, (f * alto).toInt().coerceAtLeast(0))
         if (entrarAlCargar) {
             entrarAlCargar = false
             vista.post { ponerLaCapaDondeElDocumento(); esconderLaTintaDeLaPagina(); anotando = true }
@@ -289,7 +294,7 @@ class VisorHtmlActivity : ComponentActivity() {
         fraccionPendiente = fraccionDeAhora()
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo, columnaDeAnotar, esDeNoche())) }
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosor, tipo, columnaDeAnotar, esDeNoche(), espacioIzq, espacioDer)) }
             }
             web?.reload()
         }
@@ -636,6 +641,19 @@ class VisorHtmlActivity : ComponentActivity() {
 
     /** El ancho de la columna de texto, en píxeles CSS, desde que se anotó por primera vez; null si nunca. */
     private var columnaDeAnotar by mutableStateOf<Int?>(null)
+    /**
+     * **El espacio en blanco de cada lado de la columna**, en píxeles CSS (23-sep-2026). Eran los
+     * dos tercios de la columna a los dos lados, siempre; ahora cada lado tiene el suyo y se
+     * agranda con su botón ([anadirEspacio]). Solo cuentan con la columna fijada.
+     */
+    private var espacioIzq by mutableStateOf(0)
+    private var espacioDer by mutableStateOf(0)
+    /**
+     * **Bloquear el desplazamiento de lado** (23-sep-2026, pedido por el usuario): con él puesto,
+     * el dedo solo sube y baja; a lo ancho, **donde se dejó ahí se queda**. Los dos dedos siguen
+     * ampliando y alejando. Se recuerda. Ver [WebDelDocumento].
+     */
+    private var sinLado by mutableStateOf(false)
     private var anotando by mutableStateOf(false)
     private var compartiendo by mutableStateOf(false)
     /** Hay que entrar a anotar en cuanto la página recargada (ya con márgenes) esté lista. */
@@ -683,7 +701,7 @@ class VisorHtmlActivity : ComponentActivity() {
         // Al volver al texto, la columna al centro.
         if (!entera) vista.postDelayed({
             @Suppress("DEPRECATION")
-            columnaDeAnotar?.let { vista.scrollTo((com.forge.pixpin.motor.Lectura.margenDe(it) * vista.scale).toInt(), vista.scrollY) }
+            columnaDeAnotar?.let { vista.scrollTo((espacioIzq * vista.scale).toInt(), vista.scrollY) }
             if (anotando) ponerLaCapaDondeElDocumento()
         }, 160)
     }
@@ -767,8 +785,13 @@ class VisorHtmlActivity : ComponentActivity() {
         if (columnaDeAnotar != null) { ponerLaCapaDondeElDocumento(); esconderLaTintaDeLaPagina(); anotando = true; return }
         val columna = (vista.width / vista.scale.coerceAtLeast(0.1f)).toInt().coerceAtLeast(200)
         columnaDeAnotar = columna
+        // La primera vez, los dos tercios de siempre a cada lado.
+        espacioIzq = com.forge.pixpin.motor.Lectura.margenDe(columna)
+        espacioDer = com.forge.pixpin.motor.Lectura.margenDe(columna)
         prefsDeLectura.edit()
             .putInt(claveDelDocumento + ":columna", columna)
+            .putInt(claveDelDocumento + ":izq", espacioIzq)
+            .putInt(claveDelDocumento + ":der", espacioDer)
             .putString(claveDelDocumento + ":letra", "$tamanoDeLetra,$grosorDeLetra,$tipoDeLetra")
             .apply()
         val pagina = laPaginaQueSeVe ?: return
@@ -776,7 +799,7 @@ class VisorHtmlActivity : ComponentActivity() {
         entrarAlCargar = true
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
-                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna, esDeNoche())) }
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna, esDeNoche(), espacioIzq, espacioDer)) }
             }
             vista.settings.loadWithOverviewMode = false
             vista.reload()
@@ -798,32 +821,18 @@ class VisorHtmlActivity : ComponentActivity() {
         val columna = columnaDeAnotar ?: return
         if (!vistaEntera || anotando) return
         @Suppress("DEPRECATION")
-        val tope = ((com.forge.pixpin.motor.Lectura.anchoConMargenes(columna) * vista.scale) - vista.width).toInt().coerceAtLeast(0)
+        val tope = (((columna + espacioIzq + espacioDer) * vista.scale) - vista.width).toInt().coerceAtLeast(0)
         val meta = if (vista.scrollX < tope / 2) 0 else tope
         if (meta != vista.scrollX) android.animation.ObjectAnimator.ofInt(vista, "scrollX", vista.scrollX, meta).setDuration(200).start()
     }
 
-    /** Dónde estaba el documento, a lo ancho, al posar el dedo. Para el imán del centro. */
-    private var corridoAlPosar = 0
     private var xDelLienzoAlPosar = Double.NaN
-
-    /** **Leyendo**: si el gesto venía hacia el centro, el documento se va al centro. Ver [com.forge.pixpin.motor.Lectura.imanDelCentro]. */
-    @Suppress("DEPRECATION")
-    private fun encajarEnElCentro() {
-        val vista = web ?: return
-        val columna = columnaDeAnotar ?: return
-        if (anotando) return
-        if (vistaEntera) { aUnLado(); return }
-        val margen = com.forge.pixpin.motor.Lectura.margenDe(columna) * vista.scale.toDouble()
-        val meta = com.forge.pixpin.motor.Lectura.imanDelCentro(corridoAlPosar.toDouble(), vista.scrollX.toDouble(), margen, margen) ?: return
-        android.animation.ObjectAnimator.ofInt(vista, "scrollX", vista.scrollX, meta.toInt()).setDuration(220).start()
-    }
 
     /** **Anotando**: lo mismo, moviendo la vista del lienzo, que es quien lleva el documento. */
     private fun encajarElLienzoEnElCentro() {
         val columna = columnaDeAnotar ?: return
         if (vistaEntera) { xDelLienzoAlPosar = Double.NaN; return }
-        val margen = com.forge.pixpin.motor.Lectura.margenDe(columna).toDouble()
+        val margen = espacioIzq.toDouble().coerceAtLeast(1.0)
         val ahora = -laCapa.scene.viewport.scrollX
         val antes = xDelLienzoAlPosar.takeIf { !it.isNaN() } ?: ahora
         xDelLienzoAlPosar = Double.NaN
@@ -844,7 +853,7 @@ class VisorHtmlActivity : ComponentActivity() {
         val e = v.zoom.coerceAtLeast(0.1)
         val (x, y) = com.forge.pixpin.motor.Lectura.dentroDelDocumento(
             -v.scrollX, -v.scrollY,
-            com.forge.pixpin.motor.Lectura.anchoConMargenes(columna).toDouble(), vista.contentHeight.toDouble(),
+            (columna + espacioIzq + espacioDer).toDouble(), vista.contentHeight.toDouble(),
             vista.width / e, vista.height / e
         )
         if (x != -v.scrollX || y != -v.scrollY) laCapa.setViewport(v.copy(scrollX = -x, scrollY = -y))
@@ -856,6 +865,58 @@ class VisorHtmlActivity : ComponentActivity() {
     /** Sube cada vez que el dedo toca la página, y cada vez que la mueve: la burbuja los mira. */
     private var toquesEnLaPagina by mutableStateOf(0)
     private var movidasDeLaPagina by mutableStateOf(0)
+
+    /**
+     * **Espacio en blanco a un lado** ([izquierda] o a la derecha): un paso más ([mas]) o uno
+     * menos. Si la columna aún no está fijada, se fija aquí, sin espacio a ningún lado salvo el
+     * pedido. El texto no se mueve bajo lo anotado: al abrir espacio a la izquierda la columna se
+     * corre a la derecha, y **lo anotado se corre con ella** lo mismo.
+     */
+    @Suppress("DEPRECATION")
+    private fun anadirEspacio(izquierda: Boolean, mas: Boolean = true) {
+        val vista = web ?: return
+        val pagina = laPaginaQueSeVe ?: return
+        val columna = columnaDeAnotar ?: (vista.width / vista.scale.coerceAtLeast(0.1f)).toInt().coerceAtLeast(200).also { c ->
+            columnaDeAnotar = c
+            espacioIzq = 0
+            espacioDer = 0
+            prefsDeLectura.edit()
+                .putInt(claveDelDocumento + ":columna", c)
+                .putString(claveDelDocumento + ":letra", "$tamanoDeLetra,$grosorDeLetra,$tipoDeLetra")
+                .apply()
+        }
+        val paso = com.forge.pixpin.motor.Lectura.pasoDeEspacio(columna) * (if (mas) 1 else -1)
+        val antes = if (izquierda) espacioIzq else espacioDer
+        val ahora = com.forge.pixpin.motor.Lectura.espacioValido(antes + paso, columna)
+        val corre = ahora - antes
+        if (corre == 0) {
+            Toast.makeText(this, if (mas) "Ya no cabe más espacio a ese lado" else "Ese lado ya no tiene espacio", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (izquierda) {
+            espacioIzq = ahora
+            // Lo anotado, con el texto: todo lo de la capa se corre lo mismo que la columna.
+            if (laCapa.scene.elements.isNotEmpty()) {
+                laCapa.load(laCapa.scene.copy(elements = laCapa.scene.elements.map { it.copy(x = it.x + corre) }))
+                guardarLaCapa()
+            }
+        } else espacioDer = ahora
+        prefsDeLectura.edit().putInt(claveDelDocumento + ":izq", espacioIzq).putInt(claveDelDocumento + ":der", espacioDer).apply()
+        // Se recarga en el mismo sitio: la misma altura, y a lo ancho, lo que se estaba viendo.
+        fraccionPendiente = fraccionDeAhora()
+        val xAntes = vista.scrollX + if (izquierda) (corre * vista.scale).toInt() else 0
+        xTrasRecargar = xAntes.coerceAtLeast(0)
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna, esDeNoche(), espacioIzq, espacioDer)) }
+            }
+            vista.settings.loadWithOverviewMode = false
+            vista.reload()
+        }
+    }
+
+    /** A qué altura de lado volver tras recargar por [anadirEspacio], o −1. */
+    private var xTrasRecargar = -1
 
     /** Lo que la página ha puesto a pantalla completa (presentar), y cómo decirle que se acabó. */
     private var aPantalla: android.view.View? = null
@@ -882,8 +943,11 @@ class VisorHtmlActivity : ComponentActivity() {
             // Y se vuelve a donde se dejó de leer.
             fraccionPendiente = prefsDeLectura.getFloat(claveDelDocumento + ":sitio", -1f)
             // **Un documento anotado conserva su letra y su columna**, las de cuando se anotó.
+            sinLado = prefsDeLectura.getBoolean("sinLado", false)
             prefsDeLectura.getInt(claveDelDocumento + ":columna", 0).takeIf { it > 0 }?.let { columna ->
                 columnaDeAnotar = columna
+                espacioIzq = prefsDeLectura.getInt(claveDelDocumento + ":izq", com.forge.pixpin.motor.Lectura.margenDe(columna))
+                espacioDer = prefsDeLectura.getInt(claveDelDocumento + ":der", com.forge.pixpin.motor.Lectura.margenDe(columna))
                 prefsDeLectura.getString(claveDelDocumento + ":letra", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
                     ?.takeIf { it.size == 3 }?.let { (t, g, l) -> tamanoDeLetra = t; grosorDeLetra = g; tipoDeLetra = l }
                 if (fraccionPendiente < 0f) fraccionPendiente = 0f
@@ -924,7 +988,7 @@ class VisorHtmlActivity : ComponentActivity() {
         LaunchedEffect(original) {
             val hecha = withContext(Dispatchers.IO) { runCatching { if (enSuSitio) original.takeIf { it.exists() } else copiaParaVer(original) }.getOrNull() }
             if (hecha != null && esDocumento) withContext(Dispatchers.IO) {
-                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra, columnaDeAnotar, esDeNoche())) }
+                runCatching { hecha.writeText(com.forge.pixpin.motor.Lectura.conEstilo(hecha.readText(), grosorDeLetra, tipoDeLetra, columnaDeAnotar, esDeNoche(), espacioIzq, espacioDer)) }
             }
             laPaginaQueSeVe = hecha
             if (hecha == null) fallo = true else copia = hecha
@@ -946,6 +1010,14 @@ class VisorHtmlActivity : ComponentActivity() {
             }
         }
         BackHandler { salir() }
+        // Al dejar de anotar se vuelve a leer con el zoom del `WebView`: fuera el aumento de la capa.
+        LaunchedEffect(anotando) {
+            if (!anotando) {
+                if (vistaEntera) ponerLaVistaEntera(false)
+                aumento = 1f
+                corridoDelAumento = androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
         // Si el lector se suelta desde la notificación, o pasa a leer otro documento, esta pantalla
         // deja de enseñarlo.
         LaunchedEffect(Unit) {
@@ -1107,6 +1179,12 @@ class VisorHtmlActivity : ComponentActivity() {
                     )
                     if (escuchando && !poniendoMarcador) BarraDeEscuchar(Modifier.align(Alignment.BottomCenter))
                     if (autoDesplazando && !escuchando && !poniendoMarcador) BarraDeAutoDesplazar(Modifier.align(Alignment.BottomCenter))
+                    // Con la pastilla, y si abajo no hay otra barra: espacio a cada lado y el candado del lado.
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = aLaVista && !escuchando && !autoDesplazando && !poniendoMarcador && !conLaLetra,
+                        enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    ) { MandosDeLosLados(Modifier) }
                     if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
                         poniendoMarcador = false
                         marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
@@ -1267,14 +1345,25 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /**
-     * **El pellizco de un documento.** Con dos dedos se amplía —nunca por debajo de 1— y el punto
-     * entre los dedos se queda quieto. Leyendo, esos dos dedos también pasean por lo ampliado y
-     * el gesto se consume, para que el texto no se desplace a la vez. Anotando **solo amplía**: el
-     * paseo de los dos dedos es del lienzo, que es quien lleva el documento. Un dedo no se toca.
+     * **El pellizco de un documento, anotando.** Con dos dedos se amplía —nunca por debajo de 1—
+     * y el punto entre los dedos se queda quieto; el paseo de los dos dedos es del lienzo, que es
+     * quien lleva el documento. Un dedo no se toca.
+     *
+     * **Leyendo, el zoom es del propio `WebView`** (23-sep-2026, pedido por el usuario: «libera el
+     * zoom… con un solo dedo moverme a todas partes»). Aquí se ampliaba una capa por encima, y
+     * dentro de ella un dedo solo desplazaba el texto: para moverse de lado hacían falta dos. Esa
+     * capa existía porque la tinta iba en otra superficie y temblaba; desde que va **dentro de la
+     * página** ([ponerLaTintaEnLaPagina]) el aumento del `WebView` la lleva consigo, y con él
+     * vienen el zoom libre —hasta ver los espacios de los lados—, el dedo en todas direcciones y
+     * la inercia. Así que leyendo este gesto no hace nada y deja pasar los dedos.
      */
     private fun Modifier.pellizcoDelDocumento(): Modifier = pointerInput(Unit) {
         awaitEachGesture {
             awaitFirstDown(requireUnconsumed = false, pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+            if (!anotando) {
+                do { val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial) } while (e.changes.any { it.pressed })
+                return@awaitEachGesture
+            }
             var deMenos = 1f
             while (true) {
                 val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -1439,80 +1528,220 @@ class VisorHtmlActivity : ComponentActivity() {
     @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Composable
     private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit, onVoces: () -> Unit) {
+        // **Rediseñado** (23-sep-2026, pedido por el usuario: «más simple y fácil; no todo tiene que
+        // ser botones: interruptores, deslizadores… con un tamaño mesurado»). Cuatro apartados
+        // cortos —Letra, Lectura, Voz, Documento—: lo que es sí o no, interruptor; lo que es
+        // cuánto, deslizador; elegir entre pocas, fichas; y lo que es hacer algo, un botón de texto.
         val lectura = com.forge.pixpin.motor.Lectura
         val fijada = hayAnotaciones
+        val blanco = androidx.compose.ui.graphics.Color.White
+        val gris = blanco.copy(alpha = 0.6f)
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = onCerrar,
             containerColor = androidx.compose.ui.graphics.Color(0xF214182B),
-            contentColor = androidx.compose.ui.graphics.Color.White,
+            contentColor = blanco,
             scrimColor = androidx.compose.ui.graphics.Color.Transparent
         ) {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 18.dp)) {
-                val gris = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f)
+            Column(
+                Modifier.fillMaxWidth().navigationBarsPadding()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(horizontal = 18.dp).padding(bottom = 14.dp)
+            ) {
+                // ---- Letra ----
+                Apartado("Letra")
                 if (fijada) Text(
-                    "La letra está fijada: este documento tiene anotaciones, y si cambiara se quedarían en el aire.",
-                    color = androidx.compose.ui.graphics.Color(0xFFFFD27A), style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(bottom = 10.dp)
+                    "Fijada: el documento tiene anotaciones y, si la letra cambiara, se quedarían en el aire.",
+                    color = androidx.compose.ui.graphics.Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Tamaño", color = gris, modifier = Modifier.weight(1f))
-                    Text("$tamanoDeLetra %", color = gris)
-                }
-                BarraDePuntos(
-                    cuantos = lectura.TAMANOS.size,
-                    elegido = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it },
-                    crece = true
-                ) { if (!fijada) ponerElTamano(lectura.TAMANOS[it]) }
-
-                Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Grosor", color = gris, modifier = Modifier.weight(1f))
-                    Text(lectura.GROSORES.getOrElse(grosorDeLetra) { lectura.GROSORES[1] }.second, color = gris)
-                }
-                BarraDePuntos(cuantos = lectura.GROSORES.size, elegido = grosorDeLetra, crece = false) { if (!fijada) ponerLaLetra(it, tipoDeLetra) }
-
-                Text("Letra", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+                val indiceDeTamano = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it }
+                var tamano by remember(indiceDeTamano) { mutableStateOf(indiceDeTamano.toFloat()) }
+                Deslizador(
+                    "Tamaño", "${lectura.TAMANOS[tamano.toInt()]} %", tamano, lectura.TAMANOS.lastIndex, !fijada,
+                    onCambio = { tamano = it }, onSoltar = { ponerElTamano(lectura.TAMANOS[tamano.toInt()]) }
+                )
+                var grosor by remember(grosorDeLetra) { mutableStateOf(grosorDeLetra.toFloat()) }
+                Deslizador(
+                    "Grosor", lectura.GROSORES.getOrElse(grosor.toInt()) { lectura.GROSORES[1] }.second, grosor, lectura.GROSORES.lastIndex, !fijada,
+                    onCambio = { grosor = it }, onSoltar = { if (grosor.toInt() != grosorDeLetra) ponerLaLetra(grosor.toInt(), tipoDeLetra) }
+                )
                 Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
                     lectura.LETRAS.forEachIndexed { i, (_, nombre) -> FichaDeLetra(nombre, i == tipoDeLetra) { if (!fijada) ponerLaLetra(grosorDeLetra, i) } }
                 }
 
-                Text("Documento", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
-                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    FichaDeLetra("Vista de impresión", false, onImpresion)
-                    FichaDeLetra("Al proyecto", false, onAlProyecto)
-                    if (marcadores.isNotEmpty()) FichaDeLetra("Quitar marcadores", false, onQuitarMarcadores)
+                // ---- Lectura ----
+                Apartado("Lectura")
+                Interruptor("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado) {
+                    sinLado = it
+                    prefsDeLectura.edit().putBoolean("sinLado", it).apply()
+                }
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Espacio para anotar", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    MasMenos("Izquierda", espacioIzq, columnaDeAnotar, { anadirEspacio(izquierda = true, mas = false) }) { anadirEspacio(izquierda = true) }
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    MasMenos("Derecha", espacioDer, columnaDeAnotar, { anadirEspacio(izquierda = false, mas = false) }) { anadirEspacio(izquierda = false) }
                 }
 
-                // Las voces sin conexión se bajan en el propio motor de Google, no en PixPin.
-                Text("Escuchar", color = gris, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
-                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    FichaDeLetra("Voces sin conexión", false, onVoces)
-                    // **En línea**: las voces de la red del mismo motor de Google, gratis y más naturales.
-                    FichaDeLetra("Voces en línea", vocesEnLinea) {
-                        vocesEnLinea = !vocesEnLinea
-                        prefsDeLectura.edit().putBoolean("voz:enLinea", vocesEnLinea).apply()
-                        lector.ponerEnLinea(vocesEnLinea)
-                        Toast.makeText(
-                            this@VisorHtmlActivity,
-                            if (vocesEnLinea) "Voces en línea de Google: suenan mejor, pero el texto se manda a Google. Sin red, la de siempre."
-                            else "Solo voces sin conexión: el texto no sale del teléfono",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    // **Las de Microsoft Edge**: más de 300 voces neuronales, gratis; no es un servicio oficial.
-                    FichaDeLetra("Voces de Microsoft", vocesDeMicrosoft) {
-                        vocesDeMicrosoft = !vocesDeMicrosoft
-                        prefsDeLectura.edit().putBoolean("voz:edge", vocesDeMicrosoft).apply()
-                        if (!vocesDeMicrosoft) lector.usarEdge(null)
-                        else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
-                        Toast.makeText(
-                            this@VisorHtmlActivity,
-                            if (vocesDeMicrosoft) "Voces de Microsoft Edge: muy naturales y gratis, pero el texto va a Microsoft y no es un servicio oficial. Si falla, la de Google."
-                            else "Con las voces de Google",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    if (vocesDeMicrosoft) FichaDeLetra("Elegir voz", false) { eligiendoVozDeMicrosoft = true }
+                // ---- Voz ----
+                Apartado("Voz")
+                Interruptor("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", vocesEnLinea) {
+                    vocesEnLinea = it
+                    prefsDeLectura.edit().putBoolean("voz:enLinea", it).apply()
+                    lector.ponerEnLinea(it)
                 }
+                Interruptor("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
+                    vocesDeMicrosoft = it
+                    prefsDeLectura.edit().putBoolean("voz:edge", it).apply()
+                    if (!it) lector.usarEdge(null)
+                    else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
+                }
+                if (vocesDeMicrosoft) {
+                    val puesta = (lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idiomaDeAhora()), null))
+                        ?.let { n -> n.substringAfter('-').substringAfter('-').removeSuffix("Neural") } ?: "la del país"
+                    Fila("Voz de Microsoft", puesta) { eligiendoVozDeMicrosoft = true }
+                }
+                val voz by lector.estado.collectAsState()
+                val auricular = if (voz.listo) voz.auricular else prefsDeLectura.getBoolean("voz:auricular", false)
+                Interruptor("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
+                    prefsDeLectura.edit().putBoolean("voz:auricular", it).apply()
+                    lector.porElAuricular(it)
+                }
+                Fila("Bajar voces sin conexión", null, onVoces)
+
+                // ---- Documento ----
+                Apartado("Documento")
+                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    BotonDeTexto("Vista de impresión", onImpresion)
+                    BotonDeTexto("Al proyecto", onAlProyecto)
+                    if (marcadores.isNotEmpty()) BotonDeTexto("Quitar marcadores", onQuitarMarcadores)
+                }
+            }
+        }
+    }
+
+    /** El título de un apartado del engranaje: pequeño, en gris, con aire encima. */
+    @Composable
+    private fun Apartado(titulo: String) {
+        Text(
+            titulo.uppercase(), color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f),
+            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+        )
+    }
+
+    /** Un deslizador de pasos, con su nombre a la izquierda y el valor a la derecha. Se aplica al soltar. */
+    @Composable
+    private fun Deslizador(nombre: String, valor: String, actual: Float, ultimo: Int, activo: Boolean, onCambio: (Float) -> Unit, onSoltar: () -> Unit) {
+        Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
+            androidx.compose.material3.Slider(
+                value = actual, onValueChange = { onCambio(Math.round(it).toFloat()) }, onValueChangeFinished = onSoltar,
+                valueRange = 0f..ultimo.toFloat(), steps = (ultimo - 1).coerceAtLeast(0), enabled = activo,
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = androidx.compose.ui.graphics.Color.White,
+                    activeTrackColor = androidx.compose.ui.graphics.Color(0xFF8AB4F8),
+                    inactiveTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.18f),
+                    activeTickColor = androidx.compose.ui.graphics.Color.Transparent,
+                    inactiveTickColor = androidx.compose.ui.graphics.Color.Transparent
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            Text(valor, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium,
+                maxLines = 1, modifier = Modifier.width(62.dp).padding(start = 8.dp))
+        }
+    }
+
+    /** Sí o no: el nombre, una línea pequeña de qué hace, y el interruptor (algo menor que el de serie). */
+    @Composable
+    private fun Interruptor(nombre: String, nota: String?, puesto: Boolean, onCambio: (Boolean) -> Unit) {
+        Row(
+            Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                .clickable { onCambio(!puesto) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(nombre, style = MaterialTheme.typography.bodyMedium)
+                if (nota != null) Text(nota, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
+            }
+            androidx.compose.material3.Switch(
+                checked = puesto, onCheckedChange = onCambio,
+                modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
+            )
+        }
+    }
+
+    /** Una fila que abre algo: el nombre, lo que hay puesto y una flechita. */
+    @Composable
+    private fun Fila(nombre: String, valor: String?, onToque: () -> Unit) {
+        Row(
+            Modifier.fillMaxWidth().height(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).clickable(onClick = onToque),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if (valor != null) Text(valor, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
+            Text("  ›", color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f))
+        }
+    }
+
+    /** Un − y un + con el nombre y cuánto hay (en tercios de columna), para el espacio de un lado. */
+    @Composable
+    private fun MasMenos(nombre: String, valor: Int, columna: Int?, onMenos: () -> Unit, onMas: () -> Unit) {
+        val pasos = columna?.let { c -> Math.round(valor.toFloat() / com.forge.pixpin.motor.Lectura.pasoDeEspacio(c)) } ?: 0
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(nombre, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
+            IconButton(onClick = onMenos, modifier = Modifier.size(34.dp)) { Icon(Icons.Filled.Remove, contentDescription = "Menos espacio a la ${nombre.lowercase()}", modifier = Modifier.size(18.dp)) }
+            Text("$pasos", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            IconButton(onClick = onMas, modifier = Modifier.size(34.dp)) { Icon(Icons.Filled.Add, contentDescription = "Más espacio a la ${nombre.lowercase()}", modifier = Modifier.size(18.dp)) }
+        }
+    }
+
+    /** Un botón que hace algo, solo texto, con el tamaño justo. */
+    @Composable
+    private fun BotonDeTexto(texto: String, onToque: () -> Unit) {
+        androidx.compose.material3.TextButton(onClick = onToque, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+            Text(texto, color = androidx.compose.ui.graphics.Color(0xFF8AB4F8), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+
+    /**
+     * **Los mandos de los lados**, abajo y pequeños, con la pastilla (23-sep-2026, pedido por el
+     * usuario: «un botón en cada lado para añadir espacio, y el del bloqueo, nada más»): a la
+     * izquierda, espacio a la izquierda; en medio, el candado del desplazamiento de lado; a la
+     * derecha, espacio a la derecha.
+     */
+    @Composable
+    private fun MandosDeLosLados(modifier: Modifier) {
+        val fondo = androidx.compose.ui.graphics.Color(0x8C14182B)
+        val blanco = androidx.compose.ui.graphics.Color.White
+        @Composable
+        fun Boton(descripcion: String, onToque: () -> Unit, contenido: @Composable () -> Unit) {
+            Row(
+                Modifier.height(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(fondo)
+                    .clickable(onClickLabel = descripcion, onClick = onToque).padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) { contenido() }
+        }
+        Row(
+            modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Boton("Más espacio a la izquierda", { anadirEspacio(izquierda = true) }) {
+                Text("⟵", color = blanco); Icon(Icons.Filled.Add, contentDescription = null, tint = blanco, modifier = Modifier.size(16.dp))
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            Boton(if (sinLado) "Desbloquear el desplazamiento de lado" else "Bloquear el desplazamiento de lado", {
+                sinLado = !sinLado
+                prefsDeLectura.edit().putBoolean("sinLado", sinLado).apply()
+                Toast.makeText(this@VisorHtmlActivity, if (sinLado) "De lado, bloqueado: solo sube y baja" else "Se mueve a todas partes", Toast.LENGTH_SHORT).show()
+            }) {
+                Icon(if (sinLado) Icons.Filled.Lock else Icons.Filled.LockOpen, contentDescription = null, tint = if (sinLado) androidx.compose.ui.graphics.Color(0xFFFFC440) else blanco, modifier = Modifier.size(16.dp))
+                Text(" ⟷", color = blanco)
+            }
+            androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            Boton("Más espacio a la derecha", { anadirEspacio(izquierda = false) }) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = blanco, modifier = Modifier.size(16.dp)); Text("⟶", color = blanco)
             }
         }
     }
@@ -1773,7 +2002,8 @@ class VisorHtmlActivity : ComponentActivity() {
      * está aquí encendido está apagado. Ver el porqué en la documentación de la clase.
      */
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
-    private fun nuevoWeb(contexto: Context, pagina: File): WebView = WebView(contexto).apply {
+    private fun nuevoWeb(contexto: Context, pagina: File): WebView = WebDelDocumento(contexto).apply {
+        conBloqueo = { esDocumento && sinLado && !anotando }
         // Un Word o un libro convertidos aquí no traen guiones —se les quitan al convertir—, y el
         // nuestro hace falta para medir los bloques al exportar. Ver [medirElDocumento].
         settings.javaScriptEnabled = !sinGuion || esDocumento
@@ -1789,7 +2019,7 @@ class VisorHtmlActivity : ComponentActivity() {
         // Un plano exportado se mira acercándose: el pellizco, sin los botones de + y −.
         settings.builtInZoomControls = !esDocumento
         settings.displayZoomControls = false
-        // El aumento del `WebView` solo lo usamos nosotros, para [ponerLaVistaEntera]: los dos dedos no le llegan.
+        // Leyendo, el aumento es el del `WebView` y los dos dedos le llegan. Ver [pellizcoDelDocumento].
         if (esDocumento) { settings.setSupportZoom(true); settings.builtInZoomControls = true }
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
@@ -1811,14 +2041,12 @@ class VisorHtmlActivity : ComponentActivity() {
         var seMovio = false
         setOnTouchListener { _, e ->
             when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false; corridoAlPosar = scrollX }
+                android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false }
                 android.view.MotionEvent.ACTION_MOVE ->
                     if (!seMovio && (kotlin.math.abs(e.x - x0) > margen || kotlin.math.abs(e.y - y0) > margen)) { seMovio = true; movidasDeLaPagina++ }
-                android.view.MotionEvent.ACTION_UP -> {
-                    if (!seMovio) toquesEnLaPagina++
-                    // Un respiro, por si la página sigue con la inercia del gesto; luego, el imán.
-                    else postDelayed({ encajarEnElCentro() }, 140)
-                }
+                // Leyendo, **donde se deja el documento, ahí se queda** (23-sep-2026): el imán que
+                // lo devolvía al centro al soltar se fue con el zoom libre.
+                android.view.MotionEvent.ACTION_UP -> if (!seMovio) toquesEnLaPagina++
             }
             false
         }
@@ -1942,5 +2170,35 @@ class VisorHtmlActivity : ComponentActivity() {
             }.isSuccess
             if (!salio) Toast.makeText(this@VisorHtmlActivity, getString(R.string.visor_html_no_compartir), Toast.LENGTH_SHORT).show()
         }
+    }
+}
+
+/**
+ * **El `WebView` de un documento, con el lado bloqueable** (23-sep-2026, pedido por el usuario:
+ * «bloquear el desplazamiento horizontal: donde lo deje ahí se quede»).
+ *
+ * Con [conBloqueo] a verdad, al `WebView` le llega el dedo **siempre en la misma columna**: la
+ * de cuando se posó. Así solo ve movimiento de arriba abajo, y ni desplaza ni lanza de lado.
+ * Con dos dedos pasa todo tal cual —ampliar y alejar siguen igual—, y al levantar uno la
+ * columna pasa a ser la del dedo que queda, para que el documento no pegue un salto.
+ */
+@SuppressLint("ViewConstructor")
+private class WebDelDocumento(contexto: Context) : WebView(contexto) {
+    var conBloqueo: () -> Boolean = { false }
+    private var columna = 0f
+
+    override fun dispatchTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (!conBloqueo()) return super.dispatchTouchEvent(e)
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> columna = e.x
+            android.view.MotionEvent.ACTION_POINTER_UP -> if (e.pointerCount == 2) columna = e.getX(1 - e.actionIndex)
+        }
+        if (e.pointerCount > 1) return super.dispatchTouchEvent(e)
+        val fijo = android.view.MotionEvent.obtain(
+            e.downTime, e.eventTime, e.action, columna, e.y, e.pressure, e.size,
+            e.metaState, e.xPrecision, e.yPrecision, e.deviceId, e.edgeFlags
+        )
+        fijo.source = e.source
+        return try { super.dispatchTouchEvent(fijo) } finally { fijo.recycle() }
     }
 }

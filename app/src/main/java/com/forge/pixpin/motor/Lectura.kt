@@ -59,7 +59,16 @@ object Lectura {
     /** Lo que mide el documento entero con sus dos márgenes: la columna y dos tercios a cada lado. */
     fun anchoConMargenes(columna: Int): Int = columna + 2 * margenDe(columna)
 
-    fun estilo(grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null): String {
+    /**
+     * **Espacio a un lado, a gusto** (23-sep-2026, pedido por el usuario: «un botón en cada lado
+     * para añadir espacio a la derecha o a la izquierda, según como quiera»). Cada toque abre un
+     * tercio de la columna; no más de dos columnas por lado, que el papel no sea infinito.
+     */
+    fun pasoDeEspacio(columna: Int): Int = (columna / 3).coerceAtLeast(40)
+
+    fun espacioValido(espacio: Int, columna: Int): Int = espacio.coerceIn(0, columna * 2)
+
+    fun estilo(grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null, izq: Int? = null, der: Int? = null): String {
         val peso = GROSORES.getOrElse(grosor) { GROSORES[1] }.first
         val familia = LETRAS.getOrElse(letra) { LETRAS[0] }.first
         val titulos = maxOf(peso, 700)
@@ -70,9 +79,12 @@ object Lectura {
             // «el ancho de la pantalla», para que girar el aparato no recoloque el texto bajo lo
             // anotado— y a cada lado se abre un margen en blanco donde escribir.
             (columna?.let {
-                "html{width:${anchoConMargenes(it)}px !important;overflow-x:auto !important}" +
+                // Cada lado con el suyo: los dos tercios de siempre si no se dice otra cosa.
+                val i = izq ?: margenDe(it)
+                val d = der ?: margenDe(it)
+                "html{width:${it + i + d}px !important;overflow-x:auto !important}" +
                     "body{box-sizing:border-box !important;width:${it}px !important;max-width:none !important;" +
-                    "margin-left:${margenDe(it)}px !important;margin-right:${margenDe(it)}px !important}" +
+                    "margin-left:${i}px !important;margin-right:${d}px !important}" +
                     // **Las tablas anchas, enteras** (22-sep-2026, pedido por el usuario). Leyendo,
                     // una tabla más ancha que la columna va en una caja con su propio scroll de
                     // lado (`.tabla{overflow-x:auto}` en [DocxAHtml]): se ve un trozo y se corre
@@ -82,7 +94,7 @@ object Lectura {
                     // extiende hacia el margen de la derecha —hasta la columna más ese margen,
                     // que es lo que hay de papel—; más ancha, envuelve el texto de sus celdas.
                     ".tabla{overflow:visible !important}" +
-                    "table{max-width:${it + margenDe(it)}px !important}"
+                    "table{max-width:${it + (der ?: margenDe(it))}px !important}"
             } ?: "") +
             // **El papel, decidido aquí y no por la página**: claro u oscuro según el aparato, sin
             // dejarlo a lo que el visor entienda por «modo oscuro». La tinta de lo anotado se elige
@@ -96,10 +108,10 @@ object Lectura {
     }
 
     /** La página con el estilo puesto (y sin el que tuviera de antes): justo antes de `</head>`. */
-    fun conEstilo(pagina: String, grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null): String {
+    fun conEstilo(pagina: String, grosor: Int, letra: Int, columna: Int? = null, oscuro: Boolean? = null, izq: Int? = null, der: Int? = null): String {
         val limpia = pagina.replace(Regex("<style id=\"$ID_DEL_ESTILO\">.*?</style>", RegexOption.DOT_MATCHES_ALL), "")
         val i = limpia.indexOf("</head>", ignoreCase = true)
-        val hoja = estilo(grosor, letra, columna, oscuro)
+        val hoja = estilo(grosor, letra, columna, oscuro, izq, der)
         return if (i < 0) hoja + limpia else limpia.substring(0, i) + hoja + limpia.substring(i)
     }
 

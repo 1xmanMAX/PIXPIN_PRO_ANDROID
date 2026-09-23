@@ -92,7 +92,9 @@ object ExportarHtml {
             val margen: Int,
             val tops: List<Double>,
             val letra: Double,
-            fondo: String
+            fondo: String,
+            /** El espacio de la derecha, si no es igual al de la izquierda ([margen]). */
+            val margenDerecho: Int = margen
         ) : HojaWeb(nombre, fondo)
         /**
          * **Una tabla con fórmulas.** Viaja lo escrito —el JSON de [TablaDeCalculo]— y la
@@ -327,10 +329,11 @@ object ExportarHtml {
                     is HojaWeb.Documento -> {
                         append("<div class=\"doc-caja\" data-columna=\"").append(hoja.columna)
                         append("\" data-margen=\"").append(hoja.margen)
+                        append("\" data-derecho=\"").append(hoja.margenDerecho)
                         append("\" data-letra=\"").append(hoja.letra)
                         append("\" data-bloques=\"").append(DocumentoAnotado.SELECTOR)
                         append("\" data-tops=\"").append(hoja.tops.joinToString(",") { (Math.round(it * 10) / 10.0).toString() })
-                        append("\" style=\"width:").append(hoja.columna + 2 * hoja.margen).append("px\">")
+                        append("\" style=\"width:").append(hoja.columna + hoja.margen + hoja.margenDerecho).append("px\">")
                         append("<article class=\"doc\" style=\"width:").append(hoja.columna)
                         append("px;margin-left:").append(hoja.margen).append("px;font-size:").append(hoja.letra).append("px\">")
                         append(hoja.cuerpo).append("</article>").append(hoja.capa)
@@ -1689,8 +1692,8 @@ function crearNota(d){
   function encajarDoc(){
     // Se abre **viendo el texto de borde a borde**, como en la aplicación, con lo anotado a los
     // lados a un gesto; en una pantalla donde cabe todo, entero y a su tamaño.
-    var col=+caja.dataset.columna, m=+caja.dataset.margen, cw=d.clientWidth||col;
-    z=1; poner(16*(cw>=col+2*m?1:Math.min(Math.max(cw/col,0.3),1.25)));
+    var col=+caja.dataset.columna, m=+caja.dataset.margen, md=+(caja.dataset.derecho||m), cw=d.clientWidth||col;
+    z=1; poner(16*(cw>=col+m+md?1:Math.min(Math.max(cw/col,0.3),1.25)));
     d.scrollLeft=Math.max(0,m*z-Math.max(0,(cw-col*z)/2)); d.scrollTop=0;
   }
   if(esDoc){
