@@ -12,6 +12,11 @@ name: APK de prueba
 # Solo a mano (pestaña Actions → «APK de prueba» → Run workflow): empujar código no compila nada.
 on:
   workflow_dispatch:
+    inputs:
+      rapido:
+        description: "Sin R8 (-Prapido): compila antes; el APK pesa más"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -62,7 +67,7 @@ jobs:
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 SHA256
 
       - name: Compilar
-        run: ./gradlew :app:assembleRelease --stacktrace
+        run: ./gradlew :app:assembleRelease --stacktrace ${{ inputs.rapido && '-Prapido' || '' }}
 
       - name: Firmar para repartir
         run: |
