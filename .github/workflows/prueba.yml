@@ -5,8 +5,9 @@
 # firma v1 que pide el instalador de archivos descargados) y lo publica como
 # `v<versión>-prueba`, igual que las anteriores. Se lanza solo a mano, desde la pestaña Actions.
 #
-# La clave: ver el paso «Clave de depuración». Sin el secreto CLAVE_DE_DEPURACION, el APK sale
-# firmado con una clave nueva y no se instala encima del que ya hay en el teléfono.
+# La clave: ver el paso «Clave de depuración». Con el secreto CLAVE_DE_DEPURACION firma con esa;
+# sin él, con `herramientas/pixpin-prueba.keystore`, que es fija: cada versión de prueba se instala
+# encima de la anterior.
 name: APK de prueba
 
 # Solo a mano (pestaña Actions → «APK de prueba» → Run workflow): empujar código no compila nada.
@@ -48,8 +49,8 @@ jobs:
       # **La clave con la que se firma.** Para que el APK se instale encima del que ya hay en el
       # teléfono tiene que ser la misma de siempre: la `debug.keystore` del ordenador donde se
       # compilaban las anteriores (SHA-256 05554faf…). Se guarda en el secreto
-      # CLAVE_DE_DEPURACION, en base64. Sin el secreto se crea una nueva, y ese APK solo se
-      # instala desinstalando antes PixPin.
+      # CLAVE_DE_DEPURACION, en base64. Sin el secreto se usa la clave de prueba del repositorio
+      # (SHA-256 72a69d9e…), fija, para que las versiones de prueba se actualicen entre sí.
       - name: Clave de depuración
         env:
           CLAVE: ${{ secrets.CLAVE_DE_DEPURACION }}
@@ -59,10 +60,11 @@ jobs:
             echo "$CLAVE" | base64 -d > ~/.android/debug.keystore
             echo "Firmando con la clave de siempre."
           else
-            echo "::warning::Sin el secreto CLAVE_DE_DEPURACION: clave nueva, el APK no se instalará encima del que ya hay."
-            keytool -genkeypair -v -keystore ~/.android/debug.keystore \
-              -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 \
-              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            # **La clave de prueba del repositorio** (24-sep-2026): sin secreto se creaba una clave
+            # nueva en cada compilación y ninguna versión se instalaba encima de la anterior. Esta
+            # es siempre la misma, así que las de prueba se actualizan unas a otras.
+            cp herramientas/pixpin-prueba.keystore ~/.android/debug.keystore
+            echo "Firmando con la clave de prueba del repositorio (herramientas/pixpin-prueba.keystore)."
           fi
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 SHA256
 
