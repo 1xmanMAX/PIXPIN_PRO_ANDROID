@@ -5,4 +5,16 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
+
+    <!--
+        **Una hoja que sube desde abajo** (24-sep-2026): las mini apps del chat ya no tapan la
+        pantalla entera; la ventana es transparente y la tarjeta la dibuja Compose, con el chat
+        a la vista detrás. Sin animación de ventana: la de subir y bajar la hace la tarjeta.
+    -->
+    <style name="Theme.PixPin.Hoja" parent="Theme.PixPin">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
 </resources>

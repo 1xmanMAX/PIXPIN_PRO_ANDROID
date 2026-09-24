@@ -6,6 +6,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,12 +20,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Checkbox
@@ -26,7 +31,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -54,7 +58,7 @@ import kotlinx.coroutines.withContext
 /**
  * La pantalla de una mini-aplicación: la lista de tareas, los gastos.
  *
- * ## Por qué es una pantalla y no una burbuja que se edita en el sitio
+ * ## Por qué es una tarjeta aparte y no una burbuja que se edita en el sitio
  *
  * Porque se escribe. Editar dentro de la conversación obliga a convivir con el teclado, la
  * lista desplazándose y el campo de escribir de abajo, que es otro sitio donde escribir a
@@ -111,55 +115,115 @@ class MiniActivity : ComponentActivity() {
 
         val doc = documento
         val app = cual
-        Scaffold(
-            topBar = {
-                // **Con el hueco de la barra de estado.**
-                //
-                // Desde Android 15 la ventana va de borde a borde por defecto, así que
-                // sin esto el título quedaba **debajo del reloj y la batería**: se veían
-                // encima las letras del sistema. `TopAppBar` lo hace solo, pero esta
-                // barra es a mano, y lo hecho a mano tiene que pedir su hueco.
-                Surface(shadowElevation = 2.dp) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { finish() }) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = getString(R.string.cd_close)
+
+        // **Una tarjeta que sube desde abajo, no una pantalla** (24-sep-2026). Lo pidió el
+        // usuario: que la mini app salga de abajo sin ponerse en pantalla completa, y que se
+        // pueda ocultar para volver al chat, que se sigue viendo detrás. Se cierra con la X,
+        // tocando fuera, bajando el asa o con atrás; lo escrito ya está guardado (ver arriba).
+        val estado = remember { androidx.compose.animation.core.MutableTransitionState(false).apply { targetState = true } }
+        fun cerrar() { estado.targetState = false }
+        androidx.activity.compose.BackHandler { cerrar() }
+        androidx.compose.runtime.LaunchedEffect(estado.currentState, estado.isIdle) {
+            if (estado.isIdle && !estado.currentState && !estado.targetState) finish()
+        }
+        var arrastre by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+            androidx.compose.animation.AnimatedVisibility(
+                visibleState = estado,
+                enter = androidx.compose.animation.fadeIn(),
+                exit = androidx.compose.animation.fadeOut()
+            ) {
+                // El velo: oscurece el chat y, tocado, cierra la tarjeta.
+                androidx.compose.foundation.layout.Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color(0x66000000))
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) { cerrar() }
+                )
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visibleState = estado,
+                modifier = Modifier.align(Alignment.BottomCenter),
+                enter = androidx.compose.animation.slideInVertically { it },
+                exit = androidx.compose.animation.slideOutVertically { it }
+            ) {
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    tonalElevation = 2.dp,
+                    shadowElevation = 12.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.72f)
+                        .offset { androidx.compose.ui.unit.IntOffset(0, arrastre.toInt().coerceAtLeast(0)) }
+                        .imePadding()
+                ) {
+                    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
+                        // El asa: arrastrándola hacia abajo un buen trecho, la tarjeta se oculta.
+                        androidx.compose.foundation.layout.Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = {
+                                            if (arrastre > 120.dp.toPx()) cerrar()
+                                            arrastre = 0f
+                                        },
+                                        onDragCancel = { arrastre = 0f }
+                                    ) { cambio, dy ->
+                                        cambio.consume()
+                                        arrastre = (arrastre + dy).coerceAtLeast(0f)
+                                    }
+                                }
+                                .padding(top = 10.dp, bottom = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                Modifier
+                                    .size(width = 36.dp, height = 4.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
                             )
                         }
-                        // El título se edita aquí mismo: es una línea, y mandarla a un
-                        // diálogo aparte para cambiar una palabra sería más trabajo que
-                        // el que uno viene a hacer.
-                        TextField(
-                            value = doc?.let { Cabecera.titulo(it) }.orEmpty(),
-                            onValueChange = { nuevo ->
-                                val actual = doc ?: return@TextField
-                                guardar(Cabecera.linea(nuevo) + Cabecera.cuerpo(actual))
-                            },
-                            singleLine = true,
-                            placeholder = { Text(getString(R.string.miniapp_titulo_nuevo)) },
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // El título se edita aquí mismo: es una línea, y mandarla a un
+                            // diálogo aparte para cambiar una palabra sería más trabajo que
+                            // el que uno viene a hacer.
+                            TextField(
+                                value = doc?.let { Cabecera.titulo(it) }.orEmpty(),
+                                onValueChange = { nuevo ->
+                                    val actual = doc ?: return@TextField
+                                    guardar(Cabecera.linea(nuevo) + Cabecera.cuerpo(actual))
+                                },
+                                singleLine = true,
+                                placeholder = { Text(getString(R.string.miniapp_titulo_nuevo)) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { cerrar() }) {
+                                Icon(Icons.Filled.Close, contentDescription = getString(R.string.cd_close))
+                            }
+                        }
+                        HorizontalDivider()
+                        if (doc != null && app != null) {
+                            Column(Modifier.fillMaxWidth().weight(1f)) {
+                                when (app) {
+                                    MiniApp.TAREAS -> DeTareas(doc, ::guardar)
+                                    MiniApp.GASTOS -> DeGastos(doc, ::guardar)
+                                    MiniApp.CRONOMETRO -> DeCronometro(doc, ::guardar)
+                                    MiniApp.TEMPORIZADOR -> DeTemporizador(id, doc, ::guardar)
+                                    MiniApp.ALARMA -> DeAlarma(id, doc, ::guardar)
+                                    MiniApp.CONTADOR -> DeContador(doc, ::guardar)
+                                    MiniApp.RULETA -> DeRuleta(doc, ::guardar)
+                                }
+                            }
+                        }
                     }
-                }
-            }
-        ) { hueco ->
-            if (doc == null || app == null) return@Scaffold
-            Column(Modifier.fillMaxSize().padding(hueco)) {
-                when (app) {
-                    MiniApp.TAREAS -> DeTareas(doc, ::guardar)
-                    MiniApp.GASTOS -> DeGastos(doc, ::guardar)
-                    MiniApp.CRONOMETRO -> DeCronometro(doc, ::guardar)
-                    MiniApp.TEMPORIZADOR -> DeTemporizador(id, doc, ::guardar)
-                    MiniApp.ALARMA -> DeAlarma(id, doc, ::guardar)
-                    MiniApp.CONTADOR -> DeContador(doc, ::guardar)
-                    MiniApp.RULETA -> DeRuleta(doc, ::guardar)
                 }
             }
         }

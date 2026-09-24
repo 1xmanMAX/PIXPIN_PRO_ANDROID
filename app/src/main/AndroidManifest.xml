@@ -497,6 +497,7 @@
         <activity
             android:name=".mini.MiniActivity"
             android:exported="false"
+            android:theme="@style/Theme.PixPin.Hoja"
             android:windowSoftInputMode="adjustResize" />
 
         <!--

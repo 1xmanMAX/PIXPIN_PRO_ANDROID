@@ -1,6 +1,5 @@
 package com.forge.pixpin
 
-import androidx.compose.material.icons.filled.TableChart
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -38,7 +37,6 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -412,32 +410,8 @@ fun TarjetaDeConfiguracion(
             // deslizada de aquí. Queda la puerta a los ajustes, que sigue siendo otra
             // pantalla porque son cuarenta interruptores y no una tarjeta.
             Row(Modifier.fillMaxWidth()) {
-                // **El croquis en el espacio, desde aquí.** Es una aplicación aparte —otra
-                // forma de dibujar, no una herramienta más del lienzo— así que necesita su
-                // propia puerta, y esta tarjeta es la portada.
-                TextButton(
-                    onClick = {
-                        com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(context)
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Filled.ViewInAr, contentDescription = null, Modifier.size(18.dp))
-                    Text(
-                        stringResource(R.string.croquis_titulo),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-                // **Las tablas con fórmulas**, la otra aplicación aparte. Ver [TablaActivity].
-                TextButton(
-                    onClick = { com.forge.pixpin.tabla.TablaActivity.abrir(context) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Filled.TableChart, contentDescription = null, Modifier.size(18.dp))
-                    Text(
-                        stringResource(R.string.tablas_titulo),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
+                // **Sin Croquis 3D ni Tablas aquí** (24-sep-2026): los pidió quitar el usuario porque
+                // se repiten más abajo, en los botones de cada proyecto, y solo ocupaban sitio.
                 TextButton(onClick = onAjustes, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Filled.Tune, contentDescription = null, Modifier.size(18.dp))
                     Text(
