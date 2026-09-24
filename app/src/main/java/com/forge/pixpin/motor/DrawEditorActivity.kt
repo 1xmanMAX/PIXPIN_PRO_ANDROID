@@ -132,6 +132,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -644,6 +645,16 @@ class DrawEditorActivity : ComponentActivity() {
      * y no del dibujo, **al hacer zoom resbalaba** sobre lo dibujado. Ver [CapaDeMarcas].
      */
     private var origenDelLienzo by mutableStateOf(Offset.Zero)
+
+    /**
+     * **El encuadre con el que se pintó el lienzo la última vez** (24-sep-2026). Es el aviso a la
+     * capa de marcadores de que la vista ha cambiado, venga de donde venga: ir a un marcador, el
+     * 100 %, pasar de hoja, encuadrar… Cada uno avisaba al lienzo por su lado, y la capa solo se
+     * enteraba de los gestos: al tocar un marcador la vista saltaba y **el anterior se quedaba
+     * pintado donde estaba en la pantalla**, encima de la zona nueva, hasta el siguiente toque.
+     * Se apunta al pintar el lienzo, así que si el lienzo se ve movido, los marcadores también.
+     */
+    private var vistaPintada by mutableStateOf(Viewport())
 
     /** Lo que ocupa el panel lateral de estilo, para que el riel no se le meta debajo. */
     private var anchoDelPanelLateral by mutableIntStateOf(0)
@@ -1547,6 +1558,11 @@ class DrawEditorActivity : ComponentActivity() {
                     // Lo que mide de verdad este lienzo en su columna: es con lo que se encuadra.
                     .onSizeChanged { medidaDelLienzo = it }
                     .onGloballyPositioned { origenDelLienzo = it.positionInWindow() }
+                    .drawWithContent {
+                        drawContent()
+                        val v = controller.scene.viewport
+                        if (v != vistaPintada) vistaPintada = v
+                    }
                     .then(if (comoCielo) Modifier else Modifier.background(Color(android.graphics.Color.parseColor(papel))))
                     // **Dos dedos deshacen.** Sobre un texto marcado, dos dedos lo abren para
                     // escribir, que es lo que hacían antes.
@@ -2864,6 +2880,7 @@ class DrawEditorActivity : ComponentActivity() {
                         Modifier
                             .offset {
                                 @Suppress("UNUSED_EXPRESSION") pulsoDeLaVista.intValue
+                                @Suppress("UNUSED_EXPRESSION") vistaPintada
                                 val donde = enElLienzoAhora(m)
                                 val radio = 18.dp.toPx()
                                 // **Solo dentro del lienzo**: lo que cae fuera se aparta del todo en
