@@ -64,6 +64,31 @@ object EsquivaDeCamara {
         return izq.coerceAtLeast(0f) to der.coerceAtLeast(0f)
     }
 
+    /**
+     * **Por dónde apartar [caja] de las cámaras que pisa, cueste lo que menos** (24-sep-2026).
+     *
+     * Para lo que flota en una esquina o en un canto —el candado, la bolita, el panel del lado, el
+     * riel—, que antes no esquivaba nada: con la cámara en una esquina, o en el canto al poner el
+     * teléfono de lado, quedaban debajo. Para cada cámara que pisa se mira apartarse **hacia
+     * dentro de la pantalla**, de lado o de alto, y se queda lo más corto. Devuelve los márgenes
+     * que hay que añadir: izquierda, arriba, derecha, abajo.
+     */
+    fun empuje(caja: Rect, camaras: List<Rect>, ancho: Float, alto: Float): FloatArray {
+        val m = FloatArray(4)
+        for (c in camaras) {
+            val cerca = Rect(c.left - HOLGURA, c.top - HOLGURA, c.right + HOLGURA, c.bottom + HOLGURA)
+            if (!caja.overlaps(cerca)) continue
+            // De lado: hacia el centro de la pantalla. De alto: igual.
+            val deLado = if (c.center.x < ancho / 2) 0 to (c.right - caja.left + HOLGURA)
+            else 2 to (caja.right - c.left + HOLGURA)
+            val deAlto = if (c.center.y < alto / 2) 1 to (c.bottom - caja.top + HOLGURA)
+            else 3 to (caja.bottom - c.top + HOLGURA)
+            val (lado, cuanto) = if (deLado.second <= deAlto.second) deLado else deAlto
+            m[lado] = max(m[lado], cuanto)
+        }
+        return m
+    }
+
     /** Cuánto hay que bajar [caja] para que no pise ninguna cámara. */
     fun bajada(caja: Rect, camaras: List<Rect>): Float {
         var b = 0f
@@ -104,8 +129,12 @@ fun rememberCamaras(): List<Rect> {
     val d = LocalDensity.current
     val arriba = WindowInsets.displayCutout.getTop(d)
     val izquierda = WindowInsets.displayCutout.getLeft(d, androidx.compose.ui.unit.LayoutDirection.Ltr)
+    // **Y los otros dos cantos** (24-sep-2026): de lado con la cámara a la derecha, o boca abajo,
+    // arriba e izquierda valen cero igual que antes de girar y se quedaban las cámaras de antes.
+    val derecha = WindowInsets.displayCutout.getRight(d, androidx.compose.ui.unit.LayoutDirection.Ltr)
+    val abajo = WindowInsets.displayCutout.getBottom(d)
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return emptyList()
-    return remember(vista, arriba, izquierda) {
+    return remember(vista, arriba, izquierda, derecha, abajo) {
         vista.rootWindowInsets?.displayCutout?.boundingRects.orEmpty().map {
             Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat())
         }
@@ -123,6 +152,22 @@ fun Modifier.apartarDeLaCamara(): Modifier = composed {
     this
         .onGloballyPositioned { caja = it.boundsInWindow() }
         .padding(start = (izq / d).dp, end = (der / d).dp)
+}
+
+/**
+ * **Aparta de la cámara lo que flota en una esquina o en un canto**, por el lado que menos cueste.
+ * Va justo después del `align`, para medir el sitio entero que ocupa. Ver [EsquivaDeCamara.empuje].
+ */
+fun Modifier.esquivarLaCamara(): Modifier = composed {
+    val camaras = rememberCamaras()
+    if (camaras.isEmpty()) return@composed this
+    val vista = LocalView.current
+    var caja by remember { mutableStateOf<Rect?>(null) }
+    val d = LocalDensity.current.density
+    val m = caja?.let { EsquivaDeCamara.empuje(it, camaras, vista.width.toFloat(), vista.height.toFloat()) } ?: FloatArray(4)
+    this
+        .onGloballyPositioned { caja = it.boundsInWindow() }
+        .padding(start = (m[0] / d).dp, top = (m[1] / d).dp, end = (m[2] / d).dp, bottom = (m[3] / d).dp)
 }
 
 /** Baja lo que va centrado si pisa una cámara. Ver [EsquivaDeCamara.bajada]. */

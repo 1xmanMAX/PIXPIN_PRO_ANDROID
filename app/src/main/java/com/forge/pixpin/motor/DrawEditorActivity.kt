@@ -2,6 +2,9 @@ package com.forge.pixpin.motor
 
 import com.forge.pixpin.ui.theme.bajarSiTocaLaCamara
 import com.forge.pixpin.ui.theme.apartarDeLaCamara
+import com.forge.pixpin.ui.theme.esquivarLaCamara
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -1749,6 +1752,7 @@ class DrawEditorActivity : ComponentActivity() {
                     marcas.size, { i -> marcas[i].emoji },
                     Modifier
                         .align(Alignment.CenterEnd)
+                        .esquivarLaCamara()
                         .padding(end = if (zurdo) with(LocalDensity.current) { anchoDelPanelLateral.toDp() } else 0.dp)
                 ) { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } }
             }
@@ -1786,6 +1790,7 @@ class DrawEditorActivity : ComponentActivity() {
                     alAbrir = { mandoAbierto = true },
                     modifier = Modifier
                         .align(if (zurdo) Alignment.BottomStart else Alignment.BottomEnd)
+                        .esquivarLaCamara()
                         .padding(18.dp)
                 )
             }
@@ -1813,6 +1818,7 @@ class DrawEditorActivity : ComponentActivity() {
                         alAbrir = { mandoAbierto = true },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
+                            .esquivarLaCamara()
                             .padding(
                                 end = 14.dp,
                                 bottom = with(LocalDensity.current) {
@@ -1968,6 +1974,7 @@ class DrawEditorActivity : ComponentActivity() {
                     Isla(
                         Modifier
                             .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
+                            .esquivarLaCamara()
                             .padding(horizontal = 8.dp)
                             .padding(top = BAJO_LA_BARRA)
                             .onSizeChanged { anchoDeLaIslaDeLoMarcado = it.width }
@@ -1989,6 +1996,7 @@ class DrawEditorActivity : ComponentActivity() {
                     Isla(
                         Modifier
                             .align(if (zurdo) Alignment.TopEnd else Alignment.TopStart)
+                            .esquivarLaCamara()
                             .padding(horizontal = 8.dp)
                             .padding(top = BAJO_LA_BARRA)
                             .onSizeChanged { anchoDeLaIslaDeHojas = it.width }
@@ -2014,6 +2022,7 @@ class DrawEditorActivity : ComponentActivity() {
                     Isla(
                         Modifier
                             .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
+                            .esquivarLaCamara()
                             .padding(horizontal = 8.dp)
                             .padding(top = BAJO_LA_BARRA + ALTO_DE_UNA_ISLA)
                     ) {
@@ -2041,6 +2050,8 @@ class DrawEditorActivity : ComponentActivity() {
                 Column(
                     Modifier
                         .align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart)
+                        // Lejos de la cámara cuando cae en este canto (de lado). Ver [esquivarLaCamara].
+                        .esquivarLaCamara()
                         // Lo que ocupa: es lo que tiene que apartarse el riel de marcadores
                         // cuando los dos caen en el mismo canto.
                         .onSizeChanged { if (it.width != anchoDelPanelLateral) anchoDelPanelLateral = it.width },
@@ -2258,6 +2269,7 @@ class DrawEditorActivity : ComponentActivity() {
                     Isla(
                         Modifier
                             .align(if (zurdo) Alignment.CenterStart else Alignment.CenterEnd)
+                            .esquivarLaCamara()
                             // Igual que el panel de estilo: separada del canto y
                             // fuera del gesto de «atrás» de Android, que si no se
                             // queda el arrastre y cierra el editor.
@@ -2499,6 +2511,7 @@ class DrawEditorActivity : ComponentActivity() {
                     onZoom = { zoomBloqueado = !zoomBloqueado },
                     modifier = Modifier
                         .align(if (zurdo) Alignment.TopStart else Alignment.TopEnd)
+                        .esquivarLaCamara()
                         .padding(top = 18.dp, start = 14.dp, end = 14.dp)
                 )
             }
@@ -2577,8 +2590,6 @@ class DrawEditorActivity : ComponentActivity() {
                     detalleDelProyecto = detalle.second,
                     cuadricula = cuadricula,
                     onCuadricula = { cuadricula = it; cambiado() },
-                    zoomBloqueado = zoomBloqueado,
-                    onZoomBloqueado = { zoomBloqueado = it },
                     modoDedo = controller.modoDedo,
                     onModoDedo = { controller.modoDedo = it; cambiado() },
                     // **Las dos maneras de traer un plano**, y solo cuando hay uno debajo.
@@ -2847,6 +2858,23 @@ class DrawEditorActivity : ComponentActivity() {
         fun desfase() = origenDelLienzo - origenDeLaCapa
         // Lo que se está arrastrando, en píxeles **del lienzo**: mientras dura, manda esto y no el punto.
         var arrastrando by remember { mutableStateOf<Pair<Long, Offset>?>(null) }
+        val vibrar = androidx.compose.ui.platform.LocalHapticFeedback.current
+        // La que se ha mantenido pulsada sin moverla: se pregunta antes de quitarla.
+        var quitandoMarca by remember { mutableStateOf<com.forge.pixpin.motor.Marca?>(null) }
+        quitandoMarca?.let { q ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { quitandoMarca = null },
+                title = { Text("¿Quitar el marcador ${q.emoji}?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        marcas = com.forge.pixpin.motor.Marcas.sin(marcas, q.id)
+                        guardarLasMarcas()
+                        quitandoMarca = null
+                    }) { Text("Quitar") }
+                },
+                dismissButton = { TextButton(onClick = { quitandoMarca = null }) { Text("Cancelar") } }
+            )
+        }
         // Dónde cae ahora mismo, en el lienzo: se pregunta **al colocar**, leyendo el encuadre de
         // verdad. El pulso solo sirve para que se vuelva a colocar mientras el dedo mueve el
         // dibujo; sin él, esto se quedaba con el encuadre de la última recomposición.
@@ -2898,35 +2926,57 @@ class DrawEditorActivity : ComponentActivity() {
                             .size(36.dp)
                             .clip(androidx.compose.foundation.shape.CircleShape)
                             .background(Color(0xCC14182B))
-                            // **Solo se mueve con la herramienta de selección** (21-sep-2026):
-                            // dibujando, el dedo que pasaba por encima se lo llevaba puesto. Con
-                            // cualquier otra herramienta un toque va a su sitio y ya.
-                            .then(if (controller.tool != Tool.SELECTION) Modifier else Modifier.pointerInput(m.id) {
-                                detectDragGestures(
-                                    onDragStart = { arrastrando = m.id to enElLienzoAhora(m) },
-                                    onDrag = { cambio, movido ->
-                                        cambio.consume()
-                                        arrastrando = arrastrando?.let { it.first to (it.second + movido) }
-                                    },
-                                    onDragEnd = {
-                                        val donde = arrastrando?.second
-                                        arrastrando = null
-                                        val p = donde?.let { controller.scene.viewport.toScene(it.x.toDouble(), it.y.toDouble()) } ?: return@detectDragGestures
-                                        marcas = com.forge.pixpin.motor.Marcas.movida(marcas, m.id, p.x, p.y)
-                                        guardarLasMarcas()
-                                    },
-                                    onDragCancel = { arrastrando = null }
-                                )
-                            })
+                            // **Se mueve manteniendo pulsado y arrastrando, y solo así** (24-sep-2026).
+                            // Lo pidió el usuario: con arrastrar a secas era demasiado fácil llevárselo
+                            // sin querer. Un toque va a su sitio; mantenerlo lo levanta —vibra— y ya se
+                            // puede llevar; mantenerlo y soltar sin moverlo pregunta si quitarlo. No es
+                            // parte del dibujo, así que «seleccionar todo» tampoco lo coge nunca.
                             .pointerInput(m.id) {
-                                detectTapGestures(
-                                    onLongPress = {
-                                        marcas = com.forge.pixpin.motor.Marcas.sin(marcas, m.id)
-                                        guardarLasMarcas()
-                                        Toast.makeText(this@DrawEditorActivity, "Marcador quitado", Toast.LENGTH_SHORT).show()
-                                    },
-                                    onTap = { irALaMarca(m) }
-                                )
+                                val espera = viewConfiguration.longPressTimeoutMillis
+                                val holgura = viewConfiguration.touchSlop
+                                awaitEachGesture {
+                                    val abajo = awaitFirstDown()
+                                    abajo.consume()
+                                    val inicio = abajo.position
+                                    var movido = false
+                                    val soltado = withTimeoutOrNull(espera) {
+                                        while (true) {
+                                            val e = awaitPointerEvent()
+                                            val c = e.changes.firstOrNull { it.id == abajo.id } ?: return@withTimeoutOrNull true
+                                            if (!c.pressed) { c.consume(); return@withTimeoutOrNull true }
+                                            if ((c.position - inicio).getDistance() > holgura) { movido = true; return@withTimeoutOrNull false }
+                                        }
+                                        @Suppress("UNREACHABLE_CODE") false
+                                    }
+                                    when {
+                                        soltado == true -> irALaMarca(m)
+                                        movido -> Unit
+                                        else -> {
+                                            // Pulsado largo: levantado.
+                                            vibrar.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            val desde = enElLienzoAhora(m)
+                                            arrastrando = m.id to desde
+                                            var recorrido = Offset.Zero
+                                            while (true) {
+                                                val e = awaitPointerEvent()
+                                                val c = e.changes.firstOrNull { it.id == abajo.id } ?: break
+                                                if (!c.pressed) { c.consume(); break }
+                                                val paso = c.position - c.previousPosition
+                                                c.consume()
+                                                recorrido += paso
+                                                arrastrando = m.id to (desde + recorrido)
+                                            }
+                                            val donde = arrastrando?.second
+                                            arrastrando = null
+                                            if (recorrido.getDistance() <= holgura) quitandoMarca = m
+                                            else if (donde != null) {
+                                                val p = controller.scene.viewport.toScene(donde.x.toDouble(), donde.y.toDouble())
+                                                marcas = com.forge.pixpin.motor.Marcas.movida(marcas, m.id, p.x, p.y)
+                                                guardarLasMarcas()
+                                            }
+                                        }
+                                    }
+                                }
                             },
                         contentAlignment = Alignment.Center
                     ) {

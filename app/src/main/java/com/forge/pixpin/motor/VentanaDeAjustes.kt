@@ -89,8 +89,6 @@ data class FormatoDeSalida(val icono: ImageVector, val nombre: String, val al: (
 fun VentanaDeAjustes(
     cuadricula: Cuadricula,
     onCuadricula: (Cuadricula) -> Unit,
-    zoomBloqueado: Boolean,
-    onZoomBloqueado: (Boolean) -> Unit,
     /** Enseñar u ocultar las líneas de referencia; null si no hay ninguna. */
     referenciasVisibles: Boolean?,
     onReferencias: () -> Unit,
@@ -220,15 +218,14 @@ fun VentanaDeAjustes(
                         Seccion("Ver como hoja", "Pone el zoom al tamaño real de la hoja.") {
                             Segmentos(Papel.entries.map { it.etiqueta }, -1) { onPapel(Papel.entries[it]) }
                         }
-                        Seccion("Vista") {
-                            Interruptor("Clavar el zoom", "El pellizco solo mueve, no amplía.", zoomBloqueado, onZoomBloqueado)
-                            if (referenciasVisibles != null) {
-                                Fila(
-                                    "Líneas de referencia",
-                                    if (referenciasVisibles) "A la vista" else "Escondidas",
-                                    onReferencias
-                                )
-                            }
+                        // **Sin «Clavar el zoom»** (24-sep-2026): el usuario lo pidió quitar porque ya
+                        // está en el candado del visor del zoom, a un toque y a la vista.
+                        if (referenciasVisibles != null) Seccion("Vista") {
+                            Fila(
+                                "Líneas de referencia",
+                                if (referenciasVisibles) "A la vista" else "Escondidas",
+                                onReferencias
+                            )
                         }
                     }
 

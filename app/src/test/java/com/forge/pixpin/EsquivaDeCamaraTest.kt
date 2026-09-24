@@ -55,4 +55,29 @@ class EsquivaDeCamaraTest {
         assertTrue(pastilla.top + baja >= centro.bottom)
         assertEquals(0f, EsquivaDeCamara.bajada(Rect(0f, 200f, 100f, 250f), listOf(centro)))
     }
+
+    @Test
+    fun `lo de la esquina se aparta de la cámara de esquina por el lado más corto`() {
+        // Cámara arriba a la derecha; un candado de 100×60 pegado a esa esquina.
+        val camara = Rect(960f, 20f, 1040f, 100f)
+        val candado = Rect(940f, 30f, 1060f, 90f)
+        val m = EsquivaDeCamara.empuje(candado, listOf(camara), 1080f, 2400f)
+        // Bajar son 100-30+12 = 82; apartarse a la izquierda, 1060-960+12 = 112: baja.
+        assertEquals(0f, m[0]); assertEquals(82f, m[1]); assertEquals(0f, m[2]); assertEquals(0f, m[3])
+    }
+
+    @Test
+    fun `de lado, el panel del canto se aparta de la cámara hacia dentro`() {
+        // Teléfono de lado: la cámara en el canto izquierdo, a media altura; el panel ocupa ese canto.
+        val camara = Rect(0f, 500f, 80f, 580f)
+        val panel = Rect(0f, 200f, 120f, 880f)
+        val m = EsquivaDeCamara.empuje(panel, listOf(camara), 2400f, 1080f)
+        assertEquals(92f, m[0]); assertEquals(0f, m[1])
+    }
+
+    @Test
+    fun `lo que no la pisa no se mueve`() {
+        val m = EsquivaDeCamara.empuje(Rect(0f, 1000f, 100f, 1100f), listOf(Rect(500f, 0f, 580f, 80f)), 1080f, 2400f)
+        assertTrue(m.all { it == 0f })
+    }
 }

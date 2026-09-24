@@ -882,6 +882,10 @@ private fun PaginaDeProyecto(
     // sellos y llegas al final en dos gestos. Las dos son perezosas, así que
     // cambiar de una a otra no cuesta nada.
     var rejilla by remember(p.id) { mutableStateOf(false) }
+    // La hoja que enseña la portada. Aquí arriba porque, de lado, la tira va en otra columna
+    // que la portada (debajo del nombre) y las dos tienen que hablar de la misma.
+    var enFoco by remember(p.id) { androidx.compose.runtime.mutableIntStateOf(0) }
+    val zurdo = app.settings.settings.collectAsState(initial = app.ajustes).value.zurdo
 
     // **Los sublienzos, plegados bajo su página** (lo pidió el usuario el 13-sep-2026). Una zona
     // mandada al chat es una hoja colgada de otra ([Hoja.padre]); de fábrica no se ve, y su página
@@ -1137,7 +1141,11 @@ private fun PaginaDeProyecto(
                             anotadas = anotadasDeVerdad,
                             onMarcar = onMarcar,
                             ampliada = ampliada,
-                            enPrimerPlano = enPrimerPlano
+                            enPrimerPlano = enPrimerPlano,
+                            enFoco = enFoco,
+                            onFoco = { enFoco = it },
+                            // De lado la tira va debajo del nombre. Ver abajo.
+                            sinTira = apaisado
                         )
                     }
                     }
@@ -1148,14 +1156,37 @@ private fun PaginaDeProyecto(
                 // [BarraDeAcciones] en [PantallaDeProyectos].
                 val pie: @Composable () -> Unit = {}
                 if (apaisado) {
-                    Row(Modifier.fillMaxSize()) {
-                        Column(Modifier.weight(0.42f).fillMaxHeight()) {
+                    // **De lado: el nombre y las miniaturas juntos en una columna, la portada
+                    // grande en la otra** (24-sep-2026). Lo pidió el usuario: debajo del nombre
+                    // quedaba un hueco vacío y las miniaturas se apretaban en una lista al lado
+                    // de la portada. Ahora van debajo del nombre, en tantas filas como quepan y
+                    // pasando a lo ancho. La columna va del lado de la mano (zurdo, a la derecha).
+                    val conTira = visibles.isNotEmpty() && !rejilla
+                    val columna: @Composable () -> Unit = {
+                        Column(Modifier.fillMaxWidth(0.42f).fillMaxHeight()) {
                             cabecera()
-                            Spacer(Modifier.weight(1f))
+                            if (conTira) {
+                                Spacer(Modifier.height(8.dp))
+                                TiraEnFilas(
+                                    app = app,
+                                    p = p,
+                                    paginas = visibles,
+                                    marcadas = marcadas,
+                                    anotadas = anotadasDeVerdad,
+                                    enFoco = enFoco,
+                                    onFoco = { enFoco = it },
+                                    onMarcar = onMarcar,
+                                    pedirMiniaturas = enPrimerPlano,
+                                    modifier = Modifier.weight(1f).fillMaxWidth()
+                                )
+                            } else Spacer(Modifier.weight(1f))
                             pie()
                         }
-                        Spacer(Modifier.width(12.dp))
+                    }
+                    Row(Modifier.fillMaxSize()) {
+                        if (!zurdo) { columna(); Spacer(Modifier.width(12.dp)) }
                         hojas(Modifier.weight(1f).fillMaxHeight())
+                        if (zurdo) { Spacer(Modifier.width(12.dp)); columna() }
                     }
                 } else {
                     Column(Modifier.fillMaxSize()) {
@@ -1530,9 +1561,12 @@ private fun PortadaConTira(
     anotadas: Set<String>,
     onMarcar: (String) -> Unit,
     ampliada: ZoomDeHoja,
-    enPrimerPlano: Boolean
+    enPrimerPlano: Boolean,
+    enFoco: Int,
+    onFoco: (Int) -> Unit,
+    /** Solo la portada: la tira va en otro sitio (de lado, debajo del nombre). */
+    sinTira: Boolean = false
 ) {
-    var enFoco by remember(p.id) { mutableIntStateOf(0) }
     // Si la tira se quedó apuntando a una hoja que ya no está —se borró desde el
     // editor—, la portada vuelve a la primera en vez de quedarse en blanco.
     val portada = paginas.getOrNull(enFoco) ?: paginas.first()
@@ -1564,14 +1598,16 @@ private fun PortadaConTira(
             marcadas = marcadas,
             anotadas = anotadas,
             enFoco = enFoco,
-            onFoco = { enFoco = it },
+            onFoco = onFoco,
             onMarcar = onMarcar,
             pedirMiniaturas = enPrimerPlano,
             deLado = deLado
         )
     }
 
-    if (deLado) {
+    if (sinTira) {
+        laPortada(Modifier.fillMaxSize())
+    } else if (deLado) {
         Row(Modifier.fillMaxSize()) {
             laPortada(Modifier.weight(1f).fillMaxHeight())
             Spacer(Modifier.width(8.dp))
@@ -1761,6 +1797,59 @@ private fun TiraDeHojas(
 }
 
 /**
+ * **Las miniaturas debajo del nombre, con el teléfono de lado** (24-sep-2026).
+ *
+ * Tantas filas como quepan en el hueco (y no más de las que hacen falta), y se pasa a lo ancho.
+ * Van **por columnas**: la 1 y la 2 en la primera, la 3 y la 4 en la siguiente… así que al
+ * deslizar se van viendo las páginas en orden. Tocar una la sube a la portada, como en la tira.
+ */
+@Composable
+private fun TiraEnFilas(
+    app: PixPinApp,
+    p: Proyecto,
+    paginas: List<HojasDelProyecto.Pagina>,
+    marcadas: Set<String>,
+    anotadas: Set<String>,
+    enFoco: Int,
+    onFoco: (Int) -> Unit,
+    onMarcar: (String) -> Unit,
+    pedirMiniaturas: Boolean,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier) {
+        val caben = (maxHeight / ALTO_DE_FILA).toInt().coerceIn(1, 4)
+        // Al menos dos columnas antes de abrir otra fila.
+        val filas = caben.coerceAtMost(((paginas.size + 1) / 2).coerceAtLeast(1))
+        val columnas = (paginas.size + filas - 1) / filas
+        val estado = remember(p.id, filas) { LazyListState() }
+        LazyRow(state = estado, modifier = Modifier.fillMaxSize()) {
+            items(columnas, key = { it }) { x ->
+                Column {
+                    (0 until filas).forEach { f ->
+                        val i = x * filas + f
+                        val pagina = paginas.getOrNull(i)
+                        if (pagina != null) {
+                            HojaDelProyecto(
+                                app = app,
+                                p = p,
+                                pagina = pagina,
+                                marcada = pagina.clave in marcadas,
+                                onMarcar = { onMarcar(pagina.clave) },
+                                onElegir = { onFoco(i) },
+                                anotada = pagina.hoja.dibujo in anotadas,
+                                enFoco = i == enFoco,
+                                pedirMiniatura = pedirMiniaturas
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        PreparadorDeMiniaturas(p, paginas, estado, filas, pedirMiniaturas, porColumnas = true)
+    }
+}
+
+/**
  * Todas las hojas a la vez, para llegar lejos.
  *
  * **Las filas salen de lo que mide el hueco**, no de un número escrito: la
@@ -1848,7 +1937,9 @@ private fun PreparadorDeMiniaturas(
     paginas: List<HojasDelProyecto.Pagina>,
     estado: LazyListState,
     filas: Int,
-    pedir: Boolean
+    pedir: Boolean,
+    /** Si las páginas van por columnas ([TiraEnFilas]) y no por filas ([RejillaDeHojas]). */
+    porColumnas: Boolean = false
 ) {
     val contexto = LocalContext.current
     val pdf = remember(p.pdfOrigen, p.pdfLimpio) {
@@ -1865,13 +1956,17 @@ private fun PreparadorDeMiniaturas(
             PdfMiniaturas.preparar(
                 contexto,
                 pdf,
-                HojasDelProyecto.enColumnas(
+                (if (porColumnas) {
+                    // Por columnas, lo que se ve va seguido: de la columna de la izquierda en adelante.
+                    val desde = ((primera - 2) * filas).coerceAtLeast(0)
+                    (desde until minOf(paginas.size, (primera + ANCHO_DE_TANDA) * filas)).toList()
+                } else HojasDelProyecto.enColumnas(
                     total = paginas.size,
                     filas = filas,
                     porFila = porFila,
                     desde = primera - 2,
                     hasta = primera + ANCHO_DE_TANDA
-                ).mapNotNull { paginas[it].hoja.pagina },
+                )).mapNotNull { paginas[it].hoja.pagina },
                 PdfDoc.THUMB_WIDTH
             )
         }
