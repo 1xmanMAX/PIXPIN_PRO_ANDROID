@@ -628,6 +628,23 @@ class DrawEditorActivity : ComponentActivity() {
     private var marcas by mutableStateOf(emptyList<com.forge.pixpin.motor.Marca>())
     private var poniendoMarca by mutableStateOf(false)
 
+    /**
+     * **El emoticono elegido, esperando a que se toque el sitio** (24-sep-2026). Lo pidió el
+     * usuario así: primero el emoticono, luego un toque donde se quiere, y ahí se queda. Antes se
+     * plantaba solo en el centro de la vista, que casi nunca era donde uno quería. Mientras no es
+     * nulo, un toque sobre el lienzo lo pone ahí. Ver [CapaDeMarcas].
+     */
+    private var emojiPorPoner by mutableStateOf<String?>(null)
+
+    /**
+     * **Dónde empieza el lienzo que manda, en la ventana.** Los marcadores se pintan en una capa
+     * que ocupa la pantalla entera, pero el lienzo no siempre empieza en su esquina: de pie, en la
+     * tira, va debajo de la barra de arriba, y al correr la tira se desplaza. Sin restar esto el
+     * emoticono quedaba corrido respecto a su sitio, y como el desfase es en píxeles de pantalla
+     * y no del dibujo, **al hacer zoom resbalaba** sobre lo dibujado. Ver [CapaDeMarcas].
+     */
+    private var origenDelLienzo by mutableStateOf(Offset.Zero)
+
     /** Lo que ocupa el panel lateral de estilo, para que el riel no se le meta debajo. */
     private var anchoDelPanelLateral by mutableIntStateOf(0)
 
@@ -1529,6 +1546,7 @@ class DrawEditorActivity : ComponentActivity() {
                     .fillMaxSize()
                     // Lo que mide de verdad este lienzo en su columna: es con lo que se encuadra.
                     .onSizeChanged { medidaDelLienzo = it }
+                    .onGloballyPositioned { origenDelLienzo = it.positionInWindow() }
                     .then(if (comoCielo) Modifier else Modifier.background(Color(android.graphics.Color.parseColor(papel))))
                     // **Dos dedos deshacen.** Sobre un texto marcado, dos dedos lo abren para
                     // escribir, que es lo que hacían antes.
@@ -2160,12 +2178,28 @@ class DrawEditorActivity : ComponentActivity() {
                     // **Los emoticonos, encima de la barra de herramientas y debajo del zoom**
                     // (21-sep-2026): salían detrás de la barra y no se podían tocar. Aquí dentro
                     // hacen hueco —todo lo de abajo sube mientras están— y al cerrarse, baja.
+                    // **Primero el emoticono, luego el sitio** (24-sep-2026): elegido, la fila se
+                    // cambia por un aviso y el siguiente toque en el lienzo lo planta ahí.
                     if (poniendoMarca) {
                         com.forge.pixpin.ui.ElegirEmojiDeMarca(onCerrar = { poniendoMarca = false }) { emoji ->
                             poniendoMarca = false
-                            val centro = centroDeLaVista()
-                            marcas = com.forge.pixpin.motor.Marcas.con(marcas, centro.x, centro.y, emoji, System.currentTimeMillis())
-                            guardarLasMarcas()
+                            emojiPorPoner = emoji
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    emojiPorPoner?.let { emoji ->
+                        Row(
+                            Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xD914182B))
+                                .padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(emoji, fontSize = 20.sp)
+                            Text("  Toca donde quieras ponerlo", fontSize = 13.sp, color = Color.White)
+                            IconButton(onClick = { emojiPorPoner = null }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancelar", tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
                         }
                         Spacer(Modifier.height(6.dp))
                     }
@@ -2787,72 +2821,100 @@ class DrawEditorActivity : ComponentActivity() {
     @Composable
     private fun CapaDeMarcas(tick: Int, pulsoDeLaVista: androidx.compose.runtime.MutableIntState) {
         @Suppress("UNUSED_EXPRESSION") tick
-        if (marcas.isEmpty()) return
-        val d = LocalDensity.current
+        val porPoner = emojiPorPoner
+        if (marcas.isEmpty() && porPoner == null) return
         val ancho = medidaDelLienzo.width
         val alto = medidaDelLienzo.height
-        // Lo que se está arrastrando, en píxeles de pantalla: mientras dura, manda esto y no el punto.
-        var arrastrando by remember { mutableStateOf<Pair<Long, androidx.compose.ui.geometry.Offset>?>(null) }
-        // Dónde cae ahora mismo, en la pantalla: se pregunta **al colocar**, leyendo el encuadre
-        // de verdad. El pulso solo sirve para que se vuelva a colocar mientras el dedo mueve el
+        // Dónde empieza esta capa en la ventana. Con [origenDelLienzo] da el desfase entre las dos:
+        // un punto del lienzo cae en la capa en `pantalla del lienzo + desfase`.
+        var origenDeLaCapa by remember { mutableStateOf(Offset.Zero) }
+        fun desfase() = origenDelLienzo - origenDeLaCapa
+        // Lo que se está arrastrando, en píxeles **del lienzo**: mientras dura, manda esto y no el punto.
+        var arrastrando by remember { mutableStateOf<Pair<Long, Offset>?>(null) }
+        // Dónde cae ahora mismo, en el lienzo: se pregunta **al colocar**, leyendo el encuadre de
+        // verdad. El pulso solo sirve para que se vuelva a colocar mientras el dedo mueve el
         // dibujo; sin él, esto se quedaba con el encuadre de la última recomposición.
-        fun enPantallaAhora(m: com.forge.pixpin.motor.Marca): androidx.compose.ui.geometry.Offset {
+        fun enElLienzoAhora(m: com.forge.pixpin.motor.Marca): Offset {
             arrastrando?.takeIf { it.first == m.id }?.let { return it.second }
             val p = controller.scene.viewport.toScreen(Pt(m.x, m.y))
-            return androidx.compose.ui.geometry.Offset(p.x.toFloat(), p.y.toFloat())
+            return Offset(p.x.toFloat(), p.y.toFloat())
         }
-        for (m in marcas) {
-            key(m.id) {
-                Box(
-                    Modifier
-                        .offset {
-                            @Suppress("UNUSED_EXPRESSION") pulsoDeLaVista.intValue
-                            val donde = enPantallaAhora(m)
-                            val radio = 18.dp.toPx()
-                            // Lo que cae fuera de la pantalla se aparta del todo en vez de
-                            // dejarse en el canto, que es donde se tocaría sin querer.
-                            if (ancho > 0 && alto > 0 &&
-                                (donde.x < -radio * 4 || donde.y < -radio * 4 ||
-                                    donde.x > ancho + radio * 4 || donde.y > alto + radio * 4)
-                            ) return@offset androidx.compose.ui.unit.IntOffset(-9999, -9999)
-                            androidx.compose.ui.unit.IntOffset((donde.x - radio).toInt(), (donde.y - radio).toInt())
-                        }
-                        .size(36.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(Color(0xCC14182B))
-                        // **Solo se mueve con la herramienta de selección** (21-sep-2026):
-                        // dibujando, el dedo que pasaba por encima se lo llevaba puesto. Con
-                        // cualquier otra herramienta un toque va a su sitio y ya.
-                        .then(if (controller.tool != Tool.SELECTION) Modifier else Modifier.pointerInput(m.id) {
-                            detectDragGestures(
-                                onDragStart = { arrastrando = m.id to enPantallaAhora(m) },
-                                onDrag = { cambio, movido ->
-                                    cambio.consume()
-                                    arrastrando = arrastrando?.let { it.first to (it.second + movido) }
-                                },
-                                onDragEnd = {
-                                    val donde = arrastrando?.second
-                                    arrastrando = null
-                                    val p = donde?.let { controller.scene.viewport.toScene(it.x.toDouble(), it.y.toDouble()) } ?: return@detectDragGestures
-                                    marcas = com.forge.pixpin.motor.Marcas.movida(marcas, m.id, p.x, p.y)
-                                    guardarLasMarcas()
-                                },
-                                onDragCancel = { arrastrando = null }
-                            )
-                        })
-                        .pointerInput(m.id) {
-                            detectTapGestures(
-                                onLongPress = {
-                                    marcas = com.forge.pixpin.motor.Marcas.sin(marcas, m.id)
-                                    guardarLasMarcas()
-                                    Toast.makeText(this@DrawEditorActivity, "Marcador quitado", Toast.LENGTH_SHORT).show()
-                                },
-                                onTap = { irALaMarca(m) }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(m.emoji, fontSize = 20.sp)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { origenDeLaCapa = it.positionInWindow() }
+                // **Poniendo uno, el toque es para él.** Solo mientras hay emoticono por poner:
+                // el resto del tiempo esta capa no coge ni un dedo y el lienzo sigue igual.
+                .then(if (porPoner == null) Modifier else Modifier.pointerInput(porPoner) {
+                    detectTapGestures { toque ->
+                        val enElLienzo = toque - desfase()
+                        // Fuera del lienzo que manda (la barra, el vecino de la tira) no se pone.
+                        val lienzo = medidaDelLienzo
+                        if (lienzo.width <= 0 || enElLienzo.x !in 0f..lienzo.width.toFloat() || enElLienzo.y !in 0f..lienzo.height.toFloat()) return@detectTapGestures
+                        val p = controller.scene.viewport.toScene(enElLienzo.x.toDouble(), enElLienzo.y.toDouble())
+                        marcas = com.forge.pixpin.motor.Marcas.con(marcas, p.x, p.y, porPoner, System.currentTimeMillis())
+                        guardarLasMarcas()
+                        emojiPorPoner = null
+                    }
+                })
+        ) {
+            for (m in marcas) {
+                key(m.id) {
+                    Box(
+                        Modifier
+                            .offset {
+                                @Suppress("UNUSED_EXPRESSION") pulsoDeLaVista.intValue
+                                val donde = enElLienzoAhora(m)
+                                val radio = 18.dp.toPx()
+                                // **Solo dentro del lienzo**: lo que cae fuera se aparta del todo en
+                                // vez de pintarse encima de la barra o del lienzo de al lado, que
+                                // es donde parecía que aparecía y desaparecía sin motivo.
+                                if (ancho > 0 && alto > 0 &&
+                                    (donde.x < 0f || donde.y < 0f || donde.x > ancho || donde.y > alto)
+                                ) return@offset androidx.compose.ui.unit.IntOffset(-9999, -9999)
+                                val d = desfase()
+                                androidx.compose.ui.unit.IntOffset(
+                                    kotlin.math.round(donde.x + d.x - radio).toInt(),
+                                    kotlin.math.round(donde.y + d.y - radio).toInt()
+                                )
+                            }
+                            .size(36.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(0xCC14182B))
+                            // **Solo se mueve con la herramienta de selección** (21-sep-2026):
+                            // dibujando, el dedo que pasaba por encima se lo llevaba puesto. Con
+                            // cualquier otra herramienta un toque va a su sitio y ya.
+                            .then(if (controller.tool != Tool.SELECTION) Modifier else Modifier.pointerInput(m.id) {
+                                detectDragGestures(
+                                    onDragStart = { arrastrando = m.id to enElLienzoAhora(m) },
+                                    onDrag = { cambio, movido ->
+                                        cambio.consume()
+                                        arrastrando = arrastrando?.let { it.first to (it.second + movido) }
+                                    },
+                                    onDragEnd = {
+                                        val donde = arrastrando?.second
+                                        arrastrando = null
+                                        val p = donde?.let { controller.scene.viewport.toScene(it.x.toDouble(), it.y.toDouble()) } ?: return@detectDragGestures
+                                        marcas = com.forge.pixpin.motor.Marcas.movida(marcas, m.id, p.x, p.y)
+                                        guardarLasMarcas()
+                                    },
+                                    onDragCancel = { arrastrando = null }
+                                )
+                            })
+                            .pointerInput(m.id) {
+                                detectTapGestures(
+                                    onLongPress = {
+                                        marcas = com.forge.pixpin.motor.Marcas.sin(marcas, m.id)
+                                        guardarLasMarcas()
+                                        Toast.makeText(this@DrawEditorActivity, "Marcador quitado", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onTap = { irALaMarca(m) }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(m.emoji, fontSize = 20.sp)
+                    }
                 }
             }
         }
@@ -2971,7 +3033,7 @@ class DrawEditorActivity : ComponentActivity() {
             }
             // **Marcar este sitio.** El mismo marcador con emoticono de los lectores; aquí, un
             // punto del lienzo al que se vuelve de un toque. Ver [CapaDeMarcas].
-            IconButton(onClick = { poniendoMarca = !poniendoMarca }) {
+            IconButton(onClick = { emojiPorPoner = null; poniendoMarca = !poniendoMarca }) {
                 Icon(
                     Icons.Filled.BookmarkAdd,
                     contentDescription = "Marcador aquí"
