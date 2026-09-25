@@ -18,6 +18,10 @@ on:
         description: "Sin R8 (-Prapido): compila antes; el APK pesa más"
         type: boolean
         default: false
+      estable:
+        description: "Release estable (v<versión>, sin «prueba» ni prerelease)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -78,17 +82,22 @@ jobs:
           # El proyecto deja lo compilado en `pixpin-build`, fuera de app/build.
           sh herramientas/apk-para-repartir.sh "PixPin-$VERSION.apk"
 
-      - name: Publicar la prerelease
+      - name: Publicar la release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v$VERSION-prueba"
+          # Estable: `v<versión>` y release normal. Si no, la prerelease de prueba de siempre.
+          if [ "${{ inputs.estable }}" = "true" ]; then
+            TAG="v$VERSION"; TITULO="v$VERSION"; TIPO=""
+          else
+            TAG="v$VERSION-prueba"; TITULO="v$VERSION (prueba)"; TIPO="--prerelease"
+          fi
           NOTAS=$(git log -1 --format=%B -- app/build.gradle.kts | sed '/^Co-Authored-By:/d;/^Claude-Session:/d')
           # Si ya estaba (se volvió a empujar con la misma versión), se reemplaza el APK.
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "PixPin-$VERSION.apk" --clobber
           else
-            gh release create "$TAG" "PixPin-$VERSION.apk" --prerelease \
-              --target "$GITHUB_SHA" --title "v$VERSION (prueba)" --notes "$NOTAS"
+            gh release create "$TAG" "PixPin-$VERSION.apk" $TIPO \
+              --target "$GITHUB_SHA" --title "$TITULO" --notes "$NOTAS"
           fi
           echo "https://github.com/${{ github.repository }}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
