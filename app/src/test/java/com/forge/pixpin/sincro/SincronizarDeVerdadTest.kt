@@ -326,6 +326,131 @@ class SincronizarDeVerdadTest {
     }
 
     @Test
+    fun `lo anotado sobre un PDF, un Word y un libro del chat viaja con el codigo del mensaje`() {
+        emparejar()
+        val carpeta = File(telefono.filesDir, "guardados").apply { mkdirs() }
+        val pdf = File(carpeta, "1_plano.pdf").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val docx = File(carpeta, "2_informe.docx").apply { writeBytes(byteArrayOf(4, 5)) }
+        val epub = File(carpeta, "3_libro.epub").apply { writeBytes(byteArrayOf(6)) }
+        mensaje(telefono, "p", clase = Clase.ARCHIVO, ruta = pdf.absolutePath)
+        mensaje(telefono, "d", clase = Clase.ARCHIVO, ruta = docx.absolutePath)
+        mensaje(telefono, "e", clase = Clase.ARCHIVO, ruta = epub.absolutePath)
+        val a = AnotacionesDelAdjunto
+        val uPdf = a.uidDe(telefono.filesDir, pdf.absolutePath)!!
+        val uDocx = a.uidDe(telefono.filesDir, docx.absolutePath)!!
+        val uEpub = a.uidDe(telefono.filesDir, epub.absolutePath)!!
+        lienzo(telefono, a.dePagina(uPdf, 2), fig("trazo-pdf"))
+        a.escribir(a.marcas(telefono.filesDir, a.delPdf(uPdf)), "m1:0.5:2.25:⭐")
+        a.escribir(a.espacios(telefono.filesDir, a.delPdf(uPdf)), "3")
+        lienzo(telefono, a.delDocumento(uDocx, docx), fig("trazo-docx"))
+        a.escribir(a.maqueta(telefono.filesDir, a.delDocumento(uDocx, docx)), "420,280,280,100,1,0")
+        lienzo(telefono, a.delDocumento(uEpub, epub), fig("trazo-epub"))
+        a.escribir(a.marcas(telefono.filesDir, a.delDocumento(uEpub, epub)), "0.3:📌")
+
+        sincronizar()
+
+        // En la tableta, el mismo mensaje con otra ruta da el mismo código: el lector lo encuentra.
+        fun rutaAlla(id: String) = tableta.leerMensajes().single { it.id == id }.ruta!!
+        assertEquals(uPdf, a.uidDe(tableta.filesDir, rutaAlla("p")))
+        assertEquals(uDocx, a.uidDe(tableta.filesDir, rutaAlla("d")))
+        assertEquals(uEpub, a.uidDe(tableta.filesDir, rutaAlla("e")))
+        assertEquals(listOf("trazo-pdf"), figuras(tableta, a.dePagina(uPdf, 2)))
+        assertEquals("m1:0.5:2.25:⭐", a.leer(a.marcas(tableta.filesDir, a.delPdf(uPdf))))
+        assertEquals("3", a.leer(a.espacios(tableta.filesDir, a.delPdf(uPdf))))
+        assertEquals(listOf("trazo-docx"), figuras(tableta, a.delDocumento(uDocx, docx)))
+        assertEquals(AnotacionesDelAdjunto.Maqueta(420, 280, 280, 100, 1, 0),
+            AnotacionesDelAdjunto.Maqueta.deTexto(a.leer(a.maqueta(tableta.filesDir, a.delDocumento(uDocx, docx)))))
+        assertEquals(listOf("trazo-epub"), figuras(tableta, a.delDocumento(uEpub, epub)))
+        assertEquals("0.3:📌", a.leer(a.marcas(tableta.filesDir, a.delDocumento(uEpub, epub))))
+
+        // Y de vuelta: lo que se cambia en la tableta llega al teléfono.
+        reloj += 10_000
+        a.escribir(a.espacios(tableta.filesDir, a.delPdf(uPdf)), "1")
+        File(tableta.filesDir, "pins/draw/${a.delPdf(uPdf)}.espacios").setLastModified(System.currentTimeMillis() + 60_000)
+        lienzo(tableta, a.dePagina(uPdf, 2), fig("trazo-pdf"), fig("otro"))
+        sincronizar()
+        assertEquals("1", a.leer(a.espacios(telefono.filesDir, a.delPdf(uPdf))))
+        assertEquals(setOf("trazo-pdf", "otro"), figuras(telefono, a.dePagina(uPdf, 2)).toSet())
+    }
+
+    @Test
+    fun `los marcadores de un lienzo, el verde de la voz y los del PDF de un proyecto tambien viajan`() {
+        emparejar()
+        val a = AnotacionesDelAdjunto
+        // Un lienzo del chat con sus marcadores al lado.
+        dibujo(telefono, "d1", "planta")
+        mensaje(telefono, "l", clase = Clase.DIBUJO, referencia = "d1")
+        a.escribir(a.delLienzo(telefono.filesDir, "d1"), "k:10.0:20.0:🏠")
+        // Un Word con el verde de la voz y el punto de lectura.
+        val docx = File(telefono.filesDir, "guardados/4_acta.docx").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(9)) }
+        mensaje(telefono, "w", clase = Clase.ARCHIVO, ruta = docx.absolutePath)
+        val uW = a.uidDe(telefono.filesDir, docx.absolutePath)!!
+        a.escribir(a.voz(telefono.filesDir, a.delDocumento(uW, docx)), "12:0.4")
+        a.escribir(a.sitio(telefono.filesDir, a.delDocumento(uW, docx)), "0.37")
+        sincronizar()
+        assertEquals("k:10.0:20.0:🏠", a.leer(a.delLienzo(tableta.filesDir, "d1")))
+        assertEquals("12:0.4", a.leer(a.voz(tableta.filesDir, a.delDocumento(uW, docx))))
+        assertEquals("0.37", a.leer(a.sitio(tableta.filesDir, a.delDocumento(uW, docx))))
+
+        // El PDF de un proyecto: sus marcadores y espacios con el código del proyecto.
+        proyecto(telefono, Proyecto("pr-9", "Tesis", hojas = listOf(Hoja("h1", "Pág. 1", pagina = 0)), tocado = 5))
+        mensaje(telefono, "n", "nota", proyecto = "pr-9")
+        val uP = Codigos.unico(telefono.leerProyectos().single())
+        a.escribir(a.marcas(telefono.filesDir, a.delPdf(uP)), "m:0.1:0.5:⭐")
+        a.escribir(a.espacios(telefono.filesDir, a.delPdf(uP)), "2")
+        sincronizar(listOf("pr-9"))
+        assertEquals(uP, Codigos.unico(tableta.leerProyectos().single()))
+        assertEquals("m:0.1:0.5:⭐", a.leer(a.marcas(tableta.filesDir, a.delPdf(uP))))
+        assertEquals("2", a.leer(a.espacios(tableta.filesDir, a.delPdf(uP))))
+    }
+
+    @Test
+    fun `borrar el mensaje se lleva lo anotado en los dos aparatos`() {
+        emparejar()
+        val a = AnotacionesDelAdjunto
+        val pdf = File(telefono.filesDir, "guardados/5_libro.pdf").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1)) }
+        mensaje(telefono, "p", clase = Clase.ARCHIVO, ruta = pdf.absolutePath)
+        val u = a.uidDe(telefono.filesDir, pdf.absolutePath)!!
+        lienzo(telefono, a.dePagina(u, 0), fig("t"))
+        a.escribir(a.marcas(telefono.filesDir, a.delPdf(u)), "x:0:0:⭐")
+        sincronizar()
+        assertEquals(2, a.todoDe(tableta.filesDir, u).size)
+        borrar(telefono, "p")
+        a.todoDe(telefono.filesDir, u).forEach { it.delete() } // lo que hace el chat al borrar
+        sincronizar()
+        assertTrue(tableta.leerMensajes().none { it.id == "p" })
+        assertEquals(emptyList<File>(), a.todoDe(tableta.filesDir, u))
+    }
+
+    @Test
+    fun `lo anotado de antes se copia una vez al nombre del mensaje y no se pisa`() {
+        val a = AnotacionesDelAdjunto
+        val dir = telefono.filesDir
+        val viejo = dibujo(telefono, "pdf-abc-p0", "de antes")
+        val nuevo = File(dir, "pins/draw/${a.dePagina("ABCDE23456", 0)}.excalidraw.gz")
+        assertTrue(a.copiarSiFalta(viejo, nuevo))
+        assertTrue(viejo.exists())
+        assertTrue(nuevo.readBytes().contentEquals(viejo.readBytes()))
+        dibujo(telefono, "pdf-abc-p0", "cambiado despues")
+        assertFalse("lo nuevo ya existe: no se pisa", a.copiarSiFalta(viejo, nuevo))
+        val marcas = a.marcas(dir, a.delPdf("ABCDE23456"))
+        assertTrue(a.ponerSiFalta(marcas, "x:0:0:⭐"))
+        assertFalse(a.ponerSiFalta(marcas, "otra"))
+        assertFalse(a.ponerSiFalta(a.espacios(dir, "anot-ABCDE23456"), null))
+        assertEquals("x:0:0:⭐", a.leer(marcas))
+        // Solo lo de un mensaje, con su código entero; ni temporales ni otros dibujos.
+        File(dir, "pins/draw/anot-ABCDE23456.marcas.tmp").writeText("?")
+        File(dir, "pins/draw/anot-CORTO.marcas").writeText("?")
+        assertEquals(
+            mapOf("ABCDE23456" to setOf("pins/draw/anot-ABCDE23456-p0.excalidraw.gz", "pins/draw/anot-ABCDE23456.marcas")),
+            a.porUid(dir).mapValues { it.value.toSet() }
+        )
+        assertNull(a.uidDe(dir, File(dir, "guardados/no-esta.pdf").absolutePath))
+        assertNull(AnotacionesDelAdjunto.Maqueta.deTexto("0,1,2,3,4,5"))
+        assertNull(AnotacionesDelAdjunto.Maqueta.deTexto("420,x,2,3,4,5"))
+    }
+
+    @Test
     fun `un lienzo viaja con su foto y sin rutas del telefono dentro`() {
         emparejar()
         File(telefono.filesDir, "pins/draw/files/foto1").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1, 2, 3)) }

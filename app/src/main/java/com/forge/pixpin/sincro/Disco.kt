@@ -279,6 +279,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     fun aplicarMensajes(chat: String, poner: List<String>, borrar: List<String>, ahora: Long = System.currentTimeMillis()) {
         if (poner.isEmpty() && borrar.isEmpty()) return
         val adjuntosFuera = ArrayList<String>()
+        val anotadosFuera = ArrayList<String>()
         synchronized(Cerrojos.chat) {
             val lista = leerMensajes().toMutableList()
             val quitar = borrar.toSet()
@@ -294,7 +295,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                     clave != null && clave in porClave -> {
                         if (puestos.add(clave)) salida += porClave.getValue(clave).copy(recuerdaEn = m.recuerdaEn)
                     }
-                    clave != null && clave in quitar -> { quitados += m; m.ruta?.let { adjuntosFuera += it } }
+                    clave != null && clave in quitar -> { quitados += m; m.ruta?.let { adjuntosFuera += it; anotadosFuera += clave } }
                     else -> salida += m
                 }
             }
@@ -312,6 +313,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             val rel = rutas.relativa(ruta) ?: continue
             if (rel.startsWith("guardados/")) File(filesDir, rel).delete()
         }
+        // Y lo anotado sobre ellos, que sin su mensaje ya no viaja ni se abre. Ver [AnotacionesDelAdjunto].
+        for (uid in anotadosFuera) AnotacionesDelAdjunto.todoDe(filesDir, uid).forEach { it.delete() }
         alCambiar(Cambio.MENSAJES)
     }
 
@@ -488,15 +491,21 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             if (!f.isFile) return
             salida[rel] = etiqueta
             if (esTexto(rel)) pendientes += rel to etiqueta
+            // Los marcadores de un lienzo, con él. Ver [AnotacionesDelAdjunto.delLienzo].
+            AnotacionesDelAdjunto.marcasJuntoA(rel)?.let { poner(it, etiqueta) }
         }
         fun dibujo(id: String?) = id?.let { "pins/draw/$it.excalidraw.gz" }
         fun croquis(id: String?) = id?.let { "croquis3d/$it.croquis.gz" }
         val tablas = TablasEnDisco.de(filesDir)
         fun tabla(id: String?) = id?.let { rutas.relativa(tablas.archivo(it).absolutePath) }
+        // Lo anotado sobre los adjuntos (PDF suelto, Word, libro), nombrado por el código del
+        // mensaje: tinta, marcadores, espacios. Ver [AnotacionesDelAdjunto].
+        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
 
         for (m in leerMensajes().filter { chatDe(it) == chat }) {
             val etiqueta = etiquetaDe(m)
             for (rel in rutas.enTexto(JSON.encodeToString(Mensaje.serializer(), m))) poner(rel, etiqueta)
+            if (m.ruta != null && anotado.isNotEmpty()) anotado[Codigos.unico(m)]?.forEach { poner(it, etiqueta) }
             when (m.clase) {
                 Clase.DIBUJO, Clase.PAGINA -> poner(dibujo(m.referencia), etiqueta)
                 Clase.IMAGEN -> poner(dibujo(m.referencia ?: "foto-${m.id}"), etiqueta)
@@ -515,6 +524,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         }
         leerProyectos().firstOrNull { it.id == chat }?.let { p ->
             for (rel in rutas.enTexto(Proyectos.json.encodeToString(Proyecto.serializer(), p))) poner(rel, p.nombre)
+            // Los marcadores y espacios de su PDF, con el código del proyecto.
+            anotado[Codigos.unico(p)]?.forEach { poner(it, p.nombre) }
             for (h in p.hojas) {
                 val etiqueta = h.nombre.ifBlank { p.nombre }
                 poner(dibujo(h.dibujo), etiqueta)

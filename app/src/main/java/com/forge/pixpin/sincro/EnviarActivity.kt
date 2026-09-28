@@ -244,7 +244,7 @@ class EnviarActivity : ComponentActivity() {
         val nombre = h.nombre.ifBlank { if (h.pagina != null) "Página ${h.pagina + 1}" else "Lienzo" }
         val destino = File(File(carpeta, "l-${System.nanoTime()}").apply { mkdirs() }, Envio.nombreSano("${p.nombre} - $nombre") + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION)
         // **Con su chat**: el mensaje de ese lienzo, con su hora y su seña. Ver [ChatQueViaja].
-        val chat = ChatQueViaja.preparar(p, ChatQueViaja.deLaHoja(this, p, h))
+        val chat = ChatQueViaja.preparar(p, ChatQueViaja.deLaHoja(this, p, h), filesDir)
         com.forge.pixpin.motor.PaquetePixpin.escribir(this, solo, destino, chat = chat?.texto, adjuntosDelChat = chat?.adjuntos.orEmpty()) ?: return emptyList()
         val suMensaje = Recepcion.mensajeDeLaHoja(com.forge.pixpin.guardados.MensajesStore(this).leer(), p, h)
         val identidadDelProyecto = Recepcion.identidadDe(p)
@@ -273,7 +273,7 @@ class EnviarActivity : ComponentActivity() {
         val p = sellado(id) ?: return emptyList()
         val destino = File(carpeta, Envio.nombreSano(p.nombre) + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION)
         // **El proyecto con su chat entero**: el chat manda. Ver [ChatQueViaja].
-        val chat = ChatQueViaja.preparar(p, ChatQueViaja.delProyecto(this, p))
+        val chat = ChatQueViaja.preparar(p, ChatQueViaja.delProyecto(this, p), filesDir)
         com.forge.pixpin.motor.PaquetePixpin.escribir(
             this, p, destino,
             croquisDe = { c -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(this, c) },

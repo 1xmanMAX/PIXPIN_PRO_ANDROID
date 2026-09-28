@@ -664,12 +664,21 @@ class DrawEditorActivity : ComponentActivity() {
 
     private fun prefsDeMarcas() = getSharedPreferences("marcas", MODE_PRIVATE)
 
+    /**
+     * **Los marcadores van junto al dibujo** (`<dibujo>.marcas`, 28-sep-2026) para que viajen con él
+     * al sincronizar; lo que había en las preferencias pasa ahí la primera vez y no se borra.
+     * Ver [com.forge.pixpin.sincro.AnotacionesDelAdjunto.delLienzo].
+     */
+    private fun archivoDeMarcas() = com.forge.pixpin.sincro.AnotacionesDelAdjunto.delLienzo(filesDir, dibujoId)
+
     private fun cargarLasMarcas() {
-        marcas = com.forge.pixpin.motor.Marcas.deTexto(prefsDeMarcas().getString("lienzo:" + dibujoId, null))
+        val f = archivoDeMarcas()
+        com.forge.pixpin.sincro.AnotacionesDelAdjunto.ponerSiFalta(f, prefsDeMarcas().getString("lienzo:" + dibujoId, null))
+        marcas = com.forge.pixpin.motor.Marcas.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(f))
     }
 
     private fun guardarLasMarcas() {
-        prefsDeMarcas().edit().putString("lienzo:" + dibujoId, com.forge.pixpin.motor.Marcas.aTexto(marcas)).apply()
+        com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(archivoDeMarcas(), com.forge.pixpin.motor.Marcas.aTexto(marcas))
     }
 
     private fun encajarEn(x: Double, y: Double, ancho: Double, alto: Double) {

@@ -184,7 +184,7 @@ class LectorEnVoz private constructor(context: Context) {
         trozoActual = 0
         msPausado = 0
         soltarElAudio()
-        _estado.value.clave.takeIf { it.isNotEmpty() }?.let { prefs.edit().remove(com.forge.pixpin.motor.Lectura.claveDeVoz(it)).apply() }
+        _estado.value.clave.takeIf { it.isNotEmpty() }?.let { ExportarDocumentoAnotado.ponerVoz(app, it, null) }
         _estado.value = _estado.value.copy(parrafo = -1)
     }
 
@@ -404,7 +404,7 @@ class LectorEnVoz private constructor(context: Context) {
     private fun apuntarElVerde(p: Int) {
         val clave = _estado.value.clave.takeIf { it.isNotEmpty() } ?: return
         val f = fracciones.getOrNull(p) ?: if (parrafos.isEmpty()) 0f else p.toFloat() / parrafos.size
-        prefs.edit().putString(com.forge.pixpin.motor.Lectura.claveDeVoz(clave), com.forge.pixpin.motor.Lectura.vozATexto(p, f)).apply()
+        ExportarDocumentoAnotado.ponerVoz(app, clave, com.forge.pixpin.motor.Lectura.vozATexto(p, f))
     }
 
     /** Para, y se queda donde iba: [seguir] vuelve a empezar por ese mismo trozo. */

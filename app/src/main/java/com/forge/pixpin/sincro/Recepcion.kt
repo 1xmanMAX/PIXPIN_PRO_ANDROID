@@ -105,11 +105,15 @@ object Recepcion {
     private fun renovado(c: PaquetePixpin.Contenido, ahora: Long): PaquetePixpin.Contenido {
         val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; encodeDefaults = false }
         val ids = HashMap<String, String>()
+        // Y lo anotado sobre sus adjuntos va por el código único viejo: se renombra al nuevo.
+        val uids = HashMap<String, String>()
         val lineas = c.chat?.lines()?.filter { it.isNotBlank() }?.mapIndexedNotNull { i, l ->
             val m = runCatching { json.decodeFromString(Mensaje.serializer(), l) }.getOrNull() ?: return@mapIndexedNotNull null
             val nuevo = UUID.randomUUID().toString()
             ids[m.id] = nuevo
-            json.encodeToString(Mensaje.serializer(), Codigos.renovar(m).copy(id = nuevo, cuando = ahora + i, uid = null))
+            val renovado = Codigos.renovar(m).copy(id = nuevo, cuando = ahora + i, uid = null)
+            uids["anot-" + Codigos.unico(m)] = "anot-" + Codigos.unico(renovado)
+            json.encodeToString(Mensaje.serializer(), renovado)
         }
         val p = c.proyecto.copy(
             uid = Codigos.nuevo(), creado = ahora, aparato = null, origen = null,
@@ -117,7 +121,9 @@ object Recepcion {
         )
         // Los adjuntos van por el id viejo del mensaje: se les cambia la clave igual.
         val adjuntos = c.adjuntosDelChat.mapKeys { (clave, _) ->
-            ids.entries.firstOrNull { clave.startsWith(it.key + "-") }?.let { it.value + clave.removePrefix(it.key) } ?: clave
+            val anotado = clave.substringAfter('/', "").takeIf { clave.startsWith("anotado/") }
+            if (anotado != null) uids.entries.firstOrNull { anotado.startsWith(it.key) }?.let { "anotado/" + it.value + anotado.removePrefix(it.key) } ?: clave
+            else ids.entries.firstOrNull { clave.startsWith(it.key + "-") }?.let { it.value + clave.removePrefix(it.key) } ?: clave
         }
         val chat = lineas?.joinToString("\n")?.let { texto ->
             ids.entries.fold(texto) { t, (viejo, nuevo) -> t.replace("adjunto:$viejo-", "adjunto:$nuevo-") }

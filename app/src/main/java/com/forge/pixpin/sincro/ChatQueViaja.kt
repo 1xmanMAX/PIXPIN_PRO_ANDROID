@@ -33,6 +33,15 @@ object ChatQueViaja {
     private const val EL_DOCUMENTO = "documento:"
     private const val ADJUNTO = "adjunto:"
 
+    /**
+     * **Lo anotado viaja con su mensaje** (28-sep-2026): tinta, marcadores, espacios, voz… de un PDF,
+     * un Word o un libro del chat ([AnotacionesDelAdjunto]). Van como adjuntos con estas claves y,
+     * al llegar, se renombran con el código que el mensaje tenga aquí (y lo del PDF del proyecto,
+     * con el del proyecto de aquí).
+     */
+    private const val ANOTADO = "anotado/"
+    private const val ANOTADO_DEL_PROYECTO = "anotado-proyecto/"
+
     /** Los mensajes del chat de [p]. */
     fun delProyecto(context: Context, p: Proyecto): List<Mensaje> =
         MensajesStore(context).leer().filter { it.proyecto == p.id }
@@ -50,10 +59,20 @@ object ChatQueViaja {
                 )
         }
 
-    /** Prepara [mensajes] de [p] para el paquete. Trabajo de disco: solo lee. */
-    fun preparar(p: Proyecto, mensajes: List<Mensaje>): Paquete? {
+    /** Prepara [mensajes] de [p] para el paquete. Trabajo de disco: solo lee. Con [filesDir], también lo anotado. */
+    fun preparar(p: Proyecto, mensajes: List<Mensaje>, filesDir: File? = null): Paquete? {
         if (mensajes.isEmpty()) return null
         val adjuntos = LinkedHashMap<String, File>()
+        if (filesDir != null) {
+            val anotado = AnotacionesDelAdjunto.porUid(filesDir)
+            for (m in mensajes) if (m.ruta != null) anotado[Codigos.unico(m)]?.forEach { rel ->
+                adjuntos[ANOTADO + File(rel).name] = File(filesDir, rel)
+            }
+            val delProyecto = Codigos.unico(p)
+            anotado[delProyecto]?.forEach { rel ->
+                adjuntos[ANOTADO_DEL_PROYECTO + File(rel).name.removePrefix("anot-$delProyecto")] = File(filesDir, rel)
+            }
+        }
         val lineas = mensajes.sortedBy { it.cuando }.map { m ->
             val ruta = m.ruta
             val viaja = when {
@@ -162,7 +181,32 @@ object ChatQueViaja {
             if (yaEstan.containsKey(puesto.id)) almacen.actualizar(puesto.id) { puesto.copy(fijado = it.fijado) }
             else almacen.anadir(puesto)
             cuantos++
+            // Lo anotado sobre su adjunto, con el código que tiene aquí. Quien envía manda.
+            if (rutaAqui != null) {
+                val alli = "anot-" + Codigos.unico(llega)
+                val aqui = "anot-" + Codigos.unico(puesto)
+                for ((clave, bytes) in adjuntos) {
+                    val nombre = clave.takeIf { it.startsWith(ANOTADO) }?.removePrefix(ANOTADO)?.takeIf { it.startsWith(alli) } ?: continue
+                    ponerAnotado(context.filesDir, aqui + nombre.removePrefix(alli), bytes)
+                }
+            }
+        }
+        val delProyecto = "anot-" + Codigos.unico(proyecto)
+        for ((clave, bytes) in adjuntos) {
+            val resto = clave.takeIf { it.startsWith(ANOTADO_DEL_PROYECTO) }?.removePrefix(ANOTADO_DEL_PROYECTO) ?: continue
+            ponerAnotado(context.filesDir, delProyecto + resto, bytes)
         }
         return cuantos
+    }
+
+    private fun ponerAnotado(filesDir: File, nombre: String, bytes: ByteArray) {
+        if (nombre.contains('/') || nombre.contains("..")) return
+        runCatching {
+            val destino = File(filesDir, "${AnotacionesDelAdjunto.CARPETA}/$nombre")
+            destino.parentFile?.mkdirs()
+            val tmp = File(destino.parentFile, "$nombre.tmp")
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(destino)) { tmp.copyTo(destino, overwrite = true); tmp.delete() }
+        }
     }
 }

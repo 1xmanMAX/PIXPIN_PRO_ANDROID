@@ -357,6 +357,18 @@ class MensajesStore(private val context: Context) {
     }.getOrNull()
 
     /** Borra el archivo de un mensaje. Solo al borrar el mensaje, no antes. */
+    /**
+     * El adjunto de [m] y **lo anotado sobre él** (tinta, marcadores, espacios…), que va con el código
+     * del mensaje y sin él se quedaría suelto. Ver [com.forge.pixpin.sincro.AnotacionesDelAdjunto].
+     */
+    fun borrarAdjunto(m: Mensaje) {
+        borrarAdjunto(m.ruta)
+        if (m.ruta == null) return
+        runCatching {
+            com.forge.pixpin.sincro.AnotacionesDelAdjunto.todoDe(context.filesDir, com.forge.pixpin.sincro.Codigos.unico(m)).forEach { it.delete() }
+        }
+    }
+
     fun borrarAdjunto(ruta: String?) {
         if (ruta.isNullOrBlank()) return
         // Solo lo que es nuestro: un dibujo del lienzo o una página de un PDF viven en su

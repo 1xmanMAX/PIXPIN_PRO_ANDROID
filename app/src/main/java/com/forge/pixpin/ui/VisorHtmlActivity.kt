@@ -295,6 +295,24 @@ class VisorHtmlActivity : ComponentActivity() {
     /** Con qué se guarda lo de este documento: el archivo de verdad, no la página fabricada. */
     private val claveDelDocumento: String get() = "doc:" + (comparte ?: elOriginal)?.absolutePath.orEmpty()
 
+    /**
+     * **Si es un adjunto del chat, lo anotado va con el código de su mensaje** (28-sep-2026): la
+     * tinta, los marcadores y la columna fijada, en archivos que viajan al sincronizar. Null si no
+     * es un documento del chat: entonces sigue todo por la ruta. Ver [ExportarDocumentoAnotado.baseDe].
+     */
+    private var baseDelMensaje: String? = null
+    private val elDocumento: File? get() = comparte ?: elOriginal
+
+    /** La columna fijada, la letra con que se fijó y los espacios, a su sitio. */
+    private fun guardarLaMaqueta() {
+        val doc = elDocumento ?: return
+        val columna = columnaDeAnotar ?: return
+        ExportarDocumentoAnotado.guardarMaqueta(
+            this, doc, baseDelMensaje,
+            com.forge.pixpin.sincro.AnotacionesDelAdjunto.Maqueta(columna, espacioIzq, espacioDer, tamanoDeLetra, grosorDeLetra, tipoDeLetra)
+        )
+    }
+
     /** Lo alto que es el documento entero, en píxeles de pantalla. */
     @Suppress("DEPRECATION")
     private fun altoDelDocumento(): Float = web?.let { it.contentHeight * it.scale } ?: 0f
@@ -323,7 +341,8 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     private fun guardarMarcadores() {
-        prefsDeLectura.edit().putString(claveDelDocumento + ":marcadores", com.forge.pixpin.motor.Lectura.aTexto(marcadores)).apply()
+        val doc = elDocumento ?: return
+        ExportarDocumentoAnotado.guardarMarcadores(this, doc, baseDelMensaje, com.forge.pixpin.motor.Lectura.aTexto(marcadores))
     }
 
     /** Reescribe la página que se enseña con la letra pedida, y la recarga **sin perder el sitio**. */
@@ -370,7 +389,7 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     private var marcaDeVoz by mutableStateOf<Pair<Int, Float>?>(null)
     private fun leerLaMarcaDeVoz() {
-        marcaDeVoz = com.forge.pixpin.motor.Lectura.vozDeTexto(prefsDeLectura.getString(com.forge.pixpin.motor.Lectura.claveDeVoz(claveDelDocumento), null))
+        marcaDeVoz = com.forge.pixpin.motor.Lectura.vozDeTexto(ExportarDocumentoAnotado.vozDe(this, claveDelDocumento))
     }
     /** Voces en línea de Google (mejores, pero el texto sale del teléfono); se recuerda. */
     private var vocesEnLinea by mutableStateOf(false)
@@ -734,7 +753,7 @@ class VisorHtmlActivity : ComponentActivity() {
     }
 
     /** Lo anotado sobre este documento: un dibujo del motor de siempre, guardado como cualquier otro. */
-    private val idDeLaCapa: String get() = "capa-doc-" + claveDelDocumento.hashCode().toUInt().toString(16)
+    private val idDeLaCapa: String get() = ExportarDocumentoAnotado.idDeLaCapa(elDocumento ?: File(""), baseDelMensaje)
     private val laCapa: com.forge.pixpin.motor.DrawController by lazy {
         com.forge.pixpin.motor.DrawController(
             com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, idDeLaCapa))
@@ -815,12 +834,7 @@ class VisorHtmlActivity : ComponentActivity() {
         // La primera vez, los dos tercios de siempre a cada lado.
         espacioIzq = com.forge.pixpin.motor.Lectura.margenDe(columna)
         espacioDer = com.forge.pixpin.motor.Lectura.margenDe(columna)
-        prefsDeLectura.edit()
-            .putInt(claveDelDocumento + ":columna", columna)
-            .putInt(claveDelDocumento + ":izq", espacioIzq)
-            .putInt(claveDelDocumento + ":der", espacioDer)
-            .putString(claveDelDocumento + ":letra", "$tamanoDeLetra,$grosorDeLetra,$tipoDeLetra")
-            .apply()
+        guardarLaMaqueta()
         val pagina = laPaginaQueSeVe ?: return
         fraccionPendiente = fraccionDeAhora()
         entrarAlCargar = true
@@ -907,10 +921,7 @@ class VisorHtmlActivity : ComponentActivity() {
             columnaDeAnotar = c
             espacioIzq = 0
             espacioDer = 0
-            prefsDeLectura.edit()
-                .putInt(claveDelDocumento + ":columna", c)
-                .putString(claveDelDocumento + ":letra", "$tamanoDeLetra,$grosorDeLetra,$tipoDeLetra")
-                .apply()
+            guardarLaMaqueta()
         }
         val paso = com.forge.pixpin.motor.Lectura.pasoDeEspacio(columna) * (if (mas) 1 else -1)
         val antes = if (izquierda) espacioIzq else espacioDer
@@ -928,7 +939,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 guardarLaCapa()
             }
         } else espacioDer = ahora
-        prefsDeLectura.edit().putInt(claveDelDocumento + ":izq", espacioIzq).putInt(claveDelDocumento + ":der", espacioDer).apply()
+        guardarLaMaqueta()
         // Se recarga en el mismo sitio: la misma altura, y a lo ancho, lo que se estaba viendo.
         fraccionPendiente = fraccionDeAhora()
         val xAntes = vista.scrollX + if (izquierda) (corre * vista.scale).toInt() else 0
@@ -966,7 +977,7 @@ class VisorHtmlActivity : ComponentActivity() {
             if (cuantos == 0) { Toast.makeText(this, "Este documento no tiene texto que leer", Toast.LENGTH_SHORT).show(); return@evaluateJavascript }
             val desde = json.optInt("desde", 0).coerceIn(0, cuantos - 1)
             val f = json.optJSONArray("f")?.optDouble(desde, -1.0)?.toFloat()?.takeIf { it >= 0f } ?: fraccionDeAhora()
-            prefsDeLectura.edit().putString(com.forge.pixpin.motor.Lectura.claveDeVoz(claveDelDocumento), com.forge.pixpin.motor.Lectura.vozATexto(desde, f)).apply()
+            ExportarDocumentoAnotado.ponerVoz(this, claveDelDocumento, com.forge.pixpin.motor.Lectura.vozATexto(desde, f))
             leerLaMarcaDeVoz()
             val e = lector.estado.value
             if (escuchando && e.listo && e.clave == claveDelDocumento) {
@@ -1005,17 +1016,20 @@ class VisorHtmlActivity : ComponentActivity() {
             tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
             grosorDeLetra = prefsDeLectura.getInt("grosor", 1)
             tipoDeLetra = prefsDeLectura.getInt("tipo", 0)
-            marcadores = com.forge.pixpin.motor.Lectura.deTexto(prefsDeLectura.getString(claveDelDocumento + ":marcadores", null))
+            val doc = elDocumento
+            baseDelMensaje = doc?.let { d -> ExportarDocumentoAnotado.baseDe(this, d)?.also { ExportarDocumentoAnotado.migrar(this, d, it) } }
+            marcadores = com.forge.pixpin.motor.Lectura.deTexto(doc?.let { ExportarDocumentoAnotado.marcadores(this, it, baseDelMensaje) })
             // Y se vuelve a donde se dejó de leer.
-            fraccionPendiente = prefsDeLectura.getFloat(claveDelDocumento + ":sitio", -1f)
-            // **Un documento anotado conserva su letra y su columna**, las de cuando se anotó.
+            fraccionPendiente = doc?.let { ExportarDocumentoAnotado.sitioDe(this, it, baseDelMensaje) } ?: -1f
+            // **Un documento anotado conserva su letra y su columna**, las de cuando se anotó
+            // —aquí o en el otro aparato, que la tinta sin su columna caería en otro sitio—.
             sinLado = prefsDeLectura.getBoolean("sinLado", false)
-            prefsDeLectura.getInt(claveDelDocumento + ":columna", 0).takeIf { it > 0 }?.let { columna ->
+            doc?.let { ExportarDocumentoAnotado.maqueta(this, it, baseDelMensaje) }?.let { m ->
+                val columna = m.columna
                 columnaDeAnotar = columna
-                espacioIzq = com.forge.pixpin.motor.Lectura.espacioValido(prefsDeLectura.getInt(claveDelDocumento + ":izq", com.forge.pixpin.motor.Lectura.margenDe(columna)), columna)
-                espacioDer = com.forge.pixpin.motor.Lectura.espacioValido(prefsDeLectura.getInt(claveDelDocumento + ":der", com.forge.pixpin.motor.Lectura.margenDe(columna)), columna)
-                prefsDeLectura.getString(claveDelDocumento + ":letra", null)?.split(',')?.mapNotNull { it.toIntOrNull() }
-                    ?.takeIf { it.size == 3 }?.let { (t, g, l) -> tamanoDeLetra = t; grosorDeLetra = g; tipoDeLetra = l }
+                espacioIzq = com.forge.pixpin.motor.Lectura.espacioValido(m.izq, columna)
+                espacioDer = com.forge.pixpin.motor.Lectura.espacioValido(m.der, columna)
+                tamanoDeLetra = m.tamano; grosorDeLetra = m.grosor; tipoDeLetra = m.tipo
                 if (fraccionPendiente < 0f) fraccionPendiente = 0f
             }
         }
@@ -1031,7 +1045,7 @@ class VisorHtmlActivity : ComponentActivity() {
     override fun onPause() {
         guardarLaCapa()
         if (esDocumento && altoDelDocumento() > 0f) {
-            prefsDeLectura.edit().putFloat(claveDelDocumento + ":sitio", fraccionDeAhora()).apply()
+            elDocumento?.let { ExportarDocumentoAnotado.guardarSitio(this, it, baseDelMensaje, fraccionDeAhora()) }
             lifecycleScope.launch { runCatching { medirElDocumento() } }
         }
         super.onPause()

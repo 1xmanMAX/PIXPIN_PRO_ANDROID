@@ -909,7 +909,7 @@ class MensajesActivity : ComponentActivity() {
                                 },
                                 seleccionar = { marcados = marcados + m.id },
                                 borrar = {
-                                    almacen.borrarAdjunto(m.ruta)
+                                    almacen.borrarAdjunto(m)
                                     // El chat manda: lo que era este mensaje se va también del proyecto.
                                     quitarDeLosProyectos(listOf(m))
                                     guardarAparte(
@@ -1287,7 +1287,7 @@ class MensajesActivity : ComponentActivity() {
                                     }
                                 }
                                 IconButton(onClick = {
-                                    loMarcado.forEach { almacen.borrarAdjunto(it.ruta) }
+                                    loMarcado.forEach { almacen.borrarAdjunto(it) }
                                     quitarDeLosProyectos(loMarcado.toList())
                                     guardarAparte(
                                         mensajes.filterNot { it.id in marcados }
@@ -5256,7 +5256,7 @@ class MensajesActivity : ComponentActivity() {
         // temporizador obligaría a mantener algo despierto para borrar archivos.
         val fuera = caducados(todos, System.currentTimeMillis())
         if (fuera.isEmpty()) return todos
-        fuera.forEach { almacen.borrarAdjunto(it.ruta) }
+        fuera.forEach { almacen.borrarAdjunto(it) }
         val quedan = todos - fuera.toSet()
         almacen.reescribir(quedan)
         return quedan

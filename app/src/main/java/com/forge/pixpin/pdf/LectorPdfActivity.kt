@@ -246,8 +246,27 @@ class LectorPdfActivity : ComponentActivity() {
         // botón de la esquina los enciende y los apaga. Ver [EspaciosDelLado].
         val prefsDelLector = remember { getSharedPreferences("lectura", MODE_PRIVATE) }
         val claveDeEspacios = remember(rutaPedida) { "pdf:$rutaPedida:espacios" }
-        var espacios by remember(rutaPedida) { mutableStateOf(prefsDelLector.getInt(claveDeEspacios, 0)) }
-        fun ponerEspacios(v: Int) { espacios = v; prefsDelLector.edit().putInt(claveDeEspacios, v).apply() }
+        // **Si es un adjunto del chat, en un archivo con el código del mensaje**, que viaja al
+        // sincronizar (28-sep-2026); si es el PDF de un proyecto, con el código del proyecto. Lo de
+        // las preferencias, la primera vez, pasa ahí. Ver [com.forge.pixpin.sincro.AnotacionesDelAdjunto].
+        val baseSuelta = remember(rutaPedida) { capas.baseSuelta() }
+        val archivoDeEspacios = remember(baseSuelta) {
+            baseSuelta?.let { b ->
+                com.forge.pixpin.sincro.AnotacionesDelAdjunto.espacios(filesDir, b).also { f ->
+                    if (prefsDelLector.contains(claveDeEspacios)) com.forge.pixpin.sincro.AnotacionesDelAdjunto.ponerSiFalta(f, prefsDelLector.getInt(claveDeEspacios, 0).toString())
+                }
+            }
+        }
+        var espacios by remember(rutaPedida) {
+            mutableStateOf(
+                archivoDeEspacios?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it)?.trim()?.toIntOrNull()?.and(ESPACIO_IZQUIERDA or ESPACIO_DERECHA) }
+                    ?: prefsDelLector.getInt(claveDeEspacios, 0)
+            )
+        }
+        fun ponerEspacios(v: Int) {
+            espacios = v
+            archivoDeEspacios?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, v.toString()) } ?: prefsDelLector.edit().putInt(claveDeEspacios, v).apply()
+        }
         val hayIzquierda = espacios and ESPACIO_IZQUIERDA != 0
         val hayDerecha = espacios and ESPACIO_DERECHA != 0
         val margenPx = anchoPx * Lectura.MARGEN_DEL_PDF
@@ -261,8 +280,13 @@ class LectorPdfActivity : ComponentActivity() {
         // arriba. Ver [com.forge.pixpin.motor.Marcas] y [com.forge.pixpin.ui.RielDeMarcas].
         val prefsDeMarcas = remember { getSharedPreferences("marcas", MODE_PRIVATE) }
         val claveDeMarcas = remember(rutaPedida) { "pdf:" + rutaPedida }
+        val archivoDeMarcas = remember(baseSuelta) {
+            baseSuelta?.let { b -> com.forge.pixpin.sincro.AnotacionesDelAdjunto.marcas(filesDir, b).also { com.forge.pixpin.sincro.AnotacionesDelAdjunto.ponerSiFalta(it, prefsDeMarcas.getString(claveDeMarcas, null)) } }
+        }
         var marcas by remember(rutaPedida) {
-            mutableStateOf(com.forge.pixpin.motor.Marcas.deTexto(prefsDeMarcas.getString(claveDeMarcas, null)))
+            mutableStateOf(com.forge.pixpin.motor.Marcas.deTexto(
+                archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it) } ?: prefsDeMarcas.getString(claveDeMarcas, null)
+            ))
         }
         var poniendoMarca by remember { mutableStateOf(false) }
 
@@ -295,7 +319,8 @@ class LectorPdfActivity : ComponentActivity() {
             }
         }
         fun guardarLasMarcas() {
-            prefsDeMarcas.edit().putString(claveDeMarcas, com.forge.pixpin.motor.Marcas.aTexto(marcas)).apply()
+            val texto = com.forge.pixpin.motor.Marcas.aTexto(marcas)
+            archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, texto) } ?: prefsDeMarcas.edit().putString(claveDeMarcas, texto).apply()
         }
         /** Qué página se está mirando y por dónde va, para plantar ahí el marcador. */
         fun dondeEstoy(): Pair<Int, Double> {
@@ -781,7 +806,10 @@ class LectorPdfActivity : ComponentActivity() {
  * - **Cada hoja tiene su dibujo**, en las mismas unidades que usa el editor completo para una
  *   página (la hoja a [PdfDoc.PAGE_WIDTH] de ancho). Si el PDF **es de un proyecto**, es el dibujo
  *   de esa hoja —lo que se anote aquí se edita luego desde proyectos, y al revés—; si no, es un
- *   dibujo suelto del propio PDF (`pdf-<huella>-p<n>`).
+ *   dibujo suelto del propio PDF: `anot-<uid>-p<n>` si es un adjunto del chat —con el código de
+ *   su mensaje, que viaja al sincronizar ([com.forge.pixpin.sincro.AnotacionesDelAdjunto])—, o
+ *   `pdf-<huella>-p<n>` (la huella de la ruta) si no lo es. El de la huella es también el de
+ *   antes del 28-sep-2026: se copia al nuevo la primera vez que se abre la hoja.
  * - **No se crea ningún proyecto** por anotar. Solo con «Al proyecto» ([pasarAProyecto]), que
  *   además le entrega al proyecto nuevo los dibujos ya hechos.
  * - **Lo anotado se pinta siempre encima de cada hoja**, leyendo su dibujo: no depende de rehacer
@@ -790,6 +818,8 @@ class LectorPdfActivity : ComponentActivity() {
 private class CapasDelPdf(private val actividad: ComponentActivity, private val rutaPedida: String) {
     private val app = actividad.application as? com.forge.pixpin.PixPinApp
     private val huella = rutaPedida.hashCode().toUInt().toString(16)
+    /** El código del mensaje del chat que lleva este PDF, o null si no es un adjunto. No cambia nunca. */
+    private val uid: String? by lazy { com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(actividad.filesDir, rutaPedida) }
     private val abiertas = HashMap<Int, com.forge.pixpin.motor.DrawController>()
     private val sucias = HashSet<Int>()
     private var ultimaTocada = -1
@@ -801,11 +831,31 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
 
     fun esDeUnProyecto() = proyecto() != null
 
+    /**
+     * Con qué se nombran los marcadores y los espacios para que viajen: el código del proyecto si
+     * el PDF es de uno, el del mensaje si es un adjunto del chat, o null (se quedan por la ruta).
+     */
+    fun baseSuelta(): String? =
+        proyecto()?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(com.forge.pixpin.sincro.Codigos.unico(it)) }
+            ?: uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
+
+    /** El dibujo suelto de la hoja [i], migrando el de la huella si es la primera vez. */
+    private fun suelto(i: Int): String {
+        val viejo = "pdf-$huella-p$i"
+        val u = uid ?: return viejo
+        val nuevo = com.forge.pixpin.sincro.AnotacionesDelAdjunto.dePagina(u, i)
+        com.forge.pixpin.sincro.AnotacionesDelAdjunto.copiarSiFalta(
+            java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, viejo)),
+            java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, nuevo))
+        )
+        return nuevo
+    }
+
     fun documentoLimpio(): String? = proyecto()?.pdfLimpio?.takeIf { java.io.File(it).exists() }
 
     /** El dibujo de la hoja [i]. En un proyecto, el de su hoja; se le pone uno si aún no tenía. */
     private fun idDe(i: Int, paraEscribir: Boolean): String {
-        val p = proyecto() ?: return "pdf-$huella-p$i"
+        val p = proyecto() ?: return suelto(i)
         val hoja = p.hojas.firstOrNull { it.pagina == i } ?: return "pdf-$huella-p$i"
         hoja.dibujo?.let { return it }
         val suelto = "pdf-$huella-p$i"
@@ -850,13 +900,16 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
         val repo = app?.proyectos ?: return false
         // Primero a disco, que el proyecto va a leer los dibujos de ahí.
         val todo = synchronized(abiertas) { abiertas.map { (i, c) -> i to c.scene } }
-        todo.forEach { (i, escena) -> com.forge.pixpin.motor.ExcalidrawStore.guardar(actividad, "pdf-$huella-p$i", escena) }
+        // Con los nombres de antes de ser proyecto: los del adjunto, si lo es.
+        val sueltos = HashMap<Int, String>()
+        fun sueltoDe(i: Int) = sueltos.getOrPut(i) { suelto(i) }
+        todo.forEach { (i, escena) -> com.forge.pixpin.motor.ExcalidrawStore.guardar(actividad, sueltoDe(i), escena) }
         synchronized(sucias) { sucias.clear() }
         var p = repo.deEstePdf(rutaPedida, nombre, paginas, System.currentTimeMillis())
         for (hoja in p.hojas) {
             val i = hoja.pagina ?: continue
             if (hoja.dibujo != null) continue
-            val suelto = "pdf-$huella-p$i"
+            val suelto = sueltoDe(i)
             if (!java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, suelto)).exists()) continue
             p = com.forge.pixpin.motor.Proyectos.conDibujo(p, hoja.id, suelto, System.currentTimeMillis())
         }
