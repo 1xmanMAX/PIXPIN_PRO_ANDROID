@@ -6351,7 +6351,7 @@ class MensajesActivity : ComponentActivity() {
 
     /** El tipo de un archivo por su extensión, o «cualquiera» si Android no lo conoce. */
     private fun tipoDe(ruta: String): String =
-        android.webkit.MimeTypeMap.getSingleton()
+        com.forge.pixpin.data.TiposDeArchivo.principal(ruta) ?: android.webkit.MimeTypeMap.getSingleton()
             .getMimeTypeFromExtension(ruta.substringAfterLast('.', "").lowercase()) ?: "*/*"
 
     private fun abrirFuera(ruta: String) {

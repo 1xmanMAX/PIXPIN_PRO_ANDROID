@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.forge.pixpin.data.TiposDeArchivo
 import java.io.File
 
 /**
@@ -24,6 +25,11 @@ import java.io.File
  *   el usuario lo permita para PixPin en Ajustes. Se le lleva ahí directamente.
  * - Como PixPin también sabe abrir PDF, el sistema se quedaba con PixPin. En «Abrir con» PixPin sale
  *   de la lista: para verlo aquí ya está el toque normal.
+ *
+ * Y el 29-sep-2026: **un DWG no ofrecía ninguna aplicación de planos**, sino todas las demás. Android
+ * no conoce la extensión, el archivo salía como `*`/`*` y eso casa con cualquiera que declare algún
+ * tipo. Ahora se busca con todos los nombres de ese tipo ([TiposDeArchivo]) y se ofrecen juntas las
+ * que respondan a alguno; si ninguna responde se avisa y se deja elegir entre todas, como antes.
  */
 object AbrirCon {
 
@@ -32,6 +38,7 @@ object AbrirCon {
     fun mimeDe(archivo: File): String {
         val ext = archivo.extension.lowercase()
         if (ext == "apk") return MIME_APK
+        TiposDeArchivo.principal(archivo.name)?.let { return it }
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
     }
 
@@ -49,7 +56,8 @@ object AbrirCon {
             Toast.makeText(context, "El archivo ya no está", Toast.LENGTH_SHORT).show()
             return
         }
-        val tipo = mime?.takeIf { it != "*/*" } ?: mimeDe(archivo)
+        // Lo guardado con el pin puede decir «octet-stream» o «cualquiera»: eso no es un tipo.
+        val tipo = mime?.takeIf { it != "*/*" && it != "application/octet-stream" } ?: mimeDe(archivo)
         val fuera = context !is android.app.Activity
         runCatching {
             val uri = uriDe(context, archivo)
@@ -57,13 +65,39 @@ object AbrirCon {
                 instalar(context, uri, fuera)
                 return
             }
-            val ver = Intent(Intent.ACTION_VIEW).setDataAndType(uri, tipo).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            fun ver(t: String) = Intent(Intent.ACTION_VIEW).setDataAndType(uri, t).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val pm = context.packageManager
+            val principal = ver(tipo)
+            // Las que solo contestan a otro nombre del mismo tipo (un visor de DWG que se anuncia como
+            // `application/acad`) van aparte, cada una con el nombre al que contesta.
+            val otros = TiposDeArchivo.candidatos(archivo.name).filter { it != tipo }
+            val yaSalen = pm.queryIntentActivities(principal, 0).map { it.activityInfo.packageName }.toMutableSet()
+            val extra = ArrayList<Intent>()
+            for (t in otros) {
+                for (r in pm.queryIntentActivities(ver(t), 0)) {
+                    val paquete = r.activityInfo.packageName
+                    if (paquete == context.packageName || !yaSalen.add(paquete)) continue
+                    extra += ver(t).setComponent(ComponentName(paquete, r.activityInfo.name))
+                }
+            }
+            // Solo de los tipos de la tabla se puede saber que no hay nadie: son los declarados en
+            // `<queries>`. Del resto (un PDF) las demás aplicaciones no se ven al preguntar.
+            val nadie = otros.isNotEmpty() && yaSalen.none { it != context.packageName }
+            if (nadie) {
+                Toast.makeText(
+                    context,
+                    "Ninguna aplicación dice abrir .${archivo.extension.lowercase()}: se muestran todas",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            val lanzar = if (nadie) ver("*/*") else principal
             // Las de PixPin sí se ven sin declarar nada (son del propio paquete); las demás las lista el selector.
-            val propios = context.packageManager.queryIntentActivities(ver, 0)
+            val propios = pm.queryIntentActivities(lanzar, 0)
                 .filter { it.activityInfo.packageName == context.packageName }
                 .map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }
-            val elegir = Intent.createChooser(ver, "Abrir con").apply {
+            val elegir = Intent.createChooser(lanzar, "Abrir con").apply {
                 if (propios.isNotEmpty()) putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, propios.toTypedArray())
+                if (extra.isNotEmpty()) putExtra(Intent.EXTRA_INITIAL_INTENTS, extra.toTypedArray())
                 if (fuera) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(elegir)

@@ -28,7 +28,8 @@ import androidx.core.content.FileProvider
  * recibe no sabe qué es, así que no se ofrece a abrirlo con nada.
  *
  * Los tipos que sí conoce el sistema —PNG, JPEG, PDF— se dejan como estaban: no
- * hay nada que arreglar y una lista propia solo podría quedarse vieja.
+ * hay nada que arreglar y una lista propia solo podría quedarse vieja. Los que no
+ * (SVG, Excalidraw, DWG y demás planos) están en [TiposDeArchivo].
  *
  * ## Y las rutas siguen en el manifiesto
  *
@@ -41,18 +42,6 @@ import androidx.core.content.FileProvider
  */
 class ProveedorDeArchivos : FileProvider() {
 
-    override fun getType(uri: Uri): String? {
-        val nombre = uri.lastPathSegment.orEmpty().lowercase()
-        for ((extension, tipo) in LOS_QUE_EL_SISTEMA_NO_SABE) {
-            if (nombre.endsWith(extension)) return tipo
-        }
-        return super.getType(uri)
-    }
-
-    private companion object {
-        val LOS_QUE_EL_SISTEMA_NO_SABE = listOf(
-            ".svg" to "image/svg+xml",
-            ".excalidraw" to "application/vnd.excalidraw+json"
-        )
-    }
+    override fun getType(uri: Uri): String? =
+        TiposDeArchivo.principal(uri.lastPathSegment.orEmpty()) ?: super.getType(uri)
 }
