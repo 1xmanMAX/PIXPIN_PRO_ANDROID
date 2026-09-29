@@ -5953,6 +5953,15 @@ class MensajesActivity : ComponentActivity() {
             m.ruta?.takeIf { File(it).exists() && com.forge.pixpin.ui.ExportarDocumentoAnotado.esDocumento(m.nombre, it) }?.let { ruta ->
                 add(com.forge.pixpin.ui.ExportarDocumentoAnotado.formato(this@MensajesActivity, File(ruta), m.nombre.ifBlank { File(ruta).name }))
             }
+            // **Un PDF: con lo anotado en el lector**, sus márgenes y sus marcadores (29-sep-2026). Antes
+            // solo salía el archivo tal cual, sin nada de lo anotado. Ver [com.forge.pixpin.motor.PdfConAnotaciones].
+            m.ruta?.takeIf { File(it).exists() && it.endsWith(".pdf", ignoreCase = true) }?.let { ruta ->
+                val anotado = com.forge.pixpin.ui.ExportarPdfAnotado.DelChat(this@MensajesActivity, ruta)
+                add(com.forge.pixpin.ui.ExportarPdfAnotado.formatoPdf(
+                    this@MensajesActivity, ruta, m.nombre.ifBlank { File(ruta).name }.substringBeforeLast('.'),
+                    anotado::escena, anotado::espacios, anotado::marcas
+                ))
+            }
             talCual?.let { add(it) }
             if (m.texto.isNotBlank()) add(
                 com.forge.pixpin.ui.Compartible.Formato(

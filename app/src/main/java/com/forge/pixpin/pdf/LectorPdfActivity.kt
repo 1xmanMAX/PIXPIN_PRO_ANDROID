@@ -626,6 +626,12 @@ class LectorPdfActivity : ComponentActivity() {
                     remember(ruta, titulo) {
                         com.forge.pixpin.ui.Compartible(
                             titulo, formatos = listOf(
+                                // **El PDF, con lo anotado** —o limpio, con el interruptor—. `ruta` es ya la
+                                // copia limpia si el PDF es de un proyecto: lo anotado no sale dos veces.
+                                com.forge.pixpin.ui.ExportarPdfAnotado.formatoPdf(
+                                    this@LectorPdfActivity, ruta, titulo, { i -> capas.escenaDe(i) },
+                                    espacios = { espacios }, marcas = { marcas }
+                                ),
                                 com.forge.pixpin.ui.ExportarPdfAnotado.formato(this@LectorPdfActivity, ruta, titulo, cuantas) { i -> capas.escenaDe(i) },
                                 // **Y como texto**: el PDF pasado a un documento que se reflowea, con lo
                                 // anotado leyéndolo como texto. Ver [com.forge.pixpin.motor.PdfAHtml].

@@ -1100,11 +1100,33 @@ class Renderer(
      * volúmenes dibujan cosas cuyo tamaño no es el de su caja.
      */
     private fun sePierdeDePequeno(e: Element): Boolean = when (e.type) {
-        ElementType.LINE, ElementType.ARROW, ElementType.FREEDRAW,
+        ElementType.LINE, ElementType.ARROW, ElementType.FREEDRAW ->
+            (e.width + e.height) * zoomActual < UMBRAL_DE_CHIQUITO &&
+                (medidaDeSusPuntos(e) ?: (e.width + e.height)) * zoomActual < UMBRAL_DE_CHIQUITO
         ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
         ElementType.ARC, ElementType.TEXT, ElementType.REGION ->
             (e.width + e.height) * zoomActual < UMBRAL_DE_CHIQUITO
         else -> false
+    }
+
+    /**
+     * **Lo que miden de verdad sus puntos** (ancho más alto), o null si no tiene.
+     *
+     * Un trazo que llega de fuera puede traer la caja a cero: PixPin para Windows saca la caja
+     * de los puntos y escribía `width`/`height` sin rellenar (29-sep-2026). Fiándose de la caja,
+     * cada trazo del PC «cabía en un píxel» y se pintaba como la raya de la primera punta a la
+     * última: en el lector se veían rectas y en el HTML exportado —que no toma este atajo—
+     * los trazos enteros. Solo se mira aquí, cuando la caja ya dice «diminuto», que es lo raro.
+     */
+    private fun medidaDeSusPuntos(e: Element): Double? {
+        val pts = e.points ?: return null
+        if (pts.isEmpty()) return null
+        var x0 = pts[0].x; var x1 = x0; var y0 = pts[0].y; var y1 = y0
+        for (p in pts) {
+            if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x
+            if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y
+        }
+        return (x1 - x0) + (y1 - y0)
     }
 
     /**
@@ -1307,9 +1329,11 @@ class Renderer(
         paint.color = tema(parseColor(e.strokeColor, alpha))
         val puntos = e.points
         if (puntos != null && puntos.size >= 2) {
+            // La primera punta es la suya, no el origen: un trazo de fuera no siempre empieza en (0, 0).
+            val a = puntos.first()
             val u = puntos.last()
             canvas.drawLine(
-                e.x.toFloat(), e.y.toFloat(),
+                (e.x + a.x).toFloat(), (e.y + a.y).toFloat(),
                 (e.x + u.x).toFloat(), (e.y + u.y).toFloat(), paint
             )
         } else {

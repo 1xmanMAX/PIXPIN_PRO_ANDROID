@@ -503,4 +503,90 @@ object PdfAnotado {
     }
 
     private operator fun DoubleArray.component4(): Double = this[3]
+
+    // ---------------------------------------------------------------------
+    // Ensanchar la hoja y el índice
+    // ---------------------------------------------------------------------
+
+    /**
+     * **La hoja más ancha**, [izquierda] y [derecha] puntos a cada lado (29-sep-2026): los
+     * márgenes para anotar del lector, dentro del PDF. Cambia `/MediaBox` y `/CropBox` de la
+     * página y nada más: lo que había sigue en su sitio, porque el origen no se mueve.
+     *
+     * Solo con la hoja derecha: girada, lo que en pantalla es «a los lados» es otro eje de la caja,
+     * y el lector no pone márgenes ahí. Null si no se puede.
+     */
+    fun ensanchar(archivo: PdfArchivo, indicePagina: Int, izquierda: Double, derecha: Double): ByteArray? {
+        if (archivo.cifrado || (izquierda <= 0 && derecha <= 0)) return null
+        if (giroDePagina(archivo, indicePagina) != 0) return null
+        val numero = archivo.paginas().getOrNull(indicePagina) ?: return null
+        val pagina = archivo.diccDe(PdfValor.Ref(numero, 0)) ?: return null
+        val (x0, y0, x1, y1) = cajaDePagina(archivo, indicePagina) ?: return null
+        val caja = PdfValor.Lista(listOf(x0 - izquierda, y0, x1 + derecha, y1).map { PdfValor.Numero(it) })
+        return PdfEscritura.incremental(
+            archivo,
+            listOf(ObjetoPdf(numero, PdfValor.Dicc(pagina.entradas + mapOf("MediaBox" to caja, "CropBox" to caja))))
+        )
+    }
+
+    /** Un marcador del índice: su título, la hoja (desde 0) y a qué altura de ella, de 0 (arriba) a 1. */
+    data class Marcador(val titulo: String, val pagina: Int, val alto: Double)
+
+    /**
+     * **Los marcadores, en el índice del PDF** (`/Outlines`), detrás de los que ya tuviera: el
+     * panel de marcadores de cualquier lector los enseña y llevan a su hoja, a su altura.
+     * Null si no se puede o no hay ninguno.
+     */
+    fun conMarcadores(archivo: PdfArchivo, marcadores: List<Marcador>): ByteArray? {
+        if (archivo.cifrado) return null
+        val paginas = archivo.paginas()
+        val validos = marcadores.filter { it.pagina in paginas.indices }
+        if (validos.isEmpty()) return null
+        val numeroCatalogo = (archivo.trailer.entradas["Root"] as? PdfValor.Ref)?.numero ?: return null
+        val catalogo = archivo.diccDe(PdfValor.Ref(numeroCatalogo, 0)) ?: return null
+
+        var siguiente = PdfEscritura.primerNumeroLibre(archivo)
+        val objetos = ArrayList<ObjetoPdf>()
+        val existente = catalogo.entradas["Outlines"] as? PdfValor.Ref
+        val raiz = existente?.let { archivo.diccDe(it) }
+        val numeroRaiz = if (raiz != null) existente.numero else siguiente++
+        val nuestros = validos.map { siguiente++ }
+        val ultimoViejo = raiz?.entradas?.get("Last") as? PdfValor.Ref
+
+        validos.forEachIndexed { k, m ->
+            val caja = cajaDePagina(archivo, m.pagina)
+            val arriba = caja?.let { it[3] - m.alto.coerceIn(0.0, 1.0) * (it[3] - it[1]) }
+            val destino = PdfValor.Lista(
+                listOf(PdfValor.Ref(paginas[m.pagina], 0), PdfValor.Nombre("XYZ"), PdfValor.Nulo,
+                    arriba?.let { PdfValor.Numero(it) } ?: PdfValor.Nulo, PdfValor.Nulo)
+            )
+            objetos += ObjetoPdf(nuestros[k], PdfValor.Dicc(buildMap {
+                put("Title", PdfValor.Cadena(textoPdf(m.titulo)))
+                put("Parent", PdfValor.Ref(numeroRaiz, 0))
+                put("Dest", destino)
+                if (k > 0) put("Prev", PdfValor.Ref(nuestros[k - 1], 0))
+                else if (ultimoViejo != null) put("Prev", ultimoViejo)
+                if (k < nuestros.size - 1) put("Next", PdfValor.Ref(nuestros[k + 1], 0))
+            }))
+        }
+        // El último de los que había apunta al primero nuestro.
+        if (ultimoViejo != null) archivo.diccDe(ultimoViejo)?.let { d ->
+            objetos += ObjetoPdf(ultimoViejo.numero, PdfValor.Dicc(d.entradas + ("Next" to PdfValor.Ref(nuestros.first(), 0))))
+        }
+        val cuenta = ((archivo.resolver(raiz?.entradas?.get("Count")) as? PdfValor.Numero)?.valor ?: 0.0).let { if (it < 0) 0.0 else it }
+        objetos += ObjetoPdf(numeroRaiz, PdfValor.Dicc(raiz?.entradas.orEmpty() + buildMap {
+            put("Type", PdfValor.Nombre("Outlines"))
+            if (raiz?.entradas?.get("First") == null) put("First", PdfValor.Ref(nuestros.first(), 0))
+            put("Last", PdfValor.Ref(nuestros.last(), 0))
+            put("Count", PdfValor.Numero(cuenta + nuestros.size))
+        }))
+        if (existente == null) {
+            objetos += ObjetoPdf(numeroCatalogo, PdfValor.Dicc(catalogo.entradas + mapOf(
+                "Outlines" to PdfValor.Ref(numeroRaiz, 0),
+                // Que el lector abra con el panel de marcadores, si el documento no decía otra cosa.
+                "PageMode" to (catalogo.entradas["PageMode"] ?: PdfValor.Nombre("UseOutlines"))
+            )))
+        }
+        return PdfEscritura.incremental(archivo, objetos)
+    }
 }

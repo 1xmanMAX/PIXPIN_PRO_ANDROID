@@ -105,8 +105,16 @@ class Compartible(
         /** Un panel de opciones (la página web), con su botón al lado del peso. */
         val ajustes: (@Composable (cerrar: () -> Unit) -> Unit)? = null,
         /** Cambia cuando cambian los ajustes, para volver a preparar el archivo. */
-        val versionDeAjustes: @Composable () -> Any? = { null }
+        val versionDeAjustes: @Composable () -> Any? = { null },
+        /**
+         * **Un interruptor a la vista**, debajo de los formatos (29-sep-2026: «con anotaciones o sin
+         * ellas, un switch siempre activo por defecto»). Cambiarlo vuelve a preparar el archivo.
+         */
+        val interruptor: Interruptor? = null
     )
+
+    /** Lo lee [Formato.generar] en [puesto]; la hoja lo cambia antes de volver a preparar. */
+    class Interruptor(val nombre: String, val detalle: String = "", @Volatile var puesto: Boolean = true)
 
     class Salida(val archivo: File, val mime: String, val resumen: String? = null)
 
@@ -142,12 +150,14 @@ fun HojaDeCompartir(c: Compartible, alCerrar: () -> Unit) {
     var fallo by remember { mutableStateOf<String?>(null) }
     var vuelta by remember { mutableIntStateOf(0) }
     val version = formato?.versionDeAjustes?.invoke()
+    var puesto by remember(formatoId) { mutableStateOf(formato?.interruptor?.puesto ?: true) }
 
     // **El archivo, preparado en cuanto se elige**: así se ve su peso y compartir es instantáneo.
-    LaunchedEffect(formatoId, elegidas, version, vuelta) {
+    LaunchedEffect(formatoId, elegidas, version, vuelta, puesto) {
         salida = null
         fallo = null
         val f = formato ?: return@LaunchedEffect
+        f.interruptor?.puesto = puesto
         val generar = f.generar ?: return@LaunchedEffect
         if (c.paginas.isNotEmpty() && f.paginas != Compartible.NINGUNA && elegidas.isEmpty()) return@LaunchedEffect
         preparando = true
@@ -200,6 +210,19 @@ fun HojaDeCompartir(c: Compartible, alCerrar: () -> Unit) {
                         Text(f.nombre, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 6.dp),
                             fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal)
                     }
+                }
+            }
+
+            formato?.interruptor?.let { i ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { puesto = !puesto }.padding(horizontal = 20.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(i.nombre, style = MaterialTheme.typography.titleSmall)
+                        if (i.detalle.isNotBlank()) Text(i.detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    androidx.compose.material3.Switch(checked = puesto, onCheckedChange = { puesto = it })
                 }
             }
 

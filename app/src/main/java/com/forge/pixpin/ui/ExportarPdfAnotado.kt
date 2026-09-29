@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.util.Base64
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.PictureAsPdf
 import com.forge.pixpin.motor.DocumentoAnotado
 import com.forge.pixpin.motor.DrawSvg
 import com.forge.pixpin.motor.ExportarHtml
@@ -26,8 +27,10 @@ import kotlinx.coroutines.flow.first
  * [Lectura.MARGEN_DEL_PDF] a cada lado, lo anotado encima de cada una —también lo de los
  * márgenes— y la barra de lápiz, resaltador, borrador, deshacer y guardar de toda página web.
  *
- * Las hojas van como fotografía: la página es una lectura, no un plano que medir. Cuantas más
- * hojas, menos puntos por hoja, para que un documento largo no se haga de decenas de megas.
+ * Si el PDF se deja leer como líneas, va **una página por hoja**, en líneas, con lo anotado
+ * encima: pesa poco y el texto sigue nítido a cualquier aumento ([porHojas], 29-sep-2026). Si no
+ * —un escaneo—, las hojas van como fotografía en una columna: cuantas más hojas, menos puntos por
+ * hoja, para que un documento largo no se haga de decenas de megas.
  */
 object ExportarPdfAnotado {
     /** Lo que mide la hoja en la página web, en píxeles CSS. El dibujo la mide en [PdfDoc.PAGE_WIDTH]. */
@@ -43,6 +46,77 @@ object ExportarPdfAnotado {
             // se copia—. Ver [capaDeTexto].
             ".hoja-pdf{position:relative}.texto-pdf{position:absolute;left:0;top:0;right:0;bottom:0;line-height:1;color:transparent}" +
             ".texto-pdf span{position:absolute;white-space:pre;cursor:text}.texto-pdf ::selection{background:rgba(0,90,255,.25);color:transparent}"
+
+    /**
+     * **El PDF, con lo anotado o limpio** (29-sep-2026). Con el interruptor puesto —como viene—, el
+     * PDF de siempre más los márgenes del lector, la tinta como vectores y los marcadores en el
+     * índice ([com.forge.pixpin.motor.PdfConAnotaciones]); quitado, el PDF limpio, tal cual.
+     *
+     * [base] es el documento **sin nada anotado dentro**: en un proyecto, su copia limpia.
+     */
+    fun formatoPdf(
+        c: Context, base: String, titulo: String, escenaDe: (Int) -> Scene?,
+        espacios: () -> Int, marcas: () -> List<com.forge.pixpin.motor.Marca>
+    ): Compartible.Formato {
+        val interruptor = Compartible.Interruptor("Con anotaciones", "Tinta, márgenes y marcadores encima del PDF")
+        return Compartible.Formato(
+            "pdf-anotado", Icons.Filled.PictureAsPdf, "PDF", Compartible.NINGUNA,
+            interruptor = interruptor,
+            generar = { hacerPdf(c, base, titulo, escenaDe, espacios(), marcas(), interruptor.puesto) }
+        )
+    }
+
+    private fun hacerPdf(
+        c: Context, base: String, titulo: String, escenaDe: (Int) -> Scene?,
+        e: Int, m: List<com.forge.pixpin.motor.Marca>, conAnotaciones: Boolean
+    ): Compartible.Salida? {
+        val limpio = ("$titulo.pdf").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
+        val destino = File(File(c.cacheDir, "share").apply { mkdirs() }, limpio)
+        val original = File(base).readBytes()
+        if (!conAnotaciones) {
+            destino.writeBytes(original)
+            return Compartible.Salida(destino, "application/pdf", "El PDF limpio, sin nada anotado")
+        }
+        val hecho = com.forge.pixpin.motor.PdfConAnotaciones.hacer(
+            c.applicationContext, original, escenaDe,
+            izquierda = e and 1 != 0, derecha = e and 2 != 0,
+            marcadores = com.forge.pixpin.motor.PdfConAnotaciones.marcadoresDe(m),
+            hojaPintada = { i -> PdfDoc.render(base, i, PdfDoc.PAGE_WIDTH) }
+        ) ?: return null
+        destino.writeBytes(hecho)
+        val resumen = buildList {
+            add("Editable, con lo anotado encima")
+            if (e != 0) add("márgenes")
+            if (m.isNotEmpty()) add("${m.size} marcador" + if (m.size == 1) "" else "es")
+        }.joinToString(" · ")
+        return Compartible.Salida(destino, "application/pdf", resumen)
+    }
+
+    /**
+     * **Lo anotado de un PDF del chat**, sin abrirlo: su tinta hoja por hoja, sus márgenes y sus
+     * marcadores, buscados como los busca el lector (por el código del mensaje, y si no, por la ruta).
+     */
+    class DelChat(private val c: Context, private val ruta: String) {
+        private val uid = com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(c.filesDir, ruta)
+        private val base = uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
+        private val huella = ruta.hashCode().toUInt().toString(16)
+
+        fun escena(i: Int): Scene? {
+            val nombres = listOfNotNull(uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.dePagina(it, i) }, "pdf-$huella-p$i")
+            return nombres.firstNotNullOfOrNull { n ->
+                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(c, n).takeIf { File(it).exists() }?.let { com.forge.pixpin.motor.ExcalidrawStore.cargar(it) }
+            }
+        }
+
+        fun espacios(): Int =
+            base?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(com.forge.pixpin.sincro.AnotacionesDelAdjunto.espacios(c.filesDir, it)) }?.trim()?.toIntOrNull()
+                ?: c.getSharedPreferences("lectura", Context.MODE_PRIVATE).getInt("pdf:$ruta:espacios", 0)
+
+        fun marcas(): List<com.forge.pixpin.motor.Marca> = com.forge.pixpin.motor.Marcas.deTexto(
+            base?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(com.forge.pixpin.sincro.AnotacionesDelAdjunto.marcas(c.filesDir, it)) }
+                ?: c.getSharedPreferences("marcas", Context.MODE_PRIVATE).getString("pdf:$ruta", null)
+        )
+    }
 
     fun formato(c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?) =
         Compartible.Formato(
@@ -73,6 +147,11 @@ object ExportarPdfAnotado {
             textos.asSequence().filterNotNull().flatMap { it.textos.asSequence() }.take(800).joinToString(" ") { it.texto },
             java.util.Locale.getDefault().language.ifBlank { "es" }
         )
+        // **Si las hojas se dejan leer como líneas, van como líneas** (29-sep-2026). Ver [porHojas].
+        val planos = textos.map { p -> p?.takeIf { it.valeLaPena && it.sinEntender == 0 && it.ancho > 0 && it.alto > 0 } }
+        if (planos.any { it != null }) {
+            porHojas(c, ruta, titulo, paginas, escenaDe, funciones, planos)?.let { return it }
+        }
         for (i in 0 until paginas) {
             val foto = PdfDoc.render(ruta, i, ancho) ?: continue
             val alto = COLUMNA.toDouble() * foto.height / foto.width
@@ -102,6 +181,50 @@ object ExportarPdfAnotado {
         val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
         File(File(c.cacheDir, "share").apply { mkdirs() }, limpio).also { it.writeText(hecha) }
     }.getOrNull()
+
+    /**
+     * **Una página web por hoja, con la hoja en líneas y lo anotado encima** (29-sep-2026).
+     *
+     * El usuario: «cuando lo comparto como HTML pesa mucho; aplica la técnica del canvas cuando lo
+     * separa por hojas: solo se envía la capa de anotación y sobre eso las líneas, y el texto sigue
+     * nítido al hacer zoom». Es lo que hace la página web de un proyecto con su PDF
+     * ([com.forge.pixpin.motor.ExportarProyectoWeb]): la hoja viaja como geometría ([com.forge.pixpin.motor.PlanoWeb])
+     * y la pinta el visor en su lienzo, a cualquier aumento; lo anotado va en el SVG de encima. Ninguna
+     * foto, salvo en las hojas que no se dejan leer (un escaneo): esas van en WebP, como en el proyecto.
+     *
+     * Lo que se pierde frente a la columna de fotos: el texto invisible para «Leer en voz alta» y
+     * el ir hoja tras hoja deslizando; se pasa de hoja con el menú y las flechas del documento.
+     */
+    private fun porHojas(
+        c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?,
+        funciones: Set<String>?, planos: List<com.forge.pixpin.motor.PlanoDePdf.Plano?>
+    ): File? {
+        val hojas = ArrayList<ExportarHtml.HojaWeb>(paginas)
+        for (i in 0 until paginas) {
+            val leido = planos.getOrNull(i)
+            val plano = leido?.let { runCatching { com.forge.pixpin.motor.PlanoWeb.aJson(it) }.getOrNull() }
+            val escena = (escenaDe(i) ?: Scene()).copy(backgroundColor = "#ffffff")
+            // **El papel manda en el encuadre**: mide PAGE_WIDTH, como la hoja sobre la que se anotó.
+            // Con la hoja en líneas no viaja, así que solo hacen falta sus medidas —salvo que una
+            // lupa o un mosaico tengan que coger sus píxeles—; si no, la hoja pintada.
+            val sinPixeles = plano != null && escena.elements.none { !it.isDeleted && (it.type == com.forge.pixpin.motor.ElementType.LUPA || it.type == com.forge.pixpin.motor.ElementType.MOSAIC) }
+            val papel = (if (sinPixeles) null else PdfDoc.render(ruta, i, PdfDoc.PAGE_WIDTH))
+                ?: leido?.let { Bitmap.createBitmap(PdfDoc.PAGE_WIDTH, Math.round(PdfDoc.PAGE_WIDTH * it.alto / it.ancho).toInt().coerceAtLeast(1), Bitmap.Config.ALPHA_8) }
+                ?: continue
+            val imagen: (String) -> Bitmap? = { f -> escena.files[f]?.path?.let { ImageStore.load(it) } }
+            val svg = DrawSvg.aTexto(
+                c, escena, imagen, papel,
+                papelFino = if (plano == null) papel else null,
+                papelAparte = plano != null
+            )
+            papel.recycle()
+            if (svg != null) hojas += ExportarHtml.HojaWeb.Dibujo("Hoja ${i + 1}", svg, "#ffffff", plano)
+        }
+        if (hojas.isEmpty()) return null
+        val hecha = ExportarHtml.paginas(hojas, titulo, "$titulo (anotado)", ExportarHtml.Opciones.de(funciones))
+        val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
+        return File(File(c.cacheDir, "share").apply { mkdirs() }, limpio).also { it.writeText(hecha) }
+    }
 
     /**
      * **Las líneas de la hoja**, cada una en su sitio sobre la foto, en píxeles de la columna. Las

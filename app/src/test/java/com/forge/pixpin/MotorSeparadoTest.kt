@@ -47,7 +47,7 @@ class MotorSeparadoTest {
         // imágenes, y las dos cosas son de Android. La geometría que usan sí es
         // del núcleo —[Caminos], [Rough], [Perimetros]— y por eso el PDF se
         // comprueba casi entero sin dispositivo.
-        "Glifos.kt", "PdfLienzo.kt", "PdfDoc.kt", "PdfDelProyecto.kt",
+        "Glifos.kt", "PdfLienzo.kt", "PdfDoc.kt", "PdfDelProyecto.kt", "PdfConAnotaciones.kt",
         // Pinta el plano leído del PDF en un `Canvas` de Android, con sus `Paint` y sus
         // `Matrix`. Lo que **lee** el PDF —[PlanoDePdf]— sí es núcleo y sí se comprueba sin
         // dispositivo, que es donde está toda la dificultad.

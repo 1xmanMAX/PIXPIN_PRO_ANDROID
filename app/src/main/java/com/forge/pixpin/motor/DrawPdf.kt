@@ -212,11 +212,17 @@ object DrawPdf {
          * que tapa. Sin ella un mosaico sale como una placa esmerilada — sigue
          * tapando, que es lo suyo, pero no se parece al de la pantalla.
          */
-        hojaPintada: Bitmap? = null
+        hojaPintada: Bitmap? = null,
+        /**
+         * La matriz ya calculada, si quien llama la midió antes de cambiar la página. Es lo que
+         * hace falta al **ensanchar la hoja** para los márgenes: la matriz tiene que salir de la
+         * caja original —sobre ella se dibujó—, no de la ensanchada. Ver [PdfConAnotaciones].
+         */
+        matrizFija: DoubleArray? = null
     ): ByteArray? = runCatching {
         val archivo = leerPdf(original) ?: return null
         if (archivo.cifrado) return null
-        val matriz = PdfAnotado.matrizDePagina(archivo, pagina, anchoImagen, altoImagen)
+        val matriz = matrizFija ?: PdfAnotado.matrizDePagina(archivo, pagina, anchoImagen, altoImagen)
             ?: return null
 
         val dibujo = PdfLienzo.deEscena(
