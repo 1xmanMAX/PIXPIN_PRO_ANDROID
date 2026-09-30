@@ -327,6 +327,30 @@ class LectorPdfActivity : ComponentActivity() {
             val texto = com.forge.pixpin.motor.Marcas.aTexto(marcas)
             archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, texto) } ?: prefsDeMarcas.edit().putString(claveDeMarcas, texto).apply()
         }
+        // **Los marcadores que ya trae el PDF** (30-sep-2026): los de su índice —un PDF exportado
+        // desde PixPin los lleva ahí— pasan al riel la primera vez que se abre. Solo si aún no se
+        // guardó ninguno: quitados a mano, no vuelven.
+        LaunchedEffect(rutaPedida) {
+            val nuncaGuardadas = archivoDeMarcas?.exists()?.not() ?: !prefsDeMarcas.contains(claveDeMarcas)
+            if (!nuncaGuardadas || marcas.isNotEmpty()) return@LaunchedEffect
+            val delIndice = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.forge.pixpin.motor.leerPdf(java.io.File(rutaPedida).readBytes())
+                        ?.let { com.forge.pixpin.motor.PdfAnotado.marcadoresDelIndice(it, com.forge.pixpin.motor.Marcas.MAXIMO) }
+                }.getOrNull().orEmpty()
+            }
+            if (delIndice.isEmpty() || marcas.isNotEmpty()) return@LaunchedEffect
+            var lista = emptyList<com.forge.pixpin.motor.Marca>()
+            val ahora = System.currentTimeMillis()
+            for (m in delIndice) {
+                // «⭐ Hoja 3» vuelve a ser una estrella; lo que no empiece por uno de los nuestros, un 🔖.
+                val emoji = com.forge.pixpin.motor.Marcas.EMOJIS.firstOrNull { m.titulo.startsWith(it) } ?: com.forge.pixpin.motor.Marcas.EMOJIS.first()
+                val (x, y) = com.forge.pixpin.motor.Marcas.enLaPagina(m.pagina, m.alto)
+                lista = com.forge.pixpin.motor.Marcas.con(lista, x, y, emoji, ahora)
+            }
+            marcas = lista
+            guardarLasMarcas()
+        }
         /** Qué página se está mirando y por dónde va, para plantar ahí el marcador. */
         fun dondeEstoy(): Pair<Int, Double> {
             val primera = estado.layoutInfo.visibleItemsInfo.firstOrNull() ?: return 0 to 0.0

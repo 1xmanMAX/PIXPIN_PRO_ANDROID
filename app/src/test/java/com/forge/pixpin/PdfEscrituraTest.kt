@@ -286,49 +286,48 @@ class PdfEscrituraTest {
      * nada que se pueda romper ahí.
      */
     @Test
-    fun `en capa, el contenido de la página ni se roza`() {
+    fun `en capa, lo de la página sigue entero`() {
         val archivo = leerPdf(pdfClasico())!!
         val antes = archivo.pagina(0)!!
         val releido = leerPdf(PdfAnotado.anotar(archivo, 0, dibujo)!!)!!
         val despues = releido.pagina(0)!!
 
-        assertEquals("le han tocado el contenido", antes.entradas["Contents"], despues.entradas["Contents"])
-        assertEquals("le han tocado los recursos", antes.entradas["Resources"], despues.entradas["Resources"])
-        // Lo único nuevo: la lista de anotaciones.
-        assertEquals(
-            setOf("Annots"),
-            despues.entradas.keys - antes.entradas.keys
-        )
+        // Su contenido, tal cual, entre nuestro `q` y lo nuestro.
+        val contenidos = despues.lista("Contents")!!
+        assertEquals(3, contenidos.size)
+        assertEquals("le han tocado el contenido", antes.entradas["Contents"], contenidos[1])
+        // Sus recursos siguen: solo se añaden los nuestros.
+        val recursosAntes = archivo.diccDe(antes.entradas["Resources"])!!
+        val recursosDespues = releido.diccDe(despues.entradas["Resources"])!!
+        assertTrue("le han quitado recursos", recursosDespues.entradas.keys.containsAll(recursosAntes.entradas.keys))
+        assertNull("sigue yendo como anotación", despues.entradas["Annots"])
     }
 
+    /**
+     * **La tinta va en el contenido, no en una anotación** (30-sep-2026): el lector de PDF de
+     * Android no pinta las anotaciones, y el usuario exportaba y veía el PDF limpio.
+     */
     @Test
-    fun `la capa cuelga de una anotación que se imprime`() {
+    fun `la capa se pinta dentro de la página`() {
         val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
-        val anots = releido.pagina(0)!!.lista("Annots")
-        assertNotNull("no hay anotaciones", anots)
-        assertEquals(1, anots!!.size)
-        val marca = releido.diccDe(anots[0])!!
-        assertEquals("Annot", marca.nombre("Type"))
-        assertEquals("Stamp", marca.nombre("Subtype"))
-        // Sin el bit de imprimir se ve en pantalla y no sale en el papel, que es
-        // la peor forma de enterarse.
-        assertEquals(4, marca.entero("F"))
-        assertNotNull("no lleva capa", marca.ref("OC"))
-        assertNotNull("no lleva apariencia", releido.diccDe(marca.entradas["AP"]))
+        val pagina = releido.pagina(0)!!
+        val ultimo = releido.resolver(pagina.lista("Contents")!!.last()) as PdfValor.Flujo
+        val ordenes = String(releido.descomprimir(ultimo)!!, Charsets.ISO_8859_1)
+        assertTrue(ordenes, Regex("""/OC /PxOC\d+ BDC\s+/PxT\d+ Do\s+EMC""").containsMatchIn(ordenes))
+        val recursos = releido.diccDe(pagina.entradas["Resources"])!!
+        val propiedades = releido.diccDe(recursos.entradas["Properties"])!!
+        val capa = propiedades.entradas.values.single()
+        assertEquals("OCG", releido.diccDe(capa)!!.nombre("Type"))
+        assertEquals("la forma y la página no son de la misma capa", capa, formasDePixPin(releido, 0).single().dicc.ref("OC"))
     }
 
-    /** Y el dibujo está dentro de esa apariencia, marcado como de la capa. */
+    /** Y el dibujo está dentro de esa forma, marcada como de la capa. */
     @Test
     fun `el dibujo va dentro de la capa`() {
         val releido = leerPdf(PdfAnotado.anotar(leerPdf(pdfClasico())!!, 0, dibujo)!!)!!
-        val marca = releido.diccDe(releido.pagina(0)!!.lista("Annots")!![0])!!
-        val ap = releido.diccDe(marca.entradas["AP"])!!
-        val forma = releido.resolver(ap.entradas["N"]) as PdfValor.Flujo
+        val forma = formasDePixPin(releido, 0).single()
         assertEquals("Form", forma.dicc.nombre("Subtype"))
-        assertEquals(
-            "la forma y la anotación no son de la misma capa",
-            marca.ref("OC"), forma.dicc.ref("OC")
-        )
+        assertNotNull("la forma no lleva capa", forma.dicc.ref("OC"))
         val texto = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
         assertTrue(texto, texto.contains("100 100 m 300 400 l S"))
     }
@@ -363,7 +362,7 @@ class PdfEscrituraTest {
             leerPdf(una)!!, 0, "0 0 1 RG 10 10 m 50 50 l S\n".toByteArray(), nombre = "Martes"
         )!!
         val releido = leerPdf(dos)!!
-        assertEquals(2, releido.pagina(0)!!.lista("Annots")!!.size)
+        assertEquals(2, formasDePixPin(releido, 0).size)
         val props = releido.diccDe(
             releido.diccDe(releido.trailer.entradas["Root"])!!.entradas["OCProperties"]
         )!!

@@ -101,29 +101,22 @@ object PdfAnotado {
      * dentro del contenido de la página, lo que funciona pero lo deja soldado:
      * a partir de ahí es tan «de la página» como el texto que ya tenía. Aquí no.
      * El dibujo va en una **capa** con su nombre —lo que un PDF llama grupo de
-     * contenido opcional— dentro de una **anotación** propia.
+     * contenido opcional—: un formulario suelto que el contenido de la página
+     * pinta al final, marcado como de esa capa (`/OC … BDC … EMC`).
      *
-     * Lo que eso cambia, que no es poco:
+     * **Antes iba en una anotación** (un sello) y así la página no se tocaba.
+     * Pero el lector de PDF de Android (`PdfRenderer`, el de PixPin y el de
+     * muchos visores del móvil) **no pinta las anotaciones**: el usuario exportaba
+     * y veía el PDF limpio (30-sep-2026). Dentro del contenido la pinta todo el
+     * mundo. Lo que se conserva:
      *
-     * - **La página no se toca en absoluto.** Ni su contenido ni sus recursos:
-     *   lo único que cambia de ella es que su lista de anotaciones tiene una
-     *   más. Es la edición menos invasiva que admite el formato, y por tanto la
-     *   que menos puede romper. Ni siquiera hace falta ya proteger la pila
-     *   gráfica con `q`/`Q`, porque nunca entramos en su flujo.
      * - **Se puede apagar.** En Acrobat, Foxit, PDF-XChange u Okular sale un
      *   panel de capas y se enciende y se apaga: se ve el plano limpio o el
      *   plano con tus marcas, sin dos archivos.
-     * - **Se puede quitar.** Es una anotación, así que cualquier lector con
-     *   herramientas la selecciona y la borra. Fundida en el contenido habría
-     *   que reescribir el archivo.
+     * - **Lo de la página no se reescribe**: se le añaden dos flujos, uno que
+     *   guarda la pila gráfica antes (`q`) y otro que la repone y pinta encima.
      * - **Cada tanda es su capa.** Anotar otro día añade otra, con su nombre, y
      *   se pueden mirar por separado.
-     *
-     * Lo que hay que decir por delante: **el interruptor solo aparece en
-     * lectores de escritorio**. En el móvil, en Chrome y en el visor de Android
-     * —todos con el mismo motor por dentro— la capa se ve, porque nace
-     * encendida, pero no hay panel donde apagarla. Se pierde el interruptor, no
-     * el dibujo.
      *
      * [nombre] es lo que se leerá en ese panel: conviene que diga algo, como
      * «PixPin — 9 de agosto», y no «Capa 1».
@@ -150,7 +143,6 @@ object PdfAnotado {
 
         val capa = pedirNumero()
         val forma = pedirNumero()
-        val marca = pedirNumero()
         val objetos = ArrayList<ObjetoPdf>(extra)
 
         // La capa: un nombre y poco más. Lo que la hace una capa es que la
@@ -187,36 +179,32 @@ object PdfAnotado {
             )
         )
 
-        // Y la anotación que la coloca sobre la hoja.
+        // Y la página la pinta al final, marcada como de la capa. Dos flujos
+        // nuevos alrededor de los suyos: la pila gráfica que dejen a medias no
+        // nos mueve el dibujo. La caja del formulario es la de la página, y su
+        // matriz la identidad: cae justo donde caía el sello de antes.
+        val abrir = pedirNumero()
+        val pintar = pedirNumero()
+        val nombreForma = "${PREFIJO}T$forma"
+        val nombreCapa = "${PREFIJO}OC$capa"
+        objetos += ObjetoPdf(abrir, flujoComprimido("q\n".toByteArray(Charsets.ISO_8859_1)))
         objetos += ObjetoPdf(
-            marca,
-            PdfValor.Dicc(
-                buildMap {
-                    put("Type", PdfValor.Nombre("Annot"))
-                    put("Subtype", PdfValor.Nombre("Stamp"))
-                    put("Rect", cajaPdf)
-                    // **El bit de imprimir.** Sin él la anotación se ve en
-                    // pantalla y no sale en el papel, que es la peor forma de
-                    // enterarse: cuando ya has impreso.
-                    put("F", PdfValor.Numero(4.0))
-                    put("AP", PdfValor.Dicc(mapOf("N" to PdfValor.Ref(forma, 0))))
-                    put("OC", PdfValor.Ref(capa, 0))
-                    put("T", PdfValor.Cadena(textoPdf("PixPin")))
-                    put("Contents", PdfValor.Cadena(textoPdf(nombre)))
-                    put("NM", PdfValor.Cadena(textoPdf("$PREFIJO-$indicePagina-$marca")))
-                }
+            pintar,
+            flujoComprimido("Q\nq\n/OC /$nombreCapa BDC\n/$nombreForma Do\nEMC\nQ\n".toByteArray(Charsets.ISO_8859_1))
+        )
+        val nuestros = PdfValor.Dicc(
+            mapOf(
+                "XObject" to PdfValor.Dicc(mapOf(nombreForma to PdfValor.Ref(forma, 0))),
+                "Properties" to PdfValor.Dicc(mapOf(nombreCapa to PdfValor.Ref(capa, 0)))
             )
         )
-
-        // De la página solo cambia esto: una anotación más.
-        val anotaciones = when (val a = archivo.resolver(pagina.entradas["Annots"])) {
-            is PdfValor.Lista -> a.valores
-            else -> emptyList()
-        }
         objetos += ObjetoPdf(
             numeroPagina,
             PdfValor.Dicc(
-                pagina.entradas + ("Annots" to PdfValor.Lista(anotaciones + PdfValor.Ref(marca, 0)))
+                pagina.entradas + mapOf(
+                    "Contents" to PdfValor.Lista(listOf(PdfValor.Ref(abrir, 0)) + contenidosDe(pagina) + PdfValor.Ref(pintar, 0)),
+                    "Resources" to fusionarRecursos(archivo, pagina, nuestros)
+                )
             )
         )
 
@@ -589,4 +577,49 @@ object PdfAnotado {
         }
         return PdfEscritura.incremental(archivo, objetos)
     }
+
+    /**
+     * **Los marcadores que ya trae el PDF**, en su índice (`/Outlines`): lo inverso de
+     * [conMarcadores] (30-sep-2026). Un PDF exportado desde PixPin lleva ahí sus marcadores, y el
+     * lector los recoge al abrirlo por primera vez; también los de cualquier otro documento.
+     * Van en orden de lectura, con los de dentro de cada uno detrás de él. Los que apuntan a un
+     * destino con nombre o a otra cosa que una hoja se saltan.
+     */
+    fun marcadoresDelIndice(archivo: PdfArchivo, tope: Int = 200): List<Marcador> {
+        if (archivo.cifrado) return emptyList()
+        val catalogo = archivo.diccDe(archivo.trailer.entradas["Root"]) ?: return emptyList()
+        val raiz = archivo.diccDe(catalogo.entradas["Outlines"]) ?: return emptyList()
+        val porNumero = archivo.paginas().withIndex().associate { (i, n) -> n to i }
+        val salida = ArrayList<Marcador>()
+        val vistos = HashSet<Int>()
+        fun recorrer(primero: PdfValor?, fondo: Int) {
+            var ref = primero as? PdfValor.Ref
+            while (ref != null && salida.size < tope && fondo < 16 && vistos.add(ref.numero)) {
+                val m = archivo.diccDe(ref) ?: break
+                val destino = archivo.resolver(m.entradas["Dest"])
+                    ?: (archivo.diccDe(m.entradas["A"])?.takeIf { it.nombre("S") == "GoTo" }?.let { archivo.resolver(it.entradas["D"]) })
+                val lista = (destino as? PdfValor.Lista)?.valores
+                val pagina = (lista?.firstOrNull() as? PdfValor.Ref)?.let { porNumero[it.numero] }
+                if (pagina != null) {
+                    val titulo = (archivo.resolver(m.entradas["Title"]) as? PdfValor.Cadena)?.bytes?.let { textoDePdf(it) }.orEmpty()
+                    // Con `/XYZ izquierda arriba zoom`, la altura; si no, lo alto de la hoja.
+                    val arriba = if ((lista.getOrNull(1) as? PdfValor.Nombre)?.valor == "XYZ")
+                        (archivo.resolver(lista.getOrNull(3)) as? PdfValor.Numero)?.valor else null
+                    val caja = cajaDePagina(archivo, pagina)
+                    val alto = if (arriba != null && caja != null && caja[3] > caja[1])
+                        ((caja[3] - arriba) / (caja[3] - caja[1])).coerceIn(0.0, 1.0) else 0.0
+                    salida += Marcador(titulo.trim(), pagina, alto)
+                }
+                recorrer(m.entradas["First"], fondo + 1)
+                ref = m.entradas["Next"] as? PdfValor.Ref
+            }
+        }
+        recorrer(raiz.entradas["First"], 0)
+        return salida
+    }
+
+    /** Un texto del PDF: UTF-16 si trae su marca, y si no, latín-1 (lo que casi siempre es). */
+    private fun textoDePdf(b: ByteArray): String =
+        if (b.size >= 2 && b[0] == 0xFE.toByte() && b[1] == 0xFF.toByte()) String(b, 2, b.size - 2, Charsets.UTF_16BE)
+        else String(b, Charsets.ISO_8859_1)
 }

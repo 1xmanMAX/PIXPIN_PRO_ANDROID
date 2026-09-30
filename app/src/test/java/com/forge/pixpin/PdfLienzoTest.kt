@@ -126,13 +126,13 @@ class PdfLienzoTest {
         assertTrue(texto, texto.contains("(Memoria tecnica) Tj"))
     }
 
-    /** La página solo gana una anotación: su contenido no se ha tocado. */
+    /** La página solo gana su capa: su contenido sigue ahí, entre lo nuestro. */
     @Test
     fun `la página solo gana su capa`() {
         val releido = leerPdf(anotado()!!)!!
         val pagina = releido.pagina(0)!!
-        assertEquals(PdfValor.Ref(4, 0), pagina.ref("Contents"))
-        assertEquals(1, pagina.lista("Annots")!!.size)
+        assertEquals(PdfValor.Ref(4, 0), pagina.lista("Contents")!![1])
+        assertEquals(1, formasDePixPin(releido, 0).size)
     }
 
     /**
@@ -145,9 +145,7 @@ class PdfLienzoTest {
     @Test
     fun `dentro de la capa hay trazos y no una imagen`() {
         val releido = leerPdf(anotado()!!)!!
-        val marca = releido.diccDe(releido.pagina(0)!!.lista("Annots")!![0])!!
-        val ap = releido.diccDe(marca.entradas["AP"])!!
-        val forma = releido.resolver(ap.entradas["N"]) as PdfValor.Flujo
+        val forma = formasDePixPin(releido, 0).first()
         val ordenes = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
 
         assertTrue("no hay caminos: $ordenes", ordenes.contains(" m\n"))
@@ -161,10 +159,7 @@ class PdfLienzoTest {
     @Test
     fun `el color del dibujo llega al PDF`() {
         val releido = leerPdf(anotado()!!)!!
-        val marca = releido.diccDe(releido.pagina(0)!!.lista("Annots")!![0])!!
-        val forma = releido.resolver(
-            releido.diccDe(marca.entradas["AP"])!!.entradas["N"]
-        ) as PdfValor.Flujo
+        val forma = formasDePixPin(releido, 0).first()
         val ordenes = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
         // #e03131 → 0.878 0.192 0.192
         assertTrue("no lleva el rojo del trazo", ordenes.contains("0.878"))
@@ -219,10 +214,7 @@ class PdfLienzoTest {
         assertNotNull("no ha salido nada", salida)
 
         val releido = leerPdf(salida!!)!!
-        val marca = releido.diccDe(releido.pagina(0)!!.lista("Annots")!![0])!!
-        val forma = releido.resolver(
-            releido.diccDe(marca.entradas["AP"])!!.entradas["N"]
-        ) as PdfValor.Flujo
+        val forma = formasDePixPin(releido, 0).first()
         val ordenes = String(releido.descomprimir(forma)!!, Charsets.ISO_8859_1)
 
         // El mosaico tapa: o con su grano incrustado, o con la placa lisa, pero
@@ -339,6 +331,6 @@ class PdfLienzoTest {
         )
         assertNotNull("la segunda tanda no ha salido", segunda)
         val releido = leerPdf(segunda!!)!!
-        assertEquals(2, releido.pagina(0)!!.lista("Annots")!!.size)
+        assertEquals(2, formasDePixPin(releido, 0).size)
     }
 }

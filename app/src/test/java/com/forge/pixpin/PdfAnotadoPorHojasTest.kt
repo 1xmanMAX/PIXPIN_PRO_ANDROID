@@ -101,12 +101,18 @@ class PdfAnotadoPorHojasTest {
         assertTrue("la hoja no se ensanchó a la izquierda: ${caja.toList()}", caja[0] < -100)
         assertTrue("la derecha no debía cambiar: ${caja.toList()}", kotlin.math.abs(caja[2] - 612) < 0.01)
         val hoja = a.pagina(0)!!
-        assertTrue("la tinta no va como anotación", (a.resolver(hoja.entradas["Annots"]) as? com.forge.pixpin.motor.PdfValor.Lista)?.valores?.isNotEmpty() == true)
+        // En el contenido de la página, que el lector de Android no pinta las anotaciones (30-sep-2026).
+        val ultimo = a.resolver((a.resolver(hoja.entradas["Contents"]) as com.forge.pixpin.motor.PdfValor.Lista).valores.last()) as com.forge.pixpin.motor.PdfValor.Flujo
+        assertTrue("la tinta no se pinta en la página", String(a.descomprimir(ultimo)!!, Charsets.ISO_8859_1).contains(" Do"))
         val catalogo = a.diccDe(a.trailer.entradas["Root"])!!
         val indice = a.diccDe(catalogo.entradas["Outlines"])
         assertNotNull("sin índice de marcadores", indice)
         val primero = a.diccDe(indice!!.entradas["First"])!!
         val titulo = (primero.entradas["Title"] as com.forge.pixpin.motor.PdfValor.Cadena).bytes
         assertTrue("el marcador no lleva su nombre", String(titulo.copyOfRange(2, titulo.size), Charsets.UTF_16BE) == "⭐ Hoja 1")
+        // Y el lector de PixPin los vuelve a leer del índice al abrir el PDF (30-sep-2026).
+        val leidos = com.forge.pixpin.motor.PdfAnotado.marcadoresDelIndice(a)
+        assertTrue("no se leen los marcadores del índice: $leidos", leidos.size == 1 && leidos[0].titulo == "⭐ Hoja 1" && leidos[0].pagina == 0)
+        assertTrue("el marcador vuelve a otra altura: ${leidos[0].alto}", kotlin.math.abs(leidos[0].alto - 0.25) < 0.01)
     }
 }
