@@ -264,6 +264,10 @@ class LectorPdfActivity : ComponentActivity() {
             )
         }
         capas.espacios = espacios
+        // **Al abrir, el marco a toda la tinta que aún no lo tiene** (30-sep-2026), con los
+        // espacios de ahora: si luego llegan otros del PC, esa tinta ya no se corre. El PC hace
+        // lo mismo antes de ampliar la hoja (`DondeVa::fijar_marco`).
+        LaunchedEffect(cuantas) { if (cuantas > 0) capas.fijarLoViejo(cuantas) }
         fun ponerEspacios(v: Int) {
             // La tinta vieja, sin marco, se leía con los espacios de cada momento y por eso se
             // corría al ponerlos: antes de cambiarlos se le apunta el marco con los de ahora.
