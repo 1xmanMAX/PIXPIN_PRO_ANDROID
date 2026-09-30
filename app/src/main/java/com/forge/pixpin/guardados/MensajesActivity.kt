@@ -4657,7 +4657,11 @@ class MensajesActivity : ComponentActivity() {
         // archivo de una nota larga en una lista de cien cosas. Un icono suelto de 24
         // no se distingue del texto que tiene al lado.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
+            // **Un archivo, con el icono de su tipo**: la hoja de su color con la extensión
+            // escrita (30-sep-2026, pedido por el usuario: rojo los PDF, azul los Word, amarillo
+            // los planos…). Ver [com.forge.pixpin.ui.IconoDeArchivo].
+            if (m.clase == Clase.ARCHIVO) com.forge.pixpin.ui.IconoDeArchivo(m.nombre.ifBlank { m.ruta }, lado = BOTON_DEL_ARCHIVO)
+            else Box(
                 Modifier
                     .size(BOTON_DEL_ARCHIVO)
                     .background(
