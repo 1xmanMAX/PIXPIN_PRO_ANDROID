@@ -70,6 +70,8 @@ class PdfAnotadoPorHojasTest {
         assertTrue("la hoja no va como líneas", texto.contains("<svg class=\"hoja-svg\"") && texto.contains("<path d=\"m"))
         // **El texto es texto**: lo encuentra el «buscar» del navegador (30-sep-2026).
         assertTrue("el texto no va como texto", texto.contains(">Hola desde el PDF</text>") && texto.contains(">Segunda linea</text>"))
+        // Y se desplaza con el dedo: la regla del dibujo (`touch-action:none`) no alcanza a sus hojas.
+        assertTrue("las hojas no se desplazan con el dedo", texto.contains("html.vivo #lienzo .doc svg{touch-action:auto"))
         assertFalse("la hoja va como foto", texto.contains("data:image/jpeg") || texto.contains("data:image/webp"))
     }
 

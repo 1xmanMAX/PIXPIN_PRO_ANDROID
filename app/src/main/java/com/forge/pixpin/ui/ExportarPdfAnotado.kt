@@ -121,22 +121,37 @@ object ExportarPdfAnotado {
         )
     }
 
-    fun formato(c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?) =
-        Compartible.Formato(
+    /**
+     * **Texto o imagen, a elegir** (30-sep-2026, pedido por el usuario: «que me dé la opción y pueda
+     * ver cuál es mejor»). Con el interruptor puesto —como viene—, cada hoja legible va en líneas y
+     * con su texto, buscable; quitado, todas como imagen WebP nítida, que en un plano escaneado o
+     * con mucho sombreado puede verse mejor.
+     */
+    fun formato(c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?): Compartible.Formato {
+        val interruptor = Compartible.Interruptor("Texto buscable", "Hojas en líneas y con su texto; quitado, como imagen")
+        return Compartible.Formato(
             "web-pdf-anotado", Icons.Filled.Language, "Página web (hojas)", Compartible.NINGUNA,
+            interruptor = interruptor,
             generar = {
                 val funciones = (c.applicationContext as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb
-                hacer(c.applicationContext, ruta, titulo, paginas, escenaDe, funciones)?.let {
-                    Compartible.Salida(it, ExportarHtml.MIME_TYPE, "Las hojas con lo anotado, y se sigue anotando")
+                val conTexto = interruptor.puesto
+                hacer(c.applicationContext, ruta, titulo, paginas, escenaDe, funciones, conTexto)?.let {
+                    Compartible.Salida(
+                        it, ExportarHtml.MIME_TYPE,
+                        if (conTexto) "Hojas en líneas, con texto que se busca; se sigue anotando" else "Hojas como imagen; se sigue anotando"
+                    )
                 }
             }
         )
+    }
 
     fun hacer(
-        c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?, funciones: Set<String>? = null
+        c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?, funciones: Set<String>? = null,
+        conTexto: Boolean = true
     ): File? = runCatching {
         if (paginas <= 0) return null
-        val ancho = when { paginas <= 10 -> 1600; paginas <= 40 -> 1200; else -> 960 }
+        // Como imagen, en WebP: a igual peso, bastante más nítido que el JPEG de antes.
+        val ancho = when { paginas <= 10 -> 2000; paginas <= 40 -> 1600; else -> 1200 }
         val margen = (COLUMNA * Lectura.MARGEN_DEL_PDF).toInt()
         val k = COLUMNA.toDouble() / PdfDoc.PAGE_WIDTH
         val tops = ArrayList<Double>(paginas)
@@ -151,7 +166,7 @@ object ExportarPdfAnotado {
             java.util.Locale.getDefault().language.ifBlank { "es" }
         )
         // **Si la hoja se deja leer, va en líneas y con su texto** (30-sep-2026). Ver [com.forge.pixpin.motor.PlanoSvg].
-        val planos = textos.map { p -> p?.takeIf { it.valeLaPena && it.sinEntender == 0 && it.ancho > 0 && it.alto > 0 } }
+        val planos = textos.map { p -> p?.takeIf { conTexto && it.valeLaPena && it.sinEntender == 0 && it.ancho > 0 && it.alto > 0 } }
         val yaPuestas = com.forge.pixpin.motor.PlanoSvg.YaPuestas()
         for (i in 0 until paginas) {
             val plano = planos[i]
@@ -164,7 +179,7 @@ object ExportarPdfAnotado {
                 val foto = PdfDoc.render(ruta, i, ancho) ?: continue
                 alto = COLUMNA.toDouble() * foto.height / foto.width
                 cuerpo.append("<div class=\"hoja-pdf\"><img alt=\"Hoja ").append(i + 1).append("\" width=\"").append(COLUMNA)
-                    .append("\" height=\"").append(Math.round(alto)).append("\" src=\"").append(enJpeg(foto)).append("\">")
+                    .append("\" height=\"").append(Math.round(alto)).append("\" src=\"").append(enWebp(foto)).append("\">")
                 textos[i]?.let { cuerpo.append(capaDeTexto(it, idioma)) }
                 cuerpo.append("</div>")
                 foto.recycle()
@@ -213,9 +228,11 @@ object ExportarPdfAnotado {
 
     private fun num(v: Double) = (Math.round(v * 10) / 10.0).toString()
 
-    private fun enJpeg(foto: Bitmap): String {
+    private fun enWebp(foto: Bitmap): String {
         val salida = ByteArrayOutputStream()
-        foto.compress(Bitmap.CompressFormat.JPEG, 80, salida)
-        return "data:image/jpeg;base64," + Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
+        @Suppress("DEPRECATION")
+        val formato = if (android.os.Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+        foto.compress(formato, 82, salida)
+        return "data:image/webp;base64," + Base64.encodeToString(salida.toByteArray(), Base64.NO_WRAP)
     }
 }

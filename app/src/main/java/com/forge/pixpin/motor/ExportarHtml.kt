@@ -604,6 +604,10 @@ object ExportarHtml {
         #lienzo .hoja>svg{width:100%;height:100%;display:block;
           user-select:none;-webkit-user-select:none}
         html.vivo #lienzo svg{touch-action:none;cursor:grab}
+        /* **Lo que va dentro de un documento se desplaza con el dedo** (30-sep-2026). Las hojas de
+           un PDF van como SVG (`PlanoSvg`) y la regla de arriba, que es para el dibujo, les quitaba
+           el desplazamiento: solo se movía tocando los márgenes. */
+        html.vivo #lienzo .doc svg{touch-action:auto;cursor:auto}
         .hoja[data-tipo=nota]{overflow:auto;-webkit-overflow-scrolling:touch;position:absolute}
         /* La capa donde se raya, encima del texto y del alto que tenga la nota. No recibe el
            dedo salvo con lápiz o resaltador en la mano: así el texto se sigue pudiendo
