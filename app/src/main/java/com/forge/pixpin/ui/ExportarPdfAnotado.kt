@@ -199,7 +199,7 @@ object ExportarPdfAnotado {
         if (tops.isEmpty()) return null
         val hoja = ExportarHtml.HojaWeb.Documento(
             titulo, ESTILO, cuerpo.toString(), DocumentoAnotado.capaDe(piezas, emptyList(), COLUMNA, margen, "pdf"),
-            COLUMNA, margen, tops, 16.0, PAPEL
+            COLUMNA, margen, tops, 16.0, PAPEL, bloques = ".hoja-pdf"
         )
         val hecha = ExportarHtml.paginas(listOf(hoja), titulo, "$titulo (anotado)", ExportarHtml.Opciones.de(funciones))
         val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)

@@ -72,6 +72,9 @@ class PdfAnotadoPorHojasTest {
         assertTrue("el texto no va como texto", texto.contains(">Hola desde el PDF</text>") && texto.contains(">Segunda linea</text>"))
         // Y se desplaza con el dedo: la regla del dibujo (`touch-action:none`) no alcanza a sus hojas.
         assertTrue("las hojas no se desplazan con el dedo", texto.contains("html.vivo #lienzo .doc svg{touch-action:auto"))
+        // La tinta se ata a su hoja, no a la n-ésima imagen: con hojas en SVG y hojas en foto
+        // mezcladas, la de la hoja 1 acababa en la primera foto (30-sep-2026).
+        assertTrue("la tinta no se ata a las hojas", texto.contains("data-bloques=\".hoja-pdf\""))
         assertFalse("la hoja va como foto", texto.contains("data:image/jpeg") || texto.contains("data:image/webp"))
     }
 

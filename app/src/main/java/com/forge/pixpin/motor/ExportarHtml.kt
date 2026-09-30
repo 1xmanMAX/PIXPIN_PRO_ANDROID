@@ -96,7 +96,13 @@ object ExportarHtml {
             /** El espacio de la derecha, si no es igual al de la izquierda ([margen]). */
             val margenDerecho: Int = margen,
             /** El idioma del texto (`es`, `en`…): el «Leer en voz alta» del navegador elige la voz con él. */
-            val idioma: String? = null
+            val idioma: String? = null,
+            /**
+             * Qué son los bloques a los que se ata lo anotado. En un PDF, **cada hoja** (`.hoja-pdf`):
+             * con las de imagen y las de SVG mezcladas, contar las `img` ataba la tinta de la hoja 1
+             * a la primera hoja con imagen (30-sep-2026).
+             */
+            val bloques: String = DocumentoAnotado.SELECTOR
         ) : HojaWeb(nombre, fondo)
         /**
          * **Una tabla con fórmulas.** Viaja lo escrito —el JSON de [TablaDeCalculo]— y la
@@ -333,7 +339,7 @@ object ExportarHtml {
                         append("\" data-margen=\"").append(hoja.margen)
                         append("\" data-derecho=\"").append(hoja.margenDerecho)
                         append("\" data-letra=\"").append(hoja.letra)
-                        append("\" data-bloques=\"").append(DocumentoAnotado.SELECTOR)
+                        append("\" data-bloques=\"").append(hoja.bloques)
                         append("\" data-tops=\"").append(hoja.tops.joinToString(",") { (Math.round(it * 10) / 10.0).toString() })
                         append("\" style=\"width:").append(hoja.columna + hoja.margen + hoja.margenDerecho).append("px\">")
                         append("<article class=\"doc\"")
