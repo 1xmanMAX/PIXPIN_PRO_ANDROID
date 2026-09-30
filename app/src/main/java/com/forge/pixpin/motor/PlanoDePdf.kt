@@ -865,18 +865,32 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
      * fuera la página entera se manda como fotografía: es preferible una página borrosa a una
      * nítida a la que le falta el sello del estudio.
      */
+    /** Los PNG ya hechos, por imagen: la misma puesta dos veces es el mismo PNG (y la misma seña). */
+    private val pngs = java.util.IdentityHashMap<PdfValor.Flujo, ByteArray?>()
+
+    /**
+     * Los bytes de una imagen tal como los entiende quien pinta: el JPEG tal cual, y lo demás
+     * —Flate, LZW, sin comprimir— **pasado a PNG** ([FotoPng], 30-sep-2026). Null si no se sabe.
+     */
+    private fun fotoDe(flujo: PdfValor.Flujo, mascara: Boolean): Pair<String, ByteArray>? {
+        val ultimo = archivo.sinElUltimoFiltro(flujo)
+        when (ultimo?.first) {
+            "DCTDecode", "DCT" -> return "image/jpeg" to ultimo.second
+            "JPXDecode", "JBIG2Decode", "CCITTFaxDecode" -> return null
+        }
+        val png = pngs.getOrPut(flujo) {
+            archivo.descomprimir(flujo)?.let { FotoPng.de(archivo, flujo.dicc, it, mascara) }
+        } ?: return null
+        return "image/png" to png
+    }
+
     private fun pasarLaFoto(flujo: PdfValor.Flujo): Boolean {
         val d = flujo.dicc
         // `/Mask` es otra cosa: o un recorte por color o un sello de un bit. Sigue fuera.
         if (d.entradas.containsKey("Mask")) return false
         if ((d.entradas["ImageMask"] as? PdfValor.Booleano)?.valor == true) return false
         if (pesoDeFotos > PESO_DE_LAS_FOTOS) return false
-        val (filtro, datos) = archivo.sinElUltimoFiltro(flujo) ?: return false
-        val tipo = when (filtro) {
-            "DCTDecode", "DCT" -> "image/jpeg"
-            "JPXDecode" -> return false
-            else -> return false
-        }
+        val (tipo, datos) = fotoDe(flujo, mascara = false) ?: return false
         // **La transparencia, si la trae.** Ver [PlanoDePdf.Imagen.mascara]: se pasa entera y
         // sin tocar, como la de color, y quien pinte las junta. Si la máscara existe pero no
         // se puede pasar tal cual, la imagen entera se rechaza: pintarla sin su transparencia
@@ -889,11 +903,8 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
             // Una máscara con máscara, no. Ni una que a su vez sea un sello.
             if (m.dicc.entradas.containsKey("SMask") || m.dicc.entradas.containsKey("Mask")) return false
             if (!mismoTamano(d, m.dicc)) return false
-            val (fm, dm) = archivo.sinElUltimoFiltro(m) ?: return false
-            tipoMascara = when (fm) {
-                "DCTDecode", "DCT" -> "image/jpeg"
-                else -> return false
-            }
+            val (tm, dm) = fotoDe(m, mascara = true) ?: return false
+            tipoMascara = tm
             mascara = dm
             if (!senasDeFoto.containsKey(datos)) pesoDeFotos += dm.size
         }
@@ -1617,6 +1628,9 @@ private class Fuente(
             " "
         )
 
+        /** De 128 a 255 en MacRomanEncoding. */
+        private const val MAC_ROMAN = "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü†°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»…\u00a0ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ\uf8ffÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ"
+
         fun leer(archivo: PdfArchivo, d: PdfValor.Dicc): Fuente {
             val subtipo = d.nombre("Subtype")
             val base = (archivo.resolver(d.entradas["BaseFont"]) as? PdfValor.Nombre)?.valor ?: ""
@@ -1651,6 +1665,13 @@ private class Fuente(
                 archivo.descomprimir(f)?.let { leerCMap(it, aTexto) }
             }
             (enc as? PdfValor.Dicc)?.let { leerDiferencias(archivo, it, aTexto) }
+            // **MacRoman** (30-sep-2026): de 128 en adelante no es Latin-1. Sin esto, en los
+            // artículos hechos en Mac la ligadura «fi» salía «Þ» y «defined» no se encontraba.
+            // Solo donde no hayan dicho nada el `/ToUnicode` ni las `/Differences`.
+            val baseEnc = nombreEnc ?: ((enc as? PdfValor.Dicc)?.entradas?.get("BaseEncoding") as? PdfValor.Nombre)?.valor
+            if (baseEnc == "MacRomanEncoding" && subtipo != "Type0") {
+                MAC_ROMAN.forEachIndexed { i, ch -> aTexto.putIfAbsent(128 + i, when (ch) { 'ﬁ' -> "fi"; 'ﬂ' -> "fl"; else -> ch.toString() }) }
+            }
 
             val minus = base.lowercase()
             // **Las estrechas se reconocen y se dicen.** Un plano las usa a mansalva —los

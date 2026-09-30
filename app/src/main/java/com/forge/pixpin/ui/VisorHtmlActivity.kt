@@ -755,10 +755,31 @@ class VisorHtmlActivity : ComponentActivity() {
     /** Lo anotado sobre este documento: un dibujo del motor de siempre, guardado como cualquier otro. */
     private val idDeLaCapa: String get() = ExportarDocumentoAnotado.idDeLaCapa(elDocumento ?: File(""), baseDelMensaje)
     private val laCapa: com.forge.pixpin.motor.DrawController by lazy {
-        com.forge.pixpin.motor.DrawController(
-            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, idDeLaCapa))
-                ?: com.forge.pixpin.motor.Scene()
-        ).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+        val leida = com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, idDeLaCapa))
+        // **Con su marco** (30-sep-2026): si la escribió el PC con otra columna u otro margen, se
+        // lleva a los de aquí. Sin marco, como antes: la maqueta dice el margen.
+        val escrito = marcoDelArchivo()?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(it) }
+        val propio = marcoDeLaColumna()
+        val escena = if (leida != null && escrito != null && propio != null) escrito.llevar(leida, propio) else leida
+        com.forge.pixpin.motor.DrawController(escena ?: com.forge.pixpin.motor.Scene())
+            .also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+    }
+
+    /**
+     * **El marco de la tinta** de un Word o un libro: la banda de la columna desde lo alto, tan alta
+     * como ancha, en píxeles CSS de la capa. Null sin columna fijada. Ver [com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco].
+     */
+    private fun marcoDeLaColumna(): com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco? {
+        val columna = columnaDeAnotar ?: return null
+        return com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco(espacioIzq.toDouble(), 0.0, (espacioIzq + columna).toDouble(), columna.toDouble())
+    }
+
+    /** El `.hoja` de la tinta: solo en un documento del chat, que es lo que viaja. */
+    private fun marcoDelArchivo(): File? = baseDelMensaje?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, it) }
+
+    /** Tras guardar la tinta, su marco (no se reescribe si dice lo mismo). */
+    private fun guardarElMarco(archivo: File?, marco: com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco?) {
+        if (archivo != null && marco != null) runCatching { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribirMarco(archivo, marco) }
     }
     private val hayAnotaciones: Boolean get() = columnaDeAnotar != null && laCapa.scene.elements.any { !it.isDeleted }
 
@@ -767,7 +788,9 @@ class VisorHtmlActivity : ComponentActivity() {
         val escena = laCapa.scene
         val id = idDeLaCapa
         val contexto = applicationContext
-        lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) } }
+        val archivo = marcoDelArchivo()
+        val marco = marcoDeLaColumna()
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) }; guardarElMarco(archivo, marco) }
     }
 
     /**
@@ -1843,7 +1866,9 @@ class VisorHtmlActivity : ComponentActivity() {
         val escena = laCapa.scene
         val id = idDeLaCapa
         val contexto = applicationContext
-        withContext(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) } }
+        val archivo = marcoDelArchivo()
+        val marco = marcoDeLaColumna()
+        withContext(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) }; guardarElMarco(archivo, marco) }
     }
 
     private fun conSuExtension(nuevo: String, antes: String): String {

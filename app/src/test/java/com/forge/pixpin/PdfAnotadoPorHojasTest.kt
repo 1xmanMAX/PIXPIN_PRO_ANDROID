@@ -2,7 +2,6 @@ package com.forge.pixpin.ui
 
 import org.robolectric.RuntimeEnvironment
 import com.forge.pixpin.motor.PlanoDePdf
-import com.forge.pixpin.motor.PlanoWeb
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -14,8 +13,9 @@ import java.io.File
 import java.util.zip.Deflater
 
 /**
- * **El PDF anotado del lector, como página web por hojas en líneas** (29-sep-2026): la hoja viaja
- * como geometría y no como foto, que es lo que la hacía pesar y emborronarse al acercar.
+ * **El PDF anotado del lector, como página web con las hojas en líneas** (29 y 30-sep-2026): la hoja
+ * viaja como SVG y no como foto, que es lo que la hacía pesar y emborronarse al acercar, y su texto
+ * es texto, que se puede buscar.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -67,7 +67,9 @@ class PdfAnotadoPorHojasTest {
         val html = ExportarPdfAnotado.hacer(c, pdf.absolutePath, "Prueba", 1, { null })
         assertNotNull("no salió la página web", html)
         val texto = html!!.readText()
-        assertTrue("la hoja no va como líneas", texto.contains(PlanoWeb.aJson(plano)))
+        assertTrue("la hoja no va como líneas", texto.contains("<svg class=\"hoja-svg\"") && texto.contains("<path d=\"m"))
+        // **El texto es texto**: lo encuentra el «buscar» del navegador (30-sep-2026).
+        assertTrue("el texto no va como texto", texto.contains(">Hola desde el PDF</text>") && texto.contains(">Segunda linea</text>"))
         assertFalse("la hoja va como foto", texto.contains("data:image/jpeg") || texto.contains("data:image/webp"))
     }
 

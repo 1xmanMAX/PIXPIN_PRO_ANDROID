@@ -263,8 +263,13 @@ class LectorPdfActivity : ComponentActivity() {
                     ?: prefsDelLector.getInt(claveDeEspacios, 0)
             )
         }
+        capas.espacios = espacios
         fun ponerEspacios(v: Int) {
+            // La tinta vieja, sin marco, se leía con los espacios de cada momento y por eso se
+            // corría al ponerlos: antes de cambiarlos se le apunta el marco con los de ahora.
+            capas.fijarLoViejo(cuantas)
             espacios = v
+            capas.espacios = v
             archivoDeEspacios?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, v.toString()) } ?: prefsDelLector.edit().putInt(claveDeEspacios, v).apply()
         }
         val hayIzquierda = espacios and ESPACIO_IZQUIERDA != 0
@@ -478,7 +483,7 @@ class LectorPdfActivity : ComponentActivity() {
                                     Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i }
                                 }
                                 // La capa coge **la hoja y sus dos márgenes**.
-                                CapaDePagina(capas, i, anotando, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
+                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
                             }
                         }
                         if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
@@ -869,19 +874,37 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
         return suelto
     }
 
+    /** Los espacios puestos ahora. Solo para leer la tinta vieja, la que no trae su marco. */
+    @Volatile var espacios = 0
+
+    private fun cargar(i: Int, id: String, migrar: Boolean): com.forge.pixpin.motor.Scene? =
+        tintaDeLaHoja(actividad, id, rutaPedida, i, espacios, suelta = proyecto() == null, migrar = migrar)
+
     /** Trabajo de disco la primera vez. */
     fun controladorDe(i: Int): com.forge.pixpin.motor.DrawController = synchronized(abiertas) {
         abiertas.getOrPut(i) {
-            val escena = com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, idDe(i, false)))
+            val escena = cargar(i, idDe(i, false), migrar = true)
             com.forge.pixpin.motor.DrawController(escena ?: com.forge.pixpin.motor.Scene()).also { it.pedirLaMedida = false }
         }
     }
 
     /** Lo anotado en la hoja [i], abierta o no: para exportar. Null si no hay nada. */
     fun escenaDe(i: Int): com.forge.pixpin.motor.Scene? =
-        (synchronized(abiertas) { abiertas[i]?.scene }
-            ?: com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, idDe(i, false))))
+        (synchronized(abiertas) { abiertas[i]?.scene } ?: cargar(i, idDe(i, false), migrar = false))
             ?.takeIf { e -> e.elements.any { !it.isDeleted } }
+
+    /** A la tinta suelta que aún no tiene marco se le escribe el de los espacios de ahora, sin tocarla. */
+    fun fijarLoViejo(paginas: Int) {
+        if (proyecto() != null) return
+        val e = espacios
+        val abiertasYa = synchronized(abiertas) { abiertas.keys.toSet() }
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            for (i in 0 until paginas) {
+                if (i in abiertasYa) continue
+                runCatching { tintaDeLaHoja(actividad, idDe(i, false), rutaPedida, i, e, suelta = true, migrar = true) }
+            }
+        }
+    }
 
     fun tocada(i: Int) { ultimaTocada = i }
     fun ultima(): com.forge.pixpin.motor.DrawController? = synchronized(abiertas) { abiertas[ultimaTocada] }
@@ -896,7 +919,13 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
         val contexto = actividad.applicationContext
         val ids = escenas.map { (i, _) -> idDe(i, true) }
         kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-            escenas.forEachIndexed { k, (_, escena) -> runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, ids[k], escena) } }
+            val suelta = proyecto() == null
+            escenas.forEachIndexed { k, (i, escena) ->
+                runCatching {
+                    com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, ids[k], escena)
+                    ponerElMarco(contexto, ids[k], rutaPedida, i, siempre = suelta)
+                }
+            }
             proyecto()?.let { p -> runCatching { com.forge.pixpin.motor.PdfDelProyecto.rehacer(contexto, p) } }
         }
     }
@@ -909,7 +938,14 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
         // Con los nombres de antes de ser proyecto: los del adjunto, si lo es.
         val sueltos = HashMap<Int, String>()
         fun sueltoDe(i: Int) = sueltos.getOrPut(i) { suelto(i) }
-        todo.forEach { (i, escena) -> com.forge.pixpin.motor.ExcalidrawStore.guardar(actividad, sueltoDe(i), escena) }
+        // Las hojas sin abrir también, que la tinta vieja está en otras unidades: el editor la
+        // quiere en las de la hoja.
+        val sinAbrir = (0 until paginas).filter { i -> todo.none { it.first == i } }
+            .mapNotNull { i -> cargar(i, sueltoDe(i), migrar = false)?.let { i to it } }
+        (todo + sinAbrir).forEach { (i, escena) ->
+            com.forge.pixpin.motor.ExcalidrawStore.guardar(actividad, sueltoDe(i), escena)
+            ponerElMarco(actividad, sueltoDe(i), rutaPedida, i, siempre = true)
+        }
         synchronized(sucias) { sucias.clear() }
         var p = repo.deEstePdf(rutaPedida, nombre, paginas, System.currentTimeMillis())
         for (hoja in p.hojas) {
@@ -940,7 +976,7 @@ private fun pintorDeCapas(contexto: Context): com.forge.pixpin.motor.Renderer =
  */
 @Composable
 private fun CapaDePagina(
-    capas: CapasDelPdf, i: Int, anotando: Boolean,
+    capas: CapasDelPdf, i: Int, anotando: Boolean, espacios: Int,
     maestro: com.forge.pixpin.motor.DrawController, modifier: Modifier, alCambiar: () -> Unit
 ) {
     val lienzo by androidx.compose.runtime.produceState<com.forge.pixpin.motor.DrawController?>(null, capas, i) {
@@ -950,7 +986,7 @@ private fun CapaDePagina(
     // La hoja mide PAGE_WIDTH en las unidades del dibujo y **empieza en el cero**, como en el
     // editor completo; el margen de la izquierda son las equis negativas. Ver [vistaDeLaCapa].
     var anchoDeLaCapa by remember { mutableStateOf(0) }
-    LaunchedEffect(c, anchoDeLaCapa) { if (anchoDeLaCapa > 0) c.setViewport(vistaDeLaCapa(anchoDeLaCapa.toDouble())) }
+    LaunchedEffect(c, anchoDeLaCapa, espacios) { if (anchoDeLaCapa > 0) c.setViewport(vistaDeLaCapa(anchoDeLaCapa.toDouble(), espacios)) }
     val medido = modifier.onSizeChanged { anchoDeLaCapa = it.width }
     val conLaMano = maestro.tool == com.forge.pixpin.motor.Tool.HAND
     val pintor = pintorDeCapas(androidx.compose.ui.platform.LocalContext.current)
@@ -960,7 +996,7 @@ private fun CapaDePagina(
             if (c.scene.elements.none { !it.isDeleted }) return@Canvas
             pintor.renderScene(
                 drawContext.canvas.nativeCanvas,
-                c.scene.copy(viewport = vistaDeLaCapa(size.width.toDouble())),
+                c.scene.copy(viewport = vistaDeLaCapa(size.width.toDouble(), espacios)),
                 size.width.toDouble(), size.height.toDouble()
             )
         }
@@ -994,10 +1030,59 @@ private fun CapaDePagina(
 private const val ESPACIO_IZQUIERDA = 1
 private const val ESPACIO_DERECHA = 2
 
-/** La vista de una capa de [ancho] píxeles: la hoja en medio y un margen de [Lectura.MARGEN_DEL_PDF] a cada lado. */
-private fun vistaDeLaCapa(ancho: Double): com.forge.pixpin.motor.Viewport {
-    val unidades = PdfDoc.PAGE_WIDTH * (1.0 + 2.0 * Lectura.MARGEN_DEL_PDF)
-    return com.forge.pixpin.motor.Viewport(scrollX = PdfDoc.PAGE_WIDTH * Lectura.MARGEN_DEL_PDF.toDouble(), scrollY = 0.0, zoom = ancho / unidades)
+/**
+ * La vista de una capa de [ancho] píxeles: la hoja y los espacios puestos, de [Lectura.MARGEN_DEL_PDF] cada uno.
+ *
+ * **La hoja va siempre de 0 a [PdfDoc.PAGE_WIDTH]**, pongan o quiten espacios (30-sep-2026). Antes la
+ * vista abarcaba siempre la hoja y los dos márgenes aunque la capa midiera menos, así que las unidades
+ * dependían de los espacios: al añadir uno, lo anotado se corría y cambiaba de tamaño, y el PC y el
+ * editor completo lo ponían en otro sitio. Ahora son las del editor, y lo escrito con las de antes se
+ * trae con su marco ([tintaDeLaHoja]).
+ */
+private fun vistaDeLaCapa(ancho: Double, espacios: Int): com.forge.pixpin.motor.Viewport {
+    val margen = PdfDoc.PAGE_WIDTH * Lectura.MARGEN_DEL_PDF.toDouble()
+    val izquierda = if (espacios and ESPACIO_IZQUIERDA != 0) 1 else 0
+    val lados = izquierda + (if (espacios and ESPACIO_DERECHA != 0) 1 else 0)
+    return com.forge.pixpin.motor.Viewport(scrollX = margen * izquierda, scrollY = 0.0, zoom = ancho / (PdfDoc.PAGE_WIDTH + margen * lados))
+}
+
+/** Lo que mide una hoja: ancho entre alto, como la dibuja la lista. */
+private fun proporcionDeLaHoja(rutaPdf: String, i: Int): Double =
+    PdfDoc.medidaEnPuntos(rutaPdf, i)?.let { (an, al) -> an.toDouble() / al.toDouble() }?.takeIf { it > 0.01 } ?: 0.7
+
+/** Dónde está la hoja en las unidades del lector y del editor: siempre la misma. */
+private fun marcoDeLaHoja(rutaPdf: String, i: Int) =
+    com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco.deHoja(PdfDoc.PAGE_WIDTH.toDouble(), proporcionDeLaHoja(rutaPdf, i))
+
+/**
+ * **La tinta de la hoja [i] en las unidades de la hoja**, con cualquier marco que se escribiera.
+ *
+ * Con su `.hoja` (lo escrito desde el 30-sep-2026, aquí o en el PC), se lleva de ese marco al de la
+ * hoja. Sin él: si es tinta **suelta** (un PDF que no es de un proyecto), está en las unidades del
+ * lector de antes, que dependían de [espacios] ([com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco.delLectorViejo]);
+ * y con [migrar] se le apunta ese marco al lado, sin tocar la tinta, para que ya no dependa de los
+ * espacios que se pongan después. La de un proyecto es el dibujo de su hoja: ya está en estas unidades.
+ */
+internal fun tintaDeLaHoja(
+    c: Context, id: String, rutaPdf: String, i: Int, espacios: Int, suelta: Boolean, migrar: Boolean
+): com.forge.pixpin.motor.Scene? {
+    val escena = com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(c, id)) ?: return null
+    val archivo = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(c.filesDir, id)
+    val escrito = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(archivo)
+        ?: if (!suelta) return escena
+        else com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco.delLectorViejo(
+            espacios, PdfDoc.PAGE_WIDTH.toDouble(), Lectura.MARGEN_DEL_PDF.toDouble(), proporcionDeLaHoja(rutaPdf, i)
+        ).also { if (migrar && escena.elements.isNotEmpty()) com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribirMarco(archivo, it) }
+    return escrito.llevar(escena, marcoDeLaHoja(rutaPdf, i))
+}
+
+/**
+ * Tras guardar la tinta [id], su marco: el de la hoja, que es en lo que se escribe. Lo lleva la
+ * tinta suelta ([siempre]); la de un proyecto, solo si ya tenía uno (lo trajo del chat).
+ */
+private fun ponerElMarco(c: Context, id: String, rutaPdf: String, i: Int, siempre: Boolean) {
+    val archivo = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(c.filesDir, id)
+    if (siempre || archivo.exists()) com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribirMarco(archivo, marcoDeLaHoja(rutaPdf, i))
 }
 
 private val PAPEL_DEL_MARGEN = Color(0xFFF3F3F0)

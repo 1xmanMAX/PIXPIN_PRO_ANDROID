@@ -27,10 +27,10 @@ import kotlinx.coroutines.flow.first
  * [Lectura.MARGEN_DEL_PDF] a cada lado, lo anotado encima de cada una —también lo de los
  * márgenes— y la barra de lápiz, resaltador, borrador, deshacer y guardar de toda página web.
  *
- * Si el PDF se deja leer como líneas, va **una página por hoja**, en líneas, con lo anotado
- * encima: pesa poco y el texto sigue nítido a cualquier aumento ([porHojas], 29-sep-2026). Si no
- * —un escaneo—, las hojas van como fotografía en una columna: cuantas más hojas, menos puntos por
- * hoja, para que un documento largo no se haga de decenas de megas.
+ * **Cada hoja que se deja leer va como SVG, con su texto de verdad** ([com.forge.pixpin.motor.PlanoSvg],
+ * 30-sep-2026): nítida a cualquier aumento, ligera, y con el texto que el «buscar» del navegador
+ * encuentra. Solo las que no —un escaneo, algo que el lector de PDF no entiende— van como foto, con
+ * su texto invisible encima; cuantas más hojas, menos puntos por foto.
  */
 object ExportarPdfAnotado {
     /** Lo que mide la hoja en la página web, en píxeles CSS. El dibujo la mide en [PdfDoc.PAGE_WIDTH]. */
@@ -45,7 +45,8 @@ object ExportarPdfAnotado {
             // visores de PDF de los navegadores: no se ve, pero está —se lee en alto, se selecciona y
             // se copia—. Ver [capaDeTexto].
             ".hoja-pdf{position:relative}.texto-pdf{position:absolute;left:0;top:0;right:0;bottom:0;line-height:1;color:transparent}" +
-            ".texto-pdf span{position:absolute;white-space:pre;cursor:text}.texto-pdf ::selection{background:rgba(0,90,255,.25);color:transparent}"
+            ".texto-pdf span{position:absolute;white-space:pre;cursor:text}.texto-pdf ::selection{background:rgba(0,90,255,.25);color:transparent}" +
+            com.forge.pixpin.motor.PlanoSvg.ESTILO + ".doc svg.hoja-svg{margin:0 0 ${ENTRE_HOJAS}px}"
 
     /**
      * **El PDF, con lo anotado o limpio** (29-sep-2026). Con el interruptor puesto —como viene—, el
@@ -103,8 +104,10 @@ object ExportarPdfAnotado {
 
         fun escena(i: Int): Scene? {
             val nombres = listOfNotNull(uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.dePagina(it, i) }, "pdf-$huella-p$i")
+            // Con su marco, en las unidades de la hoja: lo mismo que ve el lector.
             return nombres.firstNotNullOfOrNull { n ->
-                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(c, n).takeIf { File(it).exists() }?.let { com.forge.pixpin.motor.ExcalidrawStore.cargar(it) }
+                com.forge.pixpin.motor.ExcalidrawStore.rutaDe(c, n).takeIf { File(it).exists() }
+                    ?.let { com.forge.pixpin.pdf.tintaDeLaHoja(c, n, ruta, i, espacios(), suelta = true, migrar = false) }
             }
         }
 
@@ -147,19 +150,25 @@ object ExportarPdfAnotado {
             textos.asSequence().filterNotNull().flatMap { it.textos.asSequence() }.take(800).joinToString(" ") { it.texto },
             java.util.Locale.getDefault().language.ifBlank { "es" }
         )
-        // **Si las hojas se dejan leer como líneas, van como líneas** (29-sep-2026). Ver [porHojas].
+        // **Si la hoja se deja leer, va en líneas y con su texto** (30-sep-2026). Ver [com.forge.pixpin.motor.PlanoSvg].
         val planos = textos.map { p -> p?.takeIf { it.valeLaPena && it.sinEntender == 0 && it.ancho > 0 && it.alto > 0 } }
-        if (planos.any { it != null }) {
-            porHojas(c, ruta, titulo, paginas, escenaDe, funciones, planos)?.let { return it }
-        }
+        val yaPuestas = com.forge.pixpin.motor.PlanoSvg.YaPuestas()
         for (i in 0 until paginas) {
-            val foto = PdfDoc.render(ruta, i, ancho) ?: continue
-            val alto = COLUMNA.toDouble() * foto.height / foto.width
-            cuerpo.append("<div class=\"hoja-pdf\"><img alt=\"Hoja ").append(i + 1).append("\" width=\"").append(COLUMNA)
-                .append("\" height=\"").append(Math.round(alto)).append("\" src=\"").append(enJpeg(foto)).append("\">")
-            textos[i]?.let { cuerpo.append(capaDeTexto(it, idioma)) }
-            cuerpo.append("</div>")
-            foto.recycle()
+            val plano = planos[i]
+            val svg = plano?.let { runCatching { com.forge.pixpin.motor.PlanoSvg.aSvg(it, COLUMNA, "h$i", idioma, yaPuestas) }.getOrNull() }
+            val alto: Double
+            if (plano != null && svg != null) {
+                alto = COLUMNA * plano.alto / plano.ancho
+                cuerpo.append("<div class=\"hoja-pdf\">").append(svg).append("</div>")
+            } else {
+                val foto = PdfDoc.render(ruta, i, ancho) ?: continue
+                alto = COLUMNA.toDouble() * foto.height / foto.width
+                cuerpo.append("<div class=\"hoja-pdf\"><img alt=\"Hoja ").append(i + 1).append("\" width=\"").append(COLUMNA)
+                    .append("\" height=\"").append(Math.round(alto)).append("\" src=\"").append(enJpeg(foto)).append("\">")
+                textos[i]?.let { cuerpo.append(capaDeTexto(it, idioma)) }
+                cuerpo.append("</div>")
+                foto.recycle()
+            }
             val ancla = tops.size
             tops += y
             // Lo anotado de la hoja, con su cero en la esquina de la hoja: el margen izquierdo son equis negativas.
@@ -181,50 +190,6 @@ object ExportarPdfAnotado {
         val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
         File(File(c.cacheDir, "share").apply { mkdirs() }, limpio).also { it.writeText(hecha) }
     }.getOrNull()
-
-    /**
-     * **Una página web por hoja, con la hoja en líneas y lo anotado encima** (29-sep-2026).
-     *
-     * El usuario: «cuando lo comparto como HTML pesa mucho; aplica la técnica del canvas cuando lo
-     * separa por hojas: solo se envía la capa de anotación y sobre eso las líneas, y el texto sigue
-     * nítido al hacer zoom». Es lo que hace la página web de un proyecto con su PDF
-     * ([com.forge.pixpin.motor.ExportarProyectoWeb]): la hoja viaja como geometría ([com.forge.pixpin.motor.PlanoWeb])
-     * y la pinta el visor en su lienzo, a cualquier aumento; lo anotado va en el SVG de encima. Ninguna
-     * foto, salvo en las hojas que no se dejan leer (un escaneo): esas van en WebP, como en el proyecto.
-     *
-     * Lo que se pierde frente a la columna de fotos: el texto invisible para «Leer en voz alta» y
-     * el ir hoja tras hoja deslizando; se pasa de hoja con el menú y las flechas del documento.
-     */
-    private fun porHojas(
-        c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?,
-        funciones: Set<String>?, planos: List<com.forge.pixpin.motor.PlanoDePdf.Plano?>
-    ): File? {
-        val hojas = ArrayList<ExportarHtml.HojaWeb>(paginas)
-        for (i in 0 until paginas) {
-            val leido = planos.getOrNull(i)
-            val plano = leido?.let { runCatching { com.forge.pixpin.motor.PlanoWeb.aJson(it) }.getOrNull() }
-            val escena = (escenaDe(i) ?: Scene()).copy(backgroundColor = "#ffffff")
-            // **El papel manda en el encuadre**: mide PAGE_WIDTH, como la hoja sobre la que se anotó.
-            // Con la hoja en líneas no viaja, así que solo hacen falta sus medidas —salvo que una
-            // lupa o un mosaico tengan que coger sus píxeles—; si no, la hoja pintada.
-            val sinPixeles = plano != null && escena.elements.none { !it.isDeleted && (it.type == com.forge.pixpin.motor.ElementType.LUPA || it.type == com.forge.pixpin.motor.ElementType.MOSAIC) }
-            val papel = (if (sinPixeles) null else PdfDoc.render(ruta, i, PdfDoc.PAGE_WIDTH))
-                ?: leido?.let { Bitmap.createBitmap(PdfDoc.PAGE_WIDTH, Math.round(PdfDoc.PAGE_WIDTH * it.alto / it.ancho).toInt().coerceAtLeast(1), Bitmap.Config.ALPHA_8) }
-                ?: continue
-            val imagen: (String) -> Bitmap? = { f -> escena.files[f]?.path?.let { ImageStore.load(it) } }
-            val svg = DrawSvg.aTexto(
-                c, escena, imagen, papel,
-                papelFino = if (plano == null) papel else null,
-                papelAparte = plano != null
-            )
-            papel.recycle()
-            if (svg != null) hojas += ExportarHtml.HojaWeb.Dibujo("Hoja ${i + 1}", svg, "#ffffff", plano)
-        }
-        if (hojas.isEmpty()) return null
-        val hecha = ExportarHtml.paginas(hojas, titulo, "$titulo (anotado)", ExportarHtml.Opciones.de(funciones))
-        val limpio = ("$titulo (anotado).html").replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80)
-        return File(File(c.cacheDir, "share").apply { mkdirs() }, limpio).also { it.writeText(hecha) }
-    }
 
     /**
      * **Las líneas de la hoja**, cada una en su sitio sobre la foto, en píxeles de la columna. Las

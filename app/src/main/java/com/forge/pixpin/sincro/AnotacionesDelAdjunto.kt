@@ -1,6 +1,9 @@
 package com.forge.pixpin.sincro
 
 import com.forge.pixpin.guardados.Mensaje
+import com.forge.pixpin.motor.Element
+import com.forge.pixpin.motor.Pt
+import com.forge.pixpin.motor.Scene
 import java.io.File
 
 /**
@@ -22,6 +25,8 @@ import java.io.File
  *   ella la tinta no se pinta —el visor solo la enseña con la columna fijada— o cae en otro sitio.
  * - `anot-<uid>.voz`: el marcador verde de la voz (`párrafo:fracción`; vacío, sin verde).
  * - `anot-<uid>.sitio`: por dónde se iba leyendo (fracción del alto), para seguir en el otro aparato.
+ * - `anot-<uid>-p<n>.hoja`, `anot-<uid>.hoja`: **el marco de la tinta** ([Marco]), dónde está la hoja
+ *   en las unidades en que están escritos los puntos de su tinta.
  *
  * **El PDF de un proyecto** lleva su tinta en las hojas, que ya viajan; sus marcadores y espacios van
  * aquí con el código **del proyecto** en vez del de un mensaje (`anot-<uid del proyecto>.marcas`).
@@ -62,6 +67,102 @@ object AnotacionesDelAdjunto {
         porUid(filesDir)[uid].orEmpty().map { File(filesDir, it) }
     fun espacios(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base.espacios")
     fun maqueta(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base.maqueta")
+    fun hoja(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base.hoja")
+
+    /**
+     * **El marco de la tinta** (30-sep-2026, idea del usuario; formato acordado con PixPin para
+     * Windows, `docs/investigacion/2026-09-29-marco-de-la-tinta-android.md` de ese repo).
+     *
+     * Un rectángulo invisible alrededor de la hoja —la página de un PDF, la columna de un Word o un
+     * libro— **en las mismas unidades que los puntos de su tinta**. Cada aparato escribe en las
+     * unidades de su capa; antes el otro tenía que adivinarlas (por los espacios, por el margen de la
+     * maqueta) y se equivocaba: la tinta llegaba agrandada, encogida o corrida. Ahora quien lee lleva
+     * ese rectángulo al de su propia hoja ([hacia]) y la tinta cae encima.
+     *
+     * Archivo hermano de la tinta, `<base>.hoja`, dos líneas: `x0,y0,x1,y1` (punto decimal) y `v1`.
+     * No va dentro de la escena: una versión vieja lo pintaría o tiraría la escena entera.
+     */
+    data class Marco(val x0: Double, val y0: Double, val x1: Double, val y1: Double) {
+        val ancho get() = x1 - x0
+        val alto get() = y1 - y0
+        fun valido() = listOf(x0, y0, x1, y1).all { it.isFinite() } && ancho > 1e-3 && alto > 1e-3
+        fun aTexto() = "${n(x0)},${n(y0)},${n(x1)},${n(y1)}\nv1\n"
+
+        /**
+         * Lleva un elemento de las unidades de **este** marco a las de [destino] (la misma hoja).
+         * Eje por eje: si las proporciones no coinciden, cada trazo queda en el mismo sitio relativo
+         * de la hoja. El grosor y la letra, con la escala media.
+         */
+        fun hacia(destino: Marco): (Element) -> Element {
+            val ex = destino.ancho / ancho
+            val ey = destino.alto / alto
+            val dx = destino.x0 - x0 * ex
+            val dy = destino.y0 - y0 * ey
+            val k = kotlin.math.sqrt(kotlin.math.abs(ex * ey))
+            return { e ->
+                e.copy(
+                    x = e.x * ex + dx, y = e.y * ey + dy,
+                    width = e.width * ex, height = e.height * ey,
+                    // Los puntos van relativos a (x, y): solo se escalan.
+                    points = e.points?.map { p -> Pt(p.x * ex, p.y * ey) },
+                    lastCommittedPoint = e.lastCommittedPoint?.let { p -> Pt(p.x * ex, p.y * ey) },
+                    huecos = e.huecos?.map { h -> h.map { p -> Pt(p.x * ex, p.y * ey) } },
+                    strokeWidth = e.strokeWidth * k,
+                    fontSize = e.fontSize?.let { it * k }
+                )
+            }
+        }
+
+        /** [escena] escrita con este marco, en las unidades de [destino]. Tal cual si ya coinciden. */
+        fun llevar(escena: Scene, destino: Marco): Scene =
+            if (casiIgual(destino)) escena else escena.copy(elements = escena.elements.map(hacia(destino)))
+
+        fun casiIgual(o: Marco) = listOf(x0 - o.x0, y0 - o.y0, x1 - o.x1, y1 - o.y1).all { kotlin.math.abs(it) < 0.01 }
+
+        companion object {
+            /** Hasta tres decimales, sin ceros de cola y nunca con coma: `-1050`, `1414.286`. */
+            private fun n(v: Double): String {
+                val t = String.format(java.util.Locale.ROOT, "%.3f", v).trimEnd('0').trimEnd('.')
+                return if (t == "-0") "0" else t
+            }
+
+            /** Null si no se entiende: entonces manda la regla de antes. */
+            fun deTexto(t: String?): Marco? {
+                val lineas = t?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
+                if (lineas.isEmpty() || lineas.size > 2) return null
+                if (lineas.size == 2 && lineas[1] != "v1") return null
+                val n = lineas[0].split(',').map { it.trim().toDoubleOrNull() ?: return null }
+                if (n.size != 4) return null
+                return Marco(n[0], n[1], n[2], n[3]).takeIf { it.valido() }
+            }
+
+            /** La hoja de un PDF tal como la mide el editor: [ancho] de ancho, desde el cero. */
+            fun deHoja(ancho: Double, proporcion: Double) = Marco(0.0, 0.0, ancho, ancho / proporcion.coerceAtLeast(0.01))
+
+            /**
+             * **La regla de antes del marco**, para la tinta que llega sin él: el lector del móvil
+             * escribía en unidades que dependían de los espacios puestos. La capa mide la hoja más
+             * los espacios, su vista abarca siempre `ancho·(1 + 2·margen)` y empieza en `−ancho·margen`.
+             * Es la misma cuenta que `capa_del_movil` del PC: sin espacios, `-1050,0,2450,…`; con los
+             * dos, la hoja tal cual. [espacios]: 1 = izquierda, 2 = derecha.
+             */
+            fun delLectorViejo(espacios: Int, ancho: Double, margen: Double, proporcion: Double): Marco {
+                val izq = if (espacios and 1 != 0) 1.0 else 0.0
+                val der = if (espacios and 2 != 0) 1.0 else 0.0
+                val k = (1.0 + 2.0 * margen) / (1.0 + margen * (izq + der))
+                val x0 = ancho * margen * izq * k - ancho * margen
+                return Marco(x0, 0.0, x0 + ancho * k, ancho / proporcion.coerceAtLeast(0.01) * k)
+            }
+        }
+    }
+
+    fun leerMarco(f: File): Marco? = Marco.deTexto(leer(f))
+
+    /** Escribe [m] salvo que el que hay ya diga lo mismo: una ida y vuelta sin cambios no provoca otro envío. */
+    fun escribirMarco(f: File, m: Marco) {
+        if (leerMarco(f)?.casiIgual(m) == true) return
+        escribir(f, m.aTexto())
+    }
 
     fun leer(f: File): String? = runCatching { if (f.isFile) f.readText() else null }.getOrNull()
 
@@ -142,7 +243,7 @@ object AnotacionesDelAdjunto {
         return uid
     }
 
-    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio")
+    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja")
 
     /**
      * **Lo anotado que hay en disco, por código de mensaje**, en rutas relativas a `files`. Para
