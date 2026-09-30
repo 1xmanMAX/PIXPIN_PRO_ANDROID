@@ -79,15 +79,35 @@ class LlamadaSecretaActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_AUDIO = "audio"
         private const val EXTRA_NOMBRE = "nombre"
+        private const val EXTRA_MENSAJE = "mensaje"
         private const val SEGUNDOS_SONANDO = 45
 
         private const val CANAL = "llamadas"
         private const val AVISO = 7741
 
-        private fun laIntencion(context: Context, audio: String, nombre: String) =
+        /** Los minutos de «volver a llamar» (30-sep-2026, pedido por el usuario). */
+        val VOLVER_EN = listOf(5, 15, 30, 60, 120)
+
+        private val PREFS = "llamada_secreta"
+
+        /**
+         * **Quién «llama»**: el nombre que el usuario le puso a la llamada de esta nota de voz, o
+         * null si no le puso ninguno (entonces sale el nombre de la nota).
+         */
+        fun quienLlama(context: Context, mensaje: String): String? =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("quien:$mensaje", null)?.takeIf { it.isNotBlank() }
+
+        fun ponerQuienLlama(context: Context, mensaje: String, nombre: String?) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+                if (nombre.isNullOrBlank()) remove("quien:$mensaje") else putString("quien:$mensaje", nombre.trim())
+            }.apply()
+        }
+
+        private fun laIntencion(context: Context, audio: String, nombre: String, mensaje: String?) =
             Intent(context, LlamadaSecretaActivity::class.java)
                 .putExtra(EXTRA_AUDIO, audio)
                 .putExtra(EXTRA_NOMBRE, nombre)
+                .putExtra(EXTRA_MENSAJE, mensaje)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
 
         /**
@@ -97,7 +117,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
          * salía nada y el usuario se quedaba sin su «llamada». El aviso de categoría llamada sí
          * pasa: con el aparato bloqueado abre la pantalla entera, y en uso sale arriba para tocarlo.
          */
-        fun llamar(context: Context, audio: String, nombre: String) {
+        fun llamar(context: Context, audio: String, nombre: String, mensaje: String? = null) {
             val avisos = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (Build.VERSION.SDK_INT >= 26) {
                 avisos.createNotificationChannel(
@@ -108,7 +128,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 )
             }
             val pendiente = android.app.PendingIntent.getActivity(
-                context, AVISO, laIntencion(context, audio, nombre),
+                context, AVISO, laIntencion(context, audio, nombre, mensaje),
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
             val aviso = androidx.core.app.NotificationCompat.Builder(context, CANAL)
@@ -124,16 +144,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 .build()
             runCatching { avisos.notify(AVISO, aviso) }
             // Y a pelo también: donde el sistema lo deja, sale al instante.
-            runCatching { abrir(context, audio, nombre) }
-        }
-
-        fun abrir(context: Context, audio: String, nombre: String) {
-            context.startActivity(
-                Intent(context, LlamadaSecretaActivity::class.java)
-                    .putExtra(EXTRA_AUDIO, audio)
-                    .putExtra(EXTRA_NOMBRE, nombre)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
-            )
+            runCatching { context.startActivity(laIntencion(context, audio, nombre, mensaje)) }
         }
     }
 
@@ -160,8 +171,28 @@ class LlamadaSecretaActivity : ComponentActivity() {
         val ruta = intent?.getStringExtra(EXTRA_AUDIO)
         if (ruta == null || !java.io.File(ruta).exists()) { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { "Llamada" }
+        mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
         sonar()
         setContent { Pantalla(nombre, ruta) }
+    }
+
+    /** El mensaje de la nota de voz: para volver a llamar más tarde. Null si no se sabe. */
+    private var mensaje: String? = null
+
+    /**
+     * **Volver a llamar dentro de [minutos]** (30-sep-2026, pedido por el usuario: «si se tiene
+     * que cortar y no escucha, que pueda ponerlo para que me llame en 5 min, 15, 30, 1 hora o 2»).
+     * La misma alarma de la nota, a otra hora; y se cuelga.
+     */
+    private fun volverALlamar(minutos: Int) {
+        val id = mensaje ?: return
+        val cuando = System.currentTimeMillis() + minutos * 60_000L
+        Recordatorios.poner(this, RecordatorioReceiver.DE_UN_MENSAJE + id, cuando)
+        val contexto = applicationContext
+        Thread { runCatching { com.forge.pixpin.guardados.MensajesStore(contexto).actualizar(id) { it.copy(recuerdaEn = cuando) } } }.start()
+        val hora = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(cuando))
+        android.widget.Toast.makeText(this, "Te vuelve a llamar a las $hora", android.widget.Toast.LENGTH_SHORT).show()
+        colgar()
     }
 
     private fun sonar() {
@@ -286,6 +317,25 @@ class LlamadaSecretaActivity : ComponentActivity() {
             Spacer(Modifier.height(18.dp))
             Text(nombre, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
             Spacer(Modifier.weight(1f))
+            // **Volver a llamar**: sonando o ya contestada, por si no se puede escuchar ahora.
+            if (mensaje != null) {
+                Text("Volver a llamar en", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    for (min in VOLVER_EN) {
+                        Text(
+                            if (min < 60) "$min min" else "${min / 60} h",
+                            color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.14f))
+                                .clickable { volverALlamar(min) }
+                                .padding(horizontal = 10.dp, vertical = 9.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(34.dp))
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                 if (contestada) {
                     Redondo(Icons.Filled.VolumeUp, "Altavoz", if (enAltavoz) Color.White else Color.White.copy(alpha = 0.16f), if (enAltavoz) Color.Black else Color.White) { porDonde(!enAltavoz) }

@@ -60,8 +60,10 @@ class RecordatorioReceiver : BroadcastReceiver() {
             // recado se oye por el auricular. Ver [LlamadaSecretaActivity].
             val grabacion = mensaje.ruta?.takeIf { mensaje.clase == com.forge.pixpin.guardados.Clase.VOZ && java.io.File(it).exists() }
             if (grabacion != null) {
-                val quien = mensaje.nombre.substringBeforeLast('.').ifBlank { "Llamada" }
-                val abierta = runCatching { LlamadaSecretaActivity.llamar(context, grabacion, quien) }.isSuccess
+                // Quien «llama»: el nombre que se le puso al programarla; si no, el de la nota.
+                val quien = LlamadaSecretaActivity.quienLlama(context, mensaje.id)
+                    ?: mensaje.nombre.substringBeforeLast('.').ifBlank { "Llamada" }
+                val abierta = runCatching { LlamadaSecretaActivity.llamar(context, grabacion, quien, mensaje.id) }.isSuccess
                 if (abierta) return
             }
             val texto = mensaje.texto.ifBlank { mensaje.nombre }

@@ -451,13 +451,24 @@ class MensajesActivity : ComponentActivity() {
         var recordando by remember { mutableStateOf<Mensaje?>(null) }
         var compartiendo by remember { mutableStateOf<Mensaje?>(null) }
         recordando?.let { cual ->
+            // En una nota de voz es una **llamada secreta**: se elige también quién «llama».
+            val esLlamada = cual.clase == Clase.VOZ
+            var quien by remember(cual.id) {
+                mutableStateOf(
+                    if (esLlamada) com.forge.pixpin.pin.LlamadaSecretaActivity.quienLlama(this@MensajesActivity, cual.id)
+                        ?: cual.nombre.substringBeforeLast('.') else ""
+                )
+            }
             DialogoDeRecordatorio(
                 puesto = cual.recuerdaEn,
                 onElegir = { cuando ->
                     recordando = null
+                    if (esLlamada && cuando != null) com.forge.pixpin.pin.LlamadaSecretaActivity.ponerQuienLlama(this@MensajesActivity, cual.id, quien)
                     ponerRecordatorio(cual, cuando)
                 },
-                onCerrar = { recordando = null }
+                onCerrar = { recordando = null },
+                quienLlama = if (esLlamada) quien else null,
+                onQuienLlama = { quien = it }
             )
         }
         // El documento del que se va a hacer página web, mientras se elige qué lleva.
@@ -6736,15 +6747,33 @@ internal fun numerar(mensajes: List<Mensaje>): Map<String, Int> {
 private fun DialogoDeRecordatorio(
     puesto: Long?,
     onElegir: (Long?) -> Unit,
-    onCerrar: () -> Unit
+    onCerrar: () -> Unit,
+    /** En una llamada secreta, el nombre que saldrá en la llamada; null si no es una llamada. */
+    quienLlama: String? = null,
+    onQuienLlama: (String) -> Unit = {}
 ) {
     val ahora = System.currentTimeMillis()
     val opciones = remember(ahora) { atajosDeRecordatorio(ahora) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onCerrar,
-        title = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.guardados_recordar)) },
+        title = {
+            Text(androidx.compose.ui.res.stringResource(
+                if (quienLlama != null) com.forge.pixpin.R.string.guardados_llamada else com.forge.pixpin.R.string.guardados_recordar
+            ))
+        },
         text = {
             Column {
+                // **Quién llama** (30-sep-2026, pedido por el usuario): el nombre que sale en la
+                // pantalla de la llamada. Por defecto, el de la nota de voz.
+                if (quienLlama != null) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = quienLlama,
+                        onValueChange = onQuienLlama,
+                        label = { Text("Quién llama") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    )
+                }
                 // **A una hora concreta** («a las 10 de la mañana»): los atajos no bastan para una
                 // llamada que tiene que sonar en un momento dado. Si esa hora ya pasó hoy, es mañana.
                 val contexto = androidx.compose.ui.platform.LocalContext.current
