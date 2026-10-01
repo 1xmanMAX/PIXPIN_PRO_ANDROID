@@ -26,10 +26,17 @@ object PlanoSvg {
     const val PASOS = 16
 
     /** El estilo que necesitan las hojas; una vez por página, no por hoja. */
+    /**
+     * Las letras, primero **las que miden lo mismo que las de los PDF** (Times, Helvetica, Courier:
+     * las de Windows y Mac, y sus gemelas libres Liberation/Tinos/Arimo/Cousine). Con la genérica
+     * del navegador —en Linux, DejaVu, mucho más ancha— la línea se apretaba para caber y las
+     * palabras se veían pegadas (30-sep-2026).
+     */
     const val ESTILO =
         "svg.hoja-svg{display:block;width:100%;height:auto;background:#fff}" +
-            ".hoja-svg text{white-space:pre;font-family:sans-serif}" +
-            ".hoja-svg .fs{font-family:serif}.hoja-svg .fm{font-family:monospace}" +
+            ".hoja-svg text{white-space:pre;font-family:Arial,Helvetica,\"Liberation Sans\",Arimo,\"Nimbus Sans\",Roboto,sans-serif}" +
+            ".hoja-svg .fs{font-family:\"Times New Roman\",Times,\"Liberation Serif\",Tinos,\"Nimbus Roman\",\"Noto Serif\",serif}" +
+            ".hoja-svg .fm{font-family:\"Courier New\",Courier,\"Liberation Mono\",Cousine,\"Nimbus Mono PS\",monospace}" +
             ".hoja-svg .fc{font-family:\"Arial Narrow\",\"Helvetica Neue Condensed\",\"Liberation Sans Narrow\",\"Roboto Condensed\",sans-serif}" +
             ".hoja-svg .n{font-weight:bold}.hoja-svg .i{font-style:italic}"
 
@@ -85,6 +92,10 @@ object PlanoSvg {
         var p = 0
         var ux = 0
         var uy = 0
+        // Dónde empezó el subcamino: `z` vuelve ahí, y lo que sigue cuenta desde ahí. Sin esto,
+        // todo lo de detrás de un rectángulo cerrado salía corrido (30-sep-2026, capturas del usuario).
+        var sx = 0
+        var sy = 0
         fun px(i: Int) = Math.round(b.xs[i].toDouble() / k).toInt()
         fun py(i: Int) = Math.round(b.ys[i].toDouble() / k).toInt()
         for (op in b.ops) {
@@ -92,7 +103,7 @@ object PlanoSvg {
                 PlanoDePdf.MOVER -> {
                     val x = px(p); val y = py(p); p++
                     d.append('m').append(x - ux).append(if (y - uy < 0) "" else " ").append(y - uy)
-                    ux = x; uy = y
+                    ux = x; uy = y; sx = x; sy = y
                 }
                 PlanoDePdf.LINEA -> {
                     val x = px(p); val y = py(p); p++
@@ -108,7 +119,7 @@ object PlanoSvg {
                     }
                     ux = px(p + 2); uy = py(p + 2); p += 3
                 }
-                PlanoDePdf.CERRAR -> d.append('z')
+                PlanoDePdf.CERRAR -> { d.append('z'); ux = sx; uy = sy }
             }
         }
         // La primera orden es absoluta en SVG aunque sea `m`: desde (0,0) da lo mismo.
@@ -172,11 +183,21 @@ object PlanoSvg {
         }
     }
 
-    /** Una tira de texto: trozos seguidos con la misma letra sobre la misma línea base. */
+    /**
+     * Una tira de texto: trozos seguidos con la misma letra sobre la misma línea base. Va en un
+     * solo `<text>` —el «buscar» encuentra frases enteras— pero **cada palabra en su sitio** (un
+     * `<tspan>` con la x del PDF): estirar la línea entera desencajaba las de en medio, porque la
+     * letra del navegador no mide lo mismo que la del documento (30-sep-2026).
+     */
     private class Tira(val primero: PlanoDePdf.Texto) {
-        val texto = StringBuilder(primero.texto)
-        /** Dónde acaba, a lo largo de la línea, en unidades de la letra (una letra de un punto). */
-        var fin = primero.ancho
+        val trozos = arrayListOf(Trozo(0.0, StringBuilder(primero.texto), primero.ancho))
+        val fin get() = trozos.last().fin
+    }
+
+    /** Un trozo de la tira, de [inicio] a [fin] a lo largo de la línea, en unidades de la letra. */
+    private class Trozo(val inicio: Double, val texto: StringBuilder, var fin: Double) {
+        /** Si entre el anterior y este va un espacio (una palabra a otra): para buscar y copiar. */
+        var espacioAntes = false
     }
 
     private fun textos(plano: PlanoDePdf.Plano, seVe: (Int) -> Boolean, sb: StringBuilder) {
@@ -188,25 +209,36 @@ object PlanoSvg {
             if (a != null && seguido(a, t)) {
                 val p = a.primero
                 val u = ((t.x - p.x) * p.a + (t.y - p.y) * p.b) / (p.a * p.a + p.b * p.b)
-                val hueco = u - a.fin
-                if (hueco > 0.1 && !a.texto.endsWith(" ") && !t.texto.startsWith(" ")) a.texto.append(' ')
-                a.texto.append(t.texto)
-                a.fin = maxOf(a.fin, u + t.ancho)
+                val ultimo = a.trozos.last()
+                val hueco = u - ultimo.fin
+                if (hueco in -0.05..0.03) {
+                    // Pegado: la misma palabra (o un ajuste de letra).
+                    ultimo.texto.append(t.texto)
+                    ultimo.fin = maxOf(ultimo.fin, u + t.ancho)
+                } else {
+                    // Otro sitio: otro trozo, colocado donde dice el PDF. Si el hueco es de una
+                    // palabra a otra, el espacio va al final del anterior y ocupa el hueco.
+                    // El espacio va **entre** los dos trozos, fuera de los dos: dentro de uno, el
+                    // navegador lo estiraba con la palabra y desaparecía.
+                    val conEspacio = hueco > 0.12 && !ultimo.texto.endsWith(" ") && !t.texto.startsWith(" ")
+                    a.trozos += Trozo(u, StringBuilder(t.texto), u + t.ancho).also { it.espacioAntes = conEspacio }
+                }
                 continue
             }
             actual = Tira(t).also { tiras += it }
         }
         for (tira in tiras) {
             val t = tira.primero
-            val limpio = tira.texto.toString().trimEnd()
-            if (limpio.isBlank()) continue
+            if (tira.trozos.all { it.texto.isBlank() }) continue
             // **Derecho**, lo corriente, con su sitio y su tamaño en puntos: lo más corto. Girado o
             // inclinado, con su matriz; la letra a 100 y la matriz la deja en un punto, que una
             // letra de tamaño 1 la redondean al mínimo algunos navegadores.
             val derecho = Math.abs(t.b) < 1e-6 && Math.abs(t.c) < 1e-6 && Math.abs(t.a - t.d) < 1e-6 && t.a > 0
             val escala = if (derecho) t.a else 100.0
+            // La x de cada trozo: en puntos del papel derecho; en unidades de la letra, girado.
+            fun xDe(tr: Trozo) = if (derecho) t.x + tr.inicio * t.a else tr.inicio * 100.0
             if (derecho) {
-                sb.append("<text x=\"").append(n2(t.x)).append("\" y=\"").append(n2(t.y)).append("\" font-size=\"").append(n2(t.a)).append('"')
+                sb.append("<text y=\"").append(n2(t.y)).append("\" font-size=\"").append(n2(t.a)).append('"')
             } else {
                 sb.append("<text transform=\"matrix(")
                     .append(n(t.a / 100)).append(' ').append(n(t.b / 100)).append(' ')
@@ -220,11 +252,30 @@ object PlanoSvg {
             if (clases.isNotEmpty()) sb.append(" class=\"").append(clases.joinToString(" ")).append('"')
             if (t.color != 0) sb.append(" fill=\"").append(hex(t.color)).append('"')
             if (t.alfa < 0.999) sb.append(" opacity=\"").append(n(t.alfa)).append('"')
-            // Una sola letra cae en su sitio sin estirarla.
-            if (tira.fin > 0.01 && limpio.length > 1) {
-                sb.append(" textLength=\"").append(n2(tira.fin * escala)).append("\" lengthAdjust=\"spacingAndGlyphs\"")
+            fun largo(tr: Trozo): String? {
+                // Una sola letra cae en su sitio sin estirarla.
+                val texto = tr.texto.trim()
+                if (texto.length <= 1 || texto.length != tr.texto.length) return null
+                val l = (tr.fin - tr.inicio) * escala
+                return if (l > 0.01) n2(l) else null
             }
-            sb.append('>').append(escapar(limpio)).append("</text>")
+            if (tira.trozos.size == 1) {
+                val tr = tira.trozos[0]
+                sb.append(" x=\"").append(n2(xDe(tr))).append('"')
+                largo(tr)?.let { sb.append(" textLength=\"").append(it).append("\" lengthAdjust=\"spacingAndGlyphs\"") }
+                sb.append('>').append(escapar(tr.texto.toString().trimEnd())).append("</text>")
+            } else {
+                sb.append('>')
+                tira.trozos.forEachIndexed { k, tr ->
+                    val texto = if (k == tira.trozos.lastIndex) tr.texto.toString().trimEnd() else tr.texto.toString()
+                    if (texto.isEmpty()) return@forEachIndexed
+                    if (tr.espacioAntes) sb.append(' ')
+                    sb.append("<tspan x=\"").append(n2(xDe(tr))).append('"')
+                    largo(tr)?.let { sb.append(" textLength=\"").append(it).append("\" lengthAdjust=\"spacingAndGlyphs\"") }
+                    sb.append('>').append(escapar(texto)).append("</tspan>")
+                }
+                sb.append("</text>")
+            }
         }
     }
 

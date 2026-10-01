@@ -65,10 +65,11 @@ class PlanoSvgTest {
     fun `el texto va como texto, con los espacios que el PDF hace a empujones`() {
         val p = plano("BT /F1 10 Tf 72 700 Td [(Readers)-145(interested)-145(only)] TJ ET\n")
         val svg = PlanoSvg.aSvg(p, 800, "h0")
-        assertTrue(svg, svg.contains(">Readers interested only</text>"))
+        // Un solo texto (se busca la frase entera), y cada palabra en su sitio del PDF.
+        assertTrue(svg, Regex(">Readers</tspan> <tspan x=\"[0-9.]+\"[^>]*>interested</tspan> <tspan x=\"[0-9.]+\"[^>]*>only</tspan></text>").containsMatchIn(svg))
         assertTrue(svg.startsWith("<svg class=\"hoja-svg\""))
         // Derecho: con su sitio y su tamaño, sin matriz.
-        assertTrue(svg, svg.contains("<text x=\"72\" y=\"92\" font-size=\"10\""))
+        assertTrue(svg, Regex("<text y=\"92\" font-size=\"10\"[^>]*><tspan x=\"72\"").containsMatchIn(svg))
     }
 
     @Test
@@ -95,5 +96,31 @@ class PlanoSvgTest {
         val svg = PlanoSvg.aSvg(p, 800, "h0")
         assertTrue(svg, svg.contains(">a &lt; b &amp; c</text>"))
         javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(svg.byteInputStream())
+    }
+
+    /**
+     * **Lo que va detrás de una figura cerrada, en su sitio** (30-sep-2026): `z` vuelve al principio
+     * del subcamino, y los movimientos relativos que siguen cuentan desde ahí. Antes contaban desde
+     * el último punto y todo lo de detrás de un rectángulo salía corrido.
+     */
+    @Test
+    fun `lo que sigue a un rectangulo cerrado no se corre`() {
+        val p = plano("1 w 100 600 m 200 600 l 200 700 l h 300 300 m 400 300 l S\nBT /F1 12 Tf 72 700 Td (a) Tj ET\nBT /F1 12 Tf 72 680 Td (b) Tj ET\nBT /F1 12 Tf 72 660 Td (c) Tj ET\n")
+        val d = Regex("<path d=\"([^\"]+)\"").find(PlanoSvg.aSvg(p, 800, "h0"))!!.groupValues[1]
+        // Se rehace el camino con la regla de SVG: tras `z`, el punto vuelve al inicio del subcamino.
+        var x = 0; var y = 0; var sx = 0; var sy = 0
+        val puntos = ArrayList<Pair<Int, Int>>()
+        Regex("([mlz])([-0-9 ]*)").findAll(d).forEach { m ->
+            val n = m.groupValues[2].trim().split(Regex("(?=-)| ")).filter { it.isNotEmpty() }.map { it.toInt() }
+            when (m.groupValues[1]) {
+                "m" -> { x += n[0]; y += n[1]; sx = x; sy = y; puntos += x to y }
+                "l" -> { x += n[0]; y += n[1]; puntos += x to y }
+                "z" -> { x = sx; y = sy }
+            }
+        }
+        val pasos = PlanoSvg.PASOS
+        // El segundo subcamino empieza en (300, 792 − 300) puntos.
+        assertTrue("$puntos", puntos.contains(300 * pasos to (792 - 300) * pasos))
+        assertTrue("$puntos", puntos.contains(400 * pasos to (792 - 300) * pasos))
     }
 }

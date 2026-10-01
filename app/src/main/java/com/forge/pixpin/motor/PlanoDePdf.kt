@@ -875,7 +875,7 @@ private class Interprete(val archivo: PdfArchivo, val caja: PlanoDePdf.Caja) {
     private fun fotoDe(flujo: PdfValor.Flujo, mascara: Boolean): Pair<String, ByteArray>? {
         val ultimo = archivo.sinElUltimoFiltro(flujo)
         when (ultimo?.first) {
-            "DCTDecode", "DCT" -> return "image/jpeg" to ultimo.second
+            "DCTDecode", "DCT" -> return if (FotoPng.jpegTalCual(archivo, flujo.dicc)) "image/jpeg" to ultimo.second else null
             "JPXDecode", "JBIG2Decode", "CCITTFaxDecode" -> return null
         }
         val png = pngs.getOrPut(flujo) {

@@ -45,6 +45,17 @@ internal object FotoPng {
         }
     }.getOrNull()
 
+    /**
+     * Si un JPEG del PDF se puede pasar **tal cual** al navegador. Uno en CMYK no: los navegadores
+     * lo pintan con los colores del revés u oscuros (30-sep-2026, figuras de un artículo sobre
+     * fondo negro); tampoco uno con un `/Decode` que no sea el de siempre.
+     */
+    fun jpegTalCual(archivo: PdfArchivo, d: PdfValor.Dicc): Boolean {
+        val espacio = espacioDe(archivo, d.entradas["ColorSpace"]) ?: return false
+        if (espacio is Espacio.Cmyk || espacio is Espacio.Paleta) return false
+        return decodeCorriente(archivo, d.entradas["Decode"], espacio, 8)
+    }
+
     private sealed class Espacio(val componentes: Int) {
         object Gris : Espacio(1)
         object Rgb : Espacio(3)
