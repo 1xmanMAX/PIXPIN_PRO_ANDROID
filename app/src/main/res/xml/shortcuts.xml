@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    **Los atajos fijos** (2-oct-2026): los que salen al mantener pulsado el icono y los que
+    encuentra el buscador del teléfono —Samsung Finder, la búsqueda de Huawei y Honor, la del
+    Pixel—, que leen justo esta lista. Por eso la etiqueta larga dice lo que se busca
+    («Capturar pantalla»), no solo el verbo. Todos pasan por AtajoActivity, que decide qué abrir.
+    Los proyectos recientes se añaden aparte, en tiempo de ejecución: ver atajos/Atajos.kt.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="capturar"
+        android:enabled="true"
+        android:icon="@drawable/atajo_capturar"
+        android:shortcutShortLabel="@string/atajo_capturar"
+        android:shortcutLongLabel="@string/atajo_capturar_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/capturar"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="mensajes"
+        android:enabled="true"
+        android:icon="@drawable/atajo_mensajes"
+        android:shortcutShortLabel="@string/atajo_mensajes"
+        android:shortcutLongLabel="@string/guardados_titulo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/mensajes"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="proyectos"
+        android:enabled="true"
+        android:icon="@drawable/atajo_proyecto"
+        android:shortcutShortLabel="@string/proyectos_titulo"
+        android:shortcutLongLabel="@string/atajo_proyectos_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/proyectos"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="sincronizar"
+        android:enabled="true"
+        android:icon="@drawable/atajo_sincronizar"
+        android:shortcutShortLabel="@string/atajo_sincronizar"
+        android:shortcutLongLabel="@string/atajo_sincronizar_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/sincronizar"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+</shortcuts>

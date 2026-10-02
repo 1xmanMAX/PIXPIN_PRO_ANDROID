@@ -232,6 +232,28 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Los atajos del icono y del buscador del teléfono. Ver atajos/Atajos.kt. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!--
+            Por donde entran los atajos. Exportada porque algunos buscadores lanzan el intento
+            tal cual; solo entiende pixpin://atajo/... Ver atajos/AtajoActivity.
+        -->
+        <activity
+            android:name=".atajos.AtajoActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.atajo"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="pixpin" android:host="atajo" />
+            </intent-filter>
         </activity>
 
         <!--

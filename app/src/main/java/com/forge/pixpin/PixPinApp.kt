@@ -119,5 +119,15 @@ class PixPinApp : Application() {
             // **Todo lo de los proyectos, en el chat.** Ver [com.forge.pixpin.guardados.RegistroDelChat].
             com.forge.pixpin.guardados.ChatDeLosProyectos.reparar(this@PixPinApp)
         }
+        // **Los últimos proyectos, en el buscador del teléfono y en el icono.** Ver [com.forge.pixpin.atajos.Atajos].
+        scope.launch(Dispatchers.IO) {
+            var antes: Set<String>? = null
+            proyectos.proyectos.collect { lista ->
+                val ahora = lista.mapTo(HashSet()) { it.id }
+                antes?.let { com.forge.pixpin.atajos.Atajos.olvidar(this@PixPinApp, (it - ahora).toList()) }
+                antes = ahora
+                com.forge.pixpin.atajos.Atajos.ponerAlDia(this@PixPinApp, lista)
+            }
+        }
     }
 }

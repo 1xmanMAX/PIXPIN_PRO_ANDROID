@@ -824,4 +824,12 @@
     <string name="cancel">Cancelar</string>
 
     <!-- Importar planos al lienzo -->
+    <!-- Atajos del icono y del buscador del teléfono. Ver xml/shortcuts.xml y atajos/Atajos.kt. -->
+    <string name="atajo_capturar">Capturar</string>
+    <string name="atajo_capturar_largo">Capturar pantalla</string>
+    <string name="atajo_mensajes">Mensajes</string>
+    <string name="atajo_proyectos_largo">Abrir proyectos</string>
+    <string name="atajo_sincronizar">Sincronizar</string>
+    <string name="atajo_sincronizar_largo">Sincronizar por Wi-Fi</string>
+    <string name="atajo_proyecto_largo">Proyecto %1$s</string>
 </resources>
