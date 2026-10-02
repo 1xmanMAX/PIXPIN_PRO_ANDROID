@@ -16,7 +16,7 @@ import com.forge.pixpin.volverALosProyectos
  *
  * Sin pantalla: lee la seña, abre lo que toca y se va. Está exportada porque algunos
  * buscadores (los de Huawei y Honor, sobre todo) lanzan el intento tal cual en vez de pedírselo
- * al sistema; por eso solo entiende las cinco señas de [Atajos] y cualquier otra cosa la ignora.
+ * al sistema; por eso solo entiende las señas de [Atajos] y cualquier otra cosa la ignora.
  */
 class AtajoActivity : Activity() {
 
@@ -52,6 +52,9 @@ class AtajoActivity : Activity() {
                 val existe = id != null && app?.proyectos?.porId(id) != null
                 volverALosProyectos(this, if (existe) id else null)
             }
+            // Un archivo del chat, abierto con su visor como al tocarlo allí. Si ya no está, el
+            // chat se abre igual y no hace nada más: lo comprueba él, fuera del hilo principal.
+            Atajos.ARCHIVO -> if (id != null) MensajesActivity.abrirYAbrir(this, id)
             Atajos.SINCRONIZAR -> startActivity(
                 Intent(this, SincronizarActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )

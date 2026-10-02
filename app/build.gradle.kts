@@ -20,8 +20,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 189
-        versionName = "0.99.0"
+        versionCode = 190
+        versionName = "0.99.1"
     }
 
     buildTypes {
@@ -91,6 +91,11 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.13.0@aar")
 
     implementation("androidx.core:core-ktx:1.16.0")
+    // El índice de búsqueda del sistema (Android 12+): todos los archivos del chat en el
+    // buscador del teléfono. Ver atajos/IndiceDelBuscador.kt.
+    implementation("androidx.appsearch:appsearch:1.1.0")
+    implementation("androidx.appsearch:appsearch-platform-storage:1.1.0")
+    implementation("androidx.appsearch:appsearch-builtin-types:1.1.0")
     implementation("androidx.activity:activity-compose:1.10.1")
 
     implementation("androidx.compose.ui:ui")

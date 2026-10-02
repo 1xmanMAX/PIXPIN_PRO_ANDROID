@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import android.util.Log
 
@@ -119,15 +120,21 @@ class PixPinApp : Application() {
             // **Todo lo de los proyectos, en el chat.** Ver [com.forge.pixpin.guardados.RegistroDelChat].
             com.forge.pixpin.guardados.ChatDeLosProyectos.reparar(this@PixPinApp)
         }
-        // **Los últimos proyectos, en el buscador del teléfono y en el icono.** Ver [com.forge.pixpin.atajos.Atajos].
+        // **Los proyectos y los archivos del chat, en el buscador del teléfono y en el icono.**
+        // Espera a que paren los cambios: guardar un lienzo escribe varias veces seguidas, y
+        // leer el chat entero por cada una sería tirar el trabajo. Ver [com.forge.pixpin.atajos.Atajos].
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
         scope.launch(Dispatchers.IO) {
-            var antes: Set<String>? = null
-            proyectos.proyectos.collect { lista ->
-                val ahora = lista.mapTo(HashSet()) { it.id }
-                antes?.let { com.forge.pixpin.atajos.Atajos.olvidar(this@PixPinApp, (it - ahora).toList()) }
-                antes = ahora
-                com.forge.pixpin.atajos.Atajos.ponerAlDia(this@PixPinApp, lista)
-            }
+            kotlinx.coroutines.flow.combine(
+                proyectos.proyectos, com.forge.pixpin.guardados.MensajesStore.cambios
+            ) { lista, _ -> lista }
+                .debounce(1500L)
+                .collect { lista ->
+                    val mensajes = runCatching { com.forge.pixpin.guardados.MensajesStore(this@PixPinApp).leer() }
+                        .getOrDefault(emptyList())
+                    com.forge.pixpin.atajos.Atajos.ponerAlDia(this@PixPinApp, lista, mensajes)
+                    com.forge.pixpin.atajos.IndiceDelBuscador.ponerAlDia(this@PixPinApp, lista, mensajes)
+                }
         }
     }
 }
