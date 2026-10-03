@@ -53,7 +53,10 @@ class LeccionesStore(context: Context) {
             salida += Entrada(l, m)
         }
         CACHE = nueva
-        val ordenadas = salida.sortedByDescending { it.leccion.tocada }
+        // **Una lección, una tarjeta** (4-oct-2026): si su mensaje quedó dos veces en el chat
+        // —dos guardados a la vez, o lo mismo llegado por dos caminos al sincronizar—, la lista
+        // tenía la misma clave dos veces y la pantalla de lecciones se cerraba al abrirla.
+        val ordenadas = salida.sortedByDescending { it.leccion.tocada }.distinctBy { it.leccion.id }
         _todas.value = ordenadas
         ordenadas
     }
@@ -70,14 +73,18 @@ class LeccionesStore(context: Context) {
      * el chat de la lección **respondiéndola**, después de ella; los quitados se borran del chat
      * con su archivo.
      */
-    fun guardar(leccion: Leccion, proyecto: String?, nuevos: List<Mensaje>, quitados: List<String>): Leccion {
+    fun guardar(leccion: Leccion, proyecto: String?, nuevos: List<Mensaje>, quitados: List<String>): Leccion =
+        synchronized(GUARDANDO) { guardarYa(leccion, proyecto, nuevos, quitados) }
+
+    /** Mirar si ya tiene mensaje y crearlo va junto: dos guardados a la vez no hacen dos mensajes. */
+    private fun guardarYa(leccion: Leccion, proyecto: String?, nuevos: List<Mensaje>, quitados: List<String>): Leccion {
         val l = leccion.copy(adjuntos = (leccion.adjuntos - quitados.toSet() + nuevos.map { it.id }).distinct())
         val f = File(carpeta(), l.id + EXTENSION)
         val tmp = File(f.parentFile, f.name + ".tmp")
         tmp.writeText(Leccion.escribir(l))
         if (!tmp.renameTo(f)) { tmp.copyTo(f, overwrite = true); tmp.delete() }
         val ruta = f.absolutePath
-        val existente = mensajes.leer().firstOrNull { it.ruta == ruta }
+        val existente = mensajes.leer().firstOrNull { it.ruta == ruta || it.id == PREFIJO + l.id }
         if (existente == null) {
             mensajes.anadir(
                 Mensaje(
@@ -130,6 +137,7 @@ class LeccionesStore(context: Context) {
         const val EXTENSION = ".leccion"
         private const val PREFIJO = "lec-"
         private val CERROJO = Any()
+        private val GUARDANDO = Any()
         @Volatile private var CACHE: Map<String, Pair<Long, Leccion>> = emptyMap()
         private val _todas = MutableStateFlow<List<Entrada>>(emptyList())
 

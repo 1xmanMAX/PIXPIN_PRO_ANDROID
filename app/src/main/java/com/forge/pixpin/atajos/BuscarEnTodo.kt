@@ -66,8 +66,10 @@ object BuscarEnTodo {
         proyectos.forEach { (id, nombre) ->
             if (nombre.isNotBlank()) salida += Elemento(Tipo.PROYECTO, nombre, "Proyecto", 0, "🪐", Atajos.PROYECTO, id)
         }
+        val vistos = HashSet<String>()
         for (m in mensajes) {
-            if (m.enBuzon) continue
+            // Un mensaje repetido en el chat saldría dos veces con la misma clave.
+            if (m.enBuzon || !vistos.add(m.id)) continue
             val chat = m.proyecto?.let { nombreDe[it] } ?: "Mensajes guardados"
             salida += when {
                 LeccionesStore.esLeccion(m) -> Elemento(

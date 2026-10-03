@@ -62,4 +62,9 @@ class BuscarEnTodoTest {
         val quedan = com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes + foto + otra).map { it.id }
         assertEquals(listOf("1", "2", "4", "6"), quedan)
     }
+
+    @Test fun unMensajeRepetidoSaleUnaVez() {
+        val repetido = BuscarEnTodo.elementos(mensajes + mensajes[2], emptyList()).count { it.mensaje?.id == "3" }
+        assertEquals(1, repetido)
+    }
 }

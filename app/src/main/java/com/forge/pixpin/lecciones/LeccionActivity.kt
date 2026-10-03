@@ -157,6 +157,8 @@ class LeccionActivity : ComponentActivity() {
         val causasFinal = if (causasTocadas) causas.toList() else (causas + propuesta?.causas.orEmpty()).distinct()
 
         fun guardarYSalir() {
+            // Tocar fuera y atrás pueden llegar los dos: se guarda una sola vez.
+            if (guardada || isFinishing) return
             if (titulo.isBlank() && nuevos.isEmpty()) { finish(); return }
             val ahora = System.currentTimeMillis()
             val base = existente?.leccion
