@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -127,6 +128,41 @@ interface AudioDeLaNota {
 
 val LocalAudioDeLaNota = androidx.compose.runtime.compositionLocalOf<AudioDeLaNota?> { null }
 
+/**
+ * **Lo que la nota necesita saber de la aplicación** para enseñar lo que mete el PC (30-sep y
+ * 1-oct-2026): un mensaje del chat o una hoja enlazados se pintan como su burbuja, y tocar un
+ * archivo lo abre con el lector de PixPin. El Markdown no sabe de chats ni de proyectos; quien
+ * enseña la nota pone el suyo ([com.forge.pixpin.ui.IncrustadosDeLaNota]). Sin nadie, todo se ve
+ * como antes: un enlace, una tarjeta genérica.
+ */
+interface ContextoDeLaNota {
+    /** Lo que se enseña de un mensaje o una hoja enlazados; null si ya no está. */
+    fun vista(enlace: Incrustados.Enlace): VistaIncrustada?
+    fun abrirEnlace(enlace: Incrustados.Enlace)
+    fun abrirArchivo(ruta: String, nombre: String)
+    /** Abre la hoja de una página viva por su código. */
+    fun abrirHoja(codigo: String)
+    /** El peso del archivo, legible («1,2 MB»), o null. */
+    fun peso(ruta: String): String?
+}
+
+/** Lo que se pinta de un mensaje o una hoja enlazados. */
+class VistaIncrustada(
+    val texto: String,
+    val detalle: String = "",
+    /** El código de chat (`#47·K7Q2`) o la clase de hoja. */
+    val chapa: String = "",
+    val hora: String = "",
+    val miniatura: ImageBitmap? = null,
+    /** Nombre de archivo, para su icono de color, si es un archivo. */
+    val archivo: String? = null
+)
+
+val LocalContextoDeLaNota = androidx.compose.runtime.compositionLocalOf<ContextoDeLaNota?> { null }
+
+/** Sube cuando se repintan las páginas vivas: las fotos se vuelven a leer. */
+val LocalVersionDeMedios = androidx.compose.runtime.compositionLocalOf { 0 }
+
 /** El audio de **esta** nota: el primero que lleve dentro. Lo pone [MarkdownText]. */
 private val LocalRutaDelAudio = androidx.compose.runtime.compositionLocalOf<String?> { null }
 
@@ -223,6 +259,12 @@ private fun Bloque(
         // de la letra: tocarlo lleva el audio de la nota a ese punto. Aquí igual, cuando la
         // nota trae audio y quien la enseña sabe hacerlo sonar. Ver [AudioDeLaNota].
         is MarkdownBlock.Paragraph -> {
+            val contexto = LocalContextoDeLaNota.current
+            val incrustado = if (contexto != null) remember(block.content) { Incrustados.soloEnlace(block.content) } else null
+            if (contexto != null && incrustado != null) {
+                BurbujaIncrustada(incrustado.first, incrustado.second, contexto, baseSizeSp)
+                return
+            }
             val ruta = LocalRutaDelAudio.current
             val reproductor = LocalAudioDeLaNota.current
             val ms = if (ruta != null && reproductor != null) minutoDelParrafo(block.content.text) else -1
@@ -428,20 +470,30 @@ private fun TablaUi(
  */
 @Composable
 private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
+    val contexto = LocalContextoDeLaNota.current
+    val (pie, ancho) = remember(medio.alt) { Incrustados.partirAlt(medio.alt) }
     if (medio.clase == ClaseDeMedio.IMAGEN) {
-        val mapa = remember(medio.ruta) { cargarImagen(medio.ruta) }
+        // La fecha del archivo en la clave: una página viva repintada se vuelve a leer.
+        val version = LocalVersionDeMedios.current
+        val fecha = remember(medio.ruta, version) { java.io.File(medio.ruta).lastModified() }
+        val mapa = remember(medio.ruta, fecha) { cargarImagen(medio.ruta) }
+        val viva = remember(medio.ruta) { Incrustados.paginaViva(medio.ruta) }
         if (mapa != null) {
-            Image(
-                bitmap = mapa,
-                contentDescription = medio.alt.ifEmpty { null },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.FillWidth
-            )
-            if (medio.alt.isNotEmpty()) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Image(
+                    bitmap = mapa,
+                    contentDescription = pie.ifEmpty { null },
+                    modifier = Modifier
+                        // El ancho que se le puso (en el PC o aquí), sobre la columna de 720.
+                        .fillMaxWidth(((ancho ?: Incrustados.COLUMNA).toFloat() / Incrustados.COLUMNA).coerceIn(0.1f, 1f))
+                        .clip(RoundedCornerShape(8.dp))
+                        .then(if (viva != null && contexto != null && LocalMediosTocables.current) Modifier.clickable { contexto.abrirHoja(viva) } else Modifier),
+                    contentScale = ContentScale.FillWidth
+                )
+            }
+            if (pie.isNotEmpty()) {
                 Text(
-                    text = medio.alt,
+                    text = pie,
                     fontSize = (baseSizeSp * 0.8f).sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -470,6 +522,10 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
     // se llevaba el toque —y la pulsación larga— y no se podía abrir ni elegir la hoja.
     val elReproductor = LocalAudioDeLaNota.current
     val esAudio = LocalMediosTocables.current && medio.clase == ClaseDeMedio.AUDIO && java.io.File(medio.ruta).exists()
+    if (medio.clase == ClaseDeMedio.ARCHIVO && contexto != null) {
+        TarjetaDeArchivo(medio, pie, contexto, baseSizeSp)
+        return
+    }
     // Con reproductor puesto manda él: así el audio de la nota es **el mismo** que el de la
     // pantalla de la letra y el de la barra de abajo, y los minutos pueden saltar dentro.
     val suena = if (elReproductor != null && esAudio) elReproductor.sonando(medio.ruta) else sonando
@@ -523,6 +579,95 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
                     .ifEmpty { "archivo" },
                 fontSize = (baseSizeSp * 0.75f).sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** Un archivo dentro de la nota, como la fila del chat: el icono de su color, nombre, peso y tipo. */
+@Composable
+private fun TarjetaDeArchivo(medio: MarkdownBlock.Medio, pie: String, contexto: ContextoDeLaNota, baseSizeSp: Float) {
+    val nombre = pie.ifEmpty { medio.ruta.substringAfterLast('/') }
+    val existe = remember(medio.ruta) { java.io.File(medio.ruta).exists() }
+    val peso = remember(medio.ruta) { contexto.peso(medio.ruta) }
+    Row(
+        Modifier.fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
+            .then(if (existe && LocalMediosTocables.current) Modifier.clickable { contexto.abrirArchivo(medio.ruta, nombre) } else Modifier)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        com.forge.pixpin.ui.IconoDeArchivo(nombre, lado = (baseSizeSp * 2.6f).dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(nombre, fontSize = baseSizeSp.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 2)
+            val ext = nombre.substringAfterLast('.', "").uppercase()
+            Text(
+                if (!existe) "No está en este aparato" else listOfNotNull(peso, ext.ifEmpty { null }).joinToString(" · "),
+                fontSize = (baseSizeSp * 0.75f).sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * **Un mensaje del chat o una hoja dentro de la nota**, como su burbuja: lo que dice, su
+ * miniatura si la tiene, su chapa y su hora. Si ya no está, «Mensaje borrado» con el texto del
+ * enlace, apagado. Tocarlo abre el mensaje en su chat o la hoja.
+ */
+@Composable
+private fun BurbujaIncrustada(enlace: Incrustados.Enlace, texto: String, contexto: ContextoDeLaNota, baseSizeSp: Float) {
+    var vista by remember(enlace) { mutableStateOf<VistaIncrustada?>(null) }
+    var buscada by remember(enlace) { mutableStateOf(false) }
+    LaunchedEffect(enlace) {
+        vista = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { contexto.vista(enlace) }.getOrNull() }
+        buscada = true
+    }
+    val v = vista
+    val esMensaje = enlace is Incrustados.Enlace.Mensaje
+    Column(
+        Modifier.fillMaxWidth(0.92f)
+            .background(
+                if (esMensaje) MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (v == null && buscada) 0.35f else 0.9f)
+                else MaterialTheme.colorScheme.surfaceVariant,
+                RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp)
+            )
+            .clickable(enabled = v != null) { contexto.abrirEnlace(enlace) }
+            .padding(10.dp)
+    ) {
+        if (v?.miniatura != null) {
+            Image(
+                bitmap = v.miniatura, contentDescription = null,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(10.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (v?.archivo != null) {
+                com.forge.pixpin.ui.IconoDeArchivo(v.archivo, lado = (baseSizeSp * 2.4f).dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    when {
+                        v != null -> v.texto
+                        buscada -> if (esMensaje) "Mensaje borrado" else "La hoja ya no está"
+                        else -> texto
+                    },
+                    fontSize = baseSizeSp.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (v == null && buscada) 0.6f else 1f),
+                    maxLines = 6
+                )
+                if (v == null && buscada) Text(texto, fontSize = (baseSizeSp * 0.8f).sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                if (v != null && v.detalle.isNotEmpty()) Text(v.detalle, fontSize = (baseSizeSp * 0.8f).sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            }
+        }
+        if (v != null && (v.chapa.isNotEmpty() || v.hora.isNotEmpty())) {
+            Text(
+                listOf(v.chapa, v.hora).filter { it.isNotEmpty() }.joinToString("  "),
+                fontSize = (baseSizeSp * 0.7f).sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
             )
         }
     }

@@ -2979,6 +2979,8 @@ class PinWindowController(
         }
 
         val url = hit.url ?: return false
+        // Los enlaces a una hoja o a un mensaje (los mete el PC en las notas): dentro de PixPin.
+        if (com.forge.pixpin.ui.EnlacesPixpin.abrir(context, url)) return true
         val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return runCatching { context.startActivity(intent); true }

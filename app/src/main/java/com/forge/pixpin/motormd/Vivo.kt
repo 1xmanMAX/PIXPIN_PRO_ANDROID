@@ -49,6 +49,32 @@ object Vivo {
         return contenidoDelTrozo(trozo.de(texto))
     }
 
+    /**
+     * **De la posición en el texto limpio del bloque [n] a la del Markdown entero.** El texto
+     * limpio es el crudo sin marcas, así que basta con recorrer el crudo emparejando letra a letra.
+     * Lo usan los comentarios, que se anclan sobre el Markdown tal como se guarda.
+     */
+    fun aCrudo(texto: String, n: Int, pos: Int): Int {
+        val trozo = trozos(texto).getOrNull(n) ?: return pos.coerceIn(0, texto.length)
+        val crudo = trozo.de(texto)
+        val limpio = contenidoDelTrozo(crudo)?.text ?: return trozo.desde
+        var r = 0
+        var ultimo = 0
+        for (k in 0 until minOf(pos, limpio.length)) {
+            while (r < crudo.length && crudo[r] != limpio[k]) r++
+            if (r >= crudo.length) break
+            ultimo = r + 1
+            r++
+        }
+        if (pos <= 0) {
+            // El principio del contenido: la primera letra emparejada.
+            val c = limpio.firstOrNull() ?: return trozo.desde
+            val i = crudo.indexOf(c)
+            return trozo.desde + if (i < 0) 0 else i
+        }
+        return trozo.desde + ultimo
+    }
+
     fun contenidoDelTrozo(fuente: String): InlineText? =
         when (val b = Markdown.parse(fuente).firstOrNull()) {
             is MarkdownBlock.Paragraph -> b.content

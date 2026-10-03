@@ -42,6 +42,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.AddComment
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -134,6 +144,12 @@ class MarkdownEditorActivity : ComponentActivity() {
         val id = intent.getStringExtra(EXTRA_ID).orEmpty()
         val inicial = intent.getStringExtra(EXTRA_TEXTO).orEmpty()
         val desde = intent.getIntExtra(EXTRA_DESDE, -1)
+        // Leerlo toca disco (el chat): fuera del hilo que pinta, y el editor lo recibe al llegar.
+        val comentariosDeLaNota = androidx.compose.runtime.mutableStateOf<ComentariosDeNota?>(null)
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val c = runCatching { ComentariosDeNota.de(this@MarkdownEditorActivity, id) }.getOrNull()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { comentariosDeLaNota.value = c }
+        }
 
         setContent {
             PixPinTheme {
@@ -155,7 +171,9 @@ class MarkdownEditorActivity : ComponentActivity() {
                     },
                     onDescartar = { cerrarYVolver() },
                     onAProyecto = { texto -> aUnProyecto(texto) },
-                    detalle = { texto -> detalleDe(id, texto) }
+                    detalle = { texto -> detalleDe(id, texto) },
+                    comentarios = comentariosDeLaNota.value,
+                    masAcciones = listOf("Exportar a Word" to { texto -> exportarAWord(texto) })
                 )
             }
         }
@@ -170,6 +188,68 @@ class MarkdownEditorActivity : ComponentActivity() {
      * entrado. Sin esto, abrir una nota desde el proyecto y guardarla escribía
      * en el almacén del pin y el proyecto seguía enseñando lo de antes.
      */
+    /** El `.docx` ya hecho, esperando a que se elija dónde guardarlo. */
+    private var docxPendiente: ByteArray? = null
+
+    private val guardarDocx = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    ) { uri ->
+        val datos = docxPendiente
+        docxPendiente = null
+        if (uri == null || datos == null) return@registerForActivityResult
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val bien = runCatching { contentResolver.openOutputStream(uri)?.use { it.write(datos) } != null }.getOrDefault(false)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                Toast.makeText(this@MarkdownEditorActivity, if (bien) "Guardado como Word" else "No se pudo guardar", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /**
+     * **Exportar a Word** (como el PC, 1-oct-2026): con lo escrito aunque no se haya guardado, sus
+     * fotos y sus comentarios. Las fotos que Word no lee (WebP, HEIC) se pasan a PNG.
+     */
+    private fun exportarAWord(texto: String) {
+        val id = intent.getStringExtra(EXTRA_ID).orEmpty()
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val comentarios = runCatching { ComentariosDeNota.de(this@MarkdownEditorActivity, id)?.leer() }.getOrNull()
+            val titulo = com.forge.pixpin.motormd.ExportarDocx.tituloDe(texto)
+            val datos = runCatching {
+                com.forge.pixpin.motormd.ExportarDocx.exportar(
+                    com.forge.pixpin.motormd.ExportarDocx.Nota(
+                        markdown = texto, titulo = titulo, comentarios = comentarios,
+                        imagen = { ruta -> fotoParaWord(ruta) },
+                        autor = runCatching { com.forge.pixpin.sincro.IdentidadEnDisco(filesDir).leer().yo.nombre }.getOrNull().orEmpty()
+                    )
+                )
+            }.getOrNull()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (datos == null) {
+                    Toast.makeText(this@MarkdownEditorActivity, "No se pudo exportar", Toast.LENGTH_SHORT).show()
+                } else {
+                    docxPendiente = datos
+                    guardarDocx.launch(com.forge.pixpin.motormd.ExportarDocx.nombreDeArchivo(titulo))
+                }
+            }
+        }
+    }
+
+    /** Los bytes de una foto de la nota en un formato que Word entienda. */
+    private fun fotoParaWord(ruta: String): ByteArray? {
+        val f = when {
+            ruta.startsWith("pixpin:files/") -> java.io.File(filesDir, ruta.removePrefix("pixpin:files/"))
+            ruta.startsWith("file://") -> java.io.File(android.net.Uri.parse(ruta).path ?: return null)
+            else -> java.io.File(ruta)
+        }
+        if (!f.isFile) return null
+        val bytes = f.readBytes()
+        if (com.forge.pixpin.motormd.ExportarDocx.formatoDe(bytes) != null) return bytes
+        val mapa = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        return java.io.ByteArrayOutputStream().also { mapa.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    }
+
     /** Nombre y peso de la nota, y de su proyecto si lo tiene. */
     private fun detalleDe(id: String, texto: String): List<Pair<String, String>> {
         val nota = com.forge.pixpin.motor.Detalle.deLaNota(id.ifBlank { "nota" }, texto)
@@ -287,7 +367,11 @@ private fun Pantalla(
     onAProyecto: (String) -> Unit = {},
     desde: Int = -1,
     /** Qué archivo es esta nota y cuánto pesa, con su proyecto. Ver [com.forge.pixpin.motor.Detalle]. */
-    detalle: (String) -> List<Pair<String, String>> = { emptyList() }
+    detalle: (String) -> List<Pair<String, String>> = { emptyList() },
+    /** Los comentarios de esta nota, si tiene código con el que viajar. Ver [ComentariosDeNota]. */
+    comentarios: ComentariosDeNota? = null,
+    /** Lo demás del menú ⋮ que sabe la actividad (exportar a Word…). */
+    masAcciones: List<Pair<String, (String) -> Unit>> = emptyList()
 ) {
     var viendoDetalle by remember { mutableStateOf(false) }
     var valor by remember {
@@ -332,6 +416,32 @@ private fun Pantalla(
         )
     }
     var pidiendoUrl by remember { mutableStateOf(false) }
+    val contextoDelEditor = androidx.compose.ui.platform.LocalContext.current
+    val contextoDeLaNota = remember { IncrustadosDeLaNota(contextoDelEditor) }
+    // **Las páginas vivas al día** al abrir la nota: las hojas que cambiaron se repintan.
+    var repintadas by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        val n = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { PaginasVivas.ponerAlDia(contextoDelEditor, inicial) }.getOrDefault(0)
+        }
+        if (n > 0) repintadas += n
+    }
+    // **Los comentarios** (como en el PC): el fichero, el panel y el trozo que se va a comentar.
+    var fichero by remember { mutableStateOf(com.forge.pixpin.motormd.Comentarios.Fichero()) }
+    var viendoComentarios by remember { mutableStateOf<Int?>(null) }
+    var comentando by remember { mutableStateOf<com.forge.pixpin.motormd.Comentarios.Ancla?>(null) }
+    val alcanceDeComentarios = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(comentarios) {
+        val c = comentarios ?: return@LaunchedEffect
+        fichero = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { c.leer() }
+    }
+    fun cambiarComentarios(nuevo: com.forge.pixpin.motormd.Comentarios.Fichero, texto: String) {
+        val c = comentarios ?: return
+        fichero = nuevo
+        alcanceDeComentarios.launch(kotlinx.coroutines.Dispatchers.IO) {
+            c.guardar(nuevo, texto)?.let { guardado -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { fichero = guardado } }
+        }
+    }
     // **Ver la nota como va a quedar**, sin salir: el editor por bloques enseña
     // cada bloque ya compuesto, pero solo de uno en uno; esto es la página
     // entera, seguida, como la verá quien la reciba.
@@ -549,18 +659,38 @@ private fun Pantalla(
                         Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Rehacer")
                     }
 
-                    IconButton(onClick = { viendoDetalle = true }) {
-                        Icon(Icons.Filled.Info, contentDescription = "Detalle")
+                    // El globo de los comentarios, con los abiertos.
+                    if (comentarios != null) {
+                        IconButton(onClick = { viendoComentarios = -1 }) {
+                            BadgedBox(badge = { if (fichero.abiertos > 0) Badge { Text("${fichero.abiertos}") } }) {
+                                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Comentarios")
+                            }
+                        }
                     }
-                    // Mandar la nota a un proyecto: se queda como una hoja
-                    // más, con sus páginas, junto a los dibujos y las del PDF.
-                    IconButton(onClick = { onAProyecto(valor.text) }) {
-                        Icon(
-                            Icons.Filled.LibraryAdd,
-                            contentDescription = "Añadir a un proyecto"
-                        )
+                    // Lo de uso de vez en cuando, detrás de los tres puntos: la barra no daba para más.
+                    var menuMas by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuMas = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Más") }
+                        DropdownMenu(expanded = menuMas, onDismissRequest = { menuMas = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Detalle") }, leadingIcon = { Icon(Icons.Filled.Info, null) },
+                                onClick = { menuMas = false; viendoDetalle = true }
+                            )
+                            // Mandar la nota a un proyecto: se queda como una hoja
+                            // más, con sus páginas, junto a los dibujos y las del PDF.
+                            DropdownMenuItem(
+                                text = { Text("Añadir a un proyecto") }, leadingIcon = { Icon(Icons.Filled.LibraryAdd, null) },
+                                onClick = { menuMas = false; onAProyecto(valor.text) }
+                            )
+                            masAcciones.forEach { (nombre, hacer) ->
+                                DropdownMenuItem(text = { Text(nombre) }, onClick = { menuMas = false; hacer(valor.text) })
+                            }
+                        }
                     }
-                    IconButton(onClick = { onGuardar(valor.text) }) {
+                    IconButton(onClick = {
+                        if (comentarios != null && fichero.comentarios.isNotEmpty()) cambiarComentarios(fichero, valor.text)
+                        onGuardar(valor.text)
+                    }) {
                         Icon(
                             Icons.Filled.Check,
                             contentDescription = "Guardar",
@@ -587,6 +717,8 @@ private fun Pantalla(
                     val bloques = remember(valor.text) { Markdown.parse(valor.text) }
                     androidx.compose.runtime.CompositionLocalProvider(
                         com.forge.pixpin.motormd.LocalMediosTocables provides true,
+                        com.forge.pixpin.motormd.LocalContextoDeLaNota provides contextoDeLaNota,
+                        com.forge.pixpin.motormd.LocalVersionDeMedios provides repintadas,
                         // **El audio de la nota suena por el reproductor de siempre**, el
                         // mismo de la pantalla de la letra y el de la barra de abajo: así
                         // los minutos de cada párrafo pueden saltar dentro de él, que es lo
@@ -596,12 +728,21 @@ private fun Pantalla(
                         MarkdownText(blocks = bloques, baseSizeSp = 16f)
                     }
                 } else {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        com.forge.pixpin.motormd.LocalContextoDeLaNota provides contextoDeLaNota,
+                        com.forge.pixpin.motormd.LocalVersionDeMedios provides repintadas
+                    ) {
                     EditorVivo(
                         texto = valor.text,
                         sitio = sitio,
                         onTexto = { cambia(valor.copy(text = it)) },
-                        onSitio = { sitio = it }
+                        onSitio = { sitio = it },
+                        comentados = remember(fichero, valor.text) {
+                            if (comentarios == null) emptyMap() else ComentariosDeNota.porBloque(fichero, valor.text)
+                        },
+                        onComentarios = { viendoComentarios = it }
                     )
+                    }
                 }
             }
 
@@ -613,6 +754,26 @@ private fun Pantalla(
                 }
                 if (sugerencias.isNotEmpty()) {
                     ListaDeComandos(sugerencias) { tipo -> insertarBloque(tipo) }
+                }
+                if (comentarios != null && !comentarios.roto && sitio != null) {
+                    val s2 = sitio!!
+                    // Con algo elegido se comenta eso; sin nada, la palabra del cursor (como el PC).
+                    AssistChip(
+                        onClick = {
+                            val texto = valor.text
+                            val (a1, b1) = if (!s2.seleccion.collapsed) {
+                                com.forge.pixpin.motormd.Vivo.aCrudo(texto, s2.bloque, s2.seleccion.min) to
+                                    com.forge.pixpin.motormd.Vivo.aCrudo(texto, s2.bloque, s2.seleccion.max)
+                            } else {
+                                val p = com.forge.pixpin.motormd.Vivo.aCrudo(texto, s2.bloque, s2.seleccion.start)
+                                com.forge.pixpin.motormd.Comentarios.palabraEn(texto, p)?.let { it.first to it.last + 1 } ?: (p to p)
+                            }
+                            comentando = com.forge.pixpin.motormd.Comentarios.anclaDe(texto, a1, b1)
+                        },
+                        leadingIcon = { Icon(Icons.Filled.AddComment, null) },
+                        label = { Text("Comentar") },
+                        modifier = Modifier.padding(start = 12.dp)
+                    )
                 }
 
                 Box(
@@ -664,6 +825,33 @@ private fun Pantalla(
                     }
                 }
             }
+        }
+    }
+
+    if (viendoComentarios != null && comentarios != null) {
+        PanelDeComentarios(
+            fichero = fichero, texto = valor.text, quien = comentarios.quien(), soloLectura = comentarios.roto,
+            enfoque = viendoComentarios?.takeIf { it >= 0 },
+            onCambio = { cambiarComentarios(it, valor.text) },
+            onIrA = { r ->
+                // Al bloque de su texto, con lo comentado elegido si cae dentro.
+                val trozos = com.forge.pixpin.motormd.Vivo.trozos(valor.text)
+                val b = com.forge.pixpin.motormd.trozoEn(trozos, r.first)
+                sitio = com.forge.pixpin.motormd.Sitio(b)
+                viendoComentarios = null
+            },
+            onCerrar = { viendoComentarios = null }
+        )
+    }
+    comentando?.let { ancla ->
+        DialogoDeComentar(ancla.cita, onCerrar = { comentando = null }) { t ->
+            val c = comentarios
+            if (c != null) {
+                com.forge.pixpin.motormd.Comentarios.nuevo(fichero, ancla, c.quien(), System.currentTimeMillis(), t)?.let { (f, _) ->
+                    cambiarComentarios(f, valor.text)
+                }
+            }
+            comentando = null
         }
     }
 

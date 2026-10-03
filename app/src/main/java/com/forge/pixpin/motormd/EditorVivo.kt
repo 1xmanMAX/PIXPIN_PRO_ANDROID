@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -91,7 +92,13 @@ fun EditorVivo(
     onSitio: (Sitio?) -> Unit,
     baseSizeSp: Float = 16f,
     modifier: Modifier = Modifier,
-    ocultosVisibles: Set<String> = emptySet()
+    ocultosVisibles: Set<String> = emptySet(),
+    /**
+     * **Los bloques comentados** (índice → cuántos comentarios abiertos). Se pintan con fondo
+     * ámbar y su globo, como el texto comentado del PC; tocar el globo abre sus comentarios.
+     */
+    comentados: Map<Int, Int> = emptyMap(),
+    onComentarios: (Int) -> Unit = {}
 ) {
     // Los de editar: el documento vacío es un bloque vacío. Ver [Vivo.trozos].
     val trozos = remember(texto) { Vivo.trozos(texto) }
@@ -128,7 +135,13 @@ fun EditorVivo(
             val bloques = analizados.getOrPut(fuente) { Markdown.parse(fuente).take(1) }
             val bloque = bloques.firstOrNull()
             val activo = sitio?.bloque == i
+            val comentarios = comentados[i] ?: 0
 
+            Box(
+                if (comentarios > 0) Modifier.fillMaxWidth()
+                    .background(Color(0x33FFC440), RoundedCornerShape(6.dp))
+                else Modifier.fillMaxWidth()
+            ) {
             if (activo && bloque is MarkdownBlock.Tabla) {
                 TablaEditable(
                     tabla = bloque,
@@ -198,6 +211,19 @@ fun EditorVivo(
                         )
                     }
                 }
+            }
+            if (comentarios > 0) {
+                Text(
+                    "💬 $comentarios",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFFFFC440))
+                        .clickable { onComentarios(i) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    color = Color(0xFF3A2B00)
+                )
+            }
             }
         }
 

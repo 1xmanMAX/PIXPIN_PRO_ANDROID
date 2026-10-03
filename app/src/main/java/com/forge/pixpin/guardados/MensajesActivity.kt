@@ -241,8 +241,12 @@ class MensajesActivity : ComponentActivity() {
         aplicar(intent)
     }
 
+    /** El mensaje al que saltar al entrar, si lo pidió un enlace. */
+    private var irAlMensajePedido by mutableStateOf<String?>(null)
+
     /** De qué conversación viene este intento. */
     private fun aplicar(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_IR_AL_MENSAJE)?.let { irAlMensajePedido = it; intent.removeExtra(EXTRA_IR_AL_MENSAJE) }
         chatDe = intent?.getStringExtra(EXTRA_CHAT_DE)
         nombreDelChat = intent?.getStringExtra(EXTRA_NOMBRE_DEL_CHAT).orEmpty()
         // Llegando por un intento de fuera, atrás cierra esta pantalla y devuelve a
@@ -262,6 +266,20 @@ class MensajesActivity : ComponentActivity() {
         private const val EXTRA_CHAT_DE = "chat_de"
         private const val EXTRA_NOMBRE_DEL_CHAT = "chat_nombre"
         private const val EXTRA_ABRIR = "abrir_mensaje"
+        private const val EXTRA_IR_AL_MENSAJE = "ir_al_mensaje"
+
+        /**
+         * **Abre el chat [proyecto] (o el general, con null) en el mensaje [mensaje]**, con el
+         * destello de llegada. Lo usa un enlace `pixpin:mensaje=` de una nota (como en el PC).
+         */
+        fun irAlMensaje(context: android.content.Context, proyecto: String?, nombre: String, mensaje: String) {
+            context.startActivity(
+                Intent(context, MensajesActivity::class.java)
+                    .also { if (proyecto != null) it.putExtra(EXTRA_CHAT_DE, proyecto).putExtra(EXTRA_NOMBRE_DEL_CHAT, nombre) }
+                    .putExtra(EXTRA_IR_AL_MENSAJE, mensaje)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
 
         /**
          * Abre Guardados **y, encima, el mensaje [mensaje]** con el visor que le toque. Es la
@@ -367,6 +385,10 @@ class MensajesActivity : ComponentActivity() {
         var respondiendo by remember { mutableStateOf<Mensaje?>(null) }
         // A qué mensaje hay que saltar, cuando se toca una cita.
         var irA by remember { mutableStateOf<String?>(null) }
+        // Un salto pedido desde fuera (un enlace `pixpin:mensaje=` de una nota). Ver [irAlMensaje].
+        LaunchedEffect(irAlMensajePedido) {
+            irAlMensajePedido?.let { irA = it; irAlMensajePedido = null }
+        }
         // Y a qué fila hay que volver desde el salto. Telegram guarda esto en
         // `returnToMessageId` (`ChatActivity.java:10545-10553`): si llegaste a un sitio
         // saltando a una cita, el botón de abajo te devuelve al salto, no al final.
@@ -3592,6 +3614,7 @@ class MensajesActivity : ComponentActivity() {
 
     /** Abre un enlace fuera. Si no hay con qué abrirlo, se dice en vez de no hacer nada. */
     private fun abrirEnlace(url: String) {
+        if (com.forge.pixpin.ui.EnlacesPixpin.abrir(this, url)) return
         val abierto = runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
         }.isSuccess
