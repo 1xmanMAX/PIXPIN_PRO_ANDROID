@@ -3955,7 +3955,7 @@ class MensajesActivity : ComponentActivity() {
                                 modifier = Modifier.size(19.dp)
                             )
                             Text(
-                                tarea.texto,
+                                com.forge.pixpin.mini.Tareas.partir(tarea.texto).first,
                                 fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

@@ -363,7 +363,8 @@ class MensajesStore(private val context: Context) {
      */
     fun borrarAdjunto(m: Mensaje) {
         borrarAdjunto(m.ruta)
-        if (m.ruta == null) return
+        // Una nota no tiene adjunto, pero sí sus comentarios (`anot-<uid>.comentarios.json`).
+        if (m.ruta == null && m.clase != Clase.NOTA) return
         runCatching {
             com.forge.pixpin.sincro.AnotacionesDelAdjunto.todoDe(context.filesDir, com.forge.pixpin.sincro.Codigos.unico(m)).forEach { it.delete() }
         }

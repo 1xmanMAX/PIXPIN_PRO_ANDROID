@@ -48,6 +48,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
@@ -102,6 +104,21 @@ import androidx.compose.ui.unit.dp
  * pequeño en vez de un trozo suyo.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+/**
+ * **El color de la letra de la celda que se pinta**, para quien pinta su texto. Si la celda tiene
+ * color de letra, ese; si solo tiene fondo, negro o blanco según lo claro que sea el fondo (si no,
+ * en el tema oscuro la letra clara desaparece sobre un amarillo pálido); si no, null y manda el tema.
+ */
+val LocalColorDeLaCelda = androidx.compose.runtime.compositionLocalOf<Color?> { null }
+
+fun colorDeLetra(celda: Celda): Color? {
+    celda.letra?.let { return Color(0xFF000000.toInt() or it) }
+    val f = celda.fondo ?: return null
+    val r = (f shr 16) and 0xFF; val g = (f shr 8) and 0xFF; val b = f and 0xFF
+    val luz = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    return if (luz > 0.6) Color(0xFF1F1F1F) else Color.White
+}
+
 @Composable
 fun RejillaDeTabla(
     tabla: MarkdownBlock.Tabla,
@@ -257,10 +274,11 @@ fun RejillaDeTabla(
                                 .padding(1.dp * z)
                                 .clip(esquina)
                                 .background(
-                                    if (ancla.celda.cabecera) {
-                                        fondoDeCabecera
-                                    } else {
-                                        Color.Transparent
+                                    when {
+                                        // El color que le pusieron (desde el PC o aquí) manda.
+                                        ancla.celda.fondo != null -> Color(0xFF000000.toInt() or ancla.celda.fondo)
+                                        ancla.celda.cabecera -> fondoDeCabecera
+                                        else -> Color.Transparent
                                     }
                                 )
                                 // Con suelo: un borde de menos de medio punto no
@@ -275,7 +293,9 @@ fun RejillaDeTabla(
                                 .padding(horizontal = 6.dp * z, vertical = 5.dp * z),
                             contentAlignment = alineacionDeLaCelda(ancla.celda)
                         ) {
-                            celda(ancla)
+                            androidx.compose.runtime.CompositionLocalProvider(
+                                LocalColorDeLaCelda provides colorDeLetra(ancla.celda)
+                            ) { celda(ancla) }
                         }
                     }
 
@@ -524,7 +544,9 @@ fun MenuDeTabla(
     puedeCombinar: Boolean,
     puedeSeparar: Boolean,
     onAccion: (AccionDeTabla) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Pintar lo marcado: (color o null para quitarlo, si es el fondo). Sin él, no sale la fila de colores. */
+    onColor: ((Int?, Boolean) -> Unit)? = null
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -532,6 +554,20 @@ fun MenuDeTabla(
         modifier = modifier.padding(vertical = 4.dp)
     ) {
         Column(Modifier.padding(4.dp)) {
+            // **Colores**, como los pone el PC (`style="background:…;color:…"`). Fondos claros que
+            // se leen en los dos temas y letras fuertes; el primero de cada fila quita el color.
+            if (onColor != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                    Text("Fondo", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(40.dp))
+                    MuestraDeColor(null) { onColor(null, true) }
+                    FONDOS_DE_CELDA.forEach { c -> MuestraDeColor(c) { onColor(c, true) } }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                    Text("Letra", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(40.dp))
+                    MuestraDeColor(null) { onColor(null, false) }
+                    LETRAS_DE_CELDA.forEach { c -> MuestraDeColor(c, letra = true) { onColor(c, false) } }
+                }
+            }
             // Las seis posiciones: tres a lo ancho y tres a lo alto, como su
             // align y su valign. Juntas y en una fila porque son la misma
             // pregunta hecha en dos ejes.
@@ -610,6 +646,27 @@ fun MenuDeTabla(
                     ) { onAccion(AccionDeTabla.QUITAR_COLUMNA) }
                 }
             }
+        }
+    }
+}
+
+/** Los fondos de celda: los claros de Excalidraw, los mismos que da el PC. */
+val FONDOS_DE_CELDA = listOf(0xffc9c9, 0xffec99, 0xb2f2bb, 0xa5d8ff, 0xd0bfff, 0xe9ecef)
+/** Las letras: los fuertes de la misma paleta. */
+val LETRAS_DE_CELDA = listOf(0xe03131, 0xf08c00, 0x2f9e44, 0x1971c2, 0x9c36b5)
+
+@Composable
+private fun MuestraDeColor(color: Int?, letra: Boolean = false, onClick: () -> Unit) {
+    Box(
+        Modifier.padding(3.dp).size(26.dp).clip(CircleShape)
+            .background(if (color == null || letra) MaterialTheme.colorScheme.surfaceVariant else Color(0xFF000000.toInt() or color))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            color == null -> Text("∅", style = MaterialTheme.typography.labelMedium)
+            letra -> Text("A", color = Color(0xFF000000.toInt() or color), style = MaterialTheme.typography.labelLarge)
         }
     }
 }

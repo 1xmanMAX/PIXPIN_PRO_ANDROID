@@ -136,7 +136,11 @@ object Tablas {
                 },
                 anchoEnColumnas = atributo(atributos, "colspan")?.toIntOrNull()
                     ?.coerceIn(1, 20) ?: 1,
-                altoEnFilas = atributo(atributos, "rowspan")?.toIntOrNull()?.coerceIn(1, 40) ?: 1
+                altoEnFilas = atributo(atributos, "rowspan")?.toIntOrNull()?.coerceIn(1, 40) ?: 1,
+                fondo = colorDelEstilo(atributo(atributos, "style"), "background-color")
+                    ?: colorDelEstilo(atributo(atributos, "style"), "background")
+                    ?: atributo(atributos, "bgcolor")?.let { colorHex(it) },
+                letra = colorDelEstilo(atributo(atributos, "style"), "color")
             )
             pos = if (cierra < 0) fila.length else cierra + etiqueta.length
         }
@@ -204,12 +208,49 @@ object Tablas {
                     AlturaEnCelda.ABAJO -> salida.append(" valign=\"bottom\"")
                     AlturaEnCelda.ARRIBA -> Unit
                 }
+                // Los colores, como los escribe el PC (`md_tabla_html::a_html`).
+                val estilo = listOfNotNull(
+                    celda.fondo?.let { "background:" + hex(it) },
+                    celda.letra?.let { "color:" + hex(it) }
+                )
+                if (estilo.isNotEmpty()) salida.append(" style=\"").append(estilo.joinToString(";")).append('"')
                 salida.append('>').append(escapar(Inline.aTexto(celda.contenido)))
                     .append("</").append(etiqueta).append(">\n")
             }
             salida.append("  </tr>\n")
         }
         return salida.append("</table>").toString()
+    }
+
+    // ---- Los colores ----
+
+    /** `#rrggbb`, en minúsculas, como el PC. */
+    fun hex(c: Int): String = "#" + String.format(java.util.Locale.ROOT, "%06x", c and 0xFFFFFF)
+
+    /** `#rgb`, `#rrggbb` o `rgb(r,g,b)` → `0xRRGGBB`; null si no se entiende. */
+    fun colorHex(v: String): Int? {
+        val t = v.trim().lowercase()
+        if (t.startsWith("rgb")) {
+            val n = t.substringAfter('(').substringBefore(')').split(',').mapNotNull { it.trim().toIntOrNull() }
+            if (n.size >= 3) return (n[0].coerceIn(0, 255) shl 16) or (n[1].coerceIn(0, 255) shl 8) or n[2].coerceIn(0, 255)
+            return null
+        }
+        val h = t.removePrefix("#")
+        return when (h.length) {
+            3 -> h.map { "$it$it" }.joinToString("").toIntOrNull(16)
+            6 -> h.toIntOrNull(16)
+            else -> null
+        }
+    }
+
+    /** El color de la propiedad [nombre] dentro de un `style="…"`. */
+    private fun colorDelEstilo(estilo: String?, nombre: String): Int? {
+        estilo ?: return null
+        for (decl in estilo.split(';')) {
+            val k = decl.substringBefore(':').trim().lowercase()
+            if (k == nombre) return colorHex(decl.substringAfter(':', ""))
+        }
+        return null
     }
 
     // ---- La rejilla, para pintar y para saber qué hay dónde ----
@@ -557,7 +598,8 @@ object Tablas {
     }
 
     private fun atributo(etiqueta: String, nombre: String): String? =
-        Regex("""$nombre\s*=\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
+        // Con borde delante: si no, «align» casaba dentro de «valign» y «color» dentro de «bgcolor».
+        Regex("""(?<![\w-])$nombre\s*=\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
             .find(etiqueta)?.groupValues?.get(1)
 
     private fun entre(s: String, abre: String, cierra: String): String? {

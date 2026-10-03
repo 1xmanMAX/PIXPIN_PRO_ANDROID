@@ -295,7 +295,11 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                     clave != null && clave in porClave -> {
                         if (puestos.add(clave)) salida += porClave.getValue(clave).copy(recuerdaEn = m.recuerdaEn)
                     }
-                    clave != null && clave in quitar -> { quitados += m; m.ruta?.let { adjuntosFuera += it; anotadosFuera += clave } }
+                    clave != null && clave in quitar -> {
+                        quitados += m
+                        m.ruta?.let { adjuntosFuera += it }
+                        if (m.ruta != null || m.clase == Clase.NOTA) anotadosFuera += clave
+                    }
                     else -> salida += m
                 }
             }
@@ -418,7 +422,14 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     fun aPortatil(p: Proyecto): String = rutas.aPortatil(Proyectos.json.encodeToString(Proyecto.serializer(), p))
 
     fun guardarProyecto(p: Proyecto) {
-        synchronized(PROYECTOS) { escribirProyectos(Proyectos.actualizada(leerProyectos(), p)) }
+        val antes: List<Proyecto>
+        val despues: List<Proyecto>
+        synchronized(PROYECTOS) {
+            antes = leerProyectos()
+            despues = Proyectos.actualizada(antes, p)
+            escribirProyectos(despues)
+        }
+        AnotacionesDelAdjunto.borrarLoDeHojasQuitadas(filesDir, antes, despues)
         alCambiar(Cambio.PROYECTOS)
     }
 
@@ -505,7 +516,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         for (m in leerMensajes().filter { chatDe(it) == chat }) {
             val etiqueta = etiquetaDe(m)
             for (rel in rutas.enTexto(JSON.encodeToString(Mensaje.serializer(), m))) poner(rel, etiqueta)
-            if (m.ruta != null && anotado.isNotEmpty()) anotado[Codigos.unico(m)]?.forEach { poner(it, etiqueta) }
+            // La ruta del adjunto, ENTERA: `enTexto` corta en `)` (por los enlaces de Markdown) y
+            // «informe (1).pdf» se quedaba en «informe (1», que no es un archivo: no viajaba nunca y
+            // el PC lo reenviaba en cada vuelta (1-oct-2026, arreglado igual en el PC).
+            m.ruta?.let { rutas.relativa(it) }?.let { poner(it, etiqueta) }
+            // Lo anotado: sobre un adjunto, y los comentarios de una nota (`anot-<uid>.comentarios.json`).
+            if ((m.ruta != null || m.clase == Clase.NOTA) && anotado.isNotEmpty()) anotado[Codigos.unico(m)]?.forEach { poner(it, etiqueta) }
             when (m.clase) {
                 Clase.DIBUJO, Clase.PAGINA -> poner(dibujo(m.referencia), etiqueta)
                 Clase.IMAGEN -> poner(dibujo(m.referencia ?: "foto-${m.id}"), etiqueta)
@@ -524,6 +540,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         }
         leerProyectos().firstOrNull { it.id == chat }?.let { p ->
             for (rel in rutas.enTexto(Proyectos.json.encodeToString(Proyecto.serializer(), p))) poner(rel, p.nombre)
+            // El documento del proyecto con su ruta entera (los paréntesis, como arriba).
+            for (r in listOfNotNull(p.pdfOrigen, p.pdfLimpio)) rutas.relativa(r)?.let { poner(it, p.nombre) }
             // Los marcadores y espacios de su PDF, con el código del proyecto.
             anotado[Codigos.unico(p)]?.forEach { poner(it, p.nombre) }
             for (h in p.hojas) {
@@ -531,6 +549,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 poner(dibujo(h.dibujo), etiqueta)
                 poner(tabla(h.tabla), etiqueta)
                 poner(croquis(h.croquis), etiqueta)
+                // Los comentarios de una hoja nota, con el código de la hoja.
+                if (anotado.isNotEmpty()) anotado[Codigos.unico(h)]?.forEach { poner(it, etiqueta) }
             }
             for (c in p.croquis) poner(croquis(c), p.nombre)
         }

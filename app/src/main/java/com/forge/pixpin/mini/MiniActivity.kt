@@ -26,6 +26,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -229,46 +233,115 @@ class MiniActivity : ComponentActivity() {
         }
     }
 
-    /** La lista de tareas: casillas que se marcan y una línea para añadir. */
+    /**
+     * La lista de tareas: casillas que se marcan y una línea para añadir.
+     *
+     * **Lo que trajo el PC** (2-oct-2026), que es pantalla y nada más —el documento no cambia—:
+     * cuántos días hace que se creó cada tarea (nunca la fecha: lo pidió así el usuario), la línea
+     * de avance con su barra, ocultar las hechas, y al tocar una fila elegirla para corregirla o
+     * subirla y bajarla. La casilla es lo único que tacha.
+     */
     @Composable
     private fun DeTareas(documento: String, onGuardar: (String) -> Unit) {
         val titulo = Cabecera.titulo(documento)
         val tareas = remember(documento) { Tareas.leer(documento) }
         var escrito by remember { mutableStateOf("") }
+        var ocultarHechas by remember { mutableStateOf(false) }
+        var elegida by remember { mutableStateOf<Int?>(null) }
+        var corrigiendo by remember { mutableStateOf<Int?>(null) }
+        var corregido by remember { mutableStateOf("") }
+        val hoy = remember { java.time.LocalDate.now() }
 
         fun conLasTareas(nuevas: List<Tarea>) = onGuardar(Tareas.escribir(titulo, nuevas))
 
         Column(Modifier.fillMaxSize()) {
+            val resumen = Tareas.resumenDe(tareas)
+            if (!resumen.vacia) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(resumen.texto, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp))
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { resumen.avance ?: 0f },
+                        modifier = Modifier.weight(1f).padding(vertical = 4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    )
+                    if (resumen.hechas > 0) {
+                        androidx.compose.material3.TextButton(onClick = { ocultarHechas = !ocultarHechas }) {
+                            Text(if (ocultarHechas) "Ver las hechas" else "Ocultar las hechas")
+                        }
+                    }
+                }
+            }
             LazyColumn(Modifier.weight(1f)) {
                 if (tareas.isEmpty()) {
                     item { Nada() }
                 }
                 itemsIndexed(tareas, key = { i, _ -> i }) { i, t ->
+                    if (ocultarHechas && t.hecha) return@itemsIndexed
+                    val (texto, fecha) = remember(t.texto) { Tareas.partir(t.texto) }
+                    val esLaElegida = elegida == i
                     Row(
-                        Modifier.fillMaxWidth().padding(end = 4.dp),
+                        Modifier.fillMaxWidth()
+                            .background(if (esLaElegida) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent)
+                            .clickable {
+                                // Tocar la elegida otra vez la corrige; tocar otra, la elige.
+                                if (esLaElegida) { corrigiendo = i; corregido = texto } else { elegida = i; corrigiendo = null }
+                            }
+                            .padding(end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
                             checked = t.hecha,
                             onCheckedChange = { conLasTareas(Tareas.alternar(tareas, i)) }
                         )
-                        // Lo hecho se tacha en vez de irse: ver lo tachado es la mitad de
-                        // la satisfacción de una lista, y además dice lo que ya no hace
-                        // falta volver a pensar.
-                        Text(
-                            t.texto,
-                            fontSize = 16.sp,
-                            textDecoration = if (t.hecha) TextDecoration.LineThrough else null,
-                            color = if (t.hecha) MaterialTheme.colorScheme.onSurfaceVariant
-                            else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { conLasTareas(Tareas.borrar(tareas, i)) }) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = getString(R.string.cd_delete),
-                                modifier = Modifier.size(18.dp)
+                        if (corrigiendo == i) {
+                            TextField(
+                                value = corregido, onValueChange = { corregido = it }, singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
+                                    conLasTareas(Tareas.renombrar(tareas, i, corregido)); corrigiendo = null
+                                })
                             )
+                            IconButton(onClick = { conLasTareas(Tareas.renombrar(tareas, i, corregido)); corrigiendo = null }) {
+                                Icon(Icons.Filled.Check, contentDescription = "Guardar")
+                            }
+                        } else {
+                            // Lo hecho se tacha en vez de irse: ver lo tachado es la mitad de
+                            // la satisfacción de una lista, y además dice lo que ya no hace
+                            // falta volver a pensar.
+                            Text(
+                                texto,
+                                fontSize = 16.sp,
+                                textDecoration = if (t.hecha) TextDecoration.LineThrough else null,
+                                color = if (t.hecha) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (fecha != null) {
+                                val dias = Tareas.diasDesde(fecha, hoy)
+                                Text(
+                                    if (dias == 0L) getString(R.string.tarea_creada_hoy)
+                                    else resources.getQuantityString(R.plurals.tarea_creada_hace, dias.toInt(), dias.toInt()),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                            }
+                            if (esLaElegida) {
+                                IconButton(onClick = { corrigiendo = i; corregido = texto }) { Icon(Icons.Filled.Edit, contentDescription = "Corregir", modifier = Modifier.size(18.dp)) }
+                                IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i - 1)); elegida = (i - 1).coerceAtLeast(0) }, enabled = i > 0) {
+                                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Subir", modifier = Modifier.size(20.dp))
+                                }
+                                IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i + 1)); elegida = (i + 1).coerceAtMost(tareas.lastIndex) }, enabled = i < tareas.lastIndex) {
+                                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Bajar", modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            IconButton(onClick = { conLasTareas(Tareas.borrar(tareas, i)); elegida = null }) {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = getString(R.string.cd_delete),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }

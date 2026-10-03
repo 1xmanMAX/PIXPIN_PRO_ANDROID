@@ -70,6 +70,26 @@ object AnotacionesDelAdjunto {
     fun hoja(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base.hoja")
 
     /**
+     * **Los comentarios de una nota** (acordado con el PC, 30-sep-2026): `anot-<uid>.comentarios.json`,
+     * con el código único del mensaje NOTA, de la hoja nota o del mensaje del `.md`. Ver
+     * [com.forge.pixpin.motormd.Comentarios].
+     */
+    fun comentarios(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.comentarios.json")
+
+    /**
+     * Lo anotado de las hojas que estaban en [antes] y ya no están en ningún proyecto de
+     * [despues]: sin su hoja ya no viaja ni se abre. Una hoja que se mueve a otro proyecto lleva
+     * su código, así que la suya no se toca.
+     */
+    fun borrarLoDeHojasQuitadas(filesDir: File, antes: List<com.forge.pixpin.motor.Proyecto>, despues: List<com.forge.pixpin.motor.Proyecto>) {
+        val quedan = despues.flatMap { p -> p.hojas.map { Codigos.unico(it) } }.toHashSet()
+        val fuera = antes.flatMap { p -> p.hojas.map { Codigos.unico(it) } }.filter { it !in quedan }.distinct()
+        if (fuera.isEmpty()) return
+        val porUid = porUid(filesDir)
+        for (uid in fuera) porUid[uid]?.forEach { File(filesDir, it).delete() }
+    }
+
+    /**
      * **El marco de la tinta** (30-sep-2026, idea del usuario; formato acordado con PixPin para
      * Windows, `docs/investigacion/2026-09-29-marco-de-la-tinta-android.md` de ese repo).
      *
@@ -127,13 +147,27 @@ object AnotacionesDelAdjunto {
             }
 
             /** Null si no se entiende: entonces manda la regla de antes. */
-            fun deTexto(t: String?): Marco? {
+            fun deTexto(t: String?): Marco? = deTextoConHuella(t)?.first
+
+            fun esHuella(h: String) = h.length in 16..64 && h.all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }
+
+            /**
+             * El marco y la **huella de su tinta**, si la trae. El PC escribió el 29-sep marcos de tres
+             * líneas (`tinta <16-64 cifras hex>`: el principio del resumen con que la sincronización
+             * compara la tinta) y desde el 30-sep escribe dos, como aquí; los de tres se siguen
+             * leyendo, y si la huella no es la de la tinta de ahora el marco no vale.
+             */
+            fun deTextoConHuella(t: String?): Pair<Marco, String?>? {
                 val lineas = t?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
-                if (lineas.isEmpty() || lineas.size > 2) return null
-                if (lineas.size == 2 && lineas[1] != "v1") return null
+                if (lineas.isEmpty() || lineas.size > 3) return null
+                if (lineas.size >= 2 && lineas[1] != "v1") return null
+                val huella = if (lineas.size == 3) {
+                    if (!lineas[2].startsWith("tinta ")) return null
+                    lineas[2].removePrefix("tinta ").trim().takeIf { esHuella(it) }?.lowercase() ?: return null
+                } else null
                 val n = lineas[0].split(',').map { it.trim().toDoubleOrNull() ?: return null }
                 if (n.size != 4) return null
-                return Marco(n[0], n[1], n[2], n[3]).takeIf { it.valido() }
+                return Marco(n[0], n[1], n[2], n[3]).takeIf { it.valido() }?.let { it to huella }
             }
 
             /** La hoja de un PDF tal como la mide el editor: [ancho] de ancho, desde el cero. */
@@ -156,11 +190,33 @@ object AnotacionesDelAdjunto {
         }
     }
 
-    fun leerMarco(f: File): Marco? = Marco.deTexto(leer(f))
+    /**
+     * El marco de [f] (`pins/draw/<base>.hoja`) si se entiende y, si trae huella, si es la de la
+     * tinta que hay ahora; si no, null (regla vieja).
+     */
+    fun leerMarco(f: File): Marco? {
+        val (m, huella) = Marco.deTextoConHuella(leer(f)) ?: return null
+        if (huella == null) return m
+        val filesDir = f.parentFile?.parentFile?.parentFile ?: return null
+        val base = f.name.removeSuffix(".hoja")
+        val rel = "$CARPETA/$base.excalidraw.gz"
+        if (!File(filesDir, rel).isFile) return null
+        val ahora = runCatching { Disco(filesDir).resumenDeArchivo(rel) }.getOrNull() ?: return null
+        if (!ahora.startsWith(huella, ignoreCase = true)) {
+            android.util.Log.w("Marco", "marco de otra tinta ($base): se ignora")
+            return null
+        }
+        return m
+    }
 
-    /** Escribe [m] salvo que el que hay ya diga lo mismo: una ida y vuelta sin cambios no provoca otro envío. */
+    /**
+     * Escribe [m] salvo que el que hay ya diga lo mismo: una ida y vuelta sin cambios no provoca otro
+     * envío. Uno de tres líneas se reescribe en dos aunque diga lo mismo: su huella sería de la tinta
+     * de antes y el PC dejaría de creerse el marco.
+     */
     fun escribirMarco(f: File, m: Marco) {
-        if (leerMarco(f)?.casiIgual(m) == true) return
+        val ya = Marco.deTextoConHuella(leer(f))
+        if (ya != null && ya.second == null && ya.first.casiIgual(m)) return
         escribir(f, m.aTexto())
     }
 
@@ -243,7 +299,7 @@ object AnotacionesDelAdjunto {
         return uid
     }
 
-    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja")
+    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json")
 
     /**
      * **Lo anotado que hay en disco, por código de mensaje**, en rutas relativas a `files`. Para

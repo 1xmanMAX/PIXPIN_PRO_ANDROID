@@ -59,12 +59,19 @@ data class Celda(
     /** Cuántas columnas ocupa. 1 es lo normal; más es una fusión. */
     val anchoEnColumnas: Int = 1,
     /** Cuántas filas ocupa. */
-    val altoEnFilas: Int = 1
+    val altoEnFilas: Int = 1,
+    /**
+     * **Colores de la celda**, `0xRRGGBB` o null (sin color). Los pone el PC desde el 1-oct-2026 y
+     * van en `style="background:#…;color:#…"` del HTML ([Tablas]); sin leerlos, editar en el móvil
+     * una tabla coloreada en el PC le quitaba los colores.
+     */
+    val fondo: Int? = null,
+    val letra: Int? = null
 ) {
     /** ¿Usa algo que una tabla de Markdown no sabe decir? */
     val esAvanzada: Boolean
         get() = anchoEnColumnas > 1 || altoEnFilas > 1 ||
-            altura != AlturaEnCelda.ARRIBA
+            altura != AlturaEnCelda.ARRIBA || fondo != null || letra != null
 }
 
 /** Qué clase de archivo lleva un bloque de medio, deducido por su extensión. */

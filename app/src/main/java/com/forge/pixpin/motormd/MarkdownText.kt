@@ -407,6 +407,7 @@ private fun TablaUi(
         RejillaDeTabla(tabla, escala = baseSizeSp / TAMANIO_NORMAL_SP) { ancla ->
             Body(
                 content = ancla.celda.contenido,
+                color = LocalColorDeLaCelda.current ?: MaterialTheme.colorScheme.onSurface,
                 sizeSp = baseSizeSp * 0.92f,
                 bloque = "$clave/${ancla.fila}/${ancla.columna}",
                 ocultosVisibles = ocultosVisibles,

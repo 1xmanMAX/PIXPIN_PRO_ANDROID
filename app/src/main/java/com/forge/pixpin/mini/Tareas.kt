@@ -99,11 +99,35 @@ object Tareas {
      * y se cuela sola cada vez que uno toca «añadir» sin escribir nada. Se devolvería una
      * lista con una fila fantasma que además cuenta en el «3 de 7» de la burbuja.
      */
-    fun anadir(tareas: List<Tarea>, texto: String, hecha: Boolean = false): List<Tarea> {
+    /**
+     * Añade una tarea **con su fecha de creación** al final del texto (`pan ➕ 2026-10-02`), la
+     * marca del plugin Tasks de Obsidian que acordó el PC (2-oct-2026): va dentro del texto de la
+     * casilla porque es lo único que sobrevive a [escribir], también en versiones viejas. Si lo
+     * pegado ya traía su fecha, se respeta la suya. Fecha local, sin hora.
+     */
+    fun anadir(tareas: List<Tarea>, texto: String, hecha: Boolean = false, hoy: java.time.LocalDate = java.time.LocalDate.now()): List<Tarea> {
         val limpio = saneado(texto)
         if (limpio.isEmpty()) return tareas
-        return tareas + Tarea(limpio, hecha)
+        val conFecha = if (partir(limpio).second != null) limpio else "$limpio ➕ $hoy"
+        return tareas + Tarea(conFecha, hecha)
     }
+
+    /** `➕ AAAA-MM-DD` como última cosa del texto, con un blanco (o nada) delante. */
+    private val CREADA = Regex("""(?:^|\s)➕\s*(\d{4}-\d{2}-\d{2})\s*$""")
+
+    /**
+     * **El texto que se enseña y la fecha de creación**, si la lleva. Una fecha que no existe
+     * (`2026-02-30`) se queda como texto, igual que en el PC (`mini::partir`).
+     */
+    fun partir(texto: String): Pair<String, java.time.LocalDate?> {
+        val m = CREADA.find(texto) ?: return texto.trim() to null
+        val fecha = runCatching { java.time.LocalDate.parse(m.groupValues[1]) }.getOrNull() ?: return texto.trim() to null
+        return texto.substring(0, m.range.first).trim() to fecha
+    }
+
+    /** Días desde que se creó, por calendario y nunca negativos (un reloj adelantado da «hoy»). */
+    fun diasDesde(fecha: java.time.LocalDate, hoy: java.time.LocalDate = java.time.LocalDate.now()): Long =
+        java.time.temporal.ChronoUnit.DAYS.between(fecha, hoy).coerceAtLeast(0)
 
     /** Cambia el estado de una. Fuera de rango se queda como estaba. */
     fun marcar(tareas: List<Tarea>, indice: Int, hecha: Boolean): List<Tarea> {
@@ -117,11 +141,14 @@ object Tareas {
         if (indice !in tareas.indices) tareas else marcar(tareas, indice, !tareas[indice].hecha)
 
     /** Cambia el texto de una, ya saneado. Si queda vacío no se toca: para eso está [borrar]. */
+    /** Corrige el texto **conservando la fecha** que tenía (como `mini::renombrar` del PC). */
     fun renombrar(tareas: List<Tarea>, indice: Int, texto: String): List<Tarea> {
         if (indice !in tareas.indices) return tareas
         val limpio = saneado(texto)
-        if (limpio.isEmpty()) return tareas
-        return tareas.toMutableList().also { it[indice] = it[indice].copy(texto = limpio) }
+        if (partir(limpio).first.isEmpty()) return tareas
+        val fecha = partir(tareas[indice].texto).second
+        val nuevo = if (fecha != null && partir(limpio).second == null) "$limpio ➕ $fecha" else limpio
+        return tareas.toMutableList().also { it[indice] = it[indice].copy(texto = nuevo) }
     }
 
     fun borrar(tareas: List<Tarea>, indice: Int): List<Tarea> {

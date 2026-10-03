@@ -347,7 +347,7 @@ private fun TablaEditable(
                     Alineacion.DERECHA -> TextAlign.End
                     else -> TextAlign.Start
                 },
-                color = MaterialTheme.colorScheme.onSurface
+                color = LocalColorDeLaCelda.current ?: MaterialTheme.colorScheme.onSurface
             )
 
             if (escribiendo != ancla.fila to ancla.columna) {
@@ -423,6 +423,10 @@ private fun TablaEditable(
                     } == true,
                     onAccion = { accion ->
                         onCambio(aplicarEnLaTabla(tabla, marca, accion))
+                        menuAbierto = false
+                    },
+                    onColor = { color, esFondo ->
+                        onCambio(Tablas.enElMarcado(tabla, marca) { if (esFondo) it.copy(fondo = color) else it.copy(letra = color) })
                         menuAbierto = false
                     },
                     modifier = Modifier.align(Alignment.TopCenter).zIndex(1f)

@@ -74,6 +74,31 @@ class MiniAppsTest {
         assertEquals(lista, leidas)
     }
 
+    /** Lo mismo que prueba el PC (`mini.rs`): la fecha de creación va dentro del texto y sobrevive. */
+    @Test
+    fun `una tarea lleva su fecha de creacion y se lee igual que en el PC`() {
+        val d = "# La compra\n\n- [x] pan ➕ 2026-09-28\n- [ ] leche ➕ 2026-10-02\n- [ ] sal"
+        val t = Tareas.leer(d)
+        assertEquals("pan" to java.time.LocalDate.of(2026, 9, 28), Tareas.partir(t[0].texto))
+        assertEquals("sal" to null, Tareas.partir(t[2].texto))
+        assertEquals(d, Tareas.escribir("La compra", t))
+        // Una fecha que no existe es texto; pegada a la palabra, también.
+        assertEquals("pan ➕ 2026-02-30" to null, Tareas.partir("pan ➕ 2026-02-30"))
+        assertEquals("pan➕ 2026-10-02" to null, Tareas.partir("pan➕ 2026-10-02"))
+    }
+
+    @Test
+    fun `añadir pone la fecha de hoy y corregir la conserva`() {
+        val hoy = java.time.LocalDate.of(2026, 10, 3)
+        val l = Tareas.anadir(emptyList(), "comprar cemento", hoy = hoy)
+        assertEquals("comprar cemento ➕ 2026-10-03", l[0].texto)
+        // Lo pegado con su fecha se queda con la suya.
+        assertEquals("x ➕ 2026-01-01", Tareas.anadir(emptyList(), "x ➕ 2026-01-01", hoy = hoy)[0].texto)
+        assertEquals("comprar arena ➕ 2026-10-03", Tareas.renombrar(l, 0, "comprar arena")[0].texto)
+        assertEquals(0L, Tareas.diasDesde(hoy.plusDays(2), hoy))
+        assertEquals(5L, Tareas.diasDesde(hoy.minusDays(5), hoy))
+    }
+
     @Test
     fun `marcar y desmarcar no toca a las demás`() {
         val antes = listOf(Tarea("a"), Tarea("b"), Tarea("c"))
