@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.FormatListBulleted
@@ -403,6 +404,8 @@ class FloatingBallController(private val context: Context) {
                 Intent(context, ClipboardPinActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
+            // Apuntar una lección sin salir de lo que se está haciendo: la hoja sube encima.
+            BallAction.LECCION -> com.forge.pixpin.lecciones.LeccionActivity.nueva(context)
             BallAction.HIDE_ALL -> app.overlayManager.toggleHideAll()
             BallAction.PIN_LIST -> app.overlayManager.togglePinList()
         }
@@ -441,7 +444,7 @@ class FloatingBallController(private val context: Context) {
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // **Cinco botones, y los cinco de aquí.**
+                // **Seis botones, y los seis de aquí.**
                 //
                 // Se fueron el micrófono y Mensajes guardados: los dos abren una
                 // pantalla, y para abrir una pantalla ya está el icono de la aplicación
@@ -457,6 +460,9 @@ class FloatingBallController(private val context: Context) {
                 // La voz va junto a la captura y la capa: las tres son «coge esto
                 // que está pasando ahora», y esas son las que se buscan sin mirar.
 
+                // **La lección del momento** (3-oct-2026): lo aprendido se olvida en cuanto se
+                // vuelve a lo que se hacía, así que se apunta encima, sin salir de la app.
+                MenuButton(BallAction.LECCION) { Icon(androidx.compose.material.icons.Icons.Filled.Lightbulb, contentDescription = "Lección") }
                 MenuButton(BallAction.PIN_CLIPBOARD) { Icon(Icons.Filled.PushPin, contentDescription = null) }
                 MenuButton(BallAction.HIDE_ALL) { Icon(Icons.Filled.VisibilityOff, contentDescription = null) }
                 MenuButton(BallAction.PIN_LIST) { Icon(Icons.Filled.FormatListBulleted, contentDescription = null) }
@@ -470,4 +476,4 @@ class FloatingBallController(private val context: Context) {
     }
 }
 
-private enum class BallAction { CAPTURE, CAPA, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }
+private enum class BallAction { CAPTURE, CAPA, LECCION, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }

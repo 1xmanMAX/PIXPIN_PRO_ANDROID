@@ -53,7 +53,11 @@ object IndiceDelBuscador {
             if (!Atajos.esArchivo(m)) continue
             val nombre = Atajos.nombreDe(m) ?: continue
             val chat = m.proyecto?.let { nombreDelProyecto[it] }
-            val donde = if (chat != null) "Chat de $chat" else "Mensajes guardados"
+            val donde = when {
+                com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m) -> if (chat != null) "Lección de $chat" else "Lección aprendida"
+                chat != null -> "Chat de $chat"
+                else -> "Mensajes guardados"
+            }
             val clave = "$ARCHIVOS/${m.id}"
             docs[clave] = (nombre + "\u0001" + donde) to cosa(
                 ARCHIVOS, m.id, nombre, "$donde · PixPin", m.cuando,

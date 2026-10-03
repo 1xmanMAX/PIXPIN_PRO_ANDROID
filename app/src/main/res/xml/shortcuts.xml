@@ -20,6 +20,30 @@
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
     <shortcut
+        android:shortcutId="nueva_leccion"
+        android:enabled="true"
+        android:icon="@drawable/atajo_leccion"
+        android:shortcutShortLabel="@string/atajo_leccion"
+        android:shortcutLongLabel="@string/atajo_leccion_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/leccion"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="lecciones"
+        android:enabled="true"
+        android:icon="@drawable/atajo_leccion"
+        android:shortcutShortLabel="@string/atajo_lecciones"
+        android:shortcutLongLabel="@string/atajo_lecciones_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/lecciones"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
         android:shortcutId="mensajes"
         android:enabled="true"
         android:icon="@drawable/atajo_mensajes"

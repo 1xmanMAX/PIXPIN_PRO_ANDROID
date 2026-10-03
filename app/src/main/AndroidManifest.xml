@@ -239,6 +239,33 @@
         </activity>
 
         <!--
+            Las lecciones aprendidas: la pantalla con tarjetas y buscador, y la hoja que sube para
+            apuntar una (encima de cualquier app, desde la bola; y como destino de «Compartir»).
+            Ver lecciones/.
+        -->
+        <activity
+            android:name=".lecciones.LeccionesActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.lecciones"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+        <activity
+            android:name=".lecciones.LeccionActivity"
+            android:exported="true"
+            android:label="Lección"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:taskAffinity="${applicationId}.leccion"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter android:label="Lección">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!--
             Por donde entran los atajos. Exportada porque algunos buscadores lanzan el intento
             tal cual; solo entiende pixpin://atajo/... Ver atajos/AtajoActivity.
         -->

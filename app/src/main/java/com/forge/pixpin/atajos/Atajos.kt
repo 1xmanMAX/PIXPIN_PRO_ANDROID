@@ -32,6 +32,8 @@ object Atajos {
     /** `pixpin://atajo/proyecto/<id>` */
     const val PROYECTO = "proyecto"
 
+    const val LECCION = "leccion"
+    const val LECCIONES = "lecciones"
     /** `pixpin://atajo/archivo/<id del mensaje>`: un archivo del chat, abierto con su visor. */
     const val ARCHIVO = "archivo"
 
@@ -40,7 +42,7 @@ object Atajos {
 
     /**
      * Cuántos proyectos. Los lanzadores enseñan cuatro o cinco atajos al mantener pulsado el
-     * icono, y los cuatro fijos ya ocupan su sitio: con tres, los proyectos asoman sin echar
+     * icono, y los fijos ya ocupan su sitio: con tres, los proyectos asoman sin echar
      * a nadie, y el buscador los encuentra todos igual.
      */
     private const val CUANTOS_PROYECTOS = 3
@@ -53,7 +55,7 @@ object Atajos {
     private const val CUANTOS_ARCHIVOS = 8
 
     /** Los atajos fijos de `xml/shortcuts.xml`: cuentan para el tope. */
-    private const val FIJOS = 4
+    private const val FIJOS = 6
 
     private val CON_ARCHIVO = setOf(
         com.forge.pixpin.guardados.Clase.IMAGEN, com.forge.pixpin.guardados.Clase.ARCHIVO,

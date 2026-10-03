@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
@@ -1550,6 +1551,10 @@ class MensajesActivity : ComponentActivity() {
                                             eligiendoChat = true
                                         }
                                     }
+                                    DelMenu(com.forge.pixpin.R.string.lecciones_titulo, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
+                                        masOpciones = false
+                                        com.forge.pixpin.lecciones.LeccionesActivity.abrir(this@MensajesActivity, proyecto = chatDe)
+                                    }
                                     DelMenu(com.forge.pixpin.R.string.proyectos_titulo) {
                                         masOpciones = false
                                         abrirLaPortada(enProyectos = true)
@@ -1582,6 +1587,8 @@ class MensajesActivity : ComponentActivity() {
                     ) {
                         Fichas(seccion, deEsteChat.any { it.enBuzon }) { seccion = it }
                     }
+                    // Las lecciones de este proyecto, a la vista al entrar. Ver [com.forge.pixpin.lecciones.AvisoDeLecciones].
+                    chatDe?.let { p -> com.forge.pixpin.lecciones.AvisoDeLecciones(p, nombreDelChat) }
                     // **La fila de etiquetas, como la de Telegram en Guardados.**
                     //
                     // Sale **solo mientras se busca** (`ChatActivity.java:8890`), y por
@@ -2573,6 +2580,19 @@ class MensajesActivity : ComponentActivity() {
                     else com.forge.pixpin.R.string.guardados_recordar,
                     if (m.clase == Clase.VOZ && m.recuerdaEn == null) Icons.Filled.Call else Icons.Filled.Alarm
                 ) { menuAbierto = false; acciones.recordar() }
+                // **De un mensaje, una lección** (3-oct-2026): lo que pasó suele estar ya en el
+                // chat —la foto del error, la nota de voz contándolo—. La lección sale con su
+                // texto y queda enlazada a él, en el mismo chat.
+                if (!com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m)) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_hacer_leccion, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
+                        menuAbierto = false
+                        com.forge.pixpin.lecciones.LeccionActivity.nueva(
+                            this@MensajesActivity,
+                            texto = (m.transcripcion ?: m.texto).ifBlank { m.nombre }.takeIf { it.isNotBlank() },
+                            mensaje = m.id, proyecto = m.proyecto
+                        )
+                    }
+                }
                 acciones.rescatar?.let { rescatar ->
                     DelMenu(com.forge.pixpin.R.string.guardados_rescatar,
                             Icons.Filled.BookmarkBorder) {
@@ -6223,6 +6243,9 @@ class MensajesActivity : ComponentActivity() {
             // Lo que no sea un PDF sigue saliendo fuera: para eso están las otras aplicaciones.
             else -> m.ruta?.let { ruta ->
                 when {
+                    // Una lección abre su ficha, no un visor de archivos. Ver [com.forge.pixpin.lecciones.LeccionesStore].
+                    com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m) ->
+                        com.forge.pixpin.lecciones.LeccionActivity.abrir(this, File(ruta).name.removeSuffix(com.forge.pixpin.lecciones.LeccionesStore.EXTENSION))
                     ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
                         com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
                     // **Un modelo 3D abre el croquis en el espacio** (21-sep-2026, pedido por el
