@@ -58,7 +58,13 @@ data class Leccion(
     val caja: Int = 0,
     val repasar: Long = creada + DIA,
     /** Si su [proxima] sale en la lista de comprobación. */
-    val enLista: Boolean = true
+    val enLista: Boolean = true,
+    /**
+     * **Fotos y audios** (4-oct-2026): los ids de los mensajes del chat que los llevan. Cada uno
+     * es una foto o una nota de voz corriente, en el mismo chat y respondiendo a la lección: así
+     * viajan con la sincronización y se ven en Windows sin tocar nada. Ver [LeccionesStore.guardar].
+     */
+    val adjuntos: List<String> = emptyList()
 ) {
     val todasLasEtiquetas: List<String> get() = (etiquetas + etiquetasAuto).distinct()
     val vecesQuePaso: Int get() = 1 + repeticiones.size

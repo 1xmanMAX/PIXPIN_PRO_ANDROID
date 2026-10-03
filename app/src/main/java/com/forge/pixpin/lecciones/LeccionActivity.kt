@@ -58,6 +58,15 @@ import kotlinx.coroutines.withContext
  */
 class LeccionActivity : ComponentActivity() {
 
+    /** Las fotos y audios puestos y aún sin guardar: si la hoja se va sin guardar, se borran. */
+    private val nuevos = mutableStateListOf<com.forge.pixpin.guardados.Mensaje>()
+    private var guardada = false
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing && !guardada) nuevos.forEach { m -> m.ruta?.let { java.io.File(it).delete() } }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Sin esto el teclado no empuja la hoja: `imePadding` necesita dibujar bajo las barras.
@@ -97,6 +106,12 @@ class LeccionActivity : ComponentActivity() {
         var detalle by remember { mutableStateOf(false) }
         var nuevaEtiqueta by remember { mutableStateOf("") }
         var listo by remember { mutableStateOf(false) }
+        val quitados = remember { mutableStateListOf<String>() }
+        var viejos by remember { mutableStateOf<List<com.forge.pixpin.guardados.Mensaje>>(emptyList()) }
+        LaunchedEffect(existente?.leccion?.adjuntos) {
+            val l = existente?.leccion ?: return@LaunchedEffect
+            viejos = withContext(Dispatchers.IO) { runCatching { almacen.adjuntosDe(l) }.getOrDefault(emptyList()) }
+        }
 
         fun poner(dicho: String) {
             val limpio = Etiquetador.sinEtiquetas(dicho)
@@ -142,19 +157,21 @@ class LeccionActivity : ComponentActivity() {
         val causasFinal = if (causasTocadas) causas.toList() else (causas + propuesta?.causas.orEmpty()).distinct()
 
         fun guardarYSalir() {
-            if (titulo.isBlank()) { finish(); return }
+            if (titulo.isBlank() && nuevos.isEmpty()) { finish(); return }
             val ahora = System.currentTimeMillis()
             val base = existente?.leccion
             val l = (base ?: Leccion(id = LeccionesStore.nuevoId(ahora), creada = ahora, titulo = "", deMensaje = deMensaje)).copy(
                 tocada = ahora,
-                titulo = titulo.trim(), quePaso = quePaso.trim(), porQue = porQue.trim(), proxima = proxima.trim(),
+                titulo = titulo.trim().ifBlank { if (nuevos.any { it.clase == com.forge.pixpin.guardados.Clase.VOZ }) "Nota de voz" else "Foto" }, quePaso = quePaso.trim(), porQue = porQue.trim(), proxima = proxima.trim(),
                 tipo = tipoFinal, area = areaFinal.orEmpty(), gravedad = gravedad,
                 etiquetas = etiquetas.toList(), etiquetasAuto = auto, quitadas = quitadas.toList(),
                 referencias = referencias.split(',', ';').map { it.trim() }.filter { it.isNotEmpty() },
                 causas = causasFinal
             )
             val app = application as PixPinApp
-            app.scope.launch(Dispatchers.IO) { runCatching { almacen.guardar(l, proyecto) } }
+            val van = nuevos.toList(); val fuera = quitados.toList()
+            guardada = true
+            app.scope.launch(Dispatchers.IO) { runCatching { almacen.guardar(l, proyecto, van, fuera) } }
             Toast.makeText(this, if (base == null) "💡 Lección guardada" else "Lección guardada", Toast.LENGTH_SHORT).show()
             finish()
         }
@@ -231,6 +248,9 @@ class LeccionActivity : ComponentActivity() {
                         trailingIcon = { IconButton(onClick = { dictar() }) { Icon(Icons.Filled.Mic, "Dictar") } },
                         shape = RoundedCornerShape(18.dp)
                     )
+
+                    // Fotos y audios: la foto del error, lo que se dijo.
+                    AdjuntosDeLaLeccion(viejos, nuevos, quitados)
 
                     // ¿Ya la tenías?
                     parecidas.firstOrNull()?.let { r ->
@@ -363,7 +383,7 @@ class LeccionActivity : ComponentActivity() {
                         }
                     }
 
-                    Button(onClick = { guardarYSalir() }, enabled = titulo.isNotBlank(), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Button(onClick = { guardarYSalir() }, enabled = titulo.isNotBlank() || nuevos.isNotEmpty(), modifier = Modifier.fillMaxWidth().height(52.dp)) {
                         Text("Guardar", style = MaterialTheme.typography.titleMedium)
                     }
                 }

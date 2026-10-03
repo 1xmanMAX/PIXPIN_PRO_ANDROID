@@ -62,7 +62,16 @@ class LeccionesStore(context: Context) {
      * Guarda [l]. La primera vez crea su mensaje en el chat de [proyecto] (o en el general); las
      * siguientes reescribe el archivo y pone al día el resumen del mensaje.
      */
-    fun guardar(l: Leccion, proyecto: String?): Leccion {
+    fun guardar(l: Leccion, proyecto: String?): Leccion = guardar(l, proyecto, emptyList(), emptyList())
+
+    /**
+     * Guarda [leccion] con sus fotos y audios: [nuevos] son los mensajes recién hechos (foto o
+     * voz, sin chat todavía) y [quitados] los ids de los que ya no van. Los nuevos se meten en
+     * el chat de la lección **respondiéndola**, después de ella; los quitados se borran del chat
+     * con su archivo.
+     */
+    fun guardar(leccion: Leccion, proyecto: String?, nuevos: List<Mensaje>, quitados: List<String>): Leccion {
+        val l = leccion.copy(adjuntos = (leccion.adjuntos - quitados.toSet() + nuevos.map { it.id }).distinct())
         val f = File(carpeta(), l.id + EXTENSION)
         val tmp = File(f.parentFile, f.name + ".tmp")
         tmp.writeText(Leccion.escribir(l))
@@ -85,12 +94,33 @@ class LeccionesStore(context: Context) {
         } else {
             mensajes.actualizar(existente.id) { it.copy(texto = resumen(l), nombre = nombreDe(l), bytes = f.length()) }
         }
+        val idDelMensaje = existente?.id ?: (PREFIJO + l.id)
+        val chat = existente?.proyecto ?: proyecto
+        nuevos.forEach { mensajes.anadir(it.copy(proyecto = chat, respondeA = idDelMensaje)) }
+        if (quitados.isNotEmpty()) quitar(quitados.toSet())
         recargar()
         return l
     }
 
+    /** Los mensajes de las fotos y audios de [l], en su orden. */
+    fun adjuntosDe(l: Leccion): List<Mensaje> {
+        if (l.adjuntos.isEmpty()) return emptyList()
+        val porId = mensajes.leer().associateBy { it.id }
+        return l.adjuntos.mapNotNull { porId[it] }
+    }
+
+    private fun quitar(ids: Set<String>) {
+        val todos = mensajes.leer()
+        val van = todos.filter { it.id in ids }
+        if (van.isEmpty()) return
+        mensajes.reescribir(todos.filter { it.id !in ids })
+        van.forEach { mensajes.borrarAdjunto(it) }
+    }
+
     /** Borra la lección: su mensaje (con lápida, para que no vuelva al sincronizar) y su archivo. */
     fun borrar(e: Entrada) {
+        // Sus fotos y audios se van con ella.
+        quitar(e.leccion.adjuntos.toSet())
         mensajes.reescribir(mensajes.leer().filter { it.id != e.mensaje.id })
         mensajes.borrarAdjunto(e.mensaje)
         recargar()
@@ -121,6 +151,7 @@ class LeccionesStore(context: Context) {
             if (l.porQue.isNotBlank()) append("\nPor qué: ").append(l.porQue)
             if (l.proxima.isNotBlank()) append("\nLa próxima vez: ").append(l.proxima)
             if (l.repeticiones.isNotEmpty()) append("\n🔁 Pasó ").append(l.vecesQuePaso).append(" veces")
+            if (l.adjuntos.isNotEmpty()) append("\n📎 ").append(l.adjuntos.size).append(if (l.adjuntos.size == 1) " adjunto" else " adjuntos")
             val etiquetas = l.todasLasEtiquetas
             if (etiquetas.isNotEmpty()) append("\n").append(etiquetas.joinToString(" ") { "#$it" })
         }

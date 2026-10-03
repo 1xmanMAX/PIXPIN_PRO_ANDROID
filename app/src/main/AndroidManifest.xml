@@ -286,6 +286,16 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <!-- **Buscar en PixPin**: una tarjeta flotante con todo lo de la app (4-oct-2026). -->
+        <activity
+            android:name=".atajos.BuscarActivity"
+            android:exported="false"
+            android:label="Buscar en PixPin"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:taskAffinity="${applicationId}.buscar"
+            android:windowSoftInputMode="adjustResize|stateVisible"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!--
             Por donde entran los atajos. Exportada porque algunos buscadores lanzan el intento
             tal cual; solo entiende pixpin://atajo/... Ver atajos/AtajoActivity.
@@ -676,11 +686,17 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/Theme.PixPin" />
 
-        <!-- Grabar una nota de voz. Transparente: es un botón, no una pantalla. -->
+        <!--
+            Grabar una nota de voz. Transparente: es un botón, no una pantalla. **Con su propia
+            tarea** (4-oct-2026): sin `taskAffinity` caía en la tarea de la app, que salía detrás
+            entera; así queda encima de lo que hubiera (el buscador, otra app, el escritorio).
+        -->
         <activity
             android:name=".pin.GrabadoraActivity"
             android:exported="false"
             android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:taskAffinity="${applicationId}.grabar"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- El reloj del sistema para elegir la hora del recordatorio. -->

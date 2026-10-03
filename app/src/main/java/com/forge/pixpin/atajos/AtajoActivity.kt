@@ -84,6 +84,7 @@ class AtajoActivity : Activity() {
             Atajos.GRABAR -> com.forge.pixpin.pin.GrabadoraActivity.abrir(this)
             Atajos.LECCION -> com.forge.pixpin.lecciones.LeccionActivity.nueva(this)
             Atajos.LECCIONES -> com.forge.pixpin.lecciones.LeccionesActivity.abrir(this)
+            Atajos.BUSCAR -> BuscarActivity.abrir(this, dato("texto"))
             Atajos.SINCRONIZAR -> startActivity(
                 Intent(this, SincronizarActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )

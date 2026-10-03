@@ -406,6 +406,8 @@ class FloatingBallController(private val context: Context) {
             )
             // Apuntar una lección sin salir de lo que se está haciendo: la hoja sube encima.
             BallAction.LECCION -> com.forge.pixpin.lecciones.LeccionActivity.nueva(context)
+            // La nota de voz al momento: la tarjeta del micrófono, encima, sin abrir la app.
+            BallAction.GRABAR -> com.forge.pixpin.pin.GrabadoraActivity.abrir(context)
             BallAction.HIDE_ALL -> app.overlayManager.toggleHideAll()
             BallAction.PIN_LIST -> app.overlayManager.togglePinList()
         }
@@ -444,13 +446,14 @@ class FloatingBallController(private val context: Context) {
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // **Seis botones, y los seis de aquí.**
+                // **Siete botones, y los siete de aquí.**
                 //
-                // Se fueron el micrófono y Mensajes guardados: los dos abren una
-                // pantalla, y para abrir una pantalla ya está el icono de la aplicación
-                // —que ahora entra por proyectos, con su puerta al cajón en la cabecera—.
-                // La bola es para lo que se hace **encima de otra app**, sin salir de
-                // ella, y cada botón que no cumple eso le quita sitio al que sí.
+                // Se fue Mensajes guardados: abre una pantalla, y para abrir una pantalla
+                // ya está el icono de la aplicación —que ahora entra por proyectos, con su
+                // puerta al cajón en la cabecera—. La bola es para lo que se hace **encima
+                // de otra app**, sin salir de ella, y cada botón que no cumple eso le quita
+                // sitio al que sí. El micrófono volvió el 4-oct-2026 porque ya cumple: es
+                // una tarjetita flotante que graba y se va, con la app cerrada.
                 //
                 // Y la lista de pines se queda, que es la salida de emergencia: desde
                 // ahí se recupera un pin que dejó de responder porque se le puso el modo
@@ -459,6 +462,7 @@ class FloatingBallController(private val context: Context) {
                 MenuButton(BallAction.CAPA) { Icon(Icons.Filled.Gesture, contentDescription = null) }
                 // La voz va junto a la captura y la capa: las tres son «coge esto
                 // que está pasando ahora», y esas son las que se buscan sin mirar.
+                MenuButton(BallAction.GRABAR) { Icon(Icons.Filled.Mic, contentDescription = "Grabar nota de voz") }
 
                 // **La lección del momento** (3-oct-2026): lo aprendido se olvida en cuanto se
                 // vuelve a lo que se hacía, así que se apunta encima, sin salir de la app.
@@ -476,4 +480,4 @@ class FloatingBallController(private val context: Context) {
     }
 }
 
-private enum class BallAction { CAPTURE, CAPA, LECCION, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }
+private enum class BallAction { CAPTURE, CAPA, GRABAR, LECCION, PIN_CLIPBOARD, HIDE_ALL, PIN_LIST }

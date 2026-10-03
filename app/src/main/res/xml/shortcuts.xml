@@ -8,6 +8,18 @@
 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
+        android:shortcutId="buscar"
+        android:enabled="true"
+        android:icon="@drawable/atajo_buscar"
+        android:shortcutShortLabel="@string/atajo_buscar"
+        android:shortcutLongLabel="@string/atajo_buscar_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/buscar"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
         android:shortcutId="capturar"
         android:enabled="true"
         android:icon="@drawable/atajo_capturar"
@@ -100,6 +112,18 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="pixpin://atajo/sincronizar"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="capturas"
+        android:enabled="true"
+        android:icon="@drawable/atajo_imagen"
+        android:shortcutShortLabel="@string/atajo_capturas"
+        android:shortcutLongLabel="@string/atajo_capturas_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/capturas"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>

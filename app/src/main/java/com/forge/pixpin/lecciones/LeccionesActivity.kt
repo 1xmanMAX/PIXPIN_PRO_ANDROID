@@ -237,6 +237,7 @@ class LeccionesActivity : ComponentActivity() {
                     Spacer(Modifier.width(6.dp))
                     Text(l.area.ifBlank { "Sin área" }, style = MaterialTheme.typography.labelSmall, color = Cristal.tinta.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
                     if (l.repeticiones.isNotEmpty()) Text("🔁×${l.vecesQuePaso}", style = MaterialTheme.typography.labelMedium, color = Color(0xFFFF8A65), fontWeight = FontWeight.Bold)
+                    if (l.adjuntos.isNotEmpty()) Text("📎${l.adjuntos.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(l.titulo, style = MaterialTheme.typography.titleSmall, color = Cristal.tinta, fontWeight = FontWeight.SemiBold, maxLines = 5, overflow = TextOverflow.Ellipsis)
                 if (l.proxima.isNotBlank() && l.proxima != l.titulo) {

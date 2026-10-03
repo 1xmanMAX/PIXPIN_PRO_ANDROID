@@ -41,6 +41,8 @@ object Atajos {
     const val LISTA = "lista"
     const val LECCION = "leccion"
     const val LECCIONES = "lecciones"
+    /** `pixpin://atajo/buscar?texto=…`: la tarjeta de buscar en todo PixPin ([BuscarActivity]). */
+    const val BUSCAR = "buscar"
     /** `pixpin://atajo/archivo/<id del mensaje>`: un archivo del chat, abierto con su visor. */
     const val ARCHIVO = "archivo"
 
@@ -62,7 +64,7 @@ object Atajos {
     private const val CUANTOS_ARCHIVOS = 8
 
     /** Los atajos fijos de `xml/shortcuts.xml`: cuentan para el tope. */
-    private const val FIJOS = 8
+    private const val FIJOS = 10
 
     private val CON_ARCHIVO = setOf(
         com.forge.pixpin.guardados.Clase.IMAGEN, com.forge.pixpin.guardados.Clase.ARCHIVO,

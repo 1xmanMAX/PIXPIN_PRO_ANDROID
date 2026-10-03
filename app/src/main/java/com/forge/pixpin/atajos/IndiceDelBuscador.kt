@@ -33,6 +33,13 @@ object IndiceDelBuscador {
     private const val BASE = "pixpin"
     private const val ARCHIVOS = "archivos"
     private const val PROYECTOS = "proyectos"
+    private const val FUNCIONES = "funciones"
+
+    /**
+     * Sube cuando cambia cómo se escribe un documento, para que se reescriban todos aunque
+     * su nombre no haya cambiado. 2: los nombres con «p» y «PixPin» delante (4-oct-2026).
+     */
+    private const val VERSION = 2
     private const val TANDA = 100
 
     private var sesion: AppSearchSession? = null
@@ -64,6 +71,15 @@ object IndiceDelBuscador {
                 Atajos.sena(Atajos.ARCHIVO, m.id).toString(), listOfNotNull(chat, m.ruta?.substringAfterLast('/'))
             )
         }
+        // **Las funciones también** (4-oct-2026): «p galería» en el buscador del teléfono
+        // encuentra la galería de capturas, que dentro de la app costaba dar con ella.
+        for (f in BuscarEnTodo.FUNCIONES) {
+            val accion = f.accion ?: continue
+            docs["$FUNCIONES/$accion"] = (f.titulo + "\u0001" + f.otras) to cosa(
+                FUNCIONES, accion, f.titulo, "${f.detalle} · PixPin", 0L,
+                Atajos.sena(accion).toString(), f.otras.split(' ').filter { it.length > 3 }
+            )
+        }
         for (p in proyectos) {
             if (p.archivado || p.nombre.isBlank()) continue
             docs["$PROYECTOS/${p.id}"] = p.nombre to cosa(
@@ -76,7 +92,7 @@ object IndiceDelBuscador {
         val antes = runCatching {
             apunte.readLines().mapNotNull { l -> l.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
         }.getOrDefault(emptyMap())
-        val nuevos = docs.filter { (clave, v) -> antes[clave] != v.first.hashCode().toString() }
+        val nuevos = docs.filter { (clave, v) -> antes[clave] != firma(v.first) }
         val sobran = antes.keys - docs.keys
         if (nuevos.isEmpty() && sobran.isEmpty()) return
 
@@ -88,8 +104,10 @@ object IndiceDelBuscador {
             s.removeAsync(RemoveByDocumentIdRequest.Builder(espacio).addIds(ids).build()).get()
         }
         s.requestFlushAsync().get()
-        apunte.writeText(docs.entries.joinToString("\n") { it.key + "\t" + it.value.first.hashCode() })
+        apunte.writeText(docs.entries.joinToString("\n") { it.key + "\t" + firma(it.value.first) })
     }
+
+    private fun firma(texto: String) = "$VERSION-" + texto.hashCode()
 
     private fun cosa(
         espacio: String, id: String, nombre: String, descripcion: String, cuando: Long,
@@ -97,7 +115,11 @@ object IndiceDelBuscador {
     ): Thing = Thing.Builder(espacio, id)
         .setName(nombre)
         .setDescription(descripcion)
-        .setAlternateNames(otrosNombres.filter { it.isNotBlank() && it != nombre })
+        // **«p …» y «PixPin …»**: el usuario busca escribiendo una P y lo que quiere (4-oct-2026).
+        // Los buscadores casan por principio de palabra, así que «p tesis» o «pixpin tesis»
+        // dejan arriba lo de PixPin. No pueden esconder lo de otras apps: eso no lo decide nadie
+        // más que el buscador. Para buscar solo aquí está la tarjeta de [BuscarActivity].
+        .setAlternateNames((otrosNombres.filter { it.isNotBlank() && it != nombre } + "p $nombre" + "PixPin $nombre").distinct())
         .setUrl(sena)
         .setCreationTimestampMillis(cuando)
         .addPotentialAction(PotentialAction.Builder().setName("Abrir").setUri(sena).build())
