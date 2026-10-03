@@ -54,7 +54,7 @@ object BuscarEnTodo {
         Elemento(Tipo.FUNCION, "Soltar archivos", "Recuadro para arrastrar desde otra app", 0, "📥", Atajos.SOLTAR, otras = "arrastrar soltar pantalla partida"),
         Elemento(Tipo.FUNCION, "Nota nueva", "Markdown", 0, "📝", Atajos.NOTA, otras = "markdown escribir texto apunte"),
         Elemento(Tipo.FUNCION, "Mensajes guardados", "El chat", 0, "💬", Atajos.MENSAJES, otras = "chat mensajes guardados"),
-        Elemento(Tipo.FUNCION, "Proyectos", "Todos los proyectos", 0, "🪐", Atajos.PROYECTOS, otras = "sistema solar universo"),
+        Elemento(Tipo.FUNCION, "Proyectos", "Todos los proyectos", 0, "📁", Atajos.PROYECTOS, otras = "carpetas lista"),
         Elemento(Tipo.FUNCION, "Sincronizar", "Por Wi-Fi con el PC u otro teléfono", 0, "🔄", Atajos.SINCRONIZAR, otras = "wifi enviar pc ordenador")
     )
 

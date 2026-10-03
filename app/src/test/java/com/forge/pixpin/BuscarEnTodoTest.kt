@@ -55,4 +55,11 @@ class BuscarEnTodoTest {
         val con = Leccion.leer(Leccion.escribir(vieja.copy(adjuntos = listOf("m1", "m2"))))!!
         assertEquals(listOf("m1", "m2"), con.adjuntos)
     }
+
+    @Test fun elChatNoEnsenaLasLeccionesNiSusAdjuntos() {
+        val foto = Mensaje(id = "5", cuando = 50, clase = Clase.IMAGEN, ruta = "/x/guardados/f.jpg", respondeA = "3")
+        val otra = Mensaje(id = "6", cuando = 60, clase = Clase.NOTA, texto = "hola", respondeA = "1")
+        val quedan = com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes + foto + otra).map { it.id }
+        assertEquals(listOf("1", "2", "4", "6"), quedan)
+    }
 }

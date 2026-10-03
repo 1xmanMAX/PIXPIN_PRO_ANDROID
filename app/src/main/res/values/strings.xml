@@ -836,6 +836,7 @@
     <string name="atajo_tarea_largo">Nueva tarea</string>
     <string name="guardados_galeria">Galería de capturas</string>
     <string name="guardados_arrastrar">Añadir arrastrando…</string>
+    <string name="guardados_cambiar_nombre">Cambiar nombre</string>
     <string name="atajo_buscar">Buscar</string>
     <string name="atajo_buscar_largo">PixPin: buscar en todo</string>
     <string name="atajo_capturas">Capturas</string>

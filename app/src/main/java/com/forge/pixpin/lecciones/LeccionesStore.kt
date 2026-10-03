@@ -138,6 +138,16 @@ class LeccionesStore(context: Context) {
 
         fun esLeccion(m: Mensaje): Boolean = m.clase == Clase.ARCHIVO && m.ruta?.endsWith(EXTENSION) == true
 
+        /**
+         * [mensajes] sin las lecciones ni sus fotos y audios: lo que enseña el chat. Las
+         * lecciones se ven en su sección (Proyectos → 💡), no mezcladas con lo guardado.
+         */
+        fun sinLecciones(mensajes: List<Mensaje>): List<Mensaje> {
+            val lecciones = mensajes.mapNotNullTo(HashSet()) { m -> m.id.takeIf { esLeccion(m) } }
+            if (lecciones.isEmpty()) return mensajes
+            return mensajes.filter { it.id !in lecciones && (it.respondeA == null || it.respondeA !in lecciones) }
+        }
+
         fun nuevoId(ahora: Long = System.currentTimeMillis()): String =
             ahora.toString(36) + (0..2).map { "abcdefghijkmnpqrstuvwxyz23456789".random() }.joinToString("")
 

@@ -49,7 +49,8 @@ import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -396,21 +397,6 @@ fun PantallaDeProyectos(
         }
     }
 
-    // **La galaxia**: todos los proyectos como planetas en un plano infinito. Ver
-    // [PantallaDeGalaxia]. Ocupa la pantalla entera mientras está abierta.
-    var enGalaxia by rememberSaveable { mutableStateOf(false) }
-    if (enGalaxia && soloEste == null) {
-        PantallaDeGalaxia(
-            proyectos = ordenados,
-            onVolver = { enGalaxia = false },
-            onVer = { id ->
-                enGalaxia = false
-                val i = ordenados.indexOfFirst { it.id == id }
-                if (i >= 0) alcanceDeAjustes.launch { paginador.scrollToPage(i + 1) }
-            }
-        )
-        return
-    }
     // **Tocar «Proyectos» sube arriba del todo** (17-sep-2026), como la barra de estado en
     // cualquier lista. Desde lejos se salta casi hasta el principio y se anima solo el último
     // tramo: animar veinte páginas es medio segundo de tarjetas pasando.
@@ -531,8 +517,19 @@ fun PantallaDeProyectos(
                 // Y no se ofrece crear otro cuando se ha venido a uno concreto: la lista
                 // está filtrada a este, así que el botón de más solo puede acabar en un
                 // proyecto vacío que no se ve.
-                if (soloEste == null && ordenados.isNotEmpty()) {
-                    com.forge.pixpin.ui.theme.BotonRedondo(Icons.Filled.AutoAwesome, "Sistema solar de proyectos", { enGalaxia = true }, tamano = 44.dp)
+                // **Lecciones y capturas, aquí y no en el chat** (4-oct-2026): ocupan el sitio
+                // del sistema solar, que se quitó por no servir, y así no se mezclan con
+                // Mensajes guardados.
+                if (soloEste == null) {
+                    com.forge.pixpin.ui.theme.BotonRedondo(
+                        Icons.Filled.Lightbulb, "Lecciones aprendidas",
+                        { com.forge.pixpin.lecciones.LeccionesActivity.abrir(contexto) }, tamano = 44.dp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    com.forge.pixpin.ui.theme.BotonRedondo(
+                        Icons.Filled.PhotoLibrary, "Galería de capturas",
+                        { GaleriaDeCapturasActivity.abrir(contexto) }, tamano = 44.dp
+                    )
                     Spacer(Modifier.width(6.dp))
                 }
                 if (soloEste == null) {
@@ -2353,29 +2350,6 @@ private fun LaPortadaDelMonton(
     }
 }
 
-/**
- * **La portada de un planeta de la galaxia** ([PantallaDeGalaxia]): la primera hoja, pequeña y
- * barata. Sin leer el lienzo para contar sus láminas —eso es de la tarjeta—: un lienzo se pinta
- * entero o por su marco, a escala de sello.
- */
-@Composable
-internal fun PortadaDePlaneta(p: Proyecto) {
-    val contexto = LocalContext.current
-    val h = p.hojas.firstOrNull { it.padre == null } ?: return
-    when {
-        p.pdfOrigen != null && h.pagina != null -> MiniaturaDePagina(
-            p.pdfOrigen!!, h.pagina!!, PdfDoc.THUMB_WIDTH, ampliada = null, dibujo = h.dibujo
-        )
-        h.tabla != null -> MiniaturaDeTabla(h.tabla!!, grande = false)
-        h.nota != null -> MiniaturaDeNota(h.nota!!, tamaño = 7f)
-        h.croquis != null && h.vista == null -> Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color(HojasDelProyecto.colorDe(h) ?: 0).copy(alpha = 0.3f))
-        )
-        else -> MiniaturaDeLienzo(contexto, h.dibujo, h.marco, escala = 0.08, ampliada = null)
-    }
-}
 
 /** Lo alta que es una portada respecto de su ancho: la de un A4 de pie. */
 private const val RELACION_DE_LA_PORTADA = 0.72f

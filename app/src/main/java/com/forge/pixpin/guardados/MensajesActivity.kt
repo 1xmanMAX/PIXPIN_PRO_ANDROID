@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,7 +40,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
@@ -325,9 +325,25 @@ class MensajesActivity : ComponentActivity() {
             }
         }
         renombrandoMensaje?.let { m ->
-            com.forge.pixpin.ui.DialogoDeNombre(m.nombre, onCerrar = { renombrandoMensaje = null }, titulo = "Nombre del lienzo") { nuevo ->
+            val esLienzo = m.clase == Clase.DIBUJO && m.referencia != null
+            com.forge.pixpin.ui.DialogoDeNombre(
+                nombreVisible(m), onCerrar = { renombrandoMensaje = null },
+                titulo = if (esLienzo) "Nombre del lienzo" else if (m.clase == Clase.VOZ) "Nombre del audio" else "Nombre del archivo"
+            ) { nuevo ->
                 renombrandoMensaje = null
                 val app = application as? com.forge.pixpin.PixPinApp ?: return@DialogoDeNombre
+                // **Cualquier archivo del chat, también los audios** (4-oct-2026). Cambia el
+                // nombre del mensaje, no el del archivo en disco: la sincronización empareja
+                // por la ruta, y moverla sería un archivo nuevo en el otro aparato.
+                if (!esLienzo) {
+                    val limpio = Renombrar.conSuExtension(m.nombre, nuevo)
+                    if (limpio.isBlank() || limpio == m.nombre) return@DialogoDeNombre
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        almacen.actualizar(m.id) { it.copy(nombre = limpio) }
+                        MensajesStore.cambios.value = MensajesStore.cambios.value + 1
+                    }
+                    return@DialogoDeNombre
+                }
                 val dibujo = m.referencia ?: return@DialogoDeNombre
                 lifecycleScope.launch(Dispatchers.IO) {
                     NombreDelLienzo.deDibujo(app, dibujo, nuevo)
@@ -571,15 +587,18 @@ class MensajesActivity : ComponentActivity() {
         // **Filtrar y buscar, en dos pasos.** Con la consulta dentro de la misma clave,
         // cada tecla volvía a filtrar y a **ordenar** la lista entera, y ordenar no
         // depende de lo que se escriba. Separados, escribir solo paga la búsqueda.
-        val deEsteChat = remember(mensajes, chatDe) { delChat(mensajes, chatDe) }
+        // **Las lecciones no se mezclan con el chat** (4-oct-2026, lo pidió el usuario): viven
+        // como mensajes para viajar, pero se ven en su sección, desde Proyectos.
+        val sinLecciones = remember(mensajes) { com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes) }
+        val deEsteChat = remember(sinLecciones, chatDe) { delChat(sinLecciones, chatDe) }
         val deLaSeccion = remember(deEsteChat, seccion) { deSeccion(deEsteChat, seccion) }
-        val visibles = remember(deLaSeccion, consulta, porEtiqueta, mensajes) {
+        val visibles = remember(deLaSeccion, consulta, porEtiqueta, sinLecciones) {
             // **Desde el chat general se busca en todos** (14-sep-2026): los lienzos, fotos y
             // notas de todos los proyectos, por su nombre y su texto. Dentro del chat de un
             // proyecto, solo en ese.
             val buscados = when {
                 consulta.isNullOrBlank() -> deLaSeccion
-                chatDe == null -> buscar(deSeccion(mensajes, seccion), consulta!!)
+                chatDe == null -> buscar(deSeccion(sinLecciones, seccion), consulta!!)
                 else -> buscar(deLaSeccion, consulta!!)
             }
             porEmoji(buscados, porEtiqueta)
@@ -1588,17 +1607,9 @@ class MensajesActivity : ComponentActivity() {
                                             eligiendoChat = true
                                         }
                                     }
-                                    DelMenu(com.forge.pixpin.R.string.guardados_galeria, Icons.Filled.PhotoLibrary) {
-                                        masOpciones = false
-                                        com.forge.pixpin.ui.GaleriaDeCapturasActivity.abrir(this@MensajesActivity)
-                                    }
                                     DelMenu(com.forge.pixpin.R.string.guardados_arrastrar, Icons.Filled.FileDownload) {
                                         masOpciones = false
                                         SoltarActivity.abrir(this@MensajesActivity, chatDe)
-                                    }
-                                    DelMenu(com.forge.pixpin.R.string.lecciones_titulo, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
-                                        masOpciones = false
-                                        com.forge.pixpin.lecciones.LeccionesActivity.abrir(this@MensajesActivity, proyecto = chatDe)
                                     }
                                     DelMenu(com.forge.pixpin.R.string.proyectos_titulo) {
                                         masOpciones = false
@@ -2565,6 +2576,13 @@ class MensajesActivity : ComponentActivity() {
                 onDismissRequest = { menuAbierto = false },
                 offset = dondeElDedo
             ) {
+                // **Cambiar el nombre, lo primero** (4-oct-2026): de cualquier archivo, audios
+                // incluidos. Lo pidió el usuario así, «que sea notorio».
+                if (Renombrar.sePuede(m)) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_cambiar_nombre, Icons.Filled.Edit) {
+                        menuAbierto = false; renombrandoMensaje = m
+                    }
+                }
                 DelMenu(com.forge.pixpin.R.string.guardados_responder,
                         Icons.AutoMirrored.Filled.Reply) {
                     menuAbierto = false; acciones.responder()
@@ -2598,13 +2616,6 @@ class MensajesActivity : ComponentActivity() {
                             menuAbierto = false
                             aAligerar = m to ruta
                         }
-                    }
-                }
-                // **Cambiar el nombre de un lienzo** (14-sep-2026): el del mensaje y el de su hoja
-                // en los proyectos, que es por lo que lo encuentra el buscador. Ver [NombreDelLienzo].
-                if (m.clase == Clase.DIBUJO && m.referencia != null) {
-                    DelMenu(com.forge.pixpin.R.string.proyecto_renombrar, Icons.Filled.Edit) {
-                        menuAbierto = false; renombrandoMensaje = m
                     }
                 }
                 // **Solo lo que la burbuja no tiene ya a mano** (22-sep-2026, pedido por el
@@ -4275,6 +4286,15 @@ class MensajesActivity : ComponentActivity() {
             // el usuario el 9-sep-2026. `fill = false` para que un nombre corto no estire la
             // burbuja hasta el borde.
             Column(Modifier.padding(start = 10.dp).weight(1f, fill = false)) {
+                // **Su nombre, a la vista y con lápiz** (4-oct-2026): antes un audio no
+                // enseñaba cómo se llamaba y no había forma de cambiarlo.
+                NombreConLapiz(m) {
+                    Text(
+                        nombreVisible(m), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
                 if (barras.isEmpty()) {
                     // Las notas grabadas antes de guardar los picos no tienen onda. Una
                     // onda inventada mentiría sobre lo que se dijo, así que no se pinta.
@@ -4731,6 +4751,29 @@ class MensajesActivity : ComponentActivity() {
         LetraActivity.abrir(this, m.id)
     }
 
+    /** El nombre que se enseña: el puesto, o uno que diga qué es. */
+    private fun nombreVisible(m: Mensaje): String =
+        m.nombre.removeSuffix(".m4a").ifBlank { if (m.clase == Clase.VOZ) "Nota de voz" else m.ruta?.substringAfterLast('/') ?: "Archivo" }
+
+    /**
+     * El nombre de un archivo con **un lápiz al lado**: tocarlo cambia el nombre. Se ve en cada
+     * burbuja para que nadie tenga que adivinar que se puede (pedido del usuario, 4-oct-2026).
+     */
+    @Composable
+    private fun NombreConLapiz(m: Mensaje, nombre: @Composable RowScope.() -> Unit) {
+        if (!Renombrar.sePuede(m)) { Row(content = nombre); return }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { renombrandoMensaje = m }
+        ) {
+            nombre()
+            Icon(
+                Icons.Filled.Edit, contentDescription = getString(com.forge.pixpin.R.string.guardados_cambiar_nombre),
+                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp).size(15.dp)
+            )
+        }
+    }
+
     @Composable
     private fun FilaDeArchivo(m: Mensaje) {
         // **El botón redondo de 44 puntos** (`ChatMessageCell.java:13996`). No es
@@ -4775,12 +4818,15 @@ class MensajesActivity : ComponentActivity() {
                 // Dos líneas y recorte por el medio: los nombres de archivo se
                 // distinguen por el final («…informe_v3_FINAL.pdf»), y cortarlos ahí
                 // deja todos los de una carpeta con el mismo aspecto.
-                Text(
-                    m.nombre.ifBlank { "Archivo" },
-                    fontSize = 15.sp,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis
-                )
+                NombreConLapiz(m) {
+                    Text(
+                        m.nombre.ifBlank { "Archivo" },
+                        fontSize = 15.sp,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
                 // Tamaño y **extensión en mayúsculas**, como Telegram
                 // (`ChatMessageCell.java:12847`): «1,2 MB PDF» dice de un golpe qué es
                 // y cuánto pesa, que es justo lo que se pregunta antes de tocarlo.
