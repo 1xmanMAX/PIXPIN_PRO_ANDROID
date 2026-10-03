@@ -160,6 +160,9 @@ class VistaIncrustada(
 
 val LocalContextoDeLaNota = androidx.compose.runtime.compositionLocalOf<ContextoDeLaNota?> { null }
 
+/** La letra de la nota, si se eligió una (preferencia de vista, no va en el `.md`). */
+val LocalLetraDeLaNota = androidx.compose.runtime.compositionLocalOf<FontFamily?> { null }
+
 /** Sube cuando se repintan las páginas vivas: las fotos se vuelven a leer. */
 val LocalVersionDeMedios = androidx.compose.runtime.compositionLocalOf { 0 }
 
@@ -811,6 +814,7 @@ private fun Body(
         fontSize = sizeSp.sp,
         lineHeight = (sizeSp * 1.4f).sp,
         fontWeight = weight,
+        fontFamily = LocalLetraDeLaNota.current,
         color = color,
         textDecoration = if (tachado) TextDecoration.LineThrough else null,
         modifier = if (links.isEmpty()) Modifier else Modifier.onGloballyPositioned {

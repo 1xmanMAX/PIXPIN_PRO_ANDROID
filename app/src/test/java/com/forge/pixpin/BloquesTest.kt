@@ -40,6 +40,8 @@ class BloquesTest {
     @Test
     fun `lo que escribe cada plantilla lo reconoce el parser`() {
         TipoDeBloque.entries.forEach { tipo ->
+            // Los que se eligen de una lista (una hoja, un mensaje) no tienen plantilla.
+            if (Bloques.pideEleccion(tipo)) return@forEach
             val p = Bloques.plantilla(tipo)
             // Los medios se rellenan con una ruta: la plantilla los deja vacíos
             // a propósito para que el selector escriba dentro.
@@ -76,6 +78,7 @@ class BloquesTest {
                     primero is MarkdownBlock.Caja && primero.tipo == TipoDeCaja.DERECHA
                 TipoDeBloque.IMAGEN, TipoDeBloque.VIDEO,
                 TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO -> primero is MarkdownBlock.Medio
+                TipoDeBloque.PAGINA_VIVA, TipoDeBloque.ENLACE_HOJA, TipoDeBloque.DEL_CHAT -> true
             }
             assertTrue("$tipo salió como ${primero::class.simpleName}", bien)
         }

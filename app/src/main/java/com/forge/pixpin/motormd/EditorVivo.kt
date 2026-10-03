@@ -101,7 +101,9 @@ fun EditorVivo(
      * ámbar y su globo, como el texto comentado del PC; tocar el globo abre sus comentarios.
      */
     comentados: Map<Int, Int> = emptyMap(),
-    onComentarios: (Int) -> Unit = {}
+    onComentarios: (Int) -> Unit = {},
+    /** «Pasar a texto» de un audio de la nota (como el PC): la ruta del audio. Null, no sale. */
+    onPasarATexto: ((String) -> Unit)? = null
 ) {
     // Los de editar: el documento vacío es un bloque vacío. Ver [Vivo.trozos].
     val trozos = remember(texto) { Vivo.trozos(texto) }
@@ -206,10 +208,14 @@ fun EditorVivo(
                                 val largo = Vivo.contenidoDelTrozo(fuente)?.text?.length ?: 0
                                 onSitio(Sitio(i, TextRange(largo)))
                             },
-                            onLongClick = if (foto?.clase == ClaseDeMedio.IMAGEN) ({ menuDeAncho = true }) else null
+                            onLongClick = if (foto?.clase == ClaseDeMedio.IMAGEN || (foto?.clase == ClaseDeMedio.AUDIO && onPasarATexto != null)) ({ menuDeAncho = true }) else null
                         )
                 ) {
-                    if (foto != null && menuDeAncho) {
+                    if (foto != null && menuDeAncho && foto.clase == ClaseDeMedio.AUDIO) {
+                        DropdownMenu(expanded = true, onDismissRequest = { menuDeAncho = false }) {
+                            DropdownMenuItem(text = { Text("Pasar a texto") }, onClick = { menuDeAncho = false; onPasarATexto?.invoke(foto.ruta) })
+                        }
+                    } else if (foto != null && menuDeAncho) {
                         DropdownMenu(expanded = true, onDismissRequest = { menuDeAncho = false }) {
                             listOf("Pequeña" to 240, "Mediana" to 360, "Grande" to 540, "Todo el ancho" to Incrustados.COLUMNA).forEach { (nombre, ancho) ->
                                 DropdownMenuItem(text = { Text(nombre) }, onClick = {
@@ -761,7 +767,8 @@ private fun BloqueEditable(
     // el texto «se movía».
     val normal = TextStyle(
         fontSize = baseSizeSp.sp,
-        lineHeight = (baseSizeSp * 1.4f).sp
+        lineHeight = (baseSizeSp * 1.4f).sp,
+        fontFamily = LocalLetraDeLaNota.current
     )
     val alFrente = MaterialTheme.colorScheme.onSurface
     val apagado = MaterialTheme.colorScheme.onSurfaceVariant

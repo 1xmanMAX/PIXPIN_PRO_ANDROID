@@ -173,6 +173,7 @@ class MarkdownEditorActivity : ComponentActivity() {
                     onAProyecto = { texto -> aUnProyecto(texto) },
                     detalle = { texto -> detalleDe(id, texto) },
                     comentarios = comentariosDeLaNota.value,
+                    idDeLaNota = id,
                     proyectoDeLaNota = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
                         ?: (application as? PixPinApp)?.proyectos?.proyectos?.value?.firstOrNull { p -> p.hojas.any { it.id == id } }?.id,
                     masAcciones = listOf("Exportar a Word" to { texto -> exportarAWord(texto) })
@@ -374,6 +375,8 @@ private fun Pantalla(
     comentarios: ComentariosDeNota? = null,
     /** El proyecto de la nota, si es una hoja de uno: «Del chat» mira su chat. */
     proyectoDeLaNota: String? = null,
+    /** El id de la nota, para su letra y tamaño propios. */
+    idDeLaNota: String = "",
     /** Lo demás del menú ⋮ que sabe la actividad (exportar a Word…). */
     masAcciones: List<Pair<String, (String) -> Unit>> = emptyList()
 ) {
@@ -420,6 +423,11 @@ private fun Pantalla(
         )
     }
     var pidiendoUrl by remember { mutableStateOf(false) }
+    // La letra y el tamaño de la vista (preferencia de este aparato, no del `.md`).
+    val contextoDeLaVista = androidx.compose.ui.platform.LocalContext.current
+    var vista by remember { mutableStateOf(VistaDeNotas.leer(contextoDeLaVista, idDeLaNota)) }
+    var eligiendoVista by remember { mutableStateOf(false) }
+    val letraDeLaNota = remember(vista.letra) { VistaDeNotas.familia(vista.letra) }
     // Lo que se está eligiendo para meter en la nota (página viva, enlace a una hoja, del chat).
     var eligiendo by remember { mutableStateOf<TipoDeBloque?>(null) }
     val contextoDelEditor = androidx.compose.ui.platform.LocalContext.current
@@ -692,6 +700,7 @@ private fun Pantalla(
                                 text = { Text("Añadir a un proyecto") }, leadingIcon = { Icon(Icons.Filled.LibraryAdd, null) },
                                 onClick = { menuMas = false; onAProyecto(valor.text) }
                             )
+                            DropdownMenuItem(text = { Text("Letra y tamaño") }, onClick = { menuMas = false; eligiendoVista = true })
                             masAcciones.forEach { (nombre, hacer) ->
                                 DropdownMenuItem(text = { Text(nombre) }, onClick = { menuMas = false; hacer(valor.text) })
                             }
@@ -729,18 +738,20 @@ private fun Pantalla(
                         com.forge.pixpin.motormd.LocalMediosTocables provides true,
                         com.forge.pixpin.motormd.LocalContextoDeLaNota provides contextoDeLaNota,
                         com.forge.pixpin.motormd.LocalVersionDeMedios provides repintadas,
+                        com.forge.pixpin.motormd.LocalLetraDeLaNota provides letraDeLaNota,
                         // **El audio de la nota suena por el reproductor de siempre**, el
                         // mismo de la pantalla de la letra y el de la barra de abajo: así
                         // los minutos de cada párrafo pueden saltar dentro de él, que es lo
                         // que el usuario pidió (7-sep-2026). Ver [AudioDeLaNota].
                         com.forge.pixpin.motormd.LocalAudioDeLaNota provides elReproductorDeLaNota()
                     ) {
-                        MarkdownText(blocks = bloques, baseSizeSp = 16f)
+                        MarkdownText(blocks = bloques, baseSizeSp = vista.tamano)
                     }
                 } else {
                     androidx.compose.runtime.CompositionLocalProvider(
                         com.forge.pixpin.motormd.LocalContextoDeLaNota provides contextoDeLaNota,
-                        com.forge.pixpin.motormd.LocalVersionDeMedios provides repintadas
+                        com.forge.pixpin.motormd.LocalVersionDeMedios provides repintadas,
+                        com.forge.pixpin.motormd.LocalLetraDeLaNota provides letraDeLaNota
                     ) {
                     EditorVivo(
                         texto = valor.text,
@@ -750,7 +761,28 @@ private fun Pantalla(
                         comentados = remember(fichero, valor.text) {
                             if (comentarios == null) emptyMap() else ComentariosDeNota.porBloque(fichero, valor.text)
                         },
-                        onComentarios = { viendoComentarios = it }
+                        onComentarios = { viendoComentarios = it },
+                        onPasarATexto = { ruta ->
+                            Toast.makeText(contextoDelEditor, "Pasando a texto…", Toast.LENGTH_SHORT).show()
+                            com.forge.pixpin.guardados.Transcriptor.transcribir(contextoDelEditor, java.io.File(ruta)) { r ->
+                                val texto = when (r) {
+                                    is com.forge.pixpin.guardados.Transcriptor.Resultado.Texto ->
+                                        r.porParrafos ?: com.forge.pixpin.guardados.Transcriptor.conTiempos(r.segmentos).ifBlank { r.texto }
+                                    else -> null
+                                }
+                                if (texto.isNullOrBlank()) {
+                                    Toast.makeText(contextoDelEditor, "No se pudo pasar a texto", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    // Debajo de su audio, como lo escribe el PC y la transcripción del chat.
+                                    val doc = valor.text
+                                    val i = doc.indexOf("](" + ruta + ")")
+                                    val fin = if (i < 0) doc.length else doc.indexOf('\n', i).let { if (it < 0) doc.length else it }
+                                    val nuevo = doc.substring(0, fin) + "\n\n" + texto.trim() + "\n" + doc.substring(fin)
+                                    cambia(valor.copy(text = nuevo))
+                                }
+                            }
+                        },
+                        baseSizeSp = vista.tamano
                     )
                     }
                 }
@@ -881,6 +913,13 @@ private fun Pantalla(
         else -> {}
     }
 
+    if (eligiendoVista) {
+        DialogoDeVista(vista, onCerrar = { eligiendoVista = false }) { v ->
+            VistaDeNotas.guardar(contextoDelEditor, idDeLaNota, v)
+            vista = v
+            eligiendoVista = false
+        }
+    }
     if (viendoComentarios != null && comentarios != null) {
         PanelDeComentarios(
             fichero = fichero, texto = valor.text, quien = comentarios.quien(), soloLectura = comentarios.roto,
