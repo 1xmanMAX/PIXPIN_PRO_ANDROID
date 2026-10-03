@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
@@ -210,6 +211,8 @@ class MensajesActivity : ComponentActivity() {
     private var chatDe by mutableStateOf<String?>(null)
     /** El lienzo del chat al que se le está cambiando el nombre. */
     private var renombrandoMensaje by mutableStateOf<Mensaje?>(null)
+    /** El mensaje que se va a meter en una nota (como «Insertar en una nota» del PC). */
+    private var insertandoEnNota by mutableStateOf<Mensaje?>(null)
     private var nombreDelChat by mutableStateOf("")
 
     /**
@@ -309,6 +312,16 @@ class MensajesActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Pantalla() {
+        insertandoEnNota?.let { m ->
+            DialogoDeNotas(m.proyecto, onCerrar = { insertandoEnNota = null }) { p, h ->
+                insertandoEnNota = null
+                val app = application as? com.forge.pixpin.PixPinApp ?: return@DialogoDeNotas
+                val md = com.forge.pixpin.ui.ElegirParaLaNota.delChat(m, app.proyectos.porId(m.proyecto))
+                val antes = h.nota.orEmpty().trimEnd()
+                app.proyectos.guardar(com.forge.pixpin.motor.Proyectos.conNota(p, h.id, (if (antes.isEmpty()) "" else "$antes\n\n") + md + "\n", System.currentTimeMillis()))
+                Toast.makeText(this@MensajesActivity, "Insertado en «${h.nombre.ifBlank { "Nota" }}»", Toast.LENGTH_SHORT).show()
+            }
+        }
         renombrandoMensaje?.let { m ->
             com.forge.pixpin.ui.DialogoDeNombre(m.nombre, onCerrar = { renombrandoMensaje = null }, titulo = "Nombre del lienzo") { nuevo ->
                 renombrandoMensaje = null
@@ -2605,6 +2618,10 @@ class MensajesActivity : ComponentActivity() {
                 // **De un mensaje, una lección** (3-oct-2026): lo que pasó suele estar ya en el
                 // chat —la foto del error, la nota de voz contándolo—. La lección sale con su
                 // texto y queda enlazada a él, en el mismo chat.
+                DelMenu(com.forge.pixpin.R.string.guardados_insertar_en_nota, Icons.Filled.NoteAdd) {
+                    menuAbierto = false
+                    insertandoEnNota = m
+                }
                 if (!com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m)) {
                     DelMenu(com.forge.pixpin.R.string.guardados_hacer_leccion, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
                         menuAbierto = false
@@ -6917,3 +6934,35 @@ internal fun trozosDeLaTranscripcion(texto: String): List<TrozoDeTexto> =
 
 /** Lo apagado que va lo que todavía no se ha dicho, mientras suena. */
 private const val ALFA_DE_LO_NO_DICHO = 0.45f
+
+/** Elegir la nota (hoja nota de un proyecto) donde meter un mensaje; primero las del chat [proyecto]. */
+@androidx.compose.runtime.Composable
+private fun DialogoDeNotas(
+    proyecto: String?,
+    onCerrar: () -> Unit,
+    onElegir: (com.forge.pixpin.motor.Proyecto, com.forge.pixpin.motor.Hoja) -> Unit
+) {
+    val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as com.forge.pixpin.PixPinApp
+    val proyectos by app.proyectos.proyectos.collectAsState()
+    val notas = remember(proyectos, proyecto) {
+        proyectos.filter { !it.archivado }.sortedWith(compareByDescending<com.forge.pixpin.motor.Proyecto> { it.id == proyecto }.thenByDescending { it.tocado })
+            .flatMap { p -> p.hojas.filter { it.nota != null }.map { p to it } }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCerrar,
+        title = { Text("Insertar en una nota") },
+        text = {
+            if (notas.isEmpty()) Text("No hay notas en los proyectos. Crea una con «Nota» en un proyecto.")
+            else androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                items(notas.size) { i ->
+                    val (p, h) = notas[i]
+                    Column(Modifier.fillMaxWidth().clickable { onElegir(p, h) }.padding(vertical = 8.dp)) {
+                        Text(h.nombre.ifBlank { h.nota.orEmpty().lineSequence().firstOrNull { it.isNotBlank() }?.trimStart('#', ' ')?.take(60) ?: "Nota" }, maxLines = 1)
+                        Text(p.nombre, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onCerrar) { Text("Cancelar") } }
+    )
+}

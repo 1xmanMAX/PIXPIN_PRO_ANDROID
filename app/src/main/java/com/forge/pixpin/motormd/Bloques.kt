@@ -45,7 +45,9 @@ enum class TipoDeBloque {
     LISTA, NUMERADA, TAREAS, PLEGABLE,
     TABLA, FORMULA, SEPARADOR,
     IMAGEN, VIDEO, AUDIO, ARCHIVO,
-    CENTRAR, DERECHA
+    CENTRAR, DERECHA,
+    /** Los del PC (30-sep y 1-oct-2026): se eligen en una lista, no se escriben. */
+    PAGINA_VIVA, ENLACE_HOJA, DEL_CHAT
 }
 
 /**
@@ -82,7 +84,11 @@ object Bloques {
         Bloque(TipoDeBloque.AUDIO, "Audio", listOf("/audio", "/musica")),
         Bloque(TipoDeBloque.ARCHIVO, "Archivo", listOf("/archivo", "/adjunto")),
         Bloque(TipoDeBloque.CENTRAR, "Centrar", listOf("/centrar", "/centro")),
-        Bloque(TipoDeBloque.DERECHA, "A la derecha", listOf("/derecha"))
+        Bloque(TipoDeBloque.DERECHA, "A la derecha", listOf("/derecha")),
+        // Los nombres y atajos del catálogo del PC (`md_comandos::CATALOGO`).
+        Bloque(TipoDeBloque.PAGINA_VIVA, "Página de un proyecto", listOf("/pagina", "/hoja", "/lienzo", "/page", "/sheet", "/canvas")),
+        Bloque(TipoDeBloque.ENLACE_HOJA, "Enlace a una hoja", listOf("/enlace", "/vinculo", "/link")),
+        Bloque(TipoDeBloque.DEL_CHAT, "Del chat", listOf("/chat", "/mensaje"))
     )
 
     /** Los que encajan con lo tecleado, en el orden del catálogo. */
@@ -120,6 +126,7 @@ object Bloques {
         TipoDeBloque.PIE -> Plantilla(":::pie\n", "\n:::\n")
         TipoDeBloque.CENTRAR -> Plantilla(":::centro\n", "\n:::\n")
         TipoDeBloque.DERECHA -> Plantilla(":::derecha\n", "\n:::\n")
+        TipoDeBloque.PAGINA_VIVA, TipoDeBloque.ENLACE_HOJA, TipoDeBloque.DEL_CHAT -> Plantilla("")
         TipoDeBloque.IMAGEN -> Plantilla("![imagen](", ")")
         TipoDeBloque.VIDEO -> Plantilla("![vídeo](", ")")
         TipoDeBloque.AUDIO -> Plantilla("![audio](", ")")
@@ -157,7 +164,8 @@ object Bloques {
         TipoDeBloque.SEPARADOR -> "---"
         // Un medio no envuelve texto: lo sustituye.
         TipoDeBloque.IMAGEN, TipoDeBloque.VIDEO,
-        TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO -> cuerpo
+        TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO,
+        TipoDeBloque.PAGINA_VIVA, TipoDeBloque.ENLACE_HOJA, TipoDeBloque.DEL_CHAT -> cuerpo
         TipoDeBloque.TABLA ->
             if (Tablas.esTabla(cuerpo)) cuerpo else Tablas.aTexto(Tablas.nueva(3, 2))
     }
@@ -165,6 +173,11 @@ object Bloques {
     /** ¿Este bloque necesita que se elija un archivo antes de escribirse? */
     fun pideArchivo(tipo: TipoDeBloque): Boolean = tipo in setOf(
         TipoDeBloque.IMAGEN, TipoDeBloque.VIDEO, TipoDeBloque.AUDIO, TipoDeBloque.ARCHIVO
+    )
+
+    /** ¿Este bloque se elige de una lista de PixPin (una hoja, un mensaje)? */
+    fun pideEleccion(tipo: TipoDeBloque): Boolean = tipo in setOf(
+        TipoDeBloque.PAGINA_VIVA, TipoDeBloque.ENLACE_HOJA, TipoDeBloque.DEL_CHAT
     )
 }
 

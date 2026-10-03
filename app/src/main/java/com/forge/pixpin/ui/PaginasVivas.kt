@@ -87,6 +87,12 @@ object PaginasVivas {
         return maxOf(lienzo, pdf).takeIf { it > 0 }
     }
 
+    /** Pinta [h] ya, para meterla como página viva; null si es de las que aquí no se pintan. */
+    suspend fun pintarAhora(context: Context, p: Proyecto, h: Hoja): Bitmap? {
+        if (h.tabla != null || h.nota != null || h.croquis != null) return null
+        return pintar(context, Encontrada(p, h))
+    }
+
     private suspend fun pintar(context: Context, e: Encontrada): Bitmap? {
         val h = e.hoja
         val p = e.proyecto

@@ -838,6 +838,7 @@
     <string name="atajo_lecciones_largo">Buscar en mis lecciones aprendidas</string>
     <string name="lecciones_titulo">Lecciones</string>
     <string name="guardados_hacer_leccion">Hacer lección</string>
+    <string name="guardados_insertar_en_nota">Insertar en una nota</string>
     <string name="tarea_creada_hoy">hoy</string>
     <plurals name="tarea_creada_hace">
         <item quantity="one">hace %d día</item>

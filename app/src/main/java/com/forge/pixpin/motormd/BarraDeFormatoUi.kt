@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Image
@@ -97,6 +99,9 @@ fun iconoDeBloque(tipo: TipoDeBloque): ImageVector = when (tipo) {
     TipoDeBloque.ARCHIVO -> Icons.Filled.AttachFile
     TipoDeBloque.CENTRAR -> Icons.Filled.FormatAlignCenter
     TipoDeBloque.DERECHA -> Icons.Filled.FormatAlignRight
+    TipoDeBloque.PAGINA_VIVA -> Icons.Filled.Image
+    TipoDeBloque.ENLACE_HOJA -> Icons.Filled.Link
+    TipoDeBloque.DEL_CHAT -> Icons.Filled.Forum
 }
 
 /**

@@ -99,7 +99,10 @@ object Menus {
             Entrada(TipoDeBloque.IMAGEN),
             Entrada(TipoDeBloque.VIDEO),
             Entrada(TipoDeBloque.AUDIO),
-            Entrada(TipoDeBloque.ARCHIVO)
+            Entrada(TipoDeBloque.ARCHIVO),
+            Entrada(TipoDeBloque.PAGINA_VIVA),
+            Entrada(TipoDeBloque.ENLACE_HOJA),
+            Entrada(TipoDeBloque.DEL_CHAT)
         )
     }
 

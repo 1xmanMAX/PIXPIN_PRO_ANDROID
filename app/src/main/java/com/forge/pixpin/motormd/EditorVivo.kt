@@ -19,6 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -191,14 +194,34 @@ fun EditorVivo(
                     }
                 )
             } else {
+                // **El ancho de una foto** (como el asa del PC): mantenerla pulsada da los cuatro de
+                // siempre. Se escribe `![Pie|360](…)`, lo mismo que escribe el PC.
+                var menuDeAncho by remember(i) { mutableStateOf(false) }
+                val foto = bloque as? MarkdownBlock.Medio
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            val largo = Vivo.contenidoDelTrozo(fuente)?.text?.length ?: 0
-                            onSitio(Sitio(i, TextRange(largo)))
-                        }
+                        .combinedClickable(
+                            onClick = {
+                                val largo = Vivo.contenidoDelTrozo(fuente)?.text?.length ?: 0
+                                onSitio(Sitio(i, TextRange(largo)))
+                            },
+                            onLongClick = if (foto?.clase == ClaseDeMedio.IMAGEN) ({ menuDeAncho = true }) else null
+                        )
                 ) {
+                    if (foto != null && menuDeAncho) {
+                        DropdownMenu(expanded = true, onDismissRequest = { menuDeAncho = false }) {
+                            listOf("Pequeña" to 240, "Mediana" to 360, "Grande" to 540, "Todo el ancho" to Incrustados.COLUMNA).forEach { (nombre, ancho) ->
+                                DropdownMenuItem(text = { Text(nombre) }, onClick = {
+                                    menuDeAncho = false
+                                    val t = Vivo.trozos(texto)[i]
+                                    val cola = t.de(texto).takeLastWhile { it == '\n' }
+                                    val linea = "![" + Incrustados.conAncho(foto.alt, ancho) + "](" + foto.ruta + ")"
+                                    onTexto(texto.substring(0, t.desde) + linea + cola + texto.substring(t.hasta))
+                                })
+                            }
+                        }
+                    }
                     if (bloque == null) {
                         // Un renglón vacío tiene que seguir ocupando su sitio o
                         // no habría dónde tocar para escribir ahí.

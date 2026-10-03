@@ -173,6 +173,8 @@ class MarkdownEditorActivity : ComponentActivity() {
                     onAProyecto = { texto -> aUnProyecto(texto) },
                     detalle = { texto -> detalleDe(id, texto) },
                     comentarios = comentariosDeLaNota.value,
+                    proyectoDeLaNota = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
+                        ?: (application as? PixPinApp)?.proyectos?.proyectos?.value?.firstOrNull { p -> p.hojas.any { it.id == id } }?.id,
                     masAcciones = listOf("Exportar a Word" to { texto -> exportarAWord(texto) })
                 )
             }
@@ -370,6 +372,8 @@ private fun Pantalla(
     detalle: (String) -> List<Pair<String, String>> = { emptyList() },
     /** Los comentarios de esta nota, si tiene código con el que viajar. Ver [ComentariosDeNota]. */
     comentarios: ComentariosDeNota? = null,
+    /** El proyecto de la nota, si es una hoja de uno: «Del chat» mira su chat. */
+    proyectoDeLaNota: String? = null,
     /** Lo demás del menú ⋮ que sabe la actividad (exportar a Word…). */
     masAcciones: List<Pair<String, (String) -> Unit>> = emptyList()
 ) {
@@ -416,6 +420,8 @@ private fun Pantalla(
         )
     }
     var pidiendoUrl by remember { mutableStateOf(false) }
+    // Lo que se está eligiendo para meter en la nota (página viva, enlace a una hoja, del chat).
+    var eligiendo by remember { mutableStateOf<TipoDeBloque?>(null) }
     val contextoDelEditor = androidx.compose.ui.platform.LocalContext.current
     val contextoDeLaNota = remember { IncrustadosDeLaNota(contextoDelEditor) }
     // **Las páginas vivas al día** al abrir la nota: las hojas que cambiaron se repintan.
@@ -571,6 +577,10 @@ private fun Pantalla(
     }
 
     fun insertarBloque(tipo: TipoDeBloque) {
+        if (Bloques.pideEleccion(tipo)) {
+            eligiendo = tipo
+            return
+        }
         if (Bloques.pideArchivo(tipo)) {
             pidiendoArchivo = tipo
             return
@@ -826,6 +836,49 @@ private fun Pantalla(
                 }
             }
         }
+    }
+
+    /** Mete [md] como renglones suyos detrás del bloque activo, quitando el `/comando` a medias. */
+    fun meterRenglones(md: String) {
+        var texto = valor.text
+        var cursor = valor.selection.start
+        Comandos.consulta(texto, cursor)?.let { q ->
+            val desde = cursor - q.length - 1
+            texto = texto.removeRange(desde, cursor); cursor = desde
+        }
+        val donde = sitio?.let { Vivo.trozos(texto).getOrNull(it.bloque)?.hasta } ?: texto.length
+        val antes = texto.substring(0, donde.coerceIn(0, texto.length))
+        val salto = if (antes.isEmpty() || antes.endsWith("\n")) "" else "\n"
+        val nuevo = antes + salto + md + "\n" + texto.substring(donde.coerceIn(0, texto.length))
+        cambia(TextFieldValue(nuevo, TextRange((antes + salto + md).length)))
+    }
+    val alcanceDeElegir = androidx.compose.runtime.rememberCoroutineScope()
+    when (eligiendo) {
+        TipoDeBloque.PAGINA_VIVA, TipoDeBloque.ENLACE_HOJA -> {
+            val comoPagina = eligiendo == TipoDeBloque.PAGINA_VIVA
+            DialogoDeHojas(
+                titulo = if (comoPagina) "Página de un proyecto" else "Enlace a una hoja",
+                onCerrar = { eligiendo = null }
+            ) { p, h ->
+                eligiendo = null
+                if (!comoPagina) meterRenglones(ElegirParaLaNota.enlace(p, h))
+                else alcanceDeElegir.launch {
+                    val md = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { ElegirParaLaNota.paginaViva(contextoDelEditor, p, h) }.getOrNull()
+                    }
+                    // Una tabla o una nota no se pintan aquí: van como enlace, que también se abre.
+                    meterRenglones(md ?: ElegirParaLaNota.enlace(p, h))
+                }
+            }
+        }
+        TipoDeBloque.DEL_CHAT -> {
+            val app = contextoDelEditor.applicationContext as PixPinApp
+            DialogoDelChat(proyecto = proyectoDeLaNota, onCerrar = { eligiendo = null }) { m ->
+                eligiendo = null
+                meterRenglones(ElegirParaLaNota.delChat(m, app.proyectos.porId(m.proyecto)))
+            }
+        }
+        else -> {}
     }
 
     if (viendoComentarios != null && comentarios != null) {
