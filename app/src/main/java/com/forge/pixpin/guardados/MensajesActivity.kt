@@ -38,6 +38,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.NoteAdd
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
@@ -1585,6 +1587,14 @@ class MensajesActivity : ComponentActivity() {
                                             masOpciones = false
                                             eligiendoChat = true
                                         }
+                                    }
+                                    DelMenu(com.forge.pixpin.R.string.guardados_galeria, Icons.Filled.PhotoLibrary) {
+                                        masOpciones = false
+                                        com.forge.pixpin.ui.GaleriaDeCapturasActivity.abrir(this@MensajesActivity)
+                                    }
+                                    DelMenu(com.forge.pixpin.R.string.guardados_arrastrar, Icons.Filled.FileDownload) {
+                                        masOpciones = false
+                                        SoltarActivity.abrir(this@MensajesActivity, chatDe)
                                     }
                                     DelMenu(com.forge.pixpin.R.string.lecciones_titulo, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
                                         masOpciones = false

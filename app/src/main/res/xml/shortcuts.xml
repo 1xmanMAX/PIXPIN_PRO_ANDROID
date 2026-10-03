@@ -32,6 +32,18 @@
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
     <shortcut
+        android:shortcutId="nueva_tarea"
+        android:enabled="true"
+        android:icon="@drawable/atajo_tarea"
+        android:shortcutShortLabel="@string/atajo_tarea"
+        android:shortcutLongLabel="@string/atajo_tarea_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/tarea"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
         android:shortcutId="nueva_leccion"
         android:enabled="true"
         android:icon="@drawable/atajo_leccion"

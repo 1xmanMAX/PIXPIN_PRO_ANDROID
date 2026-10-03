@@ -265,6 +265,27 @@
             </intent-filter>
         </activity>
 
+        <!-- La galería de capturas y el recuadro para soltar, como los del PC (3-oct-2026). -->
+        <activity
+            android:name=".ui.GaleriaDeCapturasActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
+        <activity
+            android:name=".guardados.SoltarActivity"
+            android:exported="false"
+            android:label="Soltar en PixPin"
+            android:resizeableActivity="true"
+            android:taskAffinity="${applicationId}.soltar"
+            android:theme="@style/Theme.PixPin" />
+        <!-- Apuntar una tarea desde el icono o el buscador. -->
+        <activity
+            android:name=".mini.TareaRapidaActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="${applicationId}.tarea"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!--
             Por donde entran los atajos. Exportada porque algunos buscadores lanzan el intento
             tal cual; solo entiende pixpin://atajo/... Ver atajos/AtajoActivity.

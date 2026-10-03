@@ -832,6 +832,10 @@
     <string name="atajo_sincronizar">Sincronizar</string>
     <string name="atajo_sincronizar_largo">Sincronizar por Wi-Fi</string>
     <string name="atajo_proyecto_largo">Proyecto %1$s</string>
+    <string name="atajo_tarea">Tarea</string>
+    <string name="atajo_tarea_largo">Nueva tarea</string>
+    <string name="guardados_galeria">Galería de capturas</string>
+    <string name="guardados_arrastrar">Añadir arrastrando…</string>
     <string name="atajo_grabar">Grabar</string>
     <string name="atajo_grabar_largo">Grabar nota de voz</string>
     <string name="atajo_leccion">Lección</string>

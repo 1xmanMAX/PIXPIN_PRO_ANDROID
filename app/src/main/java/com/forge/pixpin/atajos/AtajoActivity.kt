@@ -27,6 +27,8 @@ class AtajoActivity : Activity() {
             ?.pathSegments.orEmpty()
         val accion = partes.firstOrNull()
         val id = partes.getOrNull(1)
+        consulta = sena
+
         if (accion != null) {
             runCatching { abrir(accion, id) }
             Atajos.usado(this, accion, id)
@@ -34,8 +36,31 @@ class AtajoActivity : Activity() {
         finish()
     }
 
+    /** La seña entera: los pedidos de fuera llevan sus datos en la consulta (`?texto=…`). */
+    private var consulta: android.net.Uri? = null
+    private fun dato(nombre: String): String? = runCatching { consulta?.getQueryParameter(nombre) }.getOrNull()?.takeIf { it.isNotBlank() }
+
     private fun abrir(accion: String, id: String?) {
         when (accion) {
+            // **Los pedidos de fuera**, como los del PC (`docs/protocolo-pedidos.md`), para el
+            // buscador, Tasker o cualquier otra app: `pixpin://atajo/tarea?texto=…` y compañía.
+            Atajos.TAREA -> com.forge.pixpin.mini.TareaRapidaActivity.abrir(this, dato("texto"))
+            Atajos.CAPTURAS -> com.forge.pixpin.ui.GaleriaDeCapturasActivity.abrir(this)
+            Atajos.SOLTAR -> com.forge.pixpin.guardados.SoltarActivity.abrir(this, dato("proyecto"))
+            Atajos.CHAT -> dato("texto")?.let { t ->
+                Thread { com.forge.pixpin.guardados.AlChat.meterTexto(applicationContext, t, dato("proyecto")) }.start()
+                android.widget.Toast.makeText(this, "Escrito en el chat", android.widget.Toast.LENGTH_SHORT).show()
+            } ?: startActivity(Intent(this, MensajesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            Atajos.NOTA -> com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this, "", dato("texto").orEmpty())
+            Atajos.LISTA -> Thread {
+                com.forge.pixpin.guardados.MensajesStore(applicationContext).anadir(
+                    com.forge.pixpin.guardados.Mensaje(
+                        id = java.util.UUID.randomUUID().toString(), cuando = System.currentTimeMillis(),
+                        clase = com.forge.pixpin.guardados.Clase.MINIAPP, miniapp = com.forge.pixpin.mini.MiniApp.TAREAS.id,
+                        texto = com.forge.pixpin.mini.Tareas.escribir(dato("titulo") ?: "Tareas", emptyList()), proyecto = dato("proyecto")
+                    )
+                )
+            }.start()
             Atajos.CAPTURAR -> {
                 // Lo mismo que el botón de ajustes rápidos: la bola en marcha y a capturar.
                 // CaptureFlow ya avisa si falta el permiso de superponer.
