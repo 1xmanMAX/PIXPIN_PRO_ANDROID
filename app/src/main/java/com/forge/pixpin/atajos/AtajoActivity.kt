@@ -55,6 +55,8 @@ class AtajoActivity : Activity() {
             // Un archivo del chat, abierto con su visor como al tocarlo allí. Si ya no está, el
             // chat se abre igual y no hace nada más: lo comprueba él, fuera del hilo principal.
             Atajos.ARCHIVO -> if (id != null) MensajesActivity.abrirYAbrir(this, id)
+            // El micrófono flotante, como el pedido `grabar` del PC.
+            Atajos.GRABAR -> com.forge.pixpin.pin.GrabadoraActivity.abrir(this)
             Atajos.LECCION -> com.forge.pixpin.lecciones.LeccionActivity.nueva(this)
             Atajos.LECCIONES -> com.forge.pixpin.lecciones.LeccionesActivity.abrir(this)
             Atajos.SINCRONIZAR -> startActivity(

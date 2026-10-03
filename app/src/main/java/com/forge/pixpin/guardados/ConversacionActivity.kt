@@ -83,7 +83,7 @@ import kotlinx.coroutines.withContext
  */
 class ConversacionActivity : ComponentActivity() {
 
-    private var grabador: MediaRecorder? = null
+    private var grabador: com.forge.pixpin.audio.Grabador? = null
     private var grabandoDesde = 0L
 
     /** Un turno: quién habló y el archivo de lo que dijo. */

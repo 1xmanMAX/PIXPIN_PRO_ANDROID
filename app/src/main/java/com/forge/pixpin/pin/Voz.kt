@@ -52,37 +52,36 @@ object Voz {
      * micrófono cogido, o el permiso se acaba de retirar. Quien llame se lo dice al
      * usuario y sigue; reventar aquí dejaría la pantalla de grabar colgada.
      */
-    fun empezar(context: Context, destino: File): MediaRecorder? = runCatching {
-        val grabador = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)
-        } else {
-            @Suppress("DEPRECATION") MediaRecorder()
-        }
-        grabador.setAudioSource(MediaRecorder.AudioSource.MIC)
-        grabador.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-        grabador.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-        // Calidad de voz, no de música: ver la nota de arriba.
-        grabador.setAudioSamplingRate(MUESTREO)
-        grabador.setAudioEncodingBitRate(BITS_POR_SEGUNDO)
-        grabador.setOutputFile(destino.absolutePath)
-        grabador.prepare()
-        grabador.start()
-        grabador
-    }.getOrNull()
+    fun empezar(context: Context, destino: File): com.forge.pixpin.audio.Grabador? {
+        // **Con el realce de la voz**, como el PC (3-oct-2026): una voz baja sale clara. Si este
+        // teléfono no deja montar el codificador, la grabadora de siempre.
+        com.forge.pixpin.audio.Grabador.Realzado.empezar(destino, MUESTREO, BITS_POR_SEGUNDO)?.let { return it }
+        return runCatching {
+            val grabador = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                @Suppress("DEPRECATION") MediaRecorder()
+            }
+            grabador.setAudioSource(MediaRecorder.AudioSource.MIC)
+            grabador.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            grabador.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            // Calidad de voz, no de música: ver la nota de arriba.
+            grabador.setAudioSamplingRate(MUESTREO)
+            grabador.setAudioEncodingBitRate(BITS_POR_SEGUNDO)
+            grabador.setOutputFile(destino.absolutePath)
+            grabador.prepare()
+            grabador.start()
+            com.forge.pixpin.audio.Grabador.DelSistema(grabador)
+        }.getOrNull()
+    }
 
     /**
      * Para de grabar y suelta el micrófono.
      *
-     * `stop()` revienta si no llegó a grabarse nada —una pulsación de medio segundo— y en
-     * ese caso el archivo queda a medias e ilegible. Se avisa devolviendo false para que
+     * Devuelve false si no llegó a grabarse nada —una pulsación de medio segundo— para que
      * quien llame lo borre en vez de crear un pin que no suena.
      */
-    fun parar(grabador: MediaRecorder?): Boolean {
-        if (grabador == null) return false
-        val bien = runCatching { grabador.stop() }.isSuccess
-        runCatching { grabador.release() }
-        return bien
-    }
+    fun parar(grabador: com.forge.pixpin.audio.Grabador?): Boolean = grabador?.parar() ?: false
 
     /**
      * Lo más alto que ha sonado desde la última vez que se preguntó, de 0 a 32767.
@@ -108,10 +107,7 @@ object Voz {
      * Devuelve 0 sin grabador o si el micrófono ya se soltó: un cero es una barra en el
      * suelo, no un fallo.
      */
-    fun pico(grabador: MediaRecorder?): Int {
-        if (grabador == null) return 0
-        return runCatching { grabador.maxAmplitude }.getOrDefault(0).coerceAtLeast(0)
-    }
+    fun pico(grabador: com.forge.pixpin.audio.Grabador?): Int = grabador?.pico() ?: 0
 
     /**
      * Cada cuánto se le pregunta al micrófono, en milisegundos.

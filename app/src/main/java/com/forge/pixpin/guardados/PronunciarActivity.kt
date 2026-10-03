@@ -106,7 +106,7 @@ import java.util.UUID
  */
 class PronunciarActivity : ComponentActivity() {
 
-    private var grabador: android.media.MediaRecorder? = null
+    private var grabador: com.forge.pixpin.audio.Grabador? = null
     private var grabandoEn: File? = null
     private var reproductor: MediaPlayer? = null
 

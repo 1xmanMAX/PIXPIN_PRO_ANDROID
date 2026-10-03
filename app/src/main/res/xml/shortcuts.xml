@@ -20,6 +20,18 @@
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
     <shortcut
+        android:shortcutId="grabar"
+        android:enabled="true"
+        android:icon="@drawable/atajo_voz"
+        android:shortcutShortLabel="@string/atajo_grabar"
+        android:shortcutLongLabel="@string/atajo_grabar_largo">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="pixpin://atajo/grabar"
+            android:targetPackage="com.forge.pixpin"
+            android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
+    </shortcut>
+    <shortcut
         android:shortcutId="nueva_leccion"
         android:enabled="true"
         android:icon="@drawable/atajo_leccion"

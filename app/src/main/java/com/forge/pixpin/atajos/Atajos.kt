@@ -32,6 +32,7 @@ object Atajos {
     /** `pixpin://atajo/proyecto/<id>` */
     const val PROYECTO = "proyecto"
 
+    const val GRABAR = "grabar"
     const val LECCION = "leccion"
     const val LECCIONES = "lecciones"
     /** `pixpin://atajo/archivo/<id del mensaje>`: un archivo del chat, abierto con su visor. */
@@ -55,7 +56,7 @@ object Atajos {
     private const val CUANTOS_ARCHIVOS = 8
 
     /** Los atajos fijos de `xml/shortcuts.xml`: cuentan para el tope. */
-    private const val FIJOS = 6
+    private const val FIJOS = 7
 
     private val CON_ARCHIVO = setOf(
         com.forge.pixpin.guardados.Clase.IMAGEN, com.forge.pixpin.guardados.Clase.ARCHIVO,

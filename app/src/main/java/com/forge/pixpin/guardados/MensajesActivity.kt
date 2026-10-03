@@ -5558,7 +5558,7 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
-    private var grabador: android.media.MediaRecorder? = null
+    private var grabador: com.forge.pixpin.audio.Grabador? = null
     private var destinoDeVoz: File? = null
 
     /**

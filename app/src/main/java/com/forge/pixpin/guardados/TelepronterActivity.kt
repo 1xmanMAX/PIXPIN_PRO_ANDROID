@@ -104,7 +104,7 @@ import java.util.UUID
  */
 class TelepronterActivity : ComponentActivity() {
 
-    private var grabador: android.media.MediaRecorder? = null
+    private var grabador: com.forge.pixpin.audio.Grabador? = null
     private var archivo: File? = null
     private var picos: Picos? = null
 
