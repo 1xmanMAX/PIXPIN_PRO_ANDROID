@@ -5785,6 +5785,7 @@ class MensajesActivity : ComponentActivity() {
             }
             Clase.VOZ -> m.ruta?.let { gestor.pinVoz(it) } ?: avisarDeQueNoHay()
             Clase.NOTA -> gestor.pinTexto(m.texto)
+            // Una lista de tareas sale **viva**: lo que se tacha en el pin se guarda aquí (como el PC).
             // Una tabla o un croquis no caben en una ventana flotante: se abren donde viven.
             Clase.TABLA, Clase.CROQUIS -> abrir(m)
 
@@ -5833,7 +5834,9 @@ class MensajesActivity : ComponentActivity() {
 
             // Y la mini-app, su texto: una lista de la compra pegada en la pantalla
             // mientras se hace la compra es exactamente para lo que existe pinear.
-            Clase.MINIAPP -> gestor.pinTexto(m.texto)
+            // Una lista de tareas sale **viva**: lo que se tacha en el pin se guarda aquí (como el PC).
+            Clase.MINIAPP -> if (m.miniapp == com.forge.pixpin.mini.MiniApp.TAREAS.id) gestor.pinListaDelMensaje(m.id, m.texto)
+                else gestor.pinTexto(m.texto)
 
             // Con su tipo de verdad: un PDF pineado como «*/*» salía como archivo sin
             // formato en vez de como documento con sus páginas.

@@ -209,5 +209,12 @@ data class PinState(
      * Mismo trato y misma razón que [croquisPath]: una escena puede llevar
      * cientos de elementos y este registro se lee entero al arrancar.
      */
-    val drawPath: String? = null
+    val drawPath: String? = null,
+
+    /**
+     * **El mensaje del chat del que sale esta lista** (como el PC, 3-oct-2026): lo que se tacha
+     * en el pin se guarda en el mensaje, y lo que cambie en el chat llega al pin. Null en las
+     * listas sueltas de siempre.
+     */
+    val deMensaje: String? = null
 )

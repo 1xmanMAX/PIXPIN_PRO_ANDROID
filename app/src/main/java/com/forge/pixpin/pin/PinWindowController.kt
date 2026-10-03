@@ -438,6 +438,13 @@ class PinWindowController(
     val isPinned: Boolean get() = pin.value.isPinned
     val isShowing: Boolean get() = window != null
 
+    /** Pone la lista y sus casillas que manda el mensaje del chat (ver [PinState.deMensaje]). */
+    fun ponerLista(texto: String, marcadas: List<Boolean>) {
+        val v = pin.value
+        if (v.text == texto && v.widget.checked == marcadas) return
+        pin.value = v.copy(text = texto, widget = v.widget.copy(checked = marcadas))
+    }
+
     /** Estado completo actual, incluidos posición, escala y opacidad reales. */
     fun snapshot(): PinState {
         val p = lp

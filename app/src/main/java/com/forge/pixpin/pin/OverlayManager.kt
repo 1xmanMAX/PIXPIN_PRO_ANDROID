@@ -118,7 +118,12 @@ class OverlayManager(private val app: PixPinApp) {
     private var dragAnchors: Map<String, Pair<Int, Int>> = emptyMap()
 
     private val callbacks = object : PinWindowController.Callbacks {
-        override fun onPinChanged(controller: PinWindowController) = scheduleSave()
+        override fun onPinChanged(controller: PinWindowController) {
+            scheduleSave()
+            // Una lista que salió de un mensaje: lo tachado vuelve a él.
+            val st = controller.snapshot()
+            if (st.type == PinType.CHECKLIST && st.deMensaje != null) guardarListaEnSuMensaje(st)
+        }
 
         override fun onPinClosed(controller: PinWindowController) {
             pins.remove(controller.id)
@@ -400,6 +405,62 @@ class OverlayManager(private val app: PixPinApp) {
         createPin(newPin(PinType.TEXT).copy(text = texto))
     }
 
+    /**
+     * **Saca a la pantalla la lista de tareas de un mensaje**, viva (como el PC): un pin por
+     * mensaje; pedirla otra vez trae la que ya está. Las casillas se guardan en el mensaje con el
+     * cerrojo del chat, leyendo lo que diga en ese momento, y lo que cambie en el chat llega al pin.
+     */
+    fun pinListaDelMensaje(mensaje: String, documento: String) {
+        if (!Settings.canDrawOverlays(app)) return
+        pins.values.firstOrNull { it.snapshot().deMensaje == mensaje }?.let { it.show(); return }
+        val tareas = com.forge.pixpin.mini.Tareas.leer(documento)
+        createPin(
+            newPin(PinType.CHECKLIST).copy(
+                text = tareas.joinToString("\n") { com.forge.pixpin.mini.Tareas.partir(it.texto).first },
+                widget = WidgetState(checked = tareas.map { it.hecha }),
+                deMensaje = mensaje
+            )
+        )
+        vigilarListas()
+    }
+
+    private var vigilandoListas = false
+
+    /** Lo que cambie en el chat (aquí o por la sincronización) llega a las listas sacadas. */
+    private fun vigilarListas() {
+        if (vigilandoListas) return
+        vigilandoListas = true
+        scope.launch {
+            com.forge.pixpin.guardados.MensajesStore.cambios.collect {
+                val ligadas = pins.values.filter { it.snapshot().deMensaje != null }
+                if (ligadas.isEmpty()) return@collect
+                val mensajes = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    runCatching { com.forge.pixpin.guardados.MensajesStore(app).leer() }.getOrDefault(emptyList())
+                }
+                for (c in ligadas) {
+                    val m = mensajes.firstOrNull { it.id == c.snapshot().deMensaje } ?: continue
+                    val t = com.forge.pixpin.mini.Tareas.leer(m.texto)
+                    c.ponerLista(t.joinToString("\n") { com.forge.pixpin.mini.Tareas.partir(it.texto).first }, t.map { it.hecha })
+                }
+            }
+        }
+    }
+
+    private fun guardarListaEnSuMensaje(st: PinState) {
+        val id = st.deMensaje ?: return
+        val marcadas = st.widget.checked
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                com.forge.pixpin.guardados.MensajesStore(app).actualizar(id) { m ->
+                    val t = com.forge.pixpin.mini.Tareas.leer(m.texto)
+                    val nuevas = t.mapIndexed { i, x -> x.copy(hecha = marcadas.getOrElse(i) { x.hecha }) }
+                    if (nuevas == t) m
+                    else m.copy(texto = com.forge.pixpin.mini.Tareas.escribir(com.forge.pixpin.mini.Cabecera.titulo(m.texto), nuevas))
+                }
+            }
+        }
+    }
+
     fun pinVoz(audioPath: String) {
         if (!Settings.canDrawOverlays(app)) return
         createPin(
@@ -536,6 +597,8 @@ class OverlayManager(private val app: PixPinApp) {
     private fun appString(resId: Int): String = app.getString(resId)
 
     private fun createPin(state: PinState) {
+        // Una lista ligada a un mensaje (también al restaurar los pines al arrancar) escucha al chat.
+        if (state.deMensaje != null) vigilarListas()
         // **Pinear algo deshace el ocultar-todo.** Un pin nuevo siempre lo pide
         // alguien —del portapapeles, de una captura, de una palabra mágica— y no
         // ver nada al pedirlo es indistinguible de que la app esté rota. Antes
