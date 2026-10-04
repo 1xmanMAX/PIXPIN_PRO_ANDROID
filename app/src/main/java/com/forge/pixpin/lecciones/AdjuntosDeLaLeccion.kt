@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,24 +62,36 @@ import java.util.UUID
 fun AdjuntosDeLaLeccion(
     viejos: List<Mensaje>,
     nuevos: SnapshotStateList<Mensaje>,
-    quitados: SnapshotStateList<String>
+    quitados: SnapshotStateList<String>,
+    /** Recibe cómo parar la grabación en curso, para que guardar no la pierda. */
+    alPoderParar: (() -> Unit) -> Unit = {}
 ) {
     val contexto = LocalContext.current
     val alcance = rememberCoroutineScope()
     val carpeta = remember { MensajesStore(contexto).carpetaDeAdjuntos() }
 
     // La cámara escribe directamente en el archivo que le damos.
-    var fotoEnCurso by remember { mutableStateOf<File?>(null) }
+    // Guardada como texto: sobrevive a que el sistema recree la hoja mientras la cámara está abierta.
+    var rutaEnCurso by rememberSaveable { mutableStateOf<String?>(null) }
     val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { bien ->
-        val f = fotoEnCurso; fotoEnCurso = null
+        val f = rutaEnCurso?.let { File(it) }; rutaEnCurso = null
         if (bien && f != null && f.length() > 0) nuevos += mensaje(f, Clase.IMAGEN, "Foto de la lección")
         else f?.delete()
     }
     fun hacerFoto() {
         val f = File(carpeta, "leccion_${System.currentTimeMillis()}.jpg")
-        fotoEnCurso = f
+        rutaEnCurso = f.absolutePath
         runCatching { camara.launch(FileProvider.getUriForFile(contexto, "${contexto.packageName}.fileprovider", f)) }
-            .onFailure { fotoEnCurso = null; Toast.makeText(contexto, "No hay cámara disponible", Toast.LENGTH_SHORT).show() }
+            .onFailure { rutaEnCurso = null; Toast.makeText(contexto, "No hay cámara disponible", Toast.LENGTH_SHORT).show() }
+    }
+    // El manifiesto declara la cámara, y entonces Android exige el permiso también para la app de
+    // cámara del sistema: sin pedirlo, la foto fallaba con un «no hay cámara» falso.
+    val permisoCamara = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { si ->
+        if (si) hacerFoto() else Toast.makeText(contexto, "Sin permiso para la cámara", Toast.LENGTH_SHORT).show()
+    }
+    fun pedirFoto() {
+        if (ContextCompat.checkSelfPermission(contexto, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) hacerFoto()
+        else permisoCamara.launch(Manifest.permission.CAMERA)
     }
 
     val galeria = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(6)) { uris ->
@@ -88,6 +101,12 @@ fun AdjuntosDeLaLeccion(
             copiadas.forEach { nuevos += mensaje(it, Clase.IMAGEN, "Foto de la lección") }
         }
     }
+
+    // Un solo reproductor para toda la tira.
+    var sonando by remember { mutableStateOf<String?>(null) }
+    val reproductor = remember { arrayOfNulls<MediaPlayer>(1) }
+    DisposableEffect(Unit) { onDispose { runCatching { reproductor[0]?.release() } } }
+    fun pararDeSonar() { runCatching { reproductor[0]?.release() }; reproductor[0] = null; sonando = null }
 
     // Grabar aquí mismo, sin salir de la hoja.
     var grabador by remember { mutableStateOf<com.forge.pixpin.audio.Grabador?>(null) }
@@ -112,17 +131,14 @@ fun AdjuntosDeLaLeccion(
         if (si) empezarAGrabar() else Toast.makeText(contexto, "Sin permiso para el micrófono", Toast.LENGTH_SHORT).show()
     }
     // Si la hoja se va grabando (pantalla apagada, otra app), lo grabado se queda.
+    SideEffect { alPoderParar { pararDeGrabar() } }
     val ciclo = LocalLifecycleOwner.current
     DisposableEffect(ciclo) {
-        val o = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) pararDeGrabar() }
+        val o = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) { pararDeGrabar(); pararDeSonar() } }
         ciclo.lifecycle.addObserver(o)
         onDispose { ciclo.lifecycle.removeObserver(o); pararDeGrabar() }
     }
 
-    // Un solo reproductor para toda la tira.
-    var sonando by remember { mutableStateOf<String?>(null) }
-    val reproductor = remember { arrayOfNulls<MediaPlayer>(1) }
-    DisposableEffect(Unit) { onDispose { runCatching { reproductor[0]?.release() } } }
     fun tocar(m: Mensaje) {
         runCatching { reproductor[0]?.release() }; reproductor[0] = null
         if (sonando == m.id) { sonando = null; return }
@@ -132,7 +148,7 @@ fun AdjuntosDeLaLeccion(
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        AssistChip(onClick = { hacerFoto() }, label = { Text("Foto") }, leadingIcon = { Icon(Icons.Filled.PhotoCamera, null, Modifier.size(18.dp)) })
+        AssistChip(onClick = { pedirFoto() }, label = { Text("Foto") }, leadingIcon = { Icon(Icons.Filled.PhotoCamera, null, Modifier.size(18.dp)) })
         AssistChip(
             onClick = { galeria.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             label = { Text("Galería") }, leadingIcon = { Icon(Icons.Filled.Image, null, Modifier.size(18.dp)) }

@@ -67,9 +67,11 @@ object BuscarEnTodo {
             if (nombre.isNotBlank()) salida += Elemento(Tipo.PROYECTO, nombre, "Proyecto", 0, "🪐", Atajos.PROYECTO, id)
         }
         val vistos = HashSet<String>()
+        // Lo que cuelga de una lección se ve en la lección, no en el chat: ir allí no llevaría a nada.
+        val lecciones = mensajes.mapNotNullTo(HashSet()) { m -> m.id.takeIf { LeccionesStore.esLeccion(m) } }
         for (m in mensajes) {
             // Un mensaje repetido en el chat saldría dos veces con la misma clave.
-            if (m.enBuzon || !vistos.add(m.id)) continue
+            if (m.enBuzon || !vistos.add(m.id) || m.respondeA in lecciones) continue
             val chat = m.proyecto?.let { nombreDe[it] } ?: "Mensajes guardados"
             salida += when {
                 LeccionesStore.esLeccion(m) -> Elemento(
@@ -114,13 +116,15 @@ object BuscarEnTodo {
     fun buscar(todo: List<Elemento>, consulta: String, cuantos: Int = 60): List<Elemento> {
         val palabras = Texto.normal(sinLaP(consulta)).split(' ', ',', '.').filter { it.isNotBlank() }
         if (palabras.isEmpty()) return emptyList()
+        // Uno por palabra, no uno por cada cosa que casa: con miles de mensajes se nota.
+        val alEmpezarPalabra = palabras.associateWith { Regex("(^|[^a-z0-9ñ])" + Regex.escape(it)) }
         return todo.asSequence()
             .filter { e -> palabras.all { it in e.enTodo } }
             .map { e ->
                 val puntos = palabras.sumOf { p ->
                     when {
                         e.enTitulo.startsWith(p) -> 4
-                        Regex("(^|[^a-z0-9ñ])" + Regex.escape(p)).containsMatchIn(e.enTitulo) -> 3
+                        alEmpezarPalabra.getValue(p).containsMatchIn(e.enTitulo) -> 3
                         p in e.enTitulo -> 2
                         else -> 0
                     }

@@ -107,11 +107,17 @@ object Recepcion {
         val ids = HashMap<String, String>()
         // Y lo anotado sobre sus adjuntos va por el código único viejo: se renombra al nuevo.
         val uids = HashMap<String, String>()
-        val lineas = c.chat?.lines()?.filter { it.isNotBlank() }?.mapIndexedNotNull { i, l ->
-            val m = runCatching { json.decodeFromString(Mensaje.serializer(), l) }.getOrNull() ?: return@mapIndexedNotNull null
-            val nuevo = UUID.randomUUID().toString()
-            ids[m.id] = nuevo
-            val renovado = Codigos.renovar(m).copy(id = nuevo, cuando = ahora + i, uid = null)
+        val leidos = c.chat?.lines()?.filter { it.isNotBlank() }?.mapNotNull { l ->
+            runCatching { json.decodeFromString(Mensaje.serializer(), l) }.getOrNull()
+        }
+        // Los ids nuevos, primero todos: una respuesta (la foto de una lección, una nota en un hilo)
+        // puede ir antes que su mensaje y tiene que seguirle al id nuevo.
+        leidos?.forEach { m ->
+            // El mensaje de una lección se sigue llamando `lec-…`: es por lo que se reconoce.
+            ids[m.id] = if (m.id.startsWith("lec-")) "lec-" + UUID.randomUUID().toString() else UUID.randomUUID().toString()
+        }
+        val lineas = leidos?.mapIndexed { i, m ->
+            val renovado = Codigos.renovar(m).copy(id = ids.getValue(m.id), cuando = ahora + i, uid = null, respondeA = m.respondeA?.let { ids[it] ?: it })
             uids["anot-" + Codigos.unico(m)] = "anot-" + Codigos.unico(renovado)
             json.encodeToString(Mensaje.serializer(), renovado)
         }
@@ -459,20 +465,18 @@ object Recepcion {
 
     private fun quitarDelChatLoQueYaNoEsta(context: Context, p: Proyecto) {
         val almacen = MensajesStore(context)
-        val lista = almacen.leer()
         val dibujos = p.hojas.mapNotNull { it.dibujo }.toSet()
         val tablas = p.hojas.mapNotNull { it.tabla }.toSet()
         val notas = p.hojas.filter { it.nota != null }.map { it.id }.toSet()
         val croquis = p.croquis.toSet()
-        val quedan = lista.filterNot { m ->
-            m.proyecto == p.id && when (m.clase) {
-                Clase.DIBUJO -> m.referencia != null && m.referencia !in dibujos
-                Clase.TABLA -> m.referencia != null && m.referencia !in tablas
-                Clase.NOTA -> m.referencia != null && m.referencia !in notas
-                Clase.CROQUIS -> m.referencia != null && m.referencia !in croquis
-                else -> false
-            }
+        fun sobra(m: Mensaje) = m.proyecto == p.id && when (m.clase) {
+            Clase.DIBUJO -> m.referencia != null && m.referencia !in dibujos
+            Clase.TABLA -> m.referencia != null && m.referencia !in tablas
+            Clase.NOTA -> m.referencia != null && m.referencia !in notas
+            Clase.CROQUIS -> m.referencia != null && m.referencia !in croquis
+            else -> false
         }
-        if (quedan.size != lista.size) almacen.reescribir(quedan)
+        if (almacen.leer().none(::sobra)) return
+        almacen.cambiar { lista -> lista.filterNot(::sobra) }
     }
 }

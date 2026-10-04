@@ -290,6 +290,18 @@ class MensajesStore(private val context: Context) {
      * quedarse a medias aquí significaría perder todo lo guardado, y eso no puede pasar
      * por cerrar la aplicación en mal momento.
      */
+    /**
+     * **Leer, cambiar y reescribir de una vez, bajo la llave del chat** (4-oct-2026). Es como hay
+     * que cambiar el chat: reescribir una lista leída antes —o la que tenía la pantalla— borraba
+     * lo que hubiera llegado entretanto (una sincronización, una nota del micrófono flotante) y le
+     * dejaba lápida, así que desaparecía también del otro aparato. Devuelve la lista escrita.
+     */
+    fun cambiar(cambio: (List<Mensaje>) -> List<Mensaje>): List<Mensaje> = synchronized(CERROJO) {
+        val nueva = cambio(leer())
+        reescribir(nueva)
+        nueva
+    }
+
     fun reescribir(mensajes: List<Mensaje>): Unit = synchronized(CERROJO) {
         cambios.value = cambios.value + 1
         // **Lo que se va deja su marca**, para que la sincronización no lo resucite desde otro

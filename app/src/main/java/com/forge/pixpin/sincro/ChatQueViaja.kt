@@ -136,7 +136,7 @@ object ChatQueViaja {
                     (traeElDocumento && m.clase == Clase.ARCHIVO && m.ruta != null && (m.ruta == proyecto.pdfLimpio || m.ruta == proyecto.pdfOrigen))
                 )
         }.map { it.id }.toSet()
-        if (sobran.isNotEmpty()) almacen.reescribir(antes.filterNot { it.id in sobran })
+        if (sobran.isNotEmpty()) almacen.cambiar { actual -> actual.filterNot { it.id in sobran } }
         val yaEstan = almacen.leer().associateBy { it.id }
         for (linea in texto.lines()) {
             if (linea.isBlank()) continue

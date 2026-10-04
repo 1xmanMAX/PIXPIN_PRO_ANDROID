@@ -66,12 +66,14 @@ class BuscarActivity : ComponentActivity() {
         var resultados by remember { mutableStateOf<List<BuscarEnTodo.Elemento>>(emptyList()) }
         val foco = remember { FocusRequester() }
 
-        LaunchedEffect(Unit) {
-            runCatching { foco.requestFocus() }
+        LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+        // Con la app arrancada en frío desde el atajo, los proyectos llegan un poco después:
+        // se vuelve a montar la lista cuando llegan.
+        val listaDeProyectos by (application as PixPinApp).proyectos.proyectos.collectAsState()
+        LaunchedEffect(listaDeProyectos) {
             todo = withContext(Dispatchers.IO) {
                 val mensajes = runCatching { MensajesStore(this@BuscarActivity).leer() }.getOrDefault(emptyList())
-                val proyectos = (application as PixPinApp).proyectos.proyectos.value
-                    .filter { !it.archivado }.sortedByDescending { it.tocado }.map { it.id to it.nombre }
+                val proyectos = listaDeProyectos.filter { !it.archivado }.sortedByDescending { it.tocado }.map { it.id to it.nombre }
                 BuscarEnTodo.elementos(mensajes, proyectos)
             }
         }
@@ -156,7 +158,12 @@ class BuscarActivity : ComponentActivity() {
         }
     }
 
+    /** Un doble toque no abre dos veces. */
+    private var abierto = false
+
     private fun abrir(e: BuscarEnTodo.Elemento) {
+        if (abierto) return
+        abierto = true
         runCatching {
             val m = e.mensaje
             when {

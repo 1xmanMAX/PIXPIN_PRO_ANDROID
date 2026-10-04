@@ -336,7 +336,7 @@ class MensajesActivity : ComponentActivity() {
                 // nombre del mensaje, no el del archivo en disco: la sincronización empareja
                 // por la ruta, y moverla sería un archivo nuevo en el otro aparato.
                 if (!esLienzo) {
-                    val limpio = Renombrar.conSuExtension(m.nombre, nuevo)
+                    val limpio = Renombrar.conSuExtension(Renombrar.nombreDeBase(m), nuevo)
                     if (limpio.isBlank() || limpio == m.nombre) return@DialogoDeNombre
                     lifecycleScope.launch(Dispatchers.IO) {
                         almacen.actualizar(m.id) { it.copy(nombre = limpio) }
@@ -936,15 +936,15 @@ class MensajesActivity : ComponentActivity() {
                                 verHilo = { hiloDe = m },
                                 cuantosComentarios = comentariosPorMensaje[m.id] ?: 0,
                                 alternarRecorte = {
-                                    guardarAparte(mensajes.map {
+                                    guardarAparte({ lista -> lista.map {
                                         if (it.id == m.id) it.copy(soloLaFoto = !it.soloLaFoto)
                                         else it
-                                    }) { refrescar() }
+                                    } }) { refrescar() }
                                 },
                                 cambiarTexto = { nuevo ->
-                                    guardarAparte(mensajes.map {
+                                    guardarAparte({ lista -> lista.map {
                                         if (it.id == m.id) it.copy(texto = nuevo) else it
-                                    }) { refrescar() }
+                                    } }) { refrescar() }
                                 },
                                 responder = { respondiendo = m },
                                 copiar = if (m.texto.isBlank()) null else {
@@ -959,20 +959,20 @@ class MensajesActivity : ComponentActivity() {
                                     }
                                 },
                                 fijar = {
-                                    guardarAparte(mensajes.map {
+                                    guardarAparte({ lista -> lista.map {
                                         if (it.id == m.id) it.copy(fijado = !it.fijado)
                                         else it
-                                    }) { refrescar() }
+                                    } }) { refrescar() }
                                 },
                                 compartir = { compartir(m) },
                                 pinear = { pinear(m) },
                                 rescatar = if (!m.enBuzon) null else {
                                     {
-                                        guardarAparte(mensajes.map {
+                                        guardarAparte({ lista -> lista.map {
                                             if (it.id == m.id) {
                                                 rescatado(it, System.currentTimeMillis())
                                             } else it
-                                        }) { refrescar() }
+                                        } }) { refrescar() }
                                     }
                                 },
                                 seleccionar = { marcados = marcados + m.id },
@@ -981,8 +981,8 @@ class MensajesActivity : ComponentActivity() {
                                     // El chat manda: lo que era este mensaje se va también del proyecto.
                                     quitarDeLosProyectos(listOf(m))
                                     guardarAparte(
-                                        mensajes.filterNot { it.id == m.id }
-                                    ) { refrescar() }
+                                        { lista -> lista.filterNot { it.id == m.id }
+                                     }) { refrescar() }
                                 }
                             ) },
                             marcado = m.id in marcados,
@@ -1314,9 +1314,11 @@ class MensajesActivity : ComponentActivity() {
                                 // Con una selección mixta, «fijar» es lo que se espera.
                                 val fijarTodos = loMarcado.any { !it.fijado }
                                 IconButton(onClick = {
-                                    guardarAparte(mensajes.map {
-                                        if (it.id in marcados) it.copy(fijado = fijarTodos) else it
-                                    }) { refrescar() }
+                                    // Copia: `marcados` se vacía aquí abajo, antes de que el cambio corra.
+                                    val estos = marcados
+                                    guardarAparte({ lista -> lista.map {
+                                        if (it.id in estos) it.copy(fijado = fijarTodos) else it
+                                    } }) { refrescar() }
                                     marcados = emptySet()
                                 }) {
                                     Icon(
@@ -1357,9 +1359,10 @@ class MensajesActivity : ComponentActivity() {
                                 IconButton(onClick = {
                                     loMarcado.forEach { almacen.borrarAdjunto(it) }
                                     quitarDeLosProyectos(loMarcado.toList())
+                                    val estos = marcados
                                     guardarAparte(
-                                        mensajes.filterNot { it.id in marcados }
-                                    ) { refrescar() }
+                                        { lista -> lista.filterNot { it.id in estos }
+                                     }) { refrescar() }
                                     marcados = emptySet()
                                 }) {
                                     Icon(
@@ -1873,11 +1876,11 @@ class MensajesActivity : ComponentActivity() {
                                 .clickable {
                                     // Tocar la que ya está puesta la quita: es el mismo
                                     // gesto para poner y para arrepentirse.
-                                    guardarAparte(mensajes.map {
+                                    guardarAparte({ lista -> lista.map {
                                         if (it.id == cual.id) {
                                             it.copy(emoji = if (puesta) null else emoji)
                                         } else it
-                                    }) { refrescar() }
+                                    } }) { refrescar() }
                                     etiquetando = null
                                 }
                                 .padding(10.dp)
@@ -5385,12 +5388,13 @@ class MensajesActivity : ComponentActivity() {
         val todos = almacen.leer()
         // El buzón se limpia **al entrar**, que es cuando toca: hacerlo con un
         // temporizador obligaría a mantener algo despierto para borrar archivos.
-        val fuera = caducados(todos, System.currentTimeMillis())
-        if (fuera.isEmpty()) return todos
-        fuera.forEach { almacen.borrarAdjunto(it) }
-        val quedan = todos - fuera.toSet()
-        almacen.reescribir(quedan)
-        return quedan
+        val ahora = System.currentTimeMillis()
+        if (caducados(todos, ahora).isEmpty()) return todos
+        return almacen.cambiar { actual ->
+            val fuera = caducados(actual, ahora).toSet()
+            fuera.forEach { almacen.borrarAdjunto(it) }
+            actual - fuera
+        }
     }
 
     /**
@@ -5532,7 +5536,7 @@ class MensajesActivity : ComponentActivity() {
                 val ahora = withContext(Dispatchers.IO) { File(ruta).length() }
                 // El peso del mensaje es el del archivo: si no, la lista seguiría diciendo el viejo.
                 withContext(Dispatchers.IO) {
-                    almacen.reescribir(almacen.leer().map { if (it.id == m.id) it.copy(bytes = ahora) else it })
+                    almacen.cambiar { l -> l.map { if (it.id == m.id) it.copy(bytes = ahora) else it } }
                 }
                 recargarLaLista?.invoke()
                 Toast.makeText(
@@ -5607,9 +5611,10 @@ class MensajesActivity : ComponentActivity() {
      * eso son décimas de segundo. Hacerlo dentro del `onClick` de fijar o de borrar
      * dejaba la pantalla congelada justo en el gesto que tiene que sentirse instantáneo.
      */
-    private fun guardarAparte(lista: List<Mensaje>, luego: () -> Unit = {}) {
+    private fun guardarAparte(cambio: (List<Mensaje>) -> List<Mensaje>, luego: () -> Unit = {}) {
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) { almacen.reescribir(lista) }
+            // Sobre lo que hay en el disco ahora, no sobre la lista de la pantalla. Ver [MensajesStore.cambiar].
+            withContext(Dispatchers.IO) { almacen.cambiar(cambio) }
             luego()
         }
     }
@@ -6324,11 +6329,9 @@ class MensajesActivity : ComponentActivity() {
                     // en el gesto que tiene que responder al momento. Que el apunte tarde
                     // dos décimas no lo nota nadie; que el editor tarde en abrirse, sí.
                     lifecycleScope.launch(Dispatchers.IO) {
-                        almacen.reescribir(
-                            almacen.leer().map {
-                                if (it.id == m.id) it.copy(referencia = dibujo) else it
-                            }
-                        )
+                        almacen.cambiar { l ->
+                            l.map { if (it.id == m.id) it.copy(referencia = dibujo) else it }
+                        }
                     }
                 }
                 com.forge.pixpin.motor.DrawEditorActivity.abrir(

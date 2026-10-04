@@ -109,27 +109,35 @@ class LeccionesStore(context: Context) {
         return l
     }
 
-    /** Los mensajes de las fotos y audios de [l], en su orden. */
-    fun adjuntosDe(l: Leccion): List<Mensaje> {
-        if (l.adjuntos.isEmpty()) return emptyList()
-        val porId = mensajes.leer().associateBy { it.id }
-        return l.adjuntos.mapNotNull { porId[it] }
+    /**
+     * Los mensajes de las fotos y audios de una lección: los de su lista y **también los que le
+     * responden** —si dos aparatos le pusieron una foto cada uno, la lista del archivo solo trae la
+     * de uno, pero las dos fotos le responden—. Los de la lista primero, en su orden.
+     */
+    fun adjuntosDe(e: Entrada): List<Mensaje> = adjuntosDe(e.leccion, e.mensaje.id)
+
+    fun adjuntosDe(l: Leccion, idDelMensaje: String = PREFIJO + l.id): List<Mensaje> {
+        val todos = mensajes.leer()
+        val porId = todos.associateBy { it.id }
+        val deLaLista = l.adjuntos.mapNotNull { porId[it] }
+        val vistos = deLaLista.mapTo(HashSet()) { it.id }
+        return deLaLista + todos.filter { it.respondeA == idDelMensaje && it.id !in vistos && esAdjunto(it) }
     }
 
+    /** Quita del chat (con lápida) y del disco: leer y reescribir van juntos. Ver [MensajesStore.cambiar]. */
     private fun quitar(ids: Set<String>) {
-        val todos = mensajes.leer()
-        val van = todos.filter { it.id in ids }
-        if (van.isEmpty()) return
-        mensajes.reescribir(todos.filter { it.id !in ids })
+        if (ids.isEmpty()) return
+        var van = emptyList<Mensaje>()
+        mensajes.cambiar { todos -> van = todos.filter { it.id in ids }; todos.filter { it.id !in ids } }
         van.forEach { mensajes.borrarAdjunto(it) }
     }
 
-    /** Borra la lección: su mensaje (con lápida, para que no vuelva al sincronizar) y su archivo. */
-    fun borrar(e: Entrada) {
-        // Sus fotos y audios se van con ella.
-        quitar(e.leccion.adjuntos.toSet())
-        mensajes.reescribir(mensajes.leer().filter { it.id != e.mensaje.id })
-        mensajes.borrarAdjunto(e.mensaje)
+    /**
+     * Borra la lección: su mensaje (con lápida, para que no vuelva al sincronizar), su archivo y sus
+     * fotos y audios. Bajo el mismo cerrojo que guardar: un guardado a la vez no la resucita.
+     */
+    fun borrar(e: Entrada) = synchronized(GUARDANDO) {
+        quitar(adjuntosDe(e).mapTo(HashSet()) { it.id } + e.mensaje.id)
         recargar()
     }
 
@@ -145,6 +153,9 @@ class LeccionesStore(context: Context) {
         val todas: StateFlow<List<Entrada>> = _todas
 
         fun esLeccion(m: Mensaje): Boolean = m.clase == Clase.ARCHIVO && m.ruta?.endsWith(EXTENSION) == true
+
+        /** Una foto o un audio: lo que una lección lleva colgado. */
+        private fun esAdjunto(m: Mensaje): Boolean = (m.clase == Clase.IMAGEN || m.clase == Clase.VOZ) && !m.enBuzon
 
         /**
          * [mensajes] sin las lecciones ni sus fotos y audios: lo que enseña el chat. Las

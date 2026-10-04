@@ -256,6 +256,7 @@
             android:excludeFromRecents="true"
             android:autoRemoveFromRecents="true"
             android:taskAffinity="${applicationId}.leccion"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter android:label="Lección">

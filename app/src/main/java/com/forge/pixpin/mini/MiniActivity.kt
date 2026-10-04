@@ -110,10 +110,7 @@ class MiniActivity : ComponentActivity() {
         fun guardar(nuevo: String) {
             documento = nuevo
             lifecycleScope.launch(Dispatchers.IO) {
-                val todos = almacen.leer()
-                almacen.reescribir(
-                    todos.map { if (it.id == id) it.copy(texto = nuevo) else it }
-                )
+                almacen.cambiar { todos -> todos.map { if (it.id == id) it.copy(texto = nuevo) else it } }
             }
         }
 

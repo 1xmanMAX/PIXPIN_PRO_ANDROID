@@ -62,6 +62,18 @@ class LeccionActivity : ComponentActivity() {
     private val nuevos = mutableStateListOf<com.forge.pixpin.guardados.Mensaje>()
     private var guardada = false
 
+    /**
+     * Para la grabación en curso y la mete en [nuevos]. Lo pone [AdjuntosDeLaLeccion]; guardar lo
+     * llama **antes** de copiar la lista: si no, «Guardar» con el micrófono abierto perdía el audio.
+     */
+    private var pararGrabacion: (() -> Unit)? = null
+
+    /** Si el sistema mata la app con la cámara abierta, lo puesto vuelve al recrearla. */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putStringArrayList(GUARDADO_NUEVOS, ArrayList(nuevos.map { JSON.encodeToString(com.forge.pixpin.guardados.Mensaje.serializer(), it) }))
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (isFinishing && !guardada) nuevos.forEach { m -> m.ruta?.let { java.io.File(it).delete() } }
@@ -69,6 +81,10 @@ class LeccionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        savedInstanceState?.getStringArrayList(GUARDADO_NUEVOS)?.forEach { t ->
+            runCatching { JSON.decodeFromString(com.forge.pixpin.guardados.Mensaje.serializer(), t) }.getOrNull()
+                ?.takeIf { m -> m.ruta?.let { java.io.File(it).isFile } == true }?.let { nuevos += it }
+        }
         // Sin esto el teclado no empuja la hoja: `imePadding` necesita dibujar bajo las barras.
         enableEdgeToEdge()
         val id = intent.getStringExtra(EXTRA_ID)
@@ -108,9 +124,9 @@ class LeccionActivity : ComponentActivity() {
         var listo by remember { mutableStateOf(false) }
         val quitados = remember { mutableStateListOf<String>() }
         var viejos by remember { mutableStateOf<List<com.forge.pixpin.guardados.Mensaje>>(emptyList()) }
-        LaunchedEffect(existente?.leccion?.adjuntos) {
-            val l = existente?.leccion ?: return@LaunchedEffect
-            viejos = withContext(Dispatchers.IO) { runCatching { almacen.adjuntosDe(l) }.getOrDefault(emptyList()) }
+        LaunchedEffect(existente) {
+            val e = existente ?: return@LaunchedEffect
+            viejos = withContext(Dispatchers.IO) { runCatching { almacen.adjuntosDe(e) }.getOrDefault(emptyList()) }
         }
 
         fun poner(dicho: String) {
@@ -159,6 +175,7 @@ class LeccionActivity : ComponentActivity() {
         fun guardarYSalir() {
             // Tocar fuera y atrás pueden llegar los dos: se guarda una sola vez.
             if (guardada || isFinishing) return
+            pararGrabacion?.invoke()
             if (titulo.isBlank() && nuevos.isEmpty()) { finish(); return }
             val ahora = System.currentTimeMillis()
             val base = existente?.leccion
@@ -252,7 +269,7 @@ class LeccionActivity : ComponentActivity() {
                     )
 
                     // Fotos y audios: la foto del error, lo que se dijo.
-                    AdjuntosDeLaLeccion(viejos, nuevos, quitados)
+                    AdjuntosDeLaLeccion(viejos, nuevos, quitados) { pararGrabacion = it }
 
                     // ¿Ya la tenías?
                     parecidas.firstOrNull()?.let { r ->
@@ -409,6 +426,8 @@ class LeccionActivity : ComponentActivity() {
         private const val EXTRA_MENSAJE = "leccion_mensaje"
         private const val EXTRA_PROYECTO = "leccion_proyecto"
         private const val EXTRA_DICTAR = "leccion_dictar"
+        private const val GUARDADO_NUEVOS = "leccion_nuevos"
+        private val JSON = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
         /** Abre una lección para verla o cambiarla. */
         fun abrir(context: Context, id: String) = context.startActivity(intent(context).putExtra(EXTRA_ID, id))

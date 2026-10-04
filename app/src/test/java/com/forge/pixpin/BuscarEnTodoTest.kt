@@ -67,4 +67,9 @@ class BuscarEnTodoTest {
         val repetido = BuscarEnTodo.elementos(mensajes + mensajes[2], emptyList()).count { it.mensaje?.id == "3" }
         assertEquals(1, repetido)
     }
+
+    @Test fun loQueCuelgaDeUnaLeccionNoSaleComoNota() {
+        val colgada = Mensaje(id = "n9", cuando = 90, clase = Clase.NOTA, texto = "detalle de la lección", respondeA = "3")
+        assertTrue(BuscarEnTodo.elementos(mensajes + colgada, emptyList()).none { it.mensaje?.id == "n9" })
+    }
 }

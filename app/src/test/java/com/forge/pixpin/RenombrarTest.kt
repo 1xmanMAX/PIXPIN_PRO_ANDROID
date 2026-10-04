@@ -16,6 +16,8 @@ class RenombrarTest {
         assertEquals("Clase 3", Renombrar.conSuExtension("Nota de voz 14:32", "Clase 3"))
         assertEquals("", Renombrar.conSuExtension("a.pdf", "   "))
         assertEquals("a-b.pdf", Renombrar.conSuExtension("x.pdf", "a/b"))
+        // «.0» no es una extensión.
+        assertEquals("Memoria", Renombrar.conSuExtension("Plano v2.0", "Memoria"))
     }
 
     @Test fun quéSePuedeRenombrar() {
@@ -25,5 +27,11 @@ class RenombrarTest {
         assertTrue(Renombrar.sePuede(m(Clase.ARCHIVO)))
         assertFalse(Renombrar.sePuede(m(Clase.NOTA, null)))
         assertFalse(Renombrar.sePuede(m(Clase.ARCHIVO, "/g/guardados/lecciones/a.leccion")))
+        // Una página, una tabla o un croquis llevan el nombre de su hoja: no se renombran aquí.
+        assertFalse(Renombrar.sePuede(m(Clase.PAGINA)))
+        assertFalse(Renombrar.sePuede(m(Clase.TABLA, null).copy(referencia = "t1")))
+        assertTrue(Renombrar.sePuede(m(Clase.DIBUJO, null).copy(referencia = "d1")))
+        // Sin nombre, la extensión sale del archivo.
+        assertEquals("Memoria.pdf", Renombrar.conSuExtension(Renombrar.nombreDeBase(m(Clase.ARCHIVO, "/g/guardados/1_informe.pdf")), "Memoria"))
     }
 }
