@@ -397,6 +397,13 @@ fun PantallaDeProyectos(
         }
     }
 
+    // **Los chats, en la misma pantalla** (4-oct-2026): el botón de chat de abajo la convierte
+    // en la lista de chats y su gemelo de allí la devuelve. Ver [ListaDeChats].
+    var enChats by rememberSaveable { mutableStateOf(false) }
+    if (enChats && soloEste == null) {
+        ListaDeChats(ordenados, onProyectos = { enChats = false })
+        return
+    }
     // **Tocar «Proyectos» sube arriba del todo** (17-sep-2026), como la barra de estado en
     // cualquier lista. Desde lejos se salta casi hasta el principio y se anima solo el último
     // tramo: animar veinte páginas es medio segundo de tarjetas pasando.
@@ -653,7 +660,10 @@ fun PantallaDeProyectos(
                     app = app,
                     p = cual,
                     onChat = {
-                        com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, cual.id, cual.nombre)
+                        // En la lista de proyectos, la lista de chats; con uno solo a la vista
+                        // (se vino a ese), su chat directamente.
+                        if (soloEste == null) enChats = true
+                        else com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, cual.id, cual.nombre)
                     },
                     dePie = girado,
                     modifier = Modifier
