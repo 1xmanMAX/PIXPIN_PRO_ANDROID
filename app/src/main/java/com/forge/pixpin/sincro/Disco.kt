@@ -135,6 +135,19 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     }
 
     /**
+     * **El mismo mensaje dos veces en el archivo** (mismo id, mismo chat): pasaba con una lección
+     * guardada dos veces a la vez (v0.103.1). Viajaba una sola vez —va por su código único—, pero
+     * aquí seguía doble. Se queda la primera línea. No es borrar nada: el id sigue y no deja marca.
+     * Los registros del chat tienen su propia regla ([sinRegistrosRepetidos]).
+     */
+    internal fun sinLineasRepetidas(lista: List<Mensaje>): List<Mensaje> {
+        val vistos = HashSet<Pair<String, String>>()
+        return lista.filter { m ->
+            m.id.startsWith(com.forge.pixpin.guardados.RegistroDelChat.PREFIJO) || vistos.add(chatDe(m) to m.id)
+        }
+    }
+
+    /**
      * Vuelve a poner mensajes que faltan (por su id), sin tocar los que hay. Es lo que hace
      * restaurar una copia: lo escrito después de la copia se queda. Ver [Copias].
      */
@@ -174,8 +187,9 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     fun sellar() {
         val aparato = identidad.leer().yo.codigo
         synchronized(Cerrojos.chat) {
-            val lista = leerMensajes()
-            var cambio = false
+            val leida = leerMensajes()
+            val lista = sinLineasRepetidas(leida)
+            var cambio = lista.size != leida.size
             val nuevos = HashMap<String, Mensaje>()
             for ((_, suyos) in lista.groupBy { chatDe(it) }) {
                 var sinNumero = 0

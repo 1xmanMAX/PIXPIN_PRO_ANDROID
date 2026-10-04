@@ -869,4 +869,76 @@ class SincronizarDeVerdadTest {
         sincronizar(listOf("p"))
         assertEquals(1, telefono.leerMensajes().count { it.id == id })
     }
+
+    // ------------------------------------------- 4-oct-2026: nombres, lecciones y repetidos
+
+    private fun adjunto(d: Disco, rel: String, contenido: String): String {
+        val f = File(d.filesDir, rel).apply { parentFile!!.mkdirs(); writeText(contenido) }
+        return f.absolutePath
+    }
+
+    private fun linea(d: Disco, m: Mensaje) =
+        File(d.filesDir, "guardados.jsonl").appendText(Disco.JSON.encodeToString(Mensaje.serializer(), m) + "\n")
+
+    @Test
+    fun `un audio renombrado en un lado llega con su nombre y sin duplicarse`() {
+        emparejar()
+        val ruta = adjunto(telefono, "guardados/voz_1.m4a", "audio")
+        mensaje(telefono, "v1", clase = Clase.VOZ, ruta = ruta)
+        editar(telefono, "v1") { it.copy(nombre = "Nota de voz 10:00") }
+        sincronizar()
+        editar(tableta, "v1") { it.copy(nombre = "Clase de estructuras") }
+        sincronizar()
+        for (d in listOf(telefono, tableta)) {
+            val voz = d.leerMensajes().filter { it.id == "v1" }
+            assertEquals(1, voz.size)
+            assertEquals("Clase de estructuras", voz.single().nombre)
+            assertEquals(listOf("voz_1.m4a"), File(d.filesDir, "guardados").listFiles()!!.filter { it.isFile }.map { it.name })
+        }
+    }
+
+    @Test
+    fun `renombrado distinto en los dos lados queda uno solo, el mismo`() {
+        emparejar()
+        mensaje(telefono, "a1", clase = Clase.ARCHIVO, ruta = adjunto(telefono, "guardados/informe.pdf", "%PDF"))
+        sincronizar()
+        editar(telefono, "a1") { it.copy(nombre = "Memoria.pdf") }
+        reloj += 10
+        editar(tableta, "a1") { it.copy(nombre = "Informe final.pdf") }
+        sincronizar()
+        val t = telefono.leerMensajes().filter { it.id == "a1" }
+        val b = tableta.leerMensajes().filter { it.id == "a1" }
+        assertEquals(1, t.size); assertEquals(1, b.size)
+        assertEquals(t.single().nombre, b.single().nombre)
+    }
+
+    @Test
+    fun `una leccion viaja con su foto colgada de ella`() {
+        emparejar()
+        val l = adjunto(telefono, "guardados/lecciones/abc.leccion", "{\"id\":\"abc\",\"creada\":1,\"titulo\":\"Medir dos veces\",\"adjuntos\":[\"f1\"]}")
+        val f = adjunto(telefono, "guardados/leccion_1.jpg", "jpg")
+        linea(telefono, Mensaje(id = "lec-abc", cuando = reloj++, clase = Clase.ARCHIVO, ruta = l, nombre = "💡 Medir dos veces"))
+        linea(telefono, Mensaje(id = "f1", cuando = reloj++, clase = Clase.IMAGEN, ruta = f, nombre = "Foto de la lección", respondeA = "lec-abc"))
+        sincronizar()
+        val llegados = tableta.leerMensajes().associateBy { it.id }
+        assertEquals(setOf("lec-abc", "f1"), llegados.keys)
+        assertEquals("lec-abc", llegados.getValue("f1").respondeA)
+        assertTrue(File(tableta.filesDir, "guardados/lecciones/abc.leccion").readText().contains("Medir dos veces"))
+        assertEquals("jpg", File(tableta.filesDir, "guardados/leccion_1.jpg").readText())
+        // Y otra vuelta no trae nada nuevo ni repite nada.
+        sincronizar()
+        assertEquals(2, tableta.leerMensajes().size)
+        assertEquals(2, telefono.leerMensajes().size)
+    }
+
+    @Test
+    fun `un mensaje repetido en el archivo del chat no viaja dos veces y se queda uno`() {
+        emparejar()
+        val l = adjunto(telefono, "guardados/lecciones/x.leccion", "{}")
+        val m = Mensaje(id = "lec-x", cuando = reloj++, clase = Clase.ARCHIVO, ruta = l, nombre = "💡 x")
+        linea(telefono, m); linea(telefono, m)
+        sincronizar()
+        assertEquals(1, tableta.leerMensajes().count { it.id == "lec-x" })
+        assertEquals(1, telefono.leerMensajes().count { it.id == "lec-x" })
+    }
 }
