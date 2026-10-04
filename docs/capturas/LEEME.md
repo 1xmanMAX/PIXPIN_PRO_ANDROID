@@ -2,6 +2,7 @@
 
 PNG, sin datos personales, con el nombre exacto de la tabla. En el `README.md` ya está marcado
 con un comentario dónde va cada una: al subirlas aquí solo hay que cambiar el comentario por la imagen.
+Las que más lucen en la portada son la **01**, la **02** y la **05**.
 
 | Archivo | Qué debe mostrar | Orientación |
 |---|---|---|
@@ -10,7 +11,7 @@ con un comentario dónde va cada una: al subirlas aquí solo hay que cambiar el 
 | `03-multitarea.png` | Dos lienzos uno al lado del otro, con el asa entre ellos y la pestaña del tercero | horizontal |
 | `04-baraja.png` | La baraja en abanico con tres tarjetas y un grupo guardado abajo | vertical |
 | `05-chat.png` | El chat con una foto, un PDF, una nota de voz transcrita; que se vean un punto rojo y uno verde | vertical |
-| `06-universo.png` | Un universo con archivos, notas, un rótulo y vínculos entre ellos | vertical |
+| `06-lecciones.png` | Lecciones aprendidas: tarjetas por área, una con foto y audio | vertical |
 | `07-plano.png` | Un plano de PDF muy ampliado, nítido, con una cota y las capas | horizontal |
 | `08-croquis3d.png` | Un croquis 3D girado, con algo reconocible | horizontal |
 | `09-tabla.png` | Una tabla con fórmulas | vertical |

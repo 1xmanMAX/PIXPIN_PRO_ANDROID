@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 230" role="img" aria-label="Sincronizar: el teléfono y el PC se hablan directamente por tu Wi-Fi, cifrado, sin nube; los cambios de los dos se juntan sin duplicar">
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif">
+    <!-- teléfono -->
+    <g transform="translate(40,26)">
+      <rect width="110" height="170" rx="18" fill="#6965DB" fill-opacity="0.1" stroke="#6965DB" stroke-width="2"/>
+      <rect x="40" y="8" width="30" height="5" rx="2.5" fill="#6965DB" opacity="0.5"/>
+      <rect x="14" y="28" width="70" height="18" rx="8" fill="#6965DB" fill-opacity="0.35"/>
+      <rect x="28" y="54" width="70" height="18" rx="8" fill="#6965DB" fill-opacity="0.55"/>
+      <rect x="14" y="80" width="70" height="18" rx="8" fill="#6965DB" fill-opacity="0.35"/>
+      <text x="55" y="196" text-anchor="middle" font-size="14" font-weight="700" fill="#6965DB">Teléfono</text>
+    </g>
+    <!-- PC -->
+    <g transform="translate(700,40)">
+      <rect width="160" height="110" rx="10" fill="#1971C2" fill-opacity="0.1" stroke="#1971C2" stroke-width="2"/>
+      <rect x="14" y="16" width="60" height="14" rx="6" fill="#1971C2" fill-opacity="0.35"/>
+      <rect x="40" y="38" width="80" height="14" rx="6" fill="#1971C2" fill-opacity="0.55"/>
+      <rect x="14" y="60" width="60" height="14" rx="6" fill="#1971C2" fill-opacity="0.35"/>
+      <path d="M60 110 l-10 26 h60 l-10 -26" fill="#1971C2" fill-opacity="0.25"/>
+      <text x="80" y="168" text-anchor="middle" font-size="14" font-weight="700" fill="#1971C2">PC (Windows)</text>
+    </g>
+    <!-- el cable de datos -->
+    <path d="M168 110 C 330 40, 560 40, 690 100" fill="none" stroke="#2F9E44" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+    <path d="M690 118 C 560 180, 330 180, 168 126" fill="none" stroke="#2F9E44" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+    <g transform="translate(450,104)">
+      <circle r="34" fill="#2F9E44"/>
+      <rect x="-12" y="-4" width="24" height="18" rx="3" fill="#ffffff"/>
+      <path d="M-7 -4 v-6 a7 7 0 0 1 14 0 v6" fill="none" stroke="#ffffff" stroke-width="3"/>
+      <circle cy="5" r="2.6" fill="#2F9E44"/>
+    </g>
+    <text x="450" y="38" text-anchor="middle" font-size="15" font-weight="700" fill="#2F9E44">Directo por tu Wi-Fi · cifrado AES-256</text>
+    <text x="450" y="182" text-anchor="middle" font-size="13" fill="#8B8B9E">Lo cambiado en los dos se junta · lo borrado no vuelve · nada se duplica</text>
+    <g transform="translate(450,214)" font-size="13" fill="#E03131" font-weight="600">
+      <text text-anchor="middle">✕  sin nube, sin cuentas, sin servidores</text>
+    </g>
+  </g>
+</svg>

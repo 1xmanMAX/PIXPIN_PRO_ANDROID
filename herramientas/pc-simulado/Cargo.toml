@@ -1,0 +1,13 @@
+# Lo monta `preparar.sh`: las rutas apuntan a la copia del repositorio del PC que hace él.
+[package]
+name = "pc-simulado"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pixpin-proyecto = { path = "copia-del-pc/crates/pixpin-proyecto" }
+pixpin-sincro = { path = "copia-del-pc/crates/pixpin-sincro", features = ["simulador"] }
+serde_json = "1"
+flate2 = "1.1"
+
+[workspace]

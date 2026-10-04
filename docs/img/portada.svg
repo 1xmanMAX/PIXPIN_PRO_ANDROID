@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 270" role="img" aria-label="PixPin: tu cuaderno de ingeniería en Android. Sin cuentas, sin nube, funciona sin internet">
+  <defs>
+    <linearGradient id="f" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6965DB"/><stop offset="1" stop-color="#1971C2"/>
+    </linearGradient>
+    <linearGradient id="p" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.06"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="270" rx="22" fill="url(#f)"/>
+  <g fill="#ffffff" opacity="0.07">
+    <circle cx="820" cy="30" r="120"/><circle cx="40" cy="260" r="90"/>
+  </g>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" fill="#ffffff">
+    <text x="48" y="92" font-size="56" font-weight="800" letter-spacing="-1">PixPin</text>
+    <text x="50" y="132" font-size="22" opacity="0.95">Tu cuaderno de ingeniería, en Android</text>
+    <text x="50" y="162" font-size="15" opacity="0.8">Escribe, anota planos, graba y ordénalo todo en un chat contigo mismo.</text>
+    <g font-size="14" font-weight="600">
+      <rect x="50" y="190" width="132" height="34" rx="17" fill="#ffffff" fill-opacity="0.18"/>
+      <text x="116" y="212" text-anchor="middle">Sin cuentas</text>
+      <rect x="194" y="190" width="120" height="34" rx="17" fill="#ffffff" fill-opacity="0.18"/>
+      <text x="254" y="212" text-anchor="middle">Sin nube</text>
+      <rect x="326" y="190" width="178" height="34" rx="17" fill="#ffffff" fill-opacity="0.18"/>
+      <text x="415" y="212" text-anchor="middle">Funciona sin internet</text>
+    </g>
+  </g>
+  <!-- el teléfono -->
+  <g transform="translate(640,22)">
+    <rect width="190" height="226" rx="26" fill="url(#p)" stroke="#ffffff" stroke-opacity="0.6" stroke-width="2"/>
+    <rect x="70" y="10" width="50" height="6" rx="3" fill="#ffffff" opacity="0.5"/>
+    <rect x="16" y="30" width="118" height="30" rx="12" fill="#ffffff" opacity="0.9"/>
+    <rect x="26" y="40" width="80" height="5" rx="2.5" fill="#6965DB" opacity="0.6"/>
+    <rect x="26" y="49" width="56" height="5" rx="2.5" fill="#6965DB" opacity="0.35"/>
+    <rect x="58" y="70" width="116" height="62" rx="12" fill="#ffffff" opacity="0.92"/>
+    <path d="M70 120 l22 -24 l18 10 l26 -26 l22 14" fill="none" stroke="#E03131" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="76" y="82" width="34" height="22" fill="none" stroke="#1971C2" stroke-width="2"/>
+    <rect x="16" y="142" width="120" height="30" rx="12" fill="#ffffff" opacity="0.9"/>
+    <circle cx="34" cy="157" r="8" fill="#2F9E44"/>
+    <path d="M31 153 l7 4 l-7 4 z" fill="#ffffff"/>
+    <g fill="#2F9E44" opacity="0.8"><rect x="48" y="152" width="3" height="10"/><rect x="54" y="149" width="3" height="16"/><rect x="60" y="153" width="3" height="8"/><rect x="66" y="148" width="3" height="18"/><rect x="72" y="152" width="3" height="10"/><rect x="78" y="150" width="3" height="14"/><rect x="84" y="153" width="3" height="8"/></g>
+    <rect x="16" y="190" width="158" height="22" rx="11" fill="#ffffff" opacity="0.3"/>
+  </g>
+</svg>

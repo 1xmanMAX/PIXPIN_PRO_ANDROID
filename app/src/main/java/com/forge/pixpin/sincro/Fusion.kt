@@ -129,6 +129,11 @@ object Fusion {
         for (campo in listOf("updated", "tocado")) {
             val hm = numero(m[campo]) ?: continue
             val hs = numero(s[campo]) ?: continue
+            // **Dos horas a 0 no dicen nada** (4-oct-2026). Los datos de un proyecto se juntan con su
+            // `tocado` puesto a 0 en los dos lados; con el desfase restado, 0 contra «0 − desfase»
+            // decidía por el signo del desfase entre relojes, y el nombre provisional de un
+            // proyecto recién llegado (su id) le ganaba al de verdad. Igual en el PC (`fusion.rs`).
+            if (hm == 0L && hs == 0L) continue
             val suya = hs - c.desfase
             if (hm != suya) return hm > suya
         }

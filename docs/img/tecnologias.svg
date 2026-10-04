@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 260" role="img" aria-label="Cómo está hecho: pantallas en Jetpack Compose, un motor en Kotlin puro que no depende de Android, y archivos locales; el PC en Rust habla el mismo protocolo">
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif">
+    <g transform="translate(20,16)">
+      <rect width="560" height="64" rx="14" fill="#6965DB" fill-opacity="0.14" stroke="#6965DB" stroke-width="1.6"/>
+      <text x="20" y="28" font-size="16" font-weight="700" fill="#6965DB">Pantallas · Jetpack Compose</text>
+      <text x="20" y="50" font-size="12.5" fill="#8B8B9E">la interfaz moderna de Android: menos código, fluida a 120 Hz</text>
+    </g>
+    <g transform="translate(20,92)">
+      <rect width="560" height="64" rx="14" fill="#2F9E44" fill-opacity="0.14" stroke="#2F9E44" stroke-width="1.6"/>
+      <text x="20" y="28" font-size="16" font-weight="700" fill="#2F9E44">Motor · Kotlin puro, sin Android</text>
+      <text x="20" y="50" font-size="12.5" fill="#8B8B9E">dibujo, fórmulas, fusión y sincronización: se prueba entero en segundos</text>
+    </g>
+    <g transform="translate(20,168)">
+      <rect width="560" height="64" rx="14" fill="#1971C2" fill-opacity="0.14" stroke="#1971C2" stroke-width="1.6"/>
+      <text x="20" y="28" font-size="16" font-weight="700" fill="#1971C2">Datos · archivos en tu teléfono</text>
+      <text x="20" y="50" font-size="12.5" fill="#8B8B9E">JSON y carpetas legibles: sin base de datos que se corrompa ni nube</text>
+    </g>
+    <g transform="translate(616,16)">
+      <rect width="264" height="216" rx="16" fill="#F08C00" fill-opacity="0.1" stroke="#F08C00" stroke-width="1.6"/>
+      <text x="132" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#F08C00">PC · Rust</text>
+      <text x="132" y="58" text-anchor="middle" font-size="12.5" fill="#8B8B9E">otra app, el mismo idioma</text>
+      <text x="132" y="104" text-anchor="middle" font-size="40">⇄</text>
+      <text x="132" y="146" text-anchor="middle" font-size="12.5" fill="#8B8B9E">protocolo copiado byte a byte</text>
+      <text x="132" y="166" text-anchor="middle" font-size="12.5" fill="#8B8B9E">y probado contra Android</text>
+      <text x="132" y="196" text-anchor="middle" font-size="13" font-weight="700" fill="#F08C00">en cada versión</text>
+    </g>
+  </g>
+</svg>
