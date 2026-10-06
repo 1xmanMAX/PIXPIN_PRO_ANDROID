@@ -36,7 +36,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.lifecycleScope
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
@@ -124,7 +123,8 @@ class LeccionActivity : ComponentActivity() {
         var listo by remember { mutableStateOf(false) }
         val quitados = remember { mutableStateListOf<String>() }
         var viejos by remember { mutableStateOf<List<com.forge.pixpin.guardados.Mensaje>>(emptyList()) }
-        LaunchedEffect(existente) {
+        // Al guardar sola la ficha, la entrada cambia: los adjuntos se releen solo si cambian ellos.
+        LaunchedEffect(existente?.mensaje?.id, existente?.leccion?.adjuntos) {
             val e = existente ?: return@LaunchedEffect
             viejos = withContext(Dispatchers.IO) { runCatching { almacen.adjuntosDe(e) }.getOrDefault(emptyList()) }
         }
@@ -137,7 +137,6 @@ class LeccionActivity : ComponentActivity() {
             if (c.quePaso.isNotBlank()) quePaso = c.quePaso
             if (c.porQue.isNotBlank()) porQue = c.porQue
             if (c.proxima.isNotBlank() && c.proxima != c.titulo) proxima = c.proxima
-            if (quePaso.isNotBlank() || porQue.isNotBlank() || proxima.isNotBlank()) detalle = true
         }
 
         // Rellenar una vez: lo que había (editar) o lo que llega (compartir, mensaje, dictado).
@@ -150,7 +149,7 @@ class LeccionActivity : ComponentActivity() {
                 referencias = l.referencias.joinToString(", "); tipo = l.tipo; area = l.area.ifBlank { null }
                 gravedad = l.gravedad; etiquetas.addAll(l.etiquetas); quitadas.addAll(l.quitadas)
                 causas.addAll(l.causas); causasTocadas = true; proyecto = e.proyecto
-                detalle = l.quePaso.isNotBlank() || l.porQue.isNotBlank() || l.proxima.isNotBlank()
+                detalle = l.referencias.isNotEmpty()
             } else if (!prefijado.isNullOrBlank()) poner(prefijado)
             listo = true
         }
@@ -172,14 +171,9 @@ class LeccionActivity : ComponentActivity() {
         val tipoFinal = tipo ?: propuesta?.tipo ?: Leccion.TIPO_LECCION
         val causasFinal = if (causasTocadas) causas.toList() else (causas + propuesta?.causas.orEmpty()).distinct()
 
-        fun guardarYSalir() {
-            // Tocar fuera y atrás pueden llegar los dos: se guarda una sola vez.
-            if (guardada || isFinishing) return
-            pararGrabacion?.invoke()
-            if (titulo.isBlank() && nuevos.isEmpty()) { finish(); return }
-            val ahora = System.currentTimeMillis()
-            val base = existente?.leccion
-            val l = (base ?: Leccion(id = LeccionesStore.nuevoId(ahora), creada = ahora, titulo = "", deMensaje = deMensaje)).copy(
+        /** La lección tal como está escrita ahora, sobre [base] (la que había) o una nueva. */
+        fun escrita(base: Leccion?, ahora: Long): Leccion =
+            (base ?: Leccion(id = LeccionesStore.nuevoId(ahora), creada = ahora, titulo = "", deMensaje = deMensaje)).copy(
                 tocada = ahora,
                 titulo = titulo.trim().ifBlank { if (nuevos.any { it.clase == com.forge.pixpin.guardados.Clase.VOZ }) "Nota de voz" else "Foto" }, quePaso = quePaso.trim(), porQue = porQue.trim(), proxima = proxima.trim(),
                 tipo = tipoFinal, area = areaFinal.orEmpty(), gravedad = gravedad,
@@ -187,17 +181,47 @@ class LeccionActivity : ComponentActivity() {
                 referencias = referencias.split(',', ';').map { it.trim() }.filter { it.isNotEmpty() },
                 causas = causasFinal
             )
+
+        fun guardarYSalir() {
+            // Tocar fuera y atrás pueden llegar los dos: se guarda una sola vez.
+            if (guardada || isFinishing) return
+            pararGrabacion?.invoke()
+            if (titulo.isBlank() && nuevos.isEmpty()) { finish(); return }
+            val base = existente?.leccion
+            val l = escrita(base, System.currentTimeMillis())
             val app = application as PixPinApp
             val van = nuevos.toList(); val fuera = quitados.toList()
             guardada = true
-            app.scope.launch(Dispatchers.IO) { runCatching { almacen.guardar(l, proyecto, van, fuera) } }
+            app.scope.launch(EN_FILA) { runCatching { almacen.guardar(l, proyecto, van, fuera) } }
             Toast.makeText(this, if (base == null) "💡 Lección guardada" else "Lección guardada", Toast.LENGTH_SHORT).show()
             finish()
         }
 
+        // **La ficha se guarda sola** (lo trae el PC, v2): una lección que ya existe se escribe en
+        // cuanto se deja de teclear un momento, sin esperar a cerrar la hoja. Solo el texto: las
+        // fotos y audios nuevos van al cerrar, con el guardado de siempre. En la misma fila que
+        // ese guardado, para que uno viejo nunca pise a uno nuevo.
+        // Abrirla y no tocar nada no la reescribe: se compara con cómo estaba al abrirla, con
+        // las propuestas ya puestas.
+        var alAbrir by remember { mutableStateOf<Leccion?>(null) }
+        LaunchedEffect(textoEntero, tipoFinal, areaFinal, gravedad, causasFinal, etiquetas.toList(), auto, quitadas.toList(), propuesta) {
+            val e = existente ?: return@LaunchedEffect
+            if (!listo || propuesta == null || titulo.isBlank()) return@LaunchedEffect
+            val ahoraMismo = escrita(e.leccion, 0)
+            if (alAbrir == null) { alAbrir = ahoraMismo; return@LaunchedEffect }
+            if (ahoraMismo == alAbrir) return@LaunchedEffect
+            delay(800)
+            if (guardada || isFinishing) return@LaunchedEffect
+            val base = e.leccion
+            val l = escrita(base, System.currentTimeMillis())
+            if (l.copy(tocada = base.tocada) == base) return@LaunchedEffect
+            val app = application as PixPinApp
+            app.scope.launch(EN_FILA) { runCatching { almacen.guardar(l, e.proyecto) } }
+        }
+
         fun volvioAPasar(e: LeccionesStore.Entrada) {
             val app = application as PixPinApp
-            app.scope.launch(Dispatchers.IO) { runCatching { almacen.guardar(Repaso.repetida(e.leccion, System.currentTimeMillis()), e.proyecto) } }
+            app.scope.launch(EN_FILA) { runCatching { almacen.guardar(Repaso.repetida(e.leccion, System.currentTimeMillis()), e.proyecto) } }
             Toast.makeText(this, "🔁 Apuntado: volvió a pasar (${e.leccion.vecesQuePaso + 1} veces)", Toast.LENGTH_LONG).show()
             finish()
         }
@@ -247,8 +271,10 @@ class LeccionActivity : ComponentActivity() {
                         Text(if (existente == null) "💡 Nueva lección" else "💡 Lección", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                         if (existente != null) {
                             IconButton(onClick = {
-                                val e = existente
-                                lifecycleScope.launch(Dispatchers.IO) { almacen.borrar(e) }
+                                // Con Deshacer: la lista lo ofrece; si no está a la vista, se avisa.
+                                almacen.borrarConDeshacer(existente, (application as PixPinApp).scope)
+                                if (!LeccionesActivity.aLaVista) Toast.makeText(this@LeccionActivity, "Lección borrada", Toast.LENGTH_SHORT).show()
+                                guardada = true
                                 finish()
                             }) { Icon(Icons.Filled.DeleteOutline, "Borrar") }
                         }
@@ -341,15 +367,17 @@ class LeccionActivity : ComponentActivity() {
                         )
                     }
 
-                    // Lo demás, plegado: no estorba a quien solo quiere apuntar la frase.
+                    // **La ficha en tres bloques** (lo trae el PC, v2): qué pasó, por qué y la próxima
+                    // vez, siempre a la vista. Lo demás, plegado: no estorba a quien solo apunta.
+                    Bloque(1, "Qué pasó", quePaso, { quePaso = it }, "Añade qué pasó…")
+                    Bloque(2, "Por qué", porQue, { porQue = it }, "Añade por qué pasó…")
+                    Bloque(3, "La próxima vez", proxima, { proxima = it }, "Añade qué harás distinto la próxima vez…")
                     TextButton(onClick = { detalle = !detalle }) {
                         Icon(if (detalle) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null)
-                        Text(if (detalle) "Menos detalle" else "Qué pasó, por qué y qué haré distinto")
+                        Text(if (detalle) "Menos campos" else "Más campos…")
                     }
                     AnimatedVisibility(detalle) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Campo(quePaso, { quePaso = it }, "Qué pasó")
-                            Campo(porQue, { porQue = it }, "Por qué pasó")
                             Text("Causas (un toque)", style = MaterialTheme.typography.labelMedium)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Leccion.CAUSAS.forEach { c ->
@@ -364,7 +392,6 @@ class LeccionActivity : ComponentActivity() {
                                     )
                                 }
                             }
-                            Campo(proxima, { proxima = it }, "La próxima vez… (si pasa X, haré Y)")
                             Campo(referencias, { referencias = it }, "Palabras para encontrarla (separadas por comas)")
                         }
                     }
@@ -410,6 +437,29 @@ class LeccionActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Uno de los tres bloques de la ficha: su número y su nombre encima, y el texto debajo, que se
+     * escribe ahí mismo. Vacío, dice qué falta.
+     */
+    @Composable
+    private fun Bloque(n: Int, nombre: String, valor: String, cambiar: (String) -> Unit, vacio: String) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(22.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+                    Text("$n", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(nombre, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            }
+            OutlinedTextField(
+                value = valor, onValueChange = cambiar, modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text(vacio) }, minLines = 1, maxLines = 6,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                shape = RoundedCornerShape(14.dp)
+            )
+        }
+    }
+
     @Composable
     private fun Campo(valor: String, cambiar: (String) -> Unit, pista: String) {
         OutlinedTextField(
@@ -428,6 +478,10 @@ class LeccionActivity : ComponentActivity() {
         private const val EXTRA_DICTAR = "leccion_dictar"
         private const val GUARDADO_NUEVOS = "leccion_nuevos"
         private val JSON = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+        /** Los guardados de la ficha, de uno en uno y en orden: el que se guarda solo y el de cerrar. */
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        private val EN_FILA = Dispatchers.IO.limitedParallelism(1)
 
         /** Abre una lección para verla o cambiarla. */
         fun abrir(context: Context, id: String) = context.startActivity(intent(context).putExtra(EXTRA_ID, id))

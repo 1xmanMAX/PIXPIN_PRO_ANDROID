@@ -4,8 +4,12 @@ import android.content.Context
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.guardados.MensajesStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -57,7 +61,9 @@ class LeccionesStore(context: Context) {
         // —dos guardados a la vez, o lo mismo llegado por dos caminos al sincronizar—, la lista
         // tenía la misma clave dos veces y la pantalla de lecciones se cerraba al abrirla.
         val ordenadas = salida.sortedByDescending { it.leccion.tocada }.distinctBy { it.leccion.id }
-        _todas.value = ordenadas
+        // La que espera su «Deshacer» no se enseña aunque su archivo siga ahí.
+        val fuera = _borrando.value?.leccion?.id
+        _todas.value = if (fuera == null) ordenadas else ordenadas.filter { it.leccion.id != fuera }
         ordenadas
     }
 
@@ -141,8 +147,44 @@ class LeccionesStore(context: Context) {
         recargar()
     }
 
+    /**
+     * **Borrar con Deshacer** (lo trae el PC, v2): se quita de la vista ya y se borra de verdad al
+     * acabar el plazo ([PARA_DESHACER]) o al salir de la lista ([borrarYa]). Si ya había otra
+     * esperando, esa se borra ahora. El disco, en [scope] y fuera del hilo que pinta.
+     */
+    fun borrarConDeshacer(e: Entrada, scope: CoroutineScope) {
+        val antes = _borrando.value
+        _borrando.value = e
+        _todas.value = _todas.value.filter { it.leccion.id != e.leccion.id }
+        scope.launch(Dispatchers.IO) {
+            if (antes != null && antes.leccion.id != e.leccion.id) runCatching { borrar(antes) }
+            delay(PARA_DESHACER)
+            // Solo si sigue siendo esta la que espera: Deshacer o un borrado después la sueltan.
+            if (_borrando.compareAndSet(e, null)) runCatching { borrar(e) }
+        }
+    }
+
+    /** Borra ya la que esperaba su «Deshacer» (al salir de la lista). */
+    fun borrarYa(scope: CoroutineScope) {
+        val e = _borrando.value ?: return
+        if (_borrando.compareAndSet(e, null)) scope.launch(Dispatchers.IO) { runCatching { borrar(e) } }
+    }
+
+    /** **Deshacer**: la que iba a borrarse vuelve a la lista tal cual estaba. */
+    fun deshacer(scope: CoroutineScope) {
+        if (_borrando.value == null) return
+        _borrando.value = null
+        scope.launch(Dispatchers.IO) { runCatching { recargar() } }
+    }
+
     companion object {
         const val EXTENSION = ".leccion"
+        /** Lo que espera un borrado para poder deshacerse: lo mismo que en el PC. */
+        const val PARA_DESHACER = 6_000L
+        private val _borrando = MutableStateFlow<Entrada?>(null)
+
+        /** La lección que se acaba de borrar y aún puede volver con «Deshacer». */
+        val borrando: StateFlow<Entrada?> = _borrando
         private const val PREFIJO = "lec-"
         private val CERROJO = Any()
         private val GUARDANDO = Any()
