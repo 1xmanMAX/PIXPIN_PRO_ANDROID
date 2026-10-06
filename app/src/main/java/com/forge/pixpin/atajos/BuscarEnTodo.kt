@@ -100,6 +100,69 @@ object BuscarEnTodo {
     }
 
     /**
+     * **Las pestañas** (5-oct-2026, como «Buscar en PixPin v2» del PC, `buscar_todo/modelo.rs`):
+     * Todo, Archivos, Tareas, Lecciones y Acciones. La de Capturas del PC no está: aquí las capturas
+     * no entran en el buscador (se ven en su galería, que sí sale en Acciones).
+     */
+    enum class Pestana(val nombre: String) {
+        TODO("Todo"), ARCHIVOS("Archivos"), TAREAS("Tareas"), LECCIONES("Lecciones"), ACCIONES("Acciones")
+    }
+
+    /** A qué pestaña va cada cosa. Como en el PC, los proyectos y las notas van con los archivos. */
+    fun pestanaDe(t: Tipo): Pestana = when (t) {
+        Tipo.ARCHIVO, Tipo.PROYECTO, Tipo.NOTA -> Pestana.ARCHIVOS
+        Tipo.TAREAS -> Pestana.TAREAS
+        Tipo.LECCION -> Pestana.LECCIONES
+        Tipo.FUNCION -> Pestana.ACCIONES
+    }
+
+    /** Los grupos de «Todo», en el orden del PC: lo mejor arriba y luego por clase. */
+    enum class Grupo(val nombre: String) {
+        MEJOR("Mejor resultado"), TAREAS_Y_LECCIONES("Tareas y lecciones"), ARCHIVOS("Archivos"), ACCIONES("Acciones")
+    }
+
+    private fun grupoDe(t: Tipo): Grupo = when (pestanaDe(t)) {
+        Pestana.TAREAS, Pestana.LECCIONES -> Grupo.TAREAS_Y_LECCIONES
+        Pestana.ARCHIVOS -> Grupo.ARCHIVOS
+        Pestana.TODO, Pestana.ACCIONES -> Grupo.ACCIONES
+    }
+
+    /** Cuántos hay en cada pestaña (la de «Todo», todos). */
+    fun cuentas(resultados: List<Elemento>): Map<Pestana, Int> {
+        val m = Pestana.entries.associateWithTo(LinkedHashMap()) { 0 }
+        m[Pestana.TODO] = resultados.size
+        for (e in resultados) pestanaDe(e.tipo).let { m[it] = m.getValue(it) + 1 }
+        return m
+    }
+
+    /**
+     * **Las líneas de la lista**: en «Todo», el mejor resultado arriba y el resto por grupos, cada
+     * uno en el orden en que vino; en otra pestaña, solo lo suyo y sin cabeceras. Una cabecera es
+     * un [Grupo]; una fila, un [Elemento].
+     */
+    fun lineas(resultados: List<Elemento>, pestana: Pestana): List<Any> {
+        if (pestana != Pestana.TODO) return resultados.filter { pestanaDe(it.tipo) == pestana }
+        if (resultados.isEmpty()) return emptyList()
+        val v = ArrayList<Any>(resultados.size + 5)
+        v.add(Grupo.MEJOR); v.add(resultados[0])
+        val resto = resultados.drop(1)
+        for (g in listOf(Grupo.TAREAS_Y_LECCIONES, Grupo.ARCHIVOS, Grupo.ACCIONES)) {
+            val del = resto.filter { grupoDe(it.tipo) == g }
+            if (del.isNotEmpty()) { v.add(g); v.addAll(del) }
+        }
+        return v
+    }
+
+    /**
+     * Con la caja vacía y una pestaña que no es «Todo»: todo lo de esa pestaña, lo más reciente
+     * primero (como en el PC, donde «Tareas» sin escribir enseña las listas).
+     */
+    fun deLaPestana(todo: List<Elemento>, pestana: Pestana, cuantos: Int = 60): List<Elemento> =
+        if (pestana == Pestana.TODO) emptyList()
+        else todo.asSequence().filter { pestanaDe(it.tipo) == pestana }
+            .sortedByDescending { it.cuando }.take(cuantos).toList()
+
+    /**
      * Quita la «p» de delante: quien escribe «p tesis» en el buscador del teléfono y llega aquí
      * sigue escribiendo igual. Solo si va sola y seguida de algo.
      */

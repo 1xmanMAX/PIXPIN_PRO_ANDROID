@@ -284,8 +284,42 @@ data class Settings(
      * fábrica, mientras que una cadena vacía es «no quiero ninguna». El formato
      * lo pone y lo lee [com.forge.pixpin.clipboard.MagicWord].
      */
-    val palabrasMagicas: String? = null
+    val palabrasMagicas: String? = null,
+    /**
+     * **Las herramientas apagadas en todos los sitios**, por su nombre (5-oct-2026, como el
+     * `[herramientas] apagadas` del PC). Se restan a lo que lleve cada barra: una apagada aquí no
+     * sale ni en el lienzo, ni en el pin, ni en la capa, ni en el editor rápido. Vacía de fábrica.
+     * Se guarda la lista de las apagadas y no la de las encendidas para que una herramienta nueva
+     * nazca encendida. Ver [com.forge.pixpin.motor.HerramientasPorSitio].
+     */
+    val herramientasApagadas: Set<String> = emptySet()
 ) {
+
+    private val apagadasTools: Set<com.forge.pixpin.motor.Tool>
+        get() = com.forge.pixpin.motor.HerramientasPorSitio.leer(herramientasApagadas)
+
+    /**
+     * Lo guardado de cada barra junto con la lista general, para decidir qué cambia al tocar una
+     * herramienta en un sitio o en todos. Ver [com.forge.pixpin.motor.HerramientasPorSitio.Reparto].
+     */
+    val reparto: com.forge.pixpin.motor.HerramientasPorSitio.Reparto
+        get() {
+            val S = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.entries
+            return com.forge.pixpin.motor.HerramientasPorSitio.Reparto(
+                apagadas = apagadasTools,
+                porSitio = S.associateWith { sitioGuardado(it) }
+            )
+        }
+
+    /** Lo que lleva la barra de un sitio, sin restar las apagadas en todos. */
+    fun sitioGuardado(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio): Set<com.forge.pixpin.motor.Tool> = when (s) {
+        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PANTALLA -> herramientas(capaTools, com.forge.pixpin.motor.CAPA_TOOLS_POR_DEFECTO)
+        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN -> herramientas(pinTools, com.forge.pixpin.motor.PIN_TOOLS_POR_DEFECTO)
+        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LIENZO ->
+            // La Zona entra aunque se hubiera guardado una lista antes de que existiera (13-sep-2026).
+            herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet()) + com.forge.pixpin.motor.Tool.ZONA
+        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> herramientas(lectorTools, com.forge.pixpin.motor.LECTOR_TOOLS_POR_DEFECTO)
+    }
 
     /** Las palabras mágicas ya resueltas contra las de fábrica. */
     val palabras: Map<String, com.forge.pixpin.clipboard.MiniApp>
@@ -311,20 +345,19 @@ data class Settings(
      * las tenía y se quitaron, y tirar por eso los ajustes enteros sería peor.
      */
     val pinToolSet: Set<com.forge.pixpin.motor.Tool>
-        get() = herramientas(pinTools, com.forge.pixpin.motor.PIN_TOOLS_POR_DEFECTO)
+        get() = sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN) - apagadasTools
 
     /** Las de la capa sobre la pantalla. */
     val capaToolSet: Set<com.forge.pixpin.motor.Tool>
-        get() = herramientas(capaTools, com.forge.pixpin.motor.CAPA_TOOLS_POR_DEFECTO)
+        get() = sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PANTALLA) - apagadasTools
 
     /** Las del editor rápido de los lectores. */
     val lectorToolSet: Set<com.forge.pixpin.motor.Tool>
-        get() = herramientas(lectorTools, com.forge.pixpin.motor.LECTOR_TOOLS_POR_DEFECTO)
+        get() = sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR) - apagadasTools
 
     /** Las del editor a pantalla completa: de fábrica, todas. */
     val editorToolSet: Set<com.forge.pixpin.motor.Tool>
-        // La Zona entra aunque se hubiera guardado una lista antes de que existiera (13-sep-2026).
-        get() = herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet()) + com.forge.pixpin.motor.Tool.ZONA
+        get() = sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LIENZO) - apagadasTools
 
     private fun herramientas(
         guardadas: Set<String>?,
@@ -386,6 +419,7 @@ class SettingsRepository(private val context: Context) {
         val COPY_FORMAT = stringPreferencesKey("copy_format")
         val COMPRESION_PDF = stringPreferencesKey("compresion_pdf")
         val PALABRAS = stringPreferencesKey("palabras_magicas")
+        val HERRAMIENTAS_APAGADAS = stringSetPreferencesKey("herramientas_apagadas")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
@@ -439,8 +473,82 @@ class SettingsRepository(private val context: Context) {
             }.getOrDefault(CopyFormat.PNG),
             compresionPdf = prefs[Keys.COMPRESION_PDF]?.takeIf { it in com.forge.pixpin.pdf.ComprimirPdf.NIVELES }
                 ?: com.forge.pixpin.pdf.ComprimirPdf.NIVEL_POR_DEFECTO,
-            palabrasMagicas = prefs[Keys.PALABRAS]
+            palabrasMagicas = prefs[Keys.PALABRAS],
+            herramientasApagadas = prefs[Keys.HERRAMIENTAS_APAGADAS] ?: emptySet()
         )
+    }
+
+    /**
+     * **Lo guardado, en crudo y por nombre de clave**, para el «Deshacer» de los ajustes: se
+     * apunta cómo estaba todo antes de cada cambio y se devuelve tal cual. Ver
+     * [com.forge.pixpin.ajustes.HistorialDeAjustes].
+     */
+    val crudo: Flow<Map<String, Any>> = context.dataStore.data.map { prefs ->
+        prefs.asMap().entries.associate { (k, v) -> k.name to v }
+    }
+
+    /**
+     * Vuelve [claves] a como estaban en [antes]: las que estaban se reescriben con su valor y las
+     * que no estaban se quitan (es decir, vuelven a la de fábrica). Lo demás no se toca.
+     */
+    suspend fun restaurar(antes: Map<String, Any>, claves: Collection<String>) {
+        context.dataStore.edit { p ->
+            val puestas = p.asMap().keys.associateBy { it.name }
+            for (nombre in claves) {
+                puestas[nombre]?.let { p.remove(it) }
+                @Suppress("UNCHECKED_CAST")
+                when (val v = antes[nombre]) {
+                    is Boolean -> p[booleanPreferencesKey(nombre)] = v
+                    is Int -> p[intPreferencesKey(nombre)] = v
+                    is Long -> p[androidx.datastore.preferences.core.longPreferencesKey(nombre)] = v
+                    is Float -> p[floatPreferencesKey(nombre)] = v
+                    is Double -> p[androidx.datastore.preferences.core.doublePreferencesKey(nombre)] = v
+                    is String -> p[stringPreferencesKey(nombre)] = v
+                    is Set<*> -> p[stringSetPreferencesKey(nombre)] = v as Set<String>
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    /**
+     * **Volver a la de fábrica**: quitar las claves. No es lo mismo que guardar el valor de
+     * fábrica (ver [resetPinTools]): lo que traiga una versión nueva vuelve a llegar solo.
+     */
+    suspend fun quitar(claves: Collection<String>) {
+        if (claves.isEmpty()) return
+        context.dataStore.edit { p ->
+            p.asMap().keys.filter { it.name in claves }.forEach { p.remove(it) }
+        }
+    }
+
+    /**
+     * Guarda el reparto de herramientas que sale de tocar una en un sitio o en todos: la lista
+     * general y lo que lleva cada barra. Un sitio que no cambia no se escribe, para que siga
+     * siendo «no lo he tocado». Ver [com.forge.pixpin.motor.HerramientasPorSitio].
+     */
+    suspend fun setReparto(
+        antes: com.forge.pixpin.motor.HerramientasPorSitio.Reparto,
+        despues: com.forge.pixpin.motor.HerramientasPorSitio.Reparto,
+        grupos: Pair<com.forge.pixpin.motor.HerramientasPorSitio.Sitio, List<List<com.forge.pixpin.motor.Tool>>>? = null
+    ) {
+        val H = com.forge.pixpin.motor.HerramientasPorSitio
+        context.dataStore.edit { p ->
+            if (despues.apagadas != antes.apagadas) {
+                if (despues.apagadas.isEmpty()) p.remove(Keys.HERRAMIENTAS_APAGADAS)
+                else p[Keys.HERRAMIENTAS_APAGADAS] = H.escribir(despues.apagadas)
+            }
+            for (s in com.forge.pixpin.motor.HerramientasPorSitio.Sitio.entries) {
+                val (tools, gruposKey) = when (s) {
+                    com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PANTALLA -> Keys.CAPA_TOOLS to Keys.CAPA_GROUPS
+                    com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN -> Keys.PIN_TOOLS to Keys.PIN_GROUPS
+                    com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LIENZO -> Keys.EDITOR_TOOLS to Keys.EDITOR_GROUPS
+                    com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> Keys.LECTOR_TOOLS to Keys.LECTOR_GROUPS
+                }
+                if (despues.enSitio(s) != antes.enSitio(s)) p[tools] = H.escribir(despues.enSitio(s))
+                if (grupos?.first == s) p[gruposKey] = com.forge.pixpin.motor.escribirGrupos(grupos.second)
+            }
+        }
     }
 
     suspend fun setDefaultPinAlpha(value: Float) {
