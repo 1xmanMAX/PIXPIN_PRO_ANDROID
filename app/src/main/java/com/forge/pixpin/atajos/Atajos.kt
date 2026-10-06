@@ -34,6 +34,8 @@ object Atajos {
 
     const val GRABAR = "grabar"
     const val TAREA = "tarea"
+    /** `pixpin://atajo/tareas`: todas las listas de tareas juntas, como `ventana cual: "tareas"` del PC. */
+    const val TAREAS = "tareas"
     const val CAPTURAS = "capturas"
     const val SOLTAR = "soltar"
     const val CHAT = "chat"

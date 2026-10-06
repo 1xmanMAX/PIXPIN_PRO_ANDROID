@@ -45,6 +45,7 @@ class AtajoActivity : Activity() {
             // **Los pedidos de fuera**, como los del PC (`docs/protocolo-pedidos.md`), para el
             // buscador, Tasker o cualquier otra app: `pixpin://atajo/tarea?texto=…` y compañía.
             Atajos.TAREA -> com.forge.pixpin.mini.TareaRapidaActivity.abrir(this, dato("texto"))
+            Atajos.TAREAS -> com.forge.pixpin.mini.TodasLasTareasActivity.abrir(this)
             Atajos.CAPTURAS -> com.forge.pixpin.ui.GaleriaDeCapturasActivity.abrir(this)
             Atajos.SOLTAR -> com.forge.pixpin.guardados.SoltarActivity.abrir(this, dato("proyecto"))
             Atajos.CHAT -> dato("texto")?.let { t ->
