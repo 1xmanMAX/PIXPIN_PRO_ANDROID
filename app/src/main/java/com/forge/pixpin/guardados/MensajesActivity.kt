@@ -4019,7 +4019,7 @@ class MensajesActivity : ComponentActivity() {
                                 modifier = Modifier.size(19.dp)
                             )
                             Text(
-                                com.forge.pixpin.mini.Tareas.partir(tarea.texto).first,
+                                com.forge.pixpin.mini.Tareas.legible(tarea.texto),
                                 fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,

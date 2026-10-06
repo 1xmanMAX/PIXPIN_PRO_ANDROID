@@ -2,6 +2,7 @@ package com.forge.pixpin.mini
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,6 +31,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -116,6 +121,30 @@ class MiniActivity : ComponentActivity() {
 
         val doc = documento
         val app = cual
+        var borrandoLista by remember { mutableStateOf(false) }
+        if (borrandoLista && doc != null) {
+            val nombre = Cabecera.titulo(doc).ifBlank { getString(R.string.miniapp_titulo_nuevo) }
+            val n = Tareas.leer(doc).size
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { borrandoLista = false },
+                title = { Text("Borrar lista") },
+                text = {
+                    Text(
+                        "¿Borrar la lista «$nombre»" +
+                            (if (n == 0) "" else if (n == 1) " con su tarea" else " con sus $n tareas") +
+                            "? Se borra también del chat y del PC, y no se puede deshacer."
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { borrandoLista = false; borrarLista(id, nombre) }) {
+                        Text(getString(R.string.cd_delete), color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { borrandoLista = false }) { Text("Cancelar") }
+                }
+            )
+        }
 
         // **Una tarjeta que sube desde abajo, no una pantalla** (24-sep-2026). Lo pidió el
         // usuario: que la mini app salga de abajo sin ponerse en pantalla completa, y que se
@@ -206,6 +235,14 @@ class MiniActivity : ComponentActivity() {
                                 placeholder = { Text(getString(R.string.miniapp_titulo_nuevo)) },
                                 modifier = Modifier.weight(1f)
                             )
+                            // **Borrar la lista entera** (4-oct-2026, como la papelera del PC):
+                            // por el mismo camino que borrar su mensaje en el chat, así que viaja
+                            // como borrado y se va también del PC. Se pregunta: no hay deshacer.
+                            if (app == MiniApp.TAREAS && doc != null) {
+                                IconButton(onClick = { borrandoLista = true }) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Borrar lista")
+                                }
+                            }
                             IconButton(onClick = { cerrar() }) {
                                 Icon(Icons.Filled.Close, contentDescription = getString(R.string.cd_close))
                             }
@@ -237,19 +274,143 @@ class MiniActivity : ComponentActivity() {
      * cuántos días hace que se creó cada tarea (nunca la fecha: lo pidió así el usuario), la línea
      * de avance con su barra, ocultar las hechas, y al tocar una fila elegirla para corregirla o
      * subirla y bajarla. La casilla es lo único que tacha.
+     *
+     * **Lo del 3 y 4-oct**: imágenes dentro de la tarea (miniaturas en la fila, el clip y pegar
+     * en los campos; ver [ImagenesDeTareas]), y el aspa que quita una tarea con «Deshacer».
      */
     @Composable
     private fun DeTareas(documento: String, onGuardar: (String) -> Unit) {
         val titulo = Cabecera.titulo(documento)
         val tareas = remember(documento) { Tareas.leer(documento) }
-        var escrito by remember { mutableStateOf("") }
         var ocultarHechas by remember { mutableStateOf(false) }
         var elegida by remember { mutableStateOf<Int?>(null) }
         var corrigiendo by remember { mutableStateOf<Int?>(null) }
-        var corregido by remember { mutableStateOf("") }
         val hoy = remember { java.time.LocalDate.now() }
+        val alcance = androidx.compose.runtime.rememberCoroutineScope()
+        // **Con imágenes** (3-oct-2026, como el PC): la línea de añadir y el campo de corregir
+        // llevan chapas `[img 01]`; ver [CampoConImagenes].
+        val nueva = remember { CampoConImagenes(lifecycleScope) }
+        val corrector = remember { CampoConImagenes(lifecycleScope) }
+        // Salir sin añadir borra las copias que no llegaron a ninguna tarea.
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            onDispose { nueva.descartar(); corrector.descartar() }
+        }
+        val avisos = remember { androidx.compose.material3.SnackbarHostState() }
+        var viendo by remember { mutableStateOf<String?>(null) }
+        // Lo último, para «Deshacer»: el aviso vive más que esta composición.
+        val docActual by androidx.compose.runtime.rememberUpdatedState(documento)
+        val carpetaDeFiles = remember { filesDir.absolutePath }
 
         fun conLasTareas(nuevas: List<Tarea>) = onGuardar(Tareas.escribir(titulo, nuevas))
+
+        fun dejarDeCorregir() {
+            if (corrigiendo != null) corrector.descartar()
+            corrigiendo = null
+        }
+        fun corregir(i: Int, visible: String) {
+            corrector.cargar(visible)
+            corrigiendo = i
+        }
+        fun guardarCorreccion(i: Int) {
+            conLasTareas(Tareas.renombrar(tareas, i, corrector.componer()))
+            corrigiendo = null
+        }
+        fun anadir() {
+            if (nueva.texto.isBlank() && nueva.imagenes.isEmpty()) return
+            val compuesto = nueva.componer()
+            if (compuesto.isNotBlank()) conLasTareas(Tareas.anadir(tareas, compuesto))
+        }
+
+        // **Quitar una con su aspa, con «Deshacer»** (4-oct-2026, como el PC): se va al momento y
+        // el aviso la devuelve a su sitio con su fecha, su estado y sus imágenes.
+        fun quitar(i: Int) {
+            val quitada = tareas.getOrNull(i) ?: return
+            conLasTareas(Tareas.borrar(tareas, i))
+            elegida = null
+            dejarDeCorregir()
+            // Una de solo imágenes se nombra por su primera, como el PC: «[img 01]» quitada.
+            val dice = Tareas.legible(quitada.texto).ifEmpty { Tareas.fichaDeImagen(1) }
+            alcance.launch {
+                avisos.currentSnackbarData?.dismiss()
+                val r = avisos.showSnackbar(
+                    "«$dice» quitada", actionLabel = "Deshacer",
+                    duration = androidx.compose.material3.SnackbarDuration.Long
+                )
+                if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                    val doc = docActual
+                    onGuardar(Tareas.escribir(Cabecera.titulo(doc), Tareas.reponer(Tareas.leer(doc), i, quitada)))
+                }
+            }
+        }
+
+        // El clip y el pegar: a qué campo van las imágenes que lleguen.
+        var destino by remember { mutableStateOf(nueva) }
+        fun adjuntar(uris: List<Uri>, campo: CampoConImagenes) {
+            if (uris.isEmpty()) return
+            alcance.launch {
+                val carpeta = almacen.carpetaDeAdjuntos()
+                val ms = System.currentTimeMillis()
+                val copias = withContext(Dispatchers.IO) {
+                    uris.mapIndexedNotNull { n, u -> ImagenesDeTareas.copiar(this@MiniActivity, u, carpeta, ms, n + 1) }
+                }
+                if (copias.size < uris.size) {
+                    android.widget.Toast.makeText(this@MiniActivity, "Una imagen no se pudo leer", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                copias.forEach { campo.meter(it.absolutePath) }
+            }
+        }
+        val galeria = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia()
+        ) { uris -> adjuntar(uris, destino) }
+        // La cámara escribe directamente en la copia. Guardada como texto: sobrevive a que el
+        // sistema recree la pantalla mientras la cámara está abierta.
+        var fotoEnCurso by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+        val camara = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+        ) { bien ->
+            val f = fotoEnCurso?.let { java.io.File(it) }
+            fotoEnCurso = null
+            if (bien && f != null && f.length() > 0) {
+                val campo = destino
+                alcance.launch {
+                    withContext(Dispatchers.IO) { ImagenesDeTareas.reducirEnSuSitio(f) }
+                    campo.meter(f.absolutePath)
+                }
+            } else if (f != null) lifecycleScope.launch(Dispatchers.IO) { f.delete() }
+        }
+        fun hacerFoto() {
+            val f = java.io.File(almacen.carpetaDeAdjuntos(), Tareas.nombreDeCopia(System.currentTimeMillis(), 1, "jpg"))
+            fotoEnCurso = f.absolutePath
+            runCatching {
+                camara.launch(androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f))
+            }.onFailure {
+                fotoEnCurso = null
+                android.widget.Toast.makeText(this, "No hay cámara disponible", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        // El manifiesto declara la cámara, y entonces Android exige el permiso también para la
+        // aplicación de cámara del sistema (ver `AdjuntosDeLaLeccion`).
+        val permisoCamara = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { si ->
+            if (si) hacerFoto()
+            else android.widget.Toast.makeText(this, "Sin permiso para la cámara", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        fun pedirFoto(campo: CampoConImagenes) {
+            destino = campo
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) hacerFoto()
+            else permisoCamara.launch(android.Manifest.permission.CAMERA)
+        }
+        fun pedirGaleria(campo: CampoConImagenes) {
+            destino = campo
+            galeria.launch(
+                androidx.activity.result.PickVisualMediaRequest(
+                    androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                )
+            )
+        }
 
         Column(Modifier.fillMaxSize()) {
             val resumen = Tareas.resumenDe(tareas)
@@ -267,92 +428,200 @@ class MiniActivity : ComponentActivity() {
                     }
                 }
             }
-            LazyColumn(Modifier.weight(1f)) {
-                if (tareas.isEmpty()) {
-                    item { Nada() }
-                }
-                itemsIndexed(tareas, key = { i, _ -> i }) { i, t ->
-                    if (ocultarHechas && t.hecha) return@itemsIndexed
-                    val (texto, fecha) = remember(t.texto) { Tareas.partir(t.texto) }
-                    val esLaElegida = elegida == i
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .background(if (esLaElegida) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent)
-                            .clickable {
-                                // Tocar la elegida otra vez la corrige; tocar otra, la elige.
-                                if (esLaElegida) { corrigiendo = i; corregido = texto } else { elegida = i; corrigiendo = null }
-                            }
-                            .padding(end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = t.hecha,
-                            onCheckedChange = { conLasTareas(Tareas.alternar(tareas, i)) }
-                        )
-                        if (corrigiendo == i) {
-                            TextField(
-                                value = corregido, onValueChange = { corregido = it }, singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
-                                    conLasTareas(Tareas.renombrar(tareas, i, corregido)); corrigiendo = null
-                                })
-                            )
-                            IconButton(onClick = { conLasTareas(Tareas.renombrar(tareas, i, corregido)); corrigiendo = null }) {
-                                Icon(Icons.Filled.Check, contentDescription = "Guardar")
-                            }
-                        } else {
-                            // Lo hecho se tacha en vez de irse: ver lo tachado es la mitad de
-                            // la satisfacción de una lista, y además dice lo que ya no hace
-                            // falta volver a pensar.
-                            Text(
-                                texto,
-                                fontSize = 16.sp,
-                                textDecoration = if (t.hecha) TextDecoration.LineThrough else null,
-                                color = if (t.hecha) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (fecha != null) {
-                                val dias = Tareas.diasDesde(fecha, hoy)
-                                Text(
-                                    if (dias == 0L) getString(R.string.tarea_creada_hoy)
-                                    else resources.getQuantityString(R.plurals.tarea_creada_hace, dias.toInt(), dias.toInt()),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 4.dp)
-                                )
-                            }
-                            if (esLaElegida) {
-                                IconButton(onClick = { corrigiendo = i; corregido = texto }) { Icon(Icons.Filled.Edit, contentDescription = "Corregir", modifier = Modifier.size(18.dp)) }
-                                IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i - 1)); elegida = (i - 1).coerceAtLeast(0) }, enabled = i > 0) {
-                                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Subir", modifier = Modifier.size(20.dp))
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f)) {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    if (tareas.isEmpty()) {
+                        item { Nada() }
+                    }
+                    itemsIndexed(tareas, key = { i, _ -> i }) { i, t ->
+                        if (ocultarHechas && t.hecha) return@itemsIndexed
+                        val (texto, fecha) = remember(t.texto) { Tareas.partir(t.texto) }
+                        // Lo que se lee y las imágenes, aparte: la fila enseña el texto limpio y,
+                        // detrás, una miniatura por imagen.
+                        val (limpio, enlaces) = remember(texto) { Tareas.imagenes(texto) }
+                        val esLaElegida = elegida == i
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .background(if (esLaElegida) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent)
+                                .clickable {
+                                    // Tocar la elegida otra vez la corrige; tocar otra, la elige.
+                                    if (esLaElegida) corregir(i, texto) else { elegida = i; dejarDeCorregir() }
                                 }
-                                IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i + 1)); elegida = (i + 1).coerceAtMost(tareas.lastIndex) }, enabled = i < tareas.lastIndex) {
-                                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Bajar", modifier = Modifier.size(20.dp))
+                                .padding(end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = t.hecha,
+                                onCheckedChange = { conLasTareas(Tareas.alternar(tareas, i)) }
+                            )
+                            if (corrigiendo == i) {
+                                Column(Modifier.weight(1f)) {
+                                    FichasDelCampo(corrector) { viendo = it }
+                                    CampoDeTarea(
+                                        campo = corrector,
+                                        placeholder = "",
+                                        alPegarImagenes = { adjuntar(it, corrector) },
+                                        alHecho = { guardarCorreccion(i) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
-                            }
-                            IconButton(onClick = { conLasTareas(Tareas.borrar(tareas, i)); elegida = null }) {
-                                Icon(
-                                    Icons.Filled.Close,
-                                    contentDescription = getString(R.string.cd_delete),
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                BotonDelClip({ pedirGaleria(corrector) }, { pedirFoto(corrector) })
+                                IconButton(onClick = { guardarCorreccion(i) }) {
+                                    Icon(Icons.Filled.Check, contentDescription = "Guardar")
+                                }
+                            } else {
+                                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                    // Lo hecho se tacha en vez de irse: ver lo tachado es la mitad de
+                                    // la satisfacción de una lista, y además dice lo que ya no hace
+                                    // falta volver a pensar. El texto cede su sitio a las miniaturas.
+                                    Text(
+                                        limpio,
+                                        fontSize = 16.sp,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textDecoration = if (t.hecha) TextDecoration.LineThrough else null,
+                                        color = if (t.hecha) MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    if (enlaces.isNotEmpty()) {
+                                        Row(
+                                            Modifier.padding(start = if (limpio.isEmpty()) 0.dp else 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            enlaces.forEach { e ->
+                                                MiniaturaDeTarea(Tareas.rutaDeImagen(e, carpetaDeFiles), apagada = t.hecha) { viendo = it }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (fecha != null) {
+                                    val dias = Tareas.diasDesde(fecha, hoy)
+                                    Text(
+                                        if (dias == 0L) getString(R.string.tarea_creada_hoy)
+                                        else resources.getQuantityString(R.plurals.tarea_creada_hace, dias.toInt(), dias.toInt()),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
+                                if (esLaElegida) {
+                                    IconButton(onClick = { corregir(i, texto) }) { Icon(Icons.Filled.Edit, contentDescription = "Corregir", modifier = Modifier.size(18.dp)) }
+                                    IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i - 1)); elegida = (i - 1).coerceAtLeast(0) }, enabled = i > 0) {
+                                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Subir", modifier = Modifier.size(20.dp))
+                                    }
+                                    IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i + 1)); elegida = (i + 1).coerceAtMost(tareas.lastIndex) }, enabled = i < tareas.lastIndex) {
+                                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Bajar", modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                                IconButton(onClick = { quitar(i) }) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Quitar",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
+                androidx.compose.material3.SnackbarHost(avisos, Modifier.align(Alignment.BottomCenter))
             }
-            LineaParaAnadir(
-                valor = escrito,
-                onValor = { escrito = it },
-                onAnadir = {
-                    if (escrito.isNotBlank()) {
-                        conLasTareas(Tareas.anadir(tareas, escrito))
-                        escrito = ""
+            // La línea de añadir, con su clip a la izquierda del +.
+            Surface(shadowElevation = 8.dp) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .padding(4.dp)
+                ) {
+                    FichasDelCampo(nueva) { viendo = it }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CampoDeTarea(
+                            campo = nueva,
+                            placeholder = getString(R.string.miniapp_anadir),
+                            alPegarImagenes = { adjuntar(it, nueva) },
+                            alHecho = { anadir() },
+                            modifier = Modifier.weight(1f)
+                        )
+                        BotonDelClip({ pedirGaleria(nueva) }, { pedirFoto(nueva) })
+                        IconButton(onClick = { anadir() }) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = getString(R.string.miniapp_anadir),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
-            )
+            }
+        }
+        viendo?.let { VisorDeImagenDeTarea(it) { viendo = null } }
+    }
+
+    /**
+     * El clip: elegir fotos (varias a la vez) o hacer una. Un menú corto en vez de dos botones,
+     * que la línea de añadir no tiene sitio para más.
+     */
+    @Composable
+    private fun BotonDelClip(alElegir: () -> Unit, alHacerFoto: () -> Unit) {
+        var abierto by remember { mutableStateOf(false) }
+        androidx.compose.foundation.layout.Box {
+            IconButton(onClick = { abierto = true }) {
+                Icon(Icons.Filled.AttachFile, contentDescription = "Adjuntar imagen")
+            }
+            androidx.compose.material3.DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Elegir fotos") },
+                    leadingIcon = { Icon(Icons.Filled.Image, null) },
+                    onClick = { abierto = false; alElegir() }
+                )
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Hacer foto") },
+                    leadingIcon = { Icon(Icons.Filled.PhotoCamera, null) },
+                    onClick = { abierto = false; alHacerFoto() }
+                )
+            }
+        }
+    }
+
+    /**
+     * Las imágenes que lleva el campo, encima de él: su miniatura (tocarla la enseña entera), su
+     * número y un aspa que quita su chapa. Solo las que siguen teniendo chapa en el texto.
+     */
+    @Composable
+    private fun FichasDelCampo(campo: CampoConImagenes, alVer: (String) -> Unit) {
+        if (campo.imagenes.isEmpty()) return
+        // Derivado: escribir una letra no recompone las miniaturas, solo quitar o poner una chapa.
+        val van by androidx.compose.runtime.remember(campo) {
+            androidx.compose.runtime.derivedStateOf { Tareas.conFicha(campo.estado.text.toString(), campo.imagenes) }
+        }
+        if (van.isEmpty()) return
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, top = 4.dp, bottom = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            van.forEach { (n, ruta) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MiniaturaDeTarea(ruta, apagada = false, alTocar = alVer)
+                    Text(
+                        Tareas.rotuloDeImagen(n),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Quitar imagen",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .clickable { campo.quitar(n) }
+                            .padding(3.dp)
+                    )
+                }
+            }
         }
     }
 
@@ -688,6 +957,27 @@ class MiniActivity : ComponentActivity() {
                     conLaAlarma(a.copy(minuto = (a.minuto + 5) % 60))
                 }) { Text("+5 min") }
             }
+        }
+    }
+
+    /**
+     * Borra la lista: lo mismo que el «Borrar» de su burbuja en el chat (`MensajesActivity`): su
+     * adjunto, lo que hubiera de ella en los proyectos y el mensaje, con [MensajesStore.cambiar],
+     * que le deja su marca de borrado para que la sincronización no la resucite desde el PC.
+     */
+    private fun borrarLista(id: String, nombre: String) {
+        val app = application as? com.forge.pixpin.PixPinApp
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                val m = almacen.leer().firstOrNull { it.id == id } ?: return@withContext
+                almacen.borrarAdjunto(m)
+                if (app != null) runCatching {
+                    com.forge.pixpin.guardados.UnirAlProyecto.quitarDeLosProyectos(app.proyectos, listOf(m), System.currentTimeMillis())
+                }
+                almacen.cambiar { todos -> todos.filterNot { it.id == id } }
+            }
+            android.widget.Toast.makeText(this@MiniActivity, "Lista «$nombre» borrada", android.widget.Toast.LENGTH_SHORT).show()
+            finish()
         }
     }
 
