@@ -520,6 +520,8 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
                 CaptureModeCard()
                 Spacer(Modifier.height(12.dp))
                 FormatoDeCopiaCard()
+                Spacer(Modifier.height(12.dp))
+                CaducidadDeCapturasCard()
             }
 
             // **A la vista y con su nombre** (21-sep-2026): estaba dentro de «Capturar» y el
@@ -1570,6 +1572,38 @@ private fun FormatoDeCopiaCard() {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **Días hasta borrar las capturas** (como `[capturas] dias_caducidad` del PC, 4-oct-2026). Siete
+ * de fábrica; «Nunca» es el cero. Ver [com.forge.pixpin.capture.CaducidadDeCapturas].
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CaducidadDeCapturasCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Días hasta borrar", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Pasado el plazo se van a la papelera del teléfono, salvo las conservadas.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(1, 3, 7, 14, 30, 90, 0).forEach { dias ->
+                    androidx.compose.material3.FilterChip(
+                        selected = settings.diasCaducidad == dias,
+                        onClick = { scope.launch { app.settings.setDiasCaducidad(dias) } },
+                        label = { Text(if (dias == 0) "Nunca" else "$dias") }
+                    )
                 }
             }
         }
