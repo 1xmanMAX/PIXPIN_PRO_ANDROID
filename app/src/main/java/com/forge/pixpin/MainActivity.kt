@@ -482,155 +482,52 @@ private fun TodoConcedido() {
 }
 
 /**
- * Los ajustes, detrás de una puerta y **en grupos que se pliegan**.
+ * Los ajustes, detrás de una puerta: **secciones con buscador** (v2, 5-oct-2026, como el PC).
  *
- * Sueltos y todos seguidos daban trece tarjetas del mismo tamaño y con el mismo peso, sin
- * decir cuál importa ni cuál va con cuál, y con la del motor de voz ocupando media pantalla
- * ella sola: recorrerlos era un viaje. Ahora cada grupo es una fila con su resumen, cerrada,
- * y la pantalla entera cabe de una vez; se abre solo lo que se viene a tocar.
+ * Antes eran grupos que se plegaban (trece tarjetas sueltas eran un viaje, lo reportó el usuario
+ * el 6-sep-2026). Ahora, como en el PC: buscador arriba, secciones con su resumen, punto azul en
+ * lo que no está como vino, «De fábrica» por opción, «Restablecer <sección>» y «Deshacer». El
+ * marco está en [com.forge.pixpin.ajustes.AjustesV2]; aquí solo se dice qué tarjeta es cada
+ * opción, y son las de siempre: no se pierde ninguna.
  */
 @Composable
 fun PantallaDeAjustes(onVolver: () -> Unit) {
-    Scaffold { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onVolver, modifier = Modifier.padding(end = 4.dp)) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.cd_close)
-                    )
-                }
-                Text(
-                    stringResource(R.string.ajustes_titulo),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-
-            GrupoDeAjustes(
-                stringResource(R.string.ajustes_capturar),
-                stringResource(R.string.ajustes_capturar_resumen)
-            ) {
-                CaptureModeCard()
-                Spacer(Modifier.height(12.dp))
-                FormatoDeCopiaCard()
-                Spacer(Modifier.height(12.dp))
-                CaducidadDeCapturasCard()
-            }
-
-            // **A la vista y con su nombre** (21-sep-2026): estaba dentro de «Capturar» y el
-            // usuario no la encontró, con razón; un PDF no es una captura.
-            GrupoDeAjustes("PDF", "Cuánto se comprimen al guardarlos en PixPin") {
-                CompresionDePdfCard()
-            }
-
-            GrupoDeAjustes(
-                stringResource(R.string.ajustes_dibujar),
-                stringResource(R.string.ajustes_dibujar_resumen)
-            ) {
-                ModoGuiaCard()
-                Spacer(Modifier.height(12.dp))
-                ImanCard()
-                Spacer(Modifier.height(12.dp))
-                ManoCard()
-                Spacer(Modifier.height(12.dp))
-                BarraDelEditorCard()
-                Spacer(Modifier.height(12.dp))
-                BarraDelPinCard()
-                Spacer(Modifier.height(12.dp))
-                BarraDeLaCapaCard()
-                BarraDelLectorCard()
-            }
-
-            GrupoDeAjustes(
-                stringResource(R.string.ajustes_pinear),
-                stringResource(R.string.ajustes_pinear_resumen)
-            ) {
-                PalabrasMagicasCard()
-            }
-
-            // La voz tiene su grupo: estaba en «Aspecto» de cuando era una tarjeta pequeña,
-            // y ahora es la más larga de todas y nadie la busca ahí.
-            GrupoDeAjustes(
-                stringResource(R.string.ajustes_voz),
-                stringResource(R.string.ajustes_voz_resumen)
-            ) {
-                MotorDeVozCard()
-            }
-
-            GrupoDeAjustes(
-                stringResource(R.string.ajustes_aspecto),
-                stringResource(R.string.ajustes_aspecto_resumen)
-            ) {
-                FluidezCard()
-                Spacer(Modifier.height(12.dp))
-                ModoNocheCard()
-                Spacer(Modifier.height(12.dp))
-                OledCard()
-                Spacer(Modifier.height(12.dp))
-                LetraDelPinCard()
-            }
-
-            // **La versión, aquí abajo.** Si el número solo vive en el archivo
-            // de compilación, desde el móvil no hay forma de saber qué build
-            // tienes puesto — y con los APK repartidos por enlace, esa era la
-            // pregunta que no se podía responder.
+    com.forge.pixpin.ajustes.AjustesV2(
+        onVolver = onVolver,
+        // **La versión, aquí abajo.** Si el número solo vive en el archivo de compilación, desde el
+        // móvil no hay forma de saber qué build tienes puesto — y con los APK repartidos por enlace,
+        // esa era la pregunta que no se podía responder.
+        pie = {
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )
-
-            Spacer(Modifier.height(24.dp))
+        }
+    ) { id ->
+        // Los ids son los de [com.forge.pixpin.ajustes.CatalogoDeAjustes.OPCIONES].
+        when (id) {
+            "captura" -> CaptureModeCard()
+            "formato" -> FormatoDeCopiaCard()
+            "caducidad" -> CaducidadDeCapturasCard()
+            "pdf" -> CompresionDePdfCard()
+            "guia" -> ModoGuiaCard()
+            "iman" -> ImanCard()
+            "mano" -> ManoCard()
+            "herramientas" -> com.forge.pixpin.ajustes.HerramientasEnTodosCard()
+            "barra-lienzo" -> BarraDelEditorCard()
+            "barra-pin" -> BarraDelPinCard()
+            "barra-pantalla" -> BarraDeLaCapaCard()
+            "barra-lector" -> BarraDelLectorCard()
+            "palabras" -> PalabrasMagicasCard()
+            "voz" -> MotorDeVozCard()
+            "fluidez" -> FluidezCard()
+            "noche" -> ModoNocheCard()
+            "oled" -> OledCard()
+            "letra" -> LetraDelPinCard()
         }
     }
-}
-
-@Composable
-private fun GrupoDeAjustes(titulo: String, resumen: String, contenido: @Composable () -> Unit) {
-    var abierto by rememberSaveable(titulo) { mutableStateOf(false) }
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .clickable { abierto = !abierto }
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(titulo, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                // **El resumen es lo que evita abrirlo para ver qué había.** Cerrado, la
-                // pantalla entera cabe de un vistazo y aun así se sabe dónde mirar.
-                Text(
-                    resumen,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-            Icon(
-                if (abierto) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    // **Cerrado no se compone.** Trece tarjetas abiertas a la vez eran una pantalla que no
-    // se acababa de recorrer (lo reportó el usuario el 6-sep-2026), y algunas leen del disco
-    // al componerse: así solo trabaja la que se abre.
-    if (abierto) {
-        Spacer(Modifier.height(12.dp))
-        contenido()
-    }
-    Spacer(Modifier.height(12.dp))
 }
 
 /**
@@ -858,8 +755,7 @@ private fun BarraDelPinCard() {
         descripcion = R.string.pin_tools_desc,
         grupos = settings.pinGroupList,
         puestas = settings.pinToolSet,
-        onCambio = { scope.launch { app.settings.setBarraDelPin(it) } },
-        onReset = { scope.launch { app.settings.resetBarraDelPin() } }
+        onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN, grupos) }
     )
 }
 
@@ -881,8 +777,7 @@ private fun BarraDelEditorCard() {
         descripcion = R.string.editor_tools_desc,
         grupos = settings.editorGroupList,
         puestas = settings.editorToolSet,
-        onCambio = { scope.launch { app.settings.setBarraDelEditor(it) } },
-        onReset = { scope.launch { app.settings.resetBarraDelEditor() } }
+        onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LIENZO, grupos) }
     )
 }
 
@@ -901,8 +796,7 @@ private fun BarraDelLectorCard() {
         descripcion = R.string.lector_tools_desc,
         grupos = settings.lectorGroupList,
         puestas = settings.lectorToolSet,
-        onCambio = { scope.launch { app.settings.setBarraDelLector(it) } },
-        onReset = { scope.launch { app.settings.resetBarraDelLector() } }
+        onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR, grupos) }
     )
 }
 
@@ -918,9 +812,24 @@ private fun BarraDeLaCapaCard() {
         descripcion = R.string.capa_tools_desc,
         grupos = settings.capaGroupList,
         puestas = settings.capaToolSet,
-        onCambio = { scope.launch { app.settings.setBarraDeLaCapa(it) } },
-        onReset = { scope.launch { app.settings.resetBarraDeLaCapa() } }
+        onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PANTALLA, grupos) }
     )
+}
+
+/**
+ * Guarda una barra reordenada con el reparto de herramientas: lo apagado en todos que tenía se
+ * conserva, y lo apagado en todos que se mete ahí se enciende solo ahí. Ver
+ * [com.forge.pixpin.motor.HerramientasPorSitio.Reparto.conBarra].
+ */
+private fun guardarBarra(
+    app: PixPinApp,
+    scope: kotlinx.coroutines.CoroutineScope,
+    settings: Settings,
+    sitio: com.forge.pixpin.motor.HerramientasPorSitio.Sitio,
+    grupos: List<List<com.forge.pixpin.motor.Tool>>
+) {
+    val antes = settings.reparto
+    scope.launch { app.settings.setReparto(antes, antes.conBarra(sitio, grupos.flatten().toSet()), sitio to grupos) }
 }
 
 /**
@@ -936,8 +845,7 @@ private fun BarraCard(
     @androidx.annotation.StringRes descripcion: Int,
     grupos: List<List<com.forge.pixpin.motor.Tool>>,
     puestas: Set<com.forge.pixpin.motor.Tool>,
-    onCambio: (List<List<com.forge.pixpin.motor.Tool>>) -> Unit,
-    onReset: () -> Unit
+    onCambio: (List<List<com.forge.pixpin.motor.Tool>>) -> Unit
 ) {
     val fuera = com.forge.pixpin.motor.ALL_TOOLS.filter { it !in puestas }
 
@@ -962,10 +870,7 @@ private fun BarraCard(
                 fuera = fuera,
                 onCambio = { nuevos, _ -> onCambio(nuevos) }
             )
-
-            TextButton(onClick = onReset) {
-                Text(stringResource(R.string.pin_tools_reset))
-            }
+            // El «volver a las de siempre» de cada barra es ahora el «De fábrica» de su opción.
         }
     }
 }
