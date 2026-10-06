@@ -351,7 +351,13 @@ class MensajesStore(private val context: Context) {
          * comparan los archivos por su resumen, así que reescribir aquí lo que acaba de llegar los
          * dejaría distintos para siempre y volverían a pasárselo en cada vuelta.
          */
-        aligerar: Boolean = true
+        aligerar: Boolean = true,
+        /**
+         * Si una foto se endereza según su EXIF ([FotoDerecha]). Solo lo que **entra** de fuera:
+         * lo que ya estaba en el chat (un reenvío) puede llevar un dibujo encima colocado con sus
+         * medidas de siempre, y girarla lo descuadraría.
+         */
+        enderezar: Boolean = aligerar
     ): String? = runCatching {
         // Con su extensión: sin ella, al abrirlo después Android no sabe de qué es. Ver
         // [nombreConExtension].
@@ -365,6 +371,10 @@ class MensajesStore(private val context: Context) {
         if (aligerar && destino.name.endsWith(".pdf", ignoreCase = true)) {
             com.forge.pixpin.pdf.ComprimirPdf.enSuSitio(destino)
         }
+        // **Una foto entra derecha** (5-oct-2026): si su EXIF dice que va girada, se gira aquí
+        // una vez y todo lo demás la ve bien sin saber de EXIF. Por el mismo motivo que el PDF,
+        // lo que llega sincronizando no se toca. Ver [FotoDerecha].
+        if (enderezar) FotoDerecha.enSuSitio(destino)
         destino.absolutePath
     }.getOrNull()
 

@@ -92,6 +92,8 @@ class ProyectosRepository(context: Context) {
         // archivos del tamaño de un PDF.
         porId(id)?.pdfLimpio?.let { runCatching { File(it).delete() } }
         runCatching { com.forge.pixpin.sincro.Disco(app.filesDir).borrarChat(id, "Antes de borrar el proyecto") }
+        // Su logo, que es solo de este aparato, se va con él. Ver [com.forge.pixpin.guardados.LogoDelProyecto].
+        com.forge.pixpin.guardados.LogoDelProyecto.quitar(app, id)
         _proyectos.value = _proyectos.value.filter { it.id != id }
         escribir()
     }

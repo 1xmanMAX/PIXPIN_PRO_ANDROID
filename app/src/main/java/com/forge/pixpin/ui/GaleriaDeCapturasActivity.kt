@@ -106,7 +106,7 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
                     Spacer(Modifier.height(8.dp))
                     listOf(
                         "Abrir para anotar" to { abrir(c) },
-                        "Sacar a la pantalla" to { pinear(c) },
+                        "Pinear" to { pinear(c) },
                         "Copiar" to { copiar(c) },
                         "Compartir" to { compartir(c) },
                         "Al chat" to { alChat(c) },
