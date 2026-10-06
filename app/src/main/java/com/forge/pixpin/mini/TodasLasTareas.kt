@@ -92,34 +92,13 @@ object TodasLasTareas {
     val ORDEN_DE_PENDIENTE: Comparator<Fila> =
         compareBy<Fila> { it.creada == null }.thenBy { it.creada }.thenBy { it.indice }
 
-    /**
-     * Una imagen dentro del texto de una tarea, `![img 01](enlace)`: el enlace sin blancos ni `)`.
-     * La misma regla que `mini::imagenes_de` del PC y `docs/investigacion/2026-10-03-tareas-con-
-     * imagenes-android.md`. (Local a propósito: `Tareas.imagenes` la tendrá en común.)
-     */
-    private val IMAGEN = Regex("""!\[[^\]]*]\(([^)\s]+)\)""")
     private val BLANCOS = Regex("""\s+""")
-
-    /** El texto sin sus imágenes (los blancos que dejan, juntados en uno) y los enlaces, en orden. */
-    fun imagenesDe(texto: String): Pair<String, List<String>> {
-        val enlaces = IMAGEN.findAll(texto).map { it.groupValues[1] }.toList()
-        if (enlaces.isEmpty()) return texto.trim() to emptyList()
-        return BLANCOS.replace(IMAGEN.replace(texto, " "), " ").trim() to enlaces
-    }
-
-    /** Cambia cada enlace de imagen por lo que diga [cambio] (nulo = se deja como estaba). */
-    fun cambiarEnlaces(texto: String, cambio: (String) -> String?): String =
-        IMAGEN.replace(texto) { m ->
-            val viejo = m.groupValues[1]
-            val nuevo = cambio(viejo) ?: return@replace m.value
-            m.value.substring(0, m.value.length - viejo.length - 1) + nuevo + ")"
-        }
 
     /** Las tareas de un documento, con su texto partido de su fecha y de sus imágenes. */
     fun filasDe(documento: String): List<Fila> =
         Tareas.leer(documento).mapIndexed { i, t ->
             val (visible, creada) = Tareas.partir(t.texto)
-            val (texto, imagenes) = imagenesDe(visible)
+            val (texto, imagenes) = Tareas.imagenes(visible)
             Fila(i, t.texto, texto, t.hecha, creada, imagenes)
         }
 
@@ -344,11 +323,8 @@ object TodasLasTareas {
     }
 
     /** «Deshacer»: la tarea vuelve a su sitio (o al final, si la lista se acortó), con su fecha y su estado. */
-    fun reponer(documento: String, indice: Int, tarea: Tarea): String {
-        val tareas = Tareas.leer(documento).toMutableList()
-        tareas.add(indice.coerceIn(0, tareas.size), tarea)
-        return Tareas.escribir(Cabecera.titulo(documento), tareas)
-    }
+    fun reponer(documento: String, indice: Int, tarea: Tarea): String =
+        Tareas.escribir(Cabecera.titulo(documento), Tareas.reponer(Tareas.leer(documento), indice, tarea))
 
     /**
      * Pasa la tarea [f] del documento [origen] al final de [destino], con su fecha y su estado
@@ -369,18 +345,9 @@ object TodasLasTareas {
 
     // ---- Imágenes --------------------------------------------------------
 
-    /** Lo que dice el enlace de una imagen ya resuelto: `pixpin:files/…` o una ruta absoluta. */
-    private const val PORTATIL = "pixpin:files/"
-
-    /** El fichero de este aparato al que lleva [enlace], si está. */
-    fun archivoDeEnlace(filesDir: File, enlace: String): File? {
-        val f = when {
-            enlace.startsWith(PORTATIL) -> File(filesDir, enlace.removePrefix(PORTATIL))
-            enlace.startsWith("/") -> File(enlace)
-            else -> return null
-        }
-        return f.takeIf { it.isFile }
-    }
+    /** El fichero de este aparato al que lleva [enlace] (`pixpin:files/…` o ruta absoluta), si está. */
+    fun archivoDeEnlace(filesDir: File, enlace: String): File? =
+        Tareas.rutaDeImagen(enlace, filesDir.path)?.let(::File)?.takeIf { it.isFile }
 
     /**
      * El texto de una tarea que pasa a otro chat, con sus imágenes **copiadas** a la carpeta del
@@ -392,11 +359,11 @@ object TodasLasTareas {
     fun conImagenesCopiadas(texto: String, filesDir: File, carpeta: File, ahora: Long): String? {
         var fallo = false
         var n = 0
-        val nuevo = cambiarEnlaces(texto) { enlace ->
+        val nuevo = Tareas.cambiarEnlaces(texto) { enlace ->
             val origen = archivoDeEnlace(filesDir, enlace) ?: return@cambiarEnlaces null
             val ext = origen.extension.lowercase().ifEmpty { "png" }
             val destino = generateSequence(n + 1) { it + 1 }.take(10_000)
-                .map { File(carpeta, "tarea-$ahora-${it.toString().padStart(2, '0')}.$ext") }
+                .map { File(carpeta, Tareas.nombreDeCopia(ahora, it, ext)) }
                 .firstOrNull { !it.exists() }
             if (destino == null) { fallo = true; return@cambiarEnlaces null }
             n = destino.name.substringAfterLast('-').substringBefore('.').toIntOrNull() ?: (n + 1)

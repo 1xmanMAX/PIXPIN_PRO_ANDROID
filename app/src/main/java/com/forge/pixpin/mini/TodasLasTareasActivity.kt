@@ -3,7 +3,6 @@ package com.forge.pixpin.mini
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -28,7 +27,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -416,14 +414,15 @@ class TodasLasTareasActivity : ComponentActivity() {
             withContext(Dispatchers.IO) {
                 val f = TodasLasTareas.archivoDeEnlace(filesDir, enlace)
                 archivo = f
-                imagen = f?.let { com.forge.pixpin.pin.ImageStore.load(it.absolutePath, 192)?.asImageBitmap() }
+                // La misma lectura (y la misma caché) que la fila de la lista en MiniActivity.
+                imagen = f?.let { ImagenesDeTareas.miniatura(it.absolutePath, 192) }
             }
         }
         val forma = RoundedCornerShape(6.dp)
         Box(
             Modifier.size(lado).clip(forma).background(MaterialTheme.colorScheme.surfaceVariant).clickable {
                 val f = archivo
-                if (f == null) Toast.makeText(this, "Esa imagen aún no está en este equipo: llegará con la sincronización.", Toast.LENGTH_SHORT).show()
+                if (f == null) ImagenesDeTareas.avisarQueFalta(this)
                 else runCatching { com.forge.pixpin.ui.AbrirCon.abrir(this, f) }
             },
             contentAlignment = Alignment.Center

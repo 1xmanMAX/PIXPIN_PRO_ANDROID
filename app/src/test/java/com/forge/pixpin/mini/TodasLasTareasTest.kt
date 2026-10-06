@@ -56,12 +56,12 @@ class TodasLasTareasTest {
 
     @Test
     fun `las imagenes de una tarea como en el PC y lo que no lo es se queda como texto`() {
-        assertEquals("comprar yeso" to listOf("pixpin:files/a.png"), TodasLasTareas.imagenesDe("comprar yeso ![img 01](pixpin:files/a.png)"))
-        assertEquals("" to listOf("a.png"), TodasLasTareas.imagenesDe("![img 01](a.png)"))
-        assertEquals("ñandú ★" to listOf("ñ.png"), TodasLasTareas.imagenesDe("ñandú ![img 01](ñ.png) ★"))
+        assertEquals("comprar yeso" to listOf("pixpin:files/a.png"), Tareas.imagenes("comprar yeso ![img 01](pixpin:files/a.png)"))
+        assertEquals("" to listOf("a.png"), Tareas.imagenes("![img 01](a.png)"))
+        assertEquals("ñandú ★" to listOf("ñ.png"), Tareas.imagenes("ñandú ![img 01](ñ.png) ★"))
         // Caso negativo: nada de esto es una imagen.
         for (t in listOf("un [enlace](x.png) normal", "![sin cierre](x.png", "![vacia]()", "![con blanco](mi foto.png)", "! [separada](x.png)", "pan")) {
-            assertEquals(t, t to emptyList<String>(), TodasLasTareas.imagenesDe(t))
+            assertEquals(t, t to emptyList<String>(), Tareas.imagenes(t))
         }
     }
 
@@ -286,8 +286,8 @@ class TodasLasTareasTest {
     @Test
     fun `cambiar enlaces solo toca los de las imagenes`() {
         val t = "a ![img 01](x.png) [no](y.png) ![img 02](z.png)"
-        assertEquals("a ![img 01](X) [no](y.png) ![img 02](z.png)", TodasLasTareas.cambiarEnlaces(t) { if (it == "x.png") "X" else null })
-        assertNotEquals(t, TodasLasTareas.cambiarEnlaces(t) { "Q" })
-        assertNotNull(TodasLasTareas.imagenesDe(t))
+        assertEquals("a ![img 01](X) [no](y.png) ![img 02](z.png)", Tareas.cambiarEnlaces(t) { if (it == "x.png") "X" else null })
+        assertNotEquals(t, Tareas.cambiarEnlaces(t) { "Q" })
+        assertNotNull(Tareas.imagenes(t))
     }
 }
