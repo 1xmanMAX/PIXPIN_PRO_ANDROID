@@ -284,7 +284,13 @@ data class Settings(
      * fábrica, mientras que una cadena vacía es «no quiero ninguna». El formato
      * lo pone y lo lee [com.forge.pixpin.clipboard.MagicWord].
      */
-    val palabrasMagicas: String? = null
+    val palabrasMagicas: String? = null,
+    /**
+     * **Días que aguanta una captura antes de irse sola** a la papelera del teléfono, salvo las
+     * conservadas. Cero = no se va ninguna. Siete de fábrica, como `[capturas] dias_caducidad` del
+     * PC. Ver [com.forge.pixpin.capture.CaducidadDeCapturas].
+     */
+    val diasCaducidad: Int = com.forge.pixpin.capture.CaducidadDeCapturas.DIAS
 ) {
 
     /** Las palabras mágicas ya resueltas contra las de fábrica. */
@@ -386,6 +392,7 @@ class SettingsRepository(private val context: Context) {
         val COPY_FORMAT = stringPreferencesKey("copy_format")
         val COMPRESION_PDF = stringPreferencesKey("compresion_pdf")
         val PALABRAS = stringPreferencesKey("palabras_magicas")
+        val DIAS_CADUCIDAD = intPreferencesKey("dias_caducidad")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
@@ -439,7 +446,8 @@ class SettingsRepository(private val context: Context) {
             }.getOrDefault(CopyFormat.PNG),
             compresionPdf = prefs[Keys.COMPRESION_PDF]?.takeIf { it in com.forge.pixpin.pdf.ComprimirPdf.NIVELES }
                 ?: com.forge.pixpin.pdf.ComprimirPdf.NIVEL_POR_DEFECTO,
-            palabrasMagicas = prefs[Keys.PALABRAS]
+            palabrasMagicas = prefs[Keys.PALABRAS],
+            diasCaducidad = (prefs[Keys.DIAS_CADUCIDAD] ?: com.forge.pixpin.capture.CaducidadDeCapturas.DIAS).coerceAtLeast(0)
         )
     }
 
@@ -674,6 +682,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setCompresionPdf(nivel: String) {
         context.dataStore.edit { it[Keys.COMPRESION_PDF] = nivel }
+    }
+
+    suspend fun setDiasCaducidad(dias: Int) {
+        context.dataStore.edit { it[Keys.DIAS_CADUCIDAD] = dias.coerceAtLeast(0) }
     }
 
     suspend fun setCopyFormat(format: CopyFormat) {

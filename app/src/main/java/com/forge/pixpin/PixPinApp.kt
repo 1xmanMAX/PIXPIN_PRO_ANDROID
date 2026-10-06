@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import android.util.Log
 
@@ -100,6 +101,17 @@ class PixPinApp : Application() {
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
         settings = SettingsRepository(this)
         scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }
+        // **Las capturas caducadas, a la papelera**: al arrancar y luego cada hora, como el
+        // barrendero del PC. Ver [com.forge.pixpin.capture.BarrenderoDeCapturas].
+        scope.launch(Dispatchers.IO) {
+            while (true) {
+                runCatching {
+                    val dias = settings.settings.first().diasCaducidad
+                    com.forge.pixpin.capture.BarrenderoDeCapturas.barrer(this@PixPinApp, System.currentTimeMillis(), dias)
+                }
+                kotlinx.coroutines.delay(com.forge.pixpin.capture.BarrenderoDeCapturas.CADA_MS)
+            }
+        }
         // **Reponer los PDF que se hayan quedado sin archivo.**
         //
         // Esto estaba escrito, probado y documentado —el propio comentario de
