@@ -125,6 +125,234 @@ object Tareas {
         return texto.substring(0, m.range.first).trim() to fecha
     }
 
+    /** `pan ➕ 2026-10-02`, o la marca sola si no hay texto (`mini::con_fecha` del PC). */
+    private fun conFecha(visible: String, creada: java.time.LocalDate): String {
+        val v = visible.trim()
+        return if (v.isEmpty()) "➕ $creada" else "$v ➕ $creada"
+    }
+
+    // ---- Las imágenes de una tarea (3-oct-2026) --------------------------
+    //
+    // Ver `docs/investigacion/2026-10-03-tareas-con-imagenes-android.md` del PC. Como la fecha,
+    // van **dentro del texto de la casilla**, como imágenes de Markdown y siempre **delante** de
+    // la marca de la fecha, para que [partir] la siga encontrando al final:
+    //
+    //     - [ ] comprar yeso ![img 01](pixpin:files/guardados/pc/general/archivos/tarea-1759500000000-01.png) ➕ 2026-10-03
+    //
+    // El enlace es la ruta de siempre: aquí, absoluta (`Disco.aPortatil` la vuelve
+    // `pixpin:files/…` al salir y `aLocal` absoluta al entrar), y la sincronización ya viaja con
+    // cualquier fichero que el texto de un mensaje nombre así. Todo esto es copia exacta de
+    // `mini::imagenes_de`, `con_imagenes`, `fichas_a_imagenes` y `cambiar_enlaces` del PC, con
+    // las mismas pruebas.
+
+    /** Lo que se lee de una imagen: `img 01`. Va en el `alt`; el lector no lo mira. */
+    fun rotuloDeImagen(numero: Int): String = "img " + numero.toString().padStart(2, '0')
+
+    /** La ficha que ocupa el sitio de la imagen [numero] mientras se escribe: `[img 01]`. */
+    fun fichaDeImagen(numero: Int): String = "[${rotuloDeImagen(numero)}]"
+
+    /** Los blancos que corta el PC (`es_blanco`): un enlace con uno de estos no es imagen. */
+    private fun esBlanco(c: Char) = c == ' ' || c == '\t' || c == '\u000B' || c == '\u000C' || c == '\r' || c == '\n'
+
+    /** Dónde está cada `![alt](enlace)`: el trozo entero `[inicio, fin)` y el enlace. */
+    private class Trozo(val inicio: Int, val fin: Int, val iniEnlace: Int, val finEnlace: Int)
+
+    /**
+     * Cada `![alt](enlace)` del texto. El enlace no puede ir vacío ni llevar blancos (la
+     * sincronización corta ahí) y el `alt` no puede llevar `]`. Lo demás es texto.
+     */
+    private fun trozosDeImagen(texto: String): List<Trozo> {
+        val salida = ArrayList<Trozo>()
+        var desde = 0
+        while (true) {
+            val inicio = texto.indexOf("![", desde)
+            if (inicio < 0) break
+            val trasAlt = inicio + 2
+            val cierre = texto.indexOf(']', trasAlt)
+            if (cierre < 0) break
+            if (!texto.startsWith("](", cierre)) { desde = trasAlt; continue }
+            val iniEnlace = cierre + 2
+            val finEnlace = texto.indexOf(')', iniEnlace)
+            if (finEnlace < 0) break
+            if (finEnlace == iniEnlace || (iniEnlace until finEnlace).any { esBlanco(texto[it]) }) { desde = trasAlt; continue }
+            salida += Trozo(inicio, finEnlace + 1, iniEnlace, finEnlace)
+            desde = finEnlace + 1
+        }
+        return salida
+    }
+
+    /** `split_whitespace` + `join(" ")` del PC: los blancos (de cualquier tipo) se juntan en uno. */
+    private fun juntarBlancos(s: String): String {
+        val salida = StringBuilder(s.length)
+        var hueco = false
+        for (c in s) {
+            if (c.isWhitespace()) { hueco = salida.isNotEmpty(); continue }
+            if (hueco) salida.append(' ')
+            hueco = false
+            salida.append(c)
+        }
+        return salida.toString()
+    }
+
+    /**
+     * El texto de una tarea (ya sin la fecha: [partir]) separado en **lo que se lee** y **los
+     * enlaces de sus imágenes**, en orden. Los blancos que dejan las imágenes al irse se juntan
+     * en uno: «yeso ![a](x) y arena» se lee «yeso y arena».
+     */
+    fun imagenes(visible: String): Pair<String, List<String>> {
+        val trozos = trozosDeImagen(visible)
+        if (trozos.isEmpty()) return visible.trim() to emptyList()
+        val limpio = StringBuilder(visible.length)
+        val enlaces = ArrayList<String>(trozos.size)
+        var desde = 0
+        for (t in trozos) {
+            limpio.append(visible, desde, t.inicio).append(' ')
+            enlaces += visible.substring(t.iniEnlace, t.finEnlace)
+            desde = t.fin
+        }
+        limpio.append(visible, desde, visible.length)
+        return juntarBlancos(limpio.toString()) to enlaces
+    }
+
+    /** Lo que se lee de una casilla: sin la fecha y sin las imágenes. Para la burbuja y el pin. */
+    fun legible(textoDeLaCasilla: String): String = imagenes(partir(textoDeLaCasilla).first).first
+
+    /** El texto con sus imágenes detrás, numeradas desde 1: lo contrario de [imagenes]. */
+    fun conImagenes(texto: String, enlaces: List<String>): String {
+        val s = StringBuilder(texto.trim())
+        enlaces.forEachIndexed { n, e ->
+            if (s.isNotEmpty()) s.append(' ')
+            s.append("![").append(rotuloDeImagen(n + 1)).append("](").append(e).append(')')
+        }
+        return s.toString()
+    }
+
+    /**
+     * Cambia las fichas `[img NN]` del texto por su imagen ya guardada (número, enlace). La
+     * imagen cuya ficha no está va al final; una ficha sin imagen se queda como texto (alguien
+     * lo escribió). La fecha, si el texto ya la traía, sigue al final, detrás de todo.
+     */
+    fun fichasAImagenes(texto: String, imagenes: List<Pair<Int, String>>): String {
+        val (visible, fecha) = partir(texto)
+        val s = StringBuilder(visible)
+        for ((numero, enlace) in imagenes) {
+            val ficha = fichaDeImagen(numero)
+            val imagen = "![${rotuloDeImagen(numero)}]($enlace)"
+            val i = s.indexOf(ficha)
+            if (i >= 0) s.replace(i, i + ficha.length, imagen)
+            else {
+                if (s.isNotBlank()) s.append(' ')
+                s.append(imagen)
+            }
+        }
+        val limpio = s.toString().trim()
+        return if (fecha != null) conFecha(limpio, fecha) else limpio
+    }
+
+    /** El texto con el enlace de cada imagen cambiado por lo que diga [f] (o igual, con null). */
+    fun cambiarEnlaces(texto: String, f: (String) -> String?): String {
+        val s = StringBuilder(texto.length)
+        var desde = 0
+        for (t in trozosDeImagen(texto)) {
+            s.append(texto, desde, t.iniEnlace)
+            val viejo = texto.substring(t.iniEnlace, t.finEnlace)
+            s.append(f(viejo) ?: viejo)
+            desde = t.finEnlace
+        }
+        s.append(texto, desde, texto.length)
+        return s.toString()
+    }
+
+    // ---- Las fichas del campo de escribir (solo Android) -----------------
+
+    /**
+     * Para corregir una tarea: cada imagen del texto pasa a su ficha (`[img 01]`, `[img 02]`…
+     * por orden) y se devuelve cuál es cuál. [fichasAImagenes] lo deshace.
+     */
+    fun aFichas(visible: String): Pair<String, List<Pair<Int, String>>> {
+        val trozos = trozosDeImagen(visible)
+        if (trozos.isEmpty()) return visible to emptyList()
+        val s = StringBuilder(visible.length)
+        val imagenes = ArrayList<Pair<Int, String>>(trozos.size)
+        var desde = 0
+        trozos.forEachIndexed { n, t ->
+            s.append(visible, desde, t.inicio).append(fichaDeImagen(n + 1))
+            imagenes += (n + 1) to visible.substring(t.iniEnlace, t.finEnlace)
+            desde = t.fin
+        }
+        s.append(visible, desde, visible.length)
+        return s.toString() to imagenes
+    }
+
+    /**
+     * Mete la ficha de la imagen [numero] en el [cursor], separada por blancos de lo que tenga
+     * alrededor, como `meter_imagen` del PC. Devuelve el texto y dónde queda el cursor.
+     */
+    fun meterFicha(texto: String, cursor: Int, numero: Int): Pair<String, Int> {
+        val c = cursor.coerceIn(0, texto.length)
+        val ficha = buildString {
+            if (c > 0 && !texto[c - 1].isWhitespace()) append(' ')
+            append(fichaDeImagen(numero)).append(' ')
+        }
+        return (texto.substring(0, c) + ficha + texto.substring(c)) to c + ficha.length
+    }
+
+    /** El número de la siguiente imagen del campo: uno más que la mayor (`meter_imagen`). */
+    fun siguienteNumero(imagenes: List<Pair<Int, String>>): Int = (imagenes.maxOfOrNull { it.first } ?: 0) + 1
+
+    /**
+     * Las imágenes que van con la tarea: **las que aún tienen su ficha** en el texto, por orden
+     * de aparición. Las demás se descartan (y quien llama borra sus copias nuevas).
+     */
+    fun conFicha(texto: String, imagenes: List<Pair<Int, String>>): List<Pair<Int, String>> =
+        imagenes.mapNotNull { im -> texto.indexOf(fichaDeImagen(im.first)).takeIf { it >= 0 }?.let { it to im } }
+            .sortedBy { it.first }.map { it.second }
+
+    /**
+     * **Una chapa se borra entera con un solo retroceso.** Si [despues] es [antes] con una sola
+     * letra menos y esa letra caía dentro de la ficha de una de [numeros], devuelve [antes] sin
+     * la ficha entera y dónde queda el cursor; si no, null (el cambio se queda como está).
+     */
+    fun sinFichaRota(antes: String, despues: String, numeros: Collection<Int>): Pair<String, Int>? {
+        if (despues.length != antes.length - 1 || numeros.isEmpty()) return null
+        var k = 0
+        while (k < despues.length && antes[k] == despues[k]) k++
+        if (antes.substring(k + 1) != despues.substring(k)) return null
+        for (n in numeros) {
+            val ficha = fichaDeImagen(n)
+            var i = antes.indexOf(ficha)
+            while (i >= 0) {
+                if (k in i until i + ficha.length) return antes.removeRange(i, i + ficha.length) to i
+                i = antes.indexOf(ficha, i + 1)
+            }
+        }
+        return null
+    }
+
+    /** Dónde están las fichas de [numeros] en el texto, `[inicio, fin)`: para pintar sus chapas. */
+    fun fichasEn(texto: String, numeros: Collection<Int>): List<IntRange> =
+        numeros.mapNotNull { n ->
+            val f = fichaDeImagen(n)
+            texto.indexOf(f).takeIf { it >= 0 }?.let { it until it + f.length }
+        }
+
+    /**
+     * El fichero de un enlace, en este aparato: la ruta absoluta tal cual, o la portátil
+     * (`pixpin:files/…`) dentro de [filesDir]. Lo demás (un nombre suelto) no se sabe dónde
+     * está: null, y la fila enseña el hueco.
+     */
+    fun rutaDeImagen(enlace: String, filesDir: String): String? = when {
+        enlace.startsWith(PORTATIL) -> filesDir.trimEnd('/') + "/" + enlace.removePrefix(PORTATIL)
+        enlace.startsWith("/") -> enlace
+        else -> null
+    }
+
+    /** `tarea-<ms>-<nn>.<ext>`: sin blancos ni paréntesis, que cortarían el enlace. */
+    fun nombreDeCopia(ms: Long, numero: Int, extension: String): String =
+        "tarea-$ms-${numero.toString().padStart(2, '0')}.$extension"
+
+    private const val PORTATIL = "pixpin:files/"
+
     /** Días desde que se creó, por calendario y nunca negativos (un reloj adelantado da «hoy»). */
     fun diasDesde(fecha: java.time.LocalDate, hoy: java.time.LocalDate = java.time.LocalDate.now()): Long =
         java.time.temporal.ChronoUnit.DAYS.between(fecha, hoy).coerceAtLeast(0)
@@ -155,6 +383,14 @@ object Tareas {
         if (indice !in tareas.indices) return tareas
         return tareas.filterIndexed { i, _ -> i != indice }
     }
+
+    /**
+     * «Deshacer» de una tarea quitada con su aspa (4-oct-2026, como `tareas::reponer` del PC):
+     * vuelve a su sitio con su fecha, su estado y sus imágenes; o al final, si la lista se acortó
+     * entretanto (la sincronización, la burbuja del chat).
+     */
+    fun reponer(tareas: List<Tarea>, indice: Int, tarea: Tarea): List<Tarea> =
+        tareas.toMutableList().also { it.add(indice.coerceIn(0, tareas.size), tarea) }
 
     /**
      * Mueve una tarea de sitio.

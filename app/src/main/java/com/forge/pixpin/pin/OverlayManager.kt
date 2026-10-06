@@ -416,7 +416,7 @@ class OverlayManager(private val app: PixPinApp) {
         val tareas = com.forge.pixpin.mini.Tareas.leer(documento)
         createPin(
             newPin(PinType.CHECKLIST).copy(
-                text = tareas.joinToString("\n") { com.forge.pixpin.mini.Tareas.partir(it.texto).first },
+                text = tareas.joinToString("\n") { com.forge.pixpin.mini.Tareas.legible(it.texto) },
                 widget = WidgetState(checked = tareas.map { it.hecha }),
                 deMensaje = mensaje
             )
@@ -440,7 +440,7 @@ class OverlayManager(private val app: PixPinApp) {
                 for (c in ligadas) {
                     val m = mensajes.firstOrNull { it.id == c.snapshot().deMensaje } ?: continue
                     val t = com.forge.pixpin.mini.Tareas.leer(m.texto)
-                    c.ponerLista(t.joinToString("\n") { com.forge.pixpin.mini.Tareas.partir(it.texto).first }, t.map { it.hecha })
+                    c.ponerLista(t.joinToString("\n") { com.forge.pixpin.mini.Tareas.legible(it.texto) }, t.map { it.hecha })
                 }
             }
         }
