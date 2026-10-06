@@ -115,6 +115,11 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Send
@@ -213,6 +218,8 @@ class MensajesActivity : ComponentActivity() {
     private var chatDe by mutableStateOf<String?>(null)
     /** El lienzo del chat al que se le está cambiando el nombre. */
     private var renombrandoMensaje by mutableStateOf<Mensaje?>(null)
+    /** La foto o el archivo cuya descripción se está escribiendo. Ver [Descripcion]. */
+    private var describiendo by mutableStateOf<Mensaje?>(null)
     /** El mensaje que se va a meter en una nota (como «Insertar en una nota» del PC). */
     private var insertandoEnNota by mutableStateOf<Mensaje?>(null)
     private var nombreDelChat by mutableStateOf("")
@@ -323,6 +330,45 @@ class MensajesActivity : ComponentActivity() {
                 app.proyectos.guardar(com.forge.pixpin.motor.Proyectos.conNota(p, h.id, (if (antes.isEmpty()) "" else "$antes\n\n") + md + "\n", System.currentTimeMillis()))
                 Toast.makeText(this@MensajesActivity, "Insertado en «${h.nombre.ifBlank { "Nota" }}»", Toast.LENGTH_SHORT).show()
             }
+        }
+        // **La descripción de una foto** (4-oct-2026, la del PC): el texto que se ve debajo,
+        // dentro de la burbuja. Vacía la quita. Es el mismo mensaje, no una nota aparte, así que
+        // viaja con la foto. Ver [Descripcion].
+        describiendo?.let { m ->
+            var texto by remember(m.id) { mutableStateOf(m.texto) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { describiendo = null },
+                title = {
+                    Text(getString(
+                        if (m.texto.isBlank()) com.forge.pixpin.R.string.guardados_describir
+                        else com.forge.pixpin.R.string.guardados_describir_editar
+                    ))
+                },
+                text = {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = texto,
+                        onValueChange = { texto = it },
+                        placeholder = { Text(getString(com.forge.pixpin.R.string.guardados_describir_pista)) },
+                        maxLines = 6,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        describiendo = null
+                        val nuevo = Descripcion.conDescripcion(m, texto) ?: return@TextButton
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            almacen.actualizar(m.id) { it.copy(texto = nuevo.texto) }
+                            MensajesStore.cambios.value = MensajesStore.cambios.value + 1
+                        }
+                    }) { Text(getString(com.forge.pixpin.R.string.cd_save)) }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { describiendo = null }) {
+                        Text(getString(com.forge.pixpin.R.string.cancel))
+                    }
+                }
+            )
         }
         renombrandoMensaje?.let { m ->
             val esLienzo = m.clase == Clase.DIBUJO && m.referencia != null
@@ -583,6 +629,19 @@ class MensajesActivity : ComponentActivity() {
         val elegirArchivo = androidx.activity.compose.rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument()
         ) { uri -> uri?.let { guardarArchivo(it); refrescar() } }
+
+        // **Varias fotos de una vez, con su cuadro de enviar** (4-oct-2026, el del PC): se
+        // eligen, se ordenan, se quitan o se añaden más y se mandan con su descripción. Si el
+        // cuadro ya está abierto, «Añadir» suma sin repetir. Ver [EnvioDeVarios].
+        var fotosPorEnviar by remember { mutableStateOf(emptyList<Uri>()) }
+        val elegirFotos = androidx.activity.compose.rememberLauncherForActivityResult(
+            ActivityResultContracts.PickMultipleVisualMedia(MAXIMO_DE_FOTOS)
+        ) { uris -> if (uris.isNotEmpty()) fotosPorEnviar = EnvioDeVarios.anadir(fotosPorEnviar, uris).take(MAXIMO_DE_FOTOS) }
+        val pedirFotos = {
+            elegirFotos.launch(
+                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
 
         // **Filtrar y buscar, en dos pasos.** Con la consulta dentro de la misma clave,
         // cada tecla volvía a filtrar y a **ordenar** la lista entera, y ordenar no
@@ -1440,16 +1499,24 @@ class MensajesActivity : ComponentActivity() {
                                         // salirse (usuario, 9-sep-2026). A 28 queda holgado
                                         // dentro de los 46 de la píldora pase lo que pase con
                                         // el texto de al lado.
+                                        // **Con su logo, si el proyecto tiene** (4-oct-2026). Ver
+                                        // [LogoDelProyecto].
+                                        val logo = logoDe(chatDe)
                                         Box(
                                             Modifier
                                                 .size(28.dp)
+                                                .clip(androidx.compose.foundation.shape.CircleShape)
                                                 .background(
                                                     MaterialTheme.colorScheme.primary,
                                                     androidx.compose.foundation.shape.CircleShape
                                                 ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(
+                                            if (logo != null) androidx.compose.foundation.Image(
+                                                logo, contentDescription = null,
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            ) else Icon(
                                                 if (chatDe == null) Icons.Filled.BookmarkBorder
                                                 else Icons.Filled.Folder,
                                                 contentDescription = null,
@@ -1737,6 +1804,32 @@ class MensajesActivity : ComponentActivity() {
         // Copiar un proyecto daría dos que se editan por separado y divergen, que es la
         // peor forma de perder trabajo — la que no se nota hasta que has escrito en el
         // equivocado.
+        if (fotosPorEnviar.isNotEmpty()) {
+            // El pie sale de la caja de escribir y, si se cancela, vuelve a ella: cancelar no
+            // puede ser perder lo escrito. Ver [Descripcion.pieDeVuelta].
+            var pie by remember { mutableStateOf(escrito) }
+            CuadroDeEnviar(
+                fotos = fotosPorEnviar,
+                pie = pie,
+                onPie = { pie = it },
+                onFotos = { fotosPorEnviar = it },
+                onAnadir = pedirFotos,
+                onCancelar = {
+                    escrito = Descripcion.pieDeVuelta(escrito, pie)
+                    fotosPorEnviar = emptyList()
+                },
+                onEnviar = {
+                    val todas = fotosPorEnviar
+                    val pies = Descripcion.pies(todas.map { Clase.IMAGEN }, pie)
+                    if (pie.isNotBlank() && escrito == pie) escrito = ""
+                    fotosPorEnviar = emptyList()
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        // En su orden, una tras otra: el chat las enseña por su hora.
+                        todas.forEachIndexed { i, uri -> copiarLoElegido(uri, pies[i].orEmpty()) }
+                    }
+                }
+            )
+        }
         if (eligiendoQue) {
             // **Una hoja que sube desde abajo, no un diálogo en medio.**
             //
@@ -1763,6 +1856,14 @@ class MensajesActivity : ComponentActivity() {
                 ) {
                     item {
                         Row {
+                    BotonDeAdjuntar(
+                        Icons.Filled.Image,
+                        com.forge.pixpin.R.string.guardados_adj_fotos,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        pedirFotos()
+                    }
                     BotonDeAdjuntar(
                         Icons.Filled.Description,
                         com.forge.pixpin.R.string.guardados_adj_archivo,
@@ -2543,6 +2644,8 @@ class MensajesActivity : ComponentActivity() {
             label = "destello"
         )
         var menuAbierto by remember(m.id) { mutableStateOf(false) }
+        // «Más» abierto: el menú enseña lo raro en vez de lo diario. Ver el menú, abajo.
+        var verMas by remember(m.id) { mutableStateOf(false) }
         var dondeElDedo by remember(m.id) {
             mutableStateOf(androidx.compose.ui.unit.DpOffset.Zero)
         }
@@ -2565,20 +2668,21 @@ class MensajesActivity : ComponentActivity() {
                     }
                 )
         ) {
-            // **El menú del mensaje, con Borrar el último.**
+            // **El menú del mensaje: lo diario arriba, lo raro en «Más» y Borrar aparte.**
             //
-            // Es el orden de Telegram (`ChatActivity.java:45543-45836`): responder
-            // primero, porque es lo que más se hace, y borrar al final, lejos del dedo
-            // que viene bajando. Lleva nombres y no iconos mudos: aquí «fijar» y «sacar
-            // a la pantalla» son dos cosas distintas y con dibujitos no se distinguen.
-            //
-            // La última es «Elegir», que es la puerta al modo de varios. En Telegram el
-            // menú es la vía principal y la selección la excepción, no al revés.
+            // Es el de la v2 del PC (4-oct-2026, `menu_v2.rs`), que a su vez sale del orden de
+            // Telegram (`ChatActivity.java:45543-45836`): responder primero, porque es lo que
+            // más se hace, y borrar al final, en rojo y separado por una raya, lejos del dedo
+            // que viene bajando. Con todo seguido el menú pasaba de veinte líneas y lo de cada
+            // día había que buscarlo entre lo que se usa una vez al mes. «Más» no abre otro
+            // menú al lado —en un móvil no cabe—: cambia lo de dentro por lo raro, con «Atrás»
+            // arriba para volver.
             androidx.compose.material3.DropdownMenu(
                 expanded = menuAbierto,
-                onDismissRequest = { menuAbierto = false },
+                onDismissRequest = { menuAbierto = false; verMas = false },
                 offset = dondeElDedo
             ) {
+              if (!verMas) {
                 // **Cambiar el nombre, lo primero** (4-oct-2026): de cualquier archivo, audios
                 // incluidos. Lo pidió el usuario así, «que sea notorio».
                 if (Renombrar.sePuede(m)) {
@@ -2596,40 +2700,41 @@ class MensajesActivity : ComponentActivity() {
                         menuAbierto = false; copiar()
                     }
                 }
-                DelMenu(
-                    if (m.fijado) com.forge.pixpin.R.string.guardados_soltar
-                    else com.forge.pixpin.R.string.guardados_fijar
-                ) { menuAbierto = false; acciones.fijar() }
+                // **Solo lo que la burbuja no tiene ya a mano** (22-sep-2026, pedido por el
+                // usuario: «muchas de esas opciones ya están repetidas»). Una foto, una hoja, un
+                // archivo y un lienzo llevan su botón de pinear en la propia burbuja
+                // ([AtajoEnLaEsquina], [FilaDeArchivo]); la nota de voz, el de pasarla a texto
+                // ([BotonDeTexto]). Ahí el menú calla: dos caminos al mismo sitio no ayudan,
+                // alargan la lista. Pinear queda para lo que no lleva botón: una nota
+                // de texto y una nota de voz.
+                if (!tieneBotonDePinear(m)) DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
+                    menuAbierto = false; acciones.pinear()
+                }
+                // **La descripción de una foto o un archivo** (lo del PC del 4-oct): el texto
+                // de debajo, en el propio mensaje. Ver [Descripcion].
+                if (Descripcion.sePuede(m)) {
+                    DelMenu(
+                        if (m.texto.isBlank()) com.forge.pixpin.R.string.guardados_describir
+                        else com.forge.pixpin.R.string.guardados_describir_editar,
+                        Icons.Filled.Subtitles
+                    ) { menuAbierto = false; describiendo = m }
+                }
+                // Pasar a texto solo si ya lo tiene —entonces es **volver** a pasarlo—: sin texto,
+                // el botón de la burbuja hace justo esto. Ver arriba.
+                acciones.transcribir?.let { transcribir ->
+                    if (!m.transcripcion.isNullOrBlank()) DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
+                            Icons.Filled.Subtitles) {
+                        menuAbierto = false; transcribir()
+                    }
+                }
+                DelMenu(com.forge.pixpin.R.string.guardados_reenviar,
+                        Icons.AutoMirrored.Filled.Forward) {
+                    menuAbierto = false; acciones.reenviar()
+                }
                 DelMenu(com.forge.pixpin.R.string.guardados_compartir, com.forge.pixpin.ui.IconoDeCompartir) {
                     menuAbierto = false
                     // Siempre la hoja de compartir de toda la aplicación. Ver [compartibleDe].
                     acciones.compartirComo()
-                }
-                // **Abrir con otra aplicación** (o instalar, si es un APK). Ver [com.forge.pixpin.ui.AbrirCon].
-                m.ruta?.let { ruta ->
-                    DelMenu(com.forge.pixpin.R.string.guardados_abrir_con, Icons.Filled.Launch) {
-                        menuAbierto = false
-                        com.forge.pixpin.ui.AbrirCon.abrir(this@MensajesActivity, File(ruta))
-                    }
-                    // **Aligerar un PDF que ya estaba aquí.** Lo que entra se aligera solo, pero
-                    // los documentos de antes se quedaron como entraron, y volver a compartirlos
-                    // uno a uno para que pasen por la puerta es absurdo (usuario, 14-sep-2026).
-                    if (ruta.endsWith(".pdf", ignoreCase = true)) {
-                        DelMenu(com.forge.pixpin.R.string.guardados_aligerar, Icons.Filled.Compress) {
-                            menuAbierto = false
-                            aAligerar = m to ruta
-                        }
-                    }
-                }
-                // **Solo lo que la burbuja no tiene ya a mano** (22-sep-2026, pedido por el
-                // usuario: «muchas de esas opciones ya están repetidas»). Una foto, una hoja, un
-                // archivo y un lienzo llevan su botón de sacar a la pantalla en la propia burbuja
-                // ([AtajoEnLaEsquina], [FilaDeArchivo]); la nota de voz, el de pasarla a texto
-                // ([BotonDeTexto]). Ahí el menú calla: dos caminos al mismo sitio no ayudan,
-                // alargan la lista. Sacar a la pantalla queda para lo que no lleva botón: una nota
-                // de texto y una nota de voz.
-                if (!tieneBotonDePinear(m)) DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
-                    menuAbierto = false; acciones.pinear()
                 }
                 DelMenu(
                     // En una nota de voz, recordar es **llamarse**: a esa hora suena como una
@@ -2642,10 +2747,6 @@ class MensajesActivity : ComponentActivity() {
                 // **De un mensaje, una lección** (3-oct-2026): lo que pasó suele estar ya en el
                 // chat —la foto del error, la nota de voz contándolo—. La lección sale con su
                 // texto y queda enlazada a él, en el mismo chat.
-                DelMenu(com.forge.pixpin.R.string.guardados_insertar_en_nota, Icons.Filled.NoteAdd) {
-                    menuAbierto = false
-                    insertandoEnNota = m
-                }
                 if (!com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m)) {
                     DelMenu(com.forge.pixpin.R.string.guardados_hacer_leccion, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
                         menuAbierto = false
@@ -2656,10 +2757,47 @@ class MensajesActivity : ComponentActivity() {
                         )
                     }
                 }
+                DelMenu(com.forge.pixpin.R.string.guardados_etiquetar,
+                        Icons.Filled.EmojiEmotions) {
+                    menuAbierto = false; acciones.etiquetar()
+                }
+                DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) {
+                    menuAbierto = false; acciones.seleccionar()
+                }
+                // Sin cerrar: cambia lo de dentro por lo raro.
+                DelMenu(com.forge.pixpin.R.string.guardados_menu_mas, Icons.Filled.MoreHoriz) { verMas = true }
+              } else {
+                DelMenu(com.forge.pixpin.R.string.guardados_atras, Icons.AutoMirrored.Filled.ArrowBack) { verMas = false }
+                androidx.compose.material3.HorizontalDivider()
+                DelMenu(
+                    if (m.fijado) com.forge.pixpin.R.string.guardados_soltar
+                    else com.forge.pixpin.R.string.guardados_fijar,
+                    Icons.Filled.PushPin
+                ) { menuAbierto = false; verMas = false; acciones.fijar() }
+                // **Abrir con otra aplicación** (o instalar, si es un APK). Ver [com.forge.pixpin.ui.AbrirCon].
+                m.ruta?.let { ruta ->
+                    DelMenu(com.forge.pixpin.R.string.guardados_abrir_con, Icons.Filled.Launch) {
+                        menuAbierto = false; verMas = false
+                        com.forge.pixpin.ui.AbrirCon.abrir(this@MensajesActivity, File(ruta))
+                    }
+                    // **Aligerar un PDF que ya estaba aquí.** Lo que entra se aligera solo, pero
+                    // los documentos de antes se quedaron como entraron, y volver a compartirlos
+                    // uno a uno para que pasen por la puerta es absurdo (usuario, 14-sep-2026).
+                    if (ruta.endsWith(".pdf", ignoreCase = true)) {
+                        DelMenu(com.forge.pixpin.R.string.guardados_aligerar, Icons.Filled.Compress) {
+                            menuAbierto = false; verMas = false
+                            aAligerar = m to ruta
+                        }
+                    }
+                }
+                DelMenu(com.forge.pixpin.R.string.guardados_insertar_en_nota, Icons.Filled.NoteAdd) {
+                    menuAbierto = false; verMas = false
+                    insertandoEnNota = m
+                }
                 acciones.rescatar?.let { rescatar ->
                     DelMenu(com.forge.pixpin.R.string.guardados_rescatar,
                             Icons.Filled.BookmarkBorder) {
-                        menuAbierto = false; rescatar()
+                        menuAbierto = false; verMas = false; rescatar()
                     }
                 }
                 if (m.clase == Clase.IMAGEN && m.referencia != null) {
@@ -2668,7 +2806,7 @@ class MensajesActivity : ComponentActivity() {
                         else com.forge.pixpin.R.string.guardados_solo_la_foto,
                         Icons.Filled.Crop
                     ) {
-                        menuAbierto = false
+                        menuAbierto = false; verMas = false
                         acciones.alternarRecorte()
                     }
                 }
@@ -2680,15 +2818,7 @@ class MensajesActivity : ComponentActivity() {
                     DelMenu(
                         com.forge.pixpin.R.string.guardados_ver_hilo,
                         Icons.Filled.Forum
-                    ) { menuAbierto = false; acciones.verHilo() }
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_etiquetar,
-                        Icons.Filled.EmojiEmotions) {
-                    menuAbierto = false; acciones.etiquetar()
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_reenviar,
-                        Icons.AutoMirrored.Filled.Forward) {
-                    menuAbierto = false; acciones.reenviar()
+                    ) { menuAbierto = false; verMas = false; acciones.verHilo() }
                 }
                 // **Unir al proyecto.** Lo que se guardó en la conversación de una obra
                 // acaba siendo parte de la obra: una foto es una hoja, una nota es una
@@ -2696,7 +2826,7 @@ class MensajesActivity : ComponentActivity() {
                 acciones.unir?.let { unir ->
                     DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto,
                             Icons.Filled.LibraryAdd) {
-                        menuAbierto = false; unir()
+                        menuAbierto = false; verMas = false; unir()
                     }
                 }
                 // **Volver a añadir al proyecto** lo que se quitó de él: la misma hoja, con lo que
@@ -2706,29 +2836,36 @@ class MensajesActivity : ComponentActivity() {
                     if (UnirAlProyecto.sePuedeDevolver(m, proyectosAhora)) {
                         DelMenu(com.forge.pixpin.R.string.guardados_devolver_al_proyecto,
                                 Icons.Filled.LibraryAdd) {
-                            menuAbierto = false; devolver()
+                            menuAbierto = false; verMas = false; devolver()
                         }
-                    }
-                }
-                // Pasar a texto solo si ya lo tiene —entonces es **volver** a pasarlo—: sin texto,
-                // el botón de la burbuja hace justo esto. Ver arriba.
-                acciones.transcribir?.let { transcribir ->
-                    if (!m.transcripcion.isNullOrBlank()) DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
-                            Icons.Filled.Subtitles) {
-                        menuAbierto = false; transcribir()
                     }
                 }
                 acciones.letra?.let { letra ->
                     DelMenu(com.forge.pixpin.R.string.letra_ver, Icons.Filled.Lyrics) {
-                        menuAbierto = false; letra()
+                        menuAbierto = false; verMas = false; letra()
                     }
                 }
-                DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) {
-                    menuAbierto = false; acciones.seleccionar()
+                // **Una foto del chat de un proyecto, de logo suyo** (4-oct-2026, lo del PC).
+                // Se mira el disco solo aquí, con el menú ya abierto en «Más». Ver [LogoDelProyecto].
+                val delProyecto = m.proyecto
+                if (delProyecto != null && m.clase == Clase.IMAGEN && m.ruta != null && !m.enBuzon) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_logo_poner, Icons.Filled.AccountCircle) {
+                        menuAbierto = false; verMas = false
+                        ponerDeLogo(delProyecto, File(m.ruta))
+                    }
+                    if (LogoDelProyecto.tiene(this@MensajesActivity, delProyecto)) {
+                        DelMenu(com.forge.pixpin.R.string.guardados_logo_quitar, Icons.Filled.HideImage) {
+                            menuAbierto = false; verMas = false
+                            lifecycleScope.launch(Dispatchers.IO) { LogoDelProyecto.quitar(this@MensajesActivity, delProyecto) }
+                        }
+                    }
                 }
+              }
+                // Borrar, en rojo y **aparte**: es la única que no se deshace.
+                androidx.compose.material3.HorizontalDivider()
                 DelMenu(com.forge.pixpin.R.string.cd_delete, Icons.Filled.Delete,
                         peligro = true) {
-                    menuAbierto = false; acciones.borrar()
+                    menuAbierto = false; verMas = false; acciones.borrar()
                 }
             }
             // **Lo del buzón lleva su franja.**
@@ -4854,7 +4991,7 @@ class MensajesActivity : ComponentActivity() {
             //
             // Con `OpenInNew` y no con la chincheta: en este chat la chincheta ya
             // significa **fijado arriba**, que es otra cosa. Es el mismo icono con el que
-            // sale «Sacar a la pantalla» en el menú de la burbuja, así que el atajo y la
+            // sale «Pinear» en el menú de la burbuja, así que el atajo y la
             // opción larga se reconocen como lo mismo.
             PastillaDeAtajo(
                 icono = Icons.Filled.OpenInNew,
@@ -5309,6 +5446,148 @@ class MensajesActivity : ComponentActivity() {
      *
      * Borrar va en rojo, icono incluido: es la única que no se deshace.
      */
+    /**
+     * **El cuadro de enviar varias fotos** (4-oct-2026, `envio.rs` del PC): miniaturas
+     * numeradas en el orden en que se mandarán, que se reordenan manteniendo pulsada una y
+     * arrastrándola, se quitan con su aspa y se suman con «Añadir». Debajo, la descripción, que
+     * va con la primera ([Descripcion.pies]).
+     *
+     * El arrastre no recompone: el corrimiento se lee al pintar (`graphicsLayer`), y solo al
+     * soltar cambia la lista.
+     */
+    @Composable
+    private fun CuadroDeEnviar(
+        fotos: List<Uri>,
+        pie: String,
+        onPie: (String) -> Unit,
+        onFotos: (List<Uri>) -> Unit,
+        onAnadir: () -> Unit,
+        onCancelar: () -> Unit,
+        onEnviar: () -> Unit
+    ) {
+        val densidad = androidx.compose.ui.platform.LocalDensity.current
+        val paso = with(densidad) { (LADO_DE_LA_MINIATURA + HUECO_DE_LA_MINIATURA).toPx() }
+        val actuales by androidx.compose.runtime.rememberUpdatedState(fotos)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onCancelar,
+            title = {
+                Text(resources.getQuantityString(com.forge.pixpin.R.plurals.guardados_envio_fotos, fotos.size, fotos.size))
+            },
+            text = {
+                Column {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(HUECO_DE_LA_MINIATURA),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(fotos.size, key = { fotos[it].toString() }) { i ->
+                            val uri = fotos[i]
+                            val corrido = remember(uri) { androidx.compose.runtime.mutableFloatStateOf(0f) }
+                            var cogida by remember(uri) { mutableStateOf(false) }
+                            Box(
+                                Modifier
+                                    .size(LADO_DE_LA_MINIATURA)
+                                    .zIndex(if (cogida) 1f else 0f)
+                                    .graphicsLayer {
+                                        translationX = corrido.floatValue
+                                        val e = if (cogida) 1.08f else 1f
+                                        scaleX = e; scaleY = e
+                                    }
+                                    .pointerInput(uri) {
+                                        detectDragGesturesAfterLongPress(
+                                            onDragStart = { cogida = true },
+                                            onDragEnd = {
+                                                val lista = actuales
+                                                val desde = lista.indexOf(uri)
+                                                val hueco = EnvioDeVarios.huecoTrasArrastrar(desde, corrido.floatValue / paso, lista.size)
+                                                corrido.floatValue = 0f; cogida = false
+                                                onFotos(EnvioDeVarios.mover(lista, desde, hueco))
+                                            },
+                                            onDragCancel = { corrido.floatValue = 0f; cogida = false }
+                                        ) { cambio, d -> cambio.consume(); corrido.floatValue += d.x }
+                                    }
+                            ) {
+                                MiniaturaDeUri(uri, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+                                // El número: el orden en que llegarán al chat.
+                                Text(
+                                    "${i + 1}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(4.dp)
+                                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
+                                Box(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(22.dp)
+                                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f), CircleShape)
+                                        .clickable { onFotos(actuales - uri) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = getString(com.forge.pixpin.R.string.cd_delete),
+                                        tint = androidx.compose.ui.graphics.Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = pie,
+                        onValueChange = onPie,
+                        placeholder = { Text(getString(com.forge.pixpin.R.string.guardados_describir_pista)) },
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = onEnviar) {
+                    Text(getString(com.forge.pixpin.R.string.guardados_envio_enviar))
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (fotos.size < MAXIMO_DE_FOTOS) androidx.compose.material3.TextButton(onClick = onAnadir) {
+                        Text(getString(com.forge.pixpin.R.string.guardados_envio_anadir))
+                    }
+                    androidx.compose.material3.TextButton(onClick = onCancelar) {
+                        Text(getString(com.forge.pixpin.R.string.cancel))
+                    }
+                }
+            }
+        )
+    }
+
+    /** La miniatura de una foto elegida, leída fuera del hilo de la pantalla y a su tamaño. */
+    @Composable
+    private fun MiniaturaDeUri(uri: Uri, modifier: Modifier) {
+        val lado = with(androidx.compose.ui.platform.LocalDensity.current) { LADO_DE_LA_MINIATURA.roundToPx() }
+        val imagen by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, uri) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    contentResolver.loadThumbnail(uri, android.util.Size(lado * 2, lado * 2), null).asImageBitmap()
+                }.getOrNull()
+            }
+        }
+        Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+            imagen?.let {
+                androidx.compose.foundation.Image(
+                    it, contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+
     @Composable
     private fun DelMenu(
         texto: Int,
@@ -5550,11 +5829,41 @@ class MensajesActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Deja [foto] de logo de [proyecto]: se recorta y se reduce fuera del hilo de la pantalla, y
+     * la lista y la cabecera lo vuelven a leer solas. Ver [LogoDelProyecto].
+     */
+    private fun ponerDeLogo(proyecto: String, foto: File) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val hecho = LogoDelProyecto.poner(this@MensajesActivity, proyecto, foto)
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MensajesActivity,
+                    if (hecho) com.forge.pixpin.R.string.guardados_logo_hecho else com.forge.pixpin.R.string.guardados_logo_error,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
     private fun guardarArchivo(uri: Uri) {
         lifecycleScope.launch(Dispatchers.IO) { copiarLoElegido(uri) }
     }
 
-    private suspend fun copiarLoElegido(uri: Uri) {
+    /**
+     * La última hora dada a un mensaje que entra: dos fotos copiadas en el mismo milisegundo
+     * saldrían con la misma y el chat podría enseñarlas al revés (lo mismo que `hora_sin_repetir`
+     * del PC).
+     */
+    private val ultimaHora = java.util.concurrent.atomic.AtomicLong(0)
+
+    private fun horaSinRepetir(): Long {
+        val ahora = System.currentTimeMillis()
+        return ultimaHora.updateAndGet { maxOf(ahora, it + 1) }
+    }
+
+    /** Copia lo elegido al chat; con [pie], de descripción suya. Ver [Descripcion]. */
+    private suspend fun copiarLoElegido(uri: Uri, pie: String = "") {
         runCatching {
             val nombre = nombreDe(uri)
             val temporal = File(cacheDir, "adj_${System.currentTimeMillis()}")
@@ -5583,12 +5892,13 @@ class MensajesActivity : ComponentActivity() {
             almacen.anadir(
                 Mensaje(
                     id = UUID.randomUUID().toString(),
-                    cuando = System.currentTimeMillis(),
+                    cuando = horaSinRepetir(),
                     clase = if (esImagen) Clase.IMAGEN else Clase.ARCHIVO,
                     proyecto = chatDe,
                     ruta = ruta,
                     nombre = nombre,
-                    bytes = bytes
+                    bytes = bytes,
+                    texto = pie
                 )
             )
             withContext(Dispatchers.Main) { recargarLaLista?.invoke() }
@@ -5929,7 +6239,7 @@ class MensajesActivity : ComponentActivity() {
                 val conArchivo = m.ruta?.let { origen ->
                     val archivo = File(origen)
                     if (!archivo.exists()) return@let copia.copy(ruta = null)
-                    copia.copy(ruta = almacen.copiarAdjunto(archivo, m.nombre) ?: return@let copia)
+                    copia.copy(ruta = almacen.copiarAdjunto(archivo, m.nombre, enderezar = false) ?: return@let copia)
                 } ?: copia
                 // Y lo editable, aparte: la copia es otra rama. Ver [RamaDeMensaje].
                 almacen.anadir(runCatching { RamaDeMensaje.separar(this@MensajesActivity, m, conArchivo) }.getOrDefault(conArchivo))
@@ -7028,3 +7338,11 @@ private fun DialogoDeNotas(
         confirmButton = { androidx.compose.material3.TextButton(onClick = onCerrar) { Text("Cancelar") } }
     )
 }
+
+/**
+ * El cuadro de enviar varias fotos: miniaturas de 84 con 8 entre ellas, las del PC (`envio.rs`),
+ * y hasta 20 de una vez, lo que el selector de fotos deja escoger sin pasar de página.
+ */
+private val LADO_DE_LA_MINIATURA = 84.dp
+private val HUECO_DE_LA_MINIATURA = 8.dp
+private const val MAXIMO_DE_FOTOS = 20

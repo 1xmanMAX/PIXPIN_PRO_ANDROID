@@ -349,6 +349,15 @@
     <string name="tool_image">Imagen</string>
     <string name="tool_mosaic">Pixelar</string>
     <string name="guardados_adj_archivo">Un archivo</string>
+    <string name="guardados_adj_fotos">Fotos</string>
+    <!-- El cuadro de enviar varias fotos (4-oct-2026, el del PC). -->
+    <plurals name="guardados_envio_fotos">
+        <item quantity="one">1 foto</item>
+        <item quantity="many">%d fotos</item>
+        <item quantity="other">%d fotos</item>
+    </plurals>
+    <string name="guardados_envio_enviar">Enviar</string>
+    <string name="guardados_envio_anadir">Añadir</string>
     <string name="guardados_adj_pagina">Una página de un proyecto</string>
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
@@ -590,8 +599,20 @@
     <string name="guardados_fijados">Fijados</string>
     <string name="guardados_fijar">Fijar arriba</string>
     <string name="guardados_soltar">Quitar de arriba</string>
-    <string name="guardados_pinear">Sacar a la pantalla</string>
+    <string name="guardados_pinear">Pinear</string>
     <string name="guardados_pineado">Puesto en la pantalla</string>
+    <!-- Menú de un mensaje en dos tandas (4-oct-2026, la v2 del PC): «Más» enseña lo raro. -->
+    <string name="guardados_menu_mas">Más</string>
+    <string name="guardados_atras">Atrás</string>
+    <!-- La descripción de una foto o un archivo, en el propio mensaje. Ver Descripcion.kt. -->
+    <string name="guardados_describir">Añadir descripción</string>
+    <string name="guardados_describir_editar">Editar descripción</string>
+    <string name="guardados_describir_pista">Añade una descripción…</string>
+    <!-- El logo de un proyecto desde una foto de su chat. Ver LogoDelProyecto.kt. -->
+    <string name="guardados_logo_poner">Usar de logo</string>
+    <string name="guardados_logo_quitar">Quitar logo</string>
+    <string name="guardados_logo_hecho">Logo del proyecto puesto</string>
+    <string name="guardados_logo_error">No se pudo poner esa imagen de logo</string>
     <string name="guardados_ya_no_esta">Este archivo ya no está</string>
     <string name="guardados_compartir">Compartir</string>
     <string name="guardados_abrir_con">Abrir con otra app</string>

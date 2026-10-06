@@ -132,11 +132,18 @@ class GuardarCompartidoActivity : ComponentActivity() {
         if (temporales.any { it.nombre.endsWith(".pdf", ignoreCase = true) }) Toast.makeText(this, "Guardando en PixPin…", Toast.LENGTH_SHORT).show()
         val guardados = withContext(Dispatchers.IO) {
             var cuantos = 0
-            temporales.forEach { if (darDeAlta(almacen, it, proyecto)) cuantos++ }
-            // El texto se guarda **además** del archivo, no en vez de él: al
-            // compartir una foto con comentario llegan los dos, y quedarse solo con
-            // la foto pierde justo lo que explicaba por qué se guardó.
-            if (texto.isNotBlank()) {
+            // **El texto, de descripción de la primera foto** (4-oct-2026, como el PC y como el
+            // pie de una foto en Telegram): va en el propio mensaje y viaja con ella. Antes iba en
+            // una nota aparte, que se separaba de su foto en cuanto llegaba otra cosa. Si no hay
+            // foto ni archivo que lo lleve —un audio solo—, sigue siendo una nota: nunca se
+            // pierde. Ver [Descripcion].
+            val pies = Descripcion.pies(temporales.map { claseDe(it) }, texto)
+            var pieGuardado = false
+            temporales.forEachIndexed { i, t ->
+                if (darDeAlta(almacen, t, proyecto, pies[i].orEmpty())) { cuantos++; if (pies[i] != null) pieGuardado = true }
+            }
+            // Si la foto que lo llevaba no entró, el texto se queda igual, como nota.
+            if (texto.isNotBlank() && !pieGuardado) {
                 almacen.anadir(
                     Mensaje(
                         id = UUID.randomUUID().toString(),
@@ -165,28 +172,36 @@ class GuardarCompartidoActivity : ComponentActivity() {
         Temporal(temporal, nombre, contentResolver.getType(uri))
     }.getOrNull()
 
-    /** Copia el temporal al almacén y lo da de alta en el chat que toque. */
-    private fun darDeAlta(almacen: MensajesStore, t: Temporal, proyecto: String?): Boolean =
+    /** Un audio de otra aplicación es una nota de voz; una imagen, una foto; lo demás, un archivo. */
+    private fun claseDe(t: Temporal): Clase {
+        if (t.tipo?.startsWith("image/") == true) return Clase.IMAGEN
+        // **Un audio de otra aplicación es una nota de voz**: se escucha aquí y se
+        // pasa a texto como las nuestras, venga en el formato que venga (ver
+        // [Transcriptor]). Antes entraba como archivo a secas.
+        val esAudio = t.tipo?.startsWith("audio/") == true ||
+            t.nombre.substringAfterLast('.', "").lowercase() in EXTENSIONES_DE_AUDIO
+        return if (esAudio) Clase.VOZ else Clase.ARCHIVO
+    }
+
+    /** Copia el temporal al almacén y lo da de alta en el chat que toque, con su [pie]. */
+    private fun darDeAlta(almacen: MensajesStore, t: Temporal, proyecto: String?, pie: String): Boolean =
         runCatching {
             val ruta = almacen.copiarAdjunto(t.archivo, t.nombre, extensionDe(t.tipo)) ?: return false
             // El peso de lo guardado: un PDF entra aligerado. Ver [MensajesStore.copiarAdjunto].
             val bytes = File(ruta).length()
             t.archivo.delete()
-            val esImagen = t.tipo?.startsWith("image/") == true
-            // **Un audio de otra aplicación es una nota de voz**: se escucha aquí y se
-            // pasa a texto como las nuestras, venga en el formato que venga (ver
-            // [Transcriptor]). Antes entraba como archivo a secas.
-            val esAudio = t.tipo?.startsWith("audio/") == true ||
-                ruta.substringAfterLast('.', "").lowercase() in setOf("m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp")
+            // La misma cuenta que dio a quién va el pie: si no, podría acabar en otro sitio.
+            val clase = claseDe(t)
             almacen.anadir(
                 Mensaje(
                     id = UUID.randomUUID().toString(),
                     cuando = System.currentTimeMillis(),
-                    clase = if (esImagen) Clase.IMAGEN else if (esAudio) Clase.VOZ else Clase.ARCHIVO,
+                    clase = clase,
                     ruta = ruta,
                     nombre = t.nombre,
                     bytes = bytes,
-                    duracionMs = if (esAudio) com.forge.pixpin.pin.Voz.duracion(ruta) else 0,
+                    texto = pie,
+                    duracionMs = if (clase == Clase.VOZ) com.forge.pixpin.pin.Voz.duracion(ruta) else 0,
                     proyecto = proyecto
                 )
             )
@@ -230,3 +245,6 @@ class GuardarCompartidoActivity : ComponentActivity() {
             getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: emptyList()
         }
 }
+
+/** Lo que entra como nota de voz aunque no diga que es audio. */
+private val EXTENSIONES_DE_AUDIO = setOf("m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp")

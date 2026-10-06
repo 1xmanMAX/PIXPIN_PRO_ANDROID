@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,8 +94,14 @@ private fun Fila(c: Conversacion, alTocar: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = alTocar).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(50.dp).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
+        // El logo del proyecto si se le puso uno; si no, su inicial. Ver [com.forge.pixpin.guardados.LogoDelProyecto].
+        val logo = com.forge.pixpin.guardados.logoDe(c.proyecto)
+        Box(Modifier.size(50.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
             if (c.proyecto == null) Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta)
+            else if (logo != null) androidx.compose.foundation.Image(
+                logo, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
             else Text(c.nombre.trim().take(1).uppercase().ifBlank { "·" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta)
         }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
