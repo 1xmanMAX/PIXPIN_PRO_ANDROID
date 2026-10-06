@@ -47,6 +47,7 @@ object BuscarEnTodo {
     val FUNCIONES: List<Elemento> = listOf(
         Elemento(Tipo.FUNCION, "Grabar nota de voz", "Micrófono flotante", 0, "🎙", Atajos.GRABAR, otras = "voz audio microfono grabadora llamada"),
         Elemento(Tipo.FUNCION, "Nueva tarea", "Apuntar sin abrir la app", 0, "✅", Atajos.TAREA, otras = "pendiente hacer lista recordar"),
+        Elemento(Tipo.FUNCION, "Tareas", "Todas las listas e Inbox", 0, "☑️", Atajos.TAREAS, otras = "pendientes listas inbox hechas"),
         Elemento(Tipo.FUNCION, "Nueva lección", "Lo que aprendiste", 0, "💡", Atajos.LECCION, otras = "aprendi error leccion aprendida"),
         Elemento(Tipo.FUNCION, "Lecciones", "Buscar y repasar", 0, "📚", Atajos.LECCIONES, otras = "aprendidas repaso errores"),
         Elemento(Tipo.FUNCION, "Capturar pantalla", "Recortar y fijar", 0, "✂️", Atajos.CAPTURAR, otras = "captura recorte pantallazo"),

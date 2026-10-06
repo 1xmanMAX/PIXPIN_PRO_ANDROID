@@ -243,6 +243,13 @@
             apuntar una (encima de cualquier app, desde la bola; y como destino de «Compartir»).
             Ver lecciones/.
         -->
+        <!-- Todas las listas de tareas juntas (Tareas del PC). Afinidad propia, como las lecciones. -->
+        <activity
+            android:name=".mini.TodasLasTareasActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.tareas"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
         <activity
             android:name=".lecciones.LeccionesActivity"
             android:exported="false"

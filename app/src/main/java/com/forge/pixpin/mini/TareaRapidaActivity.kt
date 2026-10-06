@@ -25,9 +25,10 @@ import java.util.UUID
 
 /**
  * **Apuntar una tarea sin abrir nada** (como `anadir_tarea` del lanzador del PC): desde el icono
- * o el buscador del teléfono sale un campo; lo escrito va, con su fecha, a la última lista de
- * tareas del chat general, o a una nueva «Tareas» si no hay ninguna. Se puede apuntar una tras
- * otra: Intro añade y deja el campo listo para la siguiente.
+ * o el buscador del teléfono sale un campo; lo escrito va, con su fecha, a la lista **«Inbox»**
+ * de «Mensajes guardados» (que se crea si no está), como en el PC desde el 3-oct-2026: de ahí se
+ * reparte con «Mover a…» en la pantalla de Tareas ([TodasLasTareasActivity]). Se puede apuntar una
+ * tras otra: Intro añade y deja el campo listo para la siguiente.
  */
 class TareaRapidaActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,8 +69,17 @@ class TareaRapidaActivity : ComponentActivity() {
             Intent(context, TareaRapidaActivity::class.java).putExtra(EXTRA_TEXTO, texto).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
 
-        /** Añade [texto] a la última lista del chat [proyecto] (o a una nueva). Trabajo de disco, rápido. */
+        /**
+         * Añade [texto]: sin [proyecto], al Inbox de «Mensajes guardados» ([alInbox]); con él, a la
+         * última lista de ese chat (o a una nueva «Tareas»), como `anadir_tarea` del PC. Trabajo de
+         * disco, rápido.
+         */
         fun anadir(context: Context, texto: String, proyecto: String? = null) {
+            if (proyecto == null) {
+                alInbox(context, texto)
+                Toast.makeText(context, "Tarea apuntada en el Inbox", Toast.LENGTH_SHORT).show()
+                return
+            }
             val almacen = MensajesStore(context)
             val lista = almacen.leer().lastOrNull {
                 it.clase == Clase.MINIAPP && it.miniapp == MiniApp.TAREAS.id && it.proyecto == proyecto && !it.enBuzon
@@ -88,6 +98,28 @@ class TareaRapidaActivity : ComponentActivity() {
                 )
             }
             Toast.makeText(context, "Tarea apuntada", Toast.LENGTH_SHORT).show()
+        }
+
+        /**
+         * Apunta [texto], con su fecha, en el **Inbox** de «Mensajes guardados»; si aún no está, lo
+         * crea con esa tarea dentro (`tareas::apuntar_con` del PC). Lo vacío no apunta nada. Sin
+         * avisos: los da quien llama. Trabajo de disco.
+         */
+        fun alInbox(context: Context, texto: String) {
+            if (Tareas.saneado(texto).isEmpty()) return
+            val almacen = MensajesStore(context)
+            val inbox = TodasLasTareas.inboxEn(almacen.leer())
+            if (inbox != null) {
+                almacen.actualizar(inbox.id) { m -> m.copy(texto = TodasLasTareas.conTarea(m.texto, texto)) }
+            } else {
+                almacen.anadir(
+                    Mensaje(
+                        id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.MINIAPP,
+                        miniapp = MiniApp.TAREAS.id,
+                        texto = TodasLasTareas.conTarea(Tareas.escribir(TodasLasTareas.INBOX, emptyList()), texto)
+                    )
+                )
+            }
         }
     }
 }

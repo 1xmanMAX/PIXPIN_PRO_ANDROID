@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
@@ -527,7 +528,13 @@ fun PantallaDeProyectos(
                 // **Lecciones y capturas, aquí y no en el chat** (4-oct-2026): ocupan el sitio
                 // del sistema solar, que se quitó por no servir, y así no se mezclan con
                 // Mensajes guardados.
+                // Y **las tareas de todos los chats** (6-oct-2026), como la ventana de Tareas del PC.
                 if (soloEste == null) {
+                    com.forge.pixpin.ui.theme.BotonRedondo(
+                        Icons.Filled.Checklist, "Tareas",
+                        { com.forge.pixpin.mini.TodasLasTareasActivity.abrir(contexto) }, tamano = 44.dp
+                    )
+                    Spacer(Modifier.width(6.dp))
                     com.forge.pixpin.ui.theme.BotonRedondo(
                         Icons.Filled.Lightbulb, "Lecciones aprendidas",
                         { com.forge.pixpin.lecciones.LeccionesActivity.abrir(contexto) }, tamano = 44.dp
