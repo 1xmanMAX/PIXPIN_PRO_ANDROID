@@ -155,4 +155,39 @@ object Etiquetador {
 
     /** Las etiquetas de concepto a las que apunta una palabra buscada: «obra» → las de Construcción. */
     fun conceptosDe(raiz: String): List<Concepto> = CONCEPTOS.filter { raiz in it.raices }
+
+    /**
+     * Palabras que delatan una lección grave o importante. **Lo añadió el PC** (v2, 4-oct-2026;
+     * `proponer_gravedad` de `etiquetador.rs`, mismas listas): antes el teléfono no proponía la
+     * gravedad y la dejaba en «Leve»; la barra rápida de la lista la rellena sola y se cambia
+     * con un toque.
+     */
+    private val DE_GRAVE = listOf(
+        "grave", "peligro", "peligroso", "accidente", "herido", "herida", "lesión", "me lastimé",
+        "incendio", "inundación", "perdí todo", "lo perdí todo", "se perdió todo", "despido",
+        "despidieron", "demanda", "denuncia", "multa", "hospital", "urgencias", "electrocutado",
+        "electrocutó", "se derrumbó", "colapsó"
+    )
+    private val DE_IMPORTANTE = listOf(
+        "importante", "rehacer", "tuve que rehacer", "repintar", "retraso", "se retrasó", "atraso",
+        "costó", "caro", "dinero", "rechazaron", "reclamo", "resbala", "resbaló", "resbaladizo",
+        "se cayó", "caída", "otra vez", "de nuevo", "volvió a pasar", "perdí", "se rompió", "rompí",
+        "nota baja", "desaprobé"
+    )
+    private val GRAVE_RX by lazy { frases(DE_GRAVE) }
+    private val IMPORTANTE_RX by lazy { frases(DE_IMPORTANTE) }
+
+    /**
+     * **La gravedad que se propone** para un texto: 3 si habla de algo grave (un accidente,
+     * perderlo todo, una multa), 2 si de algo que costó (rehacer, un retraso, un resbalón) o es
+     * un error, 1 si no. Palabras enteras: «gravedad» no es «grave».
+     */
+    fun proponerGravedad(textoEntero: String, tipo: String?): Int {
+        val normal = Texto.normal(textoEntero)
+        return when {
+            dice(normal, GRAVE_RX) -> 3
+            dice(normal, IMPORTANTE_RX) || tipo == Leccion.TIPO_ERROR -> 2
+            else -> 1
+        }
+    }
 }

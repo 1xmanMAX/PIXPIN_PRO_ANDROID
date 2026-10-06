@@ -96,6 +96,9 @@ data class Leccion(
     }
 }
 
+/** Lo que se contesta en el repaso: «¿lo recordabas?». En el orden de los botones 1, 2 y 3. */
+enum class Nota { RECORDABA, A_MEDIAS, OLVIDE }
+
 /** **El repaso espaciado**: acordarse sube de caja y aleja el siguiente; olvidarse vuelve a empezar. */
 object Repaso {
     fun toca(l: Leccion, ahora: Long): Boolean = l.repasar <= ahora
@@ -106,6 +109,26 @@ object Repaso {
     }
 
     fun olvidada(l: Leccion, ahora: Long): Leccion = l.copy(caja = 0, repasar = ahora + Leccion.DIA)
+
+    /**
+     * **A medias** (lo añadió el PC, v2, 4-oct-2026): ni sube ni vuelve a empezar; baja una caja,
+     * para verla antes que si se hubiera recordado. Solo cambia [Leccion.caja] y
+     * [Leccion.repasar], los mismos campos de siempre: el formato del archivo no se toca.
+     */
+    fun aMedias(l: Leccion, ahora: Long): Leccion {
+        val caja = (l.caja - 1).coerceIn(0, Leccion.INTERVALOS.lastIndex)
+        return l.copy(caja = caja, repasar = ahora + Leccion.INTERVALOS[caja] * Leccion.DIA)
+    }
+
+    /** La lección tras contestar [nota] en el repaso. */
+    fun calificar(l: Leccion, nota: Nota, ahora: Long): Leccion = when (nota) {
+        Nota.RECORDABA -> recordada(l, ahora)
+        Nota.A_MEDIAS -> aMedias(l, ahora)
+        Nota.OLVIDE -> olvidada(l, ahora)
+    }
+
+    /** **Cuántos días tarda en volver** si se contesta [nota]: lo que dice cada botón («vuelve en 30 días»). */
+    fun diasHasta(l: Leccion, nota: Nota): Long = calificar(l, nota, 0).repasar / Leccion.DIA
 
     /**
      * **Me volvió a pasar**: se apunta la fecha, sube la gravedad si se repite mucho y el repaso
