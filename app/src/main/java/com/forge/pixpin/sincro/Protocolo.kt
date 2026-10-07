@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -54,6 +55,13 @@ object Protocolo {
     /** Por carpeta y no para todo el proceso: en las pruebas, los dos «aparatos» viven en la misma JVM. */
     fun ocupar(disco: Disco): Boolean = ocupados.add(disco.filesDir.absolutePath)
     fun soltar(disco: Disco) { ocupados.remove(disco.filesDir.absolutePath) }
+    /**
+     * **Lo más grande que se acepta como `suelto`** (una foto del PC al lienzo que está delante).
+     * Lo mismo que el PC: por encima ni se piden los trozos.
+     */
+    const val TOPE_DE_SUELTO = 64L shl 20
+    const val SUELTO_EN_EL_LIENZO = "lienzo"
+    const val SUELTO_EN_EL_CHAT = "chat"
     const val OCUPADO = "Está sincronizando con otro aparato. Prueba otra vez en un momento."
 
     @Serializable
@@ -85,7 +93,13 @@ object Protocolo {
         /** El resumen de aquello sobre lo que va el parche: lo acordado, o lo que el otro tiene ahora. */
         val desde: String? = null,
         /** El resumen que tiene que salir al poner el parche. */
-        val resumen: String? = null
+        val resumen: String? = null,
+        /** `suelto`: el nombre del fichero en el otro aparato, solo para enseñarlo y por su extensión. */
+        val nombre: String? = null,
+        /** `suelto`: su tipo (`image/png`…, o `application/octet-stream`). */
+        val mime: String? = null,
+        /** `suelto`: adónde lo quiere quien lo manda. Hoy siempre "lienzo". */
+        val destino: String? = null
     )
 
     @Serializable
@@ -108,7 +122,11 @@ object Protocolo {
         /** No tengo aquello sobre lo que va el parche: hay que mandarlo entero. */
         val faltaBase: Boolean = false,
         /** Los proyectos borrados en el otro aparato. Ver [LapidaDeChat]. */
-        val lapidas: List<LapidaDeChat> = emptyList()
+        val lapidas: List<LapidaDeChat> = emptyList(),
+        /** Tras un `suelto` ya recibido: "listo". */
+        val t: String? = null,
+        /** Dónde quedó lo suelto: [SUELTO_EN_EL_LIENZO] o [SUELTO_EN_EL_CHAT]. */
+        val donde: String? = null
     )
 
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
@@ -230,7 +248,17 @@ class Respondedor(
     /** Dónde escucha este aparato, para decírselo al otro. */
     private val miPuerto: Int = 0,
     /** Quién vino y en qué puerto escucha él: se recuerda para llamarle directamente. */
-    private val alSaludar: (Aparato, Int) -> Unit = { _, _ -> }
+    private val alSaludar: (Aparato, Int) -> Unit = { _, _ -> },
+    /**
+     * **Una foto suelta del otro aparato** (`suelto`, la «foto al lienzo del móvil» del PC):
+     * recibe el fichero ya entero, su nombre saneado, su tipo y quién lo manda, y devuelve dónde
+     * quedó ([Protocolo.SUELTO_EN_EL_LIENZO] o [Protocolo.SUELTO_EN_EL_CHAT]). El fichero es
+     * suyo: lo borra él. Sin esto, `suelto` se contesta como cualquier petición desconocida, que
+     * es lo que el PC entiende como «PixPin de antes».
+     */
+    private val alRecibirSuelto: ((File, String, String, Aparato) -> String)? = null,
+    /** Dónde dejar lo suelto mientras llega. */
+    private val cache: File? = null
 ) {
     fun atender(entrada: InputStream, salida: OutputStream) {
         val id = disco.identidad.leer()
@@ -272,6 +300,49 @@ class Respondedor(
             responder(canal, otro)
         } finally {
             Protocolo.soltar(disco)
+        }
+    }
+
+    /**
+     * **Una foto suelta** (ver `docs/investigacion/2026-10-06-foto-al-lienzo-android.md` del PC).
+     * El «vale» (`{}`) va **antes** de los trozos: así, si no se acepta, no llega ninguno y la
+     * conversación sigue sana hasta el `adios`.
+     */
+    private fun recibirSuelto(canal: Canal, p: Protocolo.Peticion, otro: Aparato) {
+        val recibir = alRecibirSuelto
+        val carpeta = cache
+        if (recibir == null || carpeta == null) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
+            return
+        }
+        if (p.bytes < 0 || p.bytes > Protocolo.TOPE_DE_SUELTO) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "La imagen es demasiado grande"))
+            return
+        }
+        val nombre = Envio.nombreSano(p.nombre ?: "imagen.png")
+        carpeta.mkdirs()
+        val fichero = File(carpeta, "suelto_${System.nanoTime()}_$nombre")
+        try {
+            Protocolo.enviar(canal, Protocolo.Respuesta())
+            estado("Recibiendo «$nombre» de ${otro.nombre}")
+            // Si lo llegado no es lo que salió, `recibirTrozos` lanza y se corta: la conexión ya
+            // no es de fiar.
+            val entero = fichero.outputStream().use { Protocolo.recibirTrozos(canal, p.bytes, it) {} } != null
+            if (!entero) {
+                Protocolo.enviar(canal, Protocolo.Respuesta(error = "La imagen cambió mientras se mandaba"))
+                return
+            }
+            val donde = try {
+                recibir(fichero, nombre, p.mime ?: "application/octet-stream", otro)
+            } catch (e: Exception) {
+                // Lo llegado está entero: lo que falló es guardarlo aquí. Se dice y se sigue.
+                Protocolo.enviar(canal, Protocolo.Respuesta(error = e.message ?: e.javaClass.simpleName))
+                return
+            }
+            Protocolo.enviar(canal, Protocolo.Respuesta(t = "listo", donde = donde))
+        } finally {
+            // Quien lo recibe hace su copia; si no la hizo, o no llegó entero, no queda nada.
+            fichero.delete()
         }
     }
 
@@ -373,6 +444,7 @@ class Respondedor(
                         Protocolo.enviar(canal, Protocolo.Respuesta())
                         estado("«${nombreDe(p.chat)}» al día con ${otro.nombre}")
                     }
+                    "suelto" -> recibirSuelto(canal, p, otro)
                     else -> Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
                 }
             } catch (e: IOException) {

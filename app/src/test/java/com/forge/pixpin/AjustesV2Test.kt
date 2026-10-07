@@ -56,7 +56,7 @@ class AjustesV2Test {
     @Test fun lasClavesSonLasDelAlmacen() {
         // Las mismas que escribe SettingsRepository: si se renombran, el restablecer no haría nada.
         val conocidas = setOf(
-            "capture_mode", "copy_format", "compresion_pdf", "guia_editor", "guia_pin", "guia_capa", "guia_captura",
+            "capture_mode", "copy_format", "dias_caducidad", "compresion_pdf", "guia_editor", "guia_pin", "guia_capa", "guia_captura",
             "iman_activo", "iman_esquinas", "iman_medios", "iman_centros", "iman_intersecciones", "iman_eje",
             "iman_borde_guia", "iman_borde_figura", "zurdo", "herramientas_apagadas", "editor_tools", "editor_groups",
             "pin_tools", "pin_groups", "capa_tools", "capa_groups", "lector_tools", "lector_groups", "palabras_magicas",

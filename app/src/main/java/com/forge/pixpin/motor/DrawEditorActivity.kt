@@ -176,7 +176,7 @@ import kotlinx.coroutines.withContext
  * herramientas y un panel de estilos no caben en una ventana pequeña. El pin
  * sigue enseñando el resultado y sirve para copiarlo.
  */
-class DrawEditorActivity : ComponentActivity() {
+class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
 
     companion object {
         /** Lo que se guarda al pasar de un lienzo a otro: vive más que la pantalla. */
@@ -1160,7 +1160,14 @@ class DrawEditorActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    override fun onResume() {
+        super.onResume()
+        LienzoAlFrente.poner(this)
+    }
+
     override fun onPause() {
+        // Lo primero: desde aquí ya no es el lienzo que se mira.
+        LienzoAlFrente.quitar(this)
         guardarLosDeLaTira()
         // Primero lo escrito, que es de lo que se saca todo lo demás.
         guardarYa()
@@ -1256,6 +1263,10 @@ class DrawEditorActivity : ComponentActivity() {
             if (!mientrasSeTraza) tick++
             guardar()
         }
+
+        // **Lo que llega de fuera** (una foto del PC, [recibirImagen]) no pasa por ningún gesto:
+        // sin esto no se vería hasta tocar la pantalla.
+        LaunchedEffect(llegoDeFuera.intValue) { if (llegoDeFuera.intValue > 0) cambiado() }
 
         // **Y el margen de brillo se reajusta con la llave de las luces**, también al abrir un
         // dibujo que ya venía con ellas subidas. La cuenta se rehace solo cuando esa llave
@@ -5206,6 +5217,31 @@ class DrawEditorActivity : ComponentActivity() {
             guardar()
         }
     }
+
+    /**
+     * **Una imagen que llega del PC** (`suelto`, ver `sincro/Protocolo.kt`). Mismo camino que una
+     * foto elegida ([colocarImagenElegida]): se arrastra, se gira y se exporta como las demás. Va
+     * al centro de lo que se mira y, si es más grande, cabe en el 60 % de la vista: una captura de
+     * 4000 px a 1:1 taparía el lienzo entero.
+     */
+    /** Sube cada vez que entra algo sin gesto de por medio. Ver [recibirImagen]. */
+    private val llegoDeFuera = androidx.compose.runtime.mutableIntStateOf(0)
+
+    override fun recibirImagen(archivo: File, mime: String): Boolean = runCatching {
+        val file = ExcalidrawStore.guardarImagen(this, archivo, mime) ?: return false
+        val bmp = ImageStore.load(file.path) ?: return false
+        bitmaps[file.id] = bmp
+        val v = controller.scene.viewport
+        val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: resources.displayMetrics.widthPixels.toDouble()
+        val alto = medidaDelLienzo.height.takeIf { it > 0 }?.toDouble() ?: resources.displayMetrics.heightPixels.toDouble()
+        val a = v.toScene(0.0, 0.0)
+        val b = v.toScene(ancho, alto)
+        val escala = minOf(1.0, 0.6 * (b.x - a.x) / bmp.width, 0.6 * (b.y - a.y) / bmp.height)
+        // `placeImage` recibe el centro.
+        controller.placeImage(file, at = v.toScene(ancho / 2, alto / 2), width = bmp.width * escala, height = bmp.height * escala)
+        llegoDeFuera.intValue++   // repinta y guarda, como tras elegir una foto
+        true
+    }.getOrDefault(false)
 
     private fun colocarImagenElegida(uri: Uri) {
         runCatching {

@@ -133,6 +133,34 @@ fn ver(raiz: &Path) {
     writeln!(o, "{}", serde_json::json!({"chats": chats, "archivos": archivos})).unwrap();
 }
 
+/// La foto del PC al lienzo del movil, con el cliente de verdad del PC
+/// (`al_lienzo::Conexion`): saluda, manda cada fichero y escribe en una linea
+/// donde quedo cada uno (`lienzo`, `chat`) o `error: …`.
+fn suelto(codigo: &str, puerto: u16, ficheros: &[String]) {
+    use pixpin_sincro::al_lienzo::{Conexion, Donde};
+    use pixpin_sincro::mensajes::{Aparato, Hola};
+    let flujo = TcpStream::connect(("127.0.0.1", puerto)).unwrap();
+    let hola = Hola {
+        yo: Aparato { id: "id-pc".into(), nombre: "Portátil".into(), letra: None, desde: 0 },
+        reloj: ahora(),
+        ..Default::default()
+    };
+    let mut c = match Conexion::abrir(flujo, codigo, nonce(), hola) {
+        Ok(c) => c,
+        Err(e) => { println!("error: {e:?}"); return }
+    };
+    for f in ficheros {
+        let ruta = Path::new(f);
+        let nombre = ruta.file_name().unwrap().to_string_lossy().into_owned();
+        match c.mandar(ruta, &nombre) {
+            Ok(Donde::Lienzo) => println!("lienzo"),
+            Ok(Donde::Chat) => println!("chat"),
+            Err(e) => println!("error: {e:?}"),
+        }
+    }
+    c.adios();
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let raiz = Path::new(&a[2]);
@@ -141,6 +169,8 @@ fn main() {
         "responder" => responder(raiz, &a[3]),
         "dirigir" => dirigir(raiz, a[3].parse().unwrap()),
         "ver" => ver(raiz),
+        // Aqui `raiz` es el codigo del grupo: no hace falta disco.
+        "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
         _ => panic!("orden desconocida"),
     }
 }

@@ -79,7 +79,9 @@ object Presencia {
                             disco,
                             estado = { atendiendo.value = it },
                             miPuerto = red.puerto,
-                            alSaludar = { otro, puerto -> disco.apuntarDireccion(otro.id, quien, puerto) }
+                            alSaludar = { otro, puerto -> disco.apuntarDireccion(otro.id, quien, puerto) },
+                            alRecibirSuelto = ::alLienzoOAlChat,
+                            cache = java.io.File(app.cacheDir, "suelto")
                         ).atender(entrada, socket.getOutputStream())
                     }.onFailure { e ->
                         apuntar(when (e) {
@@ -101,6 +103,42 @@ object Presencia {
     fun reiniciar() {
         if (!::red.isInitialized) return
         principal.post { red.cerrar(); encender() }
+    }
+
+    /**
+     * **Una foto suelta del PC** («p móvil» en Flow Launcher): al lienzo que esté delante; si no
+     * hay ninguno, o no es una imagen, a la Conversación general como un archivo recibido.
+     */
+    private fun alLienzoOAlChat(fichero: java.io.File, nombre: String, mime: String, otro: Aparato): String {
+        val lienzo = com.forge.pixpin.motor.LienzoAlFrente.actual()
+        if (lienzo != null && mime.startsWith("image/")) {
+            val hecho = java.util.concurrent.CountDownLatch(1)
+            val puesta = java.util.concurrent.atomic.AtomicBoolean(false)
+            principal.post {
+                try { puesta.set(lienzo.recibirImagen(fichero, mime)) } finally { hecho.countDown() }
+            }
+            if (hecho.await(10, java.util.concurrent.TimeUnit.SECONDS) && puesta.get()) {
+                apuntar("Foto de ${otro.nombre} puesta en el lienzo")
+                return Protocolo.SUELTO_EN_EL_LIENZO
+            }
+        }
+        // Una copia para el chat: si el lienzo se quedó pensando más de 10 s, aún puede estar
+        // leyendo el fichero, y `guardar` borra el que se le da.
+        val copia = java.io.File(fichero.parentFile, "chat_" + fichero.name)
+        fichero.copyTo(copia, overwrite = true)
+        val e = Envio.Elemento(
+            tipo = Envio.ARCHIVO, nombre = nombre, bytes = copia.length(), mime = mime,
+            // Única por envío: con la misma identidad, `guardarArchivo` sustituiría la anterior.
+            identidad = "suelto:${otro.id}:${System.currentTimeMillis()}:$nombre"
+        )
+        try {
+            Recepcion.guardar(app, e, copia, Envio.Oferta(de = otro.nombre, deId = otro.id, elementos = emptyList()))
+                ?: throw IllegalStateException("No se pudo guardar la imagen")
+        } finally {
+            copia.delete()
+        }
+        apuntar("Foto de ${otro.nombre} guardada en la conversación general")
+        return Protocolo.SUELTO_EN_EL_CHAT
     }
 
     fun apuntar(texto: String) {

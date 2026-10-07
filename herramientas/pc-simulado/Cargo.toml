@@ -11,3 +11,5 @@ serde_json = "1"
 flate2 = "1.1"
 
 [workspace]
+# La copia del PC es su propio espacio de trabajo: sin esto, Cargo la mete en este y no encuentra su `workspace.package`.
+exclude = ["copia-del-pc"]
