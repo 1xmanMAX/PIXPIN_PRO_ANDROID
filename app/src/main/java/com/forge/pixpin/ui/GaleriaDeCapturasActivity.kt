@@ -90,10 +90,14 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) pedida = intent.getStringExtra(EXTRA_CAPTURA)
         setContent { PixPinTheme { Pantalla() } }
     }
 
     private val raiz: File get() = BarrenderoDeCapturas.raiz(this)
+
+    /** La captura que pidió el widget de la galería ([EXTRA_CAPTURA]), hasta que se abre. */
+    private var pedida: String? = null
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
@@ -127,6 +131,8 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
             capturas = l
             val presentes = l.mapTo(HashSet()) { it.uri }
             elegidas = elegidas.filterTo(HashSet()) { it in presentes }
+            // La captura que se tocó en el widget, abierta una vez (si sigue ahí).
+            pedida?.let { u -> pedida = null; l.firstOrNull { it.uri.toString() == u }?.let { detalle = it } }
         }
 
         fun avisar(texto: String, conDeshacer: Boolean = false): kotlinx.coroutines.Job = scope.launch {
@@ -611,6 +617,9 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
             Tono.URGENTE -> ROJO to Color.White
             Tono.CONSERVADA -> VERDE to Color.White
         }
+
+        /** El `content://` de una captura que abrir en su detalle nada más entrar (lo pone el widget de la galería). */
+        const val EXTRA_CAPTURA = "captura"
 
         fun abrir(context: Context) = context.startActivity(Intent(context, GaleriaDeCapturasActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }

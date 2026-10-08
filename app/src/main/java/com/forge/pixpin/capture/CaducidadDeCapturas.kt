@@ -44,6 +44,13 @@ object CaducidadDeCapturas {
     /** Leer, cambiar y escribir el registro, de uno en uno: lo tocan la galería y el barrendero. */
     private val cerrojo = Any()
 
+    /**
+     * Sube cada vez que se escribe el registro (conservar, «Dar 7 días más», olvidar lo borrado):
+     * el widget de la galería lo mira para cambiar sus chapitas sin esperar a su media hora. Ver
+     * [com.forge.pixpin.widget.AvisoDeWidgets].
+     */
+    val cambios = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
     // Dos espacios, como `serde_json::to_vec_pretty` del PC.
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val JSON = Json { prettyPrint = true; prettyPrintIndent = "  " }
@@ -121,6 +128,7 @@ object CaducidadDeCapturas {
     fun cambiar(raiz: File, ahora: Long, f: (Registro) -> Registro): Registro = synchronized(cerrojo) {
         val r = f(leerSinCerrojo(raiz, ahora))
         escribir(raiz, r)
+        cambios.value = cambios.value + 1
         r
     }
 

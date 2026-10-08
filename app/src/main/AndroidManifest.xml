@@ -719,6 +719,47 @@
             android:name=".pin.RecordatorioReceiver"
             android:exported="false" />
 
+        <!--
+            **Los widgets de la pantalla de inicio** (8-oct-2026): las tareas pendientes, para
+            marcarlas y apuntar ahí mismo, y las últimas capturas. Exportados porque es el
+            lanzador quien les pide que se pinten; lo que hacen al tocarlos va por PendingIntent
+            explícitos (marcar va a un receptor sin exportar). Sus servicios llenan las listas
+            y solo los puede atar el sistema (BIND_REMOTEVIEWS). Ver widget/.
+        -->
+        <receiver
+            android:name=".widget.WidgetDeTareas"
+            android:exported="true"
+            android:label="Tareas">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tareas_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.TocarTareaDelWidget"
+            android:exported="false" />
+        <service
+            android:name=".widget.ServicioDeTareas"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <receiver
+            android:name=".widget.WidgetDeGaleria"
+            android:exported="true"
+            android:label="Galería">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_galeria_info" />
+        </receiver>
+        <service
+            android:name=".widget.ServicioDeGaleria"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
         <!-- Las mini-apps: la lista de tareas y los gastos, cada una en su pantalla. -->
         <!-- **El lector de PDF**: ver un PDF de la conversación sin salir de PixPin. Su
              propia tarea, como los editores, para que abrirlo desde un pin no traiga la

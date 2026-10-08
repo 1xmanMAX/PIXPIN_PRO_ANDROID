@@ -876,4 +876,8 @@
         <item quantity="one">hace %d día</item>
         <item quantity="other">hace %d días</item>
     </plurals>
+
+    <!-- Los widgets de la pantalla de inicio (widget/). Lo que dice el selector de widgets. -->
+    <string name="widget_tareas_descripcion">Lo pendiente de todas tus listas: márcalo ahí mismo o apunta con «+»</string>
+    <string name="widget_galeria_descripcion">Tus últimas capturas y los días que les quedan</string>
 </resources>

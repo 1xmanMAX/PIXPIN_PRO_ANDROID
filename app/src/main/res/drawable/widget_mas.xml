@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El «+» de apuntar una tarea: círculo dorado con la cruz oscura (13:1), el acento de Cosmos. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp" android:height="36dp"
+    android:viewportWidth="36" android:viewportHeight="36">
+    <path android:fillColor="@color/widget_dorado"
+        android:pathData="M18,0a18,18 0,1 1,0 36a18,18 0,1 1,0 -36z" />
+    <path android:fillColor="@color/widget_sobre_dorado"
+        android:pathData="M16.5,10h3v6.5h6.5v3h-6.5v6.5h-3v-6.5h-6.5v-3h6.5z" />
+</vector>

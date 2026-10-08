@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Los widgets de noche: el mismo Cosmos, más opaco. Ver values/colores_widget.xml. -->
+<resources>
+    <color name="widget_fondo">#FA0B0F24</color>
+    <color name="widget_borde">#26FFFFFF</color>
+</resources>

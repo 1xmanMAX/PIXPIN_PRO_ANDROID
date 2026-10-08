@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    El widget de la galería de capturas (widget/WidgetDeGaleria.kt). Media hora de
+    `updatePeriodMillis` para que las chapitas cuenten los días con la aplicación cerrada.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_galeria_descripcion"
+    android:initialLayout="@layout/widget_galeria"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
+    android:previewImage="@drawable/atajo_imagen"
+    android:previewLayout="@layout/widget_galeria_vista"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

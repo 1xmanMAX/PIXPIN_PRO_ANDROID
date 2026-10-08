@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    El widget de tareas (widget/WidgetDeTareas.kt). Media hora de `updatePeriodMillis`, el mínimo
+    que Android respeta: basta para que «hace N días» avance; los cambios de verdad avisan al
+    momento (widget/AvisoDeWidgets.kt).
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_tareas_descripcion"
+    android:initialLayout="@layout/widget_tareas"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="110dp"
+    android:previewImage="@drawable/atajo_tarea"
+    android:previewLayout="@layout/widget_tareas_vista"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="3"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />
