@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Los colores de los widgets de la pantalla de inicio: los del tema Cosmos (ui/theme/Cosmos.kt),
+    azul noche con el acento dorado. De día, el fondo deja ver un poco el fondo de pantalla y lleva
+    un borde claro para no fundirse con uno oscuro; de noche (values-night), más opaco: sobre un
+    fondo negro el vidrio translúcido se lee peor.
+-->
+<resources>
+    <color name="widget_fondo">#EB0B0F24</color>
+    <color name="widget_borde">#33FFFFFF</color>
+    <color name="widget_fila">#14FFFFFF</color>
+    <color name="widget_tinta">#FFE8EAF6</color>
+    <color name="widget_tinta_suave">#FFB4B9D6</color>
+    <color name="widget_dorado">#FFFFD27A</color>
+    <color name="widget_sobre_dorado">#FF231A00</color>
+    <color name="widget_casilla_vacia">#FF242C55</color>
+</resources>

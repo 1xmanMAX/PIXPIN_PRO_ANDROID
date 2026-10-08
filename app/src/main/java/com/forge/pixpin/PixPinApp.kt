@@ -101,6 +101,9 @@ class PixPinApp : Application() {
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
         settings = SettingsRepository(this)
         scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }
+        // **Los widgets de tareas y de galería, al día** con el chat y con las capturas.
+        // Ver [com.forge.pixpin.widget.AvisoDeWidgets].
+        com.forge.pixpin.widget.AvisoDeWidgets.vigilar(this)
         // **Las capturas caducadas, a la papelera**: al arrancar y luego cada hora, como el
         // barrendero del PC. Ver [com.forge.pixpin.capture.BarrenderoDeCapturas].
         scope.launch(Dispatchers.IO) {

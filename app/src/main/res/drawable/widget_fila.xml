@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cada tarea del widget, y el hueco de cada miniatura: una tarjeta apenas marcada. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_fila" />
+    <corners android:radius="12dp" />
+</shape>
