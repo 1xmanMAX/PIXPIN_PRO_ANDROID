@@ -115,7 +115,9 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         // Lo último borrado, para «Deshacer».
         var deshacer by remember { mutableStateOf<List<Borrada>>(emptyList()) }
 
-        LaunchedEffect(version) {
+        // Lo que cambia la sincronización (capturas que llegan, otras fechas) se ve sin salir.
+        val deLaSincro by com.forge.pixpin.capture.CapturasEnElTelefono.cambio.collectAsState()
+        LaunchedEffect(version, deLaSincro) {
             val (l, r) = withContext(Dispatchers.IO) {
                 val t = System.currentTimeMillis()
                 // Al abrir, también se barre: lo que caducó con la app cerrada no se enseña.

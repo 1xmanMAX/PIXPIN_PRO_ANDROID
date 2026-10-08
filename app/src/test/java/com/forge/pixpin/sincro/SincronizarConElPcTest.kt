@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -47,6 +48,8 @@ class SincronizarConElPcTest {
         pc = File(raiz, "PixPin Max")
         movil = Disco(File(raiz, "movil/files").apply { mkdirs() })
         movil.identidad.guardar(Identidad(Aparato("id-movil", "Teléfono")))
+        // Con galería, como el teléfono: pedírsela al PC no puede romper nada.
+        movil.capturas = GaleriaQueViajaTest.EnCarpeta(movil.filesDir).also { it.hacer("captura.png", System.currentTimeMillis()) }
         orden("preparar", pc.path, CODIGO)
         val archivoDelPuerto = File(raiz, "puerto")
         responde = ProcessBuilder(programa, "responder", pc.path, archivoDelPuerto.path).redirectErrorStream(true)
@@ -84,6 +87,9 @@ class SincronizarConElPcTest {
                         sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
                         sesion.cerrar(prep)
                     }
+                    // Como la pantalla: la galería detrás. El PC de hoy no sabe de galerías y
+                    // contesta «No sé qué es»: no se hace nada y la vuelta sigue sana.
+                    if (movil.capturas != null) assertFalse("el PC no tiene galería", sesion.galeria(hecho))
                 }
                 sesion.adios()
             } finally { sesion.soltar() }

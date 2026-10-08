@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import com.forge.pixpin.capture.GaleriaCompartida
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -138,7 +139,11 @@ object Protocolo {
         /** Dónde quedó lo suelto: [SUELTO_EN_EL_LIENZO], [SUELTO_EN_EL_CHAT_ABIERTO] o [SUELTO_EN_EL_CHAT]. */
         val donde: String? = null,
         /** Con [SUELTO_EN_EL_CHAT_ABIERTO]: el nombre del chat donde quedó, como se ve arriba. */
-        val chat: String? = null
+        val chat: String? = null,
+        /** `galeria`: sus entradas de la galería compartida, en JSON. Ver [GaleriaQueViaja]. */
+        val galeria: String? = null,
+        /** `galeria`: las capturas que tiene de verdad. */
+        val tengo: List<String> = emptyList()
     )
 
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
@@ -148,6 +153,13 @@ object Protocolo {
         val (tipo, datos) = c.recibir()
         if (tipo != JSON_) throw IOException("Se esperaba una petición")
         return json.decodeFromString(Peticion.serializer(), datos.decodeToString())
+    }
+
+    /** Una respuesta, con su error dentro en vez de lanzarlo: para lo opcional del protocolo. */
+    internal fun leerRespuestaSinLanzar(c: Canal): Respuesta {
+        val (tipo, datos) = c.recibir()
+        if (tipo != JSON_) throw IOException("Se esperaba una respuesta")
+        return json.decodeFromString(Respuesta.serializer(), datos.decodeToString())
     }
 
     internal fun leerRespuesta(c: Canal): Respuesta {
@@ -191,12 +203,20 @@ object Protocolo {
 
     /** Un archivo cualquiera, tal cual y a trozos, con su cola. */
     internal fun salidaDeArchivo(archivo: java.io.File): Salida {
-        val largo = archivo.length()
         val fecha = archivo.lastModified()
+        val largo = archivo.length()
+        return salidaDeFlujo(largo, { archivo.inputStream() }) { archivo.length() != largo || archivo.lastModified() != fecha }
+    }
+
+    /**
+     * Lo mismo para algo que solo se sabe abrir (una captura de la galería, que en el teléfono es
+     * un `content://`): [largo] lo prometido, [cambio] si cambió mientras se leía.
+     */
+    internal fun salidaDeFlujo(largo: Long, abrir: () -> InputStream, cambio: () -> Boolean = { false }): Salida {
         return Salida(largo) { c, avance ->
             val md = java.security.MessageDigest.getInstance("SHA-256")
             var corto = false
-            archivo.inputStream().use { entrada ->
+            abrir().use { entrada ->
                 val buf = ByteArray(Canal.TOPE_DE_TRAMO)
                 var quedan = largo
                 while (quedan > 0) {
@@ -215,10 +235,10 @@ object Protocolo {
                     avance(n.toLong())
                 }
             }
-            val cambio = corto || archivo.length() != largo || archivo.lastModified() != fecha
+            val cambiado = corto || cambio()
             val resumen = hex(md.digest())
-            enviar(c, Respuesta(resumen = resumen, saltado = cambio))
-            if (cambio) null else resumen
+            enviar(c, Respuesta(resumen = resumen, saltado = cambiado))
+            if (cambiado) null else resumen
         }
     }
 
@@ -372,6 +392,51 @@ class Respondedor(
         }
     }
 
+    private fun responderGaleria(canal: Canal, p: Protocolo.Peticion) {
+        val c = disco.capturas
+        if (c == null) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
+            return
+        }
+        when (p.t) {
+            GaleriaQueViaja.PETICION -> {
+                estado("Comparando la galería…")
+                val e = GaleriaQueViaja.ponerAlDia(c, disco.identidad.leer().yo.id, ahora())
+                Protocolo.enviar(canal, Protocolo.Respuesta(galeria = GaleriaCompartida.entradasATexto(e.entradas), tengo = e.tenia.sorted()))
+            }
+            "galeriajunta" -> {
+                val juntas = GaleriaCompartida.entradasDeTexto(p.parche ?: "[]")
+                GaleriaQueViaja.aplicarJuntas(c, juntas, ahora())
+                disco.avisar(Disco.Cambio.GALERIA)
+                Protocolo.enviar(canal, Protocolo.Respuesta())
+            }
+            "damecaptura" -> {
+                val n = GaleriaQueViaja.nombreValido(p.ruta)
+                val (largo, flujo) = c.abrir(n) ?: throw IllegalStateException("No tengo «$n»")
+                flujo.close()
+                estado("Mandando «$n»")
+                val sale = Protocolo.salidaDeFlujo(largo, { c.abrir(n)?.second ?: throw IOException("«$n» ya no está") })
+                Protocolo.enviar(canal, Protocolo.Respuesta(bytes = sale.largo))
+                sale.mandar(canal) {}
+            }
+            "poncaptura" -> {
+                val n = GaleriaQueViaja.nombreValido(p.ruta)
+                // Lo que dice de ella: lo juntado, que llegó justo antes con `galeriajunta`.
+                val e = GaleriaCompartida.leer(c.raiz).porNombre[n] ?: GaleriaCompartida.Entrada(n, ahora())
+                estado("Recibiendo «$n»")
+                var leidos = false
+                val entera = runCatching {
+                    c.guardar(e) { salida -> leidos = true; Protocolo.recibirTrozos(canal, p.bytes, salida) {} != null }
+                }.getOrElse { if (it is IOException && leidos) throw it; false }
+                // Si no se pudo ni empezar a guardar, los trozos siguen en el cable: se leen y se
+                // tiran, o la conversación se descuadra.
+                if (!leidos) Protocolo.recibirTrozos(canal, p.bytes, java.io.OutputStream.nullOutputStream()) {}
+                if (entera) { GaleriaQueViaja.apuntarQueLlego(c, n); disco.avisar(Disco.Cambio.GALERIA) }
+                Protocolo.enviar(canal, Protocolo.Respuesta(saltado = !entera))
+            }
+        }
+    }
+
     private fun responder(canal: Canal, otro: Aparato) {
         // Lo que es de cada chat, calculado al preguntar por sus archivos: sin esto, cada archivo
         // pedido volvería a recorrer el chat y sus lienzos enteros.
@@ -471,6 +536,8 @@ class Respondedor(
                         estado("«${nombreDe(p.chat)}» al día con ${otro.nombre}")
                     }
                     "suelto" -> recibirSuelto(canal, p, otro)
+                    // **La galería** (8-oct-2026). Sin capturas en este disco, como un aparato de antes.
+                    GaleriaQueViaja.PETICION, "galeriajunta", "damecaptura", "poncaptura" -> responderGaleria(canal, p)
                     else -> Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
                 }
             } catch (e: IOException) {
@@ -563,7 +630,10 @@ class Sesion private constructor(
         /** Bytes que no hizo falta mandar porque viajaron solo los cambios. */
         var ahorrados: Long = 0,
         /** Lo que se estaba guardando mientras se mandaba y queda para la próxima vuelta. */
-        val saltados: MutableList<String> = ArrayList()
+        val saltados: MutableList<String> = ArrayList(),
+        /** Capturas de la galería que pasaron de un aparato a otro, y las quitadas aquí por quitarse allí. */
+        var capturas: Int = 0,
+        var capturasTiradas: Int = 0
     )
 
     private fun nombreDe(prep: PreparadoArchivos, rel: String) =
@@ -924,6 +994,50 @@ class Sesion private constructor(
         disco.guardarBase(otro.id, chat, base)
         disco.guardarObjetosDeBase(chat, base)
         disco.apuntarVez(otro.id, ahora)
+    }
+
+    /**
+     * **La galería de capturas** (ver [GaleriaQueViaja]): se junta lo de los dos, cada uno se
+     * queda con las capturas vivas que le faltan y se tira lo quitado a mano en el otro. Devuelve
+     * `false` si el otro no sabe de galerías (el PC de hoy) o aquí no hay: entonces no se hace nada.
+     * [avance] cuenta bytes, como los archivos de los chats.
+     */
+    fun galeria(hecho: Hecho, ahora: Long = System.currentTimeMillis(), avance: (Long) -> Unit = {}): Boolean {
+        val c = disco.capturas ?: return false
+        Protocolo.enviar(canal, Protocolo.Peticion(GaleriaQueViaja.PETICION))
+        val suya = Protocolo.leerRespuestaSinLanzar(canal)
+        // «No sé qué es»: un aparato de antes, o sin galería. La conversación sigue sana.
+        if (suya.error != null || suya.galeria == null) return false
+        val mia = GaleriaQueViaja.ponerAlDia(c, disco.identidad.leer().yo.id, ahora)
+        val juntas = GaleriaCompartida.juntar(mia.entradas, GaleriaCompartida.entradasDeTexto(suya.galeria))
+        val mias = mia.tenia
+        val suyas = suya.tengo.toSet()
+        // Primero lo acordado, allí y aquí: así el otro sabe de cada captura que le llega (su
+        // fecha, su tipo) y lo quitado a mano se va antes de pasar nada.
+        Protocolo.enviar(canal, Protocolo.Peticion("galeriajunta", parche = GaleriaCompartida.entradasATexto(juntas)))
+        Protocolo.leerRespuesta(canal)
+        hecho.capturasTiradas += GaleriaQueViaja.aplicarJuntas(c, juntas, ahora)
+        for (e in GaleriaCompartida.queTraer(juntas, mias, suyas, ahora)) {
+            Protocolo.enviar(canal, Protocolo.Peticion("damecaptura", ruta = e.nombre))
+            val cabecera = Protocolo.leerRespuestaSinLanzar(canal)
+            if (cabecera.error != null) continue   // ya no la tiene: se quedará para otra vez
+            var leidos = false
+            val entera = runCatching {
+                c.guardar(e) { salida -> leidos = true; Protocolo.recibirTrozos(canal, cabecera.bytes, salida, avance) != null }
+            }.getOrElse { if (it is IOException && leidos) throw it; false }
+            if (!leidos) Protocolo.recibirTrozos(canal, cabecera.bytes, java.io.OutputStream.nullOutputStream()) {}
+            if (entera) { GaleriaQueViaja.apuntarQueLlego(c, e.nombre); hecho.capturas++ } else hecho.saltados += e.nombre
+        }
+        for (e in GaleriaCompartida.queMandar(juntas, mias, suyas, ahora)) {
+            val (largo, flujo) = c.abrir(e.nombre) ?: continue
+            flujo.close()
+            val sale = Protocolo.salidaDeFlujo(largo, { c.abrir(e.nombre)?.second ?: throw IOException("«${e.nombre}» ya no está") })
+            Protocolo.enviar(canal, Protocolo.Peticion("poncaptura", ruta = e.nombre, bytes = sale.largo))
+            val resumen = sale.mandar(canal, avance)
+            if (Protocolo.leerRespuesta(canal).saltado || resumen == null) hecho.saltados += e.nombre else hecho.capturas++
+        }
+        disco.avisar(Disco.Cambio.GALERIA)
+        return true
     }
 
     /** Se despide y deja libre el aparato para otra sincronización. Se puede llamar más de una vez. */

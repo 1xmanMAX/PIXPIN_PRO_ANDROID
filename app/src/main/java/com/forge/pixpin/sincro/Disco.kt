@@ -95,9 +95,15 @@ data class ArchivoInfo(
  */
 class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
 
-    enum class Cambio { MENSAJES, PROYECTOS, ARCHIVOS, IDENTIDAD }
+    enum class Cambio { MENSAJES, PROYECTOS, ARCHIVOS, IDENTIDAD, GALERIA }
 
     val identidad = IdentidadEnDisco(filesDir)
+
+    /**
+     * **Las capturas de la galería**, para que viajen (ver [GaleriaQueViaja]). null: este disco no
+     * tiene galería (las pruebas de siempre) y se contesta como un aparato de antes.
+     */
+    var capturas: CapturasDelAparato? = null
     private val rutas = Rutas(filesDir)
     private val carpeta get() = File(filesDir, "sincro").apply { mkdirs() }
 

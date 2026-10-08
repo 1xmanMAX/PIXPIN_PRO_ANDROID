@@ -414,7 +414,9 @@ class SincronizarActivity : ComponentActivity() {
             "${hecho.enviados} enviados".takeIf { hecho.enviados > 0 },
             "${hecho.borrados} borrados".takeIf { hecho.borrados > 0 },
             "${hecho.archivos} archivos".takeIf { hecho.archivos > 0 },
-            "${hecho.fusionados} juntados de los dos".takeIf { hecho.fusionados > 0 }
+            "${hecho.fusionados} juntados de los dos".takeIf { hecho.fusionados > 0 },
+            "${hecho.capturas} ${if (hecho.capturas == 1) "captura" else "capturas"} de la galería".takeIf { hecho.capturas > 0 },
+            "${hecho.capturasTiradas} quitadas de la galería".takeIf { hecho.capturasTiradas > 0 }
         )
         return (if (partes.isEmpty()) "Ya estaban iguales." else partes.joinToString(" · ") + ".") +
             "\n${tamanoLegible(bytes).ifBlank { "0 B" }} en ${"%.1f".format(segundos)} s."
@@ -497,6 +499,23 @@ class SincronizarActivity : ComponentActivity() {
                     }
                     fase = Fase.Trabajando("${rotulo}Terminando «$nombreDelChat»…")
                     sesion.cerrar(prep)
+                }
+                // **La galería de capturas**, con sus fechas de irse (8-oct-2026). Si el otro no
+                // sabe de galerías (el PC de hoy), no pasa nada.
+                fase = Fase.Trabajando("${rotulo}Juntando la galería con $nombre…")
+                run {
+                    var hechos = 0L
+                    var ultimo = 0L
+                    val t0 = System.currentTimeMillis()
+                    sesion.galeria(hecho) { n ->
+                        hechos += n
+                        val ahora = System.currentTimeMillis()
+                        if (ahora - ultimo > 150) {
+                            ultimo = ahora
+                            val seg = (ahora - t0).coerceAtLeast(1) / 1000.0
+                            fase = Fase.Trabajando("${rotulo}Pasando capturas de la galería: ${tamanoLegible(hechos)} · ${tamanoLegible((hechos / seg).toLong())}/s")
+                        }
+                    }
                 }
                 sesion.adios()
                 val segundos = (System.currentTimeMillis() - empezo) / 1000.0

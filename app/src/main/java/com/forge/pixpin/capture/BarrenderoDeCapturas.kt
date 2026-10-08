@@ -58,13 +58,15 @@ object BarrenderoDeCapturas {
                 arrayOf(
                     MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATE_ADDED,
                     MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.MIME_TYPE, MediaStore.MediaColumns.WIDTH,
-                    MediaStore.MediaColumns.HEIGHT
+                    MediaStore.MediaColumns.HEIGHT, MediaStore.MediaColumns.DATE_TAKEN
                 ),
                 donde, carpetas.map { "%$it%" }.toTypedArray(), null
             )?.use { c ->
                 while (c.moveToNext()) salida += Captura(
                     ContentUris.withAppendedId(col, c.getLong(0)), c.getString(1) ?: "captura",
-                    c.getLong(2) * 1000, c.getLong(3), c.getString(4) ?: "image/*", c.getInt(5), c.getInt(6)
+                    // La hora en que se hizo si se sabe: una captura llegada de otro aparato
+                    // la trae en DATE_TAKEN (`CapturasEnElTelefono`); si no, cuando entró aquí.
+                    c.getLong(7).takeIf { it > 0 } ?: (c.getLong(2) * 1000), c.getLong(3), c.getString(4) ?: "image/*", c.getInt(5), c.getInt(6)
                 )
             }
         }

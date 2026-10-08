@@ -57,7 +57,14 @@ object CaducidadDeCapturas {
          * Las que se dejaron estar más: nombre y la fecha nueva en que se van, en ms UTC. Si es
          * anterior a la de la regla, gana la regla: prorrogar nunca acorta.
          */
-        val prorrogadas: Map<String, Long> = emptyMap()
+        val prorrogadas: Map<String, Long> = emptyMap(),
+        /**
+         * **La fecha exacta en que se va, acordada con el grupo** (8-oct-2026, la galería que se
+         * sincroniza: ver `sincro/GaleriaQueViaja`). Manda sobre la regla y las prórrogas: así una
+         * captura se va a la vez en todos los aparatos aunque llegara a cada uno otro día. Solo de
+         * Android: el PC no lo escribe ni lo lee (su registro no viaja).
+         */
+        val fijadas: Map<String, Long> = emptyMap()
     )
 
     // ------------------------------------------------------------------- reglas
@@ -65,6 +72,7 @@ object CaducidadDeCapturas {
     /** Cuándo se va la captura [nombre] hecha en [cuando] (ms UTC). null: no se va. Con [dias] ≤ 0 no se va ninguna. */
     fun seVaEl(r: Registro, nombre: String, cuando: Long, dias: Int): Long? {
         if (dias <= 0 || nombre in r.conservadas) return null
+        r.fijadas[nombre]?.let { return it }
         val regla = maxOf(cuando, r.desde) + dias * DIA_MS
         return r.prorrogadas[nombre]?.let { maxOf(regla, it) } ?: regla
     }
@@ -76,6 +84,8 @@ object CaducidadDeCapturas {
     /** El registro con la prórroga apuntada (igual si no se va). */
     fun prorrogada(r: Registro, nombre: String, cuando: Long, ahora: Long, dias: Int): Registro {
         val t = fechaProrrogada(r, nombre, cuando, ahora, dias) ?: return r
+        // Con fecha acordada, se mueve esa: es la que viaja.
+        if (nombre in r.fijadas) return r.copy(fijadas = r.fijadas + (nombre to t))
         return r.copy(prorrogadas = r.prorrogadas + (nombre to t))
     }
 
@@ -88,7 +98,7 @@ object CaducidadDeCapturas {
      * las que no aparecen en la carpeta; aquí no (ver [BarrenderoDeCapturas.barrer]).
      */
     fun sinEstas(r: Registro, nombres: Collection<String>): Registro =
-        r.copy(conservadas = r.conservadas - nombres.toSet(), prorrogadas = r.prorrogadas - nombres.toSet())
+        r.copy(conservadas = r.conservadas - nombres.toSet(), prorrogadas = r.prorrogadas - nombres.toSet(), fijadas = r.fijadas - nombres.toSet())
 
     // ------------------------------------------------------------------- fichero
 
@@ -98,6 +108,9 @@ object CaducidadDeCapturas {
         put("conservadas", JsonArray(r.conservadas.sorted().map { JsonPrimitive(it) }))
         if (r.prorrogadas.isNotEmpty()) {
             put("prorrogadas", JsonObject(r.prorrogadas.toSortedMap().mapValues { JsonPrimitive(it.value) }))
+        }
+        if (r.fijadas.isNotEmpty()) {
+            put("fijadas", JsonObject(r.fijadas.toSortedMap().mapValues { JsonPrimitive(it.value) }))
         }
     })
 
@@ -109,6 +122,9 @@ object CaducidadDeCapturas {
             desde = desde,
             conservadas = o["conservadas"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }?.toSet() ?: emptySet(),
             prorrogadas = (o["prorrogadas"] as? JsonObject)?.mapNotNull { (k, v) ->
+                (v as? JsonPrimitive)?.longOrNull?.let { k to it }
+            }?.toMap() ?: emptyMap(),
+            fijadas = (o["fijadas"] as? JsonObject)?.mapNotNull { (k, v) ->
                 (v as? JsonPrimitive)?.longOrNull?.let { k to it }
             }?.toMap() ?: emptyMap()
         )

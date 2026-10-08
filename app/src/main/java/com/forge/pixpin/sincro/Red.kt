@@ -242,8 +242,10 @@ class Red(private val context: Context) {
                     }
                     Disco.Cambio.ARCHIVOS -> principal.post { ExcalidrawStore.revision.intValue++ }
                     Disco.Cambio.IDENTIDAD -> Presencia.identidadCambio()
+                    // La galería se relee sola al volver a ella; esto es para quien la tenga delante.
+                    Disco.Cambio.GALERIA -> com.forge.pixpin.capture.CapturasEnElTelefono.cambio.value++
                 }
-            }
+            }.also { it.capturas = com.forge.pixpin.capture.CapturasEnElTelefono(app) }
         }
     }
 }
