@@ -737,9 +737,14 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_tareas_info" />
         </receiver>
-        <receiver
+        <!-- Transparente y sin pantalla: marca la tarea y se cierra, o abre Tareas. Ver TocarTareaDelWidget. -->
+        <activity
             android:name=".widget.TocarTareaDelWidget"
-            android:exported="false" />
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="${applicationId}.widget"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <service
             android:name=".widget.ServicioDeTareas"
             android:exported="false"

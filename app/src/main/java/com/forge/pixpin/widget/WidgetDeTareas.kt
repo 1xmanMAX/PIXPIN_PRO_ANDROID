@@ -7,7 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import android.widget.RemoteViews
 import com.forge.pixpin.R
 import com.forge.pixpin.guardados.MensajesStore
@@ -20,8 +19,8 @@ import com.forge.pixpin.mini.TodasLasTareasActivity
  *
  * - **Lo que sale** lo decide [LogicaDeLosWidgets.filasDeTareas]: lo mismo y en el mismo orden que
  *   la pantalla de Tareas ([TodasLasTareasActivity]), sin lo hecho.
- * - **Marcar** es una difusión a [TocarTareaDelWidget] ([ACCION_FILA]) y no abrir nada: el usuario
- *   quiere tachar sin salir del inicio. Se escribe con [MensajesStore.cambiar], el mismo camino que
+ * - **Marcar** va a [TocarTareaDelWidget] ([ACCION_FILA]), una actividad transparente que no
+ *   enseña nada y se cierra: el usuario quiere tachar sin salir del inicio. Se escribe con [MensajesStore.cambiar], el mismo camino que
  *   la pantalla de Tareas, así que la tarea viaja al sincronizar como cualquier otra tachada. Si la
  *   lista cambió desde que se pintó el widget, no se toca nada y la lista se repinta al día.
  * - **El «+»** abre [TareaRapidaActivity]: un widget no deja escribir dentro, y esa ventanita ya
@@ -63,14 +62,6 @@ class WidgetDeTareas : AppWidgetProvider() {
             }
         }
 
-        fun abrirTareas(context: Context) {
-            // Desde el receptor: el lanzador acaba de recibir el toque, y Android deja abrir si
-            // PixPin puede dibujar encima de otras apps (lo tiene casi siempre: son sus pines).
-            runCatching {
-                context.startActivity(Intent(context, TodasLasTareasActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }.onFailure { Log.w("PixPin", "widget de tareas: no se pudo abrir Tareas", it) }
-        }
-
         /** La cabecera, el «+» y la lista (sin filas: las pone [ServicioDeTareas]). */
         fun marco(context: Context, id: Int): RemoteViews {
             val v = RemoteViews(context.packageName, R.layout.widget_tareas)
@@ -100,12 +91,14 @@ class WidgetDeTareas : AppWidgetProvider() {
             v.setRemoteAdapter(R.id.widget_tareas_lista, servicio)
             v.setEmptyView(R.id.widget_tareas_lista, R.id.widget_tareas_vacio)
             // La plantilla de las filas: MUTABLE porque cada fila le pega lo suyo (qué tarea, y si
-            // es marcar o abrir). Explícita y a un receptor sin exportar: nadie más la recibe ni la imita.
+            // es marcar o abrir). Explícita y a una actividad sin exportar: nadie más la recibe ni
+            // la imita. Actividad y no receptor: ver [TocarTareaDelWidget].
             v.setPendingIntentTemplate(
                 R.id.widget_tareas_lista,
-                PendingIntent.getBroadcast(
+                PendingIntent.getActivity(
                     context, PI_FILAS,
-                    Intent(context, TocarTareaDelWidget::class.java).setAction(ACCION_FILA),
+                    Intent(context, TocarTareaDelWidget::class.java).setAction(ACCION_FILA)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 )
             )
