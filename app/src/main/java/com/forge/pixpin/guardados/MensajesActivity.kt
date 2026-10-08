@@ -196,7 +196,7 @@ import java.util.UUID
  *
  * Toda la decisión de qué se ve está en [Mensajes]; aquí solo se pinta y se toca.
  */
-class MensajesActivity : ComponentActivity() {
+class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
 
     private lateinit var almacen: MensajesStore
 
@@ -6808,6 +6808,24 @@ class MensajesActivity : ComponentActivity() {
         // Un APK se instala; lo demás, con la aplicación que se elija. Ver [com.forge.pixpin.ui.AbrirCon].
         com.forge.pixpin.ui.AbrirCon.abrir(this, File(ruta))
     }
+
+    override fun onResume() {
+        super.onResume()
+        ChatAlFrente.poner(this)
+    }
+
+    override fun onPause() {
+        ChatAlFrente.quitar(this)
+        super.onPause()
+    }
+
+    /**
+     * Lo que llega del PC con este chat delante viene aquí (ver [ChatAlFrente]). Se pregunta en el
+     * momento: dentro de esta pantalla se cambia de conversación sin pasar por `onResume`.
+     */
+    override fun chatQueSeVe() = ChatAlFrente.Chat(
+        chatDe, nombreDelChat.ifBlank { if (chatDe == null) getString(com.forge.pixpin.R.string.guardados_titulo) else "" }
+    )
 
     override fun onStop() {
         super.onStop()

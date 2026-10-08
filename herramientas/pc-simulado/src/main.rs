@@ -93,7 +93,7 @@ fn responder(raiz: &Path, archivo_del_puerto: &str) {
     std::fs::write(archivo_del_puerto, escucha.local_addr().unwrap().port().to_string()).unwrap();
     for flujo in escucha.incoming() {
         let Ok(flujo) = flujo else { continue };
-        let r = Respondedor { disco: &pc, estado: &|_| {}, ahora: &ahora, mi_puerto: 0, al_saludar: &|_, _| {} };
+        let r = Respondedor { disco: &pc, estado: &|_| {}, ahora: &ahora, mi_puerto: 0, al_saludar: &|_, _| {}, suelto: None };
         if let Err(e) = r.atender(flujo, nonce()) { eprintln!("PC: {e:?}"); }
     }
 }
@@ -133,7 +133,7 @@ fn ver(raiz: &Path) {
     writeln!(o, "{}", serde_json::json!({"chats": chats, "archivos": archivos})).unwrap();
 }
 
-/// La foto del PC al lienzo del movil, con el cliente de verdad del PC
+/// Archivos del PC a lo que el movil tenga abierto, con el cliente de verdad del PC
 /// (`al_lienzo::Conexion`): saluda, manda cada fichero y escribe en una linea
 /// donde quedo cada uno (`lienzo`, `chat`) o `error: …`.
 fn suelto(codigo: &str, puerto: u16, ficheros: &[String]) {
@@ -153,8 +153,12 @@ fn suelto(codigo: &str, puerto: u16, ficheros: &[String]) {
         let ruta = Path::new(f);
         let nombre = ruta.file_name().unwrap().to_string_lossy().into_owned();
         match c.mandar(ruta, &nombre) {
-            Ok(Donde::Lienzo) => println!("lienzo"),
-            Ok(Donde::Chat) => println!("chat"),
+            Ok(l) => match (l.donde, l.chat) {
+                (Donde::Lienzo, _) => println!("lienzo"),
+                (Donde::ChatAbierto, Some(chat)) => println!("chat_abierto {chat}"),
+                (Donde::ChatAbierto, None) => println!("chat_abierto"),
+                (Donde::Chat, _) => println!("chat"),
+            },
             Err(e) => println!("error: {e:?}"),
         }
     }

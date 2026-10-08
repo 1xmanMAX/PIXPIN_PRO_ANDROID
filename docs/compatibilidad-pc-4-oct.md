@@ -50,3 +50,23 @@ Probado: `SueltoTest` (11 pruebas) contra el `Respondedor` de verdad, una de ell
 **cliente Rust del PC** (`herramientas/pc-simulado suelto`, con `PIXPIN_PC_SIMULADO`): una foto
 al lienzo, otra al chat y un móvil «de antes» que el PC reconoce como tal.
 **Sin probar en teléfono**: que la foto aparezca en el lienzo sin tocar la pantalla.
+
+## Lo de la noche del 7-oct (v0.106.0)
+
+`p s` en Flow Launcher manda **cualquier archivo** a lo que el móvil tenga abierto (guía del PC:
+`docs/investigacion/2026-10-07-archivos-al-chat-abierto-android.md`).
+
+| Delante en el móvil | Una foto | Otro archivo |
+|---|---|---|
+| Un chat | a ese chat (`chat_abierto` + su nombre) | a ese chat |
+| Un lienzo | al lienzo | **se niega antes del «vale»**: «<móvil> tiene un lienzo abierto: solo acepta fotos» |
+| Nada | Conversación general | Conversación general |
+
+- `sincro/LoAbierto.kt`: la tabla, sin Android. Con pantalla partida manda el que se puso delante el último (`OrdenAlFrente`).
+- `guardados/ChatAlFrente.kt`: lo pone el `onResume` de `MensajesActivity`; el chat se pregunta en el momento, porque dentro de esa pantalla se cambia de conversación sin `onResume`.
+- `Respondedor`: `alAceptarSuelto` (antes del vale) y `alRecibirSuelto` (devuelve dónde y qué chat). Tope: 2 GB, a disco por trozos.
+- Al llegar entero se vuelve a mirar qué hay delante: con un vídeo el usuario puede haber cambiado de pantalla.
+- Lo que entra en un chat no se aligera (un PDF llega tal cual) y lleva «recibido de».
+- Sin portar: el PC atiende `suelto` aunque esté sincronizando con otro; el móvil sigue contestando «ocupado» (atiende las conexiones de una en una).
+
+Probado: `SueltoTest` (16), con el cliente Rust del PC del 7-oct: PDF con lienzo delante → `SoloFotos` y la foto de detrás entra.

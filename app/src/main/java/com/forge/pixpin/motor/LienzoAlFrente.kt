@@ -2,11 +2,22 @@ package com.forge.pixpin.motor
 
 import java.io.File
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicLong
 
 /** Lo que sabe meter una imagen en lo que se está mirando. Interfaz para probarlo sin Android. */
 interface RecibeImagenes {
     /** Llamar en el hilo de la interfaz. Devuelve si quedó puesta. El [archivo] no se toca: se copia. */
     fun recibirImagen(archivo: File, mime: String): Boolean
+}
+
+/**
+ * **Quién se puso delante el último**, entre el lienzo ([LienzoAlFrente]) y el chat
+ * (`guardados/ChatAlFrente`). Con la pantalla partida pueden estar los dos a la vista: manda el
+ * del `onResume` más reciente.
+ */
+object OrdenAlFrente {
+    private val cuenta = AtomicLong(0)
+    fun siguiente(): Long = cuenta.incrementAndGet()
 }
 
 /**
@@ -20,7 +31,11 @@ interface RecibeImagenes {
 object LienzoAlFrente {
     @Volatile private var ref: WeakReference<RecibeImagenes>? = null
 
-    fun poner(l: RecibeImagenes) { ref = WeakReference(l) }
+    /** Cuándo se puso, en el orden de [OrdenAlFrente]. */
+    @Volatile var orden = 0L
+        private set
+
+    fun poner(l: RecibeImagenes) { ref = WeakReference(l); orden = OrdenAlFrente.siguiente() }
 
     /**
      * Solo quita si es el mismo: al pasar de un lienzo a otro (o con dos en pantalla partida) el

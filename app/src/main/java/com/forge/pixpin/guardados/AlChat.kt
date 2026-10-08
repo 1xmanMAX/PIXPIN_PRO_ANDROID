@@ -25,10 +25,16 @@ object AlChat {
         meterArchivo(context, temporal, nombre, tipo, proyecto).also { temporal.delete() }
     }.getOrDefault(false)
 
-    fun meterArchivo(context: Context, archivo: File, nombre: String, tipo: String?, proyecto: String?): Boolean = runCatching {
+    fun meterArchivo(
+        context: Context, archivo: File, nombre: String, tipo: String?, proyecto: String?,
+        /** Lo que llega del PC entra tal cual, como un envío: un PDF no se aligera. */
+        aligerar: Boolean = true,
+        /** Quién lo mandó, para el «recibido de» de la burbuja. */
+        recibidoDe: String? = null
+    ): Boolean = runCatching {
         val almacen = MensajesStore(context)
         val ext = tipo?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-        val ruta = almacen.copiarAdjunto(archivo, nombre, ext) ?: return false
+        val ruta = almacen.copiarAdjunto(archivo, nombre, ext, aligerar = aligerar) ?: return false
         val esImagen = tipo?.startsWith("image/") == true ||
             ruta.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "heic", "bmp")
         val esAudio = tipo?.startsWith("audio/") == true ||
@@ -39,7 +45,8 @@ object AlChat {
                 clase = if (esImagen) Clase.IMAGEN else if (esAudio) Clase.VOZ else Clase.ARCHIVO,
                 ruta = ruta, nombre = nombre, bytes = File(ruta).length(),
                 duracionMs = if (esAudio) com.forge.pixpin.pin.Voz.duracion(ruta) else 0,
-                proyecto = proyecto
+                proyecto = proyecto,
+                recibidoDe = recibidoDe
             )
         )
         true

@@ -80,7 +80,8 @@ object Presencia {
                             estado = { atendiendo.value = it },
                             miPuerto = red.puerto,
                             alSaludar = { otro, puerto -> disco.apuntarDireccion(otro.id, quien, puerto) },
-                            alRecibirSuelto = ::alLienzoOAlChat,
+                            alAceptarSuelto = { _, mime -> LoAbierto.aceptar(delante(), mime, id.yo.nombre) },
+                            alRecibirSuelto = { f, nombre, mime, otro -> alLoAbierto(f, nombre, mime, otro, id.yo.nombre) },
                             cache = java.io.File(app.cacheDir, "suelto")
                         ).atender(entrada, socket.getOutputStream())
                     }.onFailure { e ->
@@ -105,40 +106,66 @@ object Presencia {
         principal.post { red.cerrar(); encender() }
     }
 
+    /** Qué hay delante ahora mismo: un lienzo, un chat o nada. Ver [LoAbierto]. */
+    private fun delante(): LoAbierto.Delante = LoAbierto.delante(
+        com.forge.pixpin.motor.LienzoAlFrente.actual() != null, com.forge.pixpin.motor.LienzoAlFrente.orden,
+        com.forge.pixpin.guardados.ChatAlFrente.actual() != null, com.forge.pixpin.guardados.ChatAlFrente.orden
+    )
+
     /**
-     * **Una foto suelta del PC** («p móvil» en Flow Launcher): al lienzo que esté delante; si no
-     * hay ninguno, o no es una imagen, a la Conversación general como un archivo recibido.
+     * **Un archivo suelto del PC** («p s» en Flow Launcher), ya llegado entero: a lo que esté
+     * delante, según [LoAbierto]. Se vuelve a mirar qué hay: entre el «vale» y el último trozo de
+     * un vídeo el usuario puede haber cambiado de pantalla. Devuelve dónde quedó y, si fue un chat
+     * abierto, su nombre.
      */
-    private fun alLienzoOAlChat(fichero: java.io.File, nombre: String, mime: String, otro: Aparato): String {
-        val lienzo = com.forge.pixpin.motor.LienzoAlFrente.actual()
-        if (lienzo != null && mime.startsWith("image/")) {
-            val hecho = java.util.concurrent.CountDownLatch(1)
-            val puesta = java.util.concurrent.atomic.AtomicBoolean(false)
-            principal.post {
-                try { puesta.set(lienzo.recibirImagen(fichero, mime)) } finally { hecho.countDown() }
-            }
-            if (hecho.await(10, java.util.concurrent.TimeUnit.SECONDS) && puesta.get()) {
-                apuntar("Foto de ${otro.nombre} puesta en el lienzo")
-                return Protocolo.SUELTO_EN_EL_LIENZO
+    private fun alLoAbierto(fichero: java.io.File, nombre: String, mime: String, otro: Aparato, miNombre: String): Pair<String, String?> {
+        val ahora = delante()
+        // Se cambió a un lienzo mientras llegaba algo que no es una foto: se niega igual que antes
+        // del vale. `recibirSuelto` convierte el error en la respuesta.
+        LoAbierto.aceptar(ahora, mime, miNombre)?.let { throw IllegalStateException(it) }
+        var lienzoPensando = false
+        if (ahora == LoAbierto.Delante.LIENZO) {
+            val lienzo = com.forge.pixpin.motor.LienzoAlFrente.actual()
+            if (lienzo != null) {
+                val hecho = java.util.concurrent.CountDownLatch(1)
+                val puesta = java.util.concurrent.atomic.AtomicBoolean(false)
+                principal.post {
+                    try { puesta.set(lienzo.recibirImagen(fichero, mime)) } finally { hecho.countDown() }
+                }
+                val acabo = hecho.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                if (acabo && puesta.get()) {
+                    apuntar("Foto de ${otro.nombre} puesta en el lienzo")
+                    return Protocolo.SUELTO_EN_EL_LIENZO to null
+                }
+                lienzoPensando = !acabo
             }
         }
-        // Una copia para el chat: si el lienzo se quedó pensando más de 10 s, aún puede estar
-        // leyendo el fichero, y `guardar` borra el que se le da.
-        val copia = java.io.File(fichero.parentFile, "chat_" + fichero.name)
-        fichero.copyTo(copia, overwrite = true)
-        val e = Envio.Elemento(
-            tipo = Envio.ARCHIVO, nombre = nombre, bytes = copia.length(), mime = mime,
-            // Única por envío: con la misma identidad, `guardarArchivo` sustituiría la anterior.
-            identidad = "suelto:${otro.id}:${System.currentTimeMillis()}:$nombre"
-        )
+        // Si el lienzo se quedó pensando más de 10 s aún puede estar leyendo el fichero, y
+        // `Recepcion.guardar` borra el que se le da: entonces, una copia. Si no, el mismo (con un
+        // vídeo de 2 GB, copiarlo sería otro tanto de disco).
+        val copia = if (lienzoPensando) java.io.File(fichero.parentFile, "chat_" + fichero.name).also { fichero.copyTo(it, overwrite = true) } else fichero
         try {
+            val chat = if (ahora == LoAbierto.Delante.CHAT) com.forge.pixpin.guardados.ChatAlFrente.actual() else null
+            if (chat != null) {
+                val entro = com.forge.pixpin.guardados.AlChat.meterArchivo(
+                    app, copia, nombre, mime, chat.proyecto, aligerar = false, recibidoDe = otro.nombre
+                )
+                if (!entro) throw IllegalStateException("No se pudo guardar «$nombre» en el chat")
+                apuntar("«$nombre» de ${otro.nombre} puesto en el chat «${chat.nombre}»")
+                return Protocolo.SUELTO_EN_EL_CHAT_ABIERTO to chat.nombre
+            }
+            val e = Envio.Elemento(
+                tipo = Envio.ARCHIVO, nombre = nombre, bytes = copia.length(), mime = mime,
+                // Única por envío: con la misma identidad, `guardarArchivo` sustituiría la anterior.
+                identidad = "suelto:${otro.id}:${System.currentTimeMillis()}:$nombre"
+            )
             Recepcion.guardar(app, e, copia, Envio.Oferta(de = otro.nombre, deId = otro.id, elementos = emptyList()))
-                ?: throw IllegalStateException("No se pudo guardar la imagen")
+                ?: throw IllegalStateException("No se pudo guardar «$nombre»")
+            apuntar("«$nombre» de ${otro.nombre} guardado en la conversación general")
+            return Protocolo.SUELTO_EN_EL_CHAT to null
         } finally {
-            copia.delete()
+            if (copia !== fichero) copia.delete()
         }
-        apuntar("Foto de ${otro.nombre} guardada en la conversación general")
-        return Protocolo.SUELTO_EN_EL_CHAT
     }
 
     fun apuntar(texto: String) {

@@ -56,12 +56,22 @@ object Protocolo {
     fun ocupar(disco: Disco): Boolean = ocupados.add(disco.filesDir.absolutePath)
     fun soltar(disco: Disco) { ocupados.remove(disco.filesDir.absolutePath) }
     /**
-     * **Lo más grande que se acepta como `suelto`** (una foto del PC al lienzo que está delante).
-     * Lo mismo que el PC: por encima ni se piden los trozos.
+     * **Lo más grande que se acepta como `suelto`** (un archivo del PC a lo que esté abierto): 2 GB,
+     * lo mismo que el PC, para que pasen vídeos. Va a disco trozo a trozo, no a memoria. Por
+     * encima ni se piden los trozos.
      */
-    const val TOPE_DE_SUELTO = 64L shl 20
+    const val TOPE_DE_SUELTO = 2L shl 30
+    /** En el lienzo que estaba delante. */
     const val SUELTO_EN_EL_LIENZO = "lienzo"
+    /** En el chat que estaba delante; la respuesta dice cuál en `chat`. */
+    const val SUELTO_EN_EL_CHAT_ABIERTO = "chat_abierto"
+    /** En la Conversación general: no había nada abierto. */
     const val SUELTO_EN_EL_CHAT = "chat"
+    /**
+     * **Con un lienzo delante, lo que no es una foto se niega** antes del «vale». El PC lo
+     * reconoce porque el error **acaba** así (delante va el nombre de este aparato).
+     */
+    const val SOLO_FOTOS = "tiene un lienzo abierto: solo acepta fotos"
     const val OCUPADO = "Está sincronizando con otro aparato. Prueba otra vez en un momento."
 
     @Serializable
@@ -125,8 +135,10 @@ object Protocolo {
         val lapidas: List<LapidaDeChat> = emptyList(),
         /** Tras un `suelto` ya recibido: "listo". */
         val t: String? = null,
-        /** Dónde quedó lo suelto: [SUELTO_EN_EL_LIENZO] o [SUELTO_EN_EL_CHAT]. */
-        val donde: String? = null
+        /** Dónde quedó lo suelto: [SUELTO_EN_EL_LIENZO], [SUELTO_EN_EL_CHAT_ABIERTO] o [SUELTO_EN_EL_CHAT]. */
+        val donde: String? = null,
+        /** Con [SUELTO_EN_EL_CHAT_ABIERTO]: el nombre del chat donde quedó, como se ve arriba. */
+        val chat: String? = null
     )
 
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
@@ -250,13 +262,20 @@ class Respondedor(
     /** Quién vino y en qué puerto escucha él: se recuerda para llamarle directamente. */
     private val alSaludar: (Aparato, Int) -> Unit = { _, _ -> },
     /**
-     * **Una foto suelta del otro aparato** (`suelto`, la «foto al lienzo del móvil» del PC):
-     * recibe el fichero ya entero, su nombre saneado, su tipo y quién lo manda, y devuelve dónde
-     * quedó ([Protocolo.SUELTO_EN_EL_LIENZO] o [Protocolo.SUELTO_EN_EL_CHAT]). El fichero es
-     * suyo: lo borra él. Sin esto, `suelto` se contesta como cualquier petición desconocida, que
-     * es lo que el PC entiende como «PixPin de antes».
+     * **Antes del «vale» de un `suelto`**: con su nombre saneado y su tipo, `null` si se acepta o
+     * el error con que se niega (sin que llegue ningún trozo). Ver [Protocolo.SOLO_FOTOS].
      */
-    private val alRecibirSuelto: ((File, String, String, Aparato) -> String)? = null,
+    private val alAceptarSuelto: ((String, String) -> String?)? = null,
+    /**
+     * **Un archivo suelto del otro aparato** (`suelto`, «p s» del PC): recibe el fichero ya
+     * entero, su nombre saneado, su tipo y quién lo manda, y devuelve dónde quedó
+     * ([Protocolo.SUELTO_EN_EL_LIENZO], [Protocolo.SUELTO_EN_EL_CHAT_ABIERTO] con el nombre del
+     * chat, o [Protocolo.SUELTO_EN_EL_CHAT]). Si lanza, el mensaje va al otro como error. El
+     * fichero lo borra quien lo recibe al volver de aquí: hay que copiarlo. Sin esto, `suelto` se
+     * contesta como cualquier petición desconocida, que es lo que el PC entiende como «PixPin de
+     * antes».
+     */
+    private val alRecibirSuelto: ((File, String, String, Aparato) -> Pair<String, String?>)? = null,
     /** Dónde dejar lo suelto mientras llega. */
     private val cache: File? = null
 ) {
@@ -304,9 +323,11 @@ class Respondedor(
     }
 
     /**
-     * **Una foto suelta** (ver `docs/investigacion/2026-10-06-foto-al-lienzo-android.md` del PC).
-     * El «vale» (`{}`) va **antes** de los trozos: así, si no se acepta, no llega ninguno y la
-     * conversación sigue sana hasta el `adios`.
+     * **Un archivo suelto** (ver `docs/investigacion/2026-10-06-foto-al-lienzo-android.md` y
+     * `2026-10-07-archivos-al-chat-abierto-android.md` del PC). El «vale» (`{}`) va **antes** de
+     * los trozos: así, si no se acepta, no llega ninguno y la conversación sigue sana hasta el
+     * `adios`. El `destino` («lienzo» del PC del 6-oct, «abierto» del 7) no se mira: los dos
+     * quieren decir «lo que esté abierto».
      */
     private fun recibirSuelto(canal: Canal, p: Protocolo.Peticion, otro: Aparato) {
         val recibir = alRecibirSuelto
@@ -316,10 +337,15 @@ class Respondedor(
             return
         }
         if (p.bytes < 0 || p.bytes > Protocolo.TOPE_DE_SUELTO) {
-            Protocolo.enviar(canal, Protocolo.Respuesta(error = "La imagen es demasiado grande"))
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "El archivo es demasiado grande"))
             return
         }
-        val nombre = Envio.nombreSano(p.nombre ?: "imagen.png")
+        val nombre = Envio.nombreSano(p.nombre ?: "archivo")
+        val mime = p.mime ?: "application/octet-stream"
+        alAceptarSuelto?.invoke(nombre, mime)?.let { e ->
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = e))
+            return
+        }
         carpeta.mkdirs()
         val fichero = File(carpeta, "suelto_${System.nanoTime()}_$nombre")
         try {
@@ -329,17 +355,17 @@ class Respondedor(
             // no es de fiar.
             val entero = fichero.outputStream().use { Protocolo.recibirTrozos(canal, p.bytes, it) {} } != null
             if (!entero) {
-                Protocolo.enviar(canal, Protocolo.Respuesta(error = "La imagen cambió mientras se mandaba"))
+                Protocolo.enviar(canal, Protocolo.Respuesta(error = "El archivo cambió mientras se mandaba"))
                 return
             }
             val donde = try {
-                recibir(fichero, nombre, p.mime ?: "application/octet-stream", otro)
+                recibir(fichero, nombre, mime, otro)
             } catch (e: Exception) {
                 // Lo llegado está entero: lo que falló es guardarlo aquí. Se dice y se sigue.
                 Protocolo.enviar(canal, Protocolo.Respuesta(error = e.message ?: e.javaClass.simpleName))
                 return
             }
-            Protocolo.enviar(canal, Protocolo.Respuesta(t = "listo", donde = donde))
+            Protocolo.enviar(canal, Protocolo.Respuesta(t = "listo", donde = donde.first, chat = donde.second))
         } finally {
             // Quien lo recibe hace su copia; si no la hizo, o no llegó entero, no queda nada.
             fichero.delete()
