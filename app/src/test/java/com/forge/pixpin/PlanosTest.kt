@@ -187,4 +187,18 @@ class PlanosTest {
         assertEquals(10.0, movidas[1][0][0], 0.0)
         assertEquals(10.0, cadenas[0][1][0], 0.0)
     }
+
+    @Test
+    fun la_escala_de_la_lamina_es_la_normal_que_cabe() {
+        val P = com.forge.pixpin.planos.ImprimirPlano
+        // 20 m × 10 m en metros (20 000 × 10 000 mm) sobre 250 × 150 mm: lo justo es 1:80 → 1:100.
+        assertEquals(100, P.escalaQueCabe(20_000.0, 10_000.0, 250.0, 150.0))
+        // Exacto cabe: 25 m en 250 mm es 1:100, no 1:125.
+        assertEquals(100, P.escalaQueCabe(25_000.0, 1.0, 250.0, 150.0))
+        // Las unidades del plano en milímetros.
+        assertEquals(1000.0, P.mmPorUnidad(6)!!, 0.0)
+        assertNull(P.mmPorUnidad(0))
+        // Más grande que la más pequeña: no hay escala.
+        assertNull(P.escalaQueCabe(1e12, 1.0, 100.0, 100.0))
+    }
 }

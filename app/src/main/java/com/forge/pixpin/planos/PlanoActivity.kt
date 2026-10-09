@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -175,6 +176,7 @@ class PlanoActivity : ComponentActivity() {
         // **Marcos para imprimir** (9-oct-2026): partes del plano, cada una una hoja.
         var marcando by remember { mutableStateOf(false) }
         var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
+        var preparandoLamina by remember { mutableStateOf(false) }
         // Las cotas: cadenas hechas y la que se está poniendo (puntos del plano).
         var hechas by remember { mutableStateOf<List<List<DoubleArray>>>(emptyList()) }
         var puntos by remember { mutableStateOf<List<DoubleArray>>(emptyList()) }
@@ -434,16 +436,20 @@ class PlanoActivity : ComponentActivity() {
                     IconButton(onClick = { hojas = hojas.dropLast(1); marcos2++ }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Undo, contentDescription = getString(com.forge.pixpin.R.string.plano_quitar_marco), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
                     }
-                    IconButton(onClick = {
-                        val m = modelo
-                        if (m != null) ImprimirPlano.imprimir(this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'))
-                    }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
+                    IconButton(onClick = { preparandoLamina = true }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Print, contentDescription = getString(com.forge.pixpin.R.string.plano_imprimir), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
                     }
                     IconButton(onClick = { marcando = false }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Close, contentDescription = getString(com.forge.pixpin.R.string.plano_dejar_de_marcar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
                     }
                 }
+            }
+            if (preparandoLamina) DatosDeLaLamina(nombre.substringBeforeLast('.'), onCerrar = { preparandoLamina = false }) { lamina ->
+                preparandoLamina = false
+                val m = modelo
+                if (m != null) ImprimirPlano.imprimir(
+                    this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina
+                )
             }
             // Acotando: la pista y sus mandos, abajo, mientras dure.
             if (acotando) {
@@ -473,6 +479,59 @@ class PlanoActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * **Los datos del membrete** antes de imprimir: con o sin lámina, y lo que va escrito. El
+     * proyecto, quién dibujó y las dos opciones se recuerdan para la próxima; el título empieza
+     * con el nombre del plano y la fecha con la de hoy.
+     */
+    @Composable
+    private fun DatosDeLaLamina(nombre: String, onCerrar: () -> Unit, onImprimir: (ImprimirPlano.Lamina) -> Unit) {
+        var conMembrete by remember { mutableStateOf(prefs.getBoolean("lamina:membrete", true)) }
+        var escalaNormal by remember { mutableStateOf(prefs.getBoolean("lamina:escala", true)) }
+        var proyecto by remember { mutableStateOf(prefs.getString("lamina:proyecto", "").orEmpty()) }
+        var titulo by remember { mutableStateOf(nombre) }
+        var autor by remember { mutableStateOf(prefs.getString("lamina:autor", "").orEmpty()) }
+        var fecha by remember { mutableStateOf(java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())) }
+        val conUnidades = ImprimirPlano.mmPorUnidad(modelo?.unidades ?: 0) != null
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = onCerrar,
+            title = { Text(getString(com.forge.pixpin.R.string.plano_lamina)) },
+            text = {
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(getString(com.forge.pixpin.R.string.plano_con_membrete), Modifier.weight(1f))
+                        androidx.compose.material3.Switch(checked = conMembrete, onCheckedChange = { conMembrete = it })
+                    }
+                    if (conMembrete) {
+                        androidx.compose.material3.OutlinedTextField(proyecto, { proyecto = it.take(120) }, label = { Text(getString(com.forge.pixpin.R.string.plano_proyecto)) }, singleLine = true)
+                        androidx.compose.material3.OutlinedTextField(titulo, { titulo = it.take(160) }, label = { Text(getString(com.forge.pixpin.R.string.plano_titulo_lamina)) }, singleLine = true)
+                        androidx.compose.material3.OutlinedTextField(autor, { autor = it.take(80) }, label = { Text(getString(com.forge.pixpin.R.string.plano_autor)) }, singleLine = true)
+                        androidx.compose.material3.OutlinedTextField(fecha, { fecha = it.take(30) }, label = { Text(getString(com.forge.pixpin.R.string.plano_fecha)) }, singleLine = true)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(getString(com.forge.pixpin.R.string.plano_escala_normal))
+                            Text(
+                                getString(if (conUnidades) com.forge.pixpin.R.string.plano_escala_normal_si else com.forge.pixpin.R.string.plano_escala_normal_no),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        androidx.compose.material3.Switch(checked = escalaNormal && conUnidades, enabled = conUnidades, onCheckedChange = { escalaNormal = it })
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    prefs.edit().putBoolean("lamina:membrete", conMembrete).putBoolean("lamina:escala", escalaNormal)
+                        .putString("lamina:proyecto", proyecto.trim()).putString("lamina:autor", autor.trim()).apply()
+                    onImprimir(ImprimirPlano.Lamina(conMembrete, proyecto.trim(), titulo.trim(), autor.trim(), fecha.trim(), escalaNormal && conUnidades))
+                }) { Text(getString(com.forge.pixpin.R.string.plano_imprimir)) }
+            },
+            dismissButton = { TextButton(onClick = onCerrar) { Text(getString(android.R.string.cancel)) } }
+        )
     }
 
     private fun alCambiarTamano(w: Int, h: Int) {

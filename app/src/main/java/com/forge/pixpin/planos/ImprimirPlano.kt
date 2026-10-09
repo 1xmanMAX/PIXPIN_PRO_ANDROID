@@ -43,13 +43,59 @@ object ImprimirPlano {
 
     private const val MARGEN = 28f
 
-    fun imprimir(actividad: Activity, m: ModeloCad, marcos: List<Marco>, cotas: List<List<DoubleArray>>, nombre: String) {
+    /**
+     * **La lámina, como en los planos de verdad** (9-oct-2026, el usuario: «un frame predeterminado,
+     * como un membrete»): el recuadro con los márgenes de la norma (ISO 5457: 20 mm a la izquierda
+     * para encuadernar, 10 mm en los demás) y el membrete abajo a la derecha, con el proyecto, el
+     * título, quién lo dibujó, la escala, la fecha y el número de lámina. Con [escalaNormal] el
+     * plano va a una escala de las de siempre (1:50, 1:100…) en vez de estirarse al papel.
+     */
+    data class Lamina(
+        val conMembrete: Boolean = true,
+        val proyecto: String = "",
+        val titulo: String = "",
+        val autor: String = "",
+        val fecha: String = "",
+        val escalaNormal: Boolean = true,
+    )
+
+    /** Los milímetros que mide una unidad del plano (`$INSUNITS`), o null si no lo dice. */
+    fun mmPorUnidad(unidades: Int): Double? = when (unidades) {
+        1 -> 25.4
+        2 -> 304.8
+        4 -> 1.0
+        5 -> 10.0
+        6 -> 1000.0
+        7 -> 1_000_000.0
+        14 -> 100.0
+        else -> null
+    }
+
+    /** Las escalas de siempre (1:n). */
+    val ESCALAS = intArrayOf(
+        1, 2, 5, 10, 20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500, 2000, 2500,
+        5000, 7500, 10000, 12500, 15000, 20000, 25000, 50000, 75000, 100000
+    )
+
+    /**
+     * La escala normal más grande con que [anchoMm] × [altoMm] de la realidad caben en [papelAncho] ×
+     * [papelAlto] mm: la primera 1:n con n ≥ lo justo. Null si ni la más pequeña cabe.
+     */
+    fun escalaQueCabe(anchoMm: Double, altoMm: Double, papelAncho: Double, papelAlto: Double): Int? {
+        if (papelAncho <= 0 || papelAlto <= 0) return null
+        val justa = maxOf(anchoMm / papelAncho, altoMm / papelAlto)
+        return ESCALAS.firstOrNull { it >= justa * 0.9999 }
+    }
+
+    private const val MM = 72f / 25.4f
+
+    fun imprimir(actividad: Activity, m: ModeloCad, marcos: List<Marco>, cotas: List<List<DoubleArray>>, nombre: String, lamina: Lamina = Lamina(conMembrete = false, escalaNormal = false)) {
         if (marcos.isEmpty()) return
         val apaisada = marcos.first().let { it.ancho > it.alto }
         val gestor = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
         gestor.print(
             nombre.ifBlank { "Plano" },
-            Adaptador(actividad, m, marcos, cotas, nombre),
+            Adaptador(actividad, m, marcos, cotas, nombre, lamina),
             PrintAttributes.Builder()
                 .setMediaSize(if (apaisada) PrintAttributes.MediaSize.ISO_A4.asLandscape() else PrintAttributes.MediaSize.ISO_A4.asPortrait())
                 .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
@@ -58,7 +104,8 @@ object ImprimirPlano {
     }
 
     private class Adaptador(
-        val actividad: Activity, val m: ModeloCad, val marcos: List<Marco>, val cotas: List<List<DoubleArray>>, val nombre: String
+        val actividad: Activity, val m: ModeloCad, val marcos: List<Marco>, val cotas: List<List<DoubleArray>>, val nombre: String,
+        val lamina: Lamina
     ) : PrintDocumentAdapter() {
         private var atributos: PrintAttributes? = null
 
@@ -80,7 +127,7 @@ object ImprimirPlano {
                     if (paginas.none { i in it.start..it.end }) return@forEachIndexed
                     val hoja = doc.startPage(i)
                     val c = hoja.canvas
-                    dibujar(c, m, marco, cotas, c.width.toFloat(), c.height.toFloat())
+                    hoja(c, m, marco, cotas, c.width.toFloat(), c.height.toFloat(), lamina, i + 1, marcos.size)
                     doc.finishPage(hoja)
                 }
                 FileOutputStream(destino.fileDescriptor).use { doc.writeTo(it) }
@@ -103,14 +150,83 @@ object ImprimirPlano {
         return Color.argb(a, (r * 255).toInt(), (g * 255).toInt(), (b * 255).toInt())
     }
 
-    /** Dibuja el [marco] del plano en un lienzo de [w] × [h] puntos, encajado con su margen. */
-    fun dibujar(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, w: Float, h: Float) {
+    /**
+     * Una hoja entera de [w] × [h] puntos: con [lamina] y su membrete, el recuadro y el plano en lo
+     * que queda; si no, el plano encajado con un margen, como siempre.
+     */
+    fun hoja(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, w: Float, h: Float, lamina: Lamina, numero: Int, total: Int) {
         c.drawColor(Color.WHITE)
-        val cw = w - 2 * MARGEN; val ch = h - 2 * MARGEN
-        val s = min(cw / marco.ancho, ch / marco.alto).toFloat()
+        if (!lamina.conMembrete) {
+            val escala = escalaDe(m, marco, lamina, w - 2 * MARGEN, h - 2 * MARGEN)
+            dibujar(c, m, marco, cotas, MARGEN, MARGEN, w - 2 * MARGEN, h - 2 * MARGEN, escala?.second)
+            return
+        }
+        // El recuadro: 20 mm a la izquierda (para encuadernar) y 10 en lo demás; si el papel es
+        // muy pequeño, menos.
+        val izq = min(20 * MM, w * 0.07f); val otro = min(10 * MM, w * 0.035f)
+        val bx0 = izq; val by0 = otro; val bx1 = w - otro; val by1 = h - otro
+        val linea = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.BLACK }
+        // El membrete, abajo a la derecha: 180 mm de ancho (o lo que quepa) y 4 filas.
+        val anchoM = min(180 * MM, (bx1 - bx0))
+        val fila = min(9 * MM, (by1 - by0) * 0.06f)
+        val altoM = fila * 4
+        val mx0 = bx1 - anchoM; val my0 = by1 - altoM
+        // El plano: dentro del recuadro y encima del membrete, con aire.
+        val aire = 4 * MM
+        val ax = bx0 + aire; val ay = by0 + aire; val aw = (bx1 - bx0) - 2 * aire; val ah = (my0 - by0) - 2 * aire
+        val escala = escalaDe(m, marco, lamina, aw, ah)
+        dibujar(c, m, marco, cotas, ax, ay, aw, ah, escala?.second)
+        // Recuadro (grueso) y membrete (fino por dentro).
+        linea.strokeWidth = 1.2f
+        c.drawRect(bx0, by0, bx1, by1, linea)
+        c.drawRect(mx0, my0, bx1, by1, linea)
+        linea.strokeWidth = 0.5f
+        for (k in 1 until 4) c.drawLine(mx0, my0 + k * fila, bx1, my0 + k * fila, linea)
+        // Filas: proyecto | lámina; título; dibujó | escala | fecha | unidades.
+        val col = anchoM * 0.72f
+        c.drawLine(mx0 + col, my0, mx0 + col, my0 + fila, linea)
+        val cuarto = anchoM / 4
+        for (k in 1 until 4) c.drawLine(mx0 + k * cuarto, my0 + 2 * fila, mx0 + k * cuarto, by1, linea)
+        val rotulo = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(0x55, 0x55, 0x55); textSize = fila * 0.24f }
+        val dato = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = fila * 0.42f; isFakeBoldText = true }
+        fun celda(x0: Float, y0: Float, ancho: Float, etiqueta: String, valor: String, alto: Float = fila) {
+            c.drawText(etiqueta, x0 + 1.5f * MM, y0 + rotulo.textSize + 1f * MM, rotulo)
+            var t = valor
+            while (t.length > 1 && dato.measureText(t) > ancho - 3 * MM) t = t.dropLast(1)
+            if (t != valor) t = t.dropLast(1) + "…"
+            c.drawText(t, x0 + 1.5f * MM, y0 + alto - 1.6f * MM, dato)
+        }
+        celda(mx0, my0, col, "PROYECTO", lamina.proyecto)
+        celda(mx0 + col, my0, anchoM - col, "LÁMINA", "$numero / $total")
+        celda(mx0, my0 + fila, anchoM, "TÍTULO", lamina.titulo, fila * 2)
+        val unidad = Medidas.sufijo(m.unidades).trim().ifBlank { "—" }
+        celda(mx0, my0 + 3 * fila, cuarto, "DIBUJÓ", lamina.autor)
+        celda(mx0 + cuarto, my0 + 3 * fila, cuarto, "ESCALA", escala?.first?.let { "1:$it" } ?: "Sin escala")
+        celda(mx0 + 2 * cuarto, my0 + 3 * fila, cuarto, "FECHA", lamina.fecha)
+        celda(mx0 + 3 * cuarto, my0 + 3 * fila, cuarto, "UNIDADES", unidad)
+    }
+
+    /**
+     * La escala de la hoja: con [Lamina.escalaNormal] y unidades conocidas, la 1:n de siempre que
+     * cabe en [aw] × [ah] puntos y los puntos por unidad que le tocan. Null: encajar sin más.
+     */
+    private fun escalaDe(m: ModeloCad, marco: Marco, lamina: Lamina, aw: Float, ah: Float): Pair<Int, Float>? {
+        if (!lamina.escalaNormal) return null
+        val mm = mmPorUnidad(m.unidades) ?: return null
+        val n = escalaQueCabe(marco.ancho * mm, marco.alto * mm, (aw / MM).toDouble(), (ah / MM).toDouble()) ?: return null
+        return n to (mm / n * MM).toFloat()
+    }
+
+    /**
+     * Dibuja el [marco] del plano en la caja [ax], [ay], [aw] × [ah] (puntos), centrado. Con [fija]
+     * (puntos por unidad del plano) va a esa escala; si no, lo más grande que quepa.
+     */
+    fun dibujar(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, ax: Float, ay: Float, aw: Float, ah: Float, fija: Float? = null) {
+        val cw = aw; val ch = ah
+        val s = fija ?: min(cw / marco.ancho, ch / marco.alto).toFloat()
         if (!(s > 0) || !s.isFinite()) return
-        val ox = MARGEN + (cw - marco.ancho.toFloat() * s) / 2
-        val oy = MARGEN + (ch - marco.alto.toFloat() * s) / 2
+        val ox = ax + (cw - marco.ancho.toFloat() * s) / 2
+        val oy = ay + (ch - marco.alto.toFloat() * s) / 2
         fun X(x: Float) = ox + (x - marco.x0.toFloat()) * s
         fun Y(y: Float) = oy + (marco.y1.toFloat() - y) * s
         c.save()

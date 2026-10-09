@@ -542,6 +542,15 @@
     <string name="plano_quitar_marco">Quitar el último marco</string>
     <string name="plano_imprimir">Imprimir</string>
     <string name="plano_dejar_de_marcar">Dejar de marcar</string>
+    <string name="plano_lamina">Lámina para imprimir</string>
+    <string name="plano_con_membrete">Con marco y membrete</string>
+    <string name="plano_proyecto">Proyecto</string>
+    <string name="plano_titulo_lamina">Título de la lámina</string>
+    <string name="plano_autor">Dibujó</string>
+    <string name="plano_fecha">Fecha</string>
+    <string name="plano_escala_normal">Escala normalizada</string>
+    <string name="plano_escala_normal_si">1:50, 1:100, 1:250… la que quepa en el papel</string>
+    <string name="plano_escala_normal_no">El plano no dice sus unidades: se encaja al papel</string>
     <string name="guardados_unir_al_proyecto">Añadir al proyecto</string>
     <string name="guardados_devolver_al_proyecto">Volver a añadir al proyecto</string>
     <string name="guardados_transcribir">Pasar a texto</string>
