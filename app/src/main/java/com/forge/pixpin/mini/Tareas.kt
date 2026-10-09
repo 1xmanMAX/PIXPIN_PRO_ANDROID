@@ -108,7 +108,7 @@ object Tareas {
     fun anadir(tareas: List<Tarea>, texto: String, hecha: Boolean = false, hoy: java.time.LocalDate = java.time.LocalDate.now()): List<Tarea> {
         val limpio = saneado(texto)
         if (limpio.isEmpty()) return tareas
-        val conFecha = if (partir(limpio).second != null) limpio else "$limpio ➕ $hoy"
+        val conFecha = if (partir(limpio).second != null) limpio else conHora("${sinHora(limpio)} ➕ $hoy", horaDe(limpio))
         return tareas + Tarea(conFecha, hecha)
     }
 
@@ -120,9 +120,72 @@ object Tareas {
      * (`2026-02-30`) se queda como texto, igual que en el PC (`mini::partir`).
      */
     fun partir(texto: String): Pair<String, java.time.LocalDate?> {
-        val m = CREADA.find(texto) ?: return texto.trim() to null
-        val fecha = runCatching { java.time.LocalDate.parse(m.groupValues[1]) }.getOrNull() ?: return texto.trim() to null
-        return texto.substring(0, m.range.first).trim() to fecha
+        // La hora de recordar va detrás de todo (`pan ➕ 2026-10-02 ⏰ 2026-10-09 10:00`, como la
+        // pone el PC): fuera primero, o la fecha de creación dejaría de ser lo último.
+        val sin = sinHora(texto)
+        val m = CREADA.find(sin) ?: return sin.trim() to null
+        val fecha = runCatching { java.time.LocalDate.parse(m.groupValues[1]) }.getOrNull() ?: return sin.trim() to null
+        return sin.substring(0, m.range.first).trim() to fecha
+    }
+
+    // ---- La hora de recordar (8-oct-2026, la del PC) ---------------------
+    //
+    // **Una tarea puede recordarse a una hora** (`tareas::RELOJ` del PC). No hay campo para eso
+    // en el mensaje, así que va DENTRO del texto, al final y en hora local:
+    // `Llamar al banco ➕ 2026-10-08 ⏰ 2026-10-09 10:00`. Así viaja al sincronizar sin inventar
+    // nada, y una versión vieja la enseña como texto. Al sonar se quita, aquí o en el PC (el que
+    // suene antes; lo quitado viaja). Ver `mini/AlarmasDeTareas`.
+
+    const val RELOJ = '⏰'
+
+    /** La marca de una hora local: `⏰ 2026-10-09 10:00`. */
+    fun marcaDeHora(hora: java.time.LocalDateTime): String =
+        "$RELOJ %04d-%02d-%02d %02d:%02d".format(hora.year, hora.monthValue, hora.dayOfMonth, hora.hour, hora.minute)
+
+    /** Dónde empieza la marca y la hora, si la lleva: el último ⏰ seguido de una fecha y hora que existan. */
+    private fun marcaEn(texto: String): Pair<Int, java.time.LocalDateTime>? {
+        val i = texto.lastIndexOf(RELOJ)
+        if (i < 0) return null
+        val resto = texto.substring(i + 1).trimStart()
+        if (resto.length < 16 || resto[4] != '-' || resto[7] != '-' || resto[13] != ':') return null
+        val n = { a: Int, b: Int -> resto.substring(a, b).toIntOrNull() }
+        val y = n(0, 4) ?: return null; val mo = n(5, 7) ?: return null; val d = n(8, 10) ?: return null
+        val h = n(11, 13) ?: return null; val mi = n(14, 16) ?: return null
+        if (mo !in 1..12 || d !in 1..31 || h > 23 || mi > 59) return null
+        val hora = runCatching { java.time.LocalDateTime.of(y, mo, d, h, mi) }.getOrNull() ?: return null
+        return i to hora
+    }
+
+    /** La hora local a la que se recuerda una tarea, si tiene. */
+    fun horaDe(texto: String): java.time.LocalDateTime? = marcaEn(texto)?.second
+
+    /** El texto sin la marca de la hora. */
+    fun sinHora(texto: String): String = marcaEn(texto)?.let { texto.substring(0, it.first).trimEnd() } ?: texto
+
+    /**
+     * **La hora para enseñarla**: «hoy 10:00», «mañana 08:30», «ayer 18:00» o «12 oct 10:00» (con
+     * el año si no es el de [ahora]). Sin el reloj delante: lo pone quien la pinta.
+     */
+    fun textoDeHora(hora: java.time.LocalDateTime, ahora: java.time.LocalDateTime = java.time.LocalDateTime.now()): String {
+        val hh = "%02d:%02d".format(hora.hour, hora.minute)
+        val dias = java.time.temporal.ChronoUnit.DAYS.between(ahora.toLocalDate(), hora.toLocalDate())
+        return when (dias) {
+            0L -> "hoy $hh"
+            1L -> "mañana $hh"
+            -1L -> "ayer $hh"
+            else -> {
+                val mes = MESES[hora.monthValue - 1]
+                if (hora.year == ahora.year) "${hora.dayOfMonth} $mes $hh" else "${hora.dayOfMonth} $mes ${hora.year} $hh"
+            }
+        }
+    }
+
+    private val MESES = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+    /** El texto con la hora [hora] (cambiando la que tuviera), o sin ninguna si es null. */
+    fun conHora(texto: String, hora: java.time.LocalDateTime?): String {
+        val sin = sinHora(texto).trimEnd()
+        return if (hora == null) sin else "$sin ${marcaDeHora(hora)}"
     }
 
     /** `pan ➕ 2026-10-02`, o la marca sola si no hay texto (`mini::con_fecha` del PC). */
@@ -374,8 +437,11 @@ object Tareas {
         if (indice !in tareas.indices) return tareas
         val limpio = saneado(texto)
         if (partir(limpio).first.isEmpty()) return tareas
-        val fecha = partir(tareas[indice].texto).second
-        val nuevo = if (fecha != null && partir(limpio).second == null) "$limpio ➕ $fecha" else limpio
+        val viejo = tareas[indice].texto
+        val fecha = partir(viejo).second
+        val conSuFecha = if (fecha != null && partir(limpio).second == null) "${sinHora(limpio)} ➕ $fecha" else sinHora(limpio)
+        // Y su hora de recordar: la que se escribió, o la que tenía.
+        val nuevo = conHora(conSuFecha, horaDe(limpio) ?: horaDe(viejo))
         return tareas.toMutableList().also { it[indice] = it[indice].copy(texto = nuevo) }
     }
 

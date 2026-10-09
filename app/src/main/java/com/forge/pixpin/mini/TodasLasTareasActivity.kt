@@ -179,6 +179,28 @@ class TodasLasTareasActivity : ComponentActivity() {
             }
         }
 
+        /** Recordarla a [hora], o dejar de recordarla (null). Ver [TodasLasTareas.ponerHora]. */
+        fun ponerHora(l: Lista, f: Fila, hora: java.time.LocalDateTime?) {
+            app.scope.launch(Dispatchers.IO) {
+                var cambio = false
+                almacen.cambiar { todos ->
+                    todos.map { m ->
+                        if (m.id != l.codigo) m
+                        else TodasLasTareas.ponerHora(m.texto, f, hora)?.let { m.copy(texto = it) } ?: m.also { cambio = true }
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    avisar(when {
+                        cambio -> "La lista cambió mientras tanto; ya está al día. Vuelve a intentarlo."
+                        hora == null -> "Ya no se recuerda"
+                        else -> "Te la recuerdo ${Tareas.textoDeHora(hora)}"
+                    })
+                }
+            }
+        }
+
+        fun recordar(l: Lista, f: Fila) = ElegirHora.pedir(this@TodasLasTareasActivity, Tareas.horaDe(f.crudo)) { ponerHora(l, f, it) }
+
         fun mover(desde: Lista, f: Fila, hasta: Lista) {
             if (desde.clave == hasta.clave) return
             app.scope.launch(Dispatchers.IO) {
@@ -298,7 +320,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                             val l = v.listas[g.lista]
                             item(key = "e:" + l.clave) { Encabezado(l, g.pendientes(l)) }
                             items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                Tarjeta(l, l.filas[i], palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar)
+                                Tarjeta(l, l.filas[i], palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
                             }
                             if (g.hechas.isNotEmpty()) {
                                 // Buscando, lo hecho que coincide se ve.
@@ -315,7 +337,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                     }
                                 }
                                 if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                    Tarjeta(l, l.filas[i], palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar)
+                                    Tarjeta(l, l.filas[i], palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
                                 }
                             }
                             item(key = "s:" + l.clave) { Spacer(Modifier.height(8.dp)) }
@@ -357,8 +379,10 @@ class TodasLasTareasActivity : ComponentActivity() {
     @Composable
     private fun Tarjeta(
         l: Lista, f: Fila, palabras: List<String>, hoy: LocalDate, conSuLista: Boolean,
-        marcar: (Lista, Fila, Boolean) -> Unit, moverA: () -> Unit, quitar: (Lista, Fila) -> Unit
+        marcar: (Lista, Fila, Boolean) -> Unit, moverA: () -> Unit, quitar: (Lista, Fila) -> Unit,
+        recordar: (Lista, Fila) -> Unit, olvidarHora: (Lista, Fila) -> Unit
     ) {
+        val hora = remember(f.crudo) { Tareas.horaDe(f.crudo) }
         val atenuada = if (f.hecha) 0.55f else 1f
         val resalte = Color(0x61B38F00)
         val texto = remember(f.texto, palabras) {
@@ -383,6 +407,15 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
                 val edad = TodasLasTareas.edad(f.creada, hoy)
                 val pie = listOfNotNull(edad, if (conSuLista) "${l.titulo} · ${l.chat}" else null).joinToString("  ·  ")
+                if (hora != null && !f.hecha) {
+                    // La hora a la que suena; en rojo si ya pasó sin sonar (el teléfono apagado).
+                    val pasada = hora.isBefore(java.time.LocalDateTime.now())
+                    Text(
+                        "${Tareas.RELOJ} ${Tareas.textoDeHora(hora)}",
+                        color = if (pasada) Color(0xFFFF6B6B) else Cristal.puesto,
+                        style = MaterialTheme.typography.labelMedium, maxLines = 1
+                    )
+                }
                 if (pie.isNotEmpty()) Text(
                     pie, color = Cristal.tinta.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
@@ -394,6 +427,14 @@ class TodasLasTareasActivity : ComponentActivity() {
                     DropdownMenuItem(
                         text = { Text("Mover a…") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) },
                         onClick = { menu = false; moverA() }
+                    )
+                    if (!f.hecha) DropdownMenuItem(
+                        text = { Text(if (hora == null) "Recordar…" else "Otra hora…") }, leadingIcon = { Icon(Icons.Filled.Alarm, null) },
+                        onClick = { menu = false; recordar(l, f) }
+                    )
+                    if (hora != null) DropdownMenuItem(
+                        text = { Text("No recordar") }, leadingIcon = { Icon(Icons.Filled.AlarmOff, null) },
+                        onClick = { menu = false; olvidarHora(l, f) }
                     )
                     DropdownMenuItem(
                         text = { Text("Quitar") }, leadingIcon = { Icon(Icons.Filled.Close, null) },

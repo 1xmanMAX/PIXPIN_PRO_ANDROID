@@ -361,7 +361,13 @@ class MensajesStore(private val context: Context) {
     ): String? = runCatching {
         // Con su extensión: sin ella, al abrirlo después Android no sabe de qué es. Ver
         // [nombreConExtension].
-        val comoSeLlama = nombreConExtension(nombre, deSuTipo)
+        val conSuNombre = nombreConExtension(nombre, deSuTipo)
+        // Sin extensión que se reconozca: la de lo que hay dentro, si se sabe. Sin ella, el PC (y
+        // «Abrir con» aquí) no sabe con qué abrirlo.
+        val comoSeLlama = if (tieneExtensionConocida(conSuNombre)) conSuNombre else {
+            val cabeza = runCatching { origen.inputStream().use { e -> ByteArray(16).let { b -> b.copyOf(maxOf(0, e.read(b))) } } }.getOrNull()
+            cabeza?.let(::extensionPorContenido)?.let { "$conSuNombre.$it" } ?: conSuNombre
+        }
         val destino = File(carpetaDeAdjuntos(), "${System.currentTimeMillis()}_$comoSeLlama")
         origen.copyTo(destino, overwrite = true)
         // **Un PDF se aligera en cuanto entra**, aquí y no más tarde: por este sitio pasan todos

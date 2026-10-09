@@ -315,6 +315,17 @@ object TodasLasTareas {
         return Tareas.escribir(Cabecera.titulo(documento), Tareas.marcar(tareas, f.indice, hecha))
     }
 
+    /**
+     * **Recordar la tarea [f] a una hora** (o dejar de recordarla con null): la marca `⏰` en su
+     * texto, como el PC. null si la lista cambió y ya no es esta.
+     */
+    fun ponerHora(documento: String, f: Fila, hora: java.time.LocalDateTime?): String? {
+        val tareas = Tareas.leer(documento)
+        if (!sigue(tareas, f)) return null
+        val nuevas = tareas.toMutableList().also { it[f.indice] = it[f.indice].copy(texto = Tareas.conHora(it[f.indice].texto, hora)) }
+        return Tareas.escribir(Cabecera.titulo(documento), nuevas)
+    }
+
     /** El documento sin la tarea [f], y la tarea tal cual estaba (para [reponer]). */
     fun quitar(documento: String, f: Fila): Pair<String, Tarea>? {
         val tareas = Tareas.leer(documento)

@@ -94,7 +94,30 @@ fun nombreConExtension(nombre: String, deSuTipo: String?): String {
     // hacía—; si no, se le pone la de su tipo.
     if (laQueTrae in EXTENSIONES_CONOCIDAS) return sano
     val suya = deSuTipo?.trim()?.removePrefix(".").orEmpty()
-    return if (suya.isBlank()) sano else "$sano.$suya"
+    // **`bin` no es una extensión, es «no sé qué es»** (`application/octet-stream`, lo que dan
+    // muchas apps al compartir un PDF). Pegarla dejaba `informe.bin` y el PC no sabía abrirlo
+    // (8-oct-2026). Sin tipo útil, el nombre tal cual; [extensionPorContenido] mira dentro.
+    return if (suya.isBlank() || suya.equals("bin", ignoreCase = true)) sano else "$sano.$suya"
+}
+
+/** Si [nombre] acaba en una extensión de las que se reconocen. */
+fun tieneExtensionConocida(nombre: String): Boolean = nombre.substringAfterLast('.', "").lowercase() in EXTENSIONES_CONOCIDAS
+
+/**
+ * **La extensión por lo que hay dentro**, para lo que llega sin una (ni en el nombre ni en el
+ * tipo): los primeros bytes de un PDF, PNG, JPEG, GIF o WebP no engañan. null si no es ninguno.
+ */
+fun extensionPorContenido(cabeza: ByteArray): String? {
+    fun empieza(vararg b: Int) = cabeza.size >= b.size && b.indices.all { (cabeza[it].toInt() and 0xFF) == b[it] }
+    return when {
+        empieza(0x25, 0x50, 0x44, 0x46) -> "pdf"                                  // %PDF
+        empieza(0x89, 0x50, 0x4E, 0x47) -> "png"
+        empieza(0xFF, 0xD8, 0xFF) -> "jpg"
+        empieza(0x47, 0x49, 0x46, 0x38) -> "gif"                                  // GIF8
+        cabeza.size >= 12 && empieza(0x52, 0x49, 0x46, 0x46) &&
+            String(cabeza, 8, 4, Charsets.ISO_8859_1) == "WEBP" -> "webp"
+        else -> null
+    }
 }
 
 private val EXTENSIONES_CONOCIDAS = setOf(

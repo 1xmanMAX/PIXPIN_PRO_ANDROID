@@ -51,6 +51,11 @@ class RecordatorioReceiver : BroadcastReceiver() {
         // así que aparece en la pantalla como cualquier otro recordatorio —encima de lo que
         // se esté haciendo— con lo que decía, y se le quita la hora para que no quede una
         // alarma fantasma en la conversación. Ver `MensajesActivity.ponerRecordatorio`.
+        // **Una tarea con hora** (`⏰` en su texto, como el PC). Ver [RecordatoriosDeTareas].
+        if (pinId.startsWith(com.forge.pixpin.mini.AlarmasDeTareas.PREFIJO)) {
+            RecordatoriosDeTareas.sonar(context, pinId)
+            return
+        }
         if (pinId.startsWith(DE_UN_MENSAJE)) {
             val id = pinId.removePrefix(DE_UN_MENSAJE)
             val almacen = com.forge.pixpin.guardados.MensajesStore(context)

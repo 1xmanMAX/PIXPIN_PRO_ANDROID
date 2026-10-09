@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.AlarmOff
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -504,8 +506,26 @@ class MiniActivity : ComponentActivity() {
                                         modifier = Modifier.padding(horizontal = 4.dp)
                                     )
                                 }
+                                // La hora a la que suena (`⏰`, como el PC). En rojo si pasó sin sonar.
+                                val hora = Tareas.horaDe(t.texto)
+                                if (hora != null && !t.hecha) {
+                                    Text(
+                                        "${Tareas.RELOJ} ${Tareas.textoDeHora(hora)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (hora.isBefore(java.time.LocalDateTime.now())) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
                                 if (esLaElegida) {
                                     IconButton(onClick = { corregir(i, texto) }) { Icon(Icons.Filled.Edit, contentDescription = "Corregir", modifier = Modifier.size(18.dp)) }
+                                    if (!t.hecha) IconButton(onClick = {
+                                        ElegirHora.pedir(this@MiniActivity, hora) { nueva ->
+                                            conLasTareas(tareas.toMutableList().also { l -> l[i] = l[i].copy(texto = Tareas.conHora(l[i].texto, nueva)) })
+                                        }
+                                    }) { Icon(Icons.Filled.Alarm, contentDescription = "Recordar a una hora", modifier = Modifier.size(18.dp)) }
+                                    if (hora != null) IconButton(onClick = {
+                                        conLasTareas(tareas.toMutableList().also { l -> l[i] = l[i].copy(texto = Tareas.conHora(l[i].texto, null)) })
+                                    }) { Icon(Icons.Filled.AlarmOff, contentDescription = "No recordar", modifier = Modifier.size(18.dp)) }
                                     IconButton(onClick = { conLasTareas(Tareas.mover(tareas, i, i - 1)); elegida = (i - 1).coerceAtLeast(0) }, enabled = i > 0) {
                                         Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Subir", modifier = Modifier.size(20.dp))
                                     }

@@ -63,7 +63,7 @@ object LogicaDeLosWidgets {
             val pendientes = l.filas.filter { !it.hecha }.sortedWith(TodasLasTareas.ORDEN_DE_PENDIENTE)
             for (f in pendientes) {
                 if (salida.size >= max) return salida
-                salida += FilaDeTarea(l.codigo, f.indice, f.crudo, textoDeFila(f.texto), detalleDeFila(l, f.creada, hoy))
+                salida += FilaDeTarea(l.codigo, f.indice, f.crudo, textoDeFila(f.texto), detalleDeFila(l, f.creada, hoy, com.forge.pixpin.mini.Tareas.horaDe(f.crudo)))
             }
         }
         return salida
@@ -82,10 +82,12 @@ object LogicaDeLosWidgets {
      * general no se nombra: casi todo lo de «Mensajes guardados» es el Inbox, y repetirlo en cada
      * fila solo quita sitio.
      */
-    fun detalleDeFila(l: TodasLasTareas.Lista, creada: LocalDate?, hoy: LocalDate): String {
+    fun detalleDeFila(l: TodasLasTareas.Lista, creada: LocalDate?, hoy: LocalDate, hora: java.time.LocalDateTime? = null): String {
         val donde = if (l.guardados || l.chat == l.titulo) l.titulo.ifBlank { l.chat } else "${l.titulo.ifBlank { "Tareas" }} · ${l.chat}"
         val edad = TodasLasTareas.edad(creada, hoy)
-        return if (edad == null) donde else "$donde · $edad"
+        val sinHora = if (edad == null) donde else "$donde · $edad"
+        // Con hora de recordar (`⏰`), delante: es lo que más importa de la fila.
+        return if (hora == null) sinHora else "${com.forge.pixpin.mini.Tareas.RELOJ} ${com.forge.pixpin.mini.Tareas.textoDeHora(hora, hoy.atTime(java.time.LocalTime.now()))} · $sinHora"
     }
 
     /** El número de la cabecera: vacío si no queda nada (la lista ya lo dice), y «99+» si no cabe. */

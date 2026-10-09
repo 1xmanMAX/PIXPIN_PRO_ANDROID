@@ -104,6 +104,15 @@ class PixPinApp : Application() {
         // **Los widgets de tareas y de galería, al día** con el chat y con las capturas.
         // Ver [com.forge.pixpin.widget.AvisoDeWidgets].
         com.forge.pixpin.widget.AvisoDeWidgets.vigilar(this)
+        // **Las tareas con hora** (`⏰`, como el PC): sus alarmas se rehacen al arrancar —también
+        // tras reiniciar el teléfono, que las borra— y cada vez que cambia el chat, con un respiro
+        // para no rehacerlas por cada tecla. Ver [com.forge.pixpin.pin.RecordatoriosDeTareas].
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        scope.launch(Dispatchers.IO) {
+            com.forge.pixpin.guardados.MensajesStore.cambios.debounce(1_500).collect {
+                runCatching { com.forge.pixpin.pin.RecordatoriosDeTareas.reprogramar(this@PixPinApp) }
+            }
+        }
         // **Las capturas caducadas, a la papelera**: al arrancar y luego cada hora, como el
         // barrendero del PC. Ver [com.forge.pixpin.capture.BarrenderoDeCapturas].
         scope.launch(Dispatchers.IO) {
