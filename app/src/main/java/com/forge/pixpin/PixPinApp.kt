@@ -74,6 +74,8 @@ class PixPinApp : Application() {
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
         if (nombreDelProceso().endsWith(com.forge.pixpin.pdf.PdfSqueezeService.PROCESO)) return
+        // Lo mismo el de los planos DWG/DXF: solo lee planos. Ver [com.forge.pixpin.planos.LectorDePlanos].
+        if (nombreDelProceso().endsWith(com.forge.pixpin.planos.LectorDePlanos.PROCESO)) return
         com.forge.pixpin.pdf.ComprimirPdf.despues = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.encolar(this, archivo, nivel) }
         // Un PDF aligerado después de entrar: el chat tiene que decir lo que pesa ahora.
         androidx.core.content.ContextCompat.registerReceiver(

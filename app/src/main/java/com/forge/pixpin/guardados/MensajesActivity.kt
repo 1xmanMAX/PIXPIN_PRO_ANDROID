@@ -6669,6 +6669,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(
                             this, File(ruta), m.nombre.ifBlank { File(ruta).name }
                         )
+                    // **Un plano DWG o DXF se ve aquí dentro, a pantalla completa** (9-oct-2026): la
+                    // lectura del visor de planos del PC, y el dibujo con la tarjeta gráfica.
+                    // Ver [com.forge.pixpin.planos.PlanoActivity].
+                    com.forge.pixpin.planos.PlanoActivity.esPlano(m.nombre) || com.forge.pixpin.planos.PlanoActivity.esPlano(ruta) ->
+                        com.forge.pixpin.planos.PlanoActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })
                     // **Un Word se lee aquí dentro** (19-sep-2026): se saca lo que dice —texto, tablas
                     // e imágenes, sin la maquetación de la página— a un HTML que enseña el mismo visor
                     // de las páginas web. Convertir es abrir un ZIP y leer XML: fuera del hilo que

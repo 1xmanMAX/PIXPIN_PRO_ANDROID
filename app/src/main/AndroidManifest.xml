@@ -536,6 +536,20 @@
                 <data android:mimeType="text/markdown" />
                 <data android:mimeType="text/x-markdown" />
                 <data android:mimeType="text/plain" />
+                <!-- Planos DWG/DXF: cada visor los anuncia con un alias distinto (ver data/TiposDeArchivo). -->
+                <data android:mimeType="image/vnd.dwg" />
+                <data android:mimeType="application/acad" />
+                <data android:mimeType="application/x-acad" />
+                <data android:mimeType="application/autocad_dwg" />
+                <data android:mimeType="application/dwg" />
+                <data android:mimeType="application/x-dwg" />
+                <data android:mimeType="image/x-dwg" />
+                <data android:mimeType="drawing/dwg" />
+                <data android:mimeType="image/vnd.dxf" />
+                <data android:mimeType="application/dxf" />
+                <data android:mimeType="application/x-dxf" />
+                <data android:mimeType="image/x-dxf" />
+                <data android:mimeType="application/x-autocad" />
             </intent-filter>
         </activity>
         <activity
@@ -586,6 +600,11 @@
             android:name=".pdf.PdfSqueezeService"
             android:exported="false"
             android:process=":pdfsqueeze" />
+
+        <service
+            android:name=".planos.LectorDePlanos"
+            android:exported="false"
+            android:process=":planos" />
 
         <service
             android:name=".floating.PinHostService"
@@ -783,6 +802,11 @@
             android:name=".ui.VisorHtmlActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+
+        <activity
+            android:name=".planos.PlanoActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
 
         <activity
             android:name=".mini.MiniActivity"

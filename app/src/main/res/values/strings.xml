@@ -521,6 +521,21 @@
     <!-- El visor de páginas web guardadas. Ver ui/VisorHtmlActivity.kt. -->
     <string name="visor_html_no">No se pudo abrir la página</string>
     <string name="visor_html_no_compartir">No se pudo compartir</string>
+    <!-- Visor de planos DWG/DXF (planos/PlanoActivity) -->
+    <string name="plano_abriendo">Abriendo el plano…</string>
+    <string name="plano_vacio">El plano no tiene nada que dibujar</string>
+    <string name="plano_no">No se pudo abrir el plano</string>
+    <string name="plano_tarjeta">La tarjeta gráfica no pudo con el plano: %1$s</string>
+    <string name="plano_otra_app">Abrir con otra aplicación</string>
+    <string name="plano_ver_todo">Ver todo el plano</string>
+    <string name="plano_tema">Fondo claro u oscuro</string>
+    <string name="plano_acotar">Acotar plano</string>
+    <string name="plano_pista_acotar">Toca los puntos para medir</string>
+    <string name="plano_pista_seguir">Toca el siguiente · doble toque termina</string>
+    <string name="plano_quitar_punto">Quitar el último punto</string>
+    <string name="plano_terminar">Terminar la cota</string>
+    <string name="plano_borrar_cotas">Borrar las cotas</string>
+    <string name="plano_dejar_de_acotar">Dejar de acotar</string>
     <string name="guardados_unir_al_proyecto">Añadir al proyecto</string>
     <string name="guardados_devolver_al_proyecto">Volver a añadir al proyecto</string>
     <string name="guardados_transcribir">Pasar a texto</string>
