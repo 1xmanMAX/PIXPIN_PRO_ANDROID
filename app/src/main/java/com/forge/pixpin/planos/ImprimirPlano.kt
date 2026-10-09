@@ -89,13 +89,16 @@ object ImprimirPlano {
 
     private const val MM = 72f / 25.4f
 
-    fun imprimir(actividad: Activity, m: ModeloCad, marcos: List<Marco>, cotas: List<List<DoubleArray>>, nombre: String, lamina: Lamina = Lamina(conMembrete = false, escalaNormal = false)) {
+    fun imprimir(actividad: Activity, m: ModeloCad, marcos: List<Marco>, cotas: List<List<DoubleArray>>, nombre: String, lamina: Lamina = Lamina(conMembrete = false, escalaNormal = false),
+        /** Lo anotado con el motor: (lienzo, x0, y1 del marco, puntos por unidad, ancho, alto). */
+        tinta: ((Canvas, Double, Double, Double, Float, Float) -> Unit)? = null
+    ) {
         if (marcos.isEmpty()) return
         val apaisada = marcos.first().let { it.ancho > it.alto }
         val gestor = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
         gestor.print(
             nombre.ifBlank { "Plano" },
-            Adaptador(actividad, m, marcos, cotas, nombre, lamina),
+            Adaptador(actividad, m, marcos, cotas, nombre, lamina, tinta),
             PrintAttributes.Builder()
                 .setMediaSize(if (apaisada) PrintAttributes.MediaSize.ISO_A4.asLandscape() else PrintAttributes.MediaSize.ISO_A4.asPortrait())
                 .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
@@ -105,7 +108,8 @@ object ImprimirPlano {
 
     private class Adaptador(
         val actividad: Activity, val m: ModeloCad, val marcos: List<Marco>, val cotas: List<List<DoubleArray>>, val nombre: String,
-        val lamina: Lamina
+        val lamina: Lamina,
+        val tinta: ((Canvas, Double, Double, Double, Float, Float) -> Unit)?
     ) : PrintDocumentAdapter() {
         private var atributos: PrintAttributes? = null
 
@@ -127,7 +131,7 @@ object ImprimirPlano {
                     if (paginas.none { i in it.start..it.end }) return@forEachIndexed
                     val hoja = doc.startPage(i)
                     val c = hoja.canvas
-                    hoja(c, m, marco, cotas, c.width.toFloat(), c.height.toFloat(), lamina, i + 1, marcos.size)
+                    hoja(c, m, marco, cotas, c.width.toFloat(), c.height.toFloat(), lamina, i + 1, marcos.size, tinta)
                     doc.finishPage(hoja)
                 }
                 FileOutputStream(destino.fileDescriptor).use { doc.writeTo(it) }
@@ -154,11 +158,11 @@ object ImprimirPlano {
      * Una hoja entera de [w] × [h] puntos: con [lamina] y su membrete, el recuadro y el plano en lo
      * que queda; si no, el plano encajado con un margen, como siempre.
      */
-    fun hoja(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, w: Float, h: Float, lamina: Lamina, numero: Int, total: Int) {
+    fun hoja(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, w: Float, h: Float, lamina: Lamina, numero: Int, total: Int, tinta: ((Canvas, Double, Double, Double, Float, Float) -> Unit)? = null) {
         c.drawColor(Color.WHITE)
         if (!lamina.conMembrete) {
             val escala = escalaDe(m, marco, lamina, w - 2 * MARGEN, h - 2 * MARGEN)
-            dibujar(c, m, marco, cotas, MARGEN, MARGEN, w - 2 * MARGEN, h - 2 * MARGEN, escala?.second)
+            dibujar(c, m, marco, cotas, MARGEN, MARGEN, w - 2 * MARGEN, h - 2 * MARGEN, escala?.second, tinta)
             return
         }
         // El recuadro: 20 mm a la izquierda (para encuadernar) y 10 en lo demás; si el papel es
@@ -175,7 +179,7 @@ object ImprimirPlano {
         val aire = 4 * MM
         val ax = bx0 + aire; val ay = by0 + aire; val aw = (bx1 - bx0) - 2 * aire; val ah = (my0 - by0) - 2 * aire
         val escala = escalaDe(m, marco, lamina, aw, ah)
-        dibujar(c, m, marco, cotas, ax, ay, aw, ah, escala?.second)
+        dibujar(c, m, marco, cotas, ax, ay, aw, ah, escala?.second, tinta)
         // Recuadro (grueso) y membrete (fino por dentro).
         linea.strokeWidth = 1.2f
         c.drawRect(bx0, by0, bx1, by1, linea)
@@ -221,7 +225,7 @@ object ImprimirPlano {
      * Dibuja el [marco] del plano en la caja [ax], [ay], [aw] × [ah] (puntos), centrado. Con [fija]
      * (puntos por unidad del plano) va a esa escala; si no, lo más grande que quepa.
      */
-    fun dibujar(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, ax: Float, ay: Float, aw: Float, ah: Float, fija: Float? = null) {
+    fun dibujar(c: Canvas, m: ModeloCad, marco: Marco, cotas: List<List<DoubleArray>>, ax: Float, ay: Float, aw: Float, ah: Float, fija: Float? = null, tinta: ((Canvas, Double, Double, Double, Float, Float) -> Unit)? = null) {
         val cw = aw; val ch = ah
         val s = fija ?: min(cw / marco.ancho, ch / marco.alto).toFloat()
         if (!(s > 0) || !s.isFinite()) return
@@ -344,6 +348,13 @@ object ImprimirPlano {
                 c.drawText(Medidas.medida(dd, m.unidades), (X(p[0].toFloat()) + X(q[0].toFloat())) / 2 + 2, (Y(p[1].toFloat()) + Y(q[1].toFloat())) / 2 - 2, letra)
             }
             if (cadena.size > 2) cadena.last().let { u -> c.drawText("Σ " + Medidas.medida(total, m.unidades), X(u[0].toFloat()) + 4, Y(u[1].toFloat()) + 10, letra) }
+        }
+        // 6. Lo anotado (texto y trazos del motor), en su sitio.
+        tinta?.let { t ->
+            c.save()
+            c.translate(ox, oy)
+            t(c, marco.x0, marco.y1, s.toDouble(), marco.ancho.toFloat() * s, marco.alto.toFloat() * s)
+            c.restore()
         }
         c.restore()
         // El borde del marco, fino.

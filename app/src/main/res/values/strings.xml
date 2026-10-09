@@ -543,6 +543,8 @@
     <string name="plano_imprimir">Imprimir</string>
     <string name="plano_dejar_de_marcar">Dejar de marcar</string>
     <string name="plano_lamina">Lámina para imprimir</string>
+    <string name="plano_anotar">Anotar: texto y trazos</string>
+    <string name="plano_listo">Listo</string>
     <string name="plano_con_membrete">Con marco y membrete</string>
     <string name="plano_proyecto">Proyecto</string>
     <string name="plano_titulo_lamina">Título de la lámina</string>

@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Undo
@@ -106,22 +108,91 @@ class PlanoActivity : ComponentActivity() {
     private var marcoVivo: ImprimirPlano.Marco? = null
     private var marcos2 by mutableIntStateOf(0)
 
+    // ------------------------------------------------------------ anotar
+    //
+    // **Anotar encima del plano** (9-oct-2026, el usuario: «agregar texto en cualquier parte y
+    // poder rayar como en el lienzo»). Con el motor de dibujo de siempre —el del lienzo y los
+    // lectores: un solo motor en toda la app—, en una capa propia del plano guardada como la de un
+    // Word anotado (`anot-<uid del mensaje>`, que viaja al sincronizar). Una unidad de la capa es la
+    // milésima del lado del plano ([unidadEscena]): sale del propio plano, así que la capa cae en
+    // su sitio en cualquier aparato sin guardar nada más. La y de la capa baja; la del plano sube.
+
+    /** La capa de anotar; null hasta que se lee el plano. */
+    private var capa: com.forge.pixpin.motor.DrawController? = null
+    private var idCapa = ""
+    /** Unidades del plano por unidad de la capa. */
+    private var unidadEscena = 1.0
+    /** Sube cuando cambia lo anotado (para repintarlo sin recomponer). */
+    private var cambiosEnLaCapa by mutableIntStateOf(0)
+
+    /** La vista de la capa que cae justo donde mira la cámara del plano. */
+    private fun vistaDeLaCapa(): com.forge.pixpin.motor.Viewport? {
+        val c = camara ?: return null
+        val u = unidadEscena
+        return com.forge.pixpin.motor.Viewport(
+            scrollX = (ancho / 2.0 * c.px - c.centroX) / u,
+            scrollY = (alto / 2.0 * c.px + c.centroY) / u,
+            zoom = u / c.px
+        )
+    }
+
+    /** Al revés: la cámara del plano que corresponde a la vista de la capa (anotando, manda ella). */
+    private fun camaraDeLaCapa(v: com.forge.pixpin.motor.Viewport): CamaraPlano {
+        val u = unidadEscena
+        val px = u / v.zoom.coerceAtLeast(1e-12)
+        return CamaraPlano(ancho / 2.0 * px - v.scrollX * u, v.scrollY * u - alto / 2.0 * px, px)
+    }
+
+    private fun guardarCapa() {
+        val escena = capa?.scene ?: return
+        val id = idCapa.ifBlank { return }
+        val contexto = applicationContext
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) } }
+    }
+
+    /** Lo anotado pintado sobre el plano en [lienzo] (pantalla o papel) con la vista [v]. */
+    private val pintoresDeLaCapa = HashMap<Boolean, com.forge.pixpin.motor.Renderer>()
+
+    /** El pintor de lo anotado; [oscuro]: con el filtro de noche del motor (en papel, nunca). */
+    private fun pintorDeLaCapa(oscuro: Boolean) = pintoresDeLaCapa.getOrPut(oscuro) {
+        com.forge.pixpin.motor.Renderer(
+            { f -> capa?.scene?.files?.get(f)?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+            com.forge.pixpin.motor.DrawFonts.provider(this), dark = oscuro
+        )
+    }
+
     /** La mira de acotar (en la pantalla) mientras hay un dedo; dónde cae en el plano y si se enganchó. */
     private var mira: Offset? = null
     private var miraEnPlano: DoubleArray? = null
     private var miraEnganchada = false
+    private var miraTipo = Rayas.Tipo.LIBRE
+    /** Las rayas del plano para engancharse a ellas (se hacen aparte, con los [enganches]). */
+    private var rayas: Rayas? = null
 
-    /** Pone la mira en [donde] (pantalla), enganchada si hay algo cerca. Devuelve el punto del plano. */
-    private fun ponerMira(donde: Offset, densidad: Float): DoubleArray? {
+    /**
+     * Pone la mira en [donde] (pantalla), enganchada si hay algo cerca: un punto, la perpendicular
+     * desde [desde] (el punto anterior de la cota) o un punto de una raya. Devuelve el del plano.
+     */
+    private fun ponerMira(donde: Offset, densidad: Float, desde: DoubleArray?): DoubleArray? {
         val c = camara ?: return null
         val x = c.planoX(donde.x.toDouble(), ancho)
         val y = c.planoY(donde.y.toDouble(), alto)
-        val g = enganches?.cerca(x, y, ENGANCHE * densidad * c.px)
+        val radio = ENGANCHE * densidad * c.px
+        val ajuste = rayas?.ajustar(x, y, radio, desde, enganches)
+            ?: enganches?.cerca(x, y, radio)?.let { Rayas.Ajuste(it[0], it[1], Rayas.Tipo.PUNTO) }
+            ?: Rayas.Ajuste(x, y, Rayas.Tipo.LIBRE)
         mira = donde
-        miraEnganchada = g != null
-        miraEnPlano = g ?: doubleArrayOf(x, y)
+        miraTipo = ajuste.tipo
+        miraEnganchada = ajuste.tipo != Rayas.Tipo.LIBRE
+        miraEnPlano = doubleArrayOf(ajuste.x, ajuste.y)
         marcos++
         return miraEnPlano
+    }
+
+    /** El punto anterior al que se mueve o se pone: de donde sale la perpendicular. */
+    private fun anterior(cadenas: List<List<DoubleArray>>, agarrado: Pair<Int, Int>?): DoubleArray? = when {
+        agarrado == null -> cadenas.lastOrNull()?.lastOrNull()
+        else -> cadenas.getOrNull(agarrado.first)?.let { c -> c.getOrNull(agarrado.second - 1) ?: c.getOrNull(agarrado.second + 1) }
     }
 
     private fun pantalla(p: DoubleArray): Offset {
@@ -150,7 +221,7 @@ class PlanoActivity : ComponentActivity() {
     }
 
     override fun onResume() { super.onResume(); vista?.onResume() }
-    override fun onPause() { vista?.onPause(); super.onPause() }
+    override fun onPause() { vista?.onPause(); guardarCapa(); super.onPause() }
 
     private fun pintar() {
         pintor?.camara = camara
@@ -175,6 +246,8 @@ class PlanoActivity : ComponentActivity() {
         var acotando by remember { mutableStateOf(false) }
         // **Marcos para imprimir** (9-oct-2026): partes del plano, cada una una hoja.
         var marcando by remember { mutableStateOf(false) }
+        var anotando by remember { mutableStateOf(false) }
+        var tickDeAnotar by remember { mutableIntStateOf(0) }
         var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
         var preparandoLamina by remember { mutableStateOf(false) }
         // Las cotas: cadenas hechas y la que se está poniendo (puntos del plano).
@@ -195,6 +268,15 @@ class PlanoActivity : ComponentActivity() {
             r.onSuccess { m ->
                 if (m.vacio) { estado = getString(com.forge.pixpin.R.string.plano_vacio); return@onSuccess }
                 modelo = m
+                unidadEscena = (maxOf(m.caja[2] - m.caja[0], m.caja[3] - m.caja[1]).toDouble() / 1000.0).takeIf { it > 0 && it.isFinite() } ?: 1.0
+                capa = withContext(Dispatchers.IO) {
+                    runCatching {
+                        idCapa = com.forge.pixpin.ui.ExportarDocumentoAnotado.idDeLaCapa(original, com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@PlanoActivity, original))
+                        com.forge.pixpin.motor.DrawController(
+                            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)) ?: com.forge.pixpin.motor.Scene()
+                        ).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+                    }.getOrNull()
+                }
                 pintor = PintorDePlano(m, grosor = (densidad / 1.5f).coerceIn(1f, 3f)).also {
                     it.claro = claro
                     it.alCambiarTamano = { w, h -> runOnUiThread { alCambiarTamano(w, h) } }
@@ -202,7 +284,10 @@ class PlanoActivity : ComponentActivity() {
                 estado = null
                 listo = true
                 // Los enganches de la cota, sin esperar a que se pidan (en un plano grande tardan).
-                lifecycleScope.launch(Dispatchers.Default) { enganches = runCatching { Enganches.de(m) }.getOrNull() }
+                lifecycleScope.launch(Dispatchers.Default) {
+                    enganches = runCatching { Enganches.de(m) }.getOrNull()
+                    rayas = runCatching { Rayas.de(m) }.getOrNull()
+                }
             }.onFailure { e ->
                 estado = (e as? ModeloCad.NoSeLee)?.message ?: getString(com.forge.pixpin.R.string.plano_no)
             }
@@ -225,6 +310,7 @@ class PlanoActivity : ComponentActivity() {
         BackHandler {
             when {
                 acotando && puntos.isNotEmpty() -> terminarCadena()
+                anotando -> { anotando = false; guardarCapa(); cambiosEnLaCapa++; marcos++ }
                 acotando -> acotando = false
                 marcando -> marcando = false
                 else -> finish()
@@ -249,6 +335,35 @@ class PlanoActivity : ComponentActivity() {
                         }
                     }
                 )
+                // Lo anotado, pintado encima del plano (sin anotar, solo se ve).
+                if (!anotando) {
+                    val laCapa = capa
+                    if (laCapa != null && laCapa.scene.elements.isNotEmpty()) androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                        @Suppress("UNUSED_VARIABLE") val leer = marcos + cambiosEnLaCapa
+                        val v = vistaDeLaCapa() ?: return@Canvas
+                        pintorDeLaCapa(!claro).renderScene(drawContext.canvas.nativeCanvas, laCapa.scene.copy(viewport = v), size.width.toDouble(), size.height.toDouble())
+                    }
+                }
+                val laCapa = capa
+                if (anotando && laCapa != null) {
+                    // **Anotando manda el lienzo**: dibuja con un dedo o el lápiz, encuadra con dos, y
+                    // el plano le sigue fotograma a fotograma.
+                    LaunchedEffect(Unit) {
+                        var antes: com.forge.pixpin.motor.Viewport? = null
+                        while (true) {
+                            androidx.compose.runtime.withFrameNanos { }
+                            val v = laCapa.scene.viewport
+                            if (v != antes) { antes = v; camara = camaraDeLaCapa(v); pintar() }
+                        }
+                    }
+                    com.forge.pixpin.motor.DrawCanvas(
+                        controller = laCapa,
+                        modifier = Modifier.fillMaxSize(),
+                        imageProvider = { f -> laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                        dark = !claro,
+                        onChange = { trazando -> if (!trazando) { tickDeAnotar++; cambiosEnLaCapa++ } }
+                    )
+                } else
                 // Gestos y cotas encima del plano.
                 Box(
                     Modifier.fillMaxSize().pointerInput(acotando, marcando) {
@@ -272,7 +387,7 @@ class PlanoActivity : ComponentActivity() {
                             if (marcando) abajo.consume()
                             if (acotando) {
                                 agarrado = Acotar.agarrar(cadenas(hechas, puntos), abajo.position + lado, ASA * densidad) { pantalla(it) }
-                                ponerMira(abajo.position + lado, densidad)
+                                ponerMira(abajo.position + lado, densidad, anterior(cadenas(hechas, puntos), agarrado))
                                 abajo.consume()
                             }
                             do {
@@ -299,7 +414,7 @@ class PlanoActivity : ComponentActivity() {
                                 if (marcando && varios && marcoVivo != null) { marcoVivo = null; marcos2++ }
                                 if (acotando && !varios) {
                                     val dedo = ev.changes.firstOrNull { it.id == abajo.id } ?: ev.changes.first()
-                                    val donde = ponerMira(dedo.position + lado, densidad)
+                                    val donde = ponerMira(dedo.position + lado, densidad, anterior(cadenas(hechas, puntos), agarrado))
                                     agarrado?.let { (k, i) ->
                                         if (donde != null) {
                                             if (k < hechas.size) hechas = Acotar.mover(hechas, k, i, donde)
@@ -374,7 +489,36 @@ class PlanoActivity : ComponentActivity() {
                 }
             }
             // La pastilla del nombre, con el tema, acotar y ver todo.
-            AnimatedVisibility(
+            if (anotando) capa?.let { laCapa ->
+                @Suppress("UNUSED_EXPRESSION") tickDeAnotar
+                val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+                com.forge.pixpin.ui.EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
+                Row(
+                    Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
+                        .clip(RoundedCornerShape(50)).background(Color(0xB314182B))
+                        .clickable { anotando = false; guardarCapa(); cambiosEnLaCapa++; marcos++ }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Text(getString(com.forge.pixpin.R.string.plano_listo), color = Color.White, modifier = Modifier.padding(start = 6.dp))
+                }
+                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                    com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
+                        com.forge.pixpin.motor.DrawToolbar(
+                            tool = laCapa.tool,
+                            onTool = { laCapa.selectTool(it); tickDeAnotar++ },
+                            style = laCapa.scene.style,
+                            onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
+                            canUndo = laCapa.canUndo,
+                            onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
+                            permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                            grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                        )
+                    }
+                }
+            }
+            if (!anotando) AnimatedVisibility(
                 visible = aLaVista || estado != null,
                 enter = fadeIn(), exit = fadeOut(),
                 modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
@@ -403,6 +547,14 @@ class PlanoActivity : ComponentActivity() {
                                 if (claro) Icons.Filled.DarkMode else Icons.Filled.LightMode,
                                 contentDescription = getString(com.forge.pixpin.R.string.plano_tema), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
                             )
+                        }
+                        IconButton(onClick = {
+                            val laCapa = capa ?: return@IconButton
+                            vistaDeLaCapa()?.let { laCapa.setViewport(it) }
+                            acotando = false; marcando = false; terminarCadena()
+                            anotando = true
+                        }, modifier = Modifier.size(38.dp)) {
+                            Icon(Icons.Filled.Edit, contentDescription = getString(com.forge.pixpin.R.string.plano_anotar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                         }
                         IconButton(onClick = { marcando = !marcando; if (marcando) { acotando = false; terminarCadena() }; toques++ }, modifier = Modifier.size(38.dp)) {
                             Icon(
@@ -447,8 +599,17 @@ class PlanoActivity : ComponentActivity() {
             if (preparandoLamina) DatosDeLaLamina(nombre.substringBeforeLast('.'), onCerrar = { preparandoLamina = false }) { lamina ->
                 preparandoLamina = false
                 val m = modelo
+                guardarCapa()
+                val escena = capa?.scene?.takeIf { it.elements.isNotEmpty() }
+                val u = unidadEscena
+                // Lo anotado va en la hoja, con el motor de siempre (en vectores, sin modo noche).
+                val tinta: ((android.graphics.Canvas, Double, Double, Double, Float, Float) -> Unit)? = escena?.let { e ->
+                    { lienzo, x0, y1, s, w, h ->
+                        pintorDeLaCapa(false).renderScene(lienzo, e.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = -x0 / u, scrollY = y1 / u, zoom = u * s)), w.toDouble(), h.toDouble())
+                    }
+                }
                 if (m != null) ImprimirPlano.imprimir(
-                    this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina
+                    this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina, tinta
                 )
             }
             // Acotando: la pista y sus mandos, abajo, mientras dure.
@@ -631,6 +792,19 @@ class PlanoActivity : ComponentActivity() {
                 raya.strokeWidth = 1.6f * densidad
                 val r = 13 * densidad
                 lienzo.drawCircle(mx, my, r, raya)
+                // Qué enganchó, como en AutoCAD: cuadro = punto, ⊥ = perpendicular, ⨯ = en la raya.
+                val q = 6 * densidad
+                when (miraTipo) {
+                    Rayas.Tipo.PUNTO -> lienzo.drawRect(mx - q, my - q, mx + q, my + q, raya)
+                    Rayas.Tipo.PERPENDICULAR -> {
+                        lienzo.drawLine(mx - q, my + q, mx + q, my + q, raya)
+                        lienzo.drawLine(mx - q, my + q, mx - q, my - q, raya)
+                        lienzo.drawLine(mx - q, my, mx, my, raya); lienzo.drawLine(mx, my, mx, my + q, raya)
+                        etiqueta("90°", mx + r + 18 * densidad, my - r)
+                    }
+                    Rayas.Tipo.EN_LA_RAYA -> { lienzo.drawLine(mx - q, my - q, mx + q, my + q, raya); lienzo.drawLine(mx - q, my + q, mx + q, my - q, raya) }
+                    Rayas.Tipo.LIBRE -> {}
+                }
                 lienzo.drawLine(mx - r * 1.7f, my, mx - r * 0.35f, my, raya)
                 lienzo.drawLine(mx + r * 0.35f, my, mx + r * 1.7f, my, raya)
                 lienzo.drawLine(mx, my - r * 1.7f, mx, my - r * 0.35f, raya)

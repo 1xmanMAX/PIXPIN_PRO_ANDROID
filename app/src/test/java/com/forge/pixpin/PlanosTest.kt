@@ -201,4 +201,24 @@ class PlanosTest {
         // Más grande que la más pequeña: no hay escala.
         assertNull(P.escalaQueCabe(1e12, 1.0, 100.0, 100.0))
     }
+
+    @Test
+    fun la_regla_se_engancha_a_la_raya_y_a_la_perpendicular() {
+        val R = com.forge.pixpin.planos.Rayas
+        // Una raya horizontal de (0,0) a (10,0) y una vertical larga de (20,-50) a (20,50).
+        val r = R.de(floatArrayOf(-1f, -50f, 21f, 50f), floatArrayOf(0f, 20f), floatArrayOf(0f, -50f), floatArrayOf(10f, 20f), floatArrayOf(0f, 50f))
+        // En mitad de la raya, sin punto anterior: se pega a la raya.
+        val a = r.ajustar(4.0, 0.3, 0.5, null, null)
+        assertEquals(com.forge.pixpin.planos.Rayas.Tipo.EN_LA_RAYA, a.tipo); assertEquals(4.0, a.x, 1e-9); assertEquals(0.0, a.y, 1e-9)
+        // Desde (4,0), cerca de la vertical: el pie de la perpendicular, (20, 0), aunque la mira esté en (19.7, 0.4).
+        val b = r.ajustar(19.7, 0.4, 0.6, doubleArrayOf(4.0, 0.0), null)
+        assertEquals(com.forge.pixpin.planos.Rayas.Tipo.PERPENDICULAR, b.tipo); assertEquals(20.0, b.x, 1e-9); assertEquals(0.0, b.y, 1e-9)
+        // Lejos de todo: libre.
+        assertEquals(com.forge.pixpin.planos.Rayas.Tipo.LIBRE, r.ajustar(5.0, 30.0, 0.5, null, null).tipo)
+        // Un vértice cerca manda sobre la raya.
+        val e = com.forge.pixpin.planos.Enganches.de(floatArrayOf(-1f, -50f, 21f, 50f), 1, floatArrayOf(10f), floatArrayOf(0f))
+        assertEquals(com.forge.pixpin.planos.Rayas.Tipo.PUNTO, r.ajustar(9.8, 0.1, 0.5, null, e).tipo)
+        // El pie fuera del segmento no vale.
+        assertNull(com.forge.pixpin.planos.Geometria.pieDePerpendicular(15.0, 5.0, 0.0, 0.0, 10.0, 0.0))
+    }
 }
