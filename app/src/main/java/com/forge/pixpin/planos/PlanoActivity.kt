@@ -512,8 +512,9 @@ class PlanoActivity : ComponentActivity() {
                             onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
                             canUndo = laCapa.canUndo,
                             onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
-                            permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                            grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                            // **Las del motor, las que diga Ajustes** («Barra del plano»), sin otras nuestras.
+                            permitidas = ajustes.planoToolSet,
+                            grupos = ajustes.planoGroupList
                         )
                     }
                 }

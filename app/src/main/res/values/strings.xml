@@ -725,6 +725,8 @@
     <string name="capa_limpiar">Borrar todo</string>
     <string name="capa_copiar">Copiar la pantalla con lo dibujado</string>
     <string name="lector_tools_title">Herramientas del editor rápido</string>
+    <string name="plano_tools_title">Herramientas del plano</string>
+    <string name="plano_tools_desc">Las del lienzo que salen al anotar encima de un plano DWG o DXF. Es el mismo motor: aquí solo eliges cuáles. La cota del motor viene apagada porque el plano tiene la suya.</string>
     <string name="lector_tools_desc">Las que se llevan a anotar un PDF, un Word o un libro sin salir del lector. Es el mismo motor del lienzo: aquí solo eliges cuáles. El texto, las imágenes y la zona siguen en el editor completo.</string>
     <string name="capa_tools_title">Herramientas de la capa</string>
     <!-- Mano dominante -->

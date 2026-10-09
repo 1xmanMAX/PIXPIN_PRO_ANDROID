@@ -119,6 +119,11 @@ object CatalogoDeAjustes {
             "Las del editor rápido: anotar un PDF, un Word o un libro sin salir de él.",
             "lector", "editor rapido pdf word epub libro anotar"
         ),
+        opcionDeBarra(
+            Sitio.PLANO, "Barra del plano",
+            "Las de anotar encima de un plano DWG o DXF. La cota del motor viene apagada: el plano tiene la suya.",
+            "plano", "dwg dxf autocad cad anotar"
+        ),
         Opcion(
             "palabras", Seccion.PINEAR, "Palabras mágicas",
             "Qué palabra abre qué mini-app al pinear un texto: temporizador, lista, ruleta…",
@@ -161,6 +166,7 @@ object CatalogoDeAjustes {
             Sitio.PIN -> s.pinGroups
             Sitio.LIENZO -> s.editorGroups
             Sitio.LECTOR -> s.lectorGroups
+            Sitio.PLANO -> s.planoGroups
         }
         // Lo que lleva la barra, sin restar la lista general: apagar una en todos no es tocar esta.
         gruposDe(grupos, s.sitioGuardado(sitio))

@@ -31,7 +31,9 @@ object HerramientasPorSitio {
         PANTALLA("pantalla", "Pantalla"),
         PIN("pin", "Pin"),
         LIENZO("lienzo", "Lienzo"),
-        LECTOR("lector", "Lector");
+        LECTOR("lector", "Lector"),
+        /** El visor de planos DWG/DXF (9-oct-2026): anotar encima del plano. */
+        PLANO("plano", "Plano");
 
         val porDefecto: Set<Tool>
             get() = when (this) {
@@ -39,6 +41,7 @@ object HerramientasPorSitio {
                 PIN -> PIN_TOOLS_POR_DEFECTO
                 LIENZO -> ALL_TOOLS.toSet()
                 LECTOR -> LECTOR_TOOLS_POR_DEFECTO
+                PLANO -> PLANO_TOOLS_POR_DEFECTO
             }
     }
 

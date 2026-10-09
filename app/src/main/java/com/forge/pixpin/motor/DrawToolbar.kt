@@ -1109,6 +1109,17 @@ val LECTOR_TOOLS_POR_DEFECTO: Set<Tool> = setOf(
     Tool.ELLIPSE, Tool.LINE, Tool.SELECTION, Tool.HAND
 )
 
+/**
+ * Las del **visor de planos**, de fábrica (9-oct-2026, el usuario: «todo sácalo del motor… y en
+ * configuración la opción de activar o desactivar»): todas las que se pueden usar fuera del editor
+ * completo, **menos la cota**, que el plano ya tiene la suya —con enganche a sus rayas y en sus
+ * unidades—. Se cambia en Ajustes, como las demás barras.
+ */
+val PLANO_TOOLS_POR_DEFECTO: Set<Tool> get() = ALL_TOOLS.toSet() - PLANO_TOOLS_FUERA - Tool.MEASURE
+
+/** Lo que el visor de planos no puede llevar: lo mismo que el editor rápido (piden el editor completo). */
+val PLANO_TOOLS_FUERA: Set<Tool> get() = LECTOR_TOOLS_FUERA
+
 /** Lo que el editor rápido no puede llevar: pide un diálogo o un sitio que solo tiene el editor completo. */
 val LECTOR_TOOLS_FUERA: Set<Tool> = setOf(Tool.IMAGE, Tool.ZONA, Tool.SCALE, Tool.FRAME, Tool.LUPA)
 

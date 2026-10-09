@@ -520,6 +520,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             "barra-pin" -> BarraDelPinCard()
             "barra-pantalla" -> BarraDeLaCapaCard()
             "barra-lector" -> BarraDelLectorCard()
+            "barra-plano" -> BarraDelPlanoCard()
             "palabras" -> PalabrasMagicasCard()
             "voz" -> MotorDeVozCard()
             "fluidez" -> FluidezCard()
@@ -797,6 +798,22 @@ private fun BarraDelLectorCard() {
         grupos = settings.lectorGroupList,
         puestas = settings.lectorToolSet,
         onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR, grupos) }
+    )
+}
+
+/** Lo mismo, para anotar encima de un plano DWG o DXF ([com.forge.pixpin.planos.PlanoActivity]). */
+@Composable
+private fun BarraDelPlanoCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    BarraCard(
+        titulo = R.string.plano_tools_title,
+        descripcion = R.string.plano_tools_desc,
+        grupos = settings.planoGroupList,
+        puestas = settings.planoToolSet,
+        onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO, grupos) }
     )
 }
 

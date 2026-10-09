@@ -132,6 +132,9 @@ data class Settings(
      */
     val lectorTools: Set<String>? = null,
     val lectorGroups: String? = null,
+    /** La barra del visor de planos (null: la de fábrica, [com.forge.pixpin.motor.PLANO_TOOLS_POR_DEFECTO]). */
+    val planoTools: Set<String>? = null,
+    val planoGroups: String? = null,
     /**
      * Y la del editor a pantalla completa.
      *
@@ -325,6 +328,7 @@ data class Settings(
             // La Zona entra aunque se hubiera guardado una lista antes de que existiera (13-sep-2026).
             herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet()) + com.forge.pixpin.motor.Tool.ZONA
         com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> herramientas(lectorTools, com.forge.pixpin.motor.LECTOR_TOOLS_POR_DEFECTO)
+        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO -> herramientas(planoTools, com.forge.pixpin.motor.PLANO_TOOLS_POR_DEFECTO)
     }
 
     /** Las palabras mágicas ya resueltas contra las de fábrica. */
@@ -340,6 +344,9 @@ data class Settings(
 
     val lectorGroupList: List<List<com.forge.pixpin.motor.Tool>>
         get() = com.forge.pixpin.motor.gruposDe(lectorGroups, lectorToolSet)
+
+    val planoGroupList: List<List<com.forge.pixpin.motor.Tool>>
+        get() = com.forge.pixpin.motor.gruposDe(planoGroups, planoToolSet)
 
     val editorGroupList: List<List<com.forge.pixpin.motor.Tool>>
         get() = com.forge.pixpin.motor.gruposDe(editorGroups, editorToolSet)
@@ -360,6 +367,10 @@ data class Settings(
     /** Las del editor rápido de los lectores. */
     val lectorToolSet: Set<com.forge.pixpin.motor.Tool>
         get() = sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR) - apagadasTools
+
+    /** Las del visor de planos (sin las que no puede llevar). */
+    val planoToolSet: Set<com.forge.pixpin.motor.Tool>
+        get() = sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO) - apagadasTools - com.forge.pixpin.motor.PLANO_TOOLS_FUERA
 
     /** Las del editor a pantalla completa: de fábrica, todas. */
     val editorToolSet: Set<com.forge.pixpin.motor.Tool>
@@ -406,6 +417,8 @@ class SettingsRepository(private val context: Context) {
         val CAPA_GROUPS = stringPreferencesKey("capa_groups")
         val LECTOR_TOOLS = stringSetPreferencesKey("lector_tools")
         val LECTOR_GROUPS = stringPreferencesKey("lector_groups")
+        val PLANO_TOOLS = stringSetPreferencesKey("plano_tools")
+        val PLANO_GROUPS = stringPreferencesKey("plano_groups")
         val EDITOR_TOOLS = stringSetPreferencesKey("editor_tools")
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
@@ -443,6 +456,8 @@ class SettingsRepository(private val context: Context) {
             capaGroups = prefs[Keys.CAPA_GROUPS],
             lectorTools = prefs[Keys.LECTOR_TOOLS],
             lectorGroups = prefs[Keys.LECTOR_GROUPS],
+            planoTools = prefs[Keys.PLANO_TOOLS],
+            planoGroups = prefs[Keys.PLANO_GROUPS],
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
@@ -552,6 +567,7 @@ class SettingsRepository(private val context: Context) {
                     com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN -> Keys.PIN_TOOLS to Keys.PIN_GROUPS
                     com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LIENZO -> Keys.EDITOR_TOOLS to Keys.EDITOR_GROUPS
                     com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> Keys.LECTOR_TOOLS to Keys.LECTOR_GROUPS
+                    com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO -> Keys.PLANO_TOOLS to Keys.PLANO_GROUPS
                 }
                 if (despues.enSitio(s) != antes.enSitio(s)) p[tools] = H.escribir(despues.enSitio(s))
                 if (grupos?.first == s) p[gruposKey] = com.forge.pixpin.motor.escribirGrupos(grupos.second)

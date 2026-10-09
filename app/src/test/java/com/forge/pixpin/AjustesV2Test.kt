@@ -59,7 +59,7 @@ class AjustesV2Test {
             "capture_mode", "copy_format", "dias_caducidad", "compresion_pdf", "guia_editor", "guia_pin", "guia_capa", "guia_captura",
             "iman_activo", "iman_esquinas", "iman_medios", "iman_centros", "iman_intersecciones", "iman_eje",
             "iman_borde_guia", "iman_borde_figura", "zurdo", "herramientas_apagadas", "editor_tools", "editor_groups",
-            "pin_tools", "pin_groups", "capa_tools", "capa_groups", "lector_tools", "lector_groups", "palabras_magicas",
+            "pin_tools", "pin_groups", "capa_tools", "capa_groups", "lector_tools", "lector_groups", "plano_tools", "plano_groups", "palabras_magicas",
             "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
             "maxima_fluidez", "modo_noche", "oled_negro", "pin_font"
         )
