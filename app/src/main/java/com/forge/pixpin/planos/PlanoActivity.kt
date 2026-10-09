@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.CircularProgressIndicator
@@ -99,6 +100,10 @@ class PlanoActivity : ComponentActivity() {
     private var camara: CamaraPlano? = null
     private var ancho = 0
     private var alto = 0
+
+    /** El marco que se está arrastrando, y su contador de repintar. */
+    private var marcoVivo: ImprimirPlano.Marco? = null
+    private var marcos2 by mutableIntStateOf(0)
 
     /** La mira de acotar (en la pantalla) mientras hay un dedo; dónde cae en el plano y si se enganchó. */
     private var mira: Offset? = null
@@ -167,6 +172,9 @@ class PlanoActivity : ComponentActivity() {
         var aLaVista by remember { mutableStateOf(true) }
         var toques by remember { mutableIntStateOf(0) }
         var acotando by remember { mutableStateOf(false) }
+        // **Marcos para imprimir** (9-oct-2026): partes del plano, cada una una hoja.
+        var marcando by remember { mutableStateOf(false) }
+        var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
         // Las cotas: cadenas hechas y la que se está poniendo (puntos del plano).
         var hechas by remember { mutableStateOf<List<List<DoubleArray>>>(emptyList()) }
         var puntos by remember { mutableStateOf<List<DoubleArray>>(emptyList()) }
@@ -197,8 +205,8 @@ class PlanoActivity : ComponentActivity() {
                 estado = (e as? ModeloCad.NoSeLee)?.message ?: getString(com.forge.pixpin.R.string.plano_no)
             }
         }
-        LaunchedEffect(aLaVista, toques, acotando) {
-            if (aLaVista && !acotando) { delay(3500); aLaVista = false }
+        LaunchedEffect(aLaVista, toques, acotando, marcando) {
+            if (aLaVista && !acotando && !marcando) { delay(3500); aLaVista = false }
         }
         LaunchedEffect(Unit) {
             // Si la tarjeta no pudo, se dice (el hilo de la tarjeta no puede tocar la interfaz).
@@ -216,6 +224,7 @@ class PlanoActivity : ComponentActivity() {
             when {
                 acotando && puntos.isNotEmpty() -> terminarCadena()
                 acotando -> acotando = false
+                marcando -> marcando = false
                 else -> finish()
             }
         }
@@ -240,7 +249,7 @@ class PlanoActivity : ComponentActivity() {
                 )
                 // Gestos y cotas encima del plano.
                 Box(
-                    Modifier.fillMaxSize().pointerInput(acotando) {
+                    Modifier.fillMaxSize().pointerInput(acotando, marcando) {
                         var ultimoToque = 0L
                         var dondeUltimo = Offset.Zero
                         // **Al acotar, el punto va al lado del dedo** (9-oct-2026, el usuario: «no sé
@@ -256,6 +265,9 @@ class PlanoActivity : ComponentActivity() {
                             var corrido = Offset.Zero
                             // Al acotar: qué punto se agarró (cadena, índice), o null si es uno nuevo.
                             var agarrado: Pair<Int, Int>? = null
+                            // Al marcar: el marco va de donde se puso el dedo a donde está.
+                            val inicioDelMarco = camara?.let { c -> doubleArrayOf(c.planoX(abajo.position.x.toDouble(), ancho), c.planoY(abajo.position.y.toDouble(), alto)) }
+                            if (marcando) abajo.consume()
                             if (acotando) {
                                 agarrado = Acotar.agarrar(cadenas(hechas, puntos), abajo.position + lado, ASA * densidad) { pantalla(it) }
                                 ponerMira(abajo.position + lado, densidad)
@@ -269,6 +281,20 @@ class PlanoActivity : ComponentActivity() {
                                 }
                                 val zoom = ev.calculateZoom()
                                 val pan = ev.calculatePan()
+                                if (marcando && !varios) {
+                                    val c = camara
+                                    val dedo = ev.changes.firstOrNull { it.id == abajo.id } ?: ev.changes.first()
+                                    if (c != null && inicioDelMarco != null) {
+                                        marcoVivo = ImprimirPlano.Marco.entre(
+                                            inicioDelMarco[0], inicioDelMarco[1],
+                                            c.planoX(dedo.position.x.toDouble(), ancho), c.planoY(dedo.position.y.toDouble(), alto)
+                                        )
+                                        marcos2++
+                                    }
+                                    ev.changes.forEach { it.consume() }
+                                    continue
+                                }
+                                if (marcando && varios && marcoVivo != null) { marcoVivo = null; marcos2++ }
                                 if (acotando && !varios) {
                                     val dedo = ev.changes.firstOrNull { it.id == abajo.id } ?: ev.changes.first()
                                     val donde = ponerMira(dedo.position + lado, densidad)
@@ -301,7 +327,15 @@ class PlanoActivity : ComponentActivity() {
                                     ev.changes.forEach { if (it.positionChanged()) it.consume() }
                                 }
                             } while (ev.changes.any { it.pressed })
-                            if (acotando) {
+                            if (marcando) {
+                                // Al soltar: el marco se queda si no es una raya (de lado, al menos 16 dp).
+                                val vivo = marcoVivo
+                                val c = camara
+                                if (!varios && vivo != null && c != null && vivo.ancho / c.px > 16 * densidad && vivo.alto / c.px > 16 * densidad) {
+                                    hojas = hojas + vivo
+                                }
+                                marcoVivo = null; marcos2++
+                            } else if (acotando) {
                                 // Al soltar: un punto nuevo donde quedó la mira (si no se agarró uno).
                                 val donde = miraEnPlano
                                 if (!varios && agarrado == null && donde != null) {
@@ -320,7 +354,7 @@ class PlanoActivity : ComponentActivity() {
                         }
                     }
                 ) {
-                    Cotas(hechas, puntos, enganchado, claro, densidad, acotando)
+                    Cotas(hechas, puntos, enganchado, claro, densidad, acotando, hojas)
                 }
             }
             estado?.let { texto ->
@@ -368,12 +402,46 @@ class PlanoActivity : ComponentActivity() {
                                 contentDescription = getString(com.forge.pixpin.R.string.plano_tema), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
                             )
                         }
-                        IconButton(onClick = { acotando = !acotando; if (!acotando) terminarCadena(); toques++ }, modifier = Modifier.size(38.dp)) {
+                        IconButton(onClick = { marcando = !marcando; if (marcando) { acotando = false; terminarCadena() }; toques++ }, modifier = Modifier.size(38.dp)) {
+                            Icon(
+                                Icons.Filled.Print, contentDescription = getString(com.forge.pixpin.R.string.plano_marcos),
+                                tint = if (marcando) Color(0xFF3D8BFF) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
+                            )
+                        }
+                        IconButton(onClick = { acotando = !acotando; if (acotando) marcando = false else terminarCadena(); toques++ }, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 Icons.Filled.Straighten, contentDescription = getString(com.forge.pixpin.R.string.plano_acotar),
                                 tint = if (acotando) Color(0xFFFF8A00) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
                             )
                         }
+                    }
+                }
+            }
+            // Marcando: la pista, quitar el último marco, imprimir y salir.
+            if (marcando) {
+                Row(
+                    Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+                        .clip(RoundedCornerShape(50)).background(Color(0xCC14182B)).padding(start = 16.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    val blanco = Color.White
+                    Text(
+                        if (hojas.isEmpty()) getString(com.forge.pixpin.R.string.plano_pista_marcos)
+                        else getString(com.forge.pixpin.R.string.plano_hojas, hojas.size),
+                        color = blanco, maxLines = 2, modifier = Modifier.weight(1f, fill = false).padding(vertical = 10.dp)
+                    )
+                    IconButton(onClick = { hojas = hojas.dropLast(1); marcos2++ }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Undo, contentDescription = getString(com.forge.pixpin.R.string.plano_quitar_marco), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = {
+                        val m = modelo
+                        if (m != null) ImprimirPlano.imprimir(this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'))
+                    }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Print, contentDescription = getString(com.forge.pixpin.R.string.plano_imprimir), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = { marcando = false }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = getString(com.forge.pixpin.R.string.plano_dejar_de_marcar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -420,15 +488,18 @@ class PlanoActivity : ComponentActivity() {
      * total (Σ) al final de una cadena de más de un tramo; un cuadro verde en el último enganche.
      */
     @Composable
-    private fun Cotas(hechas: List<List<DoubleArray>>, puntos: List<DoubleArray>, enganchado: DoubleArray?, claro: Boolean, densidad: Float, acotando: Boolean) {
+    private fun Cotas(hechas: List<List<DoubleArray>>, puntos: List<DoubleArray>, enganchado: DoubleArray?, claro: Boolean, densidad: Float, acotando: Boolean, hojas: List<ImprimirPlano.Marco>) {
         val m = modelo ?: return
         val naranja = android.graphics.Color.rgb(0xFF, 0x8A, 0x00)
         val raya = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val letra = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val pildora = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val asa = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+        val marco = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+        val numero = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_VARIABLE") val leer = marcos // repinta al mover, sin recomponer
+            @Suppress("UNUSED_VARIABLE") val leer2 = marcos2
             val c = camara ?: return@Canvas
             val lienzo = drawContext.canvas.nativeCanvas
             raya.color = naranja; raya.strokeWidth = 2f * densidad; raya.style = android.graphics.Paint.Style.STROKE
@@ -463,6 +534,23 @@ class PlanoActivity : ComponentActivity() {
                 if (cadena.size > 2) {
                     val u = cadena.last()
                     etiqueta("Σ " + Medidas.medida(total, m.unidades), sx(u) + 40 * densidad, sy(u) + 24 * densidad)
+                }
+            }
+            // Los marcos para imprimir: azules, a trazos, con su número (la hoja que serán).
+            run {
+                val azul = android.graphics.Color.rgb(0x3D, 0x8B, 0xFF)
+                marco.color = azul; marco.style = android.graphics.Paint.Style.STROKE; marco.strokeWidth = 1.8f * densidad
+                marco.pathEffect = android.graphics.DashPathEffect(floatArrayOf(8 * densidad, 5 * densidad), 0f)
+                val todos = hojas + listOfNotNull(marcoVivo)
+                todos.forEachIndexed { i, mc ->
+                    val l = c.pantallaX(mc.x0, ancho).toFloat(); val r = c.pantallaX(mc.x1, ancho).toFloat()
+                    val t = c.pantallaY(mc.y1, alto).toFloat(); val b = c.pantallaY(mc.y0, alto).toFloat()
+                    marco.alpha = if (i < hojas.size) 255 else 170
+                    lienzo.drawRect(l, t, r, b, marco)
+                    if (i < hojas.size) {
+                        numero.color = azul; numero.textSize = 14 * densidad; numero.isFakeBoldText = true
+                        lienzo.drawText("${i + 1}", l + 6 * densidad, t + 18 * densidad, numero)
+                    }
                 }
             }
             // La mira: el tramo vivo desde el último punto, una cruz con su círculo (verde si se

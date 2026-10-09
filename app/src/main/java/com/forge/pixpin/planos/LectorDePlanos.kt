@@ -53,7 +53,7 @@ class LectorDePlanos : Service() {
                         !PlanoNativo.disponible -> "Este teléfono no puede leer planos (hace falta uno de 64 bits)"
                         !entrada.isFile -> "No se encuentra el archivo del plano"
                         else -> try {
-                            PlanoNativo.convertir(entrada.absolutePath, salida.absolutePath, carpetaShx(this).absolutePath)
+                            PlanoNativo.convertir(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
                         } catch (e: Throwable) {
                             e.message ?: e.javaClass.simpleName
                         }
@@ -77,6 +77,8 @@ class LectorDePlanos : Service() {
         private const val EN_CACHE = 24
         /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
         const val VERSION_DEL_FORMATO = 4
+        /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo): lo leído antes se rehace. */
+        const val REVISION_DE_LETRAS = 2
 
         fun esPlano(nombre: String?): Boolean {
             val n = nombre?.lowercase() ?: return false
@@ -85,6 +87,28 @@ class LectorDePlanos : Service() {
 
         /** Las fuentes SHX que quiera usar el usuario (en un teléfono no hay AutoCAD que las traiga). */
         fun carpetaShx(c: Context): File = File(c.filesDir, "fuentes-shx")
+
+        /**
+         * Las SHX de PixPin (las de Hershey, `assets/fuentes-shx`), sacadas a disco la primera vez:
+         * la lectura nativa abre archivos, no `assets`. Se rehacen si cambia la versión de la app.
+         */
+        private fun shxDePixPin(c: Context): File {
+            val carpeta = File(c.filesDir, "fuentes-shx-pixpin")
+            val marca = File(carpeta, ".version")
+            val version = runCatching { c.packageManager.getPackageInfo(c.packageName, 0).longVersionCode.toString() }.getOrDefault("0")
+            if (marca.isFile && runCatching { marca.readText() }.getOrNull() == version) return carpeta
+            runCatching {
+                carpeta.mkdirs()
+                for (n in c.assets.list("fuentes-shx").orEmpty().filter { it.endsWith(".shx") }) {
+                    c.assets.open("fuentes-shx/$n").use { i -> File(carpeta, n).outputStream().use { i.copyTo(it) } }
+                }
+                marca.writeText(version)
+            }
+            return carpeta
+        }
+
+        /** Donde buscar las SHX, una por renglón: primero las del usuario (mandan), luego las de PixPin. */
+        fun carpetasShx(c: Context): String = carpetaShx(c).absolutePath + "\n" + shxDePixPin(c).absolutePath
 
         fun carpeta(c: Context): File = File(c.cacheDir, "planos").apply { mkdirs() }
 
@@ -116,7 +140,7 @@ class LectorDePlanos : Service() {
             val carpeta = carpeta(c)
             // Con la versión del formato en el nombre: lo leído con otra versión no se usa (ni se
             // confunde con roto) y se va solo al podar.
-            val salida = File(carpeta, clave(plano) + ".v$VERSION_DEL_FORMATO.pxcad")
+            val salida = File(carpeta, clave(plano) + ".v$VERSION_DEL_FORMATO-$REVISION_DE_LETRAS.pxcad")
             if (salida.isFile && salida.length() > 8) {
                 salida.setLastModified(System.currentTimeMillis())
                 return Resultado.Listo(salida)

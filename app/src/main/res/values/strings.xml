@@ -536,6 +536,12 @@
     <string name="plano_terminar">Terminar la cota</string>
     <string name="plano_borrar_cotas">Borrar las cotas</string>
     <string name="plano_dejar_de_acotar">Dejar de acotar</string>
+    <string name="plano_marcos">Marcos para imprimir</string>
+    <string name="plano_pista_marcos">Arrastra para marcar una parte · dos dedos mueven el plano</string>
+    <string name="plano_hojas">Hojas: %1$d · arrastra para otra</string>
+    <string name="plano_quitar_marco">Quitar el último marco</string>
+    <string name="plano_imprimir">Imprimir</string>
+    <string name="plano_dejar_de_marcar">Dejar de marcar</string>
     <string name="guardados_unir_al_proyecto">Añadir al proyecto</string>
     <string name="guardados_devolver_al_proyecto">Volver a añadir al proyecto</string>
     <string name="guardados_transcribir">Pasar a texto</string>

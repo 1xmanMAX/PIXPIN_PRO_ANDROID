@@ -30,8 +30,9 @@ static CARPETA_SHX: Mutex<String> = Mutex::new(String::new());
 /// Donde la app deja las fuentes SHX que el usuario quiera usar (en un
 /// teléfono no hay AutoCAD que las traiga).
 pub(crate) fn carpetas_shx_android() -> Vec<PathBuf> {
+    // Varias, una por renglón: primero las del usuario, luego las de PixPin.
     let c = CARPETA_SHX.lock().map(|c| c.clone()).unwrap_or_default();
-    if c.is_empty() { Vec::new() } else { vec![PathBuf::from(c)] }
+    c.lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from).collect()
 }
 
 /// **Cuánto se estrecha la letra de reserva.** En el PC, un estilo cuya fuente
@@ -51,6 +52,54 @@ pub(crate) fn estrecho_android(clave: &str, fichero: &str) -> f32 {
         return 1.0;
     }
     ANCHO_DE_ARIAL_NARROW
+}
+
+/// **La SHX de PixPin para una que no está.** Las que trae la app (fuentes de
+/// Hershey pasadas a SHX: `fuentes/hershey-a-shx.py`) llevan el nombre de la
+/// de AutoCAD de la que salen; las demás de AutoCAD se parecen a alguna. Solo
+/// para lo que es SHX: un estilo «Arial» sin extensión no pasa por aquí.
+pub(crate) fn shx_de_reserva(clave: &str) -> Option<&'static str> {
+    let c = clave.trim().to_ascii_lowercase();
+    let base = c.rsplit(['/', '\\']).next().unwrap_or(&c);
+    let base = base.strip_suffix(".shx").unwrap_or(base);
+    let conocida = [
+        "txt", "simplex", "romans", "romand", "romanc", "romant", "complex", "italic", "italicc", "italict", "scripts", "scriptc",
+        "gothice", "gothicg", "gothici", "greeks", "greekc", "monotxt", "isocp", "isocp2", "isocp3", "isoct", "isoct2", "isoct3", "isocteur", "isocpeur",
+    ];
+    if !c.ends_with(".shx") && !conocida.contains(&base) {
+        return None;
+    }
+    Some(match base {
+        "romand" | "romanc" | "complex" => "romand.shx",
+        "romant" => "romant.shx",
+        "italic" | "italicc" | "italict" => "italic.shx",
+        "scripts" => "scripts.shx",
+        "scriptc" => "scriptc.shx",
+        "gothice" | "gothicg" | "gothici" => "gothice.shx",
+        "greeks" | "greekc" => "greeks.shx",
+        _ => "romans.shx",
+    })
+}
+
+/// **El volteo de un TEXT** (DXF 71): 2 al revés (espejo en x), 4 cabeza abajo
+/// (espejo en y), alrededor de su punto de justificación y en su giro, como
+/// AutoCAD. Va en el sistema del texto (OCS).
+pub(crate) fn volteo(flags: i16, ins: [f64; 3], alineado: Option<[f64; 3]>, h: u8, v: u8, giro: f64) -> convertir::Afin {
+    use convertir::Afin;
+    let fx = if flags & 2 != 0 { -1.0 } else { 1.0 };
+    let fy = if flags & 4 != 0 { -1.0 } else { 1.0 };
+    if fx > 0.0 && fy > 0.0 {
+        return Afin::IDENTIDAD;
+    }
+    let a = match alineado {
+        Some(a) if h != 0 || v != 0 => a,
+        _ => ins,
+    };
+    Afin::traslacion(a[0], a[1], a[2])
+        .por(&Afin::giro_z(giro))
+        .por(&Afin::escala(fx, fy, 1.0))
+        .por(&Afin::giro_z(-giro))
+        .por(&Afin::traslacion(-a[0], -a[1], -a[2]))
 }
 
 /// Arial Narrow mide de ancho un 82 % de Arial (la media de sus letras).

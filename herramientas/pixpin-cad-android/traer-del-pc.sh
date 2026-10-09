@@ -77,6 +77,16 @@ cambiar("texto.rs", """                    let k = self.escala_ttf;
                         }
                         l.avance *= kx;
                     }""")
+# SHX que no está: la de PixPin que más se le parece (las de Hershey, ver fuentes/).
+cambiar("texto.rs", "crate::shx::buscar(&clave, carpetas_shx()).and_then(|r| crate::shx::abrir(&r))",
+        "crate::shx::buscar(&clave, carpetas_shx())\n                    .or_else(|| crate::shx_de_reserva(&clave).and_then(|r| crate::shx::buscar(r, carpetas_shx())))\n                    .and_then(|r| crate::shx::abrir(&r))")
+# El volteo de los TEXT (DXF 71: 2 al revés, 4 cabeza abajo): el PC aún no lo hace.
+cambiar("convertir.rs", "h: u8, v: u8, normal: &Vector3, color: u32, m: &Afin) {\n        let texto = crate::texto::texto_plano(valor);",
+        "h: u8, v: u8, normal: &Vector3, color: u32, m: &Afin, volteo: i16) {\n        let texto = crate::texto::texto_plano(valor);")
+cambiar("convertir.rs", "        let t = m.por(&ocs(normal));\n        let fuente = self.fuente_de(estilo);\n        self.textos.simple(",
+        "        let t = m.por(&ocs(normal)).por(&crate::volteo(volteo, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), h, v, giro));\n        let fuente = self.fuente_de(estilo);\n        self.textos.simple(")
+cambiar("convertir.rs", "t.vertical_alignment as u8, &t.normal, color, &m);", "t.vertical_alignment as u8, &t.normal, color, &m, t.generation_flags);")
+cambiar("convertir.rs", "a.vertical_alignment as u8, &a.normal, color, m);", "a.vertical_alignment as u8, &a.normal, color, m, 0);")
 # Fuentes SHX: la carpeta que diga la app (AutoCAD no está en un teléfono).
 cambiar("shx.rs", 'pub fn carpetas() -> Vec<PathBuf> {\n    let mut v = Vec::new();',
         'pub fn carpetas() -> Vec<PathBuf> {\n    let mut v: Vec<PathBuf> = crate::carpetas_shx_android();')
