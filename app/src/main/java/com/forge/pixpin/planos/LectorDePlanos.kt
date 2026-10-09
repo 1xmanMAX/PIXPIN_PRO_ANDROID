@@ -75,6 +75,8 @@ class LectorDePlanos : Service() {
         private const val SALIDA = "salida"
         /** Cuántos planos se guardan ya leídos (los más recientes), como en el PC. */
         private const val EN_CACHE = 24
+        /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
+        const val VERSION_DEL_FORMATO = 4
 
         fun esPlano(nombre: String?): Boolean {
             val n = nombre?.lowercase() ?: return false
@@ -112,7 +114,9 @@ class LectorDePlanos : Service() {
          */
         fun leer(c: Context, plano: File, tope: Long = 300_000L): Resultado {
             val carpeta = carpeta(c)
-            val salida = File(carpeta, clave(plano) + ".pxcad")
+            // Con la versión del formato en el nombre: lo leído con otra versión no se usa (ni se
+            // confunde con roto) y se va solo al podar.
+            val salida = File(carpeta, clave(plano) + ".v$VERSION_DEL_FORMATO.pxcad")
             if (salida.isFile && salida.length() > 8) {
                 salida.setLastModified(System.currentTimeMillis())
                 return Resultado.Listo(salida)

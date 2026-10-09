@@ -37,7 +37,7 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
     private var alto = 1
     private var listo = false
 
-    private var progSimple = 0; private var progTrama = 0; private var progLetra = 0; private var progArco = 0
+    private var progSimple = 0; private var progRelleno = 0; private var progTrama = 0; private var progLetra = 0; private var progArco = 0
     private val vaos = IntArray(4)
     private var vbVertices = 0; private var ibLineas = 0; private var ibTriangulos = 0
     private var vbTrama = 0; private var ibTrama = 0; private var vbLetras = 0; private var vbArcos = 0
@@ -87,11 +87,12 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
             GLES30.glUniform4f(GLES30.glGetUniformLocation(p, "uColor7"), c7, c7, c7, 1f)
             GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uPx"), px)
             GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uGrosor"), grosor)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uModo"), if (claro) 2f else 1f)
         }
 
         // 1. Rellenos.
         if (modelo.triangulos.cuantos > 0) {
-            vista(progSimple)
+            vista(progRelleno)
             GLES30.glBindVertexArray(vaos[0])
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibTriangulos)
             val n = modelo.tramosTriangulos.visibles(vx0, vy0, vx1, vy1, px, salida)
@@ -160,6 +161,7 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
 
     private fun subir() {
         progSimple = programa(VS_SIMPLE, FS_COLOR)
+        progRelleno = programa(VS_SIMPLE, FS_RELLENO)
         progTrama = programa(VS_TRAMA, FS_TRAMA)
         progLetra = programa(VS_LETRA, FS_COLOR)
         progArco = programa(VS_ARCO, FS_ARCO)
@@ -334,6 +336,37 @@ vec4 colorDe(uint c) {
 vec4 aPantalla(vec2 p) { return vec4((p - uCentro) * uEscala, 0.0, 1.0); }
 """
 
+        /**
+         * **Los colores en el otro fondo** (`tinta` y `apagado` de `gpu.rs` del PC, 8-oct-2026):
+         * los colores del plano se pensaron para un fondo; en el otro, los que no se leen se
+         * aclaran (u oscurecen) sin perder su tono, los grises oscuros pasan a claros como el
+         * color 7, y en oscuro los rellenos grandes se apagan (un blanco o un amarillo de tabla
+         * deslumbraba y las letras de encima no se leían). `uModo`: 1 fondo oscuro, 2 claro.
+         */
+        private const val COLORES = """
+uniform float uModo;
+float luz(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+vec4 tinta(vec4 c) {
+    if (uModo < 0.5) return c;
+    float l = luz(c.rgb);
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    if (uModo < 1.5) {
+        if (sat < 0.15 && l < 0.5) c.rgb = 1.0 - c.rgb * 0.8;
+        else if (l < 0.55) c.rgb = mix(c.rgb, vec3(1.0), (0.55 - l) / (1.0 - l));
+    } else if (l > 0.62) {
+        c.rgb *= 0.5 / l;
+    }
+    return c;
+}
+vec4 apagado(vec4 c) {
+    if (uModo < 0.5 || uModo > 1.5) return c;
+    float sat = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    if (sat < 0.15) c.rgb = 0.17 + (1.0 - c.rgb) * 0.22;
+    else c.rgb *= 0.42;
+    return c;
+}
+"""
+
         private const val VS_SIMPLE = COMUN + """
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in uint aColor;
@@ -342,10 +375,19 @@ void main() { gl_Position = aPantalla(aPos); vColor = colorDe(aColor); }
 """
 
         private const val FS_COLOR = """#version 300 es
-precision mediump float;
+precision highp float;
+""" + COLORES + """
 in vec4 vColor;
 out vec4 oColor;
-void main() { oColor = vColor; }
+void main() { oColor = tinta(vColor); }
+"""
+
+        private const val FS_RELLENO = """#version 300 es
+precision highp float;
+""" + COLORES + """
+in vec4 vColor;
+out vec4 oColor;
+void main() { oColor = apagado(vColor); }
 """
 
         private const val VS_TRAMA = COMUN + """
@@ -358,7 +400,7 @@ flat out uint vTrama;
 void main() { gl_Position = aPantalla(aPos); vColor = colorDe(aColor); vMundo = aPos; vTrama = aTrama; }
 """
 
-        private const val FS_TRAMA = COMUN + """
+        private const val FS_TRAMA = COMUN + COLORES + """
 uniform highp usampler2D uTramas;
 uniform highp usampler2D uFamilias;
 in vec4 vColor;
@@ -414,7 +456,8 @@ void main() {
         cob = max(cob, a);
     }
     if (cob <= 0.004) discard;
-    oColor = vec4(vColor.rgb, vColor.a * cob);
+    vec4 tc = tinta(vColor);
+    oColor = vec4(tc.rgb, tc.a * cob);
 }
 """
 
@@ -460,7 +503,7 @@ void main() {
 }
 """
 
-        private const val FS_ARCO = COMUN + """
+        private const val FS_ARCO = COMUN + COLORES + """
 in vec4 vColor;
 in vec2 vMundo;
 flat in vec4 vArco;
@@ -476,7 +519,8 @@ void main() {
         ang = ang - floor(ang / 6.2831853) * 6.2831853;
         if (ang > vBarrido) discard;
     }
-    oColor = vec4(vColor.rgb, vColor.a * a);
+    vec4 t = tinta(vColor);
+    oColor = vec4(t.rgb, t.a * a);
 }
 """
     }

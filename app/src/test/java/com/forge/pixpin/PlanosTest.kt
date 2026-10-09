@@ -165,4 +165,26 @@ class PlanosTest {
         println("abrir ${(t1 - t0) / 1_000_000} ms, enganches ${(t2 - t1) / 1_000_000} ms: ${m.vertices.cuantos} vértices, ${m.letras.cuantos} letras")
         assertNotNull(g)
     }
+
+    @Test
+    fun la_mira_agarra_el_punto_cercano_y_lo_mueve_sin_tocar_los_demas() {
+        // Pantalla = plano × 10 (para no depender de la cámara).
+        val aPantalla = { p: DoubleArray -> androidx.compose.ui.geometry.Offset((p[0] * 10).toFloat(), (p[1] * 10).toFloat()) }
+        val hechas = listOf(listOf(doubleArrayOf(0.0, 0.0), doubleArrayOf(10.0, 0.0)))
+        val viva = listOf(doubleArrayOf(10.0, 0.5))
+        val cadenas = hechas + listOf(viva)
+        // Cerca de (10, 0) y de (10, 0.5): gana el más cercano.
+        assertEquals(1 to 0, com.forge.pixpin.planos.Acotar.agarrar(cadenas, androidx.compose.ui.geometry.Offset(101f, 6f), 26f, aPantalla))
+        assertEquals(0 to 1, com.forge.pixpin.planos.Acotar.agarrar(cadenas, androidx.compose.ui.geometry.Offset(101f, -1f), 26f, aPantalla))
+        // Lejos de todo: un punto nuevo.
+        assertNull(com.forge.pixpin.planos.Acotar.agarrar(cadenas, androidx.compose.ui.geometry.Offset(50f, 50f), 26f, aPantalla))
+        // Moverlo cambia solo ese, y sin compartir el array de quien llama.
+        val donde = doubleArrayOf(12.0, 3.0)
+        val movidas = com.forge.pixpin.planos.Acotar.mover(cadenas, 0, 1, donde)
+        donde[0] = 99.0
+        assertEquals(12.0, movidas[0][1][0], 0.0)
+        assertEquals(0.0, movidas[0][0][0], 0.0)
+        assertEquals(10.0, movidas[1][0][0], 0.0)
+        assertEquals(10.0, cadenas[0][1][0], 0.0)
+    }
 }

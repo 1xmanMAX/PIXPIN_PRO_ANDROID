@@ -146,3 +146,33 @@ object Medidas {
         return String.format(java.util.Locale.ROOT, "%.${dec}f", d) + sufijo(unidades)
     }
 }
+
+/**
+ * **Agarrar y mover los puntos de las cotas** (9-oct-2026). Puro, sin Compose, para probarlo.
+ * Las cadenas son listas de puntos del plano; la última es la que se está poniendo.
+ */
+object Acotar {
+    /**
+     * El punto (cadena, índice) más cercano a [mira] (en la pantalla) a menos de [radio] píxeles,
+     * o null. [aPantalla] pasa un punto del plano a la pantalla. Si dos están igual de cerca, gana
+     * el último puesto: es el que se acaba de poner mal.
+     */
+    fun agarrar(
+        cadenas: List<List<DoubleArray>>, mira: androidx.compose.ui.geometry.Offset, radio: Float,
+        aPantalla: (DoubleArray) -> androidx.compose.ui.geometry.Offset
+    ): Pair<Int, Int>? {
+        var mejor: Pair<Int, Int>? = null
+        var dm = radio
+        cadenas.forEachIndexed { k, cadena ->
+            cadena.forEachIndexed { i, p ->
+                val d = (aPantalla(p) - mira).getDistance()
+                if (d <= dm) { dm = d; mejor = k to i }
+            }
+        }
+        return mejor
+    }
+
+    /** Las cadenas con el punto [i] de la [k] puesto en [donde]. */
+    fun mover(cadenas: List<List<DoubleArray>>, k: Int, i: Int, donde: DoubleArray): List<List<DoubleArray>> =
+        cadenas.mapIndexed { kk, c -> if (kk != k) c else c.mapIndexed { ii, p -> if (ii == i) donde.copyOf() else p } }
+}

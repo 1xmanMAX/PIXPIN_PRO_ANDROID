@@ -7,7 +7,7 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /**
- * **Un plano DWG/DXF ya leído**, tal como lo deja el visor del PC en su caché (formato PXCAD v3,
+ * **Un plano DWG/DXF ya leído**, tal como lo deja el visor del PC en su caché (formato PXCAD v4,
  * `Modelo::a_bytes` de `crates/pixpin-cad/src/modelo.rs`). Lo escribe `libpixpincad.so` —la
  * misma lectura del PC, compilada para Android— en el proceso `:planos`; aquí solo se lee.
  *
@@ -108,7 +108,7 @@ class ModeloCad private constructor(
         /** El índice que corta una tira de rayas (el reinicio fijo de OpenGL ES 3). */
         const val CORTE: Int = -1
         const val GLIFO_DE_RAYAS: Int = Int.MIN_VALUE
-        private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), 'C'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte(), 0, 0, 3)
+        private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), 'C'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte(), 0, 0, 4)
 
         /** Proyecta [archivo] en memoria y lo lee. */
         fun abrir(archivo: File): ModeloCad {

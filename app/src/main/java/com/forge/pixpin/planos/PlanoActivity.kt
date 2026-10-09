@@ -81,10 +81,13 @@ import kotlin.math.hypot
  * u oscuro) y **acotar plano**, más «ver todo» (en el PC es la tecla F).
  *
  * - **Un dedo** mueve, **dos** acercan y alejan, **doble toque** enseña el plano entero.
- * - **Acotar**: cada toque pone un punto, enganchado al vértice, extremo o centro de círculo más
- *   cercano (los de [Enganches]); las medidas se encadenan con su total (Σ), en las unidades del
- *   plano (`$INSUNITS`). Doble toque o ✓ termina la cadena; ↶ quita el último punto; la papelera
- *   borra las cotas. Como en el PC (allí: doble clic o Intro, Retroceso y Supr).
+ * - **Acotar**: con el dedo puesto sale una **mira arriba a la izquierda**, en diagonal, que se
+ *   engancha al vértice, extremo o centro de círculo más cercano (los de [Enganches]); al
+ *   levantar el dedo el punto queda ahí. Cada punto tiene un **asa** abajo a la derecha: se
+ *   agarra y se arrastra, viendo el punto (9-oct-2026, el usuario: bajo el dedo no se sabía dónde
+ *   caía ni se podía mover). Con dos dedos se mueve el plano. Las medidas se encadenan con su
+ *   total (Σ), en las unidades del plano (`$INSUNITS`); ✓ termina la cadena, ↶ quita el último
+ *   punto y la papelera borra las cotas.
  *
  * El plano se lee en otro proceso ([LectorDePlanos]) y se dibuja con [PintorDePlano].
  */
@@ -96,6 +99,31 @@ class PlanoActivity : ComponentActivity() {
     private var camara: CamaraPlano? = null
     private var ancho = 0
     private var alto = 0
+
+    /** La mira de acotar (en la pantalla) mientras hay un dedo; dónde cae en el plano y si se enganchó. */
+    private var mira: Offset? = null
+    private var miraEnPlano: DoubleArray? = null
+    private var miraEnganchada = false
+
+    /** Pone la mira en [donde] (pantalla), enganchada si hay algo cerca. Devuelve el punto del plano. */
+    private fun ponerMira(donde: Offset, densidad: Float): DoubleArray? {
+        val c = camara ?: return null
+        val x = c.planoX(donde.x.toDouble(), ancho)
+        val y = c.planoY(donde.y.toDouble(), alto)
+        val g = enganches?.cerca(x, y, ENGANCHE * densidad * c.px)
+        mira = donde
+        miraEnganchada = g != null
+        miraEnPlano = g ?: doubleArrayOf(x, y)
+        marcos++
+        return miraEnPlano
+    }
+
+    private fun pantalla(p: DoubleArray): Offset {
+        val c = camara ?: return Offset.Zero
+        return Offset(c.pantallaX(p[0], ancho).toFloat(), c.pantallaY(p[1], alto).toFloat())
+    }
+
+    private fun cadenas(hechas: List<List<DoubleArray>>, puntos: List<DoubleArray>) = hechas + listOf(puntos)
 
     /** Sube con cada cambio de la vista: lo lee solo el dibujo de las cotas (no recompone nada). */
     private var marcos by mutableIntStateOf(0)
@@ -215,16 +243,44 @@ class PlanoActivity : ComponentActivity() {
                     Modifier.fillMaxSize().pointerInput(acotando) {
                         var ultimoToque = 0L
                         var dondeUltimo = Offset.Zero
+                        // **Al acotar, el punto va al lado del dedo** (9-oct-2026, el usuario: «no sé
+                        // dónde lo estoy poniendo»): una mira arriba a la izquierda, en diagonal,
+                        // que se ve mientras se arrastra y se suelta al levantar el dedo. Un punto
+                        // ya puesto se agarra por su asa —abajo a la derecha, donde caería el
+                        // dedo— y se mueve igual, viéndolo. Con dos dedos se mueve el plano.
+                        val lado = Offset(-MIRA_X * densidad, -MIRA_Y * densidad)
                         awaitEachGesture {
                             val abajo = awaitFirstDown(requireUnconsumed = false)
                             var movido = false
                             var varios = false
                             var corrido = Offset.Zero
+                            // Al acotar: qué punto se agarró (cadena, índice), o null si es uno nuevo.
+                            var agarrado: Pair<Int, Int>? = null
+                            if (acotando) {
+                                agarrado = Acotar.agarrar(cadenas(hechas, puntos), abajo.position + lado, ASA * densidad) { pantalla(it) }
+                                ponerMira(abajo.position + lado, densidad)
+                                abajo.consume()
+                            }
                             do {
                                 val ev = awaitPointerEvent()
-                                if (ev.changes.count { it.pressed } >= 2) varios = true
+                                if (ev.changes.count { it.pressed } >= 2) {
+                                    if (!varios && acotando) { mira = null; agarrado = null; marcos++ }
+                                    varios = true
+                                }
                                 val zoom = ev.calculateZoom()
                                 val pan = ev.calculatePan()
+                                if (acotando && !varios) {
+                                    val dedo = ev.changes.firstOrNull { it.id == abajo.id } ?: ev.changes.first()
+                                    val donde = ponerMira(dedo.position + lado, densidad)
+                                    agarrado?.let { (k, i) ->
+                                        if (donde != null) {
+                                            if (k < hechas.size) hechas = Acotar.mover(hechas, k, i, donde)
+                                            else puntos = Acotar.mover(listOf(puntos), 0, i, donde).first()
+                                        }
+                                    }
+                                    ev.changes.forEach { it.consume() }
+                                    continue
+                                }
                                 if (!movido) {
                                     corrido += pan
                                     if (corrido.getDistance() > viewConfiguration.touchSlop || (varios && zoom != 1f)) {
@@ -245,30 +301,26 @@ class PlanoActivity : ComponentActivity() {
                                     ev.changes.forEach { if (it.positionChanged()) it.consume() }
                                 }
                             } while (ev.changes.any { it.pressed })
-                            if (!movido && !varios) {
+                            if (acotando) {
+                                // Al soltar: un punto nuevo donde quedó la mira (si no se agarró uno).
+                                val donde = miraEnPlano
+                                if (!varios && agarrado == null && donde != null) {
+                                    puntos = puntos + listOf(donde)
+                                    enganchado = if (miraEnganchada) donde else null
+                                }
+                                mira = null; miraEnPlano = null
+                                marcos++
+                            } else if (!movido && !varios) {
                                 val ahora = System.currentTimeMillis()
                                 val doble = ahora - ultimoToque < 300 && (abajo.position - dondeUltimo).getDistance() < 48 * densidad
                                 ultimoToque = if (doble) 0L else ahora
                                 dondeUltimo = abajo.position
-                                val c = camara
-                                when {
-                                    acotando && doble -> terminarCadena()
-                                    acotando && c != null -> {
-                                        val x = c.planoX(abajo.position.x.toDouble(), ancho)
-                                        val y = c.planoY(abajo.position.y.toDouble(), alto)
-                                        val g = enganches?.cerca(x, y, 28.0 * densidad * c.px)
-                                        enganchado = g
-                                        puntos = puntos + listOf(g ?: doubleArrayOf(x, y))
-                                        marcos++
-                                    }
-                                    doble -> verTodo()
-                                    else -> { aLaVista = !aLaVista; toques++ }
-                                }
+                                if (doble) verTodo() else { aLaVista = !aLaVista; toques++ }
                             }
                         }
                     }
                 ) {
-                    Cotas(hechas, puntos, enganchado, claro, densidad)
+                    Cotas(hechas, puntos, enganchado, claro, densidad, acotando)
                 }
             }
             estado?.let { texto ->
@@ -368,12 +420,13 @@ class PlanoActivity : ComponentActivity() {
      * total (Σ) al final de una cadena de más de un tramo; un cuadro verde en el último enganche.
      */
     @Composable
-    private fun Cotas(hechas: List<List<DoubleArray>>, puntos: List<DoubleArray>, enganchado: DoubleArray?, claro: Boolean, densidad: Float) {
+    private fun Cotas(hechas: List<List<DoubleArray>>, puntos: List<DoubleArray>, enganchado: DoubleArray?, claro: Boolean, densidad: Float, acotando: Boolean) {
         val m = modelo ?: return
         val naranja = android.graphics.Color.rgb(0xFF, 0x8A, 0x00)
         val raya = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val letra = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val pildora = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
+        val asa = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_VARIABLE") val leer = marcos // repinta al mover, sin recomponer
             val c = camara ?: return@Canvas
@@ -412,6 +465,42 @@ class PlanoActivity : ComponentActivity() {
                     etiqueta("Σ " + Medidas.medida(total, m.unidades), sx(u) + 40 * densidad, sy(u) + 24 * densidad)
                 }
             }
+            // La mira: el tramo vivo desde el último punto, una cruz con su círculo (verde si se
+            // enganchó) y una rayita tenue hasta el dedo, para saber de dónde sale.
+            val laMira = mira
+            val enPlano = miraEnPlano
+            if (acotando && laMira != null && enPlano != null) {
+                val mx = sx(enPlano); val my = sy(enPlano)
+                if (puntos.isNotEmpty()) {
+                    val u = puntos.last()
+                    raya.color = naranja; raya.strokeWidth = 2f * densidad; raya.alpha = 170
+                    lienzo.drawLine(sx(u), sy(u), mx, my, raya)
+                    raya.alpha = 255
+                    val d = hypot(enPlano[0] - u[0], enPlano[1] - u[1])
+                    etiqueta(Medidas.medida(d, m.unidades), mx, my - 30 * densidad)
+                }
+                val verde = android.graphics.Color.rgb(0x30, 0xD1, 0x58)
+                raya.color = if (miraEnganchada) verde else naranja
+                raya.strokeWidth = 1.6f * densidad
+                val r = 13 * densidad
+                lienzo.drawCircle(mx, my, r, raya)
+                lienzo.drawLine(mx - r * 1.7f, my, mx - r * 0.35f, my, raya)
+                lienzo.drawLine(mx + r * 0.35f, my, mx + r * 1.7f, my, raya)
+                lienzo.drawLine(mx, my - r * 1.7f, mx, my - r * 0.35f, raya)
+                lienzo.drawLine(mx, my + r * 0.35f, mx, my + r * 1.7f, raya)
+                raya.alpha = 90; raya.strokeWidth = 1f * densidad
+                lienzo.drawLine(mx + r, my + r, laMira.x + MIRA_X * densidad - r * 0.5f, laMira.y + MIRA_Y * densidad - r * 0.5f, raya)
+                raya.alpha = 255
+            }
+            // Las asas de los puntos, abajo a la derecha: por ahí se agarran sin taparlos.
+            if (acotando) {
+                asa.color = naranja; asa.alpha = 110
+                for (cadena in hechas + listOf(puntos)) for (p in cadena) {
+                    val ax = sx(p) + MIRA_X * densidad; val ay = sy(p) + MIRA_Y * densidad
+                    lienzo.drawCircle(ax, ay, 9 * densidad, asa)
+                }
+                asa.alpha = 255
+            }
             enganchado?.let { g ->
                 val s = 7 * densidad
                 raya.color = android.graphics.Color.rgb(0x30, 0xD1, 0x58); raya.strokeWidth = 1.8f * densidad
@@ -422,6 +511,13 @@ class PlanoActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_RUTA = "ruta"
+        /** Dónde va la mira respecto al dedo (dp): arriba y a la izquierda. */
+        const val MIRA_X = 34f
+        const val MIRA_Y = 52f
+        /** Lo cerca que hay que poner la mira de un punto para agarrarlo (dp). */
+        const val ASA = 26f
+        /** Lo cerca que engancha la cota a un vértice (dp). */
+        const val ENGANCHE = 20f
         private const val EXTRA_NOMBRE = "nombre"
 
         fun esPlano(nombre: String?): Boolean = LectorDePlanos.esPlano(nombre)

@@ -34,6 +34,28 @@ pub(crate) fn carpetas_shx_android() -> Vec<PathBuf> {
     if c.is_empty() { Vec::new() } else { vec![PathBuf::from(c)] }
 }
 
+/// **Cuánto se estrecha la letra de reserva.** En el PC, un estilo cuya fuente
+/// SHX no está (o que pide Arial Narrow) se escribe con Arial Narrow, que se
+/// parece en ancho a las SHX; en Android no hay Arial Narrow y la reserva es
+/// Roboto, tan ancha como Arial: los textos salían un 20 % más anchos y se
+/// montaban unos sobre otros (lo vio el usuario el 9-oct-2026). Se estrecha
+/// al ancho de Arial Narrow. Si el plano pide Arial (o nada), se deja.
+pub(crate) fn estrecho_android(clave: &str, fichero: &str) -> f32 {
+    const RESERVAS: [&str; 4] = ["robotostatic-regular.ttf", "roboto-regular.ttf", "droidsans.ttf", "notosans-regular.ttf"];
+    let f = fichero.rsplit(['/', '\\']).next().unwrap_or(fichero).to_ascii_lowercase();
+    if !RESERVAS.contains(&f.as_str()) {
+        return 1.0;
+    }
+    let c = clave.to_ascii_lowercase();
+    if c.is_empty() || (c.contains("arial") && !c.contains("narrow")) {
+        return 1.0;
+    }
+    ANCHO_DE_ARIAL_NARROW
+}
+
+/// Arial Narrow mide de ancho un 82 % de Arial (la media de sus letras).
+const ANCHO_DE_ARIAL_NARROW: f32 = 0.82;
+
 /// Lee `entrada` y escribe el modelo en `salida` (por un temporal y
 /// `rename`: nadie ve nunca medio archivo). Devuelve un resumen.
 pub fn convertir_a(entrada: &Path, salida: &Path, carpeta_shx: &str) -> Result<String, String> {

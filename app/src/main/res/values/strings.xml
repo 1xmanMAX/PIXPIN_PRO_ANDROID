@@ -530,8 +530,8 @@
     <string name="plano_ver_todo">Ver todo el plano</string>
     <string name="plano_tema">Fondo claro u oscuro</string>
     <string name="plano_acotar">Acotar plano</string>
-    <string name="plano_pista_acotar">Toca los puntos para medir</string>
-    <string name="plano_pista_seguir">Toca el siguiente · doble toque termina</string>
+    <string name="plano_pista_acotar">Arrastra: el punto va en la mira, arriba del dedo · dos dedos mueven el plano</string>
+    <string name="plano_pista_seguir">Suelta para poner el punto · arrastra un asa para moverlo · ✓ termina</string>
     <string name="plano_quitar_punto">Quitar el último punto</string>
     <string name="plano_terminar">Terminar la cota</string>
     <string name="plano_borrar_cotas">Borrar las cotas</string>
