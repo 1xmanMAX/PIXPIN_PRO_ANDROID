@@ -109,8 +109,11 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
             val n = modelo.tramosTrama.visibles(vx0, vy0, vx1, vy1, px * 2f, salida)
             for (i in 0 until n) GLES30.glDrawElements(GLES30.GL_TRIANGLES, salida[2 * i + 1], GLES30.GL_UNSIGNED_INT, salida[2 * i] * 4)
         }
-        // 3. Rayas (tiras cortadas por el índice 0xFFFFFFFF: en ES 3 el corte va siempre puesto).
+        // 3. Rayas: tiras cortadas por el índice 0xFFFFFFFF. **El corte hay que encenderlo**
+        // (9-oct-2026): sin él, ese índice se lee como un vértice más —basura, casi siempre el
+        // centro del plano— y cada tira acababa en un abanico de rayas hacia el medio.
         if (modelo.lineas.cuantos > 0) {
+            GLES30.glEnable(GLES30.GL_PRIMITIVE_RESTART_FIXED_INDEX)
             vista(progSimple)
             GLES30.glLineWidth(grosor)
             GLES30.glBindVertexArray(vaos[0])
