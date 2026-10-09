@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2">
+<Units><Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter"/></Units>
+<Surfaces><Surface name="TN"><Definition surfType="TIN"><Pnts>
+<P id="1">0 0 10</P>
+<P id="2">0 100 12</P>
+<P id="3">100 100 15</P>
+<P id="4">100 0 11</P>
+<P id="5">50 50 20</P>
+</Pnts><Faces>
+<F>1 2 5</F>
+<F>2 3 5</F>
+<F>3 4 5</F>
+<F>4 1 5</F>
+</Faces></Definition></Surface></Surfaces>
+<Alignments><Alignment name="EJE 1" length="141.42" staStart="0"><CoordGeom><Line><Start>0 0</Start><End>100 100</End></Line></CoordGeom></Alignment></Alignments>
+</LandXML>

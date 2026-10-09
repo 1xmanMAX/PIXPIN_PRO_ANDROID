@@ -9,6 +9,14 @@
 
 #[path = "pc/convertir.rs"]
 pub mod convertir;
+#[path = "pc/convertir3d.rs"]
+pub mod convertir3d;
+#[path = "pc/modelo3d.rs"]
+pub mod modelo3d;
+#[path = "pc/proxy.rs"]
+pub mod proxy;
+#[path = "pc/bim/mod.rs"]
+pub mod bim;
 #[path = "pc/leer.rs"]
 pub mod leer;
 #[path = "pc/modelo.rs"]
@@ -145,4 +153,65 @@ pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_convertir<'a>(
         Ok(_) => std::ptr::null_mut(),
         Err(m) => env.new_string(m).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
     }
+}
+
+/// Lee un modelo 3D —un plano DWG/DXF en 3D, un LandXML o un fichero de puntos de Civil 3D, un
+/// IFC o un Revit— y lo deja en `salida` con el formato del PC (PX3D, `Modelo3d::a_bytes`).
+pub fn convertir_3d_a(entrada: &Path, salida: &Path) -> Result<String, String> {
+    let modelo = std::panic::catch_unwind(|| bim::convertir_fichero(entrada)).map_err(|_| "el lector de modelos se cayó".to_string())??;
+    if modelo.vacio() {
+        return Err("no tiene nada que se vea en 3D".into());
+    }
+    let temporal = salida.with_extension("tmp");
+    std::fs::write(&temporal, modelo.a_bytes()).map_err(|e| e.to_string())?;
+    std::fs::rename(&temporal, salida).map_err(|e| e.to_string())?;
+    Ok(format!("{} vértices, {} elementos", modelo.vertices.len(), modelo.elementos.len()))
+}
+
+/// Un Revit pasado a IFC4 (lo enseña el croquis 3D, que ya lee IFC).
+pub fn revit_a_ifc_en(entrada: &Path, salida: &Path) -> Result<(), String> {
+    let ifc = std::panic::catch_unwind(|| bim::revit_a_ifc(entrada)).map_err(|_| "el lector de Revit se cayó".to_string())??;
+    let temporal = salida.with_extension("tmp");
+    std::fs::write(&temporal, ifc).map_err(|e| e.to_string())?;
+    std::fs::rename(&temporal, salida).map_err(|e| e.to_string())
+}
+
+fn texto_de<'a>(env: &mut jni::JNIEnv<'a>, s: &jni::objects::JString<'a>) -> String {
+    env.get_string(s).map(String::from).unwrap_or_default()
+}
+
+fn resultado(env: &mut jni::JNIEnv, r: Result<(), String>) -> jni::sys::jstring {
+    match r {
+        Ok(()) => std::ptr::null_mut(),
+        Err(m) => env.new_string(m).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut()),
+    }
+}
+
+/// `PlanoNativo.convertir3d(entrada, salida): String?` — null si salió bien.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_convertir3d<'a>(
+    mut env: jni::JNIEnv<'a>, _c: jni::objects::JClass<'a>, entrada: jni::objects::JString<'a>, salida: jni::objects::JString<'a>,
+) -> jni::sys::jstring {
+    let (e, s) = (texto_de(&mut env, &entrada), texto_de(&mut env, &salida));
+    let r = convertir_3d_a(Path::new(&e), Path::new(&s)).map(|_| ());
+    resultado(&mut env, r)
+}
+
+/// `PlanoNativo.revitAIfc(entrada, salida): String?` — null si salió bien.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_revitAIfc<'a>(
+    mut env: jni::JNIEnv<'a>, _c: jni::objects::JClass<'a>, entrada: jni::objects::JString<'a>, salida: jni::objects::JString<'a>,
+) -> jni::sys::jstring {
+    let (e, s) = (texto_de(&mut env, &entrada), texto_de(&mut env, &salida));
+    let r = revit_a_ifc_en(Path::new(&e), Path::new(&s));
+    resultado(&mut env, r)
+}
+
+/// `PlanoNativo.esDeCivil(ruta): Boolean` — un LandXML o un fichero de puntos (mirando dentro).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_esDeCivil<'a>(
+    mut env: jni::JNIEnv<'a>, _c: jni::objects::JClass<'a>, ruta: jni::objects::JString<'a>,
+) -> jni::sys::jboolean {
+    let r = texto_de(&mut env, &ruta);
+    std::panic::catch_unwind(|| bim::es_de_civil(Path::new(&r))).unwrap_or(false) as jni::sys::jboolean
 }

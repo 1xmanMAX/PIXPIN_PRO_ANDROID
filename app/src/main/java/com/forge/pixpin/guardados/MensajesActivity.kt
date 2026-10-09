@@ -6674,6 +6674,23 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // Ver [com.forge.pixpin.planos.PlanoActivity].
                     com.forge.pixpin.planos.PlanoActivity.esPlano(m.nombre) || com.forge.pixpin.planos.PlanoActivity.esPlano(ruta) ->
                         com.forge.pixpin.planos.PlanoActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })
+                    // **Un Revit** (9-oct-2026, lo del PC): se pasa a IFC —en el proceso de los planos— y
+                    // se abre donde se abren los IFC, el croquis 3D.
+                    com.forge.pixpin.planos.LectorDePlanos.esRevit(m.nombre) || com.forge.pixpin.planos.LectorDePlanos.esRevit(ruta) -> lifecycleScope.launch {
+                        Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.revit_pasando), Toast.LENGTH_SHORT).show()
+                        when (val r = withContext(Dispatchers.IO) { com.forge.pixpin.planos.LectorDePlanos.revitAIfc(this@MensajesActivity, File(ruta)) }) {
+                            is com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Listo -> com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(
+                                this@MensajesActivity, r.archivo, m.nombre.ifBlank { File(ruta).name }.substringBeforeLast('.') + ".ifc"
+                            )
+                            is com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Fallo -> {
+                                Toast.makeText(this@MensajesActivity, r.motivo, Toast.LENGTH_LONG).show()
+                                abrirFuera(ruta)
+                            }
+                        }
+                    }
+                    // **Civil 3D: un LandXML o un fichero de puntos** (PNEZD, ENZ…), mirando dentro: al visor 3D.
+                    com.forge.pixpin.planos.LectorDePlanos.esDeCivil(ruta, m.nombre.ifBlank { null }) ->
+                        com.forge.pixpin.planos.Visor3DActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })
                     // **Un Word se lee aquí dentro** (19-sep-2026): se saca lo que dice —texto, tablas
                     // e imágenes, sin la maquetación de la página— a un HTML que enseña el mismo visor
                     // de las páginas web. Convertir es abrir un ZIP y leer XML: fuera del hilo que

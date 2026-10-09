@@ -339,3 +339,52 @@ object Geometria {
         return doubleArrayOf(ax + t * dx, ay + t * dy)
     }
 }
+
+/**
+ * **El tamaño de lo anotado en un plano** (9-oct-2026, el usuario: «las tintas son muy gruesas y
+ * todas las herramientas se ven desproporcionadamente grandes»). La capa de anotar mide en
+ * «unidades de capa»; el motor pone de fábrica la letra a 20 y la raya a 2. Antes una unidad era la
+ * milésima del lado del plano: al acercarse a anotar, una raya «fina» medía metros. Ahora una
+ * unidad es **la vigésima parte de la letra típica del plano** (la mediana de sus textos): el texto
+ * anotado sale del tamaño de los textos del plano y la raya, en proporción, como en un dibujo.
+ *
+ * Se guarda al lado de la capa (`<capa>.escala`, viaja con ella): lo anotado antes, con la medida
+ * vieja, se sigue viendo en su sitio y a su tamaño.
+ */
+object EscalaDeLaCapa {
+    /** La de antes del 9-oct-2026: la milésima del lado del plano. */
+    fun antigua(m: ModeloCad): Double =
+        (maxOf(m.caja[2] - m.caja[0], m.caja[3] - m.caja[1]).toDouble() / 1000.0).takeIf { it > 0 && it.isFinite() } ?: 1.0
+
+    /**
+     * La de ahora: la altura de letra más común del plano / 20. Cada tramo de letras dice su tamaño
+     * en potencias de dos (de 2ⁿ a 2ⁿ⁺¹); se toma el medio. Sin textos, la cinco milésima del lado.
+     */
+    fun deLasLetras(m: ModeloCad): Double {
+        val t = m.tramosLetras
+        val porTamano = java.util.TreeMap<Float, Long>()
+        for (i in 0 until t.n) if (t.tamano[i] > 0f && t.tamano[i].isFinite()) porTamano.merge(t.tamano[i], t.cuantos[i].toLong(), Long::plus)
+        val total = porTamano.values.sum()
+        if (total > 0) {
+            var cuenta = 0L
+            for ((tam, n) in porTamano) {
+                cuenta += n
+                if (cuenta * 2 >= total) return tam * 1.4 / 20.0
+            }
+        }
+        return antigua(m) / 5.0
+    }
+
+    /** La de la capa en [rutaDeLaCapa]: la apuntada, la vieja si ya había capa sin apuntar, o la nueva. */
+    fun leerOPoner(rutaDeLaCapa: java.io.File, m: ModeloCad): Double {
+        val junto = java.io.File(rutaDeLaCapa.path.removeSuffix(".excalidraw.gz") + ".escala")
+        junto.takeIf { it.isFile }?.readText()?.trim()?.toDoubleOrNull()?.takeIf { it > 0 && it.isFinite() }?.let { return it }
+        return if (rutaDeLaCapa.isFile) antigua(m) else deLasLetras(m)
+    }
+
+    /** Se apunta junto a la capa al guardarla (no al abrir: abrir un plano no deja archivos). */
+    fun apuntar(rutaDeLaCapa: java.io.File, u: Double) {
+        val junto = java.io.File(rutaDeLaCapa.path.removeSuffix(".excalidraw.gz") + ".escala")
+        if (!junto.isFile) runCatching { junto.parentFile?.mkdirs(); junto.writeText(u.toString()) }
+    }
+}

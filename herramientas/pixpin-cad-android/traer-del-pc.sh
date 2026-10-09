@@ -10,7 +10,14 @@ AQUI=$(cd "$(dirname "$0")" && pwd)
 PC=${1:?Falta la ruta del repositorio PIXPIN_PRO_WINDOWS}
 SRC="$PC/crates/pixpin-cad/src"
 mkdir -p "$AQUI/src/pc"
-for f in convertir leer modelo relleno shx teselar texto; do cp "$SRC/$f.rs" "$AQUI/src/pc/"; done
+for f in convertir leer modelo relleno shx teselar texto proxy convertir3d modelo3d; do cp "$SRC/$f.rs" "$AQUI/src/pc/"; done
+# Lo de BIM y Civil 3D (crates/pixpin-bim): en un solo crate aquí, así que `pixpin_cad::` es `crate::`.
+mkdir -p "$AQUI/src/pc/bim"
+cp "$PC/crates/pixpin-bim/src/civil.rs" "$AQUI/src/pc/bim/civil.rs"
+cp "$PC/crates/pixpin-bim/src/lib.rs" "$AQUI/src/pc/bim/mod.rs"
+sed -i 's/pixpin_cad::/crate::/g' "$AQUI/src/pc/bim/civil.rs" "$AQUI/src/pc/bim/mod.rs"
+# Android abre el Revit pasándolo a IFC (y el IFC lo enseña el croquis 3D): esa función, pública.
+sed -i 's/^fn revit_a_ifc(/pub fn revit_a_ifc(/' "$AQUI/src/pc/bim/mod.rs"
 (cd "$PC" && git rev-parse --short HEAD) > "$AQUI/src/pc/COMMIT_DEL_PC"
 python3 - "$AQUI/src/pc" <<'FIN'
 import sys, pathlib
@@ -87,6 +94,7 @@ cambiar("convertir.rs", "        let t = m.por(&ocs(normal));\n        let fuent
         "        let t = m.por(&ocs(normal)).por(&crate::volteo(volteo, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), h, v, giro));\n        let fuente = self.fuente_de(estilo);\n        self.textos.simple(")
 cambiar("convertir.rs", "t.vertical_alignment as u8, &t.normal, color, &m);", "t.vertical_alignment as u8, &t.normal, color, &m, t.generation_flags);")
 cambiar("convertir.rs", "a.vertical_alignment as u8, &a.normal, color, m);", "a.vertical_alignment as u8, &a.normal, color, m, 0);")
+cambiar("convertir.rs", "&z, c.unwrap_or(color), m);", "&z, c.unwrap_or(color), m, 0);")
 # Fuentes SHX: la carpeta que diga la app (AutoCAD no está en un teléfono).
 cambiar("shx.rs", 'pub fn carpetas() -> Vec<PathBuf> {\n    let mut v = Vec::new();',
         'pub fn carpetas() -> Vec<PathBuf> {\n    let mut v: Vec<PathBuf> = crate::carpetas_shx_android();')

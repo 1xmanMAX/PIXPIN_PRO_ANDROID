@@ -24,6 +24,12 @@ lyon_tessellation = "1.0"
 ttf-parser = "0.25"
 tracing = "0.1"
 jni = { version = "0.21", default-features = false }
+# Lo del visor de modelos 3D del PC (crates/pixpin-bim), igual que allí:
+# IFC con ifc-lite (MPL-2.0), Revit con rvt-rs (Apache-2.0), LandXML y puntos de Civil 3D.
+ifc-lite-processing = "20.3"
+rvt = { git = "https://github.com/DrunkOnJava/rvt-rs", rev = "120e2f9" }
+roxmltree = "0.20"
+delaunator = "1.0"
 
 [profile.release]
 opt-level = 3

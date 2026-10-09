@@ -113,41 +113,64 @@ class PlanoActivity : ComponentActivity() {
     // **Anotar encima del plano** (9-oct-2026, el usuario: «agregar texto en cualquier parte y
     // poder rayar como en el lienzo»). Con el motor de dibujo de siempre —el del lienzo y los
     // lectores: un solo motor en toda la app—, en una capa propia del plano guardada como la de un
-    // Word anotado (`anot-<uid del mensaje>`, que viaja al sincronizar). Una unidad de la capa es la
-    // milésima del lado del plano ([unidadEscena]): sale del propio plano, así que la capa cae en
-    // su sitio en cualquier aparato sin guardar nada más. La y de la capa baja; la del plano sube.
+    // Word anotado (`anot-<uid del mensaje>`, que viaja al sincronizar, también con el PC). Con
+    // ella, las cotas y los marcos para imprimir, y su `.hoja`: ver [CapaDelPlano]. La y de la capa
+    // baja; la del plano sube.
 
     /** La capa de anotar; null hasta que se lee el plano. */
     private var capa: com.forge.pixpin.motor.DrawController? = null
     private var idCapa = ""
-    /** Unidades del plano por unidad de la capa. */
-    private var unidadEscena = 1.0
+    /** Cómo cae la capa en el plano (de su `.hoja`, o nuevo). */
+    private var encaje = CapaDelPlano.Encaje(1.0, 0.0, 0.0)
+    /** Las cotas y los marcos de ahora, para guardarlos en la capa (los copia la pantalla). */
+    @Volatile private var cotasParaGuardar: List<List<DoubleArray>> = emptyList()
+    @Volatile private var marcosParaGuardar: List<ImprimirPlano.Marco> = emptyList()
     /** Sube cuando cambia lo anotado (para repintarlo sin recomponer). */
     private var cambiosEnLaCapa by mutableIntStateOf(0)
 
     /** La vista de la capa que cae justo donde mira la cámara del plano. */
     private fun vistaDeLaCapa(): com.forge.pixpin.motor.Viewport? {
         val c = camara ?: return null
-        val u = unidadEscena
+        val e = encaje
         return com.forge.pixpin.motor.Viewport(
-            scrollX = (ancho / 2.0 * c.px - c.centroX) / u,
-            scrollY = (alto / 2.0 * c.px + c.centroY) / u,
-            zoom = u / c.px
+            scrollX = (ancho / 2.0 * c.px + e.ceroX - c.centroX) / e.u,
+            scrollY = (alto / 2.0 * c.px + c.centroY - e.ceroY) / e.u,
+            zoom = e.u / c.px
         )
     }
 
     /** Al revés: la cámara del plano que corresponde a la vista de la capa (anotando, manda ella). */
     private fun camaraDeLaCapa(v: com.forge.pixpin.motor.Viewport): CamaraPlano {
-        val u = unidadEscena
-        val px = u / v.zoom.coerceAtLeast(1e-12)
-        return CamaraPlano(ancho / 2.0 * px - v.scrollX * u, v.scrollY * u - alto / 2.0 * px, px)
+        val e = encaje
+        val px = e.u / v.zoom.coerceAtLeast(1e-12)
+        return CamaraPlano(ancho / 2.0 * px + e.ceroX - v.scrollX * e.u, v.scrollY * e.u + e.ceroY - alto / 2.0 * px, px)
     }
 
+    /**
+     * Guarda la capa con las cotas y los marcos de ahora dentro ([CapaDelPlano.con]) y su `.hoja`
+     * al lado. Un plano sin nada hecho no deja archivos.
+     */
     private fun guardarCapa() {
-        val escena = capa?.scene ?: return
+        val laCapa = capa ?: return
+        val m = modelo ?: return
         val id = idCapa.ifBlank { return }
+        val e = encaje
+        val nueva = CapaDelPlano.con(laCapa.scene, e, cotasParaGuardar, marcosParaGuardar, System.currentTimeMillis())
+        // Solo si cambió algo: cargar una escena nueva en el motor le vacía el deshacer.
+        if (nueva.elements != laCapa.scene.elements) laCapa.load(nueva)
+        val escena = laCapa.scene
         val contexto = applicationContext
-        lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena) } }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val ruta = java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, id))
+            if (escena.elements.isEmpty() && !ruta.isFile) return@launch
+            runCatching {
+                // La hoja antes que la capa: una capa sin su hoja al lado se leería con otra escala.
+                val hoja = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(contexto.filesDir, id)
+                val texto = CapaDelPlano.hojaDe(e, m.caja).aTexto()
+                if (!hoja.isFile || hoja.readText() != texto) hoja.writeText(texto)
+                com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena)
+            }
+        }
     }
 
     /** Lo anotado pintado sobre el plano en [lienzo] (pantalla o papel) con la vista [v]. */
@@ -268,21 +291,30 @@ class PlanoActivity : ComponentActivity() {
             r.onSuccess { m ->
                 if (m.vacio) { estado = getString(com.forge.pixpin.R.string.plano_vacio); return@onSuccess }
                 modelo = m
-                unidadEscena = (maxOf(m.caja[2] - m.caja[0], m.caja[3] - m.caja[1]).toDouble() / 1000.0).takeIf { it > 0 && it.isFinite() } ?: 1.0
                 capa = withContext(Dispatchers.IO) {
                     runCatching {
                         idCapa = com.forge.pixpin.ui.ExportarDocumentoAnotado.idDeLaCapa(original, com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@PlanoActivity, original))
+                        // Dónde cae la capa: lo que diga su `.hoja` (escrita aquí o en el PC); si no hay,
+                        // la escala de las letras del plano. Ver [CapaDelPlano].
+                        encaje = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, idCapa))
+                            ?.let { CapaDelPlano.encajeDe(it, m.caja) }
+                            ?: CapaDelPlano.Encaje(EscalaDeLaCapa.leerOPoner(File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)), m), 0.0, 0.0)
                         com.forge.pixpin.motor.DrawController(
                             com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)) ?: com.forge.pixpin.motor.Scene()
                         ).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
                     }.getOrNull()
                 }
+                // Las cotas y los marcos que había (de aquí o del PC).
+                capa?.let { c -> CapaDelPlano.leer(c.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms } }
                 pintor = PintorDePlano(m, grosor = (densidad / 1.5f).coerceIn(1f, 3f)).also {
                     it.claro = claro
                     it.alCambiarTamano = { w, h -> runOnUiThread { alCambiarTamano(w, h) } }
                 }
                 estado = null
                 listo = true
+                // **Civil 3D guardado sin su dibujo** (PROXYGRAPHICS = 0): se dice, como en el PC.
+                val sinDibujo = m.sinDibujar.filter { it.first.startsWith("sin dibujo: ") }.sumOf { it.second }
+                if (sinDibujo > 0) android.widget.Toast.makeText(this@PlanoActivity, getString(com.forge.pixpin.R.string.plano_sin_dibujo_civil, sinDibujo), android.widget.Toast.LENGTH_LONG).show()
                 // Los enganches de la cota, sin esperar a que se pidan (en un plano grande tardan).
                 lifecycleScope.launch(Dispatchers.Default) {
                     enganches = runCatching { Enganches.de(m) }.getOrNull()
@@ -303,6 +335,11 @@ class PlanoActivity : ComponentActivity() {
             }
         }
 
+        // Las cotas y los marcos se guardan en la capa al poco de cambiar (viajan con ella).
+        LaunchedEffect(hechas, hojas) {
+            cotasParaGuardar = hechas; marcosParaGuardar = hojas
+            if (listo) { delay(800); guardarCapa(); cambiosEnLaCapa++ }
+        }
         fun terminarCadena() {
             if (puntos.size >= 2) hechas = hechas + listOf(puntos)
             puntos = emptyList(); enganchado = null; marcos++
@@ -310,7 +347,7 @@ class PlanoActivity : ComponentActivity() {
         BackHandler {
             when {
                 acotando && puntos.isNotEmpty() -> terminarCadena()
-                anotando -> { anotando = false; guardarCapa(); cambiosEnLaCapa++; marcos++ }
+                anotando -> { anotando = false; capa?.let { c -> CapaDelPlano.leer(c.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms } }; guardarCapa(); cambiosEnLaCapa++; marcos++ }
                 acotando -> acotando = false
                 marcando -> marcando = false
                 else -> finish()
@@ -341,7 +378,8 @@ class PlanoActivity : ComponentActivity() {
                     if (laCapa != null && laCapa.scene.elements.isNotEmpty()) androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
                         @Suppress("UNUSED_VARIABLE") val leer = marcos + cambiosEnLaCapa
                         val v = vistaDeLaCapa() ?: return@Canvas
-                        pintorDeLaCapa(!claro).renderScene(drawContext.canvas.nativeCanvas, laCapa.scene.copy(viewport = v), size.width.toDouble(), size.height.toDouble())
+                        // Las cotas y los marcos los pinta el visor (con sus medidas); aquí, lo anotado.
+                        pintorDeLaCapa(!claro).renderScene(drawContext.canvas.nativeCanvas, CapaDelPlano.sinLoDelPlano(laCapa.scene).copy(viewport = v), size.width.toDouble(), size.height.toDouble())
                     }
                 }
                 val laCapa = capa
@@ -496,7 +534,7 @@ class PlanoActivity : ComponentActivity() {
                 Row(
                     Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
                         .clip(RoundedCornerShape(50)).background(Color(0xB314182B))
-                        .clickable { anotando = false; guardarCapa(); cambiosEnLaCapa++; marcos++ }
+                        .clickable { anotando = false; CapaDelPlano.leer(laCapa.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms }; guardarCapa(); cambiosEnLaCapa++; marcos++ }
                         .padding(horizontal = 14.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -548,6 +586,9 @@ class PlanoActivity : ComponentActivity() {
                                 if (claro) Icons.Filled.DarkMode else Icons.Filled.LightMode,
                                 contentDescription = getString(com.forge.pixpin.R.string.plano_tema), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
                             )
+                        }
+                        IconButton(onClick = { Visor3DActivity.abrir(this@PlanoActivity, original.absolutePath, nombre); toques++ }, modifier = Modifier.size(38.dp)) {
+                            Text("3D", color = blanco.copy(alpha = 0.9f), fontWeight = FontWeight.Bold)
                         }
                         IconButton(onClick = {
                             val laCapa = capa ?: return@IconButton
@@ -601,12 +642,15 @@ class PlanoActivity : ComponentActivity() {
                 preparandoLamina = false
                 val m = modelo
                 guardarCapa()
-                val escena = capa?.scene?.takeIf { it.elements.isNotEmpty() }
-                val u = unidadEscena
+                val escena = capa?.scene?.let(CapaDelPlano::sinLoDelPlano)?.takeIf { s -> s.elements.any { !it.isDeleted } }
+                val enc = encaje
                 // Lo anotado va en la hoja, con el motor de siempre (en vectores, sin modo noche).
                 val tinta: ((android.graphics.Canvas, Double, Double, Double, Float, Float) -> Unit)? = escena?.let { e ->
                     { lienzo, x0, y1, s, w, h ->
-                        pintorDeLaCapa(false).renderScene(lienzo, e.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = -x0 / u, scrollY = y1 / u, zoom = u * s)), w.toDouble(), h.toDouble())
+                        pintorDeLaCapa(false).renderScene(
+                            lienzo, e.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = (enc.ceroX - x0) / enc.u, scrollY = (y1 - enc.ceroY) / enc.u, zoom = enc.u * s)),
+                            w.toDouble(), h.toDouble()
+                        )
                     }
                 }
                 if (m != null) ImprimirPlano.imprimir(

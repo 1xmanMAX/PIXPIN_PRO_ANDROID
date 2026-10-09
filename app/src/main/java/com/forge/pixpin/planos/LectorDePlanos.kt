@@ -17,6 +17,15 @@ object PlanoNativo {
 
     /** Null si salió bien; si no, por qué. Bloquea (de segundos a un minuto en un plano grande). */
     @JvmStatic external fun convertir(entrada: String, salida: String, carpetaShx: String): String?
+
+    /** Un modelo 3D (plano en 3D, LandXML, puntos, IFC, Revit) al formato PX3D. Null si salió bien. */
+    @JvmStatic external fun convertir3d(entrada: String, salida: String): String?
+
+    /** Un Revit pasado a IFC4. Null si salió bien. */
+    @JvmStatic external fun revitAIfc(entrada: String, salida: String): String?
+
+    /** Si es un LandXML o un fichero de puntos de Civil 3D (mirando dentro). */
+    @JvmStatic external fun esDeCivil(ruta: String): Boolean
 }
 
 /**
@@ -39,6 +48,7 @@ class LectorDePlanos : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val modo = intent?.getStringExtra(MODO) ?: MODO_PLANO
         val entrada = intent?.getStringExtra(ENTRADA)?.let { File(it) }
         val salida = intent?.getStringExtra(SALIDA)?.let { File(it) }
         if (entrada == null || salida == null) { stopSelf(startId); return START_NOT_STICKY }
@@ -53,7 +63,11 @@ class LectorDePlanos : Service() {
                         !PlanoNativo.disponible -> "Este teléfono no puede leer planos (hace falta uno de 64 bits)"
                         !entrada.isFile -> "No se encuentra el archivo del plano"
                         else -> try {
-                            PlanoNativo.convertir(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
+                            when (modo) {
+                                MODO_3D -> PlanoNativo.convertir3d(entrada.absolutePath, salida.absolutePath)
+                                MODO_REVIT -> PlanoNativo.revitAIfc(entrada.absolutePath, salida.absolutePath)
+                                else -> PlanoNativo.convertir(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
+                            }
                         } catch (e: Throwable) {
                             e.message ?: e.javaClass.simpleName
                         }
@@ -73,10 +87,32 @@ class LectorDePlanos : Service() {
         const val PROCESO = ":planos"
         private const val ENTRADA = "entrada"
         private const val SALIDA = "salida"
+        private const val MODO = "modo"
+        private const val MODO_PLANO = "plano"
+        private const val MODO_3D = "3d"
+        private const val MODO_REVIT = "revit"
+
+        /** Lo que se ve en el visor 3D aunque no sea un plano: Revit, LandXML y puntos (estos, mirando dentro). */
+        fun esRevit(nombre: String?) = nombre?.lowercase()?.endsWith(".rvt") == true
+
+        /** Un .xml, .csv o .txt que es de Civil 3D (un LandXML o puntos PNEZD/ENZ…). Lee el principio del archivo. */
+        fun esDeCivil(ruta: String?, nombre: String?): Boolean {
+            val n = (nombre ?: ruta ?: return false).lowercase()
+            if (!(n.endsWith(".xml") || n.endsWith(".csv") || n.endsWith(".txt") || n.endsWith(".pnezd") || n.endsWith(".penzd") || n.endsWith(".nez"))) return false
+            return ruta != null && PlanoNativo.disponible && runCatching { PlanoNativo.esDeCivil(ruta) }.getOrDefault(false)
+        }
+
+        /** El modelo 3D de [archivo] (de la caché o leyéndolo aparte). Bloquea. */
+        fun leer3D(c: Context, archivo: File): Resultado =
+            pedir(c, archivo, File(carpeta(c), clave(archivo) + ".px3d"), MODO_3D, 300_000L)
+
+        /** Un Revit como IFC (de la caché o pasándolo aparte), para el croquis 3D. Bloquea. */
+        fun revitAIfc(c: Context, archivo: File): Resultado =
+            pedir(c, archivo, File(carpeta(c), clave(archivo) + ".ifc"), MODO_REVIT, 600_000L)
         /** Cuántos planos se guardan ya leídos (los más recientes), como en el PC. */
         private const val EN_CACHE = 24
         /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
-        const val VERSION_DEL_FORMATO = 4
+        const val VERSION_DEL_FORMATO = 5
         /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo): lo leído antes se rehace. */
         const val REVISION_DE_LETRAS = 2
 
@@ -141,6 +177,11 @@ class LectorDePlanos : Service() {
             // Con la versión del formato en el nombre: lo leído con otra versión no se usa (ni se
             // confunde con roto) y se va solo al podar.
             val salida = File(carpeta, clave(plano) + ".v$VERSION_DEL_FORMATO-$REVISION_DE_LETRAS.pxcad")
+            return pedir(c, plano, salida, MODO_PLANO, tope)
+        }
+
+        private fun pedir(c: Context, plano: File, salida: File, modo: String, tope: Long): Resultado {
+            val carpeta = salida.parentFile ?: carpeta(c)
             if (salida.isFile && salida.length() > 8) {
                 salida.setLastModified(System.currentTimeMillis())
                 return Resultado.Listo(salida)
@@ -149,7 +190,7 @@ class LectorDePlanos : Service() {
             podar(carpeta)
             try {
                 c.startService(
-                    Intent(c, LectorDePlanos::class.java).putExtra(ENTRADA, plano.absolutePath).putExtra(SALIDA, salida.absolutePath)
+                    Intent(c, LectorDePlanos::class.java).putExtra(ENTRADA, plano.absolutePath).putExtra(SALIDA, salida.absolutePath).putExtra(MODO, modo)
                 ) ?: return Resultado.Fallo("No se pudo empezar a leer el plano")
             } catch (e: Throwable) {
                 return Resultado.Fallo("No se pudo empezar a leer el plano")
@@ -190,7 +231,8 @@ class LectorDePlanos : Service() {
 
         /** Deja solo los [EN_CACHE] planos más recientes. */
         private fun podar(carpeta: File) {
-            val v = carpeta.listFiles()?.filter { it.name.endsWith(".pxcad") }?.sortedByDescending { it.lastModified() } ?: return
+            val v = carpeta.listFiles()?.filter { it.name.endsWith(".pxcad") || it.name.endsWith(".px3d") || it.name.endsWith(".ifc") }
+                ?.sortedByDescending { it.lastModified() } ?: return
             v.drop(EN_CACHE).forEach { it.delete() }
             // Y los restos de lecturas que se quedaron a medias.
             carpeta.listFiles()?.filter { it.name.endsWith(".tmp") && System.currentTimeMillis() - it.lastModified() > 3_600_000 }?.forEach { it.delete() }

@@ -543,6 +543,16 @@
     <string name="plano_imprimir">Imprimir</string>
     <string name="plano_dejar_de_marcar">Dejar de marcar</string>
     <string name="plano_lamina">Lámina para imprimir</string>
+    <string name="plano_3d">Ver en 3D</string>
+    <string name="plano_sin_dibujo_civil">%1$d objetos de Civil 3D se guardaron sin su dibujo: guárdalo con PROXYGRAPHICS = 1 o exporta a LandXML</string>
+    <string name="modelo3d_abriendo">Abriendo el modelo…</string>
+    <string name="modelo3d_vacio">El modelo no tiene nada que se vea en 3D</string>
+    <string name="modelo3d_no">No se pudo abrir el modelo</string>
+    <string name="modelo3d_aristas">Aristas</string>
+    <string name="modelo3d_planta">Vista en planta</string>
+    <string name="modelo3d_corte">Cortar el modelo</string>
+    <string name="modelo3d_altura_corte">Corte %1$s</string>
+    <string name="revit_pasando">Pasando el Revit a IFC…</string>
     <string name="plano_anotar">Anotar: texto y trazos</string>
     <string name="plano_listo">Listo</string>
     <string name="plano_con_membrete">Con marco y membrete</string>
