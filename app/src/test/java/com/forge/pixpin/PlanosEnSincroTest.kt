@@ -105,7 +105,7 @@ class PlanosEnSincroTest {
         assertTrue(!m.vacio)
         assertTrue("la superficie", m.nOpacos >= 12)
         assertTrue("curvas de nivel o el eje", m.nLineas > 0)
-        assertTrue(m.elementos.any { it.second == "TN" || it.first.contains("Superficie", true) })
+        assertTrue(m.elementos.any { it.nombre == "TN" || it.tipo.contains("Superficie", true) })
         // De 10 a 20 m de cota.
         assertEquals(10.0, (m.caja[5] - m.caja[2]).toDouble(), 0.5)
         // Un modelo roto no se lee.

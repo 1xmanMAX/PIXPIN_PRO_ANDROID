@@ -21,3 +21,13 @@ ifc-lite (en el edificio del usuario, una losa a 0,5 m); lo que se veía «desco
 viene sobre todo de pintar sin búfer de profundidad. En el visor 3D eso no pasa.
 
 Nada de esto se ha visto en un teléfono.
+
+## Lo del PC del 10-oct (`9625d0d`) en Android (v0.117.0)
+
+| Del PC | En Android |
+|---|---|
+| Panel de **niveles y categorías** del visor 3D (`ventana3d/arbol.rs`): cuántos elementos y su volumen; clic muestra u oculta, Ctrl + clic deja solo ese, «Mostrar todo» | `planos/ArbolDelModelo.kt` (las cuentas) y el panel de `Visor3DActivity` (botón de capas, a la derecha): **un toque** muestra u oculta, **mantener** deja solo ese. Lo ocultado a mano se suma a lo del panel. Pruebas: `ArbolDelModeloTest` (las tres del PC y el lector). |
+| Niveles del IFC (`pixpin-bim/src/niveles.rs`: `IfcBuildingStorey`, `IfcRelContainedInSpatialStructure`, `IfcRelAggregates`), y así de Revit | Traído tal cual al `.so` (`traer-del-pc.sh` copia `niveles.rs`). |
+| Volumen, área en planta y en alzado de cada elemento (`medir` en `modelo3d.rs`); la pastilla dice nivel, m³ y m² | La pastilla de lo tocado usa `ArbolDelModelo.describir` (mismo texto que el PC; «≈» si la malla no es cerrada). |
+| Caché PX3D **v3** | `Modelo3D` lee v3; la caché pasa a `<clave>.v3.px3d` (las viejas se rehacen). |
+| (`c493abb`) SHX de Hershey dentro del programa y volteo de los TEXT: lo de Android adoptado | El guion ya no parchea eso: `include_bytes!` apunta a `app/src/main/assets/fuentes-shx`. PXCAD **v6** (igual que v5): `ModeloCad` lee las dos. |

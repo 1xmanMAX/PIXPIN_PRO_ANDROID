@@ -552,7 +552,11 @@
     <string name="modelo3d_planta">Vista en planta</string>
     <string name="modelo3d_corte">Caja de sección</string>
     <string name="modelo3d_altura_corte">Corte %1$s</string>
-    <string name="modelo3d_piezas">Piezas</string>
+    <string name="modelo3d_piezas">Niveles y categorías</string>
+    <string name="modelo3d_niveles">NIVELES</string>
+    <string name="modelo3d_categorias">CATEGORÍAS</string>
+    <string name="modelo3d_sin_nivel">Sin nivel</string>
+    <string name="modelo3d_solo_ese_pista">Mantén pulsado para dejar solo ese</string>
     <string name="modelo3d_medir">Medir</string>
     <string name="modelo3d_al_croquis">Al croquis 3D</string>
     <string name="modelo3d_ocultar">Ocultar</string>

@@ -7,7 +7,7 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /**
- * **Un plano DWG/DXF ya leído**, tal como lo deja el visor del PC en su caché (formato PXCAD v5,
+ * **Un plano DWG/DXF ya leído**, tal como lo deja el visor del PC en su caché (formato PXCAD v5 o v6,
  * `Modelo::a_bytes` de `crates/pixpin-cad/src/modelo.rs`). Lo escribe `libpixpincad.so` —la
  * misma lectura del PC, compilada para Android— en el proceso `:planos`; aquí solo se lee.
  *
@@ -108,7 +108,9 @@ class ModeloCad private constructor(
         /** El índice que corta una tira de rayas (el reinicio fijo de OpenGL ES 3). */
         const val CORTE: Int = -1
         const val GLIFO_DE_RAYAS: Int = Int.MIN_VALUE
-        private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), 'C'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte(), 0, 0, 5)
+        private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), 'C'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte(), 0, 0)
+        /** Las versiones que se leen: la 6 del PC (c493abb) es la 5 tal cual, cambiada solo para rehacer su caché. */
+        private val VERSIONES = setOf<Byte>(5, 6)
 
         /** Proyecta [archivo] en memoria y lo lee. */
         fun abrir(archivo: File): ModeloCad {
@@ -119,7 +121,8 @@ class ModeloCad private constructor(
         fun deBytes(b: ByteBuffer): ModeloCad {
             val d = b.duplicate().order(ByteOrder.LITTLE_ENDIAN)
             if (d.remaining() < 8 || (d.remaining() - 8) % 4 != 0) throw NoSeLee("No es un plano leído")
-            for (i in 0 until 8) if (d.get(i) != MAGIA[i]) throw NoSeLee("No es un plano leído (o es de otra versión)")
+            for (i in 0 until 7) if (d.get(i) != MAGIA[i]) throw NoSeLee("No es un plano leído")
+            if (d.get(7) !in VERSIONES) throw NoSeLee("No es un plano leído (o es de otra versión)")
             d.position(8)
             val p = d.slice().order(ByteOrder.LITTLE_ENDIAN)
             val r = Lector(p)

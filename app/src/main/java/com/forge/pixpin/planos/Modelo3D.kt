@@ -12,7 +12,7 @@ import kotlin.math.tan
 
 /**
  * **Un modelo 3D ya leído** —un plano DWG/DXF visto en 3D, un LandXML o un fichero de puntos de
- * Civil 3D, un IFC o un Revit—, en el formato del visor de modelos del PC (PX3D v2,
+ * Civil 3D, un IFC o un Revit—, en el formato del visor de modelos del PC (PX3D v3,
  * `Modelo3d::a_bytes` de `crates/pixpin-cad/src/modelo3d.rs`). Lo escribe `libpixpincad.so` en el
  * proceso `:planos`; aquí se lee proyectado en memoria y se sube tal cual a la tarjeta.
  *
@@ -32,9 +32,24 @@ class Modelo3D private constructor(
     val aristas: ByteBuffer, val nAristas: Int,
     val lineas: ByteBuffer, val nLineas: Int,
     val puntos: ByteBuffer, val nPuntos: Int,
-    /** De cada elemento: su clase (`IfcWall`, `Superficie`…) y su nombre. */
-    val elementos: List<Pair<String, String>>,
+    /** De cada elemento: su clase (`IfcWall`, `Superficie`…), su nombre, su nivel y lo que mide. */
+    val elementos: List<Elemento>,
+    /** Los niveles (plantas), de abajo arriba; vacío si el modelo no los tiene. */
+    val niveles: List<Nivel>,
 ) {
+    /** Un elemento: [nivel] es su índice en [niveles] o -1. */
+    data class Elemento(val tipo: String, val nombre: String, val nivel: Int = -1, val medidas: Medidas = Medidas())
+
+    /**
+     * Lo que mide un elemento, sacado de sus triángulos en el PC (`medir` de `modelo3d.rs`), en
+     * unidades del modelo: el volumen (exacto solo si la malla es [cerrado]), el área en planta (lo
+     * que mira arriba), la de una cara en alzado (lo vertical, entre dos) y toda la superficie.
+     */
+    data class Medidas(val volumen: Float = 0f, val planta: Float = 0f, val alzado: Float = 0f, val superficie: Float = 0f, val cerrado: Boolean = false)
+
+    /** Un nivel: el `IfcBuildingStorey` o el Level de Revit, con su cota en metros. */
+    data class Nivel(val nombre: String, val cota: Double)
+
     fun x(v: Int) = vertices.getFloat(v * 24)
     fun y(v: Int) = vertices.getFloat(v * 24 + 4)
     fun z(v: Int) = vertices.getFloat(v * 24 + 8)
@@ -67,7 +82,7 @@ class Modelo3D private constructor(
     class NoSeLee(mensaje: String) : Exception(mensaje)
 
     companion object {
-        private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), '3'.code.toByte(), 'D'.code.toByte(), 0, 0, 0, 2)
+        private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), '3'.code.toByte(), 'D'.code.toByte(), 0, 0, 0, LectorDePlanos.VERSION_3D.toByte())
 
         fun abrir(archivo: File): Modelo3D {
             val datos = RandomAccessFile(archivo, "r").use { it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.length()) }
@@ -102,8 +117,18 @@ class Modelo3D private constructor(
             val ne = u()
             if (ne < 0 || ne > d.limit()) throw NoSeLee("Modelo leído roto")
             fun texto(): String { val n = u(); if (n < 0) throw NoSeLee("Modelo leído roto"); hay(n.toLong()); val by = ByteArray(n); for (k in 0 until n) by[k] = d.get(i + k); i += n; return String(by, Charsets.UTF_8) }
-            val elementos = List(ne) { texto() to texto() }
-            return Modelo3D(origen, caja, metros, vertices, nv, op, nOp, tr, nTr, ar, nAr, li, nLi, pu, nPu, elementos)
+            val elementos = List(ne) {
+                val tipo = texto(); val nombre = texto()
+                val nivel = u()
+                hay(17)
+                val md = Medidas(f(), f(), f(), f(), d.get(i) != 0.toByte()).also { i += 1 }
+                Elemento(tipo, nombre, if (nivel == -1) -1 else nivel, md)
+            }
+            val nn = u()
+            if (nn < 0 || nn > d.limit()) throw NoSeLee("Modelo leído roto")
+            val niveles = List(nn) { val n = texto(); hay(8); Nivel(n, d.getDouble(i).also { i += 8 }) }
+            if (elementos.any { it.nivel < -1 || it.nivel >= nn }) throw NoSeLee("Modelo leído roto")
+            return Modelo3D(origen, caja, metros, vertices, nv, op, nOp, tr, nTr, ar, nAr, li, nLi, pu, nPu, elementos, niveles)
         }
 
         private fun trozo(d: ByteBuffer, desde: Int, largo: Int): ByteBuffer {
@@ -423,7 +448,7 @@ object ModeloAMalla {
         }
         var actual = if (orden.isEmpty()) -1 else elem[orden[0]]
         fun cerrar(e: Int) {
-            val (tipo, nombre) = m.elementos.getOrNull(e) ?: ("" to "")
+            val (tipo, nombre) = m.elementos.getOrNull(e) ?: Modelo3D.Elemento("", "")
             c.cerrarPieza(nombre.ifBlank { TiposIfc.legible(tipo) }, tipo.uppercase())
         }
         for (tt in orden) {

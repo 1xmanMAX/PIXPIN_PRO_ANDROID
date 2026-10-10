@@ -12,7 +12,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FitScreen
@@ -62,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -91,9 +95,13 @@ import java.io.File
  *
  * **Desde el 10-oct-2026 abre también los IFC y los Revit** que antes iban al croquis 3D (pedido por
  * el usuario: «ábrelos como en Windows, en una app separada, que en el canvas 3D se ve todo
- * descolocado»). Y lo que en el croquis tenía el panel del modelo: **piezas por tipo** que se
- * esconden, **ocultar** o **aislar** lo tocado, **medir** entre dos puntos del modelo, y **llevarlo
- * al croquis** (leído con esta misma lectura) para dibujar encima.
+ * descolocado»). Y lo que en el croquis tenía el panel del modelo: **ocultar** o **aislar** lo
+ * tocado, **medir** entre dos puntos del modelo, y **llevarlo al croquis** (leído con esta misma
+ * lectura) para dibujar encima.
+ *
+ * **Niveles y categorías** (PC `9625d0d`): un panel con las plantas del edificio y las categorías
+ * (muros, losas…), cada una con cuántos elementos tiene y su volumen; un toque la muestra u oculta
+ * y mantener deja solo esa ([ArbolDelModelo]). Lo tocado dice su nivel, su volumen y su área.
  */
 class Visor3DActivity : ComponentActivity() {
     private var vista: GLSurfaceView? = null
@@ -102,6 +110,8 @@ class Visor3DActivity : ComponentActivity() {
     private var orbita: Orbita? = null
     /** La caja del elemento aislado (lo que se encuadra con «ver todo»), o null. */
     private var cajaAislada: FloatArray? = null
+    /** Los niveles y las categorías del modelo (el panel). */
+    private var arbol: ArbolDelModelo? = null
     private var ancho = 0
     private var alto = 0
     private val prefs by lazy { getSharedPreferences("planos", Context.MODE_PRIVATE) }
@@ -136,6 +146,7 @@ class Visor3DActivity : ComponentActivity() {
     /** La matriz de la cámara de ahora (la misma que usa la tarjeta). */
     private fun matriz(): FloatArray? = orbita?.matriz(ancho, alto, pintor?.radio ?: 1.0)
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun Pantalla(original: File, nombre: String) {
         val abriendo = getString(com.forge.pixpin.R.string.modelo3d_abriendo)
@@ -143,13 +154,16 @@ class Visor3DActivity : ComponentActivity() {
         var listo by remember { mutableStateOf(false) }
         var claro by remember { mutableStateOf(prefs.getBoolean("claro", false)) }
         var aristas by remember { mutableStateOf(true) }
-        var elegido by remember { mutableStateOf<Pair<String, String>?>(null) }
+        var elegido by remember { mutableStateOf<Modelo3D.Elemento?>(null) }
         var elegidoIdx by remember { mutableIntStateOf(-1) }
         var aLaVista by remember { mutableStateOf(true) }
         var toques by remember { mutableIntStateOf(0) }
         val densidad = resources.displayMetrics.density
-        // Lo escondido (un byte por elemento) y el aislado (o -1).
+        // Lo escondido (un byte por elemento) y el aislado (o -1). Lo escondido sale de los niveles y
+        // categorías ocultos del panel ([grupos]) y de lo ocultado a mano ([sueltos]).
         var ocultos by remember { mutableStateOf(ByteArray(0)) }
+        var grupos by remember { mutableStateOf(emptySet<ArbolDelModelo.Clave>()) }
+        var sueltos by remember { mutableStateOf(emptySet<Int>()) }
         var aislado by remember { mutableIntStateOf(-1) }
         // La caja de sección (relativa al origen), y la cara que se arrastra con su valor.
         var seccion by remember { mutableStateOf<FloatArray?>(null) }
@@ -166,10 +180,15 @@ class Visor3DActivity : ComponentActivity() {
         fun esconder(nuevos: ByteArray) { ocultos = nuevos; pintor?.ocultos = nuevos; repintar() }
         fun ponerSeccion(c: FloatArray?) { seccion = c; pintor?.seccion = c; repintar() }
         fun soltar() { elegido = null; elegidoIdx = -1; pintor?.elegido = -1 }
-        fun mostrarTodo() {
+        /** Lo escondido de nuevo, con lo oculto del panel y a mano (sin aislar). */
+        fun aplicar() {
+            val mm = modelo ?: return
+            val n = arbol?.escondidos(mm, grupos) ?: ByteArray(mm.elementos.size)
+            for (e in sueltos) if (e in n.indices) n[e] = 1
             aislado = -1; cajaAislada = null
-            modelo?.let { esconder(ByteArray(it.elementos.size)) }
+            esconder(n)
         }
+        fun mostrarTodo() { grupos = emptySet(); sueltos = emptySet(); aplicar() }
         fun aislar(e: Int) {
             val m = modelo ?: return
             val nuevos = ByteArray(m.elementos.size) { 1 }
@@ -197,6 +216,7 @@ class Visor3DActivity : ComponentActivity() {
             r.onSuccess { m ->
                 if (m.vacio) { estado = getString(com.forge.pixpin.R.string.modelo3d_vacio); return@onSuccess }
                 modelo = m
+                arbol = ArbolDelModelo.de(m, getString(com.forge.pixpin.R.string.modelo3d_sin_nivel))
                 ocultos = ByteArray(m.elementos.size)
                 pintor = Pintor3D(m, grosor = (densidad / 1.5f).coerceIn(1f, 3f), densidad = densidad).also {
                     it.claro = claro
@@ -444,38 +464,53 @@ class Visor3DActivity : ComponentActivity() {
                     })
                 }
             }
-            // Las piezas por tipo: encender y apagar todo un tipo (muros, losas, ventanas…).
-            if (viendoPiezas && m != null) {
-                val tipos = remember(m) {
-                    m.elementos.withIndex().groupBy { TiposIfc.legible(it.value.first) }
-                        .map { (n, l) -> n to l.map { it.index }.toIntArray() }.sortedBy { it.first.lowercase() }
-                }
+            // Niveles y categorías (PC 9625d0d): un toque muestra u oculta, mantener deja solo ese.
+            val ar = arbol
+            if (viendoPiezas && m != null && ar != null) {
+                val unidad = if (m.metros == 1f) "m" else ""
+                val tenue = Color.White.copy(alpha = 0.55f)
                 LazyColumn(
                     Modifier.align(Alignment.CenterEnd).statusBarsPadding().navigationBarsPadding()
-                        .padding(end = 60.dp, top = 64.dp, bottom = 16.dp).width(230.dp)
+                        .padding(end = 60.dp, top = 64.dp, bottom = 16.dp).width(270.dp)
                         .clip(RoundedCornerShape(18.dp)).background(Color(0xE614182B)).padding(vertical = 6.dp)
                 ) {
                     item(key = " todo") {
-                        TextButton(onClick = { mostrarTodo() }, modifier = Modifier.padding(horizontal = 6.dp)) {
-                            Text(getString(com.forge.pixpin.R.string.modelo3d_mostrar_todo), color = azul)
+                        val algo = grupos.isNotEmpty() || sueltos.isNotEmpty() || aislado >= 0
+                        TextButton(onClick = { val estaba = aislado >= 0; mostrarTodo(); if (estaba) verTodo() }, enabled = algo, modifier = Modifier.padding(horizontal = 6.dp)) {
+                            Text(getString(com.forge.pixpin.R.string.modelo3d_mostrar_todo), color = if (algo) azul else tenue)
                         }
                     }
-                    items(tipos.size, key = { tipos[it].first }) { i ->
-                        val (n, cuales) = tipos[i]
-                        val visibles = cuales.count { ocultos.getOrNull(it)?.toInt() == 0 }
-                        Row(
-                            Modifier.fillMaxWidth().clickable {
-                                val nuevos = ocultos.copyOf()
-                                val poner: Byte = if (visibles > 0) 1 else 0
-                                for (e in cuales) nuevos[e] = poner
-                                aislado = -1; cajaAislada = null
-                                esconder(nuevos)
-                            }.padding(horizontal = 14.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(n, color = if (visibles > 0) Color.White else Color.White.copy(alpha = 0.4f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            Text(if (visibles == cuales.size) "${cuales.size}" else "$visibles/${cuales.size}", color = Color.White.copy(alpha = 0.55f))
+                    fun lista(titulo: Int, filas: List<ArbolDelModelo.Grupo>, prefijo: String) {
+                        item(key = " cabecera $prefijo") {
+                            Text(getString(titulo), color = tenue, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp))
                         }
+                        items(filas.size, key = { prefijo + filas[it].clave.toString() }) { i ->
+                            val g = filas[i]
+                            val ve = g.clave !in grupos
+                            Row(
+                                Modifier.fillMaxWidth().combinedClickable(
+                                    onClick = { grupos = ar.alternar(grupos, g.clave); aplicar() },
+                                    onLongClick = { grupos = ar.soloEse(grupos, g.clave); aplicar() },
+                                ).padding(horizontal = 14.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(16.dp).clip(RoundedCornerShape(4.dp))
+                                        .then(if (ve) Modifier.background(azul) else Modifier.border(1.3.dp, tenue, RoundedCornerShape(4.dp))),
+                                    contentAlignment = Alignment.Center
+                                ) { if (ve) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
+                                Spacer(Modifier.width(10.dp))
+                                Text(g.nombre, color = if (ve) Color.White else Color.White.copy(alpha = 0.4f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Spacer(Modifier.width(8.dp))
+                                val dato = if (g.volumen > 0) "${g.cuenta} · ${ArbolDelModelo.conUnidad(g.volumen, unidad, 3)}" else "${g.cuenta}"
+                                Text(dato, color = tenue, fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                    if (ar.niveles.isNotEmpty()) lista(com.forge.pixpin.R.string.modelo3d_niveles, ar.niveles, "n")
+                    lista(com.forge.pixpin.R.string.modelo3d_categorias, ar.tipos, "t")
+                    item(key = " pista") {
+                        Text(getString(com.forge.pixpin.R.string.modelo3d_solo_ese_pista), color = tenue, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
                 }
             }
@@ -494,17 +529,17 @@ class Visor3DActivity : ComponentActivity() {
                     } else getString(com.forge.pixpin.R.string.modelo3d_medir_pista)
                     Chip(texto)
                 }
-                elegido?.let { (tipo, n) ->
-                    val t = TiposIfc.legible(tipo).let { if (n.isBlank()) it else "$it · $n" }
+                elegido?.let { el ->
+                    val t = if (m != null) ArbolDelModelo.describir(el, m, unidad.trim()) else TiposIfc.legible(el.tipo)
                     Row(Modifier.clip(RoundedCornerShape(50)).background(Color(0xCC14182B)).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(t, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).padding(vertical = 9.dp))
                         val e = elegidoIdx
                         if (m != null && e in ocultos.indices) {
                             TextButton(onClick = {
-                                val nuevos = ocultos.copyOf(); nuevos[e] = 1
                                 soltar()
-                                if (aislado == e) { aislado = -1; cajaAislada = null }
-                                esconder(nuevos)
+                                // Si estaba aislado, se vuelve a lo de antes sin él (no a nada a la vista).
+                                sueltos = sueltos + e
+                                aplicar()
                             }) { Text(getString(com.forge.pixpin.R.string.modelo3d_ocultar), color = azul) }
                             if (aislado != e) TextButton(onClick = { aislar(e) }) { Text(getString(com.forge.pixpin.R.string.modelo3d_aislar), color = azul) }
                         }

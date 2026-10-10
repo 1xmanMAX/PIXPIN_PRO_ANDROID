@@ -109,7 +109,7 @@ class LectorDePlanos : Service() {
          */
         fun leer3D(c: Context, archivo: File, nombre: String? = null): Resultado {
             val entrada = conSuExtension(c, archivo, nombre)
-            return pedir(c, entrada, File(carpeta(c), clave(archivo) + ".px3d"), MODO_3D, 300_000L)
+            return pedir(c, entrada, File(carpeta(c), clave(archivo) + ".v$VERSION_3D.px3d"), MODO_3D, 300_000L)
         }
 
         /** Lo que la lectura nativa sabe abrir por su extensión en el visor 3D. */
@@ -141,9 +141,11 @@ class LectorDePlanos : Service() {
         /** Cuántos planos se guardan ya leídos (los más recientes), como en el PC. */
         private const val EN_CACHE = 24
         /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
-        const val VERSION_DEL_FORMATO = 5
+        const val VERSION_DEL_FORMATO = 6
         /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo): lo leído antes se rehace. */
         const val REVISION_DE_LETRAS = 2
+        /** La de `MAGIA` en `modelo3d.rs` del PC (y en [Modelo3D]): con otra, el modelo se vuelve a leer. */
+        const val VERSION_3D = 3
 
         fun esPlano(nombre: String?): Boolean {
             val n = nombre?.lowercase() ?: return false

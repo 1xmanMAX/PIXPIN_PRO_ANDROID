@@ -95,6 +95,26 @@ impl Afin {
     }
 }
 
+/// **El volteo de un TEXT** (DXF 71): 2 al reves (espejo en x), 4 cabeza
+/// abajo (espejo en y), alrededor de su punto de justificacion y en su giro,
+/// como AutoCAD. Va en el sistema del texto (OCS). Como PixPin Android v0.111.
+pub fn volteo_de_texto(flags: i16, ins: [f64; 3], alineado: Option<[f64; 3]>, h: u8, v: u8, giro: f64) -> Afin {
+    let fx = if flags & 2 != 0 { -1.0 } else { 1.0 };
+    let fy = if flags & 4 != 0 { -1.0 } else { 1.0 };
+    if fx > 0.0 && fy > 0.0 {
+        return Afin::IDENTIDAD;
+    }
+    let a = match alineado {
+        Some(a) if h != 0 || v != 0 => a,
+        _ => ins,
+    };
+    Afin::traslacion(a[0], a[1], a[2])
+        .por(&Afin::giro_z(giro))
+        .por(&Afin::escala(fx, fy, 1.0))
+        .por(&Afin::giro_z(-giro))
+        .por(&Afin::traslacion(-a[0], -a[1], -a[2]))
+}
+
 /// El OCS de una entidad con su `normal` (eje arbitrario de AutoCAD).
 pub fn ocs(normal: &Vector3) -> Afin {
     let n = normal;
@@ -727,7 +747,7 @@ impl<'d> Convertidor<'d> {
     fn texto_simple(&mut self, valor: &str, ins: &Vector3, alineado: Option<&Vector3>, alto: f64, giro: f64, ancho: f64, oblicuo: f64, estilo: &str, h: u8, v: u8, normal: &Vector3, color: u32, m: &Afin, volteo: i16) {
         let texto = crate::texto::texto_plano(valor);
         self.cuentas.letras += texto.chars().count();
-        let t = m.por(&ocs(normal)).por(&crate::volteo(volteo, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), h, v, giro));
+        let t = m.por(&ocs(normal)).por(&volteo_de_texto(volteo, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), h, v, giro));
         let fuente = self.fuente_de(estilo);
         self.textos.simple(&mut self.c, &texto, [ins.x, ins.y, ins.z], alineado.map(|a| [a.x, a.y, a.z]), alto, giro, ancho, oblicuo, h, v, &fuente, color, &t);
     }
