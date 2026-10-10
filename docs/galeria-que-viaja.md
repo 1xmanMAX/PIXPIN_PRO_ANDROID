@@ -7,8 +7,12 @@ Desde v0.107.0, **dos teléfonos** del mismo grupo tienen la misma galería: cad
 otro con su fecha de verdad y **se va el mismo día en los dos**; conservar o «7 días más» en uno
 se ve en el otro; quitar una a mano antes de tiempo la quita de los demás (a su papelera).
 
-El PC **aún no** entra: contesta «No sé qué es «galeria»» y la vuelta sigue sin galería (probado
-con el PC del 7-oct en `SincronizarConElPcTest`). Esta guía dice lo que haría falta allí.
+**El PC entra desde su commit c493abb (9-oct)** (`crates/pixpin-sincro/src/galeria.rs`, puerto de
+estas reglas). Probado el 10-oct con el PC de verdad en `SincronizarConElPcTest` (cinco pruebas
+`galeria…`, llamando cada uno de los dos): pasa en los dos sentidos con su hora, se va el mismo
+día aunque cada uno tenga otros días, «7 días más» y conservar se ven en el otro, lo quitado a
+mano va a la papelera del otro y lo caducado no deja marca. Un aparato de antes sigue contestando
+«No sé qué es «galeria»» (`GaleriaQueViajaTest`). Lo de abajo es la guía que se escribió para el PC.
 
 ## Por qué así
 
@@ -85,7 +89,8 @@ cualquier cosa con `/`, `\`, `..` o vacía.
 - `capture/CapturasEnElTelefono.kt` — MediaStore (`Pictures/PixPin`, `DATE_TAKEN`).
 - `sincro/Protocolo.kt` — `Respondedor.responderGaleria` y `Sesion.galeria`.
 - Pruebas: `GaleriaCompartidaTest` (10), `GaleriaQueViajaTest` (6, dos aparatos por socket),
-  `SincronizarConElPcTest` (el PC de hoy contesta «No sé» y la vuelta sigue).
+  `SincronizarConElPcTest` (contra el PC de verdad: `pc-simulado` tiene galería en una carpeta,
+  `<datos>-galeria`, con `atender_con_galeria` y `con_galeria`; `pc-simulado galeria` la enseña).
 
 **Sin probar en teléfono**: guardar en MediaStore con `DATE_TAKEN`, la papelera del sistema al
 quitarla en otro aparato, y vídeos.

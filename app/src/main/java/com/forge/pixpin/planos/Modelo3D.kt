@@ -221,6 +221,14 @@ data class Orbita(val objetivo: DoubleArray, val rumbo: Double, val altura: Doub
         return copy(objetivo = suma(objetivo, suma(por(r, -dx * k), por(u, dy * k))))
     }
 
+    /** [caja] entera en pantalla **sin cambiar desde dónde se mira** (aislar un elemento). */
+    fun encuadrarCon(caja: FloatArray, ancho: Int, alto: Int): Orbita {
+        val c = doubleArrayOf((caja[0] + caja[3]) / 2.0, (caja[1] + caja[4]) / 2.0, (caja[2] + caja[5]) / 2.0)
+        val d = doubleArrayOf((caja[3] - caja[0]).toDouble(), (caja[4] - caja[1]).toDouble(), (caja[5] - caja[2]).toDouble())
+        val o = copy(objetivo = c, dist = 1.0)
+        return o.copy(dist = maxOf(o.distanciaPara(caja, ancho, alto), sqrt(punto(d, d)) * 1e-3, 1e-3))
+    }
+
     /** La planta: desde arriba, con el norte arriba. */
     fun enPlanta(): Orbita = copy(rumbo = -Math.PI / 2, altura = ALTURA_MAX)
 
@@ -257,9 +265,22 @@ data class Orbita(val objetivo: DoubleArray, val rumbo: Double, val altura: Doub
 object ElegirEn3D {
     class Tocado(val elemento: Int, val punto: DoubleArray)
 
-    fun elegir(m: Modelo3D, ojo: DoubleArray, dir: DoubleArray, corte: Float?, toleranciaRaya: Double): Tocado? {
+    /**
+     * [seccion]: la caja de sección (mín. y máx. x, y, z), o null; lo de fuera no se toca. Si lo
+     * tocado es la cara de dentro de un sólido cortado (la tapa), el punto es el del corte: allí
+     * se gira y se acerca, como en el PC. [ocultos]: un byte por elemento, 1 = escondido (no se
+     * puede tocar lo que no se ve).
+     */
+    fun elegir(m: Modelo3D, ojo: DoubleArray, dir: DoubleArray, seccion: FloatArray?, toleranciaRaya: Double, ocultos: ByteArray? = null): Tocado? {
         var mejor = Double.MAX_VALUE
         var el = -1
+        var tapa = false
+        fun fuera(t: Double): Boolean {
+            val c = seccion ?: return false
+            for (k in 0 until 3) { val v = ojo[k] + dir[k] * t; if (v < c[k] || v > c[k + 3]) return true }
+            return false
+        }
+        fun escondido(e: Int) = ocultos != null && e in ocultos.indices && ocultos[e].toInt() != 0
         fun triangulos(l: ByteBuffer, n: Int) {
             var k = 0
             while (k + 2 < n) {
@@ -267,8 +288,10 @@ object ElegirEn3D {
                 k += 3
                 val t = rayoTriangulo(ojo, dir, m, a, b, c) ?: continue
                 if (t >= mejor) continue
-                if (corte != null && ojo[2] + dir[2] * t > corte) continue
+                if (fuera(t)) continue
+                if (escondido(m.elemento(a))) continue
                 mejor = t; el = m.elemento(a)
+                tapa = seccion != null && deEspaldas(m, a, b, c, dir)
             }
         }
         triangulos(m.opacos, m.nOpacos)
@@ -281,12 +304,49 @@ object ElegirEn3D {
             val r = rayoSegmento(ojo, dir, m, a, b) ?: continue
             val (t, d) = r
             if (t > 0 && t < mejor && d <= toleranciaRaya * t) {
-                if (corte != null && ojo[2] + dir[2] * t > corte) continue
-                mejor = t; el = m.elemento(a)
+                if (fuera(t)) continue
+                if (escondido(m.elemento(a))) continue
+                mejor = t; el = m.elemento(a); tapa = false
             }
         }
         if (el < 0) return null
+        if (tapa && seccion != null) {
+            // Por dónde entra el rayo en la caja.
+            var t0 = 0.0
+            for (k in 0 until 3) {
+                if (kotlin.math.abs(dir[k]) < 1e-12) continue
+                val a = (seccion[k] - ojo[k]) / dir[k]; val b = (seccion[k + 3] - ojo[k]) / dir[k]
+                t0 = maxOf(t0, minOf(a, b))
+            }
+            if (t0 in 0.0..mejor) mejor = t0
+        }
         return Tocado(el, Orbita.suma(ojo, Orbita.por(dir, mejor)))
+    }
+
+    /** Si el triángulo da la espalda al rayo (se le ve la cara de dentro): con la normal guardada. */
+    private fun deEspaldas(m: Modelo3D, a: Int, b: Int, c: Int, dir: DoubleArray): Boolean {
+        val n = m.vertices.getInt(a * 24 + 12)
+        val nx = (n shl 24 shr 24).toDouble(); val ny = (n shl 16 shr 24).toDouble(); val nz = (n shl 8 shr 24).toDouble()
+        if (nx == 0.0 && ny == 0.0 && nz == 0.0) return false
+        // La normal geométrica, vuelta hacia el ojo; la guardada contra ella (como el sombreador).
+        val ux = (m.x(b) - m.x(a)).toDouble(); val uy = (m.y(b) - m.y(a)).toDouble(); val uz = (m.z(b) - m.z(a)).toDouble()
+        val wx = (m.x(c) - m.x(a)).toDouble(); val wy = (m.y(c) - m.y(a)).toDouble(); val wz = (m.z(c) - m.z(a)).toDouble()
+        var gx = uy * wz - uz * wy; var gy = uz * wx - ux * wz; var gz = ux * wy - uy * wx
+        if (gx * dir[0] + gy * dir[1] + gz * dir[2] > 0) { gx = -gx; gy = -gy; gz = -gz }
+        return nx * gx + ny * gy + nz * gz < 0
+    }
+
+    /** La caja de un elemento (relativa al origen), para encuadrarlo al aislarlo; null si no tiene vértices. */
+    fun cajaDe(m: Modelo3D, e: Int): FloatArray? {
+        var c: FloatArray? = null
+        for (v in 0 until m.nVertices) {
+            if (m.elemento(v) != e) continue
+            val x = m.x(v); val y = m.y(v); val z = m.z(v)
+            val k = c ?: floatArrayOf(x, y, z, x, y, z).also { c = it }
+            k[0] = minOf(k[0], x); k[1] = minOf(k[1], y); k[2] = minOf(k[2], z)
+            k[3] = maxOf(k[3], x); k[4] = maxOf(k[4], y); k[5] = maxOf(k[5], z)
+        }
+        return c
     }
 
     /** Möller–Trumbore: la distancia por el rayo hasta el triángulo, o null. */
@@ -325,5 +385,57 @@ object ElegirEn3D {
         val enSeg = Orbita.suma(p, Orbita.por(u, s))
         val dif = Orbita.sub(enRayo, enSeg)
         return t to sqrt(Orbita.punto(dif, dif))
+    }
+}
+
+/**
+ * **Del visor 3D al croquis** (10-oct-2026): el modelo leído con la lectura del PC (ifc-lite para
+ * IFC, rvt-rs para Revit) pasado a la malla del croquis ([com.forge.pixpin.motor.Malla3D]: metros,
+ * Z arriba, un ARGB por triángulo y los triángulos de cada elemento seguidos). El croquis leía los
+ * IFC con su propio lector y el usuario los veía descolocados; así los dos enseñan lo mismo que
+ * Windows.
+ *
+ * Las medidas van relativas al origen del modelo (un edificio georreferenciado está a cientos de
+ * kilómetros del cero, y en `Float` sus centímetros se perderían). Solo las caras: las rayas y los
+ * puntos sueltos (de Civil 3D) no tienen sitio en la malla.
+ */
+object ModeloAMalla {
+    fun malla(m: Modelo3D): com.forge.pixpin.motor.Malla3D {
+        val k = m.metros.toDouble().takeIf { it > 0 && it.isFinite() } ?: 1.0
+        // Los triángulos, agrupados por elemento (la malla quiere cada pieza en un tramo seguido).
+        val nt = m.nOpacos / 3 + m.nTransparentes / 3
+        val elem = IntArray(nt)
+        val primero = IntArray(nt)
+        var t = 0
+        fun juntar(l: ByteBuffer, n: Int) {
+            var i = 0
+            while (i + 2 < n) { primero[t] = i; elem[t] = m.elemento(l.getInt(i * 4)); t++; i += 3 }
+        }
+        juntar(m.opacos, m.nOpacos)
+        val opacos = t
+        juntar(m.transparentes, m.nTransparentes)
+        val orden = (0 until t).sortedWith(compareBy({ elem[it] }, { it }))
+        val c = com.forge.pixpin.motor.Malla3D.Constructor()
+        val nuevo = IntArray(m.nVertices) { -1 }
+        fun v(i: Int): Int {
+            if (nuevo[i] < 0) nuevo[i] = c.vertice(m.x(i) * k, m.y(i) * k, m.z(i) * k)
+            return nuevo[i]
+        }
+        var actual = if (orden.isEmpty()) -1 else elem[orden[0]]
+        fun cerrar(e: Int) {
+            val (tipo, nombre) = m.elementos.getOrNull(e) ?: ("" to "")
+            c.cerrarPieza(nombre.ifBlank { TiposIfc.legible(tipo) }, tipo.uppercase())
+        }
+        for (tt in orden) {
+            if (elem[tt] != actual) { cerrar(actual); actual = elem[tt] }
+            val (l, i) = if (tt < opacos) m.opacos to primero[tt] else m.transparentes to primero[tt]
+            val a = l.getInt(i * 4); val b = l.getInt(i * 4 + 4); val cc = l.getInt(i * 4 + 8)
+            // RGBA (rojo en el byte bajo) → ARGB.
+            val rgba = m.vertices.getInt(a * 24 + 16)
+            val r = rgba and 0xff; val g = (rgba shr 8) and 0xff; val bl = (rgba shr 16) and 0xff; val al = (rgba ushr 24) and 0xff
+            c.triangulo(v(a), v(b), v(cc), (al shl 24) or (r shl 16) or (g shl 8) or bl)
+        }
+        if (actual >= 0) cerrar(actual)
+        return c.malla()
     }
 }

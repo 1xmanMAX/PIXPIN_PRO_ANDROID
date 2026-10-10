@@ -862,6 +862,24 @@ class SincronizarActivity : ComponentActivity() {
                 )
             }
             TextButton(onClick = { aMano = true }, modifier = Modifier.padding(horizontal = 6.dp)) { Text("Conectar con una dirección") }
+            // **Sincronizar sola** (9-oct-2026, como el PC desde el 8-oct): con PixPin abierto, con
+            // los del grupo que contesten. Ver [SincronizacionAutomatica].
+            var sola by remember { mutableStateOf(SincronizacionAutomatica.encendida(this@SincronizarActivity)) }
+            Row(
+                Modifier.fillMaxWidth().clickable { sola = !sola; SincronizacionAutomatica.poner(this@SincronizarActivity, sola) }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sincronizar sola", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Con PixPin abierto, cada pocos minutos y al cambiar algo, con los del grupo que estén en esta Wi-Fi. No borra proyectos: eso, a mano.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.Switch(checked = sola, onCheckedChange = { sola = it; SincronizacionAutomatica.poner(this@SincronizarActivity, it) })
+            }
         }
 
         Spacer(Modifier.height(12.dp))

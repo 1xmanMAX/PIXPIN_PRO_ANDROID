@@ -71,11 +71,54 @@ class RecordatorioReceiver : BroadcastReceiver() {
                 val abierta = runCatching { LlamadaSecretaActivity.llamar(context, grabacion, quien, mensaje.id) }.isSuccess
                 if (abierta) return
             }
-            val texto = mensaje.texto.ifBlank { mensaje.nombre }
-                .ifBlank { context.getString(com.forge.pixpin.R.string.guardados_titulo) }
-            app.overlayManager.pinTexto(texto)
+            // **Con su archivo** (como el PC desde el 8-oct-2026): si el mensaje es una foto o un
+            // documento, sale a la pantalla también eso, como pin, junto al recado. El pin borra
+            // su archivo al cerrarse, así que se le da una copia y no el del chat.
+            val archivo = mensaje.ruta?.let { java.io.File(it) }?.takeIf {
+                it.isFile && (mensaje.clase == com.forge.pixpin.guardados.Clase.IMAGEN || mensaje.clase == com.forge.pixpin.guardados.Clase.ARCHIVO)
+            }
+            val texto = mensaje.texto.ifBlank { if (archivo != null) "" else mensaje.nombre }
+                .ifBlank { if (archivo != null) "" else context.getString(com.forge.pixpin.R.string.guardados_titulo) }
+            if (texto.isNotBlank()) app.overlayManager.pinTexto(texto)
+            if (archivo != null) {
+                val pendiente = goAsync()
+                Thread {
+                    try {
+                        val copia = ArchivoDelRecordatorio.copiar(context, archivo, mensaje.nombre, mensaje.clase == com.forge.pixpin.guardados.Clase.IMAGEN)
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            when {
+                                copia == null -> app.overlayManager.pinTexto(mensaje.nombre.ifBlank { archivo.name })
+                                copia.esImagen -> app.overlayManager.pinImage(copia.ruta)
+                                else -> app.overlayManager.pinFile(copia.ruta, copia.nombre, copia.mime)
+                            }
+                        }
+                    } finally {
+                        pendiente.finish()
+                    }
+                }.start()
+            }
             return
         }
         app.overlayManager.sonarRecordatorio(pinId)
     }
+}
+
+/** La copia del archivo de un recordatorio que se le da al pin (el pin borra la suya al cerrarse). */
+object ArchivoDelRecordatorio {
+    class Copia(val ruta: String, val nombre: String, val mime: String, val esImagen: Boolean)
+
+    fun copiar(context: Context, archivo: java.io.File, nombre: String, imagen: Boolean): Copia? = runCatching {
+        if (imagen) {
+            ImageStore.importFromUri(context, android.net.Uri.fromFile(archivo))?.let { return Copia(it, nombre, "image/png", true) }
+        }
+        val visible = nombre.ifBlank { archivo.name }
+        val extension = visible.substringAfterLast('.', archivo.extension).lowercase()
+        val carpeta = java.io.File(context.filesDir, "pins/files").apply { mkdirs() }
+        val seguro = visible.substringBeforeLast('.').replace(Regex("[^A-Za-z0-9._-]"), "_").take(50).ifBlank { "archivo" }
+        val destino = java.io.File(carpeta, "${System.currentTimeMillis()}_$seguro" + if (extension.isNotBlank()) ".$extension" else "")
+        archivo.copyTo(destino, overwrite = true)
+        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: com.forge.pixpin.data.TiposDeArchivo.principal(visible) ?: "application/octet-stream"
+        Copia(destino.absolutePath, visible, mime, false)
+    }.getOrNull()
 }

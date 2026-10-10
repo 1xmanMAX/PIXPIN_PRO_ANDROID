@@ -50,9 +50,19 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             // espera al tocar un .ifc exportado de Revit. Lo preguntó el usuario —«¿cómo abro un
             // modelo IFC en el canvas 3D?, no veo cómo»—: el botón estaba, pero escondido en la
             // barra de abajo. Ver [com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo].
+            // **Un IFC o un Revit, en el visor 3D** (10-oct-2026), como en Windows: en el croquis se
+            // veía descolocado. **Un DWG o DXF, en el visor de planos.** Un OBJ sigue yendo al croquis.
+            // Con el contexto de la aplicación: van en su propia tarea, que esta se cierra al acabar.
             val modelo = withContext(Dispatchers.IO) { runCatching { elModeloDe(uris) }.getOrNull() }
             if (modelo != null) {
-                com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(this@NuevoProyectoCompartidoActivity, modelo.first, modelo.second)
+                val (archivo, nombre) = modelo
+                when {
+                    com.forge.pixpin.planos.LectorDePlanos.esDelVisor3D(nombre) ->
+                        com.forge.pixpin.planos.Visor3DActivity.abrir(applicationContext, archivo.absolutePath, nombre)
+                    com.forge.pixpin.planos.PlanoActivity.esPlano(nombre) ->
+                        com.forge.pixpin.planos.PlanoActivity.abrir(applicationContext, archivo.absolutePath, nombre)
+                    else -> com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(this@NuevoProyectoCompartidoActivity, archivo, nombre)
+                }
                 finishAndRemoveTask()
                 return@launch
             }
@@ -68,7 +78,9 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
     private fun elModeloDe(uris: List<Uri>): Pair<File, String>? {
         val uri = uris.singleOrNull() ?: return null
         val nombre = nombreDe(uri)
-        if (!com.forge.pixpin.motor.LectorIfc.esIfc(nombre) && !com.forge.pixpin.motor.LectorObj.esObj(nombre)) return null
+        if (!com.forge.pixpin.planos.LectorDePlanos.esDelVisor3D(nombre) && !com.forge.pixpin.planos.PlanoActivity.esPlano(nombre) &&
+            !com.forge.pixpin.motor.LectorObj.esObj(nombre)
+        ) return null
         val (archivo, _, _) = copiar(uri) ?: return null
         return archivo to nombre
     }

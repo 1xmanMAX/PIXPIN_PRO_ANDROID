@@ -1,15 +1,15 @@
 //! El PC de verdad (su almacen y su protocolo en Rust) para probar contra Android.
 use std::io::Write;
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pixpin_proyecto::almacen::{self, Ficha, Indice};
 use pixpin_proyecto::cuaderno::{self, Clase, Cuaderno, Mensaje, Sello};
 use pixpin_proyecto::vista::DiscoPc;
-use pixpin_sincro::disco::Disco;
+use pixpin_sincro::galeria::{self, Caducidad, CapturasDelAparato, Entrada, Local};
 use pixpin_sincro::disco_android::prueba::{crear_grupo, presentar};
-use pixpin_sincro::protocolo::{Hecho, Respondedor, Sesion};
+use pixpin_sincro::protocolo::{Hecho, Respondedor, Resultado, Sesion};
 
 fn ahora() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
@@ -76,8 +76,101 @@ fn preparar(raiz: &Path, codigo: &str) {
     let mut dib = Mensaje::adjunto(Clase::Dibujo, "d9.excalidraw", "lienzos/d9.excalidraw", 100, &sello(&ficha, 3));
     dib.referencia = Some("d9".into());
     poner(raiz, &ficha, &dib);
+    // La galeria del PC, con el registro empezado hace un mes: nada de «lo que ya habia no se va».
+    let gal = EnCarpeta::de(raiz);
+    let _ = std::fs::remove_file(gal.registro());
+    gal.caducidad(ahora() - 30 * galeria::DIA_MS);
     // El grupo lo crea el PC; el movil se une.
     crear_grupo(&pc, codigo, ahora());
+}
+
+/// **La galeria del PC**, en una carpeta junto a sus datos (`<raiz>-galeria`): como el
+/// `EnCarpeta` de las pruebas del PC (`galeria/pruebas.rs`), con 7 «dias hasta borrar». La hora
+/// de cada captura es la de modificacion del fichero (como `CapturasDelPc`).
+struct EnCarpeta {
+    raiz: PathBuf,
+}
+
+impl EnCarpeta {
+    fn de(raiz: &Path) -> EnCarpeta {
+        let mut n = raiz.as_os_str().to_owned();
+        n.push("-galeria");
+        let g = EnCarpeta { raiz: PathBuf::from(n) };
+        std::fs::create_dir_all(g.carpeta()).unwrap();
+        std::fs::create_dir_all(g.papelera()).unwrap();
+        g
+    }
+    fn carpeta(&self) -> PathBuf { self.raiz.join("Pictures/PixPin") }
+    fn papelera(&self) -> PathBuf { self.raiz.join("papelera") }
+    fn registro(&self) -> PathBuf { self.raiz.join("capturas-caducidad.json") }
+}
+
+fn listado(d: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(d)
+        .map(|l| l.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+fn hora_de(r: &Path) -> i64 {
+    std::fs::metadata(r).unwrap().modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64
+}
+
+impl CapturasDelAparato for EnCarpeta {
+    fn raiz(&self) -> PathBuf { self.raiz.clone() }
+    fn listar(&self) -> Option<Vec<Local>> {
+        Some(listado(&self.carpeta()).into_iter().map(|n| {
+            let r = self.carpeta().join(&n);
+            Local { cuando: hora_de(&r), bytes: std::fs::metadata(&r).unwrap().len() as i64, mime: "image/png".into(), nombre: n }
+        }).collect())
+    }
+    fn abrir(&self, nombre: &str) -> Option<PathBuf> {
+        Some(self.carpeta().join(nombre)).filter(|r| r.is_file())
+    }
+    fn guardar(&self, e: &Entrada, escribir: &mut dyn FnMut(&mut dyn Write) -> Resultado<bool>) -> Resultado<bool> {
+        let ruta = self.carpeta().join(&e.nombre);
+        let mut f = std::fs::File::create(&ruta)?;
+        let bien = escribir(&mut f)?;
+        if bien { f.set_modified(UNIX_EPOCH + Duration::from_millis(e.cuando as u64))?; }
+        drop(f);
+        if !bien { let _ = std::fs::remove_file(&ruta); }
+        Ok(bien)
+    }
+    fn tirar(&self, nombres: &[String]) {
+        for n in nombres { let _ = std::fs::rename(self.carpeta().join(n), self.papelera().join(n)); }
+    }
+    fn dias(&self) -> i64 { 7 }
+    fn caducidad(&self, ahora: i64) -> Caducidad {
+        if let Ok(t) = std::fs::read_to_string(self.registro()) && let Ok(r) = serde_json::from_str(&t) { return r }
+        let r = Caducidad { desde: ahora, ..Default::default() };
+        std::fs::write(self.registro(), serde_json::to_vec(&r).unwrap()).unwrap();
+        r
+    }
+    fn cambiar_caducidad(&self, ahora: i64, f: &mut dyn FnMut(&mut Caducidad)) -> std::io::Result<()> {
+        let mut r = self.caducidad(ahora);
+        f(&mut r);
+        std::fs::write(self.registro(), serde_json::to_vec(&r)?)
+    }
+}
+
+/// Lo que hay en la galeria del PC, para que la prueba lo mire con los ojos del PC: sus
+/// capturas (con su hora), su papelera, cuando se va cada una segun su registro, y el estado.
+fn ver_galeria(raiz: &Path) {
+    let g = EnCarpeta::de(raiz);
+    let r = g.caducidad(ahora());
+    let capturas: Vec<_> = listado(&g.carpeta()).into_iter().map(|n| {
+        let cuando = hora_de(&g.carpeta().join(&n));
+        serde_json::json!({"nombre": n, "cuando": cuando,
+            "seVa": galeria::se_va_el(&r, &n, cuando, g.dias()),
+            "texto": String::from_utf8_lossy(&std::fs::read(g.carpeta().join(&n)).unwrap())})
+    }).collect();
+    let estado = galeria::leer(&g.raiz);
+    let entradas: Vec<_> = estado.entradas.iter().map(|e| serde_json::to_value(e).unwrap()).collect();
+    println!("{}", serde_json::json!({
+        "capturas": capturas, "papelera": listado(&g.papelera()), "entradas": entradas,
+        "conservadas": r.conservadas, "fijadas": r.fijadas,
+    }));
 }
 
 fn nonce() -> [u8; 32] {
@@ -94,18 +187,24 @@ fn responder(raiz: &Path, archivo_del_puerto: &str) {
     for flujo in escucha.incoming() {
         let Ok(flujo) = flujo else { continue };
         let r = Respondedor { disco: &pc, estado: &|_| {}, ahora: &ahora, mi_puerto: 0, al_saludar: &|_, _| {}, suelto: None };
-        if let Err(e) = r.atender(flujo, nonce()) { eprintln!("PC: {e:?}"); }
+        // Con su galeria, como el PC desde c493abb (`atender_con_galeria`).
+        let g = EnCarpeta::de(raiz);
+        if let Err(e) = r.atender_con_galeria(flujo, nonce(), Some(&g)) { eprintln!("PC: {e:?}"); }
     }
 }
 
 fn dirigir(raiz: &Path, puerto: u16) {
     let pc = DiscoPc::nuevo(raiz);
     let flujo = TcpStream::connect(("127.0.0.1", puerto)).unwrap();
+    let g = EnCarpeta::de(raiz);
     let mut s = Sesion::conectar(flujo, &pc, false, None, ahora, 0, nonce()).unwrap();
+    // La vuelta del PC lleva la galeria (`vuelta::una` llama a `s.galeria` si `tiene_galeria`).
+    s.con_galeria(&g);
     let mut hecho = Hecho::default();
     let v = pixpin_sincro::vuelta::una(&mut s, None, &mut hecho, "", &ahora, &mut |_| {}).unwrap();
     s.adios();
     println!("{:?}", v.avisos);
+    println!("capturas={} tiradas={}", hecho.capturas, hecho.capturas_tiradas);
 }
 
 fn ver(raiz: &Path) {
@@ -173,6 +272,7 @@ fn main() {
         "responder" => responder(raiz, &a[3]),
         "dirigir" => dirigir(raiz, a[3].parse().unwrap()),
         "ver" => ver(raiz),
+        "galeria" => ver_galeria(raiz),
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.
         "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
         _ => panic!("orden desconocida"),

@@ -6660,12 +6660,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.lecciones.LeccionActivity.abrir(this, File(ruta).name.removeSuffix(com.forge.pixpin.lecciones.LeccionesStore.EXTENSION))
                     ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
                         com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
-                    // **Un modelo 3D abre el croquis en el espacio** (21-sep-2026, pedido por el
-                    // usuario: «si el archivo ifc está en el chat, que abra directamente»). El
-                    // croquis lee el archivo y se queda con la malla; el del chat no se toca.
+                    // **Un IFC o un Revit, en el visor 3D** (10-oct-2026, pedido por el usuario: «ábrelos
+                    // como en Windows, en una app separada, que en el canvas 3D se ve descolocado»). Es
+                    // la lectura del PC (ifc-lite y rvt-rs, en el proceso de los planos), la misma que
+                    // en Windows. Desde el visor se puede llevar al croquis. Ver [com.forge.pixpin.planos.Visor3DActivity].
+                    com.forge.pixpin.planos.LectorDePlanos.esDelVisor3D(m.nombre) || com.forge.pixpin.planos.LectorDePlanos.esDelVisor3D(ruta) ->
+                        com.forge.pixpin.planos.Visor3DActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })
+                    // **Un OBJ abre el croquis en el espacio** (21-sep-2026): el visor 3D no lee OBJ.
                     // Ver [com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo].
-                    com.forge.pixpin.motor.LectorIfc.esIfc(m.nombre) || com.forge.pixpin.motor.LectorIfc.esIfc(ruta) ||
-                        com.forge.pixpin.motor.LectorObj.esObj(m.nombre) || com.forge.pixpin.motor.LectorObj.esObj(ruta) ->
+                    com.forge.pixpin.motor.LectorObj.esObj(m.nombre) || com.forge.pixpin.motor.LectorObj.esObj(ruta) ->
                         com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(
                             this, File(ruta), m.nombre.ifBlank { File(ruta).name }
                         )
@@ -6674,20 +6677,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // Ver [com.forge.pixpin.planos.PlanoActivity].
                     com.forge.pixpin.planos.PlanoActivity.esPlano(m.nombre) || com.forge.pixpin.planos.PlanoActivity.esPlano(ruta) ->
                         com.forge.pixpin.planos.PlanoActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })
-                    // **Un Revit** (9-oct-2026, lo del PC): se pasa a IFC —en el proceso de los planos— y
-                    // se abre donde se abren los IFC, el croquis 3D.
-                    com.forge.pixpin.planos.LectorDePlanos.esRevit(m.nombre) || com.forge.pixpin.planos.LectorDePlanos.esRevit(ruta) -> lifecycleScope.launch {
-                        Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.revit_pasando), Toast.LENGTH_SHORT).show()
-                        when (val r = withContext(Dispatchers.IO) { com.forge.pixpin.planos.LectorDePlanos.revitAIfc(this@MensajesActivity, File(ruta)) }) {
-                            is com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Listo -> com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(
-                                this@MensajesActivity, r.archivo, m.nombre.ifBlank { File(ruta).name }.substringBeforeLast('.') + ".ifc"
-                            )
-                            is com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Fallo -> {
-                                Toast.makeText(this@MensajesActivity, r.motivo, Toast.LENGTH_LONG).show()
-                                abrirFuera(ruta)
-                            }
-                        }
-                    }
                     // **Civil 3D: un LandXML o un fichero de puntos** (PNEZD, ENZ…), mirando dentro: al visor 3D.
                     com.forge.pixpin.planos.LectorDePlanos.esDeCivil(ruta, m.nombre.ifBlank { null }) ->
                         com.forge.pixpin.planos.Visor3DActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })

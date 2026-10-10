@@ -35,17 +35,18 @@ object Presencia {
         private set
     private val principal = Handler(Looper.getMainLooper())
     private var aLaVista = 0
-    private val apagar = Runnable { if (aLaVista == 0) red.cerrar() }
+    private val apagar = Runnable { if (aLaVista == 0) { red.cerrar(); SincronizacionAutomatica.alaVista(false) } }
 
     fun identidadCambio() { version.value = version.value + 1 }
 
     fun instalar(aplicacion: Application) {
         app = aplicacion
         red = Red(aplicacion)
+        SincronizacionAutomatica.instalar(aplicacion)
         aplicacion.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 aLaVista++
-                if (aLaVista == 1) encender()
+                if (aLaVista == 1) { encender(); SincronizacionAutomatica.alaVista(true) }
             }
             override fun onActivityStopped(activity: Activity) {
                 aLaVista = (aLaVista - 1).coerceAtLeast(0)

@@ -1123,10 +1123,15 @@ class Croquis3DActivity : ComponentActivity() {
     private fun importarModelo(abrir: () -> java.io.InputStream?, nombre: String) {
         val esIfc = com.forge.pixpin.motor.LectorIfc.esIfc(nombre)
         val esObj = com.forge.pixpin.motor.LectorObj.esObj(nombre)
-        if (!esIfc && !esObj) {
+        // **IFC y Revit con la lectura del PC** (10-oct-2026): la del visor 3D y Windows (ifc-lite,
+        // rvt-rs), en el proceso de los planos. El lector propio del croquis los dejaba
+        // descolocados; se queda de reserva para los teléfonos de 32 bits.
+        val nativo = com.forge.pixpin.planos.PlanoNativo.disponible
+        val esRevit = nativo && com.forge.pixpin.planos.LectorDePlanos.esRevit(nombre)
+        if (!esIfc && !esObj && !esRevit) {
             val ext = nombre.substringAfterLast('.', "").lowercase()
             val porque = when (ext) {
-                "rvt", "rfa" -> "Un .rvt no se puede leer fuera de Revit: en Revit, Archivo → Exportar → IFC, y trae ese archivo"
+                "rvt", "rfa" -> "Este teléfono no puede leer un .rvt: en Revit, Archivo → Exportar → IFC, y trae ese archivo"
                 "fbx", "dwg", "nwc", "nwd" -> "Ese formato aún no se lee: expórtalo desde Revit como IFC (Archivo → Exportar → IFC)"
                 "ifczip" -> "Es un IFC comprimido: expórtalo sin comprimir, o descomprímelo"
                 else -> "Solo se leen modelos IFC (el de Revit) y OBJ"
@@ -1138,12 +1143,21 @@ class Croquis3DActivity : ComponentActivity() {
         lifecycleScope.launch {
             val hecho = withContext(Dispatchers.IO) {
                 runCatching {
-                    val tmp = java.io.File(cacheDir, "modelo-${System.currentTimeMillis()}.${if (esIfc) "ifc" else "obj"}")
+                    val tmp = java.io.File(cacheDir, "modelo-${System.currentTimeMillis()}.${if (esRevit) "rvt" else if (esIfc) "ifc" else "obj"}")
                     abrir()?.use { i -> tmp.outputStream().use { i.copyTo(it) } }
                         ?: error("No se pudo abrir el archivo")
                     try {
-                        val malla = if (esIfc) com.forge.pixpin.motor.LectorIfc.leer(tmp)
+                        val malla = if ((esIfc || esRevit) && nativo) {
+                            when (val r = com.forge.pixpin.planos.LectorDePlanos.leer3D(this@Croquis3DActivity, tmp, nombre)) {
+                                is com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Listo ->
+                                    com.forge.pixpin.planos.ModeloAMalla.malla(com.forge.pixpin.planos.Modelo3D.abrir(r.archivo))
+                                // Si la del PC no puede, la de siempre (un Revit no tiene otra).
+                                is com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Fallo ->
+                                    if (esIfc) com.forge.pixpin.motor.LectorIfc.leer(tmp) else throw com.forge.pixpin.motor.LectorIfc.NoSeLee(r.motivo)
+                            }
+                        } else if (esIfc) com.forge.pixpin.motor.LectorIfc.leer(tmp)
                         else com.forge.pixpin.motor.LectorObj.leer(tmp)
+                        if (malla.cuantosTriangulos == 0) throw com.forge.pixpin.motor.LectorIfc.NoSeLee("El modelo no tiene nada que se vea en 3D")
                         val carpeta = java.io.File(java.io.File(filesDir, "croquis3d"), "modelos").apply { mkdirs() }
                         val destino = java.io.File(carpeta, "m-${System.currentTimeMillis()}.malla")
                         malla.guardar(destino)

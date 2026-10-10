@@ -473,9 +473,9 @@
                 <data android:pathPattern=".*\\.pixpin" />
             </intent-filter>
             <!--
-                Modelos 3D: un .ifc de Revit o un .obj abren el croquis en el espacio con el
-                modelo dentro. Por extensión, que su tipo MIME no lo conoce casi ningún
-                explorador. Ver NuevoProyectoCompartidoActivity y Croquis3DActivity.
+                Modelos 3D y planos: un .ifc o un .rvt abren el visor 3D, un .dwg o .dxf el de
+                planos, y un .obj el croquis en el espacio con el modelo dentro. Por extensión,
+                que su tipo MIME no lo conoce casi ningún explorador. Ver NuevoProyectoCompartidoActivity y Croquis3DActivity.
             -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -488,6 +488,29 @@
                 <data android:pathPattern=".*\\.IFC" />
                 <data android:pathPattern=".*\\.obj" />
                 <data android:pathPattern=".*\\.OBJ" />
+                <data android:pathPattern=".*\\.rvt" />
+                <data android:pathPattern=".*\\.RVT" />
+                <data android:pathPattern=".*\\.dwg" />
+                <data android:pathPattern=".*\\.DWG" />
+                <data android:pathPattern=".*\\.dxf" />
+                <data android:pathPattern=".*\\.DXF" />
+            </intent-filter>
+            <!--
+                Y por su tipo, cuando el explorador lo dice (un content:// no lleva extensión en la
+                ruta): IFC al visor 3D, DWG/DXF al visor de planos (10-oct-2026).
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="model/ifc" />
+                <data android:mimeType="application/ifc" />
+                <data android:mimeType="image/vnd.dwg" />
+                <data android:mimeType="application/acad" />
+                <data android:mimeType="application/dwg" />
+                <data android:mimeType="image/vnd.dxf" />
+                <data android:mimeType="application/dxf" />
             </intent-filter>
         </activity>
         <!--

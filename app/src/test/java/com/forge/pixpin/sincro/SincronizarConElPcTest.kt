@@ -1,5 +1,8 @@
 package com.forge.pixpin.sincro
 
+import com.forge.pixpin.capture.CaducidadDeCapturas
+import com.forge.pixpin.capture.CaducidadDeCapturas.DIA_MS
+import com.forge.pixpin.capture.GaleriaCompartida
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Mensaje
 import java.io.File
@@ -9,13 +12,18 @@ import java.net.Socket
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -38,6 +46,7 @@ class SincronizarConElPcTest {
     private lateinit var raiz: File
     private lateinit var pc: File
     private lateinit var movil: Disco
+    private lateinit var galMovil: GaleriaQueViajaTest.EnCarpeta
     private var responde: Process? = null
     private var puerto = 0
 
@@ -48,8 +57,11 @@ class SincronizarConElPcTest {
         pc = File(raiz, "PixPin Max")
         movil = Disco(File(raiz, "movil/files").apply { mkdirs() })
         movil.identidad.guardar(Identidad(Aparato("id-movil", "Teléfono")))
-        // Con galería, como el teléfono: pedírsela al PC no puede romper nada.
-        movil.capturas = GaleriaQueViajaTest.EnCarpeta(movil.filesDir).also { it.hacer("captura.png", System.currentTimeMillis()) }
+        // Con galería, como el teléfono. El registro empieza hace un mes (como el del PC en
+        // `preparar`): nada de «lo que ya había no se va».
+        CaducidadDeCapturas.leer(movil.filesDir, System.currentTimeMillis() - 30 * DIA_MS)
+        galMovil = GaleriaQueViajaTest.EnCarpeta(movil.filesDir)
+        movil.capturas = galMovil.also { it.hacer("captura.png", segundos(System.currentTimeMillis())) }
         orden("preparar", pc.path, CODIGO)
         val archivoDelPuerto = File(raiz, "puerto")
         responde = ProcessBuilder(programa, "responder", pc.path, archivoDelPuerto.path).redirectErrorStream(true)
@@ -73,7 +85,7 @@ class SincronizarConElPcTest {
         return salida
     }
 
-    /** El móvil llama y el PC responde: todos los chats, como la pantalla sin preguntas. */
+    /** El móvil llama y el PC responde: todos los chats y la galería, como la pantalla sin preguntas. */
     private fun desdeElMovil(unirme: Boolean = false): Sesion.Hecho {
         val hecho = Sesion.Hecho()
         Socket(InetAddress.getLoopbackAddress(), puerto).use { s ->
@@ -87,9 +99,10 @@ class SincronizarConElPcTest {
                         sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
                         sesion.cerrar(prep)
                     }
-                    // Como la pantalla: la galería detrás. El PC de hoy no sabe de galerías y
-                    // contesta «No sé qué es»: no se hace nada y la vuelta sigue sana.
-                    if (movil.capturas != null) assertFalse("el PC no tiene galería", sesion.galeria(hecho))
+                    // Como la pantalla: la galería detrás. El PC sabe de galerías desde c493abb
+                    // (`atender_con_galeria`); uno de antes contestaría «No sé qué es» (eso lo
+                    // prueba `GaleriaQueViajaTest`).
+                    if (movil.capturas != null) assertTrue("el PC tiene galería", sesion.galeria(hecho))
                 }
                 sesion.adios()
             } finally { sesion.soltar() }
@@ -97,16 +110,17 @@ class SincronizarConElPcTest {
         return hecho
     }
 
-    /** El PC llama (su vuelta entera) y el móvil responde. */
-    private fun desdeElPc() {
+    /** El PC llama (su vuelta entera, con galería) y el móvil responde. Devuelve lo que contó el PC. */
+    private fun desdeElPc(): String {
         val server = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
         val hilo = Thread {
             runCatching { server.accept().use { s -> Respondedor(movil).atender(s.getInputStream(), s.getOutputStream()) } }
             server.close()
         }
         hilo.start()
-        orden("dirigir", pc.path, server.localPort.toString())
+        val salida = orden("dirigir", pc.path, server.localPort.toString())
         hilo.join(10_000)
+        return salida
     }
 
     private fun verPc(): JsonObject = Json.parseToJsonElement(orden("ver", pc.path).trim().lines().last()).jsonObject
@@ -209,6 +223,175 @@ class SincronizarConElPcTest {
         assertEquals(n, movil.leerMensajes().size)
         assertEquals(m, mensajesDelPc().size)
         sinRepetidos()
+    }
+
+    // ------------------------------------------------------------------ la galería (10-oct-2026)
+    // Contra la galería del PC de c493abb (`pixpin_sincro::galeria`): en `pc-simulado` sus capturas
+    // son una carpeta (su `EnCarpeta`, 7 días hasta borrar), el `Respondedor` atiende con
+    // `atender_con_galeria` y su vuelta lleva `con_galeria`.
+
+    private val carpetaPc get() = File(raiz, "PixPin Max-galeria/Pictures/PixPin")
+    private val papeleraPc get() = File(raiz, "PixPin Max-galeria/papelera")
+    private val registroPc get() = File(raiz, "PixPin Max-galeria/capturas-caducidad.json")
+
+    /** Una captura hecha en el PC a la hora [cuando]. */
+    private fun capturaEnPc(nombre: String, cuando: Long) =
+        File(carpetaPc, nombre).apply { writeText("PNG del PC: $nombre"); setLastModified(cuando) }
+
+    /** La galería vista con los ojos del PC (`pc-simulado galeria`): fechas de irse según su registro. */
+    private fun galeriaPc(): JsonObject = Json.parseToJsonElement(orden("galeria", pc.path).trim().lines().last()).jsonObject
+    private fun capturasPc(): Map<String, JsonObject> =
+        galeriaPc()["capturas"]!!.jsonArray.associate { it.jsonObject.s("nombre")!! to it.jsonObject }
+    private fun seVaEnPc(nombre: String): Long? = capturasPc().getValue(nombre)["seVa"]!!.jsonPrimitive.longOrNull
+    private fun seVaEnMovil(nombre: String): Long? = galMovil.seVa(nombre, System.currentTimeMillis())
+    private fun borradaEnPc(nombre: String): Boolean =
+        galeriaPc()["entradas"]!!.jsonArray.map { it.jsonObject }.firstOrNull { it.s("nombre") == nombre }
+            ?.get("borrada")?.jsonPrimitive?.content?.toBoolean() ?: false
+
+    /** Las horas de los ficheros, en segundos enteros. */
+    private fun segundos(ms: Long) = ms / 1000 * 1000
+
+    /** Para que lo cambiado después tenga otra hora que lo de antes (gana lo más reciente). */
+    private fun pasaUnPoco() = Thread.sleep(20)
+
+    @Test
+    fun `galeria, llama el movil - cada captura llega al otro con su hora y se va el mismo dia`() {
+        val ahora = segundos(System.currentTimeMillis())
+        capturaEnPc("pc-1.png", ahora - 2 * DIA_MS)
+        galMovil.hacer("tel-1.png", ahora - 3 * DIA_MS, 1_300_000)   // más de un trozo
+        desdeElMovil(unirme = true)
+        assertEquals("tres capturas pasaron", 3, desdeElMovil().capturas)
+        assertEquals(listOf("captura.png", "pc-1.png", "tel-1.png"), galMovil.nombres())
+        assertEquals("PNG del PC: pc-1.png", File(galMovil.carpeta, "pc-1.png").readText())
+        assertEquals("llegó con la hora del PC", ahora - 2 * DIA_MS, File(galMovil.carpeta, "pc-1.png").lastModified())
+        val enPc = capturasPc()
+        assertEquals(setOf("captura.png", "pc-1.png", "tel-1.png"), enPc.keys)
+        assertEquals("llegó al PC con la hora del móvil", ahora - 3 * DIA_MS, enPc.getValue("tel-1.png")["cuando"]!!.jsonPrimitive.long)
+        assertTrue("entera", File(carpetaPc, "tel-1.png").readBytes().contentEquals(File(galMovil.carpeta, "tel-1.png").readBytes()))
+        for (n in galMovil.nombres()) assertEquals(n, seVaEnMovil(n), seVaEnPc(n))
+        assertEquals(ahora - 2 * DIA_MS + 7 * DIA_MS, seVaEnMovil("pc-1.png"))
+        assertEquals(ahora - 3 * DIA_MS + 7 * DIA_MS, seVaEnPc("tel-1.png"))
+        // Otra vuelta, llame quien llame: nada que pasar.
+        assertEquals(0, desdeElMovil().capturas)
+        val salida = desdeElPc()
+        assertTrue("lo que contó el PC: $salida", salida.contains("capturas=0 tiradas=0"))
+    }
+
+    @Test
+    fun `galeria, llama el PC - cada captura llega al otro con su hora y se va el mismo dia`() {
+        val ahora = segundos(System.currentTimeMillis())
+        capturaEnPc("pc-1.png", ahora - 2 * DIA_MS)
+        galMovil.hacer("tel-1.png", ahora - 3 * DIA_MS, 1_300_000)
+        desdeElMovil(unirme = true)
+        val salida = desdeElPc()
+        assertTrue("lo que contó el PC: $salida", salida.contains("capturas=3 tiradas=0"))
+        assertEquals(listOf("captura.png", "pc-1.png", "tel-1.png"), galMovil.nombres())
+        assertEquals("PNG del PC: pc-1.png", File(galMovil.carpeta, "pc-1.png").readText())
+        assertEquals(ahora - 2 * DIA_MS, File(galMovil.carpeta, "pc-1.png").lastModified())
+        val enPc = capturasPc()
+        assertEquals(setOf("captura.png", "pc-1.png", "tel-1.png"), enPc.keys)
+        assertEquals(ahora - 3 * DIA_MS, enPc.getValue("tel-1.png")["cuando"]!!.jsonPrimitive.long)
+        assertTrue(File(carpetaPc, "tel-1.png").readBytes().contentEquals(File(galMovil.carpeta, "tel-1.png").readBytes()))
+        for (n in galMovil.nombres()) assertEquals(n, seVaEnMovil(n), seVaEnPc(n))
+        assertEquals(ahora - 2 * DIA_MS + 7 * DIA_MS, seVaEnMovil("pc-1.png"))
+        assertTrue(desdeElPc().contains("capturas=0 tiradas=0"))
+        assertEquals(0, desdeElMovil().capturas)
+    }
+
+    @Test
+    fun `galeria - la fecha acordada manda en los dos, con otros dias, siete mas y conservar`() {
+        galMovil.diasAqui = 30   // el móvil borra a los 30 días; el PC, a los 7
+        val ahora = segundos(System.currentTimeMillis())
+        capturaEnPc("pc-1.png", ahora - DIA_MS)
+        capturaEnPc("pc-2.png", ahora - DIA_MS)
+        galMovil.hacer("tel-1.png", ahora - DIA_MS)
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        // Cada una, con la fecha de donde se hizo, en los dos.
+        assertEquals(ahora + 6 * DIA_MS, seVaEnPc("pc-1.png"))
+        assertEquals(ahora + 6 * DIA_MS, seVaEnMovil("pc-1.png"))
+        assertEquals(ahora + 29 * DIA_MS, seVaEnMovil("tel-1.png"))
+        assertEquals(ahora + 29 * DIA_MS, seVaEnPc("tel-1.png"))
+        assertEquals("fijada en el registro del móvil", ahora + 6 * DIA_MS,
+            CaducidadDeCapturas.leer(movil.filesDir, ahora).fijadas["pc-1.png"])
+        // «7 días más» en el móvil: se ve en el PC (llama el PC).
+        pasaUnPoco()
+        val t = System.currentTimeMillis()
+        CaducidadDeCapturas.cambiar(movil.filesDir, t) { CaducidadDeCapturas.prorrogada(it, "pc-1.png", ahora - DIA_MS, t, galMovil.diasAqui) }
+        assertEquals(ahora + 13 * DIA_MS, seVaEnMovil("pc-1.png"))
+        pasaUnPoco()
+        desdeElPc()
+        assertEquals(ahora + 13 * DIA_MS, seVaEnPc("pc-1.png"))
+        // Conservar en el PC (su registro, `conservadas`): se ve en el móvil (llama el móvil).
+        pasaUnPoco()
+        val reg = Json.parseToJsonElement(registroPc.readText()).jsonObject
+        val conservadas = (reg["conservadas"]?.jsonArray.orEmpty()) + JsonPrimitive("pc-2.png")
+        registroPc.writeText(JsonObject(reg + ("conservadas" to JsonArray(conservadas))).toString())
+        assertNull(seVaEnPc("pc-2.png"))
+        pasaUnPoco()
+        desdeElMovil()
+        assertNull("conservada en el PC, conservada en el móvil", seVaEnMovil("pc-2.png"))
+        assertTrue("pc-2.png" in CaducidadDeCapturas.leer(movil.filesDir, System.currentTimeMillis()).conservadas)
+        // Otra vuelta desde el PC: nada se mueve.
+        desdeElPc()
+        assertEquals(ahora + 13 * DIA_MS, seVaEnPc("pc-1.png"))
+        assertEquals(ahora + 13 * DIA_MS, seVaEnMovil("pc-1.png"))
+        assertNull(seVaEnPc("pc-2.png"))
+        assertNull(seVaEnMovil("pc-2.png"))
+    }
+
+    @Test
+    fun `galeria - quitada a mano en uno se quita en el otro, a su papelera, en los dos sentidos`() {
+        val ahora = segundos(System.currentTimeMillis())
+        capturaEnPc("pc-1.png", ahora - DIA_MS)
+        galMovil.hacer("tel-1.png", ahora - DIA_MS)
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        assertEquals(setOf("captura.png", "pc-1.png", "tel-1.png"), capturasPc().keys)
+        // Quitada en el móvil; llama el móvil.
+        pasaUnPoco()
+        assertTrue(File(galMovil.carpeta, "pc-1.png").delete())
+        assertEquals("la quitada no vuelve a pasar", 0, desdeElMovil().capturas)
+        assertEquals(setOf("captura.png", "tel-1.png"), capturasPc().keys)
+        assertEquals(listOf("pc-1.png"), papeleraPc.list()!!.toList())
+        assertTrue(borradaEnPc("pc-1.png"))
+        // Quitada en el PC; llama el PC.
+        pasaUnPoco()
+        assertTrue(File(carpetaPc, "tel-1.png").delete())
+        val salida = desdeElPc()
+        assertTrue("lo que contó el PC: $salida", salida.contains("capturas=0"))
+        assertEquals(listOf("captura.png"), galMovil.nombres())
+        assertEquals(listOf("tel-1.png"), galMovil.papelera.list()!!.toList())
+        // Ninguna vuelve, llame quien llame.
+        desdeElMovil()
+        desdeElPc()
+        assertEquals(listOf("captura.png"), galMovil.nombres())
+        assertEquals(setOf("captura.png"), capturasPc().keys)
+    }
+
+    @Test
+    fun `galeria - lo caducado no viaja ni deja marca de borrado, en los dos sentidos`() {
+        val ahora = segundos(System.currentTimeMillis())
+        galMovil.hacer("vieja-tel.png", ahora - 10 * DIA_MS)
+        capturaEnPc("vieja-pc.png", ahora - 10 * DIA_MS)
+        capturaEnPc("nueva-pc.png", ahora - DIA_MS)
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        assertEquals(listOf("captura.png", "nueva-pc.png", "vieja-tel.png"), galMovil.nombres())
+        assertEquals(setOf("captura.png", "nueva-pc.png", "vieja-pc.png"), capturasPc().keys)
+        // Cada uno barre la suya (caducó): eso no es «quitarla a mano».
+        File(galMovil.carpeta, "vieja-tel.png").renameTo(File(galMovil.papelera, "vieja-tel.png"))
+        File(carpetaPc, "vieja-pc.png").renameTo(File(papeleraPc, "vieja-pc.png"))
+        pasaUnPoco()
+        desdeElPc()
+        pasaUnPoco()
+        desdeElMovil()
+        for (n in listOf("vieja-tel.png", "vieja-pc.png")) {
+            assertFalse("$n en el móvil", GaleriaCompartida.leer(movil.filesDir).porNombre[n]?.borrada ?: false)
+            assertFalse("$n en el PC", borradaEnPc(n))
+        }
+        assertEquals(listOf("captura.png", "nueva-pc.png"), galMovil.nombres())
+        assertEquals(setOf("captura.png", "nueva-pc.png"), capturasPc().keys)
     }
 
     private companion object {

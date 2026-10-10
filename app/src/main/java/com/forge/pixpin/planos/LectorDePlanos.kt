@@ -102,9 +102,38 @@ class LectorDePlanos : Service() {
             return ruta != null && PlanoNativo.disponible && runCatching { PlanoNativo.esDeCivil(ruta) }.getOrDefault(false)
         }
 
-        /** El modelo 3D de [archivo] (de la caché o leyéndolo aparte). Bloquea. */
-        fun leer3D(c: Context, archivo: File): Resultado =
-            pedir(c, archivo, File(carpeta(c), clave(archivo) + ".px3d"), MODO_3D, 300_000L)
+        /**
+         * El modelo 3D de [archivo] (de la caché o leyéndolo aparte). Bloquea. [nombre] es el que
+         * se ve (el del mensaje): la lectura nativa decide qué es **por la extensión**, y un adjunto
+         * puede estar guardado sin ella (`.bin`, o con un nombre interno).
+         */
+        fun leer3D(c: Context, archivo: File, nombre: String? = null): Resultado {
+            val entrada = conSuExtension(c, archivo, nombre)
+            return pedir(c, entrada, File(carpeta(c), clave(archivo) + ".px3d"), MODO_3D, 300_000L)
+        }
+
+        /** Lo que la lectura nativa sabe abrir por su extensión en el visor 3D. */
+        private val EXTENSIONES_3D = setOf("ifc", "rvt", "dwg", "dxf", "xml", "csv", "txt", "pnezd", "penzd", "nez")
+
+        /**
+         * [archivo], o un enlace a él con la extensión de [nombre] si la suya no es la que toca. El
+         * enlace (o una copia, si el sistema no deja enlazar) vive en la caché de los planos.
+         */
+        fun conSuExtension(c: Context, archivo: File, nombre: String?): File {
+            val buena = nombre?.substringAfterLast('.', "")?.lowercase().orEmpty()
+            if (buena !in EXTENSIONES_3D || archivo.extension.lowercase() == buena) return archivo
+            val enlace = File(File(carpeta(c), "entradas").apply { mkdirs() }, clave(archivo) + "." + buena)
+            if (enlace.exists()) return enlace
+            val enlazado = runCatching { android.system.Os.symlink(archivo.absolutePath, enlace.absolutePath); true }.getOrDefault(false)
+            if (!enlazado) runCatching { archivo.copyTo(enlace, overwrite = true) }.onFailure { return archivo }
+            return enlace
+        }
+
+        /** Lo que se abre en el visor 3D (y no en el croquis): IFC y Revit, como en el PC. */
+        fun esDelVisor3D(nombre: String?): Boolean {
+            val n = nombre?.lowercase() ?: return false
+            return n.endsWith(".ifc") || n.endsWith(".rvt")
+        }
 
         /** Un Revit como IFC (de la caché o pasándolo aparte), para el croquis 3D. Bloquea. */
         fun revitAIfc(c: Context, archivo: File): Resultado =
@@ -234,6 +263,12 @@ class LectorDePlanos : Service() {
             val v = carpeta.listFiles()?.filter { it.name.endsWith(".pxcad") || it.name.endsWith(".px3d") || it.name.endsWith(".ifc") }
                 ?.sortedByDescending { it.lastModified() } ?: return
             v.drop(EN_CACHE).forEach { it.delete() }
+            // Los enlaces (o copias) con la extensión que tocaba: los de más de un día sobran.
+            // La fecha **del enlace**, no la del archivo al que apunta (que puede ser de hace meses).
+            File(carpeta, "entradas").listFiles()?.filter { f ->
+                val hecho = runCatching { java.nio.file.Files.getLastModifiedTime(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS).toMillis() }.getOrDefault(f.lastModified())
+                System.currentTimeMillis() - hecho > 86_400_000
+            }?.forEach { it.delete() }
             // Y los restos de lecturas que se quedaron a medias.
             carpeta.listFiles()?.filter { it.name.endsWith(".tmp") && System.currentTimeMillis() - it.lastModified() > 3_600_000 }?.forEach { it.delete() }
         }
