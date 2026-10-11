@@ -5,6 +5,13 @@ import com.forge.pixpin.sincro.RelojDeSincro.Companion.PERIODO
 import com.forge.pixpin.sincro.RelojDeSincro.Companion.QUIETO
 import com.forge.pixpin.sincro.RelojDeSincro.Motivo
 import com.forge.pixpin.sincro.SincronizacionAutomatica
+import com.forge.pixpin.sincro.ColaDeTareas
+import com.forge.pixpin.sincro.ColaDeTareas.Companion.CALMA
+import com.forge.pixpin.sincro.ColaDeTareas.Companion.TOPE
+import com.forge.pixpin.sincro.Disco
+import com.forge.pixpin.guardados.Clase
+import com.forge.pixpin.guardados.Mensaje
+import com.forge.pixpin.guardados.MensajesStore
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
@@ -67,5 +74,83 @@ class RelojDeSincroTest {
             File(d, "cache/y.tmp").writeText("nada")
             assertEquals(b, SincronizacionAutomatica.firma(d))
         } finally { d.deleteRecursively() }
+    }
+
+    // --------------------------- tareas al instante (las de `automatica.rs` del PC, 11-oct-2026)
+
+    @Test fun `una tarea tachada sale en cuanto se calma y no antes`() {
+        val c = ColaDeTareas()
+        assertEquals(ColaDeTareas.Paso.NADA, c.siguiente(1_000, false, true))
+        c.avisan("obra", 1_000)
+        assertEquals(CALMA, c.espera(1_000))
+        assertEquals("aún tachando", ColaDeTareas.Paso.NADA, c.siguiente(1_000 + CALMA - 1, false, true))
+        assertEquals(ColaDeTareas.Paso.MANDAR, c.siguiente(1_000 + CALMA, false, true))
+        assertEquals(setOf("obra"), c.tomar())
+        assertEquals("caso negativo: ya salió", ColaDeTareas.Paso.NADA, c.siguiente(1_000 + CALMA, false, true))
+        assertNull(c.espera(5_000))
+    }
+
+    @Test fun `varias casillas seguidas van en una vuelta y el tope no deja esperar de mas`() {
+        val c = ColaDeTareas()
+        // Un toque cada 400 ms: la calma no llega nunca, el tope sí.
+        for ((i, t) in listOf(0L, 400L, 800L, 1_200L).withIndex()) {
+            c.avisan(if (i % 2 == 0) "obra" else "general", 10_000 + t)
+            assertEquals(ColaDeTareas.Paso.NADA, c.siguiente(10_000 + t, false, true))
+        }
+        assertEquals(ColaDeTareas.Paso.NADA, c.siguiente(10_000 + TOPE - 1, false, true))
+        assertEquals(ColaDeTareas.Paso.MANDAR, c.siguiente(10_000 + TOPE, false, true))
+        assertEquals("dos chats en la misma vuelta", setOf("obra", "general"), c.tomar())
+    }
+
+    @Test fun `con otra vuelta en marcha las tareas esperan y salen detras`() {
+        val c = ColaDeTareas()
+        c.avisan("obra", 0)
+        assertEquals("nunca a la par", ColaDeTareas.Paso.NADA, c.siguiente(5_000, true, true))
+        c.avisan("general", 5_100)
+        assertEquals(ColaDeTareas.Paso.NADA, c.siguiente(5_200, true, true))
+        assertEquals("se suma a la cola, no se pierde", ColaDeTareas.Paso.MANDAR, c.siguiente(PERIODO, false, true))
+        assertEquals(setOf("obra", "general"), c.tomar())
+    }
+
+    @Test fun `ocupado allí vuelven a la cola y salen en cuanto se pueda`() {
+        val c = ColaDeTareas()
+        // Como hace la automática al recibir «ocupado»: como si ya estuvieran calmadas, con un poco
+        // de azar (aquí 200 ms) para no reintentar al mismo compás que el otro.
+        c.avisan("obra", 50_000 - CALMA + 200)
+        assertEquals(200L, c.espera(50_000))
+        assertEquals(ColaDeTareas.Paso.NADA, c.siguiente(50_199, false, true))
+        assertEquals(ColaDeTareas.Paso.MANDAR, c.siguiente(50_200, false, true))
+    }
+
+    @Test fun `caso negativo sin nadie que conteste las tareas se olvidan sin salir`() {
+        val c = ColaDeTareas()
+        c.avisan("obra", 0)
+        assertEquals(ColaDeTareas.Paso.OLVIDAR, c.siguiente(CALMA, false, false))
+        c.tomar()
+        assertEquals(ColaDeTareas.Paso.NADA, c.siguiente(CALMA, false, false))
+    }
+
+    @Test fun `la vuelta entera se lleva lo que esperaba de tareas`() {
+        val c = ColaDeTareas()
+        c.avisan("obra", 100)
+        // Empieza una entera (apareció): toma la cola, y ya no espera nada.
+        c.tomar()
+        assertNull(c.espera(10_000))
+    }
+
+    @Test fun `que chats cambiaron de tareas`() {
+        fun lista(id: String, texto: String, proyecto: String? = null) =
+            Mensaje(id = id, cuando = 1, clase = Clase.MINIAPP, miniapp = "tareas", texto = texto, proyecto = proyecto)
+        val nota = Mensaje(id = "n", cuando = 1, clase = Clase.NOTA, texto = "hola")
+        val antes = listOf(lista("a", "- [ ] pan"), lista("b", "- [ ] losa", "obra"), nota)
+        assertEquals(emptySet<String>(), MensajesStore.chatsConTareasCambiadas(antes, antes))
+        assertEquals("una nota no cuenta", emptySet<String>(),
+            MensajesStore.chatsConTareasCambiadas(antes, antes.map { if (it.id == "n") it.copy(texto = "adiós") else it }))
+        assertEquals(setOf("obra"),
+            MensajesStore.chatsConTareasCambiadas(antes, antes.map { if (it.id == "b") it.copy(texto = "- [x] losa") else it }))
+        assertEquals("quitada", setOf(Disco.GENERAL), MensajesStore.chatsConTareasCambiadas(antes, antes.filter { it.id != "a" }))
+        assertEquals("añadida", setOf("tesis"), MensajesStore.chatsConTareasCambiadas(antes, antes + lista("c", "- [ ] x", "tesis")))
+        assertEquals("movida a otro chat: los dos", setOf(Disco.GENERAL, "obra"),
+            MensajesStore.chatsConTareasCambiadas(antes, antes.map { if (it.id == "a") it.copy(proyecto = "obra") else it }))
     }
 }

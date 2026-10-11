@@ -192,6 +192,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
      */
     fun sellar() {
         val aparato = identidad.leer().yo.codigo
+        // **Lo ya sellado no se relee** (como `ya_sellado` del PC, 11-oct-2026): quien responde sella
+        // dos veces por chat en cada vuelta, y con las tareas al instante hay muchas vueltas cortas.
+        // Si el chat y los proyectos siguen con el tamaño y la fecha de tras el último sellado, no
+        // hay nada sin códigos.
+        if (selladoCon != null && selladoCon == huellaDeSellado(aparato)) return
+        val chatSellado: String
         synchronized(Cerrojos.chat) {
             val leida = leerMensajes()
             val lista = sinLineasRepetidas(leida)
@@ -214,15 +220,23 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 }
             }
             if (cambio) escribirMensajes(lista.map { nuevos[it.id] ?: it })
+            chatSellado = selloDe(archivoDelChat)
         }
+        var proyectosSellado = ""
         val proyectosSellados = synchronized(PROYECTOS) {
             val lista = leerProyectos()
             val sellados = lista.map { Codigos.sellar(it) }
             (sellados != lista).also { if (it) escribirProyectos(sellados) }
+                .also { proyectosSellado = selloDe(archivoDeProyectos) }
         }
+        selladoCon = "$aparato|$chatSellado|$proyectosSellado"
         alCambiar(Cambio.MENSAJES)
         if (proyectosSellados) alCambiar(Cambio.PROYECTOS)
     }
+
+    @Volatile private var selladoCon: String? = null
+    private fun selloDe(f: File) = if (f.exists()) "${f.length()}:${f.lastModified()}" else "-"
+    private fun huellaDeSellado(aparato: String?) = "$aparato|${selloDe(archivoDelChat)}|${selloDe(archivoDeProyectos)}"
 
     /** Crea un grupo nuevo con este aparato dentro, con la letra `a`. Devuelve el código. */
     fun crearGrupo(nombre: String? = null, codigo: String = Grupo.nuevoCodigo(), ahora: Long = System.currentTimeMillis()): String {

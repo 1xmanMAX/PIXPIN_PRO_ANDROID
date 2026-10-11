@@ -9,6 +9,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 
 /**
  * **Una vuelta sin nadie delante**: la de la sincronización automática. Es la de «Sincronizar con
@@ -18,6 +19,11 @@ import java.net.InetAddress
  * borrar (v0.79, «lo mío manda»): que algo desaparezca sin que nadie lo vea pasar es justo lo
  * que costó lienzos el 15-sep. Lo demás —mensajes, lienzos, archivos, la galería— se junta igual
  * que siempre ([Fusion]).
+ *
+ * Con [con]`(soloEstos = …)` es la **vuelta de las tareas al instante** (`vuelta::solo_estos` del
+ * PC, 11-oct-2026): de esos chats, solo lo que entraría en la entera (lo elegido con ese aparato y
+ * sin lápida), sin la galería de capturas, que es lo que más tarda y no tiene que ver. El cable es
+ * el mismo: quien responde atiende petición a petición y no sabe cuántos chats se juntan.
  */
 class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, private val ahora: () -> Long = System::currentTimeMillis) {
     class Resultado(val nombre: String, val hecho: Sesion.Hecho, val bytes: Long) {
@@ -25,7 +31,7 @@ class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, pri
         val trajoAlgo: Boolean get() = hecho.traidos > 0 || hecho.fusionados > 0 || hecho.borrados > 0 || hecho.capturas > 0
     }
 
-    fun con(entrada: InputStream, salida: OutputStream): Resultado {
+    fun con(entrada: InputStream, salida: OutputStream, soloEstos: Set<String>? = null): Resultado {
         val sesion = Sesion.conectar(entrada, salida, disco, ahora = ahora, miPuerto = miPuerto)
         try {
             val otro = sesion.otro
@@ -36,13 +42,13 @@ class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, pri
             val candidatos = (mios.keys + suyos.keys).filter { it !in conLapida }
             val elegidos = disco.elegidos(otro.id) ?: candidatos.toSet()
             val hecho = Sesion.Hecho()
-            for (chat in candidatos.filter { it in elegidos }) {
+            for (chat in candidatos.filter { it in elegidos && (soloEstos == null || it in soloEstos) }) {
                 val prep = sesion.preparar(chat)
                 sesion.aplicar(prep, hecho)
                 sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
                 sesion.cerrar(prep)
             }
-            sesion.galeria(hecho, ahora())
+            if (soloEstos == null) sesion.galeria(hecho, ahora())
             val bytes = sesion.enviados + sesion.recibidos
             sesion.adios()
             return Resultado(otro.nombre, hecho, bytes)
@@ -110,6 +116,52 @@ class RelojDeSincro {
 }
 
 /**
+ * **Las tareas que esperan para salir** (`Reloj::avisan_tareas/espera_tareas/siguiente` del PC,
+ * `sincronizar/automatica.rs`, 11-oct-2026), pura para probarla sin red. Una casilla tachada no
+ * puede esperar los [RelojDeSincro.QUIETO] de la vuelta entera: quien tacha en el móvil mira el PC
+ * y la quiere tachada ya. Los avisos se juntan y salen tras [CALMA] sin más toques, o a los [TOPE]
+ * del primero si no paran: tachar cuatro seguidas es una vuelta, no cuatro.
+ */
+class ColaDeTareas {
+    enum class Paso { NADA, OLVIDAR, MANDAR }
+
+    private val chats = LinkedHashSet<String>()
+    private var desde = 0L
+    private var ultimo = 0L
+
+    /** Cambiaron las tareas de [chat] ([Disco.chatDe]). */
+    @Synchronized fun avisan(chat: String, ahora: Long) {
+        if (chats.isEmpty()) desde = ahora
+        chats += chat
+        ultimo = ahora
+    }
+
+    /** Cuánto falta para mandarlas (0: ya), o null si no espera ninguna. */
+    @Synchronized fun espera(ahora: Long): Long? =
+        if (chats.isEmpty()) null else maxOf(0L, minOf(ultimo + CALMA, desde + TOPE) - ahora)
+
+    /**
+     * Lo que toca [ahora]. Con [ocupado] (otra vuelta en marcha) nada: lo que espera se queda y sale
+     * detrás, nunca a la par. Sin nadie que conteste, se olvida: la vuelta de «apareció» lo lleva.
+     */
+    @Synchronized fun siguiente(ahora: Long, ocupado: Boolean, hayQuien: Boolean): Paso = when {
+        ocupado || espera(ahora) != 0L -> Paso.NADA
+        !hayQuien -> Paso.OLVIDAR
+        else -> Paso.MANDAR
+    }
+
+    /** Las que salen (o se olvidan, o se lleva una vuelta entera), y la cola vacía. */
+    @Synchronized fun tomar(): Set<String> = LinkedHashSet(chats).also { chats.clear() }
+
+    companion object {
+        const val CALMA = 600L
+        const val TOPE = 1_500L
+        /** Tocaba y había otra vuelta en marcha: se mira otra vez enseguida. */
+        const val REINTENTO = 250L
+    }
+}
+
+/**
  * **Sincronizar solo, con PixPin abierto** (9-oct-2026, lo que el PC hace desde el 8-oct: «que
  * se sincronice todo con solo tener la app abierta»). Mientras haya alguna pantalla de PixPin a la
  * vista ([Presencia]), cada pocos segundos se pregunta «¿estás?» a la última dirección de cada
@@ -120,6 +172,13 @@ class RelojDeSincro {
  * o si con un aparato falla [RelojDeSincro.FALLOS_PARA_AVISAR] veces seguidas (una vez). Si ya hay
  * una vuelta en marcha —a mano, o porque llamó el otro— espera ([Protocolo.ocupar]).
  * Se apaga en Sincronizar («Sincronizar sola»).
+ *
+ * **Tareas al instante** (11-oct-2026, como el PC): quien escribe tareas avisa ([avisarTareas],
+ * desde `MensajesStore`) y el bucle, despierto al momento, manda una vuelta recortada a esos chats
+ * ([VueltaCallada.con] con `soloEstos`) a los que contestaron al último sondeo. Callada del todo:
+ * ni aviso si sale bien ni si falla, que la entera de [RelojDeSincro.QUIETO] sigue detrás y esa sí
+ * avisa. Sin pantalla de PixPin (la casilla del widget, un recordatorio) sale un hilo suelto de una
+ * vez ([lanzarSuelta]).
  */
 object SincronizacionAutomatica {
     private const val LATIDO = 5_000L
@@ -147,31 +206,135 @@ object SincronizacionAutomatica {
         if (si && hilo?.isAlive != true) hilo = Thread(::bucle, "sincro-automatica").apply { isDaemon = true; start() }
     }
 
+    private val cola = ColaDeTareas()
+    private val despertar = java.util.concurrent.Semaphore(0)
+    @Volatile private var suelta: Thread? = null
+
+    /**
+     * Cambiaron las tareas de estos chats ([Disco.chatDe]): que salgan ya. Lo llama `MensajesStore`
+     * al escribir; lo que escribe la sincronización va por [Disco] y no pasa por aquí, así que lo
+     * que llega del PC no rebota.
+     */
+    fun avisarTareas(chats: Set<String>) {
+        if (!::app.isInitialized || chats.isEmpty()) return
+        try {
+            if (!encendida(app) || !Red.disco(app).identidad.leer().enGrupo) return
+        } catch (_: Throwable) { return }
+        val ahora = System.currentTimeMillis()
+        chats.forEach { cola.avisan(it, ahora) }
+        despertar.release()
+        if (hilo?.isAlive != true) lanzarSuelta()
+    }
+
     private fun bucle() {
         val reloj = RelojDeSincro()
-        var latido = 0
+        var sondeado = 0L
+        // Los que contestaron al último sondeo: las tareas van a ellos sin volver a sondear (cada
+        // aparato apagado cuesta 1-2 s de espera).
+        var presentes: Map<String, Aparato> = emptyMap()
+        var dirs: Map<String, Pair<String, Int>> = emptyMap()
         while (aLaVista) {
             try {
                 val disco = Red.disco(app)
                 val id = disco.identidad.leer()
-                if (id.enGrupo && encendida(app) && latido % LATIDOS_POR_SONDEO == 0) {
-                    val dirs = disco.direcciones()
-                    val presentes = id.miembros.filter { it.id != id.yo.id }
-                        .filter { m -> dirs[m.id]?.let { (h, p) -> Red.sondear(h, p) } == true }
-                        .associateBy { it.id }
-                    val decision = reloj.toca(System.currentTimeMillis(), presentes.keys, firma(disco.filesDir))
-                    if (decision != null) {
-                        for (otroId in decision.second) {
-                            val (host, puerto) = dirs[otroId] ?: continue
-                            vuelta(disco, otroId, presentes[otroId]?.nombre ?: otroId, host, puerto)
+                val ahora = System.currentTimeMillis()
+                if (!id.enGrupo || !encendida(app)) {
+                    cola.tomar()
+                } else {
+                    if (ahora - sondeado >= LATIDO * LATIDOS_POR_SONDEO) {
+                        sondeado = ahora
+                        dirs = disco.direcciones()
+                        presentes = id.miembros.filter { it.id != id.yo.id }
+                            .filter { m -> dirs[m.id]?.let { (h, p) -> Red.sondear(h, p) } == true }
+                            .associateBy { it.id }
+                        val decision = reloj.toca(System.currentTimeMillis(), presentes.keys, firma(disco.filesDir))
+                        if (decision != null) {
+                            // Lo que esperaba de tareas va dentro: la entera lee el disco de ahora.
+                            cola.tomar()
+                            for (otroId in decision.second) {
+                                val (host, puerto) = dirs[otroId] ?: continue
+                                vuelta(disco, otroId, presentes[otroId]?.nombre ?: otroId, host, puerto)
+                            }
+                            reloj.despuesDeSincronizar(firma(disco.filesDir))
                         }
-                        reloj.despuesDeSincronizar(firma(disco.filesDir))
                     }
+                    mandarTareas(disco, presentes, dirs)
                 }
             } catch (_: Throwable) {
             }
-            latido++
-            try { Thread.sleep(LATIDO) } catch (_: InterruptedException) { return }
+            // Lo justo para mandar las tareas a tiempo; si ya tocaban y no se pudo, se reintenta pronto.
+            val espera = when (val e = cola.espera(System.currentTimeMillis())) {
+                null -> LATIDO
+                0L -> ColaDeTareas.REINTENTO
+                else -> e.coerceAtMost(LATIDO)
+            }
+            try { despertar.tryAcquire(espera, TimeUnit.MILLISECONDS); despertar.drainPermits() } catch (_: InterruptedException) { return }
+        }
+    }
+
+    /**
+     * Si toca, la vuelta de las tareas con cada uno de [presentes]. Ocupado (otra vuelta aquí o
+     * allí): vuelven a la cola como si ya estuvieran calmadas, para salir en cuanto se pueda.
+     * **No** se toca el [RelojDeSincro]: lo demás que cambiara en los chats sigue pendiente para la
+     * vuelta entera.
+     */
+    private fun mandarTareas(disco: Disco, presentes: Map<String, Aparato>, dirs: Map<String, Pair<String, Int>>) {
+        val ahora = System.currentTimeMillis()
+        when (cola.siguiente(ahora, ocupado = false, hayQuien = presentes.keys.any { it in dirs })) {
+            ColaDeTareas.Paso.NADA -> return
+            ColaDeTareas.Paso.OLVIDAR -> { cola.tomar(); return }
+            ColaDeTareas.Paso.MANDAR -> {}
+        }
+        val chats = cola.tomar()
+        for ((otroId, _) in presentes) {
+            val (host, puerto) = dirs[otroId] ?: continue
+            if (!vueltaDeTareas(disco, host, puerto, chats)) {
+                // Con algo de azar: si los dos tacharon a la vez, cada uno encuentra al otro ocupado,
+                // y reintentando al mismo compás no saldría nunca ninguno.
+                val antes = System.currentTimeMillis() - ColaDeTareas.CALMA + kotlin.random.Random.nextLong(50, 400)
+                chats.forEach { cola.avisan(it, antes) }
+            }
+        }
+    }
+
+    /** La vuelta recortada, sin decir nada. Devuelve false solo si estaba ocupado (hay que repetir). */
+    private fun vueltaDeTareas(disco: Disco, host: String, puerto: Int, chats: Set<String>): Boolean = try {
+        Red.conectar(InetAddress.getByName(host), puerto).use { s ->
+            VueltaCallada(disco, Presencia.red.puerto).con(s.getInputStream(), s.getOutputStream(), soloEstos = chats)
+        }
+        true
+    } catch (e: Throwable) {
+        e.message != Protocolo.OCUPADO
+    }
+
+    /**
+     * **Sin PixPin a la vista** (la casilla del widget, un recordatorio que suena): un hilo de una
+     * vez que espera la calma, sondea las direcciones apuntadas, manda las tareas a quien conteste
+     * y termina. Ni escucha ni se anuncia: eso es de [Presencia]. Si mientras tanto se abre PixPin,
+     * el bucle también las puede mandar; la cola es una sola y se vacía al tomarla.
+     */
+    private fun lanzarSuelta() {
+        synchronized(this) {
+            if (suelta?.isAlive == true) return
+            suelta = Thread({
+                try {
+                    var intentos = 0
+                    while (intentos++ < 40) {
+                        val espera = cola.espera(System.currentTimeMillis()) ?: return@Thread
+                        if (espera > 0) { Thread.sleep(espera); continue }
+                        if (hilo?.isAlive == true) return@Thread
+                        val disco = Red.disco(app)
+                        val id = disco.identidad.leer()
+                        val dirs = disco.direcciones()
+                        val presentes = id.miembros.filter { it.id != id.yo.id }
+                            .filter { m -> dirs[m.id]?.let { (h, p) -> Red.sondear(h, p) } == true }
+                            .associateBy { it.id }
+                        mandarTareas(disco, presentes, dirs)
+                        if (cola.espera(System.currentTimeMillis()) != null) Thread.sleep(ColaDeTareas.REINTENTO)
+                    }
+                } catch (_: Throwable) {
+                }
+            }, "sincro-tareas").apply { isDaemon = true; start() }
         }
     }
 

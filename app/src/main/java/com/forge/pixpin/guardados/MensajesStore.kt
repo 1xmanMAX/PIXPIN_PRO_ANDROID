@@ -39,6 +39,19 @@ class MensajesStore(private val context: Context) {
         /** Por dónde va cada nota de voz que se está pasando a texto (id → 0..1). */
         val avances = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Float>>(emptyMap())
 
+        /**
+         * **Qué chats cambiaron de tareas** entre [antes] y [despues] (11-oct-2026, tareas al
+         * instante): una lista marcada, añadida, corregida o quitada. Lo demás del chat no cuenta.
+         */
+        fun chatsConTareasCambiadas(antes: List<Mensaje>, despues: List<Mensaje>): Set<String> {
+            fun tareas(l: List<Mensaje>) = l.filter(com.forge.pixpin.mini.TodasLasTareas::esLista).associateBy { it.id }
+            val a = tareas(antes)
+            val d = tareas(despues)
+            return (a.keys + d.keys)
+                .filter { a[it]?.texto != d[it]?.texto || a[it]?.proyecto != d[it]?.proyecto }
+                .flatMapTo(HashSet()) { k -> listOfNotNull(a[k], d[k]).map(com.forge.pixpin.sincro.Disco::chatDe) }
+        }
+
         /** El mismo que usa la sincronización para escribir el chat: no pueden cruzarse. */
         private val CERROJO = com.forge.pixpin.sincro.Cerrojos.chat
     }
@@ -119,8 +132,12 @@ class MensajesStore(private val context: Context) {
         if (apuntado.clase == Clase.VOZ && apuntado.estadoDelTexto == null && apuntado.ruta != null && pareceMusica(apuntado.ruta)) {
             apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
         }
-        runCatching {
+        val escrito = runCatching {
             synchronized(CERROJO) { archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n") }
+        }.isSuccess
+        // Una lista de tareas nueva sale ya a los demás aparatos (tareas al instante).
+        if (escrito && com.forge.pixpin.mini.TodasLasTareas.esLista(apuntado)) {
+            com.forge.pixpin.sincro.SincronizacionAutomatica.avisarTareas(setOf(com.forge.pixpin.sincro.Disco.chatDe(apuntado)))
         }
         if (lienzoDeFuera && app != null && destino != null) {
             val m = apuntado
@@ -304,15 +321,16 @@ class MensajesStore(private val context: Context) {
 
     fun reescribir(mensajes: List<Mensaje>): Unit = synchronized(CERROJO) {
         cambios.value = cambios.value + 1
+        val viejos = runCatching { leer() }.getOrDefault(emptyList())
         // **Lo que se va deja su marca**, para que la sincronización no lo resucite desde otro
         // aparato. Siempre, aunque aún no haya grupo: con los códigos únicos cualquier cosa puede
         // haber viajado ya a otro aparato por un envío.
         runCatching {
             val disco = com.forge.pixpin.sincro.Disco(context.filesDir)
             val letra = com.forge.pixpin.sincro.IdentidadEnDisco(context.filesDir).letraSiHay()
-            disco.anotarBorrados(com.forge.pixpin.sincro.Disco.borradosEntre(leer(), mensajes, letra, System.currentTimeMillis()))
+            disco.anotarBorrados(com.forge.pixpin.sincro.Disco.borradosEntre(viejos, mensajes, letra, System.currentTimeMillis()))
         }
-        runCatching {
+        val escrito = runCatching {
             val temporal = File(context.filesDir, "guardados.jsonl.nuevo")
             temporal.writeText(
                 mensajes.joinToString("") {
@@ -331,8 +349,13 @@ class MensajesStore(private val context: Context) {
                 temporal.copyTo(archivo, overwrite = true)
                 temporal.delete()
             }
+        }.isSuccess
+        // **Tareas al instante**: lo tachado aquí sale ya a los demás aparatos. Solo desde aquí: la
+        // sincronización escribe por `Disco`, así que lo que llega de otro aparato no rebota.
+        if (escrito) {
+            val chats = chatsConTareasCambiadas(viejos, mensajes)
+            if (chats.isNotEmpty()) com.forge.pixpin.sincro.SincronizacionAutomatica.avisarTareas(chats)
         }
-        Unit
     }
 
     /**

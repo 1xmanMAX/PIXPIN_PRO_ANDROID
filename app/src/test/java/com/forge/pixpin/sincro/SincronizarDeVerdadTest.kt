@@ -941,4 +941,65 @@ class SincronizarDeVerdadTest {
         assertEquals(1, tableta.leerMensajes().count { it.id == "lec-x" })
         assertEquals(1, telefono.leerMensajes().count { it.id == "lec-x" })
     }
+
+    // ------------------------------------------------------------ tareas al instante (11-oct-2026)
+
+    /** La vuelta de la automática, con quien escucha en [hacia]. */
+    private fun vueltaCallada(soloEstos: Set<String>?): VueltaCallada.Resultado {
+        val (server, hilo) = escuchar(tableta)
+        Socket(InetAddress.getLoopbackAddress(), server.localPort).use { s ->
+            val r = VueltaCallada(telefono, ahora = { reloj }).con(s.getInputStream(), s.getOutputStream(), soloEstos)
+            hilo.join(5000)
+            return r
+        }
+    }
+
+    @Test
+    fun `la vuelta de las tareas solo lleva los chats tachados`() {
+        emparejar()
+        proyecto(telefono, Proyecto("obra", "Obra", tocado = 5))
+        val lista = mensaje(telefono, "t1", "# Compras\n- [ ] pan", Clase.MINIAPP).copy(miniapp = "tareas")
+        editar(telefono, "t1") { lista }
+        mensaje(telefono, "n-obra", "acta de la obra", proyecto = "obra")
+        vueltaCallada(null)
+        assertEquals("# Compras\n- [ ] pan", tableta.leerMensajes().single { it.id == "t1" }.texto)
+
+        // Se tacha en el teléfono y, a la vez, se escribe en la obra: la vuelta rápida lleva lo tachado y nada más.
+        editar(telefono, "t1") { it.copy(texto = "# Compras\n- [x] pan") }
+        mensaje(telefono, "n-obra-2", "segunda acta", proyecto = "obra")
+        vueltaCallada(setOf(Disco.GENERAL))
+        assertEquals("# Compras\n- [x] pan", tableta.leerMensajes().single { it.id == "t1" }.texto)
+        assertNull("la obra espera a la vuelta entera", tableta.leerMensajes().firstOrNull { it.id == "n-obra-2" })
+
+        // Caso negativo: la entera sí la lleva.
+        vueltaCallada(null)
+        assertNotNull(tableta.leerMensajes().firstOrNull { it.id == "n-obra-2" })
+    }
+
+    @Test
+    fun `la vuelta de las tareas no lleva un chat desmarcado con ese aparato`() {
+        emparejar()
+        proyecto(telefono, Proyecto("obra", "Obra", tocado = 5))
+        vueltaCallada(null)
+        telefono.guardarElegidos("id-tab", setOf(Disco.GENERAL))
+        mensaje(telefono, "t-obra", "# Obra\n- [x] losa", Clase.MINIAPP, proyecto = "obra")
+        vueltaCallada(setOf("obra"))
+        assertNull(tableta.leerMensajes().firstOrNull { it.id == "t-obra" })
+    }
+
+    @Test
+    fun `sellar no relee lo ya sellado pero sella lo que llega despues`() {
+        emparejar()
+        telefono.sellar()
+        val chat = File(telefono.filesDir, "guardados.jsonl")
+        val antes = chat.lastModified()
+        telefono.sellar()
+        assertEquals("nada nuevo: no se reescribe", antes, chat.lastModified())
+        // Un mensaje sin códigos escrito a mano después: el siguiente sellado lo ve.
+        chat.appendText(Disco.JSON.encodeToString(Mensaje.serializer(), Mensaje(id = "suelto", cuando = reloj++, clase = Clase.NOTA, texto = "x")) + "\n")
+        telefono.sellar()
+        val m = telefono.leerMensajes().single { it.id == "suelto" }
+        assertTrue("sellado: ${m.numero}", m.numero > 0)
+        assertNotNull(m.uid)
+    }
 }
