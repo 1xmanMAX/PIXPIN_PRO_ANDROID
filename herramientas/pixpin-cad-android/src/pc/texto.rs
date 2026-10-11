@@ -59,25 +59,10 @@ const CARPETA_FUENTES: &str = "/system/fonts";
 /// Las fuentes instaladas en Windows por su nombre de familia (el del
 /// registro: «agency fb», «agency fb bold»…) y su fichero. Se lee una vez.
 pub fn fuentes_instaladas() -> &'static HashMap<String, std::path::PathBuf> {
-    // Android: no hay registro de fuentes; la familia es el nombre del archivo
-    // («roboto-regular» → «roboto», «roboto regular»).
-    static F: std::sync::OnceLock<HashMap<String, std::path::PathBuf>> = std::sync::OnceLock::new();
-    F.get_or_init(|| {
-        let mut mapa = HashMap::new();
-        // Las que miden como las de Windows (las de PixPin), primero: mandan.
-        crate::familias_android(&mut mapa);
-        if let Ok(d) = std::fs::read_dir(CARPETA_FUENTES) {
-            for e in d.flatten() {
-                let ruta = e.path();
-                let Some(base) = ruta.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { continue };
-                mapa.entry(base.replace('-', " ")).or_insert_with(|| ruta.clone());
-                if let Some(familia) = base.strip_suffix("-regular") {
-                    mapa.entry(familia.to_string()).or_insert_with(|| ruta.clone());
-                }
-            }
-        }
-        mapa
-    })
+    // Android: no hay registro de fuentes. Las del usuario (por su nombre de
+    // verdad), las de PixPin que miden como las de Windows, y las del sistema
+    // por el nombre del archivo; se rehace si el usuario añade letras.
+    crate::fuentes_android(CARPETA_FUENTES)
 }
 
 /// La clave de fuente (para [`Textos`]) de una familia de Windows, con
@@ -94,7 +79,11 @@ pub fn clave_de_familia(familia: &str, negrita: bool) -> Option<String> {
     // El registro nombra la negrita en el idioma de Windows.
     let negritas = ["bold", "negrita", "gras", "fett", "grassetto", "negrito"];
     let r = if negrita { negritas.iter().find_map(|n| m.get(&format!("{f} {n}"))).or_else(|| m.get(&f)) } else { m.get(&f).or_else(|| m.get(&format!("{f} regular"))) };
-    r.map(|p| format!("ttf:{}", p.display()))
+    let r = r.map(|p| format!("ttf:{}", p.display()));
+    if r.is_none() {
+        crate::falta(familia.trim().trim_matches('"'));
+    }
+    r
 }
 
 /// El fichero de fuente de Windows para el `font_file` de un estilo.
@@ -151,10 +140,12 @@ impl Textos {
                 // La de AutoCAD si esta; si no, la de PixPin que mas se le parece.
                 crate::shx::buscar(&clave, carpetas_shx())
                     .and_then(|r| crate::shx::abrir(&r))
+                    .or_else(|| { crate::falta_shx(&clave); None })
                     .or_else(|| crate::shx::de_reserva(&clave))
             } else {
                 None
             };
+            crate::revisar_ttf(&clave, CARPETA_FUENTES);
             for nombre in fichero_para(&clave) {
                 let ruta = crate::ruta_de_fuente(CARPETA_FUENTES, &nombre);
                 if let Ok(datos) = std::fs::read(&ruta)

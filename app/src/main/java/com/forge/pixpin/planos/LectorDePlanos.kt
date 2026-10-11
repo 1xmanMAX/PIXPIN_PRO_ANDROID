@@ -152,8 +152,54 @@ class LectorDePlanos : Service() {
             return n.endsWith(".dwg") || n.endsWith(".dxf")
         }
 
-        /** Las fuentes SHX que quiera usar el usuario (en un teléfono no hay AutoCAD que las traiga). */
+        /**
+         * Las letras que ponga el usuario —SHX de su AutoCAD y TrueType de su Windows—: en un
+         * teléfono no hay AutoCAD que las traiga, y PixPin no puede repartirlas (son de Autodesk y
+         * de Microsoft). La lectura nativa las busca aquí **antes** que las suyas.
+         */
         fun carpetaShx(c: Context): File = File(c.filesDir, "fuentes-shx")
+
+        /** Lo que el lector apunta en `sinDibujar` por cada letra que el plano pide y no está (`FUENTE_QUE_FALTA` del .so). */
+        const val FUENTE_QUE_FALTA = "fuente que falta: "
+
+        /** Las letras que se pueden añadir, por su terminación. */
+        val TIPOS_DE_LETRA = setOf("shx", "ttf", "otf", "ttc")
+
+        /** Las letras que puso el usuario, por nombre. */
+        fun letrasDelUsuario(c: Context): List<File> =
+            carpetaShx(c).listFiles()?.filter { it.isFile && it.extension.lowercase() in TIPOS_DE_LETRA }?.sortedBy { it.name.lowercase() }.orEmpty()
+
+        /** Una huella corta de [letrasDelUsuario] (nombres y pesos): cambia si se añade o se quita una. Vacía si no hay. */
+        fun huellaDeLetras(c: Context): String {
+            val l = letrasDelUsuario(c)
+            if (l.isEmpty()) return ""
+            return claveDe(l.joinToString("|") { it.name.lowercase() + ":" + it.length() }).take(8)
+        }
+
+        /**
+         * Copia a [carpetaShx] las letras elegidas (con su nombre, que es lo que pide el plano:
+         * «romans.shx», «ARIALN.TTF»). Lo que no es una letra se salta. Devuelve cuántas.
+         */
+        fun anadirLetras(c: Context, uris: List<android.net.Uri>): Int {
+            val carpeta = carpetaShx(c).apply { mkdirs() }
+            var n = 0
+            for (u in uris) {
+                val nombre = runCatching {
+                    c.contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { k ->
+                        if (k.moveToFirst()) k.getString(0) else null
+                    }
+                }.getOrNull() ?: u.lastPathSegment?.substringAfterLast('/') ?: continue
+                val limpio = File(nombre).name
+                if (limpio.substringAfterLast('.', "").lowercase() !in TIPOS_DE_LETRA) continue
+                val ok = runCatching {
+                    val tmp = File(carpeta, "$limpio.tmp")
+                    c.contentResolver.openInputStream(u)?.use { i -> tmp.outputStream().use { i.copyTo(it) } } ?: return@runCatching false
+                    tmp.renameTo(File(carpeta, limpio))
+                }.getOrDefault(false)
+                if (ok) n++
+            }
+            return n
+        }
 
         /**
          * Las SHX de PixPin (las de Hershey, `assets/fuentes-shx`), sacadas a disco la primera vez:
@@ -222,7 +268,9 @@ class LectorDePlanos : Service() {
             val carpeta = carpeta(c)
             // Con la versión del formato en el nombre: lo leído con otra versión no se usa (ni se
             // confunde con roto) y se va solo al podar.
-            val salida = File(carpeta, clave(plano) + ".v$VERSION_DEL_FORMATO-$REVISION_DE_LETRAS.pxcad")
+            // Y con la huella de las letras del usuario: si añade una, el plano se vuelve a leer con ella.
+            val letras = huellaDeLetras(c).let { if (it.isEmpty()) "" else "-$it" }
+            val salida = File(carpeta, clave(plano) + ".v$VERSION_DEL_FORMATO-$REVISION_DE_LETRAS$letras.pxcad")
             return pedir(c, plano, salida, MODO_PLANO, tope)
         }
 

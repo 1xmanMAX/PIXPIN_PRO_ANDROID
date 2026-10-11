@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.collectAsState
@@ -270,6 +271,22 @@ class PlanoActivity : ComponentActivity() {
         var acotando by remember { mutableStateOf(false) }
         // **Marcos para imprimir** (9-oct-2026): partes del plano, cada una una hoja.
         var marcando by remember { mutableStateOf(false) }
+        // Las letras: el aviso de las que faltan y añadir las del usuario.
+        var viendoLetras by remember { mutableStateOf(false) }
+        var anadiendo by remember { mutableStateOf(false) }
+        val elegirLetras = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()
+        ) { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            anadiendo = true
+            lifecycleScope.launch {
+                val n = withContext(Dispatchers.IO) { LectorDePlanos.anadirLetras(this@PlanoActivity, uris) }
+                anadiendo = false
+                android.widget.Toast.makeText(this@PlanoActivity, getString(com.forge.pixpin.R.string.plano_letras_anadidas, n), android.widget.Toast.LENGTH_LONG).show()
+                // Con letras nuevas, el plano se vuelve a leer (su caché lleva la huella de las letras).
+                if (n > 0) { guardarCapa(); recreate() }
+            }
+        }
         var anotando by remember { mutableStateOf(false) }
         var tickDeAnotar by remember { mutableIntStateOf(0) }
         var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
@@ -310,12 +327,16 @@ class PlanoActivity : ComponentActivity() {
                 pintor = PintorDePlano(m, grosor = (densidad / 1.5f).coerceIn(1f, 3f)).also {
                     it.claro = claro
                     it.alCambiarTamano = { w, h -> runOnUiThread { alCambiarTamano(w, h) } }
+                    it.pedirFotograma = { vista?.requestRender() }
                 }
                 estado = null
                 listo = true
                 // **Civil 3D guardado sin su dibujo** (PROXYGRAPHICS = 0): se dice, como en el PC.
                 val sinDibujo = m.sinDibujar.filter { it.first.startsWith("sin dibujo: ") }.sumOf { it.second }
                 if (sinDibujo > 0) android.widget.Toast.makeText(this@PlanoActivity, getString(com.forge.pixpin.R.string.plano_sin_dibujo_civil, sinDibujo), android.widget.Toast.LENGTH_LONG).show()
+                // **Letras que el plano pide y no están**: se dice, y el botón «Aa» de arriba las añade.
+                val faltan = m.sinDibujar.count { it.first.startsWith(LectorDePlanos.FUENTE_QUE_FALTA) }
+                if (faltan > 0 && sinDibujo == 0) android.widget.Toast.makeText(this@PlanoActivity, getString(com.forge.pixpin.R.string.plano_faltan_letras, faltan), android.widget.Toast.LENGTH_LONG).show()
                 // Los enganches de la cota, sin esperar a que se pidan (en un plano grande tardan).
                 lifecycleScope.launch(Dispatchers.Default) {
                     enganches = runCatching { Enganches.de(m) }.getOrNull()
@@ -592,6 +613,13 @@ class PlanoActivity : ComponentActivity() {
                                 contentDescription = getString(com.forge.pixpin.R.string.plano_tema), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
                             )
                         }
+                        val faltanLetras = modelo?.sinDibujar?.any { it.first.startsWith(LectorDePlanos.FUENTE_QUE_FALTA) } == true
+                        IconButton(onClick = { viendoLetras = true; toques++ }, modifier = Modifier.size(38.dp)) {
+                            Icon(
+                                Icons.Filled.FontDownload, contentDescription = getString(com.forge.pixpin.R.string.plano_letras),
+                                tint = if (faltanLetras) Color(0xFFFFB020) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
+                            )
+                        }
                         IconButton(onClick = { Visor3DActivity.abrir(this@PlanoActivity, original.absolutePath, nombre); toques++ }, modifier = Modifier.size(38.dp)) {
                             Text("3D", color = blanco.copy(alpha = 0.9f), fontWeight = FontWeight.Bold)
                         }
@@ -617,6 +645,42 @@ class PlanoActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+            if (viendoLetras) {
+                val faltan = remember(modelo) {
+                    modelo?.sinDibujar.orEmpty().filter { it.first.startsWith(LectorDePlanos.FUENTE_QUE_FALTA) }.map { it.first.removePrefix(LectorDePlanos.FUENTE_QUE_FALTA) }
+                }
+                var mias by remember { mutableStateOf(LectorDePlanos.letrasDelUsuario(this@PlanoActivity)) }
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { viendoLetras = false },
+                    title = { Text(getString(com.forge.pixpin.R.string.plano_letras)) },
+                    text = {
+                        Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                            Text(
+                                if (faltan.isEmpty()) getString(com.forge.pixpin.R.string.plano_letras_no_falta)
+                                else getString(com.forge.pixpin.R.string.plano_letras_faltan)
+                            )
+                            if (faltan.isNotEmpty()) Text(faltan.joinToString("\n"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
+                            Text(getString(com.forge.pixpin.R.string.plano_letras_donde), modifier = Modifier.padding(top = 8.dp))
+                            if (mias.isNotEmpty()) {
+                                Text(getString(com.forge.pixpin.R.string.plano_letras_mias, mias.size), modifier = Modifier.padding(top = 12.dp))
+                                Text(mias.joinToString(", ") { it.name }, color = Color.Gray, modifier = Modifier.padding(top = 4.dp))
+                                TextButton(onClick = {
+                                    mias.forEach { it.delete() }
+                                    mias = emptyList()
+                                    viendoLetras = false
+                                    guardarCapa(); recreate()
+                                }) { Text(getString(com.forge.pixpin.R.string.plano_letras_quitar)) }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { viendoLetras = false; elegirLetras.launch(arrayOf("*/*")) }, enabled = !anadiendo) {
+                            Text(getString(com.forge.pixpin.R.string.plano_letras_anadir))
+                        }
+                    },
+                    dismissButton = { TextButton(onClick = { viendoLetras = false }) { Text(getString(com.forge.pixpin.R.string.plano_listo)) } }
+                )
             }
             // Marcando: la pista, quitar el último marco, imprimir y salir.
             if (marcando) {

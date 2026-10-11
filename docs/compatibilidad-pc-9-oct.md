@@ -53,3 +53,19 @@ Lo vio el usuario en su Huawei MatePad Mini (en el Galaxy S24 Ultra no pasaba):
 | Lento al acercarse a los detalles | Los arcos grandes en pantalla (más de 160 px) van como una **banda** de 48 trozos que sigue la curva, no como un cuadrado que tapaba la pantalla entera y se pintaba píxel a píxel por cada arco. |
 | Textos que se montan o se salen de sus recuadros | El PC escribe con las letras de Windows; aquí iban a Roboto: un estilo con **Arial Narrow** salía un 11 % más ancho y Arial un 8 % más estrecho. Ahora van en la app **Liberation Sans / Sans Narrow / Serif / Mono** (mismas medidas que Arial, Arial Narrow, Times New Roman y Courier New), **Carlito** (Calibri) y **Caladea** (Cambria) en `assets/fuentes-ttf` con sus licencias; el `.so` las recibe en el renglón `ttf:` de las carpetas de letras (`carpeta_ttf_android`, `fuente_parecida`, `ruta_de_fuente`, `familias_android` en `lib.rs`). Caché de planos rehecha (`REVISION_DE_LETRAS` = 3). |
 | Grosor y letra del panel enormes al anotar un plano (PC `11bd1f6`) | `DrawController.escalaDeLoNuevo` (1 en toda la app; en el plano, uno entre el zoom): lo nuevo nace a la escala de lo que se ve, cambiar el tamaño de lo marcado también, y el panel lo enseña en su medida. Prueba: `EscalaDeLoNuevoTest`. |
+
+## Letras del usuario y la tableta Huawei, segunda vuelta (v0.120.0, 11-oct)
+
+- **Las letras de AutoCAD no pueden ir dentro de PixPin** (son de Autodesk; las de Windows, de
+  Microsoft). El visor de planos tiene ahora el botón **Aa**: dice qué letras pide el plano y no
+  están (el .so las apunta en `sinDibujar` como `fuente que falta: X`, desde `falta`, `falta_shx`,
+  `revisar_ttf` y `clave_de_familia`), dónde están en el PC (`C:\Program Files\Autodesk\AutoCAD
+  20xx\Fonts`, `C:\Windows\Fonts`) y deja **añadirlas** (SHX, TTF, OTF, TTC) a `files/fuentes-shx`.
+  El lector las usa antes que las de PixPin (`del_usuario`, y las TrueType por su nombre de verdad
+  de la tabla `name` en `familias_del_usuario`); la caché del plano lleva la huella de esas letras
+  (`LectorDePlanos.huellaDeLetras`), así que al añadir una el plano se relee. Prueba Rust:
+  `pruebas_letras_del_usuario` (cargo test --release --lib); probado también con `convertir-plano`.
+- **Tableta Huawei** (seguía a trozos y lenta): las letras van **ya puestas en el plano**, en un
+  búfer de vértices sueltos como las rayas (sin instancias, sin texturas ni `gl_VertexID`), si caben
+  (≤ 6 millones de vértices; si no, el camino de antes). Y **moviéndose, a menos píxeles** (≤ 1,5
+  millones, en un búfer aparte que se estira a la pantalla); a los 140 ms de quieto se pinta nítido.

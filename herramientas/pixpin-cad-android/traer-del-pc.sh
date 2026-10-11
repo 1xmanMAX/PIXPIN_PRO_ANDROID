@@ -44,28 +44,18 @@ if ini < 0:
     sys.exit("texto.rs: no encuentro fuentes_instaladas; el PC lo movió")
 fin = t.find("\n}\n", ini) + 3
 t = t[:ini] + '''pub fn fuentes_instaladas() -> &'static HashMap<String, std::path::PathBuf> {
-    // Android: no hay registro de fuentes; la familia es el nombre del archivo
-    // («roboto-regular» → «roboto», «roboto regular»).
-    static F: std::sync::OnceLock<HashMap<String, std::path::PathBuf>> = std::sync::OnceLock::new();
-    F.get_or_init(|| {
-        let mut mapa = HashMap::new();
-        // Las que miden como las de Windows (las de PixPin), primero: mandan.
-        crate::familias_android(&mut mapa);
-        if let Ok(d) = std::fs::read_dir(CARPETA_FUENTES) {
-            for e in d.flatten() {
-                let ruta = e.path();
-                let Some(base) = ruta.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { continue };
-                mapa.entry(base.replace('-', " ")).or_insert_with(|| ruta.clone());
-                if let Some(familia) = base.strip_suffix("-regular") {
-                    mapa.entry(familia.to_string()).or_insert_with(|| ruta.clone());
-                }
-            }
-        }
-        mapa
-    })
+    // Android: no hay registro de fuentes. Las del usuario (por su nombre de
+    // verdad), las de PixPin que miden como las de Windows, y las del sistema
+    // por el nombre del archivo; se rehace si el usuario añade letras.
+    crate::fuentes_android(CARPETA_FUENTES)
 }
 ''' + t[fin:]
 (d / "texto.rs").write_text(t)
+# Las letras que faltan se apuntan para decirlas en la app.
+cambiar("texto.rs", "                crate::shx::buscar(&clave, carpetas_shx())\n                    .and_then(|r| crate::shx::abrir(&r))\n",
+        "                crate::shx::buscar(&clave, carpetas_shx())\n                    .and_then(|r| crate::shx::abrir(&r))\n                    .or_else(|| { crate::falta_shx(&clave); None })\n")
+cambiar("texto.rs", "            for nombre in fichero_para(&clave) {", "            crate::revisar_ttf(&clave, CARPETA_FUENTES);\n            for nombre in fichero_para(&clave) {")
+cambiar("texto.rs", "    r.map(|p| format!(\"ttf:{}\", p.display()))\n}", "    let r = r.map(|p| format!(\"ttf:{}\", p.display()));\n    if r.is_none() {\n        crate::falta(familia.trim().trim_matches('\"'));\n    }\n    r\n}")
 # Las letras de Windows: la de PixPin que mide igual (Liberation, Carlito, Caladea) si la hay.
 cambiar("texto.rs", "let ruta = std::path::Path::new(CARPETA_FUENTES).join(&nombre);",
         "let ruta = crate::ruta_de_fuente(CARPETA_FUENTES, &nombre);")

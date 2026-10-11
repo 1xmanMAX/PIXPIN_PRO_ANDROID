@@ -110,12 +110,13 @@ const FAMILIAS_DE_WINDOWS: [(&str, &str); 24] = [
 /// Pone en `mapa` (familia → fichero) las familias de Windows que PixPin trae
 /// con las mismas medidas. Mandan sobre las del sistema.
 pub(crate) fn familias_android(mapa: &mut std::collections::HashMap<String, PathBuf>) {
+    familias_del_usuario(mapa);
     let Some(carpeta) = carpeta_ttf_android() else { return };
     for (familia, fichero) in FAMILIAS_DE_WINDOWS {
         if let Some(f) = fuente_parecida(fichero) {
             let ruta = carpeta.join(f);
             if ruta.is_file() {
-                mapa.insert(familia.to_string(), ruta);
+                mapa.entry(familia.to_string()).or_insert(ruta);
             }
         }
     }
@@ -124,6 +125,10 @@ pub(crate) fn familias_android(mapa: &mut std::collections::HashMap<String, Path
 /// Dónde leer la letra `nombre` (un fichero de Windows como «arialn.ttf», o
 /// una ruta entera): la pareja de PixPin si la hay, si no la del sistema.
 pub(crate) fn ruta_de_fuente(carpeta_sistema: &str, nombre: &str) -> PathBuf {
+    // Las que puso el usuario (copiadas de su Windows o de su AutoCAD) mandan.
+    if let Some(r) = del_usuario(nombre) {
+        return r;
+    }
     if let (Some(c), Some(f)) = (carpeta_ttf_android(), fuente_parecida(nombre)) {
         let r = c.join(f);
         if r.is_file() {
@@ -161,13 +166,18 @@ pub fn convertir_a(entrada: &Path, salida: &Path, carpeta_shx: &str) -> Result<S
     if let Ok(mut c) = CARPETA_SHX.lock() {
         *c = carpeta_shx.to_string();
     }
-    let (modelo, cuentas) = std::panic::catch_unwind(|| convertir::convertir_fichero(entrada))
+    sacar_lo_que_falta();
+    let (mut modelo, cuentas) = std::panic::catch_unwind(|| convertir::convertir_fichero(entrada))
         .map_err(|e| {
             e.downcast_ref::<String>()
                 .cloned()
                 .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
                 .unwrap_or_else(|| "el lector de planos se cayó".into())
         })??;
+    // Las letras que pide el plano y no están, para decirlas en la app.
+    for f in sacar_lo_que_falta() {
+        modelo.sin_dibujar.push((format!("{FUENTE_QUE_FALTA}{f}"), 1));
+    }
     let temporal = salida.with_extension("tmp");
     std::fs::write(&temporal, modelo.a_bytes()).map_err(|e| e.to_string())?;
     std::fs::rename(&temporal, salida).map_err(|e| e.to_string())?;
@@ -256,4 +266,159 @@ pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_esDeCivil<'a>(
 ) -> jni::sys::jboolean {
     let r = texto_de(&mut env, &ruta);
     std::panic::catch_unwind(|| bim::es_de_civil(Path::new(&r))).unwrap_or(false) as jni::sys::jboolean
+}
+
+// ------------------------------------------------------------- las letras del usuario
+
+/// Las carpetas de letras del usuario: las de las SHX menos las de PixPin
+/// (que acaban en «-pixpin»). Ahí deja la app las SHX, TTF, OTF y TTC que el
+/// usuario copia de su Windows o de su AutoCAD: PixPin no puede traer las de
+/// Autodesk ni las de Microsoft, que no se pueden repartir.
+fn carpetas_del_usuario() -> Vec<PathBuf> {
+    carpetas_shx_android().into_iter().filter(|c| !c.to_string_lossy().ends_with("-pixpin")).collect()
+}
+
+/// El fichero `nombre` (sin mirar mayúsculas) en las carpetas del usuario.
+pub(crate) fn del_usuario(nombre: &str) -> Option<PathBuf> {
+    let base = nombre.rsplit(['/', '\\']).next().unwrap_or(nombre).trim();
+    if base.is_empty() || Path::new(nombre).is_absolute() {
+        return None;
+    }
+    for c in carpetas_del_usuario() {
+        let Ok(d) = std::fs::read_dir(&c) else { continue };
+        for e in d.flatten() {
+            if e.file_name().to_string_lossy().eq_ignore_ascii_case(base) {
+                return Some(e.path());
+            }
+        }
+    }
+    None
+}
+
+/// Las familias de las TrueType del usuario, por su nombre de verdad (la
+/// tabla `name`: «Arial Narrow», y con «bold» si es negrita), como el
+/// registro de Windows.
+fn familias_del_usuario(mapa: &mut std::collections::HashMap<String, PathBuf>) {
+    for c in carpetas_del_usuario() {
+        let Ok(d) = std::fs::read_dir(&c) else { continue };
+        for e in d.flatten() {
+            let ruta = e.path();
+            let ext = ruta.extension().map(|x| x.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            if !["ttf", "otf", "ttc"].contains(&ext.as_str()) {
+                continue;
+            }
+            let Ok(datos) = std::fs::read(&ruta) else { continue };
+            let Ok(cara) = ttf_parser::Face::parse(&datos, 0) else { continue };
+            let nombre = |id: u16| {
+                cara.names().into_iter().filter(|n| n.name_id == id && n.is_unicode()).find_map(|n| n.to_string())
+            };
+            let Some(familia) = nombre(ttf_parser::name_id::TYPOGRAPHIC_FAMILY).or_else(|| nombre(ttf_parser::name_id::FAMILY)) else { continue };
+            let sub = nombre(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY).or_else(|| nombre(ttf_parser::name_id::SUBFAMILY)).unwrap_or_default().to_lowercase();
+            let familia = familia.trim().to_lowercase();
+            let clave = if sub.is_empty() || sub == "regular" || sub == "normal" { familia.clone() } else { format!("{familia} {sub}") };
+            mapa.insert(clave, ruta.clone());
+            if sub.contains("bold") {
+                mapa.insert(format!("{familia} negrita"), ruta.clone());
+            }
+        }
+    }
+}
+
+/// **Las familias que se conocen**, rehechas si cambian las carpetas o lo
+/// que hay en las del usuario (el proceso de los planos vive mucho y el
+/// usuario puede añadir letras entre un plano y otro).
+pub(crate) fn fuentes_android(sistema: &str) -> &'static std::collections::HashMap<String, PathBuf> {
+    static CACHE: Mutex<Option<(String, &'static std::collections::HashMap<String, PathBuf>)>> = Mutex::new(None);
+    let mut firma = CARPETA_SHX.lock().map(|c| c.clone()).unwrap_or_default();
+    for c in carpetas_del_usuario() {
+        if let Ok(d) = std::fs::read_dir(&c) {
+            let mut n: Vec<String> = d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+            n.sort();
+            firma.push_str(&n.join("|"));
+        }
+    }
+    let mut g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((f, m)) = g.as_ref()
+        && *f == firma
+    {
+        return m;
+    }
+    let mut mapa = std::collections::HashMap::new();
+    // Las que miden como las de Windows (del usuario y de PixPin), primero: mandan.
+    familias_android(&mut mapa);
+    if let Ok(d) = std::fs::read_dir(sistema) {
+        for e in d.flatten() {
+            let ruta = e.path();
+            let Some(base) = ruta.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { continue };
+            mapa.entry(base.replace('-', " ")).or_insert_with(|| ruta.clone());
+            if let Some(familia) = base.strip_suffix("-regular") {
+                mapa.entry(familia.to_string()).or_insert_with(|| ruta.clone());
+            }
+        }
+    }
+    let m: &'static std::collections::HashMap<String, PathBuf> = Box::leak(Box::new(mapa));
+    *g = Some((firma, m));
+    m
+}
+
+// ------------------------------------------------------------- lo que falta
+
+static FALTAN: Mutex<std::collections::BTreeSet<String>> = Mutex::new(std::collections::BTreeSet::new());
+
+/// Apunta una letra que el plano pide y no está (se dice en la app, para que
+/// el usuario la copie de su PC).
+pub(crate) fn falta(nombre: &str) {
+    let n = nombre.trim();
+    if !n.is_empty()
+        && let Ok(mut f) = FALTAN.lock()
+    {
+        f.insert(n.to_string());
+    }
+}
+
+/// Una SHX que no está: solo si de verdad es SHX (la reserva la conoce o
+/// termina en .shx); un estilo «Standard» sin fichero no cuenta.
+pub(crate) fn falta_shx(clave: &str) {
+    if crate::shx::reserva_para(clave).is_some() {
+        let base = clave.rsplit(['/', '\\']).next().unwrap_or(clave);
+        falta(&if base.to_ascii_lowercase().ends_with(".shx") { base.to_string() } else { format!("{base}.shx") });
+    }
+}
+
+/// Una TrueType pedida por su fichero (el `font_file` de un estilo) que no
+/// está ni tiene pareja en PixPin.
+pub(crate) fn revisar_ttf(clave: &str, sistema: &str) {
+    let c = clave.trim().to_ascii_lowercase();
+    if c.starts_with("ttf:") || !(c.ends_with(".ttf") || c.ends_with(".otf") || c.ends_with(".ttc")) {
+        return;
+    }
+    let base = c.rsplit(['\\', '/']).next().unwrap_or(&c).to_string();
+    if !ruta_de_fuente(sistema, &base).is_file() {
+        falta(&base);
+    }
+}
+
+/// Lo apuntado desde la última vez, y se vacía.
+pub(crate) fn sacar_lo_que_falta() -> Vec<String> {
+    FALTAN.lock().map(|mut f| std::mem::take(&mut *f).into_iter().collect()).unwrap_or_default()
+}
+
+/// Cómo se apunta en `sin_dibujar` una letra que falta (lo lee la app).
+pub const FUENTE_QUE_FALTA: &str = "fuente que falta: ";
+
+#[cfg(test)]
+mod pruebas_letras_del_usuario {
+    #[test]
+    fn la_letra_del_usuario_se_encuentra_y_no_falta() {
+        let d = std::env::temp_dir().join(format!("pixpin-letras-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join("MiaLetra.TTF"), b"x").unwrap();
+        *super::CARPETA_SHX.lock().unwrap() = format!("{}\nttf:/no/existe", d.display());
+        assert_eq!(super::del_usuario("mialetra.ttf"), Some(d.join("MiaLetra.TTF")));
+        super::sacar_lo_que_falta();
+        super::revisar_ttf("mialetra.ttf", "/system/fonts");
+        super::revisar_ttf("rara.ttf", "/system/fonts");
+        assert_eq!(super::sacar_lo_que_falta(), vec!["rara.ttf".to_string()]);
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }

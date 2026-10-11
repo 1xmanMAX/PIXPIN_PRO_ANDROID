@@ -38,8 +38,20 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
     private var listo = false
 
     private var progSimple = 0; private var progRelleno = 0; private var progTrama = 0; private var progLetra = 0; private var progArco = 0
-    private var progArcoBanda = 0
-    private val vaos = IntArray(4)
+    private var progArcoBanda = 0; private var progCopia = 0
+    /** Las letras ya puestas en el plano (un búfer de vértices sueltos) y dónde empieza cada tramo en él. */
+    private var letrasPlanas = false
+    private var vbLetrasPlanas = 0
+    private var verticesDeTramo = IntArray(1)
+    /** El búfer a menos píxeles de cuando se mueve. */
+    private var fbo = 0; private var texFbo = 0; private var fboAncho = 0; private var fboAlto = 0; private var vbCopia = 0
+    private var ultimaCamara: CamaraPlano? = null
+    private var ultimoCambio = 0L
+    private val principal = android.os.Handler(android.os.Looper.getMainLooper())
+    private var nitido = Runnable { }
+    /** Pide un fotograma (lo pone quien tiene la vista): el nítido de después de moverse. */
+    var pedirFotograma: (() -> Unit)? = null
+    private val vaos = IntArray(6)
     private var vbVertices = 0; private var ibLineas = 0; private var ibTriangulos = 0
     private var vbTrama = 0; private var ibTrama = 0; private var vbLetras = 0; private var vbArcos = 0
     private var texTramas = 0; private var texFamilias = 0; private var texMalla = 0
@@ -67,12 +79,90 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        val c = camara
+        val ahora = android.os.SystemClock.uptimeMillis()
+        if (c != ultimaCamara) { ultimaCamara = c; ultimoCambio = ahora }
+        // **Moviéndose, a menos píxeles** (11-oct-2026, la tableta Huawei del usuario iba a saltos
+        // al acercarse): los sombreados se calculan píxel a píxel y en una pantalla de 4 millones
+        // de píxeles cuestan; mientras el dedo mueve el plano basta con menos, y al pararse se
+        // vuelve a pintar nítido.
+        val moviendose = listo && c != null && ahora - ultimoCambio < QUIETO_MS
+        val s = if (moviendose) escalaEnMovimiento() else 1f
+        if (s < 1f && prepararReducido((ancho * s).toInt().coerceAtLeast(1), (alto * s).toInt().coerceAtLeast(1))) {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fbo)
+            GLES30.glViewport(0, 0, fboAncho, fboAlto)
+            escena(c, fboAncho.toFloat() / ancho)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, ancho, alto)
+            copiarReducido()
+            pedirNitido()
+        } else {
+            escena(c, 1f)
+        }
+    }
+
+    /** La escala de la imagen mientras se mueve: que no pase de [PIXELES_EN_MOVIMIENTO], ni de la mitad. */
+    private fun escalaEnMovimiento(): Float {
+        val total = ancho.toFloat() * alto
+        if (total <= PIXELES_EN_MOVIMIENTO) return 1f
+        return kotlin.math.sqrt(PIXELES_EN_MOVIMIENTO / total).coerceIn(0.5f, 1f)
+    }
+
+    private fun pedirNitido() {
+        val pedir = pedirFotograma ?: return
+        principal.removeCallbacks(nitido)
+        nitido = Runnable { pedir() }
+        principal.postDelayed(nitido, QUIETO_MS + 30L)
+    }
+
+    /** El búfer a menos píxeles (se rehace si cambia de tamaño). False si la tarjeta no lo da. */
+    private fun prepararReducido(w: Int, h: Int): Boolean {
+        if (fbo != 0 && fboAncho == w && fboAlto == h) return true
+        if (fbo != 0) {
+            GLES30.glDeleteFramebuffers(1, intArrayOf(fbo), 0); GLES30.glDeleteTextures(1, intArrayOf(texFbo), 0)
+            fbo = 0
+        }
+        val tex = IntArray(1).also { GLES30.glGenTextures(1, it, 0) }[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, w, h, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        val f = IntArray(1).also { GLES30.glGenFramebuffers(1, it, 0) }[0]
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, f)
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, tex, 0)
+        val ok = GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) == GLES30.GL_FRAMEBUFFER_COMPLETE
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        if (!ok) {
+            GLES30.glDeleteFramebuffers(1, intArrayOf(f), 0); GLES30.glDeleteTextures(1, intArrayOf(tex), 0)
+            return false
+        }
+        fbo = f; texFbo = tex; fboAncho = w; fboAlto = h
+        return true
+    }
+
+    /** La imagen reducida, estirada a la pantalla (un triángulo que la cubre). */
+    private fun copiarReducido() {
+        GLES30.glDisable(GLES30.GL_BLEND)
+        GLES30.glUseProgram(progCopia)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texFbo)
+        GLES30.glUniform1i(GLES30.glGetUniformLocation(progCopia, "uImagen"), 0)
+        GLES30.glBindVertexArray(vaos[5])
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
+        GLES30.glBindVertexArray(0)
+    }
+
+    /** El plano entero con la cámara [c]; [s]: los píxeles de donde se pinta por cada uno de la pantalla. */
+    private fun escena(c: CamaraPlano?, s: Float) {
         val fondo = if (claro) FONDO_CLARO else FONDO_OSCURO
         GLES30.glClearColor(fondo[0], fondo[1], fondo[2], 1f)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        val c = camara ?: return
-        if (!listo) return
+        if (c == null || !listo) return
         val px = c.px.toFloat()
+        // Lo que mide un píxel de donde se pinta y el grosor en esos píxeles.
+        val pxPintado = px / s
+        val grosor = (this.grosor * s).coerceAtLeast(1f)
         val cx = c.centroX.toFloat(); val cy = c.centroY.toFloat()
         val mx = (ancho / 2.0 * c.px).toFloat(); val my = (alto / 2.0 * c.px).toFloat()
         val vx0 = cx - mx; val vy0 = cy - my; val vx1 = cx + mx; val vy1 = cy + my
@@ -86,7 +176,7 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
             GLES30.glUniform2f(GLES30.glGetUniformLocation(p, "uEscala"), ex, ey)
             GLES30.glUniform2f(GLES30.glGetUniformLocation(p, "uCentro"), cx, cy)
             GLES30.glUniform4f(GLES30.glGetUniformLocation(p, "uColor7"), c7, c7, c7, 1f)
-            GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uPx"), px)
+            GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uPx"), pxPintado)
             GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uGrosor"), grosor)
             GLES30.glUniform1f(GLES30.glGetUniformLocation(p, "uModo"), if (claro) 2f else 1f)
         }
@@ -146,7 +236,21 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
             }
         }
         // 4. Letras: un texto de menos de 3 píxeles no se lee.
-        if (conLetras) {
+        if (letrasPlanas) {
+            // Ya puestas en el plano, como rayas y triángulos sueltos: lo más sencillo para la tarjeta.
+            vista(progSimple)
+            GLES30.glLineWidth(grosor)
+            GLES30.glBindVertexArray(vaos[4])
+            val t = modelo.tramosLetras
+            for (i in 0 until t.n) {
+                if (t.tamano[i] < px * 3f) break
+                if (!t.corta(i, vx0, vy0, vx1, vy1)) continue
+                val n = verticesDeTramo[i + 1] - verticesDeTramo[i]
+                if (n <= 0) continue
+                val rayas = t.clase[i] and ModeloCad.GLIFO_DE_RAYAS != 0
+                GLES30.glDrawArrays(if (rayas) GLES30.GL_LINES else GLES30.GL_TRIANGLES, verticesDeTramo[i], n)
+            }
+        } else if (conLetras) {
             vista(progLetra)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texMalla)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(progLetra, "uMalla"), 0)
@@ -178,7 +282,18 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         progLetra = programa(VS_LETRA, FS_COLOR)
         progArco = programa(VS_ARCO, FS_ARCO)
         progArcoBanda = programa(VS_ARCO_BANDA, FS_ARCO)
-        GLES30.glGenVertexArrays(4, vaos, 0)
+        GLES30.glGenVertexArrays(6, vaos, 0)
+        progCopia = programa(VS_COPIA, FS_COPIA)
+        fbo = 0
+        // Un triángulo que cubre la pantalla, para estirar la imagen reducida.
+        vbCopia = IntArray(1).also { GLES30.glGenBuffers(1, it, 0) }[0]
+        GLES30.glBindVertexArray(vaos[5])
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbCopia)
+        val tri = ByteBuffer.allocateDirect(24).order(ByteOrder.nativeOrder())
+        floatArrayOf(-1f, -1f, 3f, -1f, -1f, 3f).forEach { tri.putFloat(it) }
+        tri.position(0)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, 24, tri, GLES30.GL_STATIC_DRAW)
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
         val m = modelo
 
         // Rayas y rellenos: un vértice = x, y (f32) y color (u32).
@@ -209,7 +324,8 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         }
 
         // Letras: instancias de 32 bytes (posición, matriz, color, glifo).
-        if (m.letras.cuantos > 0 && m.mallaLetras.cuantos > 0 && filas(m.mallaLetras.cuantos) <= maxTex && filas(m.glifos.cuantos) <= maxTex) {
+        letrasPlanas = m.letras.cuantos > 0 && subirLetrasPlanas(m)
+        if (!letrasPlanas && m.letras.cuantos > 0 && m.mallaLetras.cuantos > 0 && filas(m.mallaLetras.cuantos) <= maxTex && filas(m.glifos.cuantos) <= maxTex) {
             vbLetras = bufferDeLetras(m)
             texMalla = textura(m.mallaLetras, GLES30.GL_RG32F, GLES30.GL_RG, GLES30.GL_FLOAT)
             GLES30.glBindVertexArray(vaos[2])
@@ -260,6 +376,54 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         b.position(0)
         GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, maxOf(l.cuantos * BYTES_POR_LETRA, 4), if (l.cuantos > 0) b else ByteBuffer.allocateDirect(4), GLES30.GL_STATIC_DRAW)
         return id
+    }
+
+    /**
+     * **Las letras ya puestas en el plano** (11-oct-2026): cada letra, sus rayas o triángulos con
+     * la posición de verdad, en un búfer de vértices como el de las rayas. Sin instancias ni
+     * texturas: en la tableta Huawei del usuario las letras por instancias salían a trozos, y así
+     * la tarjeta solo hace lo más básico (y no gasta vértices de relleno por letra). Si el plano
+     * tiene tantas letras que no cabría ([VERTICES_DE_LETRAS_MAX]), false: van por instancias.
+     */
+    private fun subirLetrasPlanas(m: ModeloCad): Boolean {
+        val l = m.letras; val gl = m.glifos; val malla = m.mallaLetras
+        val t = m.tramosLetras
+        fun cuantosDe(g: Int): Int = if (g in 0 until gl.cuantos) (gl.palabra(g, 1) and ModeloCad.GLIFO_DE_RAYAS.inv()) else 0
+        var total = 0L
+        for (e in 0 until l.cuantos) total += cuantosDe(l.palabra(e, 7))
+        if (total <= 0 || total > VERTICES_DE_LETRAS_MAX) return false
+        // Dónde empieza cada tramo (los tramos van seguidos en el orden de las letras).
+        val inicio = IntArray(t.n + 1)
+        val b = ByteBuffer.allocateDirect((total * 12).toInt()).order(ByteOrder.nativeOrder())
+        var v = 0
+        var tramo = 0
+        for (e in 0 until l.cuantos) {
+            while (tramo < t.n && e >= t.desde[tramo] + t.cuantos[tramo]) { tramo++; inicio[tramo] = v }
+            val g = l.palabra(e, 7)
+            val n = cuantosDe(g)
+            if (n == 0) continue
+            val desde = gl.palabra(g, 0)
+            if (desde < 0 || desde + n > malla.cuantos) continue
+            val x = l.real(e, 0); val y = l.real(e, 1)
+            val a = l.real(e, 2); val bb = l.real(e, 3); val cc = l.real(e, 4); val d = l.real(e, 5)
+            val color = l.palabra(e, 6)
+            for (k in 0 until n) {
+                val ex = malla.real(desde + k, 0); val ey = malla.real(desde + k, 1)
+                b.putFloat(x + a * ex + bb * ey); b.putFloat(y + cc * ex + d * ey); b.putInt(color)
+            }
+            v += n
+        }
+        while (tramo < t.n) { tramo++; inicio[tramo] = v }
+        verticesDeTramo = inicio
+        b.position(0)
+        vbLetrasPlanas = IntArray(1).also { GLES30.glGenBuffers(1, it, 0) }[0]
+        GLES30.glBindVertexArray(vaos[4])
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbLetrasPlanas)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, v * 12, b, GLES30.GL_STATIC_DRAW)
+        GLES30.glEnableVertexAttribArray(0); GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 12, 0)
+        GLES30.glEnableVertexAttribArray(1); GLES30.glVertexAttribIPointer(1, 1, GLES30.GL_UNSIGNED_INT, 12, 8)
+        GLES30.glBindVertexArray(0)
+        return GLES30.glGetError() != GLES30.GL_OUT_OF_MEMORY
     }
 
     /** Un tramo de [cuantas] instancias desde [desde], en dibujos de [INSTANCIAS_POR_DIBUJO] como mucho: hay tarjetas que con muchas de golpe se saltan parte. */
@@ -367,6 +531,12 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         /** Una letra: posición, matriz 2×2, color, y su glifo (desde y cuántos vértices). */
         private const val BYTES_POR_LETRA = 36
         private const val INSTANCIAS_POR_DIBUJO = 4096
+        /** Hasta cuántos vértices de letras se ponen ya en el plano (12 bytes cada uno: 72 MB). */
+        private const val VERTICES_DE_LETRAS_MAX = 6_000_000L
+        /** Píxeles como mucho mientras se mueve el plano. */
+        private const val PIXELES_EN_MOVIMIENTO = 1_500_000f
+        /** Cuánto tiene que estar quieta la cámara para volver a pintar nítido. */
+        private const val QUIETO_MS = 140L
         /** Desde cuántos píxeles de tamaño un arco va como banda y no como cuadrado. */
         private const val ARCO_GRANDE = 160f
         /** Trozos de la banda de un arco grande. */
@@ -585,6 +755,20 @@ void main() {
     vArco = vec4(aCentro, aRadio, aInicio);
     vBarrido = aBarrido;
 }
+"""
+
+        private const val VS_COPIA = """#version 300 es
+layout(location = 0) in vec2 aPos;
+out vec2 vUv;
+void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }
+"""
+
+        private const val FS_COPIA = """#version 300 es
+precision mediump float;
+uniform sampler2D uImagen;
+in vec2 vUv;
+out vec4 oColor;
+void main() { oColor = texture(uImagen, vUv); }
 """
 
         private const val FS_ARCO = COMUN + COLORES + """
