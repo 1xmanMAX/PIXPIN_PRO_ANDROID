@@ -119,6 +119,19 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             }
             return if (alguna) app.proyectos.porId(proyecto.id) else { app.proyectos.borrar(proyecto.id); null }
         }
+        // **Un Word o un PowerPoint, maquetado como en Office** (11-oct-2026): su PDF en vectores
+        // —una hoja por página o diapositiva, del mismo tamaño— con la lectura del PC. Si no se
+        // puede, el PowerPoint sigue el camino de antes. Ver [com.forge.pixpin.office.OfficeAPdf].
+        if (com.forge.pixpin.office.AbrirOffice.seMaqueta(nombre, null)) {
+            val documento = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+            val d = com.forge.pixpin.office.DocumentoOffice.abrir(this, primero.absolutePath)
+            val paginas = d?.let { runCatching { com.forge.pixpin.office.OfficeAPdf.hacer(it, documento) }.getOrDefault(0).also { _ -> it.cerrar() } } ?: 0
+            if (paginas > 0) {
+                primero.delete()
+                return app.proyectos.deEstePdf(documento.absolutePath, nombre.substringBeforeLast('.'), PdfDoc.pageCount(documento.absolutePath).takeIf { it > 0 } ?: paginas, ahora)
+            }
+            documento.delete()
+        }
         // **Una presentación de PowerPoint**: se convierte en PDF —una página por diapositiva— y
         // entra como cualquier PDF, lista para anotar y presentar. Ver [DiapositivasAPdf].
         if (com.forge.pixpin.motor.Diapositivas.esPresentacion(nombre)) {

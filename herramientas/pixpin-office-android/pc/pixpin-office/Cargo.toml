@@ -1,0 +1,12 @@
+# crates/pixpin-office del PC (sus fuentes, copiadas tal cual por traer-del-pc.sh).
+[package]
+name = "pixpin-office"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+pixpin-docs = { path = "../pixpin-docs" }
+memchr = "2"

@@ -84,6 +84,12 @@ object Imprimir {
         manager.print(nombre.ifBlank { "PixPin" }, AdaptadorDeBytes(solo, nombre), null)
     }
 
+    /** Un PDF entero ya hecho (un Word o un PowerPoint en vectores, con lo anotado). */
+    fun pdf(actividad: Activity, bytes: ByteArray, nombre: String) {
+        val manager = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
+        manager.print(nombre.ifBlank { "PixPin" }, AdaptadorDeBytes(bytes, nombre), null)
+    }
+
     /** Las hojas a imprimir: una por marco con contenido; si no hay, una con todo. */
     private fun hojasDe(escena: Scene): List<Pair<Bounds, List<Element>>> =
         escena.marcos

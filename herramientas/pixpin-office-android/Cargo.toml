@@ -1,0 +1,36 @@
+[package]
+name = "pixpin-office-android"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+
+# Word y PowerPoint del PC (crates/pixpin-office, copiado en pc/
+# por traer-del-pc.sh) para Android: se maquetan aquí, se miden con las letras TTF del teléfono
+# y se entregan a Kotlin como una lista de cosas que pintar (formato PXOF, ver src/pxof.rs),
+# que Kotlin pinta en vectores con Canvas.
+[lib]
+name = "pixpinoffice"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "office-a-pxof"
+path = "src/bin/office_a_pxof.rs"
+
+[dependencies]
+pixpin-office = { path = "pc/pixpin-office" }
+ttf-parser = "0.25"
+memmap2 = "0.9"
+jni = { version = "0.21", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "unwind"
+
+[workspace]
+members = [".", "pc/pixpin-office", "pc/pixpin-docs"]

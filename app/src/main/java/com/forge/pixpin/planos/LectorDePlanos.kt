@@ -213,7 +213,7 @@ class LectorDePlanos : Service() {
          * (Calibri) y Caladea (Cambria). Con Roboto en su lugar, los textos de un plano salían más
          * anchos y altos que en AutoCAD y se montaban o se salían de sus recuadros (el usuario, 11-oct-2026).
          */
-        private fun ttfDePixPin(c: Context): File = sacarDeAssets(c, "fuentes-ttf", "fuentes-ttf-pixpin", ".ttf")
+        fun ttfDePixPin(c: Context): File = sacarDeAssets(c, "fuentes-ttf", "fuentes-ttf-pixpin", ".ttf")
 
         /** Los archivos de `assets/[desde]` con la terminación [tipo], sacados a disco (la lectura nativa abre archivos). Se rehacen si cambia la versión de la app. */
         private fun sacarDeAssets(c: Context, desde: String, carpetaDe: String, tipo: String): File {
