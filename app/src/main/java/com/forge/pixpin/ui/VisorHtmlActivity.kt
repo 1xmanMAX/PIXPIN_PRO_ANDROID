@@ -254,7 +254,9 @@ class VisorHtmlActivity : ComponentActivity() {
              * Es un **documento para leer** (un Word, un libro): el menú ofrece verlo como saldría
              * impreso y meterlo en un proyecto como un PDF.
              */
-            documento: Boolean = false
+            documento: Boolean = false,
+            /** Empieza a leerlo en alto nada más abrir (el «Escuchar» del Word maquetado). */
+            escuchar: Boolean = false
         ) {
             val intent = Intent(context, VisorHtmlActivity::class.java)
                 .putExtra(EXTRA_RUTA, ruta)
@@ -262,7 +264,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 .putExtra(EXTRA_SIN_GUION, sinGuion)
             if (comparte != null) intent.putExtra(EXTRA_COMPARTE, comparte)
             if (mensaje != null) intent.putExtra(EXTRA_MENSAJE, mensaje)
-            intent.putExtra(EXTRA_EN_SU_SITIO, enSuSitio).putExtra(EXTRA_DOCUMENTO, documento)
+            intent.putExtra(EXTRA_EN_SU_SITIO, enSuSitio).putExtra(EXTRA_DOCUMENTO, documento).putExtra(EXTRA_ESCUCHAR, escuchar)
             context.startActivity(intent)
         }
     }

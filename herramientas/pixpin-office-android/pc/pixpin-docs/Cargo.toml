@@ -1,0 +1,11 @@
+# Solo el lector de XML de pixpin-docs (crates/pixpin-docs/src/xml.rs del PC), que es lo único
+# que pixpin-office usa de él. Lo demás de pixpin-docs no hace falta aquí.
+[package]
+name = "pixpin-docs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+path = "src/lib.rs"

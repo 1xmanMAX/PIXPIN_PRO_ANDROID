@@ -57,13 +57,22 @@ object ExportarPdfAnotado {
      */
     fun formatoPdf(
         c: Context, base: String, titulo: String, escenaDe: (Int) -> Scene?,
-        espacios: () -> Int, marcas: () -> List<com.forge.pixpin.motor.Marca>
+        espacios: () -> Int, marcas: () -> List<com.forge.pixpin.motor.Marca>,
+        /**
+         * Si el PDF aún no existe (un Word o un PowerPoint maquetado, que se pasa a PDF en
+         * vectores al compartir): lo hace y da su ruta, o null si no se pudo. Sin esto, [base].
+         */
+        prepararBase: (suspend () -> String?)? = null
     ): Compartible.Formato {
         val interruptor = Compartible.Interruptor("Con anotaciones", "Tinta, márgenes y marcadores encima del PDF")
         return Compartible.Formato(
             "pdf-anotado", Icons.Filled.PictureAsPdf, "PDF", Compartible.NINGUNA,
             interruptor = interruptor,
-            generar = { hacerPdf(c, base, titulo, escenaDe, espacios(), marcas(), interruptor.puesto) }
+            generar = {
+                (if (prepararBase == null) base else prepararBase())?.let { b ->
+                    hacerPdf(c, b, titulo, escenaDe, espacios(), marcas(), interruptor.puesto)
+                }
+            }
         )
     }
 

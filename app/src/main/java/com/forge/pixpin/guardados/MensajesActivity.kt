@@ -6720,72 +6720,24 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             abrirFuera(ruta)
                         }
                     }
+                    // **Un Word o un PowerPoint, maquetado como en Office, en el lector de PDF**
+                    // (11-oct-2026, lo del PC): páginas y diapositivas con su tinta, marcadores y
+                    // aumento nítido. Sin el .so, o si no se lee, lo de antes. Ver [com.forge.pixpin.office.AbrirOffice].
+                    com.forge.pixpin.office.AbrirOffice.seMaqueta(m.nombre, ruta) ->
+                        com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name }, mensaje = m.id)
                     com.forge.pixpin.motor.DocxAHtml.esDocx(m.nombre) ||
-                        com.forge.pixpin.motor.DocxAHtml.esDocx(ruta) -> lifecycleScope.launch {
-                        val titulo = m.nombre.ifBlank { File(ruta).name }
-                        val hecho = withContext(Dispatchers.IO) {
-                            runCatching {
-                                val original = File(ruta)
-                                // El nombre lleva la fecha y el peso del original: si el documento
-                                // cambia, no se enseña la conversión vieja; si no, se aprovecha.
-                                val huella = "$ruta|${original.lastModified()}|${original.length()}".hashCode()
-                                val carpeta = File(cacheDir, "visor-docx").apply { mkdirs() }
-                                val pagina = File(carpeta, "$huella.html")
-                                if (!pagina.exists() || pagina.length() == 0L) {
-                                    // Caché de usar y tirar: solo se guarda la última.
-                                    carpeta.listFiles()?.forEach { it.delete() }
-                                    pagina.writeText(com.forge.pixpin.motor.DocxAHtml.convertir(original, titulo))
-                                }
-                                pagina
-                            }
-                        }
-                        hecho.onSuccess { pagina ->
-                            // Arriba, el nombre del documento; al compartir sale el `.docx` y no la
-                            // página fabricada; y sin JavaScript, que esa página no lo lleva.
-                            com.forge.pixpin.ui.VisorHtmlActivity.abrir(
-                                this@MensajesActivity, pagina.absolutePath, titulo,
-                                comparte = ruta, sinGuion = true, mensaje = m.id, documento = true
-                            )
-                        }.onFailure { e ->
-                            Toast.makeText(
-                                this@MensajesActivity,
-                                (e as? com.forge.pixpin.motor.DocxAHtml.NoSeLee)?.message ?: "No se pudo leer el documento",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            abrirFuera(ruta)
-                        }
-                    }
+                        com.forge.pixpin.motor.DocxAHtml.esDocx(ruta) ->
+                        com.forge.pixpin.office.AbrirOffice.wordComoTexto(this, ruta, m.nombre, m.id) { abrirFuera(it) }
                     // **Una página web se ve aquí dentro también** (19-sep-2026): casi siempre es
                     // una «Página web» exportada por PixPin. Ver [com.forge.pixpin.ui.VisorHtmlActivity].
                     com.forge.pixpin.ui.VisorHtmlActivity.esHtml(ruta) ||
                         com.forge.pixpin.ui.VisorHtmlActivity.esHtml(m.nombre) ->
                         com.forge.pixpin.ui.VisorHtmlActivity.abrir(this, ruta, m.nombre, mensaje = m.id)
-                    // **Un PowerPoint se convierte en proyecto** (14-sep-2026): una hoja por
-                    // diapositiva, para anotarla y presentarla. Ver [DiapositivasAPdf].
+                    // **Un PowerPoint sin maquetar se convierte en proyecto** (14-sep-2026): una hoja por
+                    // diapositiva. Ver [com.forge.pixpin.office.AbrirOffice.diapositivasAProyecto].
                     com.forge.pixpin.motor.Diapositivas.esPresentacion(m.nombre) ||
-                        com.forge.pixpin.motor.Diapositivas.esPresentacion(ruta) -> lifecycleScope.launch {
-                        val app = application as? com.forge.pixpin.PixPinApp ?: return@launch
-                        Toast.makeText(this@MensajesActivity, "Preparando las diapositivas…", Toast.LENGTH_SHORT).show()
-                        val ahora = System.currentTimeMillis()
-                        val hecho = withContext(Dispatchers.IO) {
-                            runCatching {
-                                val documento = File(File(filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
-                                val paginas = DiapositivasAPdf.convertir(File(ruta), m.nombre.ifBlank { File(ruta).name }, documento)
-                                app.proyectos.deEstePdf(
-                                    documento.absolutePath, m.nombre.substringBeforeLast('.').ifBlank { "Presentación" }, paginas, ahora
-                                )
-                            }
-                        }
-                        hecho.onSuccess { p ->
-                            com.forge.pixpin.volverALosProyectos(this@MensajesActivity, p?.id)
-                        }.onFailure { e ->
-                            Toast.makeText(
-                                this@MensajesActivity,
-                                (e as? com.forge.pixpin.motor.Diapositivas.NoSeLee)?.message ?: "No se pudo leer la presentación",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
+                        com.forge.pixpin.motor.Diapositivas.esPresentacion(ruta) ->
+                        com.forge.pixpin.office.AbrirOffice.diapositivasAProyecto(this, ruta, m.nombre)
                     // **Un Excel se abre en Tablas**, con una pestaña por hoja, y no en otra
                     // aplicación. Ver [LibroDelChat].
                     LibroDelChat.esLibro(m) -> lifecycleScope.launch {

@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.foundation.horizontalScroll
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.size
@@ -30,6 +32,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
@@ -70,6 +73,7 @@ import com.forge.pixpin.guardados.aPantallaCompleta
 import com.forge.pixpin.motor.PdfDoc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.lifecycleScope
 
 /**
  * **Ver un PDF y ya.**
@@ -97,14 +101,21 @@ class LectorPdfActivity : ComponentActivity() {
         private const val EXTRA_NOMBRE = "nombre"
 
         private const val EXTRA_ANOTAR = "anotar"
+        private const val EXTRA_MENSAJE = "mensaje"
 
-        /** Con [anotando], se abre ya con el editor rápido puesto sobre la primera página. */
-        fun abrir(context: Context, ruta: String, nombre: String, anotando: Boolean = false) {
+        /**
+         * Con [anotando], se abre ya con el editor rápido puesto sobre la primera página. [ruta] puede
+         * ser también un Word o un PowerPoint (11-oct-2026): sus hojas maquetadas como en Office
+         * ([com.forge.pixpin.office.DocumentoOffice]); [mensaje], el del chat del que sale (para su
+         * «Modo lectura»).
+         */
+        fun abrir(context: Context, ruta: String, nombre: String, anotando: Boolean = false, mensaje: String? = null) {
             context.startActivity(
                 Intent(context, LectorPdfActivity::class.java)
                     .putExtra(EXTRA_RUTA, ruta)
                     .putExtra(EXTRA_NOMBRE, nombre)
                     .putExtra(EXTRA_ANOTAR, anotando)
+                    .putExtra(EXTRA_MENSAJE, mensaje)
             )
         }
     }
@@ -140,12 +151,20 @@ class LectorPdfActivity : ComponentActivity() {
         invertido: Boolean, onInvertido: (Boolean) -> Unit,
         izquierda: Boolean, derecha: Boolean, onIzquierda: () -> Unit, onDerecha: () -> Unit,
         comoTexto: (escuchar: Boolean) -> Unit,
-        onExportar: () -> Unit, onAlProyecto: (() -> Unit)?, onQuitarMarcadores: (() -> Unit)?
+        onExportar: () -> Unit, onAlProyecto: (() -> Unit)?, onQuitarMarcadores: (() -> Unit)?,
+        /** Lo de un Word o un PowerPoint maquetado: su «Modo lectura» (null, no hay), sin voz si es un PowerPoint. */
+        comoTextoRotulo: Pair<String, String?>? = "Ver como texto" to "como un Word",
+        conVoz: Boolean = true,
+        onPresentar: (() -> Unit)? = null,
+        onImprimir: (() -> Unit)? = null,
+        onCopiarHoja: (() -> Unit)? = null
     ) {
         val prefs = remember { getSharedPreferences("lectura", MODE_PRIVATE) }
         com.forge.pixpin.ui.EngranajeDeLector(onCerrar) {
             com.forge.pixpin.ui.ApartadoDeLector("Vista")
-            com.forge.pixpin.ui.FilaDeLector("Ver como texto", "como un Word") { comoTexto(false) }
+            comoTextoRotulo?.let { (r, d) -> com.forge.pixpin.ui.FilaDeLector(r, d) { comoTexto(false) } }
+            onPresentar?.let { com.forge.pixpin.ui.FilaDeLector("Presentar", "Las diapositivas a pantalla completa", it) }
+            onCopiarHoja?.let { com.forge.pixpin.ui.FilaDeLector("Copiar el texto de esta hoja", "Mantener el dedo sobre un renglón copia ese renglón", it) }
 
             com.forge.pixpin.ui.ApartadoDeLector("Lectura")
             com.forge.pixpin.ui.InterruptorDeLector("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado, onSinLado)
@@ -153,28 +172,113 @@ class LectorPdfActivity : ComponentActivity() {
             com.forge.pixpin.ui.InterruptorDeLector("Espacio a la izquierda", "Papel en blanco para anotar", izquierda) { onIzquierda() }
             com.forge.pixpin.ui.InterruptorDeLector("Espacio a la derecha", null, derecha) { onDerecha() }
 
-            com.forge.pixpin.ui.ApartadoDeLector("Voz")
-            com.forge.pixpin.ui.FilaDeLector("Escuchar este PDF", null) { comoTexto(true) }
-            var enLinea by remember { mutableStateOf(prefs.getBoolean("voz:enLinea", false)) }
-            com.forge.pixpin.ui.InterruptorDeLector("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", enLinea) {
-                enLinea = it; prefs.edit().putBoolean("voz:enLinea", it).apply()
-            }
-            var microsoft by remember { mutableStateOf(prefs.getBoolean("voz:edge", false)) }
-            com.forge.pixpin.ui.InterruptorDeLector("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", microsoft) {
-                microsoft = it; prefs.edit().putBoolean("voz:edge", it).apply()
-            }
-            var auricular by remember { mutableStateOf(prefs.getBoolean("voz:auricular", false)) }
-            com.forge.pixpin.ui.InterruptorDeLector("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
-                auricular = it; prefs.edit().putBoolean("voz:auricular", it).apply()
+            if (conVoz) {
+                com.forge.pixpin.ui.ApartadoDeLector("Voz")
+                com.forge.pixpin.ui.FilaDeLector(if (comoTextoRotulo?.first == "Ver como texto") "Escuchar este PDF" else "Escuchar", null) { comoTexto(true) }
+                var enLinea by remember { mutableStateOf(prefs.getBoolean("voz:enLinea", false)) }
+                com.forge.pixpin.ui.InterruptorDeLector("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", enLinea) {
+                    enLinea = it; prefs.edit().putBoolean("voz:enLinea", it).apply()
+                }
+                var microsoft by remember { mutableStateOf(prefs.getBoolean("voz:edge", false)) }
+                com.forge.pixpin.ui.InterruptorDeLector("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", microsoft) {
+                    microsoft = it; prefs.edit().putBoolean("voz:edge", it).apply()
+                }
+                var auricular by remember { mutableStateOf(prefs.getBoolean("voz:auricular", false)) }
+                com.forge.pixpin.ui.InterruptorDeLector("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
+                    auricular = it; prefs.edit().putBoolean("voz:auricular", it).apply()
+                }
             }
 
             com.forge.pixpin.ui.ApartadoDeLector("Documento")
             Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
                 com.forge.pixpin.ui.BotonDeTextoDeLector("Exportar", onExportar)
                 if (onAlProyecto != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Al proyecto", onAlProyecto)
+                if (onImprimir != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Imprimir", onImprimir)
                 if (onQuitarMarcadores != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Quitar marcadores", onQuitarMarcadores)
             }
         }
+    }
+
+    // ---- Lo de un Word o un PowerPoint maquetado (11-oct-2026). Ver [com.forge.pixpin.office.DocumentoOffice]. ----
+
+    /** El «Modo lectura»: el Word como texto en el visor de documentos (el lector de antes), con su voz y su tinta. */
+    private fun modoLectura(ruta: String, nombre: String, escuchar: Boolean = false) =
+        com.forge.pixpin.office.AbrirOffice.wordComoTexto(this, ruta, nombre, intent?.getStringExtra(EXTRA_MENSAJE), escuchar) {
+            com.forge.pixpin.ui.AbrirCon.abrir(this, java.io.File(it))
+        }
+
+    private fun copiar(texto: String, aviso: String) {
+        if (texto.isBlank()) { android.widget.Toast.makeText(this, "No hay texto aquí", android.widget.Toast.LENGTH_SHORT).show(); return }
+        val portapapeles = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        portapapeles.setPrimaryClip(android.content.ClipData.newPlainText("PixPin", texto))
+        // Android 13 ya enseña su propio aviso al copiar.
+        if (android.os.Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(this, aviso, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    /** Un enlace del documento: solo la web y el correo (lo demás de un archivo ajeno no se abre a ciegas). */
+    private fun abrirEnlace(destino: String) {
+        val d = destino.trim()
+        if (!(d.startsWith("http://", true) || d.startsWith("https://", true) || d.startsWith("mailto:", true))) {
+            android.widget.Toast.makeText(this, d, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(d))) }
+            .onFailure { android.widget.Toast.makeText(this, "Nada en el teléfono abre este enlace", android.widget.Toast.LENGTH_SHORT).show() }
+    }
+
+    /** Imprimir: el documento en vectores con lo anotado encima, por el servicio de impresión del teléfono. */
+    private fun imprimirOffice(ruta: String, nombre: String, escenaDe: (Int) -> com.forge.pixpin.motor.Scene?) {
+        android.widget.Toast.makeText(this, "Preparando la impresión…", android.widget.Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching {
+                    val d = com.forge.pixpin.office.HojasOffice.de(this@LectorPdfActivity, ruta) ?: return@runCatching null
+                    val pdf = com.forge.pixpin.office.OfficeAPdf.enCache(this@LectorPdfActivity, d) ?: return@runCatching null
+                    val original = pdf.readBytes()
+                    com.forge.pixpin.motor.PdfConAnotaciones.hacer(
+                        applicationContext, original, escenaDe, izquierda = false, derecha = false,
+                        marcadores = emptyList(), hojaPintada = { i -> PdfDoc.render(pdf.path, i, PdfDoc.PAGE_WIDTH) }
+                    ) ?: original
+                }.getOrNull()
+            }
+            if (bytes == null) android.widget.Toast.makeText(this@LectorPdfActivity, "No se pudo preparar la impresión", android.widget.Toast.LENGTH_SHORT).show()
+            else com.forge.pixpin.guardados.Imprimir.pdf(this@LectorPdfActivity, bytes, nombre.substringBeforeLast('.'))
+        }
+    }
+
+    /**
+     * Lo que se comparte de un Word o un PowerPoint: el **PDF en vectores** (con lo anotado, o limpio
+     * con el interruptor) y **el archivo original**, tal cual.
+     */
+    private fun formatosDeOffice(
+        ruta: String, nombre: String, titulo: String, escenaDe: (Int) -> com.forge.pixpin.motor.Scene?,
+        espacios: () -> Int, marcas: () -> List<com.forge.pixpin.motor.Marca>
+    ): com.forge.pixpin.ui.Compartible {
+        val c = this
+        return com.forge.pixpin.ui.Compartible(
+            titulo, formatos = listOf(
+                com.forge.pixpin.ui.ExportarPdfAnotado.formatoPdf(
+                    c, ruta, titulo, escenaDe, espacios = espacios, marcas = marcas,
+                    prepararBase = {
+                        withContext(Dispatchers.IO) {
+                            com.forge.pixpin.office.HojasOffice.de(c, ruta)?.let { com.forge.pixpin.office.OfficeAPdf.enCache(c, it) }?.path
+                        }
+                    }
+                ),
+                com.forge.pixpin.ui.Compartible.Formato(
+                    "original", androidx.compose.material.icons.Icons.Filled.Description, nombre.substringAfterLast('.').uppercase().ifBlank { "Original" },
+                    com.forge.pixpin.ui.Compartible.NINGUNA,
+                    generar = {
+                        withContext(Dispatchers.IO) {
+                            val destino = java.io.File(java.io.File(c.cacheDir, "share").apply { mkdirs() }, nombre.replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80).ifBlank { "documento" })
+                            java.io.File(ruta).copyTo(destino, overwrite = true)
+                            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(nombre.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
+                            com.forge.pixpin.ui.Compartible.Salida(destino, mime, "El documento tal cual, sin lo anotado")
+                        }
+                    }
+                )
+            )
+        )
     }
 
     @Composable
@@ -211,7 +315,31 @@ class LectorPdfActivity : ComponentActivity() {
         androidx.compose.runtime.DisposableEffect(capas) { onDispose { capas.guardarTodo() } }
         val quiereAnotarAlAbrir = remember { intent?.getBooleanExtra(EXTRA_ANOTAR, false) == true }
         LaunchedEffect(cuantas) { if (quiereAnotarAlAbrir && cuantas > 0) anotando = true }
+        // **Un Word o un PowerPoint** (11-oct-2026): sus hojas maquetadas como en Office, con la
+        // lectura del PC. Lo demás del lector no sabe que no es un PDF. Ver [com.forge.pixpin.office.DocumentoOffice].
+        val esOffice = remember(rutaPedida) { com.forge.pixpin.office.HojasOffice.es(rutaPedida) }
+        var esPresentacion by remember(rutaPedida) { mutableStateOf(com.forge.pixpin.office.DocumentoOffice.esPresentacion(rutaPedida)) }
+        var presentando by remember(rutaPedida) { mutableStateOf<Int?>(null) }
         LaunchedEffect(rutaPedida) {
+            if (!esOffice) return@LaunchedEffect
+            val d = withContext(Dispatchers.IO) { com.forge.pixpin.office.HojasOffice.de(this@LectorPdfActivity, rutaPedida) }
+            if (d == null) {
+                // Lo de antes, de reserva: el Word como texto, el PowerPoint a un proyecto.
+                android.widget.Toast.makeText(this@LectorPdfActivity, "No se pudo maquetar; se abre como antes", android.widget.Toast.LENGTH_SHORT).show()
+                com.forge.pixpin.office.AbrirOffice.comoAntes(this@LectorPdfActivity, rutaPedida, nombre, intent?.getStringExtra(EXTRA_MENSAJE)) {
+                    com.forge.pixpin.ui.AbrirCon.abrir(this@LectorPdfActivity, java.io.File(it))
+                }
+                finish()
+                return@LaunchedEffect
+            }
+            esPresentacion = d.esPresentacion
+            ruta = rutaPedida
+            cuantas = d.cuantas()
+            // Word: el resto se maqueta por detrás y las hojas van apareciendo.
+            if (!d.terminado) withContext(Dispatchers.IO) { d.maquetarTodo { n -> runOnUiThread { if (n > cuantas) cuantas = n } } }
+        }
+        LaunchedEffect(rutaPedida) {
+            if (esOffice) return@LaunchedEffect
             withContext(Dispatchers.IO) {
                 val doc = runCatching { SublienzosDelPdf.documentoDe(this@LectorPdfActivity, rutaPedida) }.getOrDefault(rutaPedida)
                 val n = PdfDoc.pageCount(doc)
@@ -347,6 +475,7 @@ class LectorPdfActivity : ComponentActivity() {
         // desde PixPin los lleva ahí— pasan al riel la primera vez que se abre. Solo si aún no se
         // guardó ninguno: quitados a mano, no vuelven.
         LaunchedEffect(rutaPedida) {
+            if (esOffice) return@LaunchedEffect
             val nuncaGuardadas = archivoDeMarcas?.exists()?.not() ?: !prefsDeMarcas.contains(claveDeMarcas)
             if (!nuncaGuardadas || marcas.isNotEmpty()) return@LaunchedEffect
             val delIndice = withContext(Dispatchers.IO) {
@@ -558,14 +687,22 @@ class LectorPdfActivity : ComponentActivity() {
                     botones = listOf(
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Edit, "Anotar") { anotando = true },
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.BookmarkAdd, "Marcador aquí") { poniendoMarca = !poniendoMarca },
+                        // **Presentar** un PowerPoint: las diapositivas a pantalla completa, en vectores.
+                        if (esOffice && esPresentacion) com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Slideshow, "Presentar") {
+                            presentando = dondeEstoy().first
+                        }
                         // **Escuchar**: el PDF pasado a texto, en el lector de Word, que es quien tiene la voz.
-                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.RecordVoiceOver, "Escuchar") {
-                            // Desde el marcador verde, si lo hay; si no, desde donde se deje la última vez.
-                            val verde = marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ }
-                            com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(
-                                this@LectorPdfActivity, rutaPedida, nombre, escuchar = true,
-                                desdeHoja = verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) + 1 } ?: 0
-                            )
+                        // Un Word maquetado, en su «Modo lectura» (el Word como texto), que es donde está la voz.
+                        else com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.RecordVoiceOver, "Escuchar") {
+                            if (esOffice) modoLectura(rutaPedida, nombre, escuchar = true)
+                            else {
+                                // Desde el marcador verde, si lo hay; si no, desde donde se deje la última vez.
+                                val verde = marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ }
+                                com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(
+                                    this@LectorPdfActivity, rutaPedida, nombre, escuchar = true,
+                                    desdeHoja = verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) + 1 } ?: 0
+                                )
+                            }
                         },
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.KeyboardDoubleArrowDown, "Desplazar sola") {
                             autoDesplazando = true; autoEnMarcha = true
@@ -676,7 +813,8 @@ class LectorPdfActivity : ComponentActivity() {
                 val titulo = nombre.substringBeforeLast('.').ifBlank { "PDF" }
                 com.forge.pixpin.ui.HojaDeCompartir(
                     remember(ruta, titulo) {
-                        com.forge.pixpin.ui.Compartible(
+                        if (esOffice) formatosDeOffice(rutaPedida, nombre, titulo, { i -> capas.escenaDe(i) }, { espacios }, { marcas })
+                        else com.forge.pixpin.ui.Compartible(
                             titulo, formatos = listOf(
                                 // **El PDF, con lo anotado** —o limpio, con el interruptor—. `ruta` es ya la
                                 // copia limpia si el PDF es de un proyecto: lo anotado no sale dos veces.
@@ -702,6 +840,7 @@ class LectorPdfActivity : ComponentActivity() {
                 onIzquierda = { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }, onDerecha = { ponerEspacios(espacios xor ESPACIO_DERECHA) },
                 comoTexto = { escuchar ->
                     conElEngranaje = false
+                    if (esOffice) { modoLectura(rutaPedida, nombre, escuchar); return@EngranajeDelPdf }
                     val verde = if (escuchar) marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ } else null
                     com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(
                         this@LectorPdfActivity, rutaPedida, nombre, escuchar = escuchar,
@@ -710,7 +849,20 @@ class LectorPdfActivity : ComponentActivity() {
                 },
                 onExportar = { conElEngranaje = false; capas.guardarTodo(); compartiendo = true },
                 onAlProyecto = if (capas.esDeUnProyecto()) null else ({ conElEngranaje = false; alProyecto() }),
-                onQuitarMarcadores = if (marcas.isEmpty()) null else ({ conElEngranaje = false; quitandoMarcas = true })
+                onQuitarMarcadores = if (marcas.isEmpty()) null else ({ conElEngranaje = false; quitandoMarcas = true }),
+                // Un Word: su «Modo lectura» es el Word como texto (con su voz); un PowerPoint no tiene.
+                comoTextoRotulo = if (!esOffice) "Ver como texto" to "como un Word" else if (esPresentacion) null else "Modo lectura" to "El Word como texto, con su letra y su voz",
+                conVoz = !(esOffice && esPresentacion),
+                onPresentar = if (esOffice && esPresentacion) ({ conElEngranaje = false; presentando = dondeEstoy().first }) else null,
+                onImprimir = if (esOffice) ({ conElEngranaje = false; capas.guardarTodo(); imprimirOffice(rutaPedida, nombre) { i -> capas.escenaDe(i) } }) else null,
+                onCopiarHoja = if (esOffice) ({
+                    conElEngranaje = false
+                    val hoja = dondeEstoy().first
+                    alcance.launch {
+                        val texto = withContext(Dispatchers.IO) { com.forge.pixpin.office.HojasOffice.yaAbierto(rutaPedida)?.texto(hoja).orEmpty() }
+                        copiar(texto, "Texto de la hoja ${hoja + 1} copiado")
+                    }
+                }) else null
             )
             if (quitandoMarcas) androidx.compose.material3.AlertDialog(
                 onDismissRequest = { quitandoMarcas = false },
@@ -739,7 +891,12 @@ class LectorPdfActivity : ComponentActivity() {
                 // Las palabras del PDF, una vez: con ellas, la velocidad en palabras por minuto. Ver [com.forge.pixpin.motor.AutoDesplazar].
                 LaunchedEffect(ruta) {
                     if (palabrasDelPdf < 0) palabrasDelPdf = withContext(Dispatchers.IO) {
-                        runCatching { com.forge.pixpin.motor.PdfAHtml.contarPalabras(java.io.File(ruta).readBytes()) }.getOrDefault(0)
+                        runCatching {
+                            if (esOffice) com.forge.pixpin.office.HojasOffice.yaAbierto(rutaPedida)?.let { d ->
+                                (0 until d.cuantas()).sumOf { i -> d.texto(i).split(Regex("\\s+")).count { it.isNotBlank() } }
+                            } ?: 0
+                            else com.forge.pixpin.motor.PdfAHtml.contarPalabras(java.io.File(ruta).readBytes())
+                        }.getOrDefault(0)
                             .takeIf { it > 0 } ?: (cuantas * com.forge.pixpin.motor.PdfAHtml.POR_HOJA_SI_NO_HAY)
                     }
                 }
@@ -778,6 +935,74 @@ class LectorPdfActivity : ComponentActivity() {
                 )
                 androidx.activity.compose.BackHandler { autoEnMarcha = false; autoDesplazando = false }
             }
+            // **Presentar** (PowerPoint): encima de todo, hasta que se sale con atrás o la X.
+            presentando?.let { desde -> if (cuantas > 0) Presentar(rutaPedida, desde, cuantas, capas) { presentando = null } }
+        }
+    }
+
+    /**
+     * **Las diapositivas a pantalla completa** (lo de «Presentar» del PC): una tras otra, con lo
+     * anotado encima. Cada una se pinta en vectores **a la medida exacta de la pantalla**, fuera
+     * del hilo de la pantalla, y la siguiente ya preparada: pasar es instantáneo. Un toque en el
+     * tercio derecho o un barrido a la izquierda pasa; en el izquierdo, vuelve ([com.forge.pixpin.ui.ZonaDePasar]).
+     */
+    @Composable
+    private fun Presentar(ruta: String, desde: Int, cuantas: Int, capas: CapasDelPdf, alCerrar: () -> Unit) {
+        var i by remember { mutableStateOf(desde.coerceIn(0, cuantas - 1)) }
+        androidx.activity.compose.BackHandler { alCerrar() }
+        var tam by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+        var hoja by remember { mutableStateOf<Pair<Int, Bitmap>?>(null) }
+        var tinta by remember { mutableStateOf<com.forge.pixpin.motor.Scene?>(null) }
+        var conMandos by remember { mutableStateOf(true) }
+        val listas = remember { HashMap<Int, Bitmap>() }
+        LaunchedEffect(i, tam) {
+            if (tam.width <= 0) return@LaunchedEffect
+            val d = com.forge.pixpin.office.HojasOffice.yaAbierto(ruta) ?: return@LaunchedEffect
+            fun ancho(n: Int): Int {
+                val pr = d.proporcion(n).coerceAtLeast(0.05f)
+                return minOf(tam.width.toFloat(), tam.height * pr).toInt().coerceAtLeast(1)
+            }
+            val actual = listas[i] ?: withContext(Dispatchers.IO) { d.pintar(i, ancho(i), cuantas) }
+            tinta = withContext(Dispatchers.IO) { runCatching { capas.escenaDe(i) }.getOrNull() }
+            if (actual != null) { hoja = i to actual; listas[i] = actual }
+            // La siguiente, ya hecha; y fuera las que quedan lejos.
+            listas.keys.filter { kotlin.math.abs(it - i) > 1 }.forEach { listas.remove(it) }
+            if (i + 1 < cuantas && listas[i + 1] == null) withContext(Dispatchers.IO) { d.pintar(i + 1, ancho(i + 1), cuantas) }?.let { listas[i + 1] = it }
+        }
+        val contexto = androidx.compose.ui.platform.LocalContext.current
+        Box(Modifier.fillMaxSize().background(Color.Black).onSizeChanged { tam = it }) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                val (n, b) = hoja ?: return@Canvas
+                val ox = (size.width - b.width) / 2f
+                val oy = (size.height - b.height) / 2f
+                val lienzo = drawContext.canvas.nativeCanvas
+                lienzo.drawBitmap(b, ox, oy, null)
+                val escena = tinta
+                if (escena != null && n == i) {
+                    lienzo.save()
+                    lienzo.translate(ox, oy)
+                    lienzo.clipRect(0f, 0f, b.width.toFloat(), b.height.toFloat())
+                    pintorDeCapas(contexto).renderScene(lienzo, escena.copy(viewport = vistaDeLaCapa(b.width.toDouble(), 0)), b.width.toDouble(), b.height.toDouble())
+                    lienzo.restore()
+                }
+            }
+            com.forge.pixpin.ui.ZonaDePasar(
+                onAnterior = { if (i > 0) i-- },
+                onSiguiente = { if (i < cuantas - 1) i++ },
+                onMedio = { conMandos = !conMandos },
+                modifier = Modifier.fillMaxSize()
+            )
+            if (conMandos) Row(
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 12.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(Color(0x99000000)).padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("${i + 1} / $cuantas", color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
+                Text(
+                    "Salir", color = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { alCerrar() }.padding(horizontal = 12.dp, vertical = 9.dp)
+                )
+            }
         }
     }
 
@@ -811,7 +1036,7 @@ class LectorPdfActivity : ComponentActivity() {
             else -> 4
         }
         val proporcion = remember(ruta, i) {
-            PdfDoc.medidaEnPuntos(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
+            medidaDeLaHoja(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
         }
         var mapa by remember(ruta, i) { mutableStateOf(PaginasEnMemoria.alguna(ruta, i)) }
         LaunchedEffect(ruta, i, escalon) {
@@ -835,7 +1060,26 @@ class LectorPdfActivity : ComponentActivity() {
             HojaConSublienzos(actual, proporcion, suyos, abierta = false, alPedirlos = alAbrirSublienzos, encima = encima) { }
             return
         }
-        Box(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+        // **Un Word o un PowerPoint: sus enlaces y su texto** (lo del PC). Un toque en un enlace lo
+        // abre (web y correo); mantener el dedo sobre un renglón lo copia.
+        val deOffice = remember(ruta) { com.forge.pixpin.office.HojasOffice.es(ruta) }
+        val conTexto = if (!deOffice) Modifier else Modifier.pointerInput(ruta, i) {
+            fun puntoDe(o: Offset): Pair<com.forge.pixpin.office.Pxof.Pagina, Offset>? {
+                val pag = com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)?.pagina(i) ?: return null
+                val k = pag.ancho / size.width.coerceAtLeast(1)
+                return pag to Offset(o.x * k, o.y * k)
+            }
+            detectTapGestures(
+                onTap = { o -> puntoDe(o)?.let { (pag, pt) -> pag.textoEn(pt.x, pt.y)?.enlace?.let { abrirEnlace(it) } } },
+                onLongPress = { o ->
+                    puntoDe(o)?.let { (pag, pt) ->
+                        val renglon = pag.renglonEn(pt.x, pt.y).joinToString(" ") { it.texto.trim() }.trim()
+                        if (renglon.isNotEmpty()) copiar(renglon, "Renglón copiado")
+                    }
+                }
+            )
+        }
+        Box(Modifier.fillMaxWidth().padding(bottom = 6.dp).then(conTexto)) {
             if (actual != null) {
                 Image(
                     bitmap = actual.asImageBitmap(),
@@ -888,14 +1132,31 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
     private fun proyecto(): com.forge.pixpin.motor.Proyecto? =
         app?.proyectos?.proyectos?.value?.firstOrNull { it.pdfOrigen == rutaPedida || it.pdfLimpio == rutaPedida }
 
-    fun esDeUnProyecto() = proyecto() != null
+    fun esDeUnProyecto() = proyecto() != null || proyectoDeOffice() != null
+
+    /** Un Word o un PowerPoint maquetado: sus hojas salen del .so, no de un PDF. */
+    private val esOffice = com.forge.pixpin.office.HojasOffice.es(rutaPedida)
+
+    /**
+     * El proyecto que se hizo con «Al proyecto» desde un Word o un PowerPoint (su PDF en vectores),
+     * si sigue ahí. Sus hojas usan los mismos dibujos que el lector, así que lo anotado en uno se ve
+     * en el otro; el lector sigue leyendo el documento original.
+     */
+    private fun proyectoDeOffice(): com.forge.pixpin.motor.Proyecto? {
+        if (!esOffice) return null
+        val id = actividad.getSharedPreferences("lectura", Context.MODE_PRIVATE).getString("office:$rutaPedida:proyecto", null) ?: return null
+        return app?.proyectos?.proyectos?.value?.firstOrNull { it.id == id }
+    }
 
     /**
      * Con qué se nombran los marcadores y los espacios para que viajen: el código del proyecto si
      * el PDF es de uno, el del mensaje si es un adjunto del chat, o null (se quedan por la ruta).
      */
     fun baseSuelta(): String? =
-        proyecto()?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(com.forge.pixpin.sincro.Codigos.unico(it)) }
+        // Un Word o un PowerPoint: `anot-<uid>.marcas` es del «Modo lectura» (el Word como texto,
+        // otro formato de marcador). Los de las hojas se quedan en el teléfono, como en el PC.
+        if (esOffice) null
+        else proyecto()?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(com.forge.pixpin.sincro.Codigos.unico(it)) }
             ?: uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
 
     /** El dibujo suelto de la hoja [i], migrando el de la huella si es la primera vez. */
@@ -995,7 +1256,17 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
             ponerElMarco(actividad, sueltoDe(i), rutaPedida, i, siempre = true)
         }
         synchronized(sucias) { sucias.clear() }
-        var p = repo.deEstePdf(rutaPedida, nombre, paginas, System.currentTimeMillis())
+        val ahora = System.currentTimeMillis()
+        // Un Word o un PowerPoint entra en el proyecto como su PDF en vectores, del mismo tamaño
+        // de hoja: la tinta, en unidades de la hoja, cae en el mismo sitio.
+        val pdf = if (!esOffice) rutaPedida else {
+            val d = com.forge.pixpin.office.HojasOffice.yaAbierto(rutaPedida) ?: return false
+            val destino = java.io.File(java.io.File(actividad.filesDir, "proyectos").apply { mkdirs() }, "doc-$ahora.pdf")
+            if (com.forge.pixpin.office.OfficeAPdf.hacer(d, destino) <= 0) return false
+            destino.path
+        }
+        var p = repo.deEstePdf(pdf, nombre, if (esOffice) PdfDoc.pageCount(pdf) else paginas, ahora)
+        if (esOffice) actividad.getSharedPreferences("lectura", Context.MODE_PRIVATE).edit().putString("office:$rutaPedida:proyecto", p.id).apply()
         for (hoja in p.hojas) {
             val i = hoja.pagina ?: continue
             if (hoja.dibujo != null) continue
@@ -1105,7 +1376,7 @@ private fun vistaDeLaCapa(ancho: Double, espacios: Int): com.forge.pixpin.motor.
 
 /** Lo que mide una hoja: ancho entre alto, como la dibuja la lista. */
 private fun proporcionDeLaHoja(rutaPdf: String, i: Int): Double =
-    PdfDoc.medidaEnPuntos(rutaPdf, i)?.let { (an, al) -> an.toDouble() / al.toDouble() }?.takeIf { it > 0.01 } ?: 0.7
+    medidaDeLaHoja(rutaPdf, i)?.let { (an, al) -> an / al }?.takeIf { it > 0.01 } ?: 0.7
 
 /** Dónde está la hoja en las unidades del lector y del editor: siempre la misma. */
 private fun marcoDeLaHoja(rutaPdf: String, i: Int) =
@@ -1143,6 +1414,21 @@ private fun ponerElMarco(c: Context, id: String, rutaPdf: String, i: Int, siempr
 }
 
 private val PAPEL_DEL_MARGEN = Color(0xFFF3F3F0)
+
+/**
+ * **Lo que mide la hoja [i]**, en puntos: de un PDF, o de un Word o un PowerPoint ya abierto
+ * (11-oct-2026; sus hojas las maqueta el .so del PC). Así el lector, la tinta y su marco (`.hoja`)
+ * no distinguen uno de otro.
+ */
+internal fun medidaDeLaHoja(ruta: String, i: Int): Pair<Double, Double>? =
+    if (com.forge.pixpin.office.HojasOffice.es(ruta))
+        com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)?.medida(i)?.let { it[0].toDouble() to it[1].toDouble() }
+    else PdfDoc.medidaEnPuntos(ruta, i)
+
+/** La hoja [i] pintada a [ancho] píxeles: el PDF rasterizado, o el Word/PowerPoint pintado en vectores a ese ancho. */
+private fun pintarLaHoja(ruta: String, i: Int, ancho: Int): Bitmap? =
+    if (com.forge.pixpin.office.HojasOffice.es(ruta)) com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)?.pintar(i, ancho)
+    else PdfDoc.render(ruta, i, ancho)
 
 /** Invertir colores hace falta un efecto de la tarjeta que llegó con Android 12. */
 private val PUEDE_INVERTIR = android.os.Build.VERSION.SDK_INT >= 31
@@ -1194,7 +1480,7 @@ private object PaginasEnMemoria {
     /** Trabajo de disco. */
     fun pintar(ruta: String, i: Int, ancho: Int): Bitmap? {
         cache.get("$ruta#$i#$ancho")?.let { return it }
-        val b = runCatching { PdfDoc.render(ruta, i, ancho) }.getOrNull() ?: return null
+        val b = runCatching { pintarLaHoja(ruta, i, ancho) }.getOrNull() ?: return null
         cache.put("$ruta#$i#$ancho", b)
         anchos["$ruta#$i"] = ancho
         return b
@@ -1214,7 +1500,7 @@ private object PaginasEnMemoria {
 private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.Recorte>, anchoPx: Int, invertido: Boolean, alCerrar: () -> Unit) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
     val proporcion = remember(ruta, i) {
-        PdfDoc.medidaEnPuntos(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
+        medidaDeLaHoja(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
     }
     var escala by remember(i) { mutableStateOf(1f) }
     var desplazado by remember(i) { mutableStateOf(Offset(0f, 0f)) }
