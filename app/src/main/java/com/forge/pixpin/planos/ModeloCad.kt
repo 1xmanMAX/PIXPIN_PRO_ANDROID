@@ -55,6 +55,32 @@ class ModeloCad private constructor(
     /** Lo que no se pudo dibujar, por tipo (para decirlo). */
     val sinDibujar: List<Pair<String, Int>>,
 ) {
+    /**
+     * **La caja de lo que importa** para encuadrar (`caja_util` del PC, `4f33ab3`): sin los pocos
+     * puntos sueltos muy lejos —una raya con una cota absurda, un objeto olvidado a kilómetros— que
+     * dejan el plano diminuto, como si no abriera (el plano de demolición del usuario: todo en una
+     * esquina de 1,5 km y dos objetos a 340 km). Del 0,5 % al 99,5 % de los vértices en cada eje, con
+     * un margen. Solo para encuadrar: la unidad de lo anotado sigue con [caja], para no moverlo.
+     */
+    val cajaUtil: FloatArray by lazy {
+        val n = vertices.cuantos
+        if (n < 200) return@lazy caja
+        val paso = (n / 40_000).coerceAtLeast(1)
+        val out = caja.copyOf()
+        for (k in 0 until 2) {
+            val v = FloatArray((n + paso - 1) / paso)
+            var c = 0
+            var i = 0
+            while (i < n) { val f = vertices.real(i, k); if (f.isFinite()) v[c++] = f; i += paso }
+            if (c < 100) continue
+            val s = v.copyOf(c).also { it.sort() }
+            val a = s[c / 200]; val b = s[c - 1 - c / 200]
+            val margen = (b - a) * 0.05f
+            out[k] = maxOf(a - margen, caja[k]); out[k + 2] = minOf(b + margen, caja[k + 2])
+        }
+        out
+    }
+
     /** Un trozo del archivo: [cuantos] elementos de [palabras] palabras cada uno. */
     class Lista(val datos: ByteBuffer, val cuantos: Int, val palabras: Int) {
         val bytes: Int get() = cuantos * palabras * 4

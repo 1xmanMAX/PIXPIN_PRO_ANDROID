@@ -59,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
@@ -136,6 +137,7 @@ class LectorPdfActivity : ComponentActivity() {
     private fun EngranajeDelPdf(
         onCerrar: () -> Unit,
         sinLado: Boolean, onSinLado: (Boolean) -> Unit,
+        invertido: Boolean, onInvertido: (Boolean) -> Unit,
         izquierda: Boolean, derecha: Boolean, onIzquierda: () -> Unit, onDerecha: () -> Unit,
         comoTexto: (escuchar: Boolean) -> Unit,
         onExportar: () -> Unit, onAlProyecto: (() -> Unit)?, onQuitarMarcadores: (() -> Unit)?
@@ -147,6 +149,7 @@ class LectorPdfActivity : ComponentActivity() {
 
             com.forge.pixpin.ui.ApartadoDeLector("Lectura")
             com.forge.pixpin.ui.InterruptorDeLector("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado, onSinLado)
+            if (PUEDE_INVERTIR) com.forge.pixpin.ui.InterruptorDeLector("Invertir colores", "Hojas oscuras para leer de noche; los colores conservan su tono", invertido, onInvertido)
             com.forge.pixpin.ui.InterruptorDeLector("Espacio a la izquierda", "Papel en blanco para anotar", izquierda) { onIzquierda() }
             com.forge.pixpin.ui.InterruptorDeLector("Espacio a la derecha", null, derecha) { onDerecha() }
 
@@ -311,6 +314,8 @@ class LectorPdfActivity : ComponentActivity() {
         var conElEngranaje by remember { mutableStateOf(false) }
         var quitandoMarcas by remember { mutableStateOf(false) }
         var sinLado by remember { mutableStateOf(prefsDelLector.getBoolean("sinLado", false)) }
+        // Invertir los colores de las hojas (PC 11bd1f6, la «N» de los lectores).
+        var invertido by remember { mutableStateOf(PUEDE_INVERTIR && prefsDelLector.getBoolean("invertido", false)) }
         var autoDesplazando by remember { mutableStateOf(false) }
         var autoEnMarcha by remember { mutableStateOf(false) }
         var palabrasPorMinuto by remember {
@@ -501,7 +506,7 @@ class LectorPdfActivity : ComponentActivity() {
                         // desplazamiento. Con hueco arriba y abajo se mueve a gusto.
                         items((0 until cuantas).toList()) { i ->
                             // El margen es papel: lo anotado ahí lleva la tinta de una hoja clara.
-                            Box(Modifier.fillMaxWidth().background(PAPEL_DEL_MARGEN)) {
+                            Box(Modifier.fillMaxWidth().coloresInvertidos(invertido).background(PAPEL_DEL_MARGEN)) {
                                 Box(
                                     Modifier.padding(
                                         start = with(densidad) { izquierdaPx.toDp() },
@@ -516,7 +521,7 @@ class LectorPdfActivity : ComponentActivity() {
                         }
                         if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
                     }
-                    aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx) { aSolas = null } }
+                    aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx, invertido) { aSolas = null } }
                 }
             }
             // **Los mandos de los lados** (espacio a la izquierda, candado, espacio a la derecha) y
@@ -678,6 +683,7 @@ class LectorPdfActivity : ComponentActivity() {
             if (conElEngranaje) EngranajeDelPdf(
                 onCerrar = { conElEngranaje = false },
                 sinLado = sinLado, onSinLado = { sinLado = it; prefsDelLector.edit().putBoolean("sinLado", it).apply() },
+                invertido = invertido, onInvertido = { invertido = it; prefsDelLector.edit().putBoolean("invertido", it).apply() },
                 izquierda = hayIzquierda, derecha = hayDerecha,
                 onIzquierda = { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }, onDerecha = { ponerEspacios(espacios xor ESPACIO_DERECHA) },
                 comoTexto = { escuchar ->
@@ -1115,6 +1121,38 @@ private fun ponerElMarco(c: Context, id: String, rutaPdf: String, i: Int, siempr
 
 private val PAPEL_DEL_MARGEN = Color(0xFFF3F3F0)
 
+/** Invertir colores hace falta un efecto de la tarjeta que llegó con Android 12. */
+private val PUEDE_INVERTIR = android.os.Build.VERSION.SDK_INT >= 31
+
+/**
+ * **Los colores invertidos** de una hoja con su tinta (PC `11bd1f6`: la «N» invierte cualquier pin
+ * y los lectores): el blanco pasa a negro y el negro a blanco, pero **el tono se queda** (se invierte
+ * y se gira el matiz media vuelta, como el «invertir inteligente» del teléfono): una raya roja sigue
+ * siendo roja y una foto no sale en negativo de color. Sin [PUEDE_INVERTIR], nada.
+ */
+internal fun Modifier.coloresInvertidos(si: Boolean): Modifier =
+    if (!si || !PUEDE_INVERTIR) this else this.graphicsLayer {
+        renderEffect = android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(MATRIZ_INVERTIDA))
+            .asComposeRenderEffect()
+    }
+
+/** Invertir y luego girar el matiz 180° (la de CSS `invert(1) hue-rotate(180deg)`). */
+internal val MATRIZ_INVERTIDA: android.graphics.ColorMatrix by lazy {
+    val giro = android.graphics.ColorMatrix(floatArrayOf(
+        -0.574f, 1.430f, 0.144f, 0f, 0f,
+        0.426f, 0.430f, 0.144f, 0f, 0f,
+        0.426f, 1.430f, -0.856f, 0f, 0f,
+        0f, 0f, 0f, 1f, 0f,
+    ))
+    giro.preConcat(android.graphics.ColorMatrix(floatArrayOf(
+        -1f, 0f, 0f, 0f, 255f,
+        0f, -1f, 0f, 0f, 255f,
+        0f, 0f, -1f, 0f, 255f,
+        0f, 0f, 0f, 1f, 0f,
+    )))
+    giro
+}
+
 private object PaginasEnMemoria {
     private val cache = object : android.util.LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).toInt()) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
@@ -1150,7 +1188,7 @@ private object PaginasEnMemoria {
  * [SublienzosDelPdf.miniatura].
  */
 @Composable
-private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.Recorte>, anchoPx: Int, alCerrar: () -> Unit) {
+private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.Recorte>, anchoPx: Int, invertido: Boolean, alCerrar: () -> Unit) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
     val proporcion = remember(ruta, i) {
         PdfDoc.medidaEnPuntos(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
@@ -1214,6 +1252,7 @@ private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.R
                     scaleX = escala; scaleY = escala
                     translationX = desplazado.x; translationY = desplazado.y
                 }
+                .coloresInvertidos(invertido)
         ) {
             HojaConSublienzos(mapa, proporcion, suyos, abierta = true) { r ->
                 com.forge.pixpin.motor.DrawEditorActivity.abrir(

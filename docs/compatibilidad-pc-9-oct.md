@@ -31,3 +31,14 @@ Nada de esto se ha visto en un teléfono.
 | Volumen, área en planta y en alzado de cada elemento (`medir` en `modelo3d.rs`); la pastilla dice nivel, m³ y m² | La pastilla de lo tocado usa `ArbolDelModelo.describir` (mismo texto que el PC; «≈» si la malla no es cerrada). |
 | Caché PX3D **v3** | `Modelo3D` lee v3; la caché pasa a `<clave>.v3.px3d` (las viejas se rehacen). |
 | (`c493abb`) SHX de Hershey dentro del programa y volteo de los TEXT: lo de Android adoptado | El guion ya no parchea eso: `include_bytes!` apunta a `app/src/main/assets/fuentes-shx`. PXCAD **v6** (igual que v5): `ModeloCad` lee las dos. |
+
+## Lo del PC del 10-oct por la tarde en Android (v0.118.0)
+
+| Del PC | En Android |
+|---|---|
+| Visor de planos: encuadrar lo que importa (`4f33ab3`, `Modelo::caja_util`) | `ModeloCad.cajaUtil` (mismas cuentas) en «ver todo» y al abrir. La unidad de lo anotado sigue con la caja entera. Prueba: `PlanosTest` con `suelto-lejos.dxf` leído por el .so. |
+| Tareas: cada grupo con su color, sin repetir (12 tonos), y su marca junto al nombre (`11bd1f6`) | `TodasLasTareas.coloresDeListas` (mismo reparto: FNV-1a de la clave, orden de clave por bytes, las vacías no gastan); marca junto al nombre y raya a la izquierda de cada tarjeta. Prueba con los números que da la función del PC compilada aparte. |
+| N invierte los colores de pines y lectores (`11bd1f6`) | Lector de PDF: «Invertir colores» en el engranaje (hoja, márgenes y tinta; el tono se queda). Android 12 o más. El Word/EPUB ya sigue el claro/oscuro del aparato. |
+| Planos: grosor y letra del panel a la escala del plano (`11bd1f6`) | No hace falta: aquí la capa del plano va en unidades fijas del plano (lado/1000), no de la pantalla, y lo del panel no sale enorme. |
+| Captura, cursor del chat, barras de ventanas, vista rápida del Explorador, imprimir (`11bd1f6`, `8636b12`) | Cosas de Windows. |
+| Lienzo: fuera el cronograma; los dibujos que lo tienen lo conservan para el móvil | Android lo sigue teniendo; nada que cambiar. |

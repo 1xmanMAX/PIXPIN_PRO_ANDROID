@@ -25,8 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -316,11 +321,14 @@ class TodasLasTareasActivity : ComponentActivity() {
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 32.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // El color de cada grupo, el mismo que en el PC.
+                        val colores = TodasLasTareas.coloresDeListas(v.listas.map { it.clave to it.filas.isNotEmpty() })
                         v.grupos.forEach { g ->
                             val l = v.listas[g.lista]
-                            item(key = "e:" + l.clave) { Encabezado(l, g.pendientes(l)) }
+                            val color = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[g.lista]])
+                            item(key = "e:" + l.clave) { Encabezado(l, g.pendientes(l), color) }
                             items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                Tarjeta(l, l.filas[i], palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
+                                Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
                             }
                             if (g.hechas.isNotEmpty()) {
                                 // Buscando, lo hecho que coincide se ve.
@@ -337,7 +345,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                     }
                                 }
                                 if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                    Tarjeta(l, l.filas[i], palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
+                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
                                 }
                             }
                             item(key = "s:" + l.clave) { Spacer(Modifier.height(8.dp)) }
@@ -356,12 +364,15 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun clave(l: Lista, f: Fila) = l.clave + "\u0000" + f.crudo
 
     @Composable
-    private fun Encabezado(l: Lista, pendientes: Int) {
+    private fun Encabezado(l: Lista, pendientes: Int, color: Color) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .clickable { MiniActivity.abrir(this, l.codigo) }.padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Su color: una marca redonda delante del nombre, como en el PC.
+            Box(Modifier.width(6.dp).height(18.dp).clip(RoundedCornerShape(3.dp)).background(lerp(color, Color.White, 0.25f)))
+            Spacer(Modifier.width(8.dp))
             Text(
                 l.titulo.ifBlank { "Tareas" }, color = Cristal.tinta, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -378,7 +389,7 @@ class TodasLasTareasActivity : ComponentActivity() {
 
     @Composable
     private fun Tarjeta(
-        l: Lista, f: Fila, palabras: List<String>, hoy: LocalDate, conSuLista: Boolean,
+        l: Lista, f: Fila, color: Color, palabras: List<String>, hoy: LocalDate, conSuLista: Boolean,
         marcar: (Lista, Fila, Boolean) -> Unit, moverA: () -> Unit, quitar: (Lista, Fila) -> Unit,
         recordar: (Lista, Fila) -> Unit, olvidarHora: (Lista, Fila) -> Unit
     ) {
@@ -393,7 +404,13 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
         var menu by remember { mutableStateOf(false) }
         Row(
-            Modifier.fillMaxWidth().cristal(RoundedCornerShape(16.dp)).padding(start = 4.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
+            Modifier.fillMaxWidth().cristal(RoundedCornerShape(16.dp))
+                // La raya de su grupo, a la izquierda: las tareas de una lista se reconocen de lejos.
+                .drawBehind {
+                    val m = 10.dp.toPx()
+                    drawRoundRect(color.copy(alpha = if (f.hecha) 0.4f else 1f), Offset(3.dp.toPx(), m), Size(4.dp.toPx(), (size.height - 2 * m).coerceAtLeast(0f)), CornerRadius(2.dp.toPx()))
+                }
+                .padding(start = 6.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(checked = f.hecha, onCheckedChange = { marcar(l, f, it) })

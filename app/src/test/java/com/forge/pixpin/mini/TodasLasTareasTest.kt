@@ -19,6 +19,21 @@ import org.junit.Test
  * cambió desde que se vio.
  */
 class TodasLasTareasTest {
+    /** Los colores de los grupos (PC 11bd1f6): los mismos números que da `colores_de_listas` del PC, compilado aparte. */
+    @Test fun `cada lista tiene su color sin repetir y el mismo que en el PC`() {
+        val claves = (0 until 12).map { "lista $it" to true }
+        val c = TodasLasTareas.coloresDeListas(claves)
+        assertEquals(listOf(8, 7, 6, 5, 4, 3, 2, 1, 0, 11, 9, 10), c.toList())
+        // El orden de la pantalla no cambia el color de cada una.
+        assertEquals(c.toList(), TodasLasTareas.coloresDeListas(claves.reversed()).reversed().toList())
+        // Con tildes, eñes y una vacía (que no gasta color): como el PC.
+        val otras = listOf("/abc" to true, "Tesis/m-12" to true, "/vacía" to false, "Tesis/ñ" to true)
+        assertEquals(listOf(2, 1, 3, 0), TodasLasTareas.coloresDeListas(otras).toList())
+        // Caso negativo: una lista vacía no quita color a las demás.
+        val v = TodasLasTareas.coloresDeListas(claves.take(11) + ("vacia" to false))
+        assertEquals(11, v.take(11).toSet().size)
+    }
+
 
     private fun dia(d: Int) = LocalDate.of(2026, 10, d)
 

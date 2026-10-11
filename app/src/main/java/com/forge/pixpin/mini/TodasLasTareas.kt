@@ -296,6 +296,53 @@ object TodasLasTareas {
     }
 
     /** «nada pendiente», «1 pendiente», «N pendientes» del encabezado de un grupo (`tareas3-pendientes`). */
+    /**
+     * Los colores de los grupos (PC `11bd1f6`, `tareas/ventana.rs`): doce tonos bien distintos
+     * (violeta, verde, rojo, naranja, azul, rosa, turquesa, oliva, marrón, añil, magenta y dorado),
+     * cada uno con el par de su degradado en el PC; aquí se usa el primero.
+     */
+    val COLORES_DE_GRUPO: IntArray = intArrayOf(
+        0x5B2DA8, 0x0F7A4A, 0xA8323E, 0xB8650F, 0x1767A8, 0xA8306E,
+        0x0E7C86, 0x6E7A12, 0x7A4A2A, 0x3A44B8, 0x8A2AA8, 0x9C7A0E,
+    )
+
+    /**
+     * **El color de cada lista** (su sitio en [COLORES_DE_GRUPO]), sin repetir mientras haya colores
+     * (el usuario, 10-oct-2026: «que cada grupo de tareas tenga un color diferente»). Igual que el PC,
+     * para que un grupo tenga el mismo color en los dos: cada lista parte del color de su clave
+     * (FNV-1a) y, si ya lo tiene otra, toma el siguiente libre; se reparten por orden de clave (no
+     * por el de la pantalla, que cambia al tachar). Las listas vacías no gastan color.
+     * [claves]: la clave de cada lista y si tiene tareas.
+     */
+    fun coloresDeListas(claves: List<Pair<String, Boolean>>): IntArray {
+        val n = COLORES_DE_GRUPO.size
+        fun semilla(c: String): Int {
+            var h = 0x811c9dc5.toInt()
+            for (b in c.toByteArray(Charsets.UTF_8)) h = (h xor (b.toInt() and 0xff)) * 0x01000193
+            return ((h.toLong() and 0xffffffffL) % n).toInt()
+        }
+        val out = IntArray(claves.size) { semilla(claves[it].first) }
+        val usado = BooleanArray(n)
+        // Por bytes, como el `cmp` de Rust.
+        val orden = claves.indices.filter { claves[it].second }.sortedWith { a, b -> compararBytes(claves[a].first, claves[b].first) }
+        for (i in orden) {
+            val desde = out[i]
+            val k = (0 until n).map { (desde + it) % n }.firstOrNull { !usado[it] } ?: desde
+            usado[k] = true
+            out[i] = k
+        }
+        return out
+    }
+
+    private fun compararBytes(a: String, b: String): Int {
+        val x = a.toByteArray(Charsets.UTF_8); val y = b.toByteArray(Charsets.UTF_8)
+        for (i in 0 until minOf(x.size, y.size)) {
+            val d = (x[i].toInt() and 0xff) - (y[i].toInt() and 0xff)
+            if (d != 0) return d
+        }
+        return x.size - y.size
+    }
+
     fun pendientesDeGrupo(n: Int): String = when (n) { 0 -> "nada pendiente"; 1 -> "1 pendiente"; else -> "$n pendientes" }
 
     /** «1 tarea encontrada», «N tareas encontradas» (`tareas3-encontradas`). */

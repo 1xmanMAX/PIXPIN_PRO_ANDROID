@@ -255,7 +255,8 @@ class PlanoActivity : ComponentActivity() {
     private fun verTodo() {
         val m = modelo ?: return
         if (ancho <= 0 || alto <= 0) return
-        camara = CamaraPlano.encuadrar(m.caja, ancho, alto)
+        // Lo que importa, no la caja entera: un objeto suelto a kilómetros dejaba el plano diminuto.
+        camara = CamaraPlano.encuadrar(m.cajaUtil, ancho, alto)
         pintar()
     }
 

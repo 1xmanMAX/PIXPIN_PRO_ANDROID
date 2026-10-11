@@ -5,6 +5,7 @@ import com.forge.pixpin.planos.Enganches
 import com.forge.pixpin.planos.LectorDePlanos
 import com.forge.pixpin.planos.Medidas
 import com.forge.pixpin.planos.ModeloCad
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -27,6 +28,18 @@ class PlanosTest {
         requireNotNull(javaClass.classLoader?.getResourceAsStream("planos/prueba.pxcad")).use { it.readBytes() }
 
     private fun modelo(): ModeloCad = ModeloCad.deBytes(ByteBuffer.wrap(fixture()))
+
+    /** El plano de demolición del usuario (PC 4f33ab3): todo en una esquina y un objeto a 340 km. Leído por el .so (PXCAD v6). */
+    @Test
+    fun un_objeto_suelto_a_kilometros_no_cuenta_para_encuadrar() {
+        val b = requireNotNull(javaClass.classLoader?.getResourceAsStream("planos/suelto-lejos.pxcad")).use { it.readBytes() }
+        val m = ModeloCad.deBytes(ByteBuffer.wrap(b))
+        val c = m.caja; val u = m.cajaUtil
+        assertTrue("la caja entera llega al objeto lejano: ${c.toList()}", c[2] - c[0] > 300_000f)
+        assertTrue("${u.toList()}", u[2] - u[0] < 3_000f && u[3] - u[1] < 3_000f)
+        // Caso negativo: un plano normal (pocos puntos) se encuadra entero.
+        assertArrayEquals(modelo().caja, modelo().cajaUtil, 0f)
+    }
 
     @Test
     fun lee_el_plano_que_escribe_el_rust_del_pc() {
