@@ -141,6 +141,13 @@ fun DrawCanvas(
     /** Ha entrado un toque de lápiz: quien hospeda decide si enciende el modo. */
     onLapizDetectado: () -> Unit = {},
     /**
+     * **Con [modoLapiz], el dedo es del lector** (11-oct-2026, el usuario: «es incómodo que quiera
+     * hacer scroll y el dedo dibuje»). En el lector de PDF la capa tiene la vista clavada a su hoja:
+     * el dedo no puede mover el papel aquí, así que **no se coge** y sigue hacia la lista de debajo,
+     * que se desliza y pasa las hojas como leyendo. El lápiz traza igual.
+     */
+    dedoAlLector: Boolean = false,
+    /**
      * Se ha tocado el lienzo, con lo que sea. Es lo que cierra lo que flote encima —la
      * ventana de ajustes— en cuanto uno vuelve al dibujo.
      */
@@ -359,7 +366,7 @@ fun DrawCanvas(
         // cuando arrancó —falso, siempre— y el candado no se enteraba nunca de
         // que lo habían echado. Se veía como un botón que se enciende y no hace
         // nada, que es lo peor que puede hacer un botón.
-        modifier = modifier.pointerInput(controller, zoomBloqueado, vistaFija, figurasPerfectas, modoLapiz) {
+        modifier = modifier.pointerInput(controller, zoomBloqueado, vistaFija, figurasPerfectas, modoLapiz, dedoAlLector) {
             awaitEachGesture {
                 val first = awaitFirstDown(requireUnconsumed = false)
                 var pointers = 1
@@ -566,6 +573,8 @@ fun DrawCanvas(
                 // forma de colocar un texto sin sacar el lápiz. La herramienta de
                 // texto es la excepción, y solo ella.
                 val elDedoEscribe = controller.tool == Tool.TEXT
+                // Sin cogerlo: la lista de debajo lo recibe entero, de la primera a la última posición.
+                if (modoLapiz && !esLapiz && !elDedoEscribe && dedoAlLector) return@awaitEachGesture
                 if (modoLapiz && !esLapiz && !elDedoEscribe) {
                     var previo = first.position
                     var dedos = 1

@@ -714,6 +714,9 @@ class VisorHtmlActivity : ComponentActivity() {
     /** Lo que se redibuja en los mandos de anotar; y si se ha visto un lápiz (entonces el dedo mueve). */
     private var tickDeAnotar by mutableStateOf(0)
     private var conLapiz by mutableStateOf(false)
+    /** Ya se vio un lápiz (desde entonces sale el botón «Dedo»), y si aún se enciende solo. */
+    private var vioLapiz by mutableStateOf(false)
+    private var lapizAutomatico = true
 
     /**
      * **El aumento de un documento es nuestro, no del `WebView`** (20-sep-2026). Con el suyo, el
@@ -1411,7 +1414,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 // El aumento lo lleva el pellizco del documento, que estira esto y el texto a la vez.
                 zoomBloqueado = true,
                 modoLapiz = conLapiz,
-                onLapizDetectado = { conLapiz = true }
+                onLapizDetectado = { vioLapiz = true; if (lapizAutomatico) conLapiz = true }
             )
         }
     }
@@ -1428,13 +1431,29 @@ class VisorHtmlActivity : ComponentActivity() {
                 .statusBarsPadding()
                 .padding(top = 8.dp)
                 .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                .background(androidx.compose.ui.graphics.Color(0xB314182B))
-                .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++; ponerLaTintaEnLaPagina() }
-                .padding(horizontal = 14.dp, vertical = 9.dp),
+                .background(androidx.compose.ui.graphics.Color(0xB314182B)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Filled.Check, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
-            Text("Listo", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 6.dp))
+            Row(
+                Modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++; ponerLaTintaEnLaPagina() }
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
+                Text("Listo", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 6.dp))
+            }
+            // **Con lápiz, el dedo mueve el papel** (se enciende solo); aquí se apaga, que perder el
+            // lápiz no puede dejar sin anotar. Solo desde que se vio un lápiz.
+            if (vioLapiz) Text(
+                if (conLapiz) "Dedo: mover" else "Dedo: dibujar",
+                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            )
         }
         Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
             com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {

@@ -198,6 +198,13 @@ class LectorPdfActivity : ComponentActivity() {
         // Solo para llevar la herramienta y el estilo de la barra: cada hoja tiene su lienzo.
         val maestro = remember { com.forge.pixpin.motor.DrawController().also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) } }
         var tickDeLaBarra by remember { mutableStateOf(0) }
+        // **Con lápiz, el dedo pasa las hojas** (11-oct-2026). Se enciende solo con el primer toque
+        // de lápiz; el botón «Dedo» de la barra lo apaga (perder el lápiz no puede dejar sin anotar)
+        // y entonces ya no se vuelve a encender solo hasta pedirlo.
+        var conLapiz by remember { mutableStateOf(false) }
+        var vioLapiz by remember { mutableStateOf(false) }
+        var lapizAutomatico by remember { mutableStateOf(true) }
+        val alLapiz = remember { { vioLapiz = true; if (lapizAutomatico) conLapiz = true } }
         val alcance = androidx.compose.runtime.rememberCoroutineScope()
         fun dejarDeAnotar() { anotando = false; capas.guardarTodo() }
         androidx.activity.compose.BackHandler(enabled = anotando) { dejarDeAnotar() }
@@ -516,7 +523,7 @@ class LectorPdfActivity : ComponentActivity() {
                                     Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i }
                                 }
                                 // La capa coge **la hoja y sus dos márgenes**.
-                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize()) { tickDeLaBarra++ }
+                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize(), conLapiz, alLapiz) { tickDeLaBarra++ }
                             }
                         }
                         if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
@@ -585,6 +592,13 @@ class LectorPdfActivity : ComponentActivity() {
                     Text(
                         "Listo", color = Color.White,
                         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { dejarDeAnotar() }.padding(horizontal = 12.dp, vertical = 9.dp)
+                    )
+                    // Solo desde que se vio un lápiz: sin él, el dedo es lo único que dibuja.
+                    if (vioLapiz) Text(
+                        if (conLapiz) "Dedo: mover" else "Dedo: dibujar", color = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
+                            .padding(horizontal = 12.dp, vertical = 9.dp)
                     )
                     Text(
                         "Exportar", color = Color.White.copy(alpha = 0.85f),
@@ -1007,11 +1021,15 @@ private fun pintorDeCapas(contexto: Context): com.forge.pixpin.motor.Renderer =
  * la lista se desliza como siempre. Anotando, es el [com.forge.pixpin.motor.DrawCanvas] de
  * siempre, con la vista clavada a la hoja; al posar el dedo coge la herramienta y el estilo de la
  * barra. Un dedo dibuja; **dos dedos pasan las hojas** y amplían, que de eso se encarga el lector.
+ * Con lápiz ([conLapiz]) dibuja solo el lápiz y **un dedo también pasa las hojas**.
  */
 @Composable
 private fun CapaDePagina(
     capas: CapasDelPdf, i: Int, anotando: Boolean, espacios: Int,
-    maestro: com.forge.pixpin.motor.DrawController, modifier: Modifier, alCambiar: () -> Unit
+    maestro: com.forge.pixpin.motor.DrawController, modifier: Modifier,
+    /** Con lápiz visto, el dedo no dibuja: sigue a la lista. Ver [com.forge.pixpin.motor.DrawCanvas]. */
+    conLapiz: Boolean, alLapiz: () -> Unit,
+    alCambiar: () -> Unit
 ) {
     val lienzo by androidx.compose.runtime.produceState<com.forge.pixpin.motor.DrawController?>(null, capas, i) {
         value = withContext(Dispatchers.IO) { runCatching { capas.controladorDe(i) }.getOrNull() }
@@ -1037,11 +1055,13 @@ private fun CapaDePagina(
         return
     }
     Box(
-        medido.pointerInput(c) {
+        medido.pointerInput(c, conLapiz) {
             awaitPointerEventScope {
                 while (true) {
                     val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                    if (e.changes.any { it.pressed && !it.previousPressed }) {
+                    // Con lápiz, el dedo que pasa hojas no hace suya la hoja (deshacer sigue en la del lápiz); el texto
+                    // sí se pone con el dedo, como en el lienzo.
+                    if (e.changes.any { it.pressed && !it.previousPressed && (!conLapiz || it.type == androidx.compose.ui.input.pointer.PointerType.Stylus || maestro.tool == com.forge.pixpin.motor.Tool.TEXT) }) {
                         capas.tocada(i)
                         val herramienta = maestro.tool
                         if (herramienta !in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA && herramienta != c.tool) c.selectTool(herramienta)
@@ -1055,7 +1075,10 @@ private fun CapaDePagina(
             controller = c,
             modifier = Modifier.fillMaxSize(),
             onChange = { trazando -> if (!trazando) { capas.ensuciar(i); alCambiar() } },
-            vistaFija = true
+            vistaFija = true,
+            modoLapiz = conLapiz,
+            onLapizDetectado = alLapiz,
+            dedoAlLector = true
         )
     }
 }

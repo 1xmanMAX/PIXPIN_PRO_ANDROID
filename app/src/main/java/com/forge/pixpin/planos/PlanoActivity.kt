@@ -288,6 +288,10 @@ class PlanoActivity : ComponentActivity() {
             }
         }
         var anotando by remember { mutableStateOf(false) }
+        // **Con lápiz, el dedo mueve el plano** (11-oct-2026); el botón «Dedo» lo apaga.
+        var conLapiz by remember { mutableStateOf(false) }
+        var vioLapiz by remember { mutableStateOf(false) }
+        var lapizAutomatico by remember { mutableStateOf(true) }
         var tickDeAnotar by remember { mutableIntStateOf(0) }
         var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
         var preparandoLamina by remember { mutableStateOf(false) }
@@ -425,7 +429,9 @@ class PlanoActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         imageProvider = { f -> laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
                         dark = !claro,
-                        onChange = { trazando -> if (!trazando) { tickDeAnotar++; cambiosEnLaCapa++ } }
+                        onChange = { trazando -> if (!trazando) { tickDeAnotar++; cambiosEnLaCapa++ } },
+                        modoLapiz = conLapiz,
+                        onLapizDetectado = { vioLapiz = true; if (lapizAutomatico) conLapiz = true }
                     )
                 } else
                 // Gestos y cotas encima del plano.
@@ -559,13 +565,24 @@ class PlanoActivity : ComponentActivity() {
                 com.forge.pixpin.ui.EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
                 Row(
                     Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
-                        .clip(RoundedCornerShape(50)).background(Color(0xB314182B))
-                        .clickable { anotando = false; CapaDelPlano.leer(laCapa.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms }; guardarCapa(); cambiosEnLaCapa++; marcos++ }
-                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                        .clip(RoundedCornerShape(50)).background(Color(0xB314182B)),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Text(getString(com.forge.pixpin.R.string.plano_listo), color = Color.White, modifier = Modifier.padding(start = 6.dp))
+                    Row(
+                        Modifier.clip(RoundedCornerShape(50))
+                            .clickable { anotando = false; CapaDelPlano.leer(laCapa.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms }; guardarCapa(); cambiosEnLaCapa++; marcos++ }
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Text(getString(com.forge.pixpin.R.string.plano_listo), color = Color.White, modifier = Modifier.padding(start = 6.dp))
+                    }
+                    if (vioLapiz) Text(
+                        if (conLapiz) "Dedo: mover" else "Dedo: dibujar", color = Color.White.copy(alpha = 0.85f),
+                        modifier = Modifier.clip(RoundedCornerShape(50))
+                            .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
+                            .padding(horizontal = 12.dp, vertical = 9.dp)
+                    )
                 }
                 Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
                     com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
