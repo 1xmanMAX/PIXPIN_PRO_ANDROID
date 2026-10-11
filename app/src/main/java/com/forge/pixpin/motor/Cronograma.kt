@@ -1,25 +1,17 @@
 package com.forge.pixpin.motor
 
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * El cronograma: **un plan dibujado, no una hoja de cálculo**.
  *
- * En una reunión el cronograma se dibuja siempre igual: una columna de nombres a la
- * izquierda, una escala arriba y una barra por fila. Hacerlo con rectángulos sueltos son
- * doce elementos que hay que alinear a mano y que se descuadran en cuanto se mueve uno; y
- * a mano alzada sale torcido y sin escala, que es justo lo que un cronograma tiene que
- * tener para decir algo.
+ * Una columna de nombres a la izquierda, una escala arriba y una barra por fila, todo
+ * repartido dentro de la caja de la figura: nada está en coordenadas, así que estirar la
+ * figura estira el plan sin descuadrarlo.
  *
- * Aquí es **una figura con datos dentro**. La rejilla se reparte sola dentro de la caja,
- * las barras se arrastran por encima de ella —moverlas y estirarlas es el gesto entero— y
- * añadir una tarea recoloca lo demás. Estirar la figura estira el plan sin descuadrarlo,
- * porque nada está en coordenadas: todo está en filas y columnas.
- *
- * Lo que **no** es: un gestor de proyectos. No hay dependencias, ni recursos, ni fechas
- * reales. Es el croquis de cuándo va cada cosa.
+ * **Ya no se crea ni se edita** (retirado el 11-oct-2026, como en el PC). Lo que queda
+ * aquí es solo **cómo se reparte para pintarlo** —en pantalla, en SVG y en PDF—, para que
+ * los dibujos que ya tienen uno se sigan viendo igual. Ver [ElementType.CRONOGRAMA].
  */
 
 /** Qué parte del ancho se lleva la columna de los nombres. */
@@ -30,15 +22,6 @@ const val ALTO_DE_LA_ESCALA = 0.16
 
 /** Lo más fina que se deja una barra, en columnas: por debajo no se puede ni agarrar. */
 const val MINIMA_BARRA = 0.25
-
-/** A cuánto engancha el arrastre de una barra: a cuartos de columna. */
-const val PASO_DEL_CRONOGRAMA = 0.25
-
-/** Cuánto de una barra, por su punta, estira en vez de mover. */
-private const val PUNTA_DE_LA_BARRA = 0.3
-
-/** Y como mucho esto en píxeles: en una barra larga, la punta no puede ser medio metro. */
-private const val PUNTA_MAXIMA = 24.0
 
 /** La caja del elemento, que es donde vive todo lo demás. */
 private fun caja(e: Element): Bounds = getElementAbsoluteCoords(e).toBounds()
@@ -113,105 +96,3 @@ fun letraDelCronograma(e: Element, alto: Double): Double {
     val tope = max(1.0, alto * 0.8)
     return pedida.coerceIn(1.0, tope)
 }
-
-/** Qué se hace al agarrar una barra: moverla entera o estirarla por la punta. */
-enum class ManoEnLaBarra { MOVER, ESTIRAR }
-
-/** Qué barra se ha tocado y para qué, o null si el dedo no cayó en ninguna. */
-data class ToqueEnBarra(val indice: Int, val mano: ManoEnLaBarra)
-
-/**
- * Qué barra toca el dedo, **y si la toca por la punta**.
- *
- * Por el cuerpo se mueve y por la punta derecha se estira, que es el reparto que uno
- * espera de una barra y el que no obliga a un tirador aparte —en un cronograma de diez
- * filas, veinte tiradores serían una alfombra de bolitas.
- *
- * La punta es un tanto por uno del largo **con tope**: en una barra de media pantalla, un
- * tercio de punta sería absurdo.
- */
-fun toqueEnBarra(e: Element, p: Pt, margen: Double = 0.0): ToqueEnBarra? {
-    for (i in e.tareas.indices) {
-        val b = barraDeTarea(e, i) ?: continue
-        if (p.y < b.y1 - margen || p.y > b.y2 + margen) continue
-        if (p.x < b.x1 - margen || p.x > b.x2 + margen) continue
-        val punta = min(b.width * PUNTA_DE_LA_BARRA, PUNTA_MAXIMA)
-        val mano = if (p.x >= b.x2 - punta) ManoEnLaBarra.ESTIRAR else ManoEnLaBarra.MOVER
-        return ToqueEnBarra(i, mano)
-    }
-    return null
-}
-
-/**
- * La tarea [i] después de arrastrarla hasta [p].
- *
- * Se engancha a cuartos de columna: a pulso salen barras que empiezan en 2,37 y el dibujo
- * deja de decir «esta empieza cuando acaba aquella», que es lo único que un cronograma
- * bocetado tiene que decir. Es el mismo imán de la retícula del lienzo, en una dimensión.
- *
- * [agarre] es por dónde se cogió la barra, en columnas desde su principio: sin él, la
- * barra pega un salto al empezar a moverla para ponerse con su origen bajo el dedo.
- */
-fun tareaArrastrada(
-    e: Element,
-    i: Int,
-    mano: ManoEnLaBarra,
-    p: Pt,
-    agarre: Double
-): TareaDelCronograma? {
-    val t = e.tareas.getOrNull(i) ?: return null
-    val col = anchoDeColumna(e)
-    if (col <= 0.0) return null
-    val enColumnas = (p.x - xDeLaEscala(e)) / col
-    return when (mano) {
-        ManoEnLaBarra.MOVER -> {
-            val desde = enganchado(enColumnas - agarre)
-            t.copy(desde = desde.coerceIn(0.0, max(0.0, e.periodos - t.cuanto)))
-        }
-        ManoEnLaBarra.ESTIRAR -> {
-            val cuanto = enganchado(enColumnas - t.desde)
-            t.copy(cuanto = cuanto.coerceIn(MINIMA_BARRA, max(MINIMA_BARRA, e.periodos - t.desde)))
-        }
-    }
-}
-
-private fun enganchado(v: Double): Double =
-    if (!v.isFinite()) 0.0 else (v / PASO_DEL_CRONOGRAMA).roundToInt() * PASO_DEL_CRONOGRAMA
-
-/**
- * Una tarea más, **detrás de la última y del mismo largo**.
- *
- * Nace donde acaba la anterior porque es lo que uno va a querer nueve de cada diez veces
- * —un plan se lee de arriba abajo y las cosas van una detrás de otra— y corregirlo es
- * arrastrar. Naciendo en cero habría que moverlas todas.
- */
-fun conTareaNueva(e: Element, nombre: String): Element {
-    val ultima = e.tareas.lastOrNull()
-    val desde = ultima?.let { it.desde + it.cuanto } ?: 0.0
-    val cuanto = ultima?.cuanto ?: 1.0
-    val periodos = max(e.periodos, kotlin.math.ceil(desde + cuanto).toInt())
-    return e.copy(
-        tareas = e.tareas + TareaDelCronograma(
-            nombre = nombre,
-            desde = desde.coerceAtMost(max(0.0, periodos - cuanto)),
-            cuanto = cuanto
-        ),
-        periodos = periodos
-    ).touched()
-}
-
-/** Una tarea menos: la última. Con ninguna, la figura se queda como está. */
-fun sinLaUltimaTarea(e: Element): Element =
-    if (e.tareas.isEmpty()) e else e.copy(tareas = e.tareas.dropLast(1)).touched()
-
-/** Una columna más o menos en la escala, sin bajar de una. */
-fun conPeriodos(e: Element, cuantos: Int): Element =
-    e.copy(periodos = cuantos.coerceIn(1, MAXIMO_DE_PERIODOS)).touched()
-
-/**
- * Hasta cuántas columnas se deja llegar.
- *
- * Cuarenta ya son cuarenta rayas verticales en el ancho de una figura: a partir de ahí no
- * se distingue una de otra y lo que se dibuja es una trama, no una escala.
- */
-const val MAXIMO_DE_PERIODOS = 40

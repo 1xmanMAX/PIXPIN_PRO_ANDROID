@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.filled.Cyclone
 import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material.icons.filled.ViewTimeline
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.LightMode
@@ -1062,7 +1061,6 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.NUDO,
     Tool.PUNTO,
     Tool.SOLIDO,
-    Tool.CRONOGRAMA,
     Tool.EXTRUIR,
     Tool.REVOLUCION
 )
@@ -1183,7 +1181,6 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.EXTENDER -> Icons.Filled.OpenInFull
     Tool.PUNTO -> Icons.Filled.Adjust
     Tool.SOLIDO -> Icons.Filled.ViewInAr
-    Tool.CRONOGRAMA -> Icons.Filled.ViewTimeline
     Tool.EXTRUIR -> Icons.Filled.Upgrade
     Tool.REVOLUCION -> Icons.Filled.Cyclone
 }
@@ -1221,7 +1218,6 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.RECORTAR -> R.string.tool_recortar
     Tool.EXTENDER -> R.string.tool_extender
     Tool.SOLIDO -> R.string.tool_solido
-    Tool.CRONOGRAMA -> R.string.tool_cronograma
     Tool.EXTRUIR -> R.string.tool_extruir
     Tool.REVOLUCION -> R.string.tool_revolucion
 }

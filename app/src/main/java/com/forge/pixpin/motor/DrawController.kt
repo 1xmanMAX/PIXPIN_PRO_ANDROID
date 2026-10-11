@@ -119,7 +119,7 @@ class DrawController(initial: Scene = Scene()) {
     private fun empezarArcoSobre(guia: Element, p: Pt) {
         val angulo = anguloEnElOvalo(guia, p)
         val arco = newElement(
-            ElementType.ARC, guia.x, guia.y, scene.style,
+            ElementType.ARC, guia.x, guia.y, estiloParaLoNuevo,
             width = guia.width, height = guia.height
         ).copy(angle = guia.angle, arcStart = angulo, arcSweep = 0.0)
         scene = scene.copy(elements = scene.elements + arco)
@@ -311,10 +311,7 @@ class DrawController(initial: Scene = Scene()) {
             }
 
             Tool.RECTANGLE, Tool.DIAMOND, Tool.MOSAIC,
-            Tool.FRAME, Tool.ESCALA_GRAFICA,
-            // El cronograma se pone como cualquier lámina: se arrastra su caja y dentro
-            // aparece la rejilla ya repartida, con sus tres filas. Ver [Cronograma].
-            Tool.CRONOGRAMA -> beginCreate(elementTypeOf(tool), p)
+            Tool.FRAME, Tool.ESCALA_GRAFICA -> beginCreate(elementTypeOf(tool), p)
 
             // La bolita: un barrido, y lo que toque entra o sale. No crea nada, así que no
             // hay elemento en curso ni nada que soltar al levantar.
@@ -376,7 +373,7 @@ class DrawController(initial: Scene = Scene()) {
             // **La flecha libre**: nace como flecha —con su punta— pero se traza a pulso.
             // Ver [Tool.FLECHA_LIBRE].
             Tool.FLECHA_LIBRE -> {
-                val e = newElement(ElementType.ARROW, p.x, p.y, scene.style).copy(
+                val e = newElement(ElementType.ARROW, p.x, p.y, estiloParaLoNuevo).copy(
                     points = listOf(Pt(0.0, 0.0)),
                     endArrowhead = Arrowhead.ARROW,
                     // **Y lisa, no rugosa.** El trazado a mano alzada de las figuras dibuja
@@ -396,10 +393,10 @@ class DrawController(initial: Scene = Scene()) {
             Tool.FREEDRAW, Tool.HIGHLIGHTER, Tool.GRAFITO -> {
                 // El lápiz tiene su propia escala de grosores: la mancha se
                 // dibuja a 4,25× y con la escala de las formas saldría enorme.
-                var e = newElement(ElementType.FREEDRAW, p.x, p.y, scene.style)
+                var e = newElement(ElementType.FREEDRAW, p.x, p.y, estiloParaLoNuevo)
                     .copy(
                         pressures = listOf(pressure),
-                        strokeWidth = ItemStyle.freedrawWidthFor(scene.style.strokeWidth),
+                        strokeWidth = ItemStyle.freedrawWidthFor(estiloParaLoNuevo.strokeWidth),
                         reference = modoReferencia
                     )
                 // El marcador es el lápiz translúcido y gordo: no hace falta un
@@ -424,9 +421,9 @@ class DrawController(initial: Scene = Scene()) {
 
             // Un toque = un número. No se arrastra, igual que el texto.
             Tool.SERIAL -> {
-                val radio = scene.style.fontSize * SERIAL_RADIUS
+                val radio = estiloParaLoNuevo.fontSize * SERIAL_RADIUS
                 val e = newElement(
-                    ElementType.SERIAL, p.x - radio, p.y - radio, scene.style,
+                    ElementType.SERIAL, p.x - radio, p.y - radio, estiloParaLoNuevo,
                     width = radio * 2, height = radio * 2
                 ).copy(text = nextSerial().toString(), reference = modoReferencia)
                 scene = scene.copy(elements = scene.elements + e)
@@ -523,7 +520,7 @@ class DrawController(initial: Scene = Scene()) {
             donde = anclaje.punto,
             elementos = editables,
             serie = seriePuntos,
-            estilo = scene.style,
+            estilo = estiloParaLoNuevo,
             seed = randomSeed()
         ).copy(reference = modoReferencia)
         scene = scene.copy(elements = scene.elements + e)
@@ -643,7 +640,7 @@ class DrawController(initial: Scene = Scene()) {
                 return
             }
             val hueco = esquinaDelHueco(contenedor)
-            val texto = newElement(ElementType.TEXT, hueco.x, hueco.y, scene.style)
+            val texto = newElement(ElementType.TEXT, hueco.x, hueco.y, estiloParaLoNuevo)
                 .copy(reference = contenedor.reference, textAlign = TextAlign.CENTER)
             val (conBound, atado) = atados(contenedor, texto)
             scene = scene.copy(
@@ -654,7 +651,7 @@ class DrawController(initial: Scene = Scene()) {
             return
         }
 
-        val e = newElement(ElementType.TEXT, p.x, p.y, scene.style)
+        val e = newElement(ElementType.TEXT, p.x, p.y, estiloParaLoNuevo)
             .copy(reference = modoReferencia)
         scene = scene.copy(elements = scene.elements + e)
         selectedIds = emptySet()
@@ -962,16 +959,6 @@ class DrawController(initial: Scene = Scene()) {
                         replace(e.copy(x = h.x, y = h.y, width = h.ancho, height = h.fondo))
                     }
                 }
-            }
-
-            is Gesture.BarraDelPlan -> {
-                val e = scene.byId(g.elementId) ?: return
-                val nueva = tareaArrastrada(e, g.indice, g.mano, p, g.agarre) ?: return
-                replace(
-                    e.copy(
-                        tareas = e.tareas.mapIndexed { i, t -> if (i == g.indice) nueva else t }
-                    ).touched()
-                )
             }
 
             is Gesture.GirandoVolumen -> {
@@ -1636,7 +1623,7 @@ class DrawController(initial: Scene = Scene()) {
         e.copy(
             type = ElementType.LINE,
             pressures = null,
-            strokeWidth = scene.style.strokeWidth,
+            strokeWidth = estiloParaLoNuevo.strokeWidth,
             roundness = null
         ).conPuntosAbsolutos(listOf(arranque, dedo))
 
@@ -1660,7 +1647,7 @@ class DrawController(initial: Scene = Scene()) {
             y = centro.y - radio,
             width = radio * 2,
             height = radio * 2,
-            strokeWidth = scene.style.strokeWidth,
+            strokeWidth = estiloParaLoNuevo.strokeWidth,
             // Lo que se rellena y con qué trama lo dice el estilo, como en cualquier
             // figura: un trazo de lápiz no llevaba fondo porque no puede tenerlo.
             backgroundColor = scene.style.backgroundColor,
@@ -1683,7 +1670,7 @@ class DrawController(initial: Scene = Scene()) {
             by = a.y + (if (b.y >= a.y) lado else -lado)
         }
         return newElement(
-            ElementType.RECTANGLE, minOf(a.x, bx), minOf(a.y, by), scene.style,
+            ElementType.RECTANGLE, minOf(a.x, bx), minOf(a.y, by), estiloParaLoNuevo,
             width = kotlin.math.abs(bx - a.x), height = kotlin.math.abs(by - a.y)
         // El material viaja: un rectángulo sacado de un trazo de grafito es de grafito.
         ).copy(id = e.id, seed = e.seed, reference = e.reference, material = e.material, dureza = e.dureza)
@@ -2148,7 +2135,7 @@ class DrawController(initial: Scene = Scene()) {
         // La altura nace **nula y no cero**: es el estado real «todavía no se ha
         // levantado», y lo que hace que mientras se dibuja la huella se pinte solo
         // la sombra y la planta. Ver [Element.altura].
-        val e = newElement(ElementType.SOLIDO, p.x, p.y, scene.style)
+        val e = newElement(ElementType.SOLIDO, p.x, p.y, estiloParaLoNuevo)
             .copy(reference = modoReferencia, altura = null)
         scene = scene.copy(elements = scene.elements + e)
         solidoPendiente = null
@@ -2186,7 +2173,7 @@ class DrawController(initial: Scene = Scene()) {
         // sus bordes, no dónde queda su centro.
         desdeElCentro = type != ElementType.FRAME &&
             (shapesFromCenter || (ellipseFromCenter && type == ElementType.ELLIPSE))
-        val e = deGrafitoSiToca(newElement(type, p.x, p.y, scene.style).copy(reference = modoReferencia))
+        val e = deGrafitoSiToca(newElement(type, p.x, p.y, estiloParaLoNuevo).copy(reference = modoReferencia))
         scene = scene.copy(elements = scene.elements + e)
         gesture = Gesture.Creating(e.id)
     }
@@ -2201,7 +2188,7 @@ class DrawController(initial: Scene = Scene()) {
 
     private fun beginCreateLinear(type: ElementType, p: Pt) {
         val e = deGrafitoSiToca(
-            newElement(type, p.x, p.y, scene.style)
+            newElement(type, p.x, p.y, estiloParaLoNuevo)
                 .copy(points = listOf(Pt(0.0, 0.0), Pt(0.0, 0.0)), reference = modoReferencia)
         )
         scene = scene.copy(elements = scene.elements + e)
@@ -2475,12 +2462,12 @@ class DrawController(initial: Scene = Scene()) {
         val grupo = GRUPO_DE_ZONA + randomId()
         val x = b.x1 + desplazamiento
         val y = b.y1 + desplazamiento
-        val foto = newImageElement(file.id, x, y, b.width, b.height, scene.style).copy(groupIds = listOf(grupo))
+        val foto = newImageElement(file.id, x, y, b.width, b.height, estiloParaLoNuevo).copy(groupIds = listOf(grupo))
         // **Sin color, el marco ya viene en la foto** (19-sep-2026): el marco era un rectángulo de
         // esquinas redondas puesto sobre una foto de esquinas cuadradas, y los picos de la foto
         // asomaban por fuera. Quien llama recorta la foto en redondo y le pinta el filo.
         val marco = colorDelMarco?.let {
-            newElement(ElementType.RECTANGLE, x, y, scene.style, b.width, b.height).copy(
+            newElement(ElementType.RECTANGLE, x, y, estiloParaLoNuevo, b.width, b.height).copy(
                 strokeColor = it, backgroundColor = Element.TRANSPARENT,
                 strokeStyle = StrokeStyle.SOLID, strokeWidth = 2.0, roughness = 0, groupIds = listOf(grupo)
             )
@@ -2496,7 +2483,7 @@ class DrawController(initial: Scene = Scene()) {
      */
     fun marcarZona(b: Bounds, dibujo: String) {
         val before = scene.elements
-        val marca = newElement(ElementType.RECTANGLE, b.x1, b.y1, scene.style, b.width, b.height).copy(
+        val marca = newElement(ElementType.RECTANGLE, b.x1, b.y1, estiloParaLoNuevo, b.width, b.height).copy(
             strokeColor = COLOR_DE_LA_ZONA, backgroundColor = Element.TRANSPARENT,
             strokeStyle = StrokeStyle.DASHED, strokeWidth = 2.0, roughness = 0, enlace = dibujo
         )
@@ -2611,23 +2598,6 @@ class DrawController(initial: Scene = Scene()) {
 
                     else -> Gesture.Resizing(hit.type, selected)
                 }
-                return
-            }
-        }
-
-        // 1.a ¿La barra de un cronograma? Va antes que mover la figura: dentro de un
-        //     plan, lo que uno quiere arrastrar casi siempre es una barra, no la lámina.
-        //     La lámina se sigue moviendo agarrándola por cualquier otro sitio.
-        val plan = selected.singleOrNull()
-            ?.takeIf { it.type == ElementType.CRONOGRAMA && !it.locked }
-        if (plan != null) {
-            val toque = toqueEnBarra(plan, p, UMBRAL_GUIA / zoom.coerceAtLeast(0.0001) / 2)
-            if (toque != null) {
-                val col = anchoDeColumna(plan)
-                val t = plan.tareas[toque.indice]
-                val agarre = if (col <= 0.0) 0.0
-                else (p.x - xDeLaEscala(plan)) / col - t.desde
-                gesture = Gesture.BarraDelPlan(plan.id, toque.indice, toque.mano, agarre)
                 return
             }
         }
@@ -2976,27 +2946,6 @@ class DrawController(initial: Scene = Scene()) {
         } ?: 0
     }
 
-    /** Una fila más en el cronograma, detrás de la última. Ver [conTareaNueva]. */
-    fun anadirTarea() =
-        mutarSeleccion { if (it.type == ElementType.CRONOGRAMA) conTareaNueva(it, "") else it }
-
-    /** Una fila menos. */
-    fun quitarTarea() =
-        mutarSeleccion { if (it.type == ElementType.CRONOGRAMA) sinLaUltimaTarea(it) else it }
-
-    /** Una columna más o menos en la escala. */
-    fun cambiarPeriodos(delta: Int) = mutarSeleccion {
-        if (it.type == ElementType.CRONOGRAMA) conPeriodos(it, it.periodos + delta) else it
-    }
-
-    /** Le pone nombre a una fila. */
-    fun renombrarTarea(indice: Int, nombre: String) = mutarSeleccion { e ->
-        if (e.type != ElementType.CRONOGRAMA) e
-        else e.copy(
-            tareas = e.tareas.mapIndexed { i, t -> if (i == indice) t.copy(nombre = nombre) else t }
-        ).touched()
-    }
-
     /** Macizo o de alambre. Ver [Element.esqueleto]. */
     fun cambiarEsqueleto(esqueleto: Boolean) =
         mutarSeleccion { if (it.isSolido) it.copy(esqueleto = esqueleto).touched() else it }
@@ -3038,7 +2987,7 @@ class DrawController(initial: Scene = Scene()) {
         file: SceneFile, at: Pt, width: Double, height: Double, alFondo: Boolean = false
     ) {
         val before = scene.elements
-        val e = newImageElement(file.id, at.x - width / 2, at.y - height / 2, width, height, scene.style)
+        val e = newImageElement(file.id, at.x - width / 2, at.y - height / 2, width, height, estiloParaLoNuevo)
             .copy(locked = alFondo)
         scene = scene.copy(
             elements = if (alFondo) listOf(e) + scene.elements else scene.elements + e,
@@ -3291,12 +3240,31 @@ class DrawController(initial: Scene = Scene()) {
     fun estiloActivo(): ItemStyle {
         val marcados = selectedElements()
         val base = marcados.firstOrNull()?.let { estiloDe(it) } ?: return scene.style
-        val conLetra = marcados.firstOrNull { it.fontSize != null } ?: return base
-        return base.copy(
+        val conLetra = marcados.firstOrNull { it.fontSize != null }
+        val activo = if (conLetra == null) base else base.copy(
             fontSize = conLetra.fontSize ?: base.fontSize,
             fontFamily = conLetra.fontFamily ?: base.fontFamily
         )
+        // Lo marcado, en la medida del panel (lo que se ve en pantalla), no en la del dibujo.
+        return aEscala(activo, 1.0 / escalaDeLoNuevo)
     }
+
+    /**
+     * **Cuánto se agranda lo que sale del panel** —el grosor y la letra— al ponerse en el dibujo.
+     * Vale 1 en todas partes menos al anotar un plano (PC `11bd1f6`, pedido por el usuario): allí
+     * es uno entre el zoom, así que un trazo «fino» o una letra de 20 **se ven** finos y de 20 en
+     * la pantalla al ponerlos, como al anotar en AutoCAD, y se puede acercar para detallar. Sin
+     * esto, elegir un grosor o una letra en el panel la ponía con el valor de una hoja, enorme en
+     * el plano, y no había forma de volver a lo pequeño.
+     */
+    var escalaDeLoNuevo: Double = 1.0
+        set(v) { field = if (v.isFinite() && v > 0) v else 1.0 }
+
+    /** El pincel con el grosor y la letra a [escalaDeLoNuevo]: con él nace todo lo nuevo. */
+    val estiloParaLoNuevo: ItemStyle get() = aEscala(scene.style, escalaDeLoNuevo)
+
+    private fun aEscala(s: ItemStyle, k: Double): ItemStyle =
+        if (k == 1.0) s else s.copy(strokeWidth = s.strokeWidth * k, fontSize = s.fontSize * k)
 
     /**
      * Cambia el estilo tocando **solo el mando que se ha movido**.
@@ -3316,7 +3284,8 @@ class DrawController(initial: Scene = Scene()) {
         val before = scene.elements
         val elementos = scene.elements.map {
             if (it.id in selectedIds && !it.locked) {
-                remedir(estiloAplicado(it, anterior, nuevo)).touched()
+                // A lo marcado, el grosor y la letra a la escala de lo nuevo (el panel habla en pantalla).
+                remedir(estiloAplicado(it, aEscala(anterior, escalaDeLoNuevo), aEscala(nuevo, escalaDeLoNuevo))).touched()
             } else it
         }
         scene = scene.copy(
@@ -3542,7 +3511,6 @@ class DrawController(initial: Scene = Scene()) {
         Tool.FRAME -> ElementType.FRAME
         Tool.ESCALA_GRAFICA -> ElementType.ESCALA_GRAFICA
         Tool.SOLIDO -> ElementType.SOLIDO
-        Tool.CRONOGRAMA -> ElementType.CRONOGRAMA
         // Escalar dibuja una cota como cualquier otra: la diferencia no está en
         // lo que se traza, sino en que al soltarla se pregunta cuánto mide.
         Tool.MEASURE, Tool.SCALE -> ElementType.MEASURE
@@ -3688,19 +3656,6 @@ private sealed interface Gesture {
      * fotograma. Acumulando paso a paso, el redondeo a quince grados se comería el resto
      * en cada vuelta y la pieza se quedaría corta. Ver [giradoEnElEspacio].
      */
-    /**
-     * Arrastrando una barra de un cronograma: se mueve o se estira.
-     *
-     * [agarre] es por dónde se cogió, en columnas desde su principio: sin él, la barra
-     * pega un salto al empezar a moverla para ponerse con su origen bajo el dedo.
-     */
-    data class BarraDelPlan(
-        val elementId: String,
-        val indice: Int,
-        val mano: ManoEnLaBarra,
-        val agarre: Double
-    ) : Gesture
-
     data class GirandoVolumen(
         val centro: Pt3,
         val eje: EjeDeGiro,

@@ -49,6 +49,8 @@ t = t[:ini] + '''pub fn fuentes_instaladas() -> &'static HashMap<String, std::pa
     static F: std::sync::OnceLock<HashMap<String, std::path::PathBuf>> = std::sync::OnceLock::new();
     F.get_or_init(|| {
         let mut mapa = HashMap::new();
+        // Las que miden como las de Windows (las de PixPin), primero: mandan.
+        crate::familias_android(&mut mapa);
         if let Ok(d) = std::fs::read_dir(CARPETA_FUENTES) {
             for e in d.flatten() {
                 let ruta = e.path();
@@ -64,6 +66,9 @@ t = t[:ini] + '''pub fn fuentes_instaladas() -> &'static HashMap<String, std::pa
 }
 ''' + t[fin:]
 (d / "texto.rs").write_text(t)
+# Las letras de Windows: la de PixPin que mide igual (Liberation, Carlito, Caladea) si la hay.
+cambiar("texto.rs", "let ruta = std::path::Path::new(CARPETA_FUENTES).join(&nombre);",
+        "let ruta = crate::ruta_de_fuente(CARPETA_FUENTES, &nombre);")
 # Roboto es tan ancha como Arial: donde el PC usa Arial Narrow (estilos SHX sin su fuente, o
 # «arial narrow»), aquí se estrecha al ancho de esa (≈ 0,82). Sin esto los textos se montaban.
 cambiar("texto.rs", "    escala_ttf: f32,\n}", "    escala_ttf: f32,\n    /// Android: cuánto se estrecha la letra (Roboto haciendo de Arial Narrow).\n    estrecho: f32,\n}")

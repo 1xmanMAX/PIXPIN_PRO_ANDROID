@@ -42,3 +42,14 @@ Nada de esto se ha visto en un teléfono.
 | Planos: grosor y letra del panel a la escala del plano (`11bd1f6`) | No hace falta: aquí la capa del plano va en unidades fijas del plano (lado/1000), no de la pantalla, y lo del panel no sale enorme. |
 | Captura, cursor del chat, barras de ventanas, vista rápida del Explorador, imprimir (`11bd1f6`, `8636b12`) | Cosas de Windows. |
 | Lienzo: fuera el cronograma; los dibujos que lo tienen lo conservan para el móvil | Android lo sigue teniendo; nada que cambiar. |
+
+## Lo de la tableta Huawei y las letras (v0.119.0, 11-oct)
+
+Lo vio el usuario en su Huawei MatePad Mini (en el Galaxy S24 Ultra no pasaba):
+
+| Problema | Arreglo |
+|---|---|
+| Letras a trozos al alejarse (de «3832.0» solo el «8», recuadros vacíos) | `PintorDePlano`: cada letra lleva su glifo (desde y cuántos vértices) en sus datos, sin la textura de enteros `uGlifos`; y las instancias van en tandas de 4096 como mucho. **Sin confirmar en la tableta**: es lo que diferenciaba a esa tarjeta, no un fallo que se haya podido reproducir aquí. |
+| Lento al acercarse a los detalles | Los arcos grandes en pantalla (más de 160 px) van como una **banda** de 48 trozos que sigue la curva, no como un cuadrado que tapaba la pantalla entera y se pintaba píxel a píxel por cada arco. |
+| Textos que se montan o se salen de sus recuadros | El PC escribe con las letras de Windows; aquí iban a Roboto: un estilo con **Arial Narrow** salía un 11 % más ancho y Arial un 8 % más estrecho. Ahora van en la app **Liberation Sans / Sans Narrow / Serif / Mono** (mismas medidas que Arial, Arial Narrow, Times New Roman y Courier New), **Carlito** (Calibri) y **Caladea** (Cambria) en `assets/fuentes-ttf` con sus licencias; el `.so` las recibe en el renglón `ttf:` de las carpetas de letras (`carpeta_ttf_android`, `fuente_parecida`, `ruta_de_fuente`, `familias_android` en `lib.rs`). Caché de planos rehecha (`REVISION_DE_LETRAS` = 3). |
+| Grosor y letra del panel enormes al anotar un plano (PC `11bd1f6`) | `DrawController.escalaDeLoNuevo` (1 en toda la app; en el plano, uno entre el zoom): lo nuevo nace a la escala de lo que se ve, cambiar el tamaño de lo marcado también, y el panel lo enseña en su medida. Prueba: `EscalaDeLoNuevoTest`. |

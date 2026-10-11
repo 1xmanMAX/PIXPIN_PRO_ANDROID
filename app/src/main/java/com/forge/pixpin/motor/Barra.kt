@@ -49,9 +49,6 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     listOf(Tool.TEXT, Tool.SERIAL, Tool.PUNTO),
     listOf(Tool.MOSAIC, Tool.LUPA, Tool.SPOTLIGHT),
     listOf(Tool.MEASURE, Tool.SCALE, Tool.ESCALA_GRAFICA),
-    // El cronograma va solo: no es una figura que se dibuja, es una lámina con datos
-    // dentro, y su vecino natural —la tabla— no existe todavía.
-    listOf(Tool.CRONOGRAMA),
     listOf(Tool.FRAME, Tool.IMAGE),
     listOf(Tool.ERASER)
 )

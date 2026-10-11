@@ -40,7 +40,97 @@ static CARPETA_SHX: Mutex<String> = Mutex::new(String::new());
 pub(crate) fn carpetas_shx_android() -> Vec<PathBuf> {
     // Varias, una por renglón: primero las del usuario, luego las de PixPin.
     let c = CARPETA_SHX.lock().map(|c| c.clone()).unwrap_or_default();
-    c.lines().map(str::trim).filter(|l| !l.is_empty()).map(PathBuf::from).collect()
+    c.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("ttf:")).map(PathBuf::from).collect()
+}
+
+/// La carpeta de las TrueType de PixPin (el renglón «ttf:» de las carpetas que
+/// manda la app): las que miden igual que las de Windows.
+pub(crate) fn carpeta_ttf_android() -> Option<PathBuf> {
+    let c = CARPETA_SHX.lock().map(|c| c.clone()).unwrap_or_default();
+    c.lines().map(str::trim).find_map(|l| l.strip_prefix("ttf:")).filter(|l| !l.is_empty()).map(PathBuf::from)
+}
+
+/// **La de PixPin que mide igual que una letra de Windows** (por el nombre de
+/// su fichero): Liberation Sans/Narrow/Serif/Mono hacen de Arial, Arial
+/// Narrow, Times New Roman y Courier New con los mismos anchos; Carlito, de
+/// Calibri; Caladea, de Cambria. Con Roboto en su lugar los textos salían más
+/// anchos y altos que en AutoCAD y se montaban o se salían de sus recuadros
+/// (el usuario, 11-oct-2026). Las que no tienen pareja exacta y se le parecen
+/// (Swiss 721, Helvetica, Tahoma, Verdana) van a Liberation Sans.
+pub(crate) fn fuente_parecida(fichero: &str) -> Option<&'static str> {
+    let f = fichero.rsplit(['/', '\\']).next().unwrap_or(fichero).to_ascii_lowercase();
+    Some(match f.as_str() {
+        "arial.ttf" | "ariali.ttf" | "segoeui.ttf" | "swiss.ttf" | "swissl.ttf" | "helvetica.ttf" | "tahoma.ttf" | "verdana.ttf" => {
+            if f == "ariali.ttf" { "LiberationSans-Italic.ttf" } else { "LiberationSans-Regular.ttf" }
+        }
+        "arialbd.ttf" | "arialbi.ttf" | "swissb.ttf" | "tahomabd.ttf" | "verdanab.ttf" | "segoeuib.ttf" => "LiberationSans-Bold.ttf",
+        "arialn.ttf" | "arialni.ttf" | "swissc.ttf" | "swisscl.ttf" => "LiberationSansNarrow-Regular.ttf",
+        "arialnb.ttf" | "arialnbi.ttf" | "swisscb.ttf" => "LiberationSansNarrow-Bold.ttf",
+        "times.ttf" | "timesi.ttf" => "LiberationSerif-Regular.ttf",
+        "timesbd.ttf" | "timesbi.ttf" => "LiberationSerif-Bold.ttf",
+        "cour.ttf" | "couri.ttf" => "LiberationMono-Regular.ttf",
+        "courbd.ttf" | "courbi.ttf" => "LiberationMono-Bold.ttf",
+        "calibri.ttf" | "calibril.ttf" | "calibrii.ttf" => "Carlito-Regular.ttf",
+        "calibrib.ttf" | "calibriz.ttf" => "Carlito-Bold.ttf",
+        "cambria.ttc" | "cambria.ttf" | "cambriai.ttf" => "Caladea-Regular.ttf",
+        "cambriab.ttf" | "cambriaz.ttf" => "Caladea-Bold.ttf",
+        _ => return None,
+    })
+}
+
+/// Las familias de Windows (como las nombra un MTEXT con `\f` o un estilo)
+/// que tienen pareja en PixPin, con su fichero de Windows.
+const FAMILIAS_DE_WINDOWS: [(&str, &str); 24] = [
+    ("arial", "arial.ttf"),
+    ("arial bold", "arialbd.ttf"),
+    ("arial negrita", "arialbd.ttf"),
+    ("arial italic", "ariali.ttf"),
+    ("arial narrow", "arialn.ttf"),
+    ("arial narrow bold", "arialnb.ttf"),
+    ("arial narrow negrita", "arialnb.ttf"),
+    ("times new roman", "times.ttf"),
+    ("times new roman bold", "timesbd.ttf"),
+    ("times new roman negrita", "timesbd.ttf"),
+    ("courier new", "cour.ttf"),
+    ("courier new bold", "courbd.ttf"),
+    ("calibri", "calibri.ttf"),
+    ("calibri bold", "calibrib.ttf"),
+    ("calibri negrita", "calibrib.ttf"),
+    ("cambria", "cambria.ttf"),
+    ("cambria bold", "cambriab.ttf"),
+    ("swis721 bt", "swiss.ttf"),
+    ("swis721 cn bt", "swissc.ttf"),
+    ("swis721 lt bt", "swissl.ttf"),
+    ("helvetica", "helvetica.ttf"),
+    ("tahoma", "tahoma.ttf"),
+    ("verdana", "verdana.ttf"),
+    ("segoe ui", "segoeui.ttf"),
+];
+
+/// Pone en `mapa` (familia → fichero) las familias de Windows que PixPin trae
+/// con las mismas medidas. Mandan sobre las del sistema.
+pub(crate) fn familias_android(mapa: &mut std::collections::HashMap<String, PathBuf>) {
+    let Some(carpeta) = carpeta_ttf_android() else { return };
+    for (familia, fichero) in FAMILIAS_DE_WINDOWS {
+        if let Some(f) = fuente_parecida(fichero) {
+            let ruta = carpeta.join(f);
+            if ruta.is_file() {
+                mapa.insert(familia.to_string(), ruta);
+            }
+        }
+    }
+}
+
+/// Dónde leer la letra `nombre` (un fichero de Windows como «arialn.ttf», o
+/// una ruta entera): la pareja de PixPin si la hay, si no la del sistema.
+pub(crate) fn ruta_de_fuente(carpeta_sistema: &str, nombre: &str) -> PathBuf {
+    if let (Some(c), Some(f)) = (carpeta_ttf_android(), fuente_parecida(nombre)) {
+        let r = c.join(f);
+        if r.is_file() {
+            return r;
+        }
+    }
+    Path::new(carpeta_sistema).join(nombre)
 }
 
 /// **Cuánto se estrecha la letra de reserva.** En el PC, un estilo cuya fuente

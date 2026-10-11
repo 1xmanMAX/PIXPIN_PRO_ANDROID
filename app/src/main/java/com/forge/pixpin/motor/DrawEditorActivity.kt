@@ -4657,52 +4657,6 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
     }
 
     /**
-     * Lo que se le dice a un cronograma que no se pueda decir arrastrando.
-     *
-     * Las barras se mueven y se estiran **encima del dibujo**, que es donde uno está
-     * mirando; aquí quedan las dos cuentas —cuántas filas y cuántas columnas— y los
-     * nombres, que hay que teclear.
-     */
-    @Composable
-    private fun AjustesDelCronograma(plan: Element, cambiado: () -> Unit) {
-        Text(
-            getString(R.string.cronograma_titulo),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Fila(getString(R.string.cronograma_filas)) {
-            GlifoBoton("−") { controller.quitarTarea(); cambiado() }
-            Text(
-                "${plan.tareas.size}",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            GlifoBoton("+") { controller.anadirTarea(); cambiado() }
-        }
-        Fila(getString(R.string.cronograma_escala)) {
-            GlifoBoton("−") { controller.cambiarPeriodos(-1); cambiado() }
-            Text(
-                "${plan.periodos}",
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            GlifoBoton("+") { controller.cambiarPeriodos(1); cambiado() }
-        }
-        // Un campo por fila y no un diálogo: con tres o cuatro tareas, abrir y cerrar una
-        // ventana por cada nombre cuesta más que teclearlos seguidos.
-        for ((i, t) in plan.tareas.withIndex()) {
-            OutlinedTextField(
-                value = t.nombre,
-                onValueChange = { controller.renombrarTarea(i, it); cambiado() },
-                placeholder = { Text(getString(R.string.cronograma_tarea, i + 1)) },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-            )
-        }
-    }
-
-    /**
      * Lo que se le puede decir a una caja aparte de estirarla: **qué pieza es y
      * cuántas van**.
      *
@@ -4849,13 +4803,6 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
                         controller.cambiarPauta(PautaDeHoja.PUNTOS); cambiado()
                     }
                 }
-            }
-
-            // ---- El cronograma: cuántas filas, cuántas columnas y cómo se llaman ----
-            val plan = seleccion.singleOrNull()?.takeIf { it.type == ElementType.CRONOGRAMA }
-            if (plan != null) {
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                AjustesDelCronograma(plan) { cambiado() }
             }
 
             // ---- Y la de una imagen: de cara o tumbada en el suelo ----

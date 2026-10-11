@@ -149,16 +149,6 @@ enum class Tool {
     SOLIDO,
 
     /**
-     * El **cronograma**: se arrastra la caja y nace un plan con tres filas dentro.
-     *
-     * Nace con filas y no vacío a propósito: una figura que aparece en blanco obliga a
-     * descubrir dónde se le añaden cosas antes de que enseñe nada, y lo que uno quiere al
-     * poner un cronograma es ver ya la rejilla y empezar a arrastrar barras.
-     * Ver [Cronograma].
-     */
-    CRONOGRAMA,
-
-    /**
      * **Levantar**: se toca una figura cerrada y se convierte en volumen.
      *
      * Estaba escondida en el panel de acciones, que es donde se guarda lo que se toca una
@@ -680,20 +670,10 @@ fun newElement(
     } else null,
     textAlign = if (type == ElementType.TEXT) style.textAlign else null,
     verticalAlign = if (type == ElementType.TEXT) style.verticalAlign else null,
-    // **El cronograma nace con filas.** Una figura que aparece en blanco obliga a
-    // descubrir dónde se le añaden cosas antes de enseñar nada, y lo que uno quiere al
-    // poner un cronograma es ver la rejilla y empezar a arrastrar barras. Las tres nacen
-    // escalonadas —cada una detrás de la anterior— porque es lo que es un plan.
-    tareas = if (type == ElementType.CRONOGRAMA) {
-        List(FILAS_DE_FABRICA) { TareaDelCronograma(desde = it.toDouble(), cuanto = 1.0) }
-    } else emptyList(),
     // La pieza que se dibuja con la herramienta es siempre una caja: la forma de un
     // volumen sale de levantar una figura, no de una lista. Ver [extruido].
     esqueleto = type == ElementType.SOLIDO && style.esqueleto
 )
-
-/** Con cuántas filas nace un cronograma: las justas para que se entienda de qué va. */
-private const val FILAS_DE_FABRICA = 3
 
 private val ElementType.acceptsRoundness: Boolean
     get() = this == ElementType.RECTANGLE || this == ElementType.DIAMOND ||

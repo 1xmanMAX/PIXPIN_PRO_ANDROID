@@ -142,8 +142,8 @@ class LectorDePlanos : Service() {
         private const val EN_CACHE = 24
         /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
         const val VERSION_DEL_FORMATO = 6
-        /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo): lo leído antes se rehace. */
-        const val REVISION_DE_LETRAS = 2
+        /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo, las TrueType de Windows): lo leído antes se rehace. */
+        const val REVISION_DE_LETRAS = 3
         /** La de `MAGIA` en `modelo3d.rs` del PC (y en [Modelo3D]): con otra, el modelo se vuelve a leer. */
         const val VERSION_3D = 3
 
@@ -159,23 +159,38 @@ class LectorDePlanos : Service() {
          * Las SHX de PixPin (las de Hershey, `assets/fuentes-shx`), sacadas a disco la primera vez:
          * la lectura nativa abre archivos, no `assets`. Se rehacen si cambia la versión de la app.
          */
-        private fun shxDePixPin(c: Context): File {
-            val carpeta = File(c.filesDir, "fuentes-shx-pixpin")
+        private fun shxDePixPin(c: Context): File = sacarDeAssets(c, "fuentes-shx", "fuentes-shx-pixpin", ".shx")
+
+        /**
+         * Las letras que **miden igual que las de Windows** (`assets/fuentes-ttf`): Liberation Sans,
+         * Sans Narrow, Serif y Mono (Arial, Arial Narrow, Times New Roman y Courier New), Carlito
+         * (Calibri) y Caladea (Cambria). Con Roboto en su lugar, los textos de un plano salían más
+         * anchos y altos que en AutoCAD y se montaban o se salían de sus recuadros (el usuario, 11-oct-2026).
+         */
+        private fun ttfDePixPin(c: Context): File = sacarDeAssets(c, "fuentes-ttf", "fuentes-ttf-pixpin", ".ttf")
+
+        /** Los archivos de `assets/[desde]` con la terminación [tipo], sacados a disco (la lectura nativa abre archivos). Se rehacen si cambia la versión de la app. */
+        private fun sacarDeAssets(c: Context, desde: String, carpetaDe: String, tipo: String): File {
+            val carpeta = File(c.filesDir, carpetaDe)
             val marca = File(carpeta, ".version")
             val version = runCatching { c.packageManager.getPackageInfo(c.packageName, 0).longVersionCode.toString() }.getOrDefault("0")
             if (marca.isFile && runCatching { marca.readText() }.getOrNull() == version) return carpeta
             runCatching {
                 carpeta.mkdirs()
-                for (n in c.assets.list("fuentes-shx").orEmpty().filter { it.endsWith(".shx") }) {
-                    c.assets.open("fuentes-shx/$n").use { i -> File(carpeta, n).outputStream().use { i.copyTo(it) } }
+                for (n in c.assets.list(desde).orEmpty().filter { it.endsWith(tipo) }) {
+                    c.assets.open("$desde/$n").use { i -> File(carpeta, n).outputStream().use { i.copyTo(it) } }
                 }
                 marca.writeText(version)
             }
             return carpeta
         }
 
-        /** Donde buscar las SHX, una por renglón: primero las del usuario (mandan), luego las de PixPin. */
-        fun carpetasShx(c: Context): String = carpetaShx(c).absolutePath + "\n" + shxDePixPin(c).absolutePath
+        /**
+         * Donde buscar las letras, una por renglón: las SHX del usuario (mandan), las de PixPin, y en
+         * un renglón «ttf:» las TrueType que miden como las de Windows (`carpeta_ttf_android` del .so).
+         */
+        fun carpetasShx(c: Context): String =
+            carpetaShx(c).absolutePath + "\n" + shxDePixPin(c).absolutePath + "\nttf:" + ttfDePixPin(c).absolutePath
 
         fun carpeta(c: Context): File = File(c.cacheDir, "planos").apply { mkdirs() }
 

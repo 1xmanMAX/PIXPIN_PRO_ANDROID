@@ -218,6 +218,12 @@ enum class ElementType {
      * No pretende ser un gestor de proyectos —no hay dependencias, ni recursos, ni
      * fechas—: es un croquis de cuándo va cada cosa, que es lo que uno dibuja en una
      * reunión. Ver [TareaDelCronograma].
+     *
+     * **Retirado del lienzo el 11-oct-2026** («no es nada útil», como en el PC): ya no hay
+     * herramienta para ponerlo ni ajustes para editarlo. El tipo se queda para que **los
+     * dibujos que ya lo tienen abran, se pinten y lo guarden intacto** —filas, columnas y
+     * todo— al guardar y al sincronizar. Se mueve, se estira y se borra como cualquier
+     * figura; lo de dentro ya no se toca.
      */
     @SerialName("pixpin-gantt") CRONOGRAMA
 }

@@ -64,6 +64,8 @@ pub fn fuentes_instaladas() -> &'static HashMap<String, std::path::PathBuf> {
     static F: std::sync::OnceLock<HashMap<String, std::path::PathBuf>> = std::sync::OnceLock::new();
     F.get_or_init(|| {
         let mut mapa = HashMap::new();
+        // Las que miden como las de Windows (las de PixPin), primero: mandan.
+        crate::familias_android(&mut mapa);
         if let Ok(d) = std::fs::read_dir(CARPETA_FUENTES) {
             for e in d.flatten() {
                 let ruta = e.path();
@@ -154,7 +156,7 @@ impl Textos {
                 None
             };
             for nombre in fichero_para(&clave) {
-                let ruta = std::path::Path::new(CARPETA_FUENTES).join(&nombre);
+                let ruta = crate::ruta_de_fuente(CARPETA_FUENTES, &nombre);
                 if let Ok(datos) = std::fs::read(&ruta)
                     && let Ok(cara) = ttf_parser::Face::parse(&datos, 0)
                 {

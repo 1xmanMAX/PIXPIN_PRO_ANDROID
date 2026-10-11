@@ -392,7 +392,11 @@ class PlanoActivity : ComponentActivity() {
                         while (true) {
                             androidx.compose.runtime.withFrameNanos { }
                             val v = laCapa.scene.viewport
-                            if (v != antes) { antes = v; camara = camaraDeLaCapa(v); pintar() }
+                            if (v != antes) {
+                                antes = v; camara = camaraDeLaCapa(v); pintar()
+                                // Lo que se elige en el panel, a la escala de lo que se ve (PC 11bd1f6).
+                                laCapa.escalaDeLoNuevo = 1.0 / v.zoom
+                            }
                         }
                     }
                     com.forge.pixpin.motor.DrawCanvas(

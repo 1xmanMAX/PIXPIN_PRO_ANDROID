@@ -38,10 +38,11 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
     private var listo = false
 
     private var progSimple = 0; private var progRelleno = 0; private var progTrama = 0; private var progLetra = 0; private var progArco = 0
+    private var progArcoBanda = 0
     private val vaos = IntArray(4)
     private var vbVertices = 0; private var ibLineas = 0; private var ibTriangulos = 0
     private var vbTrama = 0; private var ibTrama = 0; private var vbLetras = 0; private var vbArcos = 0
-    private var texTramas = 0; private var texFamilias = 0; private var texMalla = 0; private var texGlifos = 0
+    private var texTramas = 0; private var texFamilias = 0; private var texMalla = 0
     private var conTramas = false; private var conLetras = false
 
     private val salida = IntArray(2 * maxOf(
@@ -122,24 +123,33 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
             val n = modelo.tramosLineas.visibles(vx0, vy0, vx1, vy1, px * 0.75f, salida)
             for (i in 0 until n) GLES30.glDrawElements(GLES30.GL_LINE_STRIP, salida[2 * i + 1], GLES30.GL_UNSIGNED_INT, salida[2 * i] * 4)
         }
-        // 3b. Círculos y arcos: seis vértices (un cuadrado) por instancia.
+        // 3b. Círculos y arcos. Los pequeños en pantalla, un cuadrado por instancia (seis vértices);
+        // **los grandes, una banda que sigue la curva** (11-oct-2026): de cerca, el cuadrado de un
+        // arco de una curva de carretera tapaba la pantalla entera, y cada arco así era una pasada
+        // de píxeles por toda ella; en una tableta eso hacía ir a saltos al acercarse a los detalles.
         if (modelo.arcos.cuantos > 0) {
-            vista(progArco)
             GLES30.glBindVertexArray(vaos[3])
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbArcos)
-            val n = modelo.tramosArcos.visibles(vx0, vy0, vx1, vy1, px * 0.75f, salida)
-            for (i in 0 until n) {
-                punterosDeArcos(salida[2 * i] * 32)
-                GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, salida[2 * i + 1])
+            val t = modelo.tramosArcos
+            var actual = 0
+            for (i in 0 until t.n) {
+                if (t.tamano[i] < px * 0.75f) break
+                if (!t.corta(i, vx0, vy0, vx1, vy1)) continue
+                val banda = t.tamano[i] > px * ARCO_GRANDE
+                val prog = if (banda) progArcoBanda else progArco
+                if (prog != actual) { vista(prog); actual = prog }
+                enTandas(t.desde[i], t.cuantos[i]) { desde, cuantas ->
+                    punterosDeArcos(desde * 32)
+                    if (banda) GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLE_STRIP, 0, 2 * (TROZOS_DE_BANDA + 1), cuantas)
+                    else GLES30.glDrawArraysInstanced(GLES30.GL_TRIANGLES, 0, 6, cuantas)
+                }
             }
         }
         // 4. Letras: un texto de menos de 3 píxeles no se lee.
         if (conLetras) {
             vista(progLetra)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texMalla)
-            GLES30.glActiveTexture(GLES30.GL_TEXTURE1); GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texGlifos)
             GLES30.glUniform1i(GLES30.glGetUniformLocation(progLetra, "uMalla"), 0)
-            GLES30.glUniform1i(GLES30.glGetUniformLocation(progLetra, "uGlifos"), 1)
             GLES30.glBindVertexArray(vaos[2])
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbLetras)
             val t = modelo.tramosLetras
@@ -147,11 +157,13 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
                 if (t.tamano[i] < px * 3f) break
                 if (!t.corta(i, vx0, vy0, vx1, vy1)) continue
                 val rayas = t.clase[i] and ModeloCad.GLIFO_DE_RAYAS != 0
-                punterosDeLetras(t.desde[i] * 32)
-                GLES30.glDrawArraysInstanced(
-                    if (rayas) GLES30.GL_LINES else GLES30.GL_TRIANGLES, 0,
-                    t.clase[i] and ModeloCad.GLIFO_DE_RAYAS.inv(), t.cuantos[i]
-                )
+                enTandas(t.desde[i], t.cuantos[i]) { desde, cuantas ->
+                    punterosDeLetras(desde * BYTES_POR_LETRA)
+                    GLES30.glDrawArraysInstanced(
+                        if (rayas) GLES30.GL_LINES else GLES30.GL_TRIANGLES, 0,
+                        t.clase[i] and ModeloCad.GLIFO_DE_RAYAS.inv(), cuantas
+                    )
+                }
             }
         }
         GLES30.glBindVertexArray(0)
@@ -165,6 +177,7 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         progTrama = programa(VS_TRAMA, FS_TRAMA)
         progLetra = programa(VS_LETRA, FS_COLOR)
         progArco = programa(VS_ARCO, FS_ARCO)
+        progArcoBanda = programa(VS_ARCO_BANDA, FS_ARCO)
         GLES30.glGenVertexArrays(4, vaos, 0)
         val m = modelo
 
@@ -197,11 +210,10 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
 
         // Letras: instancias de 32 bytes (posición, matriz, color, glifo).
         if (m.letras.cuantos > 0 && m.mallaLetras.cuantos > 0 && filas(m.mallaLetras.cuantos) <= maxTex && filas(m.glifos.cuantos) <= maxTex) {
-            vbLetras = buffer(GLES30.GL_ARRAY_BUFFER, m.letras)
+            vbLetras = bufferDeLetras(m)
             texMalla = textura(m.mallaLetras, GLES30.GL_RG32F, GLES30.GL_RG, GLES30.GL_FLOAT)
-            texGlifos = textura(m.glifos, GLES30.GL_RG32UI, GLES30.GL_RG_INTEGER, GLES30.GL_UNSIGNED_INT)
             GLES30.glBindVertexArray(vaos[2])
-            for (k in 0..3) { GLES30.glEnableVertexAttribArray(k); GLES30.glVertexAttribDivisor(k, 1) }
+            for (k in 0..4) { GLES30.glEnableVertexAttribArray(k); GLES30.glVertexAttribDivisor(k, 1) }
             conLetras = true
         }
 
@@ -218,10 +230,46 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
 
     private fun punterosDeLetras(base: Int) {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbLetras)
-        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 32, base)
-        GLES30.glVertexAttribPointer(1, 4, GLES30.GL_FLOAT, false, 32, base + 8)
-        GLES30.glVertexAttribIPointer(2, 1, GLES30.GL_UNSIGNED_INT, 32, base + 24)
-        GLES30.glVertexAttribIPointer(3, 1, GLES30.GL_UNSIGNED_INT, 32, base + 28)
+        val b = BYTES_POR_LETRA
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, b, base)
+        GLES30.glVertexAttribPointer(1, 4, GLES30.GL_FLOAT, false, b, base + 8)
+        GLES30.glVertexAttribIPointer(2, 1, GLES30.GL_UNSIGNED_INT, b, base + 24)
+        GLES30.glVertexAttribIPointer(3, 1, GLES30.GL_UNSIGNED_INT, b, base + 28)
+        GLES30.glVertexAttribIPointer(4, 1, GLES30.GL_UNSIGNED_INT, b, base + 32)
+    }
+
+    /**
+     * **Las letras con su glifo ya dicho** (11-oct-2026): cada letra lleva dónde empieza su glifo en
+     * la malla y cuántos vértices tiene, en vez de buscarlo en una textura de enteros. En la tableta
+     * Huawei del usuario las letras salían a trozos (de «3832.0» solo el «8») y en el Samsung no:
+     * así la tarjeta tiene una cosa menos que leer de una textura, y la que queda es de reales.
+     */
+    private fun bufferDeLetras(m: ModeloCad): Int {
+        val l = m.letras
+        val b = ByteBuffer.allocateDirect(l.cuantos * BYTES_POR_LETRA).order(ByteOrder.nativeOrder())
+        for (e in 0 until l.cuantos) {
+            val o = e * BYTES_POR_LETRA
+            for (k in 0 until 7) b.putInt(o + k * 4, l.palabra(e, k))
+            val g = l.palabra(e, 7)
+            val ok = g >= 0 && g < m.glifos.cuantos
+            b.putInt(o + 28, if (ok) m.glifos.palabra(g, 0) else 0)
+            b.putInt(o + 32, if (ok) m.glifos.palabra(g, 1) and ModeloCad.GLIFO_DE_RAYAS.inv() else 0)
+        }
+        val id = IntArray(1).also { GLES30.glGenBuffers(1, it, 0) }[0]
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, id)
+        b.position(0)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, maxOf(l.cuantos * BYTES_POR_LETRA, 4), if (l.cuantos > 0) b else ByteBuffer.allocateDirect(4), GLES30.GL_STATIC_DRAW)
+        return id
+    }
+
+    /** Un tramo de [cuantas] instancias desde [desde], en dibujos de [INSTANCIAS_POR_DIBUJO] como mucho: hay tarjetas que con muchas de golpe se saltan parte. */
+    private inline fun enTandas(desde: Int, cuantas: Int, dibujar: (desde: Int, cuantas: Int) -> Unit) {
+        var d = 0
+        while (d < cuantas) {
+            val n = minOf(INSTANCIAS_POR_DIBUJO, cuantas - d)
+            dibujar(desde + d, n)
+            d += n
+        }
     }
 
     private fun punterosDeArcos(base: Int) {
@@ -316,6 +364,13 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
 
     companion object {
         private const val ANCHO_TEX = 1024
+        /** Una letra: posición, matriz 2×2, color, y su glifo (desde y cuántos vértices). */
+        private const val BYTES_POR_LETRA = 36
+        private const val INSTANCIAS_POR_DIBUJO = 4096
+        /** Desde cuántos píxeles de tamaño un arco va como banda y no como cuadrado. */
+        private const val ARCO_GRANDE = 160f
+        /** Trozos de la banda de un arco grande. */
+        private const val TROZOS_DE_BANDA = 48
         /** Los fondos del PC: oscuro azulado y papel. */
         val FONDO_OSCURO = floatArrayOf(0.13f, 0.15f, 0.19f)
         val FONDO_CLARO = floatArrayOf(0.99f, 0.988f, 0.976f)
@@ -463,19 +518,17 @@ void main() {
 
         private const val VS_LETRA = COMUN + """
 uniform highp sampler2D uMalla;
-uniform highp usampler2D uGlifos;
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aM;
 layout(location = 2) in uint aColor;
-layout(location = 3) in uint aGlifo;
+layout(location = 3) in uint aDesde;
+layout(location = 4) in uint aCuantos;
 out vec4 vColor;
 void main() {
-    int g = int(aGlifo);
-    uvec2 gl = texelFetch(uGlifos, ivec2(g % 1024, g / 1024), 0).xy;
-    int n = int(gl.y & 0x7fffffffu);
+    int n = int(aCuantos);
     vColor = colorDe(aColor);
     if (gl_VertexID >= n) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
-    int i = int(gl.x) + gl_VertexID;
+    int i = int(aDesde) + gl_VertexID;
     vec2 e = texelFetch(uMalla, ivec2(i % 1024, i / 1024), 0).xy;
     vec2 w = aPos + vec2(aM.x * e.x + aM.y * e.y, aM.z * e.x + aM.w * e.y);
     gl_Position = aPantalla(w);
@@ -495,6 +548,37 @@ flat out float vBarrido;
 const vec2 ESQ[6] = vec2[6](vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0), vec2(-1.0, 1.0));
 void main() {
     vec2 w = aCentro + ESQ[gl_VertexID] * (aRadio + (uGrosor + 2.0) * uPx);
+    gl_Position = aPantalla(w);
+    vColor = colorDe(aColor);
+    vMundo = w;
+    vArco = vec4(aCentro, aRadio, aInicio);
+    vBarrido = aBarrido;
+}
+"""
+
+        /**
+         * El arco grande como **banda**: [TROZOS_DE_BANDA] trozos a lo largo de su barrido, de la
+         * circunferencia menos el grosor a la de más (la de fuera algo mayor, que las cuerdas no
+         * corten la curva). Mismos datos y mismo sombreador de píxeles que el cuadrado.
+         */
+        private const val VS_ARCO_BANDA = COMUN + """
+layout(location = 0) in vec2 aCentro;
+layout(location = 1) in float aRadio;
+layout(location = 2) in float aInicio;
+layout(location = 3) in float aBarrido;
+layout(location = 4) in uint aColor;
+out vec4 vColor;
+out vec2 vMundo;
+flat out vec4 vArco;
+flat out float vBarrido;
+const int TROZOS = $TROZOS_DE_BANDA;
+void main() {
+    float barrido = min(aBarrido, 6.2831853);
+    float paso = barrido / float(TROZOS);
+    float ang = aInicio + paso * float(gl_VertexID / 2);
+    float holgura = (uGrosor + 2.0) * uPx;
+    float r = (gl_VertexID % 2 == 0) ? max(aRadio - holgura, 0.0) : (aRadio + holgura) / cos(min(paso * 0.5, 1.2));
+    vec2 w = aCentro + r * vec2(cos(ang), sin(ang));
     gl_Position = aPantalla(w);
     vColor = colorDe(aColor);
     vMundo = w;

@@ -18,10 +18,8 @@
     <string name="caja_titulo">Caja</string>
     <string name="caja_repetir">Repetir</string>
     <string name="caja_modo">Modo</string>
-    <string name="tool_cronograma">Cronograma</string>
     <string name="tool_extruir">Levantar en volumen</string>
     <string name="tool_revolucion">Torno: figura y eje</string>
-    <string name="cronograma_titulo">Cronograma</string>
     <string name="cd_anadir_hoja">Añadir hoja</string>
     <string name="cd_hoja_anterior">Hoja anterior</string>
     <string name="cd_hoja_siguiente">Hoja siguiente</string>
@@ -31,9 +29,6 @@
     <string name="hoja_titulo">Hoja</string>
     <string name="hoja_tamano">Tamaño</string>
     <string name="hoja_pauta">Pauta</string>
-    <string name="cronograma_filas">Tareas</string>
-    <string name="cronograma_escala">Columnas</string>
-    <string name="cronograma_tarea">Tarea %1$d</string>
     <string name="imagen_titulo">Imagen</string>
     <string name="imagen_plano">Plano</string>
     <string name="app_started">PixPin activo — la bola flotante aparece en tu pantalla</string>

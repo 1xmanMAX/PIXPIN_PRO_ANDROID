@@ -157,7 +157,6 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     Tool.RELLENO -> ElementType.REGION
     Tool.ESCALA_GRAFICA -> ElementType.ESCALA_GRAFICA
     Tool.SOLIDO -> ElementType.SOLIDO
-    Tool.CRONOGRAMA -> ElementType.CRONOGRAMA
     // No crean figuras: transforman las que ya hay.
     Tool.EXTRUIR, Tool.REVOLUCION -> null
     // Recortar y extender no crean nada: arreglan lo que ya hay, y lo que
