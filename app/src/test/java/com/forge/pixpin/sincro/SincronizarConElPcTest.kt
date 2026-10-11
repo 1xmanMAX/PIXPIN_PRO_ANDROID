@@ -225,6 +225,30 @@ class SincronizarConElPcTest {
         sinRepetidos()
     }
 
+    @Test
+    fun `tareas al instante - lo tachado en el movil llega al PC con la vuelta recortada`() {
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        val compras = movil.leerMensajes().single { it.miniapp == "tareas" }
+        assertTrue(compras.texto.contains("- [ ] comprar cemento"))
+        // Se tacha en el móvil (como el almacén del chat) y se escribe algo más en otro sitio.
+        val tachada = compras.copy(texto = compras.texto.replace("- [ ] comprar cemento", "- [x] comprar cemento"))
+        val lista = movil.leerMensajes().map { if (it.id == compras.id) tachada else it }
+        File(movil.filesDir, "guardados.jsonl").writeText(lista.joinToString("") { Disco.JSON.encodeToString(Mensaje.serializer(), it) + "\n" })
+        val chat = Disco.chatDe(compras)
+        assertEquals(setOf(chat), com.forge.pixpin.guardados.MensajesStore.chatsConTareasCambiadas(movil.leerMensajes().map { if (it.id == compras.id) compras else it }, movil.leerMensajes()))
+
+        val t0 = System.nanoTime()
+        Socket(InetAddress.getLoopbackAddress(), puerto).use { s ->
+            VueltaCallada(movil).con(s.getInputStream(), s.getOutputStream(), soloEstos = setOf(chat))
+        }
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        val enPc = mensajesDelPc().single { it.s("texto")?.contains("comprar cemento") == true }
+        assertTrue("tachada en el PC (${ms} ms): ${enPc.s("texto")}", enPc.s("texto")!!.contains("- [x] comprar cemento"))
+        println("tareas al instante, móvil → PC: $ms ms")
+        sinRepetidos()
+    }
+
     // ------------------------------------------------------------------ la galería (10-oct-2026)
     // Contra la galería del PC de c493abb (`pixpin_sincro::galeria`): en `pc-simulado` sus capturas
     // son una carpeta (su `EnCarpeta`, 7 días hasta borrar), el `Respondedor` atiende con
