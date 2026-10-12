@@ -9,7 +9,8 @@ publish = false
 # Word y PowerPoint del PC (crates/pixpin-office, copiado en pc/
 # por traer-del-pc.sh) para Android: se maquetan aquí, se miden con las letras TTF del teléfono
 # y se entregan a Kotlin como una lista de cosas que pintar (formato PXOF, ver src/pxof.rs),
-# que Kotlin pinta en vectores con Canvas.
+# que Kotlin pinta en vectores con Canvas. Y Excel (crates/pixpin-hojas, también en pc/): el
+# libro leído y lo que pintar, por trozos de filas (PXHL/PXHG/PXHT, ver src/hojas.rs).
 [lib]
 name = "pixpinoffice"
 crate-type = ["cdylib", "rlib"]
@@ -19,8 +20,13 @@ path = "src/lib.rs"
 name = "office-a-pxof"
 path = "src/bin/office_a_pxof.rs"
 
+[[bin]]
+name = "hojas-a-pxhj"
+path = "src/bin/hojas_a_pxhj.rs"
+
 [dependencies]
 pixpin-office = { path = "pc/pixpin-office" }
+pixpin-hojas = { path = "pc/pixpin-hojas" }
 ttf-parser = "0.25"
 memmap2 = "0.9"
 jni = { version = "0.21", default-features = false }
@@ -33,4 +39,4 @@ strip = true
 panic = "unwind"
 
 [workspace]
-members = [".", "pc/pixpin-office", "pc/pixpin-docs"]
+members = [".", "pc/pixpin-office", "pc/pixpin-docs", "pc/pixpin-hojas"]

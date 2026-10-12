@@ -836,6 +836,12 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
 
+        <!-- El visor de hojas de Excel (lo del PC, libpixpinoffice.so). Ver excel/ExcelActivity. -->
+        <activity
+            android:name=".excel.ExcelActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
+
         <activity
             android:name=".mini.MiniActivity"
             android:exported="false"

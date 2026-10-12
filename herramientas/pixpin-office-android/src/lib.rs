@@ -7,11 +7,13 @@
 //!   Windows (el PC mide con DirectWrite);
 //! - [`pxof`]: cada página maquetada, en bytes, con la cara, el glifo y la x de cada letra, para
 //!   que Kotlin la pinte en vectores (el PC pinta con Direct2D);
-//! - la entrada JNI (`com.forge.pixpin.office.OfficeNativo`).
+//! - la entrada JNI (`com.forge.pixpin.office.OfficeNativo`);
+//! - y las hojas de Excel ([`hojas`]: `pixpin-hojas` del PC; JNI `com.forge.pixpin.excel.HojasNativo`).
 //!
 //! Todo se llama desde un hilo de la app que no es el de la pantalla. Un documento roto que
 //! haga caer la lectura no tumba la app: cada llamada va dentro de `catch_unwind`.
 
+pub mod hojas;
 pub mod letras;
 pub mod pxof;
 
@@ -179,5 +181,139 @@ pub extern "system" fn Java_com_forge_pixpin_office_OfficeNativo_cerrar<'a>(_env
     if h != 0 {
         // SAFETY: el puntero de `abrir`, que Kotlin cierra una sola vez.
         drop(unsafe { Box::from_raw(h as *mut Mutex<DocAndroid>) });
+    }
+}
+
+// ------------------------------------------------------------------------------- JNI de Excel
+
+use crate::hojas::LibroAndroid;
+
+fn libro<'a>(h: jlong) -> Option<&'a Mutex<LibroAndroid>> {
+    if h == 0 {
+        return None;
+    }
+    // SAFETY: `h` es el puntero que dio `HojasNativo.abrir` (Box::into_raw) y Kotlin no lo usa
+    // tras `cerrar`.
+    Some(unsafe { &*(h as *const Mutex<LibroAndroid>) })
+}
+
+/// Hace `f` con el libro, recogiendo un fallo de la lectura (un libro raro no tumba la app).
+fn con_libro<T>(h: jlong, f: impl FnOnce(&mut LibroAndroid) -> Option<T>) -> Option<T> {
+    let m = libro(h)?;
+    let mut l = match m.lock() {
+        Ok(l) => l,
+        Err(e) => e.into_inner(),
+    };
+    catch_unwind(AssertUnwindSafe(|| f(&mut l))).ok().flatten()
+}
+
+fn o_null(env: &mut JNIEnv, b: Option<Vec<u8>>) -> jbyteArray {
+    match b {
+        Some(b) => bytes_java(env, &b),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// `HojasNativo.abrir(ruta, regional): Long` — 0 si no se pudo (el porqué, en `ultimoError`).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_abrir<'a>(mut env: JNIEnv<'a>, _c: JClass<'a>, ruta: JString<'a>, regional: JString<'a>) -> jlong {
+    let ruta = texto_de(&mut env, &ruta);
+    let regional = hojas::regional_de(&texto_de(&mut env, &regional));
+    let r = catch_unwind(|| LibroAndroid::abrir(Path::new(&ruta), regional)).unwrap_or_else(|_| Err("la lectura del libro se cayó".into()));
+    match r {
+        Ok(l) => Box::into_raw(Box::new(Mutex::new(l))) as jlong,
+        Err(e) => {
+            if let Ok(mut u) = ULTIMO_ERROR.lock() {
+                *u = e;
+            }
+            0
+        }
+    }
+}
+
+/// `HojasNativo.ultimoError(): String?`
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_ultimoError<'a>(env: JNIEnv<'a>, c: JClass<'a>) -> jstring {
+    Java_com_forge_pixpin_office_OfficeNativo_ultimoError(env, c)
+}
+
+/// `HojasNativo.libro(h): ByteArray?` — PXHL.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_libro<'a>(mut env: JNIEnv<'a>, _c: JClass<'a>, h: jlong) -> jbyteArray {
+    let b = con_libro(h, |l| Some(l.bytes_libro()));
+    o_null(&mut env, b)
+}
+
+/// `HojasNativo.abrirHoja(h, i, hasta): Boolean` — abre la hoja y lee hasta esa fila.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_abrirHoja<'a>(_env: JNIEnv<'a>, _c: JClass<'a>, h: jlong, i: jint, hasta: jint) -> jboolean {
+    con_libro(h, |l| Some(l.abrir_hoja(i.max(0) as usize, hasta.max(0) as u32))).unwrap_or(false) as jboolean
+}
+
+/// `HojasNativo.cargar(h, i, celdas): Int` — 1 ya entera, 0 falta, -1 no se pudo.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_cargar<'a>(_env: JNIEnv<'a>, _c: JClass<'a>, h: jlong, i: jint, celdas: jint) -> jint {
+    match con_libro(h, |l| l.cargar(i.max(0) as usize, celdas.max(1) as usize)) {
+        Some(true) => 1,
+        Some(false) => 0,
+        None => -1,
+    }
+}
+
+/// `HojasNativo.geometria(h, i): ByteArray?` — PXHG.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_geometria<'a>(mut env: JNIEnv<'a>, _c: JClass<'a>, h: jlong, i: jint) -> jbyteArray {
+    let b = con_libro(h, |l| l.bytes_geometria(i.max(0) as usize));
+    o_null(&mut env, b)
+}
+
+/// `HojasNativo.trozo(h, i, f0, f1, conocidos): ByteArray?` — PXHT.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_trozo<'a>(
+    mut env: JNIEnv<'a>,
+    _c: JClass<'a>,
+    h: jlong,
+    i: jint,
+    f0: jint,
+    f1: jint,
+    conocidos: jint,
+) -> jbyteArray {
+    let b = con_libro(h, |l| l.bytes_trozo(i.max(0) as usize, f0.max(0) as u32, f1.max(0) as u32, conocidos.max(0) as u32));
+    o_null(&mut env, b)
+}
+
+/// `HojasNativo.copiar(h, i, f0, c0, f1, c1): String?` — texto con tabuladores.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_copiar<'a>(
+    env: JNIEnv<'a>,
+    _c: JClass<'a>,
+    h: jlong,
+    i: jint,
+    f0: jint,
+    c0: jint,
+    f1: jint,
+    c1: jint,
+) -> jstring {
+    let r = pixpin_hojas::Rango { fila0: f0.max(0) as u32, col0: c0.max(0) as u32, fila1: f1.max(f0).max(0) as u32, col1: c1.max(c0).max(0) as u32 };
+    match con_libro(h, |l| l.copiar(i.max(0) as usize, r)) {
+        Some(s) => env.new_string(s).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// `HojasNativo.imagen(h, ruta): ByteArray?` — los bytes de una parte del ZIP (una imagen).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_imagen<'a>(mut env: JNIEnv<'a>, _c: JClass<'a>, h: jlong, ruta: JString<'a>) -> jbyteArray {
+    let ruta = texto_de(&mut env, &ruta);
+    let b = con_libro(h, |l| l.libro.parte(&ruta));
+    o_null(&mut env, b)
+}
+
+/// `HojasNativo.cerrar(h)`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_cerrar<'a>(_env: JNIEnv<'a>, _c: JClass<'a>, h: jlong) {
+    if h != 0 {
+        // SAFETY: el puntero de `abrir`, que Kotlin cierra una sola vez.
+        drop(unsafe { Box::from_raw(h as *mut Mutex<LibroAndroid>) });
     }
 }

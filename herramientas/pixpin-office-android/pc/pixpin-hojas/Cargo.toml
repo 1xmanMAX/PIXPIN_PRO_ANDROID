@@ -1,0 +1,15 @@
+# crates/pixpin-hojas del PC (sus fuentes, copiadas tal cual por traer-del-pc.sh): las hojas de
+# Excel leídas y la rejilla lista para pintar. Las dependencias, las mismas que en el PC.
+[package]
+name = "pixpin-hojas"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+# Con zlib-rs, como en el PC: descomprime cerca del doble de rápido que miniz_oxide (una hoja de
+# 100 000 filas son 70 MB de XML).
+flate2 = { version = "1.1", features = ["zlib-rs"] }
+thiserror = "2.0"

@@ -20,21 +20,29 @@ object LibroDelChat {
         m.clase == Clase.ARCHIVO && m.ruta != null &&
             (ImportarHojas.esLibro(m.nombre) || ImportarHojas.esLibro(m.ruta))
 
-    fun idDeHoja(m: Mensaje, hoja: Int) = "libro-${m.id}-$hoja"
+    fun idDeHoja(m: Mensaje, hoja: Int) = idDeHoja(m.id, hoja)
+
+    private fun idDeHoja(mensaje: String, hoja: Int) = "libro-$mensaje-$hoja"
 
     /**
      * Las tablas del libro —identificador y nombre—, leyéndolo si aún no se había leído. Trabajo
      * de disco: fuera del hilo principal. Si el archivo no se deja leer, lanza
      * [ImportarHojas.NoSeLee] con el porqué.
      */
-    fun tablas(context: Context, m: Mensaje): List<Pair<String, String>> {
+    fun tablas(context: Context, m: Mensaje): List<Pair<String, String>> = tablas(context, m.id, m.ruta, m.nombre)
+
+    /**
+     * Lo mismo con el identificador del mensaje (o, de un archivo que no está en el chat, uno
+     * sacado de su ruta: ver [com.forge.pixpin.excel.ExcelActivity]), su ruta y su nombre.
+     */
+    fun tablas(context: Context, mensaje: String, ruta: String?, nombre: String): List<Pair<String, String>> {
         val almacen = TablasEnDisco.de(context.filesDir)
-        val hechas = generateSequence(0) { it + 1 }.map { idDeHoja(m, it) }.takeWhile { almacen.archivo(it).exists() }.toList()
+        val hechas = generateSequence(0) { it + 1 }.map { idDeHoja(mensaje, it) }.takeWhile { almacen.archivo(it).exists() }.toList()
         if (hechas.isNotEmpty()) return hechas.map { it to (almacen.cargar(it)?.nombre ?: "Tabla") }
-        val ruta = m.ruta ?: return emptyList()
-        val hojas = ImportarHojas.leer(File(ruta), m.nombre.ifBlank { File(ruta).name })
+        if (ruta == null) return emptyList()
+        val hojas = ImportarHojas.leer(File(ruta), nombre.ifBlank { File(ruta).name })
         return hojas.mapIndexedNotNull { i, h ->
-            val id = idDeHoja(m, i)
+            val id = idDeHoja(mensaje, i)
             if (almacen.guardar(id, h.tabla)) id to h.nombre else null
         }
     }

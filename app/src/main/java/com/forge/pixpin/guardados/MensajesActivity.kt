@@ -6738,6 +6738,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     com.forge.pixpin.motor.Diapositivas.esPresentacion(m.nombre) ||
                         com.forge.pixpin.motor.Diapositivas.esPresentacion(ruta) ->
                         com.forge.pixpin.office.AbrirOffice.diapositivasAProyecto(this, ruta, m.nombre)
+                    // **Un Excel se ve como en Excel** (11-oct-2026, lo del PC): estilos, formatos de
+                    // número y fecha, combinaciones, paneles… en el visor de hojas, que lo abre al
+                    // instante y desde el que se pasa a Tablas («A tabla»). Sin el .so, o un .xls
+                    // antiguo, lo de antes. Ver [com.forge.pixpin.excel.ExcelActivity].
+                    com.forge.pixpin.excel.ExcelActivity.seAbre(m.nombre, ruta) ->
+                        com.forge.pixpin.excel.ExcelActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name }, mensaje = m.id)
                     // **Un Excel se abre en Tablas**, con una pestaña por hoja, y no en otra
                     // aplicación. Ver [LibroDelChat].
                     LibroDelChat.esLibro(m) -> lifecycleScope.launch {
