@@ -109,7 +109,16 @@ class CalculoEnNodeTest {
         val redondeos = listOf(2.675 to 2, -2.5 to 0, 1250.0 to -2, 1.005 to 2, 0.125 to 2, 1e-7 to 8, 123.456 to -1)
         val formatos = listOf(
             1234.5 to "#,##0.00", 0.256 to "0.0%", -1234567.891 to "#,##0", 12.0 to "S/ 0.00", 46275.0 to "dd/mm/aaaa",
-            0.5 to "0", 2.5 to "0", 1.005 to "0.00"
+            0.5 to "0", 2.5 to "0", 1.005 to "0.00", 0.5 to "#.00", 5.0 to "000", 12.0 to "0 \"kg\"",
+            36526.0 to "dddd d \"de\" mmmm", 0.5 to "h:mm AM/PM", 46306.5 to "dd/mm/aaaa hh:mm", 60.0 to "dd/mm/yyyy",
+            -1.0 to "dd/mm/yyyy", 1.0 to "0.0E+00", 3.5 to "0.##", 7.0 to "General", 1234567.891 to "#,##0.0"
+        )
+        val celdas = listOf(
+            1234.5 to FormatoDeNumero.NUMERO, -1234.567 to FormatoDeNumero.NUMERO, -0.001 to FormatoDeNumero.NUMERO,
+            1234.5 to FormatoDeNumero.MONEDA, -0.001 to FormatoDeNumero.MONEDA, 0.125 to FormatoDeNumero.PORCENTAJE,
+            -0.00001 to FormatoDeNumero.PORCENTAJE, 46306.0 to FormatoDeNumero.FECHA, 60.0 to FormatoDeNumero.FECHA,
+            46306.99999 to FormatoDeNumero.FECHA, -1.0 to FormatoDeNumero.FECHA, 2.675 to FormatoDeNumero.NUMERO,
+            1e20 to FormatoDeNumero.NUMERO, 0.0 to FormatoDeNumero.MONEDA, 1234567.125 to FormatoDeNumero.NUMERO
         )
         val desplazados = listOf(
             Triple("=A1+\$B\$2+B\$3", 1, 1), Triple("=A1+1", -1, 0), Triple("=SUMA(A:A)", 5, 1),
@@ -123,13 +132,18 @@ class CalculoEnNodeTest {
         val programa = buildString {
             append(VisorTabla.CALCULO)
             append("\nvar casos=").append(casos).append(";\n")
-            append("var out={refs:[],formulas:[],general:[],numero:[],redondear:[],formato:[],desplazar:[],r1c1:[],ar1c1:[]};\n")
+            append("var out={refs:[],formulas:[],general:[],numero:[],redondear:[],formato:[],celda:[],pc:[],desplazar:[],r1c1:[],ar1c1:[]};\n")
             append("casos.forEach(function(k){var c=Calculo.crear();for(var d in k.celdas){var p=Calculo.leer(d);c.poner(p[0],p[1],k.celdas[d]);}var q=Calculo.leer(k.en);out.formulas.push(c.texto(q[0],q[1]));});\n")
             append("[").append(numeros.joinToString(",") { it.toString() }).append("].forEach(function(n){out.general.push(Calculo.general(n));out.general.push(Calculo.general(-n));});\n")
             append(JsonArray(textos.map { JsonPrimitive(it) }).toString())
             append(".forEach(function(t){var n=Calculo.numero(t);out.numero.push(n===null?'null':Calculo.general(n));});\n")
             for ((x, d) in redondeos) append("out.redondear.push(Calculo.general(Calculo.redondear($x,$d,0)));\n")
-            for ((x, f) in formatos) append("out.formato.push(Calculo.conFormato($x,").append(JsonPrimitive(f)).append("));\n")
+            for ((x, f) in formatos) append("out.formato.push(Calculo.darFormato($x,").append(JsonPrimitive(f)).append(").map(function(x){return x===null?'null':x;}).join('|'));\n")
+            for ((x, nf) in celdas) append("out.celda.push(Calculo.conFormatoDeCelda($x,'${nf.palabra}','S/'));\n")
+            // La tabla de pruebas del PC entera, por el gemelo en JavaScript.
+            append("var datosPc=").append(buildJsonObject { for ((k, v) in FormulasComoElPcTest.DATOS) put(k, v) }).append(";\n")
+            append("var casosPc=").append(JsonArray(FormulasComoElPcTest.CASOS.map { buildJsonArray { add(JsonPrimitive(it.conDatos)); add(JsonPrimitive(it.formula)) } })).append(";\n")
+            append("casosPc.forEach(function(k){var c=Calculo.crear();c.reloj=function(){return [2026,10,11,15,30,0,0];};if(k[0])for(var d in datosPc){var p=Calculo.leer(d);c.poner(p[0],p[1],datosPc[d]);}c.poner(98,25,'='+k[1]);out.pc.push(c.mostrarGeneral(98,25));});\n")
             for ((f, a, b) in desplazados) append("out.desplazar.push(Calculo.desplazar(").append(JsonPrimitive(f)).append(",$a,$b));\n")
             for ((f, a, b) in r1c1s) {
                 append("out.r1c1.push(Calculo.r1c1(").append(JsonPrimitive(f)).append(",$a,$b));\n")
@@ -153,7 +167,15 @@ class CalculoEnNodeTest {
         assertEquals(numeros.flatMap { listOf(CalculoFormato.general(it), CalculoFormato.general(-it)) }, lista("general"))
         assertEquals(textos.map { t -> CalculoFormato.numero(t)?.let { CalculoFormato.general(it) } ?: "null" }, lista("numero"))
         assertEquals(redondeos.map { (x, d) -> CalculoFormato.general(CalculoFormato.redondear(x, d, 0)) }, lista("redondear"))
-        assertEquals(formatos.map { (x, f) -> CalculoFormato.conFormato(x, f) }, lista("formato"))
+        assertEquals(formatos.map { (x, f) -> CalculoFormato.darFormato(x, f).let { (t, e) -> (t ?: "null") + "|" + (e ?: "null") } }, lista("formato"))
+        assertEquals(celdas.map { (x, nf) -> CalculoFormato.conFormatoDeCelda(x, nf, "S/") }, lista("celda"))
+        // Las filas del PC: el JavaScript da lo mismo que Kotlin, y los dos lo que da el PC.
+        val pc = lista("pc")
+        val mal = FormulasComoElPcTest.CASOS.withIndex().mapNotNull { (i, k) ->
+            val kt = FormulasComoElPcTest.da(if (k.conDatos) FormulasComoElPcTest.DATOS else emptyList(), k.formula)
+            if (pc[i] == kt && kt == k.esperado) null else "=${k.formula}: js «${pc[i]}», kotlin «$kt», PC «${k.esperado}»"
+        }
+        assertEquals(mal.joinToString("\n"), 0, mal.size)
         assertEquals(desplazados.map { (f, a, b) -> CalculoLexico.desplazar(f, a, b) }, lista("desplazar"))
         assertEquals(r1c1s.map { (f, a, b) -> PortapapelesDeTabla.r1c1(f, a, b) }, lista("r1c1"))
         assertEquals(desplazados.map { (f, a, b) -> PortapapelesDeTabla.aR1c1(f, a, b) }, lista("ar1c1"))

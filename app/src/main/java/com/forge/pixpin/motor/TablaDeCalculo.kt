@@ -2,6 +2,9 @@ package com.forge.pixpin.motor
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * **Una tabla con fórmulas, como se guarda.** Es el cuarto tipo de hoja de un proyecto, al
@@ -38,6 +41,42 @@ data class TablaDeCalculo(
             runCatching { json.decodeFromString(serializer(), texto) }.getOrNull()
 
         fun aJson(t: TablaDeCalculo): String = json.encodeToString(serializer(), t)
+
+        /** Las claves de la tabla que se conocen. Las demás se conservan: ver [aJsonSobre]. */
+        val CLAVES = setOf("nombre", "celdas", "anchos", "estilos", "tocado", "protegida")
+
+        /**
+         * [t] en JSON **sin perder lo que no se conoce de [original]** (el JSON que había antes):
+         * una clave nueva de la tabla o de un estilo que escribió otra versión —del PC o de un
+         * móvil más nuevo— sigue ahí después de editar aquí. Es lo que hace el PC con su `resto`
+         * (`#[serde(flatten)]`). Lo conocido manda siempre lo de [t]: lo que vale lo de por
+         * defecto no se escribe y tampoco se rescata de [original].
+         */
+        fun aJsonSobre(t: TablaDeCalculo, original: String?): String {
+            val nuevo = aJson(t)
+            if (original.isNullOrBlank()) return nuevo
+            val viejo = runCatching { Json.parseToJsonElement(original) as? JsonObject }.getOrNull() ?: return nuevo
+            val raros = viejo.filterKeys { it !in CLAVES }
+            val estilosViejos = viejo["estilos"] as? JsonObject
+            val conRaros = estilosViejos?.any { (_, e) -> (e as? JsonObject)?.keys?.any { it !in EstiloDeCelda.CLAVES } == true } == true
+            if (raros.isEmpty() && !conRaros) return nuevo
+            val n = Json.parseToJsonElement(nuevo).jsonObject
+            val salida = LinkedHashMap<String, JsonElement>(n)
+            for ((k, v) in raros) salida[k] = v
+            if (conRaros) {
+                val estilos = (n["estilos"] as? JsonObject)?.let { LinkedHashMap<String, JsonElement>(it) } ?: LinkedHashMap()
+                // También la celda que aquí se quedó sin estilo: lo que no se conoce no es formato
+                // que «Borrar formato» quite (el PC lo guarda igual, en su `resto`).
+                for ((celda, e) in estilosViejos.orEmpty()) {
+                    val suyos = (e as? JsonObject)?.filterKeys { it !in EstiloDeCelda.CLAVES }
+                    if (suyos.isNullOrEmpty()) continue
+                    val mio = estilos[celda]?.jsonObject.orEmpty()
+                    estilos[celda] = JsonObject(LinkedHashMap<String, JsonElement>(mio).apply { putAll(suyos) })
+                }
+                if (estilos.isNotEmpty()) salida["estilos"] = JsonObject(estilos)
+            }
+            return JsonObject(salida).toString()
+        }
     }
 }
 
@@ -45,6 +84,11 @@ data class TablaDeCalculo(
  * Lo poco de formato que hace falta para que una tabla se entienda: **negrita** en los
  * títulos, **alineación** y un **color de fondo** para marcar filas. Nombres de una letra
  * porque se repiten en cada celda con estilo.
+ *
+ * **Lo que añadió el PC** (barra de formato del pin de hoja, 12-oct-2026; aquí el 13-oct):
+ * cursiva [k], subrayado [s], tachado [t], color de letra [c], ajustar texto [w] y formato de
+ * número [nf]. Mismos nombres que `EstiloDeCelda` de `crates/pixpin-proyecto/src/tabla.rs`:
+ * antes el móvil los leía (`ignoreUnknownKeys`) pero los perdía al volver a guardar.
  */
 @Serializable
 data class EstiloDeCelda(
@@ -54,9 +98,48 @@ data class EstiloDeCelda(
     /** El fondo, `#rrggbb`. */
     val f: String? = null,
     /** Editable aunque la tabla esté protegida. Ver [TablaDeCalculo.protegida]. */
-    val e: Boolean = false
+    val e: Boolean = false,
+    /** Cursiva (la `k` de Ctrl+K en el Excel español: la `c` ya es el color). */
+    val k: Boolean = false,
+    /** Subrayado. */
+    val s: Boolean = false,
+    /** Tachado. */
+    val t: Boolean = false,
+    /** El color de la letra, `#rrggbb`. */
+    val c: String? = null,
+    /** Ajustar el texto a la celda: varias líneas en vez de cortarse. */
+    val w: Boolean = false,
+    /** El formato del número: `numero`, `moneda`, `porcentaje` o `fecha`. Null es «General». Ver [FormatoDeNumero]. */
+    val nf: String? = null
 ) {
-    val vacio: Boolean get() = !n && a == null && f == null && !e
+    val vacio: Boolean get() = !e && sinFormato
+
+    /** Sin nada que se vea: lo que deja «Borrar formato» (la marca de editable no es formato). */
+    val sinFormato: Boolean get() = !n && a == null && f == null && !k && !s && !t && c == null && !w && nf == null
+
+    /** **Borrar formato**: quita todo lo que se ve y deja la marca de editable, como en el PC. */
+    fun sinElFormato(): EstiloDeCelda? = if (e) EstiloDeCelda(e = true) else null
+
+    companion object {
+        /** Las claves que se conocen: las demás, de una versión más nueva, se conservan al guardar. */
+        val CLAVES = setOf("n", "a", "f", "e", "k", "s", "t", "c", "w", "nf")
+    }
+}
+
+/**
+ * **Los formatos de número** del botón «123» de la barra (el `nf` de un estilo). La palabra es
+ * lo que se guarda y **no se cambia nunca**: es la del PC (`FormatoNumero::palabra`).
+ */
+enum class FormatoDeNumero(val palabra: String, val nombre: String) {
+    NUMERO("numero", "Número"),
+    MONEDA("moneda", "Moneda"),
+    PORCENTAJE("porcentaje", "Porcentaje"),
+    FECHA("fecha", "Fecha");
+
+    companion object {
+        /** De la palabra guardada; una que no se conoce (de una versión más nueva) se ve como «General». */
+        fun de(palabra: String?): FormatoDeNumero? = entries.firstOrNull { it.palabra == palabra }
+    }
 }
 
 /**
@@ -116,6 +199,12 @@ class TablaViva(inicial: TablaDeCalculo) {
     )
 
     fun estilo(fila: Int, col: Int): EstiloDeCelda? = estilos[Celdas.clave(fila, col)]
+
+    /**
+     * **Lo que se ve en la celda**, ya con su formato de número ([EstiloDeCelda.nf]): el texto de
+     * la fórmula o lo escrito si no es un número o la celda no lleva formato.
+     */
+    fun visto(fila: Int, col: Int): String = conFormato(calc, estilo(fila, col), fila, col)
     fun ancho(col: Int): Int = anchos[col] ?: ANCHO
 
     val puedeDeshacer: Boolean get() = hechos.isNotEmpty()
@@ -359,12 +448,23 @@ class TablaViva(inicial: TablaDeCalculo) {
 
     /** Lo que se ve en un rango, fila a fila: para copiar, compartir y exportar. */
     fun valores(f1: Int, c1: Int, f2: Int, c2: Int): List<List<String>> =
-        (f1..f2).map { f -> (c1..c2).map { c -> calc.texto(f, c) } }
+        (f1..f2).map { f -> (c1..c2).map { c -> visto(f, c) } }
 
     fun crudos(f1: Int, c1: Int, f2: Int, c2: Int): List<List<String>> =
         (f1..f2).map { f -> (c1..c2).map { c -> calc.crudo(f, c) } }
 
     companion object {
+        /** El símbolo de la moneda del aparato, para el formato `moneda`. La aplicación lo pone al arrancar. */
+        @Volatile var moneda: String = CalculoFormato.MONEDA_POR_DEFECTO
+
+        /** Lo que enseña la celda ([fila], [col]) de [calc] con el estilo [e]. Ver [visto]. */
+        fun conFormato(calc: Calculadora, e: EstiloDeCelda?, fila: Int, col: Int): String {
+            val nf = FormatoDeNumero.de(e?.nf) ?: return calc.texto(fila, col)
+            if (calc.crudo(fila, col).isEmpty()) return ""
+            val v = calc.valor(fila, col) as? Valor.Num ?: return calc.texto(fila, col)
+            return CalculoFormato.conFormatoDeCelda(v.n, nf, moneda)
+        }
+
         const val ANCHO = 96
         const val ANCHO_MIN = 28
         const val ANCHO_MAX = 600
@@ -381,8 +481,14 @@ class TablaViva(inicial: TablaDeCalculo) {
             val cols = minOf(v.calc.cols, maxCols)
             if (filas == 0 || cols == 0) return ""
             fun celda(f: Int, c: Int): String {
-                val s = v.calc.texto(f, c).replace("|", "\\|").replace("\n", " ")
-                return if (v.estilo(f, c)?.n == true && s.isNotBlank()) "**$s**" else s
+                val s = v.visto(f, c).replace("|", "\\|").replace("\n", " ")
+                if (s.isBlank()) return s
+                val e = v.estilo(f, c) ?: return s
+                var r = s
+                if (e.k) r = "*$r*"
+                if (e.n) r = "**$r**"
+                if (e.t) r = "~~$r~~"
+                return r
             }
             return buildString {
                 if (t.nombre.isNotBlank()) append("## ").append(t.nombre).append("\n\n")

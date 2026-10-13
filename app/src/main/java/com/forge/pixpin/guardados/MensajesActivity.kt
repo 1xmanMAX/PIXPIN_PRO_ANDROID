@@ -4159,6 +4159,37 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
 
     @Composable
     private fun FilaDeMiniApp(m: Mensaje, onCambiar: (String) -> Unit) {
+        // **Una tabla del PC** (mini-app `tabla`, el JSON de la tabla en el texto) o una hoja editada
+        // de un Excel del chat: se ve como tabla, no como su JSON. Tocarla la abre en el editor de
+        // tablas, que guarda en este mismo mensaje. Ver [TablasDelChat].
+        if (TablasDelChat.esTabla(m)) {
+            Column {
+                Box(
+                    Modifier
+                        .width(260.dp)
+                        .height(150.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                ) {
+                    com.forge.pixpin.tabla.MiniaturaDeTablaEnTexto(m.texto)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(
+                        Icons.Filled.TableChart, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        m.nombre.ifBlank { com.forge.pixpin.motor.TablaDeCalculo.deJson(m.texto)?.nombre.orEmpty() }.ifBlank { "Tabla" },
+                        fontSize = 15.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 6.dp).widthIn(max = 230.dp)
+                    )
+                }
+            }
+            return
+        }
         val cual = remember(m.miniapp) { com.forge.pixpin.mini.MiniApp.de(m.miniapp) }
         if (cual == null) {
             // De una versión posterior: se enseña como texto, que es lo que es, en vez de
@@ -6681,7 +6712,18 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     .putExtra(com.forge.pixpin.EXTRA_PROYECTO, m.referencia)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
-            Clase.MINIAPP -> com.forge.pixpin.mini.MiniActivity.abrir(this, m.id)
+            Clase.MINIAPP ->
+                if (TablasDelChat.esTabla(m)) {
+                    // Una hoja de un libro se abre con sus hermanas en pestañas, como el Excel.
+                    val libro = m.referencia?.let { TablasDelChat.partirLibro(it) }?.first
+                    val ref = m.referencia
+                    if (libro != null && ref != null) lifecycleScope.launch {
+                        val hojas = withContext(Dispatchers.IO) { TablasDelChat.hechas(almacen.leer(), libro).map { LibroDelChat.idDeHoja(libro, it.first) } }
+                        com.forge.pixpin.tabla.TablaActivity.abrir(this@MensajesActivity, ref, hojas = hojas)
+                    }
+                    else com.forge.pixpin.tabla.TablaActivity.abrir(this, TablasDelChat.idDe(m))
+                }
+                else com.forge.pixpin.mini.MiniActivity.abrir(this, m.id)
             Clase.TABLA -> m.referencia?.let { com.forge.pixpin.tabla.TablaActivity.abrir(this, it) }
             Clase.CROQUIS -> m.referencia?.let {
                 com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(this, m.proyecto, it)

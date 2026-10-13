@@ -48,7 +48,7 @@ object VisorTabla {
             for (f in f0..f1) {
                 append("<tr><th>").append(f + 1).append("</th>")
                 for (c in c0..c1) {
-                    val texto = v.calc.texto(f, c)
+                    val texto = v.visto(f, c)
                     val e = v.estilo(f, c)
                     val valor = if (v.calc.crudo(f, c).isEmpty()) null else v.calc.valor(f, c)
                     val al = e?.a ?: when (valor) {
@@ -59,13 +59,24 @@ object VisorTabla {
                     val clases = buildList {
                         if (al == "d") add("d") else if (al == "c") add("c")
                         if (e?.n == true) add("n")
+                        if (e?.k == true) add("k")
+                        if (e?.s == true) add("s")
+                        if (e?.t == true) add("t")
+                        if (e?.w == true) add("w")
                         if (valor is Valor.Err) add("err")
                         if (Calculadora.esFormula(v.calc.crudo(f, c))) add("f")
                         if (t.protegida && e?.e == true) add("ed")
                     }
                     append("<td")
                     if (clases.isNotEmpty()) append(" class=\"").append(clases.joinToString(" ")).append('"')
-                    e?.f?.takeIf { COLOR.matches(it) }?.let { append(" style=\"background:").append(it).append('"') }
+                    val fondo = e?.f?.takeIf { COLOR.matches(it) }
+                    val letra = e?.c?.takeIf { COLOR.matches(it) }
+                    if (fondo != null || letra != null) {
+                        append(" style=\"")
+                        if (fondo != null) append("background:").append(fondo)
+                        if (letra != null) append(if (fondo != null) ";" else "").append("color:").append(letra)
+                        append('"')
+                    }
                     append('>').append(escapar(texto)).append("</td>")
                 }
                 append("</tr>")
@@ -122,6 +133,11 @@ object VisorTabla {
         table.calc td.d{text-align:right}
         table.calc td.c{text-align:center}
         table.calc td.n{font-weight:700}
+        table.calc td.k{font-style:italic}
+        table.calc td.s{text-decoration:underline}
+        table.calc td.t{text-decoration:line-through}
+        table.calc td.s.t{text-decoration:underline line-through}
+        table.calc td.w{white-space:normal;word-break:break-word;text-overflow:clip;line-height:1.15}
         table.calc td.err{color:#d93025}
         table.calc td.sel{box-shadow:inset 0 0 0 999px rgba(26,115,232,.14)}
         table.calc td.act{outline:2px solid #1a73e8;outline-offset:-2px}
@@ -157,9 +173,9 @@ object VisorTabla {
     val CALCULO = """
 var Calculo=(function(){
 "use strict";
-var MAX_COLS=702, MAX_FILAS=100000, PROFUNDIDAD=400, DIAS=25569;
-var E_DIV0='#¡DIV/0!', E_VALOR='#¡VALOR!', E_REF='#¡REF!', E_NOMBRE='#¿NOMBRE?', E_ND='#N/D', E_NUM='#¡NUM!', E_CIRC='#¡CIRC!';
-var VACIO={t:'v'}, HUECO={k:'hueco'}, HONDO={hondo:1};
+var MAX_COLS=702, MAX_FILAS=100000, FILAS_EN_FORMULA=1048576, PROFUNDIDAD=400, DIAS=25569;
+var E_DIV0='#¡DIV/0!', E_VALOR='#¡VALOR!', E_REF='#¡REF!', E_NOMBRE='#¿NOMBRE?', E_ND='#N/A', E_NUM='#¡NUM!', E_CIRC='#¡CICLO!';
+var VACIO={t:'v'}, HONDO={hondo:1};
 function N(n,f){return {t:'n',n:n,f:!!f};}
 function S(s){return {t:'s',s:s};}
 function B(b){return {t:'b',b:b};}
@@ -212,8 +228,8 @@ function fecha(texto){
   if(mes<1||mes>12||d<1||d>diasDelMes(a,mes))return null;
   return serial(a,mes,d);
 }
-function serial(a,m,d){ var x=new Date(0); x.setUTCFullYear(a,m-1,d); return Math.round(x.getTime()/86400000)+DIAS; }
-function partes(s){ var x=new Date((Math.floor(s)-DIAS)*86400000); return [x.getUTCFullYear(),x.getUTCMonth()+1,x.getUTCDate()]; }
+function serial(a,m,d){ var x=new Date(0); x.setUTCFullYear(a,m-1,d); return aSerie(x.getUTCFullYear(),x.getUTCMonth()+1,x.getUTCDate()); }
+function partes(s){ var k=Math.floor(s); if(k>=0)return desdeSerie(k); var x=new Date((k-DIAS)*86400000); return [x.getUTCFullYear(),x.getUTCMonth()+1,x.getUTCDate()]; }
 function dos(n){return n<10?'0'+n:''+n;}
 function textoDeFecha(s){
   if(!isFinite(s)||s< -657434||s>2958465)return E_NUM;
@@ -222,62 +238,165 @@ function textoDeFecha(s){
   return base+' '+dos(Math.floor(min/60))+':'+dos(min%60);
 }
 function ceros(n){var s='';while(n-->0)s+='0';return s;}
+// Las cifras exactas de un double (como BigDecimal de Kotlin): [cifras, p], valor = 0.cifras × 10^p.
+function exacto(a){
+  var b=new DataView(new ArrayBuffer(8)); b.setFloat64(0,a);
+  var hi=b.getUint32(0), lo=b.getUint32(4), ex=(hi>>>20)&0x7ff;
+  var m=(BigInt(hi&0xfffff)<<BigInt(32))|BigInt(lo);
+  if(ex===0)ex=1; else m=m|(BigInt(1)<<BigInt(52));
+  var e2=ex-1075, d, p;
+  if(e2>=0){ d=(m<<BigInt(e2)).toString(); p=d.length; }
+  else { d=(m*(BigInt(5)**BigInt(-e2))).toString(); p=d.length+e2; }
+  d=d.replace(/0+$/,'')||'0';
+  return [d,p];
+}
+// [n] cifras significativas de |a|, mitad al par sobre el valor exacto (MathContext(n, HALF_EVEN)).
+function redSig(a,n){
+  a=Math.abs(a);
+  // Deprisa: lejos de un empate, el redondeo de toExponential (sobre el valor exacto) es el mismo.
+  if(n<=15&&a>0){
+    var t=a.toExponential(n+2).split('e'), cif=t[0].replace('.',''), cola=+cif.slice(n);
+    if(cola<495||cola>505){ var q=a.toExponential(n-1).split('e'); return {d:q[0].replace('.',''),p:+q[1]+1}; }
+  }
+  var x=exacto(a), d=x[0], p=x[1];
+  if(d.length<=n)return {d:d+ceros(n-d.length),p:p};
+  var c=d.slice(0,n), r=d.slice(n), sube;
+  if(r[0]>'5')sube=true; else if(r[0]<'5')sube=false; else if(/[1-9]/.test(r.slice(1)))sube=true; else sube=(+c[n-1])%2===1;
+  if(sube){
+    var arr=c.split('').map(Number), i=n-1;
+    while(i>=0){ if(arr[i]===9){arr[i]=0;i--;} else {arr[i]++;break;} }
+    if(i<0){ arr.unshift(1); arr.pop(); p++; }
+    c=arr.join('');
+  }
+  return {d:c,p:p};
+}
+// Las cifras d (valor 0.d × 10^p) escritas con [dec] decimales exactos.
+function plano(d,p,dec){
+  var ent, fr;
+  if(p<=0){ ent='0'; fr=ceros(-p)+d; }
+  else { ent=d.length>=p?d.slice(0,p):d+ceros(p-d.length); fr=d.length>p?d.slice(p):''; }
+  ent=ent.replace(/^0+(?=[0-9])/,'');
+  fr=(fr+ceros(dec)).slice(0,dec);
+  return dec>0?ent+'.'+fr:ent;
+}
+// BigDecimal(|x|).setScale(dec, HALF_EVEN).toPlainString(): `format!("{:.dec}")` de Rust.
+function fixDec(x,dec){
+  x=Math.abs(x);
+  if(x===0)return plano('0',1,dec);
+  var e=exacto(x), n=e[1]+dec;
+  if(n>=1){ var r=redSig(x,n); return plano(r.d,r.p,dec); }
+  if(n===0){ var d=e[0], sube=d[0]>'5'||(d[0]==='5'&&/[1-9]/.test(d.slice(1))); return sube?plano('1',1-dec,dec):plano('0',1,dec); }
+  return plano('0',1,dec);
+}
 function general(d){
   if(!isFinite(d))return E_NUM;
   if(d===0)return '0';
-  var a=Math.abs(d), s=d<0?'-':'';
+  var a=Math.abs(d), s=d<0?'-':'', r, t;
   if(a<1e15&&a===Math.floor(a))return s+String(a);
-  var x,m,exp;
   if(a>=1e15||a<1e-9){
-    x=a.toExponential(5).split('e'); m=x[0]; exp=+x[1];
-    if(m.indexOf('.')>=0) m=m.replace(/0+$/,'').replace(/\.$/,'');
-    var e=Math.abs(exp);
-    return s+m+'E'+(exp<0?'-':'+')+(e<10?'0'+e:''+e);
+    r=redSig(a,6); var exp=r.p-1, resto=r.d.slice(1).replace(/0+$/,''), e=Math.abs(exp);
+    return s+r.d[0]+(resto?'.'+resto:'')+'E'+(exp<0?'-':'+')+(e<10?'0'+e:''+e);
   }
-  x=a.toExponential(9).split('e'); var dig=x[0].replace('.',''), r; exp=+x[1];
-  if(exp>=0){ r=dig.length<=exp+1?dig+ceros(exp+1-dig.length):dig.slice(0,exp+1)+'.'+dig.slice(exp+1); }
-  else r='0.'+ceros(-exp-1)+dig;
-  if(r.indexOf('.')>=0) r=r.replace(/0+$/,'').replace(/\.$/,'');
-  return s+r;
+  r=redSig(a,10);
+  t=plano(r.d,r.p,Math.max(0,10-r.p));
+  if(t.indexOf('.')>=0)t=t.replace(/0+$/,'').replace(/\.$/,'');
+  return s+t;
 }
-function redondear(x,dec,modo){
-  if(!isFinite(x))return x;
-  var n=Math.max(-15,Math.min(15,dec)), f=Math.pow(10,Math.abs(n));
-  var esc=n>=0?Math.abs(x)*f:Math.abs(x)/f;
-  var limpio=esc===0?0:parseFloat(esc.toPrecision(15));
-  var ent=modo===1?Math.ceil(limpio):modo===-1?Math.floor(limpio):Math.floor(limpio+0.5);
-  var r=n>=0?ent/f:ent*f;
-  return x<0?-r:r;
+function redondo(a){ return a>=4.5e15?a:Math.round(a); }
+// REDONDEAR del PC: lo que está a una milmillonésima de un entero o de una mitad, lo es.
+function redondear(x,decimales,modo){
+  if(x===0||!isFinite(x))return x;
+  var d=Math.max(-400,Math.min(400,decimales)), f=Math.pow(10,Math.min(Math.abs(d),300));
+  var esc=d>=0?x*f:x/f;
+  if(!isFinite(esc))return x;
+  var a=Math.abs(esc), ent=redondo(a), r;
+  if(Math.abs(a-ent)<=1e-9*Math.max(a,1))a=ent;
+  if(modo===1)r=Math.ceil(a);
+  else if(modo===-1)r=Math.floor(a);
+  else { var doble=a*2; if(Math.abs(doble-redondo(doble))<=1e-9*Math.max(doble,1))a=redondo(doble)/2; r=redondo(a); }
+  r=x<0?-r:r;
+  return d>=0?r/f:r*f;
 }
-function conFormato(v,formato){
-  var sin=formato.replace(/"[^"]*"/g,'').toLowerCase(), i;
-  if(sin.indexOf('dd')>=0||sin.indexOf('yy')>=0||sin.indexOf('aa')>=0){
-    var p=partes(v), s=formato;
-    s=s.replace(/yyyy|aaaa/gi,String(p[0])); s=s.replace(/yy|aa/gi,dos(p[0]%100));
-    s=s.replace(/mm/gi,dos(p[1])); s=s.replace(/dd/gi,dos(p[2]));
-    return s;
+// ---- Fechas como el PC (fecha.rs) ----
+var BASE=-25569;
+function diasCiviles(a0,m,d){
+  var a=m<=2?a0-1:a0, era=Math.floor(a/400), yoe=a-era*400, mp=(m+9)%12;
+  var doy=Math.floor((153*mp+2)/5)+d-1, doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;
+  return era*146097+doe-719468;
+}
+function civilDeDias(z0){
+  var z=z0+719468, era=Math.floor(z/146097), doe=z-era*146097;
+  var yoe=Math.floor((doe-Math.floor(doe/1460)+Math.floor(doe/36524)-Math.floor(doe/146096))/365);
+  var a=yoe+era*400, doy=doe-(365*yoe+Math.floor(yoe/4)-Math.floor(yoe/100)), mp=Math.floor((5*doy+2)/153);
+  var d=doy-Math.floor((153*mp+2)/5)+1, m=mp<10?mp+3:mp-9;
+  return [m<=2?a+1:a,m,d];
+}
+function aSerie(a,m,d){ var dias=diasCiviles(a,m,d)-BASE; return dias<61?dias-1:dias; }
+function desdeSerie(s){
+  if(s<0)return null; if(s===0)return [1900,1,0]; if(s<60)return civilDeDias(BASE+s+1); if(s===60)return [1900,2,29];
+  return civilDeDias(BASE+s);
+}
+function serieDeTexto(texto){
+  var t=String(texto).trim(), partes=t.split(/[\/.\-]/);
+  if(partes.length!==3||partes.some(function(p){return !p||p.length>4;}))return null;
+  var n=[];
+  for(var i=0;i<3;i++){ if(!/^[+-]?[0-9]+$/.test(partes[i]))return null; n.push(parseInt(partes[i],10)); }
+  var a,m,d;
+  if(partes[0].length===4){a=n[0];m=n[1];d=n[2];} else if(partes[2].length===4){a=n[2];m=n[1];d=n[0];} else return null;
+  if(m<1||m>12||d<1||d>31||a<1900||a>9999)return null;
+  var s=aSerie(a,m,d), v=desdeSerie(s);
+  return (v&&v[0]===a&&v[1]===m&&v[2]===d)?s:null;
+}
+function fechaDeSerie(dias){ return desdeSerie(Math.max(0,dias)); }
+// El formato de número de una celda (el `nf` de su estilo): CalculoFormato.conFormatoDeCelda.
+var MONEDA_POR_DEFECTO='S/';
+function digitos(v,dec){
+  var a=Math.abs(v), k;
+  if(a===0)return ['0',ceros(dec)];
+  var r=redSig(a,15), cifras=r.d, punto=r.p, corte=punto+dec, d=[];
+  for(k=0;k<corte;k++)d.push(k<cifras.length?+cifras[k]:0);
+  var sig=corte<0?0:(corte<cifras.length?+cifras[corte]:0);
+  if(sig>=5){ k=d.length; while(true){ if(k===0){d.unshift(1);break;} k--; if(d[k]===9)d[k]=0; else {d[k]++;break;} } }
+  while(d.length<dec+1)d.unshift(0);
+  var ent=d.slice(0,d.length-dec).join('').replace(/^0+/,'')||'0', frac=d.slice(d.length-dec).join('');
+  return [ent,frac];
+}
+function conMiles(v,dec){
+  var x=digitos(v,dec), e=x[0], sb='', i;
+  for(i=0;i<e.length;i++){ if(i>0&&(e.length-i)%3===0)sb+=','; sb+=e[i]; }
+  return dec>0?sb+'.'+x[1]:sb;
+}
+function fechaCorta(v){
+  if(!(v>=0&&v<=2958466))return '###########';
+  var total=Math.round(v*86400), p=fechaDeSerie(Math.floor(total/86400));
+  return dos(p[2])+'/'+dos(p[1])+'/'+p[0];
+}
+function conFormatoDeCelda(v,nf,moneda){
+  if(!isFinite(v))return E_NUM;
+  var s;
+  switch(nf){
+    case 'numero': s=conMiles(v,2); return (v<0&&/[1-9]/.test(s)?'-':'')+s;
+    case 'moneda': return (v<0?'-':'')+(moneda||MONEDA_POR_DEFECTO)+' '+conMiles(v,2);
+    case 'porcentaje': var x=digitos(v*100,2); return (v<0&&/[1-9]/.test(x[0]+x[1])?'-':'')+x[0]+'.'+x[1]+'%';
+    case 'fecha': return fechaCorta(v);
   }
-  var primero=-1; for(i=0;i<formato.length;i++){ if(formato[i]==='0'||formato[i]==='#'){primero=i;break;} }
-  if(primero<0) return formato.replace(/"/g,'');
-  var ultimo=-1; for(i=formato.length-1;i>=0;i--){ if('0#%.,'.indexOf(formato[i])>=0){ultimo=i;break;} }
-  var delante=formato.slice(0,primero).replace(/"/g,''), mascara=formato.slice(primero,ultimo+1), detras=formato.slice(ultimo+1).replace(/"/g,'');
-  var pc=mascara.indexOf('%')>=0, punto=mascara.indexOf('.'), dec=0;
-  if(punto>=0){ var rr=mascara.slice(punto+1); for(i=0;i<rr.length;i++) if(rr[i]==='0'||rr[i]==='#')dec++; }
-  var miles=(punto<0?mascara:mascara.slice(0,punto)).indexOf(',')>=0;
-  var x=redondear(pc?v*100:v,dec,0), cifras=Math.abs(x).toFixed(dec);
-  if(miles){
-    var q=cifras.indexOf('.'), ent=q<0?cifras:cifras.slice(0,q), resto=q<0?'':cifras.slice(q), sb='';
-    for(i=0;i<ent.length;i++){ if(i>0&&(ent.length-i)%3===0)sb+=','; sb+=ent[i]; }
-    cifras=sb+resto;
-  }
-  return delante+(x<0?'-':'')+cifras+(pc?'%':'')+detras;
+  return null;
+}
+var FORMATOS={numero:1,moneda:1,porcentaje:1,fecha:1};
+/** Lo que enseña la celda con el estilo es: TablaViva.conFormato. */
+function visto(calc,es,f,c,moneda){
+  var nf=es&&es.nf;
+  if(!nf||!FORMATOS[nf])return calc.texto(f,c);
+  if(!calc.crudo(f,c))return '';
+  var v=calc.valor(f,c);
+  return v.t==='n'?conFormatoDeCelda(v.n,nf,moneda):calc.texto(f,c);
 }
 
 // ---- CalculoLexico ----
-var P_NUM=1,P_TXT=2,P_REF=3,P_COLS=4,P_NOM=5,P_OP=6,P_ABRE=7,P_CIERRA=8,P_SEP=9,P_DP=10,P_ERR=11,P_MAL=12;
+var P_NUM=1,P_TXT=2,P_REF=3,P_COLS=4,P_NOM=5,P_OP=6,P_ABRE=7,P_CIERRA=8,P_SEP=9,P_DP=10,P_ERR=11,P_MAL=12,P_MALA_REF=13;
 var ERRORES=[['#¡DIV/0!','#¡DIV/0!'],['#DIV/0!','#¡DIV/0!'],['#¡VALOR!','#¡VALOR!'],['#VALUE!','#¡VALOR!'],
-  ['#¡REF!','#¡REF!'],['#REF!','#¡REF!'],['#¿NOMBRE?','#¿NOMBRE?'],['#NAME?','#¿NOMBRE?'],['#N/D','#N/D'],['#N/A','#N/D'],
-  ['#¡NUM!','#¡NUM!'],['#NUM!','#¡NUM!'],['#¡NULO!','#¡NULO!'],['#NULL!','#¡NULO!'],['#¡CIRC!','#¡CIRC!']];
+  ['#¡REF!','#¡REF!'],['#REF!','#¡REF!'],['#¿NOMBRE?','#¿NOMBRE?'],['#NAME?','#¿NOMBRE?'],['#N/D','#N/A'],['#N/A','#N/A'],
+  ['#¡NUM!','#¡NUM!'],['#NUM!','#¡NUM!'],['#¡NULO!','#¡NULO!'],['#NULL!','#¡NULO!'],['#¡CICLO!','#¡CICLO!'],['#¡CIRC!','#¡CICLO!']];
 var TILDES='ÁÉÍÓÚÜÑáéíóúüñ';
 function esLetra(c){return c!==undefined&&((c>='A'&&c<='Z')||(c>='a'&&c<='z')||c==='_'||(c.length===1&&TILDES.indexOf(c)>=0));}
 function esCifra(c){return c!==undefined&&c>='0'&&c<='9';}
@@ -288,7 +407,7 @@ function piezas(f){
   var out=[],i=0,n=f.length;
   while(i<n){
     var c=f[i];
-    if(c===' '||c==='\t'||c==='\n'||c==='\r'||c==='\u00a0'){i++;continue;}
+    if(/\s/.test(c)){i++;continue;}
     var d=i;
     if(c==='"'){
       var sb='',cerrada=false; i++;
@@ -323,9 +442,12 @@ function palabra(f,d){
     var k=j, ff=k<n&&f[k]==='$'; if(ff)k++;
     var c0=k; while(k<n&&esCifra(f[k]))k++;
     var ci=f.slice(c0,k), sigue=k<n?f[k]:' ';
-    if(ci.length>0&&!esLetra(sigue)&&sigue!=='('&&sigue!=='.'&&sigue!=='_'){
+    var tras=k; while(tras<n&&(f[tras]===' '||f[tras]==='\t'||f[tras]==='\u00a0'||f[tras]==='\u202f'))tras++;
+    var llamada=tras<n&&f[tras]==='('&&!cf&&!ff;
+    if(ci.length>0&&!esLetra(sigue)&&!llamada&&sigue!=='('&&sigue!=='.'&&sigue!=='_'){
       var col=columna(le), fila=ci.length<=9?parseInt(ci,10)-1:-1;
-      if(col>=0&&col<MAX_COLS&&fila>=0&&fila<MAX_FILAS) return pz(P_REF,f.slice(d,k),d,k,{f:fila,c:col,ff:ff,cf:cf});
+      if(col>=0&&col<MAX_COLS&&fila>=0&&fila<FILAS_EN_FORMULA) return pz(P_REF,f.slice(d,k),d,k,{f:fila,c:col,ff:ff,cf:cf});
+      return pz(P_MALA_REF,f.slice(d,k),d,k);
     }
     if(ci.length===0&&!ff&&k<n&&f[k]===':'){
       var m=k+1, c2f=m<n&&f[m]==='$'; if(c2f)m++;
@@ -339,19 +461,23 @@ function palabra(f,d){
   }
   if(f[d]==='$') return pz(P_MAL,'$',d,d+1);
   var i=d; while(i<n&&(esLetra(f[i])||esCifra(f[i])||f[i]==='.'))i++;
-  return pz(P_NOM,f.slice(d,i),d,i);
+  var pal=f.slice(d,i), j=i; while(j<n&&/\s/.test(f[j]))j++;
+  if((j>=n||f[j]!=='(')&&/[0-9]/.test(pal))return pz(P_MALA_REF,pal,d,i);
+  return pz(P_NOM,pal,d,i);
 }
-function Mal(){}
+function Mal(e){this.e=e||E_VALOR;}
+var ANIDADO_MAXIMO=64;
 function arbol(formula){
-  var p=piezas(formula); if(!p.length) return {k:'err',e:E_NOMBRE};
-  var i=0;
+  var p=piezas(formula); if(!p.length) return {k:'err',e:E_VALOR};
+  var i=0, hondo=0;
+  function entra(){ if(++hondo>ANIDADO_MAXIMO)throw new Mal(); }
   function esOp(ops){ var x=p[i]; return (x&&x.t===P_OP&&ops.indexOf(x.x)>=0)?x.x:null; }
   function comparacion(){ var a=concatenar(),op; while((op=esOp(['=','<>','<','>','<=','>=']))){i++;a={k:'op',op:op,a:a,b:concatenar()};} return a; }
   function concatenar(){ var a=suma(); while(esOp(['&'])){i++;a={k:'op',op:'&',a:a,b:suma()};} return a; }
   function suma(){ var a=producto(),op; while((op=esOp(['+','-']))){i++;a={k:'op',op:op,a:a,b:producto()};} return a; }
   function producto(){ var a=potencia(),op; while((op=esOp(['*','/']))){i++;a={k:'op',op:op,a:a,b:potencia()};} return a; }
   function potencia(){ var a=signo(); while(esOp(['^'])){i++;a={k:'op',op:'^',a:a,b:signo()};} return a; }
-  function signo(){ var op=esOp(['+','-']); if(op){i++;var x=signo();return op==='-'?{k:'menos',x:x}:x;} return porCiento(); }
+  function signo(){ var op=esOp(['+','-']); if(op){i++;entra();var x=signo();hondo--;return op==='-'?{k:'menos',x:x}:x;} return porCiento(); }
   function porCiento(){ var a=primario(); while(esOp(['%'])){i++;a={k:'pc',x:a};} return a; }
   function primario(){
     var x=p[i]; if(!x) throw new Mal();
@@ -359,38 +485,44 @@ function arbol(formula){
       case P_NUM: i++; return {k:'num',n:x.n};
       case P_TXT: i++; return {k:'txt',s:x.x};
       case P_ERR: i++; return {k:'err',e:x.x};
+      case P_MALA_REF: i++; if(p[i]&&p[i].t===P_DP)i+=2; return {k:'err',e:E_REF};
       case P_COLS: i++; return {k:'rango',f1:0,c1:Math.min(x.c,x.c2),f2:MAX_FILAS-1,c2:Math.max(x.c,x.c2),col:true};
       case P_REF:
         i++;
         var s=p[i];
-        if(s&&s.t===P_DP){ var o=p[i+1]; if(o&&o.t===P_REF){ i+=2; return {k:'rango',f1:Math.min(x.f,o.f),c1:Math.min(x.c,o.c),f2:Math.max(x.f,o.f),c2:Math.max(x.c,o.c),col:false}; } throw new Mal(); }
+        if(s&&s.t===P_DP){
+          var o=p[i+1];
+          if(o&&o.t===P_REF){ i+=2; return {k:'rango',f1:Math.min(x.f,o.f),c1:Math.min(x.c,o.c),f2:Math.max(x.f,o.f),c2:Math.max(x.c,o.c),col:false}; }
+          if(o&&o.t===P_MALA_REF){ i+=2; return {k:'err',e:E_REF}; }
+          throw new Mal(E_REF);
+        }
         return {k:'ref',f:x.f,c:x.c};
       case P_NOM:
         i++;
         var nom=x.x.toUpperCase(), sg=p[i];
         if(sg&&sg.t===P_ABRE){
-          i++; var args=[];
-          if(p[i]&&p[i].t===P_CIERRA){i++;return {k:'fn',nombre:nom,args:args};}
+          i++; entra(); var args=[];
+          if(p[i]&&p[i].t===P_CIERRA){i++;hondo--;return {k:'fn',nombre:nom,args:args};}
           while(true){
-            var a=p[i]; if(!a) throw new Mal();
-            if(a.t===P_SEP||a.t===P_CIERRA) args.push(HUECO); else args.push(comparacion());
+            args.push(comparacion());
             var q=p[i]; if(!q) throw new Mal();
             if(q.t===P_SEP){i++;continue;}
             if(q.t===P_CIERRA){i++;break;}
             throw new Mal();
           }
+          hondo--;
           return {k:'fn',nombre:nom,args:args};
         }
         if(nom==='VERDADERO'||nom==='TRUE') return {k:'log',b:true};
         if(nom==='FALSO'||nom==='FALSE') return {k:'log',b:false};
-        return {k:'err',e:E_NOMBRE};
+        throw new Mal();
       case P_ABRE:
-        i++; var dentro=comparacion(); if(!p[i]||p[i].t!==P_CIERRA) throw new Mal(); i++; return dentro;
+        i++; entra(); var dentro=comparacion(); if(!p[i]||p[i].t!==P_CIERRA) throw new Mal(); i++; hondo--; return dentro;
       default: throw new Mal();
     }
   }
-  try{ var r=comparacion(); return i!==p.length?{k:'err',e:E_NOMBRE}:r; }
-  catch(e){ if(e instanceof Mal) return {k:'err',e:E_NOMBRE}; throw e; }
+  try{ var r=comparacion(); return i!==p.length?{k:'err',e:E_VALOR}:r; }
+  catch(e){ if(e instanceof Mal) return {k:'err',e:e.e}; throw e; }
 }
 function dir(f,c,ff,cf){return (cf?'$':'')+letras(c)+(ff?'$':'')+(f+1);}
 function desplazar(formula,df,dc){
@@ -490,108 +622,287 @@ function referencias(formula){
   return out;
 }
 
-// ---- Calculadora ----
+// ---- Calculadora ---- (el motor del PC, como Calculo.kt: ver allí)
 function esFormula(raw){return raw.length>1&&raw[0]==='=';}
 function literal(raw){
   if(raw[0]==="'")return S(raw.slice(1));
-  var x=numero(raw); if(x!==null)return N(x);
-  x=fecha(raw); if(x!==null)return N(x,true);
-  var u=raw.trim().toUpperCase();
+  var t=raw.trim(); if(!t)return S('');
+  var x=numero(t); if(x!==null)return N(x);
+  x=fecha(t); if(x!==null)return N(x,true);
+  var u=t.toUpperCase();
   if(u==='VERDADERO'||u==='TRUE')return B(true);
   if(u==='FALSO'||u==='FALSE')return B(false);
-  return S(raw);
+  return S(t);
 }
 function mostrar(v){
   switch(v.t){ case 'n': return v.f?textoDeFecha(v.n):general(v.n); case 's': return v.s; case 'b': return v.b?'VERDADERO':'FALSO'; case 'e': return v.e; default: return ''; }
 }
-function tipoDe(v){ return (v.t==='n'||v.t==='v')?0:v.t==='s'?1:v.t==='b'?2:3; }
-function vacioComo(o){ return o.t==='s'?S(''):o.t==='b'?B(false):N(0); }
-function numCmp(a,b){ if(a===b)return 0; if(Math.abs(a-b)<=1e-12*Math.max(Math.abs(a),Math.abs(b)))return 0; return a<b?-1:1; }
+function Fallo(e){this.e=e;}
+function esVacio(v){ return v.t==='v'||(v.t==='s'&&v.s===''); }
+function vacioComoTexto(v){ return v.t==='v'?S(''):v; }
+function aNum(v){
+  switch(v.t){
+    case 'n': return v.n; case 'b': return v.b?1:0; case 'v': return 0;
+    case 's': if(v.s==='')return 0; var x=numero(v.s); if(x===null)throw new Fallo(E_VALOR); return x;
+    default: throw new Fallo(v.e);
+  }
+}
+function aTxt(v){
+  switch(v.t){ case 'n': return general(v.n); case 's': return v.s; case 'b': return v.b?'VERDADERO':'FALSO'; case 'v': return ''; default: throw new Fallo(v.e); }
+}
+function aLog(v){
+  switch(v.t){
+    case 'n': return v.n!==0; case 'b': return v.b; case 'v': return false;
+    case 's': var u=v.s.trim().toUpperCase(); if(u==='')return false; if(u==='VERDADERO'||u==='TRUE')return true; if(u==='FALSO'||u==='FALSE')return false; throw new Fallo(E_VALOR);
+    default: throw new Fallo(v.e);
+  }
+}
+function potencia(x,y){
+  if(x===0&&y===0)throw new Fallo(E_NUM);
+  if(x===0&&y<0)throw new Fallo(E_DIV0);
+  if(x<0&&y!==Math.floor(y))throw new Fallo(E_NUM);
+  var r=Math.pow(x,y); if(!isFinite(r))throw new Fallo(E_NUM); return r;
+}
+function letrasDe(s){ return Array.from(s); }
+function nomPropio(t){
+  var sale='', en=false, l=Array.from(t);
+  for(var i=0;i<l.length;i++){ var ch=l[i]; if(/\p{L}/u.test(ch)){ sale+=en?ch.toLowerCase():ch.toUpperCase(); en=true; } else { sale+=ch; en=false; } }
+  return sale;
+}
+function tipoDe(v){ return v.t==='n'?0:(v.t==='s'||v.t==='v')?1:v.t==='b'?2:3; }
+function signo(x){ return x<0?-1:x>0?1:0; }
+function mismoNumero(a,b){ return a===b||Math.abs(a-b)<=1e-14*Math.max(Math.abs(a),Math.abs(b)); }
+function numCmp(a,b){ return mismoNumero(a,b)?0:a<b?-1:1; }
+function vacioComo(o){ return o.t==='n'?N(0):o.t==='b'?B(false):S(''); }
 function comparar(a,b){
-  var x=a.t==='v'?vacioComo(b):a, y=b.t==='v'?vacioComo(a):b, ra=tipoDe(x), rb=tipoDe(y);
-  if(ra!==rb)return ra<rb?-1:1;
-  if(x.t==='n')return numCmp(x.n,y.n);
-  if(x.t==='s')return cmpStr(x.s.toLowerCase(),y.s.toLowerCase());
-  if(x.t==='b')return x.b===y.b?0:!x.b?-1:1;
-  return 0;
+  var va=esVacio(a), vb=esVacio(b);
+  if(va&&vb)return 0;
+  var x=va?vacioComo(b):a, y=vb?vacioComo(a):b;
+  if(x.t==='n'&&y.t==='n')return numCmp(x.n,y.n);
+  if(x.t==='s'&&y.t==='s')return cmpStr(x.s.toLowerCase(),y.s.toLowerCase());
+  if(x.t==='b'&&y.t==='b')return x.b===y.b?0:!x.b?-1:1;
+  return signo(tipoDe(x)-tipoDe(y));
 }
-function comodin(p,s){
-  var pi=0, si=0, estrella=-1, desde=0;
-  while(si<s.length){
-    if(pi<p.length){
-      var ch=p[pi];
-      if(ch==='*'){estrella=pi;desde=si;pi++;continue;}
-      if(ch==='~'&&pi+1<p.length){ if(p[pi+1]===s[si]){pi+=2;si++;continue;} }
-      else if(ch==='?'||ch===s[si]){pi++;si++;continue;}
+function ordenDelMismoTipo(a,b){
+  var ta=a.t==='v'?S(''):a, tb=b.t==='v'?S(''):b;
+  return (ta.t===tb.t&&(ta.t==='n'||ta.t==='s'||ta.t==='b'))?comparar(ta,tb):null;
+}
+function tieneComodines(t){ return /[*?~]/.test(t); }
+function comodinL(p,pi,t,ti,exacto){
+  if(pi>=p.length)return !exacto||ti>=t.length;
+  var c=p[pi];
+  if(c==='*'){ for(var k=ti;k<=t.length;k++)if(comodinL(p,pi+1,t,k,exacto))return true; return false; }
+  if(c==='?')return ti<t.length&&comodinL(p,pi+1,t,ti+1,exacto);
+  if(c==='~'&&pi+1<p.length&&(p[pi+1]==='*'||p[pi+1]==='?'||p[pi+1]==='~'))return ti<t.length&&t[ti]===p[pi+1]&&comodinL(p,pi+2,t,ti+1,exacto);
+  return ti<t.length&&t[ti]===c&&comodinL(p,pi+1,t,ti+1,exacto);
+}
+function comodin(p,s){ return comodinL(Array.from(p),0,Array.from(s),0,true); }
+function esIgual(buscado,celda,comodines){
+  var c=celda.t==='v'?S(''):celda;
+  if(buscado.t==='n'&&c.t==='n')return mismoNumero(buscado.n,c.n);
+  if(buscado.t==='b'&&c.t==='b')return buscado.b===c.b;
+  if(buscado.t==='s'&&c.t==='s'){
+    if(comodines&&tieneComodines(buscado.s))return comodinL(Array.from(buscado.s.toLowerCase()),0,Array.from(c.s.toLowerCase()),0,true);
+    return buscado.s.toLowerCase()===c.s.toLowerCase();
+  }
+  return false;
+}
+/** Un criterio de CONTAR.SI y familia (criterio.rs). */
+function Criterio(op,tipo,n,b,t){ this.op=op; this.tipo=tipo; this.n=n; this.b=b; this.t=t; }
+Criterio.de=function(v){
+  switch(v.t){
+    case 'n': return new Criterio('=','n',v.n);
+    case 'b': return new Criterio('=','b',0,v.b);
+    case 'e': case 'v': return new Criterio('=','v');
+  }
+  var ops=['<>','<=','>=','=','<','>'], op='', i;
+  for(i=0;i<ops.length;i++) if(v.s.slice(0,ops[i].length)===ops[i]){op=ops[i];break;}
+  var resto=v.s.slice(op.length), o=op||'=';
+  if(resto==='')return new Criterio(o,'v');
+  var x=numero(resto); if(x!==null)return new Criterio(o,'n',x);
+  var u=resto.toUpperCase();
+  if(u==='VERDADERO'||u==='TRUE')return new Criterio(o,'b',0,true);
+  if(u==='FALSO'||u==='FALSE')return new Criterio(o,'b',0,false);
+  return new Criterio(o,'t',0,false,resto.toLowerCase());
+};
+Criterio.prototype.ord=function(x){ switch(this.op){ case '=': return x===0; case '<>': return x!==0; case '<': return x<0; case '>': return x>0; case '<=': return x<=0; default: return x>=0; } };
+Criterio.prototype.cumple=function(v){
+  if(v.t==='e')return false;
+  var otro=this.op==='<>';
+  switch(this.tipo){
+    case 'v': return this.op==='<>'?!esVacio(v):esVacio(v);
+    case 'n': return v.t==='n'?this.ord(mismoNumero(v.n,this.n)?0:v.n<this.n?-1:1):otro;
+    case 'b': return v.t==='b'?this.ord(v.b===this.b?0:!v.b?-1:1):otro;
+  }
+  if(!(v.t==='s'&&v.s!==''))return otro;
+  if(this.op==='='||this.op==='<>'){
+    var casa=tieneComodines(this.t)?comodinL(Array.from(this.t),0,Array.from(v.s.toLowerCase()),0,true):v.s.toLowerCase()===this.t;
+    return casa===(this.op==='=');
+  }
+  return this.ord(cmpStr(v.s.toLowerCase(),this.t));
+};
+function claveDe(v){ return v.t==='n'?'n'+general(v.n)+':'+v.n:v.t==='s'?'t'+v.s:v.t==='b'?'b'+v.b:v.t==='e'?'e'+v.e:'t'; }
+// Las funciones del PC (motor::CATALOGO) y las que solo tiene el móvil: nombre → [español, mínimo, máximo].
+var CATALOGO={};
+(function(){
+  function p(c,a,b,nombres){ nombres.forEach(function(n){ CATALOGO[n]=[c,a,b]; }); }
+  p('SI',2,3,['SI','IF']); p('Y',1,255,['Y','AND']); p('O',1,255,['O','OR']); p('NO',1,1,['NO','NOT']);
+  p('SI.ERROR',2,2,['SI.ERROR','IFERROR']); p('SI.ND',2,2,['SI.ND','IFNA']); p('SI.CONJUNTO',2,254,['SI.CONJUNTO','IFS']);
+  p('VERDADERO',0,0,['VERDADERO','TRUE']); p('FALSO',0,0,['FALSO','FALSE']);
+  p('SUMA',0,255,['SUMA','SUM']); p('CONTAR',0,255,['CONTAR','COUNT']); p('PROMEDIO',0,255,['PROMEDIO','AVERAGE']);
+  p('MIN',0,255,['MIN','MINIMO','MÍNIMO']); p('MAX',0,255,['MAX','MAXIMO','MÁXIMO']);
+  p('REDONDEAR',2,2,['REDONDEAR','ROUND']); p('REDONDEAR.MAS',2,2,['REDONDEAR.MAS','ROUNDUP']); p('REDONDEAR.MENOS',2,2,['REDONDEAR.MENOS','ROUNDDOWN']);
+  p('ENTERO',1,1,['ENTERO','INT']); p('ABS',1,1,['ABS']); p('RESIDUO',2,2,['RESIDUO','MOD']); p('POTENCIA',2,2,['POTENCIA','POWER']);
+  p('RAIZ',1,1,['RAIZ','SQRT','RAÍZ']); p('PRODUCTO',1,255,['PRODUCTO','PRODUCT']); p('MEDIANA',1,255,['MEDIANA','MEDIAN']);
+  p('PI',0,0,['PI']); p('ALEATORIO',0,0,['ALEATORIO','RAND']); p('ALEATORIO.ENTRE',2,2,['ALEATORIO.ENTRE','RANDBETWEEN']);
+  p('CONTARA',1,255,['CONTARA','COUNTA']); p('CONTAR.BLANCO',1,1,['CONTAR.BLANCO','COUNTBLANK']);
+  p('SUMAR.SI',2,3,['SUMAR.SI','SUMIF']); p('SUMAR.SI.CONJUNTO',3,255,['SUMAR.SI.CONJUNTO','SUMIFS']);
+  p('CONTAR.SI',2,2,['CONTAR.SI','COUNTIF']); p('CONTAR.SI.CONJUNTO',2,254,['CONTAR.SI.CONJUNTO','COUNTIFS']);
+  p('PROMEDIO.SI',2,3,['PROMEDIO.SI','AVERAGEIF']);
+  p('BUSCARV',3,4,['BUSCARV','VLOOKUP']); p('BUSCARH',3,4,['BUSCARH','HLOOKUP']); p('INDICE',2,3,['INDICE','INDEX','ÍNDICE']);
+  p('COINCIDIR',2,3,['COINCIDIR','MATCH']); p('BUSCARX',3,6,['BUSCARX','XLOOKUP']);
+  p('CONCATENAR',1,255,['CONCATENAR','CONCATENATE']); p('CONCAT',1,255,['CONCAT']); p('UNIRCADENAS',3,255,['UNIRCADENAS','TEXTJOIN']);
+  p('IZQUIERDA',1,2,['IZQUIERDA','LEFT']); p('DERECHA',1,2,['DERECHA','RIGHT']); p('EXTRAE',3,3,['EXTRAE','MID']);
+  p('LARGO',1,1,['LARGO','LEN']); p('MAYUSC',1,1,['MAYUSC','UPPER']); p('MINUSC',1,1,['MINUSC','LOWER']);
+  p('NOMPROPIO',1,1,['NOMPROPIO','PROPER']); p('ESPACIOS',1,1,['ESPACIOS','TRIM']); p('SUSTITUIR',3,4,['SUSTITUIR','SUBSTITUTE']);
+  p('ENCONTRAR',2,3,['ENCONTRAR','FIND']); p('HALLAR',2,3,['HALLAR','SEARCH']); p('TEXTO',2,2,['TEXTO','TEXT']); p('VALOR',1,1,['VALOR','VALUE']);
+  p('HOY',0,0,['HOY','TODAY']); p('AHORA',0,0,['AHORA','NOW']); p('FECHA',3,3,['FECHA','DATE']);
+  p('AÑO',1,1,['AÑO','ANO','YEAR']); p('MES',1,1,['MES','MONTH']); p('DIA',1,1,['DIA','DAY','DÍA']);
+  p('DIAS',2,2,['DIAS','DAYS','DÍAS']); p('DIASEM',1,2,['DIASEM','WEEKDAY']);
+  p('ESERROR',1,1,['ESERROR','ISERROR']); p('ESBLANCO',1,1,['ESBLANCO','ISBLANK']); p('ESNUMERO',1,1,['ESNUMERO','ISNUMBER']);
+  p('ESND',1,1,['ESND','ISNA']); p('ESTEXTO',1,1,['ESTEXTO','ISTEXT']);
+  p('DESVEST',1,255,['DESVEST','DESVEST.M','STDEV','STDEV.S']); p('TRUNCAR',1,2,['TRUNCAR','TRUNC']);
+  p('EXP',1,1,['EXP']); p('LN',1,1,['LN']); p('LOG10',1,1,['LOG10']); p('LOG',1,2,['LOG']);
+  p('SENO',1,1,['SENO','SIN']); p('COS',1,1,['COS']); p('TAN',1,1,['TAN']); p('GRADOS',1,1,['GRADOS','DEGREES']);
+  p('RADIANES',1,1,['RADIANES','RADIANS']); p('SIGNO',1,1,['SIGNO','SIGN']); p('REPETIR',2,2,['REPETIR','REPT']);
+  p('SUMAPRODUCTO',1,255,['SUMAPRODUCTO','SUMPRODUCT']); p('ELEGIR',2,255,['ELEGIR','CHOOSE']);
+  p('FILA',0,1,['FILA','ROW']); p('COLUMNA',0,1,['COLUMNA','COLUMN']); p('PROMEDIO.SI.CONJUNTO',3,255,['PROMEDIO.SI.CONJUNTO','AVERAGEIFS']);
+})();
+var MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+var DIAS_SEMANA=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+function fixDec(x,dec){ // format!("{:.dec}") de Rust: mitad al par sobre el valor exacto
+  var s=x.toFixed(dec);
+  var exacto=x.toPrecision(100).replace(/0+$/,''), p=exacto.indexOf('.');
+  var frac=p<0?'':exacto.slice(p+1);
+  if(frac.length===dec+1&&frac[dec]==='5'){ // empate exacto: Rust redondea al par
+    var abajo=(Math.floor(x*Math.pow(10,dec))/Math.pow(10,dec)).toFixed(dec);
+    var ult=+abajo[abajo.length-1]; if(ult%2===0)return abajo;
+  }
+  return s;
+}
+function numeroConFormato(n,formato){
+  var ch=Array.from(formato), prefijo='', region='', sufijo='', porciento=false, i=0, estado=0;
+  while(i<ch.length){
+    var c=ch[i], lit=null;
+    if(c==='"'){ var fin=-1; for(var k=i+1;k<ch.length;k++)if(ch[k]==='"'){fin=k;break;} if(fin>=0){lit=ch.slice(i+1,fin).join('');i=fin+1;} else {lit=ch.slice(i+1).join('');i=ch.length;} }
+    else if(c==='\\'||c==='_'){ lit=i+1<ch.length?(c==='_'?' ':ch[i+1]):''; i+=2; }
+    else if(c==='%'){ porciento=true; i++; lit='%'; }
+    else if('0#?.,'.indexOf(c)>=0) lit=null;
+    else { i++; lit=c; }
+    if(lit!==null){ if(estado===0)prefijo+=lit; else { estado=2; sufijo+=lit; } }
+    else { if(estado===2)sufijo+=c; else { estado=1; region+=c; } i++; }
+  }
+  var pp=region.indexOf('.'), ent=pp>=0?region.slice(0,pp):region, dec=pp>=0?region.slice(pp+1):'';
+  var miles=ent.indexOf(',')>=0, minEnt=contar(ent,'0'), decimales=0, minDec=contar(dec,'0');
+  for(var q=0;q<dec.length;q++)if(dec[q]==='0'||dec[q]==='#'||dec[q]==='?')decimales++;
+  var valor=porciento?n*100:n, red=redondear(valor,decimales,0), neg=red<0;
+  var cuerpo=fixDec(Math.abs(red),decimales), pq=cuerpo.indexOf('.');
+  var pe=pq>=0?cuerpo.slice(0,pq):cuerpo, pd=pq>=0?cuerpo.slice(pq+1):'';
+  while(pd.length>minDec&&pd[pd.length-1]==='0')pd=pd.slice(0,-1);
+  if(minEnt===0&&pe==='0'&&(decimales>0||region.indexOf('#')>=0))pe='';
+  while(pe.length<minEnt)pe='0'+pe;
+  if(miles){ var sb=''; for(var j=0;j<pe.length;j++){ if(j>0&&(pe.length-j)%3===0)sb+=','; sb+=pe[j]; } pe=sb; }
+  return (neg?'-':'')+prefijo+pe+(pd?'.'+pd:'')+sufijo;
+}
+function fechaConFormato(n,formato){
+  if(n<0||n>2958465.999999)return null;
+  var ch=Array.from(formato), tr=[], i=0, k;
+  function bajo(c){ return c.charCodeAt(0)<128?c.toLowerCase():c; }
+  while(i<ch.length){
+    var c=ch[i], b=bajo(c);
+    if(ch.slice(i).join('').toUpperCase().indexOf('AM/PM')===0){ tr.push({t:'p',n:0}); i+=5; continue; }
+    var cor=0; while(i+cor<ch.length&&bajo(ch[i+cor])===b)cor++;
+    if(b==='y'||b==='a')tr.push({t:'a',n:cor}); else if(b==='m')tr.push({t:'m',n:cor}); else if(b==='d')tr.push({t:'d',n:cor});
+    else if(b==='h')tr.push({t:'h',n:cor}); else if(b==='s')tr.push({t:'s',n:cor});
+    else {
+      if(c==='"'){ var fin=-1; for(k=i+1;k<ch.length;k++)if(ch[k]==='"'){fin=k;break;} if(fin>=0){tr.push({t:'l',x:ch.slice(i+1,fin).join('')});i=fin+1;} else {tr.push({t:'l',x:ch.slice(i+1).join('')});i=ch.length;} }
+      else if(c==='\\'){ if(i+1<ch.length)tr.push({t:'l',x:ch[i+1]}); i+=2; }
+      else { tr.push({t:'l',x:c}); i++; }
+      continue;
     }
-    if(estrella>=0){pi=estrella+1;desde++;si=desde;continue;}
-    return false;
+    i+=cor;
   }
-  while(pi<p.length&&p[pi]==='*')pi++;
-  return pi===p.length;
+  for(k=0;k<tr.length;k++){
+    if(tr[k].t!=='m')continue;
+    var antes=null, despues=null, j;
+    for(j=k-1;j>=0;j--)if(tr[j].t!=='l'){antes=tr[j];break;}
+    for(j=k+1;j<tr.length;j++)if(tr[j].t!=='l'){despues=tr[j];break;}
+    if((antes&&antes.t==='h')||(despues&&despues.t==='s'))tr[k].t='n';
+  }
+  var dia=Math.floor(n), seg=Math.round((n-Math.floor(n))*86400);
+  if(seg>=86400){seg-=86400;dia++;}
+  var f=desdeSerie(dia); if(!f)return null;
+  var a=f[0], m=f[1], d=f[2], sem=((dia-1)%7+7)%7, hh=Math.floor(seg/3600), mm=Math.floor(seg/60)%60, ss=seg%60;
+  var conAmPm=tr.some(function(t){return t.t==='p';}), s='';
+  tr.forEach(function(t){
+    switch(t.t){
+      case 'a': s+=t.n<=2?dos(a%100):String(a).padStart(4,'0'); break;
+      case 'm': s+=t.n===1?String(m):t.n===2?dos(m):t.n===3?Array.from(MESES[m-1]).slice(0,3).join(''):MESES[m-1]; break;
+      case 'd': s+=t.n===1?String(d):t.n===2?dos(d):t.n===3?Array.from(DIAS_SEMANA[sem]).slice(0,3).join(''):DIAS_SEMANA[sem]; break;
+      case 'h': var h=conAmPm?(hh+11)%12+1:hh; s+=t.n>=2?dos(h):String(h); break;
+      case 'n': s+=t.n>=2?dos(mm):String(mm); break;
+      case 's': s+=t.n>=2?dos(ss):String(ss); break;
+      case 'p': s+=hh<12?'AM':'PM'; break;
+      default: s+=t.x;
+    }
+  });
+  return s;
 }
-function cumple(v,crit){
-  var vacia=v.t==='v'||(v.t==='s'&&v.s==='');
-  switch(crit.t){
-    case 'n': var nn=v.t==='n'?v.n:v.t==='s'?numero(v.s):null; if(nn===null)return false; return numCmp(nn,crit.n)===0;
-    case 'b': return v.t==='b'&&v.b===crit.b;
-    case 'e': return v.t==='e'&&v.e===crit.e;
-    case 'v': return vacia;
+/** TEXTO de un número: [texto, error] (CalculoFormato.darFormato). */
+function darFormato(n,fe){
+  var formato=fe.split(';')[0];
+  if(!isFinite(n))return [null,E_NUM];
+  if(/[\[Ee]/.test(formato)&&formato.indexOf('"')<0&&/E\+|E-|e\+|e-|\[/.test(formato))return [null,E_VALOR];
+  if(formato.toLowerCase()==='general'||!formato)return [general(n),null];
+  var marcas=/[0#]/.test(formato);
+  if(!marcas){
+    var com=false, esF=false;
+    for(var i=0;i<formato.length;i++){ var c=formato[i]; if(c==='"')com=!com; else if(!com&&'dmyahs'.indexOf(c.toLowerCase())>=0){esF=true;break;} }
+    if(esF){ var r=fechaConFormato(n,formato); return r===null?[null,E_NUM]:[r,null]; }
   }
-  var s=crit.s, ops=['>=','<=','<>','>','<','='], op='';
-  for(var i=0;i<ops.length;i++) if(s.slice(0,ops[i].length)===ops[i]){op=ops[i];break;}
-  var resto=s.slice(op.length);
-  if(resto==='') return op==='<>'?!vacia:(op===''||op==='=')?vacia:false;
-  var x=numero(resto); if(x===null)x=fecha(resto);
-  if(x!==null){
-    var vn=v.t==='n'?v.n:(v.t==='s'&&(op===''||op==='='))?numero(v.s):null;
-    if(vn===null) return op==='<>';
-    var k=numCmp(vn,x);
-    return (op===''||op==='=')?k===0:op==='<>'?k!==0:op==='>'?k>0:op==='<'?k<0:op==='>='?k>=0:k<=0;
-  }
-  var u=resto.toUpperCase(), lg=(u==='VERDADERO'||u==='TRUE')?true:(u==='FALSO'||u==='FALSE')?false:null;
-  if(lg!==null&&(op===''||op==='='||op==='<>')){ var ig=v.t==='b'&&v.b===lg; return op==='<>'?!ig:ig; }
-  if(op===''||op==='='||op==='<>'){ var ig2=v.t==='s'&&comodin(resto.toLowerCase(),v.s.toLowerCase()); return op==='<>'?!ig2:ig2; }
-  if(v.t!=='s')return false;
-  var k2=cmpStr(v.s.toLowerCase(),resto.toLowerCase());
-  return op==='>'?k2>0:op==='<'?k2<0:op==='>='?k2>=0:k2<=0;
+  return [numeroConFormato(n,formato),null];
 }
-var ALIAS={SUMA:'SUM',PROMEDIO:'AVERAGE',CONTAR:'COUNT',CONTARA:'COUNTA','CONTAR.BLANCO':'COUNTBLANK',PRODUCTO:'PRODUCT',
-  MEDIANA:'MEDIAN',DESVEST:'STDEV','DESVEST.M':'STDEV','STDEV.S':'STDEV',SI:'IF','SI.CONJUNTO':'IFS',Y:'AND',O:'OR',NO:'NOT',
-  'SI.ERROR':'IFERROR','SI.ND':'IFNA',ESERROR:'ISERROR',ESBLANCO:'ISBLANK',ESNUMERO:'ISNUMBER',ESTEXTO:'ISTEXT',
-  REDONDEAR:'ROUND','REDONDEAR.MAS':'ROUNDUP','REDONDEAR.MENOS':'ROUNDDOWN',TRUNCAR:'TRUNC',ENTERO:'INT',RAIZ:'SQRT',
-  'RAÍZ':'SQRT',POTENCIA:'POWER',RESIDUO:'MOD',SENO:'SIN',GRADOS:'DEGREES',RADIANES:'RADIANS',SIGNO:'SIGN',
-  ALEATORIO:'RAND','ALEATORIO.ENTRE':'RANDBETWEEN',HOY:'TODAY',AHORA:'NOW',FECHA:'DATE',DIA:'DAY','DÍA':'DAY',MES:'MONTH',
-  'AÑO':'YEAR',CONCATENAR:'CONCATENATE',LARGO:'LEN',MAYUSC:'UPPER',MINUSC:'LOWER',ESPACIOS:'TRIM',IZQUIERDA:'LEFT',
-  DERECHA:'RIGHT',EXTRAE:'MID',ENCONTRAR:'FIND',HALLAR:'SEARCH',SUSTITUIR:'SUBSTITUTE',REPETIR:'REPT',TEXTO:'TEXT',
-  VALOR:'VALUE',BUSCARV:'VLOOKUP',BUSCARH:'HLOOKUP',INDICE:'INDEX','ÍNDICE':'INDEX',COINCIDIR:'MATCH',BUSCARX:'XLOOKUP',
-  'SUMAR.SI':'SUMIF','CONTAR.SI':'COUNTIF','PROMEDIO.SI':'AVERAGEIF','SUMAR.SI.CONJUNTO':'SUMIFS',
-  'CONTAR.SI.CONJUNTO':'COUNTIFS','PROMEDIO.SI.CONJUNTO':'AVERAGEIFS',SUMAPRODUCTO:'SUMPRODUCT',ELEGIR:'CHOOSE',
-  FILA:'ROW',COLUMNA:'COLUMN'};
+function rg(f1,c1,f2,c2){ return {f1:f1,c1:c1,f2:f2,c2:c2,nf:f2-f1+1,nc:c2-c1+1,clave:f1+','+c1+','+f2+','+c2}; }
+function V(v){return {k:'V',v:v};}
+function C(v){return {k:'C',v:v};}
+function R(r){return {k:'R',r:r};}
 
 function crear(){
-  var crudos=new Map(), valores=new Map(), arboles=new Map(), calculando=new Set();
-  var medidas=true, nF=0, nC=0;
-  var yo={reloj:function(){return new Date();}, azar:Math.random};
+  var crudos=new Map(), valores=new Map(), arboles=new Map(), calculando=new Set(), rangos=new Map(), criterios=new Map();
+  var medidas=true, nF=0, nC=0, instante=null;
+  // reloj: [año, mes, día, hora, minuto, segundo, ms] en hora local.
+  var yo={reloj:function(){ var d=new Date(); return [d.getFullYear(),d.getMonth()+1,d.getDate(),d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds()]; }, azar:Math.random};
   function medir(){ if(medidas)return; var f=0,c=0; crudos.forEach(function(v,k){ f=Math.max(f,Math.floor(k/1024)+1); c=Math.max(c,k%1024+1); }); nF=f;nC=c;medidas=true; }
   function filas(){medir();return nF;}
   function cols(){medir();return nC;}
+  function olvidar(){ valores.clear(); rangos.clear(); criterios.clear(); instante=null; }
   function poner(f,c,t){
     var k=f*1024+c;
     if(!t){ if(crudos.delete(k))medidas=false; }
     else { crudos.set(k,t); if(medidas){nF=Math.max(nF,f+1);nC=Math.max(nC,c+1);} }
-    valores.clear();
+    olvidar();
   }
   function crudo(f,c){ var v=crudos.get(f*1024+c); return v===undefined?'':v; }
   function texto(f,c){ var raw=crudos.get(f*1024+c); if(raw===undefined)return ''; if(!esFormula(raw))return raw[0]==="'"?raw.slice(1):raw; return mostrar(valor(f,c)); }
+  function mostrarGeneral(f,c){ var raw=crudos.get(f*1024+c); if(raw===undefined)return ''; if(!esFormula(raw))return texto(f,c); var v=valor(f,c); return v.t==='n'?general(v.n):mostrar(v); }
   function alineacion(f,c){ var v=valor(f,c); return v.t==='n'?'d':(v.t==='b'||v.t==='e')?'c':'i'; }
   function valor(f,c){
     try{ return celda(f,c,0); }
-    catch(x){ if(x!==HONDO)throw x; calentar(); try{ return celda(f,c,0); }catch(y){ if(y!==HONDO)throw y; return E(E_NUM); } }
+    catch(x){ if(x!==HONDO)throw x; calentar(); try{ return celda(f,c,0); }catch(y){ if(y!==HONDO)throw y; return E(E_CIRC); } }
   }
   function calentar(){
     var orden=[]; crudos.forEach(function(v,k){ if(esFormula(v))orden.push(k); });
-    orden.sort(function(a,b){return a-b;});
+    orden.sort(function(a,b){ return (a%1024)-(b%1024)||Math.floor(a/1024)-Math.floor(b/1024); });
     var pasadas=Math.floor(orden.length/PROFUNDIDAD)+2;
     for(var p=0;p<pasadas;p++){
       var falta=false;
@@ -604,337 +915,427 @@ function crear(){
     }
   }
   function celda(f,c,prof){
-    var k=f*1024+c, v=valores.get(k);
+    var k=f*1024+c;
+    if(calculando.has(k))return E(E_CIRC);
+    var v=valores.get(k);
     if(v!==undefined)return v;
     var raw=crudos.get(k);
     if(raw===undefined)return VACIO;
     if(!esFormula(raw)){ v=literal(raw); valores.set(k,v); return v; }
-    if(calculando.has(k))return E(E_CIRC);
     if(prof>PROFUNDIDAD)throw HONDO;
     calculando.add(k);
     try{
       var a=arboles.get(raw); if(!a){ a=arbol(raw.slice(1)); arboles.set(raw,a); }
-      v=evaluar(a,prof+1,f,c);
-      if(v.t==='v')v=N(0);
+      v=escalar(evaluar(a,prof+1,f,c),prof+1);
+      if(v.t==='v')v=S('');
       if(v.t==='n'&&!isFinite(v.n))v=E(E_NUM);
-      valores.set(k,v);
+      if(!(v.t==='e'&&v.e===E_CIRC))valores.set(k,v);
       return v;
     } finally { calculando.delete(k); }
   }
+  function conFallo(fn){ try{ return fn(); }catch(z){ if(z instanceof Fallo)return E(z.e); throw z; } }
   function evaluar(n,prof,f,c){
     switch(n.k){
-      case 'num': return N(n.n);
-      case 'txt': return S(n.s);
-      case 'log': return B(n.b);
-      case 'err': return E(n.e);
-      case 'hueco': return VACIO;
-      case 'ref': return celda(n.f,n.c,prof);
-      case 'rango': return (!n.col&&n.f1===n.f2&&n.c1===n.c2)?celda(n.f1,n.c1,prof):E(E_VALOR);
-      case 'menos': var x=aNumero(evaluar(n.x,prof,f,c)); return x.t==='n'?N(-x.n):x;
-      case 'pc': var y=aNumero(evaluar(n.x,prof,f,c)); return y.t==='n'?N(y.n/100):y;
-      case 'op': return operar(n,prof,f,c);
+      case 'num': return V(N(n.n));
+      case 'txt': return V(S(n.s));
+      case 'log': return V(B(n.b));
+      case 'err': return V(E(n.e));
+      case 'ref': return C(celda(n.f,n.c,prof));
+      case 'rango': return R(n.col?rg(n.f1,n.c1,Math.max(n.f1,filas()-1),n.c2):rg(n.f1,n.c1,n.f2,n.c2));
+      case 'menos': return V(conFallo(function(){ return N(-aNum(valorDe(n.x,prof,f,c))); }));
+      case 'pc': return V(conFallo(function(){ return N(aNum(valorDe(n.x,prof,f,c))/100); }));
+      case 'op': return V(operar(n.op,valorDe(n.a,prof,f,c),valorDe(n.b,prof,f,c)));
       case 'fn': return llamar(n,prof,f,c);
     }
-    return E(E_NOMBRE);
   }
-  function operar(n,prof,f,c){
-    var a=evaluar(n.a,prof,f,c), b=evaluar(n.b,prof,f,c), op=n.op;
-    if(op==='&'){ var x=aTexto(a); if(x.t==='e')return x; var y=aTexto(b); if(y.t==='e')return y; return S(x.s+y.s); }
-    if(op==='='||op==='<>'||op==='<'||op==='>'||op==='<='||op==='>='){
-      if(a.t==='e')return a; if(b.t==='e')return b;
-      var k=comparar(a,b);
-      return B(op==='='?k===0:op==='<>'?k!==0:op==='<'?k<0:op==='>'?k>0:op==='<='?k<=0:k>=0);
-    }
-    var p=aNumero(a); if(p.t==='e')return p;
-    var q=aNumero(b); if(q.t==='e')return q;
-    var r;
-    if(op==='+')return N(p.n+q.n,p.f||q.f);
-    if(op==='-')return N(p.n-q.n,p.f&&!q.f);
-    if(op==='*')r=p.n*q.n;
-    else if(op==='/'){ if(q.n===0)return E(E_DIV0); r=p.n/q.n; }
-    else r=Math.pow(p.n,q.n);
-    return isFinite(r)?N(r):E(E_NUM);
+  function valorDe(n,prof,f,c){ return escalar(evaluar(n,prof,f,c),prof); }
+  function escalar(e,prof){
+    if(e.k!=='R')return e.v;
+    return (e.r.nf===1&&e.r.nc===1)?celda(e.r.f1,e.r.c1,prof):E(E_VALOR);
   }
-  function aNumero(v){
-    switch(v.t){
-      case 'n': case 'e': return v;
-      case 'b': return N(v.b?1:0);
-      case 'v': return N(0);
-      case 's': var x=numero(v.s); if(x!==null)return N(x); x=fecha(v.s); if(x!==null)return N(x,true); return E(E_VALOR);
-    }
-  }
-  function aTexto(v){ return (v.t==='s'||v.t==='e')?v:S(mostrar(v)); }
-  function aLogico(v){
-    switch(v.t){
-      case 'b': case 'e': return v;
-      case 'n': return B(v.n!==0);
-      case 'v': return B(false);
-      case 's': var u=v.s.trim().toUpperCase(); if(u==='VERDADERO'||u==='TRUE')return B(true); if(u==='FALSO'||u==='FALSE')return B(false); return E(E_VALOR);
-    }
-  }
-  function rangoDe(n){
-    if(n.k==='rango') return n.col?{k:'rango',f1:n.f1,c1:n.c1,f2:Math.max(n.f1,filas()-1),c2:n.c2,col:true}:n;
-    return {k:'rango',f1:n.f,c1:n.c,f2:n.f,c2:n.c,col:false};
-  }
-  function recorrer(r,prof,solo,visita){
-    var f2=solo?Math.min(r.f2,filas()-1):r.f2, c2=solo?Math.min(r.c2,cols()-1):r.c2;
-    for(var f=r.f1;f<=f2;f++) for(var c=r.c1;c<=c2;c++){ if(visita(celda(f,c,prof),f-r.f1,c-r.c1)===false)return; }
-  }
-  function numeros(a,prof,f,c,contando,cada){
-    for(var i=0;i<a.length;i++){
-      var x=a[i];
-      if(x.k==='rango'||x.k==='ref'){
-        recorrer(rangoDe(x),prof,true,function(v){ if(v.t==='n')cada(v.n); else if(v.t==='e'&&!contando)throw {fallo:v}; return true; });
-      } else if(x.k!=='hueco'){
-        var v=evaluar(x,prof,f,c);
-        if(v.t==='n')cada(v.n);
-        else if(v.t==='b')cada(v.b?1:0);
-        else if(v.t==='s'){ var nn=numero(v.s); if(nn===null)nn=fecha(v.s); if(nn!==null)cada(nn); else if(!contando)throw {fallo:E(E_VALOR)}; }
-        else if(v.t==='e'){ if(!contando)throw {fallo:v}; }
+  function operar(op,a,b){
+    return conFallo(function(){
+      if(op==='&')return S(aTxt(a)+aTxt(b));
+      if(op==='='||op==='<>'||op==='<'||op==='>'||op==='<='||op==='>='){
+        if(a.t==='e')throw new Fallo(a.e);
+        if(b.t==='e')throw new Fallo(b.e);
+        var k=comparar(a,b);
+        return B(op==='='?k===0:op==='<>'?k!==0:op==='<'?k<0:op==='>'?k>0:op==='<='?k<=0:k>=0);
       }
-    }
+      var x=aNum(a), y=aNum(b), fx=a.t==='n'&&a.f, fy=b.t==='n'&&b.f, r;
+      if(op==='+')r=x+y; else if(op==='-')r=x-y; else if(op==='*')r=x*y;
+      else if(op==='/'){ if(y===0)throw new Fallo(E_DIV0); r=x/y; }
+      else r=potencia(x,y);
+      if(!isFinite(r))throw new Fallo(E_NUM);
+      return N(r,(op==='+'&&(fx||fy))||(op==='-'&&fx&&!fy));
+    });
   }
-  function buscarEn(largo,buscado,tipo,en){
-    var ultimo=-1;
-    for(var i=0;i<largo;i++){
-      var v=en(i); if(v.t==='v')continue;
-      var mismo=tipoDe(v)===tipoDe(buscado);
-      if(tipo===0){
-        if(mismo&&comparar(v,buscado)===0)return i;
-        if(buscado.t==='s'&&v.t==='s'&&(buscado.s.indexOf('*')>=0||buscado.s.indexOf('?')>=0)&&comodin(buscado.s.toLowerCase(),v.s.toLowerCase()))return i;
-        continue;
-      }
-      if(!mismo)continue;
-      var k=comparar(v,buscado);
-      if(k===0)return i;
-      if(tipo===1){ if(k<0)ultimo=i; else break; } else { if(k>0)ultimo=i; else break; }
+  function ev(e,prof){ return escalar(e,prof); }
+  function num(e,prof){ return aNum(ev(e,prof)); }
+  function txt(e,prof){ return aTxt(ev(e,prof)); }
+  function log(e,prof){ return aLog(ev(e,prof)); }
+  function entero(e,prof){ var n=num(e,prof); if(!isFinite(n)||Math.abs(n)>9e15)throw new Fallo(E_NUM); return n<0?Math.ceil(n):Math.floor(n); }
+  function rala(r,prof){
+    var hecho=rangos.get(r.clave); if(hecho)return hecho;
+    var claves=[], f, c;
+    if(r.nf*r.nc<=crudos.size){ for(c=r.c1;c<=r.c2;c++)for(f=r.f1;f<=r.f2;f++){ var kk=f*1024+c; if(crudos.has(kk))claves.push(kk); } }
+    else {
+      crudos.forEach(function(v,k){ var ff=Math.floor(k/1024), cc=k%1024; if(ff>=r.f1&&ff<=r.f2&&cc>=r.c1&&cc<=r.c2)claves.push(k); });
+      claves.sort(function(a,b){ return (a%1024)-(b%1024)||Math.floor(a/1024)-Math.floor(b/1024); });
     }
-    return ultimo;
+    var salida=[];
+    for(var i=0;i<claves.length;i++){
+      var k=claves[i], v=celda(Math.floor(k/1024),k%1024,prof);
+      if(v.t==='e'&&v.e===E_CIRC)throw new Fallo(E_CIRC);
+      salida.push({f:Math.floor(k/1024),c:k%1024,v:v});
+    }
+    rangos.set(r.clave,salida);
+    return salida;
+  }
+  function numeros(args,prof){
+    var l=[];
+    args.forEach(function(a){
+      var v;
+      if(a.k==='V'){ v=a.v; if(v.t==='n')l.push(v.n); else if(v.t==='b')l.push(v.b?1:0); else if(v.t==='s'){ var x=numero(v.s); if(x!==null)l.push(x); } else if(v.t==='e')throw new Fallo(v.e); }
+      else if(a.k==='C'){ v=a.v; if(v.t==='n')l.push(v.n); else if(v.t==='e')throw new Fallo(v.e); }
+      else rala(a.r,prof).forEach(function(x){ if(x.v.t==='n')l.push(x.v.n); else if(x.v.t==='e')throw new Fallo(x.v.e); });
+    });
+    return l;
+  }
+  function ahora(){
+    if(instante!==null)return instante;
+    var t=yo.reloj();
+    instante=aSerie(t[0],t[1],t[2])+(t[3]*3600000+t[4]*60000+t[5]*1000+(t[6]||0))/86400000;
+    return instante;
   }
   function llamar(fn,prof,f,c){
-    var nombre=ALIAS[fn.nombre]||fn.nombre, a=fn.args;
-    function falla(e){ throw {fallo:e}; }
-    function ev(i){ return i<a.length?evaluar(a[i],prof,f,c):VACIO; }
-    function pide(mn,mx){ if(a.length<mn||a.length>mx)falla(E(E_VALOR)); }
-    function num(i){ var v=aNumero(ev(i)); if(v.t==='n')return v.n; if(v.t==='e')falla(v); falla(E(E_VALOR)); }
-    function numO(i,si){ return (i>=a.length||a[i].k==='hueco')?si:num(i); }
-    function txt(i){ var v=aTexto(ev(i)); if(v.t==='s')return v.s; if(v.t==='e')falla(v); return ''; }
-    function log(i){ var v=aLogico(ev(i)); if(v.t==='b')return v.b; if(v.t==='e')falla(v); return false; }
-    function rango(i){ var n=a[i]; if(n&&(n.k==='rango'||n.k==='ref'))return rangoDe(n); falla(E(E_VALOR)); }
-    function num1(d){ return isFinite(d)?N(d):E(E_NUM); }
-    function mismoTamano(r,base){ return r.f2-r.f1===base.f2-base.f1&&r.c2-r.c1===base.c2-base.c1; }
+    var cat=CATALOGO[fn.nombre]; if(!cat)return V(E(E_NOMBRE));
+    var canon=cat[0], a=fn.args;
+    if(a.length<cat[1]||a.length>cat[2])return V(E(E_VALOR));
+    function e(i){ return evaluar(a[i],prof,f,c); }
     try{
-      var s,n,m,i,l,r,x,v,t;
-      switch(nombre){
-        case 'SUM': s=0; numeros(a,prof,f,c,false,function(z){s+=z;}); return N(s);
-        case 'AVERAGE': s=0;n=0; numeros(a,prof,f,c,false,function(z){s+=z;n++;}); return n===0?E(E_DIV0):N(s/n);
-        case 'MIN': case 'MAX':
-          m=nombre==='MIN'?Infinity:-Infinity; n=0;
-          numeros(a,prof,f,c,false,function(z){ m=nombre==='MIN'?Math.min(m,z):Math.max(m,z); n++; });
-          return N(n===0?0:m);
-        case 'COUNT': n=0; numeros(a,prof,f,c,true,function(){n++;}); return N(n);
-        case 'COUNTA':
-          n=0;
-          for(i=0;i<a.length;i++){ x=a[i];
-            if(x.k==='rango'||x.k==='ref') recorrer(rangoDe(x),prof,true,function(z){ if(z.t!=='v')n++; return true; });
-            else if(x.k!=='hueco'){ if(evaluar(x,prof,f,c).t!=='v')n++; }
-          }
-          return N(n);
-        case 'COUNTBLANK': pide(1,1); n=0; recorrer(rango(0),prof,false,function(z){ if(z.t==='v'||(z.t==='s'&&z.s===''))n++; return true; }); return N(n);
-        case 'PRODUCT': s=1;n=0; numeros(a,prof,f,c,false,function(z){s*=z;n++;}); return num1(n===0?0:s);
-        case 'MEDIAN':
-          l=[]; numeros(a,prof,f,c,false,function(z){l.push(z);});
-          if(!l.length)return E(E_NUM);
-          l.sort(function(p,q){return p-q;}); m=Math.floor(l.length/2);
-          return N(l.length%2===1?l[m]:(l[m-1]+l[m])/2);
-        case 'STDEV':
-          l=[]; numeros(a,prof,f,c,false,function(z){l.push(z);});
-          if(l.length<2)return E(E_DIV0);
-          m=0; for(i=0;i<l.length;i++)m+=l[i]; m/=l.length;
-          s=0; for(i=0;i<l.length;i++)s+=(l[i]-m)*(l[i]-m);
-          return N(Math.sqrt(s/(l.length-1)));
-        case 'IF': pide(1,3); return log(0)?(a.length>1?ev(1):B(true)):(a.length>2?ev(2):B(false));
-        case 'IFS':
-          if(!a.length||a.length%2!==0)falla(E(E_VALOR));
-          for(i=0;i<a.length;i+=2){ if(log(i))return ev(i+1); }
-          return E(E_ND);
-        case 'AND': case 'OR':
-          var hay=false, res=nombre==='AND';
-          for(i=0;i<a.length;i++){ x=a[i];
-            if(x.k==='rango'||x.k==='ref'){
-              recorrer(rangoDe(x),prof,true,function(z){
-                var bb=z.t==='b'?z.b:z.t==='n'?z.n!==0:null;
-                if(z.t==='e')falla(z);
-                if(bb!==null){ hay=true; res=nombre==='AND'?(res&&bb):(res||bb); }
-                return true;
-              });
-            } else if(x.k!=='hueco'){
-              v=aLogico(evaluar(x,prof,f,c)); if(v.t==='e')falla(v);
-              var b2=v.t==='b'?v.b:false; hay=true; res=nombre==='AND'?(res&&b2):(res||b2);
-            }
-          }
-          return hay?B(res):E(E_VALOR);
-        case 'NOT': pide(1,1); return B(!log(0));
-        case 'IFERROR': pide(2,2); v=ev(0); return v.t==='e'?ev(1):v;
-        case 'IFNA': pide(2,2); v=ev(0); return (v.t==='e'&&v.e===E_ND)?ev(1):v;
-        case 'ISERROR': pide(1,1); return B(ev(0).t==='e');
-        case 'ISBLANK': pide(1,1); return B(ev(0).t==='v');
-        case 'ISNUMBER': pide(1,1); return B(ev(0).t==='n');
-        case 'ISTEXT': pide(1,1); return B(ev(0).t==='s');
-        case 'ROUND': pide(1,2); return N(redondear(num(0),toInt(numO(1,0)),0));
-        case 'ROUNDUP': pide(1,2); return N(redondear(num(0),toInt(numO(1,0)),1));
-        case 'ROUNDDOWN': case 'TRUNC': pide(1,2); return N(redondear(num(0),toInt(numO(1,0)),-1));
-        case 'INT': pide(1,1); return N(Math.floor(num(0)));
-        case 'ABS': pide(1,1); return N(Math.abs(num(0)));
-        case 'SQRT': pide(1,1); x=num(0); return x<0?E(E_NUM):N(Math.sqrt(x));
-        case 'POWER': pide(2,2); return num1(Math.pow(num(0),num(1)));
-        case 'MOD': pide(2,2); x=num(0); var y=num(1); return y===0?E(E_DIV0):N(x-y*Math.floor(x/y));
-        case 'PI': pide(0,0); return N(Math.PI);
-        case 'EXP': pide(1,1); return num1(Math.exp(num(0)));
-        case 'LN': pide(1,1); x=num(0); return x<=0?E(E_NUM):N(Math.log(x));
-        case 'LOG10': pide(1,1); x=num(0); return x<=0?E(E_NUM):N(Math.log10(x));
-        case 'LOG': pide(1,2); x=num(0); var bs=numO(1,10); if(x<=0||bs<=0)return E(E_NUM); if(bs===1)return E(E_DIV0); return N(Math.log(x)/Math.log(bs));
-        case 'SIN': pide(1,1); return N(Math.sin(num(0)));
-        case 'COS': pide(1,1); return N(Math.cos(num(0)));
-        case 'TAN': pide(1,1); return N(Math.tan(num(0)));
-        case 'DEGREES': pide(1,1); return N(num(0)*180/Math.PI);
-        case 'RADIANS': pide(1,1); return N(num(0)*Math.PI/180);
-        case 'SIGN': pide(1,1); x=num(0); return N(x>0?1:x<0?-1:0);
-        case 'RAND': pide(0,0); return N(yo.azar());
-        case 'RANDBETWEEN': pide(2,2); var lo=Math.ceil(num(0)), hi=Math.floor(num(1)); return hi<lo?E(E_NUM):N(Math.floor(yo.azar()*(hi-lo+1))+lo);
-        case 'TODAY': pide(0,0); t=yo.reloj(); return N(serial(t.getFullYear(),t.getMonth()+1,t.getDate()),true);
-        case 'NOW': pide(0,0); t=yo.reloj(); return N(serial(t.getFullYear(),t.getMonth()+1,t.getDate())+(t.getHours()*3600+t.getMinutes()*60+t.getSeconds())/86400,true);
-        case 'DATE':
-          pide(3,3); var an=toInt(num(0)); if(an>=0&&an<=1899)an+=1900;
-          if(an<0||an>9999)return E(E_NUM);
-          return N(serial(an,toInt(num(1)),toInt(num(2))),true);
-        case 'DAY': case 'MONTH': case 'YEAR':
-          pide(1,1); var pr=partes(num(0)); return N(pr[nombre==='YEAR'?0:nombre==='MONTH'?1:2]);
-        case 'CONCATENATE': case 'CONCAT':
-          var sb='';
-          for(i=0;i<a.length;i++){ x=a[i];
-            if(x.k==='rango'&&!(x.f1===x.f2&&x.c1===x.c2&&!x.col)){
-              recorrer(rango(i),prof,true,function(z){ var tt=aTexto(z); if(tt.t==='s')sb+=tt.s; else if(tt.t==='e')falla(tt); return true; });
-            } else sb+=txt(i);
-          }
-          return S(sb);
-        case 'LEN': pide(1,1); return N(txt(0).length);
-        case 'UPPER': pide(1,1); return S(txt(0).toUpperCase());
-        case 'LOWER': pide(1,1); return S(txt(0).toLowerCase());
-        case 'TRIM': pide(1,1); return S(txt(0).split(' ').filter(function(z){return z.length>0;}).join(' '));
-        case 'LEFT': case 'RIGHT':
-          pide(1,2); t=txt(0); n=toInt(numO(1,1));
-          if(n<0)return E(E_VALOR);
-          return S(nombre==='LEFT'?t.slice(0,n):t.slice(Math.max(0,t.length-n)));
-        case 'MID':
-          pide(3,3); t=txt(0); var desde=toInt(num(1)); n=toInt(num(2));
-          if(desde<1||n<0)return E(E_VALOR);
-          return S(desde>t.length?'':t.slice(desde-1,Math.min(t.length,desde-1+n)));
-        case 'FIND': case 'SEARCH':
-          pide(2,3); var que=txt(0), donde=txt(1), ini=toInt(numO(2,1));
-          if(ini<1||ini>donde.length+1)return E(E_VALOR);
-          i=nombre==='FIND'?donde.indexOf(que,ini-1):donde.toLowerCase().indexOf(que.toLowerCase(),ini-1);
-          return i<0?E(E_VALOR):N(i+1);
-        case 'SUBSTITUTE':
-          pide(3,4); t=txt(0); var viejo=txt(1), nuevo=txt(2);
-          if(!viejo.length)return S(t);
-          if(a.length<4)return S(t.split(viejo).join(nuevo));
-          var cual=toInt(num(3)); if(cual<1)return E(E_VALOR);
-          var pos=-1, visto=0, dd=0;
-          while(true){ var jj=t.indexOf(viejo,dd); if(jj<0)break; visto++; if(visto===cual){pos=jj;break;} dd=jj+viejo.length; }
-          return S(pos<0?t:t.slice(0,pos)+nuevo+t.slice(pos+viejo.length));
-        case 'REPT': pide(2,2); n=toInt(num(1)); return (n<0||n>10000)?E(E_VALOR):S(txt(0).repeat(n));
-        case 'TEXT': pide(2,2); v=aNumero(ev(0)); return v.t==='n'?S(conFormato(v.n,txt(1))):S(txt(0));
-        case 'VALUE': pide(1,1); v=ev(0); if(v.t==='n')return N(v.n); x=aNumero(S(txt(0))); return x.t==='n'?N(x.n):x;
-        case 'VLOOKUP': case 'HLOOKUP':
-          pide(3,4); var bu=ev(0); if(bu.t==='e')falla(bu);
-          r=rango(1); var col=toInt(num(2)), aprox=(a.length>3&&a[3].k!=='hueco')?log(3):true, vert=nombre==='VLOOKUP';
-          var largo=vert?r.f2-r.f1+1:r.c2-r.c1+1, ancho=vert?r.c2-r.c1+1:r.f2-r.f1+1;
-          if(col<1)falla(E(E_VALOR)); if(col>ancho)falla(E(E_REF));
-          var hasta=Math.min(largo,vert?filas()-r.f1:cols()-r.c1);
-          i=buscarEn(hasta,bu,aprox?1:0,function(z){ return vert?celda(r.f1+z,r.c1,prof):celda(r.f1,r.c1+z,prof); });
-          if(i<0)return E(E_ND);
-          return vert?celda(r.f1+i,r.c1+col-1,prof):celda(r.f1+col-1,r.c1+i,prof);
-        case 'MATCH':
-          pide(2,3); var bm=ev(0); if(bm.t==='e')falla(bm);
-          r=rango(1); var tipo=Math.max(-1,Math.min(1,toInt(numO(2,1)))), vm=r.c1===r.c2;
-          if(!vm&&r.f1!==r.f2)falla(E(E_ND));
-          var lm=vm?Math.min(r.f2-r.f1+1,filas()-r.f1):Math.min(r.c2-r.c1+1,cols()-r.c1);
-          i=buscarEn(lm,bm,tipo,function(z){ return vm?celda(r.f1+z,r.c1,prof):celda(r.f1,r.c1+z,prof); });
-          return i<0?E(E_ND):N(i+1);
-        case 'XLOOKUP':
-          pide(3,4); var bx=ev(0); if(bx.t==='e')falla(bx);
-          r=rango(1); var dx=rango(2), vx=r.c1===r.c2;
-          var lx=vx?Math.min(r.f2-r.f1+1,filas()-r.f1):Math.min(r.c2-r.c1+1,cols()-r.c1);
-          i=buscarEn(lx,bx,0,function(z){ return vx?celda(r.f1+z,r.c1,prof):celda(r.f1,r.c1+z,prof); });
-          if(i<0)return a.length>3?ev(3):E(E_ND);
-          return vx?celda(dx.f1+i,dx.c1,prof):celda(dx.f1,dx.c1+i,prof);
-        case 'INDEX':
-          pide(2,3); r=rango(0); var fi=toInt(num(1)), co=toInt(numO(2,1));
-          if(a.length===2&&r.f1===r.f2&&r.c1!==r.c2){ co=fi; fi=1; }
-          if(fi<1||co<1)return E(E_VALOR);
-          if(fi>r.f2-r.f1+1||co>r.c2-r.c1+1)return E(E_REF);
-          return celda(r.f1+fi-1,r.c1+co-1,prof);
-        case 'SUMIF': case 'AVERAGEIF': case 'COUNTIF':
-          pide(2,nombre==='COUNTIF'?2:3); r=rango(0);
-          var crit=ev(1); if(crit.t==='e')falla(crit);
-          var destino=a.length>2?rango(2):r; s=0;n=0;
-          var conVacias=nombre==='COUNTIF'&&cumple(VACIO,crit);
-          recorrer(r,prof,!conVacias,function(z,df,dc){
-            if(cumple(z,crit)){
-              if(nombre==='COUNTIF')n++;
-              else { var xx=celda(destino.f1+df,destino.c1+dc,prof); if(xx.t==='n'){s+=xx.n;n++;} }
-            }
-            return true;
-          });
-          return nombre==='COUNTIF'?N(n):nombre==='SUMIF'?N(s):(n===0?E(E_DIV0):N(s/n));
-        case 'SUMIFS': case 'AVERAGEIFS': case 'COUNTIFS':
-          var cuenta=nombre==='COUNTIFS', primero=cuenta?0:1;
-          if(a.length<primero+2||(a.length-primero)%2!==0)falla(E(E_VALOR));
-          var base=rango(0), pares=[], vacias=cuenta;
-          for(i=primero;i<a.length;i+=2){
-            var rr=rango(i); if(!mismoTamano(rr,base))falla(E(E_VALOR));
-            var cr=ev(i+1); if(cr.t==='e')falla(cr);
-            if(!cumple(VACIO,cr))vacias=false;
-            pares.push([rr,cr]);
-          }
-          s=0;n=0;
-          recorrer(base,prof,!vacias,function(z,df,dc){
-            for(var w=0;w<pares.length;w++){ if(!cumple(celda(pares[w][0].f1+df,pares[w][0].c1+dc,prof),pares[w][1]))return true; }
-            if(cuenta)n++; else if(z.t==='n'){s+=z.n;n++;}
-            return true;
-          });
-          return nombre==='COUNTIFS'?N(n):nombre==='SUMIFS'?N(s):(n===0?E(E_DIV0):N(s/n));
-        case 'SUMPRODUCT':
-          if(!a.length)falla(E(E_VALOR));
-          var rs=[]; for(i=0;i<a.length;i++)rs.push(rango(i));
-          for(i=0;i<rs.length;i++) if(!mismoTamano(rs[i],rs[0]))falla(E(E_VALOR));
-          s=0;
-          recorrer(rs[0],prof,true,function(z,df,dc){
-            var pp=z.t==='n'?z.n:0;
-            for(var w=1;w<rs.length;w++){
-              if(pp===0)break;
-              var xx=celda(rs[w].f1+df,rs[w].c1+dc,prof);
-              if(xx.t==='e')falla(xx);
-              pp*=xx.t==='n'?xx.n:0;
-            }
-            if(z.t==='e')falla(z);
-            s+=pp; return true;
-          });
-          return N(s);
-        case 'CHOOSE':
-          if(a.length<2)falla(E(E_VALOR));
-          i=toInt(num(0)); return (i<1||i>=a.length)?E(E_VALOR):ev(i);
-        case 'ROW': case 'COLUMN':
-          pide(0,1);
-          if(!a.length)return N((nombre==='ROW'?f:c)+1);
-          r=rango(0); return N((nombre==='ROW'?r.f1:r.c1)+1);
+      switch(canon){
+        case 'SI': if(!log(e(0),prof))return a.length>2?e(2):V(B(false)); return e(1);
+        case 'SI.ERROR': case 'SI.ND':
+          var x=e(0); if(x.k==='R')return x;
+          var v=x.v;
+          if(v.t==='e'&&v.e!==E_CIRC&&(canon==='SI.ERROR'||v.e===E_ND))return e(1);
+          return x;
+        case 'SI.CONJUNTO':
+          if(a.length%2!==0)return V(E(E_VALOR));
+          for(var i=0;i<a.length;i+=2)if(log(e(i),prof))return e(i+1);
+          return V(E(E_ND));
+        case 'FILA': case 'COLUMNA':
+          var r;
+          if(!a.length)r=[f,c]; else if(a[0].k==='ref')r=[a[0].f,a[0].c]; else if(a[0].k==='rango')r=[a[0].f1,a[0].c1]; else return V(E(E_VALOR));
+          return V(N((canon==='FILA'?r[0]:r[1])+1));
+        case 'ELEGIR':
+          var n=entero(e(0),prof); if(n<1||n>=a.length)return V(E(E_VALOR)); return e(n);
       }
-      return E(E_NOMBRE);
-    }catch(z){ if(z&&z.fallo)return z.fallo; throw z; }
+      var evs=a.map(function(nodo,i){ return (canon==='SUMAPRODUCTO'&&nodo.k==='ref')?R(rg(nodo.f,nodo.c,nodo.f,nodo.c)):e(i); });
+      if((canon.indexOf('ES')!==0||canon==='ESPACIOS')&&canon!=='CONTARA'&&canon!=='CONTAR.BLANCO'){
+        for(var q=0;q<evs.length;q++)if(evs[q].k!=='R'&&evs[q].v.t==='e')return V(evs[q].v);
+      }
+      return V(funcion(canon,evs,prof));
+    }catch(z){ if(z instanceof Fallo)return V(E(z.e)); throw z; }
   }
-  yo.poner=poner; yo.crudo=crudo; yo.texto=texto; yo.valor=valor; yo.alineacion=alineacion;
-  yo.filas=filas; yo.cols=cols; yo.olvidar=function(){valores.clear();};
+  function suma(l){ var s=0; for(var i=0;i<l.length;i++)s+=l[i]; return s; }
+  function funcion(canon,a,prof){
+    var l, x, y, n, t, k;
+    switch(canon){
+      case 'VERDADERO': return B(true);
+      case 'FALSO': return B(false);
+      case 'Y': case 'O': return logica(canon==='Y',a,prof);
+      case 'NO': return B(!log(a[0],prof));
+      case 'SUMA': return N(suma(numeros(a,prof)));
+      case 'CONTAR': return N(numeros(a,prof).length);
+      case 'PROMEDIO': l=numeros(a,prof); if(!l.length)throw new Fallo(E_DIV0); return N(suma(l)/l.length);
+      case 'MIN': l=numeros(a,prof); return N(l.length?l.reduce(function(p,q){return Math.min(p,q);}):0);
+      case 'MAX': l=numeros(a,prof); return N(l.length?l.reduce(function(p,q){return Math.max(p,q);}):0);
+      case 'PRODUCTO': l=numeros(a,prof); return N(l.length?l.reduce(function(p,q){return p*q;},1):0);
+      case 'MEDIANA': l=numeros(a,prof); if(!l.length)throw new Fallo(E_NUM); l.sort(function(p,q){return p-q;}); k=l.length>>1; return N(l.length%2===1?l[k]:(l[k-1]+l[k])/2);
+      case 'REDONDEAR': return redondearF(a,prof,0);
+      case 'REDONDEAR.MAS': return redondearF(a,prof,1);
+      case 'REDONDEAR.MENOS': return redondearF(a,prof,-1);
+      case 'ENTERO': return N(Math.floor(num(a[0],prof)));
+      case 'ABS': return N(Math.abs(num(a[0],prof)));
+      case 'RESIDUO': x=num(a[0],prof); y=num(a[1],prof); if(y===0)throw new Fallo(E_DIV0); return N(x-y*Math.floor(x/y));
+      case 'POTENCIA': x=num(a[0],prof); y=num(a[1],prof); return N(potencia(x,y));
+      case 'RAIZ': x=num(a[0],prof); if(x<0)throw new Fallo(E_NUM); return N(Math.sqrt(x));
+      case 'PI': return N(Math.PI);
+      case 'ALEATORIO': return N(yo.azar());
+      case 'ALEATORIO.ENTRE': x=Math.ceil(num(a[0],prof)); y=Math.floor(num(a[1],prof)); if(x>y||!isFinite(x)||!isFinite(y))throw new Fallo(E_NUM); return N(Math.min(x+Math.floor(yo.azar()*(y-x+1)),y));
+      case 'CONTARA':
+        n=0; a.forEach(function(q){ if(q.k==='V')n++; else if(q.k==='C'){ if(!esVacio(q.v))n++; } else rala(q.r,prof).forEach(function(z){ if(!esVacio(z.v))n++; }); }); return N(n);
+      case 'CONTAR.BLANCO':
+        x=a[0]; if(x.k==='R'){ n=0; rala(x.r,prof).forEach(function(z){ if(!esVacio(z.v))n++; }); return N(x.r.nf*x.r.nc-n); }
+        return N(esVacio(x.v)?1:0);
+      case 'CONTAR.SI': return criterioUna(a,null,'CONTAR',prof);
+      case 'SUMAR.SI': return criterioUna(a,a[2]||null,'SUMAR',prof);
+      case 'PROMEDIO.SI': return criterioUna(a,a[2]||null,'PROMEDIAR',prof);
+      case 'CONTAR.SI.CONJUNTO': return criterioVarias(a,null,'CONTAR',prof);
+      case 'SUMAR.SI.CONJUNTO': return criterioVarias(a.slice(1),a[0],'SUMAR',prof);
+      case 'PROMEDIO.SI.CONJUNTO': return criterioVarias(a.slice(1),a[0],'PROMEDIAR',prof);
+      case 'BUSCARV': return buscarVH(a,true,prof);
+      case 'BUSCARH': return buscarVH(a,false,prof);
+      case 'INDICE': return indice(a,prof);
+      case 'COINCIDIR': return coincidir(a,prof);
+      case 'BUSCARX': return buscarX(a,prof);
+      case 'CONCATENAR': return S(a.map(function(q){ return txt(q,prof); }).join(''));
+      case 'CONCAT':
+        t=''; a.forEach(function(q){
+          if(q.k==='R') rala(q.r,prof).slice().sort(function(p,o){ return p.f-o.f||p.c-o.c; }).forEach(function(z){ t+=aTxt(z.v); });
+          else t+=txt(q,prof);
+        }); return S(t);
+      case 'UNIRCADENAS': return unir(a,prof);
+      case 'IZQUIERDA': case 'DERECHA':
+        t=letrasDe(txt(a[0],prof)); n=a.length>1?entero(a[1],prof):1; if(n<0)throw new Fallo(E_VALOR);
+        k=Math.min(n,t.length); return S(canon==='IZQUIERDA'?t.slice(0,k).join(''):t.slice(t.length-k).join(''));
+      case 'EXTRAE':
+        t=letrasDe(txt(a[0],prof)); x=entero(a[1],prof); y=entero(a[2],prof); if(x<1||y<0)throw new Fallo(E_VALOR);
+        k=Math.min(x-1,t.length); return S(t.slice(k,Math.min(k+y,t.length)).join(''));
+      case 'LARGO': return N(letrasDe(txt(a[0],prof)).length);
+      case 'MAYUSC': return S(txt(a[0],prof).toUpperCase());
+      case 'MINUSC': return S(txt(a[0],prof).toLowerCase());
+      case 'NOMPROPIO': return S(nomPropio(txt(a[0],prof)));
+      case 'ESPACIOS': return S(txt(a[0],prof).split(' ').filter(function(p){return p!=='';}).join(' '));
+      case 'SUSTITUIR': return sustituir(a,prof);
+      case 'ENCONTRAR': return buscarTexto(a,true,prof);
+      case 'HALLAR': return buscarTexto(a,false,prof);
+      case 'TEXTO': x=ev(a[0],prof); t=txt(a[1],prof); return textoConFormato(x,t);
+      case 'VALOR':
+        x=ev(a[0],prof);
+        if(x.t==='n')return N(x.n); if(x.t==='b')throw new Fallo(E_VALOR); if(x.t==='e')return x; if(x.t==='v')return N(0);
+        if(!x.s.trim())return N(0);
+        y=numero(x.s); if(y===null)y=serieDeTexto(x.s); if(y===null)throw new Fallo(E_VALOR); return N(y);
+      case 'REPETIR': n=entero(a[1],prof); if(n<0||n>10000)throw new Fallo(E_VALOR); return S(txt(a[0],prof).repeat(n));
+      case 'HOY': return N(Math.floor(ahora()),true);
+      case 'AHORA': return N(ahora(),true);
+      case 'FECHA': return N(fechaF(num(a[0],prof),num(a[1],prof),num(a[2],prof)),true);
+      case 'AÑO': case 'MES': case 'DIA':
+        x=desdeSerie(Math.floor(serie(a[0],prof))); if(!x)throw new Fallo(E_NUM);
+        return N(x[canon==='AÑO'?0:canon==='MES'?1:2]);
+      case 'DIAS': return N(Math.floor(serie(a[0],prof))-Math.floor(serie(a[1],prof)));
+      case 'DIASEM':
+        x=serie(a[0],prof); n=a.length>1?entero(a[1],prof):1; k=((Math.floor(x)-1)%7+7)%7;
+        if(n===1||n===17)return N(k+1); if(n===2||n===11)return N((k+6)%7+1); if(n===3)return N((k+6)%7);
+        throw new Fallo(E_NUM);
+      case 'ESERROR': case 'ESND': case 'ESBLANCO': case 'ESNUMERO': case 'ESTEXTO':
+        x=ev(a[0],prof); if(x.t==='e'&&x.e===E_CIRC)throw new Fallo(E_CIRC);
+        return B(canon==='ESERROR'?x.t==='e':canon==='ESND'?(x.t==='e'&&x.e===E_ND):canon==='ESBLANCO'?esVacio(x):canon==='ESNUMERO'?x.t==='n':(x.t==='s'&&x.s!==''));
+      case 'TRUNCAR': n=a.length>1?Math.max(-400,Math.min(400,entero(a[1],prof))):0; return N(redondear(num(a[0],prof),n,-1));
+      case 'DESVEST': l=numeros(a,prof); if(l.length<2)throw new Fallo(E_DIV0); x=suma(l)/l.length; return N(Math.sqrt(suma(l.map(function(q){return (q-x)*(q-x);}))/(l.length-1)));
+      case 'EXP': return N(Math.exp(num(a[0],prof)));
+      case 'LN': x=num(a[0],prof); if(x<=0)throw new Fallo(E_NUM); return N(Math.log(x));
+      case 'LOG10': x=num(a[0],prof); if(x<=0)throw new Fallo(E_NUM); return N(Math.log10(x));
+      case 'LOG': x=num(a[0],prof); y=a.length>1?num(a[1],prof):10; if(x<=0||y<=0)throw new Fallo(E_NUM); if(y===1)throw new Fallo(E_DIV0); return N(Math.log(x)/Math.log(y));
+      case 'SENO': return N(Math.sin(num(a[0],prof)));
+      case 'COS': return N(Math.cos(num(a[0],prof)));
+      case 'TAN': return N(Math.tan(num(a[0],prof)));
+      case 'GRADOS': return N(num(a[0],prof)*180/Math.PI);
+      case 'RADIANES': return N(num(a[0],prof)*Math.PI/180);
+      case 'SIGNO': x=num(a[0],prof); return N(x>0?1:x<0?-1:0);
+      case 'SUMAPRODUCTO': return sumaProducto(a,prof);
+    }
+    throw new Fallo(E_NOMBRE);
+  }
+  function logica(y,a,prof){
+    var hay=false, r=y;
+    a.forEach(function(x){
+      var lista=x.k==='R'?rala(x.r,prof).map(function(z){return z.v;}):[x.v];
+      lista.forEach(function(v){
+        var b;
+        if(v.t==='e')throw new Fallo(v.e);
+        else if(v.t==='n')b=v.n!==0;
+        else if(v.t==='b')b=v.b;
+        else { if(x.k!=='V')return; b=aLog(v); }
+        hay=true; r=y?(r&&b):(r||b);
+      });
+    });
+    if(!hay)throw new Fallo(E_VALOR);
+    return B(r);
+  }
+  function redondearF(a,prof,modo){
+    var n=num(a[0],prof), d=Math.max(-400,Math.min(400,entero(a[1],prof))), r=redondear(n,d,modo);
+    if(!isFinite(r))throw new Fallo(E_NUM); return N(r);
+  }
+  function rangoDe(e){ if(e.k!=='R')throw new Fallo(E_VALOR); return e.r; }
+  function criterioUna(a,sumaE,que,prof){
+    var crit=ev(a[1],prof); if(crit.t==='e')throw new Fallo(crit.e);
+    var r=rangoDe(a[0]), s=sumaE?rangoDe(sumaE):null;
+    return resolver([[r,Criterio.de(crit)]],s,que,que+'|'+r.clave+'|'+(s?s.clave:'-')+'|'+claveDe(crit),prof);
+  }
+  function criterioVarias(a,sumaE,que,prof){
+    if(a.length%2!==0)throw new Fallo(E_VALOR);
+    var pares=[], clave=que;
+    for(var i=0;i<a.length;i+=2){
+      var crit=ev(a[i+1],prof); if(crit.t==='e')throw new Fallo(crit.e);
+      var r=rangoDe(a[i]); clave+='|'+r.clave+'|'+claveDe(crit); pares.push([r,Criterio.de(crit)]);
+    }
+    var s=null;
+    if(sumaE){ s=rangoDe(sumaE); if(s.nf!==pares[0][0].nf||s.nc!==pares[0][0].nc)throw new Fallo(E_VALOR); }
+    return resolver(pares,s,que,clave+'|'+(s?s.clave:'-'),prof);
+  }
+  function resolver(pares,sumaR,que,clave,prof){
+    var hecho=criterios.get(clave); if(hecho)return hecho;
+    var fr=pares[0][0].nf, cr=pares[0][0].nc, i, k;
+    pares.forEach(function(p){ if(p[0].nf!==fr||p[0].nc!==cr)throw new Fallo(E_VALOR); });
+    var s=sumaR?rg(sumaR.f1,sumaR.c1,Math.min(sumaR.f1+Math.max(fr,1)-1,FILAS_EN_FORMULA-1),Math.min(sumaR.c1+Math.max(cr,1)-1,MAX_COLS-1)):null;
+    var extF=filas(), extC=cols(), cajaF=0, cajaC=0;
+    pares.map(function(p){return p[0];}).concat(s?[s]:[]).forEach(function(r){
+      cajaF=Math.max(cajaF,Math.min(Math.max(0,extF-r.f1),fr)); cajaC=Math.max(cajaC,Math.min(Math.max(0,extC-r.c1),cr));
+    });
+    var leidos=pares.map(function(p){ return rala(p[0],prof); }), leidoS=s?rala(s,prof):null;
+    function cuadricula(l,r){ var c=new Array(cajaF*cajaC).fill(VACIO); l.forEach(function(x){ var ii=x.f-r.f1, jj=x.c-r.c1; if(ii<cajaF&&jj<cajaC)c[ii*cajaC+jj]=x.v; }); return c; }
+    var datos=pares.map(function(p,j){ return cuadricula(leidos[j],p[0]); }), datosS=s?cuadricula(leidoS,s):null;
+    var cuenta=0, total=0, conNum=0;
+    for(k=0;k<cajaF*cajaC;k++){
+      var todos=true; for(i=0;i<pares.length;i++)if(!pares[i][1].cumple(datos[i][k])){todos=false;break;}
+      if(!todos)continue;
+      cuenta++;
+      if(que==='CONTAR')continue;
+      var v=(datosS||datos[0])[k];
+      if(v.t==='n'){ total+=v.n; conNum++; } else if(v.t==='e')throw new Fallo(v.e);
+    }
+    if(que==='CONTAR'){ var fuera=fr*cr-cajaF*cajaC; if(fuera>0&&pares.every(function(p){return p[1].cumple(S(''));}))cuenta+=fuera; }
+    var r;
+    if(que==='CONTAR')r=N(cuenta); else if(que==='SUMAR')r=N(total); else { if(!conNum)throw new Fallo(E_DIV0); r=N(total/conNum); }
+    criterios.set(clave,r);
+    return r;
+  }
+  function matriz(e){ return e.k==='R'?{r:e.r,dim:[e.r.nf,e.r.nc]}:{una:e.v,dim:[1,1]}; }
+  function enM(m,f,c,prof){ return m.r?celda(m.r.f1+f,m.r.c1+c,prof):m.una; }
+  function lineaM(m,vertical,prof){
+    if(!m.r)return [[0,m.una]];
+    var r=m.r, sub=vertical?rg(r.f1,r.c1,r.f2,r.c1):rg(r.f1,r.c1,r.f1,r.c2);
+    return rala(sub,prof).map(function(z){ return [vertical?z.f-r.f1:z.c-r.c1,z.v]; });
+  }
+  function ultimoMenorOIgual(b,celdas){
+    var mejor=null;
+    for(var i=0;i<celdas.length;i++){ var o=ordenDelMismoTipo(celdas[i][1],b); if(o===null)continue; if(o>0)break; mejor=celdas[i][0]; }
+    return mejor;
+  }
+  function primeraIgual(b,celdas,com){ for(var i=0;i<celdas.length;i++)if(esIgual(b,celdas[i][1],com))return celdas[i][0]; return null; }
+  function buscarVH(a,vertical,prof){
+    var b=vacioComoTexto(ev(a[0],prof)), m=matriz(a[1]), n=entero(a[2],prof), aprox=a.length>3?log(a[3],prof):true;
+    if(n<1)throw new Fallo(E_VALOR);
+    if(n>(vertical?m.dim[1]:m.dim[0]))throw new Fallo(E_REF);
+    var celdas=lineaM(m,vertical,prof), pos=aprox?ultimoMenorOIgual(b,celdas):primeraIgual(b,celdas,true);
+    if(pos===null)throw new Fallo(E_ND);
+    return vertical?enM(m,pos,n-1,prof):enM(m,n-1,pos,prof);
+  }
+  function indice(a,prof){
+    var m=matriz(a[0]), x=entero(a[1],prof), f, k;
+    if(a.length>2){ f=x; k=entero(a[2],prof); } else if(m.dim[1]===1){ f=x; k=1; } else if(m.dim[0]===1){ f=1; k=x; } else throw new Fallo(E_VALOR);
+    if(f<=0||k<=0)throw new Fallo(E_VALOR);
+    if(f>m.dim[0]||k>m.dim[1])throw new Fallo(E_REF);
+    return enM(m,f-1,k-1,prof);
+  }
+  function lineaUnica(e,prof){ var m=matriz(e); if(m.dim[0]!==1&&m.dim[1]!==1)throw new Fallo(E_ND); return [m,lineaM(m,m.dim[1]===1,prof)]; }
+  function coincidir(a,prof){
+    var b=vacioComoTexto(ev(a[0],prof)), celdas=lineaUnica(a[1],prof)[1], tipo=a.length>2?num(a[2],prof):1, pos=null;
+    if(tipo===0)pos=primeraIgual(b,celdas,true);
+    else if(tipo>0)pos=ultimoMenorOIgual(b,celdas);
+    else for(var i=0;i<celdas.length;i++){ var o=ordenDelMismoTipo(celdas[i][1],b); if(o===null)continue; if(o<0)break; pos=celdas[i][0]; }
+    if(pos===null)throw new Fallo(E_ND);
+    return N(pos+1);
+  }
+  function buscarX(a,prof){
+    var b=vacioComoTexto(ev(a[0],prof)), lu=lineaUnica(a[1],prof), donde=lu[0], celdas=lu[1], dev=matriz(a[2]);
+    var df=dev.dim[0], dc=dev.dim[1];
+    if(df!==1&&dc!==1)throw new Fallo(E_VALOR);
+    if(Math.max(donde.dim[0],donde.dim[1])!==Math.max(df,dc))throw new Fallo(E_VALOR);
+    var modo=a.length>4?entero(a[4],prof):0, sentido=a.length>5?entero(a[5],prof):1;
+    if(modo<-1||modo>2||[-2,-1,1,2].indexOf(sentido)<0)throw new Fallo(E_VALOR);
+    if(sentido<0)celdas=celdas.slice().reverse();
+    var pos=primeraIgual(b,celdas,modo===2);
+    if(pos===null&&(modo===-1||modo===1)){
+      var mejor=null;
+      celdas.forEach(function(z){
+        var o=ordenDelMismoTipo(z[1],b); if(o===null)return;
+        if(modo===-1?o>=0:o<=0)return;
+        if(mejor===null||(function(q){ return modo===-1?q>0:q<0; })(comparar(z[1],mejor[1])))mejor=z;
+      });
+      pos=mejor?mejor[0]:null;
+    }
+    if(pos!==null)return df===1?enM(dev,0,pos,prof):enM(dev,pos,0,prof);
+    if(a.length>3)return ev(a[3],prof);
+    throw new Fallo(E_ND);
+  }
+  function unir(a,prof){
+    var sep=txt(a[0],prof), ignorar=log(a[1],prof), trozos=[];
+    a.slice(2).forEach(function(x){
+      if(x.k==='R'){
+        var mapa=new Map(); rala(x.r,prof).forEach(function(z){ mapa.set(z.f*1024+z.c,z.v); });
+        var f2=Math.min(x.r.f2,filas()-1), c2=Math.min(x.r.c2,cols()-1);
+        if(x.r.f1<=f2&&x.r.c1<=c2)for(var f=x.r.f1;f<=f2;f++)for(var c=x.r.c1;c<=c2;c++)trozos.push(aTxt(mapa.get(f*1024+c)||VACIO));
+      } else trozos.push(txt(x,prof));
+    });
+    return S((ignorar?trozos.filter(function(t){return t!=='';}):trozos).join(sep));
+  }
+  function sustituir(a,prof){
+    var t=txt(a[0],prof), viejo=txt(a[1],prof), nuevo=txt(a[2],prof), cual=null;
+    if(a.length>3){ cual=entero(a[3],prof); if(cual<1)throw new Fallo(E_VALOR); }
+    if(!viejo)return S(t);
+    var sb='', desde=0, visto=0;
+    while(true){ var i=t.indexOf(viejo,desde); if(i<0)break; visto++; sb+=t.slice(desde,i)+((cual===null||cual===visto)?nuevo:viejo); desde=i+viejo.length; }
+    return S(sb+t.slice(desde));
+  }
+  function buscarTexto(a,exacto,prof){
+    var quiero=txt(a[0],prof), en=txt(a[1],prof), desde=a.length>2?entero(a[2],prof):1, e0=letrasDe(en);
+    if(desde<1||desde>Math.max(e0.length,1))throw new Fallo(E_VALOR);
+    var d=desde-1, q=exacto?letrasDe(quiero):letrasDe(quiero.toLowerCase()), e=exacto?e0:letrasDe(en.toLowerCase());
+    if(!q.length)return N(d+1);
+    for(var i=d;i<e.length;i++){
+      var casa;
+      if(exacto){ casa=i+q.length<=e.length; for(var j=0;casa&&j<q.length;j++)if(e[i+j]!==q[j])casa=false; }
+      else casa=comodinL(q,0,e,i,false);
+      if(casa)return N(i+1);
+    }
+    throw new Fallo(E_VALOR);
+  }
+  function textoConFormato(v,formato){
+    var n;
+    if(v.t==='e')throw new Fallo(v.e);
+    if(v.t==='n')n=v.n;
+    else if(v.t==='b')return S(v.b?'VERDADERO':'FALSO');
+    else if(v.t==='v')return S('');
+    else { n=v.s!==''?numero(v.s):null; if(n===null)n=serieDeTexto(v.s); if(n===null)return S(v.s); }
+    var r=darFormato(n,formato); if(r[1])throw new Fallo(r[1]); return S(r[0]);
+  }
+  function serie(e,prof){
+    var v=ev(e,prof), s;
+    if(v.t==='n')s=v.n; else if(v.t==='b')s=v.b?1:0; else if(v.t==='v')s=0; else if(v.t==='e')throw new Fallo(v.e);
+    else { if(v.s==='')s=0; else { s=serieDeTexto(v.s); if(s===null)throw new Fallo(E_VALOR); } }
+    if(s<0||!isFinite(s)||s>2958465)throw new Fallo(E_NUM);
+    return s;
+  }
+  function fechaF(a0,m0,d0){
+    function tr(x){ return x<0?Math.ceil(x):Math.floor(x); }
+    var a=tr(a0), m=tr(m0), d=tr(d0);
+    if(!(a>=0&&a<10000))throw new Fallo(E_NUM);
+    if(a<1900)a+=1900;
+    if(Math.abs(m)>1e6||Math.abs(d)>1e7)throw new Fallo(E_NUM);
+    var total=a*12+(m-1), anio=Math.floor(total/12), mes=total-anio*12+1;
+    var s=(anio===1900&&mes===2&&d===29)?60:aSerie(anio,mes,d);
+    if(!(s>=0&&s<=2958465))throw new Fallo(E_NUM);
+    return s;
+  }
+  function sumaProducto(a,prof){
+    var rs=a.map(function(e){ return rangoDe(e); }), base=rs[0];
+    rs.forEach(function(r){ if(r.nf!==base.nf||r.nc!==base.nc)throw new Fallo(E_VALOR); });
+    var leidas=rs.map(function(r){ var m=new Map(); rala(r,prof).forEach(function(z){ m.set((z.f-r.f1)*1024+(z.c-r.c1),z); }); return m; });
+    var s=0;
+    leidas[0].forEach(function(x,k){
+      var p=1;
+      for(var i=0;i<leidas.length;i++){ var z=i===0?x:leidas[i].get(k), v=z?z.v:VACIO; if(v.t==='e')throw new Fallo(v.e); p*=v.t==='n'?v.n:0; }
+      s+=p;
+    });
+    for(var i=1;i<leidas.length;i++)leidas[i].forEach(function(z){ if(z.v.t==='e')throw new Fallo(z.v.e); });
+    return N(s);
+  }
+  yo.poner=poner; yo.crudo=crudo; yo.texto=texto; yo.valor=valor; yo.alineacion=alineacion; yo.mostrarGeneral=mostrarGeneral;
+  yo.filas=filas; yo.cols=cols; yo.olvidar=olvidar;
   yo.esFormula=function(f,c){return esFormula(crudo(f,c));};
   yo.cada=function(fn){ crudos.forEach(function(v,k){ fn(Math.floor(k/1024),k%1024,v); }); };
   yo.caja=function(){
@@ -946,9 +1347,11 @@ function crear(){
   return yo;
 }
 return {crear:crear, letras:letras, columna:columna, nombre:nombre, leer:leer, numero:numero, fecha:fecha,
-  general:general, redondear:redondear, conFormato:conFormato, textoDeFecha:textoDeFecha, serial:serial,
+  general:general, redondear:redondear, darFormato:darFormato, textoDeFecha:textoDeFecha, serial:serial,
+  aSerie:aSerie, desdeSerie:desdeSerie, serieDeTexto:serieDeTexto,
+  digitos:digitos, conFormatoDeCelda:conFormatoDeCelda, fechaCorta:fechaCorta, fechaDeSerie:fechaDeSerie, visto:visto,
   piezas:piezas, arbol:arbol, desplazar:desplazar, r1c1:r1c1, aR1c1:aR1c1, deTsv:deTsv, aTsv:aTsv,
-  esFormula:esFormula, literal:literal, mostrar:mostrar, cumple:cumple, comodin:comodin, referencias:referencias};
+  esFormula:esFormula, literal:literal, mostrar:mostrar, comodin:comodin, referencias:referencias};
 })();
 """
 
@@ -966,6 +1369,7 @@ var ANCHO=96, CAB=46, MAX_PINTADAS=5000, NS='http://www.w3.org/2000/svg';
 var COLORES_REF=['#1a73e8','#d93025','#8e24aa','#188038','#e8710a','#0097a7','#c2185b','#795548'];
 // Ver [ExportarHtml.TABLAS_SOLO_VER]: con esto se mira, se elige, se copia y se raya; no se escribe.
 var editable=document.body.dataset.tablaEditable!=='0';
+var MONEDA=document.body.dataset.moneda||'S/';
 var guion=d.querySelector('script.tabla');
 var datos={};
 try{ datos=JSON.parse(guion.textContent)||{}; }catch(e){ datos={}; }
@@ -1062,10 +1466,14 @@ function clase(f,c){
 }
 function pintarCelda(f,c){
   var td=celdaTd(f,c); if(!td)return;
-  var raw=calc.crudo(f,c), t=raw?calc.texto(f,c):'', es=estilos[f*1024+c], v=raw?calc.valor(f,c):null;
+  var es=estilos[f*1024+c], raw=calc.crudo(f,c), t=raw?Calculo.visto(calc,es,f,c,MONEDA):'', v=raw?calc.valor(f,c):null;
   var al=es&&es.a?es.a:(v?(v.t==='n'?'d':(v.t==='b'||v.t==='e')?'c':'i'):'i');
   var b=al==='d'?'d':al==='c'?'c':'';
   if(es&&es.n)b+=(b?' ':'')+'n';
+  if(es&&es.k)b+=(b?' ':'')+'k';
+  if(es&&es.s)b+=(b?' ':'')+'s';
+  if(es&&es.t)b+=(b?' ':'')+'t';
+  if(es&&es.w)b+=(b?' ':'')+'w';
   if(v&&v.t==='e')b+=(b?' ':'')+'err';
   // Las celdas con fórmula, sombreadas: se ve de un vistazo qué se calcula y qué se escribió.
   if(Calculo.esFormula(raw))b+=(b?' ':'')+'f';
@@ -1074,6 +1482,8 @@ function pintarCelda(f,c){
   if(td.textContent!==t)td.textContent=t;
   var fondo=es&&es.f&&/^#[0-9a-fA-F]{6}$/.test(es.f)?es.f:'';
   if(td.style.background!==fondo)td.style.background=fondo;
+  var letra=es&&es.c&&/^#[0-9a-fA-F]{6}$/.test(es.c)?es.c:'';
+  if(td.style.color!==letra)td.style.color=letra;
   clase(f,c);
 }
 /** Tras un cambio: el marco si se movió, lo tocado y todas las fórmulas, que pueden cambiar solas. */
@@ -1516,7 +1926,7 @@ function copiaDe(r){
   for(f=r.f;f<=r.f2;f++){
     var fv=[], fc=[]; html+='<tr>';
     for(c=r.c;c<=r.c2;c++){
-      var t=calc.texto(f,c), raw=calc.crudo(f,c), es=estilos[f*1024+c];
+      var es=estilos[f*1024+c], t=Calculo.visto(calc,es,f,c,MONEDA), raw=calc.crudo(f,c);
       fv.push(t); fc.push(raw);
       html+='<td'+(Calculo.esFormula(raw)?' data-sheets-formula="'+escaparHtml(Calculo.aR1c1(raw,f,c))+'"':'')+(es&&es.n?' style="font-weight:bold"':'')+'>'+escaparHtml(t).replace(/\n/g,'<br>')+'</td>';
     }
@@ -1694,8 +2104,10 @@ function estatica(){
       var raw=calc.crudo(f,c), v=raw?calc.valor(f,c):null, es=estilos[f*1024+c];
       var al=es&&es.a?es.a:(v?(v.t==='n'?'d':(v.t==='b'||v.t==='e')?'c':'i'):'i'), cl=[];
       if(al==='d')cl.push('d'); else if(al==='c')cl.push('c');
-      if(es&&es.n)cl.push('n'); if(v&&v.t==='e')cl.push('err'); if(Calculo.esFormula(raw))cl.push('f'); if(protegida&&es&&es.e)cl.push('ed');
-      s+='<td'+(cl.length?' class="'+cl.join(' ')+'"':'')+(es&&es.f&&/^#[0-9a-fA-F]{6}$/.test(es.f)?' style="background:'+es.f+'"':'')+'>'+String(raw?calc.texto(f,c):'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</td>';
+      if(es&&es.n)cl.push('n'); if(es&&es.k)cl.push('k'); if(es&&es.s)cl.push('s'); if(es&&es.t)cl.push('t'); if(es&&es.w)cl.push('w');
+      if(v&&v.t==='e')cl.push('err'); if(Calculo.esFormula(raw))cl.push('f'); if(protegida&&es&&es.e)cl.push('ed');
+      var st=[]; if(es&&es.f&&/^#[0-9a-fA-F]{6}$/.test(es.f))st.push('background:'+es.f); if(es&&es.c&&/^#[0-9a-fA-F]{6}$/.test(es.c))st.push('color:'+es.c);
+      s+='<td'+(cl.length?' class="'+cl.join(' ')+'"':'')+(st.length?' style="'+st.join(';')+'"':'')+'>'+String(raw?Calculo.visto(calc,es,f,c,MONEDA):'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</td>';
     }
     s+='</tr>';
   }

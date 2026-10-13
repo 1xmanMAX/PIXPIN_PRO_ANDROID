@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -92,12 +93,32 @@ object Fusion {
             if (conIds(m) && conIds(s) && (bb == null || conIds(bb))) return listaConIds(bb, m, s, ganaMio, c, cuenta)
             if (deTextos(m) && deTextos(s) && (bb == null || deTextos(bb))) return JsonArray(conjunto(bb, m, s))
         }
+        // **Una tabla del chat se junta celda a celda**, no como un párrafo (13-oct-2026): la mini-app
+        // `tabla` y las hojas editadas de un Excel llevan el JSON de la tabla en el texto del mensaje,
+        // en una sola línea, y por párrafos un cambio en cada aparato era un choque entero.
+        if (clave == "texto" && m is JsonPrimitive && s is JsonPrimitive && m.isString && s.isString) {
+            tablaJunta(b, m.content, s.content, ganaMio, c, cuenta)?.let { return JsonPrimitive(it) }
+        }
         if (clave in PARRAFOS && m is JsonPrimitive && s is JsonPrimitive && m.isString && s.isString) {
             val bt = (b as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
             return JsonPrimitive(parrafos(bt, m.content, s.content, ganaMio, cuenta))
         }
         cuenta.choques++
         return if (ganaMio) m else s
+    }
+
+    /** El JSON de una tabla ([com.forge.pixpin.motor.TablaDeCalculo]) en un texto, o null si no lo es. */
+    private fun comoTabla(texto: String): JsonObject? {
+        val t = texto.trimStart()
+        if (!t.startsWith("{") || !t.contains("\"celdas\"")) return null
+        return runCatching { Json.parseToJsonElement(texto) as? JsonObject }.getOrNull()?.takeIf { it["celdas"] is JsonObject }
+    }
+
+    private fun tablaJunta(b: JsonElement?, mio: String, suyo: String, ganaMio: Boolean, c: Criterio, cuenta: Cuenta): String? {
+        val m = comoTabla(mio) ?: return null
+        val s = comoTabla(suyo) ?: return null
+        val base = (b as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(::comoTabla)
+        return objeto(base, m, s, ganaMio, c, cuenta).toString()
     }
 
     /**

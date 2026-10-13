@@ -43,7 +43,8 @@ object RamaDeMensaje {
                 var i = 0
                 while (true) {
                     val t = almacen.cargar(LibroDelChat.idDeHoja(original, i)) ?: break
-                    almacen.guardar(LibroDelChat.idDeHoja(copia, i), t)
+                    // En archivo: la copia no ha editado nada todavía (ver [TablasEnDisco.enArchivo]).
+                    almacen.enArchivo(LibroDelChat.idDeHoja(copia, i), t)
                     i++
                 }
                 copia

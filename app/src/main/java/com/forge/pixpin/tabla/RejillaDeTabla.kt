@@ -142,11 +142,13 @@ private class Memoria {
     val textos = HashMap<Int, String>()
     val alineaciones = HashMap<Int, Char>()
     val errores = HashSet<Int>()
+    /** Las celdas que ajustan el texto, ya partidas en líneas: partir cada fotograma sería caro. */
+    val ajustadas = HashMap<Int, android.text.StaticLayout>()
 
     fun preparar(t: TablaViva, v: Int, e: EstadoDeRejilla) {
         if (v == version) return
         version = v
-        textos.clear(); alineaciones.clear(); errores.clear()
+        textos.clear(); alineaciones.clear(); errores.clear(); ajustadas.clear()
         e.acum[0] = 0f
         for (c in 0 until Celdas.MAX_COLS) e.acum[c + 1] = e.acum[c] + t.ancho(c)
     }
@@ -154,7 +156,8 @@ private class Memoria {
     fun texto(t: TablaViva, f: Int, c: Int): String {
         val k = Celdas.clave(f, c)
         textos[k]?.let { return it }
-        val s = if (t.calc.crudo(f, c).isEmpty()) "" else t.calc.texto(f, c).replace('\n', ' ')
+        // Con su formato de número; los saltos de línea solo se quedan si la celda ajusta el texto.
+        val s = if (t.calc.crudo(f, c).isEmpty()) "" else t.visto(f, c).let { if (t.estilo(f, c)?.w == true) it else it.replace('\n', ' ') }
         if (s.isNotEmpty()) {
             alineaciones[k] = t.calc.alineacion(f, c)
             if (t.calc.valor(f, c) is com.forge.pixpin.motor.Valor.Err) errores += k
@@ -162,6 +165,12 @@ private class Memoria {
         textos[k] = s
         return s
     }
+}
+
+/** `#rrggbb` a color de Android; null si no lo es. Se recuerda: se pide en cada celda pintada. */
+private val coloresLeidos = HashMap<String, Int?>()
+internal fun colorDe(hex: String): Int? = coloresLeidos.getOrPut(hex) {
+    if (hex.length == 7 && hex[0] == '#') runCatching { android.graphics.Color.parseColor(hex) }.getOrNull() else null
 }
 
 private fun columnaEn(acum: FloatArray, xDp: Float): Int {
@@ -212,6 +221,8 @@ fun RejillaDeTabla(
     val memoria = remember { Memoria() }
     val pintura = remember { Paint(Paint.ANTI_ALIAS_FLAG) }
     val negrita = remember { Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+    val cursiva = remember { Typeface.create(Typeface.DEFAULT, Typeface.ITALIC) }
+    val negritaCursiva = remember { Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC) }
     val alcance = rememberCoroutineScope()
     val toque by rememberUpdatedState(onToque)
     val doble by rememberUpdatedState(onDobleToque)
@@ -425,10 +436,41 @@ fun RejillaDeTabla(
             if (s.isEmpty()) continue
             val k = Celdas.clave(f, c)
             val estilo = tabla.estilo(f, c)
-            pintura.typeface = if (estilo?.n == true) negrita else Typeface.DEFAULT
-            pintura.color = if (k in memoria.errores) rojo else tinta
+            pintura.typeface = when {
+                estilo?.n == true && estilo.k -> negritaCursiva
+                estilo?.n == true -> negrita
+                estilo?.k == true -> cursiva
+                else -> Typeface.DEFAULT
+            }
+            pintura.isUnderlineText = estilo?.s == true
+            pintura.isStrikeThruText = estilo?.t == true
+            pintura.color = estilo?.c?.let { colorDe(it) } ?: if (k in memoria.errores) rojo else tinta
             val x0 = xDe(c)
             val anchoCelda = acum[c + 1] * d - acum[c] * d
+            // **Ajustar texto**: en varias líneas dentro de la celda (la fila no crece: lo que no
+            // cabe se corta abajo, como en una fila de alto fijo de Excel).
+            if (estilo?.w == true && anchoCelda > 2 * relleno) {
+                val anchoTexto = (anchoCelda - 2 * relleno).toInt()
+                val hecha = memoria.ajustadas[k]
+                val capa = if (hecha != null && hecha.width == anchoTexto && hecha.paint.textSize == pintura.textSize &&
+                    hecha.paint.color == pintura.color) hecha else {
+                    val tp = android.text.TextPaint(pintura)
+                    val alineado = when (estilo.a?.firstOrNull() ?: memoria.alineaciones[k] ?: 'i') {
+                        'd' -> android.text.Layout.Alignment.ALIGN_OPPOSITE
+                        'c' -> android.text.Layout.Alignment.ALIGN_CENTER
+                        else -> android.text.Layout.Alignment.ALIGN_NORMAL
+                    }
+                    android.text.StaticLayout.Builder.obtain(s, 0, s.length, tp, anchoTexto)
+                        .setAlignment(alineado).setIncludePad(false).build()
+                        .also { memoria.ajustadas[k] = it }
+                }
+                lienzo.save()
+                lienzo.clipRect(x0 + 1, yDe(f), x0 + anchoCelda - 1, yDe(f) + altoFila)
+                lienzo.translate(x0 + relleno, yDe(f) + maxOf(0f, (altoFila - capa.height) / 2))
+                capa.draw(lienzo)
+                lienzo.restore()
+                continue
+            }
             val medida = pintura.measureText(s)
             val al = estilo?.a?.firstOrNull() ?: memoria.alineaciones[k] ?: 'i'
             val tx = when (al) {
@@ -444,6 +486,8 @@ fun RejillaDeTabla(
                 lienzo.restore()
             } else lienzo.drawText(s, tx, base, pintura)
         }
+        pintura.isUnderlineText = false
+        pintura.isStrikeThruText = false
         // La celda activa.
         run {
             val x0 = xDe(estado.c)

@@ -52,6 +52,13 @@ import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.FormatAlignRight
 import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatClear
+import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Numbers
+import androidx.compose.material.icons.automirrored.filled.WrapText
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.FormatColorFill
@@ -129,6 +136,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import com.forge.pixpin.motor.Celdas
 import com.forge.pixpin.motor.EstiloDeCelda
+import com.forge.pixpin.motor.FormatoDeNumero
 import com.forge.pixpin.motor.ExportarHtml
 import com.forge.pixpin.motor.ExportarProyecto
 import com.forge.pixpin.motor.Hoja
@@ -201,8 +209,10 @@ class TablaActivity : ComponentActivity() {
                             id = id,
                             inicial = inicial,
                             almacen = almacen,
+                            // Una mini-app `tabla` del chat es un mensaje, no una tabla suelta: no se lleva
+                            // a un proyecto (su hoja apuntaría a un archivo que no existe).
                             enProyecto = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO) != null ||
-                                enAlgunProyecto(id),
+                                id.startsWith(com.forge.pixpin.motor.TablasEnMensajes.MINI) || enAlgunProyecto(id),
                             hojas = hojas,
                             onHoja = { abierta = it },
                             onCerrar = { if (idInicial == null) abierta = null else cerrarYVolver() },
@@ -446,6 +456,9 @@ private val COLORES_DE_FONDO = listOf(
     "#fff3bf", "#d3f9d8", "#d0ebff", "#ffe3e3", "#f3d9fa", "#ffe8cc", "#e9ecef", "#c5f6fa"
 )
 
+/** Los colores de letra: los mismos que el PC (`LETRAS` de `hoja_pin/editor.rs`), los fuertes de Excel. */
+private val COLORES_DE_LETRA = listOf("#c00000", "#0070c0", "#00b050", "#c65911", "#7030a0", "#7f7f7f")
+
 @Composable
 private fun EditorDeTabla(
     id: String,
@@ -470,6 +483,8 @@ private fun EditorDeTabla(
     var nombre by remember { mutableStateOf(inicial.nombre.ifBlank { "Tabla" }) }
     var menu by remember { mutableStateOf(false) }
     var colores by remember { mutableStateOf(false) }
+    var coloresDeLetra by remember { mutableStateOf(false) }
+    var formatos by remember { mutableStateOf(false) }
     var renombrando by remember { mutableStateOf(false) }
     var catalogo by remember { mutableStateOf(false) }
     // **Antes de compartir la página se pregunta qué lleva**, como en el lienzo y el proyecto.
@@ -962,11 +977,29 @@ private fun EditorDeTabla(
                     texto = TextFieldValue(propuesta, TextRange(if (propuesta.endsWith("()")) propuesta.length - 1 else propuesta.length))
                     runCatching { foco.requestFocus() }
                 }) { Icon(Icons.Filled.Functions, "Autosuma") }
-                IconButton(onClick = {
-                    val todas = (estado.f1..minOf(estado.f2, estado.f1 + 2000)).all { f -> (estado.c1..estado.c2).all { c -> tabla.estilo(f, c)?.n == true } }
-                    tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { (it ?: EstiloDeCelda()).copy(n = !todas) }
+                // **La barra de formato del PC** (13-oct-2026): negrita, cursiva, subrayado y tachado se
+                // encienden si la celda activa los tiene y, como allí, se quitan si todo el rango ya
+                // los lleva. Ver `botones_de_editar` en `hoja_pin.rs`.
+                val activo = tabla.estilo(estado.f, estado.c) ?: EstiloDeCelda()
+                fun alternar(tiene: (EstiloDeCelda) -> Boolean, poner: (EstiloDeCelda, Boolean) -> EstiloDeCelda) {
+                    val todas = (estado.f1..minOf(estado.f2, estado.f1 + 2000)).all { f -> (estado.c1..estado.c2).all { c -> tabla.estilo(f, c)?.let(tiene) == true } }
+                    tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { poner(it ?: EstiloDeCelda(), !todas) }
                     cambio()
-                }) { Icon(Icons.Filled.FormatBold, "Negrita") }
+                }
+                val apagado = MaterialTheme.colorScheme.onSurfaceVariant
+                val encendido = MaterialTheme.colorScheme.primary
+                IconButton(onClick = { alternar({ it.n }) { e, si -> e.copy(n = si) } }) {
+                    Icon(Icons.Filled.FormatBold, "Negrita", tint = if (activo.n) encendido else apagado)
+                }
+                IconButton(onClick = { alternar({ it.k }) { e, si -> e.copy(k = si) } }) {
+                    Icon(Icons.Filled.FormatItalic, "Cursiva", tint = if (activo.k) encendido else apagado)
+                }
+                IconButton(onClick = { alternar({ it.s }) { e, si -> e.copy(s = si) } }) {
+                    Icon(Icons.Filled.FormatUnderlined, "Subrayado", tint = if (activo.s) encendido else apagado)
+                }
+                IconButton(onClick = { alternar({ it.t }) { e, si -> e.copy(t = si) } }) {
+                    Icon(Icons.Filled.FormatStrikethrough, "Tachado", tint = if (activo.t) encendido else apagado)
+                }
                 // **Las celdas que se podrán cambiar** en la página de una tabla protegida.
                 IconButton(onClick = {
                     tabla.alternarEditables(estado.f1, estado.c1, estado.f2, estado.c2)
@@ -992,7 +1025,33 @@ private fun EditorDeTabla(
                     )
                 }
                 Box {
-                    IconButton(onClick = { colores = true }) { Icon(Icons.Filled.FormatColorFill, "Color de fondo") }
+                    IconButton(onClick = { formatos = true }) {
+                        Icon(Icons.Filled.Numbers, "Formato de número", tint = if (activo.nf != null) encendido else apagado)
+                    }
+                    DropdownMenu(expanded = formatos, onDismissRequest = { formatos = false }) {
+                        val actual = FormatoDeNumero.de(activo.nf)
+                        fun poner(nf: FormatoDeNumero?) {
+                            formatos = false
+                            tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { (it ?: EstiloDeCelda()).copy(nf = nf?.palabra) }
+                            cambio()
+                        }
+                        DropdownMenuItem(text = { Text((if (actual == null) "✓ " else "") + "General") }, onClick = { poner(null) })
+                        FormatoDeNumero.entries.forEach { nf ->
+                            DropdownMenuItem(text = { Text((if (actual == nf) "✓ " else "") + nf.nombre) }, onClick = { poner(nf) })
+                        }
+                    }
+                }
+                IconButton(onClick = { alternar({ it.w }) { e, si -> e.copy(w = si) } }) {
+                    Icon(Icons.AutoMirrored.Filled.WrapText, "Ajustar", tint = if (activo.w) encendido else apagado)
+                }
+                IconButton(onClick = {
+                    tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { it?.sinElFormato() }
+                    cambio()
+                }) { Icon(Icons.Filled.FormatClear, "Borrar formato") }
+                Box {
+                    IconButton(onClick = { colores = true }) {
+                        Icon(Icons.Filled.FormatColorFill, "Resaltar", tint = if (activo.f != null) encendido else apagado)
+                    }
                     DropdownMenu(expanded = colores, onDismissRequest = { colores = false }) {
                         Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             COLORES_DE_FONDO.forEach { hex ->
@@ -1011,6 +1070,32 @@ private fun EditorDeTabla(
                         DropdownMenuItem(text = { Text("Sin color") }, onClick = {
                             colores = false
                             tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { it?.copy(f = null) }
+                            cambio()
+                        })
+                    }
+                }
+                Box {
+                    IconButton(onClick = { coloresDeLetra = true }) {
+                        Icon(Icons.Filled.FormatColorText, "Color", tint = activo.c?.let { colorDe(it) }?.let { Color(it) } ?: apagado)
+                    }
+                    DropdownMenu(expanded = coloresDeLetra, onDismissRequest = { coloresDeLetra = false }) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            COLORES_DE_LETRA.forEach { hex ->
+                                Box(
+                                    Modifier.size(30.dp).clip(CircleShape)
+                                        .background(Color(android.graphics.Color.parseColor(hex)))
+                                        .border(if (activo.c == hex) 3.dp else 1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                        .clickable {
+                                            coloresDeLetra = false
+                                            tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { (it ?: EstiloDeCelda()).copy(c = hex) }
+                                            cambio()
+                                        }
+                                )
+                            }
+                        }
+                        DropdownMenuItem(text = { Text("Automático") }, onClick = {
+                            coloresDeLetra = false
+                            tabla.cambiarEstilo(estado.f1, estado.c1, estado.f2, estado.c2) { it?.copy(c = null) }
                             cambio()
                         })
                     }
