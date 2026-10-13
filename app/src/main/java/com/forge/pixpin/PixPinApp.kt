@@ -71,6 +71,7 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        com.forge.pixpin.motor.DrawFonts.app = this
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
         if (nombreDelProceso().endsWith(com.forge.pixpin.pdf.PdfSqueezeService.PROCESO)) return

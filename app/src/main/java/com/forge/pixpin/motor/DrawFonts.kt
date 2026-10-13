@@ -29,6 +29,19 @@ object DrawFonts {
     private val cache = HashMap<Int, Typeface?>()
 
     /**
+     * El contexto de la aplicación, puesto al arrancar ([com.forge.pixpin.PixPinApp]).
+     *
+     * **Para quien pinta sin contexto a mano.** La vista previa de una foto o un lienzo en el
+     * chat (`DrawExport.aBitmap`) montaba el renderizador sin letras y el texto salía con la
+     * del sistema: en el editor se escribía con la de a mano y en la conversación se veía con
+     * otra. Con esto, un [Renderer] sin `typefaces` usa las de Excalidraw igualmente.
+     */
+    @Volatile var app: Context? = null
+
+    /** Lo que usa un [Renderer] al que no le pasan letras: las de Excalidraw si ya hay contexto. */
+    val deLaApp: (Int?) -> Typeface? = { familia -> app?.let { typefaceFor(it, familia) } }
+
+    /**
      * La letra de [familia], resolviendo la numeración vieja.
      *
      * Devuelve null si la fuente no se pudo cargar, y entonces el renderizador
@@ -36,14 +49,15 @@ object DrawFonts {
      */
     fun typefaceFor(context: Context, familia: Int?): Typeface? {
         val id = ItemStyle.fontFamilyResuelta(familia)
-        return cache.getOrPut(id) {
+        // Las vistas previas se pintan en hilos de fondo a la vez que la pantalla.
+        return synchronized(cache) { cache.getOrPut(id) {
             val recurso = when (id) {
                 ItemStyle.FONT_NUNITO -> R.font.nunito
                 ItemStyle.FONT_COMIC_SHANNS -> R.font.comic_shanns
                 else -> R.font.excalifont
             }
             runCatching { ResourcesCompat.getFont(context, recurso) }.getOrNull()
-        }
+        } }
     }
 
     /** El proveedor que espera [Renderer], ya atado a un contexto. */

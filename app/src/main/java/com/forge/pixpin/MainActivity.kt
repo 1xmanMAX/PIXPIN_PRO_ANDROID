@@ -521,6 +521,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             "barra-pantalla" -> BarraDeLaCapaCard()
             "barra-lector" -> BarraDelLectorCard()
             "barra-plano" -> BarraDelPlanoCard()
+            "editor-plano" -> EditorDelPlanoCard()
             "palabras" -> PalabrasMagicasCard()
             "voz" -> MotorDeVozCard()
             "fluidez" -> FluidezCard()
@@ -815,6 +816,32 @@ private fun BarraDelPlanoCard() {
         puestas = settings.planoToolSet,
         onCambio = { grupos -> guardarBarra(app, scope, settings, com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO, grupos) }
     )
+}
+
+/** Con qué editor se anota un plano: el avanzado (de fábrica) o el sencillo. */
+@Composable
+private fun EditorDelPlanoCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.plano_avanzado_title), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    stringResource(R.string.plano_avanzado_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Switch(
+                checked = settings.planoAvanzado,
+                onCheckedChange = { scope.launch { app.settings.setPlanoAvanzado(it) } }
+            )
+        }
+    }
 }
 
 /** Lo mismo, para la capa que se dibuja sobre la pantalla. */

@@ -32,6 +32,8 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
     /** Si la tarjeta no pudo con algo (sombreadores, memoria): se dice en vez de quedarse en negro. */
     @Volatile var fallo: String? = null
     var alCambiarTamano: ((Int, Int) -> Unit)? = null
+    /** Lo anotado y las cotas, puestos encima en este mismo fotograma. Ver [EncimaDelPlano]. */
+    var encima: EncimaDelPlano? = null
 
     private var ancho = 1
     private var alto = 1
@@ -67,6 +69,7 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         try {
             subir()
             listo = true
+            encima?.alCrearContexto()
         } catch (e: Throwable) {
             fallo = e.message ?: e.javaClass.simpleName
         }
@@ -99,6 +102,7 @@ class PintorDePlano(private val modelo: ModeloCad, private val grosor: Float) : 
         } else {
             escena(c, 1f)
         }
+        if (c != null && listo) encima?.dibujar(c, ancho, alto)
     }
 
     /** La escala de la imagen mientras se mueve: que no pase de [PIXELES_EN_MOVIMIENTO], ni de la mitad. */

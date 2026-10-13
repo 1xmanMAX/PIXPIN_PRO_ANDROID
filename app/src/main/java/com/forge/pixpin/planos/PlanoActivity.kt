@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -130,14 +131,68 @@ class PlanoActivity : ComponentActivity() {
     private var cambiosEnLaCapa by mutableIntStateOf(0)
 
     /** La vista de la capa que cae justo donde mira la cámara del plano. */
-    private fun vistaDeLaCapa(): com.forge.pixpin.motor.Viewport? {
-        val c = camara ?: return null
+    private fun vistaDeLaCapa(): com.forge.pixpin.motor.Viewport? = camara?.let { vistaDeLaCapa(it, ancho, alto) }
+
+    /** La de la cámara [c] en una pantalla de [w] × [h]. */
+    private fun vistaDeLaCapa(c: CamaraPlano, w: Int, h: Int): com.forge.pixpin.motor.Viewport {
         val e = encaje
         return com.forge.pixpin.motor.Viewport(
-            scrollX = (ancho / 2.0 * c.px + e.ceroX - c.centroX) / e.u,
-            scrollY = (alto / 2.0 * c.px + c.centroY - e.ceroY) / e.u,
+            scrollX = (w / 2.0 * c.px + e.ceroX - c.centroX) / e.u,
+            scrollY = (h / 2.0 * c.px + c.centroY - e.ceroY) / e.u,
             zoom = e.u / c.px
         )
+    }
+
+    // ------------------------------------------------------------ encima del plano
+    //
+    // Lo anotado, las cotas hechas y los marcos los pone la tarjeta encima del plano en su mismo
+    // fotograma: ver [EncimaDelPlano]. Aquí se decide qué y cuándo se vuelve a pintar.
+
+    private val encima = EncimaDelPlano { vista?.requestRender() }
+    /** Cómo se pinta lo de encima (lo copia la pantalla; lo lee [pedirEncima]). */
+    @Volatile private var encimaClaro = false
+    @Volatile private var encimaAnotando = false
+    /** Anotando y moviendo el papel, el editor se esconde y lo pone la tarjeta (va con el plano). */
+    private var dibujoOculto by mutableStateOf(false)
+    private var ultimoPedidoMoviendo = 0L
+    private val principal = android.os.Handler(android.os.Looper.getMainLooper())
+    private val encimaNitida = Runnable { pedirEncima(true) }
+    /** Los pintores del hilo de lo de encima (uno por tinta: con o sin el filtro de noche). */
+    private val pintoresDelHilo = java.util.concurrent.ConcurrentHashMap<Boolean, com.forge.pixpin.motor.Renderer>()
+
+    /**
+     * Pide pintar otra vez lo de encima con la cámara de ahora: [nitido] justo la pantalla;
+     * si no, el doble de campo a medio aumento (para ir moviéndose sin que falten bordes).
+     */
+    private fun pedirEncima(nitido: Boolean) {
+        val c = camara ?: return
+        if (ancho <= 0 || alto <= 0) return
+        val m = modelo ?: return
+        val escena = capa?.scene
+        val claro = encimaClaro
+        val anotando = encimaAnotando
+        val cotas = cotasParaGuardar
+        val hojas = marcosParaGuardar
+        val hayCapa = escena != null && escena.elements.any { !it.isDeleted }
+        if (!hayCapa && (anotando || (cotas.isEmpty() && hojas.isEmpty()))) { encima.vaciar(c); return }
+        val densidad = resources.displayMetrics.density
+        val k = if (nitido) 1f else 0.5f
+        val cam = if (nitido) c else c.copy(px = c.px / k)
+        val unidades = m.unidades
+        encima.pedir(EncimaDelPlano.Pedido(cam, ancho, alto, k) { lienzo, cc, w, h, esc ->
+            if (escena != null && hayCapa) {
+                // Anotando, lo mismo que pinta el editor (con las rayas de las cotas tal cual); si no,
+                // lo anotado sin lo del plano, que las cotas y los marcos van con sus medidas.
+                val loQueSeVe = if (anotando) escena else CapaDelPlano.sinLoDelPlano(escena)
+                pintoresDelHilo.getOrPut(!claro) {
+                    com.forge.pixpin.motor.Renderer(
+                        { f -> escena.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                        com.forge.pixpin.motor.DrawFonts.provider(applicationContext), dark = !claro
+                    )
+                }.renderScene(lienzo, loQueSeVe.copy(viewport = vistaDeLaCapa(cc, w, h)), w.toDouble(), h.toDouble())
+            }
+            if (!anotando) dibujarCotas(lienzo, cc, w, h, densidad * esc, claro, cotas, hojas, unidades)
+        })
     }
 
     /** Al revés: la cámara del plano que corresponde a la vista de la capa (anotando, manda ella). */
@@ -246,11 +301,18 @@ class PlanoActivity : ComponentActivity() {
 
     override fun onResume() { super.onResume(); vista?.onResume() }
     override fun onPause() { vista?.onPause(); guardarCapa(); super.onPause() }
+    override fun onDestroy() { principal.removeCallbacks(encimaNitida); super.onDestroy() }
 
     private fun pintar() {
         pintor?.camara = camara
         vista?.requestRender()
         marcos++
+        // Lo de encima: al moverse, uno de campo ancho de vez en cuando (el de antes ya cae en su
+        // sitio, solo le pueden faltar bordes); al pararse, uno nítido.
+        val ahora = android.os.SystemClock.uptimeMillis()
+        if (ahora - ultimoPedidoMoviendo > 90) { ultimoPedidoMoviendo = ahora; pedirEncima(false) }
+        principal.removeCallbacks(encimaNitida)
+        principal.postDelayed(encimaNitida, 160)
     }
 
     private fun verTodo() {
@@ -329,6 +391,7 @@ class PlanoActivity : ComponentActivity() {
                 // Las cotas y los marcos que había (de aquí o del PC).
                 capa?.let { c -> CapaDelPlano.leer(c.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms } }
                 pintor = PintorDePlano(m, grosor = (densidad / 1.5f).coerceIn(1f, 3f)).also {
+                    it.encima = encima
                     it.claro = claro
                     it.alCambiarTamano = { w, h -> runOnUiThread { alCambiarTamano(w, h) } }
                     it.pedirFotograma = { vista?.requestRender() }
@@ -364,7 +427,15 @@ class PlanoActivity : ComponentActivity() {
         // Las cotas y los marcos se guardan en la capa al poco de cambiar (viajan con ella).
         LaunchedEffect(hechas, hojas) {
             cotasParaGuardar = hechas; marcosParaGuardar = hojas
+            pedirEncima(true)
             if (listo) { delay(800); guardarCapa(); cambiosEnLaCapa++ }
+        }
+        // Lo de encima, otra vez cuando cambia lo que lleva o cómo se pinta.
+        LaunchedEffect(listo, claro, anotando, cambiosEnLaCapa) {
+            encimaClaro = claro
+            encimaAnotando = anotando
+            if (!anotando) { encima.visible = true; dibujoOculto = false; vista?.requestRender() }
+            pedirEncima(true)
         }
         fun terminarCadena() {
             if (puntos.size >= 2) hechas = hechas + listOf(puntos)
@@ -398,35 +469,41 @@ class PlanoActivity : ComponentActivity() {
                         }
                     }
                 )
-                // Lo anotado, pintado encima del plano (sin anotar, solo se ve).
-                if (!anotando) {
-                    val laCapa = capa
-                    if (laCapa != null && laCapa.scene.elements.isNotEmpty()) androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-                        @Suppress("UNUSED_VARIABLE") val leer = marcos + cambiosEnLaCapa
-                        val v = vistaDeLaCapa() ?: return@Canvas
-                        // Las cotas y los marcos los pinta el visor (con sus medidas); aquí, lo anotado.
-                        pintorDeLaCapa(!claro).renderScene(drawContext.canvas.nativeCanvas, CapaDelPlano.sinLoDelPlano(laCapa.scene).copy(viewport = v), size.width.toDouble(), size.height.toDouble())
-                    }
-                }
                 val laCapa = capa
                 if (anotando && laCapa != null) {
                     // **Anotando manda el lienzo**: dibuja con un dedo o el lápiz, encuadra con dos, y
                     // el plano le sigue fotograma a fotograma.
                     LaunchedEffect(Unit) {
                         var antes: com.forge.pixpin.motor.Viewport? = null
+                        var quietoDesde = 0L
+                        // Al entrar, lo de encima sigue puesto unos fotogramas: así no hay ninguno
+                        // sin lo dibujado mientras aparece el editor.
+                        var esconderEn = 3
                         while (true) {
-                            androidx.compose.runtime.withFrameNanos { }
+                            val t = androidx.compose.runtime.withFrameNanos { it }
                             val v = laCapa.scene.viewport
                             if (v != antes) {
+                                // **Moviendo el papel, lo dibujado lo pone la tarjeta** con el plano en
+                                // el mismo fotograma; el editor, escondido (sigue cogiendo los dedos).
+                                if (antes != null) { encima.visible = true; dibujoOculto = true; esconderEn = 0 }
                                 antes = v; camara = camaraDeLaCapa(v); pintar()
+                                quietoDesde = t
                                 // Lo que se elige en el panel, a la escala de lo que se ve (PC 11bd1f6).
                                 laCapa.escalaDeLoNuevo = 1.0 / v.zoom
+                            } else if (dibujoOculto && t - quietoDesde > 200_000_000L) {
+                                // Quieto: vuelve el editor y, unos fotogramas después, se quita lo de
+                                // la tarjeta (un instante los dos a la vez, en el mismo sitio, mejor
+                                // que uno sin nada).
+                                dibujoOculto = false; esconderEn = 3
+                            } else if (esconderEn > 0 && --esconderEn == 0 && !dibujoOculto) {
+                                encima.visible = false; vista?.requestRender()
                             }
                         }
                     }
                     com.forge.pixpin.motor.DrawCanvas(
                         controller = laCapa,
-                        modifier = Modifier.fillMaxSize(),
+                        // Solo el dibujo: la capa de alfa no toca los dedos.
+                        modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (dibujoOculto) 0f else 1f },
                         imageProvider = { f -> laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
                         dark = !claro,
                         onChange = { trazando -> if (!trazando) { tickDeAnotar++; cambiosEnLaCapa++ } },
@@ -541,7 +618,7 @@ class PlanoActivity : ComponentActivity() {
                         }
                     }
                 ) {
-                    Cotas(hechas, puntos, enganchado, claro, densidad, acotando, hojas)
+                    Cotas(puntos, enganchado, claro, densidad, acotando, hechas)
                 }
             }
             estado?.let { texto ->
@@ -584,7 +661,12 @@ class PlanoActivity : ComponentActivity() {
                             .padding(horizontal = 12.dp, vertical = 9.dp)
                     )
                 }
-                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                if (ajustes.planoAvanzado) {
+                    EditorAvanzado(laCapa, ajustes, !claro, tickDeAnotar) { cambiosDeContenido ->
+                        tickDeAnotar++
+                        if (cambiosDeContenido) cambiosEnLaCapa++
+                    }
+                } else Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
                     com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
                         com.forge.pixpin.motor.DrawToolbar(
                             tool = laCapa.tool,
@@ -839,20 +921,22 @@ class PlanoActivity : ComponentActivity() {
      * total (Σ) al final de una cadena de más de un tramo; un cuadro verde en el último enganche.
      */
     @Composable
-    private fun Cotas(hechas: List<List<DoubleArray>>, puntos: List<DoubleArray>, enganchado: DoubleArray?, claro: Boolean, densidad: Float, acotando: Boolean, hojas: List<ImprimirPlano.Marco>) {
+    private fun Cotas(puntos: List<DoubleArray>, enganchado: DoubleArray?, claro: Boolean, densidad: Float, acotando: Boolean, hechas: List<List<DoubleArray>>) {
         val m = modelo ?: return
         val naranja = android.graphics.Color.rgb(0xFF, 0x8A, 0x00)
         val raya = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val letra = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val pildora = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         val asa = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
-        val marco = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
-        val numero = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG) }
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_VARIABLE") val leer = marcos // repinta al mover, sin recomponer
             @Suppress("UNUSED_VARIABLE") val leer2 = marcos2
             val c = camara ?: return@Canvas
             val lienzo = drawContext.canvas.nativeCanvas
+            // **Aquí solo lo vivo**: la cadena que se está poniendo, el marco que se arrastra, la mira
+            // y las asas. Las cotas hechas y los marcos puestos van con lo anotado, en el fotograma
+            // del plano ([pedirEncima]): pintados aquí, se quedaban atrás al moverlo.
+            dibujarCotas(lienzo, c, ancho, alto, densidad, claro, listOf(puntos), emptyList(), m.unidades, marcoVivo)
             raya.color = naranja; raya.strokeWidth = 2f * densidad; raya.style = android.graphics.Paint.Style.STROKE
             letra.textSize = 12.5f * densidad; letra.color = if (claro) android.graphics.Color.WHITE else android.graphics.Color.rgb(0x1C, 0x1C, 0x1E)
             pildora.color = if (claro) 0xEE1C1C1E.toInt() else 0xEEF5F5F7.toInt()
@@ -863,46 +947,6 @@ class PlanoActivity : ComponentActivity() {
                 val r = android.graphics.RectF(x - w / 2 - 6 * densidad, y - letra.textSize * 0.95f, x + w / 2 + 6 * densidad, y + letra.textSize * 0.6f)
                 lienzo.drawRoundRect(r, 6 * densidad, 6 * densidad, pildora)
                 lienzo.drawText(t, x - w / 2, y + letra.textSize * 0.25f, letra)
-            }
-            for (cadena in hechas + listOf(puntos)) {
-                if (cadena.isEmpty()) continue
-                var total = 0.0
-                for (k in 1 until cadena.size) {
-                    val p = cadena[k - 1]; val q = cadena[k]
-                    lienzo.drawLine(sx(p), sy(p), sx(q), sy(q), raya)
-                    val d = hypot(q[0] - p[0], q[1] - p[1])
-                    total += d
-                    val mx = (sx(p) + sx(q)) / 2; val my = (sy(p) + sy(q)) / 2
-                    val dx = sx(q) - sx(p); val dy = sy(q) - sy(p)
-                    val l = hypot(dx, dy).coerceAtLeast(1e-6f)
-                    val nx = -dy / l; val ny = dx / l
-                    val lado = if (ny > 0) -1f else 1f
-                    etiqueta(Medidas.medida(d, m.unidades), mx + nx * lado * 16 * densidad, my + ny * lado * 16 * densidad)
-                }
-                raya.style = android.graphics.Paint.Style.FILL
-                for (p in cadena) lienzo.drawRect(sx(p) - 3 * densidad, sy(p) - 3 * densidad, sx(p) + 3 * densidad, sy(p) + 3 * densidad, raya)
-                raya.style = android.graphics.Paint.Style.STROKE
-                if (cadena.size > 2) {
-                    val u = cadena.last()
-                    etiqueta("Σ " + Medidas.medida(total, m.unidades), sx(u) + 40 * densidad, sy(u) + 24 * densidad)
-                }
-            }
-            // Los marcos para imprimir: azules, a trazos, con su número (la hoja que serán).
-            run {
-                val azul = android.graphics.Color.rgb(0x3D, 0x8B, 0xFF)
-                marco.color = azul; marco.style = android.graphics.Paint.Style.STROKE; marco.strokeWidth = 1.8f * densidad
-                marco.pathEffect = android.graphics.DashPathEffect(floatArrayOf(8 * densidad, 5 * densidad), 0f)
-                val todos = hojas + listOfNotNull(marcoVivo)
-                todos.forEachIndexed { i, mc ->
-                    val l = c.pantallaX(mc.x0, ancho).toFloat(); val r = c.pantallaX(mc.x1, ancho).toFloat()
-                    val t = c.pantallaY(mc.y1, alto).toFloat(); val b = c.pantallaY(mc.y0, alto).toFloat()
-                    marco.alpha = if (i < hojas.size) 255 else 170
-                    lienzo.drawRect(l, t, r, b, marco)
-                    if (i < hojas.size) {
-                        numero.color = azul; numero.textSize = 14 * densidad; numero.isFakeBoldText = true
-                        lienzo.drawText("${i + 1}", l + 6 * densidad, t + 18 * densidad, numero)
-                    }
-                }
             }
             // La mira: el tramo vivo desde el último punto, una cruz con su círculo (verde si se
             // enganchó) y una rayita tenue hasta el dedo, para saber de dónde sale.
@@ -957,6 +1001,162 @@ class PlanoActivity : ComponentActivity() {
                 val s = 7 * densidad
                 raya.color = android.graphics.Color.rgb(0x30, 0xD1, 0x58); raya.strokeWidth = 1.8f * densidad
                 lienzo.drawRect(sx(g) - s, sy(g) - s, sx(g) + s, sy(g) + s, raya)
+            }
+        }
+    }
+
+    /**
+     * **El editor avanzado encima del plano** (13-oct-2026, el usuario: «el editor que aparece en
+     * AutoCAD es el sencillo, quiero el avanzado según se ponga en configuración»): como en el
+     * lienzo a pantalla completa, el estilo en el lateral ([com.forge.pixpin.motor.PanelLateralDeEstilo],
+     * del lado contrario a la mano), deshacer y rehacer abajo ([com.forge.pixpin.motor.CajaDeDeshacer])
+     * y la barra solo con las herramientas, las de «Barra del plano». Mismo motor, mismas piezas: nada
+     * de mandos propios del plano. [cambiado] con true: cambió lo dibujado (hay que repintarlo encima).
+     */
+    @Composable
+    private fun androidx.compose.foundation.layout.BoxScope.EditorAvanzado(
+        laCapa: com.forge.pixpin.motor.DrawController,
+        ajustes: com.forge.pixpin.data.Settings,
+        noche: Boolean,
+        /** Sube con cada cambio del motor: sin él, esto no se volvería a componer. */
+        tick: Int,
+        cambiado: (Boolean) -> Unit
+    ) {
+        @Suppress("UNUSED_EXPRESSION") tick
+        val zurdo = ajustes.zurdo
+        val seleccionado = laCapa.selectedElements()
+        val aplican = com.forge.pixpin.motor.propiedadesPara(laCapa.tool, seleccionado)
+        fun aplicarEstilo(nuevo: com.forge.pixpin.motor.ItemStyle) {
+            // Como en el editor: un texto al que se le cambia la letra se vuelve a medir.
+            laCapa.cambiarEstilo(nuevo) { e ->
+                if (e.type != com.forge.pixpin.motor.ElementType.TEXT) return@cambiarEstilo e
+                val (w, h) = com.forge.pixpin.motor.DrawFonts.medirTexto(
+                    this@PlanoActivity, e.text.orEmpty(), e.fontFamily ?: nuevo.fontFamily, e.fontSize ?: nuevo.fontSize
+                )
+                e.copy(width = w, height = h)
+            }
+        }
+        val marcasDeColor = remember(ajustes.coloresMarcados) {
+            ajustes.coloresMarcados.split(',').map { it.trim() }.filter { it.startsWith("#") && it.length == 7 }
+        }
+        if (aplican.isNotEmpty()) Column(
+            Modifier.align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            com.forge.pixpin.motor.PanelLateralDeEstilo(
+                aplican = aplican,
+                estilo = laCapa.estiloActivo(),
+                rellenoObligatorio = laCapa.tool == com.forge.pixpin.motor.Tool.RELLENO || seleccionado.any { it.type == com.forge.pixpin.motor.ElementType.REGION },
+                zurdo = zurdo,
+                marcas = remember(ajustes.marcasDeDeslizadores) { com.forge.pixpin.motor.marcasDeTexto(ajustes.marcasDeDeslizadores) },
+                onMarcas = { cual, valores ->
+                    val todas = com.forge.pixpin.motor.marcasDeTexto(ajustes.marcasDeDeslizadores) + (cual to valores)
+                    lifecycleScope.launch {
+                        (application as com.forge.pixpin.PixPinApp).settings.setMarcas(com.forge.pixpin.motor.marcasATexto(todas))
+                    }
+                },
+                onEstilo = { nuevo -> aplicarEstilo(nuevo); cambiado(seleccionado.isNotEmpty()) },
+                zoom = { laCapa.scene.viewport.zoom.toFloat() },
+                marcasDeColor = marcasDeColor,
+                noche = noche
+            )
+        }
+        Column(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            com.forge.pixpin.motor.CajaDeDeshacer(
+                puedeDeshacer = laCapa.canUndo,
+                puedeRehacer = laCapa.canRedo,
+                onDeshacer = { laCapa.undo(); cambiado(true) },
+                onRehacer = { laCapa.redo(); cambiado(true) },
+                enFila = true,
+                modifier = Modifier.align(if (zurdo) Alignment.Start else Alignment.End)
+            )
+            Spacer(Modifier.size(6.dp))
+            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
+                com.forge.pixpin.motor.DrawToolbar(
+                    tool = laCapa.tool,
+                    onTool = { laCapa.selectTool(it); cambiado(false) },
+                    style = laCapa.scene.style,
+                    onStyle = { nuevo -> aplicarEstilo(nuevo); cambiado(false) },
+                    canUndo = laCapa.canUndo,
+                    onUndo = { laCapa.undo(); cambiado(true) },
+                    // El estilo y el deshacer, en el lateral y en su caja: aquí serían lo mismo dos veces.
+                    mostrarEstilo = false,
+                    mostrarDeshacer = false,
+                    dark = noche,
+                    permitidas = ajustes.planoToolSet,
+                    grupos = ajustes.planoGroupList
+                )
+            }
+        }
+    }
+
+    /**
+     * Las cotas ([cadenas]: naranja, su medida en una pastilla y el total Σ) y los marcos para
+     * imprimir ([hojas], azules a trazos con su número; [vivo], el que se arrastra, más tenue) en
+     * [lienzo], vistos con [c] en una pantalla de [w] × [h]. Sin estado de la pantalla: lo usan el
+     * hilo que pinta lo de encima del plano y lo vivo de [Cotas].
+     */
+    private fun dibujarCotas(
+        lienzo: android.graphics.Canvas, c: CamaraPlano, w: Int, h: Int, densidad: Float, claro: Boolean,
+        cadenas: List<List<DoubleArray>>, hojas: List<ImprimirPlano.Marco>, unidades: Int, vivo: ImprimirPlano.Marco? = null
+    ) {
+        val naranja = android.graphics.Color.rgb(0xFF, 0x8A, 0x00)
+        val raya = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val letra = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val pildora = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        raya.color = naranja; raya.strokeWidth = 2f * densidad; raya.style = android.graphics.Paint.Style.STROKE
+        letra.textSize = 12.5f * densidad; letra.color = if (claro) android.graphics.Color.WHITE else android.graphics.Color.rgb(0x1C, 0x1C, 0x1E)
+        pildora.color = if (claro) 0xEE1C1C1E.toInt() else 0xEEF5F5F7.toInt()
+        fun sx(p: DoubleArray) = c.pantallaX(p[0], w).toFloat()
+        fun sy(p: DoubleArray) = c.pantallaY(p[1], h).toFloat()
+        fun etiqueta(t: String, x: Float, y: Float) {
+            val ancho = letra.measureText(t)
+            val r = android.graphics.RectF(x - ancho / 2 - 6 * densidad, y - letra.textSize * 0.95f, x + ancho / 2 + 6 * densidad, y + letra.textSize * 0.6f)
+            lienzo.drawRoundRect(r, 6 * densidad, 6 * densidad, pildora)
+            lienzo.drawText(t, x - ancho / 2, y + letra.textSize * 0.25f, letra)
+        }
+        for (cadena in cadenas) {
+            if (cadena.isEmpty()) continue
+            var total = 0.0
+            for (k in 1 until cadena.size) {
+                val p = cadena[k - 1]; val q = cadena[k]
+                lienzo.drawLine(sx(p), sy(p), sx(q), sy(q), raya)
+                val d = hypot(q[0] - p[0], q[1] - p[1])
+                total += d
+                val mx = (sx(p) + sx(q)) / 2; val my = (sy(p) + sy(q)) / 2
+                val dx = sx(q) - sx(p); val dy = sy(q) - sy(p)
+                val l = hypot(dx, dy).coerceAtLeast(1e-6f)
+                val nx = -dy / l; val ny = dx / l
+                val lado = if (ny > 0) -1f else 1f
+                etiqueta(Medidas.medida(d, unidades), mx + nx * lado * 16 * densidad, my + ny * lado * 16 * densidad)
+            }
+            raya.style = android.graphics.Paint.Style.FILL
+            for (p in cadena) lienzo.drawRect(sx(p) - 3 * densidad, sy(p) - 3 * densidad, sx(p) + 3 * densidad, sy(p) + 3 * densidad, raya)
+            raya.style = android.graphics.Paint.Style.STROKE
+            if (cadena.size > 2) {
+                val u = cadena.last()
+                etiqueta("Σ " + Medidas.medida(total, unidades), sx(u) + 40 * densidad, sy(u) + 24 * densidad)
+            }
+        }
+        // Los marcos para imprimir: azules, a trazos, con su número (la hoja que serán).
+        val todos = hojas + listOfNotNull(vivo)
+        if (todos.isEmpty()) return
+        val azul = android.graphics.Color.rgb(0x3D, 0x8B, 0xFF)
+        val marco = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        val numero = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        marco.color = azul; marco.style = android.graphics.Paint.Style.STROKE; marco.strokeWidth = 1.8f * densidad
+        marco.pathEffect = android.graphics.DashPathEffect(floatArrayOf(8 * densidad, 5 * densidad), 0f)
+        todos.forEachIndexed { i, mc ->
+            val l = c.pantallaX(mc.x0, w).toFloat(); val r = c.pantallaX(mc.x1, w).toFloat()
+            val t = c.pantallaY(mc.y1, h).toFloat(); val b = c.pantallaY(mc.y0, h).toFloat()
+            marco.alpha = if (i < hojas.size) 255 else 170
+            lienzo.drawRect(l, t, r, b, marco)
+            if (i < hojas.size) {
+                numero.color = azul; numero.textSize = 14 * densidad; numero.isFakeBoldText = true
+                lienzo.drawText("${i + 1}", l + 6 * densidad, t + 18 * densidad, numero)
             }
         }
     }

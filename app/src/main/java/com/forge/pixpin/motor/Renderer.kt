@@ -28,10 +28,11 @@ class Renderer(
      *
      * Va como parámetro y no como constante porque cargar una fuente necesita
      * un `Context` y este archivo no tiene ninguno; quien construya el
-     * renderizador le pasa [DrawFonts.provider]. Sin él, el texto sale con la
-     * letra del sistema en vez de con la de Excalidraw.
+     * renderizador le pasa [DrawFonts.provider]. Sin él, las de la aplicación
+     * ([DrawFonts.deLaApp]): antes salía la letra del sistema, y en el chat el
+     * texto de una foto anotada se veía con otra letra que en el editor.
      */
-    private val typefaces: (Int?) -> android.graphics.Typeface? = { null },
+    private val typefaces: (Int?) -> android.graphics.Typeface? = DrawFonts.deLaApp,
     /**
      * Modo noche. **Es un filtro de pintado, no un cambio en el dibujo**: los
      * colores guardados siguen siendo los del modo día. El porqué, en

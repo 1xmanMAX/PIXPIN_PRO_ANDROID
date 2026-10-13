@@ -125,6 +125,11 @@ object CatalogoDeAjustes {
             "plano", "dwg dxf autocad cad anotar"
         ),
         Opcion(
+            "editor-plano", Seccion.DIBUJAR, "Editor del plano",
+            "Al anotar un plano DWG o DXF: el editor avanzado (estilo en el lateral, deshacer y rehacer) o el sencillo.",
+            listOf("plano_avanzado"), "dwg dxf autocad cad anotar avanzado sencillo lateral"
+        ) { it.planoAvanzado },
+        Opcion(
             "palabras", Seccion.PINEAR, "Palabras mágicas",
             "Qué palabra abre qué mini-app al pinear un texto: temporizador, lista, ruleta…",
             listOf("palabras_magicas"), "miniapp temporizador cronometro lista contador ruleta"

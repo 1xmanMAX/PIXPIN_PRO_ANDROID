@@ -136,6 +136,12 @@ data class Settings(
     val planoTools: Set<String>? = null,
     val planoGroups: String? = null,
     /**
+     * Anotar en el plano con **el editor avanzado** (panel lateral de estilo, deshacer y rehacer,
+     * la barra sin estilos) o con el sencillo de antes (todo en la barra de abajo). 13-oct-2026,
+     * el usuario: «el editor que aparece en AutoCAD es el sencillo, quiero el avanzado».
+     */
+    val planoAvanzado: Boolean = true,
+    /**
      * Y la del editor a pantalla completa.
      *
      * Ahí sitio hay, así que de fábrica salen **todas**; pero «todas» no es lo
@@ -419,6 +425,7 @@ class SettingsRepository(private val context: Context) {
         val LECTOR_GROUPS = stringPreferencesKey("lector_groups")
         val PLANO_TOOLS = stringSetPreferencesKey("plano_tools")
         val PLANO_GROUPS = stringPreferencesKey("plano_groups")
+        val PLANO_AVANZADO = booleanPreferencesKey("plano_avanzado")
         val EDITOR_TOOLS = stringSetPreferencesKey("editor_tools")
         val EDITOR_GROUPS = stringPreferencesKey("editor_groups")
         val OLED_NEGRO = booleanPreferencesKey("oled_negro")
@@ -458,6 +465,7 @@ class SettingsRepository(private val context: Context) {
             lectorGroups = prefs[Keys.LECTOR_GROUPS],
             planoTools = prefs[Keys.PLANO_TOOLS],
             planoGroups = prefs[Keys.PLANO_GROUPS],
+            planoAvanzado = prefs[Keys.PLANO_AVANZADO] ?: true,
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
@@ -786,6 +794,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit {
             it[Keys.PIN_FONT] = com.forge.pixpin.motor.ItemStyle.fontFamilyResuelta(familia)
         }
+    }
+
+    suspend fun setPlanoAvanzado(valor: Boolean) {
+        context.dataStore.edit { it[Keys.PLANO_AVANZADO] = valor }
     }
 
     suspend fun setZurdo(valor: Boolean) {
