@@ -3455,6 +3455,12 @@ class Renderer(
     /** La brocha de las imágenes, una para todas. Ver [drawImage]. */
     private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
+    /** [crop], que está en píxeles del archivo original, en los de un mapa de [ancho]×[alto]. */
+    private fun recorteEnElMapa(crop: Crop, ancho: Int, alto: Int): Rect {
+        val (x0, y0, x1, y1) = recorteEnPixeles(crop, ancho, alto)
+        return Rect(x0, y0, x1, y1)
+    }
+
     private fun drawImage(canvas: Canvas, e: Element, alpha: Int) {
         val fileId = e.fileId ?: return
         val bitmap = imageProvider(fileId) ?: return
@@ -3471,12 +3477,11 @@ class Renderer(
             )
         }
 
-        val src = e.crop?.let {
-            Rect(
-                it.x.toInt(), it.y.toInt(),
-                (it.x + it.width).toInt(), (it.y + it.height).toInt()
-            )
-        } ?: Rect(0, 0, bitmap.width, bitmap.height)
+        // El recorte viene en píxeles del archivo original (`naturalWidth`), y la imagen que
+        // llega puede estar leída a otra medida —reducida, o nítida, ver
+        // [com.forge.pixpin.pin.ImageStore.cargarNitida]—: se lleva a los píxeles de esta.
+        val src = e.crop?.let { recorteEnElMapa(it, bitmap.width, bitmap.height) }
+            ?: Rect(0, 0, bitmap.width, bitmap.height)
 
         // **Tumbada en el suelo**, si se ha pedido: es lo que permite meter un plano de
         // planta debajo de un croquis en volumen y levantar las cajas encima, a escala.

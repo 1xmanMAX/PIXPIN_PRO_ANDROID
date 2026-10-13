@@ -127,7 +127,7 @@ object Export {
         if (escena.visible.isNotEmpty()) {
             com.forge.pixpin.motor.Renderer(
                 imageProvider = { id ->
-                    escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                    escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.cargarNitida(it) }
                 },
                 typefaces = com.forge.pixpin.motor.DrawFonts.provider(context),
                 backdrop = completa
@@ -188,7 +188,7 @@ object PinExporter {
         if (!original.isRecycled && salida !== original) original.recycle()
         com.forge.pixpin.motor.Renderer(
             imageProvider = { id ->
-                escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.cargarNitida(it) }
             },
             typefaces = com.forge.pixpin.motor.DrawFonts.provider(context),
             backdrop = salida
@@ -257,7 +257,7 @@ object PinExporter {
                     ?: com.forge.pixpin.motor.ExcalidrawStore.rutaDe(context, state.id)
             )?.let { escena ->
                 com.forge.pixpin.motor.DrawExport.aBitmap(escena) { id ->
-                    escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                    escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.cargarNitida(it) }
                 }
             }
     }

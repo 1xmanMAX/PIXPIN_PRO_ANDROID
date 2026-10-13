@@ -418,7 +418,9 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         var grande by remember(c.uri) { mutableStateOf<ImageBitmap?>(null) }
         LaunchedEffect(c.uri) {
             grande = withContext(Dispatchers.IO) {
-                runCatching { contentResolver.loadThumbnail(c.uri, Size(720, 720), null).asImageBitmap() }.getOrNull()
+                // A 1600 y no a 720: ocupa todo el ancho de la pantalla, y una captura del PC
+                // a 720 ya no se leía (13-oct-2026). Sigue siendo una vista: abrirla la lee entera.
+                runCatching { contentResolver.loadThumbnail(c.uri, Size(1600, 1600), null).asImageBitmap() }.getOrNull()
             }
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {

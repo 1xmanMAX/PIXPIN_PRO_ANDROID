@@ -1054,6 +1054,22 @@ data class Crop(
     val naturalHeight: Double
 )
 
+/**
+ * **Pura**: [crop] en píxeles de un mapa de [ancho]×[alto] (izquierda, arriba, derecha, abajo).
+ *
+ * El recorte se apunta en píxeles del archivo original, pero la imagen se puede leer a otra
+ * medida (reducida para no gastar, o entera para que se vea nítida): sin llevarlo a la medida
+ * leída, una foto recortada enseñaba otro trozo. Sin `naturalWidth` válido se toma tal cual.
+ */
+fun recorteEnPixeles(crop: Crop, ancho: Int, alto: Int): IntArray {
+    val sx = if (crop.naturalWidth > 0) ancho / crop.naturalWidth else 1.0
+    val sy = if (crop.naturalHeight > 0) alto / crop.naturalHeight else 1.0
+    return intArrayOf(
+        (crop.x * sx).toInt(), (crop.y * sy).toInt(),
+        ((crop.x + crop.width) * sx).toInt(), ((crop.y + crop.height) * sy).toInt()
+    )
+}
+
 // -------------------------------------------------------------------------
 // Predicados de tipo. Se copian de `typeChecks.ts` porque media librería
 // pregunta por ellos y así el resto del código lee igual que el original.

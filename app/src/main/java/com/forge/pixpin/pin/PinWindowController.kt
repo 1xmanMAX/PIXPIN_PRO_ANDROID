@@ -596,7 +596,9 @@ class PinWindowController(
     ): Bitmap? {
         imagenesDelDibujo[id]?.takeIf { !it.isRecycled }?.let { return it }
         val ruta = archivos[id]?.path ?: return null
-        return ImageStore.load(ruta)?.also { imagenesDelDibujo[id] = it }
+        // Nítida, como en el editor: ver [ImageStore.cargarNitida].
+        return ImageStore.cargarNitida(ruta, maxPixeles = ImageStore.pixelesParaVarias(archivos.size))
+            ?.also { imagenesDelDibujo[id] = it }
     }
 
     fun setClickThrough(value: Boolean) {

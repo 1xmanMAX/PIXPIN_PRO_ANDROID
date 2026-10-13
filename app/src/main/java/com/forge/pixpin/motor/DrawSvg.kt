@@ -813,10 +813,12 @@ object DrawSvg {
         private fun recortar(bmp: Bitmap, crop: Crop?): Bitmap? {
             if (crop == null) return bmp
             return runCatching {
-                val x = crop.x.toInt().coerceIn(0, max(0, bmp.width - 1))
-                val y = crop.y.toInt().coerceIn(0, max(0, bmp.height - 1))
-                val w = crop.width.toInt().coerceIn(1, bmp.width - x)
-                val h = crop.height.toInt().coerceIn(1, bmp.height - y)
+                // En píxeles del mapa leído, no del archivo: ver [recorteEnPixeles].
+                val r = recorteEnPixeles(crop, bmp.width, bmp.height)
+                val x = r[0].coerceIn(0, max(0, bmp.width - 1))
+                val y = r[1].coerceIn(0, max(0, bmp.height - 1))
+                val w = (r[2] - r[0]).coerceIn(1, bmp.width - x)
+                val h = (r[3] - r[1]).coerceIn(1, bmp.height - y)
                 Bitmap.createBitmap(bmp, x, y, w, h)
             }.getOrNull()
         }
