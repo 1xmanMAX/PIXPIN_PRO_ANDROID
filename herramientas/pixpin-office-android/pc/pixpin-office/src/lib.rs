@@ -18,8 +18,10 @@
 #![forbid(unsafe_code)]
 
 pub mod dml;
+pub mod formas;
 pub mod docx;
 pub mod geometria;
+pub mod grafico;
 pub mod medidor;
 pub mod pagina;
 pub mod paquete;

@@ -39,6 +39,9 @@ internal object HojasNativo {
     /** Lo elegido como texto con tabuladores (lo que se ve en cada celda). */
     @JvmStatic external fun copiar(h: Long, i: Int, f0: Int, c0: Int, f1: Int, c1: Int): String?
 
+    /** Los valores de la lista desplegable de la celda, uno por renglón (solo para ver); null si no tiene. */
+    @JvmStatic external fun lista(h: Long, i: Int, f: Int, c: Int): String?
+
     /** Los bytes de una imagen del libro tal como vienen (PNG, JPEG, EMF…). */
     @JvmStatic external fun imagen(h: Long, ruta: String): ByteArray?
 

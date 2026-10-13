@@ -31,14 +31,18 @@
 //!       u32 n × { u32 min, u32 max, u32 argb } rellenos de columnas enteras,
 //!       u32 n × { u32 f0, c0, f1, c1 } combinaciones,
 //!       u32 n × { u32 f0, c0, f1, c1, u8 externo, str destino } enlaces,
-//!       u32 n × dibujo
+//!       u32 n × dibujo,
+//!       u32 n × { u32 fila, u32 columna, u8 filtrado } botones del autofiltro (de la hoja y de
+//!       las tablas),
+//!       u32 n × { u32 n × { u32 f0, c0, f1, c1 } } listas desplegables (sus rangos)
 //!   dibujo = f32 x, y, ancho, alto (px al 100 %), u8 tipo y:
 //!     0 imagen:  str ruta en el ZIP, f32 × 4 recorte (izq, arr, der, aba en fracción)
 //!     1 gráfico: str título, str tipo, u32 n × str categoría, u32 n × { str nombre,
 //!                u32 argb (0 sin), u32 n × f64 }
 //!     2 forma:   str texto, u32 relleno, u32 línea, u8 alinear, u8 vertical
 //! PXHT: "PXHT" u16 versión, u64 versión de la hoja, u32 f0, u32 f1, u32 desde, u32 n × estilo
-//!       (los estilos desde el número `desde`), u32 n × fila, u32 n × lado
+//!       (los estilos desde el número `desde`), u32 n × fila, u32 n × lado, u32 n × minigráfico,
+//!       u32 n × comentario
 //!   estilo = str familia, f32 puntos, u16 letra (1 negrita 2 cursiva 4 tachado 8 subrayado
 //!            16 doble subrayado 32 superíndice 64 subíndice), u32 argb del texto, u32 argb del
 //!            relleno (0 sin), u8 horizontal, u8 vertical, u8 (1 ajustar 2 encoger), u8 sangría,
@@ -46,14 +50,27 @@
 //!   fila   = u32 índice, u8 (1 oculta, 2 sin alto propio), u32 argb del relleno de la fila
 //!            (0 sin), u32 n × celda
 //!   celda  = u32 columna, u32 estilo, u8 clase (0 vacía 1 número 2 texto 3 lógico 4 error),
-//!            u8 (1 barra, 2 relleno contable, 4 tramos), str texto,
-//!            [barra: f32 fracción, u32 argb] [contable: u32 corte en UTF-16]
+//!            u8 (1 barra, 2 relleno contable, 4 tramos, 8 icono), str texto,
+//!            [barra: f32 desde, f32 hasta (fracciones del ancho), u32 argb, u8 (1 degradado),
+//!                    u32 argb del borde (0 sin), f32 eje (fracción; < 0 sin), u32 argb del eje]
+//!            [contable: u32 corte en UTF-16]
 //!            [tramos: u32 n × { u32 largo en UTF-16, str familia, f32 puntos, u16 letra, u32 argb }]
+//!            [icono: u8 conjunto (el orden de `Conjunto::TODOS`), u8 icono (0 = el peor)]
 //!   lado   = u8 tipo (0 horizontal: arriba de la fila; 1 vertical: a la izquierda de la
 //!            columna; 2 diagonal que baja; 3 diagonal que sube), u32 fila, u32 columna,
 //!            u8 estilo de línea (el orden de `EstiloLinea`), u32 argb
+//!   minigráfico = u32 fila, u32 columna, u8 tipo (0 línea, 1 columnas, 2 ganancia/pérdida),
+//!            u8 (1 marcadores, 2 alto, 4 bajo, 8 primero, 16 último, 32 negativos, 64 eje,
+//!            128 unir los huecos), f32 grosor en puntos, f64 mínimo y máximo del eje,
+//!            u32 argb × 8 (serie, negativo, eje, marcadores, primero, último, alto, bajo),
+//!            u32 n × f32 puntos (NaN = hueco; ya del revés si va de derecha a izquierda)
+//!   comentario = u32 fila, u32 columna, u8 encadenado, str autor, str texto,
+//!            u32 n × { str autor, str texto } respuestas
 //! ```
 //! Los lados van de menos a más fuertes: pintados en orden, los gruesos tapan las esquinas.
+//!
+//! v2 (13-oct-2026, PC 9975385): barras de datos completas, iconos, minigráficos, comentarios,
+//! botones del autofiltro, listas desplegables y los `.xls` antiguos.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -62,7 +79,7 @@ use pixpin_hojas::condicional::Efecto;
 use pixpin_hojas::estilos::{Dxf, EstiloLinea, Fuente, Horizontal, Linea, Relleno, Rgb, Subrayado, Vertical};
 use pixpin_hojas::{Celda, Clase, ContenidoDibujo, Hoja, Libro, Rango, Regional, Rejilla, TipoHoja, Valor, Visibilidad};
 
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
 /// Un libro abierto y sus hojas (cada una se abre la primera vez que se pide).
 pub struct LibroAndroid {
@@ -101,14 +118,20 @@ pub fn regional_de(texto: &str) -> Regional {
     if let Some(f) = l.next().map(str::trim).filter(|f| !f.is_empty() && f.contains('d') && f.contains('m')) {
         r.fecha_corta = f.to_string();
     }
+    // Los minutos al este de UTC del teléfono: el «hoy» del formato condicional (el PC lo saca de
+    // Windows, `fijar_hora_local`).
+    if let Some(m) = l.next().and_then(|m| m.trim().parse::<i32>().ok()) {
+        pixpin_hojas::condicional::fijar_desfase_horario(m);
+    }
     r
 }
 
-/// Si el archivo empieza como un ZIP (un `.xls` renombrado no: se queda con lo de antes).
-pub fn es_zip(ruta: &Path) -> bool {
+/// Si el archivo empieza como un ZIP (un `.xlsx`) o como un `.xls` antiguo (un archivo compuesto
+/// de OLE, que el PC lee sin Office desde 9975385).
+pub fn se_lee(ruta: &Path) -> bool {
     use std::io::Read;
-    let mut cabeza = [0u8; 4];
-    std::fs::File::open(ruta).and_then(|mut f| f.read_exact(&mut cabeza)).is_ok() && cabeza == *b"PK\x03\x04"
+    let mut cabeza = [0u8; 8];
+    std::fs::File::open(ruta).and_then(|mut f| f.read_exact(&mut cabeza)).is_ok() && (cabeza.starts_with(b"PK\x03\x04") || pixpin_hojas::cfb::es_cfb(&cabeza))
 }
 
 fn argb(c: Rgb) -> u32 {
@@ -139,6 +162,10 @@ impl Bytes {
     }
     fn f32(&mut self, v: f32) {
         self.b.extend_from_slice(&(if v.is_finite() { v } else { 0.0 }).to_le_bytes());
+    }
+    /// Un f32 tal cual, también NaN (los huecos de un minigráfico).
+    fn f32_crudo(&mut self, v: f32) {
+        self.b.extend_from_slice(&v.to_le_bytes());
     }
     fn f64(&mut self, v: f64) {
         self.b.extend_from_slice(&(if v.is_finite() { v } else { 0.0 }).to_le_bytes());
@@ -206,8 +233,8 @@ fn linea_u8(e: EstiloLinea) -> u8 {
 
 impl LibroAndroid {
     pub fn abrir(ruta: &Path, regional: Regional) -> Result<LibroAndroid, String> {
-        if !es_zip(ruta) {
-            return Err("no es un libro de Excel moderno (¿un .xls antiguo?)".into());
+        if !se_lee(ruta) {
+            return Err("no es un libro de Excel".into());
         }
         let libro = Libro::abrir(ruta, regional).map_err(|e| e.to_string())?;
         let n = libro.hojas.len();
@@ -439,6 +466,34 @@ fn geometria(libro: &Libro, hoja: &Hoja, r: &Rejilla) -> Vec<u8> {
             }
         }
     }
+    // Los botones del autofiltro: el de la hoja y los de las tablas con encabezado.
+    let tablas = hoja.cola.tablas.iter().filter(|t| t.encabezado > 0).filter_map(|t| t.filtro.as_ref());
+    let mut botones: Vec<(u32, u32, bool)> = Vec::new();
+    for f in hoja.cola.autofiltro.iter().chain(tablas) {
+        for col in f.columnas_con_boton() {
+            botones.push((f.rango.fila0, col, f.tiene_filtro(col)));
+        }
+    }
+    w.u32(botones.len() as u32);
+    for (f, c, filtrado) in botones {
+        w.u32(f);
+        w.u32(c);
+        w.u8(filtrado as u8);
+    }
+    // Las listas desplegables (las que llevan flecha).
+    let listas: Vec<_> = hoja
+        .cola
+        .validaciones
+        .iter()
+        .filter(|v| v.tipo == pixpin_hojas::validacion::TipoValidacion::Lista && v.flecha)
+        .collect();
+    w.u32(listas.len() as u32);
+    for v in listas {
+        w.u32(v.rangos.len() as u32);
+        for r in &v.rangos {
+            rango(&mut w, r);
+        }
+    }
     w.b
 }
 
@@ -586,7 +641,8 @@ fn trozo(libro: &Libro, h: &mut HojaAndroid, f0: u32, f1: u32, conocidos: u32) -
                 ),
                 None => (0u8, ""),
             };
-            let barra = ef.as_ref().and_then(|e| e.barra);
+            let barra = ef.as_ref().and_then(|e| e.barra.clone());
+            let icono = ef.as_ref().and_then(|e| e.icono);
             let corte = cont
                 .as_ref()
                 .and_then(|x| x.mostrado.relleno)
@@ -594,11 +650,16 @@ fn trozo(libro: &Libro, h: &mut HojaAndroid, f0: u32, f1: u32, conocidos: u32) -
                 .map(|k| texto[..k].encode_utf16().count() as u32);
             let tramos = cont.as_ref().and_then(|x| x.tramos.as_ref()).filter(|_| !texto.is_empty());
             filas_w.u8(clase);
-            filas_w.u8((barra.is_some() as u8) | (corte.is_some() as u8) << 1 | (tramos.is_some() as u8) << 2);
+            filas_w.u8((barra.is_some() as u8) | (corte.is_some() as u8) << 1 | (tramos.is_some() as u8) << 2 | (icono.is_some() as u8) << 3);
             filas_w.str(texto);
-            if let Some((frac, col)) = barra {
-                filas_w.f32(frac);
-                filas_w.u32(argb(col));
+            if let Some(b) = barra {
+                filas_w.f32(b.desde);
+                filas_w.f32(b.hasta);
+                filas_w.u32(argb(b.color));
+                filas_w.u8(b.degradado as u8);
+                filas_w.u32(b.borde.map_or(0, argb));
+                filas_w.f32(b.eje.map_or(-1.0, |e| e.0));
+                filas_w.u32(b.eje.map_or(0, |e| argb(e.1)));
             }
             if let Some(k) = corte {
                 filas_w.u32(k);
@@ -612,6 +673,10 @@ fn trozo(libro: &Libro, h: &mut HojaAndroid, f0: u32, f1: u32, conocidos: u32) -
                     filas_w.u16(bits_de_letra(&t.fuente));
                     filas_w.u32(argb(t.fuente.color.unwrap_or(color)));
                 }
+            }
+            if let Some((conjunto, i)) = icono {
+                filas_w.u8(pixpin_hojas::condicional::Conjunto::TODOS.iter().position(|c| *c == conjunto).unwrap_or(0) as u8);
+                filas_w.u8(i);
             }
         }
     }
@@ -705,7 +770,83 @@ fn trozo(libro: &Libro, h: &mut HojaAndroid, f0: u32, f1: u32, conocidos: u32) -
         w.u8(linea_u8(li.estilo));
         w.u32(argb(li.color));
     }
+    minigraficos(&mut w, libro, &h.hoja, f0, f1);
+    comentarios(&mut w, &h.hoja, f0, f1);
     w.b
+}
+
+/// **Los minigráficos** de las filas `f0..=f1` con sus puntos y su eje ya calculados (lo que el PC
+/// hace en `pintar_minigraficos` antes de dibujar): Kotlin solo los dibuja.
+fn minigraficos(w: &mut Bytes, libro: &Libro, hoja: &Hoja, f0: u32, f1: u32) {
+    use pixpin_hojas::minigraficos::{TipoMini, Vacias, puntos_de};
+    let minis = &hoja.cola.minigraficos;
+    let desde = minis.partition_point(|x| x.fila < f0);
+    let mut cuerpo = Bytes::default();
+    let mut n = 0u32;
+    for mi in minis[desde..].iter().take_while(|x| x.fila <= f1) {
+        let Some(g) = hoja.cola.grupos_mini.get(mi.grupo as usize) else { continue };
+        let valores = libro.valores_mini(hoja, mi);
+        let puntos = puntos_de(g, &valores);
+        let Some((lo, hi)) = libro.eje_mini(hoja, mi, &puntos) else { continue };
+        n += 1;
+        cuerpo.u32(mi.fila);
+        cuerpo.u32(mi.col);
+        cuerpo.u8(match g.tipo {
+            TipoMini::Linea => 0,
+            TipoMini::Columna => 1,
+            TipoMini::GananciaPerdida => 2,
+        });
+        cuerpo.u8(
+            g.marcadores as u8
+                | (g.alto as u8) << 1
+                | (g.bajo as u8) << 2
+                | (g.primero as u8) << 3
+                | (g.ultimo as u8) << 4
+                | (g.negativos as u8) << 5
+                | (g.eje_x as u8) << 6
+                | ((g.vacias == Vacias::Unir) as u8) << 7,
+        );
+        cuerpo.f32(g.peso);
+        cuerpo.f64(lo);
+        cuerpo.f64(hi);
+        for c in [g.c_serie, g.c_negativo, g.c_eje, g.c_marcadores, g.c_primero, g.c_ultimo, g.c_alto, g.c_bajo] {
+            cuerpo.u32(argb(c));
+        }
+        cuerpo.u32(puntos.len() as u32);
+        for p in &puntos {
+            cuerpo.f32_crudo(p.map_or(f32::NAN, |v| v as f32));
+        }
+    }
+    w.u32(n);
+    w.b.extend_from_slice(&cuerpo.b);
+}
+
+/// Las notas y los comentarios de las filas `f0..=f1` (el triángulo rojo y lo que se lee al tocar).
+fn comentarios(w: &mut Bytes, hoja: &Hoja, f0: u32, f1: u32) {
+    let com = &hoja.cola.comentarios;
+    let desde = com.partition_point(|c| c.fila < f0);
+    let estos: Vec<_> = com[desde..].iter().take_while(|c| c.fila <= f1).collect();
+    w.u32(estos.len() as u32);
+    for c in estos {
+        w.u32(c.fila);
+        w.u32(c.col);
+        w.u8(c.encadenado as u8);
+        w.str(&c.autor);
+        w.str(&c.texto);
+        w.u32(c.respuestas.len() as u32);
+        for (a, t) in &c.respuestas {
+            w.str(a);
+            w.str(t);
+        }
+    }
+}
+
+/// **Los valores de la lista desplegable** de la celda, uno por renglón (solo para ver, como el
+/// PC: no se cambia nada). `None` si la celda no tiene lista.
+pub fn lista_en(l: &mut LibroAndroid, i: usize, fila: u32, col: u32) -> Option<String> {
+    let (libro, h) = l.hoja_mut(i)?;
+    let v = h.hoja.lista_en(fila, col)?;
+    Some(pixpin_hojas::validacion::valores_lista(libro, &h.hoja, v).join("\n"))
 }
 
 /// La última fila con algo de la hoja `i` (o la de su `dimension`), si está abierta.

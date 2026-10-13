@@ -57,6 +57,20 @@ pub enum Ajuste {
     Cuadrado,
 }
 
+/// A que lado del dibujo puede ir el texto (`wrapText`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Lado {
+    /// `bothSides`: a los dos lados.
+    #[default]
+    Ambos,
+    /// `left`: solo a la izquierda.
+    Izquierda,
+    /// `right`: solo a la derecha.
+    Derecha,
+    /// `largest`: al lado con mas sitio.
+    Mayor,
+}
+
 #[derive(Debug, Clone)]
 pub struct Flotante {
     pub objeto: Objeto,
@@ -66,6 +80,12 @@ pub struct Flotante {
     pub ajuste: Ajuste,
     /// Distancia al texto (arriba, abajo, izquierda, derecha).
     pub margen: [f32; 4],
+    pub lado: Lado,
+    /// El contorno que sigue el texto (`wrapTight`/`wrapThrough` con
+    /// `wp:wrapPolygon`), en fracciones del ancho y alto del dibujo.
+    pub contorno: Option<Arc<[(f32, f32)]>>,
+    /// `wrapThrough`: el texto entra tambien en los huecos del contorno.
+    pub traspasa: bool,
 }
 
 pub enum Dibujo {
@@ -129,14 +149,26 @@ fn anclado(ctx: &mut Ctx, e: &Nodo) -> Option<Flotante> {
         hpos = Posicion { referencia: Referencia::Pagina, desplazamiento: emu(attr_num(sp, "x", 1.0).unwrap_or(0.0)), alineacion: None };
         vpos = Posicion { referencia: Referencia::Pagina, desplazamiento: emu(attr_num(sp, "y", 1.0).unwrap_or(0.0)), alineacion: None };
     }
-    let ajuste = if e.hijo("wrapTopAndBottom").is_some() {
-        Ajuste::ArribaAbajo
-    } else if e.hijo("wrapSquare").is_some() || e.hijo("wrapTight").is_some() || e.hijo("wrapThrough").is_some() {
-        Ajuste::Cuadrado
+    let (ajuste, forma) = if let Some(x) = e.hijo("wrapTopAndBottom") {
+        (Ajuste::ArribaAbajo, Some(x))
+    } else if let Some(x) = e.hijo("wrapSquare").or_else(|| e.hijo("wrapTight")).or_else(|| e.hijo("wrapThrough")) {
+        (Ajuste::Cuadrado, Some(x))
     } else {
-        Ajuste::Ninguno
+        (Ajuste::Ninguno, None)
     };
-    let d = |k: &str| emu(attr_num(e, k, 1.0).unwrap_or(0.0));
+    // Las distancias al texto: las del ajuste mandan sobre las del ancla.
+    let d = |k: &str| {
+        let v = forma.and_then(|f| attr_num(f, k, 1.0)).or_else(|| attr_num(e, k, 1.0)).unwrap_or(0.0);
+        emu(v).clamp(0.0, 1584.0)
+    };
+    let lado = match forma.map(|f| f.atributo("wrapText")).unwrap_or("") {
+        "left" => Lado::Izquierda,
+        "right" => Lado::Derecha,
+        "largest" => Lado::Mayor,
+        _ => Lado::Ambos,
+    };
+    let estrecho = forma.is_some_and(|f| f.nombre == "wrapTight" || f.nombre == "wrapThrough");
+    let contorno = forma.filter(|_| estrecho).and_then(|f| f.hijo("wrapPolygon")).and_then(poligono);
     Some(Flotante {
         objeto: Objeto { ancho: w, alto: h, bajo: 0.0, elementos },
         h: hpos,
@@ -144,7 +176,26 @@ fn anclado(ctx: &mut Ctx, e: &Nodo) -> Option<Flotante> {
         detras: matches!(e.atributo("behindDoc"), "1" | "true"),
         ajuste,
         margen: [d("distT"), d("distB"), d("distL"), d("distR")],
+        lado,
+        contorno,
+        traspasa: forma.is_some_and(|f| f.nombre == "wrapThrough"),
     })
+}
+
+/// Los puntos de un `wp:wrapPolygon` (`wp:start` y `wp:lineTo`, en 21600
+/// partes del dibujo) como fracciones de su ancho y alto. `None` con menos
+/// de tres puntos.
+fn poligono(p: &Nodo) -> Option<Arc<[(f32, f32)]>> {
+    const PARTES: f32 = 21600.0;
+    let v: Vec<(f32, f32)> = p
+        .elementos()
+        .filter(|x| x.nombre == "start" || x.nombre == "lineTo")
+        .filter_map(|x| Some((attr_num(x, "x", 1.0)? / PARTES, attr_num(x, "y", 1.0)? / PARTES)))
+        .filter(|(x, y)| x.is_finite() && y.is_finite())
+        .map(|(x, y)| (x.clamp(-1.0, 2.0), y.clamp(-1.0, 2.0)))
+        .take(1000)
+        .collect();
+    (v.len() >= 3).then(|| Arc::from(v))
 }
 
 /// El contenido de un `a:graphic` dentro de `padre` (inline o anchor).
@@ -152,6 +203,12 @@ fn grafico_de(ctx: &mut Ctx, padre: &Nodo, w: f32, h: f32) -> Vec<Elemento> {
     let Some(datos) = padre.hijo("graphic").and_then(|g| g.hijo("graphicData")) else {
         return Vec::new();
     };
+    // Un grafico: dibujado con los datos de su cache.
+    let mapa = std::collections::HashMap::new();
+    let dctx = Contexto { tema: ctx.tema, mapa: &mapa };
+    if let Some(els) = crate::grafico::de_datos(ctx.paquete, ctx.rels, datos, dctx, ctx.medidor, w, h) {
+        return els;
+    }
     let mut v = Vec::new();
     for hijo in datos.elementos() {
         forma(ctx, hijo, Rect::nuevo(0.0, 0.0, w, h), &mut v);
@@ -192,7 +249,9 @@ fn forma(ctx: &mut Ctx, n: &Nodo, caja: Rect, salida: &mut Vec<Elemento>) {
             if let Some(ln) = sppr.and_then(|s| s.hijo("ln")).and_then(|l| dml::linea(l, dctx, None)).flatten() {
                 els.push(Elemento::Rect { rect: Rect::nuevo(0.0, 0.0, caja.ancho, caja.alto), relleno: None, borde: Some(ln) });
             }
-            salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v));
+            // La sombra de las imagenes (muy comun en Word).
+            let efectos = dml::efectos_forma(sppr, n.hijo("style"), &[], dctx, x.giro);
+            salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos));
         }
         "wsp" => {
             let Some(sppr) = n.hijo("spPr") else { return };
@@ -234,7 +293,8 @@ fn forma(ctx: &mut Ctx, n: &Nodo, caja: Rect, salida: &mut Vec<Elemento>) {
                     els.push(e);
                 }
             }
-            salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v));
+            let efectos = dml::efectos_forma(Some(sppr), n.hijo("style"), &[], dctx, x.giro);
+            salida.push(dml::colocar(els, caja, x.giro, x.voltear_h, x.voltear_v).con_efectos(efectos));
         }
         "wgp" | "grpSp" | "wpc" => {
             let gx = n.hijo("grpSpPr").map(dml::xfrm).unwrap_or_default();
@@ -249,7 +309,8 @@ fn forma(ctx: &mut Ctx, n: &Nodo, caja: Rect, salida: &mut Vec<Elemento>) {
                 let r = Rect::nuevo((hx.x - gx.hijo_x) * sx, (hx.y - gx.hijo_y) * sy, hx.ancho * sx, hx.alto * sy);
                 forma(ctx, h, r, &mut hijos);
             }
-            salida.push(dml::colocar(hijos, caja, gx.giro, gx.voltear_h, gx.voltear_v));
+            let efectos = dml::efectos_forma(n.hijo("grpSpPr"), None, &[], dctx, gx.giro);
+            salida.push(dml::colocar(hijos, caja, gx.giro, gx.voltear_h, gx.voltear_v).con_efectos(efectos));
         }
         _ => {}
     }
@@ -341,5 +402,8 @@ pub fn vml(ctx: &mut Ctx, n: &Nodo) -> Option<Dibujo> {
         detras: prop("z-index").and_then(|z| z.parse::<i64>().ok()).is_some_and(|z| z < 0),
         ajuste: Ajuste::Ninguno,
         margen: [0.0; 4],
+        lado: Lado::Ambos,
+        contorno: None,
+        traspasa: false,
     }))
 }

@@ -12,5 +12,15 @@ mkdir -p "$D"
 cp "$TMP/salida/libro.pxhl" "$D/prueba.pxhl"
 cp "$TMP/salida/geometria.pxhg" "$D/prueba.pxhg"
 cp "$TMP/salida/trozo-0.pxht" "$D/prueba-0.pxht"
+# Lo del 12-oct del PC: barras, iconos, minigráfico, nota, autofiltro y lista desplegable.
+"$AQUI/../hojas-a-pxhj.sh" "$TMP/extras.xlsx" "$TMP/extras" 0 64 1
+cp "$TMP/extras/geometria.pxhg" "$D/extras.pxhg"
+cp "$TMP/extras/trozo-0.pxht" "$D/extras-0.pxht"
+# Un .xls antiguo (BIFF8), el de las pruebas del PC: con PIXPIN_PC=<repo del PC>.
+if [ -n "$PIXPIN_PC" ]; then
+    "$AQUI/../hojas-a-pxhj.sh" "$PIXPIN_PC/crates/pixpin-hojas/tests/muestras/pequeno.xls" "$TMP/xls" 0 64 1
+    cp "$TMP/xls/libro.pxhl" "$D/viejo.pxhl"
+    cp "$TMP/xls/trozo-0.pxht" "$D/viejo-0.pxht"
+fi
 rm -rf "$TMP"
 ls -l "$D"

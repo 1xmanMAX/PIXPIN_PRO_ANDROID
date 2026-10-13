@@ -159,9 +159,43 @@ def grande(ruta, filas):
     ])
 
 
+def extras(ruta):
+    """Lo de Excel que llegó al PC el 12-oct (9975385): encabezado A1:C1 con autofiltro (filtro
+    puesto en B), barras de datos en A2:A7, iconos (3 flechas) en B2:B7, un minigráfico de
+    columnas en C2 con A2:A7, una nota en A2 y una lista desplegable «Sí,No» en D2:D7."""
+    filas = ['<row r="1"><c r="A1" t="inlineStr"><is><t>Valor</t></is></c><c r="B1" t="inlineStr"><is><t>Tendencia</t></is></c>'
+             '<c r="C1" t="inlineStr"><is><t>Mini</t></is></c><c r="D1" t="inlineStr"><is><t>Hecho</t></is></c></row>']
+    valores = [3, 8, -2, 5, 10, 1]
+    for i, v in enumerate(valores):
+        r = i + 2
+        filas.append(f'<row r="{r}"><c r="A{r}"><v>{v}</v></c><c r="B{r}"><v>{v * 10}</v></c></row>')
+    hoja = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet {NS} xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+<dimension ref="A1:D7"/>
+<sheetData>{"".join(filas)}</sheetData>
+<autoFilter ref="A1:C7"><filterColumn colId="1"><filters><filter val="30"/></filters></filterColumn></autoFilter>
+<conditionalFormatting sqref="A2:A7"><cfRule type="dataBar" priority="1"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar></cfRule></conditionalFormatting>
+<conditionalFormatting sqref="B2:B7"><cfRule type="iconSet" priority="2"><iconSet iconSet="3Arrows"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting>
+<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="D2:D7"><formula1>"Sí,No"</formula1></dataValidation></dataValidations>
+<extLst><ext uri="{{05C60535-1F16-4fd2-B633-F4F36F0B64E0}}"><x14:sparklineGroups><x14:sparklineGroup type="column"><x14:colorSeries rgb="FF376092"/><x14:colorNegative rgb="FFD00000"/><x14:sparklines><x14:sparkline><xm:f>A2:A7</xm:f><xm:sqref>C2</xm:sqref></x14:sparkline></x14:sparklines></x14:sparklineGroup></x14:sparklineGroups></ext></extLst>
+</worksheet>"""
+    rels_hoja = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>"""
+    notas = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>Luis</author></authors><commentList><comment ref="A2" authorId="0"><text><r><t>Revisar este valor</t></r></text></comment></commentList></comments>"""
+    escribir(ruta, [
+        ("[Content_Types].xml", TIPOS), ("_rels/.rels", RAIZ),
+        ("xl/workbook.xml", libro_xml(["Extras", "Datos"])), ("xl/_rels/workbook.xml.rels", rels_libro(2)),
+        ("xl/styles.xml", ESTILOS), ("xl/sharedStrings.xml", textos_xml(["x"])),
+        ("xl/worksheets/sheet1.xml", hoja), ("xl/worksheets/_rels/sheet1.xml.rels", rels_hoja), ("xl/comments1.xml", notas),
+        ("xl/worksheets/sheet2.xml", f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet {NS}><sheetData/></worksheet>'),
+    ])
+
+
 if __name__ == "__main__":
     salida = Path(sys.argv[1])
     salida.mkdir(parents=True, exist_ok=True)
     prueba(salida / "prueba.xlsx")
+    extras(salida / "extras.xlsx")
     if len(sys.argv) > 2:
         grande(salida / "grande.xlsx", int(sys.argv[2]))

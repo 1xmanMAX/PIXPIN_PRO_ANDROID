@@ -16,9 +16,13 @@ import java.nio.ByteOrder
  *   (números, fechas, porcentajes, con la configuración regional del teléfono) y su estilo (letra,
  *   color, relleno y alineación, con lo de la tabla y el formato condicional ya puesto), y los
  *   bordes decididos lado a lado. Los estilos llegan una vez: cada trozo trae los nuevos.
+ *
+ * v2 (13-oct-2026, PC 9975385): barras de datos completas (desde/hasta, borde, eje), iconos,
+ * minigráficos y comentarios en cada trozo; botones del autofiltro y listas desplegables en la
+ * geometría.
  */
 object Pxhj {
-    const val VERSION = 1
+    const val VERSION = 2
 
     class NoSeLee(porque: String) : Exception(porque)
 
@@ -56,6 +60,9 @@ object Pxhj {
 
     class Serie(val nombre: String, val color: Int, val valores: DoubleArray)
 
+    /** Un botón del autofiltro en la fila de encabezado; [filtrado]: con un filtro puesto (el embudo). */
+    class BotonDeFiltro(val fila: Int, val col: Int, val filtrado: Boolean)
+
     class Geometria(
         val version: Long,
         val completa: Boolean,
@@ -82,8 +89,15 @@ object Pxhj {
         val rellenosDeColumnas: IntArray,
         val combinadas: List<Rango>,
         val enlaces: List<Enlace>,
-        val dibujos: List<Dibujo>
+        val dibujos: List<Dibujo>,
+        /** Los botones del autofiltro (de la hoja y de las tablas). */
+        val botones: List<BotonDeFiltro> = emptyList(),
+        /** Las listas desplegables: los rangos de cada una. */
+        val listas: List<List<Rango>> = emptyList()
     ) {
+        /** Si la celda tiene una lista desplegable. */
+        fun conLista(f: Int, c: Int): Boolean = listas.any { l -> l.any { it.contiene(f, c) } }
+
         /** Dónde empieza la columna [c] (px de hoja al 100 %). */
         fun x(c: Int): Long {
             val n = xs.size - 1
@@ -166,16 +180,24 @@ object Pxhj {
 
     class Tramo(val largo: Int, val familia: String, val puntos: Float, val letra: Int, val argb: Int)
 
-    /** [clase]: 0 vacía, 1 número, 2 texto, 3 lógico, 4 error. [barra] NaN = sin; [corte] -1 = sin. */
+    /**
+     * Una barra de datos ya resuelta: de [desde] a [hasta] (fracciones del ancho útil), con
+     * degradado o lisa, su borde (0 = sin) y la línea del eje en [eje] (< 0 = sin).
+     */
+    class Barra(val desde: Float, val hasta: Float, val argb: Int, val degradado: Boolean, val borde: Int, val eje: Float, val colorEje: Int)
+
+    /** [clase]: 0 vacía, 1 número, 2 texto, 3 lógico, 4 error. [corte] -1 = sin; [conjunto] -1 = sin icono. */
     class Celda(
         val col: Int,
         val estilo: Int,
         val clase: Int,
         val texto: String,
-        val barra: Float,
-        val colorBarra: Int,
+        val barra: Barra?,
         val corte: Int,
-        val tramos: List<Tramo>?
+        val tramos: List<Tramo>?,
+        /** El conjunto de iconos (orden de `Conjunto::TODOS` del PC, ver [IconosExcel]) y el icono (0 = el peor). */
+        val conjunto: Int = -1,
+        val icono: Int = 0
     ) {
         /** Lo medido al pintar (ancho del texto a 1 px por punto de letra), por quien pinta. */
         @JvmField var medida: Float = -1f
@@ -215,6 +237,28 @@ object Pxhj {
         val size get() = tipos.size
     }
 
+    /**
+     * Un minigráfico ya calculado. [tipo]: 0 línea, 1 columnas, 2 ganancia/pérdida. [marcas]: 1
+     * marcadores, 2 alto, 4 bajo, 8 primero, 16 último, 32 negativos, 64 eje, 128 unir los huecos.
+     * [colores]: serie, negativo, eje, marcadores, primero, último, alto, bajo. [puntos]: NaN = hueco.
+     */
+    class Mini(
+        val fila: Int, val col: Int, val tipo: Int, val marcas: Int, val peso: Float,
+        val minimo: Double, val maximo: Double, val colores: IntArray, val puntos: FloatArray
+    ) {
+        fun tiene(m: Int) = marcas and m != 0
+    }
+
+    /** Una nota o un comentario encadenado ([encadenado]) con sus respuestas (autor, texto). */
+    class Comentario(val fila: Int, val col: Int, val encadenado: Boolean, val autor: String, val texto: String, val respuestas: List<Pair<String, String>>) {
+        /** Todo lo que dice, para enseñarlo: autor y texto, y las respuestas debajo. */
+        fun completo(): String = buildString {
+            if (autor.isNotBlank()) append(autor).append(": ")
+            append(texto.trim())
+            for ((a, t) in respuestas) append("\n").append(if (a.isNotBlank()) "$a: " else "").append(t.trim())
+        }
+    }
+
     class Trozo(
         val version: Long,
         val f0: Int,
@@ -223,10 +267,13 @@ object Pxhj {
         val desde: Int,
         val estilos: List<Estilo>,
         val filas: List<Fila>,
-        val lados: Lados
+        val lados: Lados,
+        val minis: List<Mini> = emptyList(),
+        val comentarios: List<Comentario> = emptyList()
     ) {
         private val porIndice = HashMap<Int, Fila>(filas.size * 2).apply { filas.forEach { put(it.indice, it) } }
         fun fila(f: Int): Fila? = porIndice[f]
+        fun comentario(f: Int, c: Int): Comentario? = comentarios.firstOrNull { it.fila == f && it.col == c }
     }
 
     /** Los estilos de línea del PC (`EstiloLinea`), por su número. */
@@ -320,10 +367,12 @@ object Pxhj {
                 else -> throw NoSeLee("dibujo de tipo $t")
             }
         }
+        val botones = List(l.cuenta(9)) { BotonDeFiltro(l.u32(), l.u32(), l.u8() != 0) }
+        val listas = List(l.cuenta(4)) { List(l.cuenta(16)) { l.rango() } }
         Geometria(
             version, completa, filasFijas, columnasFijas, marcas and 1 != 0, marcas and 2 != 0, zoom,
             primeraFila, primeraColumna, filaActiva, columnaActiva, pestana, anchoDefecto, altoDefecto,
-            ultimaFila, ultimaColumna, anchoUsado, altoUsado, xs, ys, rellenos, combinadas, enlaces, dibujos
+            ultimaFila, ultimaColumna, anchoUsado, altoUsado, xs, ys, rellenos, combinadas, enlaces, dibujos, botones, listas
         )
     }
 
@@ -356,12 +405,13 @@ object Pxhj {
                 val clase = l.u8()
                 val marcas = l.u8()
                 val texto = l.str()
-                var barra = Float.NaN
-                var colorBarra = 0
-                if (marcas and 1 != 0) { barra = l.b.float; colorBarra = l.b.int }
+                val barra = if (marcas and 1 != 0) Barra(l.b.float, l.b.float, l.b.int, l.u8() != 0, l.b.int, l.b.float, l.b.int) else null
                 val corte = if (marcas and 2 != 0) l.u32() else -1
                 val tramos = if (marcas and 4 != 0) List(l.cuenta(18)) { Tramo(l.u32(), l.str(), l.b.float, l.u16(), l.b.int) } else null
-                Celda(col, estilo, clase, texto, barra, colorBarra, corte, tramos)
+                var conjunto = -1
+                var icono = 0
+                if (marcas and 8 != 0) { conjunto = l.u8(); icono = l.u8() }
+                Celda(col, estilo, clase, texto, barra, corte, tramos, conjunto, icono)
             }
             Fila(indice, m and 1 != 0, m and 2 != 0, relleno, celdas)
         }
@@ -374,7 +424,19 @@ object Pxhj {
         for (i in 0 until n) {
             tipos[i] = l.b.get(); fs[i] = l.u32(); cs[i] = l.u32(); es[i] = l.b.get(); colores[i] = l.b.int
         }
-        Trozo(version, f0, f1, desde, estilos, filas, Lados(tipos, fs, cs, es, colores))
+        val minis = List(l.cuenta(62)) {
+            val fila = l.u32(); val col = l.u32(); val tipo = l.u8(); val m = l.u8(); val peso = l.b.float
+            val lo = l.b.double; val hi = l.b.double
+            val colores8 = IntArray(8) { l.b.int }
+            val puntos = FloatArray(l.cuenta(4)) { l.b.float }
+            Mini(fila, col, tipo, m, peso, lo, hi, colores8, puntos)
+        }
+        val comentarios = List(l.cuenta(21)) {
+            val fila = l.u32(); val col = l.u32(); val enc = l.u8() != 0
+            val autor = l.str(); val texto = l.str()
+            Comentario(fila, col, enc, autor, texto, List(l.cuenta(8)) { l.str() to l.str() })
+        }
+        Trozo(version, f0, f1, desde, estilos, filas, Lados(tipos, fs, cs, es, colores), minis, comentarios)
     }
 
     private inline fun <T> leyendo(bytes: ByteArray, magia: String, leer: (Lector) -> T): T = try {

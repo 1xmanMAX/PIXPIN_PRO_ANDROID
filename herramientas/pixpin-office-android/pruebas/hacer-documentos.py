@@ -70,6 +70,7 @@ def powerpoint(ruta):
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
 <Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
+<Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
 </Types>"""
     rels = """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -78,16 +79,17 @@ def powerpoint(ruta):
     prels = """<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/>
 </Relationships>"""
     pres = f"""<?xml version="1.0" encoding="UTF-8"?>
-<p:presentation {A}><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"""
+<p:presentation {A}><p:sldIdLst><p:sldId id="256" r:id="rId2"/><p:sldId id="257" r:id="rId3"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"""
 
-    def forma(i, nombre, x, y, cx, cy, geo, relleno, linea, texto, tam):
+    def forma(i, nombre, x, y, cx, cy, geo, relleno, linea, texto, tam, efectos=""):
         rel = f'<a:solidFill><a:srgbClr val="{relleno}"/></a:solidFill>' if relleno else '<a:noFill/>'
         lin = f'<a:ln w="38100"><a:solidFill><a:srgbClr val="{linea}"/></a:solidFill></a:ln>' if linea else '<a:ln><a:noFill/></a:ln>'
         tx = f'<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="es-ES" sz="{tam}"><a:solidFill><a:srgbClr val="202020"/></a:solidFill><a:latin typeface="Calibri"/></a:rPr><a:t>{texto}</a:t></a:r></a:p></p:txBody>' if texto else ''
         return f"""<p:sp><p:nvSpPr><p:cNvPr id="{i}" name="{nombre}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="{geo}"><a:avLst/></a:prstGeom>{rel}{lin}</p:spPr>{tx}</p:sp>"""
+<p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="{geo}"><a:avLst/></a:prstGeom>{rel}{lin}{efectos}</p:spPr>{tx}</p:sp>"""
 
     dia = f"""<?xml version="1.0" encoding="UTF-8"?>
 <p:sld {A}><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="F4F1EA"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree>
@@ -96,8 +98,26 @@ def powerpoint(ruta):
 {forma(3, "Caja", 1524000, 2286000, 4000000, 2000000, "roundRect", "9DC3E6", None, "Rectángulo", 2400)}
 {forma(4, "Elipse", 6600000, 2286000, 3000000, 2000000, "ellipse", None, "C00000", None, 0)}
 </p:spTree></p:cSld></p:sld>"""
+    # La segunda (13-oct-2026, PC 954e77e y f38c011): un cubo (caras teñidas de la forma
+    # predefinida), una caja con sombra exterior y brillo, una elipse con borde suave y un
+    # rectángulo con sombra interior.
+    sombra = ('<a:effectLst><a:glow rad="63500"><a:srgbClr val="FFC000"><a:alpha val="60000"/></a:srgbClr></a:glow>'
+              '<a:outerShdw blurRad="50800" dist="38100" dir="2700000" algn="tl" rotWithShape="0">'
+              '<a:srgbClr val="000000"><a:alpha val="40000"/></a:srgbClr></a:outerShdw></a:effectLst>')
+    suave = '<a:effectLst><a:softEdge rad="127000"/></a:effectLst>'
+    interior = ('<a:effectLst><a:innerShdw blurRad="63500" dist="50800" dir="13500000">'
+                '<a:srgbClr val="000000"><a:alpha val="50000"/></a:srgbClr></a:innerShdw></a:effectLst>')
+    dia2 = f"""<?xml version="1.0" encoding="UTF-8"?>
+<p:sld {A}><p:cSld><p:spTree>
+<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>
+{forma(2, "Cubo", 838200, 1000000, 2500000, 2500000, "cube", "70AD47", None, None, 0)}
+{forma(3, "Con sombra", 4200000, 1000000, 3000000, 1500000, "rect", "4472C4", None, "Sombra", 2400, sombra)}
+{forma(4, "Suave", 8000000, 1000000, 3000000, 2000000, "ellipse", "ED7D31", None, None, 0, suave)}
+{forma(5, "Hundido", 4200000, 3800000, 3000000, 1500000, "rect", "D9D9D9", None, None, 0, interior)}
+{forma(6, "Texto suelto", 838200, 5200000, 6000000, 800000, "rect", None, None, "Texto negro sobre la hoja", 2000)}
+</p:spTree></p:cSld></p:sld>"""
     escribir(ruta, [("[Content_Types].xml", tipos), ("_rels/.rels", rels), ("ppt/_rels/presentation.xml.rels", prels),
-                    ("ppt/presentation.xml", pres), ("ppt/slides/slide1.xml", dia)])
+                    ("ppt/presentation.xml", pres), ("ppt/slides/slide1.xml", dia), ("ppt/slides/slide2.xml", dia2)])
 
 
 if __name__ == "__main__":

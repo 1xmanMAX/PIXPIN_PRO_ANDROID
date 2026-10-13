@@ -14,7 +14,7 @@ import java.nio.ByteOrder
  * maquetación: así el renglón se parte en el teléfono exactamente donde se ve partido.
  */
 object Pxof {
-    const val VERSION = 1
+    const val VERSION = 2
 
     class NoSeLee(porque: String) : Exception(porque)
 
@@ -32,12 +32,36 @@ object Pxof {
 
     data class Trazo(val argb: Int, val grosor: Float, val discontinuo: Discontinuo)
 
-    /** Una figura de un trayecto: [puntos] y [orden] como los de un `Path` (0 = recta a x,y; 1 = bézier con 6 números). */
+    /**
+     * Una figura de un trayecto: [puntos] y [orden] como los de un `Path` (0 = recta a x,y; 1 = bézier
+     * con 6 números). [tinte]: cómo se tiñe respecto al relleno de la forma (las caras del cubo y del
+     * bisel de las formas predefinidas, PC f38c011): 0 ninguno, 1 oscuro, 2 oscuro suave, 3 claro,
+     * 4 claro suave, 5 aparte (mismo color, en otra geometría para que no se agujereen).
+     */
     class Figura(
         val x0: Float, val y0: Float,
         val tipos: ByteArray, val puntos: FloatArray,
-        val cerrada: Boolean, val rellenar: Boolean, val trazar: Boolean
+        val cerrada: Boolean, val rellenar: Boolean, val trazar: Boolean,
+        val tinte: Int = 0
     )
+
+    /**
+     * Un efecto de DrawingML (`a:effectLst`, PC 954e77e) sobre lo que envuelve un [Efectos]. Las
+     * medidas, en puntos de donde está el [Efectos].
+     */
+    sealed interface Efecto {
+        /** `a:outerShdw`: la silueta, de [argb], desenfocada, movida, escalada y sesgada (grados) respecto a [ancla] (fracciones de la caja). */
+        class SombraExterior(
+            val argb: Int, val desenfoque: Float, val dx: Float, val dy: Float,
+            val escalaX: Float, val escalaY: Float, val sesgoX: Float, val sesgoY: Float, val anclaX: Float, val anclaY: Float
+        ) : Efecto
+        /** `a:innerShdw`: sombra por dentro del borde, hacia [dx], [dy]. */
+        class SombraInterior(val argb: Int, val desenfoque: Float, val dx: Float, val dy: Float) : Efecto
+        /** `a:glow`: un halo de [radio] puntos alrededor. */
+        class Brillo(val argb: Int, val radio: Float) : Efecto
+        /** `a:softEdge`: el borde se desvanece hacia dentro [radio] puntos. */
+        class BordeSuave(val radio: Float) : Efecto
+    }
 
     sealed interface Elemento
 
@@ -59,6 +83,8 @@ object Pxof {
     class Trayecto(val relleno: Relleno?, val borde: Trazo?, val figuras: List<Figura>) : Elemento
     /** [m] = a b c d e f: x' = a·x + c·y + e, y' = b·x + d·y + f. [recorte] = x, y, ancho, alto en coordenadas del grupo. */
     class Grupo(val m: FloatArray, val recorte: FloatArray?, val elementos: List<Elemento>) : Elemento
+    /** Elementos con efectos (sombras, brillo, borde suave): se pintan como siempre y además sus efectos. */
+    class Efectos(val efectos: List<Efecto>, val elementos: List<Elemento>) : Elemento
 
     class Pagina(
         val ancho: Float, val alto: Float, val numero: Int,
@@ -79,6 +105,7 @@ object Pxof {
                 for (e in els) when (e) {
                     is Texto -> v += e to floatArrayOf(e.x + dx, e.y + dy - e.tam * 0.9f, e.ancho, e.tam * 1.2f)
                     is Grupo -> bajar(e.elementos, dx + e.m[4], dy + e.m[5])
+                    is Efectos -> bajar(e.elementos, dx, dy)
                     else -> {}
                 }
             }
@@ -252,7 +279,20 @@ object Pxof {
                 val recorte = if (u8() != 0) floatArrayOf(f32(), f32(), f32(), f32()) else null
                 Grupo(m, recorte, elementos(nivel + 1, caras))
             }
+            7 -> {
+                val n = u8()
+                val efectos = List(n) { efecto() }
+                Efectos(efectos, elementos(nivel + 1, caras))
+            }
             else -> throw NoSeLee("elemento $t")
+        }
+
+        fun efecto(): Efecto = when (val t = u8()) {
+            1 -> Efecto.SombraExterior(argb(), f32(), f32(), f32(), f32(), f32(), f32(), f32(), f32(), f32())
+            2 -> Efecto.SombraInterior(argb(), f32(), f32(), f32())
+            3 -> Efecto.Brillo(argb(), f32())
+            4 -> Efecto.BordeSuave(f32())
+            else -> throw NoSeLee("efecto $t")
         }
 
         fun figura(): Figura {
@@ -270,7 +310,7 @@ object Pxof {
                     else -> throw NoSeLee("tramo $t")
                 }
             }
-            return Figura(x0, y0, tipos, puntos.toFloatArray(), f and 1 != 0, f and 2 != 0, f and 4 != 0)
+            return Figura(x0, y0, tipos, puntos.toFloatArray(), f and 1 != 0, f and 2 != 0, f and 4 != 0, (f shr 3) and 7)
         }
     }
 }

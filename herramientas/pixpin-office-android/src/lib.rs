@@ -175,6 +175,25 @@ pub extern "system" fn Java_com_forge_pixpin_office_OfficeNativo_imagen<'a>(mut 
     }
 }
 
+/// `OfficeNativo.notas(h, n): String?` — las notas del orador de la diapositiva `n` (un párrafo
+/// por renglón; PC ac7981a); null si no tiene o si no es un PowerPoint.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_office_OfficeNativo_notas<'a>(env: JNIEnv<'a>, _c: JClass<'a>, h: jlong, n: jint) -> jstring {
+    let notas = doc(h).and_then(|d| {
+        let mut d = d.lock().ok()?;
+        catch_unwind(AssertUnwindSafe(|| match &mut d.doc {
+            Documento::PowerPoint(p) => p.notas(n.max(0) as usize),
+            _ => None,
+        }))
+        .ok()
+        .flatten()
+    });
+    match notas {
+        Some(s) => env.new_string(s).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
+}
+
 /// `OfficeNativo.cerrar(h)`.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_forge_pixpin_office_OfficeNativo_cerrar<'a>(_env: JNIEnv<'a>, _c: JClass<'a>, h: jlong) {
@@ -307,6 +326,16 @@ pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_imagen<'a>(mut en
     let ruta = texto_de(&mut env, &ruta);
     let b = con_libro(h, |l| l.libro.parte(&ruta));
     o_null(&mut env, b)
+}
+
+/// `HojasNativo.lista(h, i, fila, col): String?` — los valores de la lista desplegable de la
+/// celda, uno por renglón; null si no tiene.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_excel_HojasNativo_lista<'a>(env: JNIEnv<'a>, _c: JClass<'a>, h: jlong, i: jint, f: jint, c: jint) -> jstring {
+    match con_libro(h, |l| hojas::lista_en(l, i.max(0) as usize, f.max(0) as u32, c.max(0) as u32)) {
+        Some(s) => env.new_string(s).map(|s| s.into_raw()).unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
 }
 
 /// `HojasNativo.cerrar(h)`.
