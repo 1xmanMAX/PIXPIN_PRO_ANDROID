@@ -310,7 +310,15 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
      * código único se sustituye —conservando el recordatorio, que es de este aparato—. [borrar] son
      * códigos únicos: lo borrado deja su marca y se lleva su adjunto.
      */
-    fun aplicarMensajes(chat: String, poner: List<String>, borrar: List<String>, ahora: Long = System.currentTimeMillis()) {
+    fun aplicarMensajes(
+        chat: String, poner: List<String>, borrar: List<String>, ahora: Long = System.currentTimeMillis(),
+        /**
+         * Archivos que no se tiran aunque se vaya el mensaje que los nombra: los de los demás chats,
+         * cuando quien borra es una persona de un chat compartido ([AccesoDePersona]). Sin esto, un
+         * mensaje suyo que nombrara un adjunto de otro chat se lo llevaría al borrarse.
+         */
+        noBorrar: Set<String> = emptySet()
+    ) {
         if (poner.isEmpty() && borrar.isEmpty()) return
         val adjuntosFuera = ArrayList<String>()
         val anotadosFuera = ArrayList<String>()
@@ -349,10 +357,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         }
         for (ruta in adjuntosFuera) {
             val rel = rutas.relativa(ruta) ?: continue
-            if (rel.startsWith("guardados/")) File(filesDir, rel).delete()
+            if (rel.startsWith("guardados/") && rel !in noBorrar) File(filesDir, rel).delete()
         }
         // Y lo anotado sobre ellos, que sin su mensaje ya no viaja ni se abre. Ver [AnotacionesDelAdjunto].
-        for (uid in anotadosFuera) AnotacionesDelAdjunto.todoDe(filesDir, uid).forEach { it.delete() }
+        for (uid in anotadosFuera) AnotacionesDelAdjunto.todoDe(filesDir, uid)
+            .filter { f -> noBorrar.isEmpty() || rutas.relativa(f.absolutePath) !in noBorrar }
+            .forEach { it.delete() }
         alCambiar(Cambio.MENSAJES)
     }
 
@@ -527,7 +537,100 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
      * mensajes, lo que señalan (un lienzo, una tabla, un croquis), lo del proyecto (su PDF, sus
      * hojas) y, dentro de cada lienzo o croquis, las fotos que lleva. Rutas relativas a `files`.
      */
-    fun alcance(chat: String): Map<String, String> {
+    fun alcance(chat: String): Map<String, String> =
+        alcanceCon(chat, leerMensajes().filter { chatDe(it) == chat }, leerProyectos(), AnotacionesDelAdjunto.porUid(filesDir))
+
+    /**
+     * **Lo que no es de [permitidos]**: los archivos de todos los demás chats (la conversación general
+     * incluida). Es la valla de los chats compartidos ([AccesoDePersona]): una persona no puede pedir,
+     * escribir ni hacer borrar nada de aquí, aunque se las arregle para nombrarlo desde un mensaje del
+     * chat que sí comparte. Lee el chat y los proyectos una sola vez; los lienzos de cada chat, para
+     * saber qué fotos llevan dentro, también.
+     */
+    fun prohibidosPara(permitidos: Set<String>): Set<String> {
+        val porChat = leerMensajes().groupBy { chatDe(it) }
+        val proyectos = leerProyectos()
+        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
+        val otros = (porChat.keys + proyectos.map { it.id } + GENERAL) - permitidos
+        val salida = HashSet<String>()
+        for (c in otros) salida += alcanceCon(c, porChat[c].orEmpty(), proyectos, anotado).keys
+        // Lo que está en los dos (un adjunto reenviado de un chat a otro) se queda fuera: ante la
+        // duda, no se da.
+        return salida
+    }
+
+    /** Los códigos únicos de los mensajes de los chats que no son [chat]. */
+    fun unicosFueraDe(chat: String): Set<String> =
+        leerMensajes().filter { chatDe(it) != chat }.mapTo(HashSet()) { Codigos.unico(it) }
+
+    /**
+     * **Qué archivos nombra un mensaje**, existan o no aquí: su adjunto, las rutas de dentro, el
+     * lienzo, la tabla o el croquis que señala, sus tablas de libro y lo anotado con su código. Lo
+     * mismo que mira [alcance], mensaje a mensaje.
+     */
+    fun referencias(m: Mensaje, anotado: Map<String, List<String>> = AnotacionesDelAdjunto.porUid(filesDir)): Set<String> {
+        val salida = HashSet<String>()
+        salida += rutas.enTexto(JSON.encodeToString(Mensaje.serializer(), m))
+        m.ruta?.let { rutas.relativa(it) }?.let { salida += it }
+        val tablas = TablasEnDisco.de(filesDir)
+        fun tabla(id: String?) = id?.let { rutas.relativa(tablas.archivo(it).absolutePath) }
+        when (m.clase) {
+            Clase.DIBUJO, Clase.PAGINA -> m.referencia?.let { salida += "pins/draw/$it.excalidraw.gz" }
+            Clase.IMAGEN -> salida += "pins/draw/${m.referencia ?: "foto-${m.id}"}.excalidraw.gz"
+            Clase.TABLA -> tabla(m.referencia)?.let { salida += it }
+            Clase.CROQUIS -> m.referencia?.let { salida += "croquis3d/$it.croquis.gz" }
+            Clase.ARCHIVO -> {
+                var i = 0
+                while (true) {
+                    val f = tablas.archivo("libro-${m.id}-$i")
+                    if (!f.exists()) break
+                    rutas.relativa(f.absolutePath)?.let { salida += it }; i++
+                }
+            }
+            else -> {}
+        }
+        anotado[Codigos.unico(m)]?.let { salida += it }
+        return salida
+    }
+
+    /** Lo mismo de un proyecto: su documento, sus hojas y lo anotado con su código o el de sus hojas. */
+    fun referencias(p: Proyecto): Set<String> {
+        val salida = HashSet<String>()
+        salida += rutas.enTexto(Proyectos.json.encodeToString(Proyecto.serializer(), p))
+        for (r in listOfNotNull(p.pdfOrigen, p.pdfLimpio)) rutas.relativa(r)?.let { salida += it }
+        val tablas = TablasEnDisco.de(filesDir)
+        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
+        anotado[Codigos.unico(p)]?.let { salida += it }
+        for (h in p.hojas) {
+            h.dibujo?.let { salida += "pins/draw/$it.excalidraw.gz" }
+            h.tabla?.let { rutas.relativa(tablas.archivo(it).absolutePath) }?.let { salida += it }
+            h.croquis?.let { salida += "croquis3d/$it.croquis.gz" }
+            anotado[Codigos.unico(h)]?.let { salida += it }
+        }
+        for (c in p.croquis) salida += "croquis3d/$c.croquis.gz"
+        return salida
+    }
+
+    /**
+     * **De lo que manda una persona para [chat], lo que se puede poner** (JSON portátil): mensajes
+     * de ese chat que no se hacen pasar por uno de otro chat (mismo código único) ni nombran nada de
+     * [prohibidos]. Lo demás se tira sin decir nada: un PixPin honrado nunca lo manda.
+     */
+    fun soloDeEsteChat(chat: String, poner: List<String>, prohibidos: Set<String>): List<String> {
+        if (poner.isEmpty()) return poner
+        val ajenos = unicosFueraDe(chat)
+        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
+        return poner.filter { j ->
+            val m = runCatching { JSON.decodeFromString(Mensaje.serializer(), rutas.aLocal(j)) }.getOrNull() ?: return@filter false
+            chatDe(m) == chat && Codigos.unico(m) !in ajenos && referencias(m, anotado).none { it in prohibidos }
+        }
+    }
+
+    /** El proyecto que manda una persona, si es el de [chat] y no nombra nada de [prohibidos]. */
+    fun proyectoSeguro(chat: String, p: Proyecto?, prohibidos: Set<String>): Proyecto? =
+        p?.takeIf { it.id == chat && referencias(it).none { r -> r in prohibidos } }
+
+    private fun alcanceCon(chat: String, mensajes: List<Mensaje>, proyectos: List<Proyecto>, anotado: Map<String, List<String>>): Map<String, String> {
         val salida = LinkedHashMap<String, String>()
         val pendientes = ArrayDeque<Pair<String, String>>()
         fun poner(rel: String?, etiqueta: String) {
@@ -545,9 +648,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         fun tabla(id: String?) = id?.let { rutas.relativa(tablas.archivo(it).absolutePath) }
         // Lo anotado sobre los adjuntos (PDF suelto, Word, libro), nombrado por el código del
         // mensaje: tinta, marcadores, espacios. Ver [AnotacionesDelAdjunto].
-        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
 
-        for (m in leerMensajes().filter { chatDe(it) == chat }) {
+        for (m in mensajes) {
             val etiqueta = etiquetaDe(m)
             for (rel in rutas.enTexto(JSON.encodeToString(Mensaje.serializer(), m))) poner(rel, etiqueta)
             // La ruta del adjunto, ENTERA: `enTexto` corta en `)` (por los enlaces de Markdown) y
@@ -572,7 +674,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 else -> {}
             }
         }
-        leerProyectos().firstOrNull { it.id == chat }?.let { p ->
+        proyectos.firstOrNull { it.id == chat }?.let { p ->
             for (rel in rutas.enTexto(Proyectos.json.encodeToString(Proyecto.serializer(), p))) poner(rel, p.nombre)
             // El documento del proyecto con su ruta entera (los paréntesis, como arriba).
             for (r in listOfNotNull(p.pdfOrigen, p.pdfLimpio)) rutas.relativa(r)?.let { poner(it, p.nombre) }

@@ -703,6 +703,13 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
+        <!-- Las personas de un chat compartido, y entrar en uno con su código. Ver sincro/Compartidos. -->
+        <activity
+            android:name=".sincro.ChatCompartidoActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
         <!-- Sincronizar con los otros aparatos del grupo. Ver sincro/SincronizarActivity. -->
         <activity
             android:name=".sincro.SincronizarActivity"

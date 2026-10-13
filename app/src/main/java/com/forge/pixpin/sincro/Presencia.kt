@@ -70,13 +70,18 @@ object Presencia {
         Thread {
             val disco = Red.disco(app)
             val id = disco.identidad.leer()
-            if (!id.enGrupo) { principal.post { red.cerrar() }; return@Thread }
-            val etiqueta = Grupo.etiqueta(Grupo.clave(id.codigo!!))
+            // **También con chats compartidos** (13-oct-2026): las personas de esos chats llaman aquí
+            // aunque este aparato no esté en ningún grupo. Ver [Compartidos].
+            val compartidos = runCatching { CompartidosEnDisco(app.filesDir).hayAlguno(id.yo.id) }.getOrDefault(false)
+            if (!id.enGrupo && !compartidos) { principal.post { red.cerrar() }; return@Thread }
+            val etiqueta = id.codigo?.takeIf { id.enGrupo }?.let { Grupo.etiqueta(Grupo.clave(it)) }
             principal.post {
                 red.escuchar(Red.PUERTO) { socket, entrada ->
                     val quien = socket.inetAddress?.hostAddress.orEmpty()
+                    // Quien llama dice con los cuatro primeros bytes si es del grupo o una persona.
+                    val persona = esPersona(entrada)
                     runCatching {
-                        Respondedor(
+                        val r = Respondedor(
                             disco,
                             estado = { atendiendo.value = it },
                             miPuerto = red.puerto,
@@ -84,21 +89,40 @@ object Presencia {
                             alAceptarSuelto = { _, mime -> LoAbierto.aceptar(delante(), mime, id.yo.nombre) },
                             alRecibirSuelto = { f, nombre, mime, otro -> alLoAbierto(f, nombre, mime, otro, id.yo.nombre) },
                             cache = java.io.File(app.cacheDir, "suelto")
-                        ).atender(entrada, socket.getOutputStream())
+                        )
+                        if (persona) r.atenderPersona(entrada, socket.getOutputStream())
+                        else r.atender(entrada, socket.getOutputStream())
                     }.onFailure { e ->
                         apuntar(when (e) {
-                            is Canal.CodigoDistinto -> "Alguien intentó conectar con otro código de grupo"
+                            is Canal.CodigoDistinto -> if (persona) "Una persona no pudo demostrar quién era" else "Alguien intentó conectar con otro código de grupo"
+                            is Canal.NoEsMiembro -> "Alguien de fuera de tus chats compartidos intentó conectar"
                             else -> "Se cortó una sincronización: ${e.message ?: e.javaClass.simpleName}"
                         })
                     }
                     atendiendo.value?.let { apuntar(it) }
                     atendiendo.value = null
                 }
-                red.anunciar(Red.TIPO, "PixPin ${id.yo.nombre}", mapOf(
-                    "g" to etiqueta, "id" to id.yo.id, "l" to (id.yo.letra ?: ""), "n" to id.yo.nombre.take(40)
-                ))
+                // Sin grupo, sin «g»: Sincronizar no lo lista como aparato propio. El id y el nombre
+                // sirven para que las personas de los chats compartidos lo encuentren.
+                red.anunciar(Red.TIPO, "PixPin ${id.yo.nombre}", buildMap {
+                    if (etiqueta != null) put("g", etiqueta)
+                    put("id", id.yo.id); put("l", id.yo.letra ?: ""); put("n", id.yo.nombre.take(40))
+                })
             }
         }.start()
+    }
+
+    /**
+     * Si la conversación que llega es de una persona de un chat compartido ([Canal.MAGIA_DE_PERSONA]).
+     * Mira los cuatro primeros bytes y los devuelve a su sitio.
+     */
+    internal fun esPersona(entrada: java.io.InputStream): Boolean {
+        val atras = entrada as? java.io.PushbackInputStream ?: return false
+        val b = ByteArray(4)
+        var n = 0
+        while (n < 4) { val r = atras.read(b, n, 4 - n); if (r < 0) break; n += r }
+        if (n > 0) atras.unread(b, 0, n)
+        return n == 4 && b.contentEquals(Canal.MAGIA_DE_PERSONA)
     }
 
     /** Vuelve a empezar: tras crear o dejar el grupo, o cambiar de nombre. */
