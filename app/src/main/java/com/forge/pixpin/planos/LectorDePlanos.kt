@@ -141,7 +141,7 @@ class LectorDePlanos : Service() {
         /** Cuántos planos se guardan ya leídos (los más recientes), como en el PC. */
         private const val EN_CACHE = 24
         /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
-        const val VERSION_DEL_FORMATO = 6
+        const val VERSION_DEL_FORMATO = 7
         /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo, las TrueType de Windows): lo leído antes se rehace. */
         const val REVISION_DE_LETRAS = 3
         /** La de `MAGIA` en `modelo3d.rs` del PC (y en [Modelo3D]): con otra, el modelo se vuelve a leer. */

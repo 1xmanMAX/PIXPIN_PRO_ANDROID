@@ -136,7 +136,7 @@ class ModeloCad private constructor(
         const val GLIFO_DE_RAYAS: Int = Int.MIN_VALUE
         private val MAGIA = byteArrayOf('P'.code.toByte(), 'X'.code.toByte(), 'C'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte(), 0, 0)
         /** Las versiones que se leen: la 6 del PC (c493abb) es la 5 tal cual, cambiada solo para rehacer su caché. */
-        private val VERSIONES = setOf<Byte>(5, 6)
+        private val VERSIONES = setOf<Byte>(5, 6, 7)
 
         /** Proyecta [archivo] en memoria y lo lee. */
         fun abrir(archivo: File): ModeloCad {
