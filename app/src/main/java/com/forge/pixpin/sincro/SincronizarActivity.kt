@@ -517,6 +517,9 @@ class SincronizarActivity : ComponentActivity() {
                         }
                     }
                 }
+                // **Las listas de los chats compartidos** (13-oct-2026): mi otro aparato entra en los
+                // que comparto con otras personas. Un aparato de antes no sabe: no pasa nada.
+                sesion.compartidosDelGrupo()
                 sesion.adios()
                 val segundos = (System.currentTimeMillis() - empezo) / 1000.0
                 val avisos = listOfNotNull(

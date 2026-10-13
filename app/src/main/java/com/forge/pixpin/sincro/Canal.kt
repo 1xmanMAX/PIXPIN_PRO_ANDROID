@@ -85,20 +85,24 @@ class Canal private constructor(
         /** Lo más grande que se acepta de una vez: una lista de mensajes con notas largas dentro. */
         const val TOPE_DE_MENSAJE = 64 shl 20
         private val MAGIA = "PXS1".toByteArray()
+        /** **Una persona de un chat compartido** (13-oct-2026): ver [abrirEntrePersonas]. */
+        val MAGIA_DE_PERSONA = "PXC1".toByteArray()
+        /** **Alguien que viene con una invitación a un chat compartido.** Ver [Invitacion]. */
+        val MAGIA_DE_INVITACION = "PXI1".toByteArray()
 
         /**
          * Abre el canal. [inicia] es quien llamó: los dos lados tienen que saber cuál es cuál para
-         * sacar la misma clave en cada sentido.
+         * sacar la misma clave en cada sentido. [magia]: la de siempre, o [MAGIA_DE_INVITACION].
          */
-        fun abrir(entrada: InputStream, salida: OutputStream, claveDelGrupo: ByteArray, inicia: Boolean): Canal {
+        fun abrir(entrada: InputStream, salida: OutputStream, claveDelGrupo: ByteArray, inicia: Boolean, magia: ByteArray = MAGIA): Canal {
             val mio = ByteArray(32).also { SecureRandom().nextBytes(it) }
-            salida.write(MAGIA)
+            salida.write(magia)
             salida.write(mio)
             salida.flush()
             val din = DataInputStream(entrada)
-            val magia = ByteArray(4)
-            din.readFully(magia)
-            if (!magia.contentEquals(MAGIA)) throw IOException("No es PixPin")
+            val suMagia = ByteArray(4)
+            din.readFully(suMagia)
+            if (!suMagia.contentEquals(magia)) throw IOException("No es PixPin")
             val suyo = ByteArray(32)
             din.readFully(suyo)
             val (delQueInicia, delQueResponde) = if (inicia) mio to suyo else suyo to mio
@@ -107,5 +111,56 @@ class Canal private constructor(
             val vuelta = Grupo.hmac(sesion, "vuelta".toByteArray()).copyOf(32)
             return if (inicia) Canal(entrada, salida, ida, vuelta) else Canal(entrada, salida, vuelta, ida)
         }
+
+        /** Lo más largo que se acepta como clave pública del otro: una P-256 en X.509 son 91 bytes. */
+        private const val TOPE_DE_CLAVE = 512
+
+        /**
+         * **El canal entre dos personas de un chat compartido** (13-oct-2026). Aquí no hay código de
+         * grupo que los dos sepan: cada aparato tiene su par de claves ([Llaves]) y en la lista de
+         * cada chat compartido está la clave pública de cada aparato que es miembro.
+         *
+         * Cada lado manda la magia, **su clave pública** y un número al azar. Con la clave del otro,
+         * [aceptar] dice si es alguien conocido (si no, se corta antes de hablar nada); con la
+         * privada propia y la pública del otro sale el mismo secreto en los dos (ECDH), y de él la
+         * clave de esta conversación, como en [abrir]. Quien no tenga la privada de la clave que
+         * enseña no saca el mismo secreto y no descifra ni el primer tramo: eso es la prueba de que
+         * es quien dice ser, sin que nada secreto viaje.
+         *
+         * Devuelve el canal y la clave pública del otro (X.509), que es por la que se le reconoce.
+         */
+        fun abrirEntrePersonas(
+            entrada: InputStream, salida: OutputStream, llaves: Llaves, inicia: Boolean,
+            aceptar: (ByteArray) -> Boolean
+        ): Pair<Canal, ByteArray> {
+            val mio = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            val miClave = llaves.publica
+            val dout = DataOutputStream(salida)
+            dout.write(MAGIA_DE_PERSONA)
+            dout.writeShort(miClave.size)
+            dout.write(miClave)
+            dout.write(mio)
+            dout.flush()
+            val din = DataInputStream(entrada)
+            val magia = ByteArray(4)
+            din.readFully(magia)
+            if (!magia.contentEquals(MAGIA_DE_PERSONA)) throw IOException("No es PixPin")
+            val largo = din.readUnsignedShort()
+            if (largo !in 1..TOPE_DE_CLAVE) throw IOException("Clave de $largo bytes")
+            val suClave = ByteArray(largo).also { din.readFully(it) }
+            val suyo = ByteArray(32).also { din.readFully(it) }
+            if (!aceptar(suClave)) throw NoEsMiembro()
+            val secreto = llaves.acordar(suClave)
+            val (nI, nR) = if (inicia) mio to suyo else suyo to mio
+            val (cI, cR) = if (inicia) miClave to suClave else suClave to miClave
+            val sesion = Grupo.hmac(secreto, "personas".toByteArray(), nI, nR, cI, cR)
+            val ida = Grupo.hmac(sesion, "ida".toByteArray()).copyOf(32)
+            val vuelta = Grupo.hmac(sesion, "vuelta".toByteArray()).copyOf(32)
+            val canal = if (inicia) Canal(entrada, salida, ida, vuelta) else Canal(entrada, salida, vuelta, ida)
+            return canal to suClave
+        }
     }
+
+    /** Quien llama (o a quien se llama) no está en ningún chat compartido con este aparato. */
+    class NoEsMiembro : IOException("No compartís ningún chat")
 }

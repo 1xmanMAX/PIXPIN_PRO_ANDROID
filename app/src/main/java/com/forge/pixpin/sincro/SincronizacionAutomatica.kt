@@ -48,7 +48,11 @@ class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, pri
                 sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
                 sesion.cerrar(prep)
             }
-            if (soloEstos == null) sesion.galeria(hecho, ahora())
+            if (soloEstos == null) {
+                sesion.galeria(hecho, ahora())
+                // Las listas de los chats compartidos, con mi otro aparato. Ver [Compartidos].
+                sesion.compartidosDelGrupo(ahora())
+            }
             val bytes = sesion.enviados + sesion.recibidos
             sesion.adios()
             return Resultado(otro.nombre, hecho, bytes)
@@ -228,6 +232,9 @@ object SincronizacionAutomatica {
 
     private fun bucle() {
         val reloj = RelojDeSincro()
+        // Las personas de los chats compartidos llevan su propio reloj: aparecer o cambiar va por cada uno.
+        val relojDePersonas = RelojDeSincro()
+        var sondeadas = 0L
         var sondeado = 0L
         // Los que contestaron al último sondeo: las tareas van a ellos sin volver a sondear (cada
         // aparato apagado cuesta 1-2 s de espera).
@@ -259,6 +266,10 @@ object SincronizacionAutomatica {
                         }
                     }
                     mandarTareas(disco, presentes, dirs)
+                }
+                if (encendida(app) && ahora - sondeadas >= LATIDO * LATIDOS_POR_SONDEO) {
+                    sondeadas = ahora
+                    conPersonas(disco, id, relojDePersonas)
                 }
             } catch (_: Throwable) {
             }
@@ -352,6 +363,41 @@ object SincronizacionAutomatica {
             fallos[otroId] = n
             if (n == RelojDeSincro.FALLOS_PARA_AVISAR) decir("No se pudo sincronizar solo con $nombre (${e.message ?: e.javaClass.simpleName})")
         }
+    }
+
+    /**
+     * **Con las personas de los chats compartidos** (13-oct-2026): las que contestan en la última
+     * dirección donde se las vio, con las mismas tres razones que el grupo ([RelojDeSincro]). Mis
+     * propios aparatos no cuentan: con ellos ya va la vuelta del grupo. Solo esos chats
+     * ([VueltaConPersona]).
+     */
+    private fun conPersonas(disco: Disco, id: Identidad, reloj: RelojDeSincro) {
+        val lista = CompartidosEnDisco(app.filesDir).leer()
+        val mios = id.miembros.mapTo(HashSet()) { it.id } + id.yo.id
+        val personas = lista.filter { Compartidos.dentro(it, id.yo.id) }
+            .flatMap { it.personas }.filter { it.dentro && it.id !in mios }.associateBy { it.id }
+        if (personas.isEmpty()) return
+        val dirs = disco.direcciones()
+        val presentes = personas.keys.filterTo(HashSet()) { p -> dirs[p]?.let { (h, puerto) -> Red.sondear(h, puerto) } == true }
+        val decision = reloj.toca(System.currentTimeMillis(), presentes, firma(disco.filesDir)) ?: return
+        for (otroId in decision.second) {
+            val (host, puerto) = dirs[otroId] ?: continue
+            val nombre = personas[otroId]?.nombre ?: otroId
+            try {
+                val r = Red.conectar(InetAddress.getByName(host), puerto).use { s ->
+                    VueltaConPersona(disco, Presencia.red.puerto).con(s.getInputStream(), s.getOutputStream(), aQuien = otroId)
+                }
+                if (r.puerto > 0) disco.apuntarDireccion(otroId, host, r.puerto)
+                fallos.remove(otroId)
+                if (r.trajoAlgo) decir("Chat compartido con ${r.quien.nombre}: " + resumen(r.hecho))
+            } catch (e: Throwable) {
+                if (e.message == Protocolo.OCUPADO) continue
+                val n = (fallos[otroId] ?: 0) + 1
+                fallos[otroId] = n
+                if (n == RelojDeSincro.FALLOS_PARA_AVISAR) decir("No se pudo sincronizar solo con $nombre (${e.message ?: e.javaClass.simpleName})")
+            }
+        }
+        reloj.despuesDeSincronizar(firma(disco.filesDir))
     }
 
     private fun resumen(h: Sesion.Hecho): String = listOfNotNull(

@@ -38,6 +38,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Call
@@ -225,6 +227,23 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     private var nombreDelChat by mutableStateOf("")
 
     /**
+     * **Si este chat está compartido con otras personas** (13-oct-2026), su lista; y de cada código
+     * de aparato, el nombre de quien escribe desde él. Ver [com.forge.pixpin.sincro.Compartidos].
+     */
+    private var compartido by mutableStateOf<com.forge.pixpin.sincro.ChatCompartido?>(null)
+    private var autoresDelChat by mutableStateOf<Map<String, String>>(emptyMap())
+    /** El código de este aparato: lo mío no lleva nombre encima. */
+    private var miCodigoDeAparato by mutableStateOf<String?>(null)
+
+    /** Quién escribió [m], si el chat es compartido y no lo escribí yo desde aquí. */
+    private fun autorDe(m: Mensaje): String? {
+        if (autoresDelChat.isEmpty()) return null
+        val codigo = m.aparato ?: return null
+        if (codigo == miCodigoDeAparato) return null
+        return autoresDelChat[codigo]
+    }
+
+    /**
      * Si a esta conversación se llegó **desde la general**, dentro de esta misma pantalla.
      *
      * Es lo que decide qué hace el botón de atrás, y da dos respuestas distintas porque
@@ -403,6 +422,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // que abre el archivo y lo analiza **en el hilo de la interfaz** justo al abrir la
         // pantalla: con doscientas cosas guardadas eso es la pantalla en blanco un rato,
         // que es la primera impresión que da la función.
+        // El chat compartido, si lo es: se mira al cambiar de chat y cada vez que cambia la lista.
+        val versionDeCompartidos by com.forge.pixpin.sincro.CompartidosEnDisco.version.collectAsState()
+        LaunchedEffect(chatDe, versionDeCompartidos) {
+            val este = chatDe
+            val (c, codigo) = withContext(Dispatchers.IO) {
+                runCatching {
+                    val c = este?.let { com.forge.pixpin.sincro.CompartidosEnDisco(filesDir).de(it) }
+                    c to com.forge.pixpin.sincro.Codigos.deEsteAparato(filesDir)
+                }.getOrDefault(null to null)
+            }
+            compartido = c
+            autoresDelChat = c?.let { com.forge.pixpin.sincro.Compartidos.autores(it) }.orEmpty()
+            miCodigoDeAparato = codigo
+        }
         var mensajes by remember { mutableStateOf(emptyList<Mensaje>()) }
         var cargando by remember { mutableStateOf(true) }
         var recargar by remember { mutableIntStateOf(0) }
@@ -1542,7 +1575,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                                 .rotate(if (fichasALaVista) 180f else 0f)
                                         )
                                     }
-                                    if (mensajes.isNotEmpty()) {
+                                    // **Compartido**: con cuántas personas, delante de lo demás.
+                                    val conQuien = compartido?.let { c ->
+                                        com.forge.pixpin.sincro.Compartidos.nombresDentro(c).size.takeIf { it > 1 }?.let { "compartido · $it personas" }
+                                    }
+                                    if (mensajes.isNotEmpty() || conQuien != null) {
                                         Text(
                                             // El tamaño solo si se sabe: casi nada
                                             // guarda su peso, y `tamanoLegible(0)`
@@ -1550,6 +1587,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                             // decía «12 cosas · » con el separador
                                             // colgando de la nada.
                                             listOfNotNull(
+                                                conQuien,
                                                 resources.getQuantityString(
                                                     com.forge.pixpin.R.plurals.guardados_cuantos,
                                                     deEsteChat.size, deEsteChat.size
@@ -1675,6 +1713,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         DelMenu(com.forge.pixpin.R.string.guardados_chats) {
                                             masOpciones = false
                                             eligiendoChat = true
+                                        }
+                                    }
+                                    // **Chats compartidos** (13-oct-2026): en un proyecto, quién está y
+                                    // añadir a alguien; en la general, entrar en el de otro con su código.
+                                    val esteChat = chatDe
+                                    if (esteChat != null && esteChat != com.forge.pixpin.sincro.Disco.GENERAL) {
+                                        DelMenu(com.forge.pixpin.R.string.guardados_personas, Icons.Filled.Groups) {
+                                            masOpciones = false
+                                            com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(this@MensajesActivity, esteChat, nombreDelChat)
+                                        }
+                                    } else {
+                                        DelMenu(com.forge.pixpin.R.string.guardados_entrar_en_chat, Icons.Filled.GroupAdd) {
+                                            masOpciones = false
+                                            com.forge.pixpin.sincro.ChatCompartidoActivity.entrar(this@MensajesActivity)
                                         }
                                     }
                                     DelMenu(com.forge.pixpin.R.string.guardados_arrastrar, Icons.Filled.FileDownload) {
@@ -3201,6 +3253,18 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             }
                             }
                         }
+                    }
+                    // **Quién lo escribió**, en un chat compartido (13-oct-2026): como el autor en un
+                    // grupo de Telegram, arriba y en color. Lo mío no lo lleva.
+                    autorDe(m)?.let { quien ->
+                        Text(
+                            quien,
+                            fontSize = 13.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp)
+                        )
                     }
                     // **De quién llegó**, si vino por Wi-Fi: su nombre y el código fijo de su aparato.
                     m.recibidoDe?.let { de ->

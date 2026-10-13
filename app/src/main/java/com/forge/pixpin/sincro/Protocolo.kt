@@ -110,7 +110,11 @@ object Protocolo {
         /** `suelto`: su tipo (`image/png`…, o `application/octet-stream`). */
         val mime: String? = null,
         /** `suelto`: adónde lo quiere quien lo manda. Hoy siempre "lienzo". */
-        val destino: String? = null
+        val destino: String? = null,
+        /** `compartidos`, `unirme`: la ficha de este aparato como persona ([Persona]), en JSON. */
+        val persona: String? = null,
+        /** `compartidos`, `miembros`: las listas de los chats compartidos ([ChatCompartido]), en JSON. */
+        val compartidos: String? = null
     )
 
     @Serializable
@@ -143,8 +147,25 @@ object Protocolo {
         /** `galeria`: sus entradas de la galería compartida, en JSON. Ver [GaleriaQueViaja]. */
         val galeria: String? = null,
         /** `galeria`: las capturas que tiene de verdad. */
-        val tengo: List<String> = emptyList()
+        val tengo: List<String> = emptyList(),
+        /** `compartidos`: la ficha del que responde como persona. */
+        val persona: String? = null,
+        /** `compartidos`, `miembros`, `unirme`: las listas de los chats compartidos, juntas. */
+        val compartidos: String? = null
     )
+
+    /**
+     * **El otro aparato contestó con un error** a una petición: la conversación sigue sana (no
+     * llega nada más detrás) y se puede seguir. Lo distingue de un corte de la conexión.
+     */
+    class ErrorDelOtro(mensaje: String) : IOException(mensaje)
+
+    internal fun aTexto(l: List<ChatCompartido>): String = CompartidosEnDisco.JSON.encodeToString(CompartidosEnDisco.LISTA, l)
+    internal fun deTexto(t: String?): List<ChatCompartido> =
+        t?.let { runCatching { CompartidosEnDisco.JSON.decodeFromString(CompartidosEnDisco.LISTA, it) }.getOrNull() }.orEmpty()
+    internal fun fichaATexto(p: Persona): String = CompartidosEnDisco.JSON.encodeToString(Persona.serializer(), p)
+    internal fun fichaDeTexto(t: String?): Persona? =
+        t?.let { runCatching { CompartidosEnDisco.JSON.decodeFromString(Persona.serializer(), it) }.getOrNull() }
 
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
     internal fun enviar(c: Canal, r: Respuesta) = c.enviar(JSON_, json.encodeToString(Respuesta.serializer(), r).toByteArray())
@@ -166,7 +187,7 @@ object Protocolo {
         val (tipo, datos) = c.recibir()
         if (tipo != JSON_) throw IOException("Se esperaba una respuesta")
         val r = json.decodeFromString(Respuesta.serializer(), datos.decodeToString())
-        r.error?.let { throw IOException(it) }
+        r.error?.let { throw ErrorDelOtro(it) }
         return r
     }
 
@@ -342,6 +363,79 @@ class Respondedor(
         }
     }
 
+    private val compartidos by lazy { CompartidosEnDisco(disco.filesDir) }
+
+    /**
+     * **Atiende a una persona de un chat compartido** (13-oct-2026): la conversación empieza con
+     * [Canal.MAGIA_DE_PERSONA] y no con el código del grupo. Solo se habla con quien está en la
+     * lista de algún chat compartido conmigo, y solo de los chats donde estamos dentro los dos
+     * ([AccesoDePersona]). Ver [Compartidos].
+     */
+    fun atenderPersona(entrada: InputStream, salida: OutputStream) {
+        val yo = compartidos.yo(disco.identidad.leer())
+        var quien: Persona? = null
+        val (canal, _) = Canal.abrirEntrePersonas(entrada, salida, yo.llaves, inicia = false) { clave ->
+            quien = Compartidos.porClave(compartidos.leer(), yo.id, Llaves.b64(clave))
+            quien != null
+        }
+        val persona = quien ?: throw Canal.NoEsMiembro()
+        val hola = Protocolo.leerPeticion(canal).hola ?: throw IOException("Faltó el saludo")
+        // La clave manda: el id que dice tener tiene que ser el de la ficha de esa clave.
+        if (hola.yo.id != persona.id) throw IOException("No es quien dice ser")
+        val otro = Aparato(persona.id, persona.nombre)
+        Protocolo.enviar(canal, Protocolo.Respuesta(hola = Protocolo.Hola(Aparato(yo.id, yo.nombre), reloj = ahora(), puerto = miPuerto)))
+        alSaludar(otro, hola.puerto)
+        if (!Protocolo.ocupar(disco)) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = Protocolo.OCUPADO))
+            canal.vaciar()
+            return
+        }
+        try {
+            responder(canal, otro, AccesoDePersona(disco, compartidos, yo.id, persona.id))
+        } finally {
+            Protocolo.soltar(disco)
+        }
+    }
+
+    /**
+     * **Alguien viene con una invitación** ([Invitacion]) al chat [chat]: el canal va con la clave
+     * del código de la invitación. Se le mete en la lista, firmado por este aparato, y se le da la
+     * lista entera; el chat en sí lo pide después como persona, ya con su clave
+     * ([atenderPersona]). Devuelve su ficha, para decir quién entró.
+     */
+    fun atenderInvitacion(entrada: InputStream, salida: OutputStream, codigo: String, chat: String): Persona {
+        val canal = Canal.abrir(entrada, salida, Invitacion.clave(codigo), inicia = false, magia = Canal.MAGIA_DE_INVITACION)
+        val p = Protocolo.leerPeticion(canal)
+        if (p.t != "unirme") throw IOException("Se esperaba «unirme»")
+        val hola = p.hola ?: throw IOException("Faltó el saludo")
+        val ficha = Protocolo.fichaDeTexto(p.persona)?.takeIf { it.id == hola.yo.id && it.clave.isNotBlank() }
+            ?: throw IOException("Faltó su ficha")
+        val yo = compartidos.yo(disco.identidad.leer())
+        val junto = try {
+            compartidos.cambiar { l ->
+                val c = l.firstOrNull { it.chat == chat } ?: throw IllegalStateException("Este chat ya no está compartido")
+                l.map { if (it.chat == chat) Compartidos.invitar(c, yo, ficha, ahora()) else it }
+            }.first { it.chat == chat }
+        } catch (e: IllegalStateException) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = e.message)); canal.vaciar(); throw e
+        } catch (e: IllegalArgumentException) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = e.message)); canal.vaciar(); throw e
+        }
+        Protocolo.enviar(canal, Protocolo.Respuesta(
+            hola = Protocolo.Hola(Aparato(yo.id, yo.nombre), reloj = ahora(), puerto = miPuerto),
+            compartidos = Protocolo.aTexto(listOf(junto))
+        ))
+        alSaludar(Aparato(ficha.id, ficha.nombre), hola.puerto)
+        // El «adiós»: si no llega, lo hecho hecho está.
+        runCatching {
+            Protocolo.leerPeticion(canal)
+            Protocolo.enviar(canal, Protocolo.Respuesta())
+            canal.vaciar()
+        }
+        estado("${ficha.nombre} entró en «${junto.nombre}»")
+        return ficha
+    }
+
     /**
      * **Un archivo suelto** (ver `docs/investigacion/2026-10-06-foto-al-lienzo-android.md` y
      * `2026-10-07-archivos-al-chat-abierto-android.md` del PC). El «vale» (`{}`) va **antes** de
@@ -437,7 +531,17 @@ class Respondedor(
         }
     }
 
-    private fun responder(canal: Canal, otro: Aparato) {
+    /**
+     * Con [acceso], quien pregunta es **una persona** de un chat compartido y no un aparato del
+     * grupo: solo ve y toca los chats que compartimos, ninguno de los archivos de los demás, y nada
+     * de lo que es del aparato entero (la galería, borrar proyectos, archivos sueltos).
+     */
+    private fun responder(canal: Canal, otro: Aparato, acceso: AccesoDePersona? = null) {
+        fun chatPermitido(chat: String?): String {
+            val c = chat ?: throw IllegalArgumentException("Falta el chat")
+            if (acceso != null && !acceso.puede(c)) throw IllegalArgumentException("No es un chat compartido contigo")
+            return c
+        }
         // Lo que es de cada chat, calculado al preguntar por sus archivos: sin esto, cada archivo
         // pedido volvería a recorrer el chat y sus lienzos enteros.
         var alcance: Pair<String, Set<String>>? = null
@@ -446,22 +550,29 @@ class Respondedor(
         val conocidos = HashMap<String, ArchivoInfo>()
         while (true) {
             val p = runCatching { Protocolo.leerPeticion(canal) }.getOrElse { if (it is java.io.EOFException) return else throw it }
+            // A una persona, lo del aparato entero no se le contesta: como un PixPin de antes.
+            if (acceso != null && p.t in SOLO_DEL_GRUPO) {
+                Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
+                continue
+            }
             try {
                 when (p.t) {
                     "adios" -> { Protocolo.enviar(canal, Protocolo.Respuesta()); canal.vaciar(); return }
-                    "catalogo" -> Protocolo.enviar(canal, Protocolo.Respuesta(chats = disco.chats()))
-                    // **Qué proyectos se borraron aquí**, para que el otro no los devuelva.
-                    "lapidas" -> Protocolo.enviar(canal, Protocolo.Respuesta(lapidas = disco.lapidas()))
+                    "catalogo" -> Protocolo.enviar(canal, Protocolo.Respuesta(chats = disco.chats().filter { acceso == null || acceso.puede(it.id) }))
+                    // **Qué proyectos se borraron aquí**, para que el otro no los devuelva. A una
+                    // persona, nada: borrar un chat compartido es salir de él, no borrárselo a ella.
+                    "lapidas" -> Protocolo.enviar(canal, Protocolo.Respuesta(lapidas = if (acceso == null) disco.lapidas() else emptyList()))
                     // **Bórralo tú también.** Lo pide el que dirige cuando aquí está vivo pero
                     // allí se borró y aquí no se ha tocado desde entonces. Ver [Disco.borrarChat].
                     "borrarchat" -> {
+                        require(acceso == null) { "Una persona no borra proyectos" }
                         val chat = p.chat!!
                         estado("Borrando «${nombreDe(chat)}», borrado en ${otro.nombre}…")
                         disco.borrarChat(chat, "Antes de borrarlo, borrado en ${otro.nombre}", ahora(), otro.id)
                         Protocolo.enviar(canal, Protocolo.Respuesta())
                     }
                     "inventario" -> {
-                        val chat = p.chat!!
+                        val chat = chatPermitido(p.chat)
                         estado("Comparando «${nombreDe(chat)}» con ${otro.nombre}…")
                         // **Antes de tocar nada, cómo estaba.** Ver [Copias].
                         Copias(disco).hacer(chat, "Antes de sincronizar con ${otro.nombre}", ahora())
@@ -474,11 +585,20 @@ class Respondedor(
                         ))
                     }
                     "mensajes" -> {
-                        val suyos = disco.mensajesPorClave(p.chat!!)
+                        val suyos = disco.mensajesPorClave(chatPermitido(p.chat))
                         Protocolo.enviar(canal, Protocolo.Respuesta(mensajes = p.senas.mapNotNull { suyos[it]?.let(disco::portatil) }))
                     }
                     "aplicar" -> {
-                        val chat = p.chat!!
+                        val chat = chatPermitido(p.chat)
+                        if (acceso != null) {
+                            // **De una persona, solo lo de este chat** ([Disco.soloDeEsteChat]): ni
+                            // mensajes que nombren archivos de otros chats, ni otro proyecto.
+                            val prohibidos = acceso.prohibidos()
+                            disco.aplicarMensajes(chat, disco.soloDeEsteChat(chat, p.poner, prohibidos), p.borrar, noBorrar = prohibidos)
+                            disco.proyectoSeguro(chat, disco.proyectoDe(p.proyecto), prohibidos)?.let { disco.guardarProyecto(it) }
+                            Protocolo.enviar(canal, Protocolo.Respuesta())
+                            continue
+                        }
                         disco.aplicarMensajes(chat, p.poner, p.borrar)
                         disco.proyectoDe(p.proyecto)?.let {
                             // Si llega el proyecto es que allí decidieron que sigue vivo —lo
@@ -490,13 +610,21 @@ class Respondedor(
                         Protocolo.enviar(canal, Protocolo.Respuesta())
                     }
                     "archivos" -> {
-                        val lista = disco.archivos(p.chat!!, conocidos)
+                        val chat = chatPermitido(p.chat)
+                        val lista = disco.archivos(chat, conocidos).filter { acceso == null || it.ruta !in acceso.prohibidos() }
                         lista.forEach { conocidos[it.ruta] = it }
-                        alcance = p.chat to lista.map { it.ruta }.toSet()
+                        alcance = chat to lista.map { it.ruta }.toSet()
                         Protocolo.enviar(canal, Protocolo.Respuesta(archivos = lista))
                     }
                     "pon" -> {
                         val rel = p.ruta!!
+                        if (acceso != null && p.chat?.let { acceso.puedeEscribir(it, rel) } != true) {
+                            // Los trozos ya vienen por el cable: se leen y se tiran, o la
+                            // conversación se descuadra. Y se dice que no.
+                            Protocolo.recibirTrozos(canal, p.bytes, java.io.OutputStream.nullOutputStream()) {}
+                            Protocolo.enviar(canal, Protocolo.Respuesta(error = "No es de este chat: $rel"))
+                            continue
+                        }
                         estado("Recibiendo ${rel.substringAfterLast('/')}")
                         conocidos.remove(rel)
                         val entero = disco.escribirArchivo(rel) { salida -> Protocolo.recibirTrozos(canal, p.bytes, salida) {} != null }
@@ -505,6 +633,7 @@ class Respondedor(
                     "parche" -> {
                         val rel = p.ruta!!
                         require(disco.permitida(rel) && disco.esTexto(rel)) { "No se puede parchear: $rel" }
+                        require(acceso == null || acceso.puedeEscribir(chatPermitido(p.chat), rel)) { "No es de este chat: $rel" }
                         estado("Recibiendo cambios de ${rel.substringAfterLast('/')}")
                         conocidos.remove(rel)
                         val puesto = Parches.poner(disco, rel, p.desde, p.parche, p.resumen)
@@ -514,6 +643,7 @@ class Respondedor(
                         val rel = p.ruta!!
                         val suyos = alcance?.takeIf { it.first == p.chat }?.second ?: disco.alcance(p.chat!!).keys
                         require(disco.permitida(rel) && disco.esTexto(rel) && rel in suyos) { "No es de este chat: $rel" }
+                        require(acceso == null || acceso.puedeLeer(chatPermitido(p.chat), rel, suyos)) { "No es de este chat: $rel" }
                         estado("Mandando cambios de ${rel.substringAfterLast('/')}")
                         val hecho = Parches.sacar(disco, rel, p.desde)
                         Protocolo.enviar(canal, if (hecho == null) Protocolo.Respuesta(faltaBase = true) else Protocolo.Respuesta(parche = hecho.first, resumen = hecho.second))
@@ -522,12 +652,14 @@ class Respondedor(
                         val rel = p.ruta!!
                         val suyos = alcance?.takeIf { it.first == p.chat }?.second ?: disco.alcance(p.chat!!).keys
                         require(disco.permitida(rel) && rel in suyos) { "No es de este chat: $rel" }
+                        require(acceso == null || acceso.puedeLeer(chatPermitido(p.chat), rel, suyos)) { "No es de este chat: $rel" }
                         estado("Mandando ${rel.substringAfterLast('/')}")
                         val sale = Protocolo.salida(disco, rel)
                         Protocolo.enviar(canal, Protocolo.Respuesta(bytes = sale.largo))
                         sale.mandar(canal) {}
                     }
                     "base" -> {
+                        chatPermitido(p.chat)
                         val base = p.base ?: Base()
                         disco.guardarBase(otro.id, p.chat!!, base)
                         disco.guardarObjetosDeBase(p.chat, base)
@@ -538,6 +670,22 @@ class Respondedor(
                     "suelto" -> recibirSuelto(canal, p, otro)
                     // **La galería** (8-oct-2026). Sin capturas en este disco, como un aparato de antes.
                     GaleriaQueViaja.PETICION, "galeriajunta", "damecaptura", "poncaptura" -> responderGaleria(canal, p)
+                    // **Las listas de los chats compartidos, entre aparatos del grupo** (13-oct-2026):
+                    // se juntan enteras —son mías— y el otro aparato entra en los que estoy yo.
+                    "compartidos" -> {
+                        val yo = compartidos.yo(disco.identidad.leer())
+                        val suFicha = Protocolo.fichaDeTexto(p.persona)?.takeIf { it.id == otro.id }
+                        val juntos = compartidos.cambiar { mios -> Compartidos.juntarDelGrupo(mios, Protocolo.deTexto(p.compartidos), yo, suFicha, ahora()) }
+                        Protocolo.enviar(canal, Protocolo.Respuesta(compartidos = Protocolo.aTexto(juntos), persona = Protocolo.fichaATexto(yo.ficha())))
+                    }
+                    // **Las listas, con una persona**: solo las de los chats donde constamos los dos,
+                    // y sin admitir chats nuevos. Así se entera cada uno de quién entró y quién salió.
+                    "miembros" -> {
+                        require(acceso != null) { "No sé qué es «${p.t}»" }
+                        val rastro = Compartidos.conRastro(compartidos.leer(), acceso.yo, otro.id)
+                        val juntos = compartidos.cambiar { mios -> Compartidos.juntarTodos(mios, Protocolo.deTexto(p.compartidos).filter { it.chat in rastro }) { false } }
+                        Protocolo.enviar(canal, Protocolo.Respuesta(compartidos = Protocolo.aTexto(juntos.filter { it.chat in rastro })))
+                    }
                     else -> Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
                 }
             } catch (e: IOException) {
@@ -549,6 +697,11 @@ class Respondedor(
     }
 
     private fun nombreDe(chat: String) = disco.chats().firstOrNull { it.id == chat }?.nombre ?: chat
+
+    private companion object {
+        /** Lo que es del aparato entero y no de un chat: a una persona no se le contesta. */
+        val SOLO_DEL_GRUPO = setOf("suelto", GaleriaQueViaja.PETICION, "galeriajunta", "damecaptura", "poncaptura", "compartidos", "borrarchat")
+    }
 }
 
 /**
@@ -575,6 +728,14 @@ class Sesion private constructor(
      * y mis archivos pisan a los suyos. Lo que solo tiene el otro se conserva y se trae.
      */
     var loMioManda = false
+
+    /**
+     * **Con una persona de un chat compartido** y no con un aparato del grupo (ver [conectarConPersona]):
+     * solo se trabaja en los chats que compartimos y nada de los demás sale ni se pisa aquí, aunque
+     * lo que llega lo nombre. Nulo con el grupo.
+     */
+    var acceso: AccesoDePersona? = null
+        private set
 
     fun lapidas(): List<LapidaDeChat> {
         Protocolo.enviar(canal, Protocolo.Peticion("lapidas"))
@@ -646,6 +807,7 @@ class Sesion private constructor(
 
     /** Paso 1: qué pasa con los mensajes de [chat]. */
     fun preparar(chat: String): Preparado {
+        acceso?.let { require(it.puede(chat)) { "No es un chat compartido con ${otro.nombre}" } }
         // **Antes de tocar nada, cómo estaba.** Ver [Copias].
         Copias(disco).hacer(chat, "Antes de sincronizar con ${otro.nombre}")
         disco.sellar()
@@ -693,7 +855,9 @@ class Sesion private constructor(
         // Lo que me traigo: los vivos se piden; los borrados allí se borran aquí.
         val traerVivos = traer.filter { prep.suyos[it]?.borrado == false }
         val borrarAqui = traer.filter { prep.suyos[it]?.borrado == true }
-        val llegan = pedirMensajes(chat, traerVivos)
+        val prohibidos = acceso?.prohibidos()
+        // De una persona, solo lo que es de este chat y no nombra nada de los otros ([Disco.soloDeEsteChat]).
+        val llegan = pedirMensajes(chat, traerVivos).let { l -> if (prohibidos == null) l else disco.soloDeEsteChat(chat, l, prohibidos) }
 
         // **Lo cambiado en los dos, junto** campo a campo, y el texto por párrafos.
         val juntos = ArrayList<String>()
@@ -712,10 +876,14 @@ class Sesion private constructor(
                     ?: continue
                 juntos += junto.toString()
             }
+            if (prohibidos != null) {
+                val buenos = disco.soloDeEsteChat(chat, juntos, prohibidos).toSet()
+                juntos.retainAll(buenos)
+            }
             hecho.fusionados += juntos.size
             hecho.rescatados += cuenta.rescatados
         }
-        disco.aplicarMensajes(chat, llegan + juntos, borrarAqui)
+        disco.aplicarMensajes(chat, llegan + juntos, borrarAqui, noBorrar = prohibidos.orEmpty())
         hecho.traidos += llegan.size
         hecho.borrados += borrarAqui.size
 
@@ -727,7 +895,7 @@ class Sesion private constructor(
         // El proyecto, juntado. Para saber qué hojas se cambiaron en cada lado hacen falta los
         // resúmenes de sus archivos.
         val mio = disco.leerProyectos().firstOrNull { it.id == chat }
-        val suyo = disco.proyectoDe(prep.suyoProyecto)
+        val suyo = disco.proyectoDe(prep.suyoProyecto).let { p -> if (prohibidos == null) p else disco.proyectoSeguro(chat, p, prohibidos) }
         var junto = mio ?: suyo
         if (mio != null && suyo != null && mio != suyo && !loMioManda) {
             Protocolo.enviar(canal, Protocolo.Peticion("archivos", chat = chat))
@@ -799,7 +967,7 @@ class Sesion private constructor(
         val acordado = traducir(base.archivos.filterKeys { it == rel }, mios, suyos)
         fun apunte(a: ArchivoInfo) = Diferencia.Apunte(a.ruta, a.tocado, a.tocado, a.resumen)
         val pasos = Diferencia.plan(mios.values.map(::apunte), suyos.values.map(::apunte), acordado)
-            .filter { disco.permitida(it.sena) }
+            .filter { disco.permitida(it.sena) && fueraDeLaValla(it.sena) }
         return PreparadoArchivos(chat, pasos, acordado, mios, suyos)
     }
 
@@ -831,9 +999,12 @@ class Sesion private constructor(
         val acordado = traducir(prep.base.archivos, mios, suyos)
         fun apunte(a: ArchivoInfo) = Diferencia.Apunte(a.ruta, a.tocado, a.tocado, a.resumen)
         val pasos = Diferencia.plan(mios.values.map(::apunte), suyos.values.map(::apunte), acordado)
-            .filter { disco.permitida(it.sena) }
+            .filter { disco.permitida(it.sena) && fueraDeLaValla(it.sena) }
         return PreparadoArchivos(chat, pasos, acordado, mios, suyos)
     }
+
+    /** Con una persona, lo de los demás chats no entra en ningún plan. */
+    private fun fueraDeLaValla(rel: String): Boolean = acceso?.let { rel !in it.prohibidos() } ?: true
 
     fun aplicarArchivos(prep: PreparadoArchivos, hecho: Hecho, avance: (Long) -> Unit = {}) {
         val cuenta = Fusion.Cuenta()
@@ -843,7 +1014,7 @@ class Sesion private constructor(
             val mio = prep.mios[rel]
             val suyo = prep.suyos[rel]
             val acordado = prep.acordado[rel]
-            val puesto: String? = when {
+            val puesto: String? = try { when {
                 // Lo mío manda: lo que tengo yo, va; solo se trae lo que aquí no existe.
                 loMioManda && mio != null -> mandarArchivo(rel, suyo, acordado, avance, hecho)
                 p is Diferencia.Paso.Fusionar && texto && mio != null && suyo != null -> fusionarArchivo(prep, rel, mio, suyo, acordado, cuenta, hecho)
@@ -851,6 +1022,11 @@ class Sesion private constructor(
                 p is Diferencia.Paso.Fusionar -> if ((mio?.tocado ?: 0L) >= (suyo?.tocado ?: 0L) - desfase) mandarArchivo(rel, suyo, acordado, avance, hecho) else traerArchivo(rel, mio, acordado, avance, hecho)
                 p is Diferencia.Paso.Mandar -> mandarArchivo(rel, suyo, acordado, avance, hecho)
                 else -> traerArchivo(rel, mio, acordado, avance, hecho)
+            } } catch (e: Protocolo.ErrorDelOtro) {
+                // **Una persona dijo que no** a ese archivo: en su aparato también es de otro chat
+                // suyo (un adjunto reenviado). Se deja y se sigue; con el grupo, como siempre.
+                if (acceso == null) throw e
+                null
             }
             if (puesto == null) { hecho.saltados += nombreDe(prep, rel); continue }
             conocidos.remove(rel)
@@ -1003,6 +1179,7 @@ class Sesion private constructor(
      * [avance] cuenta bytes, como los archivos de los chats.
      */
     fun galeria(hecho: Hecho, ahora: Long = System.currentTimeMillis(), avance: (Long) -> Unit = {}): Boolean {
+        if (acceso != null) return false
         val c = disco.capturas ?: return false
         Protocolo.enviar(canal, Protocolo.Peticion(GaleriaQueViaja.PETICION))
         val suya = Protocolo.leerRespuestaSinLanzar(canal)
@@ -1038,6 +1215,40 @@ class Sesion private constructor(
         }
         disco.avisar(Disco.Cambio.GALERIA)
         return true
+    }
+
+    /**
+     * **Las listas de los chats compartidos con otro aparato del grupo** (13-oct-2026): se juntan
+     * enteras, y cada uno mete al otro en los chats compartidos donde está él (son la misma persona).
+     * Dos idas: en la primera el otro me mete a mí; en la segunda le llega lo que yo hice con él.
+     * Devuelve `false` si el otro no sabe de esto (un PixPin de antes, el PC de hoy): no pasa nada.
+     */
+    fun compartidosDelGrupo(ahora: Long = System.currentTimeMillis()): Boolean {
+        if (acceso != null) return false
+        val c = CompartidosEnDisco(disco.filesDir)
+        val yo = c.yo(disco.identidad.leer())
+        repeat(2) {
+            Protocolo.enviar(canal, Protocolo.Peticion("compartidos", compartidos = Protocolo.aTexto(c.leer()), persona = Protocolo.fichaATexto(yo.ficha())))
+            val r = Protocolo.leerRespuestaSinLanzar(canal)
+            if (r.error != null) return false
+            val suFicha = Protocolo.fichaDeTexto(r.persona)?.takeIf { it.id == otro.id }
+            c.cambiar { mios -> Compartidos.juntarDelGrupo(mios, Protocolo.deTexto(r.compartidos), yo, suFicha, ahora) }
+        }
+        return true
+    }
+
+    /**
+     * **Las listas de los chats que compartimos, con una persona**: se juntan las de los chats donde
+     * constamos los dos ([Compartidos.conRastro]). Va antes que los chats: si me quitaron, me entero
+     * aquí y ya no se pide nada más.
+     */
+    fun juntarMiembros() {
+        val a = acceso ?: return
+        val c = CompartidosEnDisco(disco.filesDir)
+        val rastro = Compartidos.conRastro(c.leer(), a.yo, otro.id)
+        Protocolo.enviar(canal, Protocolo.Peticion("miembros", compartidos = Protocolo.aTexto(c.leer().filter { it.chat in rastro })))
+        val r = Protocolo.leerRespuesta(canal)
+        c.cambiar { mios -> Compartidos.juntarTodos(mios, Protocolo.deTexto(r.compartidos).filter { it.chat in rastro }) { false } }
     }
 
     /** Se despide y deja libre el aparato para otra sincronización. Se puede llamar más de una vez. */
@@ -1084,6 +1295,42 @@ class Sesion private constructor(
             if (!Protocolo.ocupar(disco)) throw IOException(Protocolo.OCUPADO)
             try {
                 return abrir(entrada, salida, disco, unirme, elCodigo, id, ahora, miPuerto)
+            } catch (e: Throwable) {
+                Protocolo.soltar(disco)
+                throw e
+            }
+        }
+
+        /**
+         * **Se presenta a una persona de un chat compartido** (13-oct-2026), con las claves de este
+         * aparato ([Canal.abrirEntrePersonas]) y no con el código del grupo. Solo se habla con
+         * alguien que está en la lista de un chat donde también estoy yo; con [aQuien], además,
+         * tiene que ser ese aparato. La sesión queda limitada a lo que compartimos ([acceso]).
+         */
+        fun conectarConPersona(
+            entrada: InputStream, salida: OutputStream, disco: Disco,
+            aQuien: String? = null, ahora: () -> Long = System::currentTimeMillis, miPuerto: Int = 0
+        ): Sesion {
+            if (!Protocolo.ocupar(disco)) throw IOException(Protocolo.OCUPADO)
+            try {
+                val compartidos = CompartidosEnDisco(disco.filesDir)
+                val yo = compartidos.yo(disco.identidad.leer())
+                var quien: Persona? = null
+                val (canal, _) = Canal.abrirEntrePersonas(entrada, salida, yo.llaves, inicia = true) { clave ->
+                    quien = Compartidos.porClave(compartidos.leer(), yo.id, Llaves.b64(clave))?.takeIf { aQuien == null || it.id == aQuien }
+                    quien != null
+                }
+                val persona = quien ?: throw Canal.NoEsMiembro()
+                val antes = ahora()
+                Protocolo.enviar(canal, Protocolo.Peticion("hola", hola = Protocolo.Hola(Aparato(yo.id, yo.nombre), reloj = antes, puerto = miPuerto)))
+                val r = Protocolo.leerRespuesta(canal)
+                val despues = ahora()
+                val hola = r.hola ?: throw IOException("${persona.nombre} no saludó")
+                if (hola.version != Protocolo.VERSION) throw IOException("${persona.nombre} tiene otra versión de PixPin: actualizad los dos")
+                if (hola.yo.id != persona.id) throw IOException("No es quien dice ser")
+                return Sesion(canal, disco, Aparato(persona.id, persona.nombre), hola.reloj - (antes + despues) / 2, hola.puerto).also {
+                    it.acceso = AccesoDePersona(disco, compartidos, yo.id, persona.id)
+                }
             } catch (e: Throwable) {
                 Protocolo.soltar(disco)
                 throw e
