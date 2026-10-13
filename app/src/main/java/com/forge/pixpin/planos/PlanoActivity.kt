@@ -655,7 +655,10 @@ class PlanoActivity : ComponentActivity() {
             if (anotando) capa?.let { laCapa ->
                 @Suppress("UNUSED_EXPRESSION") tickDeAnotar
                 val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
-                com.forge.pixpin.ui.EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
+                com.forge.pixpin.ui.EscribirEnElLienzo(
+                    laCapa, tickDeAnotar, enSitio = true, noche = !claro,
+                    fondo = (if (claro) PintorDePlano.FONDO_CLARO else PintorDePlano.FONDO_OSCURO).let { Color(it[0], it[1], it[2], 0.85f) }
+                ) { tickDeAnotar++; cambiosEnLaCapa++ }
                 Row(
                     Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
                         .clip(RoundedCornerShape(50)).background(Color(0xB314182B)),
@@ -775,7 +778,16 @@ class PlanoActivity : ComponentActivity() {
                                 if (faltan.isEmpty()) getString(com.forge.pixpin.R.string.plano_letras_no_falta)
                                 else getString(com.forge.pixpin.R.string.plano_letras_faltan)
                             )
-                            if (faltan.isNotEmpty()) Text(faltan.joinToString("\n"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp))
+                            // Con el archivo que hay que copiar al lado: las de Windows/Office no se llaman como
+                            // su nombre (Arial Black es ariblk.ttf) y en la carpeta de AutoCAD no están.
+                            if (faltan.isNotEmpty()) Text(
+                                faltan.joinToString("\n") { f -> ARCHIVOS_DE_WINDOWS[f.lowercase()]?.let { "$f  ($it)" } ?: f },
+                                fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                            if (faltan.any { !it.endsWith(".shx", ignoreCase = true) }) Text(
+                                getString(com.forge.pixpin.R.string.plano_letras_de_windows),
+                                fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp)
+                            )
                             Text(getString(com.forge.pixpin.R.string.plano_letras_donde), modifier = Modifier.padding(top = 8.dp))
                             if (mias.isNotEmpty()) {
                                 Text(getString(com.forge.pixpin.R.string.plano_letras_mias, mias.size), modifier = Modifier.padding(top = 12.dp))
@@ -1179,6 +1191,24 @@ class PlanoActivity : ComponentActivity() {
     }
 
     companion object {
+        /**
+         * El archivo de las letras de Windows y Office que más piden los planos (13-oct-2026: el
+         * usuario añadió todas las SHX de AutoCAD y el plano seguía pidiendo Agency FB, Arial Black,
+         * Bodoni MT, Forte, Freestyle Script y Stencil, que son TrueType de C:\Windows\Fonts).
+         */
+        val ARCHIVOS_DE_WINDOWS = mapOf(
+            "agency fb" to "AGENCYR.TTF", "arial black" to "ariblk.ttf", "bodoni mt" to "BOD_R.TTF",
+            "forte" to "FORTE.TTF", "freestyle script" to "FREESCPT.TTF", "stencil" to "STENCIL.TTF",
+            "arial" to "arial.ttf", "arial narrow" to "ARIALN.TTF", "calibri" to "calibri.ttf",
+            "cambria" to "cambria.ttc", "century gothic" to "GOTHIC.TTF", "comic sans ms" to "comic.ttf",
+            "courier new" to "cour.ttf", "georgia" to "georgia.ttf", "impact" to "impact.ttf",
+            "segoe ui" to "segoeui.ttf", "tahoma" to "tahoma.ttf", "times new roman" to "times.ttf",
+            "trebuchet ms" to "trebuc.ttf", "verdana" to "verdana.ttf", "swis721 bt" to "swiss.ttf",
+            "isocpeur" to "isocpeur.ttf", "romantic" to "romantic.ttf", "simplex" to "simplex.ttf",
+            "gill sans mt" to "GIL_____.TTF", "franklin gothic medium" to "framd.ttf", "lucida console" to "lucon.ttf",
+            "book antiqua" to "BKANT.TTF", "garamond" to "GARA.TTF", "haettenschweiler" to "HATTEN.TTF",
+            "showcard gothic" to "SHOWG.TTF", "broadway" to "BROADW.TTF", "algerian" to "ALGER.TTF"
+        )
         private const val EXTRA_RUTA = "ruta"
         /** Dónde va la mira respecto al dedo (dp): arriba y a la izquierda. */
         const val MIRA_X = 34f

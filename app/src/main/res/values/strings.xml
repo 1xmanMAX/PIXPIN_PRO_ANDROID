@@ -567,7 +567,8 @@
     <string name="plano_faltan_letras">Faltan %1$d letras del plano: toca Aa arriba para añadirlas</string>
     <string name="plano_letras_faltan">Este plano pide letras que no están en el teléfono; sus textos salen con otras parecidas y pueden no caber en sus recuadros:</string>
     <string name="plano_letras_no_falta">No falta ninguna letra que el plano diga por su nombre.</string>
-    <string name="plano_letras_donde">Cópialas de tu PC y añádelas aquí: las SHX están en C:\Program Files\Autodesk\AutoCAD 20xx\Fonts y las TrueType en C:\Windows\Fonts. PixPin no puede traerlas: son de Autodesk y de Microsoft.</string>
+    <string name="plano_letras_donde">Cópialas de tu PC y añádelas aquí: las SHX están en C:\\Program Files\\Autodesk\\AutoCAD 20xx\\Fonts y las TrueType en C:\\Windows\\Fonts. PixPin no puede traerlas: son de Autodesk y de Microsoft.</string>
+    <string name="plano_letras_de_windows">Las que no son .shx no vienen con AutoCAD: son TrueType de Windows y Office. Cópialas de C:\\Windows\\Fonts (el archivo va entre paréntesis) y añádelas con «Añadir letras…».</string>
     <string name="plano_letras_mias">Letras tuyas: %1$d</string>
     <string name="plano_letras_quitar">Quitar las mías</string>
     <string name="plano_letras_anadir">Añadir letras…</string>

@@ -4999,22 +4999,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         m.nombre.removeSuffix(".m4a").ifBlank { if (m.clase == Clase.VOZ) "Nota de voz" else m.ruta?.substringAfterLast('/') ?: "Archivo" }
 
     /**
-     * El nombre de un archivo con **un lápiz al lado**: tocarlo cambia el nombre. Se ve en cada
-     * burbuja para que nadie tenga que adivinar que se puede (pedido del usuario, 4-oct-2026).
+     * El nombre de un archivo en su burbuja. **Ya no se renombra tocándolo** (13-oct-2026, el usuario:
+     * «quiero abrir el documento, le doy a las letras y se cambia el nombre; es un inconveniente»):
+     * tocar el nombre es tocar la burbuja, y abre. Cambiar el nombre sigue siendo lo primero del menú
+     * del mensaje (mantener pulsado).
      */
     @Composable
-    private fun NombreConLapiz(m: Mensaje, nombre: @Composable RowScope.() -> Unit) {
-        if (!Renombrar.sePuede(m)) { Row(content = nombre); return }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { renombrandoMensaje = m }
-        ) {
-            nombre()
-            Icon(
-                Icons.Filled.Edit, contentDescription = getString(com.forge.pixpin.R.string.guardados_cambiar_nombre),
-                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp).size(15.dp)
-            )
-        }
+    private fun NombreConLapiz(@Suppress("UNUSED_PARAMETER") m: Mensaje, nombre: @Composable RowScope.() -> Unit) {
+        Row(verticalAlignment = Alignment.CenterVertically, content = nombre)
     }
 
     @Composable
