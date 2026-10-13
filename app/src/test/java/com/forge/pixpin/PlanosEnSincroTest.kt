@@ -57,6 +57,42 @@ class PlanosEnSincroTest {
     }
 
     @Test
+    fun una_cota_del_pc_con_decimales_de_f32_no_se_borra_y_renace() {
+        val e = CapaDelPlano.Encaje(0.1, 0.0, 0.0)
+        val cotas = listOf(listOf(doubleArrayOf(0.0, 0.0), doubleArrayOf(10.123456, 0.0)))
+        val marcos = listOf(ImprimirPlano.Marco.entre(-10.0, -5.0, 20.0, 15.0))
+        val propia = CapaDelPlano.con(Scene(), e, cotas, marcos, 1000)
+        // Lo mismo, como lo escribe el PC: otro id y las coordenadas pasadas por f32.
+        val delPc = propia.copy(elements = propia.elements.map { el ->
+            el.copy(id = "pc-" + el.id, x = el.x.toFloat().toDouble(), y = el.y.toFloat().toDouble(),
+                width = el.width.toFloat().toDouble(), height = el.height.toFloat().toDouble(),
+                points = el.points?.map { com.forge.pixpin.motor.Pt(it.x.toFloat().toDouble(), it.y.toFloat().toDouble()) })
+        })
+        val (c, m) = CapaDelPlano.leer(delPc, e)
+        val vuelta = CapaDelPlano.con(delPc, e, c, m, 2000)
+        // Nada borrado, nada nuevo: las mismas figuras con su id del PC.
+        assertEquals(delPc.elements.map { it.id }, vuelta.elements.map { it.id })
+        assertTrue(vuelta.elements.none { it.isDeleted })
+    }
+
+    @Test
+    fun los_marcos_llevan_su_numero_de_hoja_y_se_leen_en_ese_orden() {
+        val e = CapaDelPlano.Encaje(0.1, 0.0, 0.0)
+        val a = ImprimirPlano.Marco.entre(50.0, 0.0, 60.0, 8.0)
+        val b = ImprimirPlano.Marco.entre(-10.0, -5.0, 20.0, 15.0)
+        val s1 = CapaDelPlano.con(Scene(), e, emptyList(), listOf(a, b), 1000)
+        assertEquals(listOf("1", "2"), s1.elements.map { it.name })
+        // Aunque lleguen con el mismo `updated` y en otro orden en el fichero, manda el número.
+        val revuelta = s1.copy(elements = s1.elements.reversed().map { it.copy(updated = 5) })
+        assertEquals(50.0, CapaDelPlano.leer(revuelta, e).second[0].x0, 1e-9)
+        // Quitar el primero renumera el otro (y eso viaja: versión nueva).
+        val s2 = CapaDelPlano.con(s1, e, emptyList(), listOf(b), 2000)
+        val queda = s2.elements.single { !it.isDeleted }
+        assertEquals("1", queda.name)
+        assertTrue(queda.version > s1.elements.single { it.id == queda.id }.version)
+    }
+
+    @Test
     fun la_camara_mira_al_objetivo_y_encuadra_la_caja() {
         val o = Orbita.encuadrar(floatArrayOf(-10f, -10f, 0f, 10f, 10f, 5f), 1000, 2000)
         val m = o.matriz(1000, 2000, 30.0)

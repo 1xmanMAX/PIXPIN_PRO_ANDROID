@@ -31,6 +31,8 @@ object CapaDelPlano {
     const val GRUPO_COTA = "plano-cota"
     const val GRUPO_MARCO = "plano-marco"
     private const val NARANJA = "#ff8a00"
+    /** Lo que pueden diferir dos formas iguales (unidades de capa): los decimales del f32 del PC. */
+    private const val TOLERANCIA = 1e-3
 
     /** Cómo cae la capa en el plano: x = [ceroX] + xCapa · [u]; y = [ceroY] − yCapa · [u] (la y de la capa baja). */
     data class Encaje(val u: Double, val ceroX: Double, val ceroY: Double) {
@@ -76,9 +78,12 @@ object CapaDelPlano {
                 marcos += ImprimirPlano.Marco.entre(e.aPlanoX(el.x), e.aPlanoY(el.y), e.aPlanoX(el.x + el.width), e.aPlanoY(el.y + el.height))
             }
         }
-        // Los marcos, en el orden en que se pusieron (son las hojas 1, 2, 3…).
-        val orden = s.elements.filter { !it.isDeleted && GRUPO_MARCO in it.groupIds }.map { it.updated }
-        return cotas to marcos.zip(orden).sortedBy { it.second }.map { it.first }
+        // Los marcos, en el orden de sus hojas (1, 2, 3…): el número va en el `name` del marco
+        // (13-oct-2026, la guía del PC: dos marcos guardados a la vez salían con el mismo `updated`).
+        // Los que no lo llevan (capas de antes) van detrás, por cuándo se pusieron.
+        val orden = s.elements.filter { !it.isDeleted && GRUPO_MARCO in it.groupIds }
+            .map { (it.name?.toIntOrNull() ?: Int.MAX_VALUE) to it.updated }
+        return cotas to marcos.zip(orden).sortedWith(compareBy({ it.second.first }, { it.second.second })).map { it.first }
     }
 
     /**
@@ -89,18 +94,40 @@ object CapaDelPlano {
     fun con(s: Scene, e: Encaje, cotas: List<List<DoubleArray>>, marcos: List<ImprimirPlano.Marco>, ahora: Long): Scene {
         val queridos = LinkedHashMap<String, Element>()
         for (c in cotas) if (c.size >= 2) elementoDeCota(c, e, ahora).let { queridos[it.id] = it }
-        marcos.forEachIndexed { i, m -> elementoDeMarco(m, e, ahora + i).let { queridos[it.id] = it } }
+        marcos.forEachIndexed { i, m -> elementoDeMarco(m, e, ahora + i, i + 1).let { queridos[it.id] = it } }
         val vistos = HashSet<String>()
+        // Las que casan por id, primero: una que case por forma no puede quitarles la suya.
+        val porId = s.elements.filter { esDelPlano(it) && it.id in queridos }.mapTo(HashSet()) { it.id }
         val fuera = s.elements.map { el ->
             if (!esDelPlano(el)) return@map el
-            vistos += el.id
+            // **Por el id o por la forma** (13-oct-2026, guía del PC): una cota llegada del PC se
+            // guardó en f32 y, leída y vuelta a medir, su id puede salir otro por los decimales. Sin
+            // esto se marcaba borrada y nacía otra igual en cada guardado. Si coincide con una querida
+            // a menos de una milésima de unidad de capa, es ella, y se queda con su id.
+            val id = if (el.id in queridos) el.id
+            else queridos.entries.firstOrNull { (k, q) -> k !in vistos && k !in porId && mismaForma(el, q) }?.key
+            if (id != null) vistos += id
+            val querido = id?.let { queridos.getValue(it) }
             when {
-                el.id in queridos && el.isDeleted -> queridos.getValue(el.id).copy(version = el.version + 1)
-                el.id in queridos || el.isDeleted -> el
+                querido != null && el.isDeleted -> querido.copy(id = el.id, version = el.version + 1)
+                // Sigue; solo cambia si cambió su número de hoja (se quitó un marco de delante).
+                querido != null -> if (querido.name != el.name) el.copy(name = querido.name, version = el.version + 1, updated = ahora) else el
+                el.isDeleted -> el
                 else -> el.copy(isDeleted = true, version = el.version + 1, updated = ahora)
             }
         }
         return s.copy(elements = fuera + queridos.values.filter { it.id !in vistos })
+    }
+
+    /** Misma clase (cota o marco) y misma forma, a menos de [TOLERANCIA] unidades de capa. */
+    private fun mismaForma(a: Element, b: Element): Boolean {
+        if (a.type != b.type || a.groupIds != b.groupIds) return false
+        fun cerca(x: Double, y: Double) = kotlin.math.abs(x - y) < TOLERANCIA
+        if (GRUPO_MARCO in a.groupIds) return cerca(a.x, b.x) && cerca(a.y, b.y) && cerca(a.width, b.width) && cerca(a.height, b.height)
+        val pa = a.points ?: return false
+        val pb = b.points ?: return false
+        if (pa.size != pb.size) return false
+        return pa.indices.all { i -> cerca(a.x + pa[i].x, b.x + pb[i].x) && cerca(a.y + pa[i].y, b.y + pb[i].y) }
     }
 
     private fun huella(prefijo: String, numeros: List<Double>): String {
@@ -119,9 +146,9 @@ object CapaDelPlano {
             .copy(id = huella(GRUPO_COTA, c.flatMap { listOf(it[0], it[1]) }), points = pts, groupIds = listOf(GRUPO_COTA), updated = ahora)
     }
 
-    private fun elementoDeMarco(m: ImprimirPlano.Marco, e: Encaje, ahora: Long): Element {
+    private fun elementoDeMarco(m: ImprimirPlano.Marco, e: Encaje, ahora: Long, numero: Int): Element {
         val x = e.aCapaX(m.x0); val y = e.aCapaY(m.y1)
         return newElement(ElementType.FRAME, x, y, ItemStyle(strokeColor = "#3d8bff", strokeWidth = 1.0), m.ancho / e.u, m.alto / e.u)
-            .copy(id = huella(GRUPO_MARCO, listOf(m.x0, m.y0, m.x1, m.y1)), groupIds = listOf(GRUPO_MARCO), updated = ahora)
+            .copy(id = huella(GRUPO_MARCO, listOf(m.x0, m.y0, m.x1, m.y1)), groupIds = listOf(GRUPO_MARCO), updated = ahora, name = numero.toString())
     }
 }
