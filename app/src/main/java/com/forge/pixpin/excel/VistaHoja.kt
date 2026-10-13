@@ -39,6 +39,12 @@ import kotlin.math.sin
  * Gestos: un dedo desplaza (con inercia), dos acercan alrededor de los dedos; tocar elige una celda
  * (o una fila/columna en los encabezados, todo en la esquina); mantener y arrastrar elige un
  * rango, igual que arrastrar por los encabezados.
+ *
+ * Lo del PC del 12-oct (9975385): barras de datos completas, iconos, minigráficos, el triángulo rojo
+ * de las notas, los botones del autofiltro y las flechas de las listas desplegables (solo para ver).
+ * Y el **modo oscuro** ([oscuro], `pixpin_render::hoja_office` con `OpcionesHoja::oscuro`): papel,
+ * rejilla y encabezados oscuros y el texto sin relleno debajo, claro; los rellenos, las imágenes y
+ * los gráficos se quedan con sus colores ([com.forge.pixpin.office.Oscuro]).
  */
 @SuppressLint("ViewConstructor")
 class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
@@ -63,6 +69,44 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
 
     /** Se llama al cambiar la selección o lo que se ve (para la barra de arriba). */
     var alCambiar: (() -> Unit)? = null
+
+    /** **Modo oscuro** (luna/sol del visor). */
+    var oscuro: Boolean = false
+        set(v) {
+            if (field == v) return
+            field = v
+            colorearMarco()
+            invalidate()
+        }
+
+    private fun ui(c: Int) = com.forge.pixpin.office.Oscuro.si(oscuro, c)
+    private fun papel() = ui(Color.WHITE)
+    /** El relleno de una celda: el suyo, salvo el casi blanco en oscuro, que es papel. */
+    private fun rellenoDe(c: Int) = if (oscuro && com.forge.pixpin.office.Oscuro.casiBlanco(c)) papel() else c
+    /** Un borde sobre el papel: en oscuro el casi negro se aclara; los de color se quedan. */
+    private fun raya(c: Int) = if (oscuro) com.forge.pixpin.office.Oscuro.rayaLegible(c) else c
+    /** Un texto sobre el papel (sin relleno propio): en oscuro, si es oscuro, se aclara. */
+    private fun legible(c: Int) = if (oscuro) com.forge.pixpin.office.Oscuro.legible(c) else c
+
+    /** El color de un texto con el estilo [e]: con relleno propio (que no sea casi blanco) se queda como lo puso su autor. */
+    private fun colorDeTexto(e: Pxhj.Estilo, argb: Int): Int =
+        if (oscuro && (e.relleno == 0 || com.forge.pixpin.office.Oscuro.casiBlanco(e.relleno))) legible(argb) else argb
+
+    private fun colorearMarco() {
+        rejilla.color = ui(CUADRICULA)
+        cabeceraTexto.color = ui(ENCABEZADO_TEXTO)
+        avisoTexto.color = ui(0xFF666666.toInt())
+    }
+
+    /** La nota o el comentario de la celda (la de arriba a la izquierda si está combinada), si se sabe ya. */
+    fun comentarioDe(f: Int, c: Int): Pxhj.Comentario? {
+        val h = hoja ?: return null
+        val (ff, cc) = h.geo?.combinadaEn(f, c)?.let { it.f0 to it.c0 } ?: (f to c)
+        return h.trozo(ff / LibroExcel.FILAS_POR_TROZO)?.comentario(ff, cc)
+    }
+
+    /** Si la celda tiene una lista desplegable. */
+    fun conLista(f: Int, c: Int): Boolean = hoja?.geo?.conLista(f, c) == true
 
     fun ponerHoja(i: Int) {
         hoja = libro.hoja(i)
@@ -96,15 +140,28 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
         val texto = ArrayList<TextPaint?>()
         val metricas = ArrayList<Paint.FontMetrics?>()
         val tramos = HashMap<String, TextPaint>()
+        /** Con qué modo se colorearon (al cambiar, se cambia el color de las mismas pinturas: los textos ajustados las guardan). */
+        var oscuro = false
     }
 
-    private fun pinturas(h: LibroExcel.Hoja): Pinturas = (h.pintura as? Pinturas) ?: Pinturas().also { h.pintura = it }
+    private fun pinturas(h: LibroExcel.Hoja): Pinturas {
+        val p = (h.pintura as? Pinturas) ?: Pinturas().also { h.pintura = it; it.oscuro = oscuro }
+        if (p.oscuro != oscuro) {
+            p.oscuro = oscuro
+            for (i in p.texto.indices) {
+                val t = p.texto[i] ?: continue
+                val e = h.estilos.getOrNull(i) ?: continue
+                t.color = colorDeTexto(e, e.colorTexto)
+            }
+        }
+        return p
+    }
 
     private fun pinturaDe(h: LibroExcel.Hoja, p: Pinturas, i: Int): TextPaint? {
         if (i < p.texto.size) p.texto[i]?.let { return it }
         val e = h.estilos.getOrNull(i) ?: return null
         while (p.texto.size <= i) { p.texto.add(null); p.metricas.add(null) }
-        val t = LetrasExcel.pintura(context.assets, e.familia, e.puntos, e.letra, e.colorTexto)
+        val t = LetrasExcel.pintura(context.assets, e.familia, e.puntos, e.letra, colorDeTexto(e, e.colorTexto))
         p.texto[i] = t
         p.metricas[i] = t.fontMetrics
         return t
@@ -214,7 +271,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
     // ------------------------------------------------------------------------------ pintar
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.WHITE)
+        canvas.drawColor(papel())
         val h = hoja ?: return
         val g = h.geo
         if (g == null) {
@@ -241,7 +298,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             canvas.restore()
         }
         // Las líneas de los paneles inmovilizados.
-        relleno.color = LINEA_FIJA
+        relleno.color = ui(LINEA_FIJA)
         if (g.columnasFijas > 0) {
             val x = cabAncho + (g.x(g.columnasFijas) * e).toFloat()
             if (x < width) canvas.drawRect(x - 1f, cabAlto, x, height.toFloat(), relleno)
@@ -354,7 +411,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
                 linea(zonaL, y, zonaR, y)
             }
             canvas.drawLines(lineas, 0, n, rejilla)
-            relleno.color = Color.WHITE
+            relleno.color = papel()
             for (r in combinadasVisibles) canvas.drawRect(X(r.c0), Y(r.f0), X(r.c1 + 1) - u, Y(r.f1 + 1) - u, relleno)
             for (k in 0 until nBorrar) {
                 val x = borrar[3 * k]
@@ -367,37 +424,39 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
         var k = 0
         while (k + 2 < rc.size) {
             val a = max(rc[k], c0); val b = min(rc[k + 1], c1)
-            if (a <= b) { relleno.color = rc[k + 2]; canvas.drawRect(X(a) - u, zonaT, X(b + 1), zonaB, relleno) }
+            if (a <= b) { relleno.color = rellenoDe(rc[k + 2]); canvas.drawRect(X(a) - u, zonaT, X(b + 1), zonaB, relleno) }
             k += 3
         }
         for (f in f0..f1) {
             val fila = h.fila(f) ?: continue
             val y0 = Y(f); val y1 = Y(f + 1)
             if (y1 <= y0) continue
-            if (fila.relleno != 0) { relleno.color = fila.relleno; canvas.drawRect(zonaL, y0 - u, zonaR, y1, relleno) }
+            if (fila.relleno != 0) { relleno.color = rellenoDe(fila.relleno); canvas.drawRect(zonaL, y0 - u, zonaR, y1, relleno) }
             val cs = fila.celdas
             for (i in fila.desde(c0) until fila.desde(c1 + 1)) {
                 val c = cs[i]
                 val es = estilos.getOrNull(c.estilo) ?: continue
                 if (es.relleno != 0) {
                     if (combinadasVisibles.isNotEmpty() && enCombinada(f, c.col) != null) continue
-                    relleno.color = es.relleno
+                    relleno.color = rellenoDe(es.relleno)
                     canvas.drawRect(X(c.col) - u, y0 - u, X(c.col + 1), y1, relleno)
                 }
-                if (!c.barra.isNaN()) {
-                    val margen = max(2f, u)
-                    val x0 = X(c.col)
-                    val anchoBarra = max(u, (X(c.col + 1) - x0 - u - 2 * margen) * c.barra)
-                    relleno.color = c.colorBarra
-                    canvas.drawRect(x0 + margen, y0 + margen, x0 + margen + anchoBarra, y1 - u - margen, relleno)
+                c.barra?.let { barra(canvas, it, X(c.col), y0, X(c.col + 1), y1, u) }
+                if (c.conjunto >= 0) {
+                    // El icono a la izquierda de la celda, como Excel.
+                    val lado = max(4f, min((y1 - y0 - u) * 0.8f, 15f))
+                    IconosExcel.pintar(canvas, c.conjunto, c.icono, X(c.col) + 2f + lado / 2, (y0 + y1 - u) / 2, lado)
                 }
             }
         }
         for (r in combinadasVisibles) {
             val c = h.fila(r.f0)?.celda(r.c0) ?: continue
             val es = estilos.getOrNull(c.estilo) ?: continue
-            if (es.relleno != 0) { relleno.color = es.relleno; canvas.drawRect(X(r.c0) - u, Y(r.f0) - u, X(r.c1 + 1), Y(r.f1 + 1), relleno) }
+            if (es.relleno != 0) { relleno.color = rellenoDe(es.relleno); canvas.drawRect(X(r.c0) - u, Y(r.f0) - u, X(r.c1 + 1), Y(r.f1 + 1), relleno) }
         }
+
+        // 3b. Minigráficos.
+        pintarMinigraficos(canvas, h, g, f0, f1, c0, c1, ox, oy, u)
 
         // 4. Bordes, ya decididos lado a lado (de menos a más fuertes).
         pintarBordes(canvas, h, g, f0, f1, c0, c1, ox, oy, u, e)
@@ -410,6 +469,237 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             val x0 = (d.x - ox).toFloat(); val y0 = (d.y - oy).toFloat()
             if (d.ancho <= 0f || d.alto <= 0f || x0 > zonaR || y0 > zonaB || x0 + d.ancho < zonaL || y0 + d.alto < zonaT) continue
             pintarDibujo(canvas, d, x0, y0, u)
+        }
+
+        // 7. Encima: las flechas de las listas, los botones del autofiltro y el triángulo de las notas.
+        pintarMarcas(canvas, h, g, f0, f1, c0, c1, ox, oy, u)
+    }
+
+    /** **Una barra de datos** dentro de la celda (x0, y0)-(x1, y1), como el PC: desde/hasta, degradado o lisa, borde y eje. */
+    private fun barra(canvas: Canvas, b: Pxhj.Barra, x0: Float, y0: Float, x1: Float, y1: Float, u: Float) {
+        val margen = max(2f, u)
+        val ix0 = x0 + margen
+        val iw = x1 - x0 - u - 2 * margen
+        if (iw <= 0f) return
+        val alto = max(u, y1 - y0 - u - 2 * margen)
+        val l = ix0 + iw * b.desde
+        val r = l + max(u, iw * (b.hasta - b.desde))
+        val t = y0 + margen
+        if (b.degradado) {
+            // Del color al casi blanco, como las barras de 2007.
+            relleno.shader = android.graphics.LinearGradient(l, 0f, r, 0f, b.argb, mezclar(b.argb, Color.WHITE, 0.9f), android.graphics.Shader.TileMode.CLAMP)
+            canvas.drawRect(l, t, r, t + alto, relleno)
+            relleno.shader = null
+        } else {
+            relleno.color = b.argb
+            canvas.drawRect(l, t, r, t + alto, relleno)
+        }
+        if (b.borde != 0) {
+            trazo.color = b.borde; trazo.strokeWidth = u; trazo.pathEffect = null
+            canvas.drawRect(l + u / 2, t + u / 2, r - u / 2, t + alto - u / 2, trazo)
+        }
+        if (b.eje >= 0f) {
+            val xe = ix0 + iw * b.eje
+            relleno.color = b.colorEje
+            canvas.drawRect(xe, y0 + margen * 0.5f, xe + u, y1 - u - margen * 0.5f, relleno)
+        }
+    }
+
+    /** [a] mezclado con [b] en la proporción [t] (0 = a, 1 = b). */
+    private fun mezclar(a: Int, b: Int, t: Float): Int {
+        fun m(x: Int, y: Int) = (x + (y - x) * t).roundToInt().coerceIn(0, 255)
+        return Color.argb(255, m(Color.red(a), Color.red(b)), m(Color.green(a), Color.green(b)), m(Color.blue(a), Color.blue(b)))
+    }
+
+    private val tramoMini = Path()
+
+    /**
+     * **Minigráficos** (`x14:sparklineGroups`) de las celdas a la vista: línea, columnas o
+     * ganancia/pérdida, con marcadores (`pintar_minigraficos` del PC; el eje y los puntos ya vienen
+     * calculados del .so).
+     */
+    private fun pintarMinigraficos(canvas: Canvas, h: LibroExcel.Hoja, g: Pxhj.Geometria, f0: Int, f1: Int, c0: Int, c1: Int, ox: Double, oy: Double, u: Float) {
+        val n = LibroExcel.FILAS_POR_TROZO
+        for (k in f0 / n..f1 / n) {
+            val t = h.trozo(k) ?: continue
+            for (mi in t.minis) {
+                if (mi.fila < f0 || mi.fila > f1 || mi.col < c0 || mi.col > c1 || g.alto(mi.fila) <= 0 || g.ancho(mi.col) <= 0) continue
+                val r = g.combinadaEn(mi.fila, mi.col) ?: Pxhj.Rango(mi.fila, mi.col, mi.fila, mi.col)
+                val pad = 3f
+                val bx0 = (g.x(r.c0) - ox).toFloat() + pad; val by0 = (g.y(r.f0) - oy).toFloat() + pad
+                val bx1 = (g.x(r.c1 + 1) - ox).toFloat() - u - pad; val by1 = (g.y(r.f1 + 1) - oy).toFloat() - u - pad
+                minigrafico(canvas, mi, bx0, by0, bx1, by1, u)
+            }
+        }
+    }
+
+    private fun minigrafico(canvas: Canvas, mi: Pxhj.Mini, bx0: Float, by0: Float, bx1: Float, by1: Float, u: Float) {
+        val w = bx1 - bx0; val h = by1 - by0
+        if (w < 4f * u || h < 4f * u) return
+        val p = mi.puntos
+        val n = p.size
+        if (n == 0 || mi.maximo <= mi.minimo) return
+        val lo = mi.minimo; val hi = mi.maximo
+        fun yDe(v: Float) = by1 - ((v - lo) / (hi - lo)).coerceIn(0.0, 1.0).toFloat() * h
+        val yCero = yDe(0f).coerceIn(by0, by1)
+        // El primer máximo y el primer mínimo (los de «alto» y «bajo»).
+        var iAlto = -1; var iBajo = -1
+        for (i in 0 until n) {
+            val v = p[i]
+            if (v.isNaN()) continue
+            if (iAlto < 0 || v > p[iAlto]) iAlto = i
+            if (iBajo < 0 || v < p[iBajo]) iBajo = i
+        }
+        if (iAlto < 0) return
+        val c = mi.colores
+        fun colorDe(i: Int, v: Float): Int = when {
+            mi.tiene(2) && i == iAlto -> c[6]
+            mi.tiene(4) && i == iBajo -> c[7]
+            mi.tiene(8) && i == 0 -> c[4]
+            mi.tiene(16) && i == n - 1 -> c[5]
+            mi.tiene(32) && v < 0f -> c[1]
+            mi.tipo == 0 -> c[3]
+            else -> c[0]
+        }
+        canvas.save()
+        canvas.clipRect(bx0 - 3f, by0 - 3f, bx1 + 3f, by1 + 3f)
+        if (mi.tiene(64) && lo < 0 && hi > 0) {
+            relleno.color = c[2]
+            canvas.drawRect(bx0, yCero, bx1, yCero + u, relleno)
+        }
+        if (mi.tipo == 0) {
+            fun xDe(i: Int) = if (n > 1) bx0 + w * i / (n - 1) else bx0 + w / 2
+            val grosor = max(u, mi.peso * 96f / 72f)
+            trazo.color = c[0]; trazo.strokeWidth = grosor; trazo.pathEffect = null
+            trazo.strokeJoin = Paint.Join.ROUND
+            // Tramos seguidos; un hueco corta la línea salvo que se pida unir.
+            tramoMini.rewind()
+            var abierto = false
+            for (i in 0 until n) {
+                val v = p[i]
+                if (v.isNaN()) { if (!mi.tiene(128)) abierto = false; continue }
+                if (abierto) tramoMini.lineTo(xDe(i), yDe(v)) else { tramoMini.moveTo(xDe(i), yDe(v)); abierto = true }
+            }
+            canvas.drawPath(tramoMini, trazo)
+            trazo.strokeJoin = Paint.Join.MITER
+            val lado = max(grosor * 2.6f, 3f * u)
+            for (i in 0 until n) {
+                val v = p[i]
+                if (v.isNaN()) continue
+                val resaltado = (mi.tiene(2) && i == iAlto) || (mi.tiene(4) && i == iBajo) || (mi.tiene(8) && i == 0) ||
+                    (mi.tiene(16) && i == n - 1) || (mi.tiene(32) && v < 0f)
+                if (mi.tiene(1) || resaltado) {
+                    relleno.color = colorDe(i, v)
+                    canvas.drawRect(xDe(i) - lado / 2, yDe(v) - lado / 2, xDe(i) + lado / 2, yDe(v) + lado / 2, relleno)
+                }
+            }
+        } else {
+            val ancho = w / n
+            val hueco = min(max(u, ancho * 0.2f), 3f)
+            for (i in 0 until n) {
+                val v = p[i]
+                if (v.isNaN() || v == 0f) continue
+                val x0 = bx0 + ancho * i + hueco / 2
+                val x1 = max(x0 + u, bx0 + ancho * (i + 1) - hueco / 2)
+                val (ya, yb) = if (mi.tipo == 2) {
+                    val medio = by0 + h / 2
+                    if (v > 0f) by0 to medio - u else medio + u to by1
+                } else { val y = yDe(v); min(y, yCero) to max(y, yCero) }
+                relleno.color = colorDe(i, v)
+                canvas.drawRect(x0, ya, x1, max(yb, ya + u), relleno)
+            }
+        }
+        canvas.restore()
+    }
+
+    /** La caja del botón de una lista o de un filtro: pegado abajo a la derecha de la celda, de 17 × 20 px como mucho (`caja_flecha` del PC). */
+    private fun cajaFlecha(x0: Float, y0: Float, x1: Float, y1: Float, u: Float, salida: RectF): Boolean {
+        val ancho = 17f
+        val alto = min(20f, y1 - y0 - u)
+        if (x1 - x0 < ancho * 1.6f || alto < 8f) return false
+        salida.set(x1 - ancho - u, y1 - alto - u, x1 - u, y1 - u)
+        return true
+    }
+
+    private val cajaBoton = RectF()
+
+    /** Un triángulo hacia abajo de [ancho] centrado en [cx], con la punta en [yPunta]. */
+    private fun trianguloAbajo(canvas: Canvas, cx: Float, yPunta: Float, ancho: Float, color: Int) {
+        camino.rewind()
+        camino.moveTo(cx - ancho / 2, yPunta - ancho / 2)
+        camino.lineTo(cx + ancho / 2, yPunta - ancho / 2)
+        camino.lineTo(cx, yPunta)
+        camino.close()
+        relleno.color = color
+        canvas.drawPath(camino, relleno)
+    }
+
+    /** El botón entero (fondo, borde y lo de dentro: triángulo o embudo). */
+    private fun boton(canvas: Canvas, r: RectF, u: Float, filtrado: Boolean, colorFondo: Int, colorBorde: Int, colorTinta: Int) {
+        relleno.color = colorBorde
+        canvas.drawRect(r, relleno)
+        relleno.color = colorFondo
+        canvas.drawRect(r.left + u, r.top + u, r.right - u, r.bottom - u, relleno)
+        val cx = r.centerX(); val cy = r.centerY()
+        if (filtrado) {
+            // El embudo: filtro puesto.
+            val a = 4f; val hh = 7.2f
+            camino.rewind()
+            camino.moveTo(cx - a, cy - hh / 2); camino.lineTo(cx + a, cy - hh / 2)
+            camino.lineTo(cx + a * 0.18f, cy + hh * 0.05f); camino.lineTo(cx + a * 0.18f, cy + hh / 2)
+            camino.lineTo(cx - a * 0.18f, cy + hh / 2 - hh * 0.1f); camino.lineTo(cx - a * 0.18f, cy + hh * 0.05f)
+            camino.close()
+            relleno.color = FILTRO_ACTIVO
+            canvas.drawPath(camino, relleno)
+        } else trianguloAbajo(canvas, cx, cy + 2.5f, 7f, colorTinta)
+    }
+
+    /**
+     * **Marcas encima de las celdas** (solo para ver), como `pintar_flechas` y `pintar_marcas` del
+     * PC: el botón de la lista desplegable en la celda activa y un triangulito discreto en las demás
+     * con lista; los botones del autofiltro en su fila de encabezado; y el triángulo rojo de las
+     * notas en la esquina de arriba a la derecha.
+     */
+    private fun pintarMarcas(canvas: Canvas, h: LibroExcel.Hoja, g: Pxhj.Geometria, f0: Int, f1: Int, c0: Int, c1: Int, ox: Double, oy: Double, u: Float) {
+        fun X(c: Int) = (g.x(c) - ox).toFloat()
+        fun Y(f: Int) = (g.y(f) - oy).toFloat()
+        if (g.listas.isNotEmpty()) {
+            var pintadas = 0
+            for (lista in g.listas) for (r in lista) {
+                for (f in max(r.f0, f0)..min(r.f1, f1)) {
+                    if (g.alto(f) <= 0) continue
+                    for (c in max(r.c0, c0)..min(r.c1, c1)) {
+                        if (pintadas >= 4000) break
+                        val x0 = X(c); val x1 = X(c + 1); val y0 = Y(f); val y1 = Y(f + 1)
+                        if (f == est.activaF && c == est.activaC) {
+                            if (cajaFlecha(x0, y0, x1, y1, u, cajaBoton)) boton(canvas, cajaBoton, u, false, ui(FLECHA_FONDO), ui(FLECHA_BORDE), ui(FLECHA_TINTA))
+                        } else if (x1 - x0 >= 14f && y1 - y0 >= 8f) {
+                            trianguloAbajo(canvas, x1 - 6f, y1 - 3f, 6f, ui(FLECHA_TENUE))
+                        }
+                        pintadas++
+                    }
+                }
+            }
+        }
+        for (b in g.botones) {
+            if (b.fila < f0 || b.fila > f1 || b.col < c0 || b.col > c1 || g.alto(b.fila) <= 0 || g.ancho(b.col) <= 0) continue
+            if (cajaFlecha(X(b.col), Y(b.fila), X(b.col + 1), Y(b.fila + 1), u, cajaBoton)) boton(canvas, cajaBoton, u, b.filtrado, FLECHA_FONDO, FLECHA_BORDE, FLECHA_TINTA)
+        }
+        val n = LibroExcel.FILAS_POR_TROZO
+        for (k in f0 / n..f1 / n) {
+            val t = h.trozo(k) ?: continue
+            for (cm in t.comentarios) {
+                if (cm.fila < f0 || cm.fila > f1 || cm.col < c0 || cm.col > c1 || g.alto(cm.fila) <= 0 || g.ancho(cm.col) <= 0) continue
+                // En una combinación, la esquina de toda su caja.
+                val r = g.combinadaEn(cm.fila, cm.col) ?: Pxhj.Rango(cm.fila, cm.col, cm.fila, cm.col)
+                val x1 = X(r.c1 + 1) - u; val y0 = Y(r.f0)
+                val lado = max(6f, 4f * u)
+                if (X(r.c1 + 1) - X(r.c0) < lado * 1.5f) continue
+                camino.rewind()
+                camino.moveTo(x1 - lado, y0); camino.lineTo(x1, y0); camino.lineTo(x1, y0 + lado); camino.close()
+                relleno.color = COMENTARIO_ROJO
+                canvas.drawPath(camino, relleno)
+            }
         }
     }
 
@@ -623,7 +913,9 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             val hasta = min(c.texto.length, desde + tr.largo)
             if (hasta <= desde) continue
             val clave = "${tr.familia}|${tr.puntos}|${tr.letra}|${tr.argb}"
-            val pt = p.tramos.getOrPut(clave) { LetrasExcel.pintura(context.assets, tr.familia, tr.puntos, tr.letra, tr.argb) }
+            val es = hoja?.estilos?.getOrNull(c.estilo)
+            val argb = if (es != null) colorDeTexto(es, tr.argb) else tr.argb
+            val pt = p.tramos.getOrPut("$clave|$argb") { LetrasExcel.pintura(context.assets, tr.familia, tr.puntos, tr.letra, argb) }
             canvas.drawText(c.texto, desde, hasta, x, t.y, pt)
             x += pt.measureText(c.texto, desde, hasta)
             desde = hasta
@@ -650,17 +942,17 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
                     0 -> {
                         if (g.ancho(c) <= 0) continue
                         val b = (g.y(f) - oy).toFloat()
-                        lado(canvas, true, b, (g.x(c) - ox).toFloat(), (g.x(c + 1) - ox).toFloat(), estilo, color, u)
+                        lado(canvas, true, b, (g.x(c) - ox).toFloat(), (g.x(c + 1) - ox).toFloat(), estilo, raya(color), u)
                     }
                     1 -> {
                         if (g.alto(f) <= 0) continue
                         val b = (g.x(c) - ox).toFloat()
-                        lado(canvas, false, b, (g.y(f) - oy).toFloat(), (g.y(f + 1) - oy).toFloat(), estilo, color, u)
+                        lado(canvas, false, b, (g.y(f) - oy).toFloat(), (g.y(f + 1) - oy).toFloat(), estilo, raya(color), u)
                     }
                     else -> {
                         val x0 = (g.x(c) - ox).toFloat(); val x1 = (g.x(c + 1) - ox).toFloat()
                         val y0 = (g.y(f) - oy).toFloat(); val y1 = (g.y(f + 1) - oy).toFloat()
-                        trazo.color = color
+                        trazo.color = raya(color)
                         trazo.strokeWidth = Pxhj.Linea.grosor(estilo) * u
                         trazo.pathEffect = null
                         if (tipo == 2) canvas.drawLine(x0, y0, x1, y1, trazo) else canvas.drawLine(x0, y1, x1, y0, trazo)
@@ -683,7 +975,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             Pxhj.Linea.GRUESO -> tramo(-2f, 1f, 1f)
             Pxhj.Linea.DOBLE -> {
                 tramo(-2f, 1f, 1f)
-                relleno.color = Color.WHITE
+                relleno.color = papel()
                 tramo(-1f, 0f, -1f)
             }
             Pxhj.Linea.NINGUNO -> {}
@@ -770,7 +1062,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
                 relleno.color = SELECCION_VELO
                 canvas.drawRect(x0, y0, x1, y1, relleno)
             }
-            trazo.color = SELECCION
+            trazo.color = legible(SELECCION)
             trazo.strokeWidth = 2f * densidad
             trazo.pathEffect = null
             canvas.drawRect(x0 - densidad * 0.5f, y0 - densidad * 0.5f, x1 - densidad * 0.5f, y1 - densidad * 0.5f, trazo)
@@ -782,7 +1074,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
     private fun pintarEncabezados(canvas: Canvas, g: Pxhj.Geometria) {
         val e = e
         val s = seleccion
-        relleno.color = ENCABEZADO_FONDO
+        relleno.color = ui(ENCABEZADO_FONDO)
         canvas.drawRect(0f, 0f, width.toFloat(), cabAlto, relleno)
         canvas.drawRect(0f, 0f, cabAncho, height.toFloat(), relleno)
         val fm = cabeceraTexto.fontMetrics
@@ -800,8 +1092,8 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
                     if (w <= 0) continue
                     val x0 = cabAncho + pa.x + ((g.x(c) - pa.ox) * e).toFloat()
                     val x1 = x0 + w * e
-                    if (c in s.c0..s.c1) { relleno.color = if (todas) ENCABEZADO_ELEGIDO_FUERTE else ENCABEZADO_ELEGIDO; canvas.drawRect(x0, 0f, x1, cabAlto, relleno) }
-                    relleno.color = ENCABEZADO_LINEA
+                    if (c in s.c0..s.c1) { relleno.color = ui(if (todas) ENCABEZADO_ELEGIDO_FUERTE else ENCABEZADO_ELEGIDO); canvas.drawRect(x0, 0f, x1, cabAlto, relleno) }
+                    relleno.color = ui(ENCABEZADO_LINEA)
                     canvas.drawRect(x1 - 1f, 0f, x1, cabAlto, relleno)
                     if (w * e > cabeceraTexto.textSize * 0.8f) canvas.drawText(nombreColumna(c), (x0 + x1) / 2, baseCol, cabeceraTexto)
                 }
@@ -815,19 +1107,19 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
                     if (a <= 0) continue
                     val y0 = cabAlto + pa.y + ((g.y(f) - pa.oy) * e).toFloat()
                     val y1 = y0 + a * e
-                    if (f in s.f0..s.f1) { relleno.color = if (todasCol) ENCABEZADO_ELEGIDO_FUERTE else ENCABEZADO_ELEGIDO; canvas.drawRect(0f, y0, cabAncho, y1, relleno) }
-                    relleno.color = ENCABEZADO_LINEA
+                    if (f in s.f0..s.f1) { relleno.color = ui(if (todasCol) ENCABEZADO_ELEGIDO_FUERTE else ENCABEZADO_ELEGIDO); canvas.drawRect(0f, y0, cabAncho, y1, relleno) }
+                    relleno.color = ui(ENCABEZADO_LINEA)
                     canvas.drawRect(0f, y1 - 1f, cabAncho, y1, relleno)
                     if (a * e > cabeceraTexto.textSize * 0.7f) canvas.drawText((f + 1).toString(), cabAncho / 2, (y0 + y1) / 2 - (fm.ascent + fm.descent) / 2, cabeceraTexto)
                 }
                 canvas.restore()
             }
         }
-        relleno.color = ENCABEZADO_LINEA
+        relleno.color = ui(ENCABEZADO_LINEA)
         canvas.drawRect(0f, cabAlto - 1f, width.toFloat(), cabAlto, relleno)
         canvas.drawRect(cabAncho - 1f, 0f, cabAncho, height.toFloat(), relleno)
         // La esquina: elige todo.
-        relleno.color = ENCABEZADO_ESQUINA
+        relleno.color = ui(ENCABEZADO_ESQUINA)
         camino.reset()
         camino.moveTo(cabAncho - 4f * densidad, cabAlto - 4f * densidad - cabAlto * 0.45f)
         camino.lineTo(cabAncho - 4f * densidad, cabAlto - 4f * densidad)
@@ -1050,5 +1342,12 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
         private val LINEA_FIJA = 0xFF9B9B9B.toInt()
         private val SELECCION = 0xFF217346.toInt()
         private val SELECCION_VELO = 0x22217346
+        /** Los botones de las listas y del autofiltro, y el triángulo de las notas (los del PC). */
+        private val FLECHA_FONDO = 0xFFF2F2F2.toInt()
+        private val FLECHA_BORDE = 0xFFA6A6A6.toInt()
+        private val FLECHA_TINTA = 0xFF404040.toInt()
+        private val FLECHA_TENUE = 0xFF9A9A9A.toInt()
+        private val FILTRO_ACTIVO = 0xFF1F6FB5.toInt()
+        private val COMENTARIO_ROJO = 0xFFE03030.toInt()
     }
 }

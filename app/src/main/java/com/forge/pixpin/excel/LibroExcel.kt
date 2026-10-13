@@ -151,6 +151,11 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
         hilo.execute { listo(if (cerrado) null else HojasNativo.copiar(h, hoja, r.f0, r.c0, r.f1, r.c1)) }
     }
 
+    /** Los valores de la lista desplegable de la celda (solo para ver), en el hilo del .so; null si no tiene. */
+    fun lista(hoja: Int, f: Int, c: Int, listo: (List<String>?) -> Unit) {
+        hilo.execute { listo(if (cerrado) null else HojasNativo.lista(h, hoja, f, c)?.split('\n')?.filter { it.isNotEmpty() }) }
+    }
+
     private val imagenes = ConcurrentHashMap<String, Bitmap>()
     private val sinImagen = ConcurrentHashMap.newKeySet<String>()
 
@@ -199,17 +204,26 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
 
         private fun <T> enHilo(f: () -> T): T = hilo.submit(Callable { f() }).get()
 
-        /** Las extensiones que lee `pixpin-hojas` (los `.xls` y `.xlsb` son binarios: van por donde iban). */
+        /**
+         * Las extensiones que lee `pixpin-hojas`: los libros modernos y, desde el PC 9975385, los `.xls`
+         * antiguos (BIFF8) sin Office. Los `.xlsb` (binarios modernos) van por donde iban.
+         */
         fun esLibro(nombre: String?): Boolean =
-            nombre?.substringAfterLast('.', "")?.lowercase() in setOf("xlsx", "xlsm", "xltx", "xltm")
+            nombre?.substringAfterLast('.', "")?.lowercase() in setOf("xlsx", "xlsm", "xltx", "xltm", "xls", "xlt")
 
-        /** Si [nombre] (o [ruta]) se abre en el visor: es un libro moderno, el .so está y el archivo es un ZIP. */
+        /** Si [nombre] (o [ruta]) se abre en el visor: es un libro, el .so está y el archivo es un ZIP o un `.xls` de verdad. */
         fun seAbre(nombre: String?, ruta: String?): Boolean =
-            (esLibro(nombre) || esLibro(ruta)) && HojasNativo.disponible && ruta != null && empiezaComoZip(File(ruta))
+            (esLibro(nombre) || esLibro(ruta)) && HojasNativo.disponible && ruta != null && File(ruta).let { empiezaComoZip(it) || esXlsAntiguo(it) }
 
-        /** Un `.xls` renombrado o un archivo roto no empieza por «PK»: se queda con lo de antes. */
+        /** Un archivo roto (o un `.xlsb`) no empieza por «PK»: se queda con lo de antes. */
         fun empiezaComoZip(f: File): Boolean = runCatching {
             f.inputStream().use { val b = ByteArray(4); it.read(b) == 4 && b[0] == 'P'.code.toByte() && b[1] == 'K'.code.toByte() && b[2] == 3.toByte() && b[3] == 4.toByte() }
+        }.getOrDefault(false)
+
+        /** La firma de un archivo compuesto de OLE (`D0 CF 11 E0 A1 B1 1A E1`): un `.xls` antiguo. */
+        fun esXlsAntiguo(f: File): Boolean = runCatching {
+            val firma = byteArrayOf(0xD0.toByte(), 0xCF.toByte(), 0x11, 0xE0.toByte(), 0xA1.toByte(), 0xB1.toByte(), 0x1A, 0xE1.toByte())
+            f.inputStream().use { val b = ByteArray(8); it.read(b) == 8 && b.contentEquals(firma) }
         }.getOrDefault(false)
 
         /**
@@ -224,7 +238,9 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
                 s.decimalSeparator.toString(),
                 s.groupingSeparator.toString(),
                 patron.firstOrNull { it !in "dMy" }?.toString() ?: "/",
-                fechaCorta(patron)
+                fechaCorta(patron),
+                // Los minutos al este de UTC: el «hoy» del formato condicional («la semana pasada»…).
+                (java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60_000).toString()
             ).joinToString("\n")
         }
 

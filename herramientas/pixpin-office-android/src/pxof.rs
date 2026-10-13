@@ -22,21 +22,31 @@
 //!   2 rect:     f32 x, y, ancho, alto, relleno, trazo
 //!   3 línea:    f32 x1, y1, x2, y2, trazo
 //!   4 imagen:   str id, f32 x, y, ancho, alto, u8 hay recorte [f32 ×4], f32 opacidad
-//!   5 trayecto: relleno, trazo, u16 figuras × { u8 (1 cerrada, 2 rellenar, 4 trazar), f32 x, y,
-//!               u32 tramos × { u8 0 = línea f32 x, y | 1 = bézier f32 ×6 } }
+//!   5 trayecto: relleno, trazo, u16 figuras × { u8 (1 cerrada, 2 rellenar, 4 trazar; bits 3-5 el
+//!               tinte: 0 ninguno, 1 oscuro, 2 oscuro suave, 3 claro, 4 claro suave, 5 aparte),
+//!               f32 x, y, u32 tramos × { u8 0 = línea f32 x, y | 1 = bézier f32 ×6 } }
 //!   6 grupo:    f32 ×6 (a b c d e f), u8 hay recorte [f32 x, y, ancho, alto], u32 n × elemento
+//!   7 efectos:  u8 n × efecto, u32 n × elemento (lo envuelto)
+//! efecto  = u8 1 sombra exterior: u32 argb, f32 desenfoque, dx, dy, escala x, y, sesgo x, y (grados),
+//!                                  ancla x, y (fracciones de la caja)
+//!         | u8 2 sombra interior: u32 argb, f32 desenfoque, dx, dy
+//!         | u8 3 brillo:          u32 argb, f32 radio
+//!         | u8 4 borde suave:     f32 radio
 //! relleno = u8 0 nada | 1 u32 argb | 2 f32 ángulo, u16 n × { f32 pos, u32 argb } | 3 u16 n × {…}
 //! trazo   = u8 0 nada | 1 u32 argb, f32 grosor, u8 discontinuo (0 sólida 1 rayas 2 puntos 3 raya-punto)
 //! str     = u32 bytes + UTF-8
 //! ```
+//!
+//! v2 (13-oct-2026, PC 954e77e y f38c011): los efectos de DrawingML (7) y el tinte de las caras de
+//! las formas predefinidas (bits 3-5 de la figura).
 
 use std::collections::HashMap;
 
-use pixpin_office::pagina::{Campo, Color, Discontinuo, Elemento, Figura, Pagina, Relleno, Subrayado, Texto, Tramo, Trazo};
+use pixpin_office::pagina::{Campo, Color, Discontinuo, Efecto, Elemento, Figura, Pagina, Relleno, Sombra, Subrayado, Texto, Tramo, Trazo};
 
 use crate::letras::{Glifo, Letras};
 
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 
 /// Quien escribe una página: lleva la cuenta de las caras usadas.
 pub struct Escritor<'a> {
@@ -205,11 +215,56 @@ impl<'a> Escritor<'a> {
                 }
                 self.elementos(elementos);
             }
+            Elemento::Efecto { efectos, elementos } => {
+                self.u8(7);
+                let n = efectos.len().min(u8::MAX as usize);
+                self.u8(n as u8);
+                for ef in &efectos[..n] {
+                    self.efecto(ef);
+                }
+                self.elementos(elementos);
+            }
+        }
+    }
+
+    fn efecto(&mut self, e: &Efecto) {
+        match *e {
+            Efecto::SombraExterior { color, desenfoque, dx, dy, escala, sesgo, ancla } => {
+                self.u8(1);
+                self.color(color);
+                for v in [desenfoque, dx, dy, escala.0, escala.1, sesgo.0, sesgo.1, ancla.0, ancla.1] {
+                    self.f32(v);
+                }
+            }
+            Efecto::SombraInterior { color, desenfoque, dx, dy } => {
+                self.u8(2);
+                self.color(color);
+                for v in [desenfoque, dx, dy] {
+                    self.f32(v);
+                }
+            }
+            Efecto::Brillo { color, radio } => {
+                self.u8(3);
+                self.color(color);
+                self.f32(radio);
+            }
+            Efecto::BordeSuave { radio } => {
+                self.u8(4);
+                self.f32(radio);
+            }
         }
     }
 
     fn figura(&mut self, f: &Figura) {
-        self.u8(f.cerrada as u8 | (f.rellenar as u8) << 1 | (f.trazar as u8) << 2);
+        let tinte: u8 = match f.sombra {
+            Sombra::Ninguna => 0,
+            Sombra::Oscura => 1,
+            Sombra::OscuraSuave => 2,
+            Sombra::Clara => 3,
+            Sombra::ClaraSuave => 4,
+            Sombra::Aparte => 5,
+        };
+        self.u8(f.cerrada as u8 | (f.rellenar as u8) << 1 | (f.trazar as u8) << 2 | tinte << 3);
         self.f32(f.inicio.0);
         self.f32(f.inicio.1);
         self.u32(f.tramos.len() as u32);

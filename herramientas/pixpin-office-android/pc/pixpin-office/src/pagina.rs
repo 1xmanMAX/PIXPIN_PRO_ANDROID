@@ -146,6 +146,23 @@ pub enum Tramo {
     Bezier((f32, f32), (f32, f32), (f32, f32)),
 }
 
+/// Como se tine una figura respecto al relleno de la forma (los
+/// `fill="darken"`, `"lighten"`, `"darkenLess"` y `"lightenLess"` de los
+/// trayectos de DrawingML: las caras del cubo y del bisel). Salvo `Ninguna`,
+/// el pintor las rellena aparte, encima del relleno de la forma.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Sombra {
+    #[default]
+    Ninguna,
+    Oscura,
+    OscuraSuave,
+    Clara,
+    ClaraSuave,
+    /// Mismo color que la forma, pero en una geometria aparte: para que dos
+    /// figuras que se solapan no se agujereen entre si (regla par-impar).
+    Aparte,
+}
+
 /// Una figura cerrada o abierta de un trayecto.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Figura {
@@ -157,6 +174,8 @@ pub struct Figura {
     pub rellenar: bool,
     /// Si esta figura se traza.
     pub trazar: bool,
+    /// Su tinte respecto al relleno (`Sombra::Ninguna` en casi todas).
+    pub sombra: Sombra,
 }
 
 /// Que hay que escribir en un texto que depende de la paginacion.
@@ -205,6 +224,36 @@ pub struct Texto {
     pub enlace: Option<Arc<str>>,
 }
 
+/// Un efecto de DrawingML (`a:effectLst`) sobre lo que envuelve un
+/// [`Elemento::Efecto`]. Las medidas van en puntos, en las coordenadas de
+/// donde esta el `Efecto` (no giran con la forma salvo que el lector ya
+/// haya girado el desplazamiento: `rotWithShape`).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Efecto {
+    /// `a:outerShdw` (y `a:prstShdw`, aproximada): la silueta de lo
+    /// envuelto, de `color`, desenfocada `desenfoque` (el `blurRad`),
+    /// desplazada `dx`, `dy`, escalada (`sx`, `sy`) y sesgada (`kx`, `ky`
+    /// en grados) respecto al punto `ancla` (fracciones de la caja: el
+    /// `algn`).
+    SombraExterior { color: Color, desenfoque: f32, dx: f32, dy: f32, escala: (f32, f32), sesgo: (f32, f32), ancla: (f32, f32) },
+    /// `a:innerShdw`: sombra por dentro del borde, hacia `dx`, `dy`.
+    SombraInterior { color: Color, desenfoque: f32, dx: f32, dy: f32 },
+    /// `a:glow`: un halo de `color` de `radio` puntos alrededor.
+    Brillo { color: Color, radio: f32 },
+    /// `a:softEdge`: el borde se desvanece hacia dentro `radio` puntos.
+    BordeSuave { radio: f32 },
+}
+
+impl Efecto {
+    /// El desplazamiento de una sombra a partir de su `dist` (puntos) y su
+    /// `dir` (grados, en el sentido de las agujas del reloj desde el eje x,
+    /// con la y hacia abajo: 90 = hacia abajo).
+    pub fn desplazamiento(dist: f32, dir: f32) -> (f32, f32) {
+        let (s, c) = dir.to_radians().sin_cos();
+        (dist * c, dist * s)
+    }
+}
+
 /// Una cosa que se pinta.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Elemento {
@@ -240,9 +289,22 @@ pub enum Elemento {
         recorte: Option<Rect>,
         elementos: Vec<Elemento>,
     },
+    /// Elementos con efectos (sombras, brillo, borde suave): el pintor
+    /// los pinta como siempre y ademas sus efectos. Una pagina sin efectos
+    /// no tiene ninguno y no paga nada.
+    Efecto {
+        efectos: Vec<Efecto>,
+        elementos: Vec<Elemento>,
+    },
 }
 
 impl Elemento {
+    /// Envuelve `self` en un [`Elemento::Efecto`] si hay efectos; si no, lo
+    /// deja como esta.
+    pub fn con_efectos(self, efectos: Vec<Efecto>) -> Elemento {
+        if efectos.is_empty() { self } else { Elemento::Efecto { efectos, elementos: vec![self] } }
+    }
+
     /// Mueve el elemento `dx`, `dy` puntos.
     pub fn trasladar(&mut self, dx: f32, dy: f32) {
         if dx == 0.0 && dy == 0.0 {
@@ -284,6 +346,11 @@ impl Elemento {
                 transformada[4] += dx;
                 transformada[5] += dy;
             }
+            Elemento::Efecto { elementos, .. } => {
+                for e in elementos {
+                    e.trasladar(dx, dy);
+                }
+            }
         }
     }
 
@@ -297,6 +364,7 @@ impl Elemento {
             Elemento::Linea { desde, hasta, .. } => desde.1.min(hasta.1),
             Elemento::Trayecto { figuras, .. } => figuras.first().map(|f| f.inicio.1).unwrap_or(0.0),
             Elemento::Grupo { transformada, .. } => transformada[5],
+            Elemento::Efecto { elementos, .. } => elementos.iter().map(|e| e.y_referencia()).reduce(f32::min).unwrap_or(0.0),
         }
     }
 }
@@ -329,6 +397,7 @@ impl Pagina {
                         v.push((t, r));
                     }
                     Elemento::Grupo { transformada, elementos, .. } => bajar(elementos, dx + transformada[4], dy + transformada[5], v),
+                    Elemento::Efecto { elementos, .. } => bajar(elementos, dx, dy, v),
                     _ => {}
                 }
             }

@@ -36,6 +36,9 @@ internal object OfficeNativo {
     /** Si ya se sabe cuántas páginas hay. */
     @JvmStatic external fun terminado(h: Long): Boolean
 
+    /** Las notas del orador de la diapositiva [n] (un párrafo por renglón); null si no tiene o no es un PowerPoint. */
+    @JvmStatic external fun notas(h: Long, n: Int): String?
+
     /** Los bytes de una imagen tal como vienen en el documento (PNG, JPEG, EMF…). */
     @JvmStatic external fun imagen(h: Long, id: String): ByteArray?
 

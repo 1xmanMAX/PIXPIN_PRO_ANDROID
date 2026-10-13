@@ -99,15 +99,15 @@ class DocumentoOffice private constructor(
 
     /**
      * La hoja [i] pintada a [anchoPx] de ancho, en blanco y con todo, o null. [total] para los campos
-     * de número de páginas.
+     * de número de páginas. [oscuro]: en el modo oscuro de los visores ([Oscuro], PC 74801b4).
      */
-    fun pintar(i: Int, anchoPx: Int, total: Int = cuantas()): Bitmap? {
+    fun pintar(i: Int, anchoPx: Int, total: Int = cuantas(), oscuro: Boolean = false): Bitmap? {
         val p = pagina(i) ?: return null
         val escala = anchoPx / p.ancho.coerceAtLeast(1f)
         val alto = (p.alto * escala).toInt().coerceAtLeast(1)
         val b = runCatching { Bitmap.createBitmap(anchoPx.coerceAtLeast(1), alto, Bitmap.Config.ARGB_8888) }.getOrNull() ?: return null
         val empezo = System.nanoTime()
-        pintor().pintar(Canvas(b), p, escala, total)
+        pintor().pintar(Canvas(b), p, escala, total, oscuro = oscuro)
         val ms = (System.nanoTime() - empezo) / 1_000_000
         if (ms > 60) android.util.Log.i("PixPinOffice", "hoja ${i + 1} a $anchoPx px: $ms ms")
         return b
@@ -131,6 +131,20 @@ class DocumentoOffice private constructor(
             ?: run { sinImagen += id; return null }
         imagenes.put(id, b)
         return b
+    }
+
+    private val notas = java.util.concurrent.ConcurrentHashMap<Int, String>()
+
+    /**
+     * **Las notas del orador** de la diapositiva [i] (PC ac7981a), un párrafo por renglón; null si no
+     * tiene. Se leen al pedirlas y se guardan. Trabajo del .so: fuera de la pantalla.
+     */
+    fun notas(i: Int): String? {
+        if (!esPresentacion || i < 0 || cerrado) return null
+        notas[i]?.let { return it.ifEmpty { null } }
+        val n = enHilo { if (cerrado) null else OfficeNativo.notas(handle, i) }.orEmpty()
+        notas[i] = n
+        return n.ifEmpty { null }
     }
 
     /** Todo el texto, hoja a hoja (para contar palabras). Maqueta lo que falte. */

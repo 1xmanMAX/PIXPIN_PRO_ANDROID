@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,6 +76,10 @@ import java.io.File
  *
  * Se abre al instante: la primera pantalla sale con las primeras filas y el resto llega por
  * detrás ([LibroExcel]). Un libro que no se deja leer va por donde iba antes (a Tablas).
+ *
+ * **Luna/sol** (PC 74801b4): la hoja en oscuro o en claro, para todos los visores a la vez y
+ * recordado en este aparato ([com.forge.pixpin.office.Oscuro]). En la línea de la celda, **la nota**
+ * de la celda (si la tiene) y **su lista desplegable** (los valores, solo para ver), como el PC.
  */
 class ExcelActivity : ComponentActivity() {
     private var libro: LibroExcel? = null
@@ -108,6 +114,7 @@ class ExcelActivity : ComponentActivity() {
          */
         val marca = remember { mutableIntStateOf(0) }
         var activa by remember { mutableIntStateOf(0) }
+        var oscuro by remember { mutableStateOf(com.forge.pixpin.office.Oscuro.activo(this@ExcelActivity)) }
 
         LaunchedEffect(ruta) {
             val l = withContext(Dispatchers.IO) { LibroExcel.abrir(ruta) }
@@ -130,6 +137,14 @@ class ExcelActivity : ComponentActivity() {
                     nombre, color = Cristal.tinta, style = MaterialTheme.typography.titleSmall, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).align(Alignment.CenterVertically).padding(horizontal = 4.dp)
                 )
+                BotonDeBarra(
+                    if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro",
+                    {
+                        oscuro = !oscuro
+                        com.forge.pixpin.office.Oscuro.poner(this@ExcelActivity, oscuro)
+                        vista?.oscuro = oscuro
+                    }
+                )
                 BotonDeBarra(Icons.Filled.ContentCopy, "Copiar", { vista?.let { copiar(it) } }, activo = abierto != null)
                 BotonDeBarra(Icons.Filled.TableChart, "A tabla", { aTabla(ruta, nombre, mensaje, alFallar = false) })
                 BotonDeBarra(Icons.Filled.OpenInNew, "Abrir con", { com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(ruta)) })
@@ -137,7 +152,7 @@ class ExcelActivity : ComponentActivity() {
             LineaDeCelda(vista, marca) { activa = it }
             Spacer(Modifier.height(6.dp))
             // La hoja.
-            Box(Modifier.weight(1f).fillMaxWidth().background(Color.White)) {
+            Box(Modifier.weight(1f).fillMaxWidth().background(if (oscuro) Color(com.forge.pixpin.office.Oscuro.PAPEL) else Color.White)) {
                 val l = abierto
                 if (l == null) {
                     CircularProgressIndicator(Modifier.align(Alignment.Center).size(36.dp))
@@ -146,6 +161,7 @@ class ExcelActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         factory = { c ->
                             VistaHoja(c, l).also { nueva ->
+                                nueva.oscuro = oscuro
                                 nueva.alCambiar = { marca.intValue++ }
                                 l.alCambiar = { nueva.post { nueva.invalidate(); marca.intValue++ } }
                                 nueva.ponerHoja(activa)
@@ -204,6 +220,31 @@ class ExcelActivity : ComponentActivity() {
                 Box(Modifier.padding(horizontal = 8.dp).width(1.dp).height(22.dp).background(Cristal.tinta.copy(alpha = 0.3f)))
                 val texto = v?.textoDe(fa, ca).orEmpty().replace("\r", "").replace("\n", " ⏎ ")
                 Text(texto, color = Cristal.tinta, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                // La nota de la celda: se lee entera al tocar.
+                val nota = v?.comentarioDe(fa, ca)
+                if (nota != null) {
+                    Text(
+                        "Nota", color = Cristal.tintaPuesta, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { verNota(nota) }.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+                // La lista desplegable: sus valores, solo para ver (como el PC: no se cambia el libro).
+                if (v != null && v.conLista(fa, ca)) {
+                    var valores by remember(fa, ca) { mutableStateOf<List<String>?>(null) }
+                    Box {
+                        Text(
+                            "Lista ▾", color = Cristal.tintaPuesta, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                                libro?.lista(v.indice, fa, ca) { l -> runOnUiThread { valores = l.orEmpty() } }
+                            }.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                        androidx.compose.material3.DropdownMenu(expanded = valores != null, onDismissRequest = { valores = null }) {
+                            val l = valores.orEmpty()
+                            if (l.isEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("Sin valores que enseñar") }, onClick = { valores = null }, enabled = false)
+                            for (x in l) androidx.compose.material3.DropdownMenuItem(text = { Text(x, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { valores = null })
+                        }
+                    }
+                }
                 val enlace = v?.hoja?.geo?.enlaceEn(fa, ca)
                 if (enlace != null && v != null) {
                     // El enlace se abre con este botón y no al tocar la celda: tocar es elegir.
@@ -228,6 +269,15 @@ class ExcelActivity : ComponentActivity() {
             if (kotlin.math.abs(z - 1.0) > 0.004) add("${(z * 100).toInt()} %")
         }.joinToString("  ·  ")
         if (estado.isNotEmpty()) Text(estado, color = Cristal.tinta.copy(alpha = 0.75f), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+    }
+
+    /** La nota o el comentario de la celda, entero (con sus respuestas). */
+    private fun verNota(n: Pxhj.Comentario) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(if (n.encadenado) "Comentario" else "Nota")
+            .setMessage(n.completo())
+            .setPositiveButton("Cerrar", null)
+            .show()
     }
 
     private fun copiar(v: VistaHoja) {

@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
@@ -42,6 +44,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.layout.onSizeChanged
@@ -449,8 +454,13 @@ class LectorPdfActivity : ComponentActivity() {
         var conElEngranaje by remember { mutableStateOf(false) }
         var quitandoMarcas by remember { mutableStateOf(false) }
         var sinLado by remember { mutableStateOf(prefsDelLector.getBoolean("sinLado", false)) }
-        // Invertir los colores de las hojas (PC 11bd1f6, la «N» de los lectores).
-        var invertido by remember { mutableStateOf(PUEDE_INVERTIR && prefsDelLector.getBoolean("invertido", false)) }
+        // Invertir los colores de las hojas (PC 11bd1f6, la «N» de los lectores), que es **el modo
+        // oscuro de los visores** (PC 74801b4, luna/sol): un PDF con la matriz por píxel, un Word o
+        // un PowerPoint pintado en oscuro por color ([com.forge.pixpin.office.Oscuro]). Sin tocar
+        // nunca, el tema del teléfono.
+        var invertido by remember { mutableStateOf((PUEDE_INVERTIR || esOffice) && com.forge.pixpin.office.Oscuro.activo(this@LectorPdfActivity)) }
+        // La hoja de Office se vuelve a pintar al cambiar (la de un PDF no: la matriz va al pintarla).
+        val oscuroOffice = esOffice && invertido
         var autoDesplazando by remember { mutableStateOf(false) }
         var autoEnMarcha by remember { mutableStateOf(false) }
         var palabrasPorMinuto by remember {
@@ -642,22 +652,27 @@ class LectorPdfActivity : ComponentActivity() {
                         // desplazamiento. Con hueco arriba y abajo se mueve a gusto.
                         items((0 until cuantas).toList()) { i ->
                             // El margen es papel: lo anotado ahí lleva la tinta de una hoja clara.
-                            Box(Modifier.fillMaxWidth().coloresInvertidos(invertido).background(PAPEL_DEL_MARGEN)) {
+                            // Un Word o un PowerPoint en oscuro: la hoja ya viene oscura; el margen,
+                            // del papel oscuro, y lo anotado, con la matriz (la tinta negra, clara).
+                            Box(
+                                Modifier.fillMaxWidth().coloresInvertidos(invertido && !esOffice)
+                                    .background(if (oscuroOffice) MARGEN_OSCURO else PAPEL_DEL_MARGEN)
+                            ) {
                                 Box(
                                     Modifier.padding(
                                         start = with(densidad) { izquierdaPx.toDp() },
                                         end = with(densidad) { derechaPx.toDp() }
                                     )
                                 ) {
-                                    Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty()) { aSolas = i }
+                                    Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), oscuroOffice = oscuroOffice) { aSolas = i }
                                 }
                                 // La capa coge **la hoja y sus dos márgenes**.
-                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize(), conLapiz, alLapiz) { tickDeLaBarra++ }
+                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize().coloresInvertidos(oscuroOffice), conLapiz, alLapiz) { tickDeLaBarra++ }
                             }
                         }
                         if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
                     }
-                    aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx, invertido) { aSolas = null } }
+                    aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx, invertido && !esOffice, oscuroOffice) { aSolas = null } }
                 }
             }
             // **Los mandos de los lados** (espacio a la izquierda, candado, espacio a la derecha) y
@@ -708,8 +723,17 @@ class LectorPdfActivity : ComponentActivity() {
                             autoDesplazando = true; autoEnMarcha = true
                         },
                         com.forge.pixpin.ui.BotonDeLector(com.forge.pixpin.ui.IconoDeCompartir, "Compartir") { capas.guardarTodo(); compartiendo = true },
+                        // **Luna/sol** (PC 74801b4): el modo oscuro, para todos los visores y recordado en este aparato.
+                        if (PUEDE_INVERTIR || esOffice) com.forge.pixpin.ui.BotonDeLector(
+                            if (invertido) androidx.compose.material.icons.Icons.Filled.LightMode else androidx.compose.material.icons.Icons.Filled.DarkMode,
+                            if (invertido) "Claro" else "Oscuro"
+                        ) {
+                            invertido = !invertido
+                            com.forge.pixpin.office.Oscuro.poner(this@LectorPdfActivity, invertido)
+                            toques++
+                        } else null,
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Settings, "Ajustes") { conElEngranaje = true }
-                    ),
+                    ).filterNotNull(),
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
@@ -835,7 +859,7 @@ class LectorPdfActivity : ComponentActivity() {
             if (conElEngranaje) EngranajeDelPdf(
                 onCerrar = { conElEngranaje = false },
                 sinLado = sinLado, onSinLado = { sinLado = it; prefsDelLector.edit().putBoolean("sinLado", it).apply() },
-                invertido = invertido, onInvertido = { invertido = it; prefsDelLector.edit().putBoolean("invertido", it).apply() },
+                invertido = invertido, onInvertido = { invertido = it; com.forge.pixpin.office.Oscuro.poner(this@LectorPdfActivity, it) },
                 izquierda = hayIzquierda, derecha = hayDerecha,
                 onIzquierda = { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }, onDerecha = { ponerEspacios(espacios xor ESPACIO_DERECHA) },
                 comoTexto = { escuchar ->
@@ -945,6 +969,9 @@ class LectorPdfActivity : ComponentActivity() {
      * anotado encima. Cada una se pinta en vectores **a la medida exacta de la pantalla**, fuera
      * del hilo de la pantalla, y la siguiente ya preparada: pasar es instantáneo. Un toque en el
      * tercio derecho o un barrido a la izquierda pasa; en el izquierdo, vuelve ([com.forge.pixpin.ui.ZonaDePasar]).
+     *
+     * **Las notas del orador** (PC ac7981a): con «Notas» salen abajo, sobre la diapositiva, las de la
+     * que se ve. En el PC van en otra pantalla (la vista del orador); aquí, en el mismo teléfono.
      */
     @Composable
     private fun Presentar(ruta: String, desde: Int, cuantas: Int, capas: CapasDelPdf, alCerrar: () -> Unit) {
@@ -954,6 +981,19 @@ class LectorPdfActivity : ComponentActivity() {
         var hoja by remember { mutableStateOf<Pair<Int, Bitmap>?>(null) }
         var tinta by remember { mutableStateOf<com.forge.pixpin.motor.Scene?>(null) }
         var conMandos by remember { mutableStateOf(true) }
+        var conNotas by remember { mutableStateOf(false) }
+        var notas by remember { mutableStateOf<String?>(null) }
+        // ¿Tiene notas alguna? Solo entonces sale el botón (se mira la primera vez, fuera de la pantalla).
+        var hayNotas by remember { mutableStateOf(false) }
+        LaunchedEffect(ruta) {
+            hayNotas = withContext(Dispatchers.IO) {
+                val d = com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)
+                d != null && (0 until minOf(cuantas, 200)).any { d.notas(it) != null }
+            }
+        }
+        LaunchedEffect(i, conNotas) {
+            notas = if (!conNotas) null else withContext(Dispatchers.IO) { com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)?.notas(i) }
+        }
         val listas = remember { HashMap<Int, Bitmap>() }
         LaunchedEffect(i, tam) {
             if (tam.width <= 0) return@LaunchedEffect
@@ -992,12 +1032,27 @@ class LectorPdfActivity : ComponentActivity() {
                 onMedio = { conMandos = !conMandos },
                 modifier = Modifier.fillMaxSize()
             )
+            val texto = notas
+            if (conNotas && texto != null) Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()
+                    .padding(start = 12.dp, end = 12.dp, bottom = if (conMandos) 64.dp else 12.dp)
+                    .heightIn(max = 180.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp)).background(Color(0xCC000000))
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(texto, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            }
             if (conMandos) Row(
                 Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 12.dp)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(Color(0x99000000)).padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("${i + 1} / $cuantas", color = Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp))
+                if (hayNotas) Text(
+                    if (conNotas) "Sin notas" else "Notas", color = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { conNotas = !conNotas }.padding(horizontal = 12.dp, vertical = 9.dp)
+                )
                 Text(
                     "Salir", color = Color.White.copy(alpha = 0.85f),
                     modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { alCerrar() }.padding(horizontal = 12.dp, vertical = 9.dp)
@@ -1025,6 +1080,8 @@ class LectorPdfActivity : ComponentActivity() {
         suyos: List<SublienzosDelPdf.Recorte> = emptyList(),
         /** Lo que va encima de la hoja, ajustado a ella: la capa de lo anotado. */
         encima: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
+        /** Un Word o un PowerPoint en el modo oscuro: su hoja se pinta oscura (y se vuelve a pedir al cambiar). */
+        oscuroOffice: Boolean = false,
         alAbrirSublienzos: () -> Unit = {}
     ) {
         // A más aumento, más puntos: acercarse a una hoja ya dibujada la estiraría y se vería
@@ -1038,8 +1095,8 @@ class LectorPdfActivity : ComponentActivity() {
         val proporcion = remember(ruta, i) {
             medidaDeLaHoja(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
         }
-        var mapa by remember(ruta, i) { mutableStateOf(PaginasEnMemoria.alguna(ruta, i)) }
-        LaunchedEffect(ruta, i, escalon) {
+        var mapa by remember(ruta, i, oscuroOffice) { mutableStateOf(PaginasEnMemoria.alguna(ruta, i, oscuroOffice)) }
+        LaunchedEffect(ruta, i, escalon, oscuroOffice) {
             mapa = withContext(Dispatchers.IO) {
                 // **Y con un tope de píxeles, no solo de ancho.**
                 //
@@ -1051,7 +1108,7 @@ class LectorPdfActivity : ComponentActivity() {
                 val pedido = (anchoPx * escalon).coerceIn(320, 4000)
                 val alto = proporcion.takeIf { it > 0.01f } ?: 0.7f
                 val cabe = kotlin.math.sqrt(PIXELES_POR_HOJA * alto).toInt()
-                PaginasEnMemoria.pintar(ruta, i, minOf(pedido, cabe).coerceAtLeast(320))
+                PaginasEnMemoria.pintar(ruta, i, minOf(pedido, cabe).coerceAtLeast(320), oscuroOffice)
             } ?: mapa
         }
         val actual = mapa
@@ -1426,12 +1483,15 @@ internal fun medidaDeLaHoja(ruta: String, i: Int): Pair<Double, Double>? =
     else PdfDoc.medidaEnPuntos(ruta, i)
 
 /** La hoja [i] pintada a [ancho] píxeles: el PDF rasterizado, o el Word/PowerPoint pintado en vectores a ese ancho. */
-private fun pintarLaHoja(ruta: String, i: Int, ancho: Int): Bitmap? =
-    if (com.forge.pixpin.office.HojasOffice.es(ruta)) com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)?.pintar(i, ancho)
+private fun pintarLaHoja(ruta: String, i: Int, ancho: Int, oscuro: Boolean = false): Bitmap? =
+    if (com.forge.pixpin.office.HojasOffice.es(ruta)) com.forge.pixpin.office.HojasOffice.yaAbierto(ruta)?.pintar(i, ancho, oscuro = oscuro)
     else PdfDoc.render(ruta, i, ancho)
 
 /** Invertir colores hace falta un efecto de la tarjeta que llegó con Android 12. */
 private val PUEDE_INVERTIR = android.os.Build.VERSION.SDK_INT >= 31
+
+/** El margen de una hoja de Office en el modo oscuro: [PAPEL_DEL_MARGEN] con la luz invertida, como la hoja. */
+private val MARGEN_OSCURO = Color(com.forge.pixpin.office.Oscuro.invertirLuz(0xFFF3F3F0.toInt()))
 
 /**
  * **Los colores invertidos** de una hoja con su tinta (PC `11bd1f6`: la «N» invierte cualquier pin
@@ -1468,8 +1528,11 @@ private object PaginasEnMemoria {
     }
     private val anchos = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
+    /** La clave de una hoja: la de Office en el modo oscuro ([oscuro]) es otra hoja (la de un PDF no cambia: la matriz va al pintarla). */
+    private fun clave(ruta: String, i: Int, oscuro: Boolean) = if (oscuro) "$ruta#$i#o" else "$ruta#$i"
+
     /** La mejor que haya de esa página, sin esperar. */
-    fun alguna(ruta: String, i: Int): Bitmap? = anchos["$ruta#$i"]?.let { cache.get("$ruta#$i#$it") }
+    fun alguna(ruta: String, i: Int, oscuro: Boolean = false): Bitmap? = clave(ruta, i, oscuro).let { k -> anchos[k]?.let { cache.get("$k#$it") } }
 
     /** Lo guardado de [ruta] ya no vale: el documento ha cambiado (se ha anotado). */
     fun olvidar(ruta: String) {
@@ -1478,11 +1541,12 @@ private object PaginasEnMemoria {
     }
 
     /** Trabajo de disco. */
-    fun pintar(ruta: String, i: Int, ancho: Int): Bitmap? {
-        cache.get("$ruta#$i#$ancho")?.let { return it }
-        val b = runCatching { pintarLaHoja(ruta, i, ancho) }.getOrNull() ?: return null
-        cache.put("$ruta#$i#$ancho", b)
-        anchos["$ruta#$i"] = ancho
+    fun pintar(ruta: String, i: Int, ancho: Int, oscuro: Boolean = false): Bitmap? {
+        val k = clave(ruta, i, oscuro)
+        cache.get("$k#$ancho")?.let { return it }
+        val b = runCatching { pintarLaHoja(ruta, i, ancho, oscuro) }.getOrNull() ?: return null
+        cache.put("$k#$ancho", b)
+        anchos[k] = ancho
         return b
     }
 }
@@ -1497,7 +1561,7 @@ private object PaginasEnMemoria {
  * [SublienzosDelPdf.miniatura].
  */
 @Composable
-private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.Recorte>, anchoPx: Int, invertido: Boolean, alCerrar: () -> Unit) {
+private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.Recorte>, anchoPx: Int, invertido: Boolean, oscuroOffice: Boolean = false, alCerrar: () -> Unit) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
     val proporcion = remember(ruta, i) {
         medidaDeLaHoja(ruta, i)?.let { (an, al) -> (an / al).toFloat() } ?: 0.7f
@@ -1516,11 +1580,11 @@ private fun VistaDeLaPagina(ruta: String, i: Int, suyos: List<SublienzosDelPdf.R
         escalaFirme <= 2.6f -> 2
         else -> 4
     }
-    var mapa by remember(ruta, i) { mutableStateOf(PaginasEnMemoria.alguna(ruta, i)) }
-    LaunchedEffect(ruta, i, escalon) {
+    var mapa by remember(ruta, i, oscuroOffice) { mutableStateOf(PaginasEnMemoria.alguna(ruta, i, oscuroOffice)) }
+    LaunchedEffect(ruta, i, escalon, oscuroOffice) {
         mapa = withContext(Dispatchers.IO) {
             val cabe = kotlin.math.sqrt(PIXELES_POR_HOJA * proporcion.coerceAtLeast(0.01f)).toInt()
-            PaginasEnMemoria.pintar(ruta, i, minOf((anchoPx * 0.6f * escalon).toInt().coerceIn(320, 4000), cabe).coerceAtLeast(320))
+            PaginasEnMemoria.pintar(ruta, i, minOf((anchoPx * 0.6f * escalon).toInt().coerceIn(320, 4000), cabe).coerceAtLeast(320), oscuroOffice)
         } ?: mapa
     }
     Box(
