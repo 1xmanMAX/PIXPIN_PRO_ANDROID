@@ -3509,8 +3509,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // Y se lee a más resolución: 600 puntos estirados al alto nuevo en una
                 // pantalla de tres veces son menos píxeles de los que tiene el hueco, y
                 // se veía blanda sin necesidad.
+                // **Reducida a la medida exacta, no partida por dos** (13-oct-2026): con
+                // `load(it, 1000)` una captura del PC de 2560 se quedaba en 640 —partida por
+                // cuatro— y en la burbuja no se leía nada. Ver [LADO_DE_LA_BURBUJA].
                 withContext(Dispatchers.IO) {
-                    com.forge.pixpin.pin.ImageStore.load(it, ANCHO_DE_LA_FOTO)
+                    com.forge.pixpin.pin.ImageStore.cargarNitida(it, LADO_DE_LA_BURBUJA, PIXELES_DE_LA_BURBUJA)
                 }
             }
         }
@@ -3554,16 +3557,18 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         // identificador y hay que decirle de dónde sacarla. Sin esta
                         // lambda se pintaba lo dibujado encima de nada, y la foto
                         // desaparecía justo al anotarla, que es cuando más importa.
+                        // **Recortada a la foto.** Dibujando fuera de su borde, el
+                        // encuadre por contenido la encogía y la rodeaba de blanco:
+                        // en la conversación parecía otra foto, más pequeña. Con el
+                        // recorte se ve lo mismo que en el editor.
+                        val recorte = if (m.soloLaFoto) cajaDeLaFoto(escena) else null
                         com.forge.pixpin.motor.DrawExport.aBitmap(
-                            escena, ESCALA_DE_LA_FOTO,
-                            // **Recortada a la foto.** Dibujando fuera de su borde, el
-                            // encuadre por contenido la encogía y la rodeaba de blanco:
-                            // en la conversación parecía otra foto, más pequeña. Con el
-                            // recorte se ve lo mismo que en el editor.
-                            recorte = if (m.soloLaFoto) cajaDeLaFoto(escena) else null
+                            escena, escalaParaLaBurbuja(escena, recorte), recorte = recorte
                         ) { id ->
                             escena.files[id]?.path?.let {
-                                com.forge.pixpin.pin.ImageStore.load(it)
+                                com.forge.pixpin.pin.ImageStore.cargarNitida(
+                                    it, LADO_DE_LA_BURBUJA, PIXELES_DE_LA_BURBUJA
+                                )
                             }
                         }
                     }.getOrNull()
@@ -3652,15 +3657,16 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                                     ) { id ->
                                                         escena.files[id]?.path?.let {
                                                             com.forge.pixpin.pin.ImageStore
-                                                                .load(it)
+                                                                .cargarNitida(it)
                                                         }
                                                     }
                                                 }.getOrNull()
                                             } else {
+                                                // Entera, no partida por dos hasta
+                                                // 2000: ampliando es cuando se lee.
                                                 m.ruta?.let {
-                                                    com.forge.pixpin.pin.ImageStore.load(
-                                                        it, ANCHO_AMPLIADO
-                                                    )
+                                                    com.forge.pixpin.pin.ImageStore
+                                                        .cargarNitida(it)
                                                 }
                                             }
                                         }
@@ -4035,8 +4041,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             mapa = withContext(Dispatchers.IO) {
                 runCatching {
                     val escena = com.forge.pixpin.motor.ExcalidrawStore.cargar(ruta) ?: return@runCatching null
-                    com.forge.pixpin.motor.DrawExport.aBitmap(escena, ESCALA_DE_LA_FOTO) { id ->
-                        escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) }
+                    com.forge.pixpin.motor.DrawExport.aBitmap(escena, escalaParaLaBurbuja(escena, null)) { id ->
+                        escena.files[id]?.path?.let {
+                            com.forge.pixpin.pin.ImageStore.cargarNitida(it, LADO_DE_LA_BURBUJA, PIXELES_DE_LA_BURBUJA)
+                        }
                     }
                 }.getOrNull()
             }
@@ -6324,12 +6332,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.motor.ExcalidrawStore.cargar(rutaDelDibujo)?.let { e ->
                             com.forge.pixpin.motor.DrawExport.aBitmap(e, ESCALA_COMPARTIDA) { id ->
                                 e.files[id]?.path?.let {
-                                    com.forge.pixpin.pin.ImageStore.load(it)
+                                    com.forge.pixpin.pin.ImageStore.cargarNitida(it)
                                 }
                             }
                         }
+                    // Lo que sale fuera, con todos sus píxeles.
                     m.ruta != null ->
-                        com.forge.pixpin.pin.ImageStore.load(m.ruta!!, ANCHO_AMPLIADO)
+                        com.forge.pixpin.pin.ImageStore.cargarNitida(m.ruta!!)
                     else -> null
                 } ?: return@withContext null
                 val nombre = nombreDeLoCompartido(m)
@@ -6932,9 +6941,8 @@ private val ARRASTRE_PARA_RESPONDER = 50.dp
 
 
 /** Lo que tarda la pastilla de la fecha en aparecer y en irse. Telegram usa 150 ms. */
-/** Lo que puede ocupar una foto en la conversación, y a qué resolución se lee. */
+/** Lo que puede ocupar una foto en la conversación. A qué resolución se lee: [LADO_DE_LA_BURBUJA]. */
 private val ALTO_DE_LA_FOTO = 380.dp
-private const val ANCHO_DE_LA_FOTO = 1000
 
 /**
  * Las esquinas de una foto que va a pelo, sin burbuja alrededor.
@@ -6973,8 +6981,46 @@ private const val ANCHO_AMPLIADO = 2000
 private const val ANCHO_DE_LA_HOJA = 700
 private val ALTO_DE_LA_HOJA = 300.dp
 
-/** A qué escala se pinta el dibujo de una foto editada para la lista. */
-private const val ESCALA_DE_LA_FOTO = 0.5
+/**
+ * **El lado largo de lo que se pinta en una burbuja**: la foto, la foto anotada y el dibujo.
+ *
+ * Antes la foto anotada se pintaba a escala fija 0,5 de su lienzo y la suelta se leía partida
+ * por dos hasta 1000 de ancho: una captura del PC de 2560 quedaba en 640 píxeles —y anotada,
+ * en 640 también—, menos de lo que mide la burbuja en un teléfono de tres veces (13-oct-2026,
+ * «no se lee ni una letra»). Ahora todas salen a esta medida, exacta, y entonces la foto ocupa
+ * en la burbuja más o menos un píxel por píxel de pantalla.
+ */
+private const val LADO_DE_LA_BURBUJA = 1600
+
+/** Y como mucho estos píxeles: 1600×1000, unos 6 MB por foto de la lista. */
+private const val PIXELES_DE_LA_BURBUJA = 1600L * 1000L
+
+/** Lo menos y lo más que se amplía un dibujo para la burbuja. Ver [escalaParaLaBurbuja]. */
+private const val ESCALA_MINIMA_DE_LA_BURBUJA = 0.1
+private const val ESCALA_MAXIMA_DE_LA_BURBUJA = 2.0
+
+/**
+ * **A qué escala se pinta un dibujo para la burbuja**: la que deja su encuadre ([recorte], o lo
+ * que se ve) con el lado largo en [LADO_DE_LA_BURBUJA]. Una escala fija no sirve: el lienzo de
+ * una captura del PC mide 1280 unidades si la captura medía 2560 (`lienzo_de_la_foto::LADO_MAXIMO`
+ * del PC), y a 0,5 eran 640 píxeles para una captura que tiene cuatro veces más.
+ */
+internal fun escalaParaLaBurbuja(
+    escena: com.forge.pixpin.motor.Scene,
+    recorte: com.forge.pixpin.motor.Bounds?
+): Double {
+    val caja = recorte ?: escena.contenidoVisible.takeIf { it.isNotEmpty() }
+        ?.let { com.forge.pixpin.motor.getCommonBounds(it) }
+        ?: return 0.5
+    return escalaParaLado(caja.width, caja.height, LADO_DE_LA_BURBUJA)
+}
+
+/** **Pura**: la escala que deja [ancho]×[alto] con su lado largo en [lado], acotada. */
+internal fun escalaParaLado(ancho: Double, alto: Double, lado: Int): Double {
+    val largo = maxOf(ancho, alto)
+    if (largo <= 0.0 || largo.isNaN()) return 0.5
+    return (lado / largo).coerceIn(ESCALA_MINIMA_DE_LA_BURBUJA, ESCALA_MAXIMA_DE_LA_BURBUJA)
+}
 
 /** Lo que dura el destello del mensaje al que se acaba de saltar, y lo que tarda en irse. */
 private const val LO_QUE_DURA_EL_DESTELLO = 1000L

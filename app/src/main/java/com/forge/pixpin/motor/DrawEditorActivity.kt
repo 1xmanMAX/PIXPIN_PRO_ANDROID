@@ -511,7 +511,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
     private fun colocarImagenInicial(path: String) {
         val bmp = ImageStore.load(path) ?: return
         val file = ExcalidrawStore.guardarImagen(this, File(path), "image/png") ?: return
-        bitmaps[file.id] = bmp
+        bitmaps[file.id] = paraPintar(file.path, bmp)
         fondo = bmp
         controller.placeImage(
             file,
@@ -1175,9 +1175,25 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
         super.onPause()
     }
 
+    /**
+     * La imagen de un elemento, **nítida**: a la resolución con que llegó, no partida por dos hasta
+     * 2048 (13-oct-2026: una captura del PC de 2560 se veía aquí a 1280 y no se leía). Sus medidas
+     * en el lienzo no cambian —son las del elemento—; solo hay más píxeles dentro. Con muchas
+     * fotos en el lienzo se reparte la memoria entre ellas ([ImageStore.pixelesParaVarias]).
+     */
     private fun bitmapDe(fileId: String): Bitmap? = bitmaps.getOrPut(fileId) {
-        controller.scene.files[fileId]?.path?.let { ImageStore.load(it) }
+        controller.scene.files[fileId]?.path?.let {
+            ImageStore.cargarNitida(it, maxPixeles = ImageStore.pixelesParaVarias(controller.scene.files.size))
+        }
     }
+
+    /**
+     * Lo que va a la caché de imágenes al colocar [bmp] (leída con [ImageStore.load], que da las
+     * medidas en el lienzo): ella misma si ya está entera, y si no, la nítida.
+     */
+    private fun paraPintar(path: String, bmp: Bitmap): Bitmap =
+        if (ImageStore.estaEntera(path, bmp)) bmp
+        else ImageStore.cargarNitida(path, maxPixeles = ImageStore.pixelesParaVarias(controller.scene.files.size + 1)) ?: bmp
 
     // ---------------------------------------------------------------------
     // Interfaz
@@ -5151,7 +5167,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
             temporal.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
             val file = ExcalidrawStore.guardarImagen(this, temporal, "image/png") ?: return
             temporal.delete()
-            bitmaps[file.id] = bmp
+            bitmaps[file.id] = paraPintar(file.path, bmp)
             val v = controller.scene.viewport
             // A la mitad de lo que mide el mapa de bits: se dibujó a tres veces para que no se
             // vea blando al acercarse, pero se pega del tamaño en que se garabateó.
@@ -5177,7 +5193,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
     override fun recibirImagen(archivo: File, mime: String): Boolean = runCatching {
         val file = ExcalidrawStore.guardarImagen(this, archivo, mime) ?: return false
         val bmp = ImageStore.load(file.path) ?: return false
-        bitmaps[file.id] = bmp
+        bitmaps[file.id] = paraPintar(file.path, bmp)
         val v = controller.scene.viewport
         val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: resources.displayMetrics.widthPixels.toDouble()
         val alto = medidaDelLienzo.height.takeIf { it > 0 }?.toDouble() ?: resources.displayMetrics.heightPixels.toDouble()
@@ -5200,7 +5216,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
             temporal.delete()
 
             val bmp = ImageStore.load(file.path) ?: return
-            bitmaps[file.id] = bmp
+            bitmaps[file.id] = paraPintar(file.path, bmp)
             // Se coloca en el centro de lo que se está mirando, no en el origen
             // de la escena: en un lienzo infinito el origen puede estar lejos.
             val v = controller.scene.viewport
