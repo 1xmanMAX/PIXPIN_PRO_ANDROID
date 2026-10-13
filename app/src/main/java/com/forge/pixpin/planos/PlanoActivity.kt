@@ -124,6 +124,9 @@ class PlanoActivity : ComponentActivity() {
     private var idCapa = ""
     /** Cómo cae la capa en el plano (de su `.hoja`, o nuevo). */
     private var encaje = CapaDelPlano.Encaje(1.0, 0.0, 0.0)
+    /** El de las unidades del fichero (su `.hoja`), y cómo pasar la capa de la memoria a él. */
+    private var encajeDelFichero: CapaDelPlano.Encaje? = null
+    private var capaEnMemoria: CapaDelPlano.EnMemoria? = null
     /** Las cotas y los marcos de ahora, para guardarlos en la capa (los copia la pantalla). */
     @Volatile private var cotasParaGuardar: List<List<DoubleArray>> = emptyList()
     @Volatile private var marcosParaGuardar: List<ImprimirPlano.Marco> = emptyList()
@@ -214,7 +217,10 @@ class PlanoActivity : ComponentActivity() {
         val nueva = CapaDelPlano.con(laCapa.scene, e, cotasParaGuardar, marcosParaGuardar, System.currentTimeMillis())
         // Solo si cambió algo: cargar una escena nueva en el motor le vacía el deshacer.
         if (nueva.elements != laCapa.scene.elements) laCapa.load(nueva)
-        val escena = laCapa.scene
+        val enMemoria = laCapa.scene
+        // Al fichero, en sus unidades (lo que no se tocó, con sus números de siempre).
+        val escena = capaEnMemoria?.alFichero(enMemoria) ?: enMemoria
+        val delFichero = encajeDelFichero ?: e
         val contexto = applicationContext
         lifecycleScope.launch(Dispatchers.IO) {
             val ruta = java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, id))
@@ -222,7 +228,7 @@ class PlanoActivity : ComponentActivity() {
             runCatching {
                 // La hoja antes que la capa: una capa sin su hoja al lado se leería con otra escala.
                 val hoja = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(contexto.filesDir, id)
-                val texto = CapaDelPlano.hojaDe(e, m.caja).aTexto()
+                val texto = CapaDelPlano.hojaDe(delFichero, m.caja).aTexto()
                 if (!hoja.isFile || hoja.readText() != texto) hoja.writeText(texto)
                 com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena)
             }
@@ -380,12 +386,22 @@ class PlanoActivity : ComponentActivity() {
                         idCapa = com.forge.pixpin.ui.ExportarDocumentoAnotado.idDeLaCapa(original, com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@PlanoActivity, original))
                         // Dónde cae la capa: lo que diga su `.hoja` (escrita aquí o en el PC); si no hay,
                         // la escala de las letras del plano. Ver [CapaDelPlano].
-                        encaje = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, idCapa))
+                        val delFichero = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, idCapa))
                             ?.let { CapaDelPlano.encajeDe(it, m.caja) }
                             ?: CapaDelPlano.Encaje(EscalaDeLaCapa.leerOPoner(File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)), m), 0.0, 0.0)
-                        com.forge.pixpin.motor.DrawController(
-                            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)) ?: com.forge.pixpin.motor.Scene()
-                        ).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+                        // **En memoria, siempre la unidad de la letra** (como el PC): una capa escrita con
+                        // otra (la del PC de antes, la milésima del lado) engordaba el lápiz hasta tapar el
+                        // plano. El fichero sigue en la suya. Ver [CapaDelPlano.Unidades].
+                        val enMemoria = CapaDelPlano.Encaje(EscalaDeLaCapa.deLasLetras(m), 0.0, 0.0)
+                        val unidades = CapaDelPlano.unidadesEntre(enMemoria, delFichero)
+                        encajeDelFichero = delFichero
+                        encaje = if (unidades.iguales) delFichero else enMemoria
+                        val leida = CapaDelPlano.aLaMemoria(
+                            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)) ?: com.forge.pixpin.motor.Scene(),
+                            unidades
+                        )
+                        capaEnMemoria = leida
+                        com.forge.pixpin.motor.DrawController(leida.escena).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
                     }.getOrNull()
                 }
                 // Las cotas y los marcos que había (de aquí o del PC).
@@ -1056,7 +1072,8 @@ class PlanoActivity : ComponentActivity() {
                     }
                 },
                 onEstilo = { nuevo -> aplicarEstilo(nuevo); cambiado(seleccionado.isNotEmpty()) },
-                zoom = { laCapa.scene.viewport.zoom.toFloat() },
+                // El panel habla en pantalla: el grosor elegido ya va a la escala de lo que se ve.
+                zoom = { (laCapa.scene.viewport.zoom * laCapa.escalaDeLoNuevo).toFloat() },
                 marcasDeColor = marcasDeColor,
                 noche = noche
             )

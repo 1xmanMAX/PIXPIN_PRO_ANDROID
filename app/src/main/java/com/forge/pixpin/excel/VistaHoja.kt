@@ -69,6 +69,8 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
 
     /** Se llama al cambiar la selección o lo que se ve (para la barra de arriba). */
     var alCambiar: (() -> Unit)? = null
+    /** Un toque suelto en la hoja (para sacar o esconder los mandos, como en los otros visores). */
+    var alTocar: (() -> Unit)? = null
 
     /** **Modo oscuro** (luna/sol del visor). */
     var oscuro: Boolean = false
@@ -1151,6 +1153,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
         }
 
         override fun onSingleTapUp(ev: MotionEvent): Boolean {
+            alTocar?.invoke()
             if (ev.x < cabAncho && ev.y < cabAlto) { elegirTodo(); return true }
             if (arrastre == 2 || arrastre == 3) return true
             val c = celdaEn(ev.x, ev.y) ?: return true

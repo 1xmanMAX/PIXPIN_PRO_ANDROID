@@ -42,6 +42,70 @@ object CapaDelPlano {
         fun aPlanoY(y: Double) = ceroY - y * u
     }
 
+    /**
+     * **Las unidades del fichero respecto de las de la memoria**: `fichero = memoria · k + (dx, dy)`
+     * (`unidades_entre` del PC, 12-oct-2026).
+     *
+     * Por qué (13-oct-2026, el usuario: «antes las tintas estaban escaladas y ahora todo está
+     * sobredimensionado, con una línea se tapa todo el plano»): una capa escrita con la unidad de
+     * antes —la milésima del lado del plano, la del PC hasta el 12-oct— mide cientos de píxeles por
+     * unidad al acercarse, y las medidas fijas del motor (radio mínimo del lápiz, el tramo final
+     * que toma por ruido) engordan el trazo hasta tapar el plano. Como el PC: **en memoria la capa
+     * va siempre en la unidad de la letra** ([EscalaDeLaCapa.deLasLetras]) y el fichero se queda en
+     * la suya; lo que no se toca vuelve tal cual, número a número.
+     */
+    data class Unidades(val k: Double, val dx: Double, val dy: Double) {
+        /** Casi las mismas: no hace falta convertir nada. */
+        val iguales: Boolean get() = kotlin.math.abs(k - 1.0) < 1e-6 && kotlin.math.abs(dx) < 1e-6 && kotlin.math.abs(dy) < 1e-6
+
+        /** De la memoria al fichero. */
+        fun alFichero(e: Element): Element = transformar(e, k, dx, dy)
+
+        /** Del fichero a la memoria. */
+        fun aLaMemoria(e: Element): Element = transformar(e, 1.0 / k, -dx / k, -dy / k)
+    }
+
+    fun unidadesEntre(memoria: Encaje, fichero: Encaje): Unidades = Unidades(
+        k = memoria.u / fichero.u,
+        dx = (memoria.ceroX - fichero.ceroX) / fichero.u,
+        dy = (fichero.ceroY - memoria.ceroY) / fichero.u
+    )
+
+    /** [e] con sus medidas por [k] y corrido ([dx], [dy]): posición, caja, puntos, grosor y letra. */
+    private fun transformar(e: Element, k: Double, dx: Double, dy: Double): Element = e.copy(
+        x = e.x * k + dx,
+        y = e.y * k + dy,
+        width = e.width * k,
+        height = e.height * k,
+        points = e.points?.map { Pt(it.x * k, it.y * k) },
+        huecos = e.huecos?.map { anillo -> anillo.map { Pt(it.x * k, it.y * k) } },
+        strokeWidth = e.strokeWidth * k,
+        fontSize = e.fontSize?.times(k)
+    )
+
+    /**
+     * La escena del fichero pasada a la memoria, y lo que hace falta para devolverla: cada elemento
+     * tal como quedó en memoria al leerlo, junto al original. Al guardar, lo que siga igual que al
+     * leerlo vuelve con sus números exactos (sin versión nueva ni ida y vuelta de decimales).
+     */
+    class EnMemoria(val escena: Scene, val unidades: Unidades, private val leidos: Map<String, Pair<Element, Element>>) {
+        /** La escena de [enMemoria] en las unidades del fichero. */
+        fun alFichero(enMemoria: Scene): Scene {
+            if (unidades.iguales) return enMemoria
+            return enMemoria.copy(elements = enMemoria.elements.map { el ->
+                val (comoSeLeyo, original) = leidos[el.id] ?: return@map unidades.alFichero(el)
+                if (el == comoSeLeyo) original else unidades.alFichero(el)
+            })
+        }
+    }
+
+    fun aLaMemoria(fichero: Scene, unidades: Unidades): EnMemoria {
+        if (unidades.iguales) return EnMemoria(fichero, unidades, emptyMap())
+        val leidos = HashMap<String, Pair<Element, Element>>()
+        val convertidos = fichero.elements.map { el -> unidades.aLaMemoria(el).also { leidos[el.id] = it to el } }
+        return EnMemoria(fichero.copy(elements = convertidos), unidades, leidos)
+    }
+
     /** El marco de la tinta: la caja del plano ([caja], relativa al origen) en unidades de la capa. */
     fun hojaDe(e: Encaje, caja: FloatArray): AnotacionesDelAdjunto.Marco =
         AnotacionesDelAdjunto.Marco(e.aCapaX(caja[0].toDouble()), e.aCapaY(caja[3].toDouble()), e.aCapaX(caja[2].toDouble()), e.aCapaY(caja[1].toDouble()))

@@ -88,7 +88,7 @@ class ExcelActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+            hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         val ruta = intent?.getStringExtra(EXTRA_RUTA)
@@ -129,58 +129,59 @@ class ExcelActivity : ComponentActivity() {
             abierto = l
         }
 
-        Column(Modifier.fillMaxSize()) {
-            // Arriba: volver, el nombre y lo que se puede hacer.
-            BarraDeCristal(Modifier.statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp).fillMaxWidth()) {
-                BotonDeBarra(Icons.AutoMirrored.Filled.ArrowBack, null, { finish() }, descripcion = "Volver")
-                Text(
-                    nombre, color = Cristal.tinta, style = MaterialTheme.typography.titleSmall, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).align(Alignment.CenterVertically).padding(horizontal = 4.dp)
+        // **Como los otros visores** (13-oct-2026, el usuario: «arriba aparece un espacio; que la
+        // interfaz del Excel se iguale a los otros visores»): la hoja a pantalla completa, sin barras
+        // del sistema ni barra fija; arriba la pastilla de los lectores ([com.forge.pixpin.ui.PastillaDeLector]),
+        // que sale al tocar y se va sola; abajo, flotando, la línea de la celda y las pestañas.
+        var aLaVista by remember { mutableStateOf(true) }
+        var toques by remember { mutableIntStateOf(0) }
+        LaunchedEffect(aLaVista, toques) { if (aLaVista) { kotlinx.coroutines.delay(3500); aLaVista = false } }
+        Box(Modifier.fillMaxSize().background(if (oscuro) Color(com.forge.pixpin.office.Oscuro.PAPEL) else Color.White)) {
+            val l = abierto
+            if (l == null) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center).size(36.dp))
+            } else {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { c ->
+                        VistaHoja(c, l).also { nueva ->
+                            nueva.oscuro = oscuro
+                            nueva.alCambiar = { marca.intValue++ }
+                            nueva.alTocar = { aLaVista = true; toques++ }
+                            l.alCambiar = { nueva.post { nueva.invalidate(); marca.intValue++ } }
+                            nueva.ponerHoja(activa)
+                            vista = nueva
+                        }
+                    }
                 )
-                BotonDeBarra(
-                    if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro",
-                    {
+                DisposableEffect(l) { onDispose { l.alCambiar = null } }
+            }
+            com.forge.pixpin.ui.PastillaDeLector(
+                visible = aLaVista,
+                nombre = nombre.substringBeforeLast('.').ifBlank { "Excel" },
+                botones = listOfNotNull(
+                    com.forge.pixpin.ui.BotonDeLector(if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro") {
                         oscuro = !oscuro
                         com.forge.pixpin.office.Oscuro.poner(this@ExcelActivity, oscuro)
                         vista?.oscuro = oscuro
-                    }
-                )
-                BotonDeBarra(Icons.Filled.ContentCopy, "Copiar", { vista?.let { copiar(it) } }, activo = abierto != null)
-                BotonDeBarra(Icons.Filled.TableChart, "A tabla", { aTabla(ruta, nombre, mensaje, alFallar = false) })
-                BotonDeBarra(Icons.Filled.OpenInNew, "Abrir con", { com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(ruta)) })
-            }
-            LineaDeCelda(vista, marca) { activa = it }
-            Spacer(Modifier.height(6.dp))
-            // La hoja.
-            Box(Modifier.weight(1f).fillMaxWidth().background(if (oscuro) Color(com.forge.pixpin.office.Oscuro.PAPEL) else Color.White)) {
-                val l = abierto
-                if (l == null) {
-                    CircularProgressIndicator(Modifier.align(Alignment.Center).size(36.dp))
-                } else {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { c ->
-                            VistaHoja(c, l).also { nueva ->
-                                nueva.oscuro = oscuro
-                                nueva.alCambiar = { marca.intValue++ }
-                                l.alCambiar = { nueva.post { nueva.invalidate(); marca.intValue++ } }
-                                nueva.ponerHoja(activa)
-                                vista = nueva
-                            }
-                        }
-                    )
-                    DisposableEffect(l) { onDispose { l.alCambiar = null } }
-                }
-            }
-            // Abajo: las pestañas de las hojas y lo que falta por leer.
-            val l = abierto
-            if (l != null) {
-                Row(
-                    Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                        toques++
+                    },
+                    if (abierto != null) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.ContentCopy, "Copiar") { vista?.let { copiar(it) }; toques++ } else null,
+                    com.forge.pixpin.ui.BotonDeLector(Icons.Filled.TableChart, "A tabla") { aTabla(ruta, nombre, mensaje, alFallar = false) },
+                    com.forge.pixpin.ui.BotonDeLector(Icons.Filled.OpenInNew, "Abrir con") { com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(ruta)) }
+                ),
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+            // Abajo, flotando: la línea de la celda (con algo elegido) y las pestañas de las hojas.
+            if (l != null) Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                LineaDeCelda(vista, marca) { activa = it }
+                Row(Modifier.padding(horizontal = 8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     val hojas = remember(l) { l.libro.hojas.withIndex().filter { it.value.visible } }
-                    LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Con una sola hoja no hay pestañas que elegir: no tapan nada.
+                    if (hojas.size > 1) LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         itemsIndexed(hojas, key = { _, h -> h.index }) { _, h ->
                             val puesta = h.index == activa
                             Text(
@@ -196,7 +197,7 @@ class ExcelActivity : ComponentActivity() {
                                     .padding(horizontal = 14.dp, vertical = 8.dp)
                             )
                         }
-                    }
+                    } else Spacer(Modifier.weight(1f))
                     EstadoDeLaHoja(vista, marca)
                 }
             }
@@ -207,6 +208,8 @@ class ExcelActivity : ComponentActivity() {
     @Composable
     private fun LineaDeCelda(v: VistaHoja?, marca: androidx.compose.runtime.IntState, alCambiarDeHoja: (Int) -> Unit) {
         @Suppress("UNUSED_VARIABLE") val leer = marca.intValue
+        // Solo con una celda elegida: sin ella, la hoja se ve entera.
+        if (v?.seleccion == null) return
         SuperficieDeCristal(Modifier.padding(horizontal = 8.dp).fillMaxWidth().height(40.dp)) {
             Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 val sel = v?.seleccion
@@ -268,7 +271,7 @@ class ExcelActivity : ComponentActivity() {
             val z = v?.zoom ?: 1.0
             if (kotlin.math.abs(z - 1.0) > 0.004) add("${(z * 100).toInt()} %")
         }.joinToString("  ·  ")
-        if (estado.isNotEmpty()) Text(estado, color = Cristal.tinta.copy(alpha = 0.75f), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+        if (estado.isNotEmpty()) Text(estado, color = Cristal.tinta.copy(alpha = 0.85f), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(12.dp)).background(Cristal.barra).padding(horizontal = 10.dp, vertical = 6.dp))
     }
 
     /** La nota o el comentario de la celda, entero (con sus respuestas). */

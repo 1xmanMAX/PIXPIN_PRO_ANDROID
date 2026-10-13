@@ -76,6 +76,35 @@ class PlanosEnSincroTest {
     }
 
     @Test
+    fun una_capa_con_la_unidad_de_antes_se_trabaja_en_la_de_la_letra_y_vuelve_igual() {
+        // El fichero: la milésima del lado de un plano de 8 km (8 m por unidad); la memoria, la letra.
+        val fichero = CapaDelPlano.Encaje(8.0, 100.0, -50.0)
+        val memoria = CapaDelPlano.Encaje(0.07, 0.0, 0.0)
+        val u = CapaDelPlano.unidadesEntre(memoria, fichero)
+        assertTrue(!u.iguales)
+        val trazo = com.forge.pixpin.motor.newElement(com.forge.pixpin.motor.ElementType.FREEDRAW, 3.0, 4.0,
+            com.forge.pixpin.motor.ItemStyle(strokeWidth = 0.02), 1.0, 0.5)
+            .copy(id = "t", points = listOf(com.forge.pixpin.motor.Pt(0.0, 0.0), com.forge.pixpin.motor.Pt(1.0, 0.5)))
+        val otro = trazo.copy(id = "o", x = 10.0)
+        val leida = CapaDelPlano.aLaMemoria(Scene(elements = listOf(trazo, otro)), u)
+        val t = leida.escena.elements[0]
+        // Mismo sitio del plano en las dos unidades, y el grosor también en la de la letra.
+        assertEquals(fichero.aPlanoX(trazo.x), memoria.aPlanoX(t.x), 1e-6)
+        assertEquals(fichero.aPlanoY(trazo.y), memoria.aPlanoY(t.y), 1e-6)
+        assertEquals(0.02 * 8.0 / 0.07, t.strokeWidth, 1e-9)
+        assertEquals(1.0 * 8.0 / 0.07, t.points!![1].x, 1e-9)
+        // Lo no tocado vuelve exacto (el mismo objeto); lo tocado, convertido al fichero.
+        val movido = leida.escena.elements[1].let { it.copy(x = it.x + 10 * 8.0 / 0.07) }
+        val vuelta = leida.alFichero(Scene(elements = listOf(t, movido)))
+        assertTrue(vuelta.elements[0] === trazo)
+        assertEquals(20.0, vuelta.elements[1].x, 1e-9)
+        assertEquals(0.02, vuelta.elements[1].strokeWidth, 1e-12)
+        // Con las mismas unidades no se convierte nada.
+        val igual = CapaDelPlano.aLaMemoria(Scene(elements = listOf(trazo)), CapaDelPlano.unidadesEntre(fichero, fichero))
+        assertTrue(igual.escena.elements[0] === trazo)
+    }
+
+    @Test
     fun los_marcos_llevan_su_numero_de_hoja_y_se_leen_en_ese_orden() {
         val e = CapaDelPlano.Encaje(0.1, 0.0, 0.0)
         val a = ImprimirPlano.Marco.entre(50.0, 0.0, 60.0, 8.0)
