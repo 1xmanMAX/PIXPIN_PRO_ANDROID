@@ -53,8 +53,8 @@ class CalculoTest {
         assertEquals("FALSO", da("=\"abc\">\"abd\""))
         assertEquals("VERDADERO", da("=\"ABC\"=\"abc\""))
         assertEquals("#¿NOMBRE?", da("=NOEXISTE(1)"))
-        assertEquals("#¿NOMBRE?", da("=1+"))
-        assertEquals("#N/D", da("=#N/A"))
+        assertEquals("#¡VALOR!", da("=1+"))
+        assertEquals("#N/A", da("=#N/A"))
     }
 
     @Test
@@ -93,7 +93,7 @@ class CalculoTest {
         assertEquals("24", c.ver("A4"))
         assertEquals("12", c.ver("A5"))
         assertEquals("6", c.ver("B1"))
-        assertEquals("0", c.ver("B2"))
+        assertEquals("", c.ver("B2")) // una celda vacía citada se ve vacía, como en el PC
         assertEquals("60", c.ver("B3"))
         assertEquals("5", c.ver("B4"))
         assertEquals("12", c.ver("B5"))
@@ -113,7 +113,7 @@ class CalculoTest {
     @Test
     fun `referencias circulares y cadenas largas`() {
         val c = hoja("B1" to "=B2", "B2" to "=B1")
-        assertEquals("#¡CIRC!", c.ver("B1"))
+        assertEquals("#¡CICLO!", c.ver("B1"))
         val larga = Calculadora()
         larga.poner(0, 0, "1")
         for (f in 1 until 5000) larga.poner(f, 0, "=A$f+1")
@@ -139,7 +139,7 @@ class CalculoTest {
         assertEquals("13", da("=SUMAR.SI.CONJUNTO(B1:B4;C1:C4;\"x\";B1:B4;\">2\")", *datos))
         assertEquals("2", da("=CONTAR.SI.CONJUNTO(C1:C4;\"x\";B1:B4;\">2\")", *datos))
         assertEquals("8", da("=BUSCARV(\"pera\";A1:B4;2;FALSO)", *datos))
-        assertEquals("#N/D", da("=BUSCARV(\"uva\";A1:B4;2;0)", *datos))
+        assertEquals("#N/A", da("=BUSCARV(\"uva\";A1:B4;2;0)", *datos))
         assertEquals("3", da("=COINCIDIR(\"mango\";A1:A4;0)", *datos))
         assertEquals("y", da("=INDICE(A1:C4;2;3)", *datos))
         assertEquals("kiwi", da("=BUSCARX(1;B1:B4;A1:A4)", *datos))

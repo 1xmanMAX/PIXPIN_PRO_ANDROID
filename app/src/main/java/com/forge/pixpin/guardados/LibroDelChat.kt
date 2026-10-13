@@ -22,7 +22,7 @@ object LibroDelChat {
 
     fun idDeHoja(m: Mensaje, hoja: Int) = idDeHoja(m.id, hoja)
 
-    private fun idDeHoja(mensaje: String, hoja: Int) = "libro-$mensaje-$hoja"
+    fun idDeHoja(mensaje: String, hoja: Int) = "libro-$mensaje-$hoja"
 
     /**
      * Las tablas del libro —identificador y nombre—, leyéndolo si aún no se había leído. Trabajo
@@ -37,13 +37,23 @@ object LibroDelChat {
      */
     fun tablas(context: Context, mensaje: String, ruta: String?, nombre: String): List<Pair<String, String>> {
         val almacen = TablasEnDisco.de(context.filesDir)
+        // **Primero, las hojas que ya son mensajes del chat** (las del PC o las editadas aquí desde el
+        // 13-oct-2026): son las que viajan. Ver [TablasDelChat].
+        val store = MensajesStore(context)
+        val enElChat = TablasDelChat.hechas(store.leer(), mensaje)
+        if (enElChat.isNotEmpty()) return enElChat.map { (i, m) -> idDeHoja(mensaje, i) to m.nombre.ifBlank { "Tabla" } }
         val hechas = generateSequence(0) { it + 1 }.map { idDeHoja(mensaje, it) }.takeWhile { almacen.archivo(it).exists() }.toList()
-        if (hechas.isNotEmpty()) return hechas.map { it to (almacen.cargar(it)?.nombre ?: "Tabla") }
+        if (hechas.isNotEmpty()) {
+            // **Migración**: las hojas de antes, editadas aquí y guardadas solo en archivo, pasan a
+            // mensajes para que el PC las vea. Los archivos se quedan.
+            store.leer().firstOrNull { it.id == mensaje }?.let { runCatching { TablasDelChat(context).migrar(it) } }
+            return hechas.map { it to (almacen.cargar(it)?.nombre ?: "Tabla") }
+        }
         if (ruta == null) return emptyList()
         val hojas = ImportarHojas.leer(File(ruta), nombre.ifBlank { File(ruta).name })
         return hojas.mapIndexedNotNull { i, h ->
             val id = idDeHoja(mensaje, i)
-            if (almacen.guardar(id, h.tabla)) id to h.nombre else null
+            if (almacen.enArchivo(id, h.tabla)) id to h.nombre else null
         }
     }
 }

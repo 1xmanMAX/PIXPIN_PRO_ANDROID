@@ -80,6 +80,8 @@ class PiezaDeFormula(
         const val DOS_PUNTOS = 10
         const val ERR = 11
         const val MAL = 12
+        /** Algo con forma de celda que no es ninguna (`A0`, `AAAA1`): `#¡REF!`, como el PC. */
+        const val MALA_REF = 13
     }
 }
 
@@ -99,8 +101,6 @@ sealed interface Nodo {
     data class PorCiento(val x: Nodo) : Nodo
     data class Op(val op: String, val a: Nodo, val b: Nodo) : Nodo
     data class Funcion(val nombre: String, val args: List<Nodo>) : Nodo
-    /** Un argumento dejado en blanco: `SI(A1;;2)`. */
-    data object Hueco : Nodo
 }
 
 /**
@@ -116,16 +116,19 @@ object CalculoLexico {
 
     const val ERROR_REF = "#¡REF!"
 
+    /** Las filas que puede citar una fórmula: las de Excel, aunque la tabla tenga menos. */
+    const val FILAS_EN_FORMULA = 1_048_576
+
     /** Los errores que se pueden escribir, en los dos idiomas, con su forma de aquí. */
     val ERRORES = linkedMapOf(
         "#¡DIV/0!" to "#¡DIV/0!", "#DIV/0!" to "#¡DIV/0!",
         "#¡VALOR!" to "#¡VALOR!", "#VALUE!" to "#¡VALOR!",
         "#¡REF!" to "#¡REF!", "#REF!" to "#¡REF!",
         "#¿NOMBRE?" to "#¿NOMBRE?", "#NAME?" to "#¿NOMBRE?",
-        "#N/D" to "#N/D", "#N/A" to "#N/D",
+        "#N/D" to "#N/A", "#N/A" to "#N/A",
         "#¡NUM!" to "#¡NUM!", "#NUM!" to "#¡NUM!",
         "#¡NULO!" to "#¡NULO!", "#NULL!" to "#¡NULO!",
-        "#¡CIRC!" to "#¡CIRC!"
+        "#¡CICLO!" to "#¡CICLO!", "#¡CIRC!" to "#¡CICLO!"
     )
 
     private fun esLetra(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c == '_' || c in LETRAS_CON_TILDE
@@ -140,7 +143,8 @@ object CalculoLexico {
         val n = f.length
         while (i < n) {
             val c = f[i]
-            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ' ') { i++; continue }
+            // Los espacios, también el duro y el fino que trae un texto pegado (como el PC: `is_whitespace`).
+            if (Character.isWhitespace(c) || Character.isSpaceChar(c)) { i++; continue }
             val desde = i
             when {
                 c == '"' -> {
@@ -215,13 +219,20 @@ object CalculoLexico {
                 while (k < n && esCifra(f[k])) k++
                 val cifras = f.substring(c0, k)
                 val sigue = if (k < n) f[k] else ' '
-                if (cifras.isNotEmpty() && !esLetra(sigue) && sigue != '(' && sigue != '.' && sigue != '_') {
+                var tras = k
+                while (tras < n && (f[tras] == ' ' || f[tras] == '\t' || f[tras] == '\u00a0' || f[tras] == '\u202f')) tras++
+                val llamada = tras < n && f[tras] == '(' && !colFija && !filaFija
+                if (cifras.isNotEmpty() && !esLetra(sigue) && !llamada && sigue != '(' && sigue != '.' && sigue != '_') {
                     val col = Celdas.columna(letras)
                     val fila = cifras.toIntOrNull()?.minus(1) ?: -1
-                    if (col in 0 until Celdas.MAX_COLS && fila in 0 until Celdas.MAX_FILAS) {
+                    // En una fórmula se admite hasta la última fila de Excel (`A1:A1000000`, como el PC): lo
+                    // que pase de la tabla está vacío.
+                    if (col in 0 until Celdas.MAX_COLS && fila in 0 until FILAS_EN_FORMULA) {
                         return PiezaDeFormula(PiezaDeFormula.REF, f.substring(desde, k), desde, k, fila = fila, col = col,
                             filaFija = filaFija, colFija = colFija)
                     }
+                    // `A0`, o más allá de la última fila o columna: forma de celda sin celda.
+                    return PiezaDeFormula(PiezaDeFormula.MALA_REF, f.substring(desde, k), desde, k)
                 }
                 // Columnas enteras: `A:C`, `$A:$A`.
                 if (cifras.isEmpty() && !filaFija && k < n && f[k] == ':') {
@@ -245,28 +256,44 @@ object CalculoLexico {
         }
         if (f[i] == '$') return PiezaDeFormula(PiezaDeFormula.MAL, "$", desde, i + 1)
         while (i < n && (esLetra(f[i]) || esCifra(f[i]) || f[i] == '.')) i++
-        return PiezaDeFormula(PiezaDeFormula.NOMBRE, f.substring(desde, i), desde, i)
+        val palabra = f.substring(desde, i)
+        // Sin paréntesis detrás y con cifras dentro (`A1B`, `AAAA1`): una celda mala, como en el PC.
+        var j = i
+        while (j < n && (f[j] == ' ' || f[j] == '\t' || f[j] == '\n' || f[j] == '\r' || f[j] == '\u00a0' || f[j] == '\u202f')) j++
+        if ((j >= n || f[j] != '(') && palabra.any { esCifra(it) }) return PiezaDeFormula(PiezaDeFormula.MALA_REF, palabra, desde, i)
+        return PiezaDeFormula(PiezaDeFormula.NOMBRE, palabra, desde, i)
     }
 
-    /** El árbol de una fórmula sin el `=` de delante. Lo que no se entienda, `#¿NOMBRE?`. */
+    /**
+     * El árbol de una fórmula sin el `=` de delante. Lo que no se entienda es `#¡VALOR!` y un
+     * rango con un extremo malo (`A1:`, `A1:5`) `#¡REF!`, como en el PC (`analisis.rs`).
+     */
     fun arbol(formula: String): Nodo {
         val p = piezas(formula)
-        if (p.isEmpty()) return Nodo.Err("#¿NOMBRE?")
+        if (p.isEmpty()) return Nodo.Err(ERROR_VALOR)
         return try {
             val lector = Lector(p)
             val r = lector.comparacion()
-            if (lector.i != p.size) Nodo.Err("#¿NOMBRE?") else r
-        } catch (_: Mal) {
-            Nodo.Err("#¿NOMBRE?")
+            if (lector.i != p.size) Nodo.Err(ERROR_VALOR) else r
+        } catch (m: Mal) {
+            Nodo.Err(m.error)
         }
     }
 
-    private class Mal : RuntimeException() {
+    private const val ERROR_VALOR = "#¡VALOR!"
+
+    /** Más paréntesis, signos o funciones unos dentro de otros que esto: `#¡VALOR!` (y la pila, a salvo). */
+    private const val ANIDADO_MAXIMO = 64
+
+    private class Mal(val error: String = ERROR_VALOR) : RuntimeException() {
         override fun fillInStackTrace(): Throwable = this
     }
 
     private class Lector(val p: List<PiezaDeFormula>) {
         var i = 0
+        var hondo = 0
+
+        fun entra() { if (++hondo > ANIDADO_MAXIMO) throw Mal() }
         fun ver(): PiezaDeFormula? = p.getOrNull(i)
         fun esOp(vararg ops: String): String? {
             val x = ver() ?: return null
@@ -317,7 +344,9 @@ object CalculoLexico {
             val op = esOp("+", "-")
             if (op != null) {
                 i++
+                entra()
                 val x = signo()
+                hondo--
                 return if (op == "-") Nodo.Menos(x) else x
             }
             return porCiento()
@@ -335,6 +364,12 @@ object CalculoLexico {
                 PiezaDeFormula.NUM -> { i++; return Nodo.Num(x.numero) }
                 PiezaDeFormula.TXT -> { i++; return Nodo.Txt(x.texto) }
                 PiezaDeFormula.ERR -> { i++; return Nodo.Err(x.texto) }
+                PiezaDeFormula.MALA_REF -> {
+                    // `A0` es `#¡REF!`, y `A0:A5` también (se traga el otro extremo).
+                    i++
+                    if (ver()?.tipo == PiezaDeFormula.DOS_PUNTOS) i += 2
+                    return Nodo.Err(ERROR_REF)
+                }
                 PiezaDeFormula.COLUMNAS -> {
                     i++
                     return Nodo.Rango(0, minOf(x.col, x.col2), Celdas.MAX_FILAS - 1, maxOf(x.col, x.col2), columnas = true)
@@ -351,7 +386,9 @@ object CalculoLexico {
                                 maxOf(x.fila, otra.fila), maxOf(x.col, otra.col)
                             )
                         }
-                        throw Mal()
+                        if (otra != null && otra.tipo == PiezaDeFormula.MALA_REF) { i += 2; return Nodo.Err(ERROR_REF) }
+                        // `A1:` o `A1:5`: la fórmula entera es `#¡REF!`.
+                        throw Mal(ERROR_REF)
                     }
                     return Nodo.Ref(x.fila, x.col)
                 }
@@ -361,30 +398,34 @@ object CalculoLexico {
                     val sig = ver()
                     if (sig != null && sig.tipo == PiezaDeFormula.ABRE) {
                         i++
+                        entra()
                         val args = ArrayList<Nodo>()
-                        if (ver()?.tipo == PiezaDeFormula.CIERRA) { i++; return Nodo.Funcion(nombre, args) }
+                        if (ver()?.tipo == PiezaDeFormula.CIERRA) { i++; hondo--; return Nodo.Funcion(nombre, args) }
+                        // **Sin argumentos vacíos**: `SI(A1;;2)` y `SUMA(1;)` son error, como en el PC.
                         while (true) {
-                            val a = ver() ?: throw Mal()
-                            if (a.tipo == PiezaDeFormula.SEP || a.tipo == PiezaDeFormula.CIERRA) args += Nodo.Hueco
-                            else args += comparacion()
+                            args += comparacion()
                             val s = ver() ?: throw Mal()
                             if (s.tipo == PiezaDeFormula.SEP) { i++; continue }
                             if (s.tipo == PiezaDeFormula.CIERRA) { i++; break }
                             throw Mal()
                         }
+                        hondo--
                         return Nodo.Funcion(nombre, args)
                     }
+                    // Un nombre sin paréntesis (`=hola`, `=SUMA`) no es nada: `#¡VALOR!`.
                     return when (nombre) {
                         "VERDADERO", "TRUE" -> Nodo.Log(true)
                         "FALSO", "FALSE" -> Nodo.Log(false)
-                        else -> Nodo.Err("#¿NOMBRE?")
+                        else -> throw Mal()
                     }
                 }
                 PiezaDeFormula.ABRE -> {
                     i++
+                    entra()
                     val dentro = comparacion()
                     if (ver()?.tipo != PiezaDeFormula.CIERRA) throw Mal()
                     i++
+                    hondo--
                     return dentro
                 }
                 else -> throw Mal()

@@ -273,6 +273,8 @@ object ExportarHtml {
             // no tiene botón tampoco entre por el teclado.
             append(" data-herramientas=\"").append(opciones.herramientas().joinToString(" ")).append('"')
             if (hayTabla && !opciones.editarTablas) append(" data-tabla-editable=\"0\"")
+            // El símbolo del formato «moneda» de las celdas, el del aparato que la exportó.
+            if (hayTabla) append(" data-moneda=\"").append(escapar(TablaViva.moneda)).append('"')
             if (oscuro) append(" class=\"oscuro\"")
             append(">\n")
             // **El índice, a la vista y con enlaces** (lo pidió el usuario el 13-sep-2026): cada

@@ -42,15 +42,21 @@ class MensajesStore(private val context: Context) {
         /**
          * **Qué chats cambiaron de tareas** entre [antes] y [despues] (11-oct-2026, tareas al
          * instante): una lista marcada, añadida, corregida o quitada. Lo demás del chat no cuenta.
+         *
+         * **Y las tablas del chat** (13-oct-2026, «que permita la sincronización rápida»): la
+         * mini-app `tabla` y las hojas editadas de un Excel, que son mensajes. Ver [TablasDelChat].
          */
         fun chatsConTareasCambiadas(antes: List<Mensaje>, despues: List<Mensaje>): Set<String> {
-            fun tareas(l: List<Mensaje>) = l.filter(com.forge.pixpin.mini.TodasLasTareas::esLista).associateBy { it.id }
+            fun tareas(l: List<Mensaje>) = l.filter(::alInstante).associateBy { it.id }
             val a = tareas(antes)
             val d = tareas(despues)
             return (a.keys + d.keys)
                 .filter { a[it]?.texto != d[it]?.texto || a[it]?.proyecto != d[it]?.proyecto }
                 .flatMapTo(HashSet()) { k -> listOfNotNull(a[k], d[k]).map(com.forge.pixpin.sincro.Disco::chatDe) }
         }
+
+        /** Lo que sale a los demás aparatos en cuanto cambia: las listas de tareas y las tablas del chat. */
+        fun alInstante(m: Mensaje): Boolean = com.forge.pixpin.mini.TodasLasTareas.esLista(m) || TablasDelChat.esTabla(m)
 
         /** El mismo que usa la sincronización para escribir el chat: no pueden cruzarse. */
         private val CERROJO = com.forge.pixpin.sincro.Cerrojos.chat
@@ -136,7 +142,7 @@ class MensajesStore(private val context: Context) {
             synchronized(CERROJO) { archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n") }
         }.isSuccess
         // Una lista de tareas nueva sale ya a los demás aparatos (tareas al instante).
-        if (escrito && com.forge.pixpin.mini.TodasLasTareas.esLista(apuntado)) {
+        if (escrito && alInstante(apuntado)) {
             com.forge.pixpin.sincro.SincronizacionAutomatica.avisarTareas(setOf(com.forge.pixpin.sincro.Disco.chatDe(apuntado)))
         }
         if (lienzoDeFuera && app != null && destino != null) {

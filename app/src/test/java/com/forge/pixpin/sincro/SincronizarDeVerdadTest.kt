@@ -256,6 +256,39 @@ class SincronizarDeVerdadTest {
         conectado(telefono, tableta) { s -> assertTrue(s.preparar(Disco.GENERAL).pasos.isEmpty()) }
     }
 
+    /**
+     * **La hoja de un Excel editada viaja como mensaje `tabla`** (13-oct-2026, como el PC): con su
+     * referencia `libro-<mensaje>-<hoja>` y el JSON de la tabla en el texto; cambiada en los dos
+     * aparatos en celdas distintas, se junta celda a celda, y el formato del PC no se pierde.
+     */
+    @Test
+    fun `una hoja de un Excel editada en los dos se junta celda a celda`() {
+        emparejar()
+        fun hoja(d: Disco, texto: String) {
+            val letra = d.identidad.leer().yo.letra
+            val m = Mensaje(id = "h0", cuando = reloj++, clase = Clase.MINIAPP, miniapp = "tabla", nombre = "Cuentas · Gastos",
+                texto = texto, referencia = "libro-xl-0", numero = 1, letra = letra)
+            File(d.filesDir, "guardados.jsonl").appendText(Disco.JSON.encodeToString(Mensaje.serializer(), m) + "\n")
+        }
+        hoja(telefono, """{"nombre":"Cuentas · Gastos","celdas":{"A1":"1","B1":"2"},"estilos":{"A1":{"k":true,"nf":"moneda"}},"tocado":10}""")
+        sincronizar()
+        assertEquals("libro-xl-0", tableta.leerMensajes().single().referencia)
+        editar(telefono, "h0") { it.copy(texto = """{"nombre":"Cuentas · Gastos","celdas":{"A1":"10","B1":"2"},"estilos":{"A1":{"k":true,"nf":"moneda"}},"tocado":20}""") }
+        editar(tableta, "h0") { it.copy(texto = """{"nombre":"Cuentas · Gastos","celdas":{"A1":"1","B1":"2","C1":"=A1+B1"},"estilos":{"A1":{"k":true,"nf":"moneda"}},"tocado":30}""") }
+        assertEquals(1, sincronizar().fusionados)
+        for (d in listOf(telefono, tableta)) {
+            val t = com.forge.pixpin.motor.TablaDeCalculo.deJson(d.leerMensajes().single().texto)!!
+            assertEquals(mapOf("A1" to "10", "B1" to "2", "C1" to "=A1+B1"), t.celdas)
+            assertEquals(com.forge.pixpin.motor.EstiloDeCelda(k = true, nf = "moneda"), t.estilos["A1"])
+        }
+        // Caso negativo: la misma celda cambiada en los dos se la lleva la tabla tocada más tarde.
+        editar(telefono, "h0") { it.copy(texto = it.texto.replace("\"B1\":\"2\"", "\"B1\":\"móvil\"").replace("\"tocado\":30", "\"tocado\":40")) }
+        editar(tableta, "h0") { it.copy(texto = it.texto.replace("\"B1\":\"2\"", "\"B1\":\"otro\"").replace("\"tocado\":30", "\"tocado\":50")) }
+        sincronizar()
+        assertEquals("otro", com.forge.pixpin.motor.TablaDeCalculo.deJson(telefono.leerMensajes().single().texto)!!.celdas["B1"])
+        assertEquals(telefono.leerMensajes().single().texto, tableta.leerMensajes().single().texto)
+    }
+
     @Test
     fun `lo borrado en un lado y sin tocar en el otro se borra en los dos y no resucita`() {
         emparejar()

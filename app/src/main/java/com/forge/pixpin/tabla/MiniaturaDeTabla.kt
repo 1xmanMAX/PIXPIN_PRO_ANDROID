@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.forge.pixpin.motor.TablaDeCalculo
 import com.forge.pixpin.motor.TablaViva
 import com.forge.pixpin.motor.TablasEnDisco
 import kotlinx.coroutines.Dispatchers
@@ -31,16 +32,30 @@ import kotlinx.coroutines.withContext
 fun MiniaturaDeTabla(id: String, grande: Boolean = false, modifier: Modifier = Modifier.fillMaxSize()) {
     val contexto = LocalContext.current
     val revision = TablaActivity.revision(id)
+    MiniaturaDe(id to revision, grande, modifier) { TablasEnDisco.de(contexto.filesDir).cargar(id) }
+}
+
+/**
+ * La de una **mini-app `tabla` del chat** (las del PC): la tabla es el [texto] del mensaje, y
+ * cambia cuando él cambia.
+ */
+@Composable
+fun MiniaturaDeTablaEnTexto(texto: String, grande: Boolean = false, modifier: Modifier = Modifier.fillMaxSize()) {
+    MiniaturaDe(texto, grande, modifier) { TablaDeCalculo.deJson(texto) }
+}
+
+@Composable
+private fun MiniaturaDe(clave: Any, grande: Boolean, modifier: Modifier, cargar: () -> TablaDeCalculo?) {
     val filas = if (grande) 18 else 9
     val cols = if (grande) 6 else 4
-    val celdas by produceState<List<List<Pair<String, Char>>>?>(null, id, revision, grande) {
+    val celdas by produceState<List<List<Pair<String, Char>>>?>(null, clave, grande) {
         value = withContext(Dispatchers.IO) {
-            val t = TablasEnDisco.de(contexto.filesDir).cargar(id) ?: return@withContext emptyList()
+            val t = cargar() ?: return@withContext emptyList()
             val v = TablaViva(t)
             (0 until minOf(maxOf(v.calc.filas, 1), filas)).map { f ->
                 (0 until minOf(maxOf(v.calc.cols, 1), cols)).map { c ->
-                    val s = v.calc.texto(f, c)
-                    s to (if (s.isEmpty()) 'i' else v.calc.alineacion(f, c))
+                    val s = v.visto(f, c)
+                    s to (if (s.isEmpty()) 'i' else v.estilo(f, c)?.a?.firstOrNull() ?: v.calc.alineacion(f, c))
                 }
             }
         }
@@ -65,7 +80,11 @@ fun MiniaturaDeTabla(id: String, grande: Boolean = false, modifier: Modifier = M
             if (s.isEmpty()) continue
             val x0 = c * ancho
             val m = pintura.measureText(s)
-            val x = if (al == 'd' && m < ancho - 6f) x0 + ancho - 3f - m else x0 + 3f
+            val x = when {
+                al == 'd' && m < ancho - 6f -> x0 + ancho - 3f - m
+                al == 'c' && m < ancho - 6f -> x0 + (ancho - m) / 2
+                else -> x0 + 3f
+            }
             lienzo.save()
             lienzo.clipRect(x0 + 1f, f * alto, x0 + ancho - 1f, (f + 1) * alto)
             lienzo.drawText(s, x, f * alto + alto / 2 - medio, pintura)

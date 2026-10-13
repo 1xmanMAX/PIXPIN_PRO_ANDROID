@@ -77,6 +77,14 @@ class PixPinApp : Application() {
         if (nombreDelProceso().endsWith(com.forge.pixpin.pdf.PdfSqueezeService.PROCESO)) return
         // Lo mismo el de los planos DWG/DXF: solo lee planos. Ver [com.forge.pixpin.planos.LectorDePlanos].
         if (nombreDelProceso().endsWith(com.forge.pixpin.planos.LectorDePlanos.PROCESO)) return
+        // **Las tablas que son mensajes del chat** (mini-app `tabla` y hojas editadas de un Excel):
+        // quien carga o guarda una tabla por su id pasa por el chat sin saberlo. Ver [com.forge.pixpin.guardados.TablasDelChat].
+        com.forge.pixpin.motor.TablasEnDisco.enMensajes = com.forge.pixpin.guardados.TablasDelChat(this)
+        // El símbolo del formato «moneda» de las celdas: el del aparato, como el PC usa el de Windows.
+        runCatching {
+            val l = java.util.Locale.getDefault()
+            java.util.Currency.getInstance(l).getSymbol(l).trim().takeIf { it.isNotEmpty() && it.length <= 4 }
+        }.getOrNull()?.let { com.forge.pixpin.motor.TablaViva.moneda = it }
         com.forge.pixpin.pdf.ComprimirPdf.despues = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.encolar(this, archivo, nivel) }
         // Un PDF aligerado después de entrar: el chat tiene que decir lo que pesa ahora.
         androidx.core.content.ContextCompat.registerReceiver(
