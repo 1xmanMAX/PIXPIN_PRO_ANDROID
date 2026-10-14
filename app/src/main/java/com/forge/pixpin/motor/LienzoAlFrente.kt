@@ -11,6 +11,16 @@ interface RecibeImagenes {
 }
 
 /**
+ * **Lo que sabe meter figuras ya hechas en lo que se está mirando**: el asistente, que dibuja en el
+ * lienzo abierto (como en el PC, «hay un lienzo abierto → ahí, centrado en la vista»). Llamar en el
+ * hilo de la interfaz. Lo mete **en un solo paso de deshacer**, centrado en lo que se ve, y
+ * devuelve el id del dibujo; null si no se pudo (un lienzo que solo se mira).
+ */
+interface RecibeElementos {
+    fun recibirElementos(elementos: List<Element>): String?
+}
+
+/**
  * **Quién se puso delante el último**, entre el lienzo ([LienzoAlFrente]) y el chat
  * (`guardados/ChatAlFrente`). Con la pantalla partida pueden estar los dos a la vista: manda el
  * del `onResume` más reciente.

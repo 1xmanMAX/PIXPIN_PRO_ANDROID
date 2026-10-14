@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Hearing
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -254,6 +255,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * habías pasado.
      */
     private var vineDeLaGeneral by mutableStateOf(false)
+
+    /**
+     * **El chat «Asistente»** (14-oct-2026), si ya existe: el proyecto que lo es. En él contesta a
+     * todo; en los demás, solo a `@asistente`. Ver [com.forge.pixpin.asistente.ChatDelAsistente].
+     */
+    private var chatDelAsistente by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -453,6 +460,19 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             proyectosDeLaApp
                 ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList<com.forge.pixpin.motor.Proyecto>()) }
         ).collectAsState()
+        val idDelAsistente = remember(proyectos, mensajes) {
+            com.forge.pixpin.asistente.ChatDelAsistente.buscar(proyectos, mensajes)?.id
+        }
+        LaunchedEffect(idDelAsistente) { chatDelAsistente = idDelAsistente }
+        // Al entrar en el chat «Asistente» se carga el modelo, para que la primera respuesta no espere.
+        val enElDelAsistente = chatDe != null && chatDe == idDelAsistente
+        LaunchedEffect(enElDelAsistente) {
+            if (!enElDelAsistente) return@LaunchedEffect
+            val ajuste = withContext(Dispatchers.IO) {
+                runCatching { (application as? PixPinApp)?.settings?.settings?.first()?.asistenteModelo }.getOrNull()
+            }
+            com.forge.pixpin.asistente.Asistente.precalentar(this@MensajesActivity, com.forge.pixpin.asistente.Asistente.modelo(this@MensajesActivity, ajuste))
+        }
 
         // **Con `rememberSaveable` para que el giro no se lo lleve.** Girar el móvil
         // recreaba la pantalla entera: volvías a «Todo», sin búsqueda y con lo escrito a
@@ -808,6 +828,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             }
                         }
                     }
+                    if (chatDe != null && chatDe == chatDelAsistente) {
+                        com.forge.pixpin.asistente.TarjetaDelAsistente(
+                            Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 6.dp)
+                        )
+                    }
                     BarraDeEscribir(
                     escrito = escrito,
                     grabando = grabando,
@@ -830,22 +855,31 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     onMandar = {
                         if (escrito.isNotBlank()) {
                             val id = UUID.randomUUID().toString()
-                            almacen.anadir(
-                                Mensaje(
-                                    id = id,
-                                    cuando = System.currentTimeMillis(),
-                                    clase = Clase.NOTA,
-                                    texto = escrito.trim(),
-                                    respondeA = respondiendo?.id,
-                                    proyecto = chatDe
-                                )
+                            val nota = Mensaje(
+                                id = id,
+                                cuando = System.currentTimeMillis(),
+                                clase = Clase.NOTA,
+                                texto = escrito.trim(),
+                                respondeA = respondiendo?.id,
+                                proyecto = chatDe
                             )
+                            almacen.anadir(nota)
+                            // **El asistente contesta** en su chat a todo, y en los demás a `@asistente`.
+                            if (com.forge.pixpin.asistente.ChatDelAsistente.leToca(nota, chatDelAsistente) &&
+                                !com.forge.pixpin.asistente.Asistente.preguntar(this@MensajesActivity, nota, chatDelAsistente)
+                            ) {
+                                android.widget.Toast.makeText(this@MensajesActivity, "El asistente está contestando otra cosa", android.widget.Toast.LENGTH_SHORT).show()
+                            }
                             escrito = ""
                             respondiendo = null
                             loMandado = id
                             refrescar()
                         }
-                    }
+                    },
+                    // Mientras contesta en este chat, el botón de mandar es «Parar».
+                    parar = if (com.forge.pixpin.asistente.Asistente.contestandoEn(chatDe)) {
+                        { com.forge.pixpin.asistente.Asistente.parar() }
+                    } else null
                     )
                 }
             }
@@ -2147,12 +2181,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // **La lista de conversaciones, como la de Telegram**: cada una con su último
             // mensaje y su hora, ordenadas por lo más reciente, y la general arriba por
             // ser el nexo. Se calcula en una sola pasada sobre todos los mensajes —ver
-            // [conversaciones]— y no filtrando la lista una vez por proyecto.
-            val charlas = remember(mensajes, proyectos) {
+            // [conversaciones]— y no filtrando la lista una vez por proyecto. El chat
+            // «Asistente», fijo detrás de la general (se crea al tocarlo si aún no hay).
+            val charlas = remember(mensajes, proyectos, chatDelAsistente) {
                 conversaciones(
                     mensajes,
                     proyectos.associate { it.id to it.nombre },
-                    getString(com.forge.pixpin.R.string.guardados_titulo)
+                    getString(com.forge.pixpin.R.string.guardados_titulo),
+                    chatDelAsistente ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
                 )
             }
             androidx.compose.material3.ModalBottomSheet(
@@ -2169,7 +2205,16 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     // lanzar otra pantalla: es la misma, y volver a
                                     // lanzarla sobre sí misma no deja nada en la pila a
                                     // donde volver. Así atrás devuelve a la general.
-                                    if (charla.proyecto != null) {
+                                    if (charla.proyecto == com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) {
+                                        // El chat «Asistente» aún no existe: se crea (fuera de la pantalla) y se entra.
+                                        lifecycleScope.launch {
+                                            val p = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.asegurarChat(this@MensajesActivity) }
+                                            chatDe = p.id
+                                            nombreDelChat = p.nombre
+                                            vineDeLaGeneral = true
+                                            refrescar()
+                                        }
+                                    } else if (charla.proyecto != null) {
                                         chatDe = charla.proyecto
                                         nombreDelChat = charla.nombre
                                         vineDeLaGeneral = true
@@ -2666,6 +2711,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // Dónde empieza esta burbuja en la ventana. Lo apunta `onGloballyPositioned` y lo
         // usa el arrastre para traducir «tanto he bajado el dedo» a «por aquí voy».
         var arribaEnLaVentana by remember(m.id) { mutableStateOf(0f) }
+        // **La respuesta del asistente, en vivo**: solo la burbuja de esa respuesta se entera de cada
+        // trozo (las demás leen un null que no cambia y no se repintan).
+        val enVivo by remember(m.id) {
+            androidx.compose.runtime.derivedStateOf {
+                com.forge.pixpin.asistente.Asistente.enVivo?.takeIf { it.respuesta == m.id }?.visible
+            }
+        }
 
         // **Deslizar la burbuja para comentarla**, copiado de Telegram y comprobado
         // contra su código (`ChatActivity.java:4963-5000` de DrKLO/Telegram).
@@ -3009,7 +3061,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             alcance.launch { corrimiento.snapTo(nuevo) }
                         }
                     },
-                horizontalArrangement = Arrangement.Start,
+                // En el chat «Asistente», lo del usuario a la derecha y lo del asistente a la izquierda.
+                horizontalArrangement = if (chatDe != null && chatDe == chatDelAsistente &&
+                    !com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) Arrangement.End else Arrangement.Start,
                 verticalAlignment = Alignment.Bottom
             ) {
             // **El marcador para guardarlo, al lado y fuera de la burbuja.**
@@ -3375,7 +3429,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // —la tabla de los gastos con sus barras y sus guiones—, que es
                     // exactamente lo que la mini-app existe para no tener que leer.
                     val alPie = when (m.clase) {
-                        Clase.NOTA -> m.texto
+                        Clase.NOTA -> enVivo ?: m.texto
                         Clase.MINIAPP -> null
                         else -> m.texto.takeIf { it.isNotBlank() }
                     }
@@ -3389,6 +3443,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         val enlace = remember(m.texto) { primerEnlace(m.texto) }
                         enlace?.let { TarjetaDeEnlace(it) }
                     }
+                    // Lo que dibujó el asistente: su miniatura y «Abrir lienzo» (§4.5 del manual).
+                    if (m.clase == Clase.NOTA && m.lienzoIa != null && enVivo == null) LienzoDeLaRespuesta(m, recarga)
                     val medidor = androidx.compose.ui.text.rememberTextMeasurer()
                     val estiloDeLaHora = androidx.compose.ui.text.TextStyle(fontSize = TAMANO_DE_LA_HORA)
                     val hora = horaDe(m.cuando)
@@ -4092,6 +4148,28 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * solo cuando el archivo cambia, igual que la foto anotada de [Miniatura]. Un lienzo recién
      * creado aún no tiene archivo: hasta que se dibuje algo, solo se ve su fila.
      */
+    /**
+     * **El lienzo de una respuesta del asistente** ([Mensaje.lienzoIa]): la miniatura de lo dibujado
+     * y el botón para abrirlo. Si el lienzo aún no está en este aparato (llegará al sincronizar), nada.
+     */
+    @Composable
+    private fun LienzoDeLaRespuesta(m: Mensaje, recarga: Int) {
+        val dibujo = m.lienzoIa ?: return
+        val ruta = remember(dibujo) { com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo) }
+        val esta = remember(ruta, recarga, com.forge.pixpin.motor.ExcalidrawStore.revisionDe(dibujo)) { File(ruta).isFile }
+        if (!esta) return
+        Column(Modifier.padding(top = 4.dp, bottom = 2.dp)) {
+            MiniaturaDeDibujo(m.copy(referencia = dibujo, nombre = com.forge.pixpin.asistente.ChatDelAsistente.NOMBRE_DEL_LIENZO), recarga)
+            androidx.compose.material3.TextButton(
+                onClick = { com.forge.pixpin.motor.DrawEditorActivity.abrir(this@MensajesActivity, dibujo, ruta, null) },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+            ) {
+                Icon(Icons.Filled.Draw, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text("Abrir lienzo", fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
+            }
+        }
+    }
+
     @Composable
     private fun MiniaturaDeDibujo(m: Mensaje, recarga: Int) {
         val dibujo = m.referencia ?: return
@@ -5171,7 +5249,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         onAdjuntar: () -> Unit,
         onEmpezarVoz: () -> Boolean,
         onSoltarVoz: (guardar: Boolean) -> Unit,
-        onMandar: () -> Unit
+        onMandar: () -> Unit,
+        /** Con el asistente contestando en este chat: el botón de mandar lo para. */
+        parar: (() -> Unit)? = null
     ) {
         val hayTexto = escrito.isNotBlank()
         // **Grabar es mantener pulsado, no dos toques.**
@@ -5388,6 +5468,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     Modifier.size(FILA_DE_LA_BARRA + 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    if (parar != null) {
+                        IconButton(onClick = parar) {
+                            Icon(Icons.Filled.Stop, contentDescription = "Parar", tint = MaterialTheme.colorScheme.error)
+                        }
+                        return@Box
+                    }
                     androidx.compose.animation.AnimatedVisibility(
                         visible = hayTexto,
                         enter = androidx.compose.animation.scaleIn(

@@ -47,7 +47,13 @@ data class Conversacion(
 fun conversaciones(
     mensajes: List<Mensaje>,
     nombres: Map<String, String>,
-    nombreDeLaGeneral: String
+    nombreDeLaGeneral: String,
+    /**
+     * **El chat «Asistente»** (14-oct-2026): va fijo detrás de la general, como en el PC. Su id si
+     * ya existe; [com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR] para enseñarlo aunque aún
+     * no exista (se crea al tocarlo); null para no enseñarlo.
+     */
+    asistente: String? = null
 ): List<Conversacion> {
     val ultimos = HashMap<String?, Mensaje>()
     val cuentas = HashMap<String?, Int>()
@@ -83,5 +89,11 @@ fun conversaciones(
         )
     }.sortedWith(compareByDescending<Conversacion> { it.cuando }.thenBy { it.nombre })
 
-    return listOf(general) + delResto
+    val delAsistente = when (asistente) {
+        null -> null
+        com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR ->
+            Conversacion(asistente, com.forge.pixpin.asistente.ChatDelAsistente.NOMBRE, null, 0)
+        else -> delResto.firstOrNull { it.proyecto == asistente }
+    }
+    return listOf(general) + listOfNotNull(delAsistente) + delResto.filter { it !== delAsistente }
 }

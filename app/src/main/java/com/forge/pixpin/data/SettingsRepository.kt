@@ -189,6 +189,13 @@ data class Settings(
     val modeloWhisper: String = "tiny",
 
     /**
+     * **Qué modelo usa el asistente local** (`[asistente] modelo` del PC): `qwen3.5-2b`,
+     * `qwen3.5-0.8b` o vacío = el que toca por la RAM del teléfono (0.8B con menos de 8 GB). Ver
+     * [com.forge.pixpin.ia.Modelos.elegido]. Es de cada aparato y no viaja.
+     */
+    val asistenteModelo: String = "",
+
+    /**
      * **Qué hace Whisper con dos idiomas mezclados**: [MODO_CADA_IDIOMA], cada trozo en el
      * idioma en que se dijo, o [MODO_TODO_EN_UNO], todo en el primer idioma, traducido.
      * Whisper, con un idioma forzado, traduce a ese idioma lo que oye en otro; el usuario
@@ -434,6 +441,7 @@ class SettingsRepository(private val context: Context) {
         val IDIOMA_DE_VOZ = stringPreferencesKey("idioma_de_voz")
         val SEGUNDO_IDIOMA_DE_VOZ = stringPreferencesKey("segundo_idioma_de_voz")
         val MODELO_WHISPER = stringPreferencesKey("modelo_whisper")
+        val ASISTENTE_MODELO = stringPreferencesKey("asistente_modelo")
         val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
         val SERVICIO_DE_ENLACE = stringPreferencesKey("servicio_de_enlace")
         val FONDO_DEL_CHAT = stringPreferencesKey("fondo_del_chat")
@@ -475,6 +483,7 @@ class SettingsRepository(private val context: Context) {
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
             modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
+            asistenteModelo = prefs[Keys.ASISTENTE_MODELO] ?: "",
             modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
             servicioDeEnlace = prefs[Keys.SERVICIO_DE_ENLACE] ?: "",
             fondoDelChat = prefs[Keys.FONDO_DEL_CHAT] ?: "",
@@ -668,6 +677,11 @@ class SettingsRepository(private val context: Context) {
     /** «tiny», «base» o «small». Ver [Settings.modeloWhisper]. */
     suspend fun setModeloWhisper(valor: String) {
         context.dataStore.edit { it[Keys.MODELO_WHISPER] = valor }
+    }
+
+    /** El modelo del asistente; vacío vuelve al que toca por la RAM. Ver [Settings.asistenteModelo]. */
+    suspend fun setAsistenteModelo(valor: String) {
+        context.dataStore.edit { if (valor.isBlank()) it.remove(Keys.ASISTENTE_MODELO) else it[Keys.ASISTENTE_MODELO] = valor }
     }
 
     /** [MODO_CADA_IDIOMA] o [MODO_TODO_EN_UNO]. Ver [Settings.modoDeIdiomas]. */

@@ -1,5 +1,8 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.forge.pixpin.guardados
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 
 /**
@@ -303,7 +306,25 @@ data class Mensaje(
      * encontrarlo después sino que te lo pongan delante a una hora. Lo pidió el usuario
      * (7-sep-2026).
      */
-    val recuerdaEn: Long? = null
+    val recuerdaEn: Long? = null,
+
+    /**
+     * **El lienzo donde dibujó el asistente**, en una respuesta suya (`aparato = "IA"`): la
+     * `referencia` del lienzo, de donde sale la tarjeta «Abrir lienzo». Es el campo que pone el PC
+     * en el `resto` de su mensaje (`docs/manual-asistente-android.md` §3.1): **hay que conservarlo**,
+     * o al reescribir la nota aquí (fijarla, reaccionar) se perdería, la fusión lo tomaría por un
+     * borrado y el PC también lo perdería. No se escribe si no hay.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val lienzoIa: String? = null,
+
+    /**
+     * **Las fuentes que citó el asistente** al contestar sobre los documentos (en el PC,
+     * `[{n, titulo, proyecto, pedido}]`). El teléfono aún no las crea, pero las **conserva tal
+     * cual** por lo mismo que [lienzoIa].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val fuentesIa: kotlinx.serialization.json.JsonArray? = null
 )
 
 /** El lienzo del que salió una zona: qué dice el vínculo y cómo volver a él. */

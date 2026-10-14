@@ -176,7 +176,7 @@ import kotlinx.coroutines.withContext
  * herramientas y un panel de estilos no caben en una ventana pequeña. El pin
  * sigue enseñando el resultado y sirve para copiarlo.
  */
-class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
+class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos {
 
     companion object {
         /** Lo que se guarda al pasar de un lienzo a otro: vive más que la pantalla. */
@@ -5242,6 +5242,24 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
      */
     /** Sube cada vez que entra algo sin gesto de por medio. Ver [recibirImagen]. */
     private val llegoDeFuera = androidx.compose.runtime.mutableIntStateOf(0)
+
+    /**
+     * **Lo que dibuja el asistente, aquí** (14-oct-2026): centrado en lo que se ve y en un solo paso
+     * de deshacer ([DrawController.insertar]), como `al_lienzo.rs` del PC con un lienzo abierto.
+     */
+    override fun recibirElementos(elementos: List<Element>): String? = runCatching {
+        if (controller.soloMirar || elementos.isEmpty()) return null
+        val v = controller.scene.viewport
+        val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: resources.displayMetrics.widthPixels.toDouble()
+        val alto = medidaDelLienzo.height.takeIf { it > 0 }?.toDouble() ?: resources.displayMetrics.heightPixels.toDouble()
+        val centro = v.toScene(ancho / 2, alto / 2)
+        val caja = getCommonBounds(elementos)
+        val dx = centro.x - caja.midX
+        val dy = centro.y - caja.midY
+        controller.insertar(elementos.map { it.copy(x = it.x + dx, y = it.y + dy) })
+        llegoDeFuera.intValue++   // repinta y guarda, como una foto que llega del PC
+        dibujoId
+    }.getOrNull()
 
     override fun recibirImagen(archivo: File, mime: String): Boolean = runCatching {
         val file = ExcalidrawStore.guardarImagen(this, archivo, mime) ?: return false

@@ -251,6 +251,11 @@ class ServidorLlama(val config: Config) : Motor {
                 ficheroDeClave.delete()
                 throw ErrorIa.Arranque(e.message ?: "no se pudo lanzar")
             }
+            // **Que el sistema lo mate antes que a la app** si falta memoria: el hijo hereda la
+            // prioridad de la app en primer plano y nadie se la baja después. Como un servicio
+            // (500): bajo presión se va el modelo —el chat dice que dejó de responder— y no PixPin.
+            // Se puede subir el propio número, no bajarlo; si el sistema no deja, se queda como está.
+            pidDe(proceso)?.let { pid -> runCatching { File("/proc/$pid/oom_score_adj").writeText("500") } }
             try {
                 while (true) {
                     if (!proceso.isAlive) throw ErrorIa.Arranque("el motor se cerro (${proceso.exitValue()})${colaDelRegistro(registro)}")

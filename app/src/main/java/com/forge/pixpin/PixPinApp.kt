@@ -172,4 +172,16 @@ class PixPinApp : Application() {
                 }
         }
     }
+
+    /**
+     * **El asistente suelta su memoria** (1-3 GB en su proceso aparte) cuando la app deja de verse
+     * o el sistema la pide, si no está contestando: un teléfono no es un PC, y quien se va a otra
+     * app no quiere que esa memoria siga ocupada cinco minutos. Vuelve a cargarse sola al preguntar.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            com.forge.pixpin.asistente.Asistente.soltarSiNoContesta(this)
+        }
+    }
 }

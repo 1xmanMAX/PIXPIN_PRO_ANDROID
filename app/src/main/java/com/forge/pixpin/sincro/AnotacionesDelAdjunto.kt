@@ -299,7 +299,10 @@ object AnotacionesDelAdjunto {
         return uid
     }
 
-    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json")
+    // `.asistente.json`: lo que pensó el asistente del PC y su hoja de trabajo, uno por respuesta
+    // (`ASISTENTE` de `pixpin-sincro/src/anotado.rs`, 14-oct-2026). Viaja con su nota y se borra
+    // con ella, como los comentarios; el teléfono aún no lo escribe ni lo enseña.
+    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json")
 
     /**
      * **Lo anotado que hay en disco, por código de mensaje**, en rutas relativas a `files`. Para

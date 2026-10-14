@@ -58,6 +58,16 @@ android {
     // Antes de subirlo hay que pasarlo por `herramientas/apk-para-repartir.sh`, que lo vuelve
     // a firmar con apksigner y `--min-sdk-version 21`, que es lo único que la incluye.
 
+    // **Las bibliotecas nativas, extraídas al instalar** (14-oct-2026). El asistente lanza
+    // `libllamaserver.so` —llama.cpp, un ejecutable con nombre de biblioteca— con ProcessBuilder, y
+    // desde Android 10 solo se puede ejecutar lo que está en `nativeLibraryDir` (W^X): sin extraer,
+    // las .so se quedan dentro del APK y ese fichero no existe. Las demás (.so de JNI) se cargan
+    // igual extraídas; el APK sale además más pequeño (van comprimidas), a cambio de ocupar algo
+    // más una vez instalado. Ver ia/ServidorLlama.kt y herramientas/llama-android/compilar.sh.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     buildFeatures {
         compose = true
         // Para poder enseñar la versión dentro de la app. Si el número solo vive

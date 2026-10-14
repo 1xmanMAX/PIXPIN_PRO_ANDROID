@@ -59,9 +59,15 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
         }
     }
     val general = contexto.getString(R.string.guardados_titulo)
-    val charlas = remember(mensajes, proyectos) {
-        mensajes?.let { conversaciones(it, proyectos.filter { p -> !p.archivado }.associate { p -> p.id to p.nombre }, general) }
+    // El chat «Asistente», fijo detrás de la general; si aún no existe, se crea al tocarlo.
+    val delAsistente = remember(mensajes, proyectos) {
+        mensajes?.let { com.forge.pixpin.asistente.ChatDelAsistente.buscar(proyectos, it)?.id }
+            ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
     }
+    val charlas = remember(mensajes, proyectos) {
+        mensajes?.let { conversaciones(it, proyectos.filter { p -> !p.archivado }.associate { p -> p.id to p.nombre }, general, delAsistente) }
+    }
+    val alcance = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -70,7 +76,14 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
                 modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp)
             )
             LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
-                items(charlas.orEmpty(), key = { it.proyecto ?: "general" }) { c -> Fila(c) { abrir(contexto, c) } }
+                items(charlas.orEmpty(), key = { it.proyecto ?: "general" }) { c ->
+                    Fila(c, esDelAsistente = c.proyecto == delAsistente) {
+                        if (c.proyecto == com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) alcance.launch {
+                            val p = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.asegurarChat(contexto) }
+                            MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)
+                        } else abrir(contexto, c)
+                    }
+                }
             }
         }
         // El mismo botón, transformado: ahora lleva de vuelta a los proyectos.
@@ -89,7 +102,7 @@ private fun abrir(contexto: android.content.Context, c: Conversacion) {
 }
 
 @Composable
-private fun Fila(c: Conversacion, alTocar: () -> Unit) {
+private fun Fila(c: Conversacion, esDelAsistente: Boolean = false, alTocar: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = alTocar).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -98,6 +111,7 @@ private fun Fila(c: Conversacion, alTocar: () -> Unit) {
         val logo = com.forge.pixpin.guardados.logoDe(c.proyecto)
         Box(Modifier.size(50.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
             if (c.proyecto == null) Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta)
+            else if (esDelAsistente) Text("🤖", fontSize = 22.sp)
             else if (logo != null) androidx.compose.foundation.Image(
                 logo, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -111,7 +125,7 @@ private fun Fila(c: Conversacion, alTocar: () -> Unit) {
                 c.ultimo?.let { Text(hora(it.cuando), fontSize = 12.sp, color = Cristal.tinta.copy(alpha = 0.6f)) }
             }
             Text(
-                c.ultimo?.let { vistazo(it) } ?: "Sin mensajes",
+                c.ultimo?.let { vistazo(it) } ?: if (esDelAsistente) "Pregunta, pide un dibujo o una gráfica" else "Sin mensajes",
                 fontSize = 14.sp, color = Cristal.tinta.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }

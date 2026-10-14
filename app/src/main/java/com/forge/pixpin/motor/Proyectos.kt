@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.forge.pixpin.motor
 
 import kotlinx.serialization.Serializable
@@ -135,7 +137,14 @@ data class Proyecto(
      * cualquier guardado que llegue sin la hoja: un fallo que la pierda no es una decisión, y
      * tomarlo por borrado es justo lo que se llevó el lienzo el 15-sep.
      */
-    val quitadas: List<String> = emptyList()
+    val quitadas: List<String> = emptyList(),
+    /**
+     * **Es el chat «Asistente»** (como `asistente: true` en el `resto` de la ficha del PC,
+     * `almacen.rs::asegurar_asistente`). Se conserva tal cual llegue; nulo en todos los demás, y
+     * entonces no se escribe. Ver [com.forge.pixpin.ia.app.ChatDelAsistente].
+     */
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val asistente: Boolean? = null
 )
 
 /**
