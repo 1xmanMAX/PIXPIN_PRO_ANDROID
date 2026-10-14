@@ -516,7 +516,13 @@ class PintorOffice(private val imagen: (id: String, anchoPx: Int) -> Bitmap?) {
     }
 
     private fun foto(c: Contexto, e: Pxof.Imagen, escala: Float) {
-        val anchoPx = (e.ancho * escala).toInt().coerceIn(16, 4096)
+        // **A lo que de verdad mide en el destino** (14-oct-2026, «algunas imágenes se ven en mala
+        // calidad»): dentro de un grupo o un efecto el lienzo lleva su propio aumento, y pedir la
+        // imagen solo a la escala de la hoja la traía pequeña y la estiraba.
+        @Suppress("DEPRECATION") val m = c.canvas.matrix
+        val v = floatArrayOf(e.ancho, 0f).also { m.mapVectors(it) }
+        val enDestino = kotlin.math.hypot(v[0], v[1]) * (escala / c.escala.coerceAtLeast(1e-6f))
+        val anchoPx = maxOf(e.ancho * escala, enDestino).toInt().coerceIn(16, 4096)
         val b = imagen(e.id, anchoPx) ?: return
         val r = e.recorte
         val src = if (r == null) null else android.graphics.Rect(
@@ -525,7 +531,11 @@ class PintorOffice(private val imagen: (id: String, anchoPx: Int) -> Bitmap?) {
             ((1f - r[3]) * b.height).toInt().coerceAtLeast((r[1] * b.height).toInt() + 1)
         )
         foto.alpha = (e.opacidad.coerceIn(0f, 1f) * 255).toInt()
+        // **En modo noche, también las imágenes** (14-oct-2026, el usuario: «las imágenes no se
+        // invierten de color en modo noche»), con la misma matriz que un PDF en oscuro.
+        foto.colorFilter = if (c.oscuro) INVERTIDA else null
         c.canvas.drawBitmap(b, src, RectF(e.x, e.y, e.x + e.ancho, e.y + e.alto), foto)
+        foto.colorFilter = null
     }
 
     private fun texto(c: Contexto, t: Pxof.Texto) {
@@ -589,6 +599,9 @@ class PintorOffice(private val imagen: (id: String, anchoPx: Int) -> Bitmap?) {
     }
 
     private companion object {
+        /** La matriz del modo oscuro de los PDF, para las imágenes de una hoja en oscuro. */
+        private val INVERTIDA by lazy { ColorMatrixColorFilter(com.forge.pixpin.pdf.MATRIZ_INVERTIDA) }
+
         /** Cuántos [Pxof.Efectos] anidados se pintan con sus efectos (los de más adentro, sin ellos). */
         const val NIVELES_EFECTO = 3
         /** El mapa de bits de un efecto, como mucho (más grande, a menos resolución). */

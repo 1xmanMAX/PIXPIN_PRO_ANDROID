@@ -41,7 +41,7 @@ class DocumentoOffice private constructor(
     }
 
     /** Las imágenes ya decodificadas, con el ancho al que se decodificaron. */
-    private val imagenes = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+    private val imagenes = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val sinImagen = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
@@ -119,7 +119,7 @@ class DocumentoOffice private constructor(
     /** Una imagen del documento a ~[anchoPx] de ancho (sin pasar de 2048), o null si no se sabe decodificar (EMF, WMF). */
     fun imagen(id: String, anchoPx: Int): Bitmap? {
         if (id in sinImagen) return null
-        val quiero = anchoPx.coerceIn(16, 2048)
+        val quiero = anchoPx.coerceIn(16, 3072)
         imagenes.get(id)?.let { if (it.width >= quiero * 0.7f || it.width >= TOPE_IMAGEN) return it }
         val bytes = enHilo { if (cerrado) null else OfficeNativo.imagen(handle, id) } ?: run { sinImagen += id; return null }
         val medida = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -159,7 +159,7 @@ class DocumentoOffice private constructor(
     }
 
     companion object {
-        private const val TOPE_IMAGEN = 2048
+        private const val TOPE_IMAGEN = 3072
 
         /** Las extensiones que se maquetan aquí: las de `pixpin_office::tipo_de`. */
         private val DE_WORD = setOf("docx", "docm", "dotx", "dotm")

@@ -54,6 +54,11 @@ object DrawFonts {
             val recurso = when (id) {
                 ItemStyle.FONT_NUNITO -> R.font.nunito
                 ItemStyle.FONT_COMIC_SHANNS -> R.font.comic_shanns
+                ItemStyle.FONT_LILITA_ONE -> R.font.lilita_one
+                ItemStyle.FONT_WORK_SANS -> R.font.work_sans
+                ItemStyle.FONT_FRAUNCES -> R.font.fraunces
+                ItemStyle.FONT_COURIER_NEW -> R.font.liberation_mono
+                ItemStyle.FONT_CAVEAT -> R.font.caveat
                 else -> R.font.excalifont
             }
             runCatching { ResourcesCompat.getFont(context, recurso) }.getOrNull()
@@ -125,6 +130,11 @@ object DrawFonts {
     fun nombreDe(familia: Int): String = when (ItemStyle.fontFamilyResuelta(familia)) {
         ItemStyle.FONT_NUNITO -> "Normal"
         ItemStyle.FONT_COMIC_SHANNS -> "Código"
+        ItemStyle.FONT_LILITA_ONE -> "Lilita One"
+        ItemStyle.FONT_WORK_SANS -> "Normal (citas)"
+        ItemStyle.FONT_FRAUNCES -> "Serif"
+        ItemStyle.FONT_COURIER_NEW -> "Máquina"
+        ItemStyle.FONT_CAVEAT -> "Manuscrita"
         else -> "A mano"
     }
 }

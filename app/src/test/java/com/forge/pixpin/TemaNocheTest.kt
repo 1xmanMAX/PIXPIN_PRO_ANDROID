@@ -37,13 +37,13 @@ class TemaNocheTest {
     }
 
     @Test
-    fun `un color que no se lee cambia de claridad y sigue siendo de su tono`() {
+    fun `un color que no se lee sobre papel oscuro cambia de claridad y sigue siendo de su tono`() {
+        // Sobre papel claro, un color se queda como es (como en el PC, 14-oct-2026): el amarillo
+        // pintado en la PC tiene que llegar amarillo, no ocre.
         val amarillo = rgb(0xFF, 0xEB, 0x3B)
-        val sobreBlanco = DrawTheme.adaptar(amarillo, blanco)
-        assertNotEquals(amarillo, sobreBlanco)
-        assertTrue(seLee(sobreBlanco, blanco))
-        // Sigue siendo amarillento: más rojo y verde que azul.
-        assertTrue(((sobreBlanco shr 16) and 0xFF) > (sobreBlanco and 0xFF))
+        assertEquals(amarillo, DrawTheme.adaptar(amarillo, blanco))
+        // El gris sí se da la vuelta: el blanco sobre blanco no se vería.
+        assertTrue(DrawTheme.luminancia(DrawTheme.adaptar(blanco, blanco)) < 0.1)
 
         val marino = rgb(0x0D, 0x1B, 0x5E)
         val sobreNegro = DrawTheme.adaptar(marino, negro)

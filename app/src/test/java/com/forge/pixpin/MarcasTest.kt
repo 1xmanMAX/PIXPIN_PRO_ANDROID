@@ -67,4 +67,21 @@ class MarcasTest {
         assertEquals(0.0, Marcas.enLaPagina(0, -2.0).second, 1e-9)
         assertEquals(0.0, Marcas.enLaPagina(0, 0.5, fraccionAncho = -1.0).first, 1e-9)
     }
+
+    @Test
+    fun los_marcadores_del_word_pasan_a_hojas_y_vuelven_igual() {
+        // Los del Word como texto (los que viajan): una fracción del documento.
+        val delWord = com.forge.pixpin.motor.Lectura.deTexto("1:0.5:⭐|2:0.875:🔖")
+        val enHojas = Marcas.deFracciones(delWord, 4)
+        assertEquals(2.0, enHojas[0].y, 1e-6) // la mitad de 4 hojas: arriba de la tercera
+        assertEquals(3.5, enHojas[1].y, 1e-6)
+        // Sin mover nada, vuelve exactamente lo mismo.
+        val vuelta = Marcas.aFracciones(enHojas, 4, delWord)
+        assertEquals(com.forge.pixpin.motor.Lectura.aTexto(delWord), com.forge.pixpin.motor.Lectura.aTexto(vuelta))
+        // Uno movido a la segunda hoja, a media altura: 1,5 / 4.
+        val movidas = Marcas.movida(enHojas, 1L, 0.5, 1.5)
+        assertEquals(0.375f, Marcas.aFracciones(movidas, 4, delWord).first { it.id == 1L }.fraccion, 1e-6f)
+        // Caso negativo: la última fracción no se sale de la última hoja.
+        assertTrue(Marcas.deFracciones(com.forge.pixpin.motor.Lectura.deTexto("3:1.0:⭐"), 4)[0].y < 4.0)
+    }
 }

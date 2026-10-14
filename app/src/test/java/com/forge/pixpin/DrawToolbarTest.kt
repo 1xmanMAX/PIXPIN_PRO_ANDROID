@@ -98,7 +98,8 @@ class DrawToolbarTest {
         assertEquals(5, ItemStyle.FONT_EXCALIFONT)
         assertEquals(6, ItemStyle.FONT_NUNITO)
         assertEquals(8, ItemStyle.FONT_COMIC_SHANNS)
-        assertEquals(listOf(5, 6, 8), ItemStyle.FONT_FAMILIES)
+        // Las ocho del PC (`FUENTES` de `texto.rs`), en su orden: 7 es Lilita One y 101-104 las de citas.
+        assertEquals(listOf(5, 6, 7, 8, 101, 102, 103, 104), ItemStyle.FONT_FAMILIES)
     }
 
     /** Un dibujo viejo tiene que seguir viéndose con la letra que le tocaba. */
@@ -108,8 +109,10 @@ class DrawToolbarTest {
         assertEquals(ItemStyle.FONT_NUNITO, ItemStyle.fontFamilyResuelta(2))
         assertEquals(ItemStyle.FONT_COMIC_SHANNS, ItemStyle.fontFamilyResuelta(3))
         assertEquals(ItemStyle.FONT_EXCALIFONT, ItemStyle.fontFamilyResuelta(null))
-        // El 4 quedó libre y el 7 es una fuente que no traemos: a la de a mano.
+        // El 4 quedó libre: a la de a mano. El 7 (Lilita One) y las del PC se quedan con la suya.
         assertEquals(ItemStyle.FONT_EXCALIFONT, ItemStyle.fontFamilyResuelta(4))
-        assertEquals(ItemStyle.FONT_EXCALIFONT, ItemStyle.fontFamilyResuelta(7))
+        assertEquals(ItemStyle.FONT_LILITA_ONE, ItemStyle.fontFamilyResuelta(7))
+        assertEquals(ItemStyle.FONT_CAVEAT, ItemStyle.fontFamilyResuelta(104))
+        assertEquals(ItemStyle.FONT_EXCALIFONT, ItemStyle.fontFamilyResuelta(105))
     }
 }

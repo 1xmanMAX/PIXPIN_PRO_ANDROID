@@ -84,6 +84,11 @@ object DrawTheme {
         val gris = s < ES_GRIS
         // Hacia donde hay más contraste: oscurecer sobre papel claro, aclarar sobre oscuro.
         val oscurecer = contraste(0.0, lp) >= contraste(1.0, lp)
+        // **Sobre papel claro, un color se pinta tal cual** (14-oct-2026, el usuario: «pinté algo de
+        // amarillo en la PC y llegó al celular un amarillo oscuro»). El PC no adapta: el amarillo es
+        // amarillo, y un dibujo tiene que verse igual en los dos aparatos. Solo el gris se da la
+        // vuelta (el blanco sobre papel blanco no se vería en absoluto).
+        if (oscurecer && !gris) return argb
         fun con(claridad: Double): Int {
             val (r, g, b) = deHsl(h, if (gris) 0.0 else s, claridad.coerceIn(0.0, 1.0))
             return (a shl 24) or (redondear(r) shl 16) or (redondear(g) shl 8) or redondear(b)

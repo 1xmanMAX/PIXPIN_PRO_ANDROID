@@ -50,6 +50,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalDensity
 import com.forge.pixpin.motor.Lectura
 import androidx.compose.foundation.layout.padding
@@ -441,6 +444,19 @@ class LectorPdfActivity : ComponentActivity() {
             ))
         }
         var poniendoMarca by remember { mutableStateOf(false) }
+        // Un Word o un PowerPoint del chat: sus marcadores viajan en el archivo del documento (en
+        // fracciones), así que se leen en cuanto se sabe cuántas hojas tiene.
+        val marcasDeOffice = remember(rutaPedida) { capas.marcasDeOffice() }
+        var leidasDeOffice by remember(rutaPedida) { mutableStateOf<List<com.forge.pixpin.motor.Lectura.Marcador>?>(null) }
+        LaunchedEffect(marcasDeOffice, cuantas) {
+            val f = marcasDeOffice ?: return@LaunchedEffect
+            if (cuantas <= 0 || leidasDeOffice != null) return@LaunchedEffect
+            val leidas = withContext(Dispatchers.IO) { com.forge.pixpin.motor.Lectura.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(f)) }
+            leidasDeOffice = leidas
+            // Las que ya había solo en el teléfono (antes no viajaban) se juntan con las del archivo.
+            val propias = marcas.filter { m -> leidas.none { it.id == m.id } }
+            marcas = com.forge.pixpin.motor.Marcas.enOrden(com.forge.pixpin.motor.Marcas.deFracciones(leidas, cuantas) + propias)
+        }
 
         // ---- **Lo mismo que el lector de Word y libros** (23-sep-2026, pedido por el usuario: «todos
         // son visores rápidos: la misma interfaz y las mismas funciones»). La pastilla de arriba
@@ -478,6 +494,12 @@ class LectorPdfActivity : ComponentActivity() {
             }
         }
         fun guardarLasMarcas() {
+            val deOffice = marcasDeOffice
+            if (deOffice != null && cuantas > 0) {
+                val texto = com.forge.pixpin.motor.Lectura.aTexto(com.forge.pixpin.motor.Marcas.aFracciones(marcas, cuantas, leidasDeOffice.orEmpty()))
+                com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(deOffice, texto)
+                return
+            }
             val texto = com.forge.pixpin.motor.Marcas.aTexto(marcas)
             archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, texto) } ?: prefsDeMarcas.edit().putString(claveDeMarcas, texto).apply()
         }
@@ -651,12 +673,15 @@ class LectorPdfActivity : ComponentActivity() {
                         // arriba y no había forma de bajarla, porque sin nada que desplazar no hay
                         // desplazamiento. Con hueco arriba y abajo se mueve a gusto.
                         items((0 until cuantas).toList()) { i ->
-                            // El margen es papel: lo anotado ahí lleva la tinta de una hoja clara.
-                            // Un Word o un PowerPoint en oscuro: la hoja ya viene oscura; el margen,
-                            // del papel oscuro, y lo anotado, con la matriz (la tinta negra, clara).
+                            // **En oscuro, nada de capas con efecto** (14-oct-2026, el usuario: «las tintas
+                            // se ven pixeladas y al dibujar también»): el efecto de color pintaba la caja
+                            // en una capa aparte del tamaño sin aumento, y el aumento del lector la
+                            // estiraba. Ahora la hoja de un PDF se invierte en su propia imagen (filtro
+                            // de color al pintarla), la de Office ya viene oscura, el margen es papel
+                            // oscuro y la tinta la pinta el motor con su modo noche: nítida a cualquier zoom.
                             Box(
-                                Modifier.fillMaxWidth().coloresInvertidos(invertido && !esOffice)
-                                    .background(if (oscuroOffice) MARGEN_OSCURO else PAPEL_DEL_MARGEN)
+                                Modifier.fillMaxWidth()
+                                    .background(if (invertido) MARGEN_OSCURO else PAPEL_DEL_MARGEN)
                             ) {
                                 Box(
                                     Modifier.padding(
@@ -664,10 +689,10 @@ class LectorPdfActivity : ComponentActivity() {
                                         end = with(densidad) { derechaPx.toDp() }
                                     )
                                 ) {
-                                    Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), oscuroOffice = oscuroOffice) { aSolas = i }
+                                    Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), oscuroOffice = oscuroOffice, invertida = invertido && !esOffice) { aSolas = i }
                                 }
                                 // La capa coge **la hoja y sus dos márgenes**.
-                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize().coloresInvertidos(oscuroOffice), conLapiz, alLapiz) { tickDeLaBarra++ }
+                                CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize(), conLapiz, alLapiz, oscuro = invertido) { tickDeLaBarra++ }
                             }
                         }
                         if (cuantas == 1) item { Spacer(Modifier.requiredHeight(with(densidad) { (altoDeLaCaja * 0.28f).toDp() })) }
@@ -1022,7 +1047,7 @@ class LectorPdfActivity : ComponentActivity() {
                     lienzo.save()
                     lienzo.translate(ox, oy)
                     lienzo.clipRect(0f, 0f, b.width.toFloat(), b.height.toFloat())
-                    pintorDeCapas(contexto).renderScene(lienzo, escena.copy(viewport = vistaDeLaCapa(b.width.toDouble(), 0)), b.width.toDouble(), b.height.toDouble())
+                    pintorDeCapas(contexto, false).renderScene(lienzo, escena.copy(viewport = vistaDeLaCapa(b.width.toDouble(), 0)), b.width.toDouble(), b.height.toDouble())
                     lienzo.restore()
                 }
             }
@@ -1082,6 +1107,8 @@ class LectorPdfActivity : ComponentActivity() {
         encima: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {},
         /** Un Word o un PowerPoint en el modo oscuro: su hoja se pinta oscura (y se vuelve a pedir al cambiar). */
         oscuroOffice: Boolean = false,
+        /** Un PDF en el modo oscuro: la hoja con la matriz de invertir, al pintar su imagen. */
+        invertida: Boolean = false,
         alAbrirSublienzos: () -> Unit = {}
     ) {
         // A más aumento, más puntos: acercarse a una hoja ya dibujada la estiraría y se vería
@@ -1136,13 +1163,70 @@ class LectorPdfActivity : ComponentActivity() {
                 }
             )
         }
-        Box(Modifier.fillMaxWidth().padding(bottom = 6.dp).then(conTexto)) {
+        // **El trozo nítido de cerca** (14-oct-2026, el usuario: «las imágenes del Word se ven en baja
+        // calidad; en la PC se leen, aquí no se distinguen las letras»; el PC lo hace desde 8794f6c).
+        // La hoja entera tiene un tope de píxeles ([PIXELES_POR_HOJA]): un A4 no pasa de ~1 700 de
+        // ancho, y al ampliar solo se estiraba. Ampliado, se pinta además **lo que se ve de la hoja**
+        // a la resolución de la pantalla y se pone encima, en su sitio. Solo Word y PowerPoint, que
+        // son vectores: se vuelven a pintar del documento, no de la imagen ya hecha.
+        var donde by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+        var movida by remember { mutableStateOf(0) }
+        var nitido by remember(ruta, i, oscuroOffice) { mutableStateOf<Pair<Bitmap, androidx.compose.ui.geometry.Rect>?>(null) }
+        if (deOffice) LaunchedEffect(ruta, i, zoom, movida, oscuroOffice) {
+            if (zoom <= 1.2f) { nitido = null; return@LaunchedEffect }
+            // Que se pare: mientras se desliza, cada fotograma cambiaría el trozo.
+            kotlinx.coroutines.delay(160)
+            val c = donde?.takeIf { it.isAttached } ?: return@LaunchedEffect
+            val ventana = c.boundsInWindow()
+            if (ventana.width < 1f || ventana.height < 1f) return@LaunchedEffect
+            val a = c.windowToLocal(Offset(ventana.left, ventana.top))
+            val b = c.windowToLocal(Offset(ventana.right, ventana.bottom))
+            val visto = androidx.compose.ui.geometry.Rect(
+                maxOf(0f, minOf(a.x, b.x)), maxOf(0f, minOf(a.y, b.y)),
+                minOf(c.size.width.toFloat(), maxOf(a.x, b.x)), minOf(c.size.height.toFloat(), maxOf(a.y, b.y))
+            )
+            if (visto.width < 1f || visto.height < 1f) return@LaunchedEffect
+            val anchoLocal = c.size.width.toFloat()
+            nitido = withContext(Dispatchers.Default) {
+                runCatching {
+                    val doc = com.forge.pixpin.office.HojasOffice.yaAbierto(ruta) ?: return@runCatching null
+                    val pag = doc.pagina(i) ?: return@runCatching null
+                    // Píxeles del trozo por cada uno de la hoja en la lista: el aumento (sin pasar de ~8 MP).
+                    var k = zoom
+                    val area = visto.width * visto.height * k * k
+                    if (area > 8_000_000f) k *= kotlin.math.sqrt(8_000_000f / area)
+                    val w = (visto.width * k).toInt().coerceAtLeast(1)
+                    val h = (visto.height * k).toInt().coerceAtLeast(1)
+                    val mapa = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val lienzo = android.graphics.Canvas(mapa)
+                    lienzo.translate(-visto.left * k, -visto.top * k)
+                    doc.pintor().pintar(lienzo, pag, anchoLocal / pag.ancho.coerceAtLeast(1f) * k, doc.cuantas(), oscuro = oscuroOffice)
+                    mapa to visto
+                }.getOrNull()
+            } ?: nitido
+        }
+        val densidadDelTrozo = LocalDensity.current
+        Box(
+            Modifier.fillMaxWidth().padding(bottom = 6.dp).then(conTexto)
+                .then(if (deOffice) Modifier.onGloballyPositioned { donde = it; if (zoom > 1.2f) movida++ } else Modifier)
+        ) {
             if (actual != null) {
                 Image(
                     bitmap = actual.asImageBitmap(),
                     contentDescription = null,
+                    colorFilter = if (invertida) FILTRO_INVERTIDO else null,
                     modifier = Modifier.fillMaxWidth()
                 )
+                nitido?.let { (b, r) ->
+                    Image(
+                        bitmap = b.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                        modifier = Modifier
+                            .offset { androidx.compose.ui.unit.IntOffset(r.left.toInt(), r.top.toInt()) }
+                            .size(with(densidadDelTrozo) { r.width.toDp() }, with(densidadDelTrozo) { r.height.toDp() })
+                    )
+                }
             } else {
                 Spacer(Modifier.fillMaxWidth().aspectRatio(proporcion.coerceAtLeast(0.1f)))
             }
@@ -1215,6 +1299,15 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
         if (esOffice) null
         else proyecto()?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(com.forge.pixpin.sincro.Codigos.unico(it)) }
             ?: uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
+
+    /**
+     * Los marcadores de un Word o un PowerPoint del chat: el `anot-<uid>.marcas` del documento, el
+     * mismo que el Word como texto y que el PC (en fracción del documento). Null si no es de Office
+     * o no es un adjunto del chat. Ver [com.forge.pixpin.motor.Marcas.deFracciones].
+     */
+    fun marcasDeOffice(): java.io.File? =
+        if (!esOffice) null
+        else uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.marcas(actividad.filesDir, com.forge.pixpin.sincro.AnotacionesDelAdjunto.delDocumento(it, java.io.File(rutaPedida))) }
 
     /** El dibujo suelto de la hoja [i], migrando el de la huella si es la primera vez. */
     private fun suelto(i: Int): String {
@@ -1338,11 +1431,18 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
 }
 
 /** El pintor de las capas que solo se miran: uno para todas las hojas, con su caché de formas. */
-private var elPintorDeCapas: com.forge.pixpin.motor.Renderer? = null
+private val losPintoresDeCapas = HashMap<Boolean, com.forge.pixpin.motor.Renderer>()
 
-/** Con la letra de verdad del lienzo, que si no un texto anotado se pintaría con otra y no cuadraría. */
-private fun pintorDeCapas(contexto: Context): com.forge.pixpin.motor.Renderer =
-    elPintorDeCapas ?: com.forge.pixpin.motor.Renderer(typefaces = com.forge.pixpin.motor.DrawFonts.provider(contexto.applicationContext)).also { elPintorDeCapas = it }
+/** Con la letra de verdad del lienzo, que si no un texto anotado se pintaría con otra y no cuadraría; [oscuro]: modo noche. */
+private fun pintorDeCapas(contexto: Context, oscuro: Boolean): com.forge.pixpin.motor.Renderer =
+    losPintoresDeCapas.getOrPut(oscuro) {
+        com.forge.pixpin.motor.Renderer(typefaces = com.forge.pixpin.motor.DrawFonts.provider(contexto.applicationContext), dark = oscuro)
+    }
+
+/** La matriz de invertir, como filtro al pintar la imagen de una hoja (sin capa aparte: no se pixela al ampliar). */
+private val FILTRO_INVERTIDO by lazy {
+    androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix(MATRIZ_INVERTIDA.array))
+}
 
 /**
  * **La capa de una hoja.** Leyendo —o con la mano puesta— **solo se pinta**, y no coge ningún toque:
@@ -1357,6 +1457,8 @@ private fun CapaDePagina(
     maestro: com.forge.pixpin.motor.DrawController, modifier: Modifier,
     /** Con lápiz visto, el dedo no dibuja: sigue a la lista. Ver [com.forge.pixpin.motor.DrawCanvas]. */
     conLapiz: Boolean, alLapiz: () -> Unit,
+    /** El modo oscuro del visor: la tinta, con el modo noche del motor (clara sobre papel oscuro). */
+    oscuro: Boolean = false,
     alCambiar: () -> Unit
 ) {
     val lienzo by androidx.compose.runtime.produceState<com.forge.pixpin.motor.DrawController?>(null, capas, i) {
@@ -1369,7 +1471,7 @@ private fun CapaDePagina(
     LaunchedEffect(c, anchoDeLaCapa, espacios) { if (anchoDeLaCapa > 0) c.setViewport(vistaDeLaCapa(anchoDeLaCapa.toDouble(), espacios)) }
     val medido = modifier.onSizeChanged { anchoDeLaCapa = it.width }
     val conLaMano = maestro.tool == com.forge.pixpin.motor.Tool.HAND
-    val pintor = pintorDeCapas(androidx.compose.ui.platform.LocalContext.current)
+    val pintor = pintorDeCapas(androidx.compose.ui.platform.LocalContext.current, oscuro)
     if (!anotando || conLaMano) {
         androidx.compose.foundation.Canvas(medido) {
             @Suppress("UNUSED_EXPRESSION") capas.version.intValue
@@ -1404,6 +1506,7 @@ private fun CapaDePagina(
             modifier = Modifier.fillMaxSize(),
             onChange = { trazando -> if (!trazando) { capas.ensuciar(i); alCambiar() } },
             vistaFija = true,
+            dark = oscuro,
             modoLapiz = conLapiz,
             onLapizDetectado = alLapiz,
             dedoAlLector = true

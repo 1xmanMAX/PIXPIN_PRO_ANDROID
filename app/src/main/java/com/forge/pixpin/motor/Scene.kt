@@ -304,6 +304,18 @@ data class ItemStyle(
         const val FONT_EXCALIFONT = 5
         const val FONT_NUNITO = 6
         const val FONT_COMIC_SHANNS = 8
+        /**
+         * **Las del PC que faltaban** (14-oct-2026, el usuario: «un texto escrito en la PC sale en el
+         * celular con otro tipo de letra»): el PC tiene ocho (`FUENTES` de `texto.rs`) y aquí solo
+         * estaban tres; las demás caían en la de a mano. Lilita One es la cuarta de Excalidraw; las
+         * 101-104 son las del lienzo de citas del PC (fuera de los números de Excalidraw a propósito).
+         * Courier New se pinta con Liberation Mono, que mide lo mismo letra a letra.
+         */
+        const val FONT_LILITA_ONE = 7
+        const val FONT_WORK_SANS = 101
+        const val FONT_FRAUNCES = 102
+        const val FONT_COURIER_NEW = 103
+        const val FONT_CAVEAT = 104
 
         /** Numeración vieja, la de los dibujos de antes. */
         const val FONT_VIRGIL = 1
@@ -311,7 +323,10 @@ data class ItemStyle(
         const val FONT_CASCADIA = 3
 
         /** Las tres, en el orden en que las ofrece el original. */
-        val FONT_FAMILIES = listOf(FONT_EXCALIFONT, FONT_NUNITO, FONT_COMIC_SHANNS)
+        val FONT_FAMILIES = listOf(
+            FONT_EXCALIFONT, FONT_NUNITO, FONT_LILITA_ONE, FONT_COMIC_SHANNS,
+            FONT_WORK_SANS, FONT_FRAUNCES, FONT_COURIER_NEW, FONT_CAVEAT
+        )
 
         /**
          * La familia con la que hay que pintar, resolviendo los alias viejos.
@@ -325,6 +340,7 @@ data class ItemStyle(
             null, FONT_VIRGIL, FONT_EXCALIFONT -> FONT_EXCALIFONT
             FONT_HELVETICA, FONT_NUNITO -> FONT_NUNITO
             FONT_CASCADIA, FONT_COMIC_SHANNS -> FONT_COMIC_SHANNS
+            FONT_LILITA_ONE, FONT_WORK_SANS, FONT_FRAUNCES, FONT_COURIER_NEW, FONT_CAVEAT -> id
             else -> FONT_EXCALIFONT
         }
     }

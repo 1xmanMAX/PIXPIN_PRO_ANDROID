@@ -54,6 +54,30 @@ object Marcas {
 
     fun sin(lista: List<Marca>, id: Long): List<Marca> = lista.filterNot { it.id == id }
 
+    /**
+     * **Los marcadores de un Word, en sus hojas** (14-oct-2026, el usuario: «en Word el marcador
+     * no se sincroniza con la PC»). Lo que viaja de un Word es `anot-<uid>.marcas` con el formato
+     * del Word como texto ([Lectura.Marcador]: una fracción del documento), y el lector por hojas
+     * guardaba los suyos solo en el teléfono. Ahora lee y escribe ese mismo archivo: la fracción
+     * pasa a hoja + fracción de hoja ([paginas] hojas) y vuelve. Lo que no se movió vuelve con su
+     * fracción de siempre, sin la ida y vuelta de decimales ([deVuelta]).
+     */
+    fun deFracciones(lista: List<Lectura.Marcador>, paginas: Int): List<Marca> {
+        val n = paginas.coerceAtLeast(1)
+        return enOrden(lista.map { Marca(it.id, it.emoji, 0.5, (it.fraccion.toDouble() * n).coerceIn(0.0, n - 1e-6)) })
+    }
+
+    fun aFracciones(lista: List<Marca>, paginas: Int, deVuelta: List<Lectura.Marcador> = emptyList()): List<Lectura.Marcador> {
+        val n = paginas.coerceAtLeast(1)
+        val antes = deVuelta.associateBy { it.id }
+        return lista.map { m ->
+            val viejo = antes[m.id]
+            val f = (m.y / n).coerceIn(0.0, 1.0).toFloat()
+            if (viejo != null && viejo.emoji == m.emoji && kotlin.math.abs(viejo.fraccion - f) < 1e-5f) viejo
+            else Lectura.Marcador(m.id, f, m.emoji)
+        }.sortedBy { it.fraccion }
+    }
+
     /** Guardadas en una línea, como las de [Lectura]: `id:x:y:emoji|…`. */
     fun aTexto(lista: List<Marca>): String =
         enOrden(lista).joinToString("|") { "${it.id}:${num(it.x)}:${num(it.y)}:${it.emoji}" }

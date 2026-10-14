@@ -993,6 +993,11 @@ fun composeFontFamily(familia: Int?): androidx.compose.ui.text.font.FontFamily =
             androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.nunito))
         ItemStyle.FONT_COMIC_SHANNS ->
             androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.comic_shanns))
+        ItemStyle.FONT_LILITA_ONE -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.lilita_one))
+        ItemStyle.FONT_WORK_SANS -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.work_sans))
+        ItemStyle.FONT_FRAUNCES -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.fraunces))
+        ItemStyle.FONT_COURIER_NEW -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.liberation_mono))
+        ItemStyle.FONT_CAVEAT -> androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.caveat))
         else ->
             androidx.compose.ui.text.font.FontFamily(androidx.compose.ui.text.font.Font(R.font.excalifont))
     }
