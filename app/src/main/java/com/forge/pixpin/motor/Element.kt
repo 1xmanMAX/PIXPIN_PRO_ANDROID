@@ -984,7 +984,15 @@ data class Element(
     val fileId: String? = null,
     /** Factores de escala en X e Y; el signo invierte la imagen (volteo). */
     val scale: List<Double> = listOf(1.0, 1.0),
-    val crop: Crop? = null
+    val crop: Crop? = null,
+
+    /**
+     * **Lo que otro programa le apuntó al elemento**, conservado tal cual (el `customData` de
+     * Excalidraw). Lo usa el asistente para firmar lo que dibuja (`{"origen":"pixpin-ia"}`, igual
+     * que el PC), y sirve para que lo que traiga un `.excalidraw` de la web o del PC no se pierda
+     * al guardarlo aquí. Nulo en casi todo: con `explicitNulls = false` no se escribe.
+     */
+    val customData: kotlinx.serialization.json.JsonObject? = null
 ) {
     companion object {
         const val DEFAULT_STROKE_COLOR = "#1e1e1e"
