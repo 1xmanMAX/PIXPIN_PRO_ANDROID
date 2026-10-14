@@ -516,6 +516,51 @@ class SincronizarDeVerdadTest {
         conectado(telefono, tableta) { s -> val prep = s.preparar(Disco.GENERAL); s.aplicar(prep, Sesion.Hecho()); assertTrue(s.prepararArchivos(prep).pasos.isEmpty()) }
     }
 
+    /**
+     * **Un dibujo con dos figuras del mismo id** (13-oct-2026): el PC de antes daba a un trazo nuevo
+     * el id de otro suyo (`pc5`). Antes la fusión no podía ir figura por figura y se quedaba con la
+     * lista entera de un lado: el trazo nuevo del PC o lo nuevo del móvil se perdía. Ahora se
+     * juntan las dos cosas y quedan ids únicos en los dos aparatos.
+     */
+    @Test
+    fun `un lienzo con ids repetidos en un lado se junta figura por figura`() {
+        emparejar()
+        lienzo(telefono, "d1", fig("A"), fig("pc5", v = 2))
+        mensaje(telefono, "t1", "Planta", clase = Clase.DIBUJO, referencia = "d1")
+        sincronizar()
+        // En la tableta, un trazo nuevo con el id repetido; en el teléfono, una figura nueva.
+        lienzo(tableta, "d1", fig("A"), fig("pc5", v = 2), fig("pc5", x = 500, v = 1, updated = 40))
+        lienzo(telefono, "d1", fig("A"), fig("pc5", v = 2), fig("B"))
+        val hecho = sincronizar()
+        assertEquals(1, hecho.fusionados)
+        assertEquals(listOf("A", "pc5", "B", "pc5-2"), figuras(telefono, "d1"))
+        assertEquals(listOf("A", "pc5", "B", "pc5-2"), figuras(tableta, "d1"))
+        assertTrue("el trazo nuevo de la tableta llega", textoDelDibujo(telefono, "d1").contains("\"x\":500"))
+        assertEquals(textoDelDibujo(telefono, "d1").let(Canonico::de), textoDelDibujo(tableta, "d1").let(Canonico::de))
+        assertEquals(0, sincronizar().fusionados)
+    }
+
+    /**
+     * El teléfono abrió el dibujo y lo guardó ya arreglado (`IdsRepetidos`: el de versión baja con
+     * `pc5-2` y la versión subida); la tableta lo tiene todavía con los repetidos y movió otra
+     * figura. La arreglada **no sale dos veces**, y lo movido en la tableta se queda.
+     */
+    @Test
+    fun `un lienzo arreglado en un lado y repetido en el otro no duplica la figura`() {
+        emparejar()
+        lienzo(telefono, "d1", fig("A"), fig("pc5", v = 2), fig("pc5", x = 500, v = 1))
+        mensaje(telefono, "t1", "Planta", clase = Clase.DIBUJO, referencia = "d1")
+        sincronizar()
+        assertEquals(listOf("A", "pc5", "pc5"), figuras(tableta, "d1"))
+        lienzo(telefono, "d1", fig("A"), fig("pc5", v = 2), fig("pc5-2", x = 500, v = 2, updated = 60))
+        lienzo(tableta, "d1", fig("A", x = 77, v = 2, updated = 70), fig("pc5", v = 2), fig("pc5", x = 500, v = 1))
+        sincronizar()
+        assertEquals(listOf("A", "pc5", "pc5-2"), figuras(telefono, "d1"))
+        assertEquals(listOf("A", "pc5", "pc5-2"), figuras(tableta, "d1"))
+        assertTrue(textoDelDibujo(tableta, "d1").contains("\"x\":77"))
+        assertEquals(textoDelDibujo(telefono, "d1").let(Canonico::de), textoDelDibujo(tableta, "d1").let(Canonico::de))
+    }
+
     @Test
     fun `una figura borrada en un lado y movida en el otro vuelve`() {
         emparejar()

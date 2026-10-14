@@ -17,7 +17,11 @@ package com.forge.pixpin.motor
  */
 class DrawController(initial: Scene = Scene()) {
 
-    var scene: Scene = initial
+    /**
+     * Con un id distinto por figura desde que entra: con dos iguales, tocar una marcaba las dos y
+     * deshacer las juntaba en una. Ver [IdsRepetidos].
+     */
+    var scene: Scene = IdsRepetidos.arreglar(initial)
         private set
 
     var selectedIds: Set<String> = emptySet()
@@ -3001,6 +3005,37 @@ class DrawController(initial: Scene = Scene()) {
     }
 
     /**
+     * **Pega [crudo] como un texto del motor**, centrado en [centro] (14-oct-2026). Es el
+     * `Gesto::pegar_texto` del PC: el texto nace como con la herramienta Texto en la mano —el mismo
+     * [newElement] con [estiloParaLoNuevo]: letra, tamaño, color y alineación del panel—, partido
+     * por palabras a la mitad de lo que se ve ([TextoPegado.anchoMaximo], con [anchoVisible] en
+     * unidades de la escena), elegido y en un solo paso de deshacer.
+     *
+     * Medir es de Android: [mide] da el ancho de un renglón y [medida] la caja del texto entero,
+     * los dos con la letra y el tamaño que se le pasan. Devuelve el texto nuevo, o null si en el
+     * portapapeles no había nada que se vea.
+     */
+    fun pegarTexto(
+        crudo: String,
+        centro: Pt,
+        anchoVisible: Double,
+        mide: (renglon: String, familia: Int, tamano: Double) -> Double,
+        medida: (texto: String, familia: Int, tamano: Double) -> Pair<Double, Double>
+    ): Element? {
+        val limpio = TextoPegado.preparar(crudo) ?: return null
+        val estilo = estiloParaLoNuevo
+        val texto = TextoPegado.ajustar(limpio, TextoPegado.anchoMaximo(anchoVisible)) {
+            mide(it, estilo.fontFamily, estilo.fontSize)
+        }
+        val (ancho, alto) = medida(texto, estilo.fontFamily, estilo.fontSize)
+        // Centrado donde se pega (`x - width / 2` de Excalidraw).
+        val e = newElement(ElementType.TEXT, centro.x - ancho / 2, centro.y - alto / 2, estilo, ancho, alto)
+            .copy(text = texto, reference = modoReferencia)
+        insertar(listOf(e))
+        return e
+    }
+
+    /**
      * Mete elementos ya hechos en el dibujo y los deja marcados.
      *
      * Es la puerta por la que entra lo que no se traza con el dedo: una figura
@@ -3391,7 +3426,7 @@ class DrawController(initial: Scene = Scene()) {
 
     /** Reemplaza la escena entera (al cargar de disco). Vacía el historial. */
     fun load(next: Scene) {
-        scene = next
+        scene = IdsRepetidos.arreglar(next)
         selectedIds = emptySet()
         gesture = Gesture.None
         pendingTextId = null

@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import com.forge.pixpin.motor.IdsRepetidos
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -89,8 +90,17 @@ object Fusion {
         }
         if (m is JsonObject && s is JsonObject) return objeto(b as? JsonObject, m, s, ganaMio, c, cuenta)
         if (m is JsonArray && s is JsonArray) {
-            val bb = b as? JsonArray
-            if (conIds(m) && conIds(s) && (bb == null || conIds(bb))) return listaConIds(bb, m, s, ganaMio, c, cuenta)
+            // **Las figuras de un dibujo, con un id cada una** (13-oct-2026). Un dibujo que el PC de
+            // antes dejó con dos figuras del mismo id no se juntaba figura por figura: se quedaba la
+            // lista entera de un lado y lo nuevo del otro se perdía. Se arreglan aquí los tres con
+            // la misma regla con la que el móvil los arregla al abrirlos ([IdsRepetidos]), que no
+            // es azar: la figura renombrada aquí y la renombrada allí llevan el mismo id y se
+            // juntan como una sola.
+            val porFiguras = clave == "elements"
+            val bb = (b as? JsonArray)?.let { if (porFiguras) sinRepetidos(it) else it }
+            val mm = if (porFiguras) sinRepetidos(m) else m
+            val ss = if (porFiguras) sinRepetidos(s) else s
+            if (conIds(mm) && conIds(ss) && (bb == null || conIds(bb))) return listaConIds(bb, mm, ss, ganaMio, c, cuenta)
             if (deTextos(m) && deTextos(s) && (bb == null || deTextos(bb))) return JsonArray(conjunto(bb, m, s))
         }
         // **Una tabla del chat se junta celda a celda**, no como un párrafo (13-oct-2026): la mini-app
@@ -179,6 +189,22 @@ object Fusion {
         if (a.isEmpty()) return true
         val vistos = HashSet<String>()
         return a.all { e -> idDe(e)?.let { vistos.add(it) } == true }
+    }
+
+    /**
+     * [a] con un id distinto por figura, por la regla de [IdsRepetidos]; la misma lista si no había
+     * repetidos o si no es una lista de figuras con id. Solo cambia el `id`: la versión la sube el
+     * aparato que lo arregla al guardar, no la fusión, que no edita.
+     */
+    internal fun sinRepetidos(a: JsonArray): JsonArray {
+        if (a.size < 2) return a
+        val ids = ArrayList<String>(a.size)
+        for (e in a) ids += idDe(e) ?: return a
+        val versiones = a.map { numero((it as JsonObject)["version"]) ?: 0L }
+        val nuevos = IdsRepetidos.idsSinRepetir(ids, versiones) ?: return a
+        return JsonArray(a.mapIndexed { i, e ->
+            if (nuevos[i] == ids[i]) e else JsonObject(LinkedHashMap((e as JsonObject)).apply { put("id", JsonPrimitive(nuevos[i])) })
+        })
     }
 
     private fun deTextos(a: JsonArray) = a.all { it is JsonPrimitive && it.isString }

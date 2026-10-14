@@ -67,7 +67,9 @@ fun PanelDeFiguras(
     onCerrar: () -> Unit,
     modifier: Modifier = Modifier,
     /** Abrir el diálogo de la gráfica de una función. Ver [Graficas]. */
-    onGrafica: () -> Unit = {}
+    onGrafica: () -> Unit = {},
+    /** Pegar el texto del portapapeles como un texto del dibujo. Ver [DrawController.pegarTexto]. */
+    onPegarTexto: () -> Unit = {}
 ) {
     /**
      * El nombre a medio escribir, o null si no se está guardando nada.
@@ -158,6 +160,15 @@ fun PanelDeFiguras(
                 Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
                 Text(
                     stringResource(R.string.tabla_pegada_abrir),
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+            // **El texto copiado en cualquier sitio**, como un texto del dibujo con la letra del
+            // panel: el «Pegar» del menú del lienzo del PC.
+            TextButton(onClick = onPegarTexto) {
+                Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
+                Text(
+                    stringResource(R.string.texto_pegado_abrir),
                     modifier = Modifier.padding(start = 4.dp)
                 )
             }

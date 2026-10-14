@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -58,7 +59,10 @@ import org.robolectric.annotation.Config
 private class LienzoQueCuenta(b: Bitmap) : Canvas(b) {
     var ordenes = 0
 
-    override fun drawPath(path: Path, paint: Paint) { ordenes++ }
+    /** Los caminos distintos que se han pedido, por identidad: dos figuras, dos caminos. */
+    val caminos = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Path, Boolean>())
+
+    override fun drawPath(path: Path, paint: Paint) { ordenes++; caminos += path }
     override fun drawLine(x0: Float, y0: Float, x1: Float, y1: Float, paint: Paint) { ordenes++ }
     override fun drawLines(pts: FloatArray, off: Int, count: Int, paint: Paint) { ordenes++ }
     override fun drawCircle(cx: Float, cy: Float, radio: Float, paint: Paint) { ordenes++ }
@@ -137,7 +141,13 @@ class RendererTodoLoQuePintaTest {
     )
 
     /** Cuántas órdenes de dibujo pide [e] al pintarse. */
-    private fun pinta(e: Element): Int {
+    private fun pinta(e: Element): Int = pinta(listOf(e))
+
+    /** Cuántas órdenes de dibujo piden [elementos], pintados juntos en una escena. */
+    private fun pinta(elementos: List<Element>): Int = lienzoDe(elementos).ordenes
+
+    /** El lienzo que cuenta, con [elementos] ya pintados en él. */
+    private fun lienzoDe(elementos: List<Element>): LienzoQueCuenta {
         val ancho = 400
         val alto = 300
         val lienzo = LienzoQueCuenta(
@@ -145,7 +155,7 @@ class RendererTodoLoQuePintaTest {
         )
         val escena = Scene(
             escala = Escala(unidadesPorPixel = 0.01, unidad = "m"),
-            elements = listOf(e)
+            elements = elementos
         )
         // **Con proveedor de imágenes de verdad.** Con el de por defecto —que devuelve
         // nulo— una imagen no tiene mapa de bits que pintar y saldría por muda sin serlo:
@@ -153,7 +163,7 @@ class RendererTodoLoQuePintaTest {
         val foto = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
         Renderer(imageProvider = { foto })
             .renderScene(lienzo, escena, ancho.toDouble(), alto.toDouble())
-        return lienzo.ordenes
+        return lienzo
     }
 
     /**
@@ -219,5 +229,32 @@ class RendererTodoLoQuePintaTest {
         assertTrue("lo girado no pide nada", pinta(girado) > 0)
         val translucido = ejemplar(ElementType.RECTANGLE).copy(opacity = 40)
         assertTrue("lo translúcido no pide nada", pinta(translucido) > 0)
+    }
+
+    /**
+     * **Dos figuras con el mismo id se pintan las dos** (13-oct-2026). Las cachés del renderizador
+     * van por id —la geometría, el lápiz cocido, los renglones de un texto—, y una que solo mirase
+     * el id pintaría dos veces la misma figura o se comería la segunda. Pasa con los dibujos que el
+     * PC de antes dejó con ids repetidos ([IdsRepetidos] los arregla al abrir, pero el pintado no
+     * tiene que depender de eso). Se cuenta igual que con ids distintos, y la segunda, apartada,
+     * tiene que pedir lo suyo.
+     */
+    @Test
+    fun `dos figuras con el mismo id se pintan las dos`() {
+        for (tipo in listOf(ElementType.RECTANGLE, ElementType.FREEDRAW, ElementType.TEXT, ElementType.ELLIPSE)) {
+            val una = ejemplar(tipo).copy(id = "pc5")
+            val otra = una.copy(x = 160.0, y = 150.0, width = 100.0, height = 60.0)
+            val sola = pinta(listOf(una))
+            val conIdsDistintos = pinta(listOf(una, otra.copy(id = "pc6")))
+            val conElMismoId = pinta(listOf(una, otra))
+            assertTrue("$tipo: la segunda no pide nada ($sola, $conIdsDistintos)", conIdsDistintos > sola)
+            assertEquals("$tipo: con el mismo id se pinta distinto que con ids distintos", conIdsDistintos, conElMismoId)
+            // Y no es la misma figura dos veces: tantos caminos distintos como con ids distintos.
+            assertEquals(
+                "$tipo: la segunda reutiliza el camino de la primera",
+                lienzoDe(listOf(una, otra.copy(id = "pc6"))).caminos.size,
+                lienzoDe(listOf(una, otra)).caminos.size
+            )
+        }
     }
 }
