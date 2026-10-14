@@ -26,6 +26,12 @@ object PlanoNativo {
 
     /** Si es un LandXML o un fichero de puntos de Civil 3D (mirando dentro). */
     @JvmStatic external fun esDeCivil(ruta: String): Boolean
+
+    /** El plano por capas (`PXCAPAS1` del PC), para exportarlo. Null si salió bien. Ver [PaginaDelPlano]. */
+    @JvmStatic external fun capas(entrada: String, salida: String, carpetaShx: String): String?
+
+    /** Un DWG pasado a DXF (lo escribe `opencadcodec`). Null si salió bien. */
+    @JvmStatic external fun aDxf(entrada: String, salida: String): String?
 }
 
 /**
@@ -66,6 +72,8 @@ class LectorDePlanos : Service() {
                             when (modo) {
                                 MODO_3D -> PlanoNativo.convertir3d(entrada.absolutePath, salida.absolutePath)
                                 MODO_REVIT -> PlanoNativo.revitAIfc(entrada.absolutePath, salida.absolutePath)
+                                MODO_CAPAS -> PlanoNativo.capas(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
+                                MODO_DXF -> PlanoNativo.aDxf(entrada.absolutePath, salida.absolutePath)
                                 else -> PlanoNativo.convertir(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
                             }
                         } catch (e: Throwable) {
@@ -91,6 +99,8 @@ class LectorDePlanos : Service() {
         private const val MODO_PLANO = "plano"
         private const val MODO_3D = "3d"
         private const val MODO_REVIT = "revit"
+        private const val MODO_CAPAS = "capas"
+        private const val MODO_DXF = "dxf"
 
         /** Lo que se ve en el visor 3D aunque no sea un plano: Revit, LandXML y puntos (estos, mirando dentro). */
         fun esRevit(nombre: String?) = nombre?.lowercase()?.endsWith(".rvt") == true
@@ -138,6 +148,20 @@ class LectorDePlanos : Service() {
         /** Un Revit como IFC (de la caché o pasándolo aparte), para el croquis 3D. Bloquea. */
         fun revitAIfc(c: Context, archivo: File): Resultado =
             pedir(c, archivo, File(carpeta(c), clave(archivo) + ".ifc"), MODO_REVIT, 600_000L)
+        /**
+         * **El plano por capas, para exportarlo** (14-oct-2026, como el PC): un modelo por capa y
+         * grosor, también lo de las capas apagadas (en la página se pueden encender). De la caché
+         * o leyéndolo aparte, como al abrir. Bloquea. Ver [PaginaDelPlano].
+         */
+        fun leerPorCapas(c: Context, plano: File, tope: Long = 300_000L): Resultado {
+            val letras = huellaDeLetras(c).let { if (it.isEmpty()) "" else "-$it" }
+            return pedir(c, plano, File(carpeta(c), clave(plano) + ".v$VERSION_DEL_FORMATO-$REVISION_DE_LETRAS$letras.pxcapas"), MODO_CAPAS, tope)
+        }
+
+        /** **Un DWG como DXF**, para quien no tenga con qué abrir el DWG. Bloquea. */
+        fun aDxf(c: Context, plano: File, tope: Long = 300_000L): Resultado =
+            pedir(c, plano, File(carpeta(c), clave(plano) + ".dxf"), MODO_DXF, tope)
+
         /** Cuántos planos se guardan ya leídos (los más recientes), como en el PC. */
         private const val EN_CACHE = 24
         /** La de `MAGIA` en `modelo.rs` del PC (y en [ModeloCad]). */
@@ -325,7 +349,7 @@ class LectorDePlanos : Service() {
 
         /** Deja solo los [EN_CACHE] planos más recientes. */
         private fun podar(carpeta: File) {
-            val v = carpeta.listFiles()?.filter { it.name.endsWith(".pxcad") || it.name.endsWith(".px3d") || it.name.endsWith(".ifc") }
+            val v = carpeta.listFiles()?.filter { it.name.endsWith(".pxcad") || it.name.endsWith(".px3d") || it.name.endsWith(".ifc") || it.name.endsWith(".pxcapas") || it.name.endsWith(".dxf") }
                 ?.sortedByDescending { it.lastModified() } ?: return
             v.drop(EN_CACHE).forEach { it.delete() }
             // Los enlaces (o copias) con la extensión que tocaba: los de más de un día sobran.

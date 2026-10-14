@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Edit
@@ -256,15 +257,21 @@ class LectorPdfActivity : ComponentActivity() {
 
     /**
      * Lo que se comparte de un Word o un PowerPoint: el **PDF en vectores** (con lo anotado, o limpio
-     * con el interruptor) y **el archivo original**, tal cual.
+     * con el interruptor), **la página web** de sus hojas con lo anotado, **una hoja como imagen**,
+     * **el archivo original**, tal cual, y su **.pixpin** (14-oct-2026, como el PC).
      */
     private fun formatosDeOffice(
         ruta: String, nombre: String, titulo: String, escenaDe: (Int) -> com.forge.pixpin.motor.Scene?,
-        espacios: () -> Int, marcas: () -> List<com.forge.pixpin.motor.Marca>
+        espacios: () -> Int, marcas: () -> List<com.forge.pixpin.motor.Marca>, cuantas: Int, mirando: Int
     ): com.forge.pixpin.ui.Compartible {
         val c = this
+        val pdf: suspend () -> String? = {
+            withContext(Dispatchers.IO) {
+                com.forge.pixpin.office.HojasOffice.de(c, ruta)?.let { com.forge.pixpin.office.OfficeAPdf.enCache(c, it) }?.path
+            }
+        }
         return com.forge.pixpin.ui.Compartible(
-            titulo, formatos = listOf(
+            titulo, paginas = com.forge.pixpin.ui.ExportarVisor.paginasDe(cuantas), marcadas = setOf("p$mirando"), formatos = listOf(
                 com.forge.pixpin.ui.ExportarPdfAnotado.formatoPdf(
                     c, ruta, titulo, escenaDe, espacios = espacios, marcas = marcas,
                     prepararBase = {
@@ -284,10 +291,30 @@ class LectorPdfActivity : ComponentActivity() {
                             com.forge.pixpin.ui.Compartible.Salida(destino, mime, "El documento tal cual, sin lo anotado")
                         }
                     }
+                ),
+                com.forge.pixpin.ui.Compartible.Formato(
+                    "web-pdf-anotado", androidx.compose.material.icons.Icons.Filled.Language, "Página web", com.forge.pixpin.ui.Compartible.NINGUNA,
+                    generar = {
+                        val base = pdf() ?: return@Formato null
+                        val funciones = (c.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.funcionesWeb
+                        com.forge.pixpin.ui.ExportarPdfAnotado.hacer(c.applicationContext, base, titulo, cuantas, escenaDe, funciones)?.let {
+                            com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE, "Las hojas con lo anotado; se sigue anotando")
+                        }
+                    }
                 )
-            )
+            ) + imagenesDeHojas(titulo, pdf, escenaDe) + com.forge.pixpin.ui.ExportarVisor.pixpin(c, ruta, nombre)
         )
     }
+
+    /** **Una hoja como imagen** (PNG o JPG), con lo anotado encima. [pdf] da el documento sin lo anotado dentro. */
+    private fun imagenesDeHojas(titulo: String, pdf: suspend () -> String?, escenaDe: (Int) -> com.forge.pixpin.motor.Scene?): List<com.forge.pixpin.ui.Compartible.Formato> =
+        com.forge.pixpin.ui.ExportarVisor.imagenes(
+            this, { claves -> "$titulo - hoja ${(com.forge.pixpin.ui.ExportarVisor.paginaDeClave(claves.firstOrNull()) ?: 0) + 1}" }, com.forge.pixpin.ui.Compartible.UNA
+        ) { claves ->
+            val i = com.forge.pixpin.ui.ExportarVisor.paginaDeClave(claves.firstOrNull()) ?: return@imagenes null
+            val base = pdf() ?: return@imagenes null
+            com.forge.pixpin.ui.ExportarVisor.paginaConTinta(this, base, i, escenaDe(i))
+        }
 
     @Composable
     private fun Lector(rutaPedida: String, nombre: String) {
@@ -862,9 +889,9 @@ class LectorPdfActivity : ComponentActivity() {
                 val titulo = nombre.substringBeforeLast('.').ifBlank { "PDF" }
                 com.forge.pixpin.ui.HojaDeCompartir(
                     remember(ruta, titulo) {
-                        if (esOffice) formatosDeOffice(rutaPedida, nombre, titulo, { i -> capas.escenaDe(i) }, { espacios }, { marcas })
+                        if (esOffice) formatosDeOffice(rutaPedida, nombre, titulo, { i -> capas.escenaDe(i) }, { espacios }, { marcas }, cuantas, dondeEstoy().first)
                         else com.forge.pixpin.ui.Compartible(
-                            titulo, formatos = listOf(
+                            titulo, paginas = com.forge.pixpin.ui.ExportarVisor.paginasDe(cuantas), marcadas = setOf("p${dondeEstoy().first}"), formatos = listOf(
                                 // **El PDF, con lo anotado** —o limpio, con el interruptor—. `ruta` es ya la
                                 // copia limpia si el PDF es de un proyecto: lo anotado no sale dos veces.
                                 com.forge.pixpin.ui.ExportarPdfAnotado.formatoPdf(
@@ -875,6 +902,10 @@ class LectorPdfActivity : ComponentActivity() {
                                 // **Y como texto**: el PDF pasado a un documento que se reflowea, con lo
                                 // anotado leyéndolo como texto. Ver [com.forge.pixpin.motor.PdfAHtml].
                                 com.forge.pixpin.ui.ExportarDocumentoAnotado.formato(this@LectorPdfActivity, java.io.File(rutaPedida), nombre, rotulo = "Página web (texto)")
+                            ) + imagenesDeHojas(titulo, { ruta }, { i -> capas.escenaDe(i) }) + listOf(
+                                // El original y su .pixpin, los de todos los visores (14-oct-2026). Ver [com.forge.pixpin.ui.ExportarVisor].
+                                com.forge.pixpin.ui.ExportarVisor.original(this@LectorPdfActivity, rutaPedida, nombre, "El documento tal cual, sin lo anotado"),
+                                com.forge.pixpin.ui.ExportarVisor.pixpin(this@LectorPdfActivity, rutaPedida, nombre)
                             )
                         )
                     }

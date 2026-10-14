@@ -173,6 +173,8 @@ class Visor3DActivity : ComponentActivity() {
         var viendoPiezas by remember { mutableStateOf(false) }
         var midiendo by remember { mutableStateOf(false) }
         val medida = remember { mutableStateListOf<DoubleArray>() }
+        // **Exportar** (14-oct-2026, como el PC): la vista y el archivo, con la hoja de compartir de siempre.
+        var exportando by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
         // Sube con cada fotograma pedido: lo que va dibujado encima sigue a la cámara.
         var camara by remember { mutableIntStateOf(0) }
 
@@ -448,6 +450,16 @@ class Visor3DActivity : ComponentActivity() {
                             // La caja recién puesta: la de lo que se ve, algo holgada (que no corte nada).
                             ponerSeccion(if (seccion != null) null else cajaVisible()?.let { cajaHolgada(it) }); toques++
                         })
+                        IconButton(onClick = {
+                            val titulo = nombre.substringBeforeLast('.').ifBlank { "Modelo" }
+                            exportando = com.forge.pixpin.ui.Compartible(
+                                titulo, formatos = com.forge.pixpin.ui.ExportarVisor.deLaVista(this@Visor3DActivity, titulo) { vista?.let { com.forge.pixpin.ui.ExportarVisor.fotoDeLaTarjeta(it) } } +
+                                    listOf(com.forge.pixpin.ui.ExportarVisor.original(this@Visor3DActivity, original.absolutePath, nombre), com.forge.pixpin.ui.ExportarVisor.pixpin(this@Visor3DActivity, original.absolutePath, nombre))
+                            )
+                            toques++
+                        }, modifier = Modifier.size(38.dp)) {
+                            Icon(com.forge.pixpin.ui.IconoDeCompartir, contentDescription = "Exportar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                        }
                     }
                 }
             }
@@ -464,6 +476,7 @@ class Visor3DActivity : ComponentActivity() {
                     })
                 }
             }
+            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
             // Niveles y categorías (PC 9625d0d): un toque muestra u oculta, mantener deja solo ese.
             val ar = arbol
             if (viendoPiezas && m != null && ar != null) {

@@ -363,6 +363,8 @@ class PlanoActivity : ComponentActivity() {
         var tickDeAnotar by remember { mutableIntStateOf(0) }
         var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
         var preparandoLamina by remember { mutableStateOf(false) }
+        // **Exportar** (14-oct-2026): la hoja de compartir de siempre con los formatos del plano. Ver [ExportarPlano].
+        var exportando by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
         // Las cotas: cadenas hechas y la que se está poniendo (puntos del plano).
         var hechas by remember { mutableStateOf<List<List<DoubleArray>>>(emptyList()) }
         var puntos by remember { mutableStateOf<List<DoubleArray>>(emptyList()) }
@@ -761,6 +763,17 @@ class PlanoActivity : ComponentActivity() {
                                 tint = if (acotando) Color(0xFFFF8A00) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
                             )
                         }
+                        IconButton(onClick = {
+                            val m = modelo ?: return@IconButton
+                            guardarCapa()
+                            exportando = ExportarPlano.compartible(
+                                this@PlanoActivity,
+                                ExportarPlano.Plano(original, nombre, m, capa?.scene, encaje, hechas + listOf(puntos).filter { it.size >= 2 }, hojas)
+                            )
+                            toques++
+                        }, modifier = Modifier.size(38.dp)) {
+                            Icon(com.forge.pixpin.ui.IconoDeCompartir, contentDescription = "Exportar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                        }
                     }
                 }
             }
@@ -853,6 +866,7 @@ class PlanoActivity : ComponentActivity() {
                     this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina, tinta
                 )
             }
+            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
             // Acotando: la pista y sus mandos, abajo, mientras dure.
             if (acotando) {
                 Row(
