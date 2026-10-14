@@ -127,6 +127,62 @@ class PlanoActivity : ComponentActivity() {
     /** El de las unidades del fichero (su `.hoja`), y cómo pasar la capa de la memoria a él. */
     private var encajeDelFichero: CapaDelPlano.Encaje? = null
     private var capaEnMemoria: CapaDelPlano.EnMemoria? = null
+
+    // **Lo que llega con el plano abierto** (14-oct-2026, la guía del PC «el visor de planos pisa lo
+    // que llega del PC»): la capa se leía una vez y se reescribía en cada `onPause`, así que lo
+    // anotado en el PC con el plano abierto aquí no se veía y, al salir, se borraba en los dos. Ahora
+    // se relee lo que llega (si no hay nada a medias), no se guarda sin cambios, y al guardar se junta
+    // con el disco si cambió desde que se leyó. Como `MotorDelPlano::al_dia`/`guardar_juntando` del PC.
+
+    /** El fichero de la capa tal como se leyó o escribió aquí la última vez (la base para juntar). */
+    @Volatile private var textoDeLaCapa: String? = null
+    /** Fecha y tamaño de la capa y de su `.hoja` entonces: si cambian, llegó algo. */
+    @Volatile private var selloDeLaCapa: Pair<Long, Long>? = null
+    @Volatile private var selloDeLaHoja: Pair<Long, Long>? = null
+    /** Lo que había en memoria al leer o guardar por última vez: si no cambió, no hay nada que guardar. */
+    private var guardadaEnMemoria: List<com.forge.pixpin.motor.Element> = emptyList()
+
+    private fun sello(f: File): Pair<Long, Long>? = if (f.isFile) f.lastModified() to f.length() else null
+
+    private fun leerTexto(f: File): String? =
+        runCatching { java.util.zip.GZIPInputStream(f.inputStream()).use { it.readBytes().decodeToString() } }.getOrNull()
+
+    /** La capa leída del disco, sin tocar aún la pantalla. */
+    private class CapaLeida(
+        val delFichero: CapaDelPlano.Encaje, val encaje: CapaDelPlano.Encaje, val enMemoria: CapaDelPlano.EnMemoria,
+        val texto: String?, val sello: Pair<Long, Long>?, val selloHoja: Pair<Long, Long>?
+    )
+
+    /** Lee la capa de [idCapa] (en un hilo de fondo): su `.hoja`, la escena pasada a la memoria y la base. */
+    private fun leerCapaDelDisco(m: ModeloCad): CapaLeida {
+        val ruta = File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, idCapa))
+        val hoja = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, idCapa)
+        // Los sellos antes que el contenido: si algo llega mientras se lee, la próxima mirada lo verá.
+        val selloHoja = sello(hoja); val selloCapa = sello(ruta)
+        // Dónde cae la capa: lo que diga su `.hoja` (escrita aquí o en el PC); si no hay,
+        // la escala de las letras del plano. Ver [CapaDelPlano].
+        val delFichero = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(hoja)
+            ?.let { CapaDelPlano.encajeDe(it, m.caja) }
+            ?: CapaDelPlano.Encaje(EscalaDeLaCapa.leerOPoner(ruta, m), 0.0, 0.0)
+        // **En memoria, siempre la unidad de la letra** (como el PC): una capa escrita con
+        // otra (la del PC de antes, la milésima del lado) engordaba el lápiz hasta tapar el
+        // plano. El fichero sigue en la suya. Ver [CapaDelPlano.Unidades].
+        val enMemoria = CapaDelPlano.Encaje(EscalaDeLaCapa.deLasLetras(m), 0.0, 0.0)
+        val unidades = CapaDelPlano.unidadesEntre(enMemoria, delFichero)
+        val texto = leerTexto(ruta)
+        val escena = texto?.let { runCatching { com.forge.pixpin.motor.ExcalidrawJson.decodeFromString<com.forge.pixpin.motor.Scene>(it) }.getOrNull() }
+            ?: com.forge.pixpin.motor.Scene()
+        return CapaLeida(delFichero, if (unidades.iguales) delFichero else enMemoria, CapaDelPlano.aLaMemoria(escena, unidades), texto, selloCapa, selloHoja)
+    }
+
+    private fun ponerCapaLeida(l: CapaLeida) {
+        encajeDelFichero = l.delFichero
+        encaje = l.encaje
+        capaEnMemoria = l.enMemoria
+        textoDeLaCapa = l.texto
+        selloDeLaCapa = l.sello
+        selloDeLaHoja = l.selloHoja
+    }
     /** Las cotas y los marcos de ahora, para guardarlos en la capa (los copia la pantalla). */
     @Volatile private var cotasParaGuardar: List<List<DoubleArray>> = emptyList()
     @Volatile private var marcosParaGuardar: List<ImprimirPlano.Marco> = emptyList()
@@ -215,22 +271,50 @@ class PlanoActivity : ComponentActivity() {
         val id = idCapa.ifBlank { return }
         val e = encaje
         val nueva = CapaDelPlano.con(laCapa.scene, e, cotasParaGuardar, marcosParaGuardar, System.currentTimeMillis())
+        // **Sin cambios no se guarda** (salir del plano no es un cambio): escribir lo leído al abrir
+        // pisaba lo que hubiera llegado después.
+        if (nueva.elements == guardadaEnMemoria) return
         // Solo si cambió algo: cargar una escena nueva en el motor le vacía el deshacer.
         if (nueva.elements != laCapa.scene.elements) laCapa.load(nueva)
         val enMemoria = laCapa.scene
+        guardadaEnMemoria = enMemoria.elements
         // Al fichero, en sus unidades (lo que no se tocó, con sus números de siempre).
         val escena = capaEnMemoria?.alFichero(enMemoria) ?: enMemoria
         val delFichero = encajeDelFichero ?: e
+        val base = textoDeLaCapa
+        val visto = selloDeLaCapa
         val contexto = applicationContext
         lifecycleScope.launch(Dispatchers.IO) {
             val ruta = java.io.File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, id))
             if (escena.elements.isEmpty() && !ruta.isFile) return@launch
             runCatching {
-                // La hoja antes que la capa: una capa sin su hoja al lado se leería con otra escala.
                 val hoja = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(contexto.filesDir, id)
-                val texto = CapaDelPlano.hojaDe(delFichero, m.caja).aTexto()
+                var aEscribir = escena
+                var enSusUnidades = delFichero
+                var juntado = false
+                // **Si el disco cambió desde que se leyó, se junta** con la fusión de la sincronización.
+                val enDisco = if (sello(ruta) != visto) leerTexto(ruta) else null
+                if (enDisco != null && enDisco != base) {
+                    // En las unidades del disco, si su `.hoja` es otra (la escribió el PC con las suyas).
+                    val delDisco = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(hoja)?.let { CapaDelPlano.encajeDe(it, m.caja) } ?: delFichero
+                    fun enDisco(s: com.forge.pixpin.motor.Scene) = if (delDisco == delFichero) s else CapaDelPlano.cambiarDeUnidades(s, delFichero, delDisco)
+                    val mio = com.forge.pixpin.motor.ExcalidrawJson.encodeToString(enDisco(escena).let { it.copy(elements = com.forge.pixpin.motor.purgeDeleted(it.elements)) })
+                    val baseEnDisco = base?.let { b ->
+                        if (delDisco == delFichero) b
+                        else runCatching { com.forge.pixpin.motor.ExcalidrawJson.encodeToString(enDisco(com.forge.pixpin.motor.ExcalidrawJson.decodeFromString<com.forge.pixpin.motor.Scene>(b))) }.getOrNull()
+                    }
+                    aEscribir = com.forge.pixpin.motor.ExcalidrawJson.decodeFromString(CapaDelPlano.juntarConElDisco(baseEnDisco, mio, enDisco))
+                    enSusUnidades = delDisco
+                    juntado = true
+                }
+                // La hoja antes que la capa: una capa sin su hoja al lado se leería con otra escala.
+                val texto = CapaDelPlano.hojaDe(enSusUnidades, m.caja).aTexto()
                 if (!hoja.isFile || hoja.readText() != texto) hoja.writeText(texto)
-                com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, escena)
+                com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, aEscribir)
+                textoDeLaCapa = leerTexto(ruta)
+                selloDeLaHoja = sello(hoja)
+                // Lo junto se vuelve a leer en la pantalla (la mirada de cada 0,7 s lo ve como nuevo).
+                selloDeLaCapa = if (juntado) null else sello(ruta)
             }
         }
     }
@@ -381,29 +465,17 @@ class PlanoActivity : ComponentActivity() {
             r.onSuccess { m ->
                 if (m.vacio) { estado = getString(com.forge.pixpin.R.string.plano_vacio); return@onSuccess }
                 modelo = m
-                capa = withContext(Dispatchers.IO) {
+                val leida = withContext(Dispatchers.IO) {
                     runCatching {
                         idCapa = com.forge.pixpin.ui.ExportarDocumentoAnotado.idDeLaCapa(original, com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@PlanoActivity, original))
-                        // Dónde cae la capa: lo que diga su `.hoja` (escrita aquí o en el PC); si no hay,
-                        // la escala de las letras del plano. Ver [CapaDelPlano].
-                        val delFichero = com.forge.pixpin.sincro.AnotacionesDelAdjunto.leerMarco(com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, idCapa))
-                            ?.let { CapaDelPlano.encajeDe(it, m.caja) }
-                            ?: CapaDelPlano.Encaje(EscalaDeLaCapa.leerOPoner(File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)), m), 0.0, 0.0)
-                        // **En memoria, siempre la unidad de la letra** (como el PC): una capa escrita con
-                        // otra (la del PC de antes, la milésima del lado) engordaba el lápiz hasta tapar el
-                        // plano. El fichero sigue en la suya. Ver [CapaDelPlano.Unidades].
-                        val enMemoria = CapaDelPlano.Encaje(EscalaDeLaCapa.deLasLetras(m), 0.0, 0.0)
-                        val unidades = CapaDelPlano.unidadesEntre(enMemoria, delFichero)
-                        encajeDelFichero = delFichero
-                        encaje = if (unidades.iguales) delFichero else enMemoria
-                        val leida = CapaDelPlano.aLaMemoria(
-                            com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, idCapa)) ?: com.forge.pixpin.motor.Scene(),
-                            unidades
-                        )
-                        capaEnMemoria = leida
-                        com.forge.pixpin.motor.DrawController(leida.escena).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+                        leerCapaDelDisco(m)
                     }.getOrNull()
                 }
+                capa = leida?.let { l ->
+                    ponerCapaLeida(l)
+                    com.forge.pixpin.motor.DrawController(l.enMemoria.escena).also { it.pedirLaMedida = false; it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+                }
+                guardadaEnMemoria = capa?.scene?.elements.orEmpty()
                 // Las cotas y los marcos que había (de aquí o del PC).
                 capa?.let { c -> CapaDelPlano.leer(c.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms } }
                 pintor = PintorDePlano(m, grosor = (densidad / 1.5f).coerceIn(1f, 3f)).also {
@@ -445,6 +517,32 @@ class PlanoActivity : ComponentActivity() {
             cotasParaGuardar = hechas; marcosParaGuardar = hojas
             pedirEncima(true)
             if (listo) { delay(800); guardarCapa(); cambiosEnLaCapa++ }
+        }
+        // **Lo que llega con el plano abierto, a la vista**: cada 0,7 s se mira si la capa o su `.hoja`
+        // cambiaron en el disco (la sincronización, o lo junto al guardar) y, si no se está anotando
+        // ni hay nada sin guardar, se vuelve a leer. Con algo a medias, se juntará al guardar.
+        LaunchedEffect(listo) {
+            if (!listo) return@LaunchedEffect
+            while (true) {
+                delay(700)
+                if (anotando) continue
+                val m = modelo ?: continue
+                val laCapa = capa ?: continue
+                val id = idCapa.ifBlank { null } ?: continue
+                val ruta = File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@PlanoActivity, id))
+                val hoja = com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, id)
+                val llego = withContext(Dispatchers.IO) { sello(ruta) != selloDeLaCapa || sello(hoja) != selloDeLaHoja }
+                if (!llego) continue
+                val aMedias = CapaDelPlano.con(laCapa.scene, encaje, hechas, hojas, System.currentTimeMillis()).elements != guardadaEnMemoria
+                if (aMedias) continue
+                val l = withContext(Dispatchers.IO) { runCatching { leerCapaDelDisco(m) }.getOrNull() } ?: continue
+                ponerCapaLeida(l)
+                laCapa.load(l.enMemoria.escena)
+                guardadaEnMemoria = laCapa.scene.elements
+                CapaDelPlano.leer(laCapa.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms }
+                cotasParaGuardar = hechas; marcosParaGuardar = hojas
+                cambiosEnLaCapa++; marcos++
+            }
         }
         // Lo de encima, otra vez cuando cambia lo que lleva o cómo se pinta.
         LaunchedEffect(listo, claro, anotando, cambiosEnLaCapa) {

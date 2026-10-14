@@ -99,6 +99,26 @@ object CapaDelPlano {
         }
     }
 
+    /** La escena [s], escrita en las unidades de [de], pasada a las de [a] (sin subir versiones). */
+    fun cambiarDeUnidades(s: Scene, de: Encaje, a: Encaje): Scene {
+        val u = unidadesEntre(a, de)
+        return if (u.iguales) s else s.copy(elements = s.elements.map(u::aLaMemoria))
+    }
+
+    /**
+     * **Lo que se guarda, juntado con lo que hay en el disco** si cambió desde que se leyó (13-oct-2026,
+     * la guía del PC: el visor pisaba lo que la sincronización traía del PC con el plano abierto, y
+     * la vuelta siguiente lo tomaba por borrado en los dos). Con la fusión de la sincronización:
+     * [base] es el fichero tal como se leyó o escribió aquí la última vez, [mio] lo que se va a
+     * escribir y [enDisco] lo que hay ahora; los tres en las mismas unidades.
+     */
+    fun juntarConElDisco(base: String?, mio: String, enDisco: String): String {
+        fun j(t: String) = kotlinx.serialization.json.Json.parseToJsonElement(t)
+        return runCatching {
+            com.forge.pixpin.sincro.Fusion.json(base?.let(::j), j(mio), j(enDisco), com.forge.pixpin.sincro.Fusion.Criterio(mioMasNuevo = true))?.toString()
+        }.getOrNull() ?: mio
+    }
+
     fun aLaMemoria(fichero: Scene, unidades: Unidades): EnMemoria {
         if (unidades.iguales) return EnMemoria(fichero, unidades, emptyMap())
         val leidos = HashMap<String, Pair<Element, Element>>()

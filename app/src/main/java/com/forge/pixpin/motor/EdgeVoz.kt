@@ -26,8 +26,16 @@ object EdgeVoz {
 
     const val URL_DE_VOCES = "https://$BASE/voices/list?trustedclienttoken=$TOKEN"
 
+    /**
+     * **Por el servidor nuevo** (14-oct-2026, como el PC `crates/pixpin-voz/src/edge.rs`): desde el
+     * 12-oct el de siempre (`$BASE/edge/v1`) contesta 403 al hablar —la lista de voces sigue
+     * yendo— y Edge habla ahora por `api.msedgeservices.com`, que acepta el mismo token como
+     * `Ocp-Apim-Subscription-Key` y el mismo `Sec-MS-GEC` (rany2/edge-tts #491).
+     */
+    private const val HABLAR = "api.msedgeservices.com/tts/cognitiveservices/websocket/v1"
+
     fun urlDeHablar(conexion: String, gec: String) =
-        "wss://$BASE/edge/v1?TrustedClientToken=$TOKEN&ConnectionId=$conexion&Sec-MS-GEC=$gec&Sec-MS-GEC-Version=1-$CHROMIUM"
+        "wss://$HABLAR?Ocp-Apim-Subscription-Key=$TOKEN&ConnectionId=$conexion&Sec-MS-GEC=$gec&Sec-MS-GEC-Version=1-$CHROMIUM"
 
     /** Las cabeceras con las que se presenta Edge. */
     fun cabeceras(muid: String): Map<String, String> = mapOf(

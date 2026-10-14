@@ -105,6 +105,37 @@ class PlanosEnSincroTest {
     }
 
     @Test
+    fun guardar_junta_con_lo_que_llego_del_pc_y_no_lo_pisa() {
+        val json = com.forge.pixpin.motor.ExcalidrawJson
+        fun trazo(id: String, x: Double) = com.forge.pixpin.motor.newElement(com.forge.pixpin.motor.ElementType.RECTANGLE, x, 0.0,
+            com.forge.pixpin.motor.ItemStyle(), 10.0, 10.0).copy(id = id)
+        // Lo leído al abrir: un trazo del móvil.
+        val base = Scene(elements = listOf(trazo("m1", 0.0)))
+        val textoBase = json.encodeToString(Scene.serializer(), base)
+        // Con el plano abierto llega del PC un rectángulo (pc104), y aquí se dibuja otro (m2).
+        val enDisco = json.encodeToString(Scene.serializer(), base.copy(elements = base.elements + trazo("pc104", 50.0)))
+        val mio = json.encodeToString(Scene.serializer(), base.copy(elements = base.elements + trazo("m2", 90.0)))
+        val junto = json.decodeFromString(Scene.serializer(), CapaDelPlano.juntarConElDisco(textoBase, mio, enDisco))
+        assertEquals(setOf("m1", "pc104", "m2"), junto.elements.map { it.id }.toSet())
+        // Caso negativo: lo que se borró aquí (m1) se va, y lo del PC se queda.
+        val sinM1 = json.encodeToString(Scene.serializer(), Scene(elements = listOf(trazo("m2", 90.0))))
+        val junto2 = json.decodeFromString(Scene.serializer(), CapaDelPlano.juntarConElDisco(textoBase, sinM1, enDisco))
+        assertEquals(setOf("pc104", "m2"), junto2.elements.map { it.id }.toSet())
+    }
+
+    @Test
+    fun cambiar_de_unidades_deja_cada_cosa_en_su_sitio_del_plano() {
+        val a = CapaDelPlano.Encaje(0.07, 10.0, -3.0)
+        val b = CapaDelPlano.Encaje(2.5, -100.0, 40.0)
+        val e = com.forge.pixpin.motor.newElement(com.forge.pixpin.motor.ElementType.RECTANGLE, 12.0, 7.0, com.forge.pixpin.motor.ItemStyle(), 3.0, 2.0).copy(id = "x")
+        val enB = CapaDelPlano.cambiarDeUnidades(Scene(elements = listOf(e)), a, b).elements[0]
+        assertEquals(a.aPlanoX(e.x), b.aPlanoX(enB.x), 1e-9)
+        assertEquals(a.aPlanoY(e.y), b.aPlanoY(enB.y), 1e-9)
+        assertEquals(e.width * a.u, enB.width * b.u, 1e-9)
+        assertEquals(e.version, enB.version) // sin subir versiones
+    }
+
+    @Test
     fun los_marcos_llevan_su_numero_de_hoja_y_se_leen_en_ese_orden() {
         val e = CapaDelPlano.Encaje(0.1, 0.0, 0.0)
         val a = ImprimirPlano.Marco.entre(50.0, 0.0, 60.0, 8.0)
