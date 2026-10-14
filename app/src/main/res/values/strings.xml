@@ -839,6 +839,8 @@
     <string name="figuras_sin_mias">Todavía no has guardado ninguna.</string>
 
     <string name="tabla_pegada_abrir">Pegar una tabla</string>
+    <string name="texto_pegado_abrir">Pegar texto</string>
+    <string name="texto_pegado_vacio">En el portapapeles no hay texto que pegar.</string>
     <string name="tabla_pegada_titulo">Tabla del portapapeles</string>
     <string name="tabla_pegada_ayuda">Copia las celdas en Excel o Sheets y vuelve aquí. Puedes corregir lo que haga falta antes de insertarla.</string>
     <string name="tabla_pegada_vacia">En el portapapeles no hay una tabla. Copia unas celdas y vuelve a tocar «Pegar».</string>

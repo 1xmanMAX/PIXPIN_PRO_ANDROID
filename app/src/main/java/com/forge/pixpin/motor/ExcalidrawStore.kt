@@ -64,7 +64,11 @@ object ExcalidrawStore {
 
         // Se escribe a un temporal y se renombra: en esta aplicación el proceso
         // muere sin avisar más de lo normal, y un archivo a medias no abre.
-        val texto = ExcalidrawJson.encodeToString(scene.copy(elements = purgeDeleted(scene.elements)))
+        // Con ids únicos: un dibujo que llegó con dos figuras del mismo id se guarda ya arreglado
+        // y viaja así. Ver [IdsRepetidos].
+        val texto = ExcalidrawJson.encodeToString(
+            scene.copy(elements = IdsRepetidos.arreglar(purgeDeleted(scene.elements)))
+        )
         GZIPOutputStream(temporal.outputStream()).use { it.write(texto.toByteArray()) }
 
         if (destino.exists()) destino.delete()
@@ -114,7 +118,10 @@ object ExcalidrawStore {
         val file = File(path)
         if (!file.exists()) return null
         val texto = GZIPInputStream(file.inputStream()).use { it.readBytes().decodeToString() }
-        ExcalidrawJson.decodeFromString<Scene>(texto)
+        // **Ninguna figura tapa a otra con su id** (13-oct-2026): si el archivo trae dos con el
+        // mismo, la de versión más baja sale ya con uno nuevo, y al guardar se queda así. Ver
+        // [IdsRepetidos].
+        IdsRepetidos.arreglar(ExcalidrawJson.decodeFromString<Scene>(texto))
     }.getOrNull()
 
     fun borrar(path: String?) {
@@ -194,7 +201,7 @@ object ExcalidrawStore {
         }.toMap()
 
         Scene(
-            elements = archivo.elements,
+            elements = IdsRepetidos.arreglar(archivo.elements),
             files = ficheros,
             backgroundColor = archivo.appState.viewBackgroundColor
         )

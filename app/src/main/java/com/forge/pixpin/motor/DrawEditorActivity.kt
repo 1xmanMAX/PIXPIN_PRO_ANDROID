@@ -2410,6 +2410,17 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
                         onGrafica = {
                             figurasAbiertas = false
                             graficaAbierta = true
+                        },
+                        onPegarTexto = {
+                            figurasAbiertas = false
+                            if (pegarTextoDelPortapapeles()) {
+                                cambiado()
+                            } else {
+                                android.widget.Toast.makeText(
+                                    this@DrawEditorActivity, R.string.texto_pegado_vacio,
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     )
                 }
@@ -3877,6 +3888,48 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes {
             .joinToString("\n")
             .ifBlank { null }
     }.getOrNull()
+
+    /**
+     * **Pega el texto del portapapeles como un texto del dibujo** (14-oct-2026), en el centro de lo
+     * que se ve, con la letra, el tamaño, el color y la alineación del panel. Es el
+     * `Gesto::pegar_texto` del PC; lo que hace con el texto está en [DrawController.pegarTexto] y
+     * [TextoPegado]. Devuelve si pegó algo; quien llama repinta y guarda.
+     */
+    private fun pegarTextoDelPortapapeles(): Boolean {
+        if (controller.soloMirar) return false
+        val crudo = textoDelPortapapeles() ?: return false
+        val v = controller.scene.viewport
+        val m = resources.displayMetrics
+        val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: m.widthPixels.toDouble()
+        val alto = medidaDelLienzo.height.takeIf { it > 0 }?.toDouble() ?: m.heightPixels.toDouble()
+        // Medir un renglón se pregunta una vez por palabra: la brocha se monta una vez por letra y
+        // tamaño, no en cada pregunta. Ver [DrawFonts.reglaDeAnchos].
+        val reglas = HashMap<Pair<Int, Double>, (String) -> Double>()
+        return controller.pegarTexto(
+            crudo,
+            centro = v.toScene(ancho / 2, alto / 2),
+            anchoVisible = ancho / v.zoom.coerceAtLeast(0.0001),
+            mide = { renglon, familia, tamano ->
+                reglas.getOrPut(familia to tamano) { DrawFonts.reglaDeAnchos(this, familia, tamano) }(renglon)
+            },
+            medida = { texto, familia, tamano -> medirTexto(texto, familia, tamano) }
+        ) != null
+    }
+
+    /**
+     * **Ctrl+V con un teclado puesto** pega el texto en el lienzo, como en el PC. Solo llega aquí
+     * si nadie lo ha usado antes: escribiendo en un texto, el cuadro de escribir se lo queda y
+     * pega dentro de él, que es lo que se espera.
+     */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+        val pegar = keyCode == android.view.KeyEvent.KEYCODE_PASTE ||
+            (keyCode == android.view.KeyEvent.KEYCODE_V && event.isCtrlPressed)
+        if (pegar && event.repeatCount == 0 && pegarTextoDelPortapapeles()) {
+            llegoDeFuera.intValue++   // repinta y guarda, como lo que llega del PC
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
 
     /** Pasa a la hoja de al lado y la encuadra. Ver [DrawController.pasarDeHoja]. */
     private fun pasarDeHoja(delta: Int) {
