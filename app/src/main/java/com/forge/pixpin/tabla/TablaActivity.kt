@@ -298,7 +298,7 @@ class TablaActivity : ComponentActivity() {
  * Trabajo de disco. Si no se deja leer, lanza [ImportarHojas.NoSeLee].
  */
 /** La tabla como página web (con sus fórmulas) o como CSV, en la carpeta que publica el proveedor. */
-private fun archivoDeLaTabla(contexto: Context, foto: TablaDeCalculo, web: Boolean, opciones: ExportarHtml.Opciones = ExportarHtml.Opciones()): File? {
+internal fun archivoDeLaTabla(contexto: Context, foto: TablaDeCalculo, web: Boolean, opciones: ExportarHtml.Opciones = ExportarHtml.Opciones()): File? {
     val titulo = foto.nombre.ifBlank { "Tabla" }
     val base = ExportarProyecto.nombreDeArchivo(titulo)
     val carpeta = File(contexto.cacheDir, "share").apply { mkdirs() }

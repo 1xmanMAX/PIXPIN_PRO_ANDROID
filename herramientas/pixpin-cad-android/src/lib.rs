@@ -29,6 +29,8 @@ pub mod shx;
 pub mod teselar;
 #[path = "pc/texto.rs"]
 pub mod texto;
+/// El plano por capas y a DXF, para exportarlo (14-oct-2026).
+pub mod capas;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -160,12 +162,17 @@ pub(crate) fn estrecho_android(clave: &str, fichero: &str) -> f32 {
 /// Arial Narrow mide de ancho un 82 % de Arial (la media de sus letras).
 const ANCHO_DE_ARIAL_NARROW: f32 = 0.82;
 
-/// Lee `entrada` y escribe el modelo en `salida` (por un temporal y
-/// `rename`: nadie ve nunca medio archivo). Devuelve un resumen.
-pub fn convertir_a(entrada: &Path, salida: &Path, carpeta_shx: &str) -> Result<String, String> {
+/// Las carpetas de letras que manda la app (una por renglón).
+pub(crate) fn poner_carpetas_shx(carpeta_shx: &str) {
     if let Ok(mut c) = CARPETA_SHX.lock() {
         *c = carpeta_shx.to_string();
     }
+}
+
+/// Lee `entrada` y escribe el modelo en `salida` (por un temporal y
+/// `rename`: nadie ve nunca medio archivo). Devuelve un resumen.
+pub fn convertir_a(entrada: &Path, salida: &Path, carpeta_shx: &str) -> Result<String, String> {
+    poner_carpetas_shx(carpeta_shx);
     sacar_lo_que_falta();
     let (mut modelo, cuentas) = std::panic::catch_unwind(|| convertir::convertir_fichero(entrada))
         .map_err(|e| {
@@ -256,6 +263,27 @@ pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_revitAIfc<'a>(
 ) -> jni::sys::jstring {
     let (e, s) = (texto_de(&mut env, &entrada), texto_de(&mut env, &salida));
     let r = revit_a_ifc_en(Path::new(&e), Path::new(&s));
+    resultado(&mut env, r)
+}
+
+/// `PlanoNativo.capas(entrada, salida, carpetaShx): String?` — el plano por
+/// capas (`PXCAPAS1`) para exportarlo; null si salió bien.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_capas<'a>(
+    mut env: jni::JNIEnv<'a>, _c: jni::objects::JClass<'a>, entrada: jni::objects::JString<'a>, salida: jni::objects::JString<'a>, shx: jni::objects::JString<'a>,
+) -> jni::sys::jstring {
+    let (e, s, f) = (texto_de(&mut env, &entrada), texto_de(&mut env, &salida), texto_de(&mut env, &shx));
+    let r = capas::capas_a(Path::new(&e), Path::new(&s), &f).map(|_| ());
+    resultado(&mut env, r)
+}
+
+/// `PlanoNativo.aDxf(entrada, salida): String?` — un DWG pasado a DXF; null si salió bien.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_aDxf<'a>(
+    mut env: jni::JNIEnv<'a>, _c: jni::objects::JClass<'a>, entrada: jni::objects::JString<'a>, salida: jni::objects::JString<'a>,
+) -> jni::sys::jstring {
+    let (e, s) = (texto_de(&mut env, &entrada), texto_de(&mut env, &salida));
+    let r = capas::dxf_a(Path::new(&e), Path::new(&s));
     resultado(&mut env, r)
 }
 

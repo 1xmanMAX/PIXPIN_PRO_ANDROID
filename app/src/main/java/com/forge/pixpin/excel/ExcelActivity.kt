@@ -115,6 +115,8 @@ class ExcelActivity : ComponentActivity() {
         val marca = remember { mutableIntStateOf(0) }
         var activa by remember { mutableIntStateOf(0) }
         var oscuro by remember { mutableStateOf(com.forge.pixpin.office.Oscuro.activo(this@ExcelActivity)) }
+        // **Exportar** (14-oct-2026, como el PC): la hoja de compartir de siempre. Ver [ExportarExcel].
+        var exportando by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
 
         LaunchedEffect(ruta) {
             val l = withContext(Dispatchers.IO) { LibroExcel.abrir(ruta) }
@@ -168,10 +170,18 @@ class ExcelActivity : ComponentActivity() {
                     },
                     if (abierto != null) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.ContentCopy, "Copiar") { vista?.let { copiar(it) }; toques++ } else null,
                     com.forge.pixpin.ui.BotonDeLector(Icons.Filled.TableChart, "A tabla") { aTabla(ruta, nombre, mensaje, alFallar = false) },
+                    abierto?.let { l ->
+                        com.forge.pixpin.ui.BotonDeLector(com.forge.pixpin.ui.IconoDeCompartir, "Exportar") {
+                            val hojas = l.libro.hojas.filter { it.visible && it.tipo == 0 }.map { it.nombre }
+                            exportando = ExportarExcel.compartible(this@ExcelActivity, ruta, nombre, hojas) { vista }
+                            toques++
+                        }
+                    },
                     com.forge.pixpin.ui.BotonDeLector(Icons.Filled.OpenInNew, "Abrir con") { com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(ruta)) }
                 ),
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
             // Abajo, flotando: la línea de la celda (con algo elegido) y las pestañas de las hojas.
             if (l != null) Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 6.dp),
