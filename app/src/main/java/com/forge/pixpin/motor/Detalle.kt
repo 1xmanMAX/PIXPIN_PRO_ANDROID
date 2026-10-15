@@ -88,6 +88,32 @@ object Detalle {
         return PdfDeNota.MedioParaPdf(null, 0, 0, "${archivo.name} · $tipo · ${legible(archivo.length())}")
     }
 
+    /**
+     * **Las letras de reserva del PDF de una nota** (15-oct-2026): las del teléfono para lo que la
+     * Helvetica no tiene (∑, π, ✓, flechas, griegas) y los emoji pintados con la letra de color.
+     * Ver [LetrasDelPdf]. Se abre cada una solo si hace falta.
+     */
+    fun letrasParaPdf(): LetrasDelPdf = LetrasDelPdf.delSistema(dibujo = ::emojiParaPdf)
+
+    /**
+     * **Un emoji (o lo que ninguna letra con contornos tiene) pintado**, sobre blanco, para ir en el
+     * PDF como imagen: la letra de color del teléfono no tiene contornos que incrustar. Null si no
+     * pinta nada (un carácter que el teléfono tampoco sabe).
+     */
+    fun emojiParaPdf(texto: String): PdfDeNota.MedioParaPdf? = runCatching {
+        val pincel = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textSize = 96f; color = android.graphics.Color.BLACK }
+        if (!pincel.hasGlyph(texto)) return null
+        val ancho = pincel.measureText(texto).toInt().coerceAtLeast(1)
+        val fm = pincel.fontMetricsInt
+        val alto = (fm.descent - fm.ascent).coerceAtLeast(1)
+        val bmp = android.graphics.Bitmap.createBitmap(ancho, alto, android.graphics.Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(bmp).apply { drawColor(android.graphics.Color.WHITE); drawText(texto, 0f, -fm.ascent.toFloat(), pincel) }
+        val salida = java.io.ByteArrayOutputStream()
+        bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, salida)
+        bmp.recycle()
+        PdfDeNota.MedioParaPdf(salida.toByteArray(), ancho, alto, null)
+    }.getOrNull()
+
     /** `1,2 MB`, `340 KB`, `812 B`. */
     fun legible(bytes: Long): String = when {
         bytes >= 1L shl 30 -> String.format(java.util.Locale.getDefault(), "%.2f GB", bytes / (1L shl 30).toDouble())

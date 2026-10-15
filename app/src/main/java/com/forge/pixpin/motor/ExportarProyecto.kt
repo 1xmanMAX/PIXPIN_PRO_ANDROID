@@ -135,10 +135,11 @@ object ExportarProyecto {
         }
 
         // Las notas van detrás, como texto de verdad. Ver [PdfDeNota].
+        val letras by lazy { Detalle.letrasParaPdf() }
         notas.forEach { nota ->
             val actual = archivo
             val base = if (actual != null) actual.readBytes() else pdfEnBlanco()
-            val conNota = PdfDeNota.aniadir(base, nota, Detalle::medioParaPdf) ?: return@forEach
+            val conNota = PdfDeNota.aniadir(base, nota, letras, Detalle::medioParaPdf) ?: return@forEach
             val destino = actual ?: File(
                 File(context.cacheDir, "share").apply { mkdirs() }, "$nombre.pdf"
             )

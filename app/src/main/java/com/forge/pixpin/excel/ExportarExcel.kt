@@ -54,7 +54,7 @@ object ExportarExcel {
             add(Compartible.Formato("pdf", Icons.Filled.PictureAsPdf, "PDF", Compartible.VARIAS, generar = { claves ->
                 val t = elegidas(claves).takeIf { it.isNotEmpty() } ?: return@Formato null
                 val texto = t.joinToString("\n\n") { h -> "## ${h.nombre}\n\n" + com.forge.pixpin.motor.TablaViva.comoMarkdown(h.tabla) }
-                val pdf = com.forge.pixpin.motor.PdfDeNota.aniadir(com.forge.pixpin.motor.PdfUnion.enBlanco(), texto) ?: return@Formato null
+                val pdf = com.forge.pixpin.motor.PdfDeNota.aniadir(com.forge.pixpin.motor.PdfUnion.enBlanco(), texto, letras = com.forge.pixpin.motor.Detalle.letrasParaPdf()) ?: return@Formato null
                 val destino = File(ExportarVisor.carpeta(c), ExportarVisor.nombre(titulo, "pdf")).also { it.writeBytes(pdf) }
                 Compartible.Salida(destino, "application/pdf", "Los valores, como texto que se busca y se copia")
             }))

@@ -29,9 +29,12 @@ import com.forge.pixpin.motormd.tramosDe
  * cualquier sitio. A cambio no se puede usar una tipografía propia, que en una
  * nota de trabajo no hace ninguna falta.
  *
- * El texto va en Latin-1, que es lo que entiende `WinAnsiEncoding`. Cubre los
- * acentos y las eñes; lo que se salga —un emoji, un símbolo raro— se cambia por
- * un interrogante en vez de romper el archivo.
+ * El texto va en `WinAnsiEncoding`, que cubre los acentos, las eñes, las comillas
+ * y la viñeta. **Lo que se salga** —∑, π, ✓, las flechas, las griegas— **va con
+ * una letra de reserva incrustada** que sí lo tenga ([LetrasDelPdf], 15-oct-2026,
+ * como el PC el 14-oct), con su `ToUnicode` para que se copie y se busque; un
+ * emoji, como imagen si quien exporta lo sabe pintar. Lo que no tiene ninguna
+ * sale como el cuadrito del hueco, **nunca como un «?» callado**.
  */
 object PdfDeNota {
 
@@ -60,7 +63,13 @@ object PdfDeNota {
      */
     class MedioParaPdf(val jpeg: ByteArray?, val ancho: Int, val alto: Int, val etiqueta: String?)
 
-    fun aniadir(original: ByteArray, texto: String, medio: (String) -> MedioParaPdf? = { null }): ByteArray? = runCatching {
+    fun aniadir(
+        original: ByteArray,
+        texto: String,
+        /** Las letras para lo que la Helvetica no tiene. Sin ellas, lo que falta sale como un cuadrito. */
+        letras: LetrasDelPdf? = null,
+        medio: (String) -> MedioParaPdf? = { null }
+    ): ByteArray? = runCatching {
         val archivo = leerPdf(original) ?: return null
         if (archivo.cifrado) return null
 
@@ -71,30 +80,31 @@ object PdfDeNota {
         var bytes = original
         paginas.forEach { bloques ->
             val actual = leerPdf(bytes) ?: return@forEach
-            val hoja = Hoja(StringBuilder(), medio, PdfEscritura.primerNumeroLibre(actual))
+            val hoja = Hoja(StringBuilder(), medio, PdfEscritura.primerNumeroLibre(actual), letras)
             bloques.forEach { hoja.bloque(it) }
+            val fuentes = hoja.cerrarLetras()
             bytes = PdfAnotado.aniadirPagina(
                 actual,
                 hoja.salida.toString().toByteArray(Charsets.ISO_8859_1),
                 A4_ANCHO,
                 A4_ALTO,
-                recursos = recursos(hoja.imagenes),
+                recursos = recursos(hoja.imagenes, fuentes),
                 extra = hoja.extra
             ) ?: bytes
         }
         bytes
     }.getOrNull()
 
-    /** Las catorce de siempre, sin incrustar nada. */
-    private fun recursos(imagenes: Map<String, PdfValor.Ref> = emptyMap()): PdfValor.Dicc = PdfValor.Dicc(
+    /** Las catorce de siempre, sin incrustar nada, y las reservas que hicieron falta ([Hoja.cerrarLetras]). */
+    private fun recursos(imagenes: Map<String, PdfValor.Ref> = emptyMap(), reservas: Map<String, PdfValor.Ref> = emptyMap()): PdfValor.Dicc = PdfValor.Dicc(
         linkedMapOf<String, PdfValor>(
             "Font" to PdfValor.Dicc(
-                linkedMapOf(
+                linkedMapOf<String, PdfValor>(
                     "F1" to fuente("Helvetica"),
                     "F2" to fuente("Helvetica-Bold"),
                     "F3" to fuente("Helvetica-Oblique"),
                     "F4" to fuente("Courier")
-                )
+                ).also { it.putAll(reservas) }
             )
         ).also { if (imagenes.isNotEmpty()) it["XObject"] = PdfValor.Dicc(imagenes) }
     )
@@ -114,7 +124,12 @@ object PdfDeNota {
      * El papel mide de abajo arriba, así que escribir hacia abajo es restar. Se
      * lleva la cuenta en [y] y cada bloque la mueve lo suyo.
      */
-    private class Hoja(val salida: StringBuilder, val medio: (String) -> MedioParaPdf? = { null }, primerNumero: Int = 1) {
+    private class Hoja(
+        val salida: StringBuilder,
+        val medio: (String) -> MedioParaPdf? = { null },
+        primerNumero: Int = 1,
+        val letras: LetrasDelPdf? = null
+    ) {
         var y = A4_ALTO - MARGEN
         /** Las imágenes de esta página, como objetos del PDF, y su nombre en los recursos. */
         val extra = ArrayList<ObjetoPdf>()
@@ -189,26 +204,7 @@ object PdfDeNota {
                         var h = w * m.alto / m.ancho
                         val altoMax = minOf(360.0, (y - MARGEN).coerceAtLeast(80.0))
                         if (h > altoMax) { h = altoMax; w = h * m.ancho / m.alto }
-                        val numero = siguiente++
-                        val nombre = "Im${imagenes.size + 1}"
-                        extra += ObjetoPdf(
-                            numero,
-                            PdfValor.Flujo(
-                                PdfValor.Dicc(
-                                    linkedMapOf(
-                                        "Type" to PdfValor.Nombre("XObject"),
-                                        "Subtype" to PdfValor.Nombre("Image"),
-                                        "Width" to PdfValor.Numero(m.ancho.toDouble()),
-                                        "Height" to PdfValor.Numero(m.alto.toDouble()),
-                                        "ColorSpace" to PdfValor.Nombre("DeviceRGB"),
-                                        "BitsPerComponent" to PdfValor.Numero(8.0),
-                                        "Filter" to PdfValor.Nombre("DCTDecode")
-                                    )
-                                ),
-                                jpeg
-                            )
-                        )
-                        imagenes[nombre] = PdfValor.Ref(numero, 0)
+                        val nombre = imagen(jpeg, m.ancho, m.alto)
                         y -= h + CUERPO * 0.4
                         val x = MARGEN + (anchoCaja - w) / 2
                         salida.append("q ").append(PdfEscritura.numero(w)).append(" 0 0 ").append(PdfEscritura.numero(h))
@@ -238,6 +234,35 @@ object PdfDeNota {
             }
             y -= CUERPO * 0.35
         }
+
+        /** Una imagen JPEG como objeto de la página; devuelve su nombre en los recursos. Las iguales, una vez. */
+        private fun imagen(jpeg: ByteArray, ancho: Int, alto: Int, clave: String? = null): String {
+            clave?.let { k -> porClave[k]?.let { return it } }
+            val numero = siguiente++
+            val nombre = "Im${imagenes.size + 1}"
+            extra += ObjetoPdf(
+                numero,
+                PdfValor.Flujo(
+                    PdfValor.Dicc(
+                        linkedMapOf(
+                            "Type" to PdfValor.Nombre("XObject"),
+                            "Subtype" to PdfValor.Nombre("Image"),
+                            "Width" to PdfValor.Numero(ancho.toDouble()),
+                            "Height" to PdfValor.Numero(alto.toDouble()),
+                            "ColorSpace" to PdfValor.Nombre("DeviceRGB"),
+                            "BitsPerComponent" to PdfValor.Numero(8.0),
+                            "Filter" to PdfValor.Nombre("DCTDecode")
+                        )
+                    ),
+                    jpeg
+                )
+            )
+            imagenes[nombre] = PdfValor.Ref(numero, 0)
+            clave?.let { porClave[it] = nombre }
+            return nombre
+        }
+
+        private val porClave = HashMap<String, String>()
 
         /** Una marca a la izquierda —viñeta, número, casilla— y el texto al lado. */
         private fun conMarca(marca: String, contenido: InlineText) {
@@ -342,7 +367,11 @@ object PdfDeNota {
             y = abajo - CUERPO * 0.6
         }
 
-        /** Un texto en su sitio, con su fuente y su tamaño. */
+        /**
+         * Un texto en su sitio, con su fuente y su tamaño. Lo que la Helvetica no tiene va con su
+         * reserva en el mismo bloque (el lector avanza solo); un emoji pintado o el cuadrito del
+         * hueco cortan el bloque y se ponen donde va la cuenta de los anchos ([piezasDe]).
+         */
         private fun escribir(
             texto: String,
             x: Double,
@@ -351,11 +380,180 @@ object PdfDeNota {
             base: Double = y
         ) {
             if (texto.isEmpty()) return
-            salida.append("BT /").append(fuente).append(' ')
-                .append(PdfEscritura.numero(tam)).append(" Tf ")
-                .append(PdfEscritura.numero(x)).append(' ')
-                .append(PdfEscritura.numero(base)).append(" Td ")
-                .append(cadena(texto)).append(" Tj ET\n")
+            var cx = x
+            var abierto = false
+            var puesta: String? = null
+            fun cerrar() { if (abierto) { salida.append("ET\n"); abierto = false } }
+            for (p in piezasDe(texto, fuente, apuntar = true)) {
+                when (p) {
+                    is Pieza.Texto -> {
+                        if (!abierto) {
+                            salida.append("BT ").append(PdfEscritura.numero(cx)).append(' ').append(PdfEscritura.numero(base)).append(" Td ")
+                            abierto = true; puesta = null
+                        }
+                        if (puesta != p.fuente) { salida.append('/').append(p.fuente).append(' ').append(PdfEscritura.numero(tam)).append(" Tf "); puesta = p.fuente }
+                        salida.append(p.cadena).append(" Tj ")
+                    }
+                    is Pieza.Dibujo -> {
+                        cerrar()
+                        val m = p.medio
+                        val alto = tam * 0.95
+                        val ancho = alto * m.ancho / m.alto.coerceAtLeast(1)
+                        val nombre = imagen(m.jpeg!!, m.ancho, m.alto, clave = "dibujo:" + p.texto)
+                        salida.append("q ").append(PdfEscritura.numero(ancho)).append(" 0 0 ").append(PdfEscritura.numero(alto))
+                            .append(' ').append(PdfEscritura.numero(cx)).append(' ').append(PdfEscritura.numero(base - tam * 0.18))
+                            .append(" cm /").append(nombre).append(" Do Q\n")
+                    }
+                    is Pieza.Hueco -> {
+                        cerrar()
+                        recuadro(cx + tam * 0.08, base, tam * 0.45, tam * 0.7)
+                    }
+                }
+                cx += p.ancho * tam / 1000.0
+            }
+            cerrar()
+        }
+
+        // ------------------------------------------------------ las letras
+
+        /** Los glifos de cada reserva usados en la página, con el carácter que dibujan (para el `ToUnicode`). */
+        private val usadas = java.util.TreeMap<Int, java.util.TreeMap<Int, String>>()
+
+        /** Un trozo del texto: con una letra, pintado, o el cuadrito. [ancho] en milésimas del cuerpo. */
+        private sealed class Pieza(val ancho: Double) {
+            class Texto(val fuente: String, val cadena: String, ancho: Double) : Pieza(ancho)
+            class Dibujo(val texto: String, val medio: MedioParaPdf, ancho: Double) : Pieza(ancho)
+            class Hueco : Pieza(600.0)
+        }
+
+        /**
+         * **Con qué se escribe cada carácter** de [texto] en [fuente]: los de WinAnsi en la Helvetica
+         * (o la Courier), los demás con la primera reserva que los tenga, y lo que no tiene ninguna,
+         * pintado o como el hueco. Los seguidos con la misma letra van juntos. Con [apuntar] se
+         * anotan los glifos usados (solo al escribir: medir no cuenta).
+         */
+        private fun piezasDe(texto: String, fuente: String, apuntar: Boolean = false): List<Pieza> {
+            val salida = ArrayList<Pieza>()
+            var actual: String? = null
+            val cadena = StringBuilder()
+            var ancho = 0.0
+            fun soltar() {
+                val f = actual ?: return
+                salida += Pieza.Texto(f, if (f.startsWith("R")) "<$cadena>" else "($cadena)", ancho)
+                actual = null; cadena.setLength(0); ancho = 0.0
+            }
+            fun reserva(i: Int, g: Int, letra: String) {
+                val f = "R$i"
+                if (actual != f) { soltar(); actual = f }
+                cadena.append("%04X".format(g))
+                ancho += letras?.letra(i)?.ancho(g)?.toDouble() ?: 600.0
+                if (apuntar) usadas.getOrPut(i) { java.util.TreeMap() }.putIfAbsent(g, letra)
+            }
+            val cps = texto.codePoints().toArray()
+            var k = 0
+            while (k < cps.size) {
+                val cp = cps[k]
+                val ch = if (cp == '\t'.code) ' '.code else cp
+                val byte = winAnsi(ch)
+                when {
+                    byte != null -> {
+                        if (actual != fuente) { soltar(); actual = fuente }
+                        when (byte.toChar()) {
+                            '(', ')', '\\' -> cadena.append('\\').append(byte.toChar())
+                            else -> cadena.append(byte.toChar())
+                        }
+                        ancho += anchoWinAnsi(byte, fuente)
+                    }
+                    invisible(ch) -> {}
+                    else -> {
+                        val donde = letras?.buscar(ch)
+                        if (donde != null) reserva(donde.first, donde.second, String(Character.toChars(ch)))
+                        else {
+                            // Un emoji y lo que lo sigue (tono de piel, unión, variante) van juntos.
+                            var fin = k + 1
+                            while (fin < cps.size && (cps[fin] == 0x200D || cps[fin] in 0xFE00..0xFE0F || cps[fin] in 0x1F3FB..0x1F3FF ||
+                                    cps[fin] in 0xE0020..0xE007F || (cps[fin - 1] == 0x200D))) fin++
+                            val trozo = String(cps, k, fin - k)
+                            val pintado = letras?.pintado(trozo)?.takeIf { it.jpeg != null && it.ancho > 0 && it.alto > 0 }
+                            if (pintado != null) {
+                                soltar()
+                                salida += Pieza.Dibujo(trozo, pintado, 950.0 * pintado.ancho / pintado.alto)
+                                k = fin
+                                continue
+                            }
+                            // El hueco de una reserva (se copia como U+FFFD); sin ninguna, un cuadrito dibujado.
+                            val i = letras?.paraElHueco()
+                            if (i != null) reserva(i, 0, "\uFFFD") else { soltar(); salida += Pieza.Hueco() }
+                        }
+                    }
+                }
+                k++
+            }
+            soltar()
+            return salida
+        }
+
+        /** Lo que mide [texto] en [fuente] a [tam], con los anchos de verdad de cada letra. */
+        fun anchoDe(texto: String, tam: Double, fuente: String = "F1"): Double =
+            piezasDe(texto, fuente).sumOf { it.ancho } * tam / 1000.0
+
+        /**
+         * **Las reservas usadas, como objetos del PDF**: cada una incrustada con solo sus glifos
+         * (`Type0` → `CIDFontType2`, `Identity-H`), sus anchos y su `ToUnicode`. Devuelve su nombre
+         * en los recursos (`R0`, `R1`…). Se llama al acabar la página.
+         */
+        fun cerrarLetras(): Map<String, PdfValor.Ref> {
+            val salida = LinkedHashMap<String, PdfValor.Ref>()
+            for ((i, glifos) in usadas) {
+                val l = letras?.letra(i) ?: continue
+                val datos = runCatching { l.subconjunto(glifos.keys) }.getOrNull() ?: continue
+                val nombre = "PX" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i % 26] + "ABCD"[(i / 26) % 4] + "NT+" + l.nombre
+                val archivo = siguiente++; val descripcion = siguiente++; val cid = siguiente++; val unicode = siguiente++; val tipo0 = siguiente++
+                fun mil(v: Int) = PdfValor.Numero(Math.round(v * 1000.0 / l.unidades).toDouble())
+                extra += ObjetoPdf(archivo, PdfValor.Flujo(
+                    PdfValor.Dicc(linkedMapOf("Filter" to PdfValor.Nombre("FlateDecode"), "Length1" to PdfValor.Numero(datos.size.toDouble()))),
+                    PdfEscritura.desinflar(datos)
+                ))
+                extra += ObjetoPdf(descripcion, PdfValor.Dicc(linkedMapOf(
+                    "Type" to PdfValor.Nombre("FontDescriptor"),
+                    "FontName" to PdfValor.Nombre(nombre),
+                    "Flags" to PdfValor.Numero(4.0),
+                    "FontBBox" to PdfValor.Lista(l.caja.map { mil(it) }),
+                    "ItalicAngle" to PdfValor.Numero(0.0),
+                    "Ascent" to mil(l.ascenso),
+                    "Descent" to mil(l.descenso),
+                    "CapHeight" to mil(l.ascenso),
+                    "StemV" to PdfValor.Numero(80.0),
+                    "FontFile2" to PdfValor.Ref(archivo, 0)
+                )))
+                val anchos = ArrayList<PdfValor>()
+                for (g in glifos.keys) { anchos += PdfValor.Numero(g.toDouble()); anchos += PdfValor.Lista(listOf(PdfValor.Numero(l.ancho(g).toDouble()))) }
+                extra += ObjetoPdf(cid, PdfValor.Dicc(linkedMapOf(
+                    "Type" to PdfValor.Nombre("Font"),
+                    "Subtype" to PdfValor.Nombre("CIDFontType2"),
+                    "BaseFont" to PdfValor.Nombre(nombre),
+                    "CIDSystemInfo" to PdfValor.Dicc(linkedMapOf(
+                        "Registry" to PdfValor.Cadena("Adobe".toByteArray()),
+                        "Ordering" to PdfValor.Cadena("Identity".toByteArray()),
+                        "Supplement" to PdfValor.Numero(0.0)
+                    )),
+                    "FontDescriptor" to PdfValor.Ref(descripcion, 0),
+                    "CIDToGIDMap" to PdfValor.Nombre("Identity"),
+                    "DW" to PdfValor.Numero(1000.0),
+                    "W" to PdfValor.Lista(anchos)
+                )))
+                extra += ObjetoPdf(unicode, PdfAnotado.flujoComprimido(aUnicode(glifos).toByteArray(Charsets.ISO_8859_1)))
+                extra += ObjetoPdf(tipo0, PdfValor.Dicc(linkedMapOf(
+                    "Type" to PdfValor.Nombre("Font"),
+                    "Subtype" to PdfValor.Nombre("Type0"),
+                    "BaseFont" to PdfValor.Nombre(nombre),
+                    "Encoding" to PdfValor.Nombre("Identity-H"),
+                    "DescendantFonts" to PdfValor.Lista(listOf(PdfValor.Ref(cid, 0))),
+                    "ToUnicode" to PdfValor.Ref(unicode, 0)
+                )))
+                salida["R$i"] = PdfValor.Ref(tipo0, 0)
+            }
+            return salida
         }
 
         /** Un rectángulo de borde fino, para representar un archivo. */
@@ -375,32 +573,66 @@ object PdfDeNota {
         }
     }
 
-    /**
-     * Cuánto mide un texto, más o menos.
-     *
-     * Las anchuras de verdad de la Helvetica están en unas tablas que habría que
-     * traerse enteras; aquí basta con una media razonable para decidir dónde
-     * doblar una línea. Si se pasa por poco, la línea sale algo corta, que es el
-     * fallo que no se nota.
-     */
-    private fun anchoDe(texto: String, tam: Double): Double = texto.length * tam * 0.5
+
+    /** El byte de [cp] en WinAnsi (la Helvetica sin incrustar), si lo tiene. */
+    private fun winAnsi(cp: Int): Int? = when (cp) {
+        in 0x20..0x7E, in 0xA0..0xFF -> cp
+        else -> WIN_ANSI[cp]
+    }
+
+    /** Lo de 0x80 a 0x9F de WinAnsi: el euro, las comillas, la viñeta, las rayas… */
+    private val WIN_ANSI: Map<Int, Int> = "€\u0000‚ƒ„…†‡ˆ‰Š‹Œ\u0000Ž\u0000\u0000‘’“”•–—˜™š›œ\u0000žŸ".withIndex()
+        .filter { it.value != '\u0000' }.associate { it.value.code to 0x80 + it.index }
+
+    /** Lo que no se pinta si ninguna letra lo tiene: variantes, uniones de anchura cero, etiquetas, controles. */
+    private fun invisible(cp: Int): Boolean =
+        cp in 0x200B..0x200F || cp in 0x2060..0x2064 || cp in 0xFE00..0xFE0F || cp == 0xFEFF ||
+            cp in 0xE0000..0xE007F || cp in 0xE0100..0xE01EF || cp < 0x20 || cp in 0x7F..0x9F
 
     /**
-     * Una cadena de PDF, escapada y en Latin-1.
-     *
-     * Los paréntesis y la barra invertida se escapan porque delimitan la cadena;
-     * lo que no cabe en Latin-1 se cambia por un interrogante, que es mejor que
-     * escribir un byte que el lector no sepa leer.
+     * El ancho de un byte de WinAnsi en milésimas: los de la Helvetica (los de Liberation Sans, que
+     * mide igual que ella), en negrita los suyos, y la Courier, 600 todos.
      */
-    private fun cadena(texto: String): String {
-        val salida = StringBuilder("(")
-        texto.forEach { c ->
-            when {
-                c == '(' || c == ')' || c == '\\' -> salida.append('\\').append(c)
-                c.code in 32..255 -> salida.append(c)
-                else -> salida.append('?')
+    private fun anchoWinAnsi(b: Int, fuente: String): Double = when (fuente) {
+        "F4" -> 600.0
+        "F2" -> NEGRITA.getOrElse(b - 32) { 556 }.toDouble()
+        else -> NORMAL.getOrElse(b - 32) { 556 }.toDouble()
+    }
+
+    private val NORMAL = intArrayOf(
+        278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,
+        1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,
+        333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,0,
+        556,0,222,556,333,1000,556,556,333,1000,667,333,1000,0,611,0,0,222,222,333,333,350,556,1000,333,1000,500,333,944,0,500,667,
+        278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,552,400,549,333,333,333,576,537,333,333,333,365,556,834,834,834,611,
+        667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,
+        556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,549,611,556,556,556,556,500,556,500
+    )
+    private val NEGRITA = intArrayOf(
+        278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,
+        975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,
+        333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,0,
+        556,0,278,556,500,1000,556,556,333,1000,667,333,1000,0,611,0,0,278,278,500,500,350,556,1000,333,1000,556,333,944,0,500,667,
+        278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,552,400,549,333,333,333,576,556,333,333,333,365,556,834,834,834,611,
+        722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,
+        556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,549,611,611,611,611,611,556,611,556
+    )
+
+    /** El `ToUnicode` de una reserva: de cada glifo al carácter que dibuja, para copiar y buscar. */
+    private fun aUnicode(glifos: Map<Int, String>): String = buildString {
+        append("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n")
+        append("/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n")
+        append("/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n")
+        append("1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n")
+        for (trozo in glifos.entries.chunked(100)) {
+            append(trozo.size).append(" beginbfchar\n")
+            for ((g, letra) in trozo) {
+                append('<').append("%04X".format(g)).append("> <")
+                letra.forEach { append("%04X".format(it.code)) }
+                append(">\n")
             }
+            append("endbfchar\n")
         }
-        return salida.append(')').toString()
+        append("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n")
     }
 }

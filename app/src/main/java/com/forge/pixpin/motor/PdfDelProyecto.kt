@@ -103,10 +103,11 @@ object PdfDelProyecto {
         // Se escriben al rehacer, como las anotaciones: así el archivo es
         // siempre exactamente lo que dice el proyecto, y quitar una nota la
         // quita de verdad en vez de dejarla dentro para siempre.
+        val letras by lazy { Detalle.letrasParaPdf() }
         proyecto.hojas.forEach { hoja ->
             val nota = hoja.nota ?: return@forEach
             if (nota.isBlank()) return@forEach
-            PdfDeNota.aniadir(bytes, nota, Detalle::medioParaPdf)?.let {
+            PdfDeNota.aniadir(bytes, nota, letras, Detalle::medioParaPdf)?.let {
                 bytes = it
                 algo = true
             }
