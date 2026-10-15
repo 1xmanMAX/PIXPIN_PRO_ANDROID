@@ -59,6 +59,14 @@ object Agente {
         data class Herramienta(val llamada: Llamada, val avisos: List<String>) : Evento()
         data class Resultado(val nombre: String, val ok: Boolean, val texto: String) : Evento()
         data class Reintento(val motivo: String) : Evento()
+        /** Un trozo de lo que está pensando (la sección plegable «Pensando…»). */
+        data class Pensando(val texto: String) : Evento()
+        /** Acabó de pensar, tras tantos segundos («Pensó 12 s»). */
+        data class PensoListo(val segundos: Float) : Evento()
+        /** La petición mejorada, antes de actuar. */
+        data class Peticion(val plan: Pensar.Plan) : Evento()
+        /** Se aligeró el contexto al pasar del 70 % (tokens estimados). */
+        data class Reinicio(val antes: Int, val despues: Int) : Evento()
     }
 
     /** **El punto de enganche del chat**: hace de verdad cada herramienta. */
@@ -70,6 +78,27 @@ object Agente {
     data class Final(val texto: String, val herramientasHechas: Int, val reintentos: Int, val cortado: Boolean)
 
     /**
+     * **Lo que el turno sabe hacer además de contestar** (`agente::Opciones` del PC): planear antes
+     * de actuar (la petición mejorada), pensar en esa vuelta, la hoja de trabajo en el sistema,
+     * vigilar el contexto al 70 % y `buscar_historial`. Por omisión, todo apagado.
+     */
+    data class Opciones(
+        val planificar: Boolean = false,
+        val pensar: Boolean = false,
+        val hoja: HojaTrabajo.Hoja? = null,
+        /** Los tokens de la ventana del motor; 0: no se mide. */
+        val ventana: Int = 0,
+        /** Buscar en la conversación guardada: con esto el modelo tiene `buscar_historial`. */
+        val buscar: ((String) -> String)? = null,
+        /** El catálogo entero: el plan puede añadir herramientas que la selección no dio. */
+        val ampliar: List<com.forge.pixpin.ia.Herramienta>? = null
+    )
+
+    /** Tope de la vuelta de planear: sin pensar, cinco líneas; pensando, algo más. */
+    const val TOKENS_PLAN = 320
+    const val TOKENS_PLAN_PENSANDO = 640
+
+    /**
      * **Un turno.** [historial] trae el mensaje nuevo del usuario al final; al acabar trae también
      * lo que dijo el asistente (con sus llamadas y resultados), listo para la vuelta siguiente.
      * [contexto]: los tokens con los que se arrancó el modelo.
@@ -77,29 +106,154 @@ object Agente {
     fun turno(
         motor: Motor,
         historial: MutableList<MensajeIa>,
-        herramientas: List<Herramienta>,
+        herramientas: List<com.forge.pixpin.ia.Herramienta>,
         ejecutor: Ejecutor,
         contexto: Int = ServidorLlama.CONTEXTO,
+        opciones: Opciones = Opciones(),
         alEvento: (Evento) -> Seguir
     ): Final {
+        val crono = Pensar.Cronometro()
+        try {
+            return turnoDentro(motor, historial, herramientas, ejecutor, contexto, opciones, crono, alEvento)
+        } finally {
+            crono.otraCosa()?.let { alEvento(Evento.PensoListo(it)) }
+        }
+    }
+
+    /** Pasa un trozo del motor al turno: separa el pensamiento, lo cronometra y lo hace eventos. */
+    private fun repartir(t: Trozo, sep: Pensar.Separador, crono: Pensar.Cronometro, plan: StringBuilder?, alEvento: (Evento) -> Seguir): Seguir {
+        var seguir = Seguir.SI
+        for (x in sep.meter(t)) {
+            val s = when (x) {
+                is Trozo.Pensando -> {
+                    crono.pensando(x.texto)
+                    if (crono.penso()) alEvento(Evento.Pensando(x.texto)) else Seguir.SI
+                }
+                else -> {
+                    crono.otraCosa()?.let { alEvento(Evento.PensoListo(it)) }
+                    when (x) {
+                        is Trozo.Texto -> if (plan != null) { plan.append(x.texto); Seguir.SI } else alEvento(Evento.Texto(x.texto))
+                        is Trozo.Llamando -> alEvento(Evento.Llamando(x.nombre))
+                        else -> Seguir.SI
+                    }
+                }
+            }
+            if (s == Seguir.PARAR) seguir = Seguir.PARAR
+        }
+        return seguir
+    }
+
+    /** **La vuelta de planear.** null: el usuario paró. */
+    private fun planear(
+        motor: Motor, historial: List<MensajeIa>, herramientas: List<com.forge.pixpin.ia.Herramienta>,
+        opciones: Opciones, crono: Pensar.Cronometro, alEvento: (Evento) -> Seguir
+    ): Pensar.Plan? {
+        val u = historial.indexOfLast { it.rol == Rol.USUARIO }
+        val pedido = if (u >= 0) historial[u].textoEntero else ""
+        val texto = StringBuilder()
+        opciones.hoja?.takeIf { !it.estaVacia }?.let { texto.append(it.aTexto().trimEnd()).append("\n\n") }
+        val antes = historial.subList(0, maxOf(u, 0)).filter { (it.rol == Rol.USUARIO || it.rol == Rol.ASISTENTE) && it.textoEntero.isNotBlank() }
+        if (antes.isNotEmpty()) {
+            texto.append("## Conversacion reciente\n")
+            for (m in antes.takeLast(2)) texto.append("${if (m.rol == Rol.USUARIO) "Usuario" else "Asistente"}: ${Pensar.cortar(m.textoEntero, 400)}\n")
+            texto.append('\n')
+        }
+        texto.append("## Mensaje nuevo\n").append(pedido)
+        if (u >= 0 && historial[u].tieneImagen) texto.append("\n(adjunta una foto)")
+        val p = Peticion(
+            listOf(MensajeIa.sistema(Pensar.instruccionesDelPlan(herramientas)), MensajeIa.usuario(texto.toString())),
+            maxTokens = if (opciones.pensar) TOKENS_PLAN_PENSANDO else TOKENS_PLAN, temperatura = 0.6, pensar = opciones.pensar
+        )
+        val sep = Pensar.Separador()
+        val planTexto = StringBuilder()
+        val r = try {
+            motor.completar(p) { t -> repartir(t, sep, crono, planTexto, alEvento) }
+        } catch (e: ErrorIa) {
+            // Sin plan no se deja de contestar: se sigue con el pedido tal cual.
+            val plan = Pensar.Plan.porOmision(pedido)
+            alEvento(Evento.Peticion(plan))
+            return plan
+        } finally {
+            for (t in sep.acabar()) repartir(t, Pensar.Separador(), crono, planTexto, alEvento)
+        }
+        if (!crono.penso() && r.pensamiento.isNotBlank()) { crono.pensando(r.pensamiento); alEvento(Evento.Pensando(r.pensamiento)) }
+        if (r.fin == Fin.CORTADO) return null
+        var plano = planTexto.toString().ifBlank { r.texto }
+        if (plano.contains("</think>")) {
+            val (pensado, resto) = Pensar.separar(plano)
+            if (!crono.penso() && pensado.isNotBlank()) { crono.pensando(pensado); alEvento(Evento.Pensando(pensado)) }
+            plano = resto
+        }
+        crono.otraCosa()?.let { alEvento(Evento.PensoListo(it)) }
+        var plan = Pensar.Plan.leer(plano, herramientas)
+        // Pensó hasta agotar su tope sin escribir el plan: una vuelta corta SIN pensar, con lo pensado.
+        if (plan == null && crono.penso()) {
+            val p2 = p.copy(pensar = false, maxTokens = TOKENS_PLAN, mensajes = p.mensajes.dropLast(1) + MensajeIa.usuario(
+                "${p.mensajes.last().textoEntero}\n\n## Lo que ya pensaste\n${Pensar.resumir(crono.texto.toString(), 900)}\n\nAhora escribe SOLO las cinco lineas."
+            ))
+            val otro = StringBuilder()
+            runCatching { motor.completar(p2) { t -> if (t is Trozo.Texto) otro.append(t.texto); Seguir.SI } }.getOrNull()?.let { r2 ->
+                if (otro.isBlank()) otro.append(r2.texto)
+                plan = Pensar.Plan.leer(Pensar.separar(otro.toString()).second, herramientas)
+            }
+        }
+        val final = plan ?: Pensar.Plan.porOmision(pedido)
+        if (alEvento(Evento.Peticion(final)) == Seguir.PARAR) return null
+        return final
+    }
+
+    /** Si pasa del 70 %, poda los resultados viejos y, si no basta, reinicia. Avisa si cambió. */
+    private fun vigilarContexto(historial: MutableList<MensajeIa>, herramientas: List<com.forge.pixpin.ia.Herramienta>, ventana: Int, alEvento: (Evento) -> Seguir) {
+        val antes = Contexto.estimar(historial, herramientas)
+        if (!Contexto.pasaDelUmbral(antes, Contexto.RESERVA_RESPUESTA, ventana)) return
+        Contexto.podarEnTurno(historial)
+        if (Contexto.pasaDelUmbral(Contexto.estimar(historial, herramientas), Contexto.RESERVA_RESPUESTA, ventana)) {
+            val nuevo = Contexto.reiniciar(historial)
+            historial.clear(); historial.addAll(nuevo)
+        }
+        val despues = Contexto.estimar(historial, herramientas)
+        if (despues < antes) alEvento(Evento.Reinicio(antes, despues))
+    }
+
+    private fun turnoDentro(
+        motor: Motor,
+        historial: MutableList<MensajeIa>,
+        base: List<com.forge.pixpin.ia.Herramienta>,
+        ejecutor: Ejecutor,
+        contexto: Int,
+        opciones: Opciones,
+        crono: Pensar.Cronometro,
+        alEvento: (Evento) -> Seguir
+    ): Final {
+        val herramientas = base.toMutableList()
+        if (opciones.buscar != null && herramientas.none { it.nombre == Herramientas.BUSCAR_HISTORIAL }) herramientas += Contexto.herramientaBuscar()
+        var plan: Pensar.Plan? = null
+        if (opciones.planificar) {
+            val posibles = herramientas.toMutableList()
+            opciones.ampliar.orEmpty().forEach { h -> if (posibles.none { it.nombre == h.nombre }) posibles += h }
+            plan = planear(motor, historial, posibles, opciones, crono, alEvento) ?: return Final("", 0, 0, true)
+            for (n in plan.herramientas) if (herramientas.none { it.nombre == n }) posibles.firstOrNull { it.nombre == n }?.let { herramientas += it }
+        }
+        if (opciones.hoja != null || plan != null) {
+            val instr = historial.firstOrNull()?.takeIf { it.rol == Rol.SISTEMA }?.textoEntero ?: instrucciones()
+            Contexto.ponerSistema(historial, Contexto.sistemaConHoja(instr, opciones.hoja ?: HojaTrabajo.Hoja(), plan))
+        }
         var hechas = 0
         var reintentos = 0
         var cortado = false
         // Con la gramática de llama.cpp el modelo NO PUEDE pasarse de estas listas; bajan si una
         // llamada salió cortada.
         var tope = TOPE_LISTAS
+        // `buscar_historial` vale UNA vuelta por turno (medido en el PC: si no, el 2B la llama seis veces).
+        var yaBusco = false
         repeat(VUELTAS + REINTENTOS) {
-            val ofrecidas = conTopes(herramientas, tope)
+            if (opciones.ventana > 0) vigilarContexto(historial, herramientas, opciones.ventana, alEvento)
+            val ofrecidas = conTopes(herramientas.filter { !(yaBusco && it.nombre == Herramientas.BUSCAR_HISTORIAL) }, tope)
             var peticion = Peticion(historial.toList(), ofrecidas)
             peticion = peticion.copy(maxTokens = topeDeTokens(peticion, contexto))
-            val respuesta = try {
-                motor.completar(peticion) { t ->
-                    when (t) {
-                        is Trozo.Texto -> alEvento(Evento.Texto(t.texto))
-                        is Trozo.Llamando -> alEvento(Evento.Llamando(t.nombre))
-                        is Trozo.Pensando -> Seguir.SI
-                    }
-                }
+            val sep = Pensar.Separador()
+            val respuesta0 = try {
+                motor.completar(peticion) { t -> repartir(t, sep, crono, null, alEvento) }
             } catch (e: ErrorIa.Protocolo) {
                 // `llama-server` no deja pasar una llamada cuyo JSON no cierra (HTTP 500): es una
                 // llamada cortada por el tope; se pide MÁS CORTA y la gramática se lo impone.
@@ -111,7 +265,10 @@ object Agente {
                 if (alEvento(Evento.Reintento(motivo)) == Seguir.PARAR) return final(hechas, reintentos, true)
                 historial += MensajeIa.usuario(motivo)
                 return@repeat
+            } finally {
+                for (t in sep.acabar()) repartir(t, Pensar.Separador(), crono, null, alEvento)
             }
+            val respuesta = if (respuesta0.texto.contains("</think>")) respuesta0.copy(texto = Pensar.separar(respuesta0.texto).second) else respuesta0
             val texto = quitarPensado(respuesta.texto)
             historial += MensajeIa(Rol.ASISTENTE, listOf(Parte.Texto(texto)), respuesta.llamadas)
             if (respuesta.fin == Fin.CORTADO) return final(hechas, reintentos, true)
@@ -124,9 +281,26 @@ object Agente {
                 return Final(dicho, hechas, reintentos, false)
             }
             var algunaMal = false
+            var buscoBien = false
             // Lo que pidió el usuario, para los colores que el modelo olvide.
             val pedido = historial.lastOrNull { it.rol == Rol.USUARIO }?.textoEntero.orEmpty()
             for (cruda in respuesta.llamadas) {
+                // `buscar_historial` no es del chat: lo contesta el propio turno.
+                val buscar = opciones.buscar
+                if (buscar != null && cruda.nombre.trim() == Herramientas.BUSCAR_HISTORIAL) {
+                    val consulta = Contexto.consultaDe(cruda.argumentos)
+                    val t = when {
+                        yaBusco -> "Ya buscaste en este turno: contesta ahora con lo que encontraste."
+                        consulta != null -> buscar(consulta)
+                        else -> "ERROR: falta «consulta». Llama a buscar_historial con {\"consulta\": \"que buscar\"}."
+                    }
+                    val ok = !t.startsWith("ERROR")
+                    buscoBien = buscoBien || ok
+                    algunaMal = algunaMal || !ok
+                    alEvento(Evento.Resultado(Herramientas.BUSCAR_HISTORIAL, ok, Pensar.cortar(t, 300)))
+                    historial += MensajeIa.resultado(cruda.id, recortarResultado(t))
+                    continue
+                }
                 val validada = try {
                     Herramientas.validar(sanear(cruda), herramientas)
                 } catch (e: ErrorHerramienta) {
@@ -141,6 +315,7 @@ object Agente {
                 }
                 val llamada = when (val l = validada.llamada) {
                     is Llamada.Dibujar -> l.copy(figuras = Herramientas.coloresDelPedido(l.figuras, pedido))
+                    is Llamada.Calcar -> l.copy(parametros = Calcar.ajustarAlPedido(l.parametros, pedido))
                     else -> l
                 }
                 alEvento(Evento.Herramienta(llamada, validada.avisos))
@@ -153,6 +328,7 @@ object Agente {
                 if (validada.avisos.isNotEmpty()) paraElModelo += " (avisos: ${validada.avisos.joinToString("; ")})"
                 historial += MensajeIa.resultado(cruda.id, paraElModelo)
             }
+            yaBusco = yaBusco || buscoBien
             if (cortado) return final(hechas, reintentos, true)
             if (algunaMal) {
                 reintentos++

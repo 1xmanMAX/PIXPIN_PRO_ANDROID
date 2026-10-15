@@ -1,5 +1,6 @@
 package com.forge.pixpin.asistente
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -269,5 +270,69 @@ fun PreguntaDelAsistente(respuesta: String, modifier: Modifier = Modifier) {
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
             ) { Text("Sí", color = MaterialTheme.colorScheme.error) }
         }
+    }
+}
+
+/**
+ * **«Pensando…» plegable y la petición mejorada** encima de la respuesta (§4.2 del manual del PC):
+ * abierto mientras piensa, con el final de lo pensado; al acabar, plegado y «Pensó 12 s»; un toque
+ * lo abre entero. Debajo, «📝 Entiendo: …» en una línea que se abre, y «Contexto renovado» si el
+ * turno empezó reiniciado. Lo plegado o abierto es solo de la vista y no viaja.
+ */
+@Composable
+fun SeccionDelPensado(m: com.forge.pixpin.guardados.Mensaje, recarga: Int) {
+    val contexto = LocalContext.current
+    val vivo = Asistente.enVivo?.takeIf { it.respuesta == m.id }
+    val guardado by androidx.compose.runtime.produceState<com.forge.pixpin.ia.HojaTrabajo.Registro?>(null, m.id, m.texto, recarga, vivo == null) {
+        value = if (vivo != null) null else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { PensadoDelChat.registroDe(contexto, m) }
+    }
+    val pensamiento = vivo?.pensamiento ?: guardado?.pensamiento.orEmpty()
+    val segundos = vivo?.segundos ?: guardado?.segundos
+    val pensando = vivo?.pensando == true
+    val plan = vivo?.plan ?: guardado?.plan
+    val reinicio = vivo?.reiniciado ?: guardado?.reinicio ?: false
+    if (pensamiento.isBlank() && plan == null && !reinicio) return
+    var abierto by remember(m.id) { mutableStateOf(false) }
+    var planAbierto by remember(m.id) { mutableStateOf(false) }
+    val tenue = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (pensamiento.isNotBlank()) {
+            val rotulo = if (pensando) "Pensando…" else segundos?.let { "Pensó ${maxOf(1, Math.round(it))} s" } ?: "Pensó"
+            Text(
+                (if (abierto || pensando) "▾ " else "▸ ") + rotulo, fontSize = 13.sp, color = tenue,
+                modifier = Modifier.clickable { abierto = !abierto }
+            )
+            if (pensando) Text(pensamiento.takeLast(700), fontSize = 12.sp, color = tenue, maxLines = 6)
+            else if (abierto) Text(pensamiento.take(6000), fontSize = 12.sp, color = tenue)
+        }
+        plan?.let { p ->
+            val lineas = p.lineas()
+            Text(
+                "📝 " + if (planAbierto) lineas else lineas.lineSequence().first(), fontSize = 13.sp, color = tenue,
+                maxLines = if (planAbierto) 4 else 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { planAbierto = !planAbierto }
+            )
+        }
+        if (reinicio) Text("Contexto renovado", fontSize = 12.sp, color = tenue)
+    }
+}
+
+/**
+ * **«Abrir fuente»** (§4.5): la primera cita de `fuentesIa`, con su título y «+N» si hay más.
+ * Ejecuta su pedido: un mensaje se abre en su chat; un fichero (ruta del PC o de aquí) se busca
+ * entre los adjuntos por su nombre y se abre en su visor; si no está, la tarjeta no hace nada.
+ */
+@Composable
+fun FuenteDeLaRespuesta(m: com.forge.pixpin.guardados.Mensaje) {
+    val contexto = LocalContext.current
+    val fuentes = m.fuentesIa ?: return
+    val primera = fuentes.firstOrNull() as? kotlinx.serialization.json.JsonObject ?: return
+    val titulo = (primera["titulo"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return
+    val alcance = rememberCoroutineScope()
+    TextButton(onClick = {
+        alcance.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { AbrirFuente.abrir(contexto, primera) } }
+    }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
+        Text("📄 $titulo" + if (fuentes.size > 1) "  +${fuentes.size - 1}" else "", fontSize = 13.sp, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }

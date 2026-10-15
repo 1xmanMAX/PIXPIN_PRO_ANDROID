@@ -77,6 +77,12 @@ object AnotacionesDelAdjunto {
     fun comentarios(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.comentarios.json")
 
     /**
+     * **Lo que pensó el asistente en una respuesta y su hoja de trabajo** (§3.2 del manual del PC):
+     * `anot-<uid>.asistente.json`, uno por respuesta, en claro; viaja con su nota y se borra con ella.
+     */
+    fun asistente(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.asistente.json")
+
+    /**
      * Lo anotado de las hojas que estaban en [antes] y ya no están en ningún proyecto de
      * [despues]: sin su hoja ya no viaja ni se abre. Una hoja que se mueve a otro proyecto lleva
      * su código, así que la suya no se toca.

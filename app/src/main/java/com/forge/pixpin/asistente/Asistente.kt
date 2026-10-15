@@ -47,7 +47,17 @@ object Asistente {
         /** El id de la nota de la respuesta. */
         val respuesta: String,
         /** Lo que enseña la burbuja ya montado ([ChatDelAsistente.mostrar]). */
-        val visible: String
+        val visible: String,
+        /** Lo que va pensando (la sección plegable «Pensando…»). */
+        val pensamiento: String = "",
+        /** Cuánto pensó, cuando acabó de pensar. */
+        val segundos: Float? = null,
+        /** Si está pensando ahora mismo. */
+        val pensando: Boolean = false,
+        /** La petición mejorada («📝 Entiendo: …»). */
+        val plan: com.forge.pixpin.ia.Pensar.Plan? = null,
+        /** Si el turno empezó con el contexto renovado. */
+        val reiniciado: Boolean = false
     )
 
     var enVivo by mutableStateOf<EnVivo?>(null)
@@ -275,6 +285,9 @@ object Asistente {
     /** El texto que se le enseña al usuario la primera vez que la nube buscaría en sus documentos (§4.8). */
     const val PREGUNTA_DOCUMENTOS = "El asistente está usando un modelo de la nube. Para contestar sobre tus documentos le mandaría " +
         "trozos de ellos (lo que encuentre en tus PDF, notas y chats) por internet.\n\n¿Lo permites? Lo que elijas se recuerda y se cambia en Ajustes › Asistente."
+    /** Lo que se mide de la ventana con la nube (`pensado::VENTANA_NUBE` del PC). */
+    const val VENTANA_NUBE = 64_000
+
     const val SIN_PERMISO_DOCUMENTOS = "el usuario no permite mandar sus documentos a la nube; dile que puede permitirlo en Ajustes › Asistente o usar el modelo local, que busca sin salir del telefono"
 
     /**
@@ -308,10 +321,33 @@ object Asistente {
         val mensajes = almacen.leer()
         val fotoArchivo = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
         val foto = fotoArchivo?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
-        val historial = ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta, enSuChat, foto)
+        val pedido0 = ChatDelAsistente.sinMencion(pregunta.texto)
+        // La memoria del turno (§2.5): la hoja de trabajo del chat, el contexto medido y, si ya se
+        // reinició alguna vez, buscar en lo guardado. El 0.8B no planea: tarda y no le sirve.
+        val delChat = mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon }
+        val anteriores = delChat.filter { it.cuando <= pregunta.cuando && it.id != pregunta.id && it.id != respuesta.id }
+        val hoja = PensadoDelChat.hojaDelChat(app, anteriores)
+        val ventana = if (conNube) VENTANA_NUBE else com.forge.pixpin.ia.ServidorLlama.CONTEXTO
+        val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido0, foto != null)
+        val (historial, reiniciado) = if (enSuChat) {
+            val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(pedido0, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(pedido0)
+            PensadoDelChat.historial(Agente.instrucciones(), hoja, anteriores, nuevo, ventana, herramientas)
+        } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta, enSuChat, foto) to false
+        val fuentesDelChat = PensadoDelChat.fuentes(anteriores, hoja)
+        val ligero = !conNube && modelo(app, ajustes.asistenteModelo).id == com.forge.pixpin.ia.Modelos.QWEN35_08B.id
+        val opciones = Agente.Opciones(
+            planificar = !ligero,
+            pensar = when (ajustes.asistentePensar) { "si" -> true; "no" -> false; else -> false },
+            hoja = hoja,
+            ventana = ventana,
+            buscar = if (enSuChat && (reiniciado || hoja.reinicios > 0)) { c -> com.forge.pixpin.ia.Contexto.buscar(fuentesDelChat, c, 3) } else null,
+            ampliar = Herramientas.catalogo()
+        )
+        val recogido = PensadoDelChat.Recogido()
+        var vivo = EnVivo(respuesta.proyecto, respuesta.id, ChatDelAsistente.PENSANDO, reiniciado = reiniciado)
         // Las preguntas Sí/No contestadas quedan en el texto de la nota (`❓ … → ✅ Sí`).
         val preguntas = mutableListOf<String>()
-        val pedido = ChatDelAsistente.sinMencion(pregunta.texto)
+        val pedido = pedido0
         val ejecutor = EjecutorDelChat(
             app, almacen, pregunta.proyecto, motor, parar,
             confirmar = { q ->
@@ -347,7 +383,9 @@ object Asistente {
             if (!forzar && ahora - ultimoPintado < 60) return
             ultimoPintado = ahora
             val visible = ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = true))
-            enPantalla { if (enVivo?.respuesta == respuesta.id) enVivo = EnVivo(respuesta.proyecto, respuesta.id, visible) }
+            vivo = vivo.copy(visible = visible)
+            val ahoraVivo = vivo
+            enPantalla { if (enVivo?.respuesta == respuesta.id) enVivo = ahoraVivo }
             // En disco cada 2 s, como el PC: una sincronización a mitad se lleva un texto a medias,
             // que se arregla en la vuelta siguiente.
             if (ahora - ultimoGuardado >= 2_000) {
@@ -356,9 +394,13 @@ object Asistente {
             }
         }
         val final = try {
-            val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido, foto != null)
-            Agente.turno(motor, historial, herramientas, ejecutor) { e ->
+            Agente.turno(motor, historial, herramientas, ejecutor, ventana, opciones) { e ->
+                recogido.ver(e)
                 when (e) {
+                    is Agente.Evento.Pensando -> vivo = vivo.copy(pensamiento = recogido.pensamiento.toString(), pensando = true)
+                    is Agente.Evento.PensoListo -> vivo = vivo.copy(pensando = false, segundos = recogido.segundos)
+                    is Agente.Evento.Peticion -> vivo = vivo.copy(plan = e.plan)
+                    is Agente.Evento.Reinicio -> vivo = vivo.copy(reiniciado = true)
                     is Agente.Evento.Texto -> {
                         if (trasResultado) { texto.setLength(0); trasResultado = false }
                         texto.append(e.texto); estado = null
@@ -385,5 +427,11 @@ object Asistente {
         val fuentes = ejecutor.documentos.citas.citadas(textoFinal).takeIf { it.isNotEmpty() }
             ?.let { l -> kotlinx.serialization.json.JsonArray(l.map { it.aJson() }) }
         escribir(textoFinal, ejecutor.lienzo, fuentes)
+        // Lo que pensó y la hoja reescrita, junto a su nota (§3.2): viaja con ella.
+        if (enSuChat) {
+            val incompleto = final.cortado || final.texto.startsWith("No he sabido") || final.texto.startsWith("Hecho en parte")
+            val r = recogido.registro(hoja, pedido, textoFinal, incompleto, reiniciado)
+            almacen.leer().firstOrNull { it.id == respuesta.id }?.let { PensadoDelChat.guardar(app, it, r) }
+        }
     }
 }

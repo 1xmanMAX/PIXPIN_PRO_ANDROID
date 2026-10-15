@@ -3448,8 +3448,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         val enlace = remember(m.texto) { primerEnlace(m.texto) }
                         enlace?.let { TarjetaDeEnlace(it) }
                     }
+                    // Lo que pensó el asistente y la petición mejorada, plegados (§4.2 del manual).
+                    if (m.clase == Clase.NOTA && com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) com.forge.pixpin.asistente.SeccionDelPensado(m, recarga)
                     // Lo que dibujó el asistente: su miniatura y «Abrir lienzo» (§4.5 del manual).
                     if (m.clase == Clase.NOTA && m.lienzoIa != null && enVivo == null) LienzoDeLaRespuesta(m, recarga)
+                    // La fuente que citó: «Abrir fuente» (§4.5).
+                    if (m.clase == Clase.NOTA && m.fuentesIa != null && enVivo == null) com.forge.pixpin.asistente.FuenteDeLaRespuesta(m)
                     if (enVivo != null) com.forge.pixpin.asistente.PreguntaDelAsistente(m.id)
                     val medidor = androidx.compose.ui.text.rememberTextMeasurer()
                     val estiloDeLaHora = androidx.compose.ui.text.TextStyle(fontSize = TAMANO_DE_LA_HORA)
