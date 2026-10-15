@@ -92,4 +92,58 @@ class AsistenteEnVivoTest {
             assertTrue(!llama.cargado)
         }
     }
+
+    /**
+     * **La selección por turno con el modelo de verdad** (§2.2): pedidos de la app (tareas, ayuda,
+     * ventanas, lienzo, documentos) con las ≤6 herramientas que elige [Seleccion] y la hoja de
+     * trabajo y el plan si se piden con `IA_PLAN=1`. Apunta qué llamó y cuánto tardó; exige que
+     * lo que llame sea de lo ofrecido y que los saludos no lleven herramientas. Sin descargar nada
+     * (usa lo que haya en `IA_MODELOS`).
+     */
+    @Test
+    fun `la seleccion por turno funciona con el modelo de verdad`() {
+        assumeTrue(System.getenv("IA_EN_VIVO") == "1")
+        val proyecto = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "settings.gradle.kts").isFile }
+        val raiz = File(System.getenv("IA_MODELOS") ?: File(proyecto, "pixpin-build/ia-modelos").path)
+        val m = Modelos.porId(System.getenv("IA_MODELO")) ?: Modelos.QWEN35_08B
+        val carpeta = Descarga.carpetaModelo(raiz, m)
+        assumeTrue("sin el modelo en $carpeta", File(carpeta, m.pesos.nombre).isFile)
+        val servidor = File(proyecto, "app/src/main/jniLibs/arm64-v8a/libllamaserver.so")
+        val llama = ServidorLlama(ServidorLlama.Config(
+            servidor, File(carpeta, m.pesos.nombre), File(carpeta, m.vision!!.nombre), File(raiz, "trabajo"), hilos = ServidorLlama.hilosParaEsteAparato()
+        ))
+        val plan = System.getenv("IA_PLAN") == "1"
+        val pedidos = listOf(
+            "hola" to null,
+            "Apunta comprar pan mañana a las 10" to setOf("anadir_tarea", "anadir_tareas"),
+            "¿Cómo hago una captura de pantalla?" to setOf(Herramientas.AYUDA),
+            "Abre la galería de capturas" to setOf("abrir_ventana"),
+            "¿Qué tengo pendiente esta semana?" to setOf("consultar_tareas"),
+            "Crea un lienzo nuevo llamado Puente" to setOf("lienzo_nuevo"),
+            "Haz una gráfica de barras con enero 3, febrero 5 y marzo 7" to setOf(Herramientas.GRAFICA),
+            "Dibuja un triángulo azul" to setOf(Herramientas.DIBUJAR)
+        )
+        var aciertos = 0
+        try {
+            llama.precargar()
+            for ((pedido, esperadas) in pedidos) {
+                val ofrecidas = Herramientas.paraElPedido(pedido)
+                assertTrue(ofrecidas.size <= Seleccion.MAXIMO)
+                val hechas = mutableListOf<Llamada>()
+                val h = mutableListOf(MensajeIa.sistema(Agente.instrucciones()), MensajeIa.usuario(pedido))
+                val t = System.currentTimeMillis()
+                val f = Agente.turno(llama, h, ofrecidas, { l -> hechas += l; Result.success("hecho") }, opciones = Agente.Opciones(planificar = plan, hoja = HojaTrabajo.Hoja(), ventana = ServidorLlama.CONTEXTO, ampliar = Herramientas.catalogo())) { Seguir.SI }
+                val nombres = hechas.map { it.nombre }
+                val bien = if (esperadas == null) nombres.isEmpty() else nombres.any { it in esperadas }
+                if (bien) aciertos++
+                println("«$pedido» → ofrecidas ${ofrecidas.map { it.nombre }} · llamó $nombres · ${(System.currentTimeMillis() - t) / 1000.0} s · ${if (bien) "BIEN" else "mal"} · «${f.texto.take(80)}»")
+                if (esperadas == null) assertTrue("un saludo no lleva herramientas", ofrecidas.isEmpty())
+                // Lo que llama es de lo ofrecido (o de lo que el plan añadió del catálogo).
+                assertTrue(nombres.all { n -> Herramientas.DEL_PC.any { it.nombre == n } })
+            }
+            println("aciertos: $aciertos de ${pedidos.size} con ${m.nombre}${if (plan) " y plan" else ""}")
+        } finally {
+            llama.soltar()
+        }
+    }
 }

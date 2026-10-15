@@ -85,6 +85,33 @@ object Modelos {
     val TODOS: List<Modelo> = listOf(QWEN35_2B, QWEN35_08B)
 
     /**
+     * **Mejor vista** (opcional, `GEMMA4_E2B` del PC): Gemma 4 E2B con visión, ~4,1 GB. Solo para
+     * MIRAR una foto (describirla, leer lo que pone); para dibujar o usar la app sigue el de
+     * siempre ([Seleccion.pideMejorVista]). Nunca dos cargados a la vez.
+     */
+    val GEMMA4_E2B = Modelo(
+        id = "gemma-4-e2b",
+        nombre = "Gemma 4 E2B (mejor vista)",
+        licencia = "Apache-2.0",
+        pesos = Fichero(
+            "gemma-4-E2B-it-Q4_K_M.gguf",
+            "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/0314792d7f1f7e229411f620751375812bb9faf2/gemma-4-E2B-it-Q4_K_M.gguf",
+            3_106_738_272,
+            "740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8"
+        ),
+        vision = Fichero(
+            "mmproj-F16.gguf",
+            "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/0314792d7f1f7e229411f620751375812bb9faf2/mmproj-F16.gguf",
+            985_654_080,
+            "140be8d7849741f88c50757d529b84373ee8e27052cc2236855b537f4a8215fa"
+        ),
+        ramMb = 3700
+    )
+
+    /** Los que se bajan solo si se piden y no se eligen como «el de siempre». */
+    val OPCIONALES: List<Modelo> = listOf(GEMMA4_E2B)
+
+    /**
      * Por debajo de esto el 2B no se elige solo (`RAM_PARA_EL_2B_MB` del PC). Un teléfono de
      * 8 GB anuncia algo menos (~7,4 GB: lo que se queda el sistema), así que se compara con un
      * 85 %: «tiene 8 GB» es lo que diría su caja.
@@ -92,6 +119,8 @@ object Modelos {
     const val RAM_PARA_EL_2B_MB = 8192L
 
     fun porId(id: String?): Modelo? = TODOS.firstOrNull { it.id == id }
+
+    fun porIdConOpcionales(id: String?): Modelo? = (TODOS + OPCIONALES).firstOrNull { it.id == id }
 
     /**
      * **El que toca en este aparato**: el elegido en Ajustes si lo hay; si no, el 0.8B con menos

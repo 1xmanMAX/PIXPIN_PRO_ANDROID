@@ -110,6 +110,10 @@ class PixPinApp : Application() {
         // Y lo que el capturador no ve —crashes nativos, ANR—, que Android sí
         // apunta: se recoge al arrancar y acaba en el mismo informe.
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
+        // La biblioteca de figuras viaja por el chat «Asistente» (mensaje `auto-figuras`).
+        com.forge.pixpin.motor.BibliotecaStore.alCambiar = { c ->
+            scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.FigurasQueViajan.asegurarMensaje(c) } }
+        }
         settings = SettingsRepository(this)
         scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }
         // **Los widgets de tareas y de galería, al día** con el chat y con las capturas.

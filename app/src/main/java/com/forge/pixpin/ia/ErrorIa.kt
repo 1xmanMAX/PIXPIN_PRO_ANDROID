@@ -12,6 +12,8 @@ sealed class ErrorIa(mensaje: String) : Exception(mensaje) {
     class Arranque(detalle: String) : ErrorIa("no se pudo arrancar el modelo: $detalle")
     class Conexion(detalle: String) : ErrorIa("el modelo dejo de responder: $detalle")
     class Protocolo(val detalle: String) : ErrorIa("el modelo contesto algo que no se entiende: $detalle")
+    /** Un fallo de la nube (clave, saldo, red, servidor), ya dicho para el usuario. */
+    class Nube(val aviso: String) : ErrorIa(aviso)
     object Cancelado : ErrorIa("cancelado") {
         private fun readResolve(): Any = Cancelado
     }
@@ -24,5 +26,6 @@ sealed class ErrorIa(mensaje: String) : Exception(mensaje) {
         is Protocolo -> "Esta vez no me salió la respuesta. Prueba otra vez o pídelo más corto."
         Cancelado -> "Cancelado."
         is Descarga, is HuellaDistinta -> message.orEmpty()
+        is Nube -> aviso
     }
 }

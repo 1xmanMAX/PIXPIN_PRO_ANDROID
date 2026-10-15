@@ -23,6 +23,12 @@ import java.io.File
  */
 object BibliotecaStore {
 
+    /**
+     * Lo que se hace tras cada escritura (lo pone la aplicación): que la biblioteca viaje por el
+     * chat «Asistente» con su mensaje `auto-figuras` (§3.7 del manual del PC). Fuera del motor.
+     */
+    @Volatile var alCambiar: ((Context) -> Unit)? = null
+
     /** Sube en cada escritura: la lista se vuelve a leer sola. */
     val revision: MutableIntState = mutableIntStateOf(0)
 
@@ -52,6 +58,7 @@ object BibliotecaStore {
         if (destino.exists()) destino.delete()
         if (!temporal.renameTo(destino)) return false
         revision.intValue++
+        alCambiar?.invoke(context.applicationContext)
         true
     }.getOrDefault(false)
 

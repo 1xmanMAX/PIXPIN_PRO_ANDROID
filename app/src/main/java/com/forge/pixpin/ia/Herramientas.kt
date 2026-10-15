@@ -21,9 +21,10 @@ import kotlinx.serialization.json.put
  * `HerramientasIaTest` contra `docs/manual-asistente-android/herramientas.json`): así un modelo
  * que llama `dibujar_en_lienzo` en el PC la llama igual en el teléfono.
  *
- * De las 45 del PC, el teléfono trae por ahora las tres del primer encargo: dibujar, gráfica y
- * leer (OCR). Las demás (calcar, SVG, acciones de la app…) no se ofrecen; si el modelo las nombra
- * igual, la validación le dice que no existen y cuáles hay.
+ * **El catálogo del PC entero** viaja como recurso (`ia/catalogo-del-pc.json`, el `catalogo()` de
+ * `herramientas.rs` volcado tal cual) y el teléfono ofrece las que sabe hacer ([DISPONIBLES]); si
+ * el modelo nombra otra, la validación le dice que no existe y cuáles hay. Las acciones de la app
+ * salen además de su tabla ([Acciones]), y la prueba comprueba que dan el mismo esquema.
  *
  * - **La estructura es estricta**: tipos, obligatorios, rangos y listas. Si falla, la llamada NO
  *   se ejecuta y el modelo recibe el motivo en español, **con los mismos textos del PC** (el
@@ -32,14 +33,26 @@ import kotlinx.serialization.json.put
  * - **El JSON roto se intenta arreglar** una vez ([repararJson]).
  */
 data class Herramienta(val nombre: String, val descripcion: String, val parametros: JsonObject) {
-    fun aJson(): JsonObject = buildJsonObject {
+    /**
+     * La forma `tools` de OpenAI, **con las claves en orden alfabético** como las escribe el PC
+     * (`serde_json` sin `preserve_order`): la gramática de llama.cpp sigue el orden del esquema, y
+     * así el modelo escribe los campos en el mismo orden en los dos aparatos.
+     */
+    fun aJson(): JsonObject = ordenado(buildJsonObject {
         put("type", "function")
         put("function", buildJsonObject {
             put("name", nombre)
             put("description", descripcion)
             put("parameters", parametros)
         })
-    }
+    }) as JsonObject
+}
+
+/** El mismo JSON con las claves de cada objeto en orden alfabético. */
+fun ordenado(e: JsonElement): JsonElement = when (e) {
+    is JsonObject -> JsonObject(e.entries.sortedBy { it.key }.associateTo(LinkedHashMap()) { it.key to ordenado(it.value) })
+    is JsonArray -> JsonArray(e.map(::ordenado))
+    else -> e
 }
 
 /** Lo que pide el modelo, ya validado. */
@@ -49,9 +62,21 @@ sealed class Llamada {
     data class Dibujar(val figuras: List<Figura>) : Llamada() { override val nombre get() = Herramientas.DIBUJAR }
     data class Grafica(val grafica: com.forge.pixpin.ia.Grafica) : Llamada() { override val nombre get() = Herramientas.GRAFICA }
     data class Ocr(val peticion: PeticionOcr) : Llamada() { override val nombre get() = Herramientas.OCR }
+    /** Una acción de la app: el pedido del protocolo, con lo que falte resolver ([Acciones]). */
+    data class App(val accion: Acciones.AccionApp) : Llamada() { override val nombre get() = accion.herramienta }
+    /** Una pregunta sobre la app: se contesta con [Conocimiento.responder]. */
+    data class Ayuda(val pregunta: String) : Llamada() { override val nombre get() = Herramientas.AYUDA }
+    /** Una ilustración en SVG, ya leída y saneada ([Svg]). */
+    data class DibujoSvg(val dibujo: Svg.Dibujo) : Llamada() { override val nombre get() = Herramientas.SVG }
+    /** Buscar en los documentos y chats del usuario ([Documentos]). */
+    data class Buscar(val peticion: Documentos.PeticionBusqueda) : Llamada() { override val nombre get() = Herramientas.BUSCAR }
+    /** Calcar la imagen adjunta ([Calcar]): el ejecutor, que tiene la imagen, la calca. */
+    data class Calcar(val parametros: com.forge.pixpin.ia.Calcar.Parametros) : Llamada() { override val nombre get() = Herramientas.CALCAR }
+    /** Guardar, poner o listar figuras de la biblioteca ([Figuras]). */
+    data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
 
     /** Si lo que pide se dibuja tal cual en el lienzo. */
-    val dibuja: Boolean get() = this is Dibujar || this is Grafica
+    val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg
 }
 
 enum class TipoFigura { RECTANGULO, ELIPSE, ROMBO, LINEA, FLECHA, TEXTO, POLIGONO, CURVA, LAPIZ, PUNTO, INSTRUMENTO }
@@ -134,6 +159,52 @@ object Herramientas {
     const val DIBUJAR = "dibujar_en_lienzo"
     const val GRAFICA = "grafica"
     const val OCR = "ocr"
+    const val CALCAR = "calcar_imagen"
+    const val AYUDA = "ayuda_app"
+    const val SVG = "dibujar_svg"
+    const val FUNCION = "graficar_funcion"
+    const val ECUACION = "escribir_ecuacion"
+    const val CRONOGRAMA = "cronograma"
+    const val FIGURAS = "figuras_guardadas"
+    const val FISICA = "diagrama_fisica"
+    const val PROBLEMA = "problema_en_limpio"
+    const val BUSCAR = "buscar_en_mis_cosas"
+    const val BUSCAR_HISTORIAL = "buscar_historial"
+
+    /** Las propias del asistente (`catalogo_base` del PC), en su orden. */
+    val NOMBRES_BASE = listOf(DIBUJAR, GRAFICA, SVG, FUNCION, ECUACION, CRONOGRAMA, FISICA, PROBLEMA, FIGURAS, OCR, CALCAR, AYUDA, BUSCAR)
+
+    /**
+     * **Lo que el teléfono sabe hacer**: las herramientas del PC que se ofrecen aquí. Las que faltan
+     * y por qué, en `docs/asistente.md` (las de Windows —pines del escritorio, caja para soltar,
+     * sincronizar o mandar «al móvil»— no tienen sentido en el teléfono).
+     */
+    val DISPONIBLES: Set<String> = linkedSetOf(
+        DIBUJAR, GRAFICA, SVG, FIGURAS, OCR, CALCAR, AYUDA, BUSCAR,
+        "abrir_chat", "abrir_fichero", "abrir_mensaje", "abrir_nota", "abrir_hoja", "escribir_en_chat", "nota_nueva",
+        "lienzo_nuevo", "grabar_voz", "reproducir_audio", "lista_nueva", "anadir_tarea", "anadir_tareas", "marcar_tarea",
+        "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
+        "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
+        Acciones.TABLA, Acciones.ABRIR
+    )
+
+    /** **El catálogo entero del PC** (recurso `ia/catalogo-del-pc.json`), en su orden. */
+    val DEL_PC: List<Herramienta> by lazy {
+        val texto = Herramientas::class.java.getResourceAsStream("/ia/catalogo-del-pc.json")!!.use { it.readBytes().toString(Charsets.UTF_8) }
+        (Json.parseToJsonElement(texto) as JsonArray).map { t ->
+            val f = (t as JsonObject)["function"] as JsonObject
+            Herramienta(
+                (f["name"] as JsonPrimitive).content,
+                (f["description"] as JsonPrimitive).content,
+                ordenado(f["parameters"] as JsonObject) as JsonObject
+            )
+        }
+    }
+
+    fun delPc(nombre: String): Herramienta? = DEL_PC.firstOrNull { it.nombre == nombre }
+
+    /** Las propias del asistente, como las da el PC. */
+    fun base(): List<Herramienta> = NOMBRES_BASE.mapNotNull(::delPc)
 
     private val COORD = COORDENADA_MINIMA to COORDENADA_MAXIMA
     private val MEDIDA = 1.0 to COORDENADA_MAXIMA
@@ -151,96 +222,11 @@ object Herramientas {
     }
 
     /**
-     * **El catálogo del teléfono**: las tres del primer encargo, con el JSON Schema y la
-     * descripción exactos del PC (`catalogo_base()` de `herramientas.rs`).
+     * **El catálogo del teléfono**: las del PC que se saben hacer aquí, en el orden del PC y con
+     * su esquema exacto. Con la nube se manda entero; con el modelo local, lo que elija
+     * [Seleccion.paraElPedido].
      */
-    fun catalogo(): List<Herramienta> = listOf(
-        Herramienta(
-            DIBUJAR,
-            "Dibuja figuras en el lienzo de PixPin (800x600, origen arriba a la izquierda). " +
-                "Cada elemento lleva su «color» (el que pidio el usuario) y, si va lleno, su «relleno». " +
-                "Tipos: rectangulo, elipse, rombo, triangulo, estrella y onda (con «caja»:[x,y,ancho,alto]; un circulo tambien con «centro»:[x,y] y «radio»); " +
-                "linea, flecha, curva (suave), poligono y lapiz (a mano alzada) (con «puntos»:[x1,y1,x2,y2,...]); texto (con «x», «y» y «texto»); " +
-                "punto (con «x», «y» y su letra en «texto»); instrumento (plano cartesiano con «ejes»:2, recta con 1, espacio con 3; «caja», «unidad» en px y «tabla»:[[x,y],...] de coordenadas). " +
-                "Opcionales: «grosor», «trazo» (solido, discontinuo, punteado), «opacidad» (0-100), «relleno_estilo» (solido, rayado, cruzado), " +
-                "«material» del lapiz (lisa, tiza, grafito) con su «dureza» (4H, 2H, HB, 2B, 4B, 6B, 8B) y «capa» (las mayores van encima). " +
-                "Una figura con «texto» lo lleva escrito dentro (o encima si es flecha). «grupo»: un nombre comun para agrupar varias. " +
-                "Ejemplo, una casa: {\"elementos\":[{\"tipo\":\"rectangulo\",\"caja\":[300,280,200,160],\"color\":\"marron\"}," +
-                "{\"tipo\":\"triangulo\",\"caja\":[280,170,240,110],\"color\":\"rojo\",\"relleno\":\"rojo\"}," +
-                "{\"tipo\":\"rectangulo\",\"caja\":[380,360,40,80],\"color\":\"azul\",\"relleno\":\"azul\"}]}. " +
-                "Un paso de un diagrama: {\"tipo\":\"rectangulo\",\"caja\":[60,260,160,70],\"texto\":\"Inicio\"}," +
-                "{\"tipo\":\"flecha\",\"puntos\":[220,295,320,295]}. " +
-                "Para copiar exacta una foto adjunta usa calcar_imagen; para dibujarla con figuras o a lapiz, interpretala con estas figuras. " +
-                "Para ilustraciones con curvas o mucho detalle, mejor dibujar_svg.",
-            buildJsonObject {
-                put("type", "object")
-                put("required", buildJsonArray { add(JsonPrimitive("elementos")) })
-                put("properties", buildJsonObject {
-                    put("elementos", buildJsonObject {
-                        put("type", "array"); put("minItems", 1); put("maxItems", MAX_ELEMENTOS)
-                        put("items", buildJsonObject {
-                            put("type", "object")
-                            put("required", buildJsonArray { add(JsonPrimitive("tipo")) })
-                            put("properties", buildJsonObject {
-                                put("tipo", enumerado("rectangulo", "elipse", "rombo", "triangulo", "estrella", "onda", "linea", "flecha", "curva", "poligono", "lapiz", "texto", "punto", "instrumento"))
-                                put("caja", lista(campo("number"), "[x, y, ancho, alto]"))
-                                put("puntos", lista(campo("number"), "[x1, y1, x2, y2, ...] de linea, flecha, curva o poligono"))
-                                put("centro", lista(campo("number"), "[x, y] de un circulo"))
-                                put("radio", campo("number"))
-                                put("x", campo("number"))
-                                put("y", campo("number"))
-                                put("color", campo("string", "color del trazo: rojo, azul, verde, amarillo, naranja, morado, rosa, gris, marron, negro, blanco o #rrggbb"))
-                                put("relleno", campo("string", "color de relleno (los mismos nombres); omitir si va vacia"))
-                                put("texto", campo("string"))
-                                put("tam_letra", campo("number"))
-                                put("grupo", campo("string"))
-                                put("grosor", campo("number", "grosor del trazo, 1 a 40"))
-                                put("trazo", enumerado("solido", "discontinuo", "punteado"))
-                                put("opacidad", campo("number", "0 a 100"))
-                                put("relleno_estilo", enumerado("solido", "rayado", "cruzado"))
-                                put("material", enumerado("lisa", "tiza", "grafito", "lapiz2b", "seco"))
-                                put("dureza", enumerado("4H", "2H", "HB", "2B", "4B", "6B", "8B"))
-                                put("capa", campo("number", "orden: las mayores encima"))
-                                put("ejes", campo("number", "instrumento: 1, 2 o 3"))
-                                put("unidad", campo("number", "instrumento: px por unidad"))
-                                put("tabla", lista(lista(campo("number")), "instrumento: [[x, y], ...]"))
-                            })
-                        })
-                    })
-                    put("origen", lista(campo("number"), "[x, y] que se suma a todas las coordenadas"))
-                })
-            }
-        ),
-        Herramienta(
-            GRAFICA,
-            "Dibuja en el lienzo una grafica de barras, lineas o pastel a partir de datos.",
-            buildJsonObject {
-                put("type", "object")
-                put("required", buildJsonArray { listOf("tipo", "etiquetas", "valores").forEach { add(JsonPrimitive(it)) } })
-                put("properties", buildJsonObject {
-                    put("tipo", enumerado("barras", "lineas", "pastel"))
-                    put("titulo", campo("string"))
-                    put("etiquetas", buildJsonObject { put("type", "array"); put("items", campo("string")); put("maxItems", MAX_DATOS_GRAFICA) })
-                    put("valores", buildJsonObject { put("type", "array"); put("items", campo("number")); put("maxItems", MAX_DATOS_GRAFICA) })
-                })
-            }
-        ),
-        Herramienta(
-            OCR,
-            // El mismo texto que el PC aunque aquí no haya OCR de Windows: el catálogo tiene que
-            // salir idéntico en los dos aparatos. Lo que hace de verdad el teléfono lo dice
-            // [com.forge.pixpin.ia.app.EjecutorDelChat].
-            "Reconoce el texto de un PDF escaneado o de una imagen sin texto seleccionable, con el OCR de Windows. Usala cuando el usuario quiera el texto de un documento adjunto.",
-            buildJsonObject {
-                put("type", "object")
-                put("properties", buildJsonObject {
-                    put("archivo", campo("string", "nombre del adjunto; omitir para el ultimo adjunto"))
-                    put("paginas", campo("string", "ej. 1-3,5; omitir para todas"))
-                    put("idioma", enumerado("es", "en", "auto"))
-                })
-            }
-        )
-    )
+    fun catalogo(): List<Herramienta> = DEL_PC.filter { it.nombre in DISPONIBLES }
 
     /** El catálogo como texto JSON (la lista `tools`). */
     fun catalogoJson(): String = JsonArray(catalogo().map { it.aJson() }).toString()
@@ -295,9 +281,42 @@ object Herramientas {
             DIBUJAR -> Llamada.Dibujar(validarDibujo(args, avisos))
             GRAFICA -> Llamada.Grafica(validarGrafica(args, avisos))
             OCR -> Llamada.Ocr(validarOcr(args))
-            else -> throw ErrorHerramienta.Desconocida(nombre)
+            AYUDA -> Llamada.Ayuda(
+                textoEn(args, "pregunta")
+                    ?: args.values.firstNotNullOfOrNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+                    ?: throw mal("falta «pregunta»")
+            )
+            FIGURAS -> Llamada.Figuras(Figuras.validar(args))
+            BUSCAR -> Llamada.Buscar(Documentos.validar(args))
+            SVG -> Llamada.DibujoSvg(Svg.validar(args, avisos))
+            CALCAR -> Llamada.Calcar(validarCalcar(args))
+            else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
+                ?: throw ErrorHerramienta.Desconocida(nombre)
         }
         return Validada(llamada, avisos)
+    }
+
+    /** `calcar_imagen` (`validar_calcar` del PC). */
+    private fun validarCalcar(args: JsonObject): Calcar.Parametros {
+        val detalle = when (textoEn(args, "detalle")?.let { normalizar(it) }) {
+            null, "medio", "normal", "medium" -> Calcar.Detalle.MEDIO
+            "bajo", "poco", "low", "simple" -> Calcar.Detalle.BAJO
+            "alto", "mucho", "high", "maximo" -> Calcar.Detalle.ALTO
+            else -> throw mal("«detalle» = «${textoEn(args, "detalle")?.let { normalizar(it) }}» no existe; usa bajo, medio o alto")
+        }
+        fun siNo(campo: String, defecto: Boolean): Boolean {
+            val v = args[campo]
+            if (v == null || v is JsonNull) return defecto
+            val p = v as? JsonPrimitive ?: throw mal("«$campo» tiene que ser true o false")
+            if (!p.isString) return p.booleanOrNull ?: throw mal("«$campo» tiene que ser true o false")
+            return when (normalizar(p.content.trim())) { "true", "si" -> true; "false", "no" -> false; else -> throw mal("«$campo» tiene que ser true o false") }
+        }
+        val zona = args["zona"]?.takeIf { it !is JsonNull }?.let { v ->
+            val n = numeros(v)
+            if (n != null && n.size == 4 && n.all { it in 0.0..1.0 } && n[2] > 0.0 && n[3] > 0.0) n.toDoubleArray()
+            else throw mal("«zona» tiene que ser [x, y, ancho, alto] con fracciones de 0 a 1")
+        }
+        return Calcar.Parametros(detalle, siNo("colores", true), siNo("solo_contornos", false), zona, textoEn(args, "imagen"))
     }
 
     private fun mal(m: String) = ErrorHerramienta.Parametro(m)
@@ -781,21 +800,9 @@ object Herramientas {
     }
 
     /** Minúsculas y sin tildes (`acciones::normalizar`). */
-    fun normalizar(s: String): String = s.lowercase().map {
-        when (it) { 'á', 'à' -> 'a'; 'é', 'è' -> 'e'; 'í' -> 'i'; 'ó' -> 'o'; 'ú', 'ü' -> 'u'; 'ñ' -> 'n'; else -> it }
-    }.joinToString("")
+    fun normalizar(s: String): String = Acciones.normalizar(s)
 
-    /**
-     * **Las herramientas de este turno** (lo que el PC hace en `seleccion::para_el_pedido` con las
-     * tres que hay aquí): una charla corta («hola», «gracias») no lleva ninguna, para que el
-     * modelo conteste con texto en vez de dibujar un saludo.
-     */
-    fun paraElPedido(pedido: String): List<Herramienta> {
-        val q = normalizar(pedido)
-        val palabras = q.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
-        val charla = palabras.size <= 4 &&
-            palabras.any { it in setOf("hola", "gracias", "buenas", "adios", "chao", "ok", "vale", "genial", "perfecto") } ||
-            "que tal" in q
-        return if (charla) emptyList() else catalogo()
-    }
+    /** **Las herramientas de este turno** con el modelo local ([Seleccion], como el PC). */
+    fun paraElPedido(pedido: String, conImagen: Boolean = false): List<Herramienta> =
+        Seleccion.paraElPedido(pedido, conImagen, DISPONIBLES)
 }

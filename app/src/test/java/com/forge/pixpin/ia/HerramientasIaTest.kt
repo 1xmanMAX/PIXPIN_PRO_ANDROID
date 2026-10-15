@@ -34,18 +34,31 @@ class HerramientasIaTest {
     }
 
     @Test fun `el catalogo es el del PC, byte a byte tras ordenar las claves`() {
-        // `docs/manual-asistente-android/herramientas.json` del PC (14-oct): el catálogo que manda
-        // a su modelo, ya pasado por `con_topes(16)`.
+        // `con_topes(catalogo(), 16)` del PC (main 882d465), volcado con `herramientas/oraculo-del-pc`.
         val delPc = Json.parseToJsonElement(javaClass.getResource("/ia/herramientas-del-pc.json")!!.readText()) as JsonArray
         val porNombre = delPc.associateBy { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
         val nuestro = Agente.conTopes(Herramientas.catalogo(), Agente.TOPE_LISTAS)
-        assertEquals(listOf("dibujar_en_lienzo", "grafica", "ocr"), nuestro.map { it.nombre })
+        assertEquals(Herramientas.DISPONIBLES.size, nuestro.size)
         for (h in nuestro) {
-            assertEquals(h.nombre, ordenado(porNombre.getValue(h.nombre)).toString(), ordenado(h.aJson()).toString())
+            // Igual también SIN ordenar: el PC escribe las claves en orden alfabético y la
+            // gramática de llama.cpp sigue ese orden.
+            assertEquals(h.nombre, porNombre.getValue(h.nombre).toString(), h.aJson().toString())
         }
         // Y en el mismo orden relativo que el del PC.
         val ordenPc = delPc.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
         assertEquals(nuestro.map { it.nombre }, ordenPc.filter { it in nuestro.map { h -> h.nombre } })
+        // El catálogo entero del PC viaja tal cual (59 el 15-oct) y cada una de la tabla sale igual.
+        assertEquals(ordenPc, Herramientas.DEL_PC.map { it.nombre })
+        for (a in Acciones.TODAS) {
+            assertEquals(a.herramienta, ordenado(porNombre.getValue(a.herramienta)).toString(),
+                ordenado(Agente.conTopes(listOf(Acciones.herramienta(a)), Agente.TOPE_LISTAS)[0].aJson()).toString())
+        }
+    }
+
+    @Test fun `lo que solo es de Windows no se ofrece en el telefono`() {
+        for (n in listOf("caja_para_soltar", "sincronizar_movil", "enviar_al_movil", Acciones.HOJA_A_LIENZO))
+            assertFalse(n, n in Herramientas.catalogo().map { it.nombre })
+        assertTrue(Herramientas.DISPONIBLES.all { Herramientas.delPc(it) != null })
     }
 
     @Test fun `los topes acotan listas y textos como el PC`() {
@@ -115,7 +128,7 @@ class HerramientasIaTest {
         val e = error("borrar_disco", "{}")
         assertTrue(e is ErrorHerramienta.Desconocida)
         val m = e.paraElModelo(Herramientas.catalogo())
-        assertEquals("ERROR: la herramienta «borrar_disco» no existe. Las que hay son: dibujar_en_lienzo, grafica, ocr. Usa una de ellas o contesta con texto.", m)
+        assertEquals("ERROR: la herramienta «borrar_disco» no existe. Las que hay son: ${Herramientas.catalogo().joinToString(", ") { it.nombre }}. Usa una de ellas o contesta con texto.", m)
     }
 
     @Test fun `json roto sin arreglo se rechaza`() {
@@ -284,7 +297,7 @@ class HerramientasIaTest {
     @Test fun `una charla corta no lleva herramientas y un pedido si`() {
         assertTrue(Herramientas.paraElPedido("Hola").isEmpty())
         assertTrue(Herramientas.paraElPedido("¿Qué tal estás hoy, amigo mío?").isEmpty())
-        assertEquals(3, Herramientas.paraElPedido("dibuja un círculo rojo").size)
+        assertEquals(Herramientas.DIBUJAR, Herramientas.paraElPedido("dibuja un círculo rojo")[0].nombre)
         assertFalse(Herramientas.paraElPedido("gracias, ahora dibuja un cuadrado azul grande").isEmpty())
     }
 }

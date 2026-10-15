@@ -49,45 +49,111 @@ class EjecutorDelChat(
     private val chat: String?,
     /** El motor, para leer con la visión del modelo. */
     private val motor: Motor,
-    private val parar: AtomicBoolean
+    private val parar: AtomicBoolean,
+    /** Pregunta Sí/No en la burbuja antes de lo que borra o saca algo del aparato. */
+    confirmar: (String) -> Boolean = { false },
+    /** Lo que pidió el usuario (para afinar el calco con sus palabras). */
+    private val pedido: String = "",
+    /** La foto de la conversación que ve el modelo (la que se calca si no nombra otra). */
+    private val foto: File? = null,
+    /** null si se pueden mandar trozos de documentos al modelo; si no, lo que se le contesta. */
+    permisoDocumentos: () -> String? = { null },
+    /** El lienzo nombrado con `@lienzo:` (su referencia): ahí se dibuja, sin abrirlo. */
+    private val destino: String? = null
 ) : Agente.Ejecutor {
+
+    private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
+    val documentos = DocumentosAcciones(contexto, almacen, chat, motor, parar, permisoDocumentos)
 
     /** El lienzo donde dibujó (su `referencia`), para `lienzoIa` y la tarjeta «Abrir lienzo». */
     @Volatile var lienzo: String? = null
         private set
 
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
-        is Llamada.Dibujar, is Llamada.Grafica -> dibujar(llamada)
+        is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg -> dibujar(llamada)
         is Llamada.Ocr -> leer(llamada.peticion)
+        is Llamada.App -> if (llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA) documentos.tablaDeImagen(llamada.accion) else acciones.hacer(llamada.accion)
+        is Llamada.Buscar -> documentos.buscar(llamada.peticion)
+        is Llamada.Calcar -> calcar(llamada.parametros)
+        is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
+        is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
     }
 
     // ------------------------------------------------------------------------------------- lienzo
 
     private fun dibujar(l: Llamada): Result<String> = runCatching {
         val semilla = System.currentTimeMillis()
-        val nuevos = Lienzo.aElementos(Lienzo.elementos(l, 0.0 to 0.0, semilla))
+        val que = when (l) {
+            is Llamada.Grafica -> "la grafica"
+            is Llamada.DibujoSvg -> "la ilustracion (${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras)"
+            else -> "${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras"
+        }
+        alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementos(l, origen, semilla)) }
+    }
+
+    /**
+     * **Calcar** la foto (la de la conversación, o la que nombre) con [com.forge.pixpin.ia.Calcar],
+     * afinado con las palabras del pedido, al lienzo que toque.
+     */
+    private fun calcar(p0: com.forge.pixpin.ia.Calcar.Parametros): Result<String> = runCatching {
+        val p = com.forge.pixpin.ia.Calcar.ajustarAlPedido(p0, pedido)
+        val archivo = p.imagen?.let { n ->
+            almacen.leer().lastOrNull { m -> m.clase == Clase.IMAGEN && m.ruta != null && File(m.ruta).isFile &&
+                (m.nombre.equals(n, true) || File(m.ruta).name.equals(n, true)) }?.ruta?.let(::File)
+        } ?: foto ?: almacen.leer().lastOrNull { it.proyecto == chat && it.clase == Clase.IMAGEN && it.ruta != null && File(it.ruta).isFile }?.ruta?.let(::File)
+            ?: error("no hay ninguna foto que calcar en este chat")
+        val bm = FotoParaElModelo.mapaDe(archivo, 1024) ?: error("no se pudo leer la imagen")
+        val rgba = java.nio.ByteBuffer.allocate(bm.width * bm.height * 4)
+        bm.copyPixelsToBuffer(rgba)
+        val (ancho, alto) = bm.width to bm.height
+        bm.recycle()
+        val calcado = com.forge.pixpin.ia.Calcar.calcar(rgba.array(), ancho, alto, p)
+        if (calcado.trazos.isEmpty()) error("no salio nada al calcar: la imagen es lisa o casi vacia")
+        val semilla = System.currentTimeMillis()
+        val que = "el calco (${calcado.trazos.size} figuras)"
+        alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementosDeCalcado(calcado, origen, semilla)) }
+    }
+
+    /** Una figura de la biblioteca, estampada en el lienzo (ids nuevos, en un grupo). */
+    private fun ponerFigura(elementos: List<Element>): Result<String> = runCatching {
+        val figura = com.forge.pixpin.motor.FiguraGuardada("poner", "poner", elementos)
+        alLienzo("la figura") { (x, y) ->
+            val caja = com.forge.pixpin.motor.getCommonBounds(elementos)
+            com.forge.pixpin.motor.estampar(figura, com.forge.pixpin.motor.Pt(x + (caja.x2 - caja.x1) / 2, y + (caja.y2 - caja.y1) / 2))
+        }
+    }
+
+    /**
+     * **Lo nuevo, al lienzo que toca** (`al_lienzo.rs` del PC), en un solo paso de deshacer. [hacer]
+     * recibe la esquina donde empezar (0,0 en el lienzo abierto, que lo centra él).
+     */
+    private fun alLienzo(que: String, hacer: (Pair<Double, Double>) -> List<Element>): String {
+        val semilla = System.currentTimeMillis()
+        val nuevos = hacer(0.0 to 0.0)
         if (nuevos.isEmpty()) error("no habia nada que dibujar")
-        val que = if (l is Llamada.Grafica) "la grafica" else "${nuevos.size} figuras"
         // 1. El lienzo que el usuario tiene delante (pantalla partida): ahí, centrado.
         val abierto = LienzoAlFrente.actual() as? RecibeElementos
         if (abierto != null) {
             val id = runBlocking { withContext(Dispatchers.Main) { abierto.recibirElementos(nuevos) } }
             if (id != null) {
                 lienzo = id
-                return@runCatching "dibujada $que en el lienzo abierto"
+                return "dibujada $que en el lienzo abierto"
             }
         }
-        // 2. El lienzo propio del asistente en este chat, a la derecha de lo que hubiera.
-        val propio = ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia
+        // 2. El lienzo nombrado con `@lienzo:`, o el propio del asistente en este chat; a la
+        // derecha de lo que hubiera, para no taparlo.
+        val propio = destino?.takeIf { File(ExcalidrawStore.rutaDe(contexto, it)).isFile }
+            ?: ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia
         if (propio != null) {
             val ruta = ExcalidrawStore.rutaDe(contexto, propio)
             val escena = ExcalidrawStore.cargar(ruta) ?: Scene()
             val origen = Lienzo.alLado(escena.elements)
-            val corridos = Lienzo.aElementos(Lienzo.elementos(l, origen, semilla))
+            val corridos = hacer(origen)
             ExcalidrawStore.guardar(contexto, propio, escena.copy(elements = escena.elements + corridos))
                 ?: error("no se pudo guardar el lienzo")
             lienzo = propio
-            return@runCatching "dibujada $que en el lienzo «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+            val nombre = almacen.leer().lastOrNull { it.referencia == propio }?.let(ChatDelAsistente::nombreDeLienzo) ?: ChatDelAsistente.NOMBRE_DEL_LIENZO
+            return "dibujada $que en el lienzo «$nombre»"
         }
         // 3. Uno nuevo, que entra al chat como dibujo del asistente.
         val id = "ia-$semilla"
@@ -105,7 +171,7 @@ class EjecutorDelChat(
             )
         )
         lienzo = id
-        "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+        return "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
     }
 
     /** Que al abrir el lienzo nuevo se vea lo dibujado (está en el 800×600 del modelo). */

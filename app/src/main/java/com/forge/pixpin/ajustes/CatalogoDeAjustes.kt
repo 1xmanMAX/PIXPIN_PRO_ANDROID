@@ -29,7 +29,7 @@ object CatalogoDeAjustes {
         DIBUJAR("Dibujar", "Imán, mano, modo guía y qué herramientas salen en cada sitio"),
         PINEAR("Pinear", "Las palabras que se convierten en mini-app al pinearlas"),
         VOZ("Voz", "Con qué se pasan los audios a texto, en qué idioma, y bajar los modelos"),
-        ASISTENTE("Asistente", "El modelo de IA del teléfono, sin internet: cuál usar y bajarlo"),
+        ASISTENTE("Asistente", "Quién contesta (el modelo del teléfono, Claude o DeepSeek), sus claves y bajarlo"),
         ASPECTO("Aspecto", "Modo noche, negro OLED, fluidez y la letra de los pines")
     }
 
@@ -142,10 +142,14 @@ object CatalogoDeAjustes {
             "transcribir audio whisper vosk google idioma modelo"
         ) { listOf(it.motorDeVoz, it.idiomaDeVoz, it.segundoIdiomaDeVoz, it.modeloWhisper, it.modoDeIdiomas) },
         Opcion(
-            "asistente", Seccion.ASISTENTE, "Modelo del asistente",
-            "El asistente del chat corre en el teléfono, sin internet. 2B dibuja y ve mejor; 0.8B pesa menos y va con menos memoria.",
-            listOf("asistente_modelo"), "ia inteligencia artificial qwen modelo bajar local llama chat"
-        ) { it.asistenteModelo },
+            "asistente", Seccion.ASISTENTE, "Asistente",
+            "Quién contesta: el modelo del teléfono, sin internet (2B dibuja y ve mejor; 0.8B pesa menos), o Claude o DeepSeek con tu clave, que se guarda cifrada y no viaja. Pensar, documentos a la nube y voz.",
+            listOf(
+                "asistente_modelo", "asistente_motor", "asistente_respaldo_local", "asistente_pensar", "asistente_documentos_nube",
+                "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_mejor_vista"
+            ),
+            "ia inteligencia artificial qwen modelo bajar local llama chat claude deepseek nube clave api pensar voz gemma"
+        ) { listOf(it.asistenteModelo, it.asistenteMotor, it.asistenteRespaldoLocal, it.asistentePensar, it.asistenteDocumentosNube, it.asistenteRevisarDicho, it.asistenteLeerRespuestas, it.asistenteMejorVista) },
         Opcion(
             "fluidez", Seccion.ASPECTO, "Máxima fluidez",
             "Pide a la pantalla su tasa más alta (90 o 120 Hz). Más suave, algo más de batería.",

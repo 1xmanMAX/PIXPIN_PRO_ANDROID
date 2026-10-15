@@ -47,7 +47,17 @@ object Asistente {
         /** El id de la nota de la respuesta. */
         val respuesta: String,
         /** Lo que enseña la burbuja ya montado ([ChatDelAsistente.mostrar]). */
-        val visible: String
+        val visible: String,
+        /** Lo que va pensando (la sección plegable «Pensando…»). */
+        val pensamiento: String = "",
+        /** Cuánto pensó, cuando acabó de pensar. */
+        val segundos: Float? = null,
+        /** Si está pensando ahora mismo. */
+        val pensando: Boolean = false,
+        /** La petición mejorada («📝 Entiendo: …»). */
+        val plan: com.forge.pixpin.ia.Pensar.Plan? = null,
+        /** Si el turno empezó con el contexto renovado. */
+        val reiniciado: Boolean = false
     )
 
     var enVivo by mutableStateOf<EnVivo?>(null)
@@ -64,6 +74,44 @@ object Asistente {
     /** Sube cuando cambia lo bajado (para que la tarjeta y los ajustes se repinten). */
     var bajados by mutableStateOf(0)
         private set
+
+    /** La pregunta Sí/No que espera en la burbuja de una respuesta (§4.3 del manual del PC). */
+    data class Pregunta(val respuesta: String, val texto: String)
+
+    var pregunta by mutableStateOf<Pregunta?>(null)
+        private set
+
+    @Volatile private var contestacion: java.util.concurrent.CompletableFuture<Boolean>? = null
+
+    /** Lo que caduca una pregunta sin contestar (cuenta como no). */
+    const val PREGUNTA_CADUCA_MS = 5 * 60_000L
+
+    /** El usuario tocó «Sí» o «No» en la burbuja. */
+    fun contestarPregunta(si: Boolean) {
+        contestacion?.complete(si)
+    }
+
+    /**
+     * **Pregunta en la burbuja y espera** (en el hilo del turno). null: sin respuesta (caducó a
+     * los 5 min o se pulsó parar). Nada se hace sin el «Sí».
+     */
+    private fun preguntarSiNo(respuesta: String, texto: String): Boolean? {
+        val f = java.util.concurrent.CompletableFuture<Boolean>()
+        contestacion = f
+        enPantalla { pregunta = Pregunta(respuesta, texto) }
+        val hasta = System.currentTimeMillis() + PREGUNTA_CADUCA_MS
+        var r: Boolean? = null
+        try {
+            while (System.currentTimeMillis() < hasta && !parar.get()) {
+                r = runCatching { f.get(250, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull()
+                if (r != null) break
+            }
+        } finally {
+            contestacion = null
+            enPantalla { if (pregunta?.respuesta == respuesta) pregunta = null }
+        }
+        return r
+    }
 
     private val cancelarDescarga = AtomicBoolean(false)
     private val parar = AtomicBoolean(false)
@@ -234,26 +282,105 @@ object Asistente {
         return true
     }
 
+    /** El texto que se le enseña al usuario la primera vez que la nube buscaría en sus documentos (§4.8). */
+    const val PREGUNTA_DOCUMENTOS = "El asistente está usando un modelo de la nube. Para contestar sobre tus documentos le mandaría " +
+        "trozos de ellos (lo que encuentre en tus PDF, notas y chats) por internet.\n\n¿Lo permites? Lo que elijas se recuerda y se cambia en Ajustes › Asistente."
+    /** Lo que se mide de la ventana con la nube (`pensado::VENTANA_NUBE` del PC). */
+    const val VENTANA_NUBE = 64_000
+
+    const val SIN_PERMISO_DOCUMENTOS = "el usuario no permite mandar sus documentos a la nube; dile que puede permitirlo en Ajustes › Asistente o usar el modelo local, que busca sin salir del telefono"
+
+    /**
+     * **El motor de este turno** (§1.4): el local, o Claude o DeepSeek con su clave (y el local de
+     * respaldo si se puede). null y el motivo si no hay con qué contestar.
+     */
+    private fun motorDelTurno(app: PixPinApp, ajustes: com.forge.pixpin.data.Settings, mirarFoto: Boolean = false): Pair<com.forge.pixpin.ia.Motor?, String?> {
+        // **Mejor vista** (§1.3): con una foto y un pedido de MIRARLA, Gemma si está bajado; el de
+        // siempre se suelta antes (nunca dos cargados a la vez: `motorPara` cambia uno por otro).
+        val gemma = com.forge.pixpin.ia.Modelos.GEMMA4_E2B
+        val m = if (mirarFoto && ajustes.asistenteMejorVista && hayMotor(app) && listo(app, gemma)) gemma else modelo(app, ajustes.asistenteModelo)
+        val local = if (hayMotor(app) && listo(app, m)) motorPara(app, m) else null
+        val proveedor = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor)
+        if (proveedor != null) {
+            val clave = ClavesDeLaNube.leer(app, proveedor) ?: return null to "Falta la clave de ${proveedor.nombre}: pégala en Ajustes → Asistente."
+            val nube = com.forge.pixpin.ia.Nube.Motor(proveedor, clave, ligero = ajustes.asistentePensar == "no")
+            return (if (ajustes.asistenteRespaldoLocal && local != null) com.forge.pixpin.ia.Nube.ConRespaldo(nube, local, proveedor.nombre, Herramientas.DISPONIBLES) else nube) to null
+        }
+        if (!hayMotor(app)) return null to "El asistente local solo va en teléfonos de 64 bits (arm64)."
+        if (local == null) return null to ErrorIa.Falta(m.nombre).paraElUsuario()
+        return local to null
+    }
+
     private fun contestar(app: PixPinApp, almacen: MensajesStore, pregunta: Mensaje, respuesta: Mensaje, enSuChat: Boolean) {
-        val ajuste = runBlocking { app.settings.settings.first().asistenteModelo }
-        val m = modelo(app, ajuste)
-        fun escribir(texto: String, lienzo: String? = null) =
-            almacen.actualizar(respuesta.id) { it.copy(texto = texto, lienzoIa = lienzo ?: it.lienzoIa) }
-        if (!hayMotor(app)) {
-            escribir("⚠️ El asistente local solo va en teléfonos de 64 bits (arm64).")
+        val ajustes = runBlocking { app.settings.settings.first() }
+        fun escribir(texto: String, lienzo: String? = null, fuentes: kotlinx.serialization.json.JsonArray? = null) =
+            almacen.actualizar(respuesta.id) { it.copy(texto = texto, lienzoIa = lienzo ?: it.lienzoIa, fuentesIa = fuentes ?: it.fuentesIa) }
+        val conFoto = ChatDelAsistente.fotoDe(almacen.leer(), pregunta) != null
+        val mirar = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor) == null &&
+            com.forge.pixpin.ia.Seleccion.pideMejorVista(ChatDelAsistente.sinMencion(pregunta.texto), conFoto)
+        val (motor0, motivo) = motorDelTurno(app, ajustes, mirar)
+        // Una orden simple sale sin modelo (camino rápido); sin motor, el resto avisa.
+        val esOrden = !conFoto && com.forge.pixpin.ia.Rapido.interpretar(ChatDelAsistente.sinMencion(pregunta.texto), com.forge.pixpin.ia.Momento.ahora()) != null
+        val motor = motor0 ?: if (esOrden) Agente.SinMotor(motivo.orEmpty()) else null
+        if (motor == null) {
+            escribir("⚠️ " + motivo.orEmpty())
             return
         }
-        if (!listo(app, m)) {
-            escribir("⚠️ " + ErrorIa.Falta(m.nombre).paraElUsuario())
-            return
-        }
-        val motor = motorPara(app, m)
+        val conNube = motor.catalogoCompleto
         val mensajes = almacen.leer()
-        val foto = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
-            ?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
-        val historial = ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta, enSuChat, foto)
-        val ejecutor = EjecutorDelChat(app, almacen, pregunta.proyecto, motor, parar)
-        val pedido = ChatDelAsistente.sinMencion(pregunta.texto)
+        val fotoArchivo = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
+        val foto = fotoArchivo?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
+        // `@lienzo:Nombre` fija dónde se dibuja y se le dice al modelo como «el lienzo «Nombre»».
+        val (pedido0, destino) = ChatDelAsistente.resolverLienzo(ChatDelAsistente.sinMencion(pregunta.texto), mensajes.filter { it.proyecto == pregunta.proyecto })
+        // La memoria del turno (§2.5): la hoja de trabajo del chat, el contexto medido y, si ya se
+        // reinició alguna vez, buscar en lo guardado. El 0.8B no planea: tarda y no le sirve.
+        val delChat = mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon }
+        val anteriores = delChat.filter { it.cuando <= pregunta.cuando && it.id != pregunta.id && it.id != respuesta.id }
+        val hoja = PensadoDelChat.hojaDelChat(app, anteriores)
+        val ventana = if (conNube) VENTANA_NUBE else com.forge.pixpin.ia.ServidorLlama.CONTEXTO
+        val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido0, foto != null)
+        val (historial, reiniciado) = if (enSuChat) {
+            val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(pedido0, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(pedido0)
+            PensadoDelChat.historial(Agente.instrucciones(), hoja, anteriores, nuevo, ventana, herramientas)
+        } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta.copy(texto = pedido0), enSuChat, foto) to false
+        val fuentesDelChat = PensadoDelChat.fuentes(anteriores, hoja)
+        val ligero = !conNube && modelo(app, ajustes.asistenteModelo).id == com.forge.pixpin.ia.Modelos.QWEN35_08B.id
+        val opciones = Agente.Opciones(
+            planificar = !ligero,
+            pensar = when (ajustes.asistentePensar) { "si" -> true; "no" -> false; else -> false },
+            hoja = hoja,
+            ventana = ventana,
+            buscar = if (enSuChat && (reiniciado || hoja.reinicios > 0)) { c -> com.forge.pixpin.ia.Contexto.buscar(fuentesDelChat, c, 3) } else null,
+            ampliar = Herramientas.catalogo(),
+            rapido = com.forge.pixpin.ia.Momento.ahora()
+        )
+        val recogido = PensadoDelChat.Recogido()
+        var vivo = EnVivo(respuesta.proyecto, respuesta.id, ChatDelAsistente.PENSANDO, reiniciado = reiniciado)
+        // Las preguntas Sí/No contestadas quedan en el texto de la nota (`❓ … → ✅ Sí`).
+        val preguntas = mutableListOf<String>()
+        val pedido = pedido0
+        val ejecutor = EjecutorDelChat(
+            app, almacen, pregunta.proyecto, motor, parar,
+            confirmar = { q ->
+                val r = preguntarSiNo(respuesta.id, q)
+                preguntas += ChatDelAsistente.lineaDePregunta(q, r)
+                r == true
+            },
+            pedido = pedido, foto = fotoArchivo, destino = destino,
+            permisoDocumentos = {
+                if (!conNube) null
+                else when (runBlocking { app.settings.settings.first().asistenteDocumentosNube }) {
+                    "si" -> null
+                    "no" -> SIN_PERMISO_DOCUMENTOS
+                    else -> {
+                        val r = preguntarSiNo(respuesta.id, PREGUNTA_DOCUMENTOS)
+                        preguntas += ChatDelAsistente.lineaDePregunta("¿Mando trozos de tus documentos a la nube?", r)
+                        if (r != null) runBlocking { app.settings.setAsistenteDocumentosNube(if (r) "si" else "no") }
+                        if (r == true) null else SIN_PERMISO_DOCUMENTOS
+                    }
+                }
+            }
+        )
 
         // Lo que se va diciendo: el texto de esta vuelta, la línea de estado y los fallos.
         val texto = StringBuilder()
@@ -266,18 +393,25 @@ object Asistente {
             val ahora = System.currentTimeMillis()
             if (!forzar && ahora - ultimoPintado < 60) return
             ultimoPintado = ahora
-            val visible = ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = true)
-            enPantalla { if (enVivo?.respuesta == respuesta.id) enVivo = EnVivo(respuesta.proyecto, respuesta.id, visible) }
+            val visible = ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = true))
+            vivo = vivo.copy(visible = visible)
+            val ahoraVivo = vivo
+            enPantalla { if (enVivo?.respuesta == respuesta.id) enVivo = ahoraVivo }
             // En disco cada 2 s, como el PC: una sincronización a mitad se lleva un texto a medias,
             // que se arregla en la vuelta siguiente.
             if (ahora - ultimoGuardado >= 2_000) {
                 ultimoGuardado = ahora
-                runCatching { escribir(ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = false)) }
+                runCatching { escribir(ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = false))) }
             }
         }
         val final = try {
-            Agente.turno(motor, historial, Herramientas.paraElPedido(pedido), ejecutor) { e ->
+            Agente.turno(motor, historial, herramientas, ejecutor, ventana, opciones) { e ->
+                recogido.ver(e)
                 when (e) {
+                    is Agente.Evento.Pensando -> vivo = vivo.copy(pensamiento = recogido.pensamiento.toString(), pensando = true)
+                    is Agente.Evento.PensoListo -> vivo = vivo.copy(pensando = false, segundos = recogido.segundos)
+                    is Agente.Evento.Peticion -> vivo = vivo.copy(plan = e.plan)
+                    is Agente.Evento.Reinicio -> vivo = vivo.copy(reiniciado = true)
                     is Agente.Evento.Texto -> {
                         if (trasResultado) { texto.setLength(0); trasResultado = false }
                         texto.append(e.texto); estado = null
@@ -299,6 +433,22 @@ object Asistente {
             return
         }
         val dicho = if (final.cortado) ChatDelAsistente.sinPensado(texto.toString()) else final.texto
-        escribir(ChatDelAsistente.textoFinal(ChatDelAsistente.sinPensado(dicho), fallos, final.cortado), ejecutor.lienzo)
+        val textoFinal = ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.textoFinal(ChatDelAsistente.sinPensado(dicho), fallos, final.cortado))
+        // Las citas que nombró (`[2]`) van con la nota: de ahí sale «Abrir fuente» (§3.1).
+        val fuentes = ejecutor.documentos.citas.citadas(textoFinal).takeIf { it.isNotEmpty() }
+            ?.let { l -> kotlinx.serialization.json.JsonArray(l.map { it.aJson() }) }
+        escribir(textoFinal, ejecutor.lienzo, fuentes)
+        // Leer cada respuesta en voz alta al acabar, si se pidió en Ajustes.
+        if (ajustes.asistenteLeerRespuestas && !final.cortado) enPantalla { VozDelAsistente.leer(app, textoFinal) }
+        // «…y ábrelo»: se abre al acabar (si no, la respuesta lleva «Abrir lienzo»).
+        ejecutor.lienzo?.takeIf { ChatDelAsistente.pideAbrir(pedido) }?.let { ref ->
+            enPantalla { runCatching { com.forge.pixpin.motor.DrawEditorActivity.abrir(app, ref, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(app, ref), null) } }
+        }
+        // Lo que pensó y la hoja reescrita, junto a su nota (§3.2): viaja con ella.
+        if (enSuChat) {
+            val incompleto = final.cortado || final.texto.startsWith("No he sabido") || final.texto.startsWith("Hecho en parte")
+            val r = recogido.registro(hoja, pedido, textoFinal, incompleto, reiniciado)
+            almacen.leer().firstOrNull { it.id == respuesta.id }?.let { PensadoDelChat.guardar(app, it, r) }
+        }
     }
 }

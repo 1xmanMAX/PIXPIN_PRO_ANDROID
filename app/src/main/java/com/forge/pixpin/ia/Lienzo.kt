@@ -94,13 +94,14 @@ object Lienzo {
         }
 
         /** Una mancha rellena (`pixpin-region`, la del bote): el polígono que rellenan los dos lienzos. */
-        fun region(contorno: List<Pair<Double, Double>>, trazo: String, relleno: String) {
+        fun region(contorno: List<Pair<Double, Double>>, trazo: String, relleno: String, huecos: List<List<Pair<Double, Double>>> = emptyList()) {
             if (contorno.size < 3) return
             trazo("line", contorno, trazo, relleno)
             val e = salida.last()
             e["type"] = JsonPrimitive("pixpin-region")
             e.remove("startArrowhead"); e.remove("endArrowhead")
-            e["huecos"] = JsonArray(emptyList())
+            val (x0, y0) = contorno[0]
+            e["huecos"] = JsonArray(huecos.map { h -> JsonArray(h.map { (x, y) -> pt(x - x0, y - y0) }) })
         }
 
         fun texto(x: Double, y: Double, texto: String, tam: Double, color: String, alinear: String) {
@@ -161,7 +162,33 @@ object Lienzo {
             // Por capas: las de capa mayor, encima. Estable: a igual capa, el orden de la lista.
             is Llamada.Dibujar -> llamada.figuras.sortedBy { it.capa }.forEach { figura(f, it) }
             is Llamada.Grafica -> grafica(f, llamada.grafica)
-            is Llamada.Ocr -> {}
+            is Llamada.DibujoSvg -> Svg.elementos(f, llamada.dibujo)
+            else -> {}
+        }
+        return f.salida.map { JsonObject(it) }
+    }
+
+    /**
+     * **Lo calcado, al lienzo** (`elementos_de_calcado` del PC): las manchas como `pixpin-region`
+     * con sus agujeros, las líneas como `line` y el fondo como un rectángulo lleno; todo en un grupo,
+     * sin rugosidad, y las manchas con borde 2 del mismo color (tapa las rendijas).
+     */
+    fun elementosDeCalcado(c: Calcar.Calcado, origen: Pair<Double, Double>, semilla: Long): List<JsonObject> {
+        val f = Fabrica(semilla, origen.first, origen.second)
+        f.grupo = "ia-${java.lang.Long.toHexString(semilla)}-calco"
+        fun pares(v: List<Trazado.P>) = v.map { it.x to it.y }
+        for (t in c.trazos) {
+            val antes = f.salida.size
+            when (t) {
+                is Calcar.Trazo.Fondo -> f.caja("rectangle", t.caja, t.color, t.color)
+                is Calcar.Trazo.Mancha -> f.region(pares(t.contorno), t.color, t.color, t.huecos.map(::pares))
+                is Calcar.Trazo.Linea -> f.trazo("line", pares(t.puntos), t.color, null)
+            }
+            if (f.salida.size > antes) {
+                val e = f.salida.last()
+                e["roughness"] = JsonPrimitive(0)
+                if (t !is Calcar.Trazo.Linea) e["strokeWidth"] = JsonPrimitive(2)
+            }
         }
         return f.salida.map { JsonObject(it) }
     }
@@ -363,12 +390,14 @@ object Lienzo {
 
 /** Para comparar con el PC: los puntos `{x, y}` de vuelta a `[x, y]`. */
 internal fun puntosComoElPc(e: JsonObject): JsonObject {
-    val pts = e["points"] as? JsonArray ?: return e
-    val pares = buildJsonArray {
+    fun pares(pts: JsonArray) = buildJsonArray {
         for (p in pts) {
             val o = p as JsonObject
             add(buildJsonArray { add(o["x"]!!); add(o["y"]!!) })
         }
     }
-    return JsonObject(e + ("points" to pares))
+    var r = e
+    (e["points"] as? JsonArray)?.let { r = JsonObject(r + ("points" to pares(it))) }
+    (e["huecos"] as? JsonArray)?.let { h -> r = JsonObject(r + ("huecos" to JsonArray(h.map { pares(it as JsonArray) }))) }
+    return r
 }

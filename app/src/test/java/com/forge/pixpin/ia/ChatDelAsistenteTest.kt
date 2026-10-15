@@ -141,4 +141,31 @@ class ChatDelAsistenteTest {
         assertTrue(Proyectos.json.encodeToString(Proyecto.serializer(), p.copy(nombre = "Mi IA")).contains("\"asistente\":true"))
         assertFalse(Proyectos.json.encodeToString(Proyecto.serializer(), Proyecto("pr-2", "Obra")).contains("asistente"))
     }
+
+    @Test fun `la arroba ofrece los lienzos del chat y la mencion fija el destino`() {
+        val lienzos = listOf(
+            Mensaje(id = "d1", cuando = 1, clase = Clase.DIBUJO, nombre = "Planta baja", referencia = "ref-1", proyecto = "pr-a", numero = 3),
+            Mensaje(id = "d2", cuando = 2, clase = Clase.DIBUJO, nombre = "", referencia = "ref-2", proyecto = "pr-a", numero = 7),
+            Mensaje(id = "p1", cuando = 3, clase = Clase.PAGINA, nombre = "", referencia = "ref-3", proyecto = "pr-a", numero = 9, pagina = 1),
+            Mensaje(id = "d3", cuando = 4, clase = Clase.DIBUJO, nombre = "Planta baja", referencia = "ref-1", proyecto = "pr-a", numero = 10)
+        )
+        val o = ChatDelAsistente.opcionesDeMencion(lienzos, "", enChatDelAsistente = false)
+        assertEquals(listOf("🤖 Asistente", "🎨 Planta baja", "📄 Hoja 2", "🎨 Lienzo 7"), o.map { it.rotulo })
+        assertEquals("@lienzo:Planta_baja", o[1].mencion)
+        assertEquals(listOf("🎨 Planta baja"), ChatDelAsistente.opcionesDeMencion(lienzos, "plan", true).map { it.rotulo })
+        val (texto, destino) = ChatDelAsistente.resolverLienzo("Dibuja una puerta en @lienzo:planta_BAJA, gracias", lienzos)
+        assertEquals("Dibuja una puerta en el lienzo «Planta baja», gracias", texto)
+        assertEquals("ref-1", destino)
+        // Una mención que no casa se queda y no cambia el destino.
+        assertEquals("en @lienzo:Sotano" to null, ChatDelAsistente.resolverLienzo("en @lienzo:Sotano", lienzos))
+        assertTrue(ChatDelAsistente.pideAbrir("dibuja una casa y ábrelo")); assertFalse(ChatDelAsistente.pideAbrir("dibuja una casa"))
+        assertTrue(ChatDelAsistente.esDeSistema(Mensaje(id = "auto-figuras", cuando = 1, clase = Clase.ARCHIVO)))
+        assertFalse(ChatDelAsistente.esDeSistema(nota("x", "auto-guardado: la nota se ve")))
+    }
+
+    @Test fun `lo que se lee en voz alta no lleva pensamiento, codigo, estados ni avisos`() {
+        val t = "<think>pienso</think>Listo: dibujé la casa [1].\n✏️ dibujando en el lienzo…\n```json\n{\"a\":1}\n```\n⚠️ algo falló\n❓ ¿Borro? → ✅ Sí\n**Fin**"
+        assertEquals("Listo: dibujé la casa .\nFin", com.forge.pixpin.asistente.VozDelAsistente.textoParaLeer(t))
+        assertEquals("hola que tal", com.forge.pixpin.asistente.VozDelAsistente.limpiarDictado("[0:00] hola  [0:05] que tal"))
+    }
 }
