@@ -30,6 +30,18 @@ object FotoParaElModelo {
         aJpeg(b, lado)
     }.getOrNull()
 
+    /** La foto [archivo] como mapa ARGB_8888 de [lado] px como mucho (para calcarla); null si no se lee. */
+    fun mapaDe(archivo: File, lado: Int): Bitmap? = runCatching {
+        val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(archivo.path, medidas)
+        if (medidas.outWidth <= 0 || medidas.outHeight <= 0) return null
+        var muestra = 1
+        while (maxOf(medidas.outWidth, medidas.outHeight) / (muestra * 2) >= lado) muestra *= 2
+        val b = BitmapFactory.decodeFile(archivo.path, BitmapFactory.Options().apply { inSampleSize = muestra; inPreferredConfig = Bitmap.Config.ARGB_8888 }) ?: return null
+        val escala = minOf(1f, lado.toFloat() / maxOf(b.width, b.height))
+        if (escala >= 1f) b else Bitmap.createScaledBitmap(b, (b.width * escala).toInt().coerceAtLeast(1), (b.height * escala).toInt().coerceAtLeast(1), true).also { if (it !== b) b.recycle() }
+    }.getOrNull()
+
     /** La hoja [pagina] (desde 0) de un PDF, pintada en blanco y reducida. */
     fun deHojaDePdf(pdf: File, pagina: Int, lado: Int = LADO_PARA_LEER): ByteArray? = runCatching {
         ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->

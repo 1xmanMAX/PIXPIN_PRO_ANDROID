@@ -146,4 +146,31 @@ object TablaEscaneada {
 
     private fun masCercana(columnas: List<DoubleArray>, x: Double): Int =
         columnas.indices.minByOrNull { abs((columnas[it][0] + columnas[it][1]) / 2.0 - x) } ?: 0
+
+    /**
+     * **La tabla del chat de unas filas** (`pedidos::tabla_de_filas` del PC): A1 arriba a la
+     * izquierda, las celdas vacías no se escriben, los números de papel pasan a número, la cabecera
+     * en negrita y cada columna del ancho de su texto más largo.
+     */
+    fun tablaDeFilas(nombre: String, filas: List<List<String>>, cabecera: Boolean, ahora: Long): com.forge.pixpin.motor.TablaDeCalculo {
+        val celdas = LinkedHashMap<String, String>()
+        val estilos = LinkedHashMap<String, com.forge.pixpin.motor.EstiloDeCelda>()
+        filas.take(5000).forEachIndexed { f, fila ->
+            fila.take(200).forEachIndexed { c, t0 ->
+                val t = t0.trim()
+                val ref = com.forge.pixpin.motor.Celdas.nombre(f, c)
+                val valor = if (f == 0 && cabecera) t else comoNumero(t) ?: t
+                if (valor.isNotEmpty()) celdas[ref] = valor
+                if (f == 0 && cabecera && t.isNotEmpty()) estilos[ref] = com.forge.pixpin.motor.EstiloDeCelda(n = true)
+            }
+        }
+        val anchos = LinkedHashMap<String, Int>()
+        val columnas = minOf(filas.maxOfOrNull { it.size } ?: 0, 200)
+        for (c in 0 until columnas) {
+            val letras = filas.mapNotNull { it.getOrNull(c) }.maxOfOrNull { it.trim().codePointCount(0, it.trim().length) } ?: 0
+            val ancho = (letras * 8 + 16).coerceIn(64, 320)
+            if (ancho > 88) anchos[com.forge.pixpin.motor.Celdas.nombre(0, c).trimEnd { it in '0'..'9' }] = ancho
+        }
+        return com.forge.pixpin.motor.TablaDeCalculo(nombre.trim().ifEmpty { "Tabla" }, celdas, anchos, estilos, ahora)
+    }
 }

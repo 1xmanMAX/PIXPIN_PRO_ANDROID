@@ -1,0 +1,68 @@
+[
+{
+"nombre": "circulo-cuadrado",
+"ancho": 400,
+"alto": 300,
+"archivo": "circulo-cuadrado.rgba.gz"
+},
+{
+"nombre": "circulo-cuadrado-contornos",
+"ancho": 400,
+"alto": 300,
+"archivo": "circulo-cuadrado.rgba.gz",
+"solo_contornos": true
+},
+{
+"nombre": "circulo-cuadrado-bajo",
+"ancho": 400,
+"alto": 300,
+"archivo": "circulo-cuadrado.rgba.gz",
+"detalle": "bajo"
+},
+{
+"nombre": "circulo-cuadrado-zona",
+"ancho": 400,
+"alto": 300,
+"archivo": "circulo-cuadrado.rgba.gz",
+"zona": [
+0.5,
+0.2,
+0.5,
+0.6
+]
+},
+{
+"nombre": "circulo-cuadrado-negro",
+"ancho": 400,
+"alto": 300,
+"archivo": "circulo-cuadrado.rgba.gz",
+"colores": false
+},
+{
+"nombre": "casa",
+"ancho": 240,
+"alto": 180,
+"archivo": "casa.rgba.gz"
+},
+{
+"nombre": "casa-alto",
+"ancho": 240,
+"alto": 180,
+"archivo": "casa.rgba.gz",
+"detalle": "alto"
+},
+{
+"nombre": "casa-contornos-alto",
+"ancho": 240,
+"alto": 180,
+"archivo": "casa.rgba.gz",
+"solo_contornos": true,
+"detalle": "alto"
+},
+{
+"nombre": "anillo",
+"ancho": 200,
+"alto": 200,
+"archivo": "anillo.rgba.gz"
+}
+]

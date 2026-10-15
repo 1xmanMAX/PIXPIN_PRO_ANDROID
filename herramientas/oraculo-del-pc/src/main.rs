@@ -83,6 +83,32 @@ fn main() {
             }
             println!("{}", serde_json::to_string(&out).unwrap());
         }
+        "calcar" => {
+            use pixpin_ia::calcar::{calcar, Detalle, Parametros, Trazo};
+            let mut texto = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut texto).unwrap();
+            let v: Value = serde_json::from_str(&texto).unwrap();
+            let mut out = Vec::new();
+            let pts = |v: &[(f64, f64)]| v.iter().map(|p| json!([p.0, p.1])).collect::<Vec<_>>();
+            for c in v.as_array().unwrap() {
+                let rgba = std::fs::read(c["archivo"].as_str().unwrap()).unwrap();
+                let p = Parametros {
+                    detalle: match c["detalle"].as_str().unwrap_or("medio") { "bajo" => Detalle::Bajo, "alto" => Detalle::Alto, _ => Detalle::Medio },
+                    colores: c["colores"].as_bool().unwrap_or(true),
+                    solo_contornos: c["solo_contornos"].as_bool().unwrap_or(false),
+                    zona: c["zona"].as_array().map(|z| [z[0].as_f64().unwrap(), z[1].as_f64().unwrap(), z[2].as_f64().unwrap(), z[3].as_f64().unwrap()]),
+                    imagen: None,
+                };
+                let r = calcar(&rgba, c["ancho"].as_u64().unwrap() as u32, c["alto"].as_u64().unwrap() as u32, &p);
+                let ts: Vec<Value> = r.trazos.iter().map(|t| match t {
+                    Trazo::Mancha { contorno, huecos, color } => json!({"tipo": "mancha", "color": color, "puntos": pts(contorno), "huecos": huecos.iter().map(|h| pts(h)).collect::<Vec<_>>()}),
+                    Trazo::Linea { puntos, cerrada, color } => json!({"tipo": "linea", "color": color, "cerrada": cerrada, "puntos": pts(puntos)}),
+                    Trazo::Fondo { caja, color } => json!({"tipo": "fondo", "color": color, "caja": caja}),
+                }).collect();
+                out.push(json!({"escala": r.escala, "desplazamiento": [r.desplazamiento.0, r.desplazamiento.1], "trazos": ts}));
+            }
+            println!("{}", serde_json::to_string(&out).unwrap());
+        }
         otro => panic!("¿{otro}?"),
     }
 }

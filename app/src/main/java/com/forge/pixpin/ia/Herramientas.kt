@@ -66,6 +66,10 @@ sealed class Llamada {
     data class App(val accion: Acciones.AccionApp) : Llamada() { override val nombre get() = accion.herramienta }
     /** Una pregunta sobre la app: se contesta con [Conocimiento.responder]. */
     data class Ayuda(val pregunta: String) : Llamada() { override val nombre get() = Herramientas.AYUDA }
+    /** Buscar en los documentos y chats del usuario ([Documentos]). */
+    data class Buscar(val peticion: Documentos.PeticionBusqueda) : Llamada() { override val nombre get() = Herramientas.BUSCAR }
+    /** Calcar la imagen adjunta ([Calcar]): el ejecutor, que tiene la imagen, la calca. */
+    data class Calcar(val parametros: com.forge.pixpin.ia.Calcar.Parametros) : Llamada() { override val nombre get() = Herramientas.CALCAR }
     /** Guardar, poner o listar figuras de la biblioteca ([Figuras]). */
     data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
 
@@ -174,12 +178,12 @@ object Herramientas {
      * sincronizar o mandar «al móvil»— no tienen sentido en el teléfono).
      */
     val DISPONIBLES: Set<String> = linkedSetOf(
-        DIBUJAR, GRAFICA, FIGURAS, OCR, AYUDA,
+        DIBUJAR, GRAFICA, FIGURAS, OCR, CALCAR, AYUDA, BUSCAR,
         "abrir_chat", "abrir_fichero", "abrir_mensaje", "abrir_nota", "abrir_hoja", "escribir_en_chat", "nota_nueva",
         "lienzo_nuevo", "grabar_voz", "reproducir_audio", "lista_nueva", "anadir_tarea", "anadir_tareas", "marcar_tarea",
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
         "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
-        Acciones.ABRIR
+        Acciones.TABLA, Acciones.ABRIR
     )
 
     /** **El catálogo entero del PC** (recurso `ia/catalogo-del-pc.json`), en su orden. */
@@ -281,10 +285,35 @@ object Herramientas {
                     ?: throw mal("falta «pregunta»")
             )
             FIGURAS -> Llamada.Figuras(Figuras.validar(args))
+            BUSCAR -> Llamada.Buscar(Documentos.validar(args))
+            CALCAR -> Llamada.Calcar(validarCalcar(args))
             else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
                 ?: throw ErrorHerramienta.Desconocida(nombre)
         }
         return Validada(llamada, avisos)
+    }
+
+    /** `calcar_imagen` (`validar_calcar` del PC). */
+    private fun validarCalcar(args: JsonObject): Calcar.Parametros {
+        val detalle = when (textoEn(args, "detalle")?.let { normalizar(it) }) {
+            null, "medio", "normal", "medium" -> Calcar.Detalle.MEDIO
+            "bajo", "poco", "low", "simple" -> Calcar.Detalle.BAJO
+            "alto", "mucho", "high", "maximo" -> Calcar.Detalle.ALTO
+            else -> throw mal("«detalle» = «${textoEn(args, "detalle")?.let { normalizar(it) }}» no existe; usa bajo, medio o alto")
+        }
+        fun siNo(campo: String, defecto: Boolean): Boolean {
+            val v = args[campo]
+            if (v == null || v is JsonNull) return defecto
+            val p = v as? JsonPrimitive ?: throw mal("«$campo» tiene que ser true o false")
+            if (!p.isString) return p.booleanOrNull ?: throw mal("«$campo» tiene que ser true o false")
+            return when (normalizar(p.content.trim())) { "true", "si" -> true; "false", "no" -> false; else -> throw mal("«$campo» tiene que ser true o false") }
+        }
+        val zona = args["zona"]?.takeIf { it !is JsonNull }?.let { v ->
+            val n = numeros(v)
+            if (n != null && n.size == 4 && n.all { it in 0.0..1.0 } && n[2] > 0.0 && n[3] > 0.0) n.toDoubleArray()
+            else throw mal("«zona» tiene que ser [x, y, ancho, alto] con fracciones de 0 a 1")
+        }
+        return Calcar.Parametros(detalle, siNo("colores", true), siNo("solo_contornos", false), zona, textoEn(args, "imagen"))
     }
 
     private fun mal(m: String) = ErrorHerramienta.Parametro(m)
