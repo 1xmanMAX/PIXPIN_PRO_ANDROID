@@ -36,6 +36,79 @@ object ChatDelAsistente {
 
     fun esRespuesta(m: Mensaje): Boolean = m.aparato == APARATO
 
+    // ----------------------------------------------------------------------- `@` para elegir lienzo (§4.4)
+
+    const val MENCION_LIENZO = "@lienzo:"
+    const val OPCIONES_MAX = 6
+
+    /** Si es un lienzo (o una hoja de PDF con dibujo) en el que se puede dibujar. */
+    fun esLienzo(m: Mensaje) = (m.clase == Clase.DIBUJO || m.clase == Clase.PAGINA) && !m.referencia.isNullOrEmpty()
+
+    /** Cómo se le llama a un lienzo en la lista y en la mención. */
+    fun nombreDeLienzo(m: Mensaje): String {
+        val n = m.nombre.trim()
+        return when {
+            n.isNotEmpty() && !n.endsWith(".excalidraw") -> n
+            m.clase == Clase.PAGINA -> "Hoja ${m.pagina?.let { it + 1 } ?: m.numero}"
+            else -> "Lienzo ${m.numero}"
+        }
+    }
+
+    fun mencionDeLienzo(m: Mensaje) = MENCION_LIENZO + nombreDeLienzo(m).replace(Regex("\\s"), "_")
+
+    private fun sinTildesMencion(s: String) = s.lowercase().map {
+        when (it) { 'á', 'à', 'ä' -> 'a'; 'é', 'è', 'ë' -> 'e'; 'í', 'ì', 'ï' -> 'i'; 'ó', 'ò', 'ö' -> 'o'; 'ú', 'ù', 'ü' -> 'u'; '_' -> ' '; else -> it }
+    }.joinToString("")
+
+    data class Opcion(val rotulo: String, val mencion: String)
+
+    /** **Lo que se ofrece al escribir `@`**: el asistente (fuera de su chat) y los lienzos y hojas del chat. */
+    fun opcionesDeMencion(delChat: List<Mensaje>, escrito: String, enChatDelAsistente: Boolean): List<Opcion> {
+        val buscado = sinTildesMencion(escrito)
+        val v = ArrayList<Opcion>()
+        if (!enChatDelAsistente) v += Opcion("🤖 Asistente", MENCION)
+        val vistas = HashSet<String?>()
+        for (m in delChat.asReversed().filter(::esLienzo)) {
+            if (!vistas.add(m.referencia)) continue
+            v += Opcion("${if (m.clase == Clase.PAGINA) "📄" else "🎨"} ${nombreDeLienzo(m)}", mencionDeLienzo(m))
+        }
+        return v.filter { o -> buscado.isEmpty() || sinTildesMencion(o.rotulo).contains(buscado) || sinTildesMencion(o.mencion.trimStart('@')).startsWith(buscado) }
+            .take(OPCIONES_MAX)
+    }
+
+    /**
+     * **La pregunta con sus menciones de lienzo resueltas**: el texto para el modelo («el lienzo
+     * «Nombre»») y la referencia del lienzo nombrado. Una mención que no casa se deja tal cual.
+     */
+    fun resolverLienzo(pregunta: String, delChat: List<Mensaje>): Pair<String, String?> {
+        val texto = StringBuilder()
+        var destino: String? = null
+        var resto = pregunta
+        while (true) {
+            val i = resto.lowercase().indexOf(MENCION_LIENZO).takeIf { it >= 0 } ?: break
+            texto.append(resto, 0, i)
+            val tras = resto.substring(i + MENCION_LIENZO.length)
+            val fin = tras.indexOfFirst { it.isWhitespace() }.let { if (it < 0) tras.length else it }
+            val nombre = tras.substring(0, fin).trimEnd(',', '.', ';', ':', '?', '!')
+            val buscado = sinTildesMencion(nombre)
+            val hallado = delChat.asReversed().filter(::esLienzo).firstOrNull { sinTildesMencion(nombreDeLienzo(it)) == buscado }
+            if (hallado != null) { texto.append("el lienzo «${nombreDeLienzo(hallado)}»"); destino = hallado.referencia }
+            else texto.append(resto, i, i + MENCION_LIENZO.length + nombre.length)
+            resto = tras.substring(nombre.length)
+        }
+        texto.append(resto)
+        return texto.toString() to destino
+    }
+
+    /** Si se pide abrir el lienzo al terminar («dibuja… y ábrelo»). */
+    fun pideAbrir(pregunta: String): Boolean {
+        val t = sinTildesMencion(pregunta)
+        return listOf("abrelo", "abremelo", "abre el lienzo", "abrir el lienzo", "abre el dibujo", "abrelo al terminar", "muestramelo", "ensenamelo", "y abre", "y abrir").any { t.contains(it) }
+    }
+
+    /** Un mensaje de sistema (`auto-*`: letras, figuras, automatizaciones): viaja, pero no es burbuja. */
+    fun esDeSistema(m: Mensaje): Boolean = m.id.startsWith("auto-")
+
     /** **El chat del asistente**, si ya hay uno (ver arriba el orden). */
     fun buscar(proyectos: List<Proyecto>, mensajes: List<Mensaje>): Proyecto? {
         val vivos = proyectos.filter { !it.archivado }

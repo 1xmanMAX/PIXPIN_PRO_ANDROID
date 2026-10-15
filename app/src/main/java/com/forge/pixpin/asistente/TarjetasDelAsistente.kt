@@ -1,6 +1,9 @@
 package com.forge.pixpin.asistente
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -147,6 +150,17 @@ fun AsistenteCard() {
                     if (listo) TextButton(onClick = { Asistente.borrar(contexto, m) }) { Text("Borrar") }
                     else if (Asistente.progreso == null && Asistente.hayMotor(contexto)) TextButton(onClick = { Asistente.bajar(contexto, m) }) { Text("Bajar") }
                 }
+            }
+            // **Mejor vista** (opcional): Gemma 4 E2B solo para mirar fotos.
+            val gemma = Modelos.GEMMA4_E2B
+            val gemmaLista = remember(bajados) { Asistente.listo(contexto, gemma) }
+            Interruptor("Mejor vista para mirar fotos (${gemma.nombre.substringBefore(" (")}, ${Modelos.tamanoLegible(gemma.bytes)})", ajustes.asistenteMejorVista) { si ->
+                alcance.launch { app.settings.setAsistenteMejorVista(si) }
+                if (si && !gemmaLista && Asistente.progreso == null && Asistente.hayMotor(contexto)) Asistente.bajar(contexto, gemma)
+            }
+            if (gemmaLista) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${gemma.nombre}: bajado", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { Asistente.borrar(contexto, gemma) }) { Text("Borrar") }
             }
             Asistente.progreso?.let { p ->
                 LinearProgressIndicator(progress = { p.fraccion }, modifier = Modifier.fillMaxWidth())
@@ -334,5 +348,79 @@ fun FuenteDeLaRespuesta(m: com.forge.pixpin.guardados.Mensaje) {
     }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)) {
         Text("📄 $titulo" + if (fuentes.size > 1) "  +${fuentes.size - 1}" else "", fontSize = 13.sp, maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * **Las recetas como botones** encima de la caja del chat «Asistente» (§4.7): ordenadas por su
+ * `orden`, con su icono y su nombre; un toque manda el pedido como si se escribiera. Pulsación
+ * larga: mover a izquierda o derecha, o borrar.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun RecetasDelAsistente(modifier: Modifier = Modifier, alMandar: (String) -> Unit) {
+    val contexto = LocalContext.current
+    val revision = RecetasDelTelefono.revision.intValue
+    val recetas by androidx.compose.runtime.produceState(emptyList<com.forge.pixpin.ia.Automatizaciones.Receta>(), revision) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.forge.pixpin.ia.Automatizaciones.recetas(RecetasDelTelefono.leer(contexto)) }
+    }
+    if (recetas.isEmpty()) return
+    val alcance = rememberCoroutineScope()
+    var editando by remember { mutableStateOf<String?>(null) }
+    androidx.compose.foundation.lazy.LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(recetas.size) { i ->
+            val r = recetas[i]
+            Box {
+                Surface(
+                    shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.combinedClickable(onClick = { alMandar(r.pedido) }, onLongClick = { editando = r.id })
+                ) { Text("${r.icono} ${r.nombre}", fontSize = 13.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) }
+                androidx.compose.material3.DropdownMenu(expanded = editando == r.id, onDismissRequest = { editando = null }) {
+                    fun hacer(c: (com.forge.pixpin.ia.Automatizaciones.Lista) -> Unit) {
+                        editando = null
+                        alcance.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { RecetasDelTelefono.cambiar(contexto) { c(it) } } }
+                    }
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("← A la izquierda") }, onClick = { hacer { com.forge.pixpin.ia.Automatizaciones.moverReceta(it, r.id, -1, System.currentTimeMillis()) } })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("A la derecha →") }, onClick = { hacer { com.forge.pixpin.ia.Automatizaciones.moverReceta(it, r.id, 1, System.currentTimeMillis()) } })
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("Borrar", color = MaterialTheme.colorScheme.error) }, onClick = { hacer { com.forge.pixpin.ia.Automatizaciones.borrarReceta(it, r.id) } })
+                }
+            }
+        }
+    }
+}
+
+/**
+ * **Los mensajes de sistema, plegados en una franja** (lo del PC del 14-oct): las letras de los
+ * planos, las figuras y las automatizaciones (`auto-*`) siguen en el chat y viajan, pero no son
+ * burbujas. Una línea discreta los cuenta y, al tocarla, los lista; quitar una letra borra su
+ * mensaje, como antes la burbuja.
+ */
+@Composable
+fun FranjaDeSistema(deSistema: List<com.forge.pixpin.guardados.Mensaje>, modifier: Modifier = Modifier, alQuitar: (com.forge.pixpin.guardados.Mensaje) -> Unit) {
+    if (deSistema.isEmpty()) return
+    var abierta by remember { mutableStateOf(false) }
+    val letras = deSistema.filter { it.id.startsWith("auto-letra-") }
+    val partes = buildList {
+        if (letras.isNotEmpty()) add("Letras de planos: ${letras.size}")
+        if (deSistema.any { it.id == FigurasQueViajan.ID }) add("Figuras")
+        if (deSistema.any { it.id == com.forge.pixpin.ia.Automatizaciones.ID_MENSAJE }) add("Automatizaciones")
+        val otros = deSistema.count { !it.id.startsWith("auto-letra-") && it.id != FigurasQueViajan.ID && it.id != com.forge.pixpin.ia.Automatizaciones.ID_MENSAJE }
+        if (otros > 0) add("Otros: $otros")
+    }
+    Column(modifier.fillMaxWidth()) {
+        Text(
+            (if (abierta) "▾ " else "▸ ") + partes.joinToString(" · "), fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { abierta = !abierta }.padding(vertical = 4.dp)
+        )
+        if (abierta) for (m in deSistema) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            val que = when {
+                m.id.startsWith("auto-letra-") -> "Letra «${m.nombre}»: la usan los planos"
+                m.id == FigurasQueViajan.ID -> "Figuras guardadas: se usan desde el menú de figuras"
+                m.id == com.forge.pixpin.ia.Automatizaciones.ID_MENSAJE -> "Automatizaciones y recetas del asistente"
+                else -> m.nombre.ifBlank { m.id }
+            }
+            Text(que, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            if (m.id.startsWith("auto-letra-")) TextButton(onClick = { alQuitar(m) }) { Text("Quitar", fontSize = 12.sp) }
+        }
     }
 }

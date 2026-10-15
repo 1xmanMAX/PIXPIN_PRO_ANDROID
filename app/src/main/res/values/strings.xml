@@ -510,6 +510,7 @@
     <string name="guardados_ver_todo">Ver el dibujo entero</string>
     <string name="guardados_solo_la_foto">Ver solo la foto</string>
     <string name="guardados_reenviar">Reenviar</string>
+    <string name="asistente_guardar_receta">Guardar como receta</string>
     <string name="guardados_reenviar_a">Reenviar a…</string>
     <string name="guardados_reenviado">Reenviado</string>
     <string name="guardados_anadido_a">Añadido a %1$s</string>

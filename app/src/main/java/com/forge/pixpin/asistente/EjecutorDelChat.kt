@@ -57,7 +57,9 @@ class EjecutorDelChat(
     /** La foto de la conversación que ve el modelo (la que se calca si no nombra otra). */
     private val foto: File? = null,
     /** null si se pueden mandar trozos de documentos al modelo; si no, lo que se le contesta. */
-    permisoDocumentos: () -> String? = { null }
+    permisoDocumentos: () -> String? = { null },
+    /** El lienzo nombrado con `@lienzo:` (su referencia): ahí se dibuja, sin abrirlo. */
+    private val destino: String? = null
 ) : Agente.Ejecutor {
 
     private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
@@ -134,8 +136,10 @@ class EjecutorDelChat(
                 return "dibujada $que en el lienzo abierto"
             }
         }
-        // 2. El lienzo propio del asistente en este chat, a la derecha de lo que hubiera.
-        val propio = ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia
+        // 2. El lienzo nombrado con `@lienzo:`, o el propio del asistente en este chat; a la
+        // derecha de lo que hubiera, para no taparlo.
+        val propio = destino?.takeIf { File(ExcalidrawStore.rutaDe(contexto, it)).isFile }
+            ?: ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia
         if (propio != null) {
             val ruta = ExcalidrawStore.rutaDe(contexto, propio)
             val escena = ExcalidrawStore.cargar(ruta) ?: Scene()
@@ -144,7 +148,8 @@ class EjecutorDelChat(
             ExcalidrawStore.guardar(contexto, propio, escena.copy(elements = escena.elements + corridos))
                 ?: error("no se pudo guardar el lienzo")
             lienzo = propio
-            return "dibujada $que en el lienzo «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+            val nombre = almacen.leer().lastOrNull { it.referencia == propio }?.let(ChatDelAsistente::nombreDeLienzo) ?: ChatDelAsistente.NOMBRE_DEL_LIENZO
+            return "dibujada $que en el lienzo «$nombre»"
         }
         // 3. Uno nuevo, que entra al chat como dibujo del asistente.
         val id = "ia-$semilla"

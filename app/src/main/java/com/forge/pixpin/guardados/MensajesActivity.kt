@@ -125,6 +125,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
@@ -706,7 +707,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // depende de lo que se escriba. Separados, escribir solo paga la búsqueda.
         // **Las lecciones no se mezclan con el chat** (4-oct-2026, lo pidió el usuario): viven
         // como mensajes para viajar, pero se ven en su sección, desde Proyectos.
-        val sinLecciones = remember(mensajes) { com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes) }
+        // **Los mensajes de sistema** (`auto-*`: letras, figuras, automatizaciones) siguen en el
+        // chat y viajan, pero no son burbujas: van plegados en una franja (lo del PC del 14-oct).
+        val sinLecciones = remember(mensajes) { com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes).filterNot { com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
         val deEsteChat = remember(sinLecciones, chatDe) { delChat(sinLecciones, chatDe) }
         val deLaSeccion = remember(deEsteChat, seccion) { deSeccion(deEsteChat, seccion) }
         val visibles = remember(deLaSeccion, consulta, porEtiqueta, sinLecciones) {
@@ -837,6 +840,41 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.asistente.TarjetaDelAsistente(
                             Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 6.dp)
                         )
+                        val deSistema = remember(mensajes, chatDe) { mensajes.filter { it.proyecto == chatDe && com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
+                        com.forge.pixpin.asistente.FranjaDeSistema(deSistema, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { m ->
+                            lifecycleScope.launch(Dispatchers.IO) { almacen.cambiar { todos -> todos.filterNot { it.id == m.id } }; withContext(Dispatchers.Main) { refrescar() } }
+                        }
+                        com.forge.pixpin.asistente.RecetasDelAsistente(Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp)) { pedido ->
+                            val nota = Mensaje(id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.NOTA, texto = pedido, proyecto = chatDe)
+                            almacen.anadir(nota)
+                            if (!com.forge.pixpin.asistente.Asistente.preguntar(this@MensajesActivity, nota, chatDelAsistente)) {
+                                android.widget.Toast.makeText(this@MensajesActivity, "El asistente está contestando otra cosa", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            loMandado = nota.id
+                            refrescar()
+                        }
+                    }
+                    // **`@` para elegir lienzo** (§4.4): al escribir `@` al principio de una palabra,
+                    // el asistente (fuera de su chat) y los lienzos y hojas del chat.
+                    val palabraConArroba = escrito.substringAfterLast(' ').substringAfterLast('\n')
+                    if (palabraConArroba.startsWith("@") && (chatDe == chatDelAsistente || palabraConArroba.length >= 1)) {
+                        val opciones = remember(mensajes, chatDe, palabraConArroba) {
+                            com.forge.pixpin.asistente.ChatDelAsistente.opcionesDeMencion(
+                                mensajes.filter { it.proyecto == chatDe && !it.enBuzon }, palabraConArroba.drop(1), chatDe != null && chatDe == chatDelAsistente
+                            )
+                        }
+                        if (opciones.isNotEmpty()) androidx.compose.foundation.lazy.LazyRow(
+                            Modifier.fillMaxWidth().padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(opciones.size) { i ->
+                                val o = opciones[i]
+                                androidx.compose.material3.AssistChip(
+                                    onClick = { escrito = escrito.dropLast(palabraConArroba.length) + o.mencion + " " },
+                                    label = { Text(o.rotulo, fontSize = 13.sp, maxLines = 1) }
+                                )
+                            }
+                        }
                     }
                     BarraDeEscribir(
                     escrito = escrito,
@@ -844,13 +882,41 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     onEscrito = { escrito = it },
                     onAdjuntar = { eligiendoQue = true },
                     onEmpezarVoz = {
+                        // Hablar al micrófono calla la lectura en voz alta.
+                        com.forge.pixpin.asistente.VozDelAsistente.callar(this@MensajesActivity)
                         grabando = empezarVoz()
                         grabando
                     },
                     onSoltarVoz = { guardar ->
                         if (grabando) {
                             grabando = false
-                            if (guardar) {
+                            // **El micrófono del asistente** (§4.6): en su chat (o con solo `@asistente`
+                            // en la caja), lo dicho no es una nota de voz: se transcribe, se borra y se
+                            // le manda (o se deja en la caja, con «Lo dictado se queda en la caja»).
+                            val paraElAsistente = chatDe != null && chatDe == chatDelAsistente ||
+                                escrito.trim().equals(com.forge.pixpin.asistente.ChatDelAsistente.MENCION, ignoreCase = true)
+                            if (guardar && paraElAsistente) {
+                                val prefijo = if (chatDe != null && chatDe == chatDelAsistente) "" else escrito.trim() + " "
+                                val audio = pararVozSinGuardar()
+                                if (audio != null) {
+                                    android.widget.Toast.makeText(this@MensajesActivity, "Pasando a texto…", android.widget.Toast.LENGTH_SHORT).show()
+                                    lifecycleScope.launch {
+                                        val dicho = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.VozDelAsistente.transcribir(this@MensajesActivity, audio) }
+                                        if (dicho == null) {
+                                            android.widget.Toast.makeText(this@MensajesActivity, "No se entendió lo que dijiste", android.widget.Toast.LENGTH_SHORT).show()
+                                            return@launch
+                                        }
+                                        val revisar = withContext(Dispatchers.IO) { (application as PixPinApp).settings.settings.first().asistenteRevisarDicho }
+                                        if (revisar) { escrito = prefijo + dicho; return@launch }
+                                        val nota = Mensaje(id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.NOTA, texto = prefijo + dicho, proyecto = chatDe)
+                                        withContext(Dispatchers.IO) { almacen.anadir(nota) }
+                                        if (com.forge.pixpin.asistente.ChatDelAsistente.leToca(nota, chatDelAsistente)) com.forge.pixpin.asistente.Asistente.preguntar(this@MensajesActivity, nota, chatDelAsistente)
+                                        escrito = ""
+                                        loMandado = nota.id
+                                        refrescar()
+                                    }
+                                }
+                            } else if (guardar) {
                                 pararVoz()
                                 loMandado = System.currentTimeMillis().toString()
                                 refrescar()
@@ -2840,6 +2906,23 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         Icons.AutoMirrored.Filled.Forward) {
                     menuAbierto = false; acciones.reenviar()
                 }
+                // **Guardar como receta** (§4.7): la pregunta que contestó, como botón del chat «Asistente».
+                if (m.clase == Clase.NOTA && com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) {
+                    DelMenu(com.forge.pixpin.R.string.asistente_guardar_receta, Icons.Filled.Star) {
+                        menuAbierto = false
+                        val contexto = this@MensajesActivity
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val todos = MensajesStore(contexto).leer()
+                            val pregunta = m.respondeA?.let { id -> todos.firstOrNull { it.id == id } }
+                                ?: todos.filter { it.proyecto == m.proyecto && it.cuando < m.cuando && it.clase == Clase.NOTA && !com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(it) }.maxByOrNull { it.cuando }
+                            val pedido = pregunta?.texto?.let { com.forge.pixpin.asistente.ChatDelAsistente.sinMencion(it) }.orEmpty()
+                            val aviso = runCatching {
+                                com.forge.pixpin.asistente.RecetasDelTelefono.cambiar(contexto) { com.forge.pixpin.ia.Automatizaciones.anadirReceta(it, "", "", pedido, System.currentTimeMillis()) }
+                            }.fold({ "Receta «${it.nombre}» guardada" }, { "No se pudo: ${it.message}" })
+                            withContext(Dispatchers.Main) { android.widget.Toast.makeText(contexto, aviso, android.widget.Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                }
                 DelMenu(com.forge.pixpin.R.string.guardados_compartir, com.forge.pixpin.ui.IconoDeCompartir) {
                     menuAbierto = false
                     // Siempre la hoja de compartir de toda la aplicación. Ver [compartibleDe].
@@ -3454,6 +3537,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     if (m.clase == Clase.NOTA && m.lienzoIa != null && enVivo == null) LienzoDeLaRespuesta(m, recarga)
                     // La fuente que citó: «Abrir fuente» (§4.5).
                     if (m.clase == Clase.NOTA && m.fuentesIa != null && enVivo == null) com.forge.pixpin.asistente.FuenteDeLaRespuesta(m)
+                    // El altavoz de la respuesta acabada (§4.6): la lee con el lector común.
+                    if (m.clase == Clase.NOTA && enVivo == null && com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m) && m.texto.isNotBlank())
+                        androidx.compose.material3.TextButton(
+                            onClick = { com.forge.pixpin.asistente.VozDelAsistente.leer(this@MensajesActivity, m.texto) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+                        ) { Text("🔊 Escuchar", fontSize = 12.sp) }
                     if (enVivo != null) com.forge.pixpin.asistente.PreguntaDelAsistente(m.id)
                     val medidor = androidx.compose.ui.text.rememberTextMeasurer()
                     val estiloDeLaHora = androidx.compose.ui.text.TextStyle(fontSize = TAMANO_DE_LA_HORA)
@@ -6174,6 +6263,23 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         grabador = null
         destinoDeVoz?.delete()
         destinoDeVoz = null
+    }
+
+    /** Para la grabación y devuelve el audio sin guardarlo como nota de voz (para el asistente). */
+    private fun pararVozSinGuardar(): File? {
+        midiendoPicos?.cancel()
+        midiendoPicos = null
+        picosDeVoz = null
+        val bien = Voz.parar(grabador)
+        grabador = null
+        val archivo = destinoDeVoz
+        destinoDeVoz = null
+        if (!bien || archivo == null || !archivo.exists() || Voz.duracion(archivo.absolutePath) < Voz.MINIMO_MS) {
+            archivo?.delete()
+            if (bien) Toast.makeText(this, com.forge.pixpin.R.string.voz_muy_corta, Toast.LENGTH_SHORT).show()
+            return null
+        }
+        return archivo
     }
 
     private fun pararVoz() {
