@@ -218,6 +218,21 @@ class LetrasQueViajanDeVerdadTest {
         assertTrue(idsDeLetras(telefono).isEmpty())
     }
 
+    /** **Quitar una desde la franja del chat «Asistente»**: se va su archivo, y abrir un plano no la vuelve a poner. */
+    @Test
+    fun `quitar una desde la franja no vuelve al abrir un plano`() {
+        emparejar()
+        anadir(telefono, elegidas())
+        assertTrue(LetrasQueViajan.quitarUna(telefono, reloj++, LetrasQueViajan.idDe("romans.shx")))
+        assertFalse(letra(telefono, "romans.shx").exists())
+        assertTrue("la otra sigue", letra(telefono, "Libre.ttf").isFile)
+        LetrasQueViajan.alAbrir(telefono, reloj++) { CHAT }
+        assertEquals(listOf(LetrasQueViajan.idDe("Libre.ttf")), idsDeLetras(telefono))
+        sincronizar(telefono, tableta)
+        assertFalse(letra(tableta, "romans.shx").exists())
+        assertTrue(letra(tableta, "Libre.ttf").isFile)
+    }
+
     /**
      * **Lo que no es una letra**: llega de otro aparato con nombre de letra y no lo es por dentro, o
      * es un mensaje de letra que señala otra cosa. Se rechaza al abrir un plano (archivo y mensaje)

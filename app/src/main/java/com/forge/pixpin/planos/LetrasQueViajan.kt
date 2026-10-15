@@ -178,6 +178,20 @@ object LetrasQueViajan {
     }
 
     /**
+     * **Quitar una sola** (la franja de sistema del chat «Asistente»): su archivo de la carpeta y su
+     * mensaje, con marca. Quitar solo el mensaje no basta: al abrir un plano [senalar] lo volvería a
+     * poner porque la letra sigue en la carpeta.
+     */
+    fun quitarUna(disco: Disco, ahora: Long, id: String): Boolean {
+        val quitados = quitarMensajes(disco, ahora) { it.id == id }
+        for (m in quitados) {
+            val n = m.ruta?.let { disco.relativa(it) }?.takeIf { esDeLetras(it) }?.removePrefix(Disco.CARPETA_DE_LETRAS) ?: continue
+            if (n.isNotEmpty() && '/' !in n && '\\' !in n && ".." !in n) File(carpeta(disco.filesDir), n).delete()
+        }
+        return quitados.isNotEmpty()
+    }
+
+    /**
      * **Rechaza lo que llegó y no es una letra**: un archivo con nombre de letra que por dentro no
      * lo es, o un mensaje de letra que señala otra cosa. Fuera el archivo y su mensaje (con marca,
      * para que el otro aparato lo quite también). Devuelve cuántos.

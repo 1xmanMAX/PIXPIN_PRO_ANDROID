@@ -842,7 +842,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         )
                         val deSistema = remember(mensajes, chatDe) { mensajes.filter { it.proyecto == chatDe && com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
                         com.forge.pixpin.asistente.FranjaDeSistema(deSistema, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { m ->
-                            lifecycleScope.launch(Dispatchers.IO) { almacen.cambiar { todos -> todos.filterNot { it.id == m.id } }; withContext(Dispatchers.Main) { refrescar() } }
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                // Una letra se va con su archivo (si no, el plano la vuelve a poner).
+                                if (m.id.startsWith(com.forge.pixpin.planos.LetrasQueViajan.PREFIJO_ID))
+                                    com.forge.pixpin.planos.LetrasQueViajan.quitarUna(com.forge.pixpin.sincro.Red.disco(this@MensajesActivity), System.currentTimeMillis(), m.id)
+                                else almacen.cambiar { todos -> todos.filterNot { it.id == m.id } }
+                                withContext(Dispatchers.Main) { refrescar() }
+                            }
                         }
                         com.forge.pixpin.asistente.RecetasDelAsistente(Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp)) { pedido ->
                             val nota = Mensaje(id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.NOTA, texto = pedido, proyecto = chatDe)
