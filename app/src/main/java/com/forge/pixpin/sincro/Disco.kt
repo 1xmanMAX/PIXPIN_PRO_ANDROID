@@ -622,7 +622,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         val anotado = AnotacionesDelAdjunto.porUid(filesDir)
         return poner.filter { j ->
             val m = runCatching { JSON.decodeFromString(Mensaje.serializer(), rutas.aLocal(j)) }.getOrNull() ?: return@filter false
-            chatDe(m) == chat && Codigos.unico(m) !in ajenos && referencias(m, anotado).none { it in prohibidos }
+            // **Ni las letras de los planos** (14-oct-2026): en este aparato `files/` es uno solo, así
+            // que lo que una persona nombrara en `guardados/fuentes-shx/` caería en la carpeta de las
+            // letras del usuario y el visor de planos lo usaría. Solo viajan entre los aparatos propios,
+            // por el chat «Asistente». Ver [com.forge.pixpin.planos.LetrasQueViajan].
+            chatDe(m) == chat && Codigos.unico(m) !in ajenos &&
+                referencias(m, anotado).none { it in prohibidos || it.startsWith(CARPETA_DE_LETRAS) }
         }
     }
 
@@ -775,6 +780,9 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     fun abrir(rel: String): InputStream = File(filesDir, rel).inputStream()
 
     fun archivo(rel: String): File = File(filesDir, rel)
+
+    /** La ruta [ruta] de este aparato, relativa a `files`; null si es de fuera. */
+    fun relativa(ruta: String): String? = rutas.relativa(ruta)
 
     fun largo(rel: String): Long = File(filesDir, rel).length()
 
@@ -974,6 +982,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         private val PROYECTOS = Any()
         private val CACHE = Any()
         private val DIRECCIONES = Any()
+        /**
+         * **Las letras de los planos del usuario** (14-oct-2026): viajan solo entre sus aparatos, por
+         * el chat «Asistente»; una persona de un chat compartido no las lee ni las escribe. Ver
+         * [com.forge.pixpin.planos.LetrasQueViajan].
+         */
+        const val CARPETA_DE_LETRAS = "guardados/fuentes-shx/"
         private val CARPETAS = listOf("guardados/", "pins/", "proyectos/", "tablas/", "croquis3d/", "notas/", "voz/")
 
         fun chatDe(m: Mensaje): String = m.proyecto ?: GENERAL

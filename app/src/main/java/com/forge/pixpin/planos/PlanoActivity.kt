@@ -436,7 +436,7 @@ class PlanoActivity : ComponentActivity() {
                 anadiendo = false
                 android.widget.Toast.makeText(this@PlanoActivity, getString(com.forge.pixpin.R.string.plano_letras_anadidas, n), android.widget.Toast.LENGTH_LONG).show()
                 // Con letras nuevas, el plano se vuelve a leer (su caché lleva la huella de las letras).
-                if (n > 0) { guardarCapa(); recreate() }
+                if (n > 0) releerSinMoverLaVista()
             }
         }
         var anotando by remember { mutableStateOf(false) }
@@ -457,6 +457,10 @@ class PlanoActivity : ComponentActivity() {
 
         LaunchedEffect(original) {
             val r = withContext(Dispatchers.IO) {
+                // Las letras que viajan (14-oct-2026): fuera lo que llegó y no es una letra, y las
+                // que ya había, a los otros aparatos. Antes de leer: lo que se quite no cuenta.
+                LectorDePlanos.letrasAlAbrir(this@PlanoActivity)
+                huellaAlAbrir = LectorDePlanos.huellaDeLetras(this@PlanoActivity)
                 runCatching {
                     when (val leido = LectorDePlanos.leer(this@PlanoActivity, original)) {
                         is LectorDePlanos.Companion.Resultado.Fallo -> throw ModeloCad.NoSeLee(leido.motivo)
@@ -501,6 +505,18 @@ class PlanoActivity : ComponentActivity() {
                 }
             }.onFailure { e ->
                 estado = (e as? ModeloCad.NoSeLee)?.message ?: getString(com.forge.pixpin.R.string.plano_no)
+            }
+        }
+        // **Llegan letras con el plano abierto** (de otro aparato, al sincronizar): la huella cambia y
+        // el plano se vuelve a leer sin mover la vista, como al añadirlas con «Aa». Mirar la carpeta
+        // es una lista de una docena de archivos cada pocos segundos.
+        LaunchedEffect(listo) {
+            if (!listo) return@LaunchedEffect
+            while (true) {
+                delay(3000)
+                val ahora = withContext(Dispatchers.IO) { LectorDePlanos.huellaDeLetras(this@PlanoActivity) }
+                val antes = huellaAlAbrir ?: continue
+                if (ahora != antes) { releerSinMoverLaVista(); return@LaunchedEffect }
             }
         }
         LaunchedEffect(aLaVista, toques, acotando, marcando) {
@@ -904,10 +920,13 @@ class PlanoActivity : ComponentActivity() {
                                 Text(getString(com.forge.pixpin.R.string.plano_letras_mias, mias.size), modifier = Modifier.padding(top = 12.dp))
                                 Text(mias.joinToString(", ") { it.name }, color = Color.Gray, modifier = Modifier.padding(top = 4.dp))
                                 TextButton(onClick = {
-                                    mias.forEach { it.delete() }
                                     mias = emptyList()
                                     viendoLetras = false
-                                    guardarCapa(); recreate()
+                                    // Con su marca de borrado: se van también de los otros aparatos.
+                                    lifecycleScope.launch {
+                                        withContext(Dispatchers.IO) { LectorDePlanos.quitarLetras(this@PlanoActivity) }
+                                        releerSinMoverLaVista()
+                                    }
                                 }) { Text(getString(com.forge.pixpin.R.string.plano_letras_quitar)) }
                             }
                         }
@@ -1051,8 +1070,27 @@ class PlanoActivity : ComponentActivity() {
     private fun alCambiarTamano(w: Int, h: Int) {
         val primeraVez = camara == null || ancho <= 0
         ancho = w; alto = h
-        // Al girar el teléfono se queda mirando lo mismo, con la misma escala.
-        if (primeraVez) verTodo() else pintar()
+        // Al girar el teléfono se queda mirando lo mismo, con la misma escala. Al volver a leerlo
+        // (letras nuevas), mirando lo que se miraba.
+        val volver = if (primeraVez) vistaAlReleer?.takeIf { it.first == intent?.getStringExtra(EXTRA_RUTA) }?.second else null
+        if (volver != null) { vistaAlReleer = null; camara = volver; pintar() }
+        else if (primeraVez) verTodo() else pintar()
+    }
+
+    /** La huella de las letras con la que se leyó el plano ([LectorDePlanos.huellaDeLetras]). */
+    @Volatile private var huellaAlAbrir: String? = null
+
+    /**
+     * **Volver a leer el plano sin mover la vista**: con letras nuevas (añadidas con «Aa», quitadas
+     * o llegadas de otro aparato) lo leído en caché ya no vale, porque lleva la huella de las letras.
+     * Lo anotado se guarda antes; la cámara espera en [vistaAlReleer] a la pantalla nueva.
+     */
+    private fun releerSinMoverLaVista() {
+        if (isFinishing || isDestroyed) return
+        guardarCapa()
+        val ruta = intent?.getStringExtra(EXTRA_RUTA)
+        vistaAlReleer = camara?.let { c -> ruta?.let { it to c } }
+        recreate()
     }
 
     /**
@@ -1303,6 +1341,9 @@ class PlanoActivity : ComponentActivity() {
     }
 
     companion object {
+        /** La vista de un plano que se está volviendo a leer (su ruta y su cámara). Ver [releerSinMoverLaVista]. */
+        @Volatile private var vistaAlReleer: Pair<String, CamaraPlano>? = null
+
         /**
          * El archivo de las letras de Windows y Office que más piden los planos (13-oct-2026: el
          * usuario añadió todas las SHX de AutoCAD y el plano seguía pidiendo Agency FB, Arial Black,

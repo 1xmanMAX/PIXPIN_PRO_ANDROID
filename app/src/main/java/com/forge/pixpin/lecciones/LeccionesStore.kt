@@ -204,9 +204,15 @@ class LeccionesStore(context: Context) {
          * lecciones se ven en su sección (Proyectos → 💡), no mezcladas con lo guardado.
          */
         fun sinLecciones(mensajes: List<Mensaje>): List<Mensaje> {
-            val lecciones = mensajes.mapNotNullTo(HashSet()) { m -> m.id.takeIf { esLeccion(m) } }
-            if (lecciones.isEmpty()) return mensajes
-            return mensajes.filter { it.id !in lecciones && (it.respondeA == null || it.respondeA !in lecciones) }
+            // **Ni las letras de los planos** (15-oct-2026): un mensaje por letra en el chat «Asistente»
+            // que solo está para que viajen ([com.forge.pixpin.planos.LetrasQueViajan]); con todas las
+            // SHX de AutoCAD serían cien burbujas. El PC las pliega en una franja (`es_de_sistema`); aquí
+            // se ven y se quitan en el visor de planos, «Aa».
+            val vistos = if (mensajes.any { it.id.startsWith(com.forge.pixpin.planos.LetrasQueViajan.PREFIJO_ID) })
+                mensajes.filterNot { it.id.startsWith(com.forge.pixpin.planos.LetrasQueViajan.PREFIJO_ID) } else mensajes
+            val lecciones = vistos.mapNotNullTo(HashSet()) { m -> m.id.takeIf { esLeccion(m) } }
+            if (lecciones.isEmpty()) return vistos
+            return vistos.filter { it.id !in lecciones && (it.respondeA == null || it.respondeA !in lecciones) }
         }
 
         fun nuevoId(ahora: Long = System.currentTimeMillis()): String =

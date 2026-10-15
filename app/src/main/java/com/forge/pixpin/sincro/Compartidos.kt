@@ -416,13 +416,14 @@ class AccesoDePersona(private val disco: Disco, private val compartidos: Compart
 
     /** Si un archivo se puede leer: es de ese chat y de ninguno más. */
     fun puedeLeer(chat: String, rel: String, deEsteChat: Set<String>): Boolean =
-        puede(chat) && disco.permitida(rel) && rel in deEsteChat && rel !in prohibidos()
+        puede(chat) && disco.permitida(rel) && !rel.startsWith(Disco.CARPETA_DE_LETRAS) && rel in deEsteChat && rel !in prohibidos()
 
     /**
      * Si un archivo se puede escribir: no es de otro chat y, si ya existe, es de este. Lo nuevo (un
      * adjunto que acaba de llegar con su mensaje) sí.
      */
     fun puedeEscribir(chat: String, rel: String): Boolean =
-        puede(chat) && disco.permitida(rel) && rel !in prohibidos() &&
+        // Las letras de los planos, nunca: son del usuario y de sus aparatos ([Disco.CARPETA_DE_LETRAS]).
+        puede(chat) && disco.permitida(rel) && !rel.startsWith(Disco.CARPETA_DE_LETRAS) && rel !in prohibidos() &&
             (!disco.archivo(rel).exists() || rel in disco.alcance(chat))
 }

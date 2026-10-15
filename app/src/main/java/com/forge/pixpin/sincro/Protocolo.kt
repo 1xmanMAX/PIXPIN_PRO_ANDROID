@@ -1004,7 +1004,9 @@ class Sesion private constructor(
     }
 
     /** Con una persona, lo de los demás chats no entra en ningún plan. */
-    private fun fueraDeLaValla(rel: String): Boolean = acceso?.let { rel !in it.prohibidos() } ?: true
+    private fun fueraDeLaValla(rel: String): Boolean =
+        // Ni las letras de los planos: solo van entre los aparatos propios ([Disco.CARPETA_DE_LETRAS]).
+        acceso?.let { rel !in it.prohibidos() && !rel.startsWith(Disco.CARPETA_DE_LETRAS) } ?: true
 
     fun aplicarArchivos(prep: PreparadoArchivos, hecho: Hecho, avance: (Long) -> Unit = {}) {
         val cuenta = Fusion.Cuenta()

@@ -180,8 +180,37 @@ class LectorDePlanos : Service() {
          * Las letras que ponga el usuario —SHX de su AutoCAD y TrueType de su Windows—: en un
          * teléfono no hay AutoCAD que las traiga, y PixPin no puede repartirlas (son de Autodesk y
          * de Microsoft). La lectura nativa las busca aquí **antes** que las suyas.
+         *
+         * Desde el 14-oct-2026 es `files/guardados/fuentes-shx`, para que **viajen a los aparatos
+         * propios** ([LetrasQueViajan]); la de antes (`files/fuentes-shx`) se mueve la primera vez.
          */
-        fun carpetaShx(c: Context): File = File(c.filesDir, "fuentes-shx")
+        fun carpetaShx(c: Context): File {
+            if (!movida) synchronized(this) {
+                if (!movida) { runCatching { LetrasQueViajan.moverLaDeAntes(c.filesDir) }; movida = true }
+            }
+            return LetrasQueViajan.carpeta(c.filesDir)
+        }
+
+        @Volatile private var movida = false
+
+        /** El chat «Asistente», creándolo si no hay (es donde viajan las letras). Trabajo de disco. */
+        private fun chatDeLasLetras(c: Context): String? =
+            runCatching { com.forge.pixpin.asistente.Asistente.asegurarChat(c).id }.getOrNull()
+
+        /**
+         * **Al abrir un plano**: rechazar lo que llegó y no es una letra, y hacer viajar las que ya
+         * había sin mensaje. Bloquea: fuera del hilo de la pantalla. Ver [LetrasQueViajan.alAbrir].
+         */
+        fun letrasAlAbrir(c: Context) {
+            carpetaShx(c)
+            runCatching { LetrasQueViajan.alAbrir(com.forge.pixpin.sincro.Red.disco(c), System.currentTimeMillis()) { chatDeLasLetras(c) } }
+        }
+
+        /** **«Quitar las mías»**: fuera las letras y sus mensajes, con marca (se van también de los otros aparatos). */
+        fun quitarLetras(c: Context): Int {
+            carpetaShx(c)
+            return runCatching { LetrasQueViajan.quitarTodas(com.forge.pixpin.sincro.Red.disco(c), System.currentTimeMillis()) }.getOrDefault(0)
+        }
 
         /** Lo que el lector apunta en `sinDibujar` por cada letra que el plano pide y no está (`FUENTE_QUE_FALTA` del .so). */
         const val FUENTE_QUE_FALTA = "fuente que falta: "
@@ -190,8 +219,7 @@ class LectorDePlanos : Service() {
         val TIPOS_DE_LETRA = setOf("shx", "ttf", "otf", "ttc")
 
         /** Las letras que puso el usuario, por nombre. */
-        fun letrasDelUsuario(c: Context): List<File> =
-            carpetaShx(c).listFiles()?.filter { it.isFile && it.extension.lowercase() in TIPOS_DE_LETRA }?.sortedBy { it.name.lowercase() }.orEmpty()
+        fun letrasDelUsuario(c: Context): List<File> = LetrasQueViajan.letrasEn(carpetaShx(c))
 
         /** Una huella corta de [letrasDelUsuario] (nombres y pesos): cambia si se añade o se quita una. Vacía si no hay. */
         fun huellaDeLetras(c: Context): String {
@@ -202,7 +230,9 @@ class LectorDePlanos : Service() {
 
         /**
          * Copia a [carpetaShx] las letras elegidas (con su nombre, que es lo que pide el plano:
-         * «romans.shx», «ARIALN.TTF»). Lo que no es una letra se salta. Devuelve cuántas.
+         * «romans.shx», «ARIALN.TTF»). Lo que no es una letra —por su nombre o **por dentro**: un
+         * archivo cualquiera rebautizado `.shx` no entra— se salta. Las que entran viajan a los otros
+         * aparatos del usuario ([LetrasQueViajan.senalar]). Devuelve cuántas.
          */
         fun anadirLetras(c: Context, uris: List<android.net.Uri>): Int {
             val carpeta = carpetaShx(c).apply { mkdirs() }
@@ -215,13 +245,18 @@ class LectorDePlanos : Service() {
                 }.getOrNull() ?: u.lastPathSegment?.substringAfterLast('/') ?: continue
                 val limpio = File(nombre).name
                 if (limpio.substringAfterLast('.', "").lowercase() !in TIPOS_DE_LETRA) continue
+                val tmp = File(carpeta, "$limpio.tmp")
                 val ok = runCatching {
-                    val tmp = File(carpeta, "$limpio.tmp")
                     c.contentResolver.openInputStream(u)?.use { i -> tmp.outputStream().use { i.copyTo(it) } } ?: return@runCatching false
-                    tmp.renameTo(File(carpeta, limpio))
+                    if (!LetrasQueViajan.pareceLetra(tmp, limpio)) return@runCatching false
+                    val destino = File(carpeta, limpio)
+                    if (destino.exists()) destino.delete()
+                    tmp.renameTo(destino)
                 }.getOrDefault(false)
+                tmp.delete()
                 if (ok) n++
             }
+            if (n > 0) runCatching { LetrasQueViajan.senalar(com.forge.pixpin.sincro.Red.disco(c), System.currentTimeMillis()) { chatDeLasLetras(c) } }
             return n
         }
 
