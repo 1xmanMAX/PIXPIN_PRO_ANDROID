@@ -464,6 +464,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             com.forge.pixpin.asistente.ChatDelAsistente.buscar(proyectos, mensajes)?.id
         }
         LaunchedEffect(idDelAsistente) { chatDelAsistente = idDelAsistente }
+        // Si el asistente contesta en este chat (el botón de mandar pasa a «Parar»). Derivado: la
+        // respuesta en vivo cambia muchas veces por segundo y esto solo cuando empieza o acaba.
+        val contestandoAqui by remember {
+            androidx.compose.runtime.derivedStateOf { com.forge.pixpin.asistente.Asistente.contestandoEn(chatDe) }
+        }
         // Al entrar en el chat «Asistente» se carga el modelo, para que la primera respuesta no espere.
         val enElDelAsistente = chatDe != null && chatDe == idDelAsistente
         LaunchedEffect(enElDelAsistente) {
@@ -877,7 +882,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         }
                     },
                     // Mientras contesta en este chat, el botón de mandar es «Parar».
-                    parar = if (com.forge.pixpin.asistente.Asistente.contestandoEn(chatDe)) {
+                    parar = if (contestandoAqui) {
                         { com.forge.pixpin.asistente.Asistente.parar() }
                     } else null
                     )
