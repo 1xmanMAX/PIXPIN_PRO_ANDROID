@@ -1,0 +1,1462 @@
+[
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 2"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 1"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 4,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 4"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/obra/Presupuesto.xlsx",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Presupuesto.xlsx · Hoja1"
+      }
+    ],
+    "consulta": "¿Qué dice la tesis sobre las cunetas?",
+    "hallazgos": [
+      {
+        "fragmento": "210 planos ciento metrado Antisuyo ciento drenaje tesis avenida tesis viga encofrado técnico rígido refuerzo cunetas geométrico geométrico señalización máxima expediente reunión columna memoria acero velocidad por columna diseño viga rígido informe ensayo ciento estructura reunión ciento supervisor cunetas expediente señalización máxima pavimento rígido estructura talud método contención compresión obra concreto cunetas…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.8482254147529602,
+        "seccion": null
+      },
+      {
+        "fragmento": "…columna cronograma informe residente por velocidad tesis planos asfalto costo ensayo mínima plano cunetas tesis avenida máxima descriptiva compactación pendiente avenida sismo kilogramos cuneta vehículo entrega curado plano análisis rígido reunión Tahuantinsuyo Newmark zapata avenida concreto costo metrado curva curva reunión excavación diseño compresión ciento presupuesto plano carril cunetas jirón flexible cuneta cunetas…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.8398568034172058,
+        "seccion": null
+      },
+      {
+        "fragmento": "…mínima excavación flexible por entrega 280 pendiente vaciado capítulo refuerzo entrega columna cronograma tesis zapata refuerzo plano vaciado diseño curva curado concreto curva supervisor berma curado curado cunetas talud metrado refuerzo encofrado excavación drenaje probeta zapata ensayo Newmark tesis encofrado residente talud kilogramos zapata análisis cuneta concreto entrega viga refuerzo tesis residente muro ciento…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7226964235305786,
+        "seccion": null
+      },
+      {
+        "fragmento": "…estructura partida expediente curva metrado cuneta pendiente acta vaciado asfalto acta carril tráfico diseño por tesis cuneta vaciado 280 estructura plano Antisuyo costo supervisor talud flexible zapata muro residente memoria drenaje berma acta compresión acta mínima sismo berma Antisuyo velocidad contención residente asfalto diseño método por compresión informe pavimento reunión cronograma estructura cunetas Antisuyo…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 4,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7198197245597839,
+        "seccion": null
+      },
+      {
+        "fragmento": "…Partida 02 relleno compactado 8 300 soles. tráfico compresión ensayo estructura entrega partida Antisuyo tesis presupuesto vehículo obra tesis peralte Tahuantinsuyo muro avenida supervisor metrado cunetas vaciado acero vaciado reunión excavación contención plano vehículo asfalto por planos residente talud análisis ciento reunión relleno tesis plano Antisuyo acero encofrado compresión probeta curva cunetas análisis flexible…",
+        "nombre": "Presupuesto.xlsx",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/obra/Presupuesto.xlsx",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.6878615021705627,
+        "seccion": "Hoja1"
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Tesis.pdf», pág. 2 (chat «Obra»)\n«210 planos ciento metrado Antisuyo ciento drenaje tesis avenida tesis viga encofrado técnico rígido refuerzo cunetas geométrico geométrico señalización máxima expediente reunión columna memoria acero velocidad por columna diseño viga rígido informe ensayo ciento estructura reunión ciento supervisor cunetas expediente señalización máxima pavimento rígido estructura talud método contención compresión obra concreto cunetas…»\n\n[1] «Tesis.pdf», pág. 2 (chat «Obra»)\n«…columna cronograma informe residente por velocidad tesis planos asfalto costo ensayo mínima plano cunetas tesis avenida máxima descriptiva compactación pendiente avenida sismo kilogramos cuneta vehículo entrega curado plano análisis rígido reunión Tahuantinsuyo Newmark zapata avenida concreto costo metrado curva curva reunión excavación diseño compresión ciento presupuesto plano carril cunetas jirón flexible cuneta cunetas…»\n\n[2] «Informe cunetas.pdf», pág. 1 (chat «Obra Norte»)\n«…mínima excavación flexible por entrega 280 pendiente vaciado capítulo refuerzo entrega columna cronograma tesis zapata refuerzo plano vaciado diseño curva curado concreto curva supervisor berma curado curado cunetas talud metrado refuerzo encofrado excavación drenaje probeta zapata ensayo Newmark tesis encofrado residente talud kilogramos zapata análisis cuneta concreto entrega viga refuerzo tesis residente muro ciento…»\n\n[3] «Informe cunetas.pdf», pág. 4 (chat «Obra Norte»)\n«…estructura partida expediente curva metrado cuneta pendiente acta vaciado asfalto acta carril tráfico diseño por tesis cuneta vaciado 280 estructura plano Antisuyo costo supervisor talud flexible zapata muro residente memoria drenaje berma acta compresión acta mínima sismo berma Antisuyo velocidad contención residente asfalto diseño método por compresión informe pavimento reunión cronograma estructura cunetas Antisuyo…»\n\n[4] «Presupuesto.xlsx», Hoja1 (chat «Obra»)\n«…Partida 02 relleno compactado 8 300 soles. tráfico compresión ensayo estructura entrega partida Antisuyo tesis presupuesto vehículo obra tesis peralte Tahuantinsuyo muro avenida supervisor metrado cunetas vaciado acero vaciado reunión excavación contención plano vehículo asfalto por planos residente talud análisis ciento reunión relleno tesis plano Antisuyo acero encofrado compresión probeta curva cunetas análisis flexible…»\n",
+    "palabras": [
+      "tesi",
+      "cunet"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Casa",
+        "titulo": "Notas de la casa"
+      }
+    ],
+    "consulta": "busca en mis notas el presupuesto",
+    "hallazgos": [
+      {
+        "fragmento": "…pendiente viga geométrico curva jirón residente entrega vehículo mínima partida expediente máxima expediente presupuesto geométrico expediente berma centímetro berma ensayo pendiente 0.5 peralte presupuesto planos jirón plazo cunetas cimentación plano Tahuantinsuyo cunetas relleno concreto encofrado compresión metrado descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria concreto máxima mínima…",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 2.8120522499084473,
+        "seccion": null
+      },
+      {
+        "fragmento": "…asfalto vehículo velocidad 280 ciento muro Antisuyo Tahuantinsuyo carril columna estructura excavación drenaje kilogramos encofrado compresión refuerzo supervisor geométrico cimentación técnico pendiente viga geométrico curva jirón residente entrega vehículo mínima partida expediente máxima expediente presupuesto geométrico expediente berma centímetro berma ensayo pendiente 0.5 peralte presupuesto planos jirón plazo cunetas",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 2.6481802463531494,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Notas de la casa» (chat «Casa»)\n«…pendiente viga geométrico curva jirón residente entrega vehículo mínima partida expediente máxima expediente presupuesto geométrico expediente berma centímetro berma ensayo pendiente 0.5 peralte presupuesto planos jirón plazo cunetas cimentación plano Tahuantinsuyo cunetas relleno concreto encofrado compresión metrado descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria concreto máxima mínima…»\n\n[1] «Notas de la casa» (chat «Casa»)\n«…asfalto vehículo velocidad 280 ciento muro Antisuyo Tahuantinsuyo carril columna estructura excavación drenaje kilogramos encofrado compresión refuerzo supervisor geométrico cimentación técnico pendiente viga geométrico curva jirón residente entrega vehículo mínima partida expediente máxima expediente presupuesto geométrico expediente berma centímetro berma ensayo pendiente 0.5 peralte presupuesto planos jirón plazo cunetas»\n",
+    "palabras": [
+      "not",
+      "presupuest"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 1"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "codigo": "m2",
+            "proyecto": "obra",
+            "tipo": "mensaje"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "plano señalización Tahuantinsuyo.pdf · 4-oct-2026"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 1"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 4,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 4"
+      },
+      {
+        "n": 5,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 2"
+      }
+    ],
+    "consulta": "¿Dónde mandé el plano de señalización?",
+    "hallazgos": [
+      {
+        "fragmento": "…compresión presupuesto señalización estructura curado kilogramos Tahuantinsuyo cronograma sismo diseño diseño planos supervisor plano muro jirón avenida metrado resistencia Antisuyo costo Antisuyo Tahuantinsuyo columna diseño expediente partida velocidad pendiente refuerzo jirón Antisuyo ciento reunión señalización capítulo centímetro flexible método drenaje 210 señalización compresión muro rígido diseño señalización…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.9520571231842041,
+        "seccion": null
+      },
+      {
+        "fragmento": "plano señalización Tahuantinsuyo.pdf",
+        "nombre": "Chat de Obra",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "codigo": "m2",
+            "proyecto": "obra",
+            "tipo": "mensaje"
+          }
+        },
+        "puntos": 0.9311113357543945,
+        "seccion": "adjunto"
+      },
+      {
+        "fragmento": "entrega planos estructura probeta entrega planos curado berma contención señalización columna máxima presupuesto columna señalización señalización cuneta 0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.9236208200454712,
+        "seccion": null
+      },
+      {
+        "fragmento": "…Antisuyo contención acero contención descriptiva señalización compresión diseño drenaje velocidad avenida plano ensayo zapata técnico rígido diseño viga residente viga planos entrega por carril cronograma máxima plazo entrega 0.5 contención metrado señalización curva descriptiva asfalto refuerzo centímetro excavación jirón técnico cuneta acero kilogramos plazo tesis cronograma berma pendiente señalización refuerzo expediente…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 4,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.9128481149673462,
+        "seccion": null
+      },
+      {
+        "fragmento": "210 planos ciento metrado Antisuyo ciento drenaje tesis avenida tesis viga encofrado técnico rígido refuerzo cunetas geométrico geométrico señalización máxima expediente reunión columna memoria acero velocidad por columna diseño viga rígido informe ensayo ciento estructura reunión ciento supervisor cunetas expediente señalización máxima pavimento rígido estructura talud método contención compresión obra concreto cunetas…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.9046827554702759,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Informe cunetas.pdf», pág. 1 (chat «Obra Norte»)\n«…compresión presupuesto señalización estructura curado kilogramos Tahuantinsuyo cronograma sismo diseño diseño planos supervisor plano muro jirón avenida metrado resistencia Antisuyo costo Antisuyo Tahuantinsuyo columna diseño expediente partida velocidad pendiente refuerzo jirón Antisuyo ciento reunión señalización capítulo centímetro flexible método drenaje 210 señalización compresión muro rígido diseño señalización…»\n\n[2] El usuario SI mando el archivo «plano señalización Tahuantinsuyo.pdf» al chat «Obra» el 4-oct-2026.\n\n[3] «Tesis.pdf», pág. 1 (chat «Obra»)\n«entrega planos estructura probeta entrega planos curado berma contención señalización columna máxima presupuesto columna señalización señalización cuneta 0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria…»\n\n[4] «Informe cunetas.pdf», pág. 4 (chat «Obra Norte»)\n«…Antisuyo contención acero contención descriptiva señalización compresión diseño drenaje velocidad avenida plano ensayo zapata técnico rígido diseño viga residente viga planos entrega por carril cronograma máxima plazo entrega 0.5 contención metrado señalización curva descriptiva asfalto refuerzo centímetro excavación jirón técnico cuneta acero kilogramos plazo tesis cronograma berma pendiente señalización refuerzo expediente…»\n\n[5] «Tesis.pdf», pág. 2 (chat «Obra»)\n«210 planos ciento metrado Antisuyo ciento drenaje tesis avenida tesis viga encofrado técnico rígido refuerzo cunetas geométrico geométrico señalización máxima expediente reunión columna memoria acero velocidad por columna diseño viga rígido informe ensayo ciento estructura reunión ciento supervisor cunetas expediente señalización máxima pavimento rígido estructura talud método contención compresión obra concreto cunetas…»\n",
+    "palabras": [
+      "plan",
+      "senaliz"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 2"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Casa",
+        "titulo": "Notas de la casa"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 1"
+      }
+    ],
+    "consulta": "pendiente mínima del drenaje",
+    "hallazgos": [
+      {
+        "fragmento": "…rígido estructura talud método contención compresión obra concreto cunetas cronograma Antisuyo 0.5 avenida drenaje kilogramos pendiente ciento cronograma tesis reunión pendiente 210 jirón mínima avenida Tahuantinsuyo excavación señalización kilogramos por contención mínima 280 diseño rígido metrado mínima memoria viga tráfico jirón geométrico supervisor estructura cuneta 280 asfalto 0.5 plano capítulo relleno 0.5 diseño…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.1751965284347534,
+        "seccion": null
+      },
+      {
+        "fragmento": "…ciento 280 flexible flexible mínima costo memoria refuerzo 210 zapata compresión refuerzo señalización acta mínima talud tráfico reunión relleno curva análisis técnico rígido relleno cimentación talud centímetro tráfico residente centímetro acero berma peralte drenaje tráfico expediente 280 tráfico señalización cunetas Antisuyo kilogramos descriptiva rígido viga viga plano acero plano pendiente ciento avenida berma supervisor…",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.1412136554718018,
+        "seccion": null
+      },
+      {
+        "fragmento": "…peralte tesis talud cunetas vehículo entrega kilogramos resistencia cunetas acero tráfico acta diseño informe pendiente Newmark señalización método El drenaje longitudinal se resuelve con cunetas triangulares revestidas de concreto, con una pendiente mínima del 0.5 por ciento. máxima avenida plano rígido costo plano análisis ensayo avenida encofrado columna cronograma informe residente por velocidad tesis planos asfalto…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.0951943397521973,
+        "seccion": null
+      },
+      {
+        "fragmento": "…compresión partida velocidad talud 210 pavimento vaciado Antisuyo encofrado rígido contención flexible centímetro pendiente asfalto jirón partida pendiente descriptiva vehículo talud plano tráfico rígido avenida peralte planos geométrico drenaje memoria pendiente pavimento señalización método 210 centímetro acero jirón probeta por análisis por costo cuneta geométrico columna descriptiva Tahuantinsuyo velocidad peralte…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.0872139930725098,
+        "seccion": null
+      },
+      {
+        "fragmento": "cimentación técnico pendiente viga geométrico curva jirón residente entrega vehículo mínima partida expediente máxima expediente presupuesto geométrico expediente berma centímetro berma ensayo pendiente 0.5 peralte presupuesto planos jirón plazo cunetas cimentación plano Tahuantinsuyo cunetas relleno concreto encofrado compresión metrado descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria…",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.0666779279708862,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Tesis.pdf», pág. 2 (chat «Obra»)\n«…rígido estructura talud método contención compresión obra concreto cunetas cronograma Antisuyo 0.5 avenida drenaje kilogramos pendiente ciento cronograma tesis reunión pendiente 210 jirón mínima avenida Tahuantinsuyo excavación señalización kilogramos por contención mínima 280 diseño rígido metrado mínima memoria viga tráfico jirón geométrico supervisor estructura cuneta 280 asfalto 0.5 plano capítulo relleno 0.5 diseño…»\n\n[2] «Notas de la casa» (chat «Casa»)\n«…ciento 280 flexible flexible mínima costo memoria refuerzo 210 zapata compresión refuerzo señalización acta mínima talud tráfico reunión relleno curva análisis técnico rígido relleno cimentación talud centímetro tráfico residente centímetro acero berma peralte drenaje tráfico expediente 280 tráfico señalización cunetas Antisuyo kilogramos descriptiva rígido viga viga plano acero plano pendiente ciento avenida berma supervisor…»\n\n[1] «Tesis.pdf», pág. 2 (chat «Obra»)\n«…peralte tesis talud cunetas vehículo entrega kilogramos resistencia cunetas acero tráfico acta diseño informe pendiente Newmark señalización método El drenaje longitudinal se resuelve con cunetas triangulares revestidas de concreto, con una pendiente mínima del 0.5 por ciento. máxima avenida plano rígido costo plano análisis ensayo avenida encofrado columna cronograma informe residente por velocidad tesis planos asfalto…»\n\n[3] «Informe cunetas.pdf», pág. 1 (chat «Obra Norte»)\n«…compresión partida velocidad talud 210 pavimento vaciado Antisuyo encofrado rígido contención flexible centímetro pendiente asfalto jirón partida pendiente descriptiva vehículo talud plano tráfico rígido avenida peralte planos geométrico drenaje memoria pendiente pavimento señalización método 210 centímetro acero jirón probeta por análisis por costo cuneta geométrico columna descriptiva Tahuantinsuyo velocidad peralte…»\n\n[2] «Notas de la casa» (chat «Casa»)\n«cimentación técnico pendiente viga geométrico curva jirón residente entrega vehículo mínima partida expediente máxima expediente presupuesto geométrico expediente berma centímetro berma ensayo pendiente 0.5 peralte presupuesto planos jirón plazo cunetas cimentación plano Tahuantinsuyo cunetas relleno concreto encofrado compresión metrado descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria…»\n",
+    "palabras": [
+      "pendient",
+      "minim",
+      "drenaj"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 7,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 7"
+      }
+    ],
+    "consulta": "cuneta km 12",
+    "hallazgos": [
+      {
+        "fragmento": "La cuneta del km 12 queda pendiente de revisión de cotas. berma cimentación talud vehículo cuneta jirón sismo Tahuantinsuyo muro informe reunión berma 0.5 rígido descriptiva berma capítulo berma entrega velocidad descriptiva Newmark flexible Antisuyo jirón berma partida compresión cunetas expediente resistencia Newmark cunetas 0.5 Newmark mínima avenida costo columna entrega",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 7,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 7,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 7.830318927764893,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Informe cunetas.pdf», pág. 7 (chat «Obra Norte»)\n«La cuneta del km 12 queda pendiente de revisión de cotas. berma cimentación talud vehículo cuneta jirón sismo Tahuantinsuyo muro informe reunión berma 0.5 rígido descriptiva berma capítulo berma entrega velocidad descriptiva Newmark flexible Antisuyo jirón berma partida compresión cunetas expediente resistencia Newmark cunetas 0.5 Newmark mínima avenida costo columna entrega»\n",
+    "palabras": [
+      "cunet",
+      "km",
+      "12"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 2"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 6,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 6"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 2"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Casa",
+        "titulo": "Notas de la casa"
+      },
+      {
+        "n": 5,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 1"
+      }
+    ],
+    "consulta": "resistencia del concreto zapata",
+    "hallazgos": [
+      {
+        "fragmento": "…muro flexible metrado costo encofrado zapata planos velocidad contención cimentación avenida Newmark reunión concreto talud compresión obra acta expediente método jirón cronograma refuerzo muro avenida contención muro residente viga talud tráfico máxima resistencia señalización presupuesto concreto diseño acta jirón curva expediente peralte drenaje flexible compactación columna diseño probeta curado informe talud concreto…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.728698492050171,
+        "seccion": null
+      },
+      {
+        "fragmento": "…señalización muro estructura entrega muro jirón Tahuantinsuyo asfalto rígido método supervisor encofrado concreto relleno por ensayo por zapata geométrico descriptiva expediente máxima viga señalización zapata estructura resistencia encofrado tesis rígido resistencia 280 partida relleno muro drenaje flexible informe ensayo viga diseño mínima asfalto informe curado vehículo pendiente resistencia cuneta presupuesto cimentación…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 6,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 6,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.6051502227783203,
+        "seccion": null
+      },
+      {
+        "fragmento": "…informe cronograma 280 ciento Antisuyo acta avenida obra metrado compresión estructura curado sismo refuerzo resistencia peralte mínima Tahuantinsuyo ensayo mínima relleno geométrico sismo columna talud viga jirón estructura centímetro compactación capítulo refuerzo 0.5 zapata compactación zapata probeta informe encofrado vehículo curado metrado berma peralte tesis talud cunetas vehículo entrega kilogramos resistencia…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.481866478919983,
+        "seccion": null
+      },
+      {
+        "fragmento": "Comprar cemento y acero de refuerzo para la zapata. La resistencia del concreto será 210 kilogramos por centímetro cuadrado. diseño contención viga técnico jirón cronograma plano resistencia cuneta pavimento vehículo columna 0.5 ciento 280 flexible flexible mínima costo memoria refuerzo 210 zapata compresión refuerzo señalización acta mínima talud tráfico reunión relleno curva análisis técnico rígido relleno cimentación…",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.2997785806655884,
+        "seccion": null
+      },
+      {
+        "fragmento": "…0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna jirón carril descriptiva talud 210 sismo…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.2430781126022339,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Informe cunetas.pdf», pág. 2 (chat «Obra Norte»)\n«…muro flexible metrado costo encofrado zapata planos velocidad contención cimentación avenida Newmark reunión concreto talud compresión obra acta expediente método jirón cronograma refuerzo muro avenida contención muro residente viga talud tráfico máxima resistencia señalización presupuesto concreto diseño acta jirón curva expediente peralte drenaje flexible compactación columna diseño probeta curado informe talud concreto…»\n\n[2] «Informe cunetas.pdf», pág. 6 (chat «Obra Norte»)\n«…señalización muro estructura entrega muro jirón Tahuantinsuyo asfalto rígido método supervisor encofrado concreto relleno por ensayo por zapata geométrico descriptiva expediente máxima viga señalización zapata estructura resistencia encofrado tesis rígido resistencia 280 partida relleno muro drenaje flexible informe ensayo viga diseño mínima asfalto informe curado vehículo pendiente resistencia cuneta presupuesto cimentación…»\n\n[3] «Tesis.pdf», pág. 2 (chat «Obra»)\n«…informe cronograma 280 ciento Antisuyo acta avenida obra metrado compresión estructura curado sismo refuerzo resistencia peralte mínima Tahuantinsuyo ensayo mínima relleno geométrico sismo columna talud viga jirón estructura centímetro compactación capítulo refuerzo 0.5 zapata compactación zapata probeta informe encofrado vehículo curado metrado berma peralte tesis talud cunetas vehículo entrega kilogramos resistencia…»\n\n[4] «Notas de la casa» (chat «Casa»)\n«Comprar cemento y acero de refuerzo para la zapata. La resistencia del concreto será 210 kilogramos por centímetro cuadrado. diseño contención viga técnico jirón cronograma plano resistencia cuneta pavimento vehículo columna 0.5 ciento 280 flexible flexible mínima costo memoria refuerzo 210 zapata compresión refuerzo señalización acta mínima talud tráfico reunión relleno curva análisis técnico rígido relleno cimentación…»\n\n[5] «Tesis.pdf», pág. 1 (chat «Obra»)\n«…0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna jirón carril descriptiva talud 210 sismo…»\n",
+    "palabras": [
+      "resistenci",
+      "concret",
+      "zapat"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "codigo": "m3",
+            "proyecto": "obra",
+            "tipo": "mensaje"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Acta de reunión: se acordó el cronograma de entrega en novie… · 5-oct-2026"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 5,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 5"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 1"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 2"
+      }
+    ],
+    "consulta": "cronograma de entrega",
+    "hallazgos": [
+      {
+        "fragmento": "Acta de reunión: se acordó el cronograma de entrega en noviembre",
+        "nombre": "Chat de Obra",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "codigo": "m3",
+            "proyecto": "obra",
+            "tipo": "mensaje"
+          }
+        },
+        "puntos": 0.8676424622535706,
+        "seccion": null
+      },
+      {
+        "fragmento": "…diseño berma refuerzo reunión obra memoria acero velocidad drenaje por contención resistencia geométrico costo cronograma geométrico viga probeta residente contención expediente señalización tesis tráfico velocidad descriptiva Antisuyo velocidad excavación ensayo cuneta pavimento concreto jirón supervisor por geométrico cronograma curva cronograma probeta acta acta probeta acero centímetro berma rígido memoria carril…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 5,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 5,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.8393828868865967,
+        "seccion": null
+      },
+      {
+        "fragmento": "…capítulo talud expediente asfalto ciento relleno flexible tesis probeta curado pendiente Tahuantinsuyo tesis entrega ensayo asfalto supervisor sismo compactación expediente asfalto residente expediente refuerzo concreto compactación rígido obra estructura diseño curado viga plazo sismo residente curva obra costo método expediente residente partida muro capítulo entrega pendiente supervisor asfalto excavación por cronograma…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.8121988773345947,
+        "seccion": null
+      },
+      {
+        "fragmento": "…cimentación drenaje rígido asfalto cronograma pavimento encofrado costo Tahuantinsuyo zapata asfalto método cuneta entrega metrado viga vaciado metrado acta descriptiva ciento curado presupuesto informe curva pendiente geométrico concreto 280 cronograma drenaje contención probeta centímetro máxima compresión presupuesto compactación método avenida señalización flexible sismo tráfico avenida concreto plano entrega probeta…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.8078322410583496,
+        "seccion": null
+      },
+      {
+        "fragmento": "entrega planos estructura probeta entrega planos curado berma contención señalización columna máxima presupuesto columna señalización señalización cuneta 0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7550578117370605,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] mensaje del chat «Obra», 5-oct-2026\n«Acta de reunión: se acordó el cronograma de entrega en noviembre»\n\n[2] «Informe cunetas.pdf», pág. 5 (chat «Obra Norte»)\n«…diseño berma refuerzo reunión obra memoria acero velocidad drenaje por contención resistencia geométrico costo cronograma geométrico viga probeta residente contención expediente señalización tesis tráfico velocidad descriptiva Antisuyo velocidad excavación ensayo cuneta pavimento concreto jirón supervisor por geométrico cronograma curva cronograma probeta acta acta probeta acero centímetro berma rígido memoria carril…»\n\n[3] «Tesis.pdf», pág. 1 (chat «Obra»)\n«…capítulo talud expediente asfalto ciento relleno flexible tesis probeta curado pendiente Tahuantinsuyo tesis entrega ensayo asfalto supervisor sismo compactación expediente asfalto residente expediente refuerzo concreto compactación rígido obra estructura diseño curado viga plazo sismo residente curva obra costo método expediente residente partida muro capítulo entrega pendiente supervisor asfalto excavación por cronograma…»\n\n[4] «Informe cunetas.pdf», pág. 2 (chat «Obra Norte»)\n«…cimentación drenaje rígido asfalto cronograma pavimento encofrado costo Tahuantinsuyo zapata asfalto método cuneta entrega metrado viga vaciado metrado acta descriptiva ciento curado presupuesto informe curva pendiente geométrico concreto 280 cronograma drenaje contención probeta centímetro máxima compresión presupuesto compactación método avenida señalización flexible sismo tráfico avenida concreto plano entrega probeta…»\n\n[3] «Tesis.pdf», pág. 1 (chat «Obra»)\n«entrega planos estructura probeta entrega planos curado berma contención señalización columna máxima presupuesto columna señalización señalización cuneta 0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria…»\n",
+    "palabras": [
+      "cronogram",
+      "entreg"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 7,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 7"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 6,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 6"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 1"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 2"
+      }
+    ],
+    "consulta": "Newmark sismo",
+    "hallazgos": [
+      {
+        "fragmento": "La cuneta del km 12 queda pendiente de revisión de cotas. berma cimentación talud vehículo cuneta jirón sismo Tahuantinsuyo muro informe reunión berma 0.5 rígido descriptiva berma capítulo berma entrega velocidad descriptiva Newmark flexible Antisuyo jirón berma partida compresión cunetas expediente resistencia Newmark cunetas 0.5 Newmark mínima avenida costo columna entrega",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 7,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 7,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.1718919277191162,
+        "seccion": null
+      },
+      {
+        "fragmento": "…expediente muro obra expediente curado talud reunión Tahuantinsuyo supervisor resistencia refuerzo avenida Newmark señalización costo metrado entrega Newmark compactación jirón capítulo partida reunión jirón 0.5 señalización entrega kilogramos compactación plazo residente Newmark informe técnico supervisor máxima vaciado mínima resistencia estructura ciento entrega ciento Newmark informe método kilogramos refuerzo plazo…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 6,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 6,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 1.0313117504119873,
+        "seccion": null
+      },
+      {
+        "fragmento": "…refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna jirón carril descriptiva talud 210 sismo Newmark 0.5 centímetro 280 280 curva máxima viga método vehículo avenida 280 zapata acta cunetas excavación reunión talud viga plazo pavimento…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.9263583421707153,
+        "seccion": null
+      },
+      {
+        "fragmento": "…estructura curado sismo refuerzo resistencia peralte mínima Tahuantinsuyo ensayo mínima relleno geométrico sismo columna talud viga jirón estructura centímetro compactación capítulo refuerzo 0.5 zapata compactación zapata probeta informe encofrado vehículo curado metrado berma peralte tesis talud cunetas vehículo entrega kilogramos resistencia cunetas acero tráfico acta diseño informe pendiente Newmark señalización método…",
+        "nombre": "Tesis.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.841472864151001,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Informe cunetas.pdf», pág. 7 (chat «Obra Norte»)\n«La cuneta del km 12 queda pendiente de revisión de cotas. berma cimentación talud vehículo cuneta jirón sismo Tahuantinsuyo muro informe reunión berma 0.5 rígido descriptiva berma capítulo berma entrega velocidad descriptiva Newmark flexible Antisuyo jirón berma partida compresión cunetas expediente resistencia Newmark cunetas 0.5 Newmark mínima avenida costo columna entrega»\n\n[2] «Informe cunetas.pdf», pág. 6 (chat «Obra Norte»)\n«…expediente muro obra expediente curado talud reunión Tahuantinsuyo supervisor resistencia refuerzo avenida Newmark señalización costo metrado entrega Newmark compactación jirón capítulo partida reunión jirón 0.5 señalización entrega kilogramos compactación plazo residente Newmark informe técnico supervisor máxima vaciado mínima resistencia estructura ciento entrega ciento Newmark informe método kilogramos refuerzo plazo…»\n\n[3] «Tesis.pdf», pág. 1 (chat «Obra»)\n«…refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna jirón carril descriptiva talud 210 sismo Newmark 0.5 centímetro 280 280 curva máxima viga método vehículo avenida 280 zapata acta cunetas excavación reunión talud viga plazo pavimento…»\n\n[4] «Tesis.pdf», pág. 2 (chat «Obra»)\n«…estructura curado sismo refuerzo resistencia peralte mínima Tahuantinsuyo ensayo mínima relleno geométrico sismo columna talud viga jirón estructura centímetro compactación capítulo refuerzo 0.5 zapata compactación zapata probeta informe encofrado vehículo curado metrado berma peralte tesis talud cunetas vehículo entrega kilogramos resistencia cunetas acero tráfico acta diseño informe pendiente Newmark señalización método…»\n",
+    "palabras": [
+      "newmark",
+      "sism"
+    ]
+  },
+  {
+    "citas": [],
+    "consulta": "¿qué dice?",
+    "hallazgos": [],
+    "modelo": "No encontre nada sobre «¿qué dice?» en los documentos y chats del usuario. Diselo asi; no inventes.",
+    "palabras": []
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/obra/Presupuesto.xlsx",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Presupuesto.xlsx · Hoja1"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 1"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 1"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 2"
+      }
+    ],
+    "consulta": "excavación partida",
+    "hallazgos": [
+      {
+        "fragmento": "Partida 01 excavación 12 500 soles. Partida 02 relleno compactado 8 300 soles. tráfico compresión ensayo estructura entrega partida Antisuyo tesis presupuesto vehículo obra tesis peralte Tahuantinsuyo muro avenida supervisor metrado cunetas vaciado acero vaciado reunión excavación contención plano vehículo asfalto por planos residente talud análisis ciento reunión relleno tesis plano Antisuyo acero encofrado compresión…",
+        "nombre": "Presupuesto.xlsx",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/obra/Presupuesto.xlsx",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7808822393417358,
+        "seccion": "Hoja1"
+      },
+      {
+        "fragmento": "…concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna jirón carril descriptiva talud 210 sismo Newmark 0.5 centímetro 280 280 curva máxima viga método vehículo avenida 280 zapata acta cunetas excavación…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7656720280647278,
+        "seccion": null
+      },
+      {
+        "fragmento": "memoria expediente partida mínima muro informe presupuesto compresión descriptiva avenida drenaje método memoria carril relleno flexible muro vehículo viga rígido excavación jirón flexible memoria excavación cuneta velocidad vaciado muro costo curva mínima excavación flexible por entrega 280 pendiente vaciado capítulo refuerzo entrega columna cronograma tesis zapata refuerzo plano vaciado diseño curva curado concreto…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7592223286628723,
+        "seccion": null
+      },
+      {
+        "fragmento": "técnico talud metrado cronograma pendiente acero método Antisuyo excavación excavación Newmark flexible flexible tesis diseño 280 capítulo análisis capítulo excavación diseño peralte vehículo ensayo avenida cunetas carril jirón diseño concreto muro velocidad descriptiva ciento 210 diseño pavimento vaciado pavimento probeta acta capítulo carril 210 concreto cronograma supervisor relleno tesis residente diseño cimentación…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 2,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7580416798591614,
+        "seccion": null
+      },
+      {
+        "fragmento": "excavación 280 drenaje 280 carril máxima sismo acero metrado 280 presupuesto probeta tráfico tesis refuerzo centímetro encofrado máxima zapata cimentación análisis pavimento columna técnico centímetro viga memoria 210 carril columna entrega entrega análisis cunetas cuneta método reunión estructura probeta partida relleno pavimento jirón relleno",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.662519097328186,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Presupuesto.xlsx», Hoja1 (chat «Obra»)\n«Partida 01 excavación 12 500 soles. Partida 02 relleno compactado 8 300 soles. tráfico compresión ensayo estructura entrega partida Antisuyo tesis presupuesto vehículo obra tesis peralte Tahuantinsuyo muro avenida supervisor metrado cunetas vaciado acero vaciado reunión excavación contención plano vehículo asfalto por planos residente talud análisis ciento reunión relleno tesis plano Antisuyo acero encofrado compresión…»\n\n[2] «Tesis.pdf», pág. 1 (chat «Obra»)\n«…concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna jirón carril descriptiva talud 210 sismo Newmark 0.5 centímetro 280 280 curva máxima viga método vehículo avenida 280 zapata acta cunetas excavación…»\n\n[3] «Informe cunetas.pdf», pág. 1 (chat «Obra Norte»)\n«memoria expediente partida mínima muro informe presupuesto compresión descriptiva avenida drenaje método memoria carril relleno flexible muro vehículo viga rígido excavación jirón flexible memoria excavación cuneta velocidad vaciado muro costo curva mínima excavación flexible por entrega 280 pendiente vaciado capítulo refuerzo entrega columna cronograma tesis zapata refuerzo plano vaciado diseño curva curado concreto…»\n\n[4] «Informe cunetas.pdf», pág. 2 (chat «Obra Norte»)\n«técnico talud metrado cronograma pendiente acero método Antisuyo excavación excavación Newmark flexible flexible tesis diseño 280 capítulo análisis capítulo excavación diseño peralte vehículo ensayo avenida cunetas carril jirón diseño concreto muro velocidad descriptiva ciento 210 diseño pavimento vaciado pavimento probeta acta capítulo carril 210 concreto cronograma supervisor relleno tesis residente diseño cimentación…»\n\n[2] «Tesis.pdf», pág. 1 (chat «Obra»)\n«excavación 280 drenaje 280 carril máxima sismo acero metrado 280 presupuesto probeta tráfico tesis refuerzo centímetro encofrado máxima zapata cimentación análisis pavimento columna técnico centímetro viga memoria 210 carril columna entrega entrega análisis cunetas cuneta método reunión estructura probeta partida relleno pavimento jirón relleno»\n",
+    "palabras": [
+      "excav",
+      "partid"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 6,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 6"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 3,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 3"
+      },
+      {
+        "n": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "codigo": "m1",
+            "proyecto": "obra",
+            "tipo": "mensaje"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Mañana viene el supervisor a revisar el encofrado del muro · 3-oct-2026"
+      },
+      {
+        "n": 4,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 1"
+      },
+      {
+        "n": 5,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Casa",
+        "titulo": "Notas de la casa"
+      }
+    ],
+    "consulta": "supervisor encofrado",
+    "hallazgos": [
+      {
+        "fragmento": "zapata estructura resistencia encofrado tesis rígido resistencia 280 partida relleno muro drenaje flexible informe ensayo viga diseño mínima asfalto informe curado vehículo pendiente resistencia cuneta presupuesto cimentación contención diseño drenaje resistencia supervisor carril supervisor metrado 210 máxima plazo velocidad acta kilogramos ensayo cronograma columna encofrado descriptiva máxima asfalto tráfico descriptiva…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 6,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 6,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.7026439309120178,
+        "seccion": null
+      },
+      {
+        "fragmento": "…partida peralte geométrico análisis técnico tesis rígido encofrado entrega encofrado plazo residente concreto encofrado geométrico método drenaje rígido partida 210 descriptiva asfalto ciento plazo contención viga memoria máxima relleno rígido kilogramos presupuesto capítulo costo flexible curado capítulo cuneta muro estructura curva obra avenida geométrico costo curado flexible peralte cunetas probeta supervisor expediente…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 3,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.6724482178688049,
+        "seccion": null
+      },
+      {
+        "fragmento": "Mañana viene el supervisor a revisar el encofrado del muro",
+        "nombre": "Chat de Obra",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "codigo": "m1",
+            "proyecto": "obra",
+            "tipo": "mensaje"
+          }
+        },
+        "puntos": 0.6625863313674927,
+        "seccion": null
+      },
+      {
+        "fragmento": "…columna señalización señalización cuneta 0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna…",
+        "nombre": "Tesis.pdf",
+        "pagina": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 1,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.5655826330184937,
+        "seccion": null
+      },
+      {
+        "fragmento": "…descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria concreto máxima mínima residente vehículo estructura drenaje partida plano cronograma cuneta velocidad pavimento relleno velocidad velocidad pavimento 0.5 encofrado vehículo presupuesto asfalto curado rígido tesis tráfico por memoria encofrado jirón centímetro cuneta pavimento peralte supervisor peralte asfalto curado tráfico zapata tesis",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.5373889207839966,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Informe cunetas.pdf», pág. 6 (chat «Obra Norte»)\n«zapata estructura resistencia encofrado tesis rígido resistencia 280 partida relleno muro drenaje flexible informe ensayo viga diseño mínima asfalto informe curado vehículo pendiente resistencia cuneta presupuesto cimentación contención diseño drenaje resistencia supervisor carril supervisor metrado 210 máxima plazo velocidad acta kilogramos ensayo cronograma columna encofrado descriptiva máxima asfalto tráfico descriptiva…»\n\n[2] «Informe cunetas.pdf», pág. 3 (chat «Obra Norte»)\n«…partida peralte geométrico análisis técnico tesis rígido encofrado entrega encofrado plazo residente concreto encofrado geométrico método drenaje rígido partida 210 descriptiva asfalto ciento plazo contención viga memoria máxima relleno rígido kilogramos presupuesto capítulo costo flexible curado capítulo cuneta muro estructura curva obra avenida geométrico costo curado flexible peralte cunetas probeta supervisor expediente…»\n\n[3] mensaje del chat «Obra», 3-oct-2026\n«Mañana viene el supervisor a revisar el encofrado del muro»\n\n[4] «Tesis.pdf», pág. 1 (chat «Obra»)\n«…columna señalización señalización cuneta 0.5 técnico costo avenida diseño drenaje viga curado cronograma muro supervisor peralte análisis informe concreto kilogramos obra refuerzo refuerzo encofrado refuerzo método 280 encofrado asfalto partida pendiente excavación resistencia zapata Newmark vehículo memoria concreto método drenaje supervisor columna cronograma capítulo talud pavimento mínima excavación contención columna…»\n\n[5] «Notas de la casa» (chat «Casa»)\n«…descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria concreto máxima mínima residente vehículo estructura drenaje partida plano cronograma cuneta velocidad pavimento relleno velocidad velocidad pavimento 0.5 encofrado vehículo presupuesto asfalto curado rígido tesis tráfico por memoria encofrado jirón centímetro cuneta pavimento peralte supervisor peralte asfalto curado tráfico zapata tesis»\n",
+    "palabras": [
+      "supervisor",
+      "encofrad"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 3,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra",
+        "titulo": "Tesis.pdf · pág. 3"
+      }
+    ],
+    "consulta": "pavimento flexible conclusiones",
+    "hallazgos": [
+      {
+        "fragmento": "Conclusiones: el pavimento flexible dura más con buen drenaje. talud señalización por 0.5 refuerzo pavimento zapata drenaje 0.5 compresión encofrado geométrico viga curado carril contención peralte sismo tráfico drenaje velocidad vehículo refuerzo sismo metrado cuneta diseño jirón muro pendiente refuerzo acero técnico mínima talud ensayo planos concreto planos método concreto diseño columna Antisuyo plano probeta informe…",
+        "nombre": "Tesis.pdf",
+        "pagina": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 3,
+            "ruta": "/obra/Tesis.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 4.420551776885986,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Tesis.pdf», pág. 3 (chat «Obra»)\n«Conclusiones: el pavimento flexible dura más con buen drenaje. talud señalización por 0.5 refuerzo pavimento zapata drenaje 0.5 compresión encofrado geométrico viga curado carril contención peralte sismo tráfico drenaje velocidad vehículo refuerzo sismo metrado cuneta diseño jirón muro pendiente refuerzo acero técnico mínima talud ensayo planos concreto planos método concreto diseño columna Antisuyo plano probeta informe…»\n",
+    "palabras": [
+      "paviment",
+      "flex",
+      "conclusion"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 3,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 3"
+      },
+      {
+        "n": 2,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 7,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Obra Norte",
+        "titulo": "Informe cunetas.pdf · pág. 7"
+      }
+    ],
+    "consulta": "cunetas",
+    "hallazgos": [
+      {
+        "fragmento": "…flexible curado capítulo cuneta muro estructura curva obra avenida geométrico costo curado flexible peralte cunetas probeta supervisor expediente concreto por supervisor acta rígido sismo curado residente encofrado compresión pendiente cuneta acero memoria técnico columna 210 vaciado entrega método máxima 210 relleno columna cuneta ensayo drenaje cuneta sismo tesis relleno sismo análisis 210 cunetas planos supervisor…",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 3,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 3,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.2684064507484436,
+        "seccion": null
+      },
+      {
+        "fragmento": "La cuneta del km 12 queda pendiente de revisión de cotas. berma cimentación talud vehículo cuneta jirón sismo Tahuantinsuyo muro informe reunión berma 0.5 rígido descriptiva berma capítulo berma entrega velocidad descriptiva Newmark flexible Antisuyo jirón berma partida compresión cunetas expediente resistencia Newmark cunetas 0.5 Newmark mínima avenida costo columna entrega",
+        "nombre": "Informe cunetas.pdf",
+        "pagina": 7,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "pagina": 7,
+            "ruta": "/norte/Informe cunetas.pdf",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.26824167370796204,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Informe cunetas.pdf», pág. 3 (chat «Obra Norte»)\n«…flexible curado capítulo cuneta muro estructura curva obra avenida geométrico costo curado flexible peralte cunetas probeta supervisor expediente concreto por supervisor acta rígido sismo curado residente encofrado compresión pendiente cuneta acero memoria técnico columna 210 vaciado entrega método máxima 210 relleno columna cuneta ensayo drenaje cuneta sismo tesis relleno sismo análisis 210 cunetas planos supervisor…»\n\n[2] «Informe cunetas.pdf», pág. 7 (chat «Obra Norte»)\n«La cuneta del km 12 queda pendiente de revisión de cotas. berma cimentación talud vehículo cuneta jirón sismo Tahuantinsuyo muro informe reunión berma 0.5 rígido descriptiva berma capítulo berma entrega velocidad descriptiva Newmark flexible Antisuyo jirón berma partida compresión cunetas expediente resistencia Newmark cunetas 0.5 Newmark mínima avenida costo columna entrega»\n",
+    "palabras": [
+      "cunet"
+    ]
+  },
+  {
+    "citas": [
+      {
+        "n": 1,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "proyecto": "Casa",
+        "titulo": "Notas de la casa"
+      }
+    ],
+    "consulta": "concreto",
+    "hallazgos": [
+      {
+        "fragmento": "…pendiente 0.5 peralte presupuesto planos jirón plazo cunetas cimentación plano Tahuantinsuyo cunetas relleno concreto encofrado compresión metrado descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria concreto máxima mínima residente vehículo estructura drenaje partida plano cronograma cuneta velocidad pavimento relleno velocidad velocidad pavimento 0.5 encofrado vehículo presupuesto asfalto…",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.38551297783851624,
+        "seccion": null
+      },
+      {
+        "fragmento": "Comprar cemento y acero de refuerzo para la zapata. La resistencia del concreto será 210 kilogramos por centímetro cuadrado. diseño contención viga técnico jirón cronograma plano resistencia cuneta pavimento vehículo columna 0.5 ciento 280 flexible flexible mínima costo memoria refuerzo 210 zapata compresión refuerzo señalización acta mínima talud tráfico reunión relleno curva análisis técnico rígido relleno cimentación…",
+        "nombre": "Notas de la casa",
+        "pagina": null,
+        "pedido": {
+          "accion": "abrir",
+          "pixpin": 1,
+          "que": {
+            "ruta": "/casa/notas.md",
+            "tipo": "fichero"
+          }
+        },
+        "puntos": 0.23566891252994537,
+        "seccion": null
+      }
+    ],
+    "modelo": "Esto es lo que hay en los documentos y chats del usuario. Contesta SOLO con lo que dicen estos trozos, en pocas frases, y cita cada dato con su numero entre corchetes, como [1]:\n\n[1] «Notas de la casa» (chat «Casa»)\n«…pendiente 0.5 peralte presupuesto planos jirón plazo cunetas cimentación plano Tahuantinsuyo cunetas relleno concreto encofrado compresión metrado descriptiva diseño ciento capítulo metrado Tahuantinsuyo asfalto análisis memoria concreto máxima mínima residente vehículo estructura drenaje partida plano cronograma cuneta velocidad pavimento relleno velocidad velocidad pavimento 0.5 encofrado vehículo presupuesto asfalto…»\n\n[1] «Notas de la casa» (chat «Casa»)\n«Comprar cemento y acero de refuerzo para la zapata. La resistencia del concreto será 210 kilogramos por centímetro cuadrado. diseño contención viga técnico jirón cronograma plano resistencia cuneta pavimento vehículo columna 0.5 ciento 280 flexible flexible mínima costo memoria refuerzo 210 zapata compresión refuerzo señalización acta mínima talud tráfico reunión relleno curva análisis técnico rígido relleno cimentación…»\n",
+    "palabras": [
+      "concret"
+    ]
+  }
+]

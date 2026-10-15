@@ -49,8 +49,12 @@ class EjecutorDelChat(
     private val chat: String?,
     /** El motor, para leer con la visión del modelo. */
     private val motor: Motor,
-    private val parar: AtomicBoolean
+    private val parar: AtomicBoolean,
+    /** Pregunta Sí/No en la burbuja antes de lo que borra o saca algo del aparato. */
+    confirmar: (String) -> Boolean = { false }
 ) : Agente.Ejecutor {
+
+    private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
 
     /** El lienzo donde dibujó (su `referencia`), para `lienzoIa` y la tarjeta «Abrir lienzo». */
     @Volatile var lienzo: String? = null
@@ -59,22 +63,43 @@ class EjecutorDelChat(
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
         is Llamada.Dibujar, is Llamada.Grafica -> dibujar(llamada)
         is Llamada.Ocr -> leer(llamada.peticion)
+        is Llamada.App -> acciones.hacer(llamada.accion)
+        is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
+        is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
     }
 
     // ------------------------------------------------------------------------------------- lienzo
 
     private fun dibujar(l: Llamada): Result<String> = runCatching {
         val semilla = System.currentTimeMillis()
-        val nuevos = Lienzo.aElementos(Lienzo.elementos(l, 0.0 to 0.0, semilla))
+        val que = if (l is Llamada.Grafica) "la grafica" else "${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras"
+        alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementos(l, origen, semilla)) }
+    }
+
+    /** Una figura de la biblioteca, estampada en el lienzo (ids nuevos, en un grupo). */
+    private fun ponerFigura(elementos: List<Element>): Result<String> = runCatching {
+        val figura = com.forge.pixpin.motor.FiguraGuardada("poner", "poner", elementos)
+        alLienzo("la figura") { (x, y) ->
+            val caja = com.forge.pixpin.motor.getCommonBounds(elementos)
+            com.forge.pixpin.motor.estampar(figura, com.forge.pixpin.motor.Pt(x + (caja.x2 - caja.x1) / 2, y + (caja.y2 - caja.y1) / 2))
+        }
+    }
+
+    /**
+     * **Lo nuevo, al lienzo que toca** (`al_lienzo.rs` del PC), en un solo paso de deshacer. [hacer]
+     * recibe la esquina donde empezar (0,0 en el lienzo abierto, que lo centra él).
+     */
+    private fun alLienzo(que: String, hacer: (Pair<Double, Double>) -> List<Element>): String {
+        val semilla = System.currentTimeMillis()
+        val nuevos = hacer(0.0 to 0.0)
         if (nuevos.isEmpty()) error("no habia nada que dibujar")
-        val que = if (l is Llamada.Grafica) "la grafica" else "${nuevos.size} figuras"
         // 1. El lienzo que el usuario tiene delante (pantalla partida): ahí, centrado.
         val abierto = LienzoAlFrente.actual() as? RecibeElementos
         if (abierto != null) {
             val id = runBlocking { withContext(Dispatchers.Main) { abierto.recibirElementos(nuevos) } }
             if (id != null) {
                 lienzo = id
-                return@runCatching "dibujada $que en el lienzo abierto"
+                return "dibujada $que en el lienzo abierto"
             }
         }
         // 2. El lienzo propio del asistente en este chat, a la derecha de lo que hubiera.
@@ -83,11 +108,11 @@ class EjecutorDelChat(
             val ruta = ExcalidrawStore.rutaDe(contexto, propio)
             val escena = ExcalidrawStore.cargar(ruta) ?: Scene()
             val origen = Lienzo.alLado(escena.elements)
-            val corridos = Lienzo.aElementos(Lienzo.elementos(l, origen, semilla))
+            val corridos = hacer(origen)
             ExcalidrawStore.guardar(contexto, propio, escena.copy(elements = escena.elements + corridos))
                 ?: error("no se pudo guardar el lienzo")
             lienzo = propio
-            return@runCatching "dibujada $que en el lienzo «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+            return "dibujada $que en el lienzo «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
         }
         // 3. Uno nuevo, que entra al chat como dibujo del asistente.
         val id = "ia-$semilla"
@@ -105,7 +130,7 @@ class EjecutorDelChat(
             )
         )
         lienzo = id
-        "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+        return "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
     }
 
     /** Que al abrir el lienzo nuevo se vea lo dibujado (está en el 800×600 del modelo). */

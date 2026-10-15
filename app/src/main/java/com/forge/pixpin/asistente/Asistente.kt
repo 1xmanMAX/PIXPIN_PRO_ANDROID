@@ -65,6 +65,44 @@ object Asistente {
     var bajados by mutableStateOf(0)
         private set
 
+    /** La pregunta Sí/No que espera en la burbuja de una respuesta (§4.3 del manual del PC). */
+    data class Pregunta(val respuesta: String, val texto: String)
+
+    var pregunta by mutableStateOf<Pregunta?>(null)
+        private set
+
+    @Volatile private var contestacion: java.util.concurrent.CompletableFuture<Boolean>? = null
+
+    /** Lo que caduca una pregunta sin contestar (cuenta como no). */
+    const val PREGUNTA_CADUCA_MS = 5 * 60_000L
+
+    /** El usuario tocó «Sí» o «No» en la burbuja. */
+    fun contestarPregunta(si: Boolean) {
+        contestacion?.complete(si)
+    }
+
+    /**
+     * **Pregunta en la burbuja y espera** (en el hilo del turno). null: sin respuesta (caducó a
+     * los 5 min o se pulsó parar). Nada se hace sin el «Sí».
+     */
+    private fun preguntarSiNo(respuesta: String, texto: String): Boolean? {
+        val f = java.util.concurrent.CompletableFuture<Boolean>()
+        contestacion = f
+        enPantalla { pregunta = Pregunta(respuesta, texto) }
+        val hasta = System.currentTimeMillis() + PREGUNTA_CADUCA_MS
+        var r: Boolean? = null
+        try {
+            while (System.currentTimeMillis() < hasta && !parar.get()) {
+                r = runCatching { f.get(250, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull()
+                if (r != null) break
+            }
+        } finally {
+            contestacion = null
+            enPantalla { if (pregunta?.respuesta == respuesta) pregunta = null }
+        }
+        return r
+    }
+
     private val cancelarDescarga = AtomicBoolean(false)
     private val parar = AtomicBoolean(false)
     private val ocupado = AtomicBoolean(false)
@@ -252,7 +290,13 @@ object Asistente {
         val foto = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
             ?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
         val historial = ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta, enSuChat, foto)
-        val ejecutor = EjecutorDelChat(app, almacen, pregunta.proyecto, motor, parar)
+        // Las preguntas Sí/No contestadas quedan en el texto de la nota (`❓ … → ✅ Sí`).
+        val preguntas = mutableListOf<String>()
+        val ejecutor = EjecutorDelChat(app, almacen, pregunta.proyecto, motor, parar) { q ->
+            val r = preguntarSiNo(respuesta.id, q)
+            preguntas += ChatDelAsistente.lineaDePregunta(q, r)
+            r == true
+        }
         val pedido = ChatDelAsistente.sinMencion(pregunta.texto)
 
         // Lo que se va diciendo: el texto de esta vuelta, la línea de estado y los fallos.
@@ -266,17 +310,17 @@ object Asistente {
             val ahora = System.currentTimeMillis()
             if (!forzar && ahora - ultimoPintado < 60) return
             ultimoPintado = ahora
-            val visible = ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = true)
+            val visible = ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = true))
             enPantalla { if (enVivo?.respuesta == respuesta.id) enVivo = EnVivo(respuesta.proyecto, respuesta.id, visible) }
             // En disco cada 2 s, como el PC: una sincronización a mitad se lleva un texto a medias,
             // que se arregla en la vuelta siguiente.
             if (ahora - ultimoGuardado >= 2_000) {
                 ultimoGuardado = ahora
-                runCatching { escribir(ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = false)) }
+                runCatching { escribir(ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = false))) }
             }
         }
         val final = try {
-            Agente.turno(motor, historial, Herramientas.paraElPedido(pedido), ejecutor) { e ->
+            Agente.turno(motor, historial, Herramientas.paraElPedido(pedido, foto != null), ejecutor) { e ->
                 when (e) {
                     is Agente.Evento.Texto -> {
                         if (trasResultado) { texto.setLength(0); trasResultado = false }
@@ -299,6 +343,6 @@ object Asistente {
             return
         }
         val dicho = if (final.cortado) ChatDelAsistente.sinPensado(texto.toString()) else final.texto
-        escribir(ChatDelAsistente.textoFinal(ChatDelAsistente.sinPensado(dicho), fallos, final.cortado), ejecutor.lienzo)
+        escribir(ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.textoFinal(ChatDelAsistente.sinPensado(dicho), fallos, final.cortado)), ejecutor.lienzo)
     }
 }

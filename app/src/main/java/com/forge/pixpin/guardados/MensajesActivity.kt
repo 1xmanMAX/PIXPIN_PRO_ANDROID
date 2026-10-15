@@ -3450,6 +3450,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     }
                     // Lo que dibujó el asistente: su miniatura y «Abrir lienzo» (§4.5 del manual).
                     if (m.clase == Clase.NOTA && m.lienzoIa != null && enVivo == null) LienzoDeLaRespuesta(m, recarga)
+                    if (enVivo != null) com.forge.pixpin.asistente.PreguntaDelAsistente(m.id)
                     val medidor = androidx.compose.ui.text.rememberTextMeasurer()
                     val estiloDeLaHora = androidx.compose.ui.text.TextStyle(fontSize = TAMANO_DE_LA_HORA)
                     val hora = horaDe(m.cuando)

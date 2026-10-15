@@ -147,15 +147,29 @@ object ChatDelAsistente {
         .replace(" ⏹ (parado)", "")
         .trim()
 
-    private val ESTADOS = listOf("✏️ ", "📊 ", "🔎 ", "⚙️ ", "🔁 ", "💭 ", "⚠️ ")
+    private val ESTADOS = listOf("✏️ ", "📊 ", "🔎 ", "⚙️ ", "🔁 ", "💭 ", "⚠️ ", "🗂️ ", "🖼️ ", "📖 ", "❓ ")
 
     /** La línea de estado mientras usa una herramienta (`chat::rotulo_de` del PC). */
     fun rotuloDe(herramienta: String): String = when (herramienta) {
         "dibujar_en_lienzo" -> "✏️ dibujando en el lienzo…"
         "grafica" -> "📊 haciendo la gráfica…"
         "ocr" -> "🔎 leyendo el documento…"
+        "buscar_historial" -> "🗂️ buscando en la conversación…"
+        "calcar_imagen" -> "🖼️ calcando la imagen…"
+        "ayuda_app" -> "📖 mirando la ayuda…"
         else -> "⚙️ trabajando…"
     }
+
+    /** Cómo queda en la nota una pregunta Sí/No (§4.3): con su respuesta, o que caducó. */
+    fun lineaDePregunta(pregunta: String, r: Boolean?): String = "❓ $pregunta → " + when (r) {
+        true -> "✅ Sí"
+        false -> "✖️ No"
+        null -> "⌛ sin respuesta: no se hizo nada"
+    }
+
+    /** Las preguntas contestadas, delante del texto de la respuesta. */
+    fun conPreguntas(preguntas: List<String>, texto: String): String =
+        if (preguntas.isEmpty()) texto else (preguntas + texto).filter { it.isNotBlank() }.joinToString("\n")
 
     const val CORRIGIENDO = "🔁 corrigiendo…"
     const val PARADO = " ⏹ (parado)"

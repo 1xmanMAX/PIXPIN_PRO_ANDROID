@@ -45,7 +45,7 @@ class MotorIaTest {
         assertEquals("20", j["top_k"]!!.jsonPrimitive.content)
         assertNull(j["tools"])
         val conTools = Peticion(listOf(MensajeIa.usuario("x")), Herramientas.catalogo()).aJson(false)
-        assertEquals(3, (conTools["tools"] as JsonArray).size)
+        assertEquals(Herramientas.catalogo().size, (conTools["tools"] as JsonArray).size)
         assertNull(conTools["stream_options"])
     }
 

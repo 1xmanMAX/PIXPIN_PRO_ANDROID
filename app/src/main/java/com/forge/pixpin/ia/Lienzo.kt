@@ -161,7 +161,7 @@ object Lienzo {
             // Por capas: las de capa mayor, encima. Estable: a igual capa, el orden de la lista.
             is Llamada.Dibujar -> llamada.figuras.sortedBy { it.capa }.forEach { figura(f, it) }
             is Llamada.Grafica -> grafica(f, llamada.grafica)
-            is Llamada.Ocr -> {}
+            else -> {}
         }
         return f.salida.map { JsonObject(it) }
     }

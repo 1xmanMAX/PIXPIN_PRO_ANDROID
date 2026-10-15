@@ -154,3 +154,23 @@ fun AsistenteCard() {
         }
     }
 }
+
+/**
+ * **La pregunta Sí/No dentro de la burbuja** (§4.3 del manual del PC): lo que borra o saca algo
+ * del aparato no abre un cuadro del sistema; el turno espera aquí. «No» va relleno (es lo de
+ * por omisión) y «Sí» con borde rojo. Caduca a los 5 min o al pulsar parar.
+ */
+@Composable
+fun PreguntaDelAsistente(respuesta: String, modifier: Modifier = Modifier) {
+    val p = Asistente.pregunta?.takeIf { it.respuesta == respuesta } ?: return
+    Column(modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("❓ ${p.texto}", fontSize = 14.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { Asistente.contestarPregunta(false) }) { Text("No") }
+            OutlinedButton(
+                onClick = { Asistente.contestarPregunta(true) },
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+            ) { Text("Sí", color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}

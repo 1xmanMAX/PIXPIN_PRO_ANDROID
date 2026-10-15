@@ -202,7 +202,7 @@ object Agente {
      * cortarse a medias. Solo se recorta lo de la petición; la validación usa los límites de verdad.
      */
     fun conTopes(herramientas: List<Herramienta>, tope: Long): List<Herramienta> =
-        herramientas.map { it.copy(parametros = acotar(it.parametros, tope) as JsonObject) }
+        herramientas.map { it.copy(parametros = ordenado(acotar(it.parametros, tope)) as JsonObject) }
 
     private fun acotar(v: JsonElement, tope: Long): JsonElement {
         if (v is JsonArray) return JsonArray(v.map { acotar(it, tope) })
@@ -261,16 +261,39 @@ object Agente {
     }
 
     /**
-     * **Las instrucciones de sistema** (`agente::instrucciones` del PC, con solo lo que el teléfono
-     * sabe hacer hoy). Cortas: cada token cuenta en cada vuelta, y los modelos pequeños siguen
-     * mejor pocas reglas claras.
+     * **Las instrucciones de sistema** (`agente::instrucciones` del PC + el resumen de la app),
+     * con solo las frases de las herramientas que hay en [disponibles]: un modelo pequeño al que
+     * se le habla de una herramienta que no tiene la intenta llamar igual. Cortas: cada token
+     * cuenta en cada vuelta.
      */
-    fun instrucciones(): String =
-        "Eres el asistente de PixPin, una app de capturas, notas y lienzo. " +
-            "Contesta en el idioma del usuario, breve y claro. " +
-            "Si pide dibujar algo, usa dibujar_en_lienzo, poniendo el color de cada figura. " +
-            "Si da datos para graficar, usa grafica. " +
-            "Si quiere el texto de un documento escaneado o de una foto, usa ocr. " +
-            "Despues de usar una herramienta, di en una frase lo que hiciste. " +
-            "Estas en un telefono Android, sin internet: no inventes enlaces ni funciones que no tienes."
+    fun instrucciones(disponibles: Set<String> = Herramientas.DISPONIBLES): String {
+        fun hay(vararg n: String) = n.any { it in disponibles }
+        val s = StringBuilder("Eres el asistente de PixPin, una app de capturas, notas y lienzo. Contesta en el idioma del usuario, breve y claro. ")
+        if (hay(Herramientas.DIBUJAR)) s.append("Si pide dibujar algo, usa dibujar_en_lienzo, poniendo el color de cada figura. ")
+        if (hay(Herramientas.CALCAR)) s.append("Si pide dibujar, copiar o calcar al lienzo lo de una imagen adjunta (este perro, la foto), usa calcar_imagen. ")
+        val dibujos = listOfNotNull(
+            "si da datos para graficar, usa grafica".takeIf { hay(Herramientas.GRAFICA) },
+            "si da una funcion, graficar_funcion".takeIf { hay(Herramientas.FUNCION) },
+            "una ecuacion, escribir_ecuacion".takeIf { hay(Herramientas.ECUACION) },
+            "un cronograma, cronograma".takeIf { hay(Herramientas.CRONOGRAMA) },
+            "una ilustracion con curvas, dibujar_svg".takeIf { hay(Herramientas.SVG) }
+        )
+        if (dibujos.isNotEmpty()) s.append(dibujos.joinToString("; ").replaceFirstChar { it.uppercase() }).append(". ")
+        if (hay(Herramientas.FIGURAS)) s.append("Para guardar o poner figuras de su biblioteca, figuras_guardadas. ")
+        if (hay(Herramientas.OCR)) s.append("Si quiere el texto de un documento escaneado o de una foto, usa ocr. ")
+        if (Acciones.ACCIONES.any { it.herramienta in disponibles }) s.append("Si pide hacer algo en la app (notas, tareas, lienzos, ventanas, capturas, lecciones, abrir ficheros), usa su herramienta. ")
+        val docs = listOfNotNull(
+            "una tabla de una foto o un PDF, tabla_de_imagen".takeIf { hay(Acciones.TABLA) },
+            "resaltar, anotar o encerrar algo, anotar_documento".takeIf { hay(Acciones.ANOTAR) },
+            "«¿donde dice...?», buscar_en_documento".takeIf { hay(Acciones.BUSCAR_EN) },
+            "abrir uno por su nombre, abrir_por_nombre".takeIf { hay(Acciones.ABRIR) },
+            "otro formato, exportar_documento".takeIf { hay(Acciones.EXPORTAR) }
+        )
+        if (docs.isNotEmpty()) s.append("Con sus documentos y planos: ").append(docs.joinToString("; ")).append(". ")
+        if (hay(Herramientas.BUSCAR)) s.append("Para lo que dicen sus documentos, notas y chats, buscar_en_mis_cosas, y cita las fuentes con [n]. ")
+        s.append("Nunca pidas rutas ni codigos: nombra el archivo con las palabras del usuario; si te dicen que hay varios, pregunta cual con esa lista corta. ")
+        if (hay(Herramientas.AYUDA)) s.append("Si pregunta donde esta algo o como se hace en PixPin, usa ayuda_app y contesta con lo que diga, sin inventar. ")
+        s.append("Despues de usar una herramienta, di en una frase lo que hiciste. ")
+        return s.toString() + Conocimiento.RESUMEN
+    }
 }
