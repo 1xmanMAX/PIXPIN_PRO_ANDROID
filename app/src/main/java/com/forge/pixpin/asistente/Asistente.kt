@@ -272,32 +272,68 @@ object Asistente {
         return true
     }
 
+    /** El texto que se le enseña al usuario la primera vez que la nube buscaría en sus documentos (§4.8). */
+    const val PREGUNTA_DOCUMENTOS = "El asistente está usando un modelo de la nube. Para contestar sobre tus documentos le mandaría " +
+        "trozos de ellos (lo que encuentre en tus PDF, notas y chats) por internet.\n\n¿Lo permites? Lo que elijas se recuerda y se cambia en Ajustes › Asistente."
+    const val SIN_PERMISO_DOCUMENTOS = "el usuario no permite mandar sus documentos a la nube; dile que puede permitirlo en Ajustes › Asistente o usar el modelo local, que busca sin salir del telefono"
+
+    /**
+     * **El motor de este turno** (§1.4): el local, o Claude o DeepSeek con su clave (y el local de
+     * respaldo si se puede). null y el motivo si no hay con qué contestar.
+     */
+    private fun motorDelTurno(app: PixPinApp, ajustes: com.forge.pixpin.data.Settings): Pair<com.forge.pixpin.ia.Motor?, String?> {
+        val m = modelo(app, ajustes.asistenteModelo)
+        val local = if (hayMotor(app) && listo(app, m)) motorPara(app, m) else null
+        val proveedor = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor)
+        if (proveedor != null) {
+            val clave = ClavesDeLaNube.leer(app, proveedor) ?: return null to "Falta la clave de ${proveedor.nombre}: pégala en Ajustes → Asistente."
+            val nube = com.forge.pixpin.ia.Nube.Motor(proveedor, clave, ligero = ajustes.asistentePensar == "no")
+            return (if (ajustes.asistenteRespaldoLocal && local != null) com.forge.pixpin.ia.Nube.ConRespaldo(nube, local, proveedor.nombre, Herramientas.DISPONIBLES) else nube) to null
+        }
+        if (!hayMotor(app)) return null to "El asistente local solo va en teléfonos de 64 bits (arm64)."
+        if (local == null) return null to ErrorIa.Falta(m.nombre).paraElUsuario()
+        return local to null
+    }
+
     private fun contestar(app: PixPinApp, almacen: MensajesStore, pregunta: Mensaje, respuesta: Mensaje, enSuChat: Boolean) {
-        val ajuste = runBlocking { app.settings.settings.first().asistenteModelo }
-        val m = modelo(app, ajuste)
-        fun escribir(texto: String, lienzo: String? = null) =
-            almacen.actualizar(respuesta.id) { it.copy(texto = texto, lienzoIa = lienzo ?: it.lienzoIa) }
-        if (!hayMotor(app)) {
-            escribir("⚠️ El asistente local solo va en teléfonos de 64 bits (arm64).")
+        val ajustes = runBlocking { app.settings.settings.first() }
+        fun escribir(texto: String, lienzo: String? = null, fuentes: kotlinx.serialization.json.JsonArray? = null) =
+            almacen.actualizar(respuesta.id) { it.copy(texto = texto, lienzoIa = lienzo ?: it.lienzoIa, fuentesIa = fuentes ?: it.fuentesIa) }
+        val (motor, motivo) = motorDelTurno(app, ajustes)
+        if (motor == null) {
+            escribir("⚠️ " + motivo.orEmpty())
             return
         }
-        if (!listo(app, m)) {
-            escribir("⚠️ " + ErrorIa.Falta(m.nombre).paraElUsuario())
-            return
-        }
-        val motor = motorPara(app, m)
+        val conNube = motor.catalogoCompleto
         val mensajes = almacen.leer()
-        val foto = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
-            ?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
+        val fotoArchivo = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
+        val foto = fotoArchivo?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
         val historial = ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta, enSuChat, foto)
         // Las preguntas Sí/No contestadas quedan en el texto de la nota (`❓ … → ✅ Sí`).
         val preguntas = mutableListOf<String>()
-        val ejecutor = EjecutorDelChat(app, almacen, pregunta.proyecto, motor, parar) { q ->
-            val r = preguntarSiNo(respuesta.id, q)
-            preguntas += ChatDelAsistente.lineaDePregunta(q, r)
-            r == true
-        }
         val pedido = ChatDelAsistente.sinMencion(pregunta.texto)
+        val ejecutor = EjecutorDelChat(
+            app, almacen, pregunta.proyecto, motor, parar,
+            confirmar = { q ->
+                val r = preguntarSiNo(respuesta.id, q)
+                preguntas += ChatDelAsistente.lineaDePregunta(q, r)
+                r == true
+            },
+            pedido = pedido, foto = fotoArchivo,
+            permisoDocumentos = {
+                if (!conNube) null
+                else when (runBlocking { app.settings.settings.first().asistenteDocumentosNube }) {
+                    "si" -> null
+                    "no" -> SIN_PERMISO_DOCUMENTOS
+                    else -> {
+                        val r = preguntarSiNo(respuesta.id, PREGUNTA_DOCUMENTOS)
+                        preguntas += ChatDelAsistente.lineaDePregunta("¿Mando trozos de tus documentos a la nube?", r)
+                        if (r != null) runBlocking { app.settings.setAsistenteDocumentosNube(if (r) "si" else "no") }
+                        if (r == true) null else SIN_PERMISO_DOCUMENTOS
+                    }
+                }
+            }
+        )
 
         // Lo que se va diciendo: el texto de esta vuelta, la línea de estado y los fallos.
         val texto = StringBuilder()
@@ -320,7 +356,8 @@ object Asistente {
             }
         }
         val final = try {
-            Agente.turno(motor, historial, Herramientas.paraElPedido(pedido, foto != null), ejecutor) { e ->
+            val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido, foto != null)
+            Agente.turno(motor, historial, herramientas, ejecutor) { e ->
                 when (e) {
                     is Agente.Evento.Texto -> {
                         if (trasResultado) { texto.setLength(0); trasResultado = false }
@@ -343,6 +380,10 @@ object Asistente {
             return
         }
         val dicho = if (final.cortado) ChatDelAsistente.sinPensado(texto.toString()) else final.texto
-        escribir(ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.textoFinal(ChatDelAsistente.sinPensado(dicho), fallos, final.cortado)), ejecutor.lienzo)
+        val textoFinal = ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.textoFinal(ChatDelAsistente.sinPensado(dicho), fallos, final.cortado))
+        // Las citas que nombró (`[2]`) van con la nota: de ahí sale «Abrir fuente» (§3.1).
+        val fuentes = ejecutor.documentos.citas.citadas(textoFinal).takeIf { it.isNotEmpty() }
+            ?.let { l -> kotlinx.serialization.json.JsonArray(l.map { it.aJson() }) }
+        escribir(textoFinal, ejecutor.lienzo, fuentes)
     }
 }

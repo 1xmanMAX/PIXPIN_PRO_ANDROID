@@ -61,7 +61,8 @@ class AjustesV2Test {
             "iman_borde_guia", "iman_borde_figura", "zurdo", "herramientas_apagadas", "editor_tools", "editor_groups",
             "pin_tools", "pin_groups", "capa_tools", "capa_groups", "lector_tools", "lector_groups", "plano_tools", "plano_groups", "plano_avanzado", "palabras_magicas",
             "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
-            "asistente_modelo",
+            "asistente_modelo", "asistente_motor", "asistente_respaldo_local", "asistente_pensar", "asistente_documentos_nube",
+            "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_mejor_vista",
             "maxima_fluidez", "modo_noche", "oled_negro", "pin_font"
         )
         assertEquals(conocidas, CatalogoDeAjustes.CLAVES)

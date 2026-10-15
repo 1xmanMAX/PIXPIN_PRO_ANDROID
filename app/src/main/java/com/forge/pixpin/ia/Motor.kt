@@ -153,6 +153,12 @@ interface Motor {
 
     /** Dejarlo listo sin esperar a la primera pregunta. Bloquea. */
     fun precalentar() {}
+
+    /**
+     * Si se le manda el catálogo entero en cada turno (la nube: un prefijo estable que se cachea)
+     * en vez de las pocas que elige [Seleccion] (el modelo local).
+     */
+    val catalogoCompleto: Boolean get() = false
 }
 
 /**

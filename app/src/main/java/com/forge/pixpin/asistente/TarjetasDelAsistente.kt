@@ -48,6 +48,8 @@ fun TarjetaDelAsistente(modifier: Modifier = Modifier) {
     val modelo = remember(ajustes.asistenteModelo) { Asistente.modelo(contexto, ajustes.asistenteModelo) }
     val listo = remember(modelo, bajados) { Asistente.listo(contexto, modelo) }
     val progreso = Asistente.progreso
+    // Con la nube no hace falta bajar nada (§4.9).
+    if (com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor) != null && progreso == null) return
     if (listo && progreso == null) return
     val alcance = rememberCoroutineScope()
     var confirmando by remember { mutableStateOf(false) }
@@ -151,8 +153,103 @@ fun AsistenteCard() {
             }
             Asistente.avisoDeDescarga?.let { Text("⚠️ $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.width(1.dp))
+            QuienContesta(ajustes)
         }
     }
+}
+
+/** Una fila de opciones en forma de pastillas: la elegida, rellena. */
+@Composable
+private fun Opciones(titulo: String, opciones: List<Pair<String, String>>, actual: String, alElegir: (String) -> Unit) {
+    Text(titulo, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for ((valor, rotulo) in opciones) {
+            if (valor == actual) Button(onClick = {}) { Text(rotulo, fontSize = 13.sp) }
+            else OutlinedButton(onClick = { alElegir(valor) }) { Text(rotulo, fontSize = 13.sp) }
+        }
+    }
+}
+
+@Composable
+private fun Interruptor(texto: String, si: Boolean, alCambiar: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Text(texto, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        androidx.compose.material3.Switch(checked = si, onCheckedChange = alCambiar)
+    }
+}
+
+/**
+ * **Quién contesta y las claves de la nube** (§1.4 y §1.5 del manual del PC): el modelo del
+ * teléfono, Claude o DeepSeek. La clave se pega aquí, se guarda cifrada con el Keystore
+ * ([ClavesDeLaNube]) y solo se enseña enmascarada; no viaja a ningún otro aparato.
+ */
+@Composable
+private fun QuienContesta(ajustes: com.forge.pixpin.data.Settings) {
+    val contexto = LocalContext.current
+    val app = contexto.applicationContext as? PixPinApp ?: return
+    val alcance = rememberCoroutineScope()
+    Text("Quién contesta", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Opciones("Motor", listOf("" to "Teléfono", "claude" to "Claude", "deepseek" to "DeepSeek"), ajustes.asistenteMotor) { v ->
+        alcance.launch { app.settings.setAsistenteMotor(v) }
+    }
+    val proveedor = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor)
+    if (proveedor != null) {
+        var version by remember { mutableStateOf(0) }
+        var guardada by remember(proveedor, version) { mutableStateOf<String?>(null) }
+        androidx.compose.runtime.LaunchedEffect(proveedor, version) {
+            guardada = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ClavesDeLaNube.leer(contexto, proveedor)?.let { com.forge.pixpin.ia.Nube.enmascarar(it) } }
+        }
+        var nueva by remember(proveedor) { mutableStateOf("") }
+        var aviso by remember(proveedor) { mutableStateOf<String?>(null) }
+        Text(
+            "${proveedor.nombre}: " + (guardada?.let { "clave $it, cifrada en este teléfono" } ?: "sin clave") +
+                ". Se paga en tu cuenta y manda lo que preguntas por internet.",
+            fontSize = 13.sp
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = nueva, onValueChange = { nueva = it.trim() }, singleLine = true,
+            label = { Text("Pega la clave") },
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(onClick = {
+                val clave = nueva
+                if (!com.forge.pixpin.ia.Nube.pareceClave(clave)) { aviso = "Eso no parece una clave."; return@TextButton }
+                alcance.launch {
+                    aviso = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching { ClavesDeLaNube.guardar(contexto, proveedor, clave) }.fold({ "Guardada." }, { "No se pudo guardar." })
+                    }
+                    nueva = ""; version++
+                }
+            }) { Text("Guardar") }
+            TextButton(onClick = {
+                alcance.launch {
+                    aviso = "Probando…"
+                    aviso = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val clave = nueva.ifBlank { ClavesDeLaNube.leer(contexto, proveedor).orEmpty() }
+                        com.forge.pixpin.ia.Nube.Motor(proveedor, clave).probar().fold({ it.replaceFirstChar { c -> c.uppercase() } }, { "⚠️ " + (it.message ?: "no se pudo") })
+                    }
+                }
+            }) { Text("Probar") }
+            if (guardada != null) TextButton(onClick = {
+                alcance.launch { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ClavesDeLaNube.borrar(contexto, proveedor) }; version++; aviso = "Clave borrada." }
+            }) { Text("Borrar") }
+            TextButton(onClick = {
+                runCatching { contexto.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(proveedor.paginaDeClaves)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }) { Text("Sacar una") }
+        }
+        aviso?.let { Text(it, fontSize = 13.sp) }
+        Interruptor("Si la nube falla, sigue el del teléfono", ajustes.asistenteRespaldoLocal) { alcance.launch { app.settings.setAsistenteRespaldoLocal(it) } }
+        Opciones("Mandar trozos de tus documentos a la nube", listOf("" to "Preguntar", "si" to "Sí", "no" to "No"), ajustes.asistenteDocumentosNube) { v ->
+            alcance.launch { app.settings.setAsistenteDocumentosNube(v) }
+        }
+    }
+    Opciones("Pensar antes de contestar", listOf("" to "Auto", "si" to "Sí", "no" to "No"), ajustes.asistentePensar) { v ->
+        alcance.launch { app.settings.setAsistentePensar(v) }
+    }
+    Interruptor("Leer las respuestas en voz alta", ajustes.asistenteLeerRespuestas) { alcance.launch { app.settings.setAsistenteLeerRespuestas(it) } }
+    Interruptor("Lo dictado se queda en la caja", ajustes.asistenteRevisarDicho) { alcance.launch { app.settings.setAsistenteRevisarDicho(it) } }
 }
 
 /**

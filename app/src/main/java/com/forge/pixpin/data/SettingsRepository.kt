@@ -196,6 +196,25 @@ data class Settings(
     val asistenteModelo: String = "",
 
     /**
+     * **Quién contesta en el asistente** (`[asistente] motor` del PC): vacío = el modelo local,
+     * `claude` o `deepseek` (con la clave del usuario, que se guarda cifrada aparte y nunca aquí:
+     * ver [com.forge.pixpin.asistente.ClavesDeLaNube]). Estos ajustes son de cada aparato y no viajan.
+     */
+    val asistenteMotor: String = "",
+    /** Seguir con el modelo local si la nube falla (`respaldo_local`). */
+    val asistenteRespaldoLocal: Boolean = true,
+    /** Pensar antes de contestar: vacío = automático (la nube sí, el local no), `si` o `no`. */
+    val asistentePensar: String = "",
+    /** Mandar trozos de documentos a la nube: vacío = preguntar, `si` o `no` (§4.8). */
+    val asistenteDocumentosNube: String = "",
+    /** El dictado al asistente se queda en la caja, sin enviarse (`revisar_lo_dicho`). */
+    val asistenteRevisarDicho: Boolean = false,
+    /** Leer cada respuesta en voz alta al acabar (`leer_respuestas`). */
+    val asistenteLeerRespuestas: Boolean = false,
+    /** Gemma 4 E2B para mirar fotos (`mejor_vista`), si está bajado. */
+    val asistenteMejorVista: Boolean = false,
+
+    /**
      * **Qué hace Whisper con dos idiomas mezclados**: [MODO_CADA_IDIOMA], cada trozo en el
      * idioma en que se dijo, o [MODO_TODO_EN_UNO], todo en el primer idioma, traducido.
      * Whisper, con un idioma forzado, traduce a ese idioma lo que oye en otro; el usuario
@@ -442,6 +461,13 @@ class SettingsRepository(private val context: Context) {
         val SEGUNDO_IDIOMA_DE_VOZ = stringPreferencesKey("segundo_idioma_de_voz")
         val MODELO_WHISPER = stringPreferencesKey("modelo_whisper")
         val ASISTENTE_MODELO = stringPreferencesKey("asistente_modelo")
+        val ASISTENTE_MOTOR = stringPreferencesKey("asistente_motor")
+        val ASISTENTE_RESPALDO_LOCAL = booleanPreferencesKey("asistente_respaldo_local")
+        val ASISTENTE_PENSAR = stringPreferencesKey("asistente_pensar")
+        val ASISTENTE_DOCUMENTOS_NUBE = stringPreferencesKey("asistente_documentos_nube")
+        val ASISTENTE_REVISAR_DICHO = booleanPreferencesKey("asistente_revisar_dicho")
+        val ASISTENTE_LEER_RESPUESTAS = booleanPreferencesKey("asistente_leer_respuestas")
+        val ASISTENTE_MEJOR_VISTA = booleanPreferencesKey("asistente_mejor_vista")
         val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
         val SERVICIO_DE_ENLACE = stringPreferencesKey("servicio_de_enlace")
         val FONDO_DEL_CHAT = stringPreferencesKey("fondo_del_chat")
@@ -484,6 +510,13 @@ class SettingsRepository(private val context: Context) {
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
             modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
             asistenteModelo = prefs[Keys.ASISTENTE_MODELO] ?: "",
+            asistenteMotor = prefs[Keys.ASISTENTE_MOTOR] ?: "",
+            asistenteRespaldoLocal = prefs[Keys.ASISTENTE_RESPALDO_LOCAL] ?: true,
+            asistentePensar = prefs[Keys.ASISTENTE_PENSAR] ?: "",
+            asistenteDocumentosNube = prefs[Keys.ASISTENTE_DOCUMENTOS_NUBE] ?: "",
+            asistenteRevisarDicho = prefs[Keys.ASISTENTE_REVISAR_DICHO] ?: false,
+            asistenteLeerRespuestas = prefs[Keys.ASISTENTE_LEER_RESPUESTAS] ?: false,
+            asistenteMejorVista = prefs[Keys.ASISTENTE_MEJOR_VISTA] ?: false,
             modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
             servicioDeEnlace = prefs[Keys.SERVICIO_DE_ENLACE] ?: "",
             fondoDelChat = prefs[Keys.FONDO_DEL_CHAT] ?: "",
@@ -683,6 +716,27 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAsistenteModelo(valor: String) {
         context.dataStore.edit { if (valor.isBlank()) it.remove(Keys.ASISTENTE_MODELO) else it[Keys.ASISTENTE_MODELO] = valor }
     }
+
+    /** Quién contesta: vacío (local), `claude` o `deepseek`. Ver [Settings.asistenteMotor]. */
+    suspend fun setAsistenteMotor(valor: String) {
+        context.dataStore.edit { if (valor.isBlank()) it.remove(Keys.ASISTENTE_MOTOR) else it[Keys.ASISTENTE_MOTOR] = valor }
+    }
+
+    suspend fun setAsistenteRespaldoLocal(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_RESPALDO_LOCAL] = si } }
+
+    /** Vacío = automático, `si` o `no`. */
+    suspend fun setAsistentePensar(valor: String) {
+        context.dataStore.edit { if (valor.isBlank()) it.remove(Keys.ASISTENTE_PENSAR) else it[Keys.ASISTENTE_PENSAR] = valor }
+    }
+
+    /** Vacío = preguntar, `si` o `no`. */
+    suspend fun setAsistenteDocumentosNube(valor: String) {
+        context.dataStore.edit { if (valor.isBlank()) it.remove(Keys.ASISTENTE_DOCUMENTOS_NUBE) else it[Keys.ASISTENTE_DOCUMENTOS_NUBE] = valor }
+    }
+
+    suspend fun setAsistenteRevisarDicho(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_REVISAR_DICHO] = si } }
+    suspend fun setAsistenteLeerRespuestas(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_LEER_RESPUESTAS] = si } }
+    suspend fun setAsistenteMejorVista(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_MEJOR_VISTA] = si } }
 
     /** [MODO_CADA_IDIOMA] o [MODO_TODO_EN_UNO]. Ver [Settings.modoDeIdiomas]. */
     suspend fun setModoDeIdiomas(valor: String) {
