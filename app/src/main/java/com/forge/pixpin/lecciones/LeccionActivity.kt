@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.ui.theme.PixPinTheme
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -246,6 +247,9 @@ class LeccionActivity : ComponentActivity() {
         val foco = remember { FocusRequester() }
         LaunchedEffect(listo) { if (listo && !dictarYa && existente == null) runCatching { foco.requestFocus() } }
 
+        var exportando by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
+        exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+
         // Atrás también guarda: es el gesto con el que uno «deja» la hoja. Descartar es la X.
         androidx.activity.compose.BackHandler { guardarYSalir() }
 
@@ -270,6 +274,14 @@ class LeccionActivity : ComponentActivity() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(if (existente == null) "💡 Nueva lección" else "💡 Lección", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                         if (existente != null) {
+                            // **Exportar** (15-oct-2026, como el PC): la hoja de compartir común con
+                            // PDF, página web, imagen, .pixpin, su .leccion, TXT y Markdown.
+                            IconButton(onClick = {
+                                val ahora = escrita(existente.leccion, System.currentTimeMillis())
+                                lifecycleScope.launch {
+                                    exportando = withContext(Dispatchers.IO) { ExportarLeccion.compartible(this@LeccionActivity, existente, ahora) }
+                                }
+                            }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Exportar") }
                             IconButton(onClick = {
                                 // Con Deshacer: la lista lo ofrece; si no está a la vista, se avisa.
                                 almacen.borrarConDeshacer(existente, (application as PixPinApp).scope)

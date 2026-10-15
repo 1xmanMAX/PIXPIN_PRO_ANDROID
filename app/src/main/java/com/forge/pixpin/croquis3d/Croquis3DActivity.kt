@@ -2163,10 +2163,15 @@ class Croquis3DActivity : ComponentActivity() {
      * **El croquis como página web**: un archivo que se abre en cualquier navegador, sin
      * internet y sin instalar nada. Ver [ExportarCroquisHtml].
      */
-    /** Las tres caras del croquis en la hoja de compartir: modelo 3D, página web y editable. */
+    /**
+     * **El croquis en la hoja de compartir común** (15-oct-2026, como el PC el 14-oct): la página web
+     * que se gira, el modelo 3D, **la vista** en PNG, JPG y PDF, su **.pixpin** —el proyecto donde
+     * vive, con su chat; si no vive en ninguno, él solo— y el **original**, su `.croquis.gz`.
+     */
     private fun abrirCompartir() {
         Croquis3DAlmacen.guardar(this, elCroquis, controlador.croquis)
         val F = com.forge.pixpin.ui.Compartible
+        val id = elCroquis
         compartiendo = com.forge.pixpin.ui.Compartible(
             titulo = elCroquis,
             formatos = listOf(
@@ -2179,11 +2184,31 @@ class Croquis3DActivity : ComponentActivity() {
                 com.forge.pixpin.ui.Compartible.Formato("modelo", Icons.Filled.ViewInAr, "Modelo 3D", F.NINGUNA, generar = {
                     modeloEnZip()?.let { com.forge.pixpin.ui.Compartible.Salida(it, "application/zip", ".obj y .mtl, para Blender o cualquier visor") }
                 }),
-                com.forge.pixpin.ui.Compartible.Formato("editable", Icons.Filled.FolderZip, "Editable", F.NINGUNA, generar = {
+            ) + com.forge.pixpin.ui.ExportarVisor.deLaVista(this, elCroquis) { fotoDelLienzo() }.filter { it.id != "web" } + listOf(
+                com.forge.pixpin.ui.ExportarVisor.pixpinDelProyecto(this, { proyectos, mensajes ->
+                    proyectos.firstOrNull { p -> id in p.croquis || p.hojas.any { it.croquis == id } }
+                        ?: mensajes.firstOrNull { it.clase == com.forge.pixpin.guardados.Clase.CROQUIS && it.referencia == id }?.proyecto
+                            ?.let { pid -> proyectos.firstOrNull { it.id == pid } }
+                }) {
                     paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PixPin") }
-                })
+                },
+                com.forge.pixpin.ui.ExportarVisor.original(this, Croquis3DAlmacen.ruta(this, id), "$id.croquis.gz", "Su archivo .croquis.gz tal cual")
             )
         )
+    }
+
+    /** **La vista del croquis tal como se ve**, a tamaño de pantalla (`PixelCopy` de la ventana, recortada al lienzo). */
+    private suspend fun fotoDelLienzo(): android.graphics.Bitmap? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+        val r = rectDelLienzo ?: return@withContext null
+        if (r.width < 8 || r.height < 8) return@withContext null
+        val bmp = android.graphics.Bitmap.createBitmap(r.width.toInt(), r.height.toInt(), android.graphics.Bitmap.Config.ARGB_8888)
+        val bien = kotlinx.coroutines.suspendCancellableCoroutine { k ->
+            runCatching {
+                android.view.PixelCopy.request(window, android.graphics.Rect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt()), bmp,
+                    { res -> if (k.isActive) k.resumeWith(Result.success(res == android.view.PixelCopy.SUCCESS)) }, android.os.Handler(android.os.Looper.getMainLooper()))
+            }.onFailure { if (k.isActive) k.resumeWith(Result.success(false)) }
+        }
+        if (bien) bmp else { bmp.recycle(); null }
     }
 
     private fun paquete(): java.io.File? {

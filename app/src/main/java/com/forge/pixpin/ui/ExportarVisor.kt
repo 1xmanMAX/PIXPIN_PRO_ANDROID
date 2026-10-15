@@ -54,14 +54,18 @@ object ExportarVisor {
             }
         )
 
-    /** **El `.pixpin`** del archivo: ver arriba. Lee el chat: solo dentro de [Compartible.Formato.generar]. */
-    fun pixpin(c: Context, ruta: String, nombre: String): Compartible.Formato =
+    /**
+     * **El `.pixpin`** del archivo: ver arriba. Lee el chat: solo dentro de [Compartible.Formato.generar].
+     * [junto]: los ids de los mensajes que van con él si no vive en un proyecto (las fotos y audios
+     * de una lección): sin proyecto, el `.pixpin` lleva el mensaje y esos.
+     */
+    fun pixpin(c: Context, ruta: String, nombre: String, junto: List<String> = emptyList()): Compartible.Formato =
         Compartible.Formato(
             "editable", Icons.Filled.FolderZip, ".pixpin", Compartible.NINGUNA,
-            generar = { paquete(c, ruta, nombre) }
+            generar = { paquete(c, ruta, nombre, junto) }
         )
 
-    private fun paquete(c: Context, ruta: String, nombre: String): Compartible.Salida? {
+    private fun paquete(c: Context, ruta: String, nombre: String, junto: List<String> = emptyList()): Compartible.Salida? {
         val archivo = File(ruta)
         if (!archivo.isFile) return null
         val app = c.applicationContext as? com.forge.pixpin.PixPinApp
@@ -79,7 +83,8 @@ object ExportarVisor {
             )
             suyo != null -> {
                 val solo = com.forge.pixpin.motor.Proyecto(id = "suelto-${suyo.id}", nombre = titulo)
-                Triple(solo, com.forge.pixpin.sincro.ChatQueViaja.preparar(solo, listOf(suyo), c.filesDir), "El archivo con lo anotado, como mensaje")
+                val conEllos = listOf(suyo) + mensajes.filter { it.id in junto && it.id != suyo.id }
+                Triple(solo, com.forge.pixpin.sincro.ChatQueViaja.preparar(solo, conEllos, c.filesDir), "El archivo con lo anotado, como mensaje")
             }
             else -> {
                 val ahora = System.currentTimeMillis()
@@ -99,6 +104,31 @@ object ExportarVisor {
         ) ?: return null
         return Compartible.Salida(destino, PaquetePixpin.MIME_TYPE, detalle)
     }
+
+    /**
+     * **El `.pixpin` del proyecto donde vive lo que se ve** (14-oct-2026 en el PC,
+     * `Exportable::proyecto`): para lo que no es un adjunto con ruta, como un croquis 3D. El proyecto
+     * entero con su chat y lo anotado; si [deQuien] no da ninguno, [suelto] (o nada).
+     */
+    fun pixpinDelProyecto(c: Context, deQuien: (List<com.forge.pixpin.motor.Proyecto>, List<com.forge.pixpin.guardados.Mensaje>) -> com.forge.pixpin.motor.Proyecto?, suelto: (() -> Compartible.Salida?)? = null): Compartible.Formato =
+        Compartible.Formato(
+            "editable", Icons.Filled.FolderZip, ".pixpin", Compartible.NINGUNA,
+            generar = {
+                val app = c.applicationContext as? com.forge.pixpin.PixPinApp
+                runCatching { com.forge.pixpin.sincro.Red.disco(c).sellar() }
+                app?.proyectos?.recargar()
+                val p = deQuien(app?.proyectos?.proyectos?.value.orEmpty(), com.forge.pixpin.guardados.MensajesStore(c).leer())
+                if (p == null) suelto?.invoke() else {
+                    val chat = com.forge.pixpin.sincro.ChatQueViaja.preparar(p, com.forge.pixpin.sincro.ChatQueViaja.delProyecto(c, p), c.filesDir)
+                    val destino = File(carpeta(c), nombre(p.nombre, PaquetePixpin.EXTENSION))
+                    PaquetePixpin.escribir(
+                        c, p, destino,
+                        croquisDe = { id -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(c, id) },
+                        chat = chat?.texto, adjuntosDelChat = chat?.adjuntos.orEmpty()
+                    )?.let { Compartible.Salida(it, PaquetePixpin.MIME_TYPE, "El proyecto «${p.nombre}» con su chat") }
+                }
+            }
+        )
 
     // ------------------------------------------------------------------ imágenes
 
