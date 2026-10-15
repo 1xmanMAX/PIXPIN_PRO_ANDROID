@@ -109,6 +109,18 @@ fn main() {
             }
             println!("{}", serde_json::to_string(&out).unwrap());
         }
+        "llamadas" => {
+            // Cada línea: {"nombre", "argumentos"}; sale lo que dibuja con semilla 0xABC (o el error).
+            for linea in std::io::stdin().lock().lines() {
+                let v: Value = serde_json::from_str(&linea.unwrap()).unwrap();
+                let cruda = pixpin_ia::motor::LlamadaCruda { id: "1".into(), nombre: v["nombre"].as_str().unwrap().into(), argumentos: v["argumentos"].to_string() };
+                let r = match pixpin_ia::herramientas::validar(&cruda, &pixpin_ia::herramientas::catalogo()) {
+                    Ok(val) => json!({"elementos": pixpin_ia::lienzo::elementos(&val.llamada, (0.0, 0.0), 0xABC), "avisos": val.avisos}),
+                    Err(e) => json!({"error": e.para_el_modelo(&pixpin_ia::herramientas::catalogo())}),
+                };
+                println!("{}", r);
+            }
+        }
         otro => panic!("¿{otro}?"),
     }
 }

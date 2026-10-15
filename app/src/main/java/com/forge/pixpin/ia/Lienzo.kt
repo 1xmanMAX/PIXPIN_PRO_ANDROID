@@ -162,6 +162,7 @@ object Lienzo {
             // Por capas: las de capa mayor, encima. Estable: a igual capa, el orden de la lista.
             is Llamada.Dibujar -> llamada.figuras.sortedBy { it.capa }.forEach { figura(f, it) }
             is Llamada.Grafica -> grafica(f, llamada.grafica)
+            is Llamada.DibujoSvg -> Svg.elementos(f, llamada.dibujo)
             else -> {}
         }
         return f.salida.map { JsonObject(it) }
@@ -389,12 +390,14 @@ object Lienzo {
 
 /** Para comparar con el PC: los puntos `{x, y}` de vuelta a `[x, y]`. */
 internal fun puntosComoElPc(e: JsonObject): JsonObject {
-    val pts = e["points"] as? JsonArray ?: return e
-    val pares = buildJsonArray {
+    fun pares(pts: JsonArray) = buildJsonArray {
         for (p in pts) {
             val o = p as JsonObject
             add(buildJsonArray { add(o["x"]!!); add(o["y"]!!) })
         }
     }
-    return JsonObject(e + ("points" to pares))
+    var r = e
+    (e["points"] as? JsonArray)?.let { r = JsonObject(r + ("points" to pares(it))) }
+    (e["huecos"] as? JsonArray)?.let { h -> r = JsonObject(r + ("huecos" to JsonArray(h.map { pares(it as JsonArray) }))) }
+    return r
 }

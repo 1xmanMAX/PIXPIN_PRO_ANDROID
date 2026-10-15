@@ -91,8 +91,46 @@ object Agente {
         /** Buscar en la conversación guardada: con esto el modelo tiene `buscar_historial`. */
         val buscar: ((String) -> String)? = null,
         /** El catálogo entero: el plan puede añadir herramientas que la selección no dio. */
-        val ampliar: List<com.forge.pixpin.ia.Herramienta>? = null
+        val ampliar: List<com.forge.pixpin.ia.Herramienta>? = null,
+        /** El camino rápido ([Rapido]) con esta hora local; null: siempre contesta el modelo. */
+        val rapido: Momento? = null
     )
+
+    /**
+     * **El camino rápido** (`turno_rapido` del PC): si la orden es simple la hace el ejecutor y
+     * devuelve el final del turno; null si no era simple o no salió (entonces contesta el modelo,
+     * sin que se haya dicho nada). La conversación queda como si el modelo la hubiera hecho.
+     */
+    private fun turnoRapido(historial: MutableList<MensajeIa>, ejecutor: Ejecutor, ahora: Momento, alEvento: (Evento) -> Seguir): Final? {
+        val ultimo = historial.lastOrNull()?.takeIf { it.rol == Rol.USUARIO && !it.tieneImagen } ?: return null
+        val orden = Rapido.interpretar(ultimo.textoEntero, ahora) ?: return null
+        val cruda = LlamadaCruda("rapido-1", orden.herramienta, orden.args.toString())
+        val v = runCatching { Herramientas.validar(cruda, Herramientas.catalogo()) }.getOrNull() ?: return null
+        // Lo que pregunta antes nunca va por aquí (el intérprete no entiende «borra»), por si acaso.
+        if ((v.llamada as? Llamada.App)?.accion?.confirmar != null) return null
+        val r = ejecutor.ejecutar(v.llamada)
+        val texto = r.getOrElse { e ->
+            val motivo = e.message.orEmpty()
+            // Se entendió pero no casa con lo que hay: el motivo ya es la respuesta.
+            if (!motivo.contains(Tareas.NO_HICE_NADA)) return null
+            alEvento(Evento.Texto(motivo))
+            historial += MensajeIa.texto(Rol.ASISTENTE, motivo)
+            return Final(motivo, 0, 0, false)
+        }
+        alEvento(Evento.Herramienta(v.llamada, emptyList()))
+        alEvento(Evento.Resultado(v.llamada.nombre, true, texto))
+        val respuesta = if (texto.isBlank() || texto.startsWith("hecho")) HECHO else texto
+        alEvento(Evento.Texto(respuesta))
+        historial += MensajeIa(Rol.ASISTENTE, listOf(Parte.Texto("")), llamadas = listOf(cruda))
+        historial += MensajeIa.resultado(cruda.id, respuesta)
+        historial += MensajeIa.texto(Rol.ASISTENTE, respuesta)
+        return Final(respuesta, 1, 0, false)
+    }
+
+    /** Un motor que no hay: el camino rápido funciona sin modelo; lo demás dice por qué no. */
+    class SinMotor(private val motivo: String) : Motor {
+        override fun completar(peticion: Peticion, alTrozo: (Trozo) -> Seguir): Respuesta = throw ErrorIa.Nube(motivo)
+    }
 
     /** Tope de la vuelta de planear: sin pensar, cinco líneas; pensando, algo más. */
     const val TOKENS_PLAN = 320
@@ -225,6 +263,8 @@ object Agente {
         crono: Pensar.Cronometro,
         alEvento: (Evento) -> Seguir
     ): Final {
+        // Antes que nada (ni plan ni modelo): la orden simple, al instante.
+        opciones.rapido?.let { ahora -> turnoRapido(historial, ejecutor, ahora, alEvento)?.let { return it } }
         val herramientas = base.toMutableList()
         if (opciones.buscar != null && herramientas.none { it.nombre == Herramientas.BUSCAR_HISTORIAL }) herramientas += Contexto.herramientaBuscar()
         var plan: Pensar.Plan? = null

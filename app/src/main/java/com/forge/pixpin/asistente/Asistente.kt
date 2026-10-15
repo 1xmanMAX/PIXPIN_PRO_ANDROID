@@ -318,7 +318,10 @@ object Asistente {
         val conFoto = ChatDelAsistente.fotoDe(almacen.leer(), pregunta) != null
         val mirar = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor) == null &&
             com.forge.pixpin.ia.Seleccion.pideMejorVista(ChatDelAsistente.sinMencion(pregunta.texto), conFoto)
-        val (motor, motivo) = motorDelTurno(app, ajustes, mirar)
+        val (motor0, motivo) = motorDelTurno(app, ajustes, mirar)
+        // Una orden simple sale sin modelo (camino rápido); sin motor, el resto avisa.
+        val esOrden = !conFoto && com.forge.pixpin.ia.Rapido.interpretar(ChatDelAsistente.sinMencion(pregunta.texto), com.forge.pixpin.ia.Momento.ahora()) != null
+        val motor = motor0 ?: if (esOrden) Agente.SinMotor(motivo.orEmpty()) else null
         if (motor == null) {
             escribir("⚠️ " + motivo.orEmpty())
             return
@@ -348,7 +351,8 @@ object Asistente {
             hoja = hoja,
             ventana = ventana,
             buscar = if (enSuChat && (reiniciado || hoja.reinicios > 0)) { c -> com.forge.pixpin.ia.Contexto.buscar(fuentesDelChat, c, 3) } else null,
-            ampliar = Herramientas.catalogo()
+            ampliar = Herramientas.catalogo(),
+            rapido = com.forge.pixpin.ia.Momento.ahora()
         )
         val recogido = PensadoDelChat.Recogido()
         var vivo = EnVivo(respuesta.proyecto, respuesta.id, ChatDelAsistente.PENSANDO, reiniciado = reiniciado)

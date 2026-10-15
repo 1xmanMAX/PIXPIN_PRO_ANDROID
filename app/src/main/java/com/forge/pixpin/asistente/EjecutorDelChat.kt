@@ -70,7 +70,7 @@ class EjecutorDelChat(
         private set
 
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
-        is Llamada.Dibujar, is Llamada.Grafica -> dibujar(llamada)
+        is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg -> dibujar(llamada)
         is Llamada.Ocr -> leer(llamada.peticion)
         is Llamada.App -> if (llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA) documentos.tablaDeImagen(llamada.accion) else acciones.hacer(llamada.accion)
         is Llamada.Buscar -> documentos.buscar(llamada.peticion)
@@ -83,7 +83,11 @@ class EjecutorDelChat(
 
     private fun dibujar(l: Llamada): Result<String> = runCatching {
         val semilla = System.currentTimeMillis()
-        val que = if (l is Llamada.Grafica) "la grafica" else "${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras"
+        val que = when (l) {
+            is Llamada.Grafica -> "la grafica"
+            is Llamada.DibujoSvg -> "la ilustracion (${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras)"
+            else -> "${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras"
+        }
         alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementos(l, origen, semilla)) }
     }
 

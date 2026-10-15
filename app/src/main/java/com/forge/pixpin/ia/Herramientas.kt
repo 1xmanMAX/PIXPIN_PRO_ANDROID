@@ -66,6 +66,8 @@ sealed class Llamada {
     data class App(val accion: Acciones.AccionApp) : Llamada() { override val nombre get() = accion.herramienta }
     /** Una pregunta sobre la app: se contesta con [Conocimiento.responder]. */
     data class Ayuda(val pregunta: String) : Llamada() { override val nombre get() = Herramientas.AYUDA }
+    /** Una ilustración en SVG, ya leída y saneada ([Svg]). */
+    data class DibujoSvg(val dibujo: Svg.Dibujo) : Llamada() { override val nombre get() = Herramientas.SVG }
     /** Buscar en los documentos y chats del usuario ([Documentos]). */
     data class Buscar(val peticion: Documentos.PeticionBusqueda) : Llamada() { override val nombre get() = Herramientas.BUSCAR }
     /** Calcar la imagen adjunta ([Calcar]): el ejecutor, que tiene la imagen, la calca. */
@@ -74,7 +76,7 @@ sealed class Llamada {
     data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
 
     /** Si lo que pide se dibuja tal cual en el lienzo. */
-    val dibuja: Boolean get() = this is Dibujar || this is Grafica
+    val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg
 }
 
 enum class TipoFigura { RECTANGULO, ELIPSE, ROMBO, LINEA, FLECHA, TEXTO, POLIGONO, CURVA, LAPIZ, PUNTO, INSTRUMENTO }
@@ -178,7 +180,7 @@ object Herramientas {
      * sincronizar o mandar «al móvil»— no tienen sentido en el teléfono).
      */
     val DISPONIBLES: Set<String> = linkedSetOf(
-        DIBUJAR, GRAFICA, FIGURAS, OCR, CALCAR, AYUDA, BUSCAR,
+        DIBUJAR, GRAFICA, SVG, FIGURAS, OCR, CALCAR, AYUDA, BUSCAR,
         "abrir_chat", "abrir_fichero", "abrir_mensaje", "abrir_nota", "abrir_hoja", "escribir_en_chat", "nota_nueva",
         "lienzo_nuevo", "grabar_voz", "reproducir_audio", "lista_nueva", "anadir_tarea", "anadir_tareas", "marcar_tarea",
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
@@ -286,6 +288,7 @@ object Herramientas {
             )
             FIGURAS -> Llamada.Figuras(Figuras.validar(args))
             BUSCAR -> Llamada.Buscar(Documentos.validar(args))
+            SVG -> Llamada.DibujoSvg(Svg.validar(args, avisos))
             CALCAR -> Llamada.Calcar(validarCalcar(args))
             else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
                 ?: throw ErrorHerramienta.Desconocida(nombre)
