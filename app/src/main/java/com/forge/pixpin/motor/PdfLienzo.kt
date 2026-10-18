@@ -252,6 +252,8 @@ object PdfLienzo {
             val salida = ByteArrayOutputStream()
 
             if (e.type == ElementType.ARC) {
+                // El arco de lámina (sector, segmento, marca de ángulo), como en pantalla.
+                if (e.esArcoDeLamina) return lamina(e, alpha)
                 val puntos = puntosDelArco(e)
                 if (puntos.size < 2) return ByteArray(0)
                 val comoLinea = e.copy(type = ElementType.LINE, points = puntos, roundness = null)
@@ -265,6 +267,7 @@ object PdfLienzo {
                 val anillos = anillosDeRegion(e)
                 if (anillos.isEmpty() || anillos.first().size < 3) return ByteArray(0)
                 val silueta = opsDeAnillos(anillos, 3)
+                e.degradadoDe?.let { return conDegradado(e, it, silueta, alpha, true) }
                 return if (needsRoughFill(e)) {
                     rayado(e, silueta, Rough(roughOptionsFor(e)).fillPolygons(anillos), alpha, true)
                 } else {
@@ -357,11 +360,121 @@ object PdfLienzo {
         // -- relleno y trazo -------------------------------------------------
 
         private fun relleno(e: Element, g: ShapeGeometry, alpha: Int): ByteArray {
+            val degradado = if (e.degradado != null && e.admiteDegradado) e.degradadoDe else null
+            if (degradado != null) {
+                val silueta = opsDePuntos(g.outline, cerrado = true)
+                return if (silueta.isEmpty()) ByteArray(0) else conDegradado(e, degradado, silueta, alpha, false)
+            }
             if (!e.hasBackground || isTransparent(e.backgroundColor)) return ByteArray(0)
             val silueta = opsDePuntos(g.outline, cerrado = true)
             if (silueta.isEmpty()) return ByteArray(0)
             val rayas = g.fill ?: return solido(e, silueta, alpha, false)
             return rayado(e, silueta, rayas, alpha, false)
+        }
+
+        /**
+         * **El degradado, a bandas** (como lo pinta el PC en todas sus salidas): se recorta a la
+         * silueta con `W n` y se rellenan [BANDAS_DEGRADADO] franjas (lineal) o anillos (radial)
+         * de color liso. Opaco, las bandas se apilan y no quedan juntas; translúcido, van una al
+         * lado de otra para no sumar tinta.
+         */
+        private fun conDegradado(
+            e: Element, d: Degradado, silueta: List<Op>, alpha: Int, parImpar: Boolean
+        ): ByteArray {
+            val (o, q) = puntosDelDegradado(e, d)
+            val caja = cajaDelDegradado(e)
+            val lejos = 2 * (hypot(caja.x2 - caja.x1, caja.y2 - caja.y1) + hypot(q.x - o.x, q.y - o.y)) + 10
+            val nB = BANDAS_DEGRADADO
+            fun color(t: Double): Int {
+                val c = colorDelDegradado(d, t)
+                return ((c[3] * alpha / 255) shl 24) or (c[0] shl 16) or (c[1] shl 8) or c[2]
+            }
+            val opaco = alpha >= 255 && (rgbaDeHex(d.desde)?.get(3) ?: 255) >= 255 &&
+                (rgbaDeHex(d.hasta)?.get(3) ?: 255) >= 255
+            val salida = ByteArrayOutputStream()
+            salida.orden("q")
+            salida.write(camino(silueta))
+            salida.orden(if (parImpar) "W* n" else "W n")
+            when (d.tipo) {
+                TipoDegradado.LINEAL -> {
+                    val largo = hypot(q.x - o.x, q.y - o.y)
+                    if (largo < 1e-6) {
+                        salida.write(pintado(opsDePuntos(cuadro(o, 1.0, 0.0, -lejos, lejos, lejos), cerrado = true), color(0.0), "f"))
+                    } else {
+                        val ux = (q.x - o.x) / largo
+                        val uy = (q.y - o.y) / largo
+                        for (k in 0..nB) {
+                            val desde = if (k == 0) -lejos else largo * k / nB
+                            val hasta = when {
+                                opaco || k == nB -> lejos + largo
+                                else -> largo * (k + 1) / nB
+                            }
+                            salida.write(
+                                pintado(opsDePuntos(cuadro(o, ux, uy, desde, hasta, lejos), cerrado = true), color(k.toDouble() / nB), "f")
+                            )
+                        }
+                    }
+                }
+                TipoDegradado.RADIAL -> {
+                    val radio = hypot(q.x - o.x, q.y - o.y).coerceAtLeast(1.0)
+                    val fondo = opsDePuntos(cuadro(o, 1.0, 0.0, -lejos, lejos, lejos), cerrado = true)
+                    if (opaco) {
+                        salida.write(pintado(fondo, color(1.0), "f"))
+                        for (k in nB downTo 1) {
+                            salida.write(
+                                pintado(opsDePuntos(circulo(o, radio * k / nB, 64), cerrado = true), color((k - 0.5) / nB), "f")
+                            )
+                        }
+                    } else {
+                        for (k in 1..nB + 1) {
+                            val fuera = if (k <= nB) opsDePuntos(circulo(o, radio * k / nB, 64), cerrado = true) else fondo
+                            val dentro = if (k > 1) opsDePuntos(circulo(o, radio * (k - 1) / nB, 64), cerrado = true) else emptyList()
+                            salida.write(pintado(fuera + dentro, color(((k - 0.5) / nB).coerceAtMost(1.0)), "f*"))
+                        }
+                    }
+                }
+            }
+            salida.orden("Q")
+            return salida.toByteArray()
+        }
+
+        /** El rectángulo que va de [desde] a [hasta] por el eje `(ux, uy)` desde [o], de ±[ancho] de través. */
+        private fun cuadro(o: Pt, ux: Double, uy: Double, desde: Double, hasta: Double, ancho: Double): List<Pt> {
+            val vx = -uy
+            val vy = ux
+            return listOf(
+                Pt(o.x + ux * desde + vx * ancho, o.y + uy * desde + vy * ancho),
+                Pt(o.x + ux * hasta + vx * ancho, o.y + uy * hasta + vy * ancho),
+                Pt(o.x + ux * hasta - vx * ancho, o.y + uy * hasta - vy * ancho),
+                Pt(o.x + ux * desde - vx * ancho, o.y + uy * desde - vy * ancho)
+            )
+        }
+
+        /** El arco de lámina: relleno (liso o degradado), trazos y el valor de la marca, en curvas. */
+        private fun lamina(e: Element, alpha: Int): ByteArray {
+            val d = e.degradadoDe
+            val f = figuraDeLamina(e, d != null || !isTransparent(e.backgroundColor)) ?: return ByteArray(0)
+            val salida = ByteArrayOutputStream()
+            f.relleno?.takeIf { it.size >= 3 }?.let { pts ->
+                val silueta = opsDePuntos(pts, cerrado = true)
+                salida.write(if (d != null) conDegradado(e, d, silueta, alpha, false) else solido(e, silueta, alpha, false))
+            }
+            f.trazos.forEachIndexed { i, pts ->
+                if (pts.size >= 2) salida.write(trazo(e, opsDePuntos(pts, cerrado = i == 0 && f.primeroCerrado), alpha))
+            }
+            val texto = f.valor
+            if (!texto.isNullOrEmpty()) {
+                prepararPincel(f.tamLetra, e.fontFamily ?: ItemStyle.FONT_NUNITO, Paint.Align.LEFT)
+                val fm = medidor.fontMetrics
+                val ancho = medidor.measureText(texto).toDouble()
+                val sitio = f.sitioDelValor(ancho, (fm.descent - fm.ascent).toDouble())
+                val base = sitio.y - (fm.ascent + fm.descent) / 2.0
+                val perfil = Glifos.perfilDe(medidor, texto, sitio.x - ancho / 2, base)
+                if (perfil.isNotEmpty()) {
+                    salida.write(pintado(opsDeAnillos(perfil, 2), parseColor(e.strokeColor, alpha), "f"))
+                }
+            }
+            return salida.toByteArray()
         }
 
         private fun solido(
@@ -406,7 +519,7 @@ object PdfLienzo {
             salida.write(alfa(color))
             salida.orden(colorDe(color, "RG"))
             salida.orden("${PdfEscritura.numero(grosor)} w")
-            Svg.guionesDe(e.strokeStyle, e.strokeWidth)?.let {
+            Svg.guionesDe(e)?.let {
                 salida.orden("[${it.replace(" ", " ")}] 0 d")
             }
             salida.write(camino(ops))

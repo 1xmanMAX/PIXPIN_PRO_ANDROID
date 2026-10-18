@@ -183,6 +183,23 @@ fun anclajesDe(e: Element, ajustes: AjustesEnganche): List<Anclaje> {
     val c = getElementAbsoluteCoords(e)
     fun girado(x: Double, y: Double) = pointRotateRads(Pt(x, y), Pt(c.cx, c.cy), e.angle)
 
+    // **El arco ofrece sus dos puntas, su punto medio y el centro**, no las esquinas de la caja
+    // del óvalo del que sale, que no se ven (como el PC desde el 15-oct-2026).
+    val barrido = e.arcSweep
+    if (e.type == ElementType.ARC && barrido != null) {
+        val rx = (c.x2 - c.x1) / 2
+        val ry = (c.y2 - c.y1) / 2
+        val inicio = e.arcStart ?: 0.0
+        fun en(t: Double) = girado(c.cx + rx * kotlin.math.cos(t), c.cy + ry * kotlin.math.sin(t))
+        if (ajustes.esquinas && kotlin.math.abs(barrido) < 2 * Math.PI - 1e-6) {
+            out += Anclaje(en(inicio), TipoAnclaje.EXTREMO, e.id)
+            out += Anclaje(en(inicio + barrido), TipoAnclaje.EXTREMO, e.id)
+        }
+        if (ajustes.medios) out += Anclaje(en(inicio + barrido / 2), TipoAnclaje.MEDIO, e.id)
+        if (ajustes.centros) out += Anclaje(Pt(c.cx, c.cy), TipoAnclaje.CENTRO, e.id)
+        return out
+    }
+
     if (ajustes.esquinas) {
         out += Anclaje(girado(c.x1, c.y1), TipoAnclaje.ESQUINA, e.id)
         out += Anclaje(girado(c.x2, c.y1), TipoAnclaje.ESQUINA, e.id)

@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.filled.Cyclone
+import androidx.compose.material.icons.filled.Looks
+import androidx.compose.material.icons.filled.Architecture
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -1065,6 +1067,8 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.ESCALA_GRAFICA,
     Tool.NUDO,
     Tool.PUNTO,
+    Tool.ARCO,
+    Tool.ANGULO,
     Tool.SOLIDO,
     Tool.EXTRUIR,
     Tool.REVOLUCION
@@ -1185,6 +1189,8 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.RECORTAR -> Icons.Filled.ContentCut
     Tool.EXTENDER -> Icons.Filled.OpenInFull
     Tool.PUNTO -> Icons.Filled.Adjust
+    Tool.ARCO -> Icons.Filled.Looks
+    Tool.ANGULO -> Icons.Filled.Architecture
     Tool.SOLIDO -> Icons.Filled.ViewInAr
     Tool.EXTRUIR -> Icons.Filled.Upgrade
     Tool.REVOLUCION -> Icons.Filled.Cyclone
@@ -1193,6 +1199,8 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
 @StringRes
 fun labelFor(tool: Tool): Int = when (tool) {
     Tool.PUNTO -> R.string.tool_punto
+    Tool.ARCO -> R.string.tool_arco
+    Tool.ANGULO -> R.string.tool_angulo
     Tool.SELECTION -> R.string.tool_selection
     Tool.LASSO -> R.string.tool_lasso
     Tool.ZONA -> R.string.tool_zona

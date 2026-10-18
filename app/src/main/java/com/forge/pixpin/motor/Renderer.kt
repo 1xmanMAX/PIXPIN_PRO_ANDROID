@@ -316,6 +316,9 @@ class Renderer(
         // repintados por fotograma.
         // El arco se dibuja como la línea que recorre: no guarda sus puntos,
         // los genera de la caja del óvalo y de cuánto barre.
+        // **El arco de lámina** (sector, segmento, marca de ángulo): exacto, sin temblor, con su
+        // relleno y sus arquitos. Ver [figuraDeLamina].
+        if (e.esArcoDeLamina) return geometriaDeLamina(e)
         if (e.type == ElementType.ARC) {
             val puntos = puntosDelArco(e)
             if (puntos.size < 2) return null
@@ -334,7 +337,7 @@ class Renderer(
             val fill = if (needsRoughFill(e)) {
                 Rough(roughOptionsFor(e)).fillPolygons(anillos).toPath()
             } else null
-            return CachedShape(e, anillos.toEvenOddPath(), Path(), fill)
+            return CachedShape(e, anillos.toEvenOddPath(), Path(), fill, degradado = e.degradadoDe)
         }
 
         // **La caja en volumen: una geometría por cara.**
@@ -448,7 +451,41 @@ class Renderer(
             source = e,
             outlinePath = g.outline.toClosedPath(),
             strokePath = g.stroke.toPath(),
-            fillPath = g.fill?.toPath()
+            fillPath = g.fill?.toPath(),
+            degradado = if (e.degradado != null && e.admiteDegradado) e.degradadoDe else null
+        )
+    }
+
+    /**
+     * **Un arco de lámina, ya en caminos**: el relleno (polígono cerrado), los trazos (el borde
+     * del sector o los arquitos de la marca) y, si la marca lleva valor, dónde va su texto. Todo
+     * en la caché: en cada fotograma no se mide ni se reserva nada.
+     */
+    private fun geometriaDeLamina(e: Element): CachedShape? {
+        val degradado = e.degradadoDe
+        val conRelleno = degradado != null || !isTransparent(e.backgroundColor)
+        val f = figuraDeLamina(e, conRelleno) ?: return null
+        val trazo = Path()
+        f.trazos.forEachIndexed { i, pts ->
+            if (pts.isEmpty()) return@forEachIndexed
+            trazo.moveTo(pts[0].x.toFloat(), pts[0].y.toFloat())
+            for (k in 1 until pts.size) trazo.lineTo(pts[k].x.toFloat(), pts[k].y.toFloat())
+            if (i == 0 && f.primeroCerrado) trazo.close()
+        }
+        val relleno = f.relleno?.takeIf { it.size >= 3 }?.toClosedPath() ?: Path()
+        var valor: ValorDeMarca? = null
+        val texto = f.valor
+        if (!texto.isNullOrEmpty()) {
+            val medida = Paint(Paint.ANTI_ALIAS_FLAG)
+            medida.textSize = f.tamLetra.toFloat()
+            medida.typeface = typefaces(e.fontFamily ?: ItemStyle.FONT_NUNITO)
+            val fm = medida.fontMetrics
+            val sitio = f.sitioDelValor(medida.measureText(texto).toDouble(), (fm.descent - fm.ascent).toDouble())
+            valor = ValorDeMarca(texto, sitio.x.toFloat(), (sitio.y - (fm.ascent + fm.descent) / 2).toFloat(), f.tamLetra.toFloat())
+        }
+        return CachedShape(
+            e, relleno, trazo, null,
+            degradado = degradado, valorDeMarca = valor, rellenaLamina = f.relleno != null
         )
     }
 
@@ -1155,6 +1192,8 @@ class Renderer(
     private fun pintarRecortadoALaVista(canvas: Canvas, e: Element, alpha: Int): Boolean {
         if (pintandoLupa) return false
         if (maxOf(e.width, e.height) * zoomActual <= LIMITE_DEL_RASTERIZADOR) return false
+        // Lo de lámina (rellenos, arquitos, degradados) no se puede recortar a rayas.
+        if (e.degradado != null || (e.type == ElementType.ARC && e.esArcoDeLamina)) return false
         // El grafito se recorta él solo, por casillas: aquí saldría liso. Ver [pintarElLapiz].
         if (e.material == MaterialDeTinta.CUADRITOS && e.angle == 0.0 && e.type != ElementType.ARROW) return false
 
@@ -2153,6 +2192,10 @@ class Renderer(
      */
     private fun drawCachedShape(canvas: Canvas, e: Element, alpha: Int) {
         val shape = geometryOf(e) ?: return
+        if (shape.rellenaLamina != null) {
+            pintarLamina(canvas, e, shape, alpha)
+            return
+        }
         // De grafito, entera: trazo, fondo y rayado. Ver [pintarLaFiguraDeGrafito].
         if (e.material == MaterialDeTinta.CUADRITOS && e.type != ElementType.SOLIDO && pintarLaFiguraDeGrafito(canvas, e, shape, alpha)) return
         drawFill(canvas, e, shape, alpha)
@@ -2683,6 +2726,11 @@ class Renderer(
 
     /** El fondo de una forma: liso o rayado, siempre recortado a su silueta. */
     private fun drawFill(canvas: Canvas, e: Element, shape: CachedShape, alpha: Int) {
+        // **Con degradado se rellena aunque no haya fondo**: el degradado trae sus colores.
+        if (shape.degradado != null) {
+            rellenarConDegradado(canvas, e, shape, shape.outlinePath, alpha)
+            return
+        }
         if (!e.hasBackground || isTransparent(e.backgroundColor)) return
 
         fillPaint.reset()
@@ -2705,6 +2753,70 @@ class Renderer(
             canvas.drawPath(shape.fillPath, fillPaint)
             canvas.restore()
         }
+    }
+
+    /**
+     * **El relleno degradado**: un `Shader` de verdad (lineal o radial) en coordenadas de la escena
+     * —el giro y el zoom los pone la matriz del lienzo—, guardado en la caché de la figura y
+     * rehecho solo si cambian sus colores (opacidad, tema). Nada se reserva por fotograma.
+     */
+    private fun rellenarConDegradado(canvas: Canvas, e: Element, shape: CachedShape, camino: Path, alpha: Int) {
+        val d = shape.degradado ?: return
+        val desde = tema(argbDeHex(d.desde, alpha))
+        val hasta = tema(argbDeHex(d.hasta, alpha))
+        var shader = shape.shader
+        if (shader == null || shape.shaderDesde != desde || shape.shaderHasta != hasta) {
+            val (o, q) = puntosDelDegradado(e, d)
+            shader = when (d.tipo) {
+                TipoDegradado.LINEAL ->
+                    if (kotlin.math.hypot(q.x - o.x, q.y - o.y) < 1e-6) null
+                    else android.graphics.LinearGradient(
+                        o.x.toFloat(), o.y.toFloat(), q.x.toFloat(), q.y.toFloat(),
+                        desde, hasta, Shader.TileMode.CLAMP
+                    )
+                TipoDegradado.RADIAL -> android.graphics.RadialGradient(
+                    o.x.toFloat(), o.y.toFloat(),
+                    kotlin.math.hypot(q.x - o.x, q.y - o.y).coerceAtLeast(1.0).toFloat(),
+                    desde, hasta, Shader.TileMode.CLAMP
+                )
+            }
+            shape.shader = shader
+            shape.shaderDesde = desde
+            shape.shaderHasta = hasta
+        }
+        fillPaint.reset()
+        fillPaint.isAntiAlias = true
+        fillPaint.style = Paint.Style.FILL
+        fillPaint.color = desde
+        fillPaint.shader = shader
+        canvas.drawPath(camino, fillPaint)
+        fillPaint.shader = null
+    }
+
+    /** El arco de lámina: relleno (liso o degradado), trazo y, si lo lleva, el valor de la marca. */
+    private fun pintarLamina(canvas: Canvas, e: Element, shape: CachedShape, alpha: Int) {
+        if (shape.rellenaLamina == true) {
+            if (shape.degradado != null) rellenarConDegradado(canvas, e, shape, shape.outlinePath, alpha)
+            else if (!isTransparent(e.backgroundColor)) {
+                fillPaint.reset()
+                fillPaint.isAntiAlias = true
+                fillPaint.style = Paint.Style.FILL
+                fillPaint.color = tema(parseColor(e.backgroundColor, alpha))
+                canvas.drawPath(shape.outlinePath, fillPaint)
+            }
+        }
+        conMaterial(canvas, e, shape.strokePath, alpha, relleno = false) { a, color ->
+            canvas.drawPath(shape.strokePath, strokePaint(e, a, color))
+        }
+        val v = shape.valorDeMarca ?: return
+        paint.reset()
+        paint.isAntiAlias = true
+        paint.style = Paint.Style.FILL
+        paint.textAlign = Paint.Align.CENTER
+        paint.textSize = v.tam
+        paint.typeface = typefaces(e.fontFamily ?: ItemStyle.FONT_NUNITO)
+        paint.color = tema(parseColor(e.strokeColor, alpha))
+        canvas.drawText(v.texto, v.x, v.base, paint)
     }
 
     private fun drawLinear(canvas: Canvas, e: Element, alpha: Int) {
@@ -3610,17 +3722,23 @@ class Renderer(
     // reservar un objeto por línea discontinua y fotograma.
     private var estiloDelGuion: StrokeStyle? = null
     private var anchoDelGuion = Double.NaN
+    private var rayaPuntoDelGuion = false
     private var elGuion: DashPathEffect? = null
 
-    private fun efectoDe(estilo: StrokeStyle, ancho: Double): DashPathEffect? {
+    private fun efectoDe(estilo: StrokeStyle, ancho: Double, rayaPunto: Boolean = false): DashPathEffect? {
         if (estilo == StrokeStyle.SOLID) return null
-        if (estilo == estiloDelGuion && ancho == anchoDelGuion) return elGuion
-        val nuevo = when (estilo) {
-            StrokeStyle.DASHED -> DashPathEffect(floatArrayOf(8f, (8 + ancho).toFloat()), 0f)
+        if (estilo == estiloDelGuion && ancho == anchoDelGuion && rayaPunto == rayaPuntoDelGuion) return elGuion
+        val nuevo = when {
+            // El raya-punto de las láminas (ejes, líneas de centro). Ver [intervalosRayaPunto].
+            rayaPunto -> DashPathEffect(
+                intervalosRayaPunto(ancho).let { i -> FloatArray(i.size) { i[it].toFloat() } }, 0f
+            )
+            estilo == StrokeStyle.DASHED -> DashPathEffect(floatArrayOf(8f, (8 + ancho).toFloat()), 0f)
             else -> DashPathEffect(floatArrayOf(1.5f, (6 + ancho).toFloat()), 0f)
         }
         estiloDelGuion = estilo
         anchoDelGuion = ancho
+        rayaPuntoDelGuion = rayaPunto
         elGuion = nuevo
         return nuevo
     }
@@ -3642,7 +3760,7 @@ class Renderer(
             StrokeStyle.SOLID -> e.strokeWidth
             else -> e.strokeWidth + 0.5
         }.toFloat()
-        paint.pathEffect = efectoDe(e.strokeStyle, e.strokeWidth)
+        paint.pathEffect = efectoDe(e.strokeStyle, e.strokeWidth, e.trazoRayaPunto != null && e.esRayaPunto)
         return paint
     }
 
@@ -4000,7 +4118,21 @@ private class CachedShape(
      * diferencia es la que separa un cilindro de una persiana.
      */
     val alambreMarcado: Path? = null,
-)
+    /** El degradado del relleno, ya leído. Ver [Renderer.rellenarConDegradado]. */
+    val degradado: Degradado? = null,
+    /** El texto de una marca de ángulo, ya colocado. */
+    val valorDeMarca: ValorDeMarca? = null,
+    /** No nulo en un arco de lámina: si lleva relleno (en [outlinePath]). */
+    val rellenaLamina: Boolean? = null,
+) {
+    /** El `Shader` del degradado y los colores con que se hizo: se rehace solo si cambian. */
+    var shader: Shader? = null
+    var shaderDesde: Int = 0
+    var shaderHasta: Int = 0
+}
+
+/** El valor de una marca de ángulo («45°», «α»), con su sitio ya calculado. */
+private class ValorDeMarca(val texto: String, val x: Float, val base: Float, val tam: Float)
 
 /** Una cara de un sólido, ya en caminos de Android y con su tono. */
 private class CaraPintada(
@@ -4069,7 +4201,13 @@ internal fun hasSameGeometry(a: Element, b: Element): Boolean =
         a.inclinacion == b.inclinacion &&
         a.formaSolida == b.formaSolida &&
         a.esqueleto == b.esqueleto &&
-        a.enElSuelo == b.enElSuelo
+        a.enElSuelo == b.enElSuelo &&
+        // **Lo de las láminas** (cierre, marca, degradado) cambia lo que se pinta de un arco o
+        // de un relleno sin tocar la caja; y el tamaño de letra coloca el valor de la marca.
+        (a.cierreArco === b.cierreArco || a.cierreArco == b.cierreArco) &&
+        (a.marcaAngulo === b.marcaAngulo || a.marcaAngulo == b.marcaAngulo) &&
+        (a.degradado === b.degradado || a.degradado == b.degradado) &&
+        a.fontSize == b.fontSize && a.fontFamily == b.fontFamily
 
 // -------------------------------------------------------------------------
 // Utilidades de dibujo
@@ -4219,6 +4357,13 @@ fun contrastingTextColor(fondo: Int, alpha: Int = 255): Int {
  */
 fun parseColor(color: String, alpha: Int = 255): Int {
     if (isTransparent(color)) return Color.TRANSPARENT
+    // **`#rrggbbaa` es el de la web y el del PC (alfa al final)**; el `parseColor` de Android lee
+    // ocho cifras como `#aarrggbb`. Sin esto, el relleno translúcido de una marca de ángulo del PC
+    // («#1e1e1e4d») salía de otro color.
+    if (color.length == 9 && color[0] == '#') {
+        val c = rgbaDeHex(color)
+        if (c != null) return Color.argb(alpha * c[3] / 255, c[0], c[1], c[2])
+    }
     val base = runCatching { Color.parseColor(color) }.getOrDefault(Color.BLACK)
     return Color.argb(
         alpha * Color.alpha(base) / 255,

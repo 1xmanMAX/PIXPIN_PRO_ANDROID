@@ -159,6 +159,14 @@ fun cajaDelArco(element: Element): Bounds {
         mete(k * (PI / 2))
         k += 1
     }
+    // **El sector y la marca de ángulo llegan hasta el centro** (como en el PC): su caja lo
+    // incluye, o el relleno se saldría del recuadro de selección.
+    if (element.marcaAngulo != null || element.cierreArco != null) {
+        if (element.marcaAngulo is kotlinx.serialization.json.JsonObject || element.cierre == CierreArco.SECTOR) {
+            minX = min(minX, c.cx); minY = min(minY, c.cy)
+            maxX = max(maxX, c.cx); maxY = max(maxY, c.cy)
+        }
+    }
     return Bounds(minX, minY, maxX, maxY)
 }
 

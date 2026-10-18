@@ -162,6 +162,11 @@ object Svg {
      * Son los mismos números que el `DashPathEffect` del renderizador, para que
      * una raya a trazos se vea igual de espaciada en el SVG que en la pantalla.
      */
+    /** Los de [e], **con el raya-punto** de las láminas si lo lleva. Ver [intervalosRayaPunto]. */
+    fun guionesDe(e: Element): String? =
+        if (e.trazoRayaPunto != null && e.esRayaPunto) intervalosRayaPunto(e.strokeWidth).joinToString(" ") { num(it) }
+        else guionesDe(e.strokeStyle, e.strokeWidth)
+
     fun guionesDe(estilo: StrokeStyle, grosor: Double): String? = when (estilo) {
         StrokeStyle.SOLID -> null
         StrokeStyle.DASHED -> "${num(8.0)} ${num(8 + grosor)}"

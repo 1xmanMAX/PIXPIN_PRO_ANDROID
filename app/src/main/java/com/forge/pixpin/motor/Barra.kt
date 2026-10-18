@@ -36,7 +36,8 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     // La caja en volumen va con las formas planas y no en un grupo aparte: es la
     // misma faena —poner un bulto donde uno quiere— y quien busca «un cuadrado»
     // mira ahí. En un grupo propio sería una herramienta más que nadie encuentra.
-    listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND, Tool.SOLIDO),
+    // El arco y la marca de ángulo (las láminas de geometría del PC) van con las formas, como allí.
+    listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND, Tool.ARCO, Tool.ANGULO, Tool.SOLIDO),
     // Las dos que llevan lo plano al volumen, juntas y al lado de las formas: se dibuja
     // la planta con las de arriba y se levanta o se tornea con estas.
     listOf(Tool.EXTRUIR, Tool.REVOLUCION),
