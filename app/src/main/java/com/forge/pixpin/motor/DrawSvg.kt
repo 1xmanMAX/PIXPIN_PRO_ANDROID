@@ -1455,6 +1455,7 @@ object DrawSvg {
             val tam = e.fontSize ?: 20.0
             val c = getElementAbsoluteCoords(e)
             val color = parseColor(e.strokeColor, alpha)
+            TextoRico.vigente(e)?.let { return textoRico(e, it, c.x1, c.y1, color, alpha) }
 
             val alineado = when (e.textAlign) {
                 TextAlign.CENTER -> Paint.Align.CENTER
@@ -1481,6 +1482,49 @@ object DrawSvg {
                     s.append(enCurvas(linea, x, y, tam, e.fontFamily, alineado, color, false))
                 }
                 y += alto
+            }
+            return s.toString()
+        }
+
+        /**
+         * **Un texto rico** ([TextoRico]): las mismas piezas que pinta la pantalla, cada trozo
+         * de letra en curvas con su color (la cursiva, sesgada alrededor de su línea base, como
+         * el `textSkewX` del lienzo) y cada raya como polilínea.
+         */
+        private fun textoRico(e: Element, rico: String, x0: Double, y0: Double, base: Int, alpha: Int): String {
+            val m = TextoRico.componer(
+                rico, TextoRico.opcionesDe(e, TextoRico.anchoAlPintar(e)),
+                DrawFonts.medidorRico(typefaces, e.fontFamily)
+            )
+            val s = StringBuilder()
+            for (p in m.piezas) when (p) {
+                is Ecuacion.Pieza.Texto -> {
+                    if (p.texto.isBlank()) continue
+                    medidor.reset()
+                    medidor.textSize = p.tam.toFloat()
+                    medidor.typeface = typefaces(e.fontFamily)
+                    val x = x0 + p.x
+                    val y = y0 + p.y - medidor.fontMetrics.ascent.toDouble()
+                    val color = p.color?.let { parseColor(it, alpha) } ?: base
+                    val letras = enCurvas(p.texto, x, y, p.tam, e.fontFamily, Paint.Align.LEFT, color, p.negrita)
+                    if (p.cursiva) {
+                        s.append("<g transform=\"translate(${Svg.num(x)} ${Svg.num(y)}) skewX(-14.04) ")
+                            .append("translate(${Svg.num(-x)} ${Svg.num(-y)})\">").append(letras).append("</g>\n")
+                    } else s.append(letras)
+                }
+                is Ecuacion.Pieza.Raya -> {
+                    if (p.puntos.size < 2) continue
+                    val color = p.color?.let { parseColor(it, alpha) } ?: base
+                    s.append("<polyline points=\"")
+                    p.puntos.forEachIndexed { k, q ->
+                        if (k > 0) s.append(' ')
+                        s.append(Svg.num(x0 + q.x)).append(',').append(Svg.num(y0 + q.y))
+                    }
+                    s.append("\" fill=\"none\" stroke=\"").append(Svg.hex(color)).append('"')
+                        .append(opacidad(color, "stroke-opacity"))
+                        .append(" stroke-width=\"").append(Svg.num(p.grosor))
+                        .append("\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n")
+                }
             }
             return s.toString()
         }

@@ -43,6 +43,25 @@ PowerShell/AutoHotkey, Flow y notificaciones de Windows, Escape por capas, el li
   `guardar` no pisa lo que no se lee; `TablaActivity` no abre en blanco lo ilegible; hojas migradas
   con `tocado = editadaA`; la copia de trabajo de un Excel leído va a `files/tablas-leidas/` (no viaja).
   Pruebas: `TablaUnSoloFormatoTest`, `TablasDelChatTest`.
+- **Paso 2 hecho** (láminas de geometría, `Lamina.kt`): `cierreArco`, `marcaAngulo`, `degradado`,
+  `trazoRayaPunto` y ángulos con letra griega, pintados y conservados tal cual llegan; herramientas Arco
+  (guía/centro/tres puntos) y Ángulo en el panel, con los botones ‹ › de la letra
+  (`cambiarLetraDeAngulo`) y el aviso `anguloSinSitio` («El ángulo va donde se juntan dos rayas»).
+  **Pendiente**: el imán de tangente y `geometria_precisa` del asistente (paso 8).
+- **Paso 3 hecho** (texto rico del lienzo, `docs/texto-rico-del-lienzo.md`): `Element.textoRico` (clave
+  `textoRico`, mismo JSON que el PC; `text` con el plano de reserva) y la regla de coherencia en
+  `TextoRico.vigente` (si el plano no es el `text`, gana el `text`). `motormd/Formulas.kt` trae el lector
+  del PC entero (matrices, `Adornada`, `Color`, `Negrita`, `Recuadro`, `Encima`, `Grande`, `legible`,
+  `colorDeNombre`); `Ecuacion.kt` pasa a cajas con piezas (un solo compositor para la gráfica y el texto
+  rico, `deFormula`, adornos, recuadro, signos de ángulo dibujados). `TextoRico.kt` lee, compone (renglones
+  por el eje, alineación y justificado por renglón, partir dentro de una figura) y saca el plano idéntico
+  al del PC. Se pinta en el lienzo (`Renderer.pintarTextoRico`, maqueta recordada por elemento), el SVG
+  (y la página web) y el PDF vectorial. Editar: el cuadro de escribir edita la fuente y compone al salir,
+  con barra B/I/U/S/ƒx/colores y los atajos de teclado del PC (Ctrl+B, Ctrl+M, Ctrl+Mayús+1..6...); lo
+  mismo (sin barra) en los lectores y la hojita (`EscribirEnElLienzo`). Un texto sin marcas no estrena la
+  clave. Pruebas: `TextoRicoTest` (casos de `texto_rico.rs` y `tests/texto_rico.rs`), `TextoRicoPintadoTest`
+  (órdenes al Canvas, SVG, PDF), `FormulasTest`, `EcuacionTest`. **Sin probar en teléfono.** Falta: que el
+  asistente escriba texto rico (paso 8) y deshacer dentro del cuadro de escribir (el PC tiene Ctrl+Z propio).
 - **Paso 4 hecho** (galería con el texto de cada captura): `GaleriaCompartida.Entrada.texto` (vacío no se
   escribe, mismo JSON que el PC), `Local.texto`; `alDia` lo apunta sin tocar `cambiado`, `juntar` no lo
   pierde aunque gane la entrada sin él, `GaleriaQueViaja.aplicarJuntas` completa lo que llega sin textos y

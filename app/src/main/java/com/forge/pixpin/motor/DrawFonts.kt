@@ -95,6 +95,20 @@ object DrawFonts {
         return { texto -> p.measureText(texto).toDouble() }
     }
 
+    /**
+     * **La regla del texto rico** ([TextoRico]) con la letra de [familia]: el avance de cada
+     * trozo, con el mismo `measureText` en el editor (al medir la caja), en el lienzo, en el SVG
+     * y en el PDF. Medir distinto en uno de ellos movería las palabras de su sitio.
+     */
+    fun medidorRico(typefaces: (Int?) -> Typeface?, familia: Int?): TextoRico.Medidor {
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.typeface = typefaces(familia)
+        return TextoRico.Medidor { texto, tam, _, _ ->
+            p.textSize = tam.toFloat()
+            p.measureText(texto).toDouble()
+        }
+    }
+
     fun medirTexto(
         context: Context, texto: String, familia: Int?, tamano: Double
     ): Pair<Double, Double> {

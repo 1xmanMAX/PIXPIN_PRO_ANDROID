@@ -3564,6 +3564,9 @@ class Renderer(
      */
     var marcados: Set<String> = emptySet()
 
+    /** El texto rico que se está escribiendo: no se pinta compuesto debajo de su fuente. */
+    var escondido: String? = null
+
     /** La brocha de las imágenes, una para todas. Ver [drawImage]. */
     private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
@@ -3648,6 +3651,15 @@ class Renderer(
         }
         val c = getElementAbsoluteCoords(e)
 
+        // **Texto rico** (tramos con estilo y fórmulas en línea): sus piezas, compuestas una
+        // vez por versión y recordadas. Ver [TextoRico].
+        val rico = TextoRico.vigente(e)
+        if (rico != null) {
+            if (e.id == escondido) return
+            pintarTextoRico(canvas, e, rico, c.x1, c.y1, alpha)
+            return
+        }
+
         paint.reset()
         paint.isAntiAlias = true
         paint.color = tema(parseColor(e.strokeColor, alpha))
@@ -3702,6 +3714,70 @@ class Renderer(
         for (line in renglones) {
             canvas.drawText(line, originX.toFloat(), y.toFloat(), paint)
             y += lineHeight
+        }
+    }
+
+    /** La maqueta de un texto rico y con qué se compuso: si cambia algo, se recompone. */
+    private class MaquetaCacheada(val firma: Any, val maqueta: TextoRico.Maqueta)
+
+    private val maquetasCache = object : LinkedHashMap<String, MaquetaCacheada>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, MaquetaCacheada>) =
+            size > MAX_CACHED_SHAPES
+    }
+
+    private val caminoDeRaya = Path()
+    private val metricasRicas = Paint.FontMetrics()
+
+    /**
+     * **Pinta un texto rico**: cada trozo de letra con su color, cara y tamaño, y cada raya
+     * (fracción, raíz, adorno, subrayado, signo de ángulo) como camino. Componer es medir
+     * palabra a palabra, así que va **recordado por elemento** —como los renglones del texto
+     * plano— y en cada fotograma solo se recorren las piezas.
+     */
+    private fun pintarTextoRico(canvas: Canvas, e: Element, rico: String, x0: Double, y0: Double, alpha: Int) {
+        val opciones = TextoRico.opcionesDe(e, TextoRico.anchoAlPintar(e))
+        val firma = Triple(rico, opciones, e.fontFamily)
+        val entrada = maquetasCache[e.id]
+        val maqueta = if (entrada != null && entrada.firma == firma) entrada.maqueta else {
+            val m = TextoRico.componer(rico, opciones, DrawFonts.medidorRico(typefaces, e.fontFamily))
+            maquetasCache[e.id] = MaquetaCacheada(firma, m)
+            m
+        }
+        val base = parseColor(e.strokeColor, alpha)
+        val tipo = typefaces(e.fontFamily)
+        for (p in maqueta.piezas) when (p) {
+            is Ecuacion.Pieza.Texto -> {
+                if (p.texto.isBlank()) continue
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.style = Paint.Style.FILL
+                paint.color = tema(p.color?.let { parseColor(it, alpha) } ?: base)
+                paint.textSize = p.tam.toFloat()
+                paint.typeface = tipo
+                paint.isFakeBoldText = p.negrita
+                paint.textSkewX = if (p.cursiva) SESGO_DE_LA_CURSIVA else 0f
+                paint.textAlign = Paint.Align.LEFT
+                // La línea base donde la pone el texto de siempre: bajo su ascendente.
+                paint.getFontMetrics(metricasRicas)
+                val y = y0 + p.y - metricasRicas.ascent
+                canvas.drawText(p.texto, (x0 + p.x).toFloat(), y.toFloat(), paint)
+            }
+            is Ecuacion.Pieza.Raya -> {
+                if (p.puntos.size < 2) continue
+                paint.reset()
+                paint.isAntiAlias = true
+                paint.style = Paint.Style.STROKE
+                paint.strokeCap = Paint.Cap.ROUND
+                paint.strokeJoin = Paint.Join.ROUND
+                paint.strokeWidth = p.grosor.toFloat()
+                paint.color = tema(p.color?.let { parseColor(it, alpha) } ?: base)
+                caminoDeRaya.rewind()
+                caminoDeRaya.moveTo((x0 + p.puntos[0].x).toFloat(), (y0 + p.puntos[0].y).toFloat())
+                for (k in 1 until p.puntos.size) {
+                    caminoDeRaya.lineTo((x0 + p.puntos[k].x).toFloat(), (y0 + p.puntos[k].y).toFloat())
+                }
+                canvas.drawPath(caminoDeRaya, paint)
+            }
         }
     }
 

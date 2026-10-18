@@ -326,6 +326,7 @@
     <string name="tool_arco">Arco</string>
     <string name="tool_angulo">Ángulo</string>
     <string name="punto_sin_sitio">Los puntos van en cruces, extremos, medios o el centro de un círculo</string>
+    <string name="angulo_sin_sitio">El ángulo va donde se juntan dos rayas: toca más cerca del vértice</string>
     <string name="tool_selection">Seleccionar</string>
     <string name="tool_lasso">Lazo</string>
     <string name="tool_zona">Zona</string>

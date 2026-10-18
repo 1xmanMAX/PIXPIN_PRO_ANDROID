@@ -613,6 +613,7 @@ object PdfLienzo {
             val tam = e.fontSize ?: 20.0
             val c = getElementAbsoluteCoords(e)
             val color = parseColor(e.strokeColor, alpha)
+            TextoRico.vigente(e)?.let { return textoRico(e, it, c.x1, c.y1, color, alpha) }
 
             val alineado = when (e.textAlign) {
                 TextAlign.CENTER -> Paint.Align.CENTER
@@ -638,6 +639,43 @@ object PdfLienzo {
                     }
                 }
                 y += alto
+            }
+            return salida.toByteArray()
+        }
+
+        /**
+         * **Un texto rico** ([TextoRico]): las piezas de la pantalla, cada trozo de letra como
+         * su silueta rellena de su color (la cursiva con el mismo sesgo del lienzo) y cada raya
+         * como trazo.
+         */
+        private fun textoRico(e: Element, rico: String, x0: Double, y0: Double, base: Int, alpha: Int): ByteArray {
+            val m = TextoRico.componer(
+                rico, TextoRico.opcionesDe(e, TextoRico.anchoAlPintar(e)),
+                DrawFonts.medidorRico(typefaces, e.fontFamily)
+            )
+            val salida = ByteArrayOutputStream()
+            for (p in m.piezas) when (p) {
+                is Ecuacion.Pieza.Texto -> {
+                    if (p.texto.isBlank()) continue
+                    prepararPincel(p.tam, e.fontFamily, Paint.Align.LEFT, p.negrita)
+                    if (p.cursiva) medidor.textSkewX = -0.25f
+                    val y = y0 + p.y - medidor.fontMetrics.ascent.toDouble()
+                    val perfil = Glifos.perfilDe(medidor, p.texto, x0 + p.x, y)
+                    val color = p.color?.let { parseColor(it, alpha) } ?: base
+                    if (perfil.isNotEmpty()) salida.write(pintado(opsDeAnillos(perfil, 2), color, "f"))
+                }
+                is Ecuacion.Pieza.Raya -> {
+                    if (p.puntos.size < 2) continue
+                    val color = p.color?.let { parseColor(it, alpha) } ?: base
+                    salida.orden("q")
+                    salida.write(alfa(color))
+                    salida.orden(colorDe(color, "RG"))
+                    salida.orden("${PdfEscritura.numero(p.grosor)} w")
+                    salida.orden("1 J 1 j")
+                    salida.write(camino(opsDePuntos(p.puntos.map { Pt(x0 + it.x, y0 + it.y) }, cerrado = false)))
+                    salida.orden("S")
+                    salida.orden("Q")
+                }
             }
             return salida.toByteArray()
         }

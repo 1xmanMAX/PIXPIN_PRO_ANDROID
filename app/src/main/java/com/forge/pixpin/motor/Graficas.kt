@@ -150,7 +150,7 @@ object Graficas {
             // color de la curva, apilados arriba a la izquierda. Ver [Ecuacion].
             val letra = estilo.copy(fontSize = deLetra.fontSize * 1.15, strokeColor = color)
             val caja = Ecuacion.cajaDeLaEcuacion("y", f, letra, medir)
-            salida += caja.pintar(6.0, alturaDelRotulo)
+            salida += caja.elementos(6.0, alturaDelRotulo, letra)
             alturaDelRotulo += caja.alto + 4.0
         }
         return salida

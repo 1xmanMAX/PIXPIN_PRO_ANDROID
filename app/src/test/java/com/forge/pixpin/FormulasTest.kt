@@ -16,16 +16,7 @@ class FormulasTest {
     /** El árbol en texto plano, sin los espacios que pone el compositor. */
     private fun texto(t: Pieza): String = plano(t).replace(" ", "")
 
-    private fun plano(t: Pieza): String = when (t) {
-        is Pieza.Texto -> t.texto
-        is Pieza.Fila -> t.partes.joinToString("") { plano(it) }
-        is Pieza.Fraccion -> "(${plano(t.arriba)}/${plano(t.abajo)})"
-        is Pieza.ConIndices ->
-            plano(t.base) + (t.arriba?.let { "^${plano(it)}" } ?: "") +
-                (t.abajo?.let { "_${plano(it)}" } ?: "")
-        is Pieza.Raiz -> "sqrt(${plano(t.dentro)})"
-        is Pieza.Agrupado -> t.abre + plano(t.dentro) + t.cierra
-    }
+    private fun plano(t: Pieza): String = Formulas.plano(t)
 
     // ---- Exponentes y subíndices ----
 

@@ -505,6 +505,10 @@ class DrawController(initial: Scene = Scene()) {
     var anguloSinSitio: Boolean = false
         private set
 
+    fun limpiarAvisoDeAngulo() {
+        anguloSinSitio = false
+    }
+
     /**
      * **El pulsar del arco**, según el modo del panel:
      *
@@ -2040,6 +2044,12 @@ class DrawController(initial: Scene = Scene()) {
     private val editables: List<Element> get() = scene.visibleConReferencias.filter(::editable)
 
 
+    /**
+     * El texto que se está escribiendo ahora mismo en el cuadro de encima. Si es rico, el lienzo
+     * no lo pinta compuesto debajo de su fuente ([Renderer.escondido]).
+     */
+    var textoAbierto: String? = null
+
     /** Id del texto recién creado que la interfaz debe abrir para escribir. */
     var pendingTextId: String? = null
         private set
@@ -3338,14 +3348,18 @@ class DrawController(initial: Scene = Scene()) {
     val hayClavados: Boolean get() = scene.elements.any { it.locked && !it.isDeleted }
 
     /** Cambia el texto de un elemento de texto (lo que escribe el teclado). */
-    fun updateText(id: String, text: String, measuredWidth: Double, measuredHeight: Double) {
+    fun updateText(
+        id: String, text: String, measuredWidth: Double, measuredHeight: Double,
+        /** La fuente del texto rico ([TextoRico]); null en un texto de los de siempre. */
+        textoRico: String? = null
+    ) {
         mutate { elements ->
             val texto = elements.firstOrNull { it.id == id }
             val contenedor = texto?.let { contenedorDe(it, elements) }
             if (texto == null || contenedor == null) {
                 return@mutate elements.map {
                     if (it.id == id) {
-                        it.copy(text = text, width = measuredWidth, height = measuredHeight)
+                        it.copy(text = text, width = measuredWidth, height = measuredHeight, textoRico = textoRico)
                             .touched()
                     } else it
                 }
@@ -3366,7 +3380,7 @@ class DrawController(initial: Scene = Scene()) {
             val donde = sitioDelTextoDentro(caja, measuredWidth to measuredHeight)
             val nuevoTexto = texto.copy(
                 text = text, width = measuredWidth, height = measuredHeight,
-                x = donde.x, y = donde.y
+                x = donde.x, y = donde.y, textoRico = textoRico
             ).touched()
 
             elements.map {
