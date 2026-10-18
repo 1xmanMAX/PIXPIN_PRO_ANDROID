@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +36,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -43,6 +52,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.guardados.MensajesStore
+import com.forge.pixpin.ia.Momento
 import com.forge.pixpin.mini.TodasLasTareas.Fila
 import com.forge.pixpin.mini.TodasLasTareas.Lista
 import com.forge.pixpin.ui.theme.BotonRedondo
@@ -70,6 +80,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  * tachado se queda unos segundos en su sitio. Cada tarjeta lleva sus imágenes, cuántos días
  * lleva y su menú: «Mover a…» otra lista y «Quitar» (con «Deshacer»).
  *
+ * **17/18-oct-2026 (PC `bfdd89a`, `18aaf99`)**: lo escrito en la caja se entiende ([Frase]: prioridad,
+ * `#etiquetas` y la hora de recordar salen del título y van como marcas); cada tarea puede llevar
+ * su **nota** de por qué no se está haciendo y **fijarse en la pantalla** como pin; la vista
+ * **Kanban** ([Kanban]) pone cada lista en una columna y arrastrar una tarjeta (mantener pulsada)
+ * a otra columna la pasa a esa lista; y arriba se abre el **horario de clases** ([HorarioActivity]).
+ *
  * Toda la lógica está en [TodasLasTareas], sin Android y probada. Leer el chat y agrupar va
  * fuera del hilo que pinta; aquí solo se enseña lo ya calculado.
  */
@@ -82,6 +98,17 @@ class TodasLasTareasActivity : ComponentActivity() {
 
     /** Lo que se enseña, calculado fuera del hilo que pinta. */
     private data class Vista(val listas: List<Lista>, val grupos: List<TodasLasTareas.Grupo>, val hoy: LocalDate)
+
+    /** Lo que se puede hacer con una tarjeta (lo mismo en la lista y en el tablero). */
+    private class AccionesDeTarjeta(
+        val marcar: (Lista, Fila, Boolean) -> Unit,
+        val moverA: (Lista, Fila) -> Unit,
+        val quitar: (Lista, Fila) -> Unit,
+        val recordar: (Lista, Fila) -> Unit,
+        val olvidarHora: (Lista, Fila) -> Unit,
+        val notar: (Lista, Fila) -> Unit,
+        val fijar: (Lista, Fila) -> Unit
+    )
 
     /** Una tarea recién quitada, mientras su aviso ofrece «Deshacer». */
     private data class Quitada(val codigo: String, val indice: Int, val tarea: Tarea, val texto: String)
@@ -108,6 +135,10 @@ class TodasLasTareasActivity : ComponentActivity() {
         val recien = remember { mutableStateMapOf<String, Long>() }
         val abiertas = remember { mutableStateMapOf<String, Boolean>() }
         var moviendo by remember { mutableStateOf<Pair<Lista, Fila>?>(null) }
+        var notando by remember { mutableStateOf<Pair<Lista, Fila>?>(null) }
+        // La vista elegida se recuerda (`tareas-vista.txt` del PC).
+        val prefs = remember { getSharedPreferences("tareas", MODE_PRIVATE) }
+        var vistaElegida by remember { mutableStateOf(Kanban.Vista.deTexto(prefs.getString("vista", null))) }
         val avisos = remember { SnackbarHostState() }
         val alcance = rememberCoroutineScope()
 
@@ -236,13 +267,46 @@ class TodasLasTareasActivity : ComponentActivity() {
             }
         }
 
+        /** La nota de por qué no se está haciendo (vacía: sin nota). Ver [TodasLasTareas.ponerNota]. */
+        fun ponerNota(l: Lista, f: Fila, nota: String) {
+            app.scope.launch(Dispatchers.IO) {
+                var cambio = false
+                almacen.cambiar { todos ->
+                    todos.map { m ->
+                        if (m.id != l.codigo) m
+                        else TodasLasTareas.ponerNota(m.texto, f, nota)?.let { m.copy(texto = it) } ?: m.also { cambio = true }
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    avisar(when {
+                        cambio -> "La lista cambió mientras tanto; ya está al día. Vuelve a intentarlo."
+                        nota.isBlank() -> "Nota quitada"
+                        else -> "Nota guardada"
+                    })
+                }
+            }
+        }
+
+        /** **El pin de la tarea**: solo su título, la hora, las etiquetas y la nota, encima de todo. */
+        fun fijar(l: Lista, f: Fila) {
+            if (!android.provider.Settings.canDrawOverlays(this)) { avisar("Para fijarla, PixPin necesita «Mostrar sobre otras apps»"); return }
+            app.overlayManager.pinTexto(Frase.textoDelPin(f.crudo, Momento.ahora()))
+        }
+
+        val acciones = AccionesDeTarjeta(
+            ::marcar, { l, f -> moviendo = l to f }, ::quitar, ::recordar, { a, b -> ponerHora(a, b, null) },
+            { l, f -> notando = l to f }, ::fijar
+        )
+
         fun apuntarAhora() {
             val t = apuntar
             if (Tareas.saneado(t).isEmpty()) return
             apuntar = ""
             app.scope.launch(Dispatchers.IO) {
-                TareaRapidaActivity.alInbox(applicationContext, t)
-                withContext(Dispatchers.Main) { avisar("«${Tareas.saneado(t)}» añadida a «${TodasLasTareas.INBOX}».") }
+                val guardada = TareaRapidaActivity.alInbox(applicationContext, t) ?: return@launch
+                val m = Frase.marcas(guardada)
+                val hora = m.hora?.let { " · ⏰ " + Momento.deMsLocales(it).legible(Momento.ahora()) }.orEmpty()
+                withContext(Dispatchers.Main) { avisar("«${m.titulo.ifBlank { Tareas.saneado(t) }}» añadida a «${TodasLasTareas.INBOX}»$hora") }
             }
         }
 
@@ -262,6 +326,20 @@ class TodasLasTareasActivity : ComponentActivity() {
                             if (palabras.isNotEmpty()) TodasLasTareas.encontradas(v.grupos.sumOf { it.arriba.size + it.hechas.size })
                             else TodasLasTareas.resumen(v.listas.sumOf { it.pendientes }, v.listas.count { it.filas.isNotEmpty() }),
                             style = MaterialTheme.typography.labelMedium, color = Cristal.tinta.copy(alpha = 0.7f)
+                        )
+                    }
+                    // El horario de clases que llama (PC 17-oct) y el cambio de vista (lista / Kanban).
+                    IconButton(onClick = { HorarioActivity.abrir(this@TodasLasTareasActivity) }) {
+                        Icon(Icons.Filled.School, "Horario de clases", tint = Cristal.tinta)
+                    }
+                    val enKanban = vistaElegida == Kanban.Vista.KANBAN
+                    IconButton(onClick = {
+                        vistaElegida = if (enKanban) Kanban.Vista.LISTA else Kanban.Vista.KANBAN
+                        prefs.edit().putString("vista", vistaElegida.clave).apply()
+                    }) {
+                        Icon(
+                            if (enKanban) Icons.AutoMirrored.Filled.Notes else Icons.Filled.ViewColumn,
+                            if (enKanban) "Ver como lista" else "Ver como tablero Kanban", tint = Cristal.tinta
                         )
                     }
                 }
@@ -297,7 +375,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                     Spacer(Modifier.width(8.dp))
                     Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                         if (apuntar.isEmpty()) Text(
-                            "Apunta una tarea en el Inbox", color = Cristal.tinta.copy(alpha = 0.5f),
+                            "Apunta… («mañana a las 5 #casa !alta»)", color = Cristal.tinta.copy(alpha = 0.5f),
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                         BasicTextField(
@@ -316,6 +394,13 @@ class TodasLasTareasActivity : ComponentActivity() {
                     v == null -> Box(Modifier.weight(1f).fillMaxWidth())
                     v.grupos.isEmpty() && palabras.isNotEmpty() -> SinResultados(consulta, Modifier.weight(1f)) { consulta = "" }
                     v.grupos.isEmpty() -> Vacia(Modifier.weight(1f))
+                    vistaElegida == Kanban.Vista.KANBAN -> {
+                        val colores = TodasLasTareas.coloresDeListas(v.listas.map { it.clave to it.filas.isNotEmpty() })
+                        TableroKanban(
+                            v, { li -> Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[li]]) }, palabras, abiertas, acciones,
+                            { desde, f, hasta -> mover(desde, f, hasta) }, Modifier.weight(1f).fillMaxWidth()
+                        )
+                    }
                     else -> LazyColumn(
                         Modifier.weight(1f).fillMaxWidth(),
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 32.dp),
@@ -328,7 +413,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                             val color = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[g.lista]])
                             item(key = "e:" + l.clave) { Encabezado(l, g.pendientes(l), color) }
                             items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
+                                Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), acciones)
                             }
                             if (g.hechas.isNotEmpty()) {
                                 // Buscando, lo hecho que coincide se ve.
@@ -345,7 +430,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                     }
                                 }
                                 if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
+                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), acciones)
                                 }
                             }
                             item(key = "s:" + l.clave) { Spacer(Modifier.height(8.dp)) }
@@ -358,6 +443,9 @@ class TodasLasTareasActivity : ComponentActivity() {
         moviendo?.let { (desde, f) ->
             val otras = (listas ?: emptyList()).filter { it.clave != desde.clave }
             MoverA(f, otras, { moviendo = null }) { hasta -> moviendo = null; mover(desde, f, hasta) }
+        }
+        notando?.let { (l, f) ->
+            NotaDeTarea(f, { notando = null }) { nota -> notando = null; ponerNota(l, f, nota) }
         }
     }
 
@@ -387,24 +475,33 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
     }
 
+    /** El color de la chapita de una prioridad (los de la franja del pin de tarea del PC). */
+    private fun colorDe(p: Prioridad): Color = when (p) {
+        Prioridad.ALTA -> Color(0xFFE5534B)
+        Prioridad.MEDIA -> Color(0xFFE8A33D)
+        Prioridad.BAJA -> Color(0xFF4CAF7A)
+    }
+
     @Composable
     private fun Tarjeta(
         l: Lista, f: Fila, color: Color, palabras: List<String>, hoy: LocalDate, conSuLista: Boolean,
-        marcar: (Lista, Fila, Boolean) -> Unit, moverA: () -> Unit, quitar: (Lista, Fila) -> Unit,
-        recordar: (Lista, Fila) -> Unit, olvidarHora: (Lista, Fila) -> Unit
+        acc: AccionesDeTarjeta, modifier: Modifier = Modifier
     ) {
         val hora = remember(f.crudo) { Tareas.horaDe(f.crudo) }
+        // Lo reconocido al escribirla (prioridad, #etiquetas, nota), aparte del título.
+        val marcas = remember(f.crudo) { Frase.marcas(f.crudo) }
+        val titulo = marcas.titulo
         val atenuada = if (f.hecha) 0.55f else 1f
         val resalte = Color(0x61B38F00)
-        val texto = remember(f.texto, palabras) {
+        val texto = remember(titulo, palabras) {
             buildAnnotatedString {
-                append(f.texto)
-                TodasLasTareas.resaltes(f.texto, palabras).forEach { addStyle(SpanStyle(background = resalte), it.first, it.last + 1) }
+                append(titulo)
+                TodasLasTareas.resaltes(titulo, palabras).forEach { addStyle(SpanStyle(background = resalte), it.first, it.last + 1) }
             }
         }
         var menu by remember { mutableStateOf(false) }
         Row(
-            Modifier.fillMaxWidth().cristal(RoundedCornerShape(16.dp))
+            modifier.fillMaxWidth().cristal(RoundedCornerShape(16.dp))
                 // La raya de su grupo, a la izquierda: las tareas de una lista se reconocen de lejos.
                 .drawBehind {
                     val m = 10.dp.toPx()
@@ -413,12 +510,34 @@ class TodasLasTareasActivity : ComponentActivity() {
                 .padding(start = 6.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = f.hecha, onCheckedChange = { marcar(l, f, it) })
+            Checkbox(checked = f.hecha, onCheckedChange = { acc.marcar(l, f, it) })
             Column(Modifier.weight(1f).padding(vertical = 6.dp).alpha(atenuada), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (f.texto.isNotEmpty()) Text(
+                if (titulo.isNotEmpty()) Text(
                     texto, color = Cristal.tinta, style = MaterialTheme.typography.bodyLarge,
                     textDecoration = if (f.hecha) TextDecoration.LineThrough else null
                 )
+                // La prioridad como chapita de color y las etiquetas, en una línea.
+                if (marcas.prioridad != null || marcas.etiquetas.isNotEmpty()) Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
+                ) {
+                    marcas.prioridad?.let { p ->
+                        Text(
+                            when (p) { Prioridad.ALTA -> "Alta"; Prioridad.MEDIA -> "Media"; Prioridad.BAJA -> "Baja" },
+                            color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                            modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(colorDe(p)).padding(horizontal = 6.dp, vertical = 1.dp)
+                        )
+                    }
+                    if (marcas.etiquetas.isNotEmpty()) Text(
+                        marcas.etiquetas.joinToString(" ") { "#$it" }, color = Cristal.puesto,
+                        style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
+                marcas.nota?.let { n ->
+                    Text(
+                        "${Frase.NOTA} $n", color = Cristal.tinta.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                }
                 if (f.imagenes.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     f.imagenes.forEach { Miniatura(it) }
                 }
@@ -443,23 +562,193 @@ class TodasLasTareasActivity : ComponentActivity() {
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
                         text = { Text("Mover a…") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) },
-                        onClick = { menu = false; moverA() }
+                        onClick = { menu = false; acc.moverA(l, f) }
                     )
                     if (!f.hecha) DropdownMenuItem(
                         text = { Text(if (hora == null) "Recordar…" else "Otra hora…") }, leadingIcon = { Icon(Icons.Filled.Alarm, null) },
-                        onClick = { menu = false; recordar(l, f) }
+                        onClick = { menu = false; acc.recordar(l, f) }
                     )
                     if (hora != null) DropdownMenuItem(
                         text = { Text("No recordar") }, leadingIcon = { Icon(Icons.Filled.AlarmOff, null) },
-                        onClick = { menu = false; olvidarHora(l, f) }
+                        onClick = { menu = false; acc.olvidarHora(l, f) }
+                    )
+                    if (!f.hecha) DropdownMenuItem(
+                        text = { Text(if (marcas.nota == null) "¿Por qué no ahora?" else "Cambiar la nota") },
+                        leadingIcon = { Icon(Icons.Filled.ChatBubbleOutline, null) },
+                        onClick = { menu = false; acc.notar(l, f) }
+                    )
+                    if (!f.hecha) DropdownMenuItem(
+                        text = { Text("Fijar en pantalla") }, leadingIcon = { Icon(Icons.Filled.PushPin, null) },
+                        onClick = { menu = false; acc.fijar(l, f) }
                     )
                     DropdownMenuItem(
                         text = { Text("Quitar") }, leadingIcon = { Icon(Icons.Filled.Close, null) },
-                        onClick = { menu = false; quitar(l, f) }
+                        onClick = { menu = false; acc.quitar(l, f) }
                     )
                 }
             }
         }
+    }
+
+    /**
+     * **La nota de una tarea** (el «💬 ¿Por qué no ahora?» del pin de tarea del PC): una línea; vacía
+     * la quita. Va dentro del texto de la tarea, así que viaja y se ve en el PC.
+     */
+    @Composable
+    private fun NotaDeTarea(f: Fila, cerrar: () -> Unit, guardar: (String) -> Unit) {
+        val marcas = remember(f.crudo) { Frase.marcas(f.crudo) }
+        val inicial = marcas.nota.orEmpty()
+        var nota by remember(f.crudo) { mutableStateOf(inicial) }
+        AlertDialog(
+            onDismissRequest = cerrar,
+            title = { Text(marcas.titulo.ifBlank { "Tarea" }.take(60), maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = {
+                OutlinedTextField(
+                    value = nota, onValueChange = { nota = it.replace('\n', ' ') }, singleLine = true,
+                    placeholder = { Text("Por qué no la haces ahora") }, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { guardar(nota) })
+                )
+            },
+            confirmButton = { TextButton(onClick = { guardar(nota) }) { Text("Guardar") } },
+            dismissButton = {
+                if (inicial.isNotEmpty()) TextButton(onClick = { guardar("") }) { Text("Quitar la nota") }
+                else TextButton(onClick = cerrar) { Text("Cancelar") }
+            }
+        )
+    }
+
+    /** Una tarjeta que se está arrastrando en el tablero: de qué lista es, cuál y por dónde va el dedo (en la raíz). */
+    private data class Arrastre(val lista: Int, val fila: Fila, val titulo: String, val dedo: Offset)
+
+    /**
+     * **El tablero Kanban** (PC `18aaf99`, [Kanban]): una columna por lista, con su encabezado, sus
+     * pendientes y su pliegue de hechas; lo que no cabe a lo ancho baja a otra banda (nunca hay que
+     * desplazarse de lado). Mantener pulsada una tarjeta y soltarla en otra columna la pasa a esa lista.
+     */
+    @Composable
+    private fun TableroKanban(
+        v: Vista, colorDe: (Int) -> Color, palabras: List<String>, abiertas: MutableMap<String, Boolean>,
+        acc: AccionesDeTarjeta, soltar: (Lista, Fila, Lista) -> Unit, modifier: Modifier
+    ) {
+        val densidad = LocalDensity.current
+        BoxWithConstraints(modifier) {
+            val margen = 12f
+            val m = Kanban.Medidas(
+                ancho = maxWidth.value - 2 * margen, columnaMin = 150f, columnaMax = 360f, hueco = 8f, relleno = 6f,
+                encabezado = 40f, pliegue = 40f, entreBandas = 14f, filaHecha = 44f
+            )
+            val (k, anchoCol) = Kanban.reparto(m, v.grupos.size)
+            // Dónde está cada columna (x y ancho) y cada banda (y y alto), en la raíz: ahí se suelta.
+            val xs = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+            val bandas = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+            var origen by remember { mutableStateOf(Offset.Zero) }
+            var arrastre by remember { mutableStateOf<Arrastre?>(null) }
+            fun columnas(): List<Kanban.Columna> = v.grupos.chunked(k).flatMapIndexed { b, banda ->
+                val (y, alto) = bandas[b] ?: return@flatMapIndexed emptyList()
+                banda.mapNotNull { g -> xs[g.lista]?.let { (x, w) -> Kanban.Columna(g.lista, Kanban.Caja(x, y, w, alto)) } }
+            }
+            fun acabar(a: Arrastre?) {
+                arrastre = null
+                a ?: return
+                val hasta = Kanban.destinoAlSoltar(columnas(), a.lista, a.dedo.x, a.dedo.y) ?: return
+                soltar(v.listas[a.lista], a.fila, v.listas[hasta])
+            }
+            val destino = arrastre?.let { a -> Kanban.destinoAlSoltar(columnas(), a.lista, a.dedo.x, a.dedo.y) }
+            Column(
+                Modifier.fillMaxSize().onGloballyPositioned { origen = it.positionInRoot() }
+                    .verticalScroll(rememberScrollState()).padding(horizontal = margen.dp, vertical = 12.dp)
+            ) {
+                v.grupos.chunked(k).forEachIndexed { b, banda ->
+                    if (b > 0) Spacer(Modifier.height(m.entreBandas.dp))
+                    Row(
+                        Modifier.fillMaxWidth().onGloballyPositioned { c -> val r = c.boundsInRoot(); bandas[b] = r.top to r.height },
+                        horizontalArrangement = Arrangement.spacedBy(m.hueco.dp)
+                    ) {
+                        banda.forEach { g ->
+                            val l = v.listas[g.lista]
+                            val color = colorDe(g.lista)
+                            Column(
+                                Modifier.width(anchoCol.dp)
+                                    .onGloballyPositioned { c -> val r = c.boundsInRoot(); xs[g.lista] = r.left to r.width }
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(color.copy(alpha = if (destino == g.lista) 0.34f else 0.12f))
+                                    .padding(m.relleno.dp),
+                                verticalArrangement = Arrangement.spacedBy(m.hueco.dp)
+                            ) {
+                                Encabezado(l, g.pendientes(l), color)
+                                g.arriba.forEach { i ->
+                                    androidx.compose.runtime.key(l.clave, l.filas[i].crudo, i) {
+                                        TarjetaArrastrable(l, l.filas[i], g.lista, color, palabras, v.hoy, acc, { arrastre = it }, ::acabar)
+                                    }
+                                }
+                                if (g.hechas.isNotEmpty()) {
+                                    val abierta = palabras.isNotEmpty() || abiertas[l.clave] == true
+                                    Row(
+                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                            .clickable { abiertas[l.clave] = !abierta }.padding(horizontal = 4.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                    }
+                                    if (abierta) g.hechas.forEach { i ->
+                                        androidx.compose.runtime.key(l.clave, l.filas[i].crudo, i) {
+                                            Tarjeta(l, l.filas[i], color, palabras, v.hoy, false, acc)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
+            }
+            // La tarjeta que va con el dedo, por encima de todo.
+            arrastre?.let { a ->
+                val x = with(densidad) { (a.dedo.x - origen.x).toDp() }
+                val y = with(densidad) { (a.dedo.y - origen.y).toDp() }
+                Text(
+                    a.titulo.ifBlank { "Tarea" }, color = Cristal.tinta, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.offset(x - 24.dp, y - 36.dp).widthIn(max = 220.dp)
+                        .cristal(RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+
+    /**
+     * Una tarjeta del tablero que se arrastra tras mantenerla pulsada: [mientras] recibe por dónde va
+     * el dedo, y [alSoltar] el último sitio (o null si se canceló).
+     */
+    @Composable
+    private fun TarjetaArrastrable(
+        l: Lista, f: Fila, lista: Int, color: Color, palabras: List<String>, hoy: LocalDate, acc: AccionesDeTarjeta,
+        mientras: (Arrastre) -> Unit, alSoltar: (Arrastre?) -> Unit
+    ) {
+        var esquina by remember { mutableStateOf(Offset.Zero) }
+        var dedo by remember { mutableStateOf<Offset?>(null) }
+        val titulo = remember(f.crudo) { Frase.marcas(f.crudo).titulo }
+        Tarjeta(
+            l, f, color, palabras, hoy, false, acc,
+            Modifier.alpha(if (dedo != null) 0.4f else 1f)
+                .onGloballyPositioned { esquina = it.positionInRoot() }
+                .pointerInput(l.clave, f.crudo) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { p -> val d = esquina + p; dedo = d; mientras(Arrastre(lista, f, titulo, d)) },
+                        onDrag = { cambio, delta ->
+                            cambio.consume()
+                            val d = (dedo ?: esquina) + delta
+                            dedo = d
+                            mientras(Arrastre(lista, f, titulo, d))
+                        },
+                        onDragEnd = { val d = dedo; dedo = null; alSoltar(d?.let { Arrastre(lista, f, titulo, it) }) },
+                        onDragCancel = { dedo = null; alSoltar(null) }
+                    )
+                }
+        )
     }
 
     /** Una imagen de la tarea: 48 dp, recortada al centro. Sin fichero aún, su hueco con el icono. */
