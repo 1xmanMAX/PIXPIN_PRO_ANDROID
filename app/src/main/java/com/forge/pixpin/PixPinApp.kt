@@ -128,6 +128,9 @@ class PixPinApp : Application() {
                 runCatching { com.forge.pixpin.pin.RecordatoriosDeTareas.reprogramar(this@PixPinApp) }
             }
         }
+        // **El horario de clases** (PC `horario.rs`): sus llamadas de la próxima semana, al arrancar
+        // —también tras reiniciar el teléfono—. Ver [com.forge.pixpin.pin.RecordatoriosDelHorario].
+        scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.pin.RecordatoriosDelHorario.reprogramar(this@PixPinApp) } }
         // **Las capturas caducadas, a la papelera**: al arrancar y luego cada hora, como el
         // barrendero del PC. Ver [com.forge.pixpin.capture.BarrenderoDeCapturas].
         scope.launch(Dispatchers.IO) {

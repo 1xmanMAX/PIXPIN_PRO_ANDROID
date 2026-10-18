@@ -316,7 +316,7 @@ class AccionesDelTelefono(
                             )
                         )
                     }
-                    else -> com.forge.pixpin.mini.TareaRapidaActivity.alInbox(contexto, t)
+                    else -> { com.forge.pixpin.mini.TareaRapidaActivity.alInbox(contexto, t, entender = false) }
                 }
             }
             "marcar_tarea" -> cambiarLista(codigo!!) { doc ->
