@@ -45,6 +45,7 @@ mano va a la papelera del otro y lo caducado no deja marca. Un aparato de antes 
 | `borrada` | `true`: quitada a mano antes de tiempo; se quita en todos. |
 | `cambiado` | Cuándo cambió lo de arriba por última vez. |
 | `de` | El `id` del aparato donde se hizo (solo informativo). |
+| `texto` | Lo que pone dentro (OCR del PC; PC `8258b31`, Android desde el paso 4 de `plan-pc-18-oct.md`). Vacío no se escribe. No cuenta como cambio y **nunca se olvida**: si la entrada que gana al juntar no lo trae, se queda el de la otra, y `aplicarJuntas` completa lo que llegue sin él con el que ya había. Android no tiene OCR: lo guarda en `galeria-compartida.json`, busca por él y lo enseña en el detalle. |
 
 Los campos con su valor por omisión no se escriben (`encodeDefaults = false`).
 

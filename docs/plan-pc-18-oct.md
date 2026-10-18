@@ -43,3 +43,10 @@ PowerShell/AutoHotkey, Flow y notificaciones de Windows, Escape por capas, el li
   `guardar` no pisa lo que no se lee; `TablaActivity` no abre en blanco lo ilegible; hojas migradas
   con `tocado = editadaA`; la copia de trabajo de un Excel leído va a `files/tablas-leidas/` (no viaja).
   Pruebas: `TablaUnSoloFormatoTest`, `TablasDelChatTest`.
+- **Paso 4 hecho** (galería con el texto de cada captura): `GaleriaCompartida.Entrada.texto` (vacío no se
+  escribe, mismo JSON que el PC), `Local.texto`; `alDia` lo apunta sin tocar `cambiado`, `juntar` no lo
+  pierde aunque gane la entrada sin él, `GaleriaQueViaja.aplicarJuntas` completa lo que llega sin textos y
+  llama a `CapturasDelAparato.apuntarTexto` (no-op en el teléfono: el texto vive en el estado). La galería
+  busca por él, saca «Con texto» si alguna lo tiene y enseña «Lo que pone» (elegible, «Copiar texto»).
+  Android no tiene OCR propio. Pruebas: `GaleriaCompartidaTest`, `GaleriaQueViajaTest` (casos de
+  `galeria/pruebas.rs` + teléfono sin OCR), `SincronizarDeVerdadTest`.

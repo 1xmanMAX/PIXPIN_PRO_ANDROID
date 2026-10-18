@@ -56,6 +56,7 @@ import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.capture.BarrenderoDeCapturas
 import com.forge.pixpin.capture.BarrenderoDeCapturas.Captura
 import com.forge.pixpin.capture.CaducidadDeCapturas
+import com.forge.pixpin.capture.GaleriaCompartida
 import com.forge.pixpin.capture.GaleriaLogica
 import com.forge.pixpin.capture.GaleriaLogica.Filtro
 import com.forge.pixpin.capture.GaleriaLogica.Tono
@@ -79,9 +80,11 @@ import java.io.File
  * larga) con Conservar, Pinear, Copiar y Borrar —con «Deshacer» en vez de preguntar—; y la hoja de
  * detalle con «Conservar» y «Dar 7 días más».
  *
- * **Sin texto de dentro**: el PC busca también lo que pone en la captura con el OCR de Windows;
- * PixPin para Android no lleva ningún OCR, así que aquí se busca por nombre y fecha y no sale el
- * filtro «Con texto». Las reglas viven en [GaleriaLogica] y [CaducidadDeCapturas], sin Android.
+ * **El texto de dentro viene del PC** (PC `8258b31`, 18-oct-2026): el PC lee lo que pone en cada
+ * captura con el OCR de Windows y ese texto viaja con la galería ([GaleriaCompartida.Entrada.texto]).
+ * Android no lleva OCR propio: busca por el texto que llegó, enseña «Lo que pone» en el detalle y
+ * saca el filtro «Con texto» solo si alguna lo tiene. Las reglas viven en [GaleriaLogica] y
+ * [CaducidadDeCapturas], sin Android.
  */
 class GaleriaDeCapturasActivity : ComponentActivity() {
 
@@ -107,6 +110,8 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         val dias = ajustes.diasCaducidad
         var capturas by remember { mutableStateOf<List<Captura>?>(null) }
         var registro by remember { mutableStateOf(CaducidadDeCapturas.Registro(desde = 0L)) }
+        // El texto de cada captura que llegó de un PC (por nombre); vacío si ninguna lo trae.
+        var textos by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
         var ahora by remember { mutableLongStateOf(System.currentTimeMillis()) }
         var version by remember { mutableIntStateOf(0) }
         var filtro by remember { mutableStateOf(Filtro.TODAS) }
@@ -122,14 +127,16 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         // Lo que cambia la sincronización (capturas que llegan, otras fechas) se ve sin salir.
         val deLaSincro by com.forge.pixpin.capture.CapturasEnElTelefono.cambio.collectAsState()
         LaunchedEffect(version, deLaSincro) {
-            val (l, r) = withContext(Dispatchers.IO) {
+            val (l, r, tx) = withContext(Dispatchers.IO) {
                 val t = System.currentTimeMillis()
                 // Al abrir, también se barre: lo que caducó con la app cerrada no se enseña.
                 BarrenderoDeCapturas.barrer(this@GaleriaDeCapturasActivity, t, app.settings.settings.first().diasCaducidad)
-                (BarrenderoDeCapturas.listar(this@GaleriaDeCapturasActivity) ?: emptyList()) to CaducidadDeCapturas.leer(raiz, t)
+                val tx = GaleriaCompartida.leer(raiz).entradas.filter { it.texto.isNotBlank() }.associate { it.nombre to it.texto }
+                Triple(BarrenderoDeCapturas.listar(this@GaleriaDeCapturasActivity) ?: emptyList(), CaducidadDeCapturas.leer(raiz, t), tx)
             }
             ahora = System.currentTimeMillis()
             registro = r
+            textos = tx
             capturas = l
             val presentes = l.mapTo(HashSet()) { it.uri }
             elegidas = elegidas.filterTo(HashSet()) { it in presentes }
@@ -195,10 +202,11 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         // ---------------------------------------------------------------- la vista
         val lista = capturas
         val zona = remember { java.util.TimeZone.getDefault() }
-        val fichas = remember(lista, registro, dias) {
-            lista?.map { c -> GaleriaLogica.Ficha(c.nombre, c.extension, c.cuando, CaducidadDeCapturas.seVaEl(registro, c.nombre, c.cuando, dias)) } ?: emptyList()
+        val fichas = remember(lista, registro, dias, textos) {
+            lista?.map { c -> GaleriaLogica.Ficha(c.nombre, c.extension, c.cuando, CaducidadDeCapturas.seVaEl(registro, c.nombre, c.cuando, dias), textos[c.nombre]) } ?: emptyList()
         }
-        val carril = remember(fichas, ahora) { GaleriaLogica.carril(fichas, ahora, hayOcr = false, zona = zona) }
+        val conTexto = fichas.any { !it.texto.isNullOrBlank() }
+        val carril = remember(fichas, ahora) { GaleriaLogica.carril(fichas, ahora, hayOcr = conTexto, zona = zona) }
         // Si el filtro elegido deja de salir (no queda ningún GIF), vuelve a «Todas».
         LaunchedEffect(carril) { if (carril.none { it.first == filtro }) filtro = Filtro.TODAS }
         val vista = remember(fichas, filtro, consulta, ahora) {
@@ -250,7 +258,7 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
                         color = Cristal.tinta.copy(alpha = 0.75f), modifier = Modifier.padding(24.dp)
                     )
                     else -> {
-                        Buscador(consulta) { consulta = it }
+                        Buscador(consulta, conTexto) { consulta = it }
                         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(carril, key = { it.first }) { (f, n) ->
                                 FilterChip(
@@ -311,7 +319,7 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
             val seVa = CaducidadDeCapturas.seVaEl(registro, c.nombre, c.cuando, dias)
             ModalBottomSheet(onDismissRequest = { detalle = null }) {
                 Detalle(
-                    c, seVa, ahora, zona,
+                    c, seVa, ahora, zona, textos[c.nombre],
                     onConservar = { conservar(listOf(c), registro, dias) { r, t -> registro = r; avisar(t) } },
                     onProrrogar = {
                         lifecycleScope.launch {
@@ -333,10 +341,10 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Buscador(consulta: String, onCambio: (String) -> Unit) {
+    private fun Buscador(consulta: String, conTexto: Boolean, onCambio: (String) -> Unit) {
         OutlinedTextField(
             value = consulta, onValueChange = onCambio, singleLine = true,
-            placeholder = { Text("Buscar por nombre o fecha", maxLines = 1) },
+            placeholder = { Text(if (conTexto) "Buscar por nombre, fecha o texto" else "Buscar por nombre o fecha", maxLines = 1) },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = { if (consulta.isNotEmpty()) IconButton(onClick = { onCambio("") }) { Icon(Icons.Default.Close, "Borrar la búsqueda") } },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -411,7 +419,7 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
 
     @Composable
     private fun Detalle(
-        c: Captura, seVa: Long?, ahora: Long, zona: java.util.TimeZone,
+        c: Captura, seVa: Long?, ahora: Long, zona: java.util.TimeZone, texto: String?,
         onConservar: () -> Unit, onProrrogar: () -> Unit, onAccion: (() -> Unit) -> Unit,
         abrir: () -> Unit, pinear: () -> Unit, copiar: () -> Unit, compartir: () -> Unit, borrar: () -> Unit
     ) {
@@ -440,6 +448,24 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
             Fila("Fecha", GaleriaLogica.fechaYHora(c.cuando, ahora, zona))
             Fila("Tamaño", GaleriaLogica.tamanoLegible(c.bytes))
             Spacer(Modifier.height(10.dp))
+
+            // Lo que pone dentro, leído por el PC (Android no lo lee): se puede elegir y copiar.
+            if (!texto.isNullOrBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Lo que pone", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                    TextButton(onClick = {
+                        getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(c.nombre, texto))
+                    }) { Text("Copiar texto", maxLines = 1) }
+                }
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(
+                        texto.trim(), style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp).clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant).verticalScroll(rememberScrollState()).padding(10.dp)
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
 
             // La caducidad, con su color, y lo que se puede hacer con ella.
             val plazo = GaleriaLogica.plazo(seVa, ahora, zona)

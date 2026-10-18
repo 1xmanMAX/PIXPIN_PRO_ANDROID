@@ -44,7 +44,15 @@ object GaleriaCompartida {
         /** Cuándo cambió por última vez algo de lo de arriba: lo más nuevo gana al juntar. */
         val cambiado: Long = 0,
         /** El aparato donde se hizo, solo para enseñarlo. */
-        val de: String = ""
+        val de: String = "",
+        /**
+         * **Lo que pone dentro** (PC `8258b31`, 18-oct-2026): el texto reconocido de la captura (el
+         * OCR de Windows en el PC). Viaja con la entrada para que este aparato la encuentre por su
+         * texto sin leerla. Es de la imagen, no de lo decidido sobre ella: no cuenta como cambio
+         * (`cambiado`) y nunca se olvida uno que ya se tenía ([juntar], `aplicarJuntas`). Vacío:
+         * sin leer o sin texto, y entonces no se escribe (`encodeDefaults = false`), como en el PC.
+         */
+        val texto: String = ""
     ) {
         /** Ya pasó su fecha: cada aparato la barre solo, no hace falta pasarla. */
         fun caducada(ahora: Long) = !borrada && !conservada && seVa != null && seVa <= ahora
@@ -62,8 +70,8 @@ object GaleriaCompartida {
         val porNombre: Map<String, Entrada> get() = entradas.associateBy { it.nombre }
     }
 
-    /** Una captura que hay en este aparato ahora. */
-    data class Local(val nombre: String, val cuando: Long, val bytes: Long, val mime: String)
+    /** Una captura que hay en este aparato ahora, con el texto que ya se leyó de ella aquí (vacío: aún no, o no tiene). */
+    data class Local(val nombre: String, val cuando: Long, val bytes: Long, val mime: String, val texto: String = "")
 
     // ------------------------------------------------------------------- reglas
 
@@ -77,16 +85,19 @@ object GaleriaCompartida {
         val hay = locales.associateBy { it.nombre }
         val nuevas = LinkedHashMap(e.porNombre)
         for (c in locales) {
-            val vieja = nuevas[c.nombre]
+            val vieja0 = nuevas[c.nombre]
             val conservada = c.nombre in r.conservadas
-            if (vieja == null) {
+            if (vieja0 == null) {
                 nuevas[c.nombre] = Entrada(
                     c.nombre, c.cuando, c.bytes, c.mime,
                     seVa = if (conservada) null else CaducidadDeCapturas.seVaEl(r, c.nombre, c.cuando, dias),
-                    conservada = conservada, cambiado = c.cuando, de = aparato
+                    conservada = conservada, cambiado = c.cuando, de = aparato, texto = c.texto
                 )
                 continue
             }
+            // El texto leído aquí después de apuntarla: se añade sin tocar `cambiado`, que no es un
+            // cambio del usuario sino algo más que se sabe de la misma imagen.
+            val vieja = if (vieja0.texto.isEmpty() && c.texto.isNotEmpty()) vieja0.copy(texto = c.texto).also { nuevas[c.nombre] = it } else vieja0
             if (vieja.borrada) continue   // se quitó en otro: la quitará [aTirar]
             // La fecha que rige aquí: la acordada (`fijadas`) o, si aún no se acordó, la regla con
             // sus prórrogas. Sin caducidad aquí (días ≤ 0) no se dice nada: eso es de este aparato.
@@ -112,7 +123,8 @@ object GaleriaCompartida {
     /**
      * **Junta lo de dos aparatos**, igual en los dos lados: por cada captura, la entrada cambiada
      * más tarde; a la misma hora, borrada antes que viva, conservada antes que no, y la fecha más
-     * lejana. `cuando` y `de` salen de la que los tenga (son de quien la hizo).
+     * lejana. Si la que gana no trae texto (un Android de antes no lo conoce), se queda el de la
+     * otra: el texto es de la imagen, no de lo que se decidió sobre ella.
      */
     fun juntar(a: Collection<Entrada>, b: Collection<Entrada>): List<Entrada> {
         val todas = (a.map { it.nombre } + b.map { it.nombre }).distinct()
@@ -126,7 +138,10 @@ object GaleriaCompartida {
 
     private val orden = compareBy<Entrada>({ it.cambiado }, { it.borrada }, { it.conservada }, { it.seVa ?: Long.MAX_VALUE }, { it.bytes })
 
-    private fun ganadora(x: Entrada, y: Entrada): Entrada = if (orden.compare(x, y) >= 0) x else y
+    private fun ganadora(x: Entrada, y: Entrada): Entrada {
+        val (g, otra) = if (orden.compare(x, y) >= 0) x to y else y to x
+        return if (g.texto.isEmpty() && otra.texto.isNotEmpty()) g.copy(texto = otra.texto) else g
+    }
 
     /**
      * **Lo acordado, en el registro de caducidad**: conservadas y fechas fijadas. Las borradas se

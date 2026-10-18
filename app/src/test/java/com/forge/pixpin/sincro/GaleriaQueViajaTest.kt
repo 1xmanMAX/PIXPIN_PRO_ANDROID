@@ -26,12 +26,19 @@ import org.junit.Test
 class GaleriaQueViajaTest {
 
     /** Las capturas de un aparato en una carpeta; la papelera, otra. La hora de cada una, su fecha de modificación. */
-    class EnCarpeta(override val raiz: File, var diasAqui: Int = 7) : CapturasDelAparato {
+    class EnCarpeta(override val raiz: File, var diasAqui: Int = 7, val leeTextos: Boolean = true) : CapturasDelAparato {
         val carpeta = File(raiz, "Pictures/PixPin").apply { mkdirs() }
         val papelera = File(raiz, "papelera").apply { mkdirs() }
+        /** Donde guarda este «aparato» el texto leído de cada captura (en el PC, la caché del OCR). */
+        private fun rutaDelTexto(nombre: String) = File(raiz, "textos/$nombre.txt")
+        /** El texto leído de una captura, como si la galería la hubiera leído (como el PC). */
+        fun leerTexto(nombre: String, texto: String) { rutaDelTexto(nombre).apply { parentFile!!.mkdirs() }.writeText(texto) }
+        fun texto(nombre: String): String = rutaDelTexto(nombre).takeIf { it.isFile }?.readText().orEmpty()
         override fun listar() = carpeta.listFiles().orEmpty().sortedBy { it.name }.map {
-            GaleriaCompartida.Local(it.name, it.lastModified(), it.length(), if (it.name.endsWith(".mp4")) "video/mp4" else "image/png")
+            GaleriaCompartida.Local(it.name, it.lastModified(), it.length(), if (it.name.endsWith(".mp4")) "video/mp4" else "image/png",
+                texto = if (leeTextos) texto(it.name) else "")
         }
+        override fun apuntarTexto(nombre: String, texto: String) { if (leeTextos) leerTexto(nombre, texto) }
         override fun abrir(nombre: String): Pair<Long, InputStream>? =
             File(carpeta, nombre).takeIf { it.isFile }?.let { it.length() to it.inputStream() }
         override fun guardar(e: GaleriaCompartida.Entrada, escribir: (OutputStream) -> Boolean): Boolean {
@@ -39,6 +46,7 @@ class GaleriaQueViajaTest {
             val bien = f.outputStream().use(escribir)
             if (!bien) { f.delete(); return false }
             f.setLastModified(e.cuando)
+            if (leeTextos && e.texto.isNotEmpty()) leerTexto(e.nombre, e.texto)
             return true
         }
         override fun tirar(nombres: Collection<String>) {
@@ -195,5 +203,80 @@ class GaleriaQueViajaTest {
             assertTrue(malo, runCatching { GaleriaQueViaja.nombreValido(malo) }.isFailure)
         }
         assertEquals("captura 1.png", GaleriaQueViaja.nombreValido("captura 1.png"))
+    }
+
+    // ------------------------------------------------- el texto de cada captura (PC `8258b31`)
+
+    @Test
+    fun `una captura y su texto van y vuelven entre dos aparatos`() {
+        galTel.hacer("captura-tel.png", T0 - DIA_MS, 3000)
+        galTel.leerTexto("captura-tel.png", "Reunion a las 10:30")
+        galTab.hacer("captura-tab.png", T0 - DIA_MS, 2000)
+        galTab.leerTexto("captura-tab.png", "Lista de la compra")
+        reloj = T0
+        assertEquals(2, sincronizar().capturas)
+        // Cada captura llega con su texto, donde lo busca la galería del otro.
+        assertEquals("Reunion a las 10:30", galTab.texto("captura-tel.png"))
+        assertEquals("Lista de la compra", galTel.texto("captura-tab.png"))
+        // Y en el estado compartido de los dos.
+        for (g in listOf(galTel, galTab)) {
+            val pn = GaleriaCompartida.leer(g.raiz).porNombre
+            assertEquals("Reunion a las 10:30", pn["captura-tel.png"]!!.texto)
+            assertEquals("Lista de la compra", pn["captura-tab.png"]!!.texto)
+        }
+    }
+
+    @Test
+    fun `el texto leido despues llega a una captura que el otro ya tenia`() {
+        galTel.hacer("a.png", T0 - DIA_MS, 3000)
+        reloj = T0
+        sincronizar()
+        assertEquals(listOf("a.png"), galTab.nombres())
+        assertEquals("", galTab.texto("a.png"))
+        // El teléfono la lee después; dirige la tableta: ninguna captura pasa, pero el texto sí.
+        galTel.leerTexto("a.png", "leida luego")
+        reloj = T0 + 1000
+        assertEquals(0, sincronizar(tableta, telefono).capturas)
+        assertEquals("leida luego", galTab.texto("a.png"))
+    }
+
+    @Test
+    fun `caso negativo lo juntado sin textos no borra los de aqui`() {
+        // Quien dirige es un aparato que no sabe de textos (un Android o un PC de antes): su
+        // «galeriajunta» llega sin ellos y aquí no se puede olvidar ninguno.
+        galTab.hacer("a.png", T0 - DIA_MS, 3000)
+        galTab.leerTexto("a.png", "de aqui")
+        reloj = T0
+        val mia = GaleriaQueViaja.ponerAlDia(galTab, "id-tab", T0)
+        assertEquals("de aqui", mia.entradas[0].texto)
+        val deAntes = GaleriaCompartida.entradasDeTexto(GaleriaCompartida.entradasATexto(mia.entradas))
+            .map { it.copy(texto = "", conservada = true, cambiado = T0 + 1) }
+        GaleriaQueViaja.aplicarJuntas(galTab, deAntes, T0 + 1)
+        val e = GaleriaCompartida.leer(galTab.raiz)
+        assertTrue("lo del otro se aplica", e.entradas[0].conservada)
+        assertEquals("y el texto se queda", "de aqui", e.entradas[0].texto)
+        assertEquals("de aqui", galTab.texto("a.png"))
+    }
+
+    @Test
+    fun `un telefono sin OCR guarda el texto del otro y lo devuelve aunque gane lo suyo`() {
+        // La tableta hace de teléfono de verdad: no lee textos; el texto vive solo en su estado.
+        val sinOcr = EnCarpeta(tableta.filesDir, leeTextos = false); tableta.capturas = sinOcr
+        galTel.hacer("a.png", T0 - DIA_MS, 3000)
+        galTel.leerTexto("a.png", "del PC")
+        reloj = T0
+        sincronizar()
+        assertEquals("del PC", GaleriaCompartida.leer(sinOcr.raiz).porNombre["a.png"]!!.texto)
+        // El teléfono la conserva (gana su entrada, más nueva) y el texto sigue en los dos.
+        reloj = T0 + 1000
+        CaducidadDeCapturas.cambiar(sinOcr.raiz, reloj) { it.copy(conservadas = it.conservadas + "a.png") }
+        sincronizar(tableta, telefono)
+        for (g in listOf(galTel, sinOcr)) {
+            val a = GaleriaCompartida.leer(g.raiz).porNombre["a.png"]!!
+            assertTrue(a.conservada)
+            assertEquals("del PC", a.texto)
+        }
+        // Y el estado del teléfono, al ponerse al día sin leer nada, no lo olvida.
+        assertEquals("del PC", GaleriaQueViaja.ponerAlDia(sinOcr, "id-tab", reloj + 1).porNombre["a.png"]!!.texto)
     }
 }

@@ -109,4 +109,47 @@ class GaleriaCompartidaTest {
         assertEquals(T + 8 * DIA_MS, n.fijadas["a.png"])
         assertTrue(n.prorrogadas.isEmpty())
     }
+
+    // ------------------------------------------------- el texto de cada captura (PC `8258b31`)
+
+    @Test fun `el texto viaja en la entrada y sin texto no se escribe`() {
+        val e = Entrada("a.png", 1, texto = "Factura 123\nTotal 45,60")
+        val t = GaleriaCompartida.entradasATexto(listOf(e))
+        // Lo mismo, byte a byte, que escribe el PC (`entradas_a_texto`).
+        assertEquals("""[{"nombre":"a.png","cuando":1,"texto":"Factura 123\nTotal 45,60"}]""", t)
+        assertEquals(listOf(e), GaleriaCompartida.entradasDeTexto(t))
+        // Lo de un Android o un PC de antes (sin texto) se lee con el texto vacío y se escribe igual que antes.
+        val l = GaleriaCompartida.entradasDeTexto("""[{"nombre":"a.png","cuando":1}]""")
+        assertTrue(l[0].texto.isEmpty())
+        assertEquals("""[{"nombre":"a.png","cuando":1}]""", GaleriaCompartida.entradasATexto(l))
+    }
+
+    @Test fun `al juntar el texto no se pierde aunque gane la entrada sin el`() {
+        val con = Entrada("a.png", T, texto = "hola", cambiado = 1)
+        // La de un aparato de antes, cambiada más tarde (conservada allí), no trae texto.
+        val sin = Entrada("a.png", T, conservada = true, cambiado = 2)
+        for (j in listOf(GaleriaCompartida.juntar(listOf(con), listOf(sin)), GaleriaCompartida.juntar(listOf(sin), listOf(con)))) {
+            assertTrue("gana la más nueva", j[0].conservada)
+            assertEquals("con el texto de la otra", "hola", j[0].texto)
+        }
+        // Si las dos lo traen, el de la que gana.
+        val otro = sin.copy(texto = "adiós")
+        assertEquals("adiós", GaleriaCompartida.juntar(listOf(con), listOf(otro)).single().texto)
+    }
+
+    @Test fun `al dia apunta el texto leido despues sin contarlo como cambio`() {
+        val antes = GaleriaCompartida.alDia(Estado(), listOf(Local("a.png", T, 10, "image/png")), r0, 7, T, "pc")
+        assertTrue(antes.entradas[0].texto.isEmpty())
+        val despues = GaleriaCompartida.alDia(antes, listOf(Local("a.png", T, 10, "image/png", texto = "dentro")), r0, 7, T + 5, "pc")
+        assertEquals("dentro", despues.entradas[0].texto)
+        assertEquals(antes.entradas[0].cambiado, despues.entradas[0].cambiado)
+        // Y lo que aquí no se lee (el teléfono no tiene OCR) no borra el texto llegado de otro.
+        val otraVez = GaleriaCompartida.alDia(despues, listOf(Local("a.png", T, 10, "image/png")), r0, 7, T + 9, "tel")
+        assertEquals("dentro", otraVez.entradas[0].texto)
+    }
+
+    @Test fun `una nueva entra con el texto que ya se leyo aqui`() {
+        val e = GaleriaCompartida.alDia(Estado(), listOf(Local("a.png", T, 10, "image/png", texto = "ya leída")), r0, 7, T, "pc")
+        assertEquals("ya leída", e.entradas[0].texto)
+    }
 }

@@ -23,6 +23,12 @@ interface CapturasDelAparato {
     fun tirar(nombres: Collection<String>)
     /** «Días hasta borrar» de aquí (0 = nunca). */
     fun dias(): Int
+    /**
+     * El texto de una captura que ya está aquí, llegado de otro aparato: a donde lo busque la
+     * galería. En el teléfono no hace falta (la galería lo lee del estado compartido, que ya lo
+     * guarda); las que llegan enteras traen el suyo en la entrada de [guardar].
+     */
+    fun apuntarTexto(nombre: String, texto: String) {}
 }
 
 /**
@@ -57,11 +63,26 @@ object GaleriaQueViaja {
      * quitado en otro aparato va a la papelera. Devuelve cuántas se tiraron.
      */
     fun aplicarJuntas(c: CapturasDelAparato, juntas: List<GaleriaCompartida.Entrada>, ahora: Long): Int {
-        val aqui = c.listar()?.map { it.nombre }?.toSet() ?: emptySet()
+        val locales = c.listar().orEmpty()
+        val aqui = locales.map { it.nombre }.toSet()
         val tirar = GaleriaCompartida.aTirar(juntas, aqui)
         if (tirar.isNotEmpty()) c.tirar(tirar)
-        GaleriaCompartida.cambiar(c.raiz) { it.copy(entradas = juntas, tenia = it.tenia - tirar.toSet()) }
-        CaducidadDeCapturas.cambiar(c.raiz, ahora) { GaleriaCompartida.aplicar(it, juntas) }
+        // Lo juntado por quien no sabe de textos (un Android o un PC de antes) llega sin ellos: se
+        // completan con lo que ya había aquí, en el estado o leído de la captura, para no olvidarlos.
+        val textoLocal = locales.filter { it.texto.isNotEmpty() }.associate { it.nombre to it.texto }
+        val e = GaleriaCompartida.cambiar(c.raiz) { viejo ->
+            val textoViejo = viejo.entradas.filter { it.texto.isNotEmpty() }.associate { it.nombre to it.texto }
+            val completas = juntas.map { j ->
+                if (j.texto.isNotEmpty()) j
+                else (textoViejo[j.nombre] ?: textoLocal[j.nombre])?.let { j.copy(texto = it) } ?: j
+            }
+            viejo.copy(entradas = completas, tenia = viejo.tenia - tirar.toSet())
+        }
+        // Y al revés: el texto que trae el otro de una captura que ya está aquí pero aún no se leyó.
+        for (j in e.entradas) {
+            if (!j.borrada && j.texto.isNotEmpty() && j.nombre in aqui && j.nombre !in textoLocal) c.apuntarTexto(j.nombre, j.texto)
+        }
+        CaducidadDeCapturas.cambiar(c.raiz, ahora) { GaleriaCompartida.aplicar(it, e.entradas) }
         return tirar.size
     }
 
