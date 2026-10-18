@@ -425,6 +425,8 @@ object DrawSvg {
         private fun forma(e: Element, alpha: Int): String {
             // El arco se dibuja como la línea que recorre, igual que en pantalla.
             if (e.type == ElementType.ARC) {
+                // El arco de lámina (sector, segmento, marca de ángulo), como en pantalla.
+                if (e.esArcoDeLamina) return lamina(e, alpha)
                 val puntos = puntosDelArco(e)
                 if (puntos.size < 2) return ""
                 val comoLinea =
@@ -437,6 +439,7 @@ object DrawSvg {
                 val anillos = anillosDeRegion(e)
                 if (anillos.isEmpty() || anillos.first().size < 3) return ""
                 val silueta = Svg.caminoDeAnillos(anillos)
+                e.degradadoDe?.let { return conDegradado(e, it, silueta, alpha, evenOdd = true) }
                 // Sin trazo: el borde ya lo dibujan las figuras que encierran el
                 // hueco, y repasarlo dejaría doble contorno.
                 return if (needsRoughFill(e)) {
@@ -571,11 +574,68 @@ object DrawSvg {
         // -- relleno y trazo ------------------------------------------------
 
         private fun relleno(e: Element, g: ShapeGeometry, alpha: Int): String {
+            val degradado = if (e.degradado != null && e.admiteDegradado) e.degradadoDe else null
+            if (degradado != null) {
+                val silueta = Svg.caminoCerrado(g.outline)
+                return if (silueta.isEmpty()) "" else conDegradado(e, degradado, silueta, alpha, evenOdd = false)
+            }
             if (!e.hasBackground || isTransparent(e.backgroundColor)) return ""
             val silueta = Svg.caminoCerrado(g.outline)
             if (silueta.isEmpty()) return ""
             val rayas = g.fill ?: return solido(e, silueta, alpha, evenOdd = false)
             return rayado(e, silueta, Svg.camino(rayas), alpha, evenOdd = false)
+        }
+
+        /**
+         * **El relleno degradado**, con un `<linearGradient>`/`<radialGradient>` en coordenadas de la
+         * escena (`userSpaceOnUse`): el `rotate` del grupo lo gira con la figura, como en pantalla.
+         */
+        private fun conDegradado(e: Element, d: Degradado, silueta: String, alpha: Int, evenOdd: Boolean): String {
+            val (o, q) = puntosDelDegradado(e, d)
+            val id = "g${recorte++}"
+            val desde = parseColor(d.desde, alpha)
+            val hasta = parseColor(d.hasta, alpha)
+            fun parada(offset: Int, c: Int) =
+                "<stop offset=\"$offset\" stop-color=\"${Svg.hex(c)}\"" +
+                    (if (Svg.alfa(c) < 1.0) " stop-opacity=\"${Svg.num(Svg.alfa(c))}\"" else "") + "/>"
+            val definicion = when (d.tipo) {
+                TipoDegradado.LINEAL ->
+                    "<linearGradient id=\"$id\" gradientUnits=\"userSpaceOnUse\" x1=\"${Svg.num(o.x)}\" " +
+                        "y1=\"${Svg.num(o.y)}\" x2=\"${Svg.num(q.x)}\" y2=\"${Svg.num(q.y)}\">" +
+                        parada(0, desde) + parada(1, hasta) + "</linearGradient>"
+                TipoDegradado.RADIAL ->
+                    "<radialGradient id=\"$id\" gradientUnits=\"userSpaceOnUse\" cx=\"${Svg.num(o.x)}\" " +
+                        "cy=\"${Svg.num(o.y)}\" r=\"${Svg.num(kotlin.math.hypot(q.x - o.x, q.y - o.y).coerceAtLeast(1.0))}\">" +
+                        parada(0, desde) + parada(1, hasta) + "</radialGradient>"
+            }
+            return "<defs>$definicion</defs>\n<path d=\"$silueta\" fill=\"url(#$id)\"" +
+                (if (evenOdd) " fill-rule=\"evenodd\"" else "") + "/>\n"
+        }
+
+        /** El arco de lámina: relleno (liso o degradado), trazos y el valor de la marca, en curvas. */
+        private fun lamina(e: Element, alpha: Int): String {
+            val d = e.degradadoDe
+            val f = figuraDeLamina(e, d != null || !isTransparent(e.backgroundColor)) ?: return ""
+            val s = StringBuilder()
+            f.relleno?.takeIf { it.size >= 3 }?.let { pts ->
+                val silueta = Svg.caminoCerrado(pts)
+                s.append(if (d != null) conDegradado(e, d, silueta, alpha, false) else solido(e, silueta, alpha, false))
+            }
+            f.trazos.forEachIndexed { i, pts ->
+                if (pts.size >= 2) s.append(trazoDe(e, Svg.camino(opsDePuntos(pts, cerrado = i == 0 && f.primeroCerrado)), alpha))
+            }
+            val texto = f.valor
+            if (!texto.isNullOrEmpty()) {
+                val familia = e.fontFamily ?: ItemStyle.FONT_NUNITO
+                medidor.reset()
+                medidor.textSize = f.tamLetra.toFloat()
+                medidor.typeface = typefaces(familia)
+                val fm = medidor.fontMetrics
+                val sitio = f.sitioDelValor(medidor.measureText(texto).toDouble(), (fm.descent - fm.ascent).toDouble())
+                val base = sitio.y - (fm.ascent + fm.descent) / 2.0
+                s.append(enCurvas(texto, sitio.x, base, f.tamLetra, familia, Paint.Align.CENTER, parseColor(e.strokeColor, alpha), false))
+            }
+            return s.toString()
         }
 
         private fun solido(e: Element, silueta: String, alpha: Int, evenOdd: Boolean): String {
@@ -616,7 +676,7 @@ object DrawSvg {
             // sin la doble pasada la línea se ve más fina que una sólida.
             val grosor =
                 if (e.strokeStyle == StrokeStyle.SOLID) e.strokeWidth else e.strokeWidth + 0.5
-            val guiones = Svg.guionesDe(e.strokeStyle, e.strokeWidth)
+            val guiones = Svg.guionesDe(e)
                 ?.let { " stroke-dasharray=\"$it\"" } ?: ""
             return "<path d=\"$camino\" fill=\"none\" stroke=\"${Svg.hex(color)}\"" +
                 opacidad(color, "stroke-opacity") +

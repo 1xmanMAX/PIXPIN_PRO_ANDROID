@@ -90,6 +90,8 @@ class DrawController(initial: Scene = Scene()) {
         // Un gesto de dos tiempos no sobrevive a cambiar de herramienta: dejarlo a medias
         // haría que el siguiente toque, tres minutos después, torneara algo por sorpresa.
         if (next != Tool.REVOLUCION) figuraATornear = null
+        // Los toques del arco a medias tampoco: se empieza de cero al volver a él.
+        if (next != Tool.ARCO) clicsDeArco = emptyList()
         // Con qué se estaba pintando, para el bote: tras el grafito, rellena de grafito. Ver [rellenar].
         when (next) {
             Tool.GRAFITO -> conElGrafitoEnLaMano = true
@@ -451,8 +453,11 @@ class DrawController(initial: Scene = Scene()) {
             // había anotado en el historial no se deshace solo.
             //
             // Esperando al final, mover el dedo o apoyar el segundo lo anula.
-            Tool.RELLENO, Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO, Tool.PUNTO ->
+            Tool.RELLENO, Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO, Tool.PUNTO, Tool.ANGULO ->
                 gesture = Gesture.Tocando(p)
+
+            // **El arco de las láminas.** Ver [Tool.ARCO] y [empezarElArco].
+            Tool.ARCO -> empezarElArco(p, zoom)
 
             // La imagen la coloca la interfaz, que es quien abre el selector.
             Tool.IMAGE -> gesture = Gesture.None
@@ -475,8 +480,152 @@ class DrawController(initial: Scene = Scene()) {
             Tool.RECORTAR -> recortar(inicio, z)
             Tool.EXTENDER -> extender(inicio, z)
             Tool.NUDO -> soldar(inicio, z)
+            Tool.ANGULO -> plantarMarca(inicio, z)
+            // Los clics del arco (el centro; el inicio y el de en medio de los tres puntos).
+            Tool.ARCO -> if (clicsDeArco.size < 2) clicsDeArco = clicsDeArco + inicio
             else -> Unit
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Láminas de geometría: el arco y la marca de ángulo (PC, 15/17-oct-2026)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Los toques ya puestos de la herramienta Arco: el centro (modo centro) o el inicio y el
+     * punto de paso (tres puntos). La vista los marca mientras se espera el siguiente.
+     */
+    var clicsDeArco: List<Pt> = emptyList()
+        private set
+
+    /** La última marca de ángulo puesta: a la que le cambia la letra [cambiarLetraDeAngulo]. */
+    private var ultimaMarca: String? = null
+
+    /** Se tocó con la herramienta Ángulo donde no se juntan dos rayas. */
+    var anguloSinSitio: Boolean = false
+        private set
+
+    /**
+     * **El pulsar del arco**, según el modo del panel:
+     *
+     * - *Guía* (de fábrica, como el óvalo): sobre el borde de un óvalo de referencia se repasa;
+     *   en otro sitio se traza **la guía** (un óvalo de referencia) para repasarla después.
+     * - *Centro*: el primer toque es el centro; después se arrastra **de donde empieza a donde
+     *   acaba**, y el arco sigue al dedo en el sentido en que va (el barrido acumulado).
+     * - *Tres puntos*: dos toques (inicio y uno por donde pasa) y se arrastra el final.
+     */
+    private fun empezarElArco(p: Pt, zoom: Double) {
+        when (scene.style.modoArco) {
+            ModoArco.GUIA -> {
+                clicsDeArco = emptyList()
+                val guia = ovaloDeReferenciaEn(p, UMBRAL_GUIA / zoom.coerceAtLeast(0.0001))
+                if (guia != null && !modoReferencia) empezarArcoSobre(guia, p)
+                else {
+                    beginCreate(ElementType.ELLIPSE, p)
+                    // Lo que se traza aquí es la guía: de referencia, para repasarla.
+                    (gesture as? Gesture.Creating)?.let { g ->
+                        scene.byId(g.elementId)?.let { replace(it.copy(reference = true)) }
+                    }
+                }
+            }
+            ModoArco.CENTRO -> {
+                val c = clicsDeArco.firstOrNull()
+                val r = c?.let { kotlin.math.hypot(p.x - it.x, p.y - it.y) } ?: 0.0
+                if (c == null || r < 0.5) {
+                    gesture = Gesture.Tocando(p)
+                    return
+                }
+                val angulo = anguloDe(c, p)
+                val arco = arcoExacto(c, r, angulo, 0.0, estiloParaLoNuevo).copy(reference = modoReferencia)
+                scene = scene.copy(elements = scene.elements + arco)
+                gesture = Gesture.Arcoing(arco.id, angulo)
+                clicsDeArco = emptyList()
+            }
+            ModoArco.TRES_PUNTOS -> {
+                if (clicsDeArco.size < 2) {
+                    gesture = Gesture.Tocando(p)
+                    return
+                }
+                gesture = Gesture.ArcoPorTres(null)
+                seguirArcoPorTres(p)
+            }
+        }
+    }
+
+    /** El arco de los tres puntos con el final en [p]: lo crea o lo rehace (sin anotar aún). */
+    private fun seguirArcoPorTres(p: Pt) {
+        val g = gesture as? Gesture.ArcoPorTres ?: return
+        if (clicsDeArco.size < 2) return
+        val datos = arcoPorTresPuntos(clicsDeArco[0], clicsDeArco[1], p) ?: return
+        val nuevo = arcoExacto(Pt(datos[0], datos[1]), datos[2], datos[3], datos[4], estiloParaLoNuevo)
+            .copy(reference = modoReferencia)
+        val viejo = g.elementId?.let { scene.byId(it) }
+        if (viejo == null) {
+            scene = scene.copy(elements = scene.elements + nuevo)
+            g.elementId = nuevo.id
+        } else {
+            replace(
+                viejo.copy(
+                    x = nuevo.x, y = nuevo.y, width = nuevo.width, height = nuevo.height,
+                    arcStart = nuevo.arcStart, arcSweep = nuevo.arcSweep
+                )
+            )
+        }
+    }
+
+    /**
+     * **La marca de ángulo de un toque.** Tocar dentro de una marca ya puesta le cambia la letra
+     * (la siguiente griega libre); si no, se busca el vértice más cercano donde se juntan dos
+     * rayas (a 60 px de pantalla) y la marca va entre las dos que encierran el toque, con el
+     * radio de la distancia al vértice (8–120). A 90° ± 0,5°, el cuadradito.
+     */
+    private fun plantarMarca(p: Pt, zoom: Double) {
+        anguloSinSitio = false
+        marcaBajo(editables, p, margenDelDedo(zoom))?.let { tocada ->
+            cambiarLetraDe(tocada.id, 1)
+            ultimaMarca = tocada.id
+            return
+        }
+        val rayas = editables.filter { it.marcaAngulo == null }
+        val (v, a, b) = anguloEn(rayas, p, ALCANCE_ANGULO_PX / zoom) ?: run {
+            anguloSinSitio = true
+            return
+        }
+        val r = kotlin.math.hypot(p.x - v.x, p.y - v.y).coerceIn(8.0, 120.0)
+        val s = estiloParaLoNuevo
+        val marca = marcaConModo(
+            s.modoAngulo, v, a, b, r, s.arcosAngulo, letrasDeAnguloUsadas(scene.elements), s
+        ).let {
+            // El relleno: el del panel, o el color del trazo al 30 % (como en el PC).
+            val fondo = if (!isTransparent(s.backgroundColor)) s.backgroundColor
+            else rgbaDeHex(s.strokeColor)?.let { c -> hexDeRgba(intArrayOf(c[0], c[1], c[2], 77)) } ?: s.strokeColor
+            it.copy(backgroundColor = fondo, fillStyle = FillStyle.SOLID, degradado = null, reference = modoReferencia)
+        }
+        mutate { it + marca }
+        selectedIds = emptySet()
+        ultimaMarca = marca.id
+    }
+
+    /** Cambia la letra griega de la marca [id] a la de al lado, saltando las que ya se usan. */
+    private fun cambiarLetraDe(id: String, paso: Int): Boolean {
+        val e = scene.byId(id) ?: return false
+        val m = e.marca ?: return false
+        if (m.recto) return false
+        val nueva = letraVecina(m.valor, paso, letrasDeAnguloUsadas(scene.elements, id))
+        if (nueva == m.valor) return false
+        mutate { lista -> lista.map { if (it.id == id) conMarca(it, m.copy(valor = nueva)).touched() else it } }
+        return true
+    }
+
+    /**
+     * **La letra de la marca de al lado** (la rueda y las flechas del PC): la de la marca elegida si es
+     * una sola, o la última que se puso con el Ángulo en la mano. `false` si no hay a quién.
+     */
+    fun cambiarLetraDeAngulo(paso: Int): Boolean {
+        val marcados = selectedIds
+        val id = if (marcados.size == 1) marcados.first()
+        else if (marcados.isEmpty() && tool == Tool.ANGULO) ultimaMarca else null
+        return id != null && cambiarLetraDe(id, paso)
     }
 
     /**
@@ -572,7 +721,14 @@ class DrawController(initial: Scene = Scene()) {
                 elements = scene.elements
                     // Una mancha de rejilla que hubiera ahí de antes se va: no se apilan pinturas.
                     .filterNot { it.isRegion && !it.isDeleted && !it.locked && it.reference == figura.reference && puntoEnRegion(it, p) }
-                    .map { if (it.id == figura.id) it.copy(backgroundColor = color, fillStyle = scene.style.fillStyle) else it }
+                    .map {
+                        if (it.id != figura.id) return@map it
+                        val pintada = it.copy(backgroundColor = color, fillStyle = scene.style.fillStyle)
+                        // Con el degradado del panel, del color del bote a uno más claro; liso, sin él.
+                        val tipo = scene.style.degradado
+                        if (tipo != null && pintada.admiteDegradado) conDegradado(pintada, Degradado.desdeRelleno(tipo, color))
+                        else conDegradado(pintada, null)
+                    }
             )
             return
         }
@@ -752,7 +908,9 @@ class DrawController(initial: Scene = Scene()) {
      */
     private fun extender(p: Pt, zoom: Double) {
         val victima = figuraCerca(p, zoom, soloRayas = true) ?: return
-        val estirada = extenderEn(victima, paredesPara(victima), p) ?: return
+        // Un arco sigue **por su circunferencia** hasta lo primero que toca (PC, 15-oct).
+        val estirada = if (victima.type == ElementType.ARC) extenderArco(victima, paredesPara(victima), p) ?: return
+        else extenderEn(victima, paredesPara(victima), p) ?: return
         mutate { elementos -> elementos.map { if (it.id == victima.id) estirada else it } }
     }
 
@@ -766,7 +924,7 @@ class DrawController(initial: Scene = Scene()) {
      */
     private fun figuraCerca(p: Pt, zoom: Double, soloRayas: Boolean = false): Element? {
         val vale: (Element) -> Boolean = when {
-            soloRayas -> { e -> e.isLinear }
+            soloRayas -> { e -> e.isLinear || e.type == ElementType.ARC }
             else -> { e ->
                 e.isLinear || e.type == ElementType.ELLIPSE || e.type == ElementType.ARC ||
                     e.type == ElementType.RECTANGLE || e.type == ElementType.DIAMOND
@@ -858,6 +1016,8 @@ class DrawController(initial: Scene = Scene()) {
             // Se toca y se arrastra: no era un toque. Se deja constancia para
             // que al levantar no se dispare nada.
             is Gesture.Tocando -> Unit
+
+            is Gesture.ArcoPorTres -> seguirArcoPorTres(imantado(pRaw, Iman.Faena.TRAZANDO, zoom, g.elementId))
 
             // Arrancar el clavo y volver a clavarlo en otro sitio, con todo lo
             // que atraviesa puesto.
@@ -1201,6 +1361,12 @@ class DrawController(initial: Scene = Scene()) {
         yaTocados = emptySet()
         when (val g = gesture) {
             is Gesture.Tocando -> terminarToque(g.punto, p, zoom)
+
+            // El final del arco de tres puntos: donde se levanta el dedo, aunque no se moviera.
+            is Gesture.ArcoPorTres -> {
+                seguirArcoPorTres(imantado(p, Iman.Faena.TRAZANDO, zoom, g.elementId))
+                clicsDeArco = emptyList()
+            }
 
             is Gesture.Lassoing -> {
                 selectedIds = getElementsWithinLasso(
@@ -1740,6 +1906,8 @@ class DrawController(initial: Scene = Scene()) {
 
         moviendoPunto -> Iman.Faena.AFINANDO
         tool == Tool.PUNTO -> Iman.Faena.SITIO_NOTABLE
+        // Los toques del arco van al centro de una circunferencia, a un cruce, a un extremo…
+        tool == Tool.ARCO -> Iman.Faena.TRAZANDO
         tool.isFreehand -> Iman.Faena.A_MANO
         tool.isShape || tool.isLinear -> Iman.Faena.TRAZANDO
         else -> null
@@ -3317,11 +3485,24 @@ class DrawController(initial: Scene = Scene()) {
         val anterior = estiloActivo()
         if (nuevo == anterior) return
         val before = scene.elements
-        val elementos = scene.elements.map {
+        var elementos = scene.elements.map {
             if (it.id in selectedIds && !it.locked) {
                 // A lo marcado, el grosor y la letra a la escala de lo nuevo (el panel habla en pantalla).
                 remedir(estiloAplicado(it, aEscala(anterior, escalaDeLoNuevo), aEscala(nuevo, escalaDeLoNuevo))).touched()
             } else it
+        }
+        // **La marca que pasa a llevar letra coge la siguiente libre**, no la primera de la serie
+        // (que es lo único que sabe poner [conEstilo], sin ver el dibujo).
+        if (nuevo.modoAngulo != anterior.modoAngulo && nuevo.modoAngulo == ModoAngulo.GRIEGA) {
+            val antes = scene.elements.associateBy { it.id }
+            for (i in elementos.indices) {
+                val e = elementos[i]
+                if (e.id !in selectedIds || e.marcaAngulo == null) continue
+                val m = e.marca ?: continue
+                if (m.valor == null || antes[e.id]?.marca?.valor != null) continue
+                val libre = siguienteLetraDeAngulo(letrasDeAnguloUsadas(elementos, e.id))
+                elementos = elementos.toMutableList().also { l -> l[i] = conMarca(e, m.copy(valor = libre)) }
+            }
         }
         scene = scene.copy(
             elements = elementos,
@@ -3623,6 +3804,9 @@ private sealed interface Gesture {
      * por el punto donde el ángulo cambia de signo. Ver [barridoAcumulado].
      */
     data class Arcoing(val elementId: String, var anguloPrevio: Double) : Gesture
+
+    /** El último tramo del arco por tres puntos: el final sigue al dedo. Ver [Tool.ARCO]. */
+    data class ArcoPorTres(var elementId: String?) : Gesture
     data class Rotating(val originals: List<Element>) : Gesture
     data class BoxSelecting(val origin: Pt, val mode: BoxSelectionMode) : Gesture
     data class Lassoing(val points: MutableList<Pt>) : Gesture

@@ -737,6 +737,22 @@ data class Element(
     val arcStart: Double? = null,
     val arcSweep: Double? = null,
 
+    // --- Láminas de geometría (PC, 15-oct-2026). Ver [Lamina] ---
+    /**
+     * `"sector"` / `"segmento"`: el arco se cierra por los radios o por la cuerda y se rellena.
+     *
+     * Estas cuatro claves se guardan **tal cual llegaron** (`JsonElement`) y se leen con las
+     * extensiones de `Lamina.kt` ([cierre], [marca], [degradadoDe], [esRayaPunto]): un valor
+     * que esta versión no entiende vuelve intacto al guardar, como pide el PC.
+     */
+    val cierreArco: kotlinx.serialization.json.JsonElement? = null,
+    /** `{"arcos", "recto", "valor"}`: el arco es la marca de un ángulo. Solo ARC. */
+    val marcaAngulo: kotlinx.serialization.json.JsonElement? = null,
+    /** El relleno que va de un color a otro. Rectángulo, rombo, óvalo, arco cerrado y región. */
+    val degradado: kotlinx.serialization.json.JsonElement? = null,
+    /** `true` con `strokeStyle: "dashed"`: el trazo raya-punto. */
+    val trazoRayaPunto: kotlinx.serialization.json.JsonElement? = null,
+
     /**
      * Hacia dónde queda la letra de un punto, en radianes, y a qué distancia.
      *

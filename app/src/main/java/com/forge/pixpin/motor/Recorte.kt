@@ -225,11 +225,14 @@ private fun recortarArco(e: Element, otros: List<Element>, p: Pt): List<Element>
     fun arco(desdeT: Double, hastaT: Double): Element? {
         val barre = hastaT - desdeT
         if (barre < MINIMO_BARRIDO) return null
-        return e.copy(
-            type = ElementType.ARC,
-            arcStart = inicio + signo * desdeT,
-            arcSweep = signo * barre,
-            backgroundColor = Element.TRANSPARENT
+        // Un arco recortado pierde su cierre, su marca y su degradado (como en el PC).
+        return sinLamina(
+            e.copy(
+                type = ElementType.ARC,
+                arcStart = inicio + signo * desdeT,
+                arcSweep = signo * barre,
+                backgroundColor = Element.TRANSPARENT
+            )
         ).touched()
     }
 

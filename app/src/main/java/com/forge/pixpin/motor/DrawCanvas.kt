@@ -1237,6 +1237,21 @@ fun DrawCanvas(
             }
         }
 
+        // **Los toques ya puestos del arco** (el centro, o el inicio y el de paso): sin marca, un
+        // gesto de varios toques es una aplicación que no responde. Ver [Tool.ARCO].
+        if (controller.tool == Tool.ARCO) {
+            val clics = controller.clicsDeArco
+            for (i in clics.indices) {
+                val v = vp.toScreen(clics[i])
+                val c = Offset(v.x.toFloat(), v.y.toFloat())
+                val r = APOYO_RADIO.dp.toPx()
+                drawCircle(Color.White, r, c)
+                drawCircle(SELECTION_COLOR, r, c, style = Stroke(width = 2.dp.toPx()))
+                drawLine(SELECTION_COLOR, Offset(c.x - r * 1.6f, c.y), Offset(c.x + r * 1.6f, c.y), strokeWidth = 1.5.dp.toPx())
+                drawLine(SELECTION_COLOR, Offset(c.x, c.y - r * 1.6f), Offset(c.x, c.y + r * 1.6f), strokeWidth = 1.5.dp.toPx())
+            }
+        }
+
         // **El vértice al que se está apoyando la caja que se mueve.**
         //
         // Sin señal, el imán de los volúmenes es magia: la caja salta y no se sabe a qué.

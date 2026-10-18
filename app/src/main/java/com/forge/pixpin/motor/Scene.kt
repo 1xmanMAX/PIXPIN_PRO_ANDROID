@@ -138,6 +138,21 @@ enum class Tool {
     PUNTO,
 
     /**
+     * **El arco** (PC, 15-oct-2026): sobre una guía (como el óvalo sobre su referencia), por el
+     * centro (un toque en el centro y se arrastra de donde empieza a donde acaba) o por tres
+     * puntos (inicio, uno por donde pasa, y se arrastra el final). Se cierra como sector o
+     * segmento con el mando del panel. Ver [ModoArco] y [Lamina].
+     */
+    ARCO,
+
+    /**
+     * **La marca de ángulo** (PC, 15/17-oct-2026): un toque dentro del ángulo, cerca de donde se
+     * juntan dos rayas, y sale la marca con la siguiente letra griega libre (α, β, θ…); a 90° el
+     * cuadradito. Tocar otra vez una marca le cambia la letra. Ver [ModoAngulo] y [Lamina].
+     */
+    ANGULO,
+
+    /**
      * La caja en volumen: **el boceto 3D del motor**.
      *
      * Se arrastra la huella por el suelo isométrico y luego se levanta. Son dos
@@ -247,7 +262,20 @@ data class ItemStyle(
      * estaban donde se guarda lo que se toca una vez. En el estilo van al lateral, que es
      * donde uno mira, y además se quedan cargadas para la siguiente pieza.
      */
-    val esqueleto: Boolean = false
+    val esqueleto: Boolean = false,
+    // --- Láminas de geometría (PC, 15/17-oct-2026). Ver [Lamina] ---
+    /** El trazo es raya-punto (con [strokeStyle] discontinuo, que es su reserva). */
+    val rayaPunto: Boolean = false,
+    /** Cómo se cierra el arco: null abierto, sector o segmento. */
+    val cierreArco: CierreArco? = null,
+    /** El relleno degradado: null liso, lineal o radial (del fondo a uno 80 % más claro). */
+    val degradado: TipoDegradado? = null,
+    /** Cómo traza la herramienta Arco. */
+    val modoArco: ModoArco = ModoArco.GUIA,
+    /** Qué pone la herramienta Ángulo: letra griega, la marca sola o el cuadradito. */
+    val modoAngulo: ModoAngulo = ModoAngulo.GRIEGA,
+    /** Cuántos arquitos lleva la marca de ángulo (1 a 3). */
+    val arcosAngulo: Int = 1
 ) {
     companion object {
         /** Los cuatro grosores del original (`STROKE_WIDTH`). */
@@ -688,8 +716,26 @@ fun newElement(
     verticalAlign = if (type == ElementType.TEXT) style.verticalAlign else null,
     // La pieza que se dibuja con la herramienta es siempre una caja: la forma de un
     // volumen sale de levantar una figura, no de una lista. Ver [extruido].
-    esqueleto = type == ElementType.SOLIDO && style.esqueleto
+    esqueleto = type == ElementType.SOLIDO && style.esqueleto,
+    // Lo de las láminas: el raya-punto, el cierre del arco y el degradado de lo que se rellena.
+    trazoRayaPunto = if (style.rayaPunto && style.strokeStyle == StrokeStyle.DASHED) {
+        kotlinx.serialization.json.JsonPrimitive(true)
+    } else null,
+    cierreArco = if (type == ElementType.ARC) cierreHacia(style.cierreArco) else null,
+    degradado = degradadoNuevo(type, style)
 )
+
+/** El degradado con que nace una figura: el del pincel, si lo admite y hay fondo del que partir. */
+private fun degradadoNuevo(type: ElementType, style: ItemStyle): kotlinx.serialization.json.JsonElement? {
+    val tipo = style.degradado ?: return null
+    if (isTransparent(style.backgroundColor)) return null
+    val admite = when (type) {
+        ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE, ElementType.REGION -> true
+        ElementType.ARC -> style.cierreArco != null
+        else -> false
+    }
+    return if (admite) degradadoHacia(Degradado.desdeRelleno(tipo, style.backgroundColor)) else null
+}
 
 private val ElementType.acceptsRoundness: Boolean
     get() = this == ElementType.RECTANGLE || this == ElementType.DIAMOND ||
@@ -917,8 +963,31 @@ fun estiloDe(e: Element): ItemStyle {
         // caja no cambiaba nada porque creía que ya lo era, y pedir cualquier otra cosa se
         // aplicaba pero el mando volvía a saltar a caja al recomponerse. Desde fuera se
         // veía exactamente como lo que se veía: que solo se podía poner la cúbica.
-        esqueleto = e.esqueleto
+        esqueleto = e.esqueleto,
+        rayaPunto = e.trazoRayaPunto != null && e.esRayaPunto,
+        cierreArco = if (e.cierreArco != null) e.cierre else null,
+        degradado = if (e.degradado != null) e.degradadoDe?.tipo else null,
+        modoAngulo = e.marca?.let { m ->
+            when {
+                m.recto -> ModoAngulo.RECTO
+                m.valor != null -> ModoAngulo.GRIEGA
+                else -> ModoAngulo.SIMPLE
+            }
+        } ?: base.modoAngulo,
+        arcosAngulo = e.marca?.arcos ?: base.arcosAngulo
     )
+}
+
+/**
+ * Lo que un arco de lámina admite **además** de lo de su tipo: el cierre (si no es una marca),
+ * el fondo y el degradado (si está cerrado) y los mandos del ángulo (si es una marca).
+ */
+fun propiedadesDeLamina(e: Element): Set<Propiedad> {
+    if (e.type != ElementType.ARC) return emptySet()
+    val esMarca = e.marcaAngulo is kotlinx.serialization.json.JsonObject
+    if (esMarca) return setOf(Propiedad.FONDO, Propiedad.ANGULO)
+    return if (e.cierre != null) setOf(Propiedad.CIERRE, Propiedad.FONDO, Propiedad.DEGRADADO)
+    else setOf(Propiedad.CIERRE)
 }
 
 /**
@@ -930,12 +999,30 @@ fun estiloDe(e: Element): ItemStyle {
  * que no tiene.
  */
 fun conEstilo(e: Element, s: ItemStyle): Element {
-    val aplican = propiedadesDeTipo(e.type)
+    val aplican = if (e.type == ElementType.ARC) {
+        val extra = propiedadesDeLamina(e)
+        // La marca de ángulo no tiene cierre que cambiar ni letra «de texto»: su valor va con lo suyo.
+        if (Propiedad.ANGULO in extra) propiedadesDeTipo(e.type) - Propiedad.CIERRE + extra
+        else propiedadesDeTipo(e.type) + extra
+    } else propiedadesDeTipo(e.type)
     var out = e
     if (Propiedad.TRAZO in aplican) out = out.copy(strokeColor = s.strokeColor)
     if (Propiedad.FONDO in aplican) out = out.copy(backgroundColor = s.backgroundColor)
     if (Propiedad.RELLENO in aplican) out = out.copy(fillStyle = s.fillStyle)
-    if (Propiedad.LINEA in aplican) out = out.copy(strokeStyle = s.strokeStyle)
+    if (Propiedad.LINEA in aplican) {
+        out = out.copy(strokeStyle = s.strokeStyle)
+        out = conRayaPunto(out, s.rayaPunto && s.strokeStyle == StrokeStyle.DASHED)
+    }
+    if (Propiedad.CIERRE in aplican) {
+        val nuevo = s.cierreArco
+        if (nuevo != (if (out.cierreArco != null) out.cierre else null)) {
+            out = conCierre(out, nuevo)
+            // Abierto ya no rellena: se va el degradado (si se entendía).
+            if (nuevo == null) out = conDegradado(out, null)
+        }
+    }
+    if (Propiedad.DEGRADADO in aplican) out = conDegradadoDelPanel(e, out, s)
+    if (Propiedad.ANGULO in aplican) out = conMarcaDelPanel(out, s)
     if (Propiedad.GROSOR in aplican) {
         out = out.copy(
             strokeWidth =
@@ -1032,7 +1119,46 @@ fun conCambios(destino: ItemStyle, anterior: ItemStyle, nuevo: ItemStyle): ItemS
     // —lo siguiente que se dibujara sí salía en alambre— pero la pieza ya marcada se
     // quedaba exactamente igual, que es lo que se veía: «el esqueleto no funciona».
     if (nuevo.esqueleto != anterior.esqueleto) out = out.copy(esqueleto = nuevo.esqueleto)
+    if (nuevo.rayaPunto != anterior.rayaPunto) out = out.copy(rayaPunto = nuevo.rayaPunto)
+    if (nuevo.cierreArco != anterior.cierreArco) out = out.copy(cierreArco = nuevo.cierreArco)
+    if (nuevo.degradado != anterior.degradado) out = out.copy(degradado = nuevo.degradado)
+    if (nuevo.modoArco != anterior.modoArco) out = out.copy(modoArco = nuevo.modoArco)
+    if (nuevo.modoAngulo != anterior.modoAngulo) out = out.copy(modoAngulo = nuevo.modoAngulo)
+    if (nuevo.arcosAngulo != anterior.arcosAngulo) out = out.copy(arcosAngulo = nuevo.arcosAngulo)
     return out
+}
+
+/**
+ * El degradado del panel llevado a [out] (que es [antes] con lo demás ya puesto). Solo se toca si
+ * cambió el tipo o el fondo: así cambiar el color del trazo no le pisa a un degradado del PC su
+ * `hasta` ni su origen. Sin fondo no hay degradado (apagar el fondo apaga el relleno entero).
+ */
+private fun conDegradadoDelPanel(antes: Element, out: Element, s: ItemStyle): Element {
+    val actual = if (antes.degradado != null) antes.degradadoDe else null
+    val cambiaTipo = s.degradado != actual?.tipo
+    val cambiaFondo = s.backgroundColor != antes.backgroundColor
+    if (!cambiaTipo && !cambiaFondo) return out
+    val tipo = s.degradado
+    if (tipo == null || isTransparent(out.backgroundColor)) return conDegradado(out, null)
+    val nuevo = Degradado.desdeRelleno(tipo, out.backgroundColor)
+    // El mismo tipo con otro fondo: se queda dónde empieza y dónde acaba.
+    val conSitio = if (actual != null && actual.tipo == tipo) nuevo.copy(origen = actual.origen, destino = actual.destino) else nuevo
+    return conDegradado(out, conSitio)
+}
+
+/**
+ * Los mandos del ángulo llevados a una marca: los arquitos, y el modo (cuadradito, sin letra o con
+ * letra griega). La letra que se pone aquí es la primera de la serie; quien tenga el dibujo entero
+ * la cambia por la siguiente libre (ver `DrawController.cambiarEstilo`).
+ */
+private fun conMarcaDelPanel(out: Element, s: ItemStyle): Element {
+    val m = out.marca ?: return out
+    val nueva = when (s.modoAngulo) {
+        ModoAngulo.RECTO -> m.copy(recto = true, valor = null)
+        ModoAngulo.SIMPLE -> m.copy(recto = false, valor = null)
+        ModoAngulo.GRIEGA -> m.copy(recto = false, valor = m.valor ?: LETRAS_DE_ANGULO[0])
+    }.copy(arcos = s.arcosAngulo.coerceIn(1, 3))
+    return if (nueva == m) out else conMarca(out, nueva)
 }
 
 /**

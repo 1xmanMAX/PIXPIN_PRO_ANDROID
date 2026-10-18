@@ -301,6 +301,76 @@ fun PanelLateralDeEstilo(
             LaLineaQueHay(estilo, onEstilo, neutro, haciaLaIzquierda, bola)
         }
 
+        // **Las láminas de geometría** (PC, 15/17-oct-2026): cómo se traza y se cierra el arco,
+        // el relleno degradado y los mandos de la marca de ángulo. Ver [Lamina].
+        if (Propiedad.MODO_ARCO in aplican) {
+            val modos = ModoArco.entries
+            SelectorArrastrable(
+                opciones = modos,
+                actual = modos.indexOf(estilo.modoArco),
+                haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
+                descripcion = "Trazar el arco",
+                tinta = neutro,
+                onElegir = { onEstilo(estilo.copy(modoArco = modos[it])) }
+            ) { m, tinta -> Canvas(Modifier.size(20.dp)) { dibujarModoArco(m, tinta) } }
+        }
+        if (Propiedad.CIERRE in aplican) {
+            val cierres = listOf(null, CierreArco.SECTOR, CierreArco.SEGMENTO)
+            SelectorArrastrable(
+                opciones = cierres,
+                actual = cierres.indexOf(estilo.cierreArco).coerceAtLeast(0),
+                haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
+                descripcion = "Cierre del arco",
+                tinta = neutro,
+                onElegir = { onEstilo(estilo.copy(cierreArco = cierres[it])) }
+            ) { c, tinta -> Canvas(Modifier.size(20.dp)) { dibujarCierre(c, tinta) } }
+        }
+        if (Propiedad.DEGRADADO in aplican && (rellenoObligatorio || !isTransparent(estilo.backgroundColor))) {
+            val tipos = listOf(null, TipoDegradado.LINEAL, TipoDegradado.RADIAL)
+            SelectorArrastrable(
+                opciones = tipos,
+                actual = tipos.indexOf(estilo.degradado).coerceAtLeast(0),
+                haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
+                descripcion = "Relleno degradado",
+                tinta = tintaDelFondo,
+                onElegir = { onEstilo(estilo.copy(degradado = tipos[it])) }
+            ) { t, tinta -> Canvas(Modifier.size(20.dp)) { dibujarDegradado(t, tinta) } }
+        }
+        if (Propiedad.ANGULO in aplican) {
+            val modos = ModoAngulo.entries
+            SelectorArrastrable(
+                opciones = modos,
+                actual = modos.indexOf(estilo.modoAngulo),
+                haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
+                descripcion = "Marca del ángulo",
+                tinta = neutro,
+                onElegir = { onEstilo(estilo.copy(modoAngulo = modos[it])) }
+            ) { m, tinta ->
+                Text(
+                    when (m) {
+                        ModoAngulo.GRIEGA -> "α"
+                        ModoAngulo.SIMPLE -> "∠"
+                        ModoAngulo.RECTO -> "∟"
+                    },
+                    fontSize = 15.sp, color = tinta
+                )
+            }
+            val arcos = listOf(1, 2, 3)
+            SelectorArrastrable(
+                opciones = arcos,
+                actual = (estilo.arcosAngulo - 1).coerceIn(0, 2),
+                haciaLaIzquierda = haciaLaIzquierda,
+                bola = bola,
+                descripcion = "Arquitos",
+                tinta = neutro,
+                onElegir = { onEstilo(estilo.copy(arcosAngulo = arcos[it])) }
+            ) { n, tinta -> Canvas(Modifier.size(20.dp)) { dibujarArquitos(n, tinta) } }
+        }
+
         // **De qué está hecha la tinta**: lisa, encendida o con grano. En un plano el color
         // no basta para decir qué es una cosa —una sección se raya, una sombra se cruza, un
         // terreno se puntea, un tubo encendido resplandece— y hoy todo eso se hacía con el
@@ -1136,15 +1206,109 @@ private fun LaLineaQueHay(
     haciaLaIzquierda: Boolean,
     bola: Dp
 ) {
-    val lineas = StrokeStyle.entries
+    // Las tres de siempre y el **raya-punto** de las láminas (ejes, líneas de centro), que viaja
+    // como discontinuo con su marca. Ver [conRayaPunto].
+    val lineas = StrokeStyle.entries.map { it to false } + (StrokeStyle.DASHED to true)
+    val actual = if (estilo.rayaPunto && estilo.strokeStyle == StrokeStyle.DASHED) lineas.lastIndex
+    else lineas.indexOf(estilo.strokeStyle to false).coerceAtLeast(0)
     ElMandoDeOpciones(
         descripcion = "Tipo de línea",
         opciones = lineas,
-        actual = lineas.indexOf(estilo.strokeStyle).coerceAtLeast(0),
-        onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it])) },
+        actual = actual,
+        onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it].first, rayaPunto = lineas[it].second)) },
         haciaLaIzquierda = haciaLaIzquierda,
         bola = bola
-    ) { ss -> Canvas(Modifier.size(width = 22.dp, height = 20.dp)) { dibujarLinea(ss, tinta) } }
+    ) { (ss, rp) ->
+        Canvas(Modifier.size(width = 22.dp, height = 20.dp)) {
+            if (rp) dibujarRayaPunto(tinta) else dibujarLinea(ss, tinta)
+        }
+    }
+}
+
+/** Raya, punto, raya: el trazo de los ejes y las líneas de centro. */
+fun DrawScope.dibujarRayaPunto(tinta: Color) {
+    val y = size.height / 2
+    val grosor = 2.dp.toPx()
+    val w = size.width
+    drawLine(tinta, Offset(0f, y), Offset(w * 0.38f, y), strokeWidth = grosor)
+    drawCircle(tinta, radius = grosor / 2, center = Offset(w * 0.55f, y))
+    drawLine(tinta, Offset(w * 0.72f, y), Offset(w, y), strokeWidth = grosor)
+}
+
+/** Guía (el arco sobre su óvalo de puntos), centro (con el centro marcado) o tres puntos. */
+fun DrawScope.dibujarModoArco(m: ModoArco, tinta: Color) {
+    val g = 1.6.dp.toPx()
+    val r = size.minDimension * 0.42f
+    val c = Offset(size.width / 2, size.height * 0.62f)
+    val caja = androidx.compose.ui.geometry.Rect(c.x - r, c.y - r, c.x + r, c.y + r)
+    if (m == ModoArco.GUIA) {
+        drawArc(
+            tinta.copy(alpha = 0.35f), 0f, 360f, false, caja.topLeft, caja.size,
+            style = Stroke(width = g * 0.7f)
+        )
+    }
+    drawArc(tinta, 200f, 140f, false, caja.topLeft, caja.size, style = Stroke(width = g))
+    when (m) {
+        ModoArco.GUIA -> Unit
+        ModoArco.CENTRO -> drawCircle(tinta, radius = g * 1.2f, center = c)
+        ModoArco.TRES_PUNTOS -> for (a in listOf(200.0, 270.0, 340.0)) {
+            val t = Math.toRadians(a)
+            drawCircle(
+                tinta, radius = g * 1.3f,
+                center = Offset(c.x + r * kotlin.math.cos(t).toFloat(), c.y + r * kotlin.math.sin(t).toFloat())
+            )
+        }
+    }
+}
+
+/** Abierto, sector (los dos radios) o segmento (la cuerda). */
+fun DrawScope.dibujarCierre(c: CierreArco?, tinta: Color) {
+    val g = 1.8.dp.toPx()
+    val r = size.minDimension * 0.46f
+    val centro = Offset(size.width * 0.3f, size.height * 0.8f)
+    val caja = androidx.compose.ui.geometry.Rect(centro.x - r * 1.4f, centro.y - r * 1.4f, centro.x + r * 1.4f, centro.y + r * 1.4f)
+    when (c) {
+        null -> drawArc(tinta, 270f, 90f, false, caja.topLeft, caja.size, style = Stroke(width = g))
+        CierreArco.SECTOR -> {
+            drawArc(tinta.copy(alpha = 0.3f), 270f, 90f, true, caja.topLeft, caja.size)
+            drawArc(tinta, 270f, 90f, true, caja.topLeft, caja.size, style = Stroke(width = g))
+        }
+        CierreArco.SEGMENTO -> {
+            drawArc(tinta.copy(alpha = 0.3f), 270f, 90f, false, caja.topLeft, caja.size)
+            drawArc(tinta, 270f, 90f, false, caja.topLeft, caja.size, style = Stroke(width = g))
+            drawLine(
+                tinta, Offset(centro.x, centro.y - r * 1.4f), Offset(centro.x + r * 1.4f, centro.y), strokeWidth = g
+            )
+        }
+    }
+}
+
+/** Liso, lineal o radial, con el color del fondo. */
+fun DrawScope.dibujarDegradado(t: TipoDegradado?, tinta: Color) {
+    val claro = androidx.compose.ui.graphics.lerp(tinta, Color.White, 0.8f)
+    val pincel = when (t) {
+        null -> androidx.compose.ui.graphics.SolidColor(tinta)
+        TipoDegradado.LINEAL -> androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(tinta, claro))
+        TipoDegradado.RADIAL -> androidx.compose.ui.graphics.Brush.radialGradient(
+            listOf(tinta, claro), center = Offset(size.width / 2, size.height / 2), radius = size.minDimension * 0.7f
+        )
+    }
+    drawRect(pincel, size = size)
+}
+
+/** Uno, dos o tres arquitos concéntricos, como se marcan a mano los ángulos iguales. */
+fun DrawScope.dibujarArquitos(n: Int, tinta: Color) {
+    val g = 1.4.dp.toPx()
+    val v = Offset(size.width * 0.12f, size.height * 0.88f)
+    drawLine(tinta, v, Offset(size.width, v.y), strokeWidth = g)
+    drawLine(tinta, v, Offset(v.x + size.width * 0.6f, 0f), strokeWidth = g)
+    for (k in 0 until n) {
+        val r = size.minDimension * (0.62f - 0.16f * k)
+        drawArc(
+            tinta, 302f, 58f, false, Offset(v.x - r, v.y - r), androidx.compose.ui.geometry.Size(2 * r, 2 * r),
+            style = Stroke(width = g)
+        )
+    }
 }
 
 /**
@@ -1624,7 +1788,8 @@ private val EN_EL_LATERAL = setOf(
     Propiedad.ESQUINAS, Propiedad.FORMA_FLECHA, Propiedad.MOSAICO, Propiedad.LUPA,
     Propiedad.VOLUMEN,
     Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.DUREZA, Propiedad.LUPA, Propiedad.ZONA, Propiedad.OSCURECER,
-    Propiedad.OPACIDAD, Propiedad.FUENTE
+    Propiedad.OPACIDAD, Propiedad.FUENTE,
+    Propiedad.CIERRE, Propiedad.DEGRADADO, Propiedad.ANGULO, Propiedad.MODO_ARCO
 )
 
 /** De cinco en cinco, que es como se dice cuánto se apaga o cuánto tapa algo. */

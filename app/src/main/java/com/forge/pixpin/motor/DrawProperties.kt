@@ -87,7 +87,22 @@ enum class Propiedad {
      * que se cambie figura a figura, así que vive en la configuración. Está aquí
      * para que el motor sepa a qué elementos se le escribe. Ver [conEstilo].
      */
-    PRESION
+    PRESION,
+
+    /** **Cierre del arco**: abierto, sector o segmento. Ver [CierreArco]. */
+    CIERRE,
+
+    /**
+     * **Relleno degradado**: liso, lineal o radial, del color de fondo a uno 80 % más claro. Solo
+     * lo que se rellena (rectángulo, rombo, óvalo, arco cerrado y el bote) y con fondo puesto.
+     */
+    DEGRADADO,
+
+    /** **Los mandos del ángulo**: con letra griega, sin letra o recto, y cuántos arquitos. */
+    ANGULO,
+
+    /** **Cómo traza la herramienta Arco**: sobre una guía, por el centro o por tres puntos. */
+    MODO_ARCO
 }
 
 /**
@@ -108,6 +123,11 @@ fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
     // con el bote en la mano no había manera de elegir de qué color rellenar.
     if (tool == Tool.RELLENO) return propiedadesDeTipo(tipo) - Propiedad.FONDO + Propiedad.TRAZO
     if (tool == Tool.GRAFITO) return propiedadesDeTipo(tipo) + Propiedad.DUREZA
+    // La marca de ángulo: su color, su relleno translúcido y sus mandos (letra y arquitos).
+    if (tool == Tool.ANGULO) return setOf(Propiedad.TRAZO, Propiedad.FONDO, Propiedad.OPACIDAD, Propiedad.ANGULO)
+    // El arco: cómo se traza y cómo se cierra; cerrado, también con qué se rellena.
+    if (tool == Tool.ARCO) return propiedadesDeTipo(tipo) + Propiedad.MODO_ARCO + Propiedad.CIERRE +
+        setOf(Propiedad.FONDO, Propiedad.DEGRADADO)
     return propiedadesDeTipo(tipo)
 }
 
@@ -125,6 +145,12 @@ fun propiedadesDe(e: Element): Set<Propiedad> {
     val abierta = (e.type == ElementType.LINE || e.type == ElementType.FREEDRAW) &&
         !isPathALoop(e.points)
     val conDureza = if (e.material == MaterialDeTinta.CUADRITOS) base + Propiedad.DUREZA else base
+    // El arco de lámina: cierre, fondo, degradado o los mandos de la marca. Ver [propiedadesDeLamina].
+    if (e.type == ElementType.ARC) {
+        val extra = propiedadesDeLamina(e)
+        return if (Propiedad.ANGULO in extra) conDureza - Propiedad.CIERRE - Propiedad.LINEA + extra
+        else conDureza + extra
+    }
     return if (!abierta) conDureza else conDureza - Propiedad.FONDO - Propiedad.RELLENO
 }
 
@@ -140,6 +166,8 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     // La bolita selecciona, no dibuja: como la selección, el lazo y la mano.
     Tool.BOLITA -> null
     Tool.PUNTO -> ElementType.PUNTO
+    // El arco y la marca de ángulo son arcos (`pixpin-arc`). Ver [Lamina].
+    Tool.ARCO, Tool.ANGULO -> ElementType.ARC
     Tool.RECTANGLE -> ElementType.RECTANGLE
     Tool.DIAMOND -> ElementType.DIAMOND
     Tool.ELLIPSE -> ElementType.ELLIPSE
@@ -179,13 +207,13 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     ElementType.PUNTO -> setOf(Propiedad.TRAZO, Propiedad.FUENTE, Propiedad.OPACIDAD)
 
     ElementType.RECTANGLE, ElementType.DIAMOND -> setOf(
-        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
+        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.DEGRADADO, Propiedad.LINEA,
         Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.ESQUINAS, Propiedad.OPACIDAD
     )
 
     // La elipse no tiene esquinas que redondear.
     ElementType.ELLIPSE -> setOf(
-        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.LINEA,
+        Propiedad.TRAZO, Propiedad.FONDO, Propiedad.RELLENO, Propiedad.DEGRADADO, Propiedad.LINEA,
         Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.RUGOSIDAD, Propiedad.OPACIDAD
     )
 
@@ -257,7 +285,7 @@ fun propiedadesDeTipo(tipo: ElementType): Set<Propiedad> = when (tipo) {
     // El relleno de un hueco es **solo mancha**: ni trazo, ni línea, ni esquinas.
     // Su borde lo dibujan las figuras que lo encierran, así que ofrecerle color
     // de trazo sería un botón que no puede cambiar nada de lo que se ve.
-    ElementType.REGION -> setOf(Propiedad.FONDO, Propiedad.RELLENO, Propiedad.OPACIDAD)
+    ElementType.REGION -> setOf(Propiedad.FONDO, Propiedad.RELLENO, Propiedad.DEGRADADO, Propiedad.OPACIDAD)
 
     // La reglita: el color con el que se pinta y de qué tamaño sale la cifra.
     // Ni relleno ni rugosidad — una escala temblorosa no se lee.
