@@ -50,3 +50,13 @@ PowerShell/AutoHotkey, Flow y notificaciones de Windows, Escape por capas, el li
   busca por él, saca «Con texto» si alguna lo tiene y enseña «Lo que pone» (elegible, «Copiar texto»).
   Android no tiene OCR propio. Pruebas: `GaleriaCompartidaTest`, `GaleriaQueViajaTest` (casos de
   `galeria/pruebas.rs` + teléfono sin OCR), `SincronizarDeVerdadTest`.
+- **Paso 5 hecho** (enviar a los aparatos del grupo sin escanear): `sincro/AlGrupo.kt` (sin Android) es el cliente
+  `suelto` del PC (`al_lienzo::Conexion` + `al_movil::mandar_ya`): mismo cable (hola sin ocupar, `suelto` con
+  `destino:"abierto"`, vale antes de los trozos, `listo`/`donde`/`chat`, `adios`), misma tabla de tipos, mismos
+  fallos y avisos (`SinSoporte` dice «que use el código de abajo»). `EnviarActivity`: caja «Tus aparatos · sin
+  código» encima del código (solo con archivos, no proyectos ni lienzos), quién se ve por PING/mDNS
+  (`AlDia.aparatos`, cada 15 s), «Enviar» por fila y «Enviar a todos los que se ven». Al recibir un `suelto`,
+  `Presencia` saca un aviso (Toast) con de quién, qué y dónde quedó (`al-frente-*` del PC). Pruebas:
+  `AlGrupoTest` (Android→Android por el `Respondedor` real; lienzo delante, otro código, PixPin viejo, sin grupo; y
+  Android→PC de verdad con `pc-simulado recibir-suelto`, modo nuevo), `SueltoTest`, `SincronizarDeVerdadTest`,
+  `SincronizarConElPcTest`. Sin probar en teléfono.
