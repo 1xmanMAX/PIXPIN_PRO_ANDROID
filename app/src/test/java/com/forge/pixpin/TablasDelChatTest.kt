@@ -85,6 +85,103 @@ class TablasDelChatTest {
         assertTrue(disco.archivo("libro-xl-9-0").exists())
     }
 
+    /** Como `las_hojas_viejas_del_movil_se_editan_y_al_guardar_pasan_a_mensajes` del PC (punto 4 del manual). */
+    @Test
+    fun `las hojas viejas migradas salen editadas, con el estilo de ahora y sin perder lo desconocido`() {
+        val store = MensajesStore(context)
+        store.anadir(Mensaje(id = "xl-5", cuando = 1_700_000_000_000, clase = Clase.ARCHIVO, nombre = "Cuentas.xlsx", ruta = "/x/Cuentas.xlsx"))
+        val hoja0 = """{"nombre":"Cuentas · Gastos","celdas":{"A1":"Editado en el movil","B1":"5"},"tocado":1700000500000,"protegida":true}"""
+        val hoja1 = """{"nombre":"Cuentas · Resumen","celdas":{"A1":"Total"},"estilos":{"A1":"negrita"},"futuro":{"x":1}}"""
+        disco.archivo("libro-xl-5-0").apply { parentFile!!.mkdirs() }.writeText(hoja0)
+        disco.archivo("libro-xl-5-1").writeText(hoja1)
+        val antes = System.currentTimeMillis()
+        assertEquals(listOf("libro-xl-5-0", "libro-xl-5-1"), LibroDelChat.tablas(context, "xl-5", "/x/Cuentas.xlsx", "Cuentas.xlsx").map { it.first })
+        val hechas = TablasDelChat.hechas(store.leer(), "xl-5")
+        assertEquals(2, hechas.size)
+        for ((_, m) in hechas) {
+            val t = TablaDeCalculo.deJson(m.texto)!!
+            assertTrue("«editada»: el PC no la esconde tras el .xlsx", t.tocado > m.cuando + 2000)
+            assertTrue(t.tocado >= antes)
+        }
+        val t0 = TablaDeCalculo.deJson(hechas[0].second.texto)!!
+        assertEquals("Editado en el movil", t0.celdas["A1"])
+        assertTrue(t0.protegida)
+        val j1 = Json.parseToJsonElement(hechas[1].second.texto).jsonObject
+        assertEquals("""{"n":true}""", j1["estilos"]!!.jsonObject["A1"].toString())
+        assertEquals("""{"x":1}""", j1["futuro"].toString())
+        // Los archivos viejos no se tocan.
+        assertEquals(hoja0, disco.archivo("libro-xl-5-0").readText())
+        assertEquals(hoja1, disco.archivo("libro-xl-5-1").readText())
+    }
+
+    /** Punto 5 del manual: leer un libro no deja nada en `tablas/` (lo que viaja) ni crea mensajes. */
+    @Test
+    fun `leer un Excel deja una copia de trabajo que no viaja y editarlo crea los mensajes`() {
+        val store = MensajesStore(context)
+        val csv = java.io.File(context.cacheDir, "Notas.csv").apply { parentFile!!.mkdirs(); writeText("a;b\n1;2\n") }
+        store.anadir(Mensaje(id = "xl-c", cuando = 1_000, clase = Clase.ARCHIVO, nombre = "Notas.csv", ruta = csv.absolutePath))
+        val ids = LibroDelChat.tablas(context, "xl-c", csv.absolutePath, "Notas.csv").map { it.first }
+        assertEquals(listOf("libro-xl-c-0"), ids)
+        assertTrue(!disco.archivo("libro-xl-c-0").exists())
+        assertTrue(disco.leida("libro-xl-c-0").exists())
+        assertTrue(TablasDelChat.hechas(store.leer(), "xl-c").isEmpty())
+        val leida = disco.cargar("libro-xl-c-0")!!
+        assertEquals("1", leida.celdas["A2"])
+        // Volver a abrirlo no lo migra como si se hubiera editado.
+        LibroDelChat.tablas(context, "xl-c", csv.absolutePath, "Notas.csv")
+        assertTrue(TablasDelChat.hechas(store.leer(), "xl-c").isEmpty())
+        // Editar: nace el mensaje, con la edición, y nada en `tablas/`.
+        assertTrue(disco.guardar("libro-xl-c-0", leida.copy(celdas = leida.celdas + ("C1" to "nuevo"))))
+        val m = TablasDelChat.hechas(store.leer(), "xl-c").single().second
+        assertEquals("nuevo", TablaDeCalculo.deJson(m.texto)!!.celdas["C1"])
+        assertTrue(!disco.archivo("libro-xl-c-0").exists())
+    }
+
+    /** Como `una_hoja_vieja_rota_no_se_pierde_y_se_lee_el_libro` del PC. */
+    @Test
+    fun `una hoja vieja rota no se pierde y se lee el libro`() {
+        val store = MensajesStore(context)
+        val csv = java.io.File(context.cacheDir, "Rota.csv").apply { parentFile!!.mkdirs(); writeText("Original\n") }
+        store.anadir(Mensaje(id = "xl-r", cuando = 1_000, clase = Clase.ARCHIVO, nombre = "Rota.csv", ruta = csv.absolutePath))
+        disco.archivo("libro-xl-r-0").apply { parentFile!!.mkdirs() }.writeText("{ esto no es una tabla")
+        assertEquals(listOf("libro-xl-r-0"), LibroDelChat.tablas(context, "xl-r", csv.absolutePath, "Rota.csv").map { it.first })
+        assertTrue("una hoja que no se entiende no se migra", TablasDelChat.hechas(store.leer(), "xl-r").isEmpty())
+        val t = disco.cargar("libro-xl-r-0")!!
+        assertEquals("se lee el libro, como si no hubiera nada", "Original", t.celdas["A1"])
+        assertTrue(disco.guardar("libro-xl-r-0", t.copy(celdas = t.celdas + ("A2" to "1"))))
+        val m = TablasDelChat.hechas(store.leer(), "xl-r").single().second
+        assertEquals("1", TablaDeCalculo.deJson(m.texto)!!.celdas["A2"])
+        assertEquals("el archivo roto sigue tal cual", "{ esto no es una tabla", disco.archivo("libro-xl-r-0").readText())
+    }
+
+    /** Una hoja de un libro sin nada aquí (llegó un proyecto que la nombra): se lee el libro. */
+    @Test
+    fun `una hoja de un libro sin copia aqui se prepara leyendo el libro`() {
+        val store = MensajesStore(context)
+        val csv = java.io.File(context.cacheDir, "Otro.csv").apply { parentFile!!.mkdirs(); writeText("x;y\n") }
+        store.anadir(Mensaje(id = "xl-p", cuando = 1_000, clase = Clase.ARCHIVO, nombre = "Otro.csv", ruta = csv.absolutePath))
+        assertEquals(TablasEnDisco.Lectura.NoHay, disco.leer("libro-xl-p-0"))
+        assertTrue(LibroDelChat.prepararHoja(context, "libro-xl-p-0"))
+        assertEquals("x", disco.cargar("libro-xl-p-0")!!.celdas["A1"])
+        // Caso negativo: ni una hoja que el libro no tiene ni un id que no es de libro.
+        assertTrue(!LibroDelChat.prepararHoja(context, "libro-xl-p-3"))
+        assertTrue(!LibroDelChat.prepararHoja(context, "t-1"))
+    }
+
+    /** Punto 1 del manual: un mensaje-tabla con algo que no se lee no se abre en blanco ni se pisa. */
+    @Test
+    fun `una tabla del chat que no se lee no se abre ni se guarda encima`() {
+        val store = MensajesStore(context)
+        store.anadir(Mensaje(id = "roto", cuando = 1, clase = Clase.MINIAPP, miniapp = "tabla", texto = "no es json"))
+        assertEquals(TablasEnDisco.Lectura.NoSeLee, disco.leer("mini-roto"))
+        assertTrue(!disco.guardar("mini-roto", TablaDeCalculo(nombre = "encima")))
+        assertEquals("no es json", store.leer().single { it.id == "roto" }.texto)
+        assertTrue(!disco.archivo("mini-roto").exists())
+        // Un estilo-palabra del PC viejo ya no deja la tabla sin abrir.
+        store.anadir(Mensaje(id = "vieja", cuando = 1, clase = Clase.MINIAPP, miniapp = "tabla", texto = """{"celdas":{"A1":"x"},"estilos":{"A1":"negrita"}}"""))
+        assertTrue(disco.cargar("mini-vieja")!!.estilos["A1"]!!.n)
+    }
+
     @Test
     fun `una tabla del chat cambiada sale al instante, como las tareas`() {
         val t = Mensaje(id = "t", cuando = 1, clase = Clase.MINIAPP, miniapp = "tabla", texto = "{\"celdas\":{}}", proyecto = "obra")

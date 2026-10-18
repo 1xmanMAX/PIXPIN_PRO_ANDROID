@@ -61,6 +61,8 @@ class TablasDelChat(private val context: Context) : TablasEnMensajes {
     /**
      * **Migración**: los mensajes de las hojas de [excel] a partir de los `tablas/libro-….json` que
      * ya hubiera de antes. Lo viejo no se borra. No hace nada si ya hay mensajes o no hay archivos.
+     * Las hojas migradas salen **editadas** (`tocado` con [editadaA]): si no, el PC enseñaría el
+     * `.xlsx` original y escondería lo editado en el móvil (punto 4 del manual del PC).
      */
     fun migrar(excel: Mensaje): Boolean {
         val almacen = MensajesStore(context)
@@ -70,22 +72,29 @@ class TablasDelChat(private val context: Context) : TablasEnMensajes {
 
     private fun crearLasDelLibro(almacen: MensajesStore, excel: Mensaje, editada: Pair<Int, TablaDeCalculo>?, ahora: Long): Boolean {
         val disco = TablasEnDisco(carpetaPropia)
-        val hojas = ArrayList<Pair<TablaDeCalculo, String?>>()
+        // Cada hoja: la tabla, el JSON de donde salió (para no perder lo que no se conoce) y si es
+        // de un archivo viejo de `tablas/` (lo que el móvil editaba antes del 13-oct) o solo la
+        // copia de trabajo de leer el libro ([TablasEnDisco.leida]).
+        class HojaDelLibro(val tabla: TablaDeCalculo, val original: String?, val vieja: Boolean)
+        val hojas = ArrayList<HojaDelLibro>()
         while (true) {
             val i = hojas.size
-            val archivo = disco.archivo(LibroDelChat.idDeHoja(excel, i))
-            val t = if (editada?.first == i) editada.second
-            else if (archivo.exists()) TablaDeCalculo.deJson(archivo.readText()) else null
+            val id = LibroDelChat.idDeHoja(excel, i)
+            // El archivo viejo si se lee; si no (o no lo hay), la copia de trabajo.
+            val textos = listOf(disco.archivo(id), disco.leida(id)).map { f -> if (f.exists()) runCatching { f.readText() }.getOrNull() else null }
+            val n = textos.indexOfFirst { it != null && TablaDeCalculo.deJson(it) != null }
+            val original = textos.getOrNull(n)
+            val t = if (editada?.first == i) editada.second else original?.let { TablaDeCalculo.deJson(it) }
             if (t == null) break
-            hojas += t to (if (archivo.exists()) runCatching { archivo.readText() }.getOrNull() else null)
+            hojas += HojaDelLibro(t, original, n == 0)
         }
         if (hojas.isEmpty() || (editada != null && editada.first >= hojas.size)) return false
         // Con la llave del chat puesta y mirando otra vez: dos guardados seguidos no las crean dos
         // veces, y la hoja que ya tenga mensaje no se repite (solo se pone al día la editada).
         synchronized(com.forge.pixpin.sincro.Cerrojos.chat) {
             val ya = hechas(almacen.leer(), excel.id).associate { it.first to it.second }
-            for ((i, par) in hojas.withIndex()) {
-                val (t, original) = par
+            for ((i, hoja) in hojas.withIndex()) {
+                val t = hoja.tabla
                 val suyo = ya[i]
                 if (suyo != null) {
                     if (editada?.first == i) almacen.cambiar { todos -> todos.map { if (it.id == suyo.id) alGuardar(it, t, ahora) else it } }
@@ -93,7 +102,9 @@ class TablasDelChat(private val context: Context) : TablasEnMensajes {
                 }
                 // Cada hoja un milisegundo detrás de la anterior, como en el PC (`mensajes_de_hojas`).
                 val cuando = ahora + i
-                val tocado = if (editada?.first == i) editadaA(ahora, cuando) else t.tocado
+                // La editada ahora y las de los archivos viejos, «editadas»; la copia de trabajo de
+                // leer el libro, con el `tocado` de leerla (no se editó), como en el PC.
+                val tocado = if (editada?.first == i || hoja.vieja) editadaA(ahora, cuando) else t.tocado
                 almacen.anadir(
                     Mensaje(
                         id = UUID.randomUUID().toString(),
@@ -101,7 +112,7 @@ class TablasDelChat(private val context: Context) : TablasEnMensajes {
                         clase = Clase.MINIAPP,
                         miniapp = MINIAPP,
                         nombre = t.nombre,
-                        texto = TablaDeCalculo.aJsonSobre(t.copy(tocado = tocado), original),
+                        texto = TablaDeCalculo.aJsonSobre(t.copy(tocado = tocado), hoja.original),
                         referencia = LibroDelChat.idDeHoja(excel, i),
                         proyecto = excel.proyecto
                     )

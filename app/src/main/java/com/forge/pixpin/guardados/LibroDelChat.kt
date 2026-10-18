@@ -42,18 +42,38 @@ object LibroDelChat {
         val store = MensajesStore(context)
         val enElChat = TablasDelChat.hechas(store.leer(), mensaje)
         if (enElChat.isNotEmpty()) return enElChat.map { (i, m) -> idDeHoja(mensaje, i) to m.nombre.ifBlank { "Tabla" } }
-        val hechas = generateSequence(0) { it + 1 }.map { idDeHoja(mensaje, it) }.takeWhile { almacen.archivo(it).exists() }.toList()
+        // Lo que ya hay en disco, hoja a hoja: el archivo de `tablas/` (lo editado aquí antes del
+        // 13-oct, o una tabla de un archivo que no es del chat) o, si no, la copia de trabajo de
+        // haberlo leído ya, que no viaja (ver [TablasEnDisco.leida]).
+        // Uno roto no cuenta (se lee el libro, como en el PC, y el archivo sigue tal cual).
+        val hechas = generateSequence(0) { it + 1 }.map { idDeHoja(mensaje, it) }
+            .map { it to almacen.cargar(it) }.takeWhile { it.second != null }.toList()
         if (hechas.isNotEmpty()) {
             // **Migración**: las hojas de antes, editadas aquí y guardadas solo en archivo, pasan a
-            // mensajes para que el PC las vea. Los archivos se quedan.
-            store.leer().firstOrNull { it.id == mensaje }?.let { runCatching { TablasDelChat(context).migrar(it) } }
-            return hechas.map { it to (almacen.cargar(it)?.nombre ?: "Tabla") }
+            // mensajes para que el PC las vea. Los archivos se quedan. Solo copias de trabajo: nada
+            // que migrar (no se editaron).
+            if (hechas.any { almacen.archivo(it.first).exists() }) {
+                store.leer().firstOrNull { it.id == mensaje }?.let { runCatching { TablasDelChat(context).migrar(it) } }
+            }
+            return hechas.map { (id, t) -> id to (t?.nombre?.ifBlank { null } ?: "Tabla") }
         }
         if (ruta == null) return emptyList()
         val hojas = ImportarHojas.leer(File(ruta), nombre.ifBlank { File(ruta).name })
         return hojas.mapIndexedNotNull { i, h ->
             val id = idDeHoja(mensaje, i)
-            if (almacen.enArchivo(id, h.tabla)) id to h.nombre else null
+            if (almacen.deTrabajo(id, h.tabla)) id to h.nombre else null
         }
+    }
+
+    /**
+     * Si [id] es una hoja de un Excel del chat que aquí aún no tiene nada (por ejemplo, la hoja de
+     * un proyecto que llegó por la sincronización: la copia de trabajo no viaja), lee el libro para
+     * que se pueda abrir. True si después la hay. Trabajo de disco.
+     */
+    fun prepararHoja(context: Context, id: String): Boolean {
+        if (!id.startsWith(com.forge.pixpin.motor.TablasEnMensajes.LIBRO)) return false
+        val (libro, _) = TablasDelChat.partirLibro(id) ?: return false
+        val m = MensajesStore(context).leer().firstOrNull { it.id == libro && esLibro(it) } ?: return false
+        return runCatching { tablas(context, m).any { it.first == id } }.getOrDefault(false)
     }
 }

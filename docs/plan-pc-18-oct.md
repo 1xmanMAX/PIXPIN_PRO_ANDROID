@@ -37,3 +37,9 @@ PowerShell/AutoHotkey, Flow y notificaciones de Windows, Escape por capas, el li
 ## Estado
 
 (se rellena al acabar cada paso)
+
+- **Paso 1 hecho** (hojas, un solo formato): `TablaDeCalculo.deJson` tolerante (`rescatar`, `viejo_<campo>`,
+  estilos-palabra) y `aJsonSobre` que lo conserva; `TablasEnDisco.leer` distingue NoHay/NoSeLee y
+  `guardar` no pisa lo que no se lee; `TablaActivity` no abre en blanco lo ilegible; hojas migradas
+  con `tocado = editadaA`; la copia de trabajo de un Excel leído va a `files/tablas-leidas/` (no viaja).
+  Pruebas: `TablaUnSoloFormatoTest`, `TablasDelChatTest`.

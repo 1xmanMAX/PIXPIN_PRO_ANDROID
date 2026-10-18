@@ -3,7 +3,10 @@ package com.forge.pixpin.motor
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
 
 /**
@@ -37,8 +40,176 @@ data class TablaDeCalculo(
         /** Sin los valores por defecto: una tabla de mil celdas no repite mil veces `"n":false`. */
         val json = Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false }
 
+        /**
+         * **Lee una tabla**, sea de esta versión, del PC o de una vieja (como `Tabla::leer` del PC,
+         * 15-oct-2026; `docs/manual-hojas-android.md` §5.1 del PC). Primero tal cual; si no encaja
+         * pero es un objeto JSON, se rescata campo a campo ([rescatar]): un estilo que era una
+         * palabra (`"B1": "negrita"`), un número en `celdas`... ya no dejan la tabla entera sin
+         * abrir. Lo que no se puede convertir no se tira: al guardar con [aJsonSobre] vuelve como
+         * `viejo_<campo>`. Null solo si ni siquiera es un objeto JSON, y entonces nadie debe
+         * guardar encima (ver [TablasEnDisco.leer]).
+         */
         fun deJson(texto: String): TablaDeCalculo? =
             runCatching { json.decodeFromString(serializer(), texto) }.getOrNull()
+                ?: objeto(texto)?.let { rescatar(it).tabla }
+
+        private fun objeto(texto: String): JsonObject? =
+            runCatching { Json.parseToJsonElement(texto) as? JsonObject }.getOrNull()
+
+        /**
+         * Lo rescatado de un objeto JSON: la [tabla] con lo que se entiende, lo de arriba que no
+         * ([resto]: claves desconocidas, `viejo_<campo>`, un `protegida` que no es sí/no) y, por
+         * celda, lo de su estilo que no se entiende ([restoDeEstilos]: claves desconocidas, un
+         * campo conocido con un tipo imposible con su mismo nombre, `viejo` con la palabra rara).
+         */
+        class Rescate(
+            val tabla: TablaDeCalculo,
+            val resto: Map<String, JsonElement>,
+            val restoDeEstilos: Map<String, Map<String, JsonElement>>
+        )
+
+        /** Ver [deJson] y [Rescate]. Mismas reglas que `Tabla::rescatar` del PC. */
+        fun rescatar(o: JsonObject): Rescate {
+            val resto = LinkedHashMap<String, JsonElement>()
+            val viejos = LinkedHashMap<String, JsonElement>()
+            val restoDeEstilos = LinkedHashMap<String, Map<String, JsonElement>>()
+            var nombre = ""
+            when (val v = o["nombre"]) {
+                null, JsonNull -> {}
+                is JsonPrimitive -> if (v.isString) nombre = v.content else viejos["viejo_nombre"] = v
+                else -> viejos["viejo_nombre"] = v
+            }
+            // Un mapa de celda a algo: lo que `convertir` entiende entra; lo demás se queda aparte, tal cual.
+            fun mapa(clave: String, convertir: (String, JsonElement) -> Boolean) {
+                when (val v = o[clave]) {
+                    null, JsonNull -> {}
+                    is JsonObject -> {
+                        val malas = v.filter { (k, x) -> !convertir(k, x) }
+                        if (malas.isNotEmpty()) viejos["viejo_$clave"] = JsonObject(malas)
+                    }
+                    else -> viejos["viejo_$clave"] = v
+                }
+            }
+            val celdas = LinkedHashMap<String, String>()
+            mapa("celdas") { k, x ->
+                val s = textoDeCelda(x) ?: return@mapa false
+                if (s.isNotEmpty()) celdas[k] = s
+                true
+            }
+            val anchos = LinkedHashMap<String, Int>()
+            mapa("anchos") { k, x ->
+                val n = (x as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.trim()?.toDoubleOrNull()
+                    ?.takeIf { it.isFinite() && it >= 0.0 && it <= Int.MAX_VALUE } ?: return@mapa false
+                anchos[k] = Math.round(n).toInt()
+                true
+            }
+            val estilos = LinkedHashMap<String, EstiloDeCelda>()
+            mapa("estilos") { k, x ->
+                val (e, suyos) = estiloDe(x) ?: return@mapa false
+                if (!e.vacio) estilos[k] = e
+                if (suyos.isNotEmpty()) restoDeEstilos[k] = suyos
+                true
+            }
+            var tocado = 0L
+            o["tocado"]?.let { v ->
+                val p = v as? JsonPrimitive
+                val n = when {
+                    p == null || p is JsonNull -> null
+                    p.isString -> p.content.trim().toLongOrNull()
+                    else -> p.content.toLongOrNull() ?: p.content.toDoubleOrNull()?.takeIf { it.isFinite() }?.toLong()
+                }
+                when {
+                    n != null -> tocado = n
+                    v is JsonNull -> {}
+                    else -> viejos["viejo_tocado"] = v
+                }
+            }
+            var protegida = false
+            o["protegida"]?.let { v -> si(v)?.let { protegida = it } ?: run { resto["protegida"] = v } }
+            // Lo demás (lo de una versión más nueva, los `viejo_*` de antes...) tal cual; los
+            // `viejo_*` de ahora pisan a los de antes, como en el PC.
+            for ((k, v) in o) if (k !in CLAVES) resto[k] = v
+            resto.putAll(viejos)
+            return Rescate(
+                TablaDeCalculo(nombre = nombre, celdas = celdas, anchos = anchos, estilos = estilos, tocado = tocado, protegida = protegida),
+                resto, restoDeEstilos
+            )
+        }
+
+        /** Un número o un sí/no pasan a texto (`12`, `VERDADERO`); null es una celda vacía; una lista o un objeto no son una celda. */
+        private fun textoDeCelda(v: JsonElement): String? = when (v) {
+            JsonNull -> ""
+            is JsonPrimitive -> when {
+                v.isString -> v.content
+                v.booleanOrNull != null -> if (v.booleanOrNull == true) "VERDADERO" else "FALSO"
+                else -> v.content
+            }
+            else -> null
+        }
+
+        /** Un sí/no escrito de otra forma: `1`, `"true"`, `"si"`... Null: no se entiende. */
+        private fun si(v: JsonElement): Boolean? = when (v) {
+            JsonNull -> false
+            is JsonPrimitive -> if (v.isString) when (v.content.trim().lowercase()) {
+                "true", "1", "si" -> true
+                "false", "0", "no", "" -> false
+                else -> null
+            } else v.booleanOrNull ?: v.content.toDoubleOrNull()?.let { it != 0.0 }
+            else -> null
+        }
+
+        /**
+         * Un estilo escrito de otra forma, y lo suyo que no se entiende. El PC de antes del 12-oct
+         * guardaba una palabra (`"negrita"`); una versión rara puede traer `"n": 1`. Null: ni objeto
+         * ni palabra (va entero a `viejo_estilos`).
+         */
+        private fun estiloDe(v: JsonElement): Pair<EstiloDeCelda, Map<String, JsonElement>>? = when (v) {
+            JsonNull -> EstiloDeCelda() to emptyMap()
+            is JsonObject -> {
+                var e = EstiloDeCelda()
+                val suyos = LinkedHashMap<String, JsonElement>()
+                for ((k, x) in v) {
+                    val hecho = when (k) {
+                        "n", "e", "k", "s", "t", "w" -> si(x)?.let { b ->
+                            e = when (k) { "n" -> e.copy(n = b); "e" -> e.copy(e = b); "k" -> e.copy(k = b); "s" -> e.copy(s = b); "t" -> e.copy(t = b); else -> e.copy(w = b) }
+                        } != null
+                        "a", "f", "c", "nf" -> when {
+                            x is JsonNull -> true
+                            x is JsonPrimitive && x.isString -> {
+                                val s = x.content
+                                e = when (k) { "a" -> e.copy(a = s); "f" -> e.copy(f = s); "c" -> e.copy(c = s); else -> e.copy(nf = s) }
+                                true
+                            }
+                            else -> false
+                        }
+                        else -> false
+                    }
+                    // Un campo conocido que no se entiende se queda con su nombre: el suyo vale lo de
+                    // por defecto y no se escribe, así que no sale dos veces.
+                    if (!hecho) suyos[k] = x
+                }
+                e to suyos
+            }
+            is JsonPrimitive -> if (!v.isString) null else {
+                var e = EstiloDeCelda()
+                var raras = false
+                for (p in v.content.split(' ', ',', ';', '+').map { it.trim() }.filter { it.isNotEmpty() }) {
+                    when (p.lowercase()) {
+                        "negrita", "bold", "b" -> e = e.copy(n = true)
+                        "cursiva", "italic", "italica" -> e = e.copy(k = true)
+                        "subrayado", "underline" -> e = e.copy(s = true)
+                        "tachado", "strike" -> e = e.copy(t = true)
+                        "ajustar", "wrap" -> e = e.copy(w = true)
+                        "izquierda", "left" -> e = e.copy(a = "i")
+                        "centro", "centrado", "center" -> e = e.copy(a = "c")
+                        "derecha", "right" -> e = e.copy(a = "d")
+                        else -> raras = true
+                    }
+                }
+                e to (if (raras) mapOf("viejo" to v) else emptyMap())
+            }
+            else -> null
+        }
 
         fun aJson(t: TablaDeCalculo): String = json.encodeToString(serializer(), t)
 
@@ -55,25 +226,25 @@ data class TablaDeCalculo(
         fun aJsonSobre(t: TablaDeCalculo, original: String?): String {
             val nuevo = aJson(t)
             if (original.isNullOrBlank()) return nuevo
-            val viejo = runCatching { Json.parseToJsonElement(original) as? JsonObject }.getOrNull() ?: return nuevo
-            val raros = viejo.filterKeys { it !in CLAVES }
-            val estilosViejos = viejo["estilos"] as? JsonObject
-            val conRaros = estilosViejos?.any { (_, e) -> (e as? JsonObject)?.keys?.any { it !in EstiloDeCelda.CLAVES } == true } == true
-            if (raros.isEmpty() && !conRaros) return nuevo
+            val viejo = objeto(original) ?: return nuevo
+            // Lo de antes que aquí no se entiende, con las reglas de [rescatar]: claves desconocidas,
+            // `viejo_<campo>` de lo que no se pudo convertir y, en cada estilo, lo suyo.
+            val r = rescatar(viejo)
+            if (r.resto.isEmpty() && r.restoDeEstilos.isEmpty()) return nuevo
             val n = Json.parseToJsonElement(nuevo).jsonObject
             val salida = LinkedHashMap<String, JsonElement>(n)
-            for ((k, v) in raros) salida[k] = v
-            if (conRaros) {
+            // Lo conocido manda lo de [t] (un `protegida` raro solo se queda si aquí no se puso).
+            for ((k, v) in r.resto) if (k !in salida) salida[k] = v
+            if (r.restoDeEstilos.isNotEmpty()) {
                 val estilos = (n["estilos"] as? JsonObject)?.let { LinkedHashMap<String, JsonElement>(it) } ?: LinkedHashMap()
                 // También la celda que aquí se quedó sin estilo: lo que no se conoce no es formato
                 // que «Borrar formato» quite (el PC lo guarda igual, en su `resto`).
-                for ((celda, e) in estilosViejos.orEmpty()) {
-                    val suyos = (e as? JsonObject)?.filterKeys { it !in EstiloDeCelda.CLAVES }
-                    if (suyos.isNullOrEmpty()) continue
-                    val mio = estilos[celda]?.jsonObject.orEmpty()
-                    estilos[celda] = JsonObject(LinkedHashMap<String, JsonElement>(mio).apply { putAll(suyos) })
+                for ((celda, suyos) in r.restoDeEstilos) {
+                    val mio = LinkedHashMap<String, JsonElement>(estilos[celda]?.jsonObject.orEmpty())
+                    for ((k, v) in suyos) if (k !in mio) mio[k] = v
+                    estilos[celda] = JsonObject(mio)
                 }
-                if (estilos.isNotEmpty()) salida["estilos"] = JsonObject(estilos)
+                salida["estilos"] = JsonObject(estilos)
             }
             return JsonObject(salida).toString()
         }

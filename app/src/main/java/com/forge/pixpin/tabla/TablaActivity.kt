@@ -188,14 +188,25 @@ class TablaActivity : ComponentActivity() {
                         onCerrar = { finish() }
                     )
                 } else key(id) {
-                    val cargada by produceState<TablaDeCalculo?>(null, id) {
+                    // **Lo que no se lee no se abre en blanco** (18-oct-2026, punto 1 del manual de
+                    // hojas del PC): antes «no existe» y «existe pero no se lee» daban la misma tabla
+                    // vacía, y al guardar se pisaba lo que había.
+                    val cargada by produceState<Pair<TablaDeCalculo?, Boolean>?>(null, id) {
                         value = withContext(Dispatchers.IO) {
-                            almacen.cargar(id)
-                                ?: TablaDeCalculo(nombre = nombreNuevo(almacen), tocado = System.currentTimeMillis())
+                            var leida = almacen.leer(id)
+                            // La hoja de un Excel del chat sin nada aquí todavía: se lee el libro.
+                            if (leida == TablasEnDisco.Lectura.NoHay && com.forge.pixpin.guardados.LibroDelChat.prepararHoja(applicationContext, id)) leida = almacen.leer(id)
+                            when (leida) {
+                                is TablasEnDisco.Lectura.Hay -> leida.tabla to true
+                                TablasEnDisco.Lectura.NoSeLee -> null to false
+                                TablasEnDisco.Lectura.NoHay -> TablaDeCalculo(nombre = nombreNuevo(almacen), tocado = System.currentTimeMillis()) to true
+                            }
                         }
                     }
-                    val inicial = cargada
-                    if (inicial == null) {
+                    val inicial = cargada?.first
+                    if (cargada?.second == false) {
+                        NoSeLeeLaTabla(onCerrar = { if (idInicial == null) abierta = null else cerrarYVolver() })
+                    } else if (inicial == null) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
                     } else {
                         // **En la multitarea, como una pestaña más** (19-sep-2026).
@@ -289,6 +300,22 @@ class TablaActivity : ComponentActivity() {
             if (hojas != null && hojas.size > 1) i.putStringArrayListExtra(EXTRA_HOJAS, ArrayList(hojas))
             if (desdeProyecto != null) i.putExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO, desdeProyecto)
             runCatching { context.startActivity(i) }
+        }
+    }
+}
+
+/** Una tabla guardada que no se entiende: se dice, y no se abre para editar (se pisaría). */
+@Composable
+private fun NoSeLeeLaTabla(onCerrar: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).statusBarsPadding().navigationBarsPadding().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Esta tabla no se puede leer", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Lo guardado no es una tabla que esta versión entienda. No se abre para no escribir encima: sigue tal cual.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            TextButton(onClick = onCerrar, modifier = Modifier.padding(top = 16.dp)) { Text("Cerrar") }
         }
     }
 }
