@@ -87,7 +87,9 @@ object Presencia {
                             miPuerto = red.puerto,
                             alSaludar = { otro, puerto -> disco.apuntarDireccion(otro.id, quien, puerto) },
                             alAceptarSuelto = { _, mime -> LoAbierto.aceptar(delante(), mime, id.yo.nombre) },
-                            alRecibirSuelto = { f, nombre, mime, otro -> alLoAbierto(f, nombre, mime, otro, id.yo.nombre) },
+                            alRecibirSuelto = { f, nombre, mime, otro ->
+                                alLoAbierto(f, nombre, mime, otro, id.yo.nombre).also { avisarDeLlegada(otro, nombre, it) }
+                            },
                             cache = java.io.File(app.cacheDir, "suelto")
                         )
                         if (persona) r.atenderPersona(entrada, socket.getOutputStream())
@@ -191,6 +193,16 @@ object Presencia {
         } finally {
             if (copia !== fichero) copia.delete()
         }
+    }
+
+    /**
+     * **El aviso de lo que llegó** sin escanear nada (PC `ccab4f0`, 17-oct-2026): de quién, qué y
+     * dónde quedó. Lo que manda un aparato del grupo desde su «Enviar por Wi-Fi» —o el PC con «p s»—
+     * cae en lo que está abierto sin preguntar, y tiene que notarse aunque no se esté mirando ahí.
+     */
+    private fun avisarDeLlegada(otro: Aparato, nombre: String, donde: Pair<String, String?>) {
+        val texto = AlGrupo.avisoDeLlegada(otro.nombre, nombre, donde.first, donde.second)
+        principal.post { android.widget.Toast.makeText(app, texto, android.widget.Toast.LENGTH_LONG).show() }
     }
 
     fun apuntar(texto: String) {

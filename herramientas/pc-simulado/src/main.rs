@@ -264,6 +264,35 @@ fn suelto(codigo: &str, puerto: u16, ficheros: &[String]) {
     c.adios();
 }
 
+/// **El PC que recibe archivos sueltos** (lo que Android manda a «Tus aparatos» sin escanear, PC
+/// `ccab4f0`): el `Respondedor` de verdad con su `al_lienzo::responder`. Lo llegado queda en
+/// `<raiz>/llegados/<nombre>`. Con `lienzo`, como un PC con un lienzo delante: solo fotos.
+fn recibir_suelto(raiz: &Path, archivo_del_puerto: &str, lienzo: bool) {
+    use pixpin_sincro::al_lienzo::{Donde, Llegada, Recibe, SOLO_FOTOS, Suelto};
+    use pixpin_sincro::mensajes::Aparato;
+    struct EnCarpetaDeLlegados { carpeta: PathBuf, lienzo: bool }
+    impl Recibe for EnCarpetaDeLlegados {
+        fn aceptar(&mut self, p: &Suelto) -> Result<(), String> {
+            if self.lienzo && !p.es_imagen() { Err(format!("Portátil {SOLO_FOTOS}")) } else { Ok(()) }
+        }
+        fn guardar(&mut self, p: &Suelto, fichero: &Path) -> Result<Llegada, String> {
+            std::fs::create_dir_all(&self.carpeta).map_err(|e| e.to_string())?;
+            std::fs::copy(fichero, self.carpeta.join(&p.nombre)).map_err(|e| e.to_string())?;
+            Ok(Llegada::en(if self.lienzo { Donde::Lienzo } else { Donde::Chat }))
+        }
+    }
+    let pc = DiscoPc::nuevo(raiz);
+    let escucha = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    std::fs::write(archivo_del_puerto, escucha.local_addr().unwrap().port().to_string()).unwrap();
+    let carpeta = raiz.join("llegados");
+    let fabrica = move |_: &Aparato| -> Box<dyn Recibe> { Box::new(EnCarpetaDeLlegados { carpeta: carpeta.clone(), lienzo }) };
+    for flujo in escucha.incoming() {
+        let Ok(flujo) = flujo else { continue };
+        let r = Respondedor { disco: &pc, estado: &|_| {}, ahora: &ahora, mi_puerto: 4747, al_saludar: &|_, _| {}, suelto: Some(&fabrica) };
+        if let Err(e) = r.atender(flujo, nonce()) { eprintln!("PC: {e:?}"); }
+    }
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let raiz = Path::new(&a[2]);
@@ -271,6 +300,7 @@ fn main() {
         "preparar" => preparar(raiz, &a[3]),
         "responder" => responder(raiz, &a[3]),
         "dirigir" => dirigir(raiz, a[3].parse().unwrap()),
+        "recibir-suelto" => recibir_suelto(raiz, &a[3], a.get(4).is_some_and(|x| x == "lienzo")),
         "ver" => ver(raiz),
         "galeria" => ver_galeria(raiz),
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.

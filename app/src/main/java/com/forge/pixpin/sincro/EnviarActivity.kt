@@ -117,6 +117,17 @@ class EnviarActivity : ComponentActivity() {
     }
 
     private var estado by mutableStateOf<Estado>(Estado.Preparando)
+
+    /**
+     * **Tus aparatos, sin código** (PC `ccab4f0`, 17-oct-2026): los del grupo menos yo, leídos al
+     * tener lo que se manda. Solo con archivos: un proyecto o un lienzo no van por `suelto` (allí se
+     * guardarían como un adjunto, no como proyecto). Ver [AlGrupo].
+     */
+    private var grupo by mutableStateOf<List<AlGrupo.AparatoDelGrupo>>(emptyList())
+    /** Los del grupo que contestan ahora en la Wi-Fi, por su id, con dónde llamarles. */
+    private var cerca by mutableStateOf<Map<String, AlDia.Estado>>(emptyMap())
+    /** Lo mandado directo a cada uno, por su id: `null` mientras sale. */
+    private var alGrupo by mutableStateOf<Map<String, AlGrupo.Hecho?>>(emptyMap())
     private var cosas by mutableStateOf<List<Pair<Envio.Elemento, File>>>(emptyList())
     private var red: Red? = null
     private val carpeta by lazy { File(cacheDir, "envio/${System.currentTimeMillis()}").apply { mkdirs() } }
@@ -292,7 +303,50 @@ class EnviarActivity : ComponentActivity() {
         val lista = withContext(Dispatchers.IO) { runCatching(que).getOrDefault(emptyList()) }
         if (lista.isEmpty()) { estado = Estado.Fallo("No se pudo preparar lo que querías enviar."); return }
         cosas = lista
+        if (lista.all { it.first.tipo == Envio.ARCHIVO }) {
+            grupo = withContext(Dispatchers.IO) { runCatching { AlGrupo.aparatos(Red.disco(this@EnviarActivity)) }.getOrDefault(emptyList()) }
+            if (grupo.isNotEmpty()) buscarAlGrupo()
+        }
         abrirLaPuerta(lista)
+    }
+
+    /**
+     * Quién del grupo se ve en la Wi-Fi: la dirección de siempre si contesta al PING y, si no, el
+     * anuncio de la red ([AlDia.aparatos]). Se vuelve a mirar cada poco mientras la pantalla esté
+     * abierta: el otro puede abrir PixPin después.
+     */
+    private fun buscarAlGrupo() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            while (true) {
+                val vistos = runCatching { AlDia.aparatos(this@EnviarActivity) }.getOrDefault(emptyList())
+                withContext(Dispatchers.Main) { cerca = vistos.filter { it.id.isNotBlank() }.associateBy { it.id } }
+                kotlinx.coroutines.delay(15_000)
+            }
+        }
+    }
+
+    /**
+     * **Directo a un aparato del grupo, sin código**: el mismo canal cifrado y la misma petición
+     * `suelto` que «p s» del PC, en su hilo porque localizarlo puede tardar segundos. Si ya hay uno
+     * saliendo hacia él, no se manda dos veces.
+     */
+    private fun mandarAlGrupo(id: String) {
+        val lista = cosas
+        if (lista.isEmpty() || lista.any { it.first.tipo != Envio.ARCHIVO }) return
+        if (alGrupo.containsKey(id) && alGrupo[id] == null) return
+        alGrupo = alGrupo + (id to null)
+        val visto = cerca[id]
+        lifecycleScope.launch(Dispatchers.IO) {
+            val donde = (visto ?: runCatching { AlDia.aparatos(this@EnviarActivity).firstOrNull { it.id == id } }.getOrNull())
+                ?.let { it.host to it.puerto }
+            val hecho = AlGrupo.mandarYa(
+                Red.disco(this@EnviarActivity), id,
+                lista.map { (e, f) -> AlGrupo.Fichero(f, e.nombre, e.mime) },
+                miPuerto = runCatching { Presencia.red.puerto }.getOrDefault(0),
+                localizar = { donde }
+            )
+            withContext(Dispatchers.Main) { alGrupo = alGrupo + (id to hecho) }
+        }
     }
 
     // ------------------------------------------------------------- la red
@@ -369,6 +423,7 @@ class EnviarActivity : ComponentActivity() {
                 Spacer(Modifier.height(8.dp))
                 LoQueSeEnvia()
                 Spacer(Modifier.height(16.dp))
+                if (estado is Estado.Esperando) DelGrupo()
                 LosAparatos()
                 when (val e = estado) {
                     Estado.Preparando -> Cargando("Preparando…")
@@ -434,6 +489,55 @@ class EnviarActivity : ComponentActivity() {
                     onClick = { destinos.filter { it.fase == Destino.Fase.PIDIENDO }.forEach { responder(it.id, true) } },
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                 ) { Text("Enviar a todos los que esperan") }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+
+    /**
+     * **Tus aparatos**: los del grupo, cada uno con su «Enviar» directo (sin código) y, si se ven dos
+     * o más, «Enviar a todos». Encima del código, como en el PC.
+     */
+    @Composable
+    private fun DelGrupo() {
+        if (grupo.isEmpty()) return
+        val todos = AlGrupo.aTodos(grupo, cerca.keys, alGrupo)
+        Caja {
+            Text(AlGrupo.TITULO_DEL_GRUPO, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Text(AlGrupo.COMO_VA_AL_GRUPO, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            for (a in grupo) {
+                val tiene = alGrupo.containsKey(a.id)
+                val hecho = alGrupo[a.id]
+                val seVe = a.id in cerca
+                val (texto, tono) = AlGrupo.estadoEnFila(tiene, hecho, seVe)
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(a.nombre.ifBlank { "Un aparato" }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            texto, style = MaterialTheme.typography.bodySmall,
+                            color = when (tono) {
+                                AlGrupo.Tono.BIEN -> VERDE
+                                AlGrupo.Tono.MAL -> MaterialTheme.colorScheme.error
+                                AlGrupo.Tono.SUAVE -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    if (tiene && hecho == null) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Button(
+                            onClick = { mandarAlGrupo(a.id) }, enabled = seVe,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp)
+                        ) { Text("Enviar") }
+                    }
+                }
+            }
+            if (todos.size > 1) {
+                Button(onClick = { todos.forEach { mandarAlGrupo(it) } }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    Text(AlGrupo.ENVIAR_A_TODOS)
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
