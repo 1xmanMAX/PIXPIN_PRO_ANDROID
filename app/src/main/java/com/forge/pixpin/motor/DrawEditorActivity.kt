@@ -119,6 +119,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -150,6 +151,12 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -1744,6 +1751,15 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
+                    // El Ángulo se tocó lejos de donde se juntan dos rayas.
+                    if (controller.anguloSinSitio) {
+                        controller.limpiarAvisoDeAngulo()
+                        android.widget.Toast.makeText(
+                            this@DrawEditorActivity,
+                            R.string.angulo_sin_sitio,
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                     if (controller.rellenoSinCerrar) {
                         controller.limpiarAvisoRelleno()
                         android.widget.Toast.makeText(
@@ -1774,7 +1790,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             )
             }
 
-            EditorEnSitio(tick, editandoTexto, noche) { editandoTexto = it; cambiado() }
+            EditorEnSitio(tick, editandoTexto, noche, onAbrir = { cambiado() }) { editandoTexto = it; cambiado() }
 
             // **Los marcadores del lienzo**, encima del dibujo y pegados a su sitio. Ver [CapaDeMarcas].
             if (!presentando) {
@@ -2124,6 +2140,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                             zoom = { zoomVivo.floatValue },
                             anchoPintado = anchoDelTrazoAMano(seleccionado),
                             onAbrirColor = { tallerDeColor = !tallerDeColor },
+                            onLetraDeAngulo = { paso -> if (controller.cambiarLetraDeAngulo(paso)) cambiado() },
                             marcasDeColor = marcasDeColor,
                             // Para que la bolita enseñe la tinta que va a salir y no la
                             // guardada: sobre papel oscuro no son la misma.
@@ -4657,6 +4674,16 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         // deja de cuadrar con lo que se ve pintado.
         controller.cambiarEstilo(nuevo) { e ->
             if (e.type != ElementType.TEXT) return@cambiarEstilo e
+            // Un texto rico mide lo compuesto, con la letra nueva.
+            TextoRico.vigente(e)?.let { rico ->
+                val familia = e.fontFamily ?: nuevo.fontFamily
+                val (ancho, alto) = TextoRico.medida(
+                    rico, TextoRico.opcionesDe(e.copy(fontSize = e.fontSize ?: nuevo.fontSize)),
+                    DrawFonts.medidorRico(DrawFonts.provider(this), familia)
+                )
+                return@cambiarEstilo if (e.containerId == null) e.copy(width = ancho, height = alto)
+                else e.copy(height = alto)
+            }
             val (ancho, alto) = medirTexto(
                 e.text.orEmpty(),
                 e.fontFamily ?: nuevo.fontFamily,
@@ -5046,6 +5073,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         tick: Int,
         id: String?,
         noche: Boolean,
+        onAbrir: () -> Unit = {},
         onCerrar: (String?) -> Unit
     ) {
         @Suppress("UNUSED_EXPRESSION") tick
@@ -5056,10 +5084,34 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         val esquina = vp.toScreen(Pt(e.x, e.y))
         val tam = e.fontSize ?: controller.scene.style.fontSize
         val familia = e.fontFamily ?: controller.scene.style.fontFamily
-        var texto by remember(id) { mutableStateOf(e.text.orEmpty()) }
+        // **Un texto rico se edita como fuente** (`$x^2$`, `**ya**`, `\color{rojo}{X}`) y se
+        // compone al salir, como en el PC. Ver [TextoRico].
+        var valor by remember(id) {
+            val inicial = TextoRico.vigente(e) ?: e.text.orEmpty()
+            mutableStateOf(
+                androidx.compose.ui.text.input.TextFieldValue(
+                    inicial, androidx.compose.ui.text.TextRange(inicial.length)
+                )
+            )
+        }
+        val texto = valor.text
         val foco = remember(id) { androidx.compose.ui.focus.FocusRequester() }
 
         LaunchedEffect(id) { runCatching { foco.requestFocus() } }
+        // Mientras se escribe, el lienzo no pinta lo compuesto debajo de la fuente.
+        DisposableEffect(id) {
+            controller.textoAbierto = id
+            onAbrir()
+            onDispose { if (controller.textoAbierto == id) controller.textoAbierto = null }
+        }
+
+        fun formato(cambio: (String, Int, Int) -> TextoRico.Edicion) {
+            val r = cambio(valor.text, valor.selection.start, valor.selection.end)
+            valor = androidx.compose.ui.text.input.TextFieldValue(
+                r.texto, androidx.compose.ui.text.TextRange(r.desde, r.hasta)
+            )
+            runCatching { foco.requestFocus() }
+        }
 
         fun cerrar() {
             if (texto.isBlank()) {
@@ -5077,13 +5129,27 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 // parte quien escribe, donde quiera.
                 val caja = controller.scene.byId(id)
                     ?.let { contenedorDe(it, controller.scene.elements) }
-                val definitivo =
-                    if (caja == null) texto
-                    else repartirEnLineas(texto, anchoQueCabe(caja)) { trozo ->
-                        medirTexto(trozo, familia, tam).first
-                    }.joinToString("\n")
-                val (ancho, alto) = medirTexto(definitivo, familia, tam)
-                controller.updateText(id, definitivo, ancho, alto)
+                val actual = controller.scene.byId(id)
+                if (actual != null && TextoRico.tieneMarcas(texto)) {
+                    // Rico: la fuente tal cual (los renglones los parte el compositor, al ancho
+                    // de la figura si la hay), el plano en `text` y la caja de lo compuesto.
+                    val compuesto = TextoRico.conFuente(
+                        actual.copy(fontSize = tam, fontFamily = familia), texto,
+                        DrawFonts.medidorRico(DrawFonts.provider(this@DrawEditorActivity), familia),
+                        caja?.let { anchoQueCabe(it) } ?: TextoRico.SIN_PARTIR
+                    )
+                    controller.updateText(
+                        id, compuesto.text.orEmpty(), compuesto.width, compuesto.height, compuesto.textoRico
+                    )
+                } else {
+                    val definitivo =
+                        if (caja == null) texto
+                        else repartirEnLineas(texto, anchoQueCabe(caja)) { trozo ->
+                            medirTexto(trozo, familia, tam).first
+                        }.joinToString("\n")
+                    val (ancho, alto) = medirTexto(definitivo, familia, tam)
+                    controller.updateText(id, definitivo, ancho, alto)
+                }
             }
             controller.clearPendingText()
             onCerrar(null)
@@ -5100,9 +5166,15 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             ) { cerrar() }
         )
 
+        BarraDeFormato(
+            esquina = esquina,
+            onFormato = { f -> formato { t, a, b -> TextoRico.envolver(t, a, b, f) } },
+            onColor = { c -> formato { t, a, b -> TextoRico.conColor(t, a, b, c) } }
+        )
+
         androidx.compose.foundation.text.BasicTextField(
-            value = texto,
-            onValueChange = { texto = it },
+            value = valor,
+            onValueChange = { valor = it },
             textStyle = androidx.compose.ui.text.TextStyle(
                 fontFamily = composeFontFamily(familia),
                 // **En píxeles de pantalla, no en `sp`.** Los `sp` los escala
@@ -5136,6 +5208,104 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 .offset { IntOffset(esquina.x.toInt(), esquina.y.toInt()) }
                 .widthIn(min = 120.dp)
                 .focusRequester(foco)
+                // Con teclado físico, los atajos del PC: Ctrl+B/N negrita, Ctrl+I/K cursiva,
+                // Ctrl+U subrayado, Ctrl+Mayús+X tachado, Ctrl+M fórmula, Ctrl+Mayús+1..6 color
+                // (rojo, azul, verde, naranja, morado, gris) y Ctrl+Mayús+0 negro.
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || !ev.isCtrlPressed) {
+                        return@onPreviewKeyEvent false
+                    }
+                    val k = ev.key
+                    val f = when {
+                        !ev.isShiftPressed && (k == Key.B || k == Key.N) -> TextoRico.Formato.NEGRITA
+                        !ev.isShiftPressed && (k == Key.I || k == Key.K) -> TextoRico.Formato.CURSIVA
+                        !ev.isShiftPressed && k == Key.U -> TextoRico.Formato.SUBRAYADO
+                        ev.isShiftPressed && k == Key.X -> TextoRico.Formato.TACHADO
+                        !ev.isShiftPressed && k == Key.M -> TextoRico.Formato.FORMULA
+                        else -> null
+                    }
+                    if (f != null) {
+                        formato { t, a, b -> TextoRico.envolver(t, a, b, f) }
+                        return@onPreviewKeyEvent true
+                    }
+                    val digitos = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six)
+                    val color = when {
+                        !ev.isShiftPressed -> null
+                        k == Key.Zero -> "negro"
+                        k in digitos -> TextoRico.COLORES_DE_ATAJO[digitos.indexOf(k)]
+                        else -> null
+                    } ?: return@onPreviewKeyEvent false
+                    formato { t, a, b -> TextoRico.conColor(t, a, b, color) }
+                    true
+                }
+        )
+    }
+
+    /**
+     * **Los botones del texto rico**, encima del cuadro de escribir: negrita, cursiva, subrayado,
+     * tachado, fórmula y los colores del PC. Envuelven lo elegido (y lo dejan elegido para
+     * encadenar) o, sin nada elegido, ponen las marcas con el cursor en medio. Ver [TextoRico].
+     */
+    @Composable
+    private fun BarraDeFormato(
+        esquina: Pt,
+        onFormato: (TextoRico.Formato) -> Unit,
+        onColor: (String) -> Unit
+    ) {
+        val alto = with(androidx.compose.ui.platform.LocalDensity.current) { 46.dp.toPx() }
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 3.dp,
+            shadowElevation = 3.dp,
+            modifier = Modifier.offset {
+                IntOffset(esquina.x.toInt(), (esquina.y - alto).toInt().coerceAtLeast(0))
+            }
+        ) {
+            Row(
+                Modifier.padding(horizontal = 4.dp).height(40.dp).horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BotonDeFormato("B", TextoRico.Formato.NEGRITA, onFormato, negrita = true)
+                BotonDeFormato("I", TextoRico.Formato.CURSIVA, onFormato, cursiva = true)
+                BotonDeFormato("U", TextoRico.Formato.SUBRAYADO, onFormato)
+                BotonDeFormato("S", TextoRico.Formato.TACHADO, onFormato)
+                BotonDeFormato("ƒx", TextoRico.Formato.FORMULA, onFormato, cursiva = true)
+                for (c in TextoRico.COLORES_DE_ATAJO + "negro") {
+                    val hex = com.forge.pixpin.motormd.Formulas.colorDeNombre(c) ?: continue
+                    Box(
+                        Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(22.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(parseColor(hex)))
+                            .clickable { onColor(c) }
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun BotonDeFormato(
+        letra: String,
+        f: TextoRico.Formato,
+        onFormato: (TextoRico.Formato) -> Unit,
+        negrita: Boolean = false,
+        cursiva: Boolean = false
+    ) {
+        Text(
+            letra,
+            fontWeight = if (negrita) FontWeight.Bold else null,
+            fontStyle = if (cursiva) androidx.compose.ui.text.font.FontStyle.Italic else null,
+            textDecoration = when (f) {
+                TextoRico.Formato.SUBRAYADO -> androidx.compose.ui.text.style.TextDecoration.Underline
+                TextoRico.Formato.TACHADO -> androidx.compose.ui.text.style.TextDecoration.LineThrough
+                else -> null
+            },
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onFormato(f) }
+                .padding(horizontal = 10.dp, vertical = 6.dp)
         )
     }
 
@@ -5149,9 +5319,17 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
     private fun ensenarAMedirElTexto() {
         controller.altoDelTexto = { e, ancho ->
             val tam = e.fontSize ?: com.forge.pixpin.motor.ItemStyle().fontSize
-            val regla = DrawFonts.reglaDeAnchos(this, e.fontFamily, tam)
-            val renglones = renglonesQueCaben(e.text.orEmpty(), ancho, regla)
-            altoDeRenglones(renglones.size, tam)
+            // Un texto rico suelto no se parte (como en el PC): su alto es el de lo compuesto.
+            val rico = TextoRico.vigente(e)
+            if (rico != null) {
+                TextoRico.medida(
+                    rico, TextoRico.opcionesDe(e), DrawFonts.medidorRico(DrawFonts.provider(this), e.fontFamily)
+                ).second
+            } else {
+                val regla = DrawFonts.reglaDeAnchos(this, e.fontFamily, tam)
+                val renglones = renglonesQueCaben(e.text.orEmpty(), ancho, regla)
+                altoDeRenglones(renglones.size, tam)
+            }
         }
     }
 

@@ -1054,6 +1054,7 @@ fun DrawCanvas(
         // Lo marcado, para lo que solo tiene sentido mientras se toca: el
         // contorno de lo que mira una lupa. Ver [Renderer.marcados].
         renderer.marcados = controller.selectedIds
+        renderer.escondido = controller.textoAbierto
         drawIntoCanvas { canvas ->
             renderer.renderScene(
                 canvas.nativeCanvas, scene,

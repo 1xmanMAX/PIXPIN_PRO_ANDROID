@@ -722,6 +722,14 @@ data class Element(
     val negrita: Boolean = false,
     val cursiva: Boolean = false,
     val tachado: Boolean = false,
+    /**
+     * **La fuente del texto rico** (PC, 15-oct-2026; `docs/texto-rico-del-lienzo.md`): tramos
+     * con estilo (`**negrita**`, `\color{rojo}{X}`...) y fórmulas en línea (`$x^2$`). Con ella,
+     * [text] guarda su versión plana, que es lo que ve quien no la entiende. Solo vale si su
+     * plano sigue siendo [text] ([TextoRico.vigente]): si alguien cambió el texto sin saber de
+     * esto, gana el texto. Null en un texto de los de siempre.
+     */
+    val textoRico: String? = null,
 
     // --- Solo FRAME ---
     /** Nombre del marco, el que el original enseña sobre su esquina. */

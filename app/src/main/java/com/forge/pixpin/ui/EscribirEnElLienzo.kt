@@ -62,7 +62,8 @@ fun EscribirEnElLienzo(
     val elemento = controlador.scene.byId(id)
     if (elemento == null) { controlador.clearPendingText(); return }
     val contexto = LocalContext.current
-    var texto by remember(id) { mutableStateOf(elemento.text.orEmpty()) }
+    // Un texto rico se reescribe como fuente y se compone al aceptar (com.forge.pixpin.motor.TextoRico).
+    var texto by remember(id) { mutableStateOf(com.forge.pixpin.motor.TextoRico.vigente(elemento) ?: elemento.text.orEmpty()) }
     val foco = remember(id) { FocusRequester() }
     LaunchedEffect(id) { runCatching { foco.requestFocus() } }
 
@@ -71,6 +72,13 @@ fun EscribirEnElLienzo(
         if (!guardar && elemento.text.isNullOrBlank() || guardar && limpio.isBlank()) {
             controlador.setSelection(setOf(id))
             controlador.deleteSelection()
+        } else if (guardar && com.forge.pixpin.motor.TextoRico.tieneMarcas(limpio)) {
+            val familia = elemento.fontFamily ?: controlador.scene.style.fontFamily
+            val compuesto = com.forge.pixpin.motor.TextoRico.conFuente(
+                elemento.copy(fontSize = elemento.fontSize ?: controlador.scene.style.fontSize, fontFamily = familia),
+                limpio, DrawFonts.medidorRico(DrawFonts.provider(contexto), familia)
+            )
+            controlador.updateText(id, compuesto.text.orEmpty(), compuesto.width, compuesto.height, compuesto.textoRico)
         } else if (guardar) {
             val (ancho, alto) = DrawFonts.medirTexto(
                 contexto, limpio,

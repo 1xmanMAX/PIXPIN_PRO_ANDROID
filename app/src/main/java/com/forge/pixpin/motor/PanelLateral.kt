@@ -157,6 +157,11 @@ fun PanelLateralDeEstilo(
     marcasDeColor: List<String> = emptyList(),
     /** Si el papel es oscuro: decide con qué color se enseña cada tinta. Ver [colorDeEstilo]. */
     noche: Boolean = false,
+    /**
+     * La letra griega de la marca de ángulo, a la de antes (-1) o a la de después (+1): la
+     * elegida o la última puesta (las flechas y la rueda del PC). Null: no se enseña.
+     */
+    onLetraDeAngulo: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     // Las opciones salen **hacia el lienzo**, o sea al contrario del lado en el
@@ -369,6 +374,15 @@ fun PanelLateralDeEstilo(
                 tinta = neutro,
                 onElegir = { onEstilo(estilo.copy(arcosAngulo = arcos[it])) }
             ) { n, tinta -> Canvas(Modifier.size(20.dp)) { dibujarArquitos(n, tinta) } }
+            if (onLetraDeAngulo != null && estilo.modoAngulo == ModoAngulo.GRIEGA) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    BotonDeTexto("‹", false, bola) { onLetraDeAngulo(-1) }
+                    BotonDeTexto("›", false, bola) { onLetraDeAngulo(1) }
+                }
+            }
         }
 
         // **De qué está hecha la tinta**: lisa, encendida o con grano. En un plano el color

@@ -1,6 +1,7 @@
 package com.forge.pixpin.motormd
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -146,6 +147,64 @@ private fun PiezaUi(pieza: Pieza, tamanoSp: Float, color: Color) {
                 fontFamily = FontFamily.Serif,
                 color = color
             )
+        }
+
+        // Lo que trajo el PC el 15-oct (matrices, adornos, colores, recuadros): aquí, en las
+        // notas, compuesto con lo justo para que se lea; el lienzo lo compone con rayas
+        // (`motor/Ecuacion.deFormula`).
+        is Pieza.Tabla -> Row(verticalAlignment = Alignment.CenterVertically) {
+            if (pieza.abre.isNotEmpty()) Text(pieza.abre, fontSize = (tamanoSp * 1.6f).sp, color = color)
+            Column(horizontalAlignment = if (pieza.izquierda) Alignment.Start else Alignment.CenterHorizontally) {
+                pieza.filas.forEach { fila ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        fila.forEachIndexed { k, celda ->
+                            if (k > 0) Spacer(Modifier.width((tamanoSp * 0.8f).dp))
+                            PiezaUi(celda, tamanoSp, color)
+                        }
+                    }
+                }
+            }
+            if (pieza.cierra.isNotEmpty()) Text(pieza.cierra, fontSize = (tamanoSp * 1.6f).sp, color = color)
+        }
+
+        is Pieza.Adornada -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            val marca = when (pieza.adorno) {
+                Adorno.RAYA_ENCIMA, Adorno.RAYA_DEBAJO -> null
+                Adorno.ARCO_ENCIMA -> "⌒"
+                Adorno.FLECHA -> "→"
+                Adorno.GORRO -> "^"
+                Adorno.TILDE -> "~"
+            }
+            if (pieza.adorno == Adorno.RAYA_ENCIMA) {
+                Canvas(Modifier.fillMaxWidth().height(1.dp)) { drawRect(color) }
+            } else if (marca != null) {
+                Text(marca, fontSize = menor(tamanoSp).sp, color = color)
+            }
+            PiezaUi(pieza.dentro, tamanoSp, color)
+            if (pieza.adorno == Adorno.RAYA_DEBAJO) {
+                Canvas(Modifier.fillMaxWidth().height(1.dp)) { drawRect(color) }
+            }
+        }
+
+        is Pieza.Color -> PiezaUi(
+            pieza.dentro, tamanoSp,
+            Formulas.colorDeNombre(pieza.color)?.let {
+                runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()
+            } ?: color
+        )
+
+        is Pieza.Negrita -> PiezaUi(pieza.dentro, tamanoSp, color)
+        is Pieza.Grande -> PiezaUi(pieza.dentro, tamanoSp, color)
+
+        is Pieza.Recuadro -> Box(
+            Modifier
+                .border(1.dp, color)
+                .padding(horizontal = 3.dp, vertical = 1.dp)
+        ) { PiezaUi(pieza.dentro, tamanoSp, color) }
+
+        is Pieza.Encima -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            PiezaUi(pieza.arriba, menor(tamanoSp), color)
+            PiezaUi(pieza.base, tamanoSp, color)
         }
     }
 }
