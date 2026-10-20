@@ -313,7 +313,9 @@ object Ecuacion {
 
     /** La base con un índice pequeño y bajado. */
     fun subindice(base: Caja, indice: Caja, t: Double): Caja {
-        val bajada = indice.alto * 0.5
+        // Su centro algo por encima del borde de abajo de la base (PC 18-oct): con la mitad por debajo
+        // caía tan bajo que en un renglón de texto pisaba el de abajo («P₍ₓ₎=x⁴+6 es un polinomio…»).
+        val bajada = indice.alto * 0.72
         val alto = max(base.alto, base.alto - base.eje + indice.alto - bajada + base.eje)
         return Caja(
             base.ancho + indice.ancho + t * 0.05, alto, base.eje,
@@ -480,7 +482,20 @@ object Ecuacion {
             Adorno.ARCO_ENCIMA -> min(t * 0.16 + w * 0.04, t * 0.32)
             Adorno.GORRO, Adorno.TILDE -> t * 0.16
             Adorno.FLECHA -> t * 0.12
-            Adorno.RAYA_ENCIMA, Adorno.RAYA_DEBAJO -> 0.0
+            Adorno.RAYA_ENCIMA, Adorno.RAYA_DEBAJO, Adorno.LLAVE_DEBAJO -> 0.0
+        }
+        // La llave de `\underbrace`: dos tramos que bajan, van rectos y se juntan en un pico en medio.
+        if (adorno == Adorno.LLAVE_DEBAJO) {
+            val y0 = abajo + t * 0.1
+            val altoLlave = t * 0.22
+            val xm = (x0 + x1) / 2; val y1 = y0 + altoLlave
+            val medio = y0 + altoLlave * 0.55
+            fun lado(de: Double, a: Double) = (0..10).map { k ->
+                val s = k / 10.0
+                val y = if (s < 0.15) y0 + (medio - y0) * (s / 0.15) else if (s < 0.85) medio else medio + (y1 - medio) * ((s - 0.85) / 0.15)
+                (de + (a - de) * s) to y
+            }
+            return Caja(w, max(dentro.alto, y1 + trazo(t)), dentro.eje, dentro.piezas + raya(lado(x0, xm), t) + raya(lado(x1, xm), t))
         }
         if (adorno == Adorno.RAYA_DEBAJO) {
             val y = abajo + t * 0.12
@@ -509,7 +524,7 @@ object Ecuacion {
                 piezas += raya(listOf(x1 - t * 0.18 to y - t * 0.1, x1 to y, x1 - t * 0.18 to y + t * 0.1), t)
                 listOf(x0 to y, x1 to y)
             }
-            Adorno.RAYA_DEBAJO -> emptyList()
+            Adorno.RAYA_DEBAJO, Adorno.LLAVE_DEBAJO -> emptyList()
         }
         piezas += raya(marca, t)
         return Caja(w, dentro.alto + baja, dentro.eje + baja, piezas)
@@ -526,6 +541,13 @@ object Ecuacion {
         val piezas = ArrayList<Pieza>(dentro.piezasEn(m, dy))
         piezas += raya(listOf(0.0 to y0, ancho to y0, ancho to y1, 0.0 to y1, 0.0 to y0), t)
         return Caja(ancho, max(dentro.alto + dy, y1 + trazo(t)), dentro.eje + dy, piezas)
+    }
+
+    /** Lo pequeño centrado debajo de la base (el rótulo de `\underbrace`, PC 18-oct). */
+    fun debajo(base: Caja, abajo: Caja, t: Double): Caja {
+        val ancho = max(base.ancho, abajo.ancho)
+        val dy = base.alto + t * 0.02
+        return Caja(ancho, dy + abajo.alto, base.eje, base.piezasEn((ancho - base.ancho) / 2, 0.0) + abajo.piezasEn((ancho - abajo.ancho) / 2, dy))
     }
 
     /** Lo pequeño centrado encima de la base (`\overset{?}{=}`). */
@@ -648,6 +670,7 @@ object Ecuacion {
             is F.Negrita -> sigue(p.dentro, t).enNegrita()
             is F.Recuadro -> recuadro(sigue(p.dentro, t), t)
             is F.Encima -> encima(sigue(p.base, t), sigue(p.arriba, menor(t)), t)
+            is F.Debajo -> debajo(sigue(p.base, t), sigue(p.abajo, menor(t)), t)
         }
     }
 }

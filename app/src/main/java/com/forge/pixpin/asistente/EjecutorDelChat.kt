@@ -76,6 +76,21 @@ class EjecutorDelChat(
 
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
         is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg, is Llamada.Cronograma -> dibujar(llamada)
+        is Llamada.Funciones -> runCatching {
+            val piezas = com.forge.pixpin.ia.Funciones.piezas(llamada.pedido, medirFraunces)
+            alLienzo("la grafica (${llamada.pedido.curvas.size} curvas)") { (x, y) -> piezas.map { it.copy(x = it.x + x, y = it.y + y) } }
+        }
+        is Llamada.Fisica -> runCatching {
+            val piezas = com.forge.pixpin.ia.Fisica.piezas(llamada.diagrama, medirFraunces)
+            alLienzo("el diagrama de ${llamada.diagrama.tipo.replace('_', ' ')}") { (x, y) -> piezas.map { it.copy(x = it.x + x, y = it.y + y) } }
+        }
+        is Llamada.Problema -> runCatching {
+            val semilla = System.currentTimeMillis()
+            val els = com.forge.pixpin.ia.Problema.elementos(llamada.problema, medirFraunces) { figuras ->
+                Lienzo.aElementos(Lienzo.elementos(Llamada.Dibujar(figuras), 0.0 to 0.0, semilla))
+            }
+            alLienzo("el problema en limpio") { (x, y) -> els.map { it.copy(x = it.x + x, y = it.y + y) } }
+        }
         is Llamada.Ecuacion -> runCatching {
             // Medida con la letra de verdad (Fraunces, la de serifa), como el PC con DirectWrite.
             val (piezas, _) = com.forge.pixpin.ia.EscribirEcuacion.piezas(llamada.ecuacion) { t, tam ->
@@ -95,6 +110,11 @@ class EjecutorDelChat(
         is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
         is Llamada.Geometria -> geometria(llamada.args)
         is Llamada.Editar -> editar(llamada.pedido)
+    }
+
+    /** Lo que mide un texto en la letra de la pizarra (Fraunces), la de verdad. */
+    private val medirFraunces: com.forge.pixpin.motor.MedidaDeTexto = { t, tam ->
+        com.forge.pixpin.motor.DrawFonts.medirTexto(contexto, t, com.forge.pixpin.motor.ItemStyle.FONT_FRAUNCES, tam)
     }
 
     /** **Los ojos**: la vista del lienzo destino del turno (PC `Ejecutor::ver`). */

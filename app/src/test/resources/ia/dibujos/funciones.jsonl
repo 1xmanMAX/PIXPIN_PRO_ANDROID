@@ -1,0 +1,20 @@
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^2-4"],"marcar":["raices"]}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^2","y = 2x + 1"],"x_desde":-3,"x_hasta":3}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^3-3x"],"marcar":["extremos","raices","corte_y"],"titulo":"f(x) = x^3 - 3x"}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["1/x"]}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["(2x+1)/(x-1)"],"asintotas":true}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x+2","x^2"],"sombrear":{"entre":[0,1]},"marcar":["intersecciones"]}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^3 - 3x"],"tangente":{"curva":0,"x":2}}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["sin(x)"],"x_desde":0,"x_hasta":"pi"}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":[{"x":"3cos(t)","y":"2sin(t)"},{"r":"1+cos(t)"}]}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^2 si x<0; x si x>=0"],"x_desde":-2,"x_hasta":2}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":[],"puntos":[[0,1],[1,3],[2,2],[3,5]],"unir":true,"nombre_puntos":"medidas"}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["tan(x)"],"x_desde":-3,"x_hasta":3}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["exp(x)"],"x_desde":-2,"x_hasta":4}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":[{"función":"x = 3cos(t)"},{"función":"y = 2sin(t)"}]}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["sqrt(x)"],"x_desde":-5,"x_hasta":-1}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^2"],"x_desde":3,"x_hasta":1}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x*y"]}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["abs(x)"],"tangente":{"x":0}}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["1/x"],"sombrear":{"desde":-1,"hasta":1}}}
+{"nombre":"graficar_funcion","semilla":5,"args":{"funciones":["x^2"],"marcar":"todo"}}

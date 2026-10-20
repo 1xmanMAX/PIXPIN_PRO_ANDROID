@@ -16,6 +16,17 @@ import java.util.concurrent.TimeUnit
  * Si no se puede leer (o tarda), lista vacía: el calco sigue y las letras salen como trazos.
  */
 object LectorDeLetras {
+    /** Los renglones leídos, de arriba abajo (la pista del problema en limpio, PC `pista_de_ocr`); null si no se pudo leer. */
+    fun lineas(mapa: Bitmap): List<String>? = runCatching {
+        val lector = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        try {
+            Tasks.await(lector.process(InputImage.fromBitmap(mapa, 0)), 30, TimeUnit.SECONDS)
+                .textBlocks.flatMap { it.lines }.sortedBy { it.boundingBox?.top ?: 0 }.map { it.text }
+        } finally {
+            lector.close()
+        }
+    }.getOrNull()
+
     fun leer(mapa: Bitmap): List<Calcar.Palabra> = runCatching {
         val lector = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {

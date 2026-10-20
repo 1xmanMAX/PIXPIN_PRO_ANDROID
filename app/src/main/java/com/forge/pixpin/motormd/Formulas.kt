@@ -66,12 +66,19 @@ sealed interface Pieza {
     /** Algo pequeño encima de otra cosa (`\overset{a}{=}`). */
     data class Encima(val base: Pieza, val arriba: Pieza) : Pieza
 
+    /** Lo pequeño centrado debajo: `\underset{n}{x}`, el rótulo de `\underbrace{SS...S}_{n veces}` (PC 18-oct). */
+    data class Debajo(val base: Pieza, val abajo: Pieza) : Pieza
+
     /** **Con su tamaño de display** (`\dfrac`): una fracción así no encoge en un renglón. */
     data class Grande(val dentro: Pieza) : Pieza
 }
 
 /** Las marcas de [Pieza.Adornada]. */
-enum class Adorno { RAYA_ENCIMA, ARCO_ENCIMA, FLECHA, GORRO, TILDE, RAYA_DEBAJO }
+enum class Adorno {
+    RAYA_ENCIMA, ARCO_ENCIMA, FLECHA, GORRO, TILDE, RAYA_DEBAJO,
+    /** `\underbrace`: la llave de «"n" veces» (PC 18-oct). */
+    LLAVE_DEBAJO
+}
 
 /**
  * Entiende fórmulas escritas en LaTeX, del subconjunto que se usa en unas notas.
@@ -207,7 +214,19 @@ object Formulas {
                 // `1/2 + x` se paraba en el espacio y devolvía solo la fracción.
                 saltarEspacios()
                 if (esFin(fin)) break
-                val signo = signoSuelto() ?: break
+                val signo = signoSuelto()
+                if (signo == null) {
+                    // **Dentro de un grupo** (`{(x; y)}`, PC 18-oct): una coma, un punto y coma o un «°» no lo
+                    // cierra. Antes se cortaba ahí y la llave salía suelta («F (x y)}»): se escribe y se sigue.
+                    val c = en(i)
+                    if (fin != null && c != null && c != fin) {
+                        i++
+                        partes += texto(if (c == ',' || c == ';') "$c " else c.toString())
+                        partes += termino(fin)
+                        continue
+                    }
+                    break
+                }
                 partes += texto(" $signo ")
                 partes += termino(fin)
             }
@@ -401,6 +420,28 @@ object Formulas {
                         else -> Adorno.ARCO_ENCIMA
                     }
                     Pieza.Adornada(base, adorno)
+                }
+                // `\underbrace{SS...S}_{"n" veces}`: la llave debajo y su rótulo debajo de ella (PC 18-oct).
+                "underbrace" -> {
+                    val base = Pieza.Adornada(grupo(), Adorno.LLAVE_DEBAJO)
+                    saltarEspacios()
+                    if (en(i) == '_') { i++; Pieza.Debajo(base, grupo()) } else base
+                }
+                // `\underset{n}{x}`: lo pequeño debajo.
+                "underset" -> {
+                    val abajo = grupo()
+                    Pieza.Debajo(grupo(), abajo)
+                }
+                // `\phantom{xx}`: su hueco, sin tinta (salía como código).
+                "phantom", "hphantom", "vphantom" -> {
+                    val g = plano(grupo())
+                    texto(" ".repeat(maxOf(g.codePointCount(0, g.length), 1)))
+                }
+                // `\overbrace{...}^{...}`: el arco encima y lo de arriba, encima.
+                "overbrace" -> {
+                    val base = Pieza.Adornada(grupo(), Adorno.ARCO_ENCIMA)
+                    saltarEspacios()
+                    if (en(i) == '^') { i++; Pieza.Encima(base, grupo()) } else base
                 }
                 // `\overset{\frown}{AC}` es el arco; `\overset{?}{=}`, lo pequeño encima.
                 "overset", "stackrel" -> {
@@ -629,12 +670,14 @@ object Formulas {
             Adorno.GORRO -> "^"
             Adorno.TILDE -> "~"
             Adorno.RAYA_DEBAJO -> "_"
+            Adorno.LLAVE_DEBAJO -> ""
         }
         is Pieza.Color -> plano(p.dentro)
         is Pieza.Negrita -> plano(p.dentro)
         is Pieza.Grande -> plano(p.dentro)
         is Pieza.Recuadro -> "[${plano(p.dentro)}]"
         is Pieza.Encima -> plano(p.base) + "^" + plano(p.arriba)
+        is Pieza.Debajo -> plano(p.base) + " (" + plano(p.abajo) + ")"
     }
 
     /** **Los mandatos que el lector no entendió** (salen con su barra). */
@@ -643,6 +686,7 @@ object Formulas {
         is Pieza.Fila -> p.partes.flatMap { desconocidos(it) }
         is Pieza.Fraccion -> desconocidos(p.arriba) + desconocidos(p.abajo)
         is Pieza.Encima -> desconocidos(p.base) + desconocidos(p.arriba)
+        is Pieza.Debajo -> desconocidos(p.base) + desconocidos(p.abajo)
         is Pieza.ConIndices -> desconocidos(p.base) + (p.arriba?.let { desconocidos(it) } ?: emptyList()) +
             (p.abajo?.let { desconocidos(it) } ?: emptyList())
         is Pieza.Raiz -> desconocidos(p.dentro) + (p.indice?.let { desconocidos(it) } ?: emptyList())
@@ -680,6 +724,7 @@ object Formulas {
         Adorno.GORRO -> "̂"
         Adorno.TILDE -> "̃"
         Adorno.RAYA_DEBAJO -> "̲"
+        Adorno.LLAVE_DEBAJO -> ""
     }
 
     private fun compuesto(p: Pieza): Boolean {
@@ -733,6 +778,7 @@ object Formulas {
         is Pieza.Grande -> legible(p.dentro)
         is Pieza.Recuadro -> legible(p.dentro)
         is Pieza.Encima -> legible(p.base) + (alzado(legible(p.arriba), true) ?: "")
+        is Pieza.Debajo -> legible(p.base) + " (" + legible(p.abajo) + ")"
     }
 
     /**

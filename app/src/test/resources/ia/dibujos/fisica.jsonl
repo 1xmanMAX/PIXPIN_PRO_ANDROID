@@ -1,0 +1,20 @@
+{"nombre":"diagrama_fisica","args":{"tipo":"plano_inclinado","parametros":{"angulo":30,"masa":5,"mu":0.2}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"plano_inclinado","parametros":{"angulo":20,"masa":2,"mu":0.6},"titulo":"Bloque con mu = 0.6"}}
+{"nombre":"diagrama_fisica","args":{"tipo":"tiro_parabolico","parametros":{"v0":20,"angulo":45}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"tiro","v0":"15 m/s","angulo":"60°","altura":10}}
+{"nombre":"diagrama_fisica","args":{"tipo":"vectores","parametros":{"vectores":[{"nombre":"A","modulo":5,"angulo":30},{"nombre":"B","modulo":3,"angulo":120}]}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"vectores","parametros":{"vectores":[[4,0],[3,90],[2,200]],"metodo":"poligono"}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"cuerpo_libre","parametros":{"fuerzas":[{"nombre":"F1","modulo":10,"angulo":0},{"nombre":"F2","modulo":10,"angulo":180}],"masa":2}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"dcl","fuerzas":[{"modulo":8,"angulo":45},{"modulo":5,"angulo":270}]}}
+{"nombre":"diagrama_fisica","args":{"tipo":"mru","parametros":{"v":3,"t":8}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"mrua","parametros":{"v0":10,"a":-2,"t":8,"x0":5}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"circuito","parametros":{"voltaje":12,"resistencias":[4,6,12],"conexion":"paralelo"}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"circuito","parametros":{"voltage":9,"resistances":[100,200],"conexion":"serie"}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"pendulo","parametros":{"longitud":2,"angulo":30}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"atwood","parametros":{"m1":3,"m2":5}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"cuerpo_libre","parametros":{"angulo":25,"mu":0.1,"masa":4}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"plano_inclinado","parametros":{"angulo":95,"masa":5}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"circuito","parametros":{"voltaje":12,"resistencias":[0,6],"conexion":"serie"}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"circuito","parametros":{"voltaje":12,"resistencias":[4,6]}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"cohete","parametros":{}}}
+{"nombre":"diagrama_fisica","args":{"tipo":"tiro_parabolico","parametros":{"v0":20,"angulo":45,"color":"rojo"}}}

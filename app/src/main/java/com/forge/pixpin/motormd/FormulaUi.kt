@@ -169,7 +169,7 @@ private fun PiezaUi(pieza: Pieza, tamanoSp: Float, color: Color) {
 
         is Pieza.Adornada -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
             val marca = when (pieza.adorno) {
-                Adorno.RAYA_ENCIMA, Adorno.RAYA_DEBAJO -> null
+                Adorno.RAYA_ENCIMA, Adorno.RAYA_DEBAJO, Adorno.LLAVE_DEBAJO -> null
                 Adorno.ARCO_ENCIMA -> "⌒"
                 Adorno.FLECHA -> "→"
                 Adorno.GORRO -> "^"
@@ -184,6 +184,7 @@ private fun PiezaUi(pieza: Pieza, tamanoSp: Float, color: Color) {
             if (pieza.adorno == Adorno.RAYA_DEBAJO) {
                 Canvas(Modifier.fillMaxWidth().height(1.dp)) { drawRect(color) }
             }
+            if (pieza.adorno == Adorno.LLAVE_DEBAJO) Text("⏟", fontSize = menor(tamanoSp).sp, color = color)
         }
 
         is Pieza.Color -> PiezaUi(
@@ -205,6 +206,11 @@ private fun PiezaUi(pieza: Pieza, tamanoSp: Float, color: Color) {
         is Pieza.Encima -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
             PiezaUi(pieza.arriba, menor(tamanoSp), color)
             PiezaUi(pieza.base, tamanoSp, color)
+        }
+
+        is Pieza.Debajo -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            PiezaUi(pieza.base, tamanoSp, color)
+            PiezaUi(pieza.abajo, menor(tamanoSp), color)
         }
     }
 }

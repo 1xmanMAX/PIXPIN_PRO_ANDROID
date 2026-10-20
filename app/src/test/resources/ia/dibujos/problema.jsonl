@@ -1,0 +1,6 @@
+{"nombre":"problema_en_limpio","args":{"titulo":"Problema 3","enunciado":"Un bloque de 5 kg baja por un plano inclinado de 30° sin rozamiento. ¿Cual es su aceleracion?","ecuaciones":["a = g \\sin\\theta","\\frac{1}{2} m v^2"],"datos":["m = 5\\ kg","\\theta = 30°","g = 9.8\\ m/s^2"],"incognitas":["a"],"pasos":[{"texto":"La aceleracion es g por el seno del angulo","calculo":"9.8*sin(30°)","resultado":5.1,"unidad":"m/s²"},"Sale la mitad de g"],"respuesta":"a = 4.9 m/s²"}}
+{"nombre":"problema_en_limpio","args":{"enunciado":"Resuelve la ecuacion $x^2 + 3x = 0$ y comprueba las raices obtenidas.","ecuaciones":["x^2 + 3x = 0"],"datos":["A = [[2,-1,0],[1,3,2]]","b = \\frac{1}{2}"],"incognitas":["x_1","x_2"]}}
+{"nombre":"problema_en_limpio","args":{"enunciado":"Calcula el area de un circulo de radio 3 cm y su perimetro.","datos":["r = 3 cm"],"incognitas":["area","perimetro"],"pasos":[{"texto":"Area","calculo":"pi*3^2","unidad":"cm²"},{"texto":"Perimetro","calculo":"2*pi*3"}]}}
+{"nombre":"problema_en_limpio","args":{"enunciado":"hola"}}
+{"nombre":"problema_en_limpio","args":{"enunciado":"Un tren recorre 120 km en 2 horas a velocidad constante.","pasos":[{"texto":"v","calculo":"d/t"}]}}
+{"nombre":"problema_en_limpio","args":{"enunciado":"Un tren recorre 120 km en 2 horas a velocidad constante.","ecuaciones":["v = \\frac{d}{t"]}}

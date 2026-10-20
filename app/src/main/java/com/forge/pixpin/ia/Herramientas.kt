@@ -87,6 +87,15 @@ sealed class Llamada {
     /** Una ecuación compuesta ([EscribirEcuacion]): el ejecutor la mide con la letra de verdad. */
     data class Ecuacion(val ecuacion: EscribirEcuacion.Pedido) : Llamada() { override val nombre get() = EscribirEcuacion.NOMBRE }
 
+    /** Una gráfica de funciones ([Funciones]): el ejecutor la mide con la letra de verdad. */
+    data class Funciones(val pedido: com.forge.pixpin.ia.Funciones.Pedido) : Llamada() { override val nombre get() = com.forge.pixpin.ia.Funciones.NOMBRE }
+
+    /** Un diagrama de física de plantilla ([Fisica]). */
+    data class Fisica(val diagrama: com.forge.pixpin.ia.Fisica.Diagrama) : Llamada() { override val nombre get() = com.forge.pixpin.ia.Fisica.NOMBRE }
+
+    /** Un problema en limpio ([Problema]). */
+    data class Problema(val problema: com.forge.pixpin.ia.Problema.Pedido) : Llamada() { override val nombre get() = com.forge.pixpin.ia.Problema.NOMBRE }
+
     /** Si lo que pide se dibuja tal cual en el lienzo. */
     val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg || this is Cronograma
 }
@@ -201,7 +210,7 @@ object Herramientas {
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
         "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
         Acciones.TABLA, Acciones.ABRIR, GeometriaPrecisaNombre,
-        CronogramaIa.NOMBRE, EscribirEcuacion.NOMBRE,
+        CronogramaIa.NOMBRE, EscribirEcuacion.NOMBRE, Funciones.NOMBRE, Fisica.NOMBRE, Problema.NOMBRE,
         // Editar lo que ya hay (PC 14-oct, `edicion.rs`).
         Edicion.SELECCIONAR, Edicion.TRANSFORMAR, Edicion.ESTILO, Edicion.TRAZAR, Edicion.CORTAR, Edicion.EXTENDER, Edicion.IMAGEN,
         // 15-17 oct, solo con la nube (PC `SOLO_NUBE`): grabar la pantalla no (el teléfono no graba desde aquí).
@@ -319,6 +328,9 @@ object Herramientas {
                 Llamada.Geometria(args)
             }
             CronogramaIa.NOMBRE -> Llamada.Cronograma(CronogramaIa.validar(args, avisos))
+            Funciones.NOMBRE -> Llamada.Funciones(Funciones.validar(args, avisos))
+            Fisica.NOMBRE -> Llamada.Fisica(Fisica.validar(args, avisos))
+            Problema.NOMBRE -> Llamada.Problema(Problema.validar(args, avisos, ::validarDibujo))
             EscribirEcuacion.NOMBRE -> Llamada.Ecuacion(EscribirEcuacion.validar(args, avisos))
             in Edicion.NOMBRES -> try { Llamada.Editar(Edicion.validar(nombre, args)) } catch (e: Edicion.Fallo) { throw mal(e.message ?: "mal puesto") }
             else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
@@ -394,7 +406,7 @@ object Herramientas {
         return out
     }
 
-    private fun validarDibujo(args: JsonObject, avisos: MutableList<String>): List<Figura> {
+    internal fun validarDibujo(args: JsonObject, avisos: MutableList<String>): List<Figura> {
         val lista: List<JsonElement> = when (val e = args["elementos"]) {
             is JsonArray -> e
             // Un solo elemento suelto, sin la lista: se acepta.

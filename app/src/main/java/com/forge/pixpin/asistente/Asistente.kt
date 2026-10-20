@@ -342,7 +342,12 @@ object Asistente {
         // El lienzo destino y sus #n (PC `anadir_resumen`): si el pedido habla de dibujar o de editar,
         // su resumen va pegado detrás, entre corchetes, para que el modelo nombre lo que ya hay.
         val lienzoDelTurno = LienzoDelTurno(app, { almacen.leer() }, pregunta.proyecto)
-        val conLienzo = pedido0 + (if (com.forge.pixpin.ia.Edicion.vieneACuento(pedido0)) runCatching { lienzoDelTurno.resumen(destino) }.getOrNull()?.let { "\n\n[$it]" } ?: "" else "")
+        // Un problema en una foto: el OCR del teléfono, de apoyo para el modelo (PC `pista_de_ocr`).
+        val pistaDeOcr = if (fotoArchivo != null && com.forge.pixpin.ia.Problema.pideProblema(pedido0)) {
+            FotoParaElModelo.mapaDe(fotoArchivo, 1600)?.let { bm -> LectorDeLetras.lineas(bm).also { bm.recycle() } }
+                ?.let(com.forge.pixpin.ia.Problema::pistaDeOcr).orEmpty()
+        } else ""
+        val conLienzo = pedido0 + pistaDeOcr + (if (com.forge.pixpin.ia.Edicion.vieneACuento(pedido0)) runCatching { lienzoDelTurno.resumen(destino) }.getOrNull()?.let { "\n\n[$it]" } ?: "" else "")
         // Con la nube, la hora al minuto y la de cada archivo del chat (PC 17-oct).
         val conLaHora = if (conNube) {
             val desfase = ChatDelAsistente.desfaseLocal()
