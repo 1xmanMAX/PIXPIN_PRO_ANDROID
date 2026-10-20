@@ -51,7 +51,7 @@ class EjecutorDelChat(
     private val motor: Motor,
     private val parar: AtomicBoolean,
     /** Pregunta Sí/No en la burbuja antes de lo que borra o saca algo del aparato. */
-    confirmar: (String) -> Boolean = { false },
+    private val confirmar: (String) -> Boolean = { false },
     /** Lo que pidió el usuario (para afinar el calco con sus palabras). */
     private val pedido: String = "",
     /** La foto de la conversación que ve el modelo (la que se calca si no nombra otra). */
@@ -104,6 +104,13 @@ class EjecutorDelChat(
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.ANOTAR -> anotarDocumento(llamada.accion.pedido)
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.BUSCAR_EN -> buscarEnDocumento(llamada.accion.pedido)
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.EXPORTAR -> exportarDocumento(llamada.accion.pedido)
+            // Las conexiones (PC 17/18-oct): Drive con lo del chat (subir pregunta antes) y el calendario leído.
+            llamada.accion.herramienta == "ver_calendario" -> runCatching { CalendarioGoogle.verCalendario(contexto, llamada.accion.pedido) }
+            llamada.accion.herramienta in com.forge.pixpin.ia.ConexionesNativas.NOMBRES -> runCatching {
+                if (!com.forge.pixpin.ia.ConexionesNativas.disponible) error("esta versión del teléfono no trae las conexiones (falta su biblioteca)")
+                ConexionesDelTelefono(contexto, almacen, chat, confirmar, parar).hacer(llamada.accion.herramienta, llamada.accion.pedido.toString()).getOrThrow()
+            }
+            llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.HOJA_A_LIENZO -> hoja().hacer(llamada.accion.pedido, foto).also { r -> r.onSuccess { hoja?.lienzo?.let { lienzo = it } } }
             llamada.accion.herramienta == com.forge.pixpin.ia.Anotacion.NOMBRE -> runCatching {
                 medirLasNotas()
                 try { AnotarInteligente(contexto, docs, parar).hacer(llamada.accion.pedido, motor, motor.catalogoCompleto) }
@@ -206,6 +213,11 @@ class EjecutorDelChat(
      * **Calcar** la foto (la de la conversación, o la que nombre) con [com.forge.pixpin.ia.Calcar],
      * afinado con las palabras del pedido, al lienzo que toque.
      */
+    /** La hoja al lienzo del PC ([HojaAlLienzo]), con la nube del turno. */
+    @Volatile private var hoja: HojaAlLienzo? = null
+
+    private fun hoja(): HojaAlLienzo = HojaAlLienzo(contexto, almacen, chat, motor, motor.catalogoCompleto, parar, destino).also { hoja = it }
+
     private fun calcar(p0: com.forge.pixpin.ia.Calcar.Parametros): Result<String> = runCatching {
         val p = com.forge.pixpin.ia.Calcar.ajustarAlPedido(p0, pedido)
         val archivo = p.imagen?.let { n ->
@@ -213,6 +225,17 @@ class EjecutorDelChat(
                 (m.nombre.equals(n, true) || File(m.ruta).name.equals(n, true)) }?.ruta?.let(::File)
         } ?: foto ?: almacen.leer().lastOrNull { it.proyecto == chat && it.clase == Clase.IMAGEN && it.ruta != null && File(it.ruta).isFile }?.ruta?.let(::File)
             ?: error("no hay ninguna foto que calcar en este chat")
+        // **Con la nube, una lámina (texto y figuras) no se calca por manchas** (PC 15-oct): se pasa
+        // como hoja, con figuras exactas y texto editable. Lo decide quien ejecuta, como el PC.
+        if (motor.catalogoCompleto && p.zona == null && com.forge.pixpin.ia.HojaNativa.disponible) {
+            val h = hoja()
+            val r = com.forge.pixpin.ia.HojaNativa.lamina(archivo.path, 0.0, System.currentTimeMillis(), h)
+            val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(r) as kotlinx.serialization.json.JsonObject }.getOrNull()
+            if (o != null && o["no"] == null) {
+                h.lienzo?.let { lienzo = it }
+                return@runCatching com.forge.pixpin.ia.HojaNativa.resultado(r).getOrThrow()
+            }
+        }
         val bm = FotoParaElModelo.mapaDe(archivo, 1024) ?: error("no se pudo leer la imagen")
         val rgba = java.nio.ByteBuffer.allocate(bm.width * bm.height * 4)
         bm.copyPixelsToBuffer(rgba)

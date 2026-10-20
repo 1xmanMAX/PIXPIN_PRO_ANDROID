@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -202,6 +203,49 @@ fun HorarioSemanal(texto: String, alCambiar: (String) -> Unit, modifier: Modifie
                         if (ahoraM in Semana.DESDE until Semana.HASTA) {
                             val y = (ahoraM - Semana.DESDE) / Semana.PASO.toFloat() * franjaPx
                             drawLine(Color(0xFFFF453A), androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), strokeWidth = 2f)
+                        }
+                    }
+                    // **Los eventos de Google Calendar** de esta semana (PC 18-oct), debajo de las clases:
+                    // translúcidos, con la raya de su color a la izquierda. Son de Google: no se mueven;
+                    // tocarlos los abre allí. En domingo, la semana que empieza (como el PC).
+                    val eventos = remember(com.forge.pixpin.asistente.CalendarioGoogle.version) {
+                        val hoy = java.time.LocalDate.now()
+                        val lunes = if (hoy.dayOfWeek == java.time.DayOfWeek.SUNDAY) hoy.plusDays(1) else hoy.with(java.time.DayOfWeek.MONDAY)
+                        val zona = java.time.ZoneId.systemDefault()
+                        val desde = lunes.atStartOfDay(zona).toInstant().toEpochMilli()
+                        com.forge.pixpin.asistente.CalendarioGoogle.eventosEntre(contexto, desde - 86_400_000L, desde + 8 * 86_400_000L).mapNotNull { e ->
+                            val ini = if (e.todoElDia) java.time.Instant.ofEpochMilli(e.inicioMs).atZone(java.time.ZoneOffset.UTC).toLocalDateTime()
+                                else java.time.Instant.ofEpochMilli(e.inicioMs).atZone(zona).toLocalDateTime()
+                            val fin = if (e.todoElDia) ini else java.time.Instant.ofEpochMilli(e.finMs).atZone(zona).toLocalDateTime()
+                            val dia = java.time.temporal.ChronoUnit.DAYS.between(lunes, ini.toLocalDate()).toInt()
+                            if (dia !in 0 until 7) return@mapNotNull null
+                            val m0 = ini.hour * 60 + ini.minute
+                            val m1 = if (fin.toLocalDate().isAfter(ini.toLocalDate())) Semana.HASTA else fin.hour * 60 + fin.minute
+                            Triple(e, dia, m0 to m1)
+                        }
+                    }
+                    for ((e, dia, tramo) in eventos) {
+                        if (dia >= dias) continue
+                        val tinte = runCatching { Color(0xFF000000.toInt() or e.color.trimStart('#').toInt(16)) }.getOrDefault(Color(0xFF4285F4))
+                        val (m0, m1) = tramo
+                        if (!e.todoElDia && (m1 <= Semana.DESDE || m0 >= Semana.HASTA)) continue
+                        val x = dia * anchoDia
+                        val y = if (e.todoElDia) 0f else (maxOf(m0, Semana.DESDE) - Semana.DESDE) / Semana.PASO.toFloat() * franjaPx
+                        val alto = if (e.todoElDia) with(densidad) { 18.dp.toPx() } else (minOf(maxOf(m1, m0 + 15), Semana.HASTA) - maxOf(m0, Semana.DESDE)) / Semana.PASO.toFloat() * franjaPx
+                        Row(
+                            Modifier.offset { IntOffset(x.toInt(), y.toInt()) }
+                                .size(with(densidad) { (anchoDia - 3).coerceAtLeast(1f).toDp() }, with(densidad) { alto.coerceAtLeast(franjaPx).toDp() })
+                                .padding(1.5.dp).clip(RoundedCornerShape(6.dp)).background(tinte.copy(alpha = 0.30f))
+                                .clickable(enabled = e.enlace.isNotEmpty()) {
+                                    runCatching { contexto.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(e.enlace))) }
+                                }
+                        ) {
+                            Box(Modifier.width(3.dp).fillMaxHeight().background(tinte))
+                            Column(Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                Text(e.titulo, color = Cristal.tinta, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                if (!e.todoElDia) Text(com.forge.pixpin.asistente.CalendarioGoogle.tramoLegible(e) + (if (e.lugar.isNotEmpty()) " · ${e.lugar}" else ""),
+                                    color = Cristal.tinta.copy(alpha = 0.7f), fontSize = 9.sp, maxLines = 1)
+                            }
                         }
                     }
                     estado.bloques.forEachIndexed { i, b ->

@@ -73,7 +73,9 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
 - **5 hecho** Excel: riel, marcadores (x = columna, y = hoja·10⁷ + fila) con vista, marcos por hoja, tinta
   por hoja (`anot-<uid>-h<i>`), imprimir en claro.
 - **6 hecho** lienzo: riel (marcador, lápiz = mirar/editar, marco = herramienta Marco), fichas de las hojas.
-- **7 pendiente**: pines de imagen.
+- **7 hecho**: pines de imagen con marcos numerados (en píxeles de la foto, `<imagen>.pixpin-marcos` como el PC),
+  botón en la barra del pin, fichas, quitar el último, borrar, imprimir en grupo con lo anotado
+  (`ImprimirFotosActivity`, el diálogo de impresión necesita una actividad).
 - **8 hecho** planos y 3D: riel, marcadores 2D/3D con vista (`MarcadoresCad.kt`, comparten fichero),
   marcos 3D e imprimirlos, tinta por marcador 3D; claves estables GlobalId (PX3D v4, `libpixpincad.so`
   recompilado). Pruebas: `MarcadoresCadTest`.
@@ -81,11 +83,26 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
 - **10 hecho** tareas: `mini/Frase.kt` = `pixpin-frase/tarea.rs` (`FraseTest`), fechas nuevas (`FechasTest`),
   horario semanal (`Semana.kt`, `HorarioSemanal.kt`, `SemanaTest`), asignaturas = listas del chat
   «Asignaturas» (`Asignaturas.kt`), reloj y libro en la caja de Tareas, chapitas con +N que buscan.
-- **11 en parte**: foto en el cursor de la nota, enlaces pulsables en el chat. Falta: riel en las notas.
+- **11 hecho**: foto en el cursor de la nota, enlaces pulsables en el chat y **el riel en las notas**
+  (`ui/VisorDeNotaActivity`): la página de notas del PC (`assets/lector-md.html`, `herramientas/traer-lector-md.sh`)
+  en modo lectura con marcador (fracción + vista exacta), tinta y marcos **dentro de la página** con el guion del
+  riel del PC (`capa_web::INSTALAR`), en `anot-<código>` de la nota (viaja). Se entra desde el editor: «Leer y anotar».
 - **12 en parte**: complejidad, conversación nueva, pastilla del modelo, contexto 40×4000, hora al minuto,
   sin lectura automática; 18 herramientas nuevas (`EnElChat.kt`, `AccionesDelTelefono`), geometría exacta
   (`GeometriaPrecisa.kt`, `GeometriaPrecisaTest`); catálogo y selección del PC de hoy por el oráculo.
-  Falta: anotar_inteligente, ver_lienzo, y las de antes que el teléfono nunca tuvo (editar el lienzo,
-  graficar_funcion, ecuación, cronograma, física, problema en limpio, hoja al lienzo, documentos).
+  Después (20-oct): ver_lienzo y editar el lienzo (`Edicion.kt`, `Ojos.kt`), funciones, ecuación, cronograma,
+  física, problema en limpio (iguales que el PC por el oráculo), calcar con rayas finas y texto (ML Kit),
+  documentos (anotar, buscar dentro, exportar), **anotar_inteligente** (`ia/Anotacion.kt` = `pixpin_ia::anotacion`,
+  `asistente/AnotarInteligente.kt`: PDF, Word, PowerPoint, foto, plano y Excel en sus capas), `revision_tabla`,
+  tabla_de_imagen con OCR, acciones del PC (capturas, sincronizar, enviar al grupo, automatizaciones, soltar).
+  **hoja_a_lienzo**: el código del PC compilado (`herramientas/pixpin-ia-android` → `libpixpinia.so`: `pixpin_ia::hoja`
+  y `hoja_a_lienzo.rs` con su planificador y supervisor, traídos sin tocar por `traer-del-pc.py`); Kotlin pone el puente
+  (`asistente/HojaAlLienzo.kt`: leer, OCR de ML Kit, nube, cada zona al lienzo y pintar para comprobar). Calcar una
+  lámina con la nube la pasa como hoja, como el PC.
+- **14 hecho**: Google Drive y Calendar con `pixpin_ia::conexiones` compilado en `libpixpinia.so` (OAuth con PKCE y
+  vuelta a 127.0.0.1, guardado cifrado con la Keystore en `files/claves`, red por `HttpURLConnection`): las cinco
+  herramientas, Ajustes → Asistente → Conexiones, el caché de Calendar cada 15 min (`calendario-google.json`, la forma del
+  PC), sus eventos en la rejilla del horario y sus avisos con la llamada. `ConexionesTest`.
 - **15 en parte**: `.pixpin` de un archivo suelto con todo lo anotado (`ChatQueViaja.conLoSuelto`,
-  `LoSueltoTest`), claves estables BIM.
+  `LoSueltoTest`), claves estables BIM. **`8d0cc90` (PC, 20-oct)**: la etiqueta de un `.doc`/`.ppt` convertido;
+  en el teléfono la barra ya dice «Word»/«PowerPoint» por el tipo, no por la copia: nada que cambiar.

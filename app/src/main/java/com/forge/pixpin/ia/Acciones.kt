@@ -393,8 +393,46 @@ object Acciones {
             ), null, "Hecho.")
     )
 
-    /** **Todas las filas**: las de la app y las de los documentos. */
-    val TODAS: List<Accion> get() = ACCIONES + ACCIONES_DOCUMENTOS
+    // ------------------------------------------------------------------------------- conexiones
+
+    /** La `accion` de las conexiones: las hace `asistente/ConexionesDelTelefono` con la biblioteca del PC. */
+    const val CONEXION = "(conexion)"
+    private val SERVICIO = d("\"google_drive\"", p("servicio", op("google_drive"), false, "el servicio conectado; omitir: google_drive"))
+    private const val ARCHIVO_DE_DRIVE = "id del archivo (el que da buscar_en_conexion) o su nombre exacto"
+
+    /** **La tabla de las conexiones** (PC `conexiones/acciones.rs`, 17/18-oct): Google Drive y Calendar. Solo para la nube. */
+    val ACCIONES_CONEXIONES: List<Accion> = listOf(
+        Accion("buscar_en_conexion", CONEXION, "Busca archivos en el Google Drive del usuario (por nombre o por lo que dicen dentro) y da su nombre, tipo, fecha e id. " +
+            "Sin texto, lo ultimo modificado. Usala para «busca en mi Drive...», «¿tengo en Drive el contrato...?».", Categoria.ABRIR, emptyList(), "{}",
+            listOf(
+                p("texto", Tipo.Texto, false, "lo que se busca; omitir: lo mas reciente"),
+                d("\"cualquiera\"", p("tipo", op("cualquiera", "documento", "hoja", "presentacion", "pdf", "imagen", "carpeta"), false, "solo de este tipo")),
+                d("10", p("maximo", Tipo.Entero, false, "cuantos como mucho (1-25)")),
+                SERVICIO
+            ), null, "Hecho."),
+        Accion("leer_de_conexion", CONEXION, "Lee el texto de un archivo del Google Drive del usuario: un Documento o Presentacion de Google, una Hoja de calculo (en CSV), " +
+            "un PDF, Word o texto. Usala para resumirlo o contestar sobre el sin bajarlo.", Categoria.NOTAS, emptyList(), "{}",
+            listOf(p("archivo", Tipo.Texto, true, ARCHIVO_DE_DRIVE), d("1", p("parte", Tipo.Entero, false, "si el texto es largo, que trozo (1, 2, 3...)")), SERVICIO), null, "Hecho."),
+        Accion("bajar_de_conexion", CONEXION, "Baja un archivo del Google Drive del usuario y lo deja en este chat (un Doc de Google sale como Word, una Hoja como Excel). " +
+            "Para trabajar despues con el en PixPin (anotarlo, abrirlo, pasarlo al lienzo).", Categoria.ABRIR, emptyList(), "{}",
+            listOf(p("archivo", Tipo.Texto, true, ARCHIVO_DE_DRIVE), SERVICIO), null, "Hecho."),
+        Accion("subir_a_conexion", CONEXION, "Sube un archivo de este chat al Google Drive del usuario (pide permiso antes). Opcional: la carpeta de Drive y otro nombre.", Categoria.ABRIR, emptyList(), "{}",
+            listOf(
+                p("archivo", Tipo.Texto, false, "nombre o descripcion del archivo del chat; omitir: el mas reciente"),
+                p("carpeta", Tipo.Texto, false, "carpeta de Drive (su id o su nombre); omitir: la raiz de Mi unidad"),
+                p("nombre", Tipo.Texto, false, "nombre con el que se guarda en Drive; omitir: el mismo"),
+                SERVICIO
+            ), "¿Subo[ «{archivo}»] a {servicio}?", "Hecho."),
+        Accion("ver_calendario", CONEXION, "Lee los eventos del Google Calendar del usuario (todos sus calendarios visibles): titulo, dia, hora, lugar.                       " +
+            "Usala para «¿que tengo hoy?», «¿tengo algo el jueves?», «mi agenda de esta semana». Solo lee: no crea ni cambia eventos.", Categoria.ABRIR, emptyList(), "{}",
+            listOf(
+                d("\"hoy\"", p("desde", Tipo.Texto, false, "el primer dia: hoy, mañana, un dia de la semana (jueves), semana (esta semana) o una fecha AAAA-MM-DD")),
+                d("1", p("dias", Tipo.Entero, false, "cuantos dias desde ese (1-31); con desde=semana, 7"))
+            ), null, "Hecho.")
+    )
+
+    /** **Todas las filas**: las de la app, las de los documentos y las de las conexiones. */
+    val TODAS: List<Accion> get() = ACCIONES + ACCIONES_DOCUMENTOS + ACCIONES_CONEXIONES
 
     fun porNombre(nombre: String): Accion? = TODAS.firstOrNull { it.herramienta == nombre }
 

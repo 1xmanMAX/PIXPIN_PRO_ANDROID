@@ -108,6 +108,15 @@ class PixPinApp : Application() {
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
         com.forge.pixpin.sincro.Presencia.instalar(this)
+        // **Google Calendar** (PC 18-oct): lo leído al arrancar (unos segundos después, para no
+        // estorbar) y cada 15 minutos mientras la app viva; el horario y los avisos leen el caché.
+        if (com.forge.pixpin.ia.ConexionesNativas.disponible) scope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(8_000)
+            while (true) {
+                runCatching { com.forge.pixpin.asistente.CalendarioGoogle.leer(this@PixPinApp) }
+                kotlinx.coroutines.delay(com.forge.pixpin.asistente.CalendarioGoogle.CADA_MS)
+            }
+        }
         // **La tasa de refresco, en todas las ventanas y desde el primer momento.**
         //
         // Aquí y no en cada Activity porque son veinte y no tienen clase base común: de

@@ -1,0 +1,9 @@
+[package]
+name = "shim-codec"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Lo que usa la hoja al lienzo del PC de `pixpin-codec` (WIC de Windows), con el crate `image`.
+[dependencies]
+image = { version = "0.25.9", default-features = false, features = ["png", "jpeg", "webp"] }

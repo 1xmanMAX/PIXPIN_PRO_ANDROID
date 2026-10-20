@@ -1,0 +1,8 @@
+[package]
+name = "shim-ocr"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# `pixpin-ocr` del PC (el OCR de Windows) con el del teléfono: ML Kit, que le pone el puente JNI.
+[dependencies]

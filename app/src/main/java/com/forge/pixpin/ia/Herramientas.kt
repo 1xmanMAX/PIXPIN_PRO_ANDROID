@@ -209,7 +209,8 @@ object Herramientas {
         "lienzo_nuevo", "grabar_voz", "reproducir_audio", "lista_nueva", "anadir_tarea", "anadir_tareas", "marcar_tarea",
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
         "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
-        Acciones.TABLA, Acciones.ABRIR, Acciones.ANOTAR, Acciones.BUSCAR_EN, Acciones.EXPORTAR, Anotacion.NOMBRE, GeometriaPrecisaNombre,
+        Acciones.TABLA, Acciones.ABRIR, Acciones.ANOTAR, Acciones.BUSCAR_EN, Acciones.EXPORTAR, Anotacion.NOMBRE, Acciones.HOJA_A_LIENZO, GeometriaPrecisaNombre,
+        "buscar_en_conexion", "leer_de_conexion", "bajar_de_conexion", "subir_a_conexion", "ver_calendario",
         CronogramaIa.NOMBRE, EscribirEcuacion.NOMBRE, Funciones.NOMBRE, Fisica.NOMBRE, Problema.NOMBRE,
         "conservar_captura", "borrar_captura", "caja_para_soltar", "sincronizar_movil", "enviar_al_movil", "crear_automatizacion",
         // Editar lo que ya hay (PC 14-oct, `edicion.rs`).

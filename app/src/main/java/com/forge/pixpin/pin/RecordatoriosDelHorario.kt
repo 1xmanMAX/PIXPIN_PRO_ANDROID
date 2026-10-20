@@ -50,7 +50,13 @@ object RecordatoriosDelHorario {
         val app = context.applicationContext
         val local = msLocales(ahora)
         val h = Horario.deDisco(app.filesDir, Momento.deMsLocales(local))
-        val alarmas = Horario.avisos(h, local, Horario.DIAS_A_LA_VISTA).associate { it.id to utcDe(it.cuando) } +
+        // Los eventos de Google Calendar (PC 18-oct), con la misma antelación que las clases. Los de
+        // todo el día no llaman.
+        val deGoogle = com.forge.pixpin.asistente.CalendarioGoogle.eventosEntre(app, ahora, ahora + Horario.DIAS_A_LA_VISTA * 86_400_000L)
+            .filter { !it.todoElDia }
+            .map { e -> "${Horario.PREFIJO}gcal:${e.id}:${e.titulo}" to e.inicioMs - h.antelacion * 60_000L }
+            .filter { it.second > ahora }
+        val alarmas = Horario.avisos(h, local, Horario.DIAS_A_LA_VISTA).associate { it.id to utcDe(it.cuando) } + deGoogle +
             pospuestas(app.filesDir, ahora)
         val apuntadas = File(app.filesDir, APUNTADAS)
         val antes = runCatching { apuntadas.readLines().filter { it.isNotBlank() }.toSet() }.getOrDefault(emptySet())
@@ -72,6 +78,20 @@ object RecordatoriosDelHorario {
         }
         val local = msLocales(ahora)
         val h = Horario.deDisco(app.filesDir, Momento.deMsLocales(local))
+        // Un evento de Google Calendar: su título, su hora, su lugar.
+        val deGoogle = id.removePrefix(Horario.PREFIJO).takeIf { it.startsWith("gcal:") && id.startsWith(Horario.PREFIJO) }
+            ?.removePrefix("gcal:")?.substringBefore(':')?.substringBefore('|')
+            ?.let { com.forge.pixpin.asistente.CalendarioGoogle.evento(app, it) }
+        if (deGoogle != null) {
+            val l = Horario.Llamada(
+                audio = null, nombre = deGoogle.titulo, mensaje = id,
+                detalle = listOf(com.forge.pixpin.asistente.CalendarioGoogle.tramoLegible(deGoogle), deGoogle.lugar, deGoogle.calendario).filter { it.isNotEmpty() }.joinToString(" · "),
+                texto = if (deGoogle.lugar.isEmpty()) deGoogle.titulo else "${deGoogle.titulo} en ${deGoogle.lugar}"
+            )
+            runCatching { LlamadaSecretaActivity.llamarDelHorario(app, l) }
+            reprogramar(app, ahora + 1_000)
+            return
+        }
         val aviso = Horario.avisoDe(h, id, local)
         if (aviso != null) {
             val l = Horario.llamadaDe(h, aviso, Horario.carpetaDeVoz(app.filesDir)) { f ->

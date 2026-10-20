@@ -1,0 +1,28 @@
+[package]
+name = "pixpin-ia-android"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# **La hoja al lienzo del PC en el teléfono** (libpixpinia.so): el asistente de Windows
+# (crates/pixpin-ia) y su orquestación (apps/pixpin/src/asistente/hoja_a_lienzo*.rs), traídos sin
+# cambiar sus algoritmos; lo de Windows (OCR, nube, lienzo, pintar) lo hace Kotlin por JNI. Ver
+# herramientas/pixpin-ia-android/preparar.sh.
+[lib]
+name = "pixpinia"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+pixpin-ia = { path = "../pixpin-ia" }
+pixpin-motor2d = { path = "../pixpin-motor2d" }
+serde_json = "1.0"
+tracing = "0.1.44"
+jni = { version = "0.21", default-features = false }
+# Lo de Windows, con las mismas firmas (ver shims/).
+pixpin_codec = { package = "shim-codec", path = "../shim-codec" }
+pixpin_ocr = { package = "shim-ocr", path = "../shim-ocr" }
+pixpin_shell = { package = "shim-shell", path = "../shim-shell" }
+pixpin_pdf = { package = "shim-pdf", path = "../shim-pdf" }

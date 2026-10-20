@@ -259,6 +259,7 @@ private fun QuienContesta(ajustes: com.forge.pixpin.data.Settings) {
         Opciones("Mandar trozos de tus documentos a la nube", listOf("" to "Preguntar", "si" to "Sí", "no" to "No"), ajustes.asistenteDocumentosNube) { v ->
             alcance.launch { app.settings.setAsistenteDocumentosNube(v) }
         }
+        ConexionesDelAsistente()
     }
     Opciones("Pensar antes de contestar", listOf("" to "Auto", "si" to "Sí", "no" to "No"), ajustes.asistentePensar) { v ->
         alcance.launch { app.settings.setAsistentePensar(v) }
