@@ -15,6 +15,25 @@ fn main() {
             let l: Vec<Value> = c.iter().map(|h| h.a_json()).collect();
             println!("{}", serde_json::to_string_pretty(&l).unwrap());
         }
+        // Lo que el PC dibuja para cada llamada (una por renglón: {nombre, args, semilla}).
+        "elementos" => {
+            for linea in std::io::stdin().lock().lines() {
+                let v: Value = serde_json::from_str(&linea.unwrap()).unwrap();
+                let cruda = pixpin_ia::motor::LlamadaCruda {
+                    id: "o".into(),
+                    nombre: v["nombre"].as_str().unwrap().into(),
+                    argumentos: v["args"].to_string(),
+                };
+                let semilla = v["semilla"].as_u64().unwrap_or(7);
+                match pixpin_ia::herramientas::validar(&cruda, &pixpin_ia::herramientas::catalogo()) {
+                    Ok(val) => {
+                        let els = pixpin_ia::lienzo::elementos(&val.llamada, (0.0, 0.0), semilla);
+                        println!("{}", json!({"elementos": els, "avisos": val.avisos}));
+                    }
+                    Err(e) => println!("{}", json!({"error": e.to_string()})),
+                }
+            }
+        }
         "seleccion" => {
             for linea in std::io::stdin().lock().lines() {
                 let v: Value = serde_json::from_str(&linea.unwrap()).unwrap();

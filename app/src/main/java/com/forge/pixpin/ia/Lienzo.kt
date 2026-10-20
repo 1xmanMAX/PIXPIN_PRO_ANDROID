@@ -163,6 +163,7 @@ object Lienzo {
             is Llamada.Dibujar -> llamada.figuras.sortedBy { it.capa }.forEach { figura(f, it) }
             is Llamada.Grafica -> grafica(f, llamada.grafica)
             is Llamada.DibujoSvg -> Svg.elementos(f, llamada.dibujo)
+            is Llamada.Cronograma -> CronogramaIa.elementos(f, llamada.cronograma)
             else -> {}
         }
         return f.salida.map { JsonObject(it) }

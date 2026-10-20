@@ -1,0 +1,7 @@
+{"nombre":"cronograma","semilla":4,"args":{"titulo":"Obra","tareas":[{"nombre":"Excavacion","inicio":"2026-11-02","fin":"2026-11-06"},{"nombre":"Cimientos","inicio":"2026-11-09","fin":"2026-11-20","depende_de":["excavacion"]},{"nombre":"Muros","inicio":"2026-11-23","duracion":10,"depende_de":[2]},{"nombre":"Fin de cimientos","inicio":"2026-11-20","hito":true,"depende_de":["Cimientos"]}]}}
+{"nombre":"cronograma","semilla":9,"args":{"unidad":"semanas","tareas":[{"nombre":"Diseno","inicio":1,"fin":4},{"nombre":"Licencia","inicio":4,"fin":9,"depende_de":["Diseno"]},{"nombre":"Un nombre de tarea larguisimo que no cabe en la columna","inicio":2,"fin":12,"color":"rojo"}]}}
+{"nombre":"cronograma","semilla":11,"args":{"titulo":"Tesis","tareas":[{"nombre":"Marco teorico","inicio":"2026-09-01","fin":"2026-12-15"},{"nombre":"Encuestas","inicio":"2026-11-01","fin":"2027-02-28","depende_de":[1]},{"nombre":"Entrega","inicio":"2027-03-01","hito":true,"depende_de":["Encuestas"]}]}}
+{"nombre":"cronograma","semilla":3,"args":{"tareas":[{"nombre":"A","inicio":1,"fin":3},{"nombre":"B","inicio":2,"fin":5,"depende_de":["A"]},{"nombre":"C","inicio":5,"fin":5,"depende_de":["B"]}]}}
+{"nombre":"cronograma","semilla":3,"args":{"tareas":[{"nombre":"A","inicio":"2026-11-10","fin":"2026-11-02"}]}}
+{"nombre":"cronograma","semilla":3,"args":{"tareas":[{"nombre":"A","inicio":1,"fin":3,"depende_de":["B"]},{"nombre":"B","inicio":3,"fin":5,"depende_de":["A"]}]}}
+{"nombre":"cronograma","semilla":3,"args":{"tareas":[{"nombre":"A","inicio":1,"fin":3,"depende_de":["Z"]}]}}

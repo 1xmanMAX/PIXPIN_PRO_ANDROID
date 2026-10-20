@@ -75,7 +75,14 @@ class EjecutorDelChat(
         private set
 
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
-        is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg -> dibujar(llamada)
+        is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg, is Llamada.Cronograma -> dibujar(llamada)
+        is Llamada.Ecuacion -> runCatching {
+            // Medida con la letra de verdad (Fraunces, la de serifa), como el PC con DirectWrite.
+            val (piezas, _) = com.forge.pixpin.ia.EscribirEcuacion.piezas(llamada.ecuacion) { t, tam ->
+                com.forge.pixpin.motor.DrawFonts.medirTexto(contexto, t, com.forge.pixpin.motor.ItemStyle.FONT_FRAUNCES, tam)
+            }
+            alLienzo("la ecuacion") { (x, y) -> piezas.map { it.copy(x = it.x + x, y = it.y + y) } }
+        }
         is Llamada.Ocr -> leer(llamada.peticion)
         is Llamada.App -> when {
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA -> documentos.tablaDeImagen(llamada.accion)
@@ -117,6 +124,7 @@ class EjecutorDelChat(
         val semilla = System.currentTimeMillis()
         val que = when (l) {
             is Llamada.Grafica -> "la grafica"
+            is Llamada.Cronograma -> "el cronograma (${l.cronograma.tareas.size} tareas)"
             is Llamada.DibujoSvg -> "la ilustracion (${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras)"
             else -> "${Lienzo.elementos(l, 0.0 to 0.0, semilla).size} figuras"
         }
