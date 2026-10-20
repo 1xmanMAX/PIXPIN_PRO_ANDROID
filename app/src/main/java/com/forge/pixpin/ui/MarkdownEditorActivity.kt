@@ -176,7 +176,15 @@ class MarkdownEditorActivity : ComponentActivity() {
                     idDeLaNota = id,
                     proyectoDeLaNota = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
                         ?: (application as? PixPinApp)?.proyectos?.proyectos?.value?.firstOrNull { p -> p.hojas.any { it.id == id } }?.id,
-                    masAcciones = listOf("Exportar a Word" to { texto -> exportarAWord(texto) })
+                    masAcciones = listOf(
+                        "Exportar a Word" to { texto -> exportarAWord(texto) },
+                        // Leer con el riel de los visores (marcador, tinta y marcos), en la página del PC.
+                        "Leer y anotar" to { texto ->
+                            if (id.isNotEmpty()) TextoStore.guardar(id, texto)
+                            guardarEnSuProyecto(id, texto)
+                            VisorDeNotaActivity.abrir(this, id, texto, texto.lineSequence().firstOrNull { it.isNotBlank() }?.trimStart('#', ' ')?.take(60) ?: "Nota")
+                        }
+                    )
                 )
             }
         }

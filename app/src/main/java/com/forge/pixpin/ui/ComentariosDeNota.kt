@@ -77,17 +77,22 @@ class ComentariosDeNota private constructor(private val archivo: File, private v
 
     companion object {
         /** Los comentarios de la nota [id], o null si esa nota no tiene código con el que viajar. */
-        fun de(context: Context, id: String): ComentariosDeNota? {
+        /** El código con el que viaja lo de la nota [id] (sus comentarios, y la tinta y las marcas del riel). */
+        fun uidDe(context: Context, id: String): String? {
             if (id.isBlank()) return null
             val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return null
-            val uid = app.proyectos.proyectos.value.asSequence().flatMap { it.hojas.asSequence() }
+            return app.proyectos.proyectos.value.asSequence().flatMap { it.hojas.asSequence() }
                 .firstOrNull { it.id == id && it.nota != null }?.let { Codigos.unico(it) }
                 ?: run {
                     val mensajes = com.forge.pixpin.guardados.MensajesStore(app).leer()
                     val m = mensajes.firstOrNull { it.id == id } ?: mensajes.firstOrNull { "md-${it.id}" == id }
                     m?.let { Codigos.unico(it) }
                 }
-                ?: return null
+        }
+
+        fun de(context: Context, id: String): ComentariosDeNota? {
+            val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return null
+            val uid = uidDe(context, id) ?: return null
             val identidad = runCatching { com.forge.pixpin.sincro.IdentidadEnDisco(app.filesDir).leer().yo }.getOrNull()
             val quien = Comentarios.Quien(
                 identidad?.nombre?.ifBlank { null } ?: android.os.Build.MODEL ?: "Teléfono",

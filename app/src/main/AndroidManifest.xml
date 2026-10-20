@@ -888,6 +888,11 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Leer una nota con el riel (la página de notas del PC). -->
+        <activity
+            android:name=".ui.VisorDeNotaActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
         <!-- Imprimir los marcos de un pin flotante: el diálogo necesita una actividad. -->
         <activity
             android:name=".guardados.ImprimirFotosActivity"
