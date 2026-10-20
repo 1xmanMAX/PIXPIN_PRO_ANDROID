@@ -338,6 +338,27 @@ class PinWindowController(
 
     private val annotating = mutableStateOf(false)
 
+    // ---- Marcos numerados (19-oct-2026, PC `pines/marcos.rs`) ----
+
+    /**
+     * **Los marcos numerados del pin de imagen**, como en el plano y los demás visores: en píxeles de
+     * la foto (los de la escena), así que se quedan en su sitio aunque el pin se agrande, se acerque
+     * por dentro o se gire. Se guardan junto a la imagen (`<imagen>.pixpin-marcos`, como el PC) y
+     * se pintan siempre; con el modo puesto, arrastrar pone uno.
+     */
+    private var marcosDelPin: com.forge.pixpin.motor.MarcosDoc? = null
+    private val marcosTick = mutableStateOf(0)
+    private val enMarcos = mutableStateOf(false)
+    private var marcosBar: OverlayComposeWindow? = null
+
+    private fun marcosDelPin(): com.forge.pixpin.motor.MarcosDoc? {
+        marcosDelPin?.let { return it }
+        if (pin.value.type != PinType.IMAGE) return null
+        val ruta = pin.value.imagePath ?: return null
+        return com.forge.pixpin.motor.MarcosDoc.de(com.forge.pixpin.motor.GuardadoDoc(java.io.File("$ruta.pixpin-marcos"), viaja = false))
+            .also { marcosDelPin = it }
+    }
+
     /** Con qué se entró al modo anotación, para saber si hay algo nuevo que guardar. */
     private var annotationsAtEnter: List<com.forge.pixpin.motor.Element> = emptyList()
 
@@ -542,6 +563,7 @@ class PinWindowController(
 
     fun hideView() {
         exitAnnotateMode()
+        salirDeMarcos()
         cerrarTirador()
         closeActionBar()
         closeEmojiPicker()
@@ -1484,6 +1506,7 @@ class PinWindowController(
     private fun enterAnnotateMode() {
         if (annotating.value || pin.value.type != PinType.IMAGE) return
         closeActionBar()
+        salirDeMarcos()
         annotating.value = true
         annotationsAtEnter = annotator.scene.visible
         // **Se conserva `StrokeTouchReader`.** Trae el rechazo de palma y las
@@ -1578,6 +1601,127 @@ class PinWindowController(
             // editaría a ciegas, con los trazos flotando sobre el vacío.
             s.imagePath
         )
+    }
+
+    /**
+     * Los marcos encima de la foto, con la raya y el número de todos los visores (azul `#0078D4`,
+     * 2 dp, el número blanco en su cuadrito). [escala]: píxeles de pantalla por píxel de la foto.
+     */
+    private fun dibujarMarcos(lona: android.graphics.Canvas, escala: Double) {
+        val m = marcosDelPin ?: return
+        val d = context.resources.displayMetrics.density
+        val raya = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = com.forge.pixpin.motor.MarcosDoc.AZUL.toInt(); style = android.graphics.Paint.Style.STROKE; strokeWidth = 2 * d
+        }
+        val fondo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = com.forge.pixpin.motor.MarcosDoc.AZUL.toInt() }
+        val numero = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE; textSize = 12 * d; typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        fun rect(c: com.forge.pixpin.motor.MarcoDoc) = android.graphics.RectF(
+            (minOf(c.x0, c.x1) * escala).toFloat(), (minOf(c.y0, c.y1) * escala).toFloat(),
+            (maxOf(c.x0, c.x1) * escala).toFloat(), (maxOf(c.y0, c.y1) * escala).toFloat()
+        )
+        m.lista.forEachIndexed { i, c ->
+            val r = rect(c)
+            lona.drawRect(r, raya)
+            val n = (i + 1).toString()
+            lona.drawRect(r.left, r.top, r.left + numero.measureText(n) + 12 * d, r.top + 20 * d, fondo)
+            lona.drawText(n, r.left + 6 * d, r.top + 15 * d, numero)
+        }
+        m.cajaNueva()?.let { c ->
+            val r = rect(c)
+            lona.drawRect(r, android.graphics.Paint(fondo).apply { alpha = 20 })
+            lona.drawRect(r, android.graphics.Paint(raya).apply { strokeWidth = 1.5f * d })
+        }
+    }
+
+    /** El marco del riel: entra o sale del modo de poner marcos (no va a la vez que anotar). */
+    private fun alternarMarcos() {
+        if (enMarcos.value) { salirDeMarcos(); return }
+        val m = marcosDelPin() ?: return
+        closeActionBar()
+        exitAnnotateMode()
+        m.poner(true)
+        enMarcos.value = true
+        window?.setTouchHandler(
+            StrokeTouchReader(
+                onBegin = { x, y, _ -> toEscena(x, y)?.let { m.pulsar(doubleArrayOf(it.x, it.y)); marcosTick.value++ } },
+                onExtend = { x, y, _ -> toEscena(x, y)?.let { if (m.mover(doubleArrayOf(it.x, it.y))) marcosTick.value++ } },
+                onFinish = {
+                    if (m.soltar(doubleArrayOf(ultimoPuntoEscena.x, ultimoPuntoEscena.y), zoomEscena())) marcosTick.value++
+                    else m.cancelar()
+                    marcosTick.value++
+                },
+                onCancel = { m.cancelar(); marcosTick.value++ },
+                onModifier = { }
+            )
+        )
+        abrirBarraDeMarcos()
+    }
+
+    private fun salirDeMarcos() {
+        if (!enMarcos.value) return
+        enMarcos.value = false
+        marcosDelPin?.poner(false)
+        window?.setTouchHandler(newTouchHandler())
+        marcosBar?.let { b -> runCatching { wm.removeView(b.view) }; b.onDetached() }
+        marcosBar = null
+        marcosTick.value++
+    }
+
+    /** Las fichas y los mandos de los marcos, en su ventana (la del pin se queda con los toques). */
+    private fun abrirBarraDeMarcos() {
+        if (marcosBar != null) return
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            y = (24 * context.resources.displayMetrics.density).toInt()
+        }
+        val bar = OverlayComposeWindow(context) { BarraDeMarcosContent() }
+        marcosBar = bar
+        runCatching { wm.añadirVistaFluida(bar.view, params); bar.onAttached() }.onFailure { marcosBar = null }
+    }
+
+    @Composable
+    private fun BarraDeMarcosContent() {
+        @Suppress("UNUSED_EXPRESSION") marcosTick.value
+        val m = marcosDelPin ?: return
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.forge.pixpin.ui.FichasDeMarcos(
+                cuantos = m.lista.size, alIrA = { },
+                alImprimir = { imprimirMarcos() },
+                alQuitarUltimo = { if (m.quitarUltimo()) marcosTick.value++ },
+                alBorrar = { m.borrar(); marcosTick.value++ }
+            )
+            Surface(shape = androidx.compose.foundation.shape.CircleShape, shadowElevation = 6.dp) {
+                IconButton(onClick = { salirDeMarcos() }) {
+                    Icon(Icons.Filled.Check, contentDescription = "Hecho", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+
+    /**
+     * **Imprime los marcos en grupo**, una hoja por marco (PC `imprimir_marcos`): cada uno se recorta de
+     * la foto entera con lo anotado horneado a su tamaño real, no de lo que se ve en pantalla.
+     */
+    private fun imprimirMarcos() {
+        val m = marcosDelPin ?: return
+        val bmp = bitmapState.value ?: return
+        if (m.lista.isEmpty()) return
+        val escena = annotator.scene
+        val carpeta = java.io.File(context.cacheDir, "imprimir").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+        val rutas = m.lista.mapIndexedNotNull { i, c ->
+            val r = android.graphics.Rect(minOf(c.x0, c.x1).toInt(), minOf(c.y0, c.y1).toInt(), maxOf(c.x0, c.x1).toInt(), maxOf(c.y0, c.y1).toInt())
+            if (r.width() < 2 || r.height() < 2) return@mapIndexedNotNull null
+            val foto = com.forge.pixpin.capture.Export.horneaCaptura(context, bmp, escena, r)
+            java.io.File(carpeta, "marco-${i + 1}.png").also { f -> f.outputStream().use { foto.compress(Bitmap.CompressFormat.PNG, 100, it) }; foto.recycle() }.path
+        }
+        com.forge.pixpin.guardados.ImprimirFotosActivity.abrir(context, rutas, pin.value.text?.takeIf { it.isNotBlank() } ?: "PixPin")
     }
 
     private fun exitAnnotateMode() {
@@ -2708,11 +2852,17 @@ class PinWindowController(
                 // encima; en un dibujo o una nota, editarlo; en un PDF, abrirlo. Es lo
                 // que se viene a hacer con ese pin el noventa por ciento de las veces.
                 when {
-                    s.type == PinType.IMAGE -> IconButton(onClick = { enterAnnotateMode() }) {
-                        Icon(
-                            Icons.Filled.Brush,
-                            contentDescription = context.getString(R.string.cd_anotar_aqui)
-                        )
+                    s.type == PinType.IMAGE -> {
+                        IconButton(onClick = { enterAnnotateMode() }) {
+                            Icon(
+                                Icons.Filled.Brush,
+                                contentDescription = context.getString(R.string.cd_anotar_aqui)
+                            )
+                        }
+                        // El marco del riel de todos los visores: marcos numerados para imprimir.
+                        IconButton(onClick = { alternarMarcos() }) {
+                            Icon(Icons.Filled.CropFree, contentDescription = "Marcos para imprimir")
+                        }
                     }
                     s.type == PinType.DRAW -> IconButton(onClick = {
                         // Con el id del dibujo y no el del pin: si no, el editor
@@ -3533,6 +3683,7 @@ class PinWindowController(
                 )
         ) {
             @Suppress("UNUSED_EXPRESSION") tick
+            @Suppress("UNUSED_EXPRESSION") marcosTick.value
             val zoom = scale.floatValue
             if (bmp.width < 1) return@Canvas
             if (enVentana) {
@@ -3554,6 +3705,7 @@ class PinWindowController(
                         (bmp.width * encaje.escala).toDouble(),
                         (bmp.height * encaje.escala).toDouble()
                     )
+                    dibujarMarcos(lona, encaje.escala.toDouble())
                     lona.restoreToCount(guardado)
                 }
                 return@Canvas
@@ -3573,6 +3725,7 @@ class PinWindowController(
                     ),
                     w, h
                 )
+                dibujarMarcos(lienzo.nativeCanvas, escala)
             }
             dibujarLosTiradores(this, escala)
         }

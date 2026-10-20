@@ -888,6 +888,12 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
-</application>
+        <!-- Imprimir los marcos de un pin flotante: el diálogo necesita una actividad. -->
+        <activity
+            android:name=".guardados.ImprimirFotosActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
 
 </manifest>

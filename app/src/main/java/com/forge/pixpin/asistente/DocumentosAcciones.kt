@@ -30,9 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * buscar en sus cosas (BM25, con citas que acaban en `fuentesIa`) y pasar la tabla de una foto o un
  * PDF a una tabla del chat o a un Excel ([TablaEscaneada]).
  *
- * El teléfono no tiene OCR con cajas (ni el de Windows ni ML Kit): la tabla de un PDF con texto
- * sale de su capa de texto, con el mismo algoritmo que el PC; la de una foto la transcribe la
- * visión del modelo en filas separadas por tabuladores, y eso lo dice el resultado.
+ * La tabla de un PDF con texto sale de su capa de texto; la de una foto o una hoja escaneada, del
+ * OCR del teléfono (ML Kit, palabras con caja), los dos con el mismo algoritmo que el PC. Solo si
+ * el OCR no está o no ve una tabla la transcribe la visión del modelo.
  */
 class DocumentosAcciones(
     private val contexto: Context,
@@ -78,7 +78,7 @@ class DocumentosAcciones(
         val ruta = File(m.ruta!!)
         val nombreDoc = m.nombre.ifBlank { ruta.name }
         val pagina = (p["pagina"] as? JsonPrimitive)?.intOrNull
-        val (filas, conVision) = if (ruta.name.lowercase().endsWith(".pdf")) tablaDePdf(ruta, pagina) to false else tablaDeFoto(ruta) to true
+        val (filas, conVision) = if (ruta.name.lowercase().endsWith(".pdf")) tablaDePdf(ruta, pagina) to false else tablaDeFoto(ruta)
         if (filas.size < 2 || (filas.maxOfOrNull { it.size } ?: 0) < 2) error("no se ve una tabla en «$nombreDoc»")
         val nombre = texto("nombre")?.trim()?.takeIf { it.isNotEmpty() } ?: "Tabla"
         val cabecera = (p["cabecera"] as? JsonPrimitive)?.booleanOrNull ?: TablaEscaneada.TablaLeida(filas).pareceCabecera()
@@ -111,12 +111,25 @@ class DocumentosAcciones(
             val t = TablaEscaneada.reconstruir(palabras)
             if (t.filas.size >= 2 && t.columnas >= 2) return t.filas
         }
-        if (paginas.size == 1 && PlanoDePdf.de(archivo, paginas[0])?.textos.isNullOrEmpty()) error("la página ${paginas[0] + 1} es escaneada y el teléfono no tiene OCR: mándala como foto")
+        // Escaneadas: la hoja pintada, por el OCR (como mucho tres).
+        for (n in paginas.filter { PlanoDePdf.de(archivo, it)?.textos.isNullOrEmpty() }.take(3)) {
+            val bm = com.forge.pixpin.motor.PdfDoc.render(f.path, n, 1700) ?: continue
+            val t = tablaDelOcr(bm).also { bm.recycle() }
+            if (t.size >= 2) return t
+        }
         return emptyList()
     }
 
-    /** La tabla de una foto, transcrita por la visión del modelo en filas con tabuladores. */
-    private fun tablaDeFoto(f: File): List<List<String>> {
+    /** La tabla de una imagen por el OCR del teléfono y [TablaEscaneada]; vacía si no se ve una. */
+    private fun tablaDelOcr(bm: android.graphics.Bitmap): List<List<String>> {
+        val palabras = LectorDeLetras.leer(bm).map { TablaEscaneada.Palabra(it.texto, it.x, it.y, it.w, it.h) }
+        val t = TablaEscaneada.reconstruir(palabras)
+        return if (t.filas.size >= 2 && t.columnas >= 2) t.filas else emptyList()
+    }
+
+    /** La tabla de una foto: por el OCR; si no la ve, transcrita por la visión del modelo. */
+    private fun tablaDeFoto(f: File): Pair<List<List<String>>, Boolean> {
+        com.forge.pixpin.pin.ImageStore.load(f.path)?.let { bm -> tablaDelOcr(bm).takeIf { it.isNotEmpty() }?.let { return it to false } }
         val jpeg = FotoParaElModelo.deArchivo(f, FotoParaElModelo.LADO_PARA_LEER) ?: error("no se pudo leer la foto")
         val r = motor.completar(
             Peticion(
@@ -128,6 +141,6 @@ class DocumentosAcciones(
             )
         ) { if (parar.get()) Seguir.PARAR else Seguir.SI }
         return ChatDelAsistente.sinPensado(r.texto).lines().map { it.trim().trim('|') }.filter { it.isNotBlank() && !it.all { c -> c in "-|: \t" } }
-            .map { l -> (if ('\t' in l) l.split('\t') else l.split('|')).map { it.trim() } }
+            .map { l -> (if ('\t' in l) l.split('\t') else l.split('|')).map { it.trim() } } to true
     }
 }
