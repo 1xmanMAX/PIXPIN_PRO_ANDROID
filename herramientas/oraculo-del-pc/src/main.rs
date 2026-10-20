@@ -104,6 +104,7 @@ fn main() {
                     Trazo::Mancha { contorno, huecos, color } => json!({"tipo": "mancha", "color": color, "puntos": pts(contorno), "huecos": huecos.iter().map(|h| pts(h)).collect::<Vec<_>>()}),
                     Trazo::Linea { puntos, cerrada, color } => json!({"tipo": "linea", "color": color, "cerrada": cerrada, "puntos": pts(puntos)}),
                     Trazo::Fondo { caja, color } => json!({"tipo": "fondo", "color": color, "caja": caja}),
+                    Trazo::Raya { puntos, color, grosor } => json!({"tipo": "raya", "color": color, "grosor": grosor, "puntos": pts(puntos)}),
                 }).collect();
                 out.push(json!({"escala": r.escala, "desplazamiento": [r.desplazamiento.0, r.desplazamiento.1], "trazos": ts}));
             }

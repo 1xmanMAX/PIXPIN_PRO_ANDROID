@@ -28,9 +28,17 @@ open(ia + "src/servidor.rs", "w").write("pub const CONTEXTO: u32 = 8192;\n")
 open(ia + "src/descarga.rs", "w").write("")
 h = open(ia + "src/nube/http.rs").read()
 open(ia + "src/nube/http.rs", "w").write("use std::time::Duration;\nuse crate::motor::Seguir;\n" + h[h.index("/// Por que no salio."):h.index("/// **Manda el POST**")] +
-    'pub fn enviar(_p: &Pedido, _a: &mut dyn FnMut(&[u8]) -> Seguir) -> Result<bool, Fallo> { Err(Fallo::Red("sin red".into())) }\n')
+    'pub fn enviar(_p: &Pedido, _a: &mut dyn FnMut(&[u8]) -> Seguir) -> Result<bool, Fallo> { Err(Fallo::Red("sin red".into())) }\n'
+    # Las conexiones (Drive, 17-oct) piden por aquí: sin red.
+    'pub struct Respuesta { pub codigo: u32, pub cuerpo: Vec<u8>, pub ubicacion: Option<String> }\n'
+    'pub fn pedir(_m: &str, _u: &str, _c: &[(&\'static str, String)], _b: &[u8], _l: usize) -> Result<Respuesta, Fallo> { Err(Fallo::Red("sin red".into())) }\n')
 k = open(ia + "src/nube/claves.rs").read()
 open(ia + "src/nube/claves.rs", "w").write(k[k.index("/// Lo que se ensena de una clave"):k.index("/// **Cifra** con DPAPI")])
+open(ia + "src/nube/claves.rs", "a").write("\npub fn carpeta() -> Option<std::path::PathBuf> { None }\npub fn cifrar(_c: &[u8]) -> Result<Vec<u8>, String> { Err(\"sin DPAPI\".into()) }\npub fn descifrar(_c: &[u8]) -> Result<Vec<u8>, String> { Err(\"sin DPAPI\".into()) }\n")
+o = open(ia + "src/conexiones/oauth.rs").read()
+i = o.index("pub fn aleatorio(n: usize) -> Vec<u8> {")
+j = o.index("\n}\n", i) + 3
+open(ia + "src/conexiones/oauth.rs", "w").write(o[:i] + "pub fn aleatorio(n: usize) -> Vec<u8> { (0..n).map(|i| (i * 37 + 11) as u8).collect() }\n" + o[j:])
 n = c + "pixpin-notas/"
 os.system("mv %ssrc %ssrc_old && mkdir %ssrc && cp %ssrc_old/formulas.rs %ssrc/" % (n, n, n, n, n))
 open(n + "src/lib.rs", "w").write("pub mod formulas;\n")
