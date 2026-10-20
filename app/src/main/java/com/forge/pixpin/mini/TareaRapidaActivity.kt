@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.guardados.MensajesStore
+import com.forge.pixpin.ia.Momento
 import com.forge.pixpin.ui.theme.PixPinTheme
 import java.util.UUID
 
@@ -50,7 +51,7 @@ class TareaRapidaActivity : ComponentActivity() {
                 OutlinedTextField(
                     value = texto, onValueChange = { texto = it }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().focusRequester(foco),
-                    placeholder = { Text("¿Qué hay que hacer?") },
+                    placeholder = { Text("¿Qué hay? («mañana a las 5 #casa !alta»)") },
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { if (texto.isNotBlank()) { anadir(this@TareaRapidaActivity, texto); texto = ""; hechas++ } })
                 )
@@ -84,20 +85,34 @@ class TareaRapidaActivity : ComponentActivity() {
             val lista = almacen.leer().lastOrNull {
                 it.clase == Clase.MINIAPP && it.miniapp == MiniApp.TAREAS.id && it.proyecto == proyecto && !it.enBuzon
             }
+            // Lo reconocido al escribir (PC 17-oct): prioridad, #etiquetas y hora como marcas.
+            val entendida = Frase.paraGuardar(texto, Momento.ahora())
             if (lista != null) {
                 almacen.actualizar(lista.id) { m ->
                     val t = Tareas.leer(m.texto)
-                    m.copy(texto = Tareas.escribir(Cabecera.titulo(m.texto), Tareas.anadir(t, texto)))
+                    m.copy(texto = Tareas.escribir(Cabecera.titulo(m.texto), Tareas.anadir(t, entendida)))
                 }
             } else {
                 almacen.anadir(
                     Mensaje(
                         id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.MINIAPP,
-                        miniapp = MiniApp.TAREAS.id, texto = Tareas.escribir("Tareas", Tareas.anadir(emptyList(), texto)), proyecto = proyecto
+                        miniapp = MiniApp.TAREAS.id, texto = Tareas.escribir("Tareas", Tareas.anadir(emptyList(), entendida)), proyecto = proyecto
                     )
                 )
             }
             Toast.makeText(context, "Tarea apuntada", Toast.LENGTH_SHORT).show()
+            fijarSiTieneHora(context, entendida)
+        }
+
+        /**
+         * Con hora de recordar, **su pin a la pantalla** en seguida, como el PC al apuntarla: que se
+         * vea sin abrir nada (`pedir_pin`). La alarma la pone `RecordatoriosDeTareas` al ver el cambio.
+         */
+        fun fijarSiTieneHora(context: Context, crudo: String) {
+            if (Tareas.horaDe(crudo) == null) return
+            val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return
+            val texto = Frase.textoDelPin(crudo, Momento.ahora())
+            android.os.Handler(android.os.Looper.getMainLooper()).post { runCatching { app.overlayManager.pinTexto(texto) } }
         }
 
         /**
@@ -105,21 +120,26 @@ class TareaRapidaActivity : ComponentActivity() {
          * crea con esa tarea dentro (`tareas::apuntar_con` del PC). Lo vacío no apunta nada. Sin
          * avisos: los da quien llama. Trabajo de disco.
          */
-        fun alInbox(context: Context, texto: String) {
-            if (Tareas.saneado(texto).isEmpty()) return
+        fun alInbox(context: Context, texto: String, entender: Boolean = true): String? {
+            if (Tareas.saneado(texto).isEmpty()) return null
+            // Lo reconocido al escribir (PC 17-oct): prioridad, #etiquetas y hora como marcas. El
+            // asistente no ([entender] = false): lo que manda ya viene ordenado, como en el PC.
+            val entendida = if (entender) Frase.paraGuardar(texto, Momento.ahora()) else texto
             val almacen = MensajesStore(context)
             val inbox = TodasLasTareas.inboxEn(almacen.leer())
             if (inbox != null) {
-                almacen.actualizar(inbox.id) { m -> m.copy(texto = TodasLasTareas.conTarea(m.texto, texto)) }
+                almacen.actualizar(inbox.id) { m -> m.copy(texto = TodasLasTareas.conTarea(m.texto, entendida)) }
             } else {
                 almacen.anadir(
                     Mensaje(
                         id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.MINIAPP,
                         miniapp = MiniApp.TAREAS.id,
-                        texto = TodasLasTareas.conTarea(Tareas.escribir(TodasLasTareas.INBOX, emptyList()), texto)
+                        texto = TodasLasTareas.conTarea(Tareas.escribir(TodasLasTareas.INBOX, emptyList()), entendida)
                     )
                 )
             }
+            if (entender) fijarSiTieneHora(context, entendida)
+            return entendida
         }
     }
 }

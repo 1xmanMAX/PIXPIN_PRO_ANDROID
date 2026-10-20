@@ -73,6 +73,11 @@ import kotlinx.coroutines.delay
  *   verdad. Hay un botón de altavoz por si se quiere oír sin acercarlo. Al acabar, cuelga sola.
  *
  * Al salir se deja el audio del teléfono **como estaba**.
+ *
+ * **La misma pantalla sirve para el horario de clases** (PC `bfdd89a`, `horario.rs`/`llamada.rs`):
+ * quien «llama» es la asignatura, debajo van su hora y su aula (y las evaluaciones cercanas), y al
+ * contestar suena la nota de voz de la clase —si la hay— y después la voz del teléfono lee lo apuntado
+ * con `>` en el horario. Ver [llamarDelHorario] y [RecordatoriosDelHorario].
  */
 class LlamadaSecretaActivity : ComponentActivity() {
 
@@ -80,6 +85,9 @@ class LlamadaSecretaActivity : ComponentActivity() {
         private const val EXTRA_AUDIO = "audio"
         private const val EXTRA_NOMBRE = "nombre"
         private const val EXTRA_MENSAJE = "mensaje"
+        private const val EXTRA_DETALLE = "detalle"
+        private const val EXTRA_TEXTO = "texto"
+        private const val EXTRA_HORARIO = "horario"
         private const val SEGUNDOS_SONANDO = 45
 
         private const val CANAL = "llamadas"
@@ -103,12 +111,24 @@ class LlamadaSecretaActivity : ComponentActivity() {
             }.apply()
         }
 
-        private fun laIntencion(context: Context, audio: String, nombre: String, mensaje: String?) =
+        private fun laIntencion(context: Context, audio: String?, nombre: String, mensaje: String?) =
             Intent(context, LlamadaSecretaActivity::class.java)
                 .putExtra(EXTRA_AUDIO, audio)
                 .putExtra(EXTRA_NOMBRE, nombre)
                 .putExtra(EXTRA_MENSAJE, mensaje)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
+
+        /**
+         * **La llamada de un aviso del horario de clases** ([com.forge.pixpin.mini.Horario.llamadaDe]):
+         * la asignatura, su detalle, la nota de voz si es para esta sesión y lo que lee la voz.
+         */
+        fun llamarDelHorario(context: Context, l: com.forge.pixpin.mini.Horario.Llamada) {
+            val intencion = laIntencion(context, l.audio?.absolutePath, l.nombre, null)
+                .putExtra(EXTRA_DETALLE, l.detalle)
+                .putExtra(EXTRA_TEXTO, l.texto)
+                .putExtra(EXTRA_HORARIO, l.mensaje)
+            lanzar(context, intencion, l.nombre)
+        }
 
         /**
          * **Como llaman las aplicaciones de llamadas**: con un aviso de pantalla completa. Abrir
@@ -117,7 +137,10 @@ class LlamadaSecretaActivity : ComponentActivity() {
          * salía nada y el usuario se quedaba sin su «llamada». El aviso de categoría llamada sí
          * pasa: con el aparato bloqueado abre la pantalla entera, y en uso sale arriba para tocarlo.
          */
-        fun llamar(context: Context, audio: String, nombre: String, mensaje: String? = null) {
+        fun llamar(context: Context, audio: String, nombre: String, mensaje: String? = null) =
+            lanzar(context, laIntencion(context, audio, nombre, mensaje), nombre)
+
+        private fun lanzar(context: Context, intencion: Intent, nombre: String) {
             val avisos = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (Build.VERSION.SDK_INT >= 26) {
                 avisos.createNotificationChannel(
@@ -128,7 +151,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 )
             }
             val pendiente = android.app.PendingIntent.getActivity(
-                context, AVISO, laIntencion(context, audio, nombre, mensaje),
+                context, AVISO, intencion,
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
             val aviso = androidx.core.app.NotificationCompat.Builder(context, CANAL)
@@ -144,12 +167,13 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 .build()
             runCatching { avisos.notify(AVISO, aviso) }
             // Y a pelo también: donde el sistema lo deja, sale al instante.
-            runCatching { context.startActivity(laIntencion(context, audio, nombre, mensaje)) }
+            runCatching { context.startActivity(Intent(intencion)) }
         }
     }
 
     private var tono: Ringtone? = null
     private var voz: MediaPlayer? = null
+    private var lector: android.speech.tts.TextToSpeech? = null
     private var cerca: PowerManager.WakeLock? = null
     private var modoDeAntes = AudioManager.MODE_NORMAL
     private var altavozDeAntes = false
@@ -168,16 +192,26 @@ class LlamadaSecretaActivity : ComponentActivity() {
         )
         // La pantalla ya está: el aviso que la trajo sobra.
         runCatching { (getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager).cancel(AVISO) }
-        val ruta = intent?.getStringExtra(EXTRA_AUDIO)
-        if (ruta == null || !java.io.File(ruta).exists()) { finish(); return }
+        val ruta = intent?.getStringExtra(EXTRA_AUDIO)?.takeIf { java.io.File(it).exists() }
+        horario = intent?.getStringExtra(EXTRA_HORARIO)
+        texto = intent?.getStringExtra(EXTRA_TEXTO)?.takeIf { it.isNotBlank() }
+        // Sin nada que oír solo llama el horario (su nombre y su hora ya son el recado).
+        if (ruta == null && horario == null) { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { "Llamada" }
+        val detalle = intent?.getStringExtra(EXTRA_DETALLE).orEmpty()
         mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
         sonar()
-        setContent { Pantalla(nombre, ruta) }
+        setContent { Pantalla(nombre, detalle, ruta) }
     }
 
     /** El mensaje de la nota de voz: para volver a llamar más tarde. Null si no se sabe. */
     private var mensaje: String? = null
+
+    /** El id del aviso del horario (`horario:…`), si es una llamada del horario de clases. */
+    private var horario: String? = null
+
+    /** Lo que lee la voz del teléfono al contestar, después de la nota (el horario). */
+    private var texto: String? = null
 
     /**
      * **Volver a llamar dentro de [minutos]** (30-sep-2026, pedido por el usuario: «si se tiene
@@ -185,6 +219,15 @@ class LlamadaSecretaActivity : ComponentActivity() {
      * La misma alarma de la nota, a otra hora; y se cuelga.
      */
     private fun volverALlamar(minutos: Int) {
+        horario?.let { h ->
+            val contexto = applicationContext
+            Thread { runCatching { RecordatoriosDelHorario.posponer(contexto, h, minutos) } }.start()
+            val cuando = System.currentTimeMillis() + minutos * 60_000L
+            val hora = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(cuando))
+            android.widget.Toast.makeText(this, "Te vuelve a llamar a las $hora", android.widget.Toast.LENGTH_SHORT).show()
+            colgar()
+            return
+        }
         val id = mensaje ?: return
         val cuando = System.currentTimeMillis() + minutos * 60_000L
         Recordatorios.poner(this, RecordatorioReceiver.DE_UN_MENSAJE + id, cuando)
@@ -219,15 +262,16 @@ class LlamadaSecretaActivity : ComponentActivity() {
         runCatching { (getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.cancel() }
     }
 
-    /** Contestar: fuera el tono, y la grabación por el auricular. */
-    private fun contestar(ruta: String) {
+    /** Contestar: fuera el tono, y la grabación por el auricular (y después, lo que lee la voz). */
+    private fun contestar(ruta: String?) {
         callar()
         contestada = true
         modoDeAntes = audio.mode
         @Suppress("DEPRECATION")
         altavozDeAntes = audio.isSpeakerphoneOn
         porDonde(altavoz = false)
-        runCatching {
+        if (ruta == null) leerOColgar()
+        else runCatching {
             voz = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -236,18 +280,49 @@ class LlamadaSecretaActivity : ComponentActivity() {
                         .build()
                 )
                 setDataSource(ruta)
-                setOnCompletionListener { window.decorView.postDelayed({ colgar() }, 900) }
+                setOnCompletionListener { window.decorView.postDelayed({ leerOColgar() }, 600) }
                 prepare()
                 com.forge.pixpin.audio.AudioAlto.enganchar(this, ruta)
                 start()
             }
-        }.onFailure { colgar() }
+        }.onFailure { leerOColgar() }
         // La pantalla se apaga al acercarla a la cara, para no tocar nada con la mejilla.
         runCatching {
             val energia = getSystemService(Context.POWER_SERVICE) as PowerManager
             if (energia.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
                 cerca = energia.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "pixpin:llamada").also { it.acquire(10 * 60 * 1000L) }
             }
+        }
+    }
+
+    /**
+     * **Lo apuntado en el horario, en voz alta** (el `leer_en_voz` del PC), por donde va la llamada;
+     * sin nada que leer, o si el teléfono no tiene voz, cuelga.
+     */
+    private fun leerOColgar() {
+        val t = texto
+        if (t == null || isFinishing) { window.decorView.postDelayed({ colgar() }, 1_500); return }
+        texto = null
+        // El aviso de «lista» puede llegar antes de que `lector` esté puesto: se atiende en el
+        // siguiente paso del hilo de la pantalla.
+        lector = android.speech.tts.TextToSpeech(this) { estado -> window.decorView.post { hablar(estado == android.speech.tts.TextToSpeech.SUCCESS, t) } }
+    }
+
+    private fun hablar(lista: Boolean, t: String) {
+        val l = lector
+        if (!lista || l == null || isFinishing) { colgar(); return }
+        run {
+            runCatching { l.setLanguage(java.util.Locale("es", "ES")) }
+            l.setAudioAttributes(
+                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
+            )
+            l.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(id: String?) {}
+                override fun onDone(id: String?) { runOnUiThread { window.decorView.postDelayed({ colgar() }, 900) } }
+                @Deprecated("Deprecated in Java")
+                override fun onError(id: String?) { runOnUiThread { colgar() } }
+            })
+            if (l.speak(t, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "llamada") != android.speech.tts.TextToSpeech.SUCCESS) colgar()
         }
     }
 
@@ -276,6 +351,8 @@ class LlamadaSecretaActivity : ComponentActivity() {
         com.forge.pixpin.audio.AudioAlto.soltar(voz)
         runCatching { voz?.stop(); voz?.release() }
         voz = null
+        runCatching { lector?.stop(); lector?.shutdown() }
+        lector = null
         runCatching { if (cerca?.isHeld == true) cerca?.release() }
         // El audio del teléfono, como estaba.
         if (contestada) runCatching {
@@ -287,7 +364,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Pantalla(nombre: String, ruta: String) {
+    private fun Pantalla(nombre: String, detalle: String, ruta: String?) {
         BackHandler { colgar() }
         var segundos by androidx.compose.runtime.remember { mutableStateOf(0) }
         LaunchedEffect(contestada) {
@@ -318,9 +395,17 @@ class LlamadaSecretaActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(18.dp))
             Text(nombre, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+            // La hora y el aula de la clase (y la evaluación que se acerca), como la tarjeta del PC.
+            if (detalle.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    detalle, color = Color.White.copy(alpha = 0.75f), fontSize = 15.sp, maxLines = 3,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
             Spacer(Modifier.weight(1f))
             // **Volver a llamar**: sonando o ya contestada, por si no se puede escuchar ahora.
-            if (mensaje != null) {
+            if (mensaje != null || horario != null) {
                 Text("Volver a llamar en", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {

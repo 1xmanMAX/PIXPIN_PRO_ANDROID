@@ -48,7 +48,7 @@ object AlarmasDeTareas {
                 val hora = Tareas.horaDe(t.texto) ?: return@mapNotNull null
                 val cuando = hora.atZone(zona).toInstant().toEpochMilli()
                 if (cuando <= ahora) return@mapNotNull null
-                Alarma(idDe(m.id, hora), cuando, "☑ " + Tareas.legible(t.texto).ifBlank { "Tarea con imagen" })
+                Alarma(idDe(m.id, hora), cuando, "☑ " + textoDeAviso(t.texto))
             }
         }.distinctBy { it.id }
 
@@ -62,6 +62,16 @@ object AlarmasDeTareas {
         if (i < 0) return null
         val t = tareas[i]
         val nuevas = tareas.toMutableList().also { it[i] = t.copy(texto = Tareas.conHora(t.texto, null)) }
-        return Tareas.escribir(Cabecera.titulo(documento), nuevas) to Tareas.legible(t.texto).ifBlank { "Tarea con imagen" }
+        return Tareas.escribir(Cabecera.titulo(documento), nuevas) to textoDeAviso(t.texto)
+    }
+
+    /**
+     * Lo que dice el aviso de una tarea: su título sin las marcas de [Frase] (prioridad, etiquetas) y
+     * su nota de por qué no se hizo, si tiene (como el pin de tarea del PC).
+     */
+    fun textoDeAviso(crudo: String): String {
+        val m = Frase.marcas(crudo)
+        val titulo = m.titulo.ifBlank { "Tarea con imagen" }
+        return m.nota?.let { "$titulo · ${Frase.NOTA} $it" } ?: titulo
     }
 }

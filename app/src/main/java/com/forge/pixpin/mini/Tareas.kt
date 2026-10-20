@@ -120,8 +120,14 @@ object Tareas {
      * (`2026-02-30`) se queda como texto, igual que en el PC (`mini::partir`).
      */
     fun partir(texto: String): Pair<String, java.time.LocalDate?> {
+        // Desde el 17-oct-2026 el PC escribe la hora DELANTE de la fecha (`pan ⏫ ⏰ 2026-10-17 17:00
+        // ➕ 2026-10-17`, `tareas::frase`): si la fecha es lo último, se lee así.
+        CREADA.find(texto)?.let { m ->
+            val fecha = runCatching { java.time.LocalDate.parse(m.groupValues[1]) }.getOrNull()
+            if (fecha != null) return sinHora(texto.substring(0, m.range.first)).trim() to fecha
+        }
         // La hora de recordar va detrás de todo (`pan ➕ 2026-10-02 ⏰ 2026-10-09 10:00`, como la
-        // pone el PC): fuera primero, o la fecha de creación dejaría de ser lo último.
+        // ponía el PC hasta el 17-oct): fuera primero, o la fecha de creación dejaría de ser lo último.
         val sin = sinHora(texto)
         val m = CREADA.find(sin) ?: return sin.trim() to null
         val fecha = runCatching { java.time.LocalDate.parse(m.groupValues[1]) }.getOrNull() ?: return sin.trim() to null
@@ -159,8 +165,18 @@ object Tareas {
     /** La hora local a la que se recuerda una tarea, si tiene. */
     fun horaDe(texto: String): java.time.LocalDateTime? = marcaEn(texto)?.second
 
-    /** El texto sin la marca de la hora. */
-    fun sinHora(texto: String): String = marcaEn(texto)?.let { texto.substring(0, it.first).trimEnd() } ?: texto
+    /**
+     * El texto sin la marca de la hora. Si detrás de la hora iba la fecha de creación (el orden del
+     * PC desde el 17-oct-2026, `… ⏰ 2026-10-17 17:00 ➕ 2026-10-17`), la fecha se queda.
+     */
+    fun sinHora(texto: String): String {
+        val (i, _) = marcaEn(texto) ?: return texto
+        val antes = texto.substring(0, i).trimEnd()
+        val tras = texto.substring(i + 1).trimStart().substring(16).trim()
+        return if (CREADA_SOLA.matches(tras)) "$antes $tras".trim() else antes
+    }
+
+    private val CREADA_SOLA = Regex("""➕\s*\d{4}-\d{2}-\d{2}""")
 
     /**
      * **La hora para enseñarla**: «hoy 10:00», «mañana 08:30», «ayer 18:00» o «12 oct 10:00» (con

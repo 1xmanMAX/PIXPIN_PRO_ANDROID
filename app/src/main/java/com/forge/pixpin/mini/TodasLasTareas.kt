@@ -373,6 +373,17 @@ object TodasLasTareas {
         return Tareas.escribir(Cabecera.titulo(documento), nuevas)
     }
 
+    /**
+     * **La nota de por qué no se está haciendo** (PC 17-oct, `tareas::poner_nota`): dentro del texto
+     * de la tarea, tras `💬` ([Frase.conNota]); vacía la quita. null si la lista cambió.
+     */
+    fun ponerNota(documento: String, f: Fila, nota: String): String? {
+        val tareas = Tareas.leer(documento)
+        if (!sigue(tareas, f)) return null
+        val nuevas = tareas.toMutableList().also { it[f.indice] = it[f.indice].copy(texto = Frase.conNota(it[f.indice].texto, nota)) }
+        return Tareas.escribir(Cabecera.titulo(documento), nuevas)
+    }
+
     /** El documento sin la tarea [f], y la tarea tal cual estaba (para [reponer]). */
     fun quitar(documento: String, f: Fila): Pair<String, Tarea>? {
         val tareas = Tareas.leer(documento)

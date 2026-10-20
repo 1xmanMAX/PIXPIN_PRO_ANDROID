@@ -250,6 +250,13 @@
             android:taskAffinity="${applicationId}.tareas"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
+        <!-- El horario de clases que llama (PC horario.rs). Ver mini/HorarioActivity. -->
+        <activity
+            android:name=".mini.HorarioActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.tareas"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
         <activity
             android:name=".lecciones.LeccionesActivity"
             android:exported="false"

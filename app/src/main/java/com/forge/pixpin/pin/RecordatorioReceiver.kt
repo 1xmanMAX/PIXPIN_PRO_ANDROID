@@ -56,6 +56,15 @@ class RecordatorioReceiver : BroadcastReceiver() {
             RecordatoriosDeTareas.sonar(context, pinId)
             return
         }
+        // **Una clase del horario** (o una evaluación): suena como una llamada. Ver
+        // [RecordatoriosDelHorario].
+        if (pinId.startsWith(com.forge.pixpin.mini.Horario.PREFIJO)) {
+            val pendiente = goAsync()
+            Thread {
+                try { runCatching { RecordatoriosDelHorario.sonar(context, pinId) } } finally { pendiente.finish() }
+            }.start()
+            return
+        }
         if (pinId.startsWith(DE_UN_MENSAJE)) {
             val id = pinId.removePrefix(DE_UN_MENSAJE)
             val almacen = com.forge.pixpin.guardados.MensajesStore(context)
