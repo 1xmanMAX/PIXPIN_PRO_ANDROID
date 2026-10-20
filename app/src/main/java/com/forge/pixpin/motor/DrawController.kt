@@ -3119,6 +3119,13 @@ class DrawController(initial: Scene = Scene()) {
         selectedIds = setOf(destino.id)
     }
 
+    /** **A la hoja [i]** (desde 0, en su orden): la ficha de los marcos del riel (PC 19-oct). */
+    fun irAHoja(i: Int, ancho: Double, alto: Double) {
+        val destino = hojasEnOrden(scene).getOrNull(i) ?: return
+        scene = scene.copy(viewport = fitToContent(listOf(destino), ancho, alto, padding = MARGEN_DE_LA_HOJA))
+        selectedIds = setOf(destino.id)
+    }
+
     /** Cuál de las hojas está más cerca del centro de lo que se ve ahora mismo. */
     private fun hojaMasCentrada(hojas: List<Element>, ancho: Double, alto: Double): Int {
         val centro = scene.viewport.toScene(ancho / 2, alto / 2)

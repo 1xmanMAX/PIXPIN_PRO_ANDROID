@@ -4349,6 +4349,7 @@ class PinWindowController(
                 setDataSource(ruta)
                 setOnCompletionListener { pararLaNota() }
                 prepare()
+                com.forge.pixpin.audio.AudioAlto.enganchar(this, ruta)
                 start()
             }
         }.getOrNull()
@@ -4357,6 +4358,7 @@ class PinWindowController(
 
     private fun pararLaNota() {
         runCatching { reproductor?.stop() }
+        com.forge.pixpin.audio.AudioAlto.soltar(reproductor)
         runCatching { reproductor?.release() }
         reproductor = null
         sonando.value = false

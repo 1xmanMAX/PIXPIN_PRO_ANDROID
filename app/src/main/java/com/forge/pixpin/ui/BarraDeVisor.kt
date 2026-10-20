@@ -104,15 +104,15 @@ fun BarraDeVisor(
                 nombre, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 fontSize = 14.sp, modifier = Modifier.weight(1f)
             )
-            for (b in botones) BotonDeBarra(b.icono, b.descripcion, false, b.alTocar)
+            for (b in botones) BotonDeBarra(b.icono, b.descripcion, false, alTocar = b.alTocar)
             if (oscuro != null && onOscuro != null)
-                BotonDeBarra(if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro", false, onOscuro)
+                BotonDeBarra(if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro", false, alTocar = onOscuro)
             if (pantallaCompleta != null && onPantallaCompleta != null)
-                BotonDeBarra(if (pantallaCompleta) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, "Pantalla completa", pantallaCompleta, onPantallaCompleta)
+                BotonDeBarra(if (pantallaCompleta) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, "Pantalla completa", pantallaCompleta, alTocar = onPantallaCompleta)
             if (menu.isNotEmpty()) {
                 var abierto by remember { mutableStateOf(false) }
                 Box {
-                    BotonDeBarra(Icons.Filled.MoreVert, "Más", false) { abierto = true }
+                    BotonDeBarra(Icons.Filled.MoreVert, "Más", false, alTocar = { abierto = true })
                     DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
                         for (o in menu) DropdownMenuItem(
                             text = { Text(o.texto) },
@@ -122,7 +122,7 @@ fun BarraDeVisor(
                     }
                 }
             }
-            if (onCerrar != null) BotonDeBarra(Icons.Filled.Close, "Cerrar", false, onCerrar)
+            if (onCerrar != null) BotonDeBarra(Icons.Filled.Close, "Cerrar", false, alTocar = onCerrar)
         }
     }
 }

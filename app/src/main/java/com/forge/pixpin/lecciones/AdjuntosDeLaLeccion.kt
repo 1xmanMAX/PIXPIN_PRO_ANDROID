@@ -142,7 +142,7 @@ fun AdjuntosDeLaLeccion(
     fun tocar(m: Mensaje) {
         runCatching { reproductor[0]?.release() }; reproductor[0] = null
         if (sonando == m.id) { sonando = null; return }
-        val p = runCatching { MediaPlayer().apply { setDataSource(m.ruta); prepare(); start() } }.getOrNull() ?: return
+        val p = runCatching { MediaPlayer().apply { setDataSource(m.ruta); prepare(); m.ruta?.let { com.forge.pixpin.audio.AudioAlto.enganchar(this, it) }; start() } }.getOrNull() ?: return
         p.setOnCompletionListener { sonando = null }
         reproductor[0] = p; sonando = m.id
     }

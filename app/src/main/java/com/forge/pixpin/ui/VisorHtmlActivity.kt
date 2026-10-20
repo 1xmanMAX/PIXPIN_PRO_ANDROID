@@ -90,6 +90,9 @@ import com.forge.pixpin.ui.theme.PixPinTheme
 import java.io.ByteArrayInputStream
 import java.io.File
 import androidx.lifecycle.lifecycleScope
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.EditNote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -303,6 +306,17 @@ class VisorHtmlActivity : ComponentActivity() {
      * es un documento del chat: entonces sigue todo por la ruta. Ver [ExportarDocumentoAnotado.baseDe].
      */
     private var baseDelMensaje: String? = null
+
+    /**
+     * **Los marcos numerados y las vistas de los marcadores** (PC 19/20-oct-2026, `marcos_doc.rs`), en
+     * píxeles CSS del documento. Viajan con el mensaje (`anot-<uid>.marcos.json`, `.vistas.json`); los
+     * de un archivo suelto quedan junto a él.
+     */
+    private var marcosDoc = com.forge.pixpin.motor.MarcosDoc()
+    private var vistasDoc = com.forge.pixpin.motor.VistasDoc()
+    private var versionDeMarcos by mutableStateOf(0)
+    private var conPantallaCompleta by mutableStateOf(false)
+    private var cambiandoElNombre by mutableStateOf(false)
     private val elDocumento: File? get() = comparte ?: elOriginal
 
     /** La columna fijada, la letra con que se fijó y los espacios, a su sitio. */
@@ -345,6 +359,69 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun guardarMarcadores() {
         val doc = elDocumento ?: return
         ExportarDocumentoAnotado.guardarMarcadores(this, doc, baseDelMensaje, com.forge.pixpin.motor.Lectura.aTexto(marcadores))
+        vistasDoc.soloDe(marcadores.map { it.id.toString() }.toSet())
+    }
+
+    // ---- Los marcos y las vistas: de los píxeles CSS del documento a la pantalla y de vuelta. ----
+    private fun docAPantalla(x: Double, y: Double) = androidx.compose.ui.geometry.Offset((x * escalaWeb - corridoX).toFloat(), (y * escalaWeb - corridoY).toFloat())
+    private fun pantallaADoc(o: androidx.compose.ui.geometry.Offset) = doubleArrayOf(((o.x + corridoX) / escalaWeb).toDouble(), ((o.y + corridoY) / escalaWeb).toDouble())
+    private fun vistaDeAhora() = com.forge.pixpin.motor.VistasDoc.zoomATexto(1.0, (corridoX / escalaWeb).toDouble(), (corridoY / escalaWeb).toDouble())
+    private fun irAVista(x: Double, y: Double) { web?.scrollTo((x * escalaWeb).toInt().coerceAtLeast(0), (y * escalaWeb).toInt().coerceAtLeast(0)) }
+    private fun irAlMarco(i: Int) {
+        val m = marcosDoc.lista.getOrNull(i) ?: return
+        // Con un poco de aire arriba y a la izquierda; el aumento lo lleva el WebView.
+        irAVista(m.x0 - 12 / escalaWeb, m.y0 - 24 / escalaWeb)
+    }
+
+    /**
+     * **Imprimir los marcos**: el documento se lleva a cada uno, se fotografía lo que se ve (con su
+     * tinta) y se recorta el marco. Lo que no quepa en la pantalla sale cortado: el `WebView` no deja
+     * pintar fuera de lo que enseña.
+     */
+    private fun imprimirLosMarcos(nombre: String) {
+        val vista = web ?: return
+        val lista = marcosDoc.lista
+        if (lista.isEmpty()) return
+        val antes = corridoX to corridoY
+        lifecycleScope.launch {
+            val fotos = ArrayList<android.graphics.Bitmap>()
+            for (m in lista) {
+                irAVista(m.x0, m.y0)
+                kotlinx.coroutines.delay(350)
+                val w = vista.width.coerceAtLeast(1); val h = vista.height.coerceAtLeast(1)
+                val entera = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                val lienzo = android.graphics.Canvas(entera)
+                lienzo.translate(-vista.scrollX.toFloat(), -vista.scrollY.toFloat())
+                vista.draw(lienzo)
+                lienzo.translate(vista.scrollX.toFloat(), vista.scrollY.toFloat())
+                if (hayAnotaciones && !tintaEnLaPagina) runCatching {
+                    val e = escalaWeb.coerceAtLeast(0.1f).toDouble()
+                    com.forge.pixpin.motor.Renderer(typefaces = com.forge.pixpin.motor.DrawFonts.provider(this@VisorHtmlActivity)).renderScene(
+                        lienzo, laCapa.scene.copy(viewport = com.forge.pixpin.motor.Viewport(scrollX = -vista.scrollX / e, scrollY = -vista.scrollY / e, zoom = e)),
+                        w.toDouble(), h.toDouble()
+                    )
+                }
+                val a = docAPantalla(m.x0, m.y0); val b = docAPantalla(m.x1, m.y1)
+                val x0 = a.x.toInt().coerceIn(0, w - 1); val y0 = a.y.toInt().coerceIn(0, h - 1)
+                val x1 = b.x.toInt().coerceIn(x0 + 1, w); val y1 = b.y.toInt().coerceIn(y0 + 1, h)
+                fotos += android.graphics.Bitmap.createBitmap(entera, x0, y0, x1 - x0, y1 - y0)
+            }
+            vista.scrollTo(antes.first, antes.second)
+            com.forge.pixpin.guardados.Imprimir.fotos(this@VisorHtmlActivity, fotos, sinExtension(nombre))
+        }
+    }
+
+    /** Un marcador donde se está leyendo, **con su vista** (PC 19-oct): el sitio exacto, para volver ahí. */
+    private fun ponerMarcadorAqui(emoji: String) {
+        val antes = marcadores.map { it.id }.toSet()
+        marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
+        marcadores.firstOrNull { it.id !in antes }?.let { vistasDoc.poner(it.id.toString(), vistaDeAhora()) }
+        guardarMarcadores()
+    }
+
+    private fun alternarMarcos() {
+        if (!marcosDoc.activo && anotando) { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
+        marcosDoc.alternar(); versionDeMarcos++
     }
 
     /** Reescribe la página que se enseña con la letra pedida, y la recarga **sin perder el sitio**. */
@@ -1040,6 +1117,11 @@ class VisorHtmlActivity : ComponentActivity() {
         escucharAlCargar = intent?.getBooleanExtra(EXTRA_ESCUCHAR, false) == true
         hojaPedida = intent?.getIntExtra(EXTRA_DESDE_HOJA, 0) ?: 0
         elOriginal = File(ruta)
+        // Una página web también lleva marcadores, marcos y vistas (como en el PC), con el código de su mensaje.
+        if (!esDocumento && !sinGuion) elDocumento?.let { d ->
+            baseDelMensaje = ExportarDocumentoAnotado.baseDe(this, d)
+            marcadores = com.forge.pixpin.motor.Lectura.deTexto(ExportarDocumentoAnotado.marcadores(this, d, baseDelMensaje))
+        }
         if (esDocumento) {
             tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
             grosorDeLetra = prefsDeLectura.getInt("grosor", 1)
@@ -1067,6 +1149,14 @@ class VisorHtmlActivity : ComponentActivity() {
             vocesDeMicrosoft = prefsDeLectura.getBoolean("voz:edge", false)
         }
         engancharALaVoz()
+        elDocumento?.let { d ->
+            val base = baseDelMensaje
+            fun guardado(terminacion: String, junto: String) =
+                if (base != null) com.forge.pixpin.motor.GuardadoDoc(File(filesDir, "${com.forge.pixpin.sincro.AnotacionesDelAdjunto.CARPETA}/$base$terminacion"), viaja = true)
+                else com.forge.pixpin.motor.GuardadoDoc(File(d.path + junto), viaja = false)
+            marcosDoc = com.forge.pixpin.motor.MarcosDoc.de(guardado(com.forge.pixpin.sincro.AnotacionesDelAdjunto.MARCOS, ".pixpin-marcos"))
+            vistasDoc = com.forge.pixpin.motor.VistasDoc.de(guardado(com.forge.pixpin.sincro.AnotacionesDelAdjunto.VISTAS, ".pixpin-vistas"))
+        }
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -1188,73 +1278,61 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
                 if (esDocumento && anotando) MandosDeAnotar()
                 if (esDocumento) BucleDeAutoDesplazar()
-                if (!presentando) androidx.compose.animation.AnimatedVisibility(
-                    visible = aLaVista && !anotando,
-                    enter = androidx.compose.animation.fadeIn(),
-                    exit = androidx.compose.animation.fadeOut(),
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
-                ) {
-                    Row(
-                        Modifier
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                            .background(androidx.compose.ui.graphics.Color(0x8C14182B))
-                            .padding(start = 14.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val blanco = androidx.compose.ui.graphics.Color.White
-                        if (cambiando) {
-                            var texto by remember { mutableStateOf(sinExtension(suNombre)) }
-                            val foco = remember { androidx.compose.ui.focus.FocusRequester() }
-                            LaunchedEffect(Unit) { foco.requestFocus() }
-                            androidx.compose.foundation.text.BasicTextField(
-                                value = texto,
-                                onValueChange = { texto = it.take(80).replace("\n", "") },
-                                singleLine = true,
-                                textStyle = androidx.compose.ui.text.TextStyle(color = blanco, fontWeight = FontWeight.Bold, fontSize = androidx.compose.ui.unit.TextUnit.Unspecified),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(blanco),
-                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = {
-                                    cambiando = false
-                                    val limpio = conSuExtension(texto.trim(), suNombre)
-                                    if (texto.isNotBlank() && limpio != suNombre) { suNombre = limpio; renombrar(limpio) }
-                                }),
-                                modifier = Modifier.weight(1f, fill = false).widthIn(min = 120.dp).focusRequester(foco).padding(vertical = 10.dp)
-                            )
-                        } else {
-                            Text(
-                                sinExtension(suNombre), color = blanco, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false).clickable { cambiando = true }.padding(vertical = 10.dp)
-                            )
-                        }
-                        // **En una página web, solo el nombre**: sus botones son los de la propia
-                        // página. **En un Word o un libro, el nombre, el marcador y el engranaje**
-                        // (tercera vuelta del usuario, 19-sep-2026): los tres puntos se fueron, y
-                        // con ellos imprimir y compartir —se comparte desde el chat—. Los dos
-                        // botones van con la pastilla: salen al tocar y se van al mover.
-                        if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
-                        else {
-                            // **Anotar**: una capa del motor del lienzo encima del documento. Ver [CapaDeAnotar].
-                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.Edit, contentDescription = "Anotar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                            IconButton(onClick = { poniendoMarcador = true; conLaLetra = false }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                            // **Escuchar**: la voz de Google del teléfono lee desde lo que asoma arriba. Ver [empezarAEscuchar].
-                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAEscuchar() }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.RecordVoiceOver, contentDescription = "Escuchar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                            // **Que suba sola**, a las palabras por minuto de cada uno. Ver [empezarAAutoDesplazar].
-                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAAutoDesplazar() }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.KeyboardDoubleArrowDown, contentDescription = "Desplazar sola", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                            IconButton(onClick = { compartiendo = true; conLaLetra = false; poniendoMarcador = false }, modifier = Modifier.size(38.dp)) {
-                                Icon(IconoDeCompartir, contentDescription = "Compartir", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                            IconButton(onClick = { conLaLetra = true; poniendoMarcador = false }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Letra", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                        }
+                // **Los marcos numerados** (PC 19-oct): encima del documento, en sus píxeles CSS.
+                if (pagina != null && !presentando && !anotando && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) CapaDeMarcos(
+                    marcos = marcosDoc, version = versionDeMarcos,
+                    aPantalla = { x, y -> @Suppress("UNUSED_EXPRESSION") corridoY; docAPantalla(x, y) },
+                    aDocumento = { o -> pantallaADoc(o) },
+                    px = { escalaWeb.toDouble() },
+                    alCambiar = { versionDeMarcos++ },
+                    alIrA = { i -> irAlMarco(i) },
+                    alImprimir = { imprimirLosMarcos(suNombre) },
+                    alDesplazar = { pan, _, _ -> web?.scrollBy(-pan.x.toInt(), -pan.y.toInt()) }
+                )
+                // **La barra de arriba, como la de los pines del PC** (20-oct-2026): tipo y nombre, lo propio
+                // del visor, pantalla completa, ⋮ y cerrar. El nombre ya no se cambia al tocarlo (se cambiaba
+                // sin querer): va en el ⋮. Anotar, marcador y marcos, en el riel.
+                if (!presentando && !anotando) BarraDeVisor(
+                    visible = aLaVista,
+                    tipo = when (File(suNombre).extension.lowercase()) { "epub" -> "Libro"; "docx", "doc", "odt", "rtf" -> "Word"; "pdf" -> "PDF"; "" -> "Web"; else -> File(suNombre).extension },
+                    nombre = sinExtension(suNombre),
+                    botones = if (!esDocumento) emptyList() else listOf(
+                        // **Escuchar**: la voz de Google del teléfono lee desde lo que asoma arriba. Ver [empezarAEscuchar].
+                        BotonDeLector(Icons.Filled.RecordVoiceOver, "Escuchar") { conLaLetra = false; poniendoMarcador = false; empezarAEscuchar() },
+                        // **Que suba sola**, a las palabras por minuto de cada uno. Ver [empezarAAutoDesplazar].
+                        BotonDeLector(Icons.Filled.KeyboardDoubleArrowDown, "Desplazar sola") { conLaLetra = false; poniendoMarcador = false; empezarAAutoDesplazar() },
+                        BotonDeLector(IconoDeCompartir, "Compartir") { compartiendo = true; conLaLetra = false; poniendoMarcador = false }
+                    ),
+                    pantallaCompleta = conPantallaCompleta,
+                    onPantallaCompleta = { conPantallaCompleta = !conPantallaCompleta; ponerPantallaCompleta(this@VisorHtmlActivity, conPantallaCompleta); toquesEnLaPagina++ },
+                    menu = listOfNotNull(
+                        if (esDocumento) OpcionDeMenu("Letra y espaciado", Icons.Filled.Settings) { conLaLetra = true; poniendoMarcador = false } else null,
+                        OpcionDeMenu("Cambiar el nombre", Icons.Filled.EditNote) { cambiandoElNombre = true },
+                        if (marcosDoc.lista.isNotEmpty()) OpcionDeMenu("Imprimir los marcos", Icons.Filled.Print) { imprimirLosMarcos(suNombre) } else null,
+                        if (marcosDoc.lista.isNotEmpty()) OpcionDeMenu("Borrar los marcos", Icons.Filled.DeleteSweep) { marcosDoc.borrar(); versionDeMarcos++ } else null
+                    ),
+                    onCerrar = { salir() },
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+                if (!presentando && pagina != null) {
+                    @Suppress("UNUSED_EXPRESSION") versionDeMarcos
+                    RielDeVisor(
+                        botonesDelRiel(
+                            poniendoMarca = poniendoMarcador, onMarca = if (anotando) null else ({ if (marcosDoc.activo) alternarMarcos(); poniendoMarcador = !poniendoMarcador; conLaLetra = false }),
+                            anotando = anotando, onAnotar = if (!esDocumento) null else ({
+                                if (anotando) { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
+                                else { if (marcosDoc.activo) alternarMarcos(); conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }
+                            }),
+                            enmarcando = marcosDoc.activo, onMarcos = if (anotando) null else ({ alternarMarcos() })
+                        ),
+                        Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 52.dp)
+                    )
+                }
+                if (!presentando && !anotando && !esDocumento) {
+                    LateralDeMarcadores(Modifier.align(Alignment.CenterEnd))
+                    if (poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), conVerde = false, onCerrar = { poniendoMarcador = false }) { emoji ->
+                        poniendoMarcador = false
+                        ponerMarcadorAqui(emoji)
                     }
                 }
                 if (esDocumento && !presentando && !anotando) {
@@ -1299,8 +1377,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         poniendoMarcador = false
                         if (emoji == com.forge.pixpin.motor.Lectura.EMOJI_DE_VOZ) ponerElVerdeAqui()
                         else {
-                            marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
-                            guardarMarcadores()
+                            ponerMarcadorAqui(emoji)
                         }
                     }
                 }
@@ -1343,6 +1420,22 @@ class VisorHtmlActivity : ComponentActivity() {
                     }
                 },
                 confirmButton = { androidx.compose.material3.TextButton(onClick = { quitandoMarcadores = false }) { Text("Hecho") } }
+            )
+        }
+        if (cambiandoElNombre) {
+            var texto by remember { mutableStateOf(sinExtension(suNombre)) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { cambiandoElNombre = false },
+                title = { Text("Cambiar el nombre") },
+                text = { androidx.compose.material3.OutlinedTextField(texto, { texto = it.take(80).replace("\n", "") }, singleLine = true) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        cambiandoElNombre = false
+                        val limpio = conSuExtension(texto.trim(), suNombre)
+                        if (texto.isNotBlank() && limpio != suNombre) { suNombre = limpio; renombrar(limpio) }
+                    }) { Text("Cambiar") }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { cambiandoElNombre = false }) { Text("Cancelar") } }
             )
         }
         if (preguntandoSiSalir) {
@@ -1535,7 +1628,10 @@ class VisorHtmlActivity : ComponentActivity() {
         val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
         if (lista.isEmpty()) return
         RielDeMarcas(lista.size, { i -> lista[i].emoji }, modifier) { i ->
-            lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) }
+            lista.getOrNull(i)?.let { m ->
+                val vista = com.forge.pixpin.motor.VistasDoc.zoomDeTexto(vistasDoc.deMarca(m.id.toString()))
+                if (vista != null) irAVista(vista.second, vista.third) else irALaFraccion(m.fraccion, intentos = 0)
+            }
         }
     }
 

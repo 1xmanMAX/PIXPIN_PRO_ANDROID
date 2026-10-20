@@ -15,6 +15,12 @@ import kotlinx.coroutines.launch
 import android.util.Log
 
 class PixPinApp : Application() {
+    companion object {
+        /** La aplicación, para lo que no tiene un contexto a mano (el reproductor común). */
+        @Volatile var instancia: PixPinApp? = null
+            private set
+    }
+
 
     lateinit var settings: SettingsRepository
         private set
@@ -70,6 +76,7 @@ class PixPinApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        instancia = this
         CrashLog.install(this)
         com.forge.pixpin.motor.DrawFonts.app = this
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].

@@ -440,6 +440,9 @@ class PlanoActivity : ComponentActivity() {
             }
         }
         var anotando by remember { mutableStateOf(false) }
+        val sitioDeMarcadores = remember(original) { MarcadoresDelPlano(this@PlanoActivity, original) }
+        var cadDelPlano by remember(original) { mutableStateOf(sitioDeMarcadores.leer()) }
+        var quitandoMarcadores by remember { mutableStateOf(false) }
         // **Con lápiz, el dedo mueve el plano** (11-oct-2026); el botón «Dedo» lo apaga.
         var conLapiz by remember { mutableStateOf(false) }
         var vioLapiz by remember { mutableStateOf(false) }
@@ -857,20 +860,6 @@ class PlanoActivity : ComponentActivity() {
                         IconButton(onClick = { Visor3DActivity.abrir(this@PlanoActivity, original.absolutePath, nombre); toques++ }, modifier = Modifier.size(38.dp)) {
                             Text("3D", color = blanco.copy(alpha = 0.9f), fontWeight = FontWeight.Bold)
                         }
-                        IconButton(onClick = {
-                            val laCapa = capa ?: return@IconButton
-                            vistaDeLaCapa()?.let { laCapa.setViewport(it) }
-                            acotando = false; marcando = false; terminarCadena()
-                            anotando = true
-                        }, modifier = Modifier.size(38.dp)) {
-                            Icon(Icons.Filled.Edit, contentDescription = getString(com.forge.pixpin.R.string.plano_anotar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                        }
-                        IconButton(onClick = { marcando = !marcando; if (marcando) { acotando = false; terminarCadena() }; toques++ }, modifier = Modifier.size(38.dp)) {
-                            Icon(
-                                Icons.Filled.Print, contentDescription = getString(com.forge.pixpin.R.string.plano_marcos),
-                                tint = if (marcando) Color(0xFF3D8BFF) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
-                            )
-                        }
                         IconButton(onClick = { acotando = !acotando; if (acotando) marcando = false else terminarCadena(); toques++ }, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 Icons.Filled.Straighten, contentDescription = getString(com.forge.pixpin.R.string.plano_acotar),
@@ -891,6 +880,46 @@ class PlanoActivity : ComponentActivity() {
                     }
                 }
             }
+            // **El riel, como el de los pines del PC** (20-oct-2026): marcador (con la vista entera: el
+            // centro y lo que se ve), anotar y marcos para imprimir. A la izquierda, los marcadores.
+            if (listo && !anotando) {
+                com.forge.pixpin.ui.RielDeVisor(
+                    com.forge.pixpin.ui.botonesDelRiel(
+                        poniendoMarca = false, onMarca = {
+                            val c = camara; val m = modelo
+                            if (c != null && m != null) {
+                                val nuevo = com.forge.pixpin.motor.Marcador2d(
+                                    com.forge.pixpin.motor.MarcadoresCad.nuevoId(), "Vista ${cadDelPlano.plano.size + 1}",
+                                    c.centroX + m.origenX, c.centroY + m.origenY, ancho * c.px, alto * c.px
+                                )
+                                cadDelPlano = sitioDeMarcadores.guardar(cadDelPlano.copy(plano = cadDelPlano.plano + nuevo), delPlano = true)
+                                android.widget.Toast.makeText(this@PlanoActivity, "Marcador «${nuevo.nombre}» con esta vista", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        anotando = false, onAnotar = {
+                            capa?.let { laCapa ->
+                                vistaDeLaCapa()?.let { laCapa.setViewport(it) }
+                                acotando = false; marcando = false; terminarCadena()
+                                anotando = true
+                            }
+                        },
+                        enmarcando = marcando, onMarcos = { marcando = !marcando; if (marcando) { acotando = false; terminarCadena() }; toques++ }
+                    ),
+                    Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 56.dp)
+                )
+                ListaDeMarcadoresCad(
+                    cadDelPlano.plano.map { it.nombre }, -1, Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+                    alIr = { i ->
+                        val mk = cadDelPlano.plano.getOrNull(i); val m = modelo
+                        if (mk != null && m != null) { camara = CamaraPlano(mk.x - m.origenX, mk.y - m.origenY, mk.pxEn(ancho, alto)); pintar(); marcos2++ }
+                    },
+                    alQuitar = { quitandoMarcadores = true }
+                )
+            }
+            if (quitandoMarcadores) QuitarMarcadoresCad(cadDelPlano.plano.map { it.nombre }, alQuitar = { i ->
+                cadDelPlano = sitioDeMarcadores.guardar(cadDelPlano.copy(plano = cadDelPlano.plano.filterIndexed { j, _ -> j != i }), delPlano = true)
+                if (cadDelPlano.plano.isEmpty()) quitandoMarcadores = false
+            }, alCerrar = { quitandoMarcadores = false })
             if (viendoLetras) {
                 val faltan = remember(modelo) {
                     modelo?.sinDibujar.orEmpty().filter { it.first.startsWith(LectorDePlanos.FUENTE_QUE_FALTA) }.map { it.first.removePrefix(LectorDePlanos.FUENTE_QUE_FALTA) }

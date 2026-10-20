@@ -238,6 +238,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 setDataSource(ruta)
                 setOnCompletionListener { window.decorView.postDelayed({ colgar() }, 900) }
                 prepare()
+                com.forge.pixpin.audio.AudioAlto.enganchar(this, ruta)
                 start()
             }
         }.onFailure { colgar() }
@@ -272,6 +273,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
 
     override fun onDestroy() {
         callar()
+        com.forge.pixpin.audio.AudioAlto.soltar(voz)
         runCatching { voz?.stop(); voz?.release() }
         voz = null
         runCatching { if (cerca?.isHeld == true) cerca?.release() }

@@ -85,6 +85,37 @@ object Imprimir {
     }
 
     /** Un PDF entero ya hecho (un Word o un PowerPoint en vectores, con lo anotado). */
+    /**
+     * **Los marcos numerados de un visor, en grupo** (20-oct-2026, PC `marco_imprimir::imprimir_fotos`):
+     * una hoja por foto, en su orden, cada una en A4 girada según la foto y con su margen. Las fotos
+     * las saca cada visor con sus colores de verdad (sin el modo noche).
+     */
+    fun fotos(actividad: Activity, fotos: List<Bitmap>, nombre: String) {
+        if (fotos.isEmpty()) {
+            android.widget.Toast.makeText(actividad, "No hay marcos que imprimir", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        pdf(actividad, pdfDeFotos(fotos), nombre)
+    }
+
+    /** El PDF de [fotos], una por hoja A4 (595×842 pt), encajada con [MARGEN]. */
+    fun pdfDeFotos(fotos: List<Bitmap>): ByteArray {
+        val doc = android.graphics.pdf.PdfDocument()
+        try {
+            fotos.forEachIndexed { i, f ->
+                val apaisada = f.width > f.height
+                val (w, h) = if (apaisada) 842 to 595 else 595 to 842
+                val pagina = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(w, h, i + 1).create())
+                val k = minOf((w - 2 * MARGEN) / f.width, (h - 2 * MARGEN) / f.height)
+                val dw = (f.width * k).toFloat(); val dh = (f.height * k).toFloat()
+                val x = (w - dw) / 2f; val y = (h - dh) / 2f
+                pagina.canvas.drawBitmap(f, null, android.graphics.RectF(x, y, x + dw, y + dh), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                doc.finishPage(pagina)
+            }
+            return java.io.ByteArrayOutputStream().also { doc.writeTo(it) }.toByteArray()
+        } finally { doc.close() }
+    }
+
     fun pdf(actividad: Activity, bytes: ByteArray, nombre: String) {
         val manager = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
         manager.print(nombre.ifBlank { "PixPin" }, AdaptadorDeBytes(bytes, nombre), null)

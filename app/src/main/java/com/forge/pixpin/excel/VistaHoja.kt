@@ -119,6 +119,74 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
     }
 
     val zoom: Double get() = est.zoom
+
+    // ---- **De la hoja a la pantalla y de vuelta** (PC 19/20-oct-2026): para los marcos numerados, las
+    // vistas de los marcadores y la tinta, en píxeles de la hoja al 100 % (los del PC). Lo inmovilizado
+    // cuenta: lo que cae en las filas o columnas fijas se ve fijo. ----
+
+    /** Se llama al acabar de pintar cada fotograma: lo de encima (marcos, tinta) se repinta con él. */
+    var alPintar: (() -> Unit)? = null
+    /** Píxeles de la pantalla por píxel de la hoja. */
+    val escala: Float get() = e
+
+    private fun eje(v: Double, fijo: Double, origen: Double, cabecera: Float, tope: Float): Float {
+        val e = e.toDouble()
+        val anchoFijo = minOf(fijo * e, tope.toDouble())
+        return cabecera + (if (v < fijo) v * e else anchoFijo + (v - maxOf(origen, fijo)) * e).toFloat()
+    }
+    private fun ejeInverso(p: Float, fijo: Double, origen: Double, cabecera: Float, tope: Float): Double {
+        val e = e.toDouble()
+        val d = (p - cabecera).toDouble()
+        val anchoFijo = minOf(fijo * e, tope.toDouble())
+        return if (d < anchoFijo) d / e else maxOf(origen, fijo) + (d - anchoFijo) / e
+    }
+    fun xEnPantalla(x: Double): Float { val g = hoja?.geo ?: return 0f; return eje(x, g.x(g.columnasFijas).toDouble(), est.x, cabAncho, width - cabAncho) }
+    fun yEnPantalla(y: Double): Float { val g = hoja?.geo ?: return 0f; return eje(y, g.y(g.filasFijas).toDouble(), est.y, cabAlto, height - cabAlto) }
+    fun xEnHoja(sx: Float): Double { val g = hoja?.geo ?: return 0.0; return ejeInverso(sx, g.x(g.columnasFijas).toDouble(), est.x, cabAncho, width - cabAncho) }
+    fun yEnHoja(sy: Float): Double { val g = hoja?.geo ?: return 0.0; return ejeInverso(sy, g.y(g.filasFijas).toDouble(), est.y, cabAlto, height - cabAlto) }
+
+    /** La vista de ahora: el zoom y la esquina de arriba a la izquierda (lo que guarda un marcador). */
+    fun vistaDeAhora(): Triple<Double, Double, Double> = Triple(est.zoom, est.x, est.y)
+
+    fun ponerVista(zoom: Double, x: Double, y: Double) {
+        est.zoom = zoom.coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO); est.x = x; est.y = y
+        scroller.forceFinished(true)
+        acotar(); invalidate(); alCambiar?.invoke()
+    }
+
+    /** Mover lo que se ve [dx], [dy] píxeles de pantalla y acercarse [factor] alrededor de ([fx], [fy]). */
+    fun moverYAcercar(dx: Float, dy: Float, factor: Float, fx: Float, fy: Float) {
+        scroller.forceFinished(true)
+        if (factor != 1f) zoomEn(est.zoom * factor, fx, fy)
+        val e = e
+        est.x -= dx / e; est.y -= dy / e
+        acotar(); invalidate()
+    }
+
+    /**
+     * La vista del lienzo de la tinta sobre la zona principal (sin lo inmovilizado): `scrollX`,
+     * `scrollY` y el aumento, como [com.forge.pixpin.motor.Viewport].
+     */
+    fun vistaDeLaTinta(): DoubleArray {
+        val g = hoja?.geo ?: return doubleArrayOf(0.0, 0.0, e.toDouble())
+        val e = e.toDouble()
+        val fx = g.x(g.columnasFijas).toDouble(); val fy = g.y(g.filasFijas).toDouble()
+        val sx = (cabAncho + minOf(fx * e, (width - cabAncho).toDouble())) / e - maxOf(est.x, fx)
+        val sy = (cabAlto + minOf(fy * e, (height - cabAlto).toDouble())) / e - maxOf(est.y, fy)
+        return doubleArrayOf(sx, sy, e)
+    }
+
+    /** Lleva lo que se ve a la vista que tiene el lienzo de la tinta (mientras se anota, manda el lienzo). */
+    fun seguirALaTinta(scrollX: Double, scrollY: Double, zoom: Double) {
+        val g = hoja?.geo ?: return
+        val z = (zoom / densidad).coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
+        if (kotlin.math.abs(z - est.zoom) > 1e-6) est.zoom = z
+        val e = e.toDouble()
+        val fx = g.x(g.columnasFijas).toDouble(); val fy = g.y(g.filasFijas).toDouble()
+        est.x = maxOf(fx, (cabAncho + minOf(fx * e, (width - cabAncho).toDouble())) / e - scrollX)
+        est.y = maxOf(fy, (cabAlto + minOf(fy * e, (height - cabAlto).toDouble())) / e - scrollY)
+        acotar(); invalidate()
+    }
     val indice: Int get() = hoja?.indice ?: -1
 
     /** Lo elegido (filas y columnas), y la celda activa. */
@@ -311,6 +379,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
         }
         pintarSeleccion(canvas, g)
         pintarEncabezados(canvas, g)
+        alPintar?.invoke()
     }
 
     /** Pide los trozos que se ven y uno más por cada lado (al desplazar ya están). */

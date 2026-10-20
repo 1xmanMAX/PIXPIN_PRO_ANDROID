@@ -542,7 +542,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
                 else Modifier.clickable {
                     val actual = reproductor[0]
                     if (sonando && actual != null) {
-                        runCatching { actual.stop(); actual.release() }
+                        com.forge.pixpin.audio.AudioAlto.soltar(actual); runCatching { actual.stop(); actual.release() }
                         reproductor[0] = null
                         sonando = false
                     } else {
@@ -550,7 +550,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
                             android.media.MediaPlayer().apply {
                                 setDataSource(medio.ruta)
                                 setOnCompletionListener { sonando = false }
-                                prepare(); start()
+                                prepare(); com.forge.pixpin.audio.AudioAlto.enganchar(this, medio.ruta); start()
                             }
                         }.getOrNull()?.let { reproductor[0] = it; sonando = true }
                     }

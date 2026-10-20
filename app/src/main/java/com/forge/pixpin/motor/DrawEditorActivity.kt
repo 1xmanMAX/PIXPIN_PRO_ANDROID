@@ -1846,6 +1846,39 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                         .padding(18.dp)
                 )
             }
+            // **El riel, como el de los pines del PC** (20-oct-2026): marcador, lápiz (mirar ↔ editar,
+            // que en el PC es el lápiz de la barra del pin) y marco (la herramienta Marco: las hojas
+            // son los marcos del lienzo; con ella puesta, las fichas 1, 2, 3… llevan a cada una).
+            if (!soloElDibujo && !presentando && !mandoAbierto) {
+                @Suppress("UNUSED_EXPRESSION") tick
+                val conMarco = !modoVista && controller.tool == Tool.FRAME
+                com.forge.pixpin.ui.RielDeVisor(
+                    com.forge.pixpin.ui.botonesDelRiel(
+                        poniendoMarca = poniendoMarca, onMarca = { emojiPorPoner = null; poniendoMarca = !poniendoMarca },
+                        anotando = !modoVista, onAnotar = { if (modoVista) pasarAEditar() else entrarEnVista() },
+                        enmarcando = conMarco, onMarcos = {
+                            if (modoVista) pasarAEditar()
+                            if (controller.tool == Tool.FRAME) controller.selectTool(herramientaAntesDelMarco ?: Tool.FREEDRAW)
+                            else { herramientaAntesDelMarco = controller.tool; controller.selectTool(Tool.FRAME) }
+                            pulsoDelRiel++
+                        }
+                    ),
+                    Modifier.align(Alignment.TopEnd)
+                        .padding(top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } + 8.dp)
+                        .statusBarsPadding()
+                )
+                @Suppress("UNUSED_EXPRESSION") pulsoDelRiel
+                val hojas = if (conMarco) hojasEnOrden(controller.scene) else emptyList()
+                if (conMarco) com.forge.pixpin.ui.FichasDeMarcos(
+                    cuantos = hojas.size,
+                    alIrA = { i -> val m = resources.displayMetrics; controller.irAHoja(i, m.widthPixels.toDouble(), m.heightPixels.toDouble()); pulsoDelRiel++ },
+                    alImprimir = if (hojas.isEmpty()) null else ({ imprimir() }),
+                    alQuitarUltimo = null, alBorrar = null,
+                    pista = if (hojas.isEmpty()) "Arrastra para poner un marco" else "Toca un número para ir a su marco",
+                    modifier = Modifier.align(Alignment.TopStart).statusBarsPadding()
+                        .padding(top = with(LocalDensity.current) { altoDeLaBarraDeArriba.toDp() } + 8.dp, start = 12.dp, end = 64.dp)
+                )
+            }
             // **El modo visualización**: solo su barra. Ver [BarraDeVista].
             if (modoVista && !soloElDibujo && !presentando) {
                 @Suppress("UNUSED_EXPRESSION") tick
@@ -3162,14 +3195,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                     contentDescription = getString(R.string.cd_encuadrar)
                 )
             }
-            // **Marcar este sitio.** El mismo marcador con emoticono de los lectores; aquí, un
-            // punto del lienzo al que se vuelve de un toque. Ver [CapaDeMarcas].
-            IconButton(onClick = { emojiPorPoner = null; poniendoMarca = !poniendoMarca }) {
-                Icon(
-                    Icons.Filled.BookmarkAdd,
-                    contentDescription = "Marcador aquí"
-                )
-            }
+            // **Marcar este sitio**: ya no aquí, en el riel (como el PC, 20-oct-2026). Ver [CapaDeMarcas].
             // **Añadir hoja**, que es lo que convierte el lienzo en un cuaderno.
             //
             // Aquí y no en la barra de herramientas: no se dibuja nada con ella, se
@@ -5632,6 +5658,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
     /** Mirando: sin la barra de herramientas, solo mover, imprimir, presentar y editar. */
     private var modoVista by mutableStateOf(false)
     private var herramientaAntesDeVer: Tool? = null
+    private var herramientaAntesDelMarco: Tool? = null
+    private var pulsoDelRiel by mutableIntStateOf(0)
 
     private fun entrarEnVista() {
         if (!modoVista) herramientaAntesDeVer = controller.tool.takeIf { it != Tool.HAND }
