@@ -113,6 +113,10 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
   y `hoja_a_lienzo.rs` con su planificador y supervisor, traídos sin tocar por `traer-del-pc.py`); Kotlin pone el puente
   (`asistente/HojaAlLienzo.kt`: leer, OCR de ML Kit, nube, cada zona al lienzo y pintar para comprobar). Calcar una
   lámina con la nube la pasa como hoja, como el PC.
+- **13 hecho por la biblioteca nativa**: el calcar agéntico del PC (`plan.rs`, `supervisor.rs`, `hoja_a_lienzo.rs`
+  hasta `49eb7ac`) corre tal cual en `libpixpinia.so`; calcar una lámina se desvía a ella (`HojaNativa.lamina`).
+  Lo que es solo trazado a mano (calcar sin nube) sigue el de Kotlin. Y `al_lienzo` (fotos y texto a un lienzo
+  por su nombre, apilados: `motor/PilaDelLienzo.kt` = PC `pila_lienzo.rs`), que faltaba en los enlaces.
 - **14 hecho**: Google Drive y Calendar con `pixpin_ia::conexiones` compilado en `libpixpinia.so` (OAuth con PKCE y
   vuelta a 127.0.0.1, guardado cifrado con la Keystore en `files/claves`, red por `HttpURLConnection`): las cinco
   herramientas, Ajustes → Asistente → Conexiones, el caché de Calendar cada 15 min (`calendario-google.json`, la forma del
