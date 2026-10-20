@@ -70,6 +70,22 @@ object AnotacionesDelAdjunto {
     fun hoja(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base.hoja")
 
     /**
+     * **Los marcos numerados** (`<base>.marcos.json`) y **las vistas de los marcadores**
+     * (`<base>.vistas.json`) de un documento (PC, 20-oct-2026; ver [com.forge.pixpin.motor.MarcosDoc]).
+     * Misma base que sus marcadores: el uid del mensaje, el del proyecto para su PDF, `-texto`…
+     */
+    const val MARCOS = ".marcos.json"
+    const val VISTAS = ".vistas.json"
+    fun marcos(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base$MARCOS")
+    fun vistas(filesDir: File, base: String) = File(filesDir, "$CARPETA/$base$VISTAS")
+
+    /** La tinta de la hoja [i] (desde 0) de un libro de Excel: `anot-<uid>-h<i>.excalidraw.gz`, sin `.hoja`. */
+    fun deHojaDelLibro(uid: String, i: Int) = "$PREFIJO$uid-h$i"
+
+    /** La tinta de lo anotado sobre un marcador 3D de un modelo: `anot-<uid>-m<id saneado>`. */
+    fun deMarcador3d(uid: String, id: String) = "$PREFIJO$uid-m" + id.filter { it.isLetterOrDigit() && it.code < 128 || it == '_' || it == '-' }
+
+    /**
      * **Los comentarios de una nota** (acordado con el PC, 30-sep-2026): `anot-<uid>.comentarios.json`,
      * con el código único del mensaje NOTA, de la hoja nota o del mensaje del `.md`. Ver
      * [com.forge.pixpin.motormd.Comentarios].
@@ -308,7 +324,7 @@ object AnotacionesDelAdjunto {
     // `.asistente.json`: lo que pensó el asistente del PC y su hoja de trabajo, uno por respuesta
     // (`ASISTENTE` de `pixpin-sincro/src/anotado.rs`, 14-oct-2026). Viaja con su nota y se borra
     // con ella, como los comentarios; el teléfono aún no lo escribe ni lo enseña.
-    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json")
+    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json", MARCOS, VISTAS)
 
     /**
      * **Lo anotado que hay en disco, por código de mensaje**, en rutas relativas a `files`. Para

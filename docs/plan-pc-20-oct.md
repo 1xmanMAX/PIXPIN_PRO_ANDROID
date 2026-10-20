@@ -1,0 +1,54 @@
+# Plan: lo del PC del 18 al 20-oct en Android (y lo que quedó del 18-oct)
+
+Repo del PC revisado hasta `d891ca4` (20-oct-2026), desde `cf46430` (ya planificado en
+`plan-pc-18-oct.md`, pasos 1-5 hechos). Rama: `pc-20-oct` (sale de `pc-18-oct`). Sin agentes: un
+paso detrás de otro, cada uno con sus pruebas y su commit. Manual del PC que manda:
+`docs/sincronizar-marcos-vistas-y-tinta.md` de ese repo.
+
+Lo que pidió el usuario (20-oct): «los frames» (marcos numerados), barra de arriba y barra lateral
+en los visores como en los pines del PC (en el lateral: anotar, marcadores y marcos), todo
+sincronizable, y mejorar el audio.
+
+## Pasos
+
+1. **Lo que viaja** (sin Android): `.marcos.json` y `.vistas.json` en `TERMINACIONES`;
+   `motor/MarcosDoc.kt` = `marcos_doc.rs` (lista, modo, arrastrar > 8 px, quitar el último, borrar,
+   fichas, `px_para_llenar`, vistas `zoom x y`), guardar por temporal, `[]`/`{}` en vez de borrar,
+   no reescribir si no cambia. Pruebas con los JSON del PC y por la sincronización de verdad.
+2. **La interfaz común**: `ui/BarraDeVisor.kt` (barra de arriba: tipo, nombre, botones propios,
+   luna/sol, pantalla completa, menú ⋮ sin repetidos, cerrar) y `ui/RielDeVisor.kt` (riel a la
+   derecha arriba: marcador, lápiz, marco; pulsado = azul `#0060DF` con icono blanco; toque largo =
+   nombre), `ui/CapaDeMarcos.kt` (raya azul `#0078D4`, número en su cuadrito, fichas abajo a la
+   izquierda con la pista; arrastrar pone uno) e imprimir en grupo (una hoja por marco).
+3. **PDF y Office maquetado** (`LectorPdfActivity`): riel + marcos en unidades del lector
+   (1400 por hoja, hueco 18), imprimir los marcos, marcadores con vista (zoom y sitio).
+4. **Word/EPUB/HTML** (`VisorHtmlActivity`): lo mismo en píxeles CSS; tinta de html/md sin la regla
+   de columnas del Word.
+5. **Excel** (`ExcelActivity`): riel, tinta por hoja `anot-<uid>-h<i>` (px al 100 %), marcadores
+   con vista y marcos por hoja.
+6. **Lienzo 2D**: abre en solo mirar si tiene algo, el lápiz de la barra pasa a editar; riel con
+   marcador, lápiz y marco; marcos y fichas.
+7. **Pines de imagen** (`PinWindowController`): riel con lápiz y marco; marcos en px de la imagen.
+8. **Planos y modelos**: `.vistas.json` de planos (2D: centro y tamaño) y modelos (`Estado3d`),
+   marcos 3D, tinta de cada marcador 3D (`-m<id>`), riel y fichas.
+9. **Audio**: realce al reproducir (`volumen.rs`): pico del 99,9 %, hasta ×16, limitador tanh, copia
+   WAV en caché; en todos los reproductores.
+10. **Tareas** (paso 6 del 18-oct, WIP `98cd1ffa`) + lo nuevo: urgencia en tres niveles, etiquetas,
+    fecha intuitiva, Kanban, horario semanal con asignaturas (cada una un grupo de tareas).
+11. **Notas y visores** (paso 7 del 18-oct): fotos en el sitio del cursor, tablas del Markdown
+    editables en la celda, enlaces pulsables en la caja del chat.
+12. **Asistente** (paso 8 del 18-oct) + geometría exacta del asistente (`0dd8a45`).
+13. **Calcar** (paso 9 del 18-oct + calcar agéntico del 18/19-oct), lo que encaje.
+14. **Google Drive y Calendar** (paso 10 + `0de0eef`), si cabe.
+
+Al final: suite completa, relectura del diff, `SincronizarDeVerdadTest` y `SincronizarConElPcTest`
+varias veces, versión nueva, push a main.
+
+## Fuera (solo Windows)
+
+WebView2 (carpetas, precalentado, cierres), teclas (I, Supr, Ctrl+P, G, F11) —en Android los
+botones—, «siempre encima», Flow, Microsoft Print to PDF.
+
+## Estado
+
+(se rellena al acabar cada paso)

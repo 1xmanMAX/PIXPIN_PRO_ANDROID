@@ -438,6 +438,41 @@ class SincronizarDeVerdadTest {
     }
 
     @Test
+    fun `los marcos numerados, las vistas de los marcadores y la tinta de Excel viajan con su adjunto`() {
+        emparejar()
+        val a = AnotacionesDelAdjunto
+        val pdf = File(telefono.filesDir, "guardados/6_lamina.pdf").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(3)) }
+        val xlsx = File(telefono.filesDir, "guardados/7_cuentas.xlsx").apply { writeBytes(byteArrayOf(4)) }
+        mensaje(telefono, "p", clase = Clase.ARCHIVO, ruta = pdf.absolutePath)
+        mensaje(telefono, "x", clase = Clase.ARCHIVO, ruta = xlsx.absolutePath)
+        val uP = a.uidDe(telefono.filesDir, pdf.absolutePath)!!
+        val uX = a.uidDe(telefono.filesDir, xlsx.absolutePath)!!
+        val marcos = com.forge.pixpin.motor.MarcosDoc.de(com.forge.pixpin.motor.GuardadoDoc(a.marcos(telefono.filesDir, a.delPdf(uP)), true))
+        marcos.alternar(); marcos.pulsar(doubleArrayOf(0.0, 0.0)); marcos.soltar(doubleArrayOf(700.0, 990.0), 1.0)
+        val vistas = com.forge.pixpin.motor.VistasDoc.de(com.forge.pixpin.motor.GuardadoDoc(a.vistas(telefono.filesDir, a.delPdf(uP)), true))
+        vistas.poner("m1", com.forge.pixpin.motor.VistasDoc.zoomATexto(1.75, 120.0, 3400.5))
+        lienzo(telefono, a.deHojaDelLibro(uX, 1), fig("tinta-hoja-2"))
+        sincronizar()
+        val alla = com.forge.pixpin.motor.MarcosDoc.deTexto(a.leer(a.marcos(tableta.filesDir, a.delPdf(uP))))
+        assertEquals(listOf(listOf(0.0, 0.0, 700.0, 990.0)), alla.map { it.caja })
+        assertEquals("1.75 120 3400.5", com.forge.pixpin.motor.VistasDoc.deTexto(a.leer(a.vistas(tableta.filesDir, a.delPdf(uP))))["m1"])
+        assertEquals(listOf("tinta-hoja-2"), figuras(tableta, a.deHojaDelLibro(uX, 1)))
+
+        // Quitados en la tableta: `[]`, que llega y vacía el teléfono (un borrado volvería).
+        reloj += 10_000
+        val enLaTableta = com.forge.pixpin.motor.MarcosDoc.de(com.forge.pixpin.motor.GuardadoDoc(a.marcos(tableta.filesDir, a.delPdf(uP)), true))
+        enLaTableta.borrar()
+        File(tableta.filesDir, "pins/draw/${a.delPdf(uP)}.marcos.json").setLastModified(System.currentTimeMillis() + 60_000)
+        sincronizar()
+        assertEquals("[]", a.leer(a.marcos(telefono.filesDir, a.delPdf(uP))))
+        // Y se van con su mensaje.
+        borrar(telefono, "p")
+        a.todoDe(telefono.filesDir, uP).forEach { it.delete() }
+        sincronizar()
+        assertEquals(emptyList<File>(), a.todoDe(tableta.filesDir, uP))
+    }
+
+    @Test
     fun `borrar el mensaje se lleva lo anotado en los dos aparatos`() {
         emparejar()
         val a = AnotacionesDelAdjunto
