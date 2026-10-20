@@ -339,15 +339,21 @@ object Asistente {
         val hoja = PensadoDelChat.hojaDelChat(app, anteriores)
         val ventana = if (conNube) VENTANA_NUBE else com.forge.pixpin.ia.ServidorLlama.CONTEXTO
         val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido0, foto != null)
+        // Con la nube, la hora al minuto y la de cada archivo del chat (PC 17-oct).
+        val conLaHora = if (conNube) {
+            val desfase = ChatDelAsistente.desfaseLocal()
+            pedido0 + ChatDelAsistente.archivosConFecha(delChat, desfase) + ChatDelAsistente.notaDeAhora(System.currentTimeMillis(), desfase)
+        } else pedido0
         val (historial, reiniciado) = if (enSuChat) {
-            val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(pedido0, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(pedido0)
+            val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(conLaHora, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(conLaHora)
             PensadoDelChat.historial(Agente.instrucciones(), hoja, anteriores, nuevo, ventana, herramientas)
         } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta.copy(texto = pedido0), enSuChat, foto) to false
         val fuentesDelChat = PensadoDelChat.fuentes(anteriores, hoja)
         val ligero = !conNube && modelo(app, ajustes.asistenteModelo).id == com.forge.pixpin.ia.Modelos.QWEN35_08B.id
         val opciones = Agente.Opciones(
             planificar = !ligero,
-            pensar = when (ajustes.asistentePensar) { "si" -> true; "no" -> false; else -> false },
+            // «Automático» piensa solo si la tarea es compleja (PC c871730, [com.forge.pixpin.ia.Complejidad]).
+            pensar = com.forge.pixpin.ia.Complejidad.decidir(when (ajustes.asistentePensar) { "si" -> true; "no" -> false; else -> null }, pedido0),
             hoja = hoja,
             ventana = ventana,
             buscar = if (enSuChat && (reiniciado || hoja.reinicios > 0)) { c -> com.forge.pixpin.ia.Contexto.buscar(fuentesDelChat, c, 3) } else null,
@@ -438,8 +444,7 @@ object Asistente {
         val fuentes = ejecutor.documentos.citas.citadas(textoFinal).takeIf { it.isNotEmpty() }
             ?.let { l -> kotlinx.serialization.json.JsonArray(l.map { it.aJson() }) }
         escribir(textoFinal, ejecutor.lienzo, fuentes)
-        // Leer cada respuesta en voz alta al acabar, si se pidió en Ajustes.
-        if (ajustes.asistenteLeerRespuestas && !final.cortado) enPantalla { VozDelAsistente.leer(app, textoFinal) }
+        // Ya no se lee sola al acabar (PC 17-oct): queda el altavoz y «Escuchar» en el menú.
         // «…y ábrelo»: se abre al acabar (si no, la respuesta lleva «Abrir lienzo»).
         ejecutor.lienzo?.takeIf { ChatDelAsistente.pideAbrir(pedido) }?.let { ref ->
             enPantalla { runCatching { com.forge.pixpin.motor.DrawEditorActivity.abrir(app, ref, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(app, ref), null) } }

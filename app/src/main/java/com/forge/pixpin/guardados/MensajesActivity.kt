@@ -71,6 +71,8 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
@@ -1686,6 +1688,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                                 .rotate(if (fichasALaVista) 180f else 0f)
                                         )
                                     }
+                                    // **El modelo del asistente**, en su chat (PC 17-oct): un toque pasa al siguiente.
+                                    if (chatDe != null && chatDe == chatDelAsistente) {
+                                        val clave = motorDelAsistente()
+                                        Text(
+                                            (MODELOS_DEL_ASISTENTE.firstOrNull { it.first == clave }?.second ?: "Local") + " ▾",
+                                            fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                                .clickable {
+                                                    val i = MODELOS_DEL_ASISTENTE.indexOfFirst { it.first == clave }
+                                                    ponerMotorDelAsistente(MODELOS_DEL_ASISTENTE[(i + 1) % MODELOS_DEL_ASISTENTE.size].first)
+                                                }
+                                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                                        )
+                                    }
                                     // **Compartido**: con cuántas personas, delante de lo demás.
                                     val conQuien = compartido?.let { c ->
                                         com.forge.pixpin.sincro.Compartidos.nombresDentro(c).size.takeIf { it > 1 }?.let { "compartido · $it personas" }
@@ -1816,6 +1832,25 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     // entra a la de cualquier proyecto: es lo que hace
                                     // que esto sea el sitio desde el que se llega a todo
                                     // y no una conversación más entre otras.
+                                    // **El chat del asistente** (PC 17-oct): conversación nueva y qué modelo contesta.
+                                    if (chatDe != null && chatDe == chatDelAsistente) {
+                                        androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text("Conversación nueva") },
+                                            leadingIcon = { Icon(Icons.Filled.CleaningServices, null) },
+                                            onClick = {
+                                                masOpciones = false
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    almacen.anadir(com.forge.pixpin.asistente.ChatDelAsistente.notaDeCorte(chatDe, System.currentTimeMillis()))
+                                                    withContext(Dispatchers.Main) { refrescar() }
+                                                }
+                                            }
+                                        )
+                                        for ((clave, nombre) in MODELOS_DEL_ASISTENTE) androidx.compose.material3.DropdownMenuItem(
+                                            text = { Text(nombre) },
+                                            leadingIcon = { if (clave == motorDelAsistente()) Icon(Icons.Filled.Check, null) else Spacer(Modifier.size(24.dp)) },
+                                            onClick = { masOpciones = false; ponerMotorDelAsistente(clave) }
+                                        )
+                                    }
                                     if (chatDe == null) {
                                         DelMenu(com.forge.pixpin.R.string.biblioteca_audio, Icons.Filled.LibraryMusic) {
                                             masOpciones = false
@@ -5873,6 +5908,22 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             }
         }
     }
+
+    /** Qué contesta en el chat del asistente: vacío (local), `claude` o `deepseek`. */
+    @Composable
+    private fun motorDelAsistente(): String {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return ""
+        val a by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+        return a.asistenteMotor
+    }
+
+    private fun ponerMotorDelAsistente(clave: String) {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return
+        lifecycleScope.launch { app.settings.setAsistenteMotor(clave) }
+        android.widget.Toast.makeText(this, "Contesta: " + (MODELOS_DEL_ASISTENTE.firstOrNull { it.first == clave }?.second ?: "Local"), android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private val MODELOS_DEL_ASISTENTE = listOf("" to "Local", "claude" to "Claude Haiku", "deepseek" to "DeepSeek")
 
     @Composable
     private fun DelMenu(

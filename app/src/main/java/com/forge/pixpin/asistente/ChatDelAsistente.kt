@@ -36,6 +36,55 @@ object ChatDelAsistente {
 
     fun esRespuesta(m: Mensaje): Boolean = m.aparato == APARATO
 
+    // ----------------------------------------------------------------------- «Conversación nueva» (PC 17-oct)
+
+    /** Lo que dice la nota que corta la conversación. */
+    const val TEXTO_NUEVA_CONVERSACION = "🧹 Conversación nueva: lo de arriba ya no se le manda al asistente."
+
+    fun esCorte(m: Mensaje): Boolean = esRespuesta(m) && m.nuevaConversacionIa == true
+
+    /** **Lo que el asistente ve de la conversación**: lo de después de la última «Conversación nueva». */
+    fun desdeElCorte(mensajes: List<Mensaje>): List<Mensaje> {
+        val i = mensajes.indexOfLast { esCorte(it) }
+        return if (i < 0) mensajes else mensajes.subList(i + 1, mensajes.size)
+    }
+
+    /** La nota que corta: del asistente, en su chat. */
+    fun notaDeCorte(proyecto: String?, ahora: Long): Mensaje = Mensaje(
+        id = java.util.UUID.randomUUID().toString(), cuando = ahora, clase = Clase.NOTA, texto = TEXTO_NUEVA_CONVERSACION,
+        proyecto = proyecto, aparato = APARATO, nuevaConversacionIa = true
+    )
+
+    /**
+     * **«(Ahora: vie 17-oct-2026 14:05, hora local del usuario.)»** al final del pedido, solo con la nube
+     * (PC `nota_de_ahora`): con la hora de ahora el modelo entiende «lo de esta mañana».
+     */
+    fun notaDeAhora(ahoraUtc: Long, desfase: Long): String = fechaYHora(ahoraUtc, desfase)?.let { "\n\n(Ahora: $it, hora local del usuario.)" }.orEmpty()
+
+    /** `vie 3-oct-2026 14:05` en hora local (PC `fechas::fecha_y_hora`); null antes del 2001 (sin hora). */
+    fun fechaYHora(msUtc: Long, desfaseMs: Long): String? {
+        if (msUtc < 978_307_200_000L) return null
+        val m = com.forge.pixpin.ia.Momento.deMsLocales(msUtc + desfaseMs)
+        val (y, mes, d) = com.forge.pixpin.ia.Fechas.fechaDe(m.dia)
+        val meses = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+        val sem = listOf("lun", "mar", "mié", "jue", "vie", "sáb", "dom")[com.forge.pixpin.ia.Fechas.diaDeLaSemana(m.dia).toInt()]
+        return "$sem $d-${meses[(mes - 1).toInt()]}-$y %02d:%02d".format(m.minuto / 60, m.minuto % 60)
+    }
+
+    /** Hora local menos UTC, redondeada al cuarto de hora. */
+    fun desfaseLocal(): Long {
+        val ahora = System.currentTimeMillis()
+        val d = java.util.TimeZone.getDefault().getOffset(ahora).toLong()
+        return Math.round(d / 900_000.0) * 900_000L
+    }
+
+    /** Los archivos del chat con su fecha al minuto (hasta 15), para la nube. */
+    fun archivosConFecha(delChat: List<Mensaje>, desfase: Long): String {
+        val l = desdeElCorte(delChat).filter { it.ruta != null && it.nombre.isNotBlank() }.takeLast(15)
+        if (l.isEmpty()) return ""
+        return "\n\n(Archivos del chat: " + l.joinToString("; ") { m -> m.nombre + (fechaYHora(m.cuando, desfase)?.let { " — $it" } ?: "") } + ".)"
+    }
+
     // ----------------------------------------------------------------------- `@` para elegir lienzo (§4.4)
 
     const val MENCION_LIENZO = "@lienzo:"
@@ -174,7 +223,7 @@ object ChatDelAsistente {
         foto: Pair<ByteArray, String>?
     ): MutableList<MensajeIa> {
         val pedido = sinMencion(pregunta.texto).ifBlank { pregunta.texto }
-        val antes = mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon && it.cuando <= pregunta.cuando && it.id != pregunta.id }
+        val antes = desdeElCorte(mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon && it.cuando <= pregunta.cuando && it.id != pregunta.id })
         val salida = mutableListOf(MensajeIa.sistema(sistema))
         if (enSuChat) {
             val turnos = ArrayList<MensajeIa>()

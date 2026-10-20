@@ -23,6 +23,9 @@ object PensadoDelChat {
     /** Lo último de la conversación que entra en el turno, y cuánto de cada mensaje. */
     private const val ULTIMOS = 12
     private const val LARGO = 1500
+    /** Con la nube, más contexto (PC 17-oct): 40 mensajes de hasta 4000 letras (~24 000 tokens). */
+    private const val ULTIMOS_NUBE = 40
+    private const val LARGO_NUBE = 4000
 
     /** Lo ya leído (por id de la nota); null = no tiene o está roto. Se olvida al reescribir. */
     private val cache = ConcurrentHashMap<String, Any>()
@@ -54,7 +57,7 @@ object PensadoDelChat {
             hoja.turnos.filter { it.pensado.isNotEmpty() }.map { Contexto.Fuente("T${it.n} pensado", "${it.peticion} — ${it.pensado}") }
 
     /** (id, número, del usuario, texto) de las notas de la conversación. */
-    private fun conversacion(delChat: List<Mensaje>) = delChat
+    private fun conversacion(delChat: List<Mensaje>) = ChatDelAsistente.desdeElCorte(delChat)
         .filter { it.clase == Clase.NOTA && it.texto.isNotBlank() && it.texto != ChatDelAsistente.PENSANDO }
         .map { m -> Quad(m.id, m.numero, !ChatDelAsistente.esRespuesta(m), if (ChatDelAsistente.esRespuesta(m)) ChatDelAsistente.limpiarRespuesta(m.texto) else ChatDelAsistente.sinMencion(m.texto)) }
         .filter { it.cuarto.isNotBlank() }
@@ -72,8 +75,9 @@ object PensadoDelChat {
     ): Pair<MutableList<MensajeIa>, Boolean> {
         var conv = conversacion(anteriores)
         hoja.reinicioDesde?.let { desde -> val i = conv.indexOfFirst { it.id == desde }; if (i >= 0) conv = conv.drop(i) }
-        conv = conv.takeLast(ULTIMOS)
-        val pares = conv.map { it.delUsuario to it.cuarto.take(LARGO) }
+        val nube = ventana > com.forge.pixpin.ia.ServidorLlama.CONTEXTO
+        conv = conv.takeLast(if (nube) ULTIMOS_NUBE else ULTIMOS)
+        val pares = conv.map { it.delUsuario to it.cuarto.take(if (nube) LARGO_NUBE else LARGO) }
         val sistema = Contexto.sistemaConHoja(instrucciones, hoja, null)
         val p = Contexto.preparar(sistema, pares, nuevo, herramientas + Contexto.herramientaBuscar(), ventana, Contexto.RESERVA_RESPUESTA)
         if (p.reiniciado) {

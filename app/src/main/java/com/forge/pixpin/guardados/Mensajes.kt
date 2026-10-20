@@ -324,7 +324,12 @@ data class Mensaje(
      * cual** por lo mismo que [lienzoIa].
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val fuentesIa: kotlinx.serialization.json.JsonArray? = null
+    val fuentesIa: kotlinx.serialization.json.JsonArray? = null,
+    /**
+     * **«Conversación nueva»** (PC 17-oct, `chat::NUEVA_CONVERSACION`): en la nota del asistente que
+     * corta el contexto. Lo de antes sigue en la vista, pero ya no se le manda al modelo.
+     */
+    val nuevaConversacionIa: Boolean? = null
 )
 
 /** El lienzo del que salió una zona: qué dice el vínculo y cómo volver a él. */

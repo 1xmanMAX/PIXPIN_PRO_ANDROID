@@ -34,7 +34,8 @@ open(ia + "src/nube/claves.rs", "w").write(k[k.index("/// Lo que se ensena de un
 n = c + "pixpin-notas/"
 os.system("mv %ssrc %ssrc_old && mkdir %ssrc && cp %ssrc_old/formulas.rs %ssrc/" % (n, n, n, n, n))
 open(n + "src/lib.rs", "w").write("pub mod formulas;\n")
-open(n + "Cargo.toml", "w").write('[package]\nname = "pixpin-notas"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\n')
+# Desde el 18-oct las fórmulas viven en `pixpin-motor2d` (pixpin-notas las reexporta).
+open(n + "Cargo.toml", "w").write('[package]\nname = "pixpin-notas"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\n[dependencies]\npixpin-motor2d = { path = "../pixpin-motor2d" }\n')
 PY
 mkdir -p "$C/crates/volcado/src"
 cp "$AQUI/src/main.rs" "$C/crates/volcado/src/main.rs"
