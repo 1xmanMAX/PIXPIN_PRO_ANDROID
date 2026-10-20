@@ -73,7 +73,17 @@ jobs:
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 SHA256
 
       - name: Compilar
-        run: ./gradlew :app:assembleRelease --stacktrace ${{ inputs.rapido && '-Prapido' || '' }}
+        # 20-oct-2026: dos veces se quedó colgado en packageRelease (en local tarda segundos). Si pasa de
+        # 20 minutos, se vuelcan los hilos de Gradle (jstack) para ver dónde, y se corta.
+        run: |
+          ./gradlew :app:assembleRelease --stacktrace ${{ inputs.rapido && '-Prapido' || '' }} &
+          G=$!
+          for i in $(seq 1 120); do kill -0 $G 2>/dev/null || break; sleep 10; done
+          if kill -0 $G 2>/dev/null; then
+            for p in $(jps -q); do echo "=== $p $(jps -l | grep "^$p ")"; jstack $p | head -400; done
+            kill $G; exit 1
+          fi
+          wait $G
 
       - name: Firmar para repartir
         run: |
