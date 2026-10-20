@@ -46,6 +46,8 @@ sincronizable, y mejorar el audio.
     marcadores de planos/3D; «crear como nuevo» renombra lo anotado), `1984938` lo editable es el
     `.pixpin` (Android ya no ofrecía el `.excalidraw` suelto). Pendiente de que lo suba: la extensión
     `.excalidraw` → `.pixpin` en todo y los enlaces `pixpin://` para que otras apps llamen a PixPin.
+    Llegó también `01ef092` (claves estables GlobalId de los marcadores BIM) y `7048d8e` (.doc/.ppt
+    antiguos leídos en nombre del original: en Android el .so ya los abre con el uid del mensaje).
 
 Al final: suite completa, relectura del diff, `SincronizarDeVerdadTest` y `SincronizarConElPcTest`
 varias veces, versión nueva, push a main.
@@ -58,3 +60,32 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
 ## Estado
 
 (se rellena al acabar cada paso)
+
+- **1 hecho**: `motor/MarcosDoc.kt` (MarcosDoc, VistasDoc, GuardadoDoc), terminaciones `.marcos.json` y
+  `.vistas.json`, `-h<i>` y `-m<id>`. Pruebas: `MarcosDocTest`, `SincronizarDeVerdadTest` (marcos, vistas y
+  tinta de Excel viajan; vaciados quedan `[]`).
+- **2 hecho**: `ui/BarraDeVisor.kt` (barra, riel, `botonesDelRiel`, pantalla completa), `ui/CapaDeMarcos.kt`
+  (marcos, fichas, dos dedos mueven), `Imprimir.fotos`, `ui/TintaSobreVisor.kt`.
+- **3 hecho** PDF/Office: unidades del PC (`motor/HojasDoc.kt`), marcos, fotos por hoja con su tinta,
+  marcadores con vista, ir a página para el asistente.
+- **4 hecho** Word/EPUB/HTML: marcos en px CSS, marcadores (también en HTML) con vista, barra con ⋮ y
+  «Cambiar el nombre» (ya no al tocar). Imprimir un marco más alto que la pantalla sale cortado.
+- **5 hecho** Excel: riel, marcadores (x = columna, y = hoja·10⁷ + fila) con vista, marcos por hoja, tinta
+  por hoja (`anot-<uid>-h<i>`), imprimir en claro.
+- **6 hecho** lienzo: riel (marcador, lápiz = mirar/editar, marco = herramienta Marco), fichas de las hojas.
+- **7 pendiente**: pines de imagen.
+- **8 hecho** planos y 3D: riel, marcadores 2D/3D con vista (`MarcadoresCad.kt`, comparten fichero),
+  marcos 3D e imprimirlos, tinta por marcador 3D; claves estables GlobalId (PX3D v4, `libpixpincad.so`
+  recompilado). Pruebas: `MarcadoresCadTest`.
+- **9 hecho** audio: `audio/Volumen.kt` (`VolumenTest`, casos del PC) + `AudioAlto` (LoudnessEnhancer).
+- **10 hecho** tareas: `mini/Frase.kt` = `pixpin-frase/tarea.rs` (`FraseTest`), fechas nuevas (`FechasTest`),
+  horario semanal (`Semana.kt`, `HorarioSemanal.kt`, `SemanaTest`), asignaturas = listas del chat
+  «Asignaturas» (`Asignaturas.kt`), reloj y libro en la caja de Tareas, chapitas con +N que buscan.
+- **11 en parte**: foto en el cursor de la nota, enlaces pulsables en el chat. Falta: riel en las notas.
+- **12 en parte**: complejidad, conversación nueva, pastilla del modelo, contexto 40×4000, hora al minuto,
+  sin lectura automática; 18 herramientas nuevas (`EnElChat.kt`, `AccionesDelTelefono`), geometría exacta
+  (`GeometriaPrecisa.kt`, `GeometriaPrecisaTest`); catálogo y selección del PC de hoy por el oráculo.
+  Falta: anotar_inteligente, ver_lienzo, y las de antes que el teléfono nunca tuvo (editar el lienzo,
+  graficar_funcion, ecuación, cronograma, física, problema en limpio, hoja al lienzo, documentos).
+- **15 en parte**: `.pixpin` de un archivo suelto con todo lo anotado (`ChatQueViaja.conLoSuelto`,
+  `LoSueltoTest`), claves estables BIM.
