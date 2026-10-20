@@ -124,3 +124,7 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
 - **15 en parte**: `.pixpin` de un archivo suelto con todo lo anotado (`ChatQueViaja.conLoSuelto`,
   `LoSueltoTest`), claves estables BIM. **`8d0cc90` (PC, 20-oct)**: la etiqueta de un `.doc`/`.ppt` convertido;
   en el teléfono la barra ya dice «Word»/«PowerPoint» por el tipo, no por la copia: nada que cambiar.
+  **La extensión `.pixpin` en vez del `.excalidraw`** (lo que pidió el usuario): en el PC es `1984938`+`841c32f`
+  (compartir solo ofrece el `.pixpin`, el de un lienzo con el lienzo como su hoja, copiado de `EnviarActivity.deLienzo`
+  del móvil). El teléfono ya lo hacía así; quitada la última cadena «Compartir como .excalidraw» (sin usar). Los
+  `.excalidraw` siguen abriéndose y el almacén interno sigue igual (el PC tampoco lo cambió).

@@ -311,7 +311,6 @@
     <string name="pin_type_table">Tabla</string>
     <string name="pin_type_draw">Dibujo</string>
     <string name="cd_draw_edit">Seguir dibujando</string>
-    <string name="cd_draw_export">Compartir como .excalidraw</string>
     <string name="cd_redo">Rehacer</string>
     <string name="cd_duplicate">Duplicar</string>
     <string name="cd_delete">Borrar</string>
