@@ -321,13 +321,8 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:taskAffinity="${applicationId}.atajo"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="pixpin" android:host="atajo" />
-            </intent-filter>
-        </activity>
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- (Los enlaces pixpin://atajo/… de fuera llegan por EnlaceActivity, que se los pasa.) -->
 
         <!--
             taskAffinity propio: si comparten tarea con MainActivity, lanzarlas
@@ -888,6 +883,21 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
+        <!-- Los enlaces pixpin:// y pixpinmax:// del PC (cualquier app le pide algo a PixPin). -->
+        <activity
+            android:name=".atajos.EnlaceActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="${applicationId}.enlace"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pixpin" />
+                <data android:scheme="pixpinmax" />
+            </intent-filter>
+        </activity>
         <!-- Leer una nota con el riel (la página de notas del PC). -->
         <activity
             android:name=".ui.VisorDeNotaActivity"

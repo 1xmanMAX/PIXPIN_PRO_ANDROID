@@ -148,7 +148,8 @@ class AnotarInteligente(
 
     /** Dónde van las figuras de cada página. */
     sealed class Destino {
-        class Hojas(val c: DocumentosDelAsistente.Candidato) : Destino()
+        /** [cuantas]: las hojas del documento (las de antes de abrir un espacio guardan su marco). */
+        class Hojas(val c: DocumentosDelAsistente.Candidato, val cuantas: Int) : Destino()
         class Foto(val id: String) : Destino()
         class Plano(val c: DocumentosDelAsistente.Candidato, val id: String, val ruta: File, val hoja: File,
                     val encaje: com.forge.pixpin.planos.CapaDelPlano.Encaje, val m: com.forge.pixpin.planos.ModeloCad) : Destino()
@@ -179,7 +180,7 @@ class AnotarInteligente(
         val p = docs.paginas(c.ruta, c.nombre, pedidas.toSet(), MAX_OCR)
         val conOcr = 0
         val paginas = pedidas.map { i -> paginaDeHoja(i, p.altos[i], renglonesDe(p.textos[i], ANCHO_HOJA, p.altos[i])) }
-        return Leido(f, paginas, Destino.Hojas(c), conOcr)
+        return Leido(f, paginas, Destino.Hojas(c, cuantas), conOcr)
     }
 
     private fun leerFoto(c: DocumentosDelAsistente.Candidato): Leido {
@@ -415,7 +416,7 @@ class AnotarInteligente(
                 val lado = if (puesta.lado == Anotacion.Lado.IZQUIERDA) 1 else 2
                 if (espacios and lado == 0) {
                     espacios = espacios or lado
-                    abrirEspacio(leido.destino.c, lado, leido.paginas.maxOf { it.numero } + 1)
+                    abrirEspacio(leido.destino.c, lado, leido.destino.cuantas)
                 }
             }
             hecho.puestas = anotador.cuantas()

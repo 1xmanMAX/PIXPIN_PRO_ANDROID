@@ -119,7 +119,12 @@ class Modelo3D private constructor(
         fun deBytes(b: ByteBuffer): Modelo3D {
             val d = b.duplicate().order(ByteOrder.LITTLE_ENDIAN)
             if (d.remaining() < 8) throw NoSeLee("No es un modelo leído")
-            for (i in 0 until 8) if (d.get(i) != MAGIA[i]) throw NoSeLee("No es un modelo leído (o es de otra versión)")
+            for (i in 0 until 7) if (d.get(i) != MAGIA[i]) throw NoSeLee("No es un modelo leído (o es de otra versión)")
+            // **El v3 también** (los guardados antes del 20-oct y los de las pruebas): sin las claves fijas
+            // de cada elemento y cada nivel, que en el v4 van detrás de su nombre.
+            val version = d.get(7).toInt()
+            if (version != 3 && version != LectorDePlanos.VERSION_3D) throw NoSeLee("No es un modelo leído (o es de otra versión)")
+            val conClaves = version >= 4
             var i = 8
             fun hay(n: Long) { if (i + n > d.limit()) throw NoSeLee("Modelo leído cortado") }
             fun u(): Int { hay(4); return d.getInt(i).also { i += 4 } }
@@ -145,7 +150,7 @@ class Modelo3D private constructor(
             if (ne < 0 || ne > d.limit()) throw NoSeLee("Modelo leído roto")
             fun texto(): String { val n = u(); if (n < 0) throw NoSeLee("Modelo leído roto"); hay(n.toLong()); val by = ByteArray(n); for (k in 0 until n) by[k] = d.get(i + k); i += n; return String(by, Charsets.UTF_8) }
             val elementos = List(ne) {
-                val tipo = texto(); val nombre = texto(); val clave = texto()
+                val tipo = texto(); val nombre = texto(); val clave = if (conClaves) texto() else ""
                 val nivel = u()
                 hay(17)
                 val md = Medidas(f(), f(), f(), f(), d.get(i) != 0.toByte()).also { i += 1 }
@@ -153,7 +158,7 @@ class Modelo3D private constructor(
             }
             val nn = u()
             if (nn < 0 || nn > d.limit()) throw NoSeLee("Modelo leído roto")
-            val niveles = List(nn) { val n = texto(); hay(8); val cota = d.getDouble(i).also { i += 8 }; Nivel(n, cota, texto()) }
+            val niveles = List(nn) { val n = texto(); hay(8); val cota = d.getDouble(i).also { i += 8 }; Nivel(n, cota, if (conClaves) texto() else "") }
             if (elementos.any { it.nivel < -1 || it.nivel >= nn }) throw NoSeLee("Modelo leído roto")
             return Modelo3D(origen, caja, metros, vertices, nv, op, nOp, tr, nTr, ar, nAr, li, nLi, pu, nPu, elementos, niveles)
         }

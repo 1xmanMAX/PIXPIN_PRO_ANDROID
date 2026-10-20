@@ -49,4 +49,21 @@ class VisorDeNotaTest {
         assertTrue(g, g.endsWith("""("colocar",12.5,0.0)"""))
         assertTrue(VisorDeNotaActivity.PUENTE.contains("window.chrome.webview") && VisorDeNotaActivity.PUENTE.contains("Work Sans"))
     }
+
+    @Test fun `la maqueta va y vuelve y dice si el texto cae igual`() {
+        val M = VisorDeNotaActivity.Companion.Maqueta
+        val m = VisorDeNotaActivity.Companion.Maqueta(768.0, 16.0, 212.5)
+        assertEquals(m, M.deTexto(m.aTexto()))
+        // Medio píxel de redondeo: cae igual; otra columna u otra letra, no.
+        assertTrue(m.coincide(VisorDeNotaActivity.Companion.Maqueta(768.6, 16.0, 40.0)))
+        assertFalse(m.coincide(VisorDeNotaActivity.Companion.Maqueta(540.0, 16.0)))
+        assertFalse(m.coincide(VisorDeNotaActivity.Companion.Maqueta(768.0, 18.0, 212.5)))
+        // Lo que no es una maqueta no se toma por una.
+        assertEquals(null, M.deTexto("1.25 10 20"))
+        assertEquals(null, M.deTexto("""{"ancho":0,"tam":16}"""))
+        // Y un sitio con la medida de la columna se lee (el guion nuevo del PC la manda).
+        val s = VisorDeNotaActivity.Companion.Sitio.de(JSONObject("""{"x":1,"y":2,"maq":{"ancho":700,"tam":15,"ox":30}}"""))
+        assertEquals(VisorDeNotaActivity.Companion.Maqueta(700.0, 15.0, 30.0), s.maq)
+        assertTrue(VisorDeNotaActivity.INSTALAR.contains("__pixpinMaqueta"))
+    }
 }

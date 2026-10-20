@@ -11,7 +11,13 @@
 //! que devuelve JSON `{"ok": "…"}` o `{"error": "…"}`; y `esLamina(ruta, puente)`.
 
 pub mod asistente;
+pub mod compartido;
 pub mod conexiones;
+pub mod enlaces;
+pub mod jump_list;
+pub mod mensajero;
+#[allow(dead_code, unused_imports)]
+pub mod orden;
 pub mod puente;
 
 use jni::JNIEnv;

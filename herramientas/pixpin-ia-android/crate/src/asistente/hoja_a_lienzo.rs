@@ -47,16 +47,8 @@ use pixpin_ia::motor::Motor;
 
 use super::al_lienzo::EnHoja;
 
-#[cfg(test)]
-mod banco;
-#[cfg(test)]
-mod banco_17oct;
 pub(crate) mod plan;
 pub(crate) mod supervisor;
-#[cfg(test)]
-pub(crate) mod banco_diagramas;
-#[cfg(test)]
-pub(crate) mod pruebas;
 
 /// El ancho al que se pinta una pagina de PDF (~200 ppp en A4).
 pub const ANCHO_PAGINA: u32 = 1700;

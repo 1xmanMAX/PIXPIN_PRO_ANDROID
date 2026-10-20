@@ -21,6 +21,9 @@ pixpin-motor2d = { path = "../pixpin-motor2d" }
 serde_json = "1.0"
 tracing = "0.1.44"
 jni = { version = "0.21", default-features = false }
+# Los enlaces firmados de los avisos (`orden/firma.rs` del PC).
+hmac = "0.12"
+sha2 = "0.10.9"
 # Lo de Windows, con las mismas firmas (ver shims/).
 pixpin_codec = { package = "shim-codec", path = "../shim-codec" }
 pixpin_ocr = { package = "shim-ocr", path = "../shim-ocr" }

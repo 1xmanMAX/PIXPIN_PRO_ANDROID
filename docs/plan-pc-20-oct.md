@@ -52,6 +52,20 @@ sincronizable, y mejorar el audio.
 Al final: suite completa, relectura del diff, `SincronizarDeVerdadTest` y `SincronizarConElPcTest`
 varias veces, versión nueva, push a main.
 
+16. **Lo del PC del 20-oct (mañana)**, `4a87067`: (a) la página de notas nueva (buscador, tablas con su ancho)
+    y **la maqueta de la tinta** (la medida de la columna con que se anotó, en las vistas, que viajan; con
+    otra medida la tinta se esconde hasta el marcador ✏️ o el lápiz); (b) **Claude con búsqueda y lectura
+    web de servidor** (`web_search`, `web_fetch`; si la cuenta no las tiene, se sigue sin ellas); (c) los
+    **enlaces `pixpin://<verbo>?…` y `pixpinmax://`** del PC (`pixpin-shell/orden.rs`, desde el 15-oct) en el
+    teléfono: el mismo lector de enlaces (compilado) y su seguridad, y sus pedidos con lo del teléfono.
+    Solo de Windows: el globo que tiraba la app al cerrar un pin, `--sin-chat`, el encargo de fuera en el pin.
+    **Hecho**: (a) `assets/lector-md.html` de `4a87067` y la maqueta en `VisorDeNotaActivity` (el guion nuevo del PC,
+    `Maqueta`, ✏️, la clave `maqueta` no se poda); (b) `Nube.Claude.herramientasWeb`, sus bloques intactos y
+    `Nube.webApagada`; (c) `orden.rs` del PC compilado (`EnlacesNativos`), `atajos/EnlaceActivity` (pixpin:// y
+    pixpinmax://, pregunta lo que no es inofensivo) y `EnlacesDelTelefono` (cada pedido a su fila de la tabla).
+    Pruebas: `NubeTest`, `VisorDeNotaTest`, `EnlacesTest`, y las de `orden.rs` del PC en Rust (13/17: las 4 que no
+    pasan son de la consola de Windows con rutas `C:\`).
+
 ## Fuera (solo Windows)
 
 WebView2 (carpetas, precalentado, cierres), teclas (I, Supr, Ctrl+P, G, F11) —en Android los

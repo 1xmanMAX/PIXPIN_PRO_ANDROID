@@ -327,7 +327,8 @@ class NubeTest {
         val q = Nube.paraElLocal(p, Herramientas.DISPONIBLES)
         assertTrue(q.herramientas.size <= Seleccion.MAXIMO && q.herramientas.any { it.nombre == Herramientas.DIBUJAR })
         val c = Nube.Claude.cuerpo(p, emptyMap(), 100)
-        assertEquals(Herramientas.catalogo().size, c["tools"]!!.jsonArray.size)
+        // Las de la app y las dos de la web (PC `claude::herramientas_web`).
+        assertEquals(Herramientas.catalogo().size + Nube.Claude.herramientasWeb().size, c["tools"]!!.jsonArray.size)
         assertTrue(c["tools"]!!.jsonArray.all { it.jsonObject["strict"] == null })
     }
 
@@ -360,5 +361,46 @@ class NubeTest {
         val buena = validar("casa-sin-strict.sse").getOrThrow().llamada as Llamada.Dibujar
         assertEquals(3, buena.figuras.size)
         assertTrue(validar("casa-con-strict.sse").isFailure)
+    }
+
+    @Test fun `la web va siempre y la busqueda se devuelve intacta`() {
+        val c = Nube.Claude.cuerpo(peticion("hola"), emptyMap(), 100)
+        val tipos = c["tools"]!!.jsonArray.mapNotNull { it.jsonObject["type"]?.jsonPrimitive?.content }
+        assertTrue(tipos.toString(), "web_search_20250305" in tipos && "web_fetch_20250910" in tipos)
+        val sse = listOf(
+            """data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}""",
+            """data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"query\": \"pixpin\"}"}}""",
+            """data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://x","title":"X","encrypted_content":"E"}]}}""",
+            """data: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}""",
+            """data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"Hallado."}}""",
+            """data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}""",
+            """data: {"type":"message_stop"}"""
+        ).joinToString("\n") + "\n"
+        val l = Nube.Claude.Lector()
+        val trozos = l.meter(sse.toByteArray())
+        assertTrue(trozos.any { it is Trozo.Llamando && it.nombre == Nube.Claude.BUSCAR_EN_LA_WEB })
+        val r = l.acabar(false)
+        assertEquals("Hallado.", r.respuesta.texto)
+        assertTrue("la web no es una llamada de la app", r.respuesta.llamadas.isEmpty())
+        assertEquals(Fin.NATURAL, r.respuesta.fin)
+        assertEquals(j("""{"query": "pixpin"}"""), r.bloques[0].jsonObject["input"])
+        assertEquals("web_search_tool_result", r.bloques[1].jsonObject["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `sin la web en la cuenta se sigue sin ella`() {
+        Nube.webApagada.set(false)
+        try {
+            val s = Servidor("/v1/messages", listOf(
+                Falsa(400, """{"type":"error","error":{"type":"invalid_request_error","message":"Web search is not enabled for this organization"}}"""),
+                guionClaude(listOf(texto(0, "Sin web.")), "end_turn")
+            ))
+            val r = claude(s.url).completar(peticion("hola")) { Seguir.SI }
+            assertEquals("Sin web.", r.texto)
+            assertTrue(Nube.webApagada.get())
+            val segunda = s.recibidas[1].cuerpo["tools"]?.jsonArray.orEmpty()
+            assertTrue(segunda.none { it.jsonObject["type"]?.jsonPrimitive?.content?.startsWith("web_") == true })
+            // Caso negativo: un cuerpo sin herramientas de la app ni web se queda sin `tools`.
+            assertNull(Nube.Claude.sinLaWeb(Nube.Claude.cuerpo(peticion("x"), emptyMap(), 10))["tools"])
+        } finally { Nube.webApagada.set(false) }
     }
 }

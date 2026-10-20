@@ -38,6 +38,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  * enmascara. La guarda cifrada [com.forge.pixpin.asistente.ClavesDeLaNube].
  */
 object Nube {
+    /**
+     * **La web, apagada** en este proceso (PC `WEB_APAGADA`): la cuenta de Claude contestó que no la tiene
+     * activada (400 «Web search is not enabled for this organization»). Desde entonces, sin ella.
+     */
+    val webApagada = java.util.concurrent.atomic.AtomicBoolean(false)
+
     enum class Proveedor(val id: String, val nombre: String, val modelo: String, val url: String, val paginaDeClaves: String, val maxTokens: Int) {
         CLAUDE("claude", "Claude Haiku 5.5", "claude-haiku-5-5", "https://api.anthropic.com/v1/messages", "https://platform.claude.com/settings/keys", 16_000),
         DEEPSEEK("deepseek", "DeepSeek V4.1 Flash", "deepseek-flash", "https://api.deepseek.com/chat/completions", "https://platform.deepseek.com/api_keys", 16_000);
@@ -230,6 +236,27 @@ object Nube {
     // ---------------------------------------------------------------------------------- Claude
 
     object Claude {
+        /**
+         * **La web** (PC 20-oct-2026, el usuario: «dale acceso a la web al agente de IA»): las herramientas
+         * de servidor de Anthropic. Las ejecuta la API, no la app: el modelo busca o lee una página y sigue
+         * en la misma vuelta. Sus bloques (`server_tool_use`, `web_search_tool_result`…) se devuelven
+         * intactos en la vuelta siguiente, como el pensamiento. Con tope de usos por pregunta.
+         */
+        const val BUSCAR_EN_LA_WEB = "web_search"
+        const val LEER_LA_WEB = "web_fetch"
+
+        fun herramientasWeb(): List<JsonObject> = listOf(
+            buildJsonObject { put("type", "web_search_20250305"); put("name", BUSCAR_EN_LA_WEB); put("max_uses", 5) },
+            buildJsonObject { put("type", "web_fetch_20250910"); put("name", LEER_LA_WEB); put("max_uses", 3) }
+        )
+
+        /** Quita del cuerpo las herramientas de la web (y `tools` si se queda vacío, que la API no lo admite). */
+        fun sinLaWeb(c: JsonObject): JsonObject {
+            val tools = (c["tools"] as? JsonArray)?.filterNot { ((it as? JsonObject)?.get("type") as? JsonPrimitive)?.content?.startsWith("web_") == true }
+                ?: return c
+            return if (tools.isEmpty()) JsonObject(c - "tools" - "tool_choice") else JsonObject(c + ("tools" to JsonArray(tools)))
+        }
+
         fun herramienta(h: Herramienta): JsonObject = buildJsonObject {
             put("name", h.nombre); put("description", h.descripcion); put("input_schema", h.parametros)
             put("eager_input_streaming", true)
@@ -302,10 +329,9 @@ object Nube {
                     put("thinking", buildJsonObject { put("type", "adaptive"); put("display", "summarized") })
                     put("output_config", buildJsonObject { put("effort", ESFUERZO_CLAUDE) })
                 }
-                if (p.herramientas.isNotEmpty()) {
-                    put("tools", JsonArray(p.herramientas.map(::herramienta)))
-                    put("tool_choice", buildJsonObject { put("type", "auto") })
-                }
+                // Las de la app y, siempre, las de la web (las ejecuta la API).
+                put("tools", JsonArray(p.herramientas.map(::herramienta) + herramientasWeb()))
+                put("tool_choice", buildJsonObject { put("type", "auto") })
             }
         }
 
@@ -320,6 +346,8 @@ object Nube {
             class Pensando(val t: StringBuilder, val firma: StringBuilder) : Bloque()
             class Tal(val v: JsonElement) : Bloque()
             class Herramienta(val id: String, val nombre: String, val json: StringBuilder) : Bloque()
+            /** `server_tool_use` (la web): lo ejecuta la API; solo se guarda para devolverlo intacto. */
+            class Servidor(val bloque: JsonObject, val json: StringBuilder) : Bloque()
         }
 
         data class ErrorDelFlujo(val tipo: String, val mensaje: String)
@@ -370,6 +398,10 @@ object Nube {
                                 trozos += Trozo.Llamando(nombre)
                                 Bloque.Herramienta(s(b, "id").orEmpty(), nombre, StringBuilder())
                             }
+                            "server_tool_use" -> {
+                                trozos += Trozo.Llamando(s(b, "name").orEmpty())
+                                Bloque.Servidor(b!!, StringBuilder())
+                            }
                             else -> Bloque.Tal(b ?: JsonNull)
                         }
                         val i = (v["index"] as? JsonPrimitive)?.intOrNull ?: bloques.size
@@ -386,6 +418,7 @@ object Nube {
                             s(d, "type") == "thinking_delta" && b is Bloque.Pensando -> s(d, "thinking")?.takeIf { it.isNotEmpty() }?.let { b.t.append(it); trozos += Trozo.Pensando(it) }
                             s(d, "type") == "signature_delta" && b is Bloque.Pensando -> b.firma.append(s(d, "signature").orEmpty())
                             s(d, "type") == "input_json_delta" && b is Bloque.Herramienta -> b.json.append(s(d, "partial_json").orEmpty())
+                            s(d, "type") == "input_json_delta" && b is Bloque.Servidor -> b.json.append(s(d, "partial_json").orEmpty())
                         }
                     }
                     "message_delta" -> {
@@ -419,6 +452,7 @@ object Nube {
                     is Bloque.Texto -> { texto.append(b.t); if (b.t.isNotEmpty()) salida += buildJsonObject { put("type", "text"); put("text", b.t.toString()) } }
                     is Bloque.Pensando -> { pensamiento.append(b.t); salida += buildJsonObject { put("type", "thinking"); put("thinking", b.t.toString()); put("signature", b.firma.toString()) } }
                     is Bloque.Tal -> if (b.v !is JsonNull) salida += b.v
+                    is Bloque.Servidor -> salida += if (b.json.isBlank()) b.bloque else JsonObject(b.bloque + ("input" to comoObjeto(b.json.toString())))
                     is Bloque.Herramienta -> {
                         val args = b.json.toString().ifBlank { "{}" }
                         salida += buildJsonObject { put("type", "tool_use"); put("id", b.id); put("name", b.nombre); put("input", comoObjeto(args)) }
@@ -508,7 +542,8 @@ object Nube {
             val reserva = if (ligero) 0 else RESERVA_PENSAR
             val max = minOf(p.maxTokens + reserva, proveedor.maxTokens)
             return when (proveedor) {
-                Proveedor.CLAUDE -> Claude.cuerpo(p, mem, max, ligero)
+                // Sin la web si la cuenta dijo que no la tiene (PC `sin_la_web`).
+                Proveedor.CLAUDE -> Claude.cuerpo(p, mem, max, ligero).let { if (webApagada.get()) Claude.sinLaWeb(it) else it }
                 Proveedor.DEEPSEEK -> DeepSeek.cuerpo(p, mem, pensar.get(), max)
             }
         }
@@ -580,6 +615,10 @@ object Nube {
         } catch (f: Fallo.Red) {
             throw Intento.Reintentar(nube("No hay conexion con ${proveedor.nombre}. Mira la red o vuelve al asistente local en Ajustes → Asistente."), null)
         } catch (f: Fallo.Http) {
+            // La cuenta no tiene la web activada (Console → Privacidad): se sigue sin ella, sin romper el chat.
+            val bajo = f.cuerpo.lowercase()
+            if (f.codigo == 400 && proveedor == Proveedor.CLAUDE && ("web search" in bajo || "web fetch" in bajo) && !webApagada.getAndSet(true))
+                throw Intento.Cambiar(nube(clasificar(proveedor, f.codigo, f.cuerpo).first))
             if (f.codigo == 400 && proveedor == Proveedor.DEEPSEEK && "reasoning" in f.cuerpo.lowercase() && pensar.getAndSet(false))
                 throw Intento.Cambiar(nube(clasificar(proveedor, f.codigo, f.cuerpo).first))
             val (aviso, pasajero) = clasificar(proveedor, f.codigo, f.cuerpo)

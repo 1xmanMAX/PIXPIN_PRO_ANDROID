@@ -24,6 +24,8 @@ def pieza(texto, empieza):
     linea = texto[i:texto.index("\n", i)]
     if linea.rstrip().endswith(";"):
         fin = texto.index("\n", i) + 1
+    elif linea.rstrip().endswith("["):
+        fin = texto.index("\n];\n", i) + 4
     else:
         fin = texto.index("\n}\n", i) + 3
     # Los comentarios de documentación y atributos de encima van con ella.
@@ -55,6 +57,7 @@ h = quitar(h, [
     "pub fn pintar(", "pub fn motor_de_vision(", "pub fn motor_de_vision_en(",
     "pub struct SinVentana", "impl Destino for SinVentana", "pub fn letra_segoe(",
 ])
+h = re.sub(r"(?m)^#\[cfg\(test\)\]\n(pub\(crate\) )?mod (banco|banco_17oct|banco_diagramas|pruebas);\n", "", h)
 h += "\ninclude!(\"hoja_reemplazos.rs\");\n"
 open(os.path.join(dest, "hoja_a_lienzo.rs"), "w", encoding="utf-8").write(h)
 
@@ -84,4 +87,35 @@ open(os.path.join(dest, "documentos_acciones.rs"), "w", encoding="utf-8").write(
         "pub(crate) fn rayas_marcadas(", "pub fn aspecto_de_tabla(", "pub fn filas_de(", "fn con_filas(",
         "const LETRA_DE_TABLA", "pub fn tabla_de_fichero(", "fn se_parece(", "fn corregir_con_la_nube(",
     ]) + "\n")
+# 5. Los enlaces pixpin:// del PC (`pixpin-shell/orden.rs`, puro): el lector, la tabla de verbos y la
+#    seguridad, con lo poco de `mensajero`, `compartido` y `jump_list` que nombra.
+sh = os.path.join(pc, "crates/pixpin-shell/src")
+o = leer(os.path.join(sh, "orden.rs"))
+i, f = pieza(o, "pub fn orden_del_protocolo(")
+o = o[:i] + "/// En el teléfono `pixpin://` es de PixPin (lo dice su manifiesto).\npub fn orden_del_protocolo(_esquema: &str) -> Option<String> {\n    None\n}\n" + o[f:]
+open(os.path.join(src, "orden.rs"), "w", encoding="utf-8").write(o)
+os.makedirs(os.path.join(src, "orden"), exist_ok=True)
+fi = leer(os.path.join(sh, "orden", "firma.rs"))
+i, f = pieza(fi, "pub fn ruta_de_la_clave(")
+fi = fi[:i] + ("/// Donde vive la clave en el teléfono (`files/claves/enlaces.clave`): la pone el puente.\n"
+    "pub static CLAVE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();\n\n"
+    "pub fn ruta_de_la_clave() -> Option<PathBuf> {\n    CLAVE.get().cloned()\n}\n") + fi[f:]
+i, f = pieza(fi, "fn al_azar(")
+fi = fi[:i] + ("fn al_azar() -> std::io::Result<[u8; 32]> {\n    use std::io::Read;\n    let mut b = [0u8; 32];\n"
+    "    std::fs::File::open(\"/dev/urandom\")?.read_exact(&mut b)?;\n    Ok(b)\n}\n") + fi[f:]
+open(os.path.join(src, "orden", "firma.rs"), "w", encoding="utf-8").write(fi)
+# Sus pruebas, sin la de los botones de los avisos de Windows (`notificacion`).
+pr = leer(os.path.join(sh, "orden", "pruebas.rs"))
+pr = quitar(pr, ["fn una_sola_lista_blanca_para_enlaces_y_botones_de_avisos("])
+open(os.path.join(src, "orden", "pruebas.rs"), "w", encoding="utf-8").write(pr)
+m = leer(os.path.join(sh, "mensajero.rs"))
+open(os.path.join(src, "mensajero.rs"), "w", encoding="utf-8").write(
+    "//! De `pixpin-shell/mensajero.rs` del PC: el tamaño, la versión y las acciones del protocolo de pedidos.\n\n"
+    + sacar(m, ["pub const TOPE_PEDIDO", "pub const VERSION_PEDIDO", "pub mod respuesta", "pub const ACCIONES", "pub fn validar_pedido("]) + "\n")
+c = leer(os.path.join(sh, "compartido.rs"))
+open(os.path.join(src, "compartido.rs"), "w", encoding="utf-8").write(
+    "//! De `pixpin-shell/compartido.rs` del PC: qué guarda el chat como foto.\n\nuse std::path::Path;\n\n" + sacar(c, ["pub fn es_foto("]) + "\n")
+j = leer(os.path.join(sh, "jump_list.rs"))
+open(os.path.join(src, "jump_list.rs"), "w", encoding="utf-8").write(
+    "//! De `pixpin-shell/jump_list.rs` del PC: el nombre de la orden de los enlaces.\n\n" + sacar(j, ["pub const URL"]) + "\n")
 print("traído del PC")

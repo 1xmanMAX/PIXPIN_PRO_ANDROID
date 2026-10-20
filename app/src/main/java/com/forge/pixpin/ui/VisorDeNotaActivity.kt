@@ -92,10 +92,12 @@ R.ir=function(modo,a,b){var d=cual(),max=maximo(d),w=d.raiz?window:d.s;
 function ir(){var q=area(d);if(modo==='ir')w.scrollTo({top:a*max,behavior:'instant'});if(modo==='bajar')w.scrollBy({top:a,behavior:'instant'});if(modo==='colocar')w.scrollTo({left:a+q.bx-q.ax,top:b+q.by-q.ay,behavior:'instant'});}
 if(modo==='mirar')return;ir();if(modo==='colocar'){requestAnimationFrame(ir);setTimeout(ir,80);}};
 R.sitio=function(){var d=cual(),s=d.s,max=maximo(d),r;if(d.raiz){r={x:scrollX,y:scrollY,arriba:scrollY,maximo:max};}else{var c=s.getBoundingClientRect();r={x:s.scrollLeft-c.left,y:s.scrollTop-c.top,arriba:s.scrollTop,maximo:max};}
+r.x-=R.desfase(s);var M=window.__pixpinMaqueta;if(M)r.maq=M.medir();
 var q=area(d);r.ax=q.ax;r.ay=q.ay;r.aw=q.aw;r.ah=q.ah;var v=window.visualViewport;r.vx=v?v.offsetLeft:0;r.vy=v?v.offsetTop:0;r.escala=v?v.scale:1;r.dpr=devicePixelRatio||1;return r;};
 function mandar(o){try{window.chrome.webview.postMessage(JSON.stringify(o));}catch(_){}}
-R.colgar=function(){var c=R.capa;if(!c)return;var e=R.donde(),padre=e||document.documentElement;if(!padre)return;if(c.parentNode!==padre)padre.appendChild(c);
-if(e){if(getComputedStyle(e).position==='static')e.style.position='relative';c.style.left=(-e.clientLeft)+'px';c.style.top=(-e.clientTop)+'px';}else{c.style.left='0px';c.style.top='0px';}};
+R.desfase=function(s){var M=window.__pixpinMaqueta;return M&&M.desfase?M.desfase(s):0;};
+R.colgar=function(){var c=R.capa;if(!c)return;var e=R.donde(),padre=e||document.documentElement;if(!padre)return;if(c.parentNode!==padre)padre.appendChild(c);var D=R.desfase(e||document.scrollingElement||document.documentElement);
+if(e){if(getComputedStyle(e).position==='static')e.style.position='relative';c.style.left=(D-e.clientLeft)+'px';c.style.top=(-e.clientTop)+'px';}else{c.style.left=D+'px';c.style.top='0px';}};
 R.poner=function(t,m,ver,ctrlp,menu){R.ctrlp=ctrlp;R.menu=menu;var c=R.capa;
 if(!c){c=R.capa=document.createElement('div');c.id='pixpin-riel-capa';c.setAttribute('aria-hidden','true');c.style.cssText='position:absolute;left:0;top:0;width:0;height:0;margin:0;padding:0;border:0;overflow:visible;pointer-events:none;user-select:none;z-index:2147483647';c.appendChild(document.createElement('div'));c.appendChild(document.createElement('div'));}
 R.colgar();var a=c.firstChild,b=c.lastChild;if(a.__t!==t){a.innerHTML=t;a.__t=t;}a.style.visibility=ver?'visible':'hidden';if(b.__t!==m){b.innerHTML=m;b.__t=m;}
@@ -105,7 +107,7 @@ addEventListener('keydown',function(ev){if(ev.isComposing||ev.altKey||ev.metaKey
 if(ev.ctrlKey){if(k==='p'&&R.ctrlp)vk=80;else if(k==='m'&&!ed&&!ev.shiftKey)vk=77;}
 else if(!ed&&!ev.shiftKey){if(k==='i')vk=73;else if(k==='m')vk=77;else if(k==='a')vk=65;else if(k==='g'&&R.menu)vk=71;}
 if(!vk)return;ev.preventDefault();ev.stopPropagation();mandar({pixpin_riel:'tecla',vk:vk,ctrl:!!ev.ctrlKey});},true);
-function aviso(){R.raf=0;var r=R.sitio();r.pixpin_riel='sitio';mandar(r);}
+function aviso(){R.raf=0;if(R.capa)R.colgar();var r=R.sitio();r.pixpin_riel='sitio';mandar(r);}
 function pronto(){if(!R.raf)R.raf=requestAnimationFrame(aviso);}
 addEventListener('scroll',pronto,{capture:true,passive:true});addEventListener('resize',pronto,{passive:true});
 if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passive:true});visualViewport.addEventListener('resize',pronto,{passive:true});}
@@ -122,11 +124,36 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
             "<style>@font-face{font-family:'Work Sans';src:url('${ORIGEN}fuente/work_sans.ttf');font-weight:100 900;}" +
             "@font-face{font-family:'Fraunces';src:url('${ORIGEN}fuente/fraunces.ttf');font-weight:100 900;}</style>"
 
+        /**
+         * **La maqueta de la tinta de una nota** (PC `capa_web::Maqueta`, 20-oct-2026): la medida de la
+         * columna con que se anotó (`ancho` en px CSS, `tam` la letra, `ox` su borde izquierdo en lo que se
+         * desplaza). El texto de una nota se recoloca con el ancho de la pantalla; con la columna a esta
+         * medida cae igual en cualquier aparato. Va en las vistas del documento (clave [CLAVE_MAQUETA]),
+         * que viajan.
+         */
+        data class Maqueta(val ancho: Double, val tam: Double, val ox: Double = 0.0) {
+            /** Si el texto cae igual con la medida [m] de ahora (medio píxel de holgura). */
+            fun coincide(m: Maqueta) = kotlin.math.abs(ancho - m.ancho) < 1.5 && kotlin.math.abs(tam - m.tam) < 0.25
+            fun aTexto(): String = JSONObject().put("ancho", ancho).put("tam", tam).put("ox", ox).toString()
+
+            companion object {
+                fun de(o: JSONObject?): Maqueta? = o?.let { Maqueta(it.optDouble("ancho", 0.0), it.optDouble("tam", 0.0), it.optDouble("ox", 0.0)) }
+                    ?.takeIf { it.ancho > 50 && it.tam > 4 }
+                fun deTexto(t: String?): Maqueta? = runCatching { de(JSONObject(t ?: return null)) }.getOrNull()
+            }
+        }
+
+        const val CLAVE_MAQUETA = "maqueta"
+        /** El marcador especial de la maqueta: pulsarlo pone la columna a su medida (PC `MARCA_MAQUETA`). */
+        const val MARCA_MAQUETA = "✏️"
+
         /** Por dónde va la página (el `Sitio` del PC). */
         data class Sitio(
             val x: Double = 0.0, val y: Double = 0.0, val arriba: Double = 0.0, val maximo: Double = 0.0,
             val dpr: Double = 1.0, val vx: Double = 0.0, val vy: Double = 0.0, val escala: Double = 1.0,
-            val ax: Double = 0.0, val ay: Double = 0.0, val aw: Double = 0.0, val ah: Double = 0.0, val nuevo: Boolean = false
+            val ax: Double = 0.0, val ay: Double = 0.0, val aw: Double = 0.0, val ah: Double = 0.0, val nuevo: Boolean = false,
+            /** La medida de la columna de ahora, si la página es una nota. */
+            val maq: Maqueta? = null
         ) {
             /** La esquina de arriba a la izquierda de lo que enseña el documento, en el documento. */
             fun esquina() = doubleArrayOf(x + ax, y + ay)
@@ -141,7 +168,8 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
                 fun de(o: JSONObject) = Sitio(
                     o.optDouble("x", 0.0), o.optDouble("y", 0.0), o.optDouble("arriba", 0.0), o.optDouble("maximo", 0.0),
                     o.optDouble("dpr", 1.0), o.optDouble("vx", 0.0), o.optDouble("vy", 0.0), o.optDouble("escala", 1.0),
-                    o.optDouble("ax", 0.0), o.optDouble("ay", 0.0), o.optDouble("aw", 0.0), o.optDouble("ah", 0.0), o.optBoolean("nuevo", false)
+                    o.optDouble("ax", 0.0), o.optDouble("ay", 0.0), o.optDouble("aw", 0.0), o.optDouble("ah", 0.0), o.optBoolean("nuevo", false),
+                    Maqueta.de(o.optJSONObject("maq"))
                 )
             }
         }
@@ -187,6 +215,23 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
     private var pulso by mutableIntStateOf(0)
     private var aLaVista by mutableStateOf(true)
     private var imprimiendo = false
+    /** La maqueta de esta nota (null: aún no se anotó) y si la columna está puesta a su medida. */
+    private var maqueta: Maqueta? = null
+    private var fija = false
+    private var escondidaAntes = false
+
+    /**
+     * **La tinta, escondida** (PC `tinta_escondida`): la nota tiene maqueta y el texto cae ahora con otra
+     * medida (otra pantalla, otro aparato), así que no caería sobre lo anotado. Sale con el marcador ✏️ o
+     * el lápiz, que ponen la columna a su medida.
+     */
+    private fun tintaEscondida(): Boolean {
+        val m = maqueta ?: return false
+        val ahora = sitio.maq ?: return false
+        return !fija && !m.coincide(ahora)
+    }
+
+    private fun guionDeLaMaqueta() = "if(window.__pixpinMaqueta)window.__pixpinMaqueta.poner(${maqueta?.aTexto() ?: "null"},$fija);"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -202,6 +247,7 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
             else com.forge.pixpin.motor.GuardadoDoc(File(File(filesDir, "riel-notas").apply { mkdirs() }, "${id.ifBlank { "suelta" }}$aqui"), viaja = false)
         marcosDoc = MarcosDoc.de(guardado(AnotacionesDelAdjunto.MARCOS, ".pixpin-marcos"))
         vistasDoc = VistasDoc.de(guardado(AnotacionesDelAdjunto.VISTAS, ".pixpin-vistas"))
+        maqueta = Maqueta.deTexto(vistasDoc.deMarca(CLAVE_MAQUETA))
         marcadores = Lectura.deTexto(if (b != null) AnotacionesDelAdjunto.leer(AnotacionesDelAdjunto.marcas(filesDir, b)) else guardado(".marcas", ".marcas").leer())
         idDeLaTinta = b ?: "nota-riel-${id.ifBlank { "suelta" }}"
         tinta = DrawController(ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(this, idDeLaTinta)) ?: Scene())
@@ -318,7 +364,12 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
         when {
             o.optString("pixpin_riel") == "sitio" -> {
                 val nuevo = Sitio.de(o)
-                if (nuevo.valido()) { sitio = nuevo; pulso++; aLaVista = false }
+                if (nuevo.valido()) {
+                    sitio = nuevo; pulso++; aLaVista = false
+                    // Si con esta medida la tinta pasa a caer (o deja de caer) en su sitio, se dice en la página.
+                    val escondida = tintaEscondida()
+                    if (escondida != escondidaAntes) { escondidaAntes = escondida; ponerEnLaPagina() }
+                }
             }
             o.optString("tipo") == "listo" -> {
                 aLaPagina(JSONObject().put("tipo", "abrir").put("idioma", "es").put("nombre", nombre).put("texto", texto).put("enPin", true))
@@ -364,8 +415,23 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
 
     // --------------------------------------------------------------- la tinta y los marcos
 
+    /**
+     * **Al coger el lápiz** (PC `fijar_maqueta`): la columna, a la medida de su maqueta (se anota siempre a
+     * la misma). La primera vez la nota no la tiene: es la medida de ahora, y se pone el marcador ✏️ aquí
+     * para volver a ella desde otra pantalla u otro aparato.
+     */
     private fun empezarAAnotar() {
-        mirar { tinta.setViewport(vistaDeLaTinta()); anotando = true; ponerEnLaPagina() }
+        mirar { s ->
+            if (maqueta == null) s.maq?.let { m ->
+                maqueta = m
+                vistasDoc.poner(CLAVE_MAQUETA, m.aTexto())
+                if (marcadores.none { it.emoji == MARCA_MAQUETA }) ponerMarca(MARCA_MAQUETA)
+            }
+            fija = true
+            web?.evaluateJavascript(guionDeLaMaqueta()) {
+                mirar { tinta.setViewport(vistaDeLaTinta()); anotando = true; ponerEnLaPagina() }
+            }
+        }
     }
 
     private fun guardarLaTinta() {
@@ -389,7 +455,7 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
         val escena = tinta.scene
         val deNoche = esDeNoche()
         val marcos = if (!conMarcos || marcosDoc.activo) "" else svgDeLosMarcos(marcosDoc.lista, sitio.zoom, resources.displayMetrics.density.toDouble())
-        val ver = !anotando
+        val ver = !anotando && !tintaEscondida()
         lifecycleScope.launch {
             val svg = withContext(Dispatchers.IO) {
                 runCatching {
@@ -404,7 +470,8 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
                 }.getOrDefault("")
             }
             if (web !== vista) return@launch
-            vista.evaluateJavascript("$INSTALAR\nwindow.__pixpinRiel.poner(${JSONObject.quote(svg)},${JSONObject.quote(marcos)},$ver,false,false)", null)
+            // La maqueta antes que la capa: la capa se cuelga con su desfase.
+            vista.evaluateJavascript("$INSTALAR\n${guionDeLaMaqueta()}\nwindow.__pixpinRiel.poner(${JSONObject.quote(svg)},${JSONObject.quote(marcos)},$ver,false,false)", null)
         }
     }
 
@@ -473,7 +540,8 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
         val b = base
         if (b != null) AnotacionesDelAdjunto.escribir(AnotacionesDelAdjunto.marcas(filesDir, b), t)
         else File(File(filesDir, "riel-notas").apply { mkdirs() }, "${intent.getStringExtra(EXTRA_ID).orEmpty().ifBlank { "suelta" }}.marcas").writeText(t)
-        vistasDoc.soloDe(marcadores.map { it.id.toString() }.toSet())
+        // (La maqueta va en las mismas vistas y no es de ningún marcador: se queda.)
+        vistasDoc.soloDe(marcadores.map { it.id.toString() }.toSet() + CLAVE_MAQUETA)
     }
 
     /** Un marcador aquí: la fracción (como el Word, para las versiones de antes) y su vista exacta. */
@@ -487,6 +555,12 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
     }
 
     private fun irALaMarca(m: Lectura.Marcador) {
+        // El marcador ✏️: antes de ir, la columna a la medida con que se anotó (los guiones van en orden).
+        if (m.emoji == MARCA_MAQUETA && maqueta != null && !fija) {
+            fija = true
+            web?.evaluateJavascript(guionDeLaMaqueta(), null)
+            ponerEnLaPagina()
+        }
         val v = VistasDoc.zoomDeTexto(vistasDoc.deMarca(m.id.toString()))
         web?.evaluateJavascript(if (v != null) guion("colocar", v.second, v.third) else guion("ir", m.fraccion.toDouble())) { r -> leerSitio(r)?.let { sitio = it; pulso++ } }
     }
