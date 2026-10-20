@@ -108,6 +108,10 @@ class PixPinApp : Application() {
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
         com.forge.pixpin.sincro.Presencia.instalar(this)
+        // Las palabras de cada urgencia de las tareas, las de Ajustes (PC `tareas::frase::fijar`).
+        scope.launch {
+            settings.settings.collect { a -> com.forge.pixpin.mini.Frase.actuales = com.forge.pixpin.mini.Frase.Palabras.deTextos(a.tareasUrgente, a.tareasMuyUrgente) }
+        }
         // **Google Calendar** (PC 18-oct): lo leído al arrancar (unos segundos después, para no
         // estorbar) y cada 15 minutos mientras la app viva; el horario y los avisos leen el caché.
         if (com.forge.pixpin.ia.ConexionesNativas.disponible) scope.launch(Dispatchers.IO) {

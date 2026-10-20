@@ -28,6 +28,7 @@ object CatalogoDeAjustes {
         PDF("PDF", "Cuánto se comprimen al guardarlos en PixPin"),
         DIBUJAR("Dibujar", "Imán, mano, modo guía y qué herramientas salen en cada sitio"),
         PINEAR("Pinear", "Las palabras que se convierten en mini-app al pinearlas"),
+        TAREAS("Tareas", "Las palabras que hacen urgente o muy urgente una tarea"),
         VOZ("Voz", "Con qué se pasan los audios a texto, en qué idioma, y bajar los modelos"),
         ASISTENTE("Asistente", "Quién contesta (el modelo del teléfono, Claude o DeepSeek), sus claves y bajarlo"),
         ASPECTO("Aspecto", "Modo noche, negro OLED, fluidez y la letra de los pines")
@@ -135,6 +136,11 @@ object CatalogoDeAjustes {
             "Qué palabra abre qué mini-app al pinear un texto: temporizador, lista, ruleta…",
             listOf("palabras_magicas"), "miniapp temporizador cronometro lista contador ruleta"
         ) { it.palabras },
+        Opcion(
+            "urgencia", Seccion.TAREAS, "Palabras de urgencia",
+            "Qué palabras hacen urgente o muy urgente una tarea al escribirla («urgente», «!!»…), como en el PC.",
+            listOf("tareas_urgente", "tareas_muy_urgente"), "prioridad importante tarea urgente muy urgente"
+        ) { it.tareasUrgente to it.tareasMuyUrgente },
         Opcion(
             "voz", Seccion.VOZ, "Motor de voz",
             "Con qué se pasan los audios a texto (Google, Vosk o Whisper), en qué idioma y el segundo idioma.",

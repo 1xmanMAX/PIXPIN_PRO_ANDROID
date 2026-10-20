@@ -60,6 +60,7 @@ class AjustesV2Test {
             "iman_activo", "iman_esquinas", "iman_medios", "iman_centros", "iman_intersecciones", "iman_eje",
             "iman_borde_guia", "iman_borde_figura", "zurdo", "herramientas_apagadas", "editor_tools", "editor_groups",
             "pin_tools", "pin_groups", "capa_tools", "capa_groups", "lector_tools", "lector_groups", "plano_tools", "plano_groups", "plano_avanzado", "palabras_magicas",
+            "tareas_urgente", "tareas_muy_urgente",
             "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
             "asistente_modelo", "asistente_motor", "asistente_respaldo_local", "asistente_pensar", "asistente_documentos_nube",
             "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_mejor_vista",

@@ -142,4 +142,19 @@ class FraseTest {
         assertEquals("llamar", s("llamar recuérdame el viernes"))
         assertEquals("leer el capítulo 5 urgente", s("leer el capítulo 5 urgente"))
     }
+
+    @Test fun `las palabras de Ajustes valen en todas las cajas y se escriben sin repetir`() {
+        val antes = Frase.actuales
+        try {
+            Frase.actuales = Frase.Palabras.deTextos("pronto, ya", "")
+            assertEquals(Urgencia.URGENTE, leer("llamar pronto").urgencia)
+            // «Muy urgente» sin palabras: ninguna lo es (y «urgente» de fábrica ya no vale).
+            assertEquals(Urgencia.NORMAL, leer("llamar muy urgente").urgencia)
+            assertEquals(Urgencia.NORMAL, leer("llamar urgente").urgencia)
+            Frase.actuales = Frase.Palabras.deTextos(null, null)
+            assertEquals(Urgencia.MUY_URGENTE, leer("llamar muy urgente").urgencia)
+        } finally { Frase.actuales = antes }
+        assertEquals("pronto, Ya mismo", sinRepetir("pronto, , Ya mismo\nPRONTO"))
+        assertEquals("", sinRepetir(" , "))
+    }
 }

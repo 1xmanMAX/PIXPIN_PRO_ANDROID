@@ -51,6 +51,9 @@ object Frase {
     val URGENTE = listOf("urgente", "prioridad alta", "importante", "!")
     val MUY_URGENTE = listOf("muy urgente", "urgentísimo", "prioridad máxima", "!!", "!!!")
 
+    /** **Las de Ajustes ahora** (PC `tareas::frase::fijar`): las pone la app al arrancar y al cambiarlas. */
+    @Volatile var actuales: Palabras = Palabras()
+
     /** Las palabras que hacen urgente o muy urgente una tarea (Ajustes); sin mayúsculas ni tildes. */
     data class Palabras(val urgente: List<String> = URGENTE, val muyUrgente: List<String> = MUY_URGENTE) {
         /** Cada frase partida en palabras llanas, con su nivel; las vacías fuera. */
@@ -144,7 +147,7 @@ object Frase {
      * **Entiende una tarea escrita.** Lo que no se entiende se queda en el título, nunca se adivina.
      * Vale también para un texto ya guardado: sus marcas se vuelven a leer y sale el mismo texto.
      */
-    fun leer(texto: String, ahora: Momento, palabras: Palabras = Palabras()): Leida {
+    fun leer(texto: String, ahora: Momento, palabras: Palabras = actuales): Leida {
         var cuerpo = texto
         var horaGuardada: Momento? = null
         marcaDeHora(cuerpo)?.let { (i, m) -> horaGuardada = m; cuerpo = cuerpo.substring(0, i) }
@@ -230,7 +233,7 @@ object Frase {
     }
 
     /** **Lo escrito sin la fecha dicha con palabras**, con lo demás en su sitio: lo que hace el selector de día y hora. */
-    fun sinFechaDicha(texto: String, ahora: Momento, palabras: Palabras = Palabras()): String {
+    fun sinFechaDicha(texto: String, ahora: Momento, palabras: Palabras = actuales): String {
         val crudas = palabrasDe(texto)
         val (_, _, quedan) = urgenciaYEtiquetas(crudas, palabras)
         val otras = quedan.map { crudas[it] }
@@ -315,7 +318,7 @@ object Frase {
      * **Lo que se guarda de lo escrito** en la caja de apuntar: lo reconocido como marcas detrás del
      * título; si no queda título (solo «#casa», por ejemplo), lo escrito tal cual, como el PC.
      */
-    fun paraGuardar(texto: String, ahora: Momento, palabras: Palabras = Palabras()): String {
+    fun paraGuardar(texto: String, ahora: Momento, palabras: Palabras = actuales): String {
         val limpio = Tareas.saneado(texto)
         val f = leer(limpio, ahora, palabras)
         return if (f.titulo.isEmpty()) limpio else f.texto()

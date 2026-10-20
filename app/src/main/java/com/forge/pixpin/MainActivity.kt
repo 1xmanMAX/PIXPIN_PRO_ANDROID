@@ -529,6 +529,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             "barra-plano" -> BarraDelPlanoCard()
             "editor-plano" -> EditorDelPlanoCard()
             "palabras" -> PalabrasMagicasCard()
+            "urgencia" -> com.forge.pixpin.mini.PalabrasDeUrgenciaCard()
             "voz" -> MotorDeVozCard()
             "asistente" -> com.forge.pixpin.asistente.AsistenteCard()
             "fluidez" -> FluidezCard()

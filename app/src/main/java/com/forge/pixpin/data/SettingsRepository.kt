@@ -321,6 +321,12 @@ data class Settings(
      */
     val palabrasMagicas: String? = null,
     /**
+     * **Las palabras de cada urgencia de las tareas** (PC Ajustes → Tareas, 18-oct-2026), separadas por
+     * comas. Null: las de fábrica ([com.forge.pixpin.mini.Frase.URGENTE]); vacío: ninguna.
+     */
+    val tareasUrgente: String? = null,
+    val tareasMuyUrgente: String? = null,
+    /**
      * **Días que aguanta una captura antes de irse sola** a la papelera del teléfono, salvo las
      * conservadas. Cero = no se va ninguna. Siete de fábrica, como `[capturas] dias_caducidad` del
      * PC. Ver [com.forge.pixpin.capture.CaducidadDeCapturas].
@@ -479,6 +485,8 @@ class SettingsRepository(private val context: Context) {
         val COPY_FORMAT = stringPreferencesKey("copy_format")
         val COMPRESION_PDF = stringPreferencesKey("compresion_pdf")
         val PALABRAS = stringPreferencesKey("palabras_magicas")
+        val TAREAS_URGENTE = stringPreferencesKey("tareas_urgente")
+        val TAREAS_MUY_URGENTE = stringPreferencesKey("tareas_muy_urgente")
         val DIAS_CADUCIDAD = intPreferencesKey("dias_caducidad")
         val HERRAMIENTAS_APAGADAS = stringSetPreferencesKey("herramientas_apagadas")
     }
@@ -546,6 +554,8 @@ class SettingsRepository(private val context: Context) {
             compresionPdf = prefs[Keys.COMPRESION_PDF]?.takeIf { it in com.forge.pixpin.pdf.ComprimirPdf.NIVELES }
                 ?: com.forge.pixpin.pdf.ComprimirPdf.NIVEL_POR_DEFECTO,
             palabrasMagicas = prefs[Keys.PALABRAS],
+            tareasUrgente = prefs[Keys.TAREAS_URGENTE],
+            tareasMuyUrgente = prefs[Keys.TAREAS_MUY_URGENTE],
             diasCaducidad = (prefs[Keys.DIAS_CADUCIDAD] ?: com.forge.pixpin.capture.CaducidadDeCapturas.DIAS).coerceAtLeast(0),
             herramientasApagadas = prefs[Keys.HERRAMIENTAS_APAGADAS] ?: emptySet()
         )
@@ -870,6 +880,12 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setZurdo(valor: Boolean) {
         context.dataStore.edit { it[Keys.ZURDO] = valor }
+    }
+
+    /** Las palabras de una urgencia de las tareas (0 urgente, 1 muy urgente); null: las de fábrica. */
+    suspend fun setPalabrasDeUrgencia(cual: Int, texto: String?) {
+        val k = if (cual == 0) Keys.TAREAS_URGENTE else Keys.TAREAS_MUY_URGENTE
+        context.dataStore.edit { if (texto == null) it.remove(k) else it[k] = texto }
     }
 
     /** Fija las palabras mágicas. Ver [Settings.palabrasMagicas]. */
