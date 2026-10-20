@@ -1,5 +1,8 @@
 package com.forge.pixpin.mini
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -70,6 +73,7 @@ class HorarioActivity : ComponentActivity() {
         var texto by remember { mutableStateOf<String?>(null) }
         var guardado by remember { mutableStateOf("") }
         var grabando by remember { mutableStateOf<String?>(null) }
+        var enSemana by remember { mutableStateOf(true) }
         val alcance = rememberCoroutineScope()
         LaunchedEffect(Unit) {
             val t = withContext(Dispatchers.IO) { runCatching { ruta.takeIf { it.isFile }?.readText() }.getOrNull() } ?: Horario.PLANTILLA
@@ -138,6 +142,25 @@ class HorarioActivity : ComponentActivity() {
                     }
                     TextButton(onClick = { guardar(salir = false) }, enabled = texto != null && texto != guardado) { Text("Guardar") }
                 }
+                // **La semana o el texto** (PC 18-oct): las dos escriben el mismo horario.md.
+                Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for ((k, nombre) in listOf(true to "Semana", false to "Como texto")) Text(
+                        nombre, color = if (enSemana == k) androidx.compose.ui.graphics.Color.White else Cristal.tinta,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .background(if (enSemana == k) Cristal.puesto else Cristal.barra)
+                            .clickable { enSemana = k }.padding(horizontal = 14.dp, vertical = 7.dp)
+                    )
+                }
+                val t0 = texto
+                if (enSemana && t0 != null) {
+                    HorarioSemanal(t0, alCambiar = { texto = it }, modifier = Modifier.weight(1f))
+                    FilledTonalButton(onClick = { grabarOParar() }, modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                        Icon(if (grabando != null) Icons.Filled.Stop else Icons.Filled.Mic, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (grabando != null) "Parar · nota para $grabando" else "Nota de voz para la próxima clase")
+                    }
+                } else
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val t = texto
                     if (t != null) OutlinedTextField(

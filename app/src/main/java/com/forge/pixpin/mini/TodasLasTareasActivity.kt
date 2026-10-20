@@ -133,6 +133,9 @@ class TodasLasTareasActivity : ComponentActivity() {
 
         var consulta by remember { mutableStateOf("") }
         var apuntar by remember { mutableStateOf("") }
+        /** La asignatura de la tarea nueva (el libro de la caja, PC 18-oct); null: al Inbox. */
+        var asignatura by remember { mutableStateOf<String?>(null) }
+        var eligiendoAsignatura by remember { mutableStateOf<List<String>?>(null) }
         // Las recién tachadas (clave de la lista + texto crudo) y cuándo.
         val recien = remember { mutableStateMapOf<String, Long>() }
         val abiertas = remember { mutableStateMapOf<String, Boolean>() }
@@ -304,11 +307,12 @@ class TodasLasTareasActivity : ComponentActivity() {
             val t = apuntar
             if (Tareas.saneado(t).isEmpty()) return
             apuntar = ""
+            val destino = asignatura
             app.scope.launch(Dispatchers.IO) {
-                val guardada = TareaRapidaActivity.alInbox(applicationContext, t) ?: return@launch
+                val guardada = (if (destino != null) Asignaturas.apuntar(applicationContext, destino, t) else TareaRapidaActivity.alInbox(applicationContext, t)) ?: return@launch
                 val m = Frase.marcas(guardada)
                 val hora = m.hora?.let { " · ⏰ " + Momento.deMsLocales(it).legible(Momento.ahora()) }.orEmpty()
-                withContext(Dispatchers.Main) { avisar("«${m.titulo.ifBlank { Tareas.saneado(t) }}» añadida a «${TodasLasTareas.INBOX}»$hora") }
+                withContext(Dispatchers.Main) { avisar("«${m.titulo.ifBlank { Tareas.saneado(t) }}» añadida a «${destino ?: TodasLasTareas.INBOX}»$hora") }
             }
         }
 
@@ -388,7 +392,36 @@ class TodasLasTareasActivity : ComponentActivity() {
                             keyboardActions = KeyboardActions(onDone = { apuntarAhora() })
                         )
                     }
-                    TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text("Apuntar") }
+                    // **El reloj**: elegir día y hora; lo dicho con palabras se quita y va la marca elegida.
+                    IconButton(onClick = {
+                        val c = java.util.Calendar.getInstance()
+                        android.app.DatePickerDialog(this@TodasLasTareasActivity, { _, y, mo, d ->
+                            android.app.TimePickerDialog(this@TodasLasTareasActivity, { _, h, mi ->
+                                val m = Momento(com.forge.pixpin.ia.Fechas.diasDe(y.toLong(), mo + 1L, d.toLong()), h * 60 + mi)
+                                apuntar = (Frase.sinFechaDicha(apuntar, Momento.ahora()).trim() + " " + m.marca()).trim()
+                            }, c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), true).show()
+                        }, c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH), c.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                    }) { Icon(Icons.Filled.Schedule, contentDescription = "Día y hora", tint = Cristal.tinta.copy(alpha = 0.8f)) }
+                    // **El libro**: a qué asignatura va (cada asignatura es un grupo de tareas).
+                    Box {
+                        IconButton(onClick = {
+                            app.scope.launch(Dispatchers.IO) {
+                                val n = Asignaturas.nombres(applicationContext)
+                                withContext(Dispatchers.Main) {
+                                    if (n.isEmpty()) avisar("Aún no hay asignaturas: créalas en el horario") else eligiendoAsignatura = n
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Filled.Book, contentDescription = "Asignatura", tint = if (asignatura != null) Cristal.puesto else Cristal.tinta.copy(alpha = 0.8f))
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = eligiendoAsignatura != null, onDismissRequest = { eligiendoAsignatura = null }) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("Inbox (sin asignatura)") }, onClick = { asignatura = null; eligiendoAsignatura = null })
+                            eligiendoAsignatura.orEmpty().forEach { n ->
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(if (n == asignatura) "✓ $n" else n) }, onClick = { asignatura = n; eligiendoAsignatura = null })
+                            }
+                        }
+                    }
+                    TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text(asignatura?.let { "A $it" } ?: "Apuntar") }
                 }
 
                 val v = vista

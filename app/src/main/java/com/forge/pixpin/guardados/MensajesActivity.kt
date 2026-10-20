@@ -7165,11 +7165,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         texto: String,
         consulta: String?
     ): androidx.compose.ui.text.AnnotatedString {
-        if (consulta.isNullOrBlank()) return androidx.compose.ui.text.AnnotatedString(texto)
         val marca = MaterialTheme.colorScheme.primary.copy(alpha = ALFA_DE_LO_QUE_CASA)
-        return remember(texto, consulta, marca) {
-            val tramos = tramosQueCasan(texto, consulta)
-            if (tramos.isEmpty()) {
+        val colorDeEnlace = MaterialTheme.colorScheme.primary
+        return remember(texto, consulta, marca, colorDeEnlace) {
+            val tramos = if (consulta.isNullOrBlank()) emptyList() else tramosQueCasan(texto, consulta)
+            // **Los enlaces, pulsables** (PC b8403bc): http, https y www., subrayados y en el color de
+            // enlace; un toque los abre.
+            val enlaces = ENLACE_EN_EL_TEXTO.findAll(texto).toList()
+            if (tramos.isEmpty() && enlaces.isEmpty()) {
                 androidx.compose.ui.text.AnnotatedString(texto)
             } else {
                 androidx.compose.ui.text.buildAnnotatedString {
@@ -7180,10 +7183,25 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             tramo.first, tramo.last + 1
                         )
                     }
+                    for (e in enlaces) {
+                        val url = e.value.trimEnd('.', ',', ';', ':', ')', '!', '?')
+                        val fin = e.range.first + url.length
+                        addLink(
+                            androidx.compose.ui.text.LinkAnnotation.Url(
+                                if (url.startsWith("www.", ignoreCase = true)) "https://$url" else url,
+                                androidx.compose.ui.text.TextLinkStyles(
+                                    androidx.compose.ui.text.SpanStyle(color = colorDeEnlace, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
+                                )
+                            ),
+                            e.range.first, fin
+                        )
+                    }
                 }
             }
         }
     }
+
+    private val ENLACE_EN_EL_TEXTO = Regex("""(?i)\b(?:https?://|www\.)[^\s<>"]+""")
 
     private fun resumen(m: Mensaje): String = when {
         m.texto.isNotBlank() -> m.texto.take(60)

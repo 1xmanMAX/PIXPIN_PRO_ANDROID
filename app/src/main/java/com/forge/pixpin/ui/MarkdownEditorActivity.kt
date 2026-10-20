@@ -518,9 +518,15 @@ private fun Pantalla(
         }
         // La plantilla deja el cursor entre los paréntesis, así que la ruta se
         // escribe justo ahí y el bloque queda entero de una vez.
-        val donde = sitio?.let { Vivo.trozos(valor.text).getOrNull(it.bloque)?.hasta }
-            ?: valor.text.length
-        val r = Comandos.elegir(valor.text, donde, tipo)
+        // **Donde está el cursor** (PC 18aaf99): con el cursor en mitad de un párrafo, se parte y
+        // la foto entra entre las dos mitades, no debajo del párrafo entero.
+        var base = valor.text
+        val s2 = sitio
+        val contenido = s2?.let { Vivo.contenido(base, it.bloque) }
+        val pos = s2?.seleccion?.min ?: -1
+        if (s2 != null && contenido != null && pos in 1 until contenido.text.length) base = Vivo.partir(base, s2.bloque, contenido, pos).first
+        val donde = s2?.let { Vivo.trozos(base).getOrNull(it.bloque)?.hasta } ?: base.length
+        val r = Comandos.elegir(base, donde, tipo)
         val conRuta = r.text.substring(0, r.selStart) + ruta + r.text.substring(r.selStart)
         cambia(valor.copy(text = conRuta))
     }

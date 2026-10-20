@@ -88,12 +88,22 @@ object ExportarVisor {
             }
             else -> {
                 val ahora = System.currentTimeMillis()
+                // **Con código propio** (PC 6cddabe): es lo que hace de lo anotado lo de este mensaje en
+                // el chat que lo reciba (`anot-<uid>…`), y todo lo anotado del suelto va con ese nombre.
+                val uid = com.forge.pixpin.sincro.Codigos.nuevo()
                 val m = com.forge.pixpin.guardados.Mensaje(
                     id = "m-$ahora", cuando = ahora, clase = com.forge.pixpin.guardados.Clase.ARCHIVO,
-                    ruta = archivo.absolutePath, nombre = nombre, bytes = archivo.length()
+                    ruta = archivo.absolutePath, nombre = nombre, bytes = archivo.length(), uid = uid
                 )
                 val solo = com.forge.pixpin.motor.Proyecto(id = "suelto-$ahora", nombre = titulo)
-                Triple(solo, com.forge.pixpin.sincro.ChatQueViaja.preparar(solo, listOf(m), c.filesDir), "El archivo como mensaje (no está en el chat)")
+                val capa = ExportarDocumentoAnotado.idDeLaCapa(archivo, null)
+                Triple(
+                    solo,
+                    com.forge.pixpin.sincro.ChatQueViaja.preparar(solo, listOf(m), c.filesDir)?.let {
+                        com.forge.pixpin.sincro.ChatQueViaja.conLoSuelto(it, uid, archivo.absolutePath, c.filesDir, capa)
+                    },
+                    "El archivo como mensaje, con todo lo anotado"
+                )
             }
         }
         val destino = File(carpeta(c), nombre(p.nombre, PaquetePixpin.EXTENSION))

@@ -41,6 +41,12 @@ sincronizable, y mejorar el audio.
 13. **Calcar** (paso 9 del 18-oct + calcar agéntico del 18/19-oct), lo que encaje.
 14. **Google Drive y Calendar** (paso 10 + `0de0eef`), si cabe.
 
+15. **Lo del PC del 20-oct (noche), según vaya llegando** (revisión cada 30 min): `6cddabe` el
+    `.pixpin` lleva todo lo anotado (un archivo suelto con código propio y su tinta, marcos, vistas y
+    marcadores de planos/3D; «crear como nuevo» renombra lo anotado), `1984938` lo editable es el
+    `.pixpin` (Android ya no ofrecía el `.excalidraw` suelto). Pendiente de que lo suba: la extensión
+    `.excalidraw` → `.pixpin` en todo y los enlaces `pixpin://` para que otras apps llamen a PixPin.
+
 Al final: suite completa, relectura del diff, `SincronizarDeVerdadTest` y `SincronizarConElPcTest`
 varias veces, versión nueva, push a main.
 

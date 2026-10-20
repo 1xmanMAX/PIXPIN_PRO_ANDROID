@@ -91,6 +91,35 @@ object ChatQueViaja {
     }
 
     /**
+     * **Lo anotado de un archivo suelto** (que no es un adjunto del chat), con los nombres del mensaje
+     * [uid] que lo lleva en el `.pixpin` (PC `6cddabe`, `lo_anotado_del_suelto`): la tinta de sus hojas
+     * (`pdf-<huella>-p<n>`), la de un libro de Excel (`xlsx-<huella>-h<i>`) y de los marcadores 3D
+     * (`modelo-<huella>-m<id>`), la de un Word o un libro (`capa-doc-…`), sus marcadores, y los marcos y
+     * las vistas de junto al archivo o de un plano o modelo. Al importarlo, todo es de ese mensaje.
+     */
+    fun conLoSuelto(paquete: Paquete, uid: String, ruta: String, filesDir: File, capaDelDocumento: String? = null): Paquete {
+        val adjuntos = LinkedHashMap(paquete.adjuntos)
+        val huella = ruta.hashCode().toUInt().toString(16)
+        val base = "anot-$uid"
+        fun poner(terminacion: String, f: File) { if (f.isFile) adjuntos.putIfAbsent(ANOTADO + base + terminacion, f) }
+        val dibujos = File(filesDir, AnotacionesDelAdjunto.CARPETA)
+        for (n in dibujos.list().orEmpty().sorted()) {
+            val f = File(dibujos, n)
+            for (prefijo in listOf("pdf-$huella", "xlsx-$huella", "modelo-$huella") + listOfNotNull(capaDelDocumento)) {
+                if (!n.startsWith(prefijo)) continue
+                val resto = n.removePrefix(prefijo)
+                if (resto.startsWith("-") || resto.startsWith(".")) poner(resto, f)
+            }
+        }
+        poner(AnotacionesDelAdjunto.MARCOS, File("$ruta.pixpin-marcos"))
+        poner(AnotacionesDelAdjunto.VISTAS, File("$ruta.pixpin-vistas"))
+        val delPlano = File(filesDir, "planos-marcadores")
+        poner(AnotacionesDelAdjunto.VISTAS, File(delPlano, "$huella.vistas.json"))
+        poner(AnotacionesDelAdjunto.MARCOS, File(delPlano, "$huella.marcos.json"))
+        return Paquete(paquete.texto, adjuntos)
+    }
+
+    /**
      * **Los ids de allí, en los de aquí**: lo que un mensaje señala (su dibujo, su tabla, su nota,
      * su croquis, su proyecto) cambió de nombre al importarse. Se sacan comparando las hojas que
      * vinieron con las que quedaron, que van en el mismo orden.

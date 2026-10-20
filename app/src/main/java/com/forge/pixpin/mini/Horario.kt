@@ -68,8 +68,17 @@ object Horario {
         val nombre: String,
         val aula: String?,
         /** Lo apuntado con `>` debajo: lo que lee la voz al contestar. */
-        val notas: List<String> = emptyList()
+        val notas: List<String> = emptyList(),
+        /** Los minutos de antes en que avisa esta clase (`avisar 15` en su línea); null: la del horario. */
+        val antelacion: Int? = null
     )
+
+    /** Una asignatura de la lista (`Asignatura Geometría @A-12 #4F8EF7`, PC 18-oct). [color]: `0xRRGGBB`. */
+    data class Asignatura(val nombre: String, val aula: String?, val color: Int?)
+
+    /** Los dos títulos que pone la pantalla semanal encima de lo que escribe. */
+    const val TITULO_ASIGNATURAS = "## Asignaturas"
+    const val TITULO_CLASES = "## Clases"
 
     /** Una evaluación (examen, entrega…) con su fecha. */
     data class Evaluacion(
@@ -87,8 +96,17 @@ object Horario {
         /** Minutos antes de cada clase. */
         val antelacion: Int = ANTELACION,
         /** Días antes de cada evaluación. */
-        val diasAntes: List<Int> = DIAS_ANTES
-    )
+        val diasAntes: List<Int> = DIAS_ANTES,
+        /** La lista de asignaturas, en el orden escrito. */
+        val asignaturas: List<Asignatura> = emptyList()
+    ) {
+        /** Las de la lista y, detrás, las de las clases que no están en ella, sin repetir. */
+        fun todasLasAsignaturas(): List<Asignatura> {
+            val v = asignaturas.toMutableList()
+            for (c in clases) if (v.none { Acciones.normalizar(it.nombre) == Acciones.normalizar(c.nombre) }) v += Asignatura(c.nombre, c.aula, null)
+            return v
+        }
+    }
 
     // ---- Leer ------------------------------------------------------------
 
@@ -180,14 +198,19 @@ object Horario {
     }
 
     /** Separa el aula del nombre: `@A-12`, `aula 12`, `salón 3`, `(Lab 2)`. */
-    private fun nombreYAula(palabras: List<String>): Pair<String, String?> {
+    fun nombreYAula(palabras: List<String>): Pair<String, String?> {
         val nombre = ArrayList<String>()
         var aula: String? = null
         var i = 0
         while (i < palabras.size) {
             val p = palabras[i]
             val sig = palabras.getOrNull(i + 1)
-            if (p.startsWith('@') && p.length > 1) {
+            if (p.startsWith("@(")) {
+                // `@(Lab de física)`: un aula de varias palabras (así la escribe la pantalla semanal).
+                val v = arrayListOf(p.substring(2))
+                while (!v.last().endsWith(')') && i + 1 < palabras.size) { i++; v += palabras[i] }
+                v.joinToString(" ").removeSuffix(")").trim().takeIf { it.isNotEmpty() }?.let { aula = it }
+            } else if (p.startsWith('@') && p.length > 1) {
                 aula = p.substring(1)
             } else if (n(p.trimStart('(')) in setOf("aula", "salon", "sala", "lab", "laboratorio") && sig != null) {
                 aula = "${p.trimStart('(')} ${sig.trimEnd(')')}"
@@ -213,6 +236,7 @@ object Horario {
             else if (!(n(palabras[i]) == "y" && dias.isNotEmpty())) break
             i++
         }
+        val diasDelante = dias.isNotEmpty()
         // El tramo: en una palabra, o en tres («8:00 a 10:00», «8 - 10»).
         var tramo: Pair<Int, Int>? = null
         val resto = ArrayList<String>()
@@ -231,16 +255,43 @@ object Horario {
                 // «de 8 a 10»: el «de» no es del nombre.
                 if (n(p) == "de" && palabras.getOrNull(j + 1)?.let { horaDe(it) } != null) { j++; continue }
             }
-            // Días detrás del nombre («Geometría lunes 8-10»): solo los largos.
-            val d = diasDe(p, false)
+            // Días detrás del nombre («Geometría lunes 8-10»): solo los largos, y no si ya iban delante
+            // ni detrás de «de»/«del» («Taller del Sábado»).
+            val trasDe = j > 0 && n(palabras[j - 1]) in setOf("de", "del")
+            val d = if (!diasDelante && !trasDe) diasDe(p, false) else null
             if (d != null) dias += d else resto += p
             j++
         }
         val (inicio, fin) = arreglarTramo(tramo ?: return null) ?: return null
+        val antelacion = quitarAvisar(resto)
         val (nombre, aula) = nombreYAula(resto)
         val unicos = dias.distinct().sorted()
         if (unicos.isEmpty() || nombre.isEmpty()) return null
-        return Clase(unicos, inicio, fin, nombre, aula)
+        return Clase(unicos, inicio, fin, nombre, aula, antelacion = antelacion)
+    }
+
+    /** Saca de las palabras de una clase su «avisar 15 [min] [antes]»: los minutos de antes de esa clase. */
+    private fun quitarAvisar(resto: MutableList<String>): Int? {
+        val i = resto.indexOfFirst { n(it) in setOf("avisar", "aviso") }.takeIf { it >= 0 } ?: return null
+        val m = resto.getOrNull(i + 1)?.toIntOrNull() ?: return null
+        var j = i + 2
+        if (resto.getOrNull(j)?.let { n(it) in setOf("min", "minutos") } == true) j++
+        if (resto.getOrNull(j)?.let { n(it) == "antes" } == true) j++
+        repeat(j - i) { resto.removeAt(i) }
+        return m.coerceAtMost(24 * 60)
+    }
+
+    /** **Una línea de la lista de asignaturas**: `Asignatura Geometría @A-12 #4F8EF7`. */
+    private fun asignaturaDeLinea(palabras: List<String>): Asignatura? {
+        val primera = n(palabras.firstOrNull()?.trimEnd(':') ?: return null)
+        if (primera != "asignatura" && primera != "materia") return null
+        var color: Int? = null
+        val resto = palabras.drop(1).filter { p ->
+            val c = p.takeIf { it.startsWith('#') && it.length == 7 }?.substring(1)?.toIntOrNull(16)
+            if (c != null) { color = c; false } else true
+        }
+        val (nombre, aula) = nombreYAula(resto)
+        return if (nombre.isEmpty()) null else Asignatura(nombre, aula, color)
     }
 
     /** Lo que dice que una línea es una evaluación. */
@@ -303,17 +354,33 @@ object Horario {
      * se dicen como en las tareas: «23/10», «el jueves»). Lo que no se entiende se salta: es una nota,
      * puede llevar títulos y comentarios.
      */
-    fun leer(texto: String, ahora: Momento): Leido {
+    fun leer(texto: String, ahora: Momento): Leido = leerConSitios(texto, ahora).first
+
+    /**
+     * Como [leer], y además qué líneas son de clases o de asignaturas (las que reescribe la pantalla
+     * semanal, [Semana.reescribir]): las de clase, sus `>`, las tablas que dieron clases, las de
+     * `Asignatura …` y los dos títulos. Lo demás no se toca.
+     */
+    fun leerConSitios(texto: String, ahora: Momento): Pair<Leido, BooleanArray> {
         val clases = ArrayList<Clase>()
+        val asignaturas = ArrayList<Asignatura>()
         var antelacion = ANTELACION
         var diasAntes = DIAS_ANTES
+        val lineas = texto.lines()
+        val suyas = BooleanArray(lineas.size)
         val tabla = ArrayList<List<String>>()
+        val filasDeTabla = ArrayList<Int>()
         var enComentario = false
         val sueltas = ArrayList<String>()
         fun cerrarTabla() {
-            if (tabla.isNotEmpty()) { clases += clasesDeTabla(tabla); tabla.clear() }
+            if (tabla.isNotEmpty()) {
+                val de = clasesDeTabla(tabla)
+                if (de.isNotEmpty()) filasDeTabla.forEach { suyas[it] = true }
+                clases += de
+                tabla.clear(); filasDeTabla.clear()
+            }
         }
-        for (linea in texto.lines()) {
+        for ((k, linea) in lineas.withIndex()) {
             val t0 = linea.trim()
             // Los comentarios de HTML (`<!-- … -->`): ahí va el ejemplo.
             if (enComentario) {
@@ -322,15 +389,16 @@ object Horario {
             }
             if (t0.startsWith("<!--")) { enComentario = "-->" !in t0; continue }
             val c = celdas(linea)
-            if (c != null) { tabla += c; continue }
+            if (c != null) { tabla += c; filasDeTabla += k; continue }
             cerrarTabla()
+            if (t0 == TITULO_ASIGNATURAS || t0 == TITULO_CLASES) { suyas[k] = true; continue }
             if (t0.isEmpty() || t0.startsWith('#')) continue
             // Lo que lee la voz, para la clase de encima.
             if (t0.startsWith('>')) {
                 val nota = t0.substring(1).trim()
-                if (clases.isNotEmpty() && nota.isNotEmpty()) {
-                    val ultima = clases.last()
-                    clases[clases.size - 1] = ultima.copy(notas = ultima.notas + nota)
+                if (clases.isNotEmpty()) {
+                    if (nota.isNotEmpty()) { val ultima = clases.last(); clases[clases.size - 1] = ultima.copy(notas = ultima.notas + nota) }
+                    suyas[k] = true
                 }
                 continue
             }
@@ -346,8 +414,14 @@ object Horario {
                 } else numeros.firstOrNull()?.let { x -> antelacion = (if ("hora" in q) x * 60 else x).coerceAtMost(24 * 60) }
                 continue
             }
+            val asig = asignaturaDeLinea(palabras)
+            if (asig != null) {
+                suyas[k] = true
+                if (asignaturas.none { n(it.nombre) == n(asig.nombre) }) asignaturas += asig
+                continue
+            }
             if (palabras.firstOrNull()?.let { esEvaluacion(it) } == true) { sueltas += t; continue }
-            claseDeLinea(t)?.let { clases += it }
+            claseDeLinea(t)?.let { clases += it; suyas[k] = true }
         }
         cerrarTabla()
         // Las evaluaciones al final: nombran clases que pueden ir después.
@@ -359,7 +433,7 @@ object Horario {
             val clase = clases.indexOfFirst { q.contains(n(it.nombre)) }.takeIf { it >= 0 }
             evaluaciones += Evaluacion(que, clase, cuando)
         }
-        return Leido(clases, evaluaciones, antelacion, diasAntes)
+        return Leido(clases, evaluaciones, antelacion, diasAntes, asignaturas) to suyas
     }
 
     // ---- Avisos ----------------------------------------------------------
@@ -391,7 +465,7 @@ object Horario {
             for (d in hoy - 1..hoy + dias) {
                 if (Fechas.diaDeLaSemana(d).toInt() !in c.dias) continue
                 val inicio = d * DIA + c.inicio * MINUTO
-                val cuando = inicio - h.antelacion * MINUTO
+                val cuando = inicio - (c.antelacion ?: h.antelacion) * MINUTO
                 if (cuando > desde && cuando <= hasta) v += Aviso("${PREFIJO}clase:$inicio:${c.nombre}", cuando, Que.DeClase(i, inicio))
             }
         }
