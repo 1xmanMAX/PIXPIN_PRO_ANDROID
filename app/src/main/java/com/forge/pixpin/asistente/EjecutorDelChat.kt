@@ -104,6 +104,11 @@ class EjecutorDelChat(
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.ANOTAR -> anotarDocumento(llamada.accion.pedido)
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.BUSCAR_EN -> buscarEnDocumento(llamada.accion.pedido)
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.EXPORTAR -> exportarDocumento(llamada.accion.pedido)
+            llamada.accion.herramienta == com.forge.pixpin.ia.Anotacion.NOMBRE -> runCatching {
+                medirLasNotas()
+                try { AnotarInteligente(contexto, docs, parar).hacer(llamada.accion.pedido, motor, motor.catalogoCompleto) }
+                catch (e: IllegalStateException) { error(e.message ?: "no se pudo anotar") }
+            }
             llamada.accion.fila.accion == com.forge.pixpin.ia.Acciones.EN_EL_CHAT -> enElChat.hacer(llamada.accion)
             else -> acciones.hacer(llamada.accion)
         }
@@ -121,6 +126,16 @@ class EjecutorDelChat(
     }
 
     private val docs by lazy { DocumentosDelAsistente(contexto, almacen, chat) }
+
+    /** Las notas del anotador se parten midiendo con su letra de verdad (Nunito), como el PC con DirectWrite. */
+    private fun medirLasNotas() {
+        if (com.forge.pixpin.ia.Anotacion.medidor !== com.forge.pixpin.ia.Anotacion.A_OJO) return
+        val letra = com.forge.pixpin.motor.DrawFonts.typefaceFor(contexto, com.forge.pixpin.ia.Anotacion.FAMILIA)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { typeface = letra }
+        com.forge.pixpin.ia.Anotacion.medidor = com.forge.pixpin.ia.Anotacion.Medidor { t, tam, negrita ->
+            synchronized(p) { p.textSize = tam.toFloat(); p.isFakeBoldText = negrita; p.measureText(t).toDouble() }
+        }
+    }
 
     private fun textoDe(p: kotlinx.serialization.json.JsonObject, k: String) =
         (p[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }

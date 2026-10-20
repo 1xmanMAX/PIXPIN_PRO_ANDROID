@@ -40,7 +40,7 @@ import kotlin.math.roundToInt
  */
 class DocumentosDelAsistente(private val contexto: Context, private val almacen: MensajesStore, private val chat: String?) {
 
-    enum class Sirve { DOCUMENTO, ESCANEADO, CUALQUIERA }
+    enum class Sirve { DOCUMENTO, ESCANEADO, CUALQUIERA, ANOTABLE }
 
     /** Un archivo de los chats: su mensaje, su nombre y el de su chat. */
     class Candidato(val mensaje: Mensaje, val nombre: String, val ruta: File, val proyecto: String?, val proyectoNombre: String, val cuando: Long)
@@ -54,6 +54,7 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
         Sirve.ESCANEADO -> extension(n) == "pdf" || esImagen(n)
         Sirve.DOCUMENTO -> extension(n) == "pdf" || esOfficeDePaginas(n) || esPlano(n)
         Sirve.CUALQUIERA -> extension(n).isNotEmpty()
+        Sirve.ANOTABLE -> extension(n) == "pdf" || esOfficeDePaginas(n) || esPlano(n) || esImagen(n) || extension(n) in setOf("xlsx", "xlsm", "xls")
     }
 
     private fun nombreDelChat(p: String?) = p?.let { (contexto.applicationContext as? com.forge.pixpin.PixPinApp)?.proyectos?.porId(it)?.nombre }
@@ -121,7 +122,10 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
     }
 
     private fun noSirve(s: Sirve): String {
-        val que = when (s) { Sirve.ESCANEADO -> "una foto o un PDF"; Sirve.DOCUMENTO -> "un PDF, Word, PowerPoint o plano"; Sirve.CUALQUIERA -> "ningun archivo" }
+        val que = when (s) {
+            Sirve.ESCANEADO -> "una foto o un PDF"; Sirve.DOCUMENTO -> "un PDF, Word, PowerPoint o plano"; Sirve.CUALQUIERA -> "ningun archivo"
+            Sirve.ANOTABLE -> "un PDF, Word, PowerPoint, Excel, foto o plano"
+        }
         val hay = candidatos().filter { it.proyecto == chat }.sortedByDescending { it.cuando }
         if (hay.isEmpty()) return "en este chat no hay $que; pregunta al usuario cual (por su nombre)"
         val consejo = when (s) {
@@ -171,7 +175,7 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
     }
 
     /** **Las páginas de un PDF, Word o PowerPoint** (PC `paginas`): la capa de texto, o el OCR si es escaneado. */
-    fun paginas(ruta: File, nombre: String): Paginas {
+    fun paginas(ruta: File, nombre: String, solo: Collection<Int>? = null, maxOcr: Int = MAX_OCR): Paginas {
         if (esOfficeDePaginas(nombre)) {
             val d = com.forge.pixpin.office.HojasOffice.de(contexto, ruta.path) ?: throw IllegalStateException("no se pudo abrir «$nombre»")
             d.maquetarTodo { }
@@ -179,6 +183,7 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
             for (i in 0 until d.cuantas()) {
                 val p = d.pagina(i) ?: continue
                 altos += ANCHO_HOJA * p.alto / max(p.ancho, 1f)
+                if (solo != null && i !in solo) { textos += PaginaDeTexto("", emptyList()); continue }
                 textos += pagina(p.textos().map { (t, r) -> t.texto to r }, p.ancho.toDouble(), p.alto.toDouble())
             }
             if (textos.isEmpty()) throw IllegalStateException("el documento no tiene paginas")
@@ -190,13 +195,18 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
         val textos = ArrayList<PaginaDeTexto>(); val altos = ArrayList<Double>()
         var leidas = 0
         for (i in 0 until n) {
+            if (solo != null && i !in solo) {
+                val m = PdfDoc.medidaEnPuntos(ruta.path, i)
+                altos += ANCHO_HOJA * (m?.second ?: 842.0) / max(m?.first ?: 595.0, 1.0)
+                textos += PaginaDeTexto("", emptyList()); continue
+            }
             val plano = PlanoDePdf.de(archivo, i)
             val w = plano?.ancho ?: PdfDoc.medidaEnPuntos(ruta.path, i)?.first ?: 595.0
             val h = plano?.alto ?: PdfDoc.medidaEnPuntos(ruta.path, i)?.second ?: 842.0
             altos += ANCHO_HOJA * h / max(w, 1.0)
             val trozos = PdfAHtml.trozosDe(plano?.textos.orEmpty()).map { it.texto to floatArrayOf(it.x.toFloat(), (it.y - it.alto * 0.8).toFloat(), (it.fin - it.x).toFloat(), it.alto.toFloat()) }
             var p = pagina(trozos, w, h)
-            if (p.texto.trim().length < 20 && leidas < MAX_OCR) {
+            if (p.texto.trim().length < 20 && leidas < maxOcr) {
                 leidas++
                 PdfDoc.render(ruta.path, i, ANCHO_OCR)?.let { bm -> p = paginaDeOcr(bm).also { bm.recycle() } }
             }
@@ -206,7 +216,7 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
     }
 
     /** El texto de una imagen por el OCR: cada letra con la caja de su palabra repartida a partes iguales. */
-    private fun paginaDeOcr(bm: android.graphics.Bitmap): PaginaDeTexto {
+    internal fun paginaDeOcr(bm: android.graphics.Bitmap): PaginaDeTexto {
         val palabras = LectorDeLetras.leer(bm)
         val w = max(bm.width, 1).toDouble(); val h = max(bm.height, 1).toDouble()
         return pagina(palabras.map { it.texto to floatArrayOf(it.x.toFloat(), it.y.toFloat(), it.w.toFloat(), it.h.toFloat()) }, w, h)
@@ -396,16 +406,25 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
      * Escribe en la capa de la hoja [i] de un PDF o un Word del chat: la MISMA que lee y guarda el lector
      * (`anot-<uid>-p<i>` con su `.hoja`), en las unidades de la hoja.
      */
-    private fun escribirEnLaHoja(c: Candidato, i: Int, nuevas: List<Element>) {
+    internal fun escribirEnLaHoja(c: Candidato, i: Int, nuevas: List<Element>) {
         val uid = c.mensaje.uid?.takeIf { it.isNotBlank() } ?: run { throw IllegalStateException("«${c.nombre}» no tiene código de mensaje: ábrelo una vez y vuelve a pedirlo") }
         val id = AnotacionesDelAdjunto.dePagina(uid, i)
-        val escena = com.forge.pixpin.pdf.tintaDeLaHoja(contexto, id, c.ruta.path, i, 0, suelta = true, migrar = false) ?: Scene()
+        val escena = com.forge.pixpin.pdf.tintaDeLaHoja(contexto, id, c.ruta.path, i, espaciosDe(uid), suelta = true, migrar = false) ?: Scene()
         ExcalidrawStore.guardar(contexto, id, escena.copy(elements = escena.elements + nuevas)) ?: throw IllegalStateException("no se pudo guardar lo anotado")
         AnotacionesDelAdjunto.escribirMarco(AnotacionesDelAdjunto.hoja(contexto.filesDir, id), com.forge.pixpin.pdf.marcoDeLaHoja(c.ruta.path, i))
     }
 
+    /** Apunta en el mensaje [id] el lienzo de su foto (lo que hace el chat al abrirla la primera vez). */
+    internal fun apuntarReferencia(id: String, dibujo: String) {
+        almacen.cambiar { l -> l.map { if (it.id == id && it.referencia == null) it.copy(referencia = dibujo) else it } }
+    }
+
+    /** Los espacios para anotar abiertos de un PDF o un Word del chat (los bits del lector). */
+    internal fun espaciosDe(uid: String): Int =
+        AnotacionesDelAdjunto.leer(AnotacionesDelAdjunto.espacios(contexto.filesDir, AnotacionesDelAdjunto.delPdf(uid)))?.trim()?.toIntOrNull() ?: 0
+
     /** Los textos del plano (la orden nativa en su proceso, con caché). */
-    private fun textosDelPlano(c: Candidato): List<Pair<String, DoubleArray>> {
+    internal fun textosDelPlano(c: Candidato): List<Pair<String, DoubleArray>> {
         val r = com.forge.pixpin.planos.LectorDePlanos.textos(contexto, c.ruta)
         val f = (r as? com.forge.pixpin.planos.LectorDePlanos.Companion.Resultado.Listo)?.archivo ?: throw IllegalStateException("no se pudo leer el plano «${c.nombre}»: $r")
         val v = kotlinx.serialization.json.Json.parseToJsonElement(f.readText()) as JsonArray
@@ -504,7 +523,7 @@ class DocumentosDelAsistente(private val contexto: Context, private val almacen:
     }
 
     /** La hoja antes que la capa (una capa sin su hoja al lado se leería con otra escala), como el visor. */
-    private fun guardarCapaDelPlano(id: String, ruta: File, hojaF: File, encaje: com.forge.pixpin.planos.CapaDelPlano.Encaje,
+    internal fun guardarCapaDelPlano(id: String, ruta: File, hojaF: File, encaje: com.forge.pixpin.planos.CapaDelPlano.Encaje,
                                     m: com.forge.pixpin.planos.ModeloCad, escena: Scene) {
         val texto = com.forge.pixpin.planos.CapaDelPlano.hojaDe(encaje, m.caja).aTexto()
         if (!hojaF.isFile || hojaF.readText() != texto) hojaF.writeText(texto)

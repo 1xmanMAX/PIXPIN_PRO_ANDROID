@@ -365,6 +365,24 @@ object Acciones {
         Accion(EXPORTAR, EXPORTAR, "Exporta un documento, plano, Excel o imagen (con lo anotado) en otro formato y lo deja en el chat.", Categoria.ABRIR,
             listOf("exporta", "exportar", "exportalo", "guarda como", "guardalo como", "convierte a", "convertir a", "pasalo a", "en pdf", "a pdf", "a png", "a dxf", "como imagen", "en png"), "{}",
             listOf(p("formato", Tipo.Opciones(FORMATOS), true, "el formato"), p("archivo", Tipo.Texto, false, ARCHIVO)), null, "Hecho."),
+        // Anotar con cabeza (15-oct, [Anotacion]): lo hace el ejecutor del chat (`asistente/AnotarInteligente.kt`).
+        // Sin claves a propósito: solo para la nube, que la elige por su descripción.
+        Accion(Anotacion.NOMBRE, Anotacion.NOMBRE, "Anota con criterio un PDF, Word, PowerPoint, Excel, foto/escaneo o plano: lee el texto de la pagina y pone en su capa " +
+            "recuadros sobre lo importante con la explicacion al margen, pasos numerados, errores con su correccion, " +
+            "el resumen de la pagina o de cada seccion, un glosario o preguntas de repaso. Usala para «señalame lo importante», " +
+            "«explicame esta formula al costado», «marca los errores», «resume cada seccion al margen». " +
+            "Para resaltar o encerrar un texto concreto que dice el usuario, anotar_documento.", Categoria.NOTAS,
+            emptyList(), "{}",
+            listOf(
+                p("pedido", Tipo.Texto, true, "lo que pidio el usuario, con sus palabras"),
+                p("modo", op("importante", "pasos", "errores", "resumen", "glosario", "preguntas", "explicar", "mixto"), false, "que anotar; omitir: lo decide el pedido"),
+                p("foco", Tipo.Texto, false, "el trozo exacto a explicar (una formula, una frase), si el usuario lo dijo"),
+                p("archivo", Tipo.Texto, false, ARCHIVO),
+                p("pagina", Tipo.Entero, false, "pagina desde 1; omitir: la que el usuario tiene abierta (o la 1)"),
+                p("hasta", Tipo.Entero, false, "ultima pagina, para anotar varias seguidas (como mucho 5)"),
+                p("celdas", Tipo.Texto, false, "en un Excel, el rango a mirar (\"A1:F40\"); omitir: lo usado de la hoja"),
+                p("hoja", Tipo.Texto, false, "en un Excel, el nombre de la hoja; omitir: la primera")
+            ), null, "Hecho."),
         Accion(HOJA_A_LIENZO, HOJA_A_LIENZO, "Pasa al lienzo una hoja (foto, escaneo o pagina de un PDF) interpretandola: parrafos y titulos como texto, tablas como tabla, formulas como ecuacion, fotos recortadas y rayas, en su sitio y en orden de lectura. Usala para «pasa esta hoja/foto/pagina al lienzo» o «digitaliza esto» (mejor que calcarla si tiene texto).", Categoria.NOTAS,
             listOf("digitaliza", "hoja al lienzo", "pagina al lienzo", "escaneo al lienzo", "hoja en el lienzo", "pasa la hoja", "pasa esta hoja"), "{}",
             listOf(

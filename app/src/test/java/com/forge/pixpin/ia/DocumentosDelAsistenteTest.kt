@@ -104,6 +104,27 @@ class DocumentosDelAsistenteTest {
         try { d.elegir("planos de estructuras", DocumentosDelAsistente.Sirve.DOCUMENTO); fail() } catch (e: IllegalStateException) { assertTrue(e.message!!.contains("no hay ningun archivo")) }
     }
 
+    @Test fun `anotar con cabeza pone las notas en la hoja del lector segun llegan`() {
+        val (d, _) = conElPdf()
+        val cand = d.elegir(null, DocumentosDelAsistente.Sirve.ANOTABLE)
+        val respuesta = "{\"tipo\":\"importante\",\"pag\":1,\"ancla\":\"cemento Portland\",\"l\":2,\"nota\":\"El tipo de cemento manda en la mezcla.\"}\n" +
+            "{\"tipo\":\"definicion\",\"ancla\":\"Memoria de calculo\",\"nota\":\"memoria: el documento que justifica el diseño\"}\n" +
+            "{\"tipo\":\"importante\",\"ancla\":\"acero corrugado\",\"nota\":\"no esta\"}"
+        val motor = com.forge.pixpin.ia.MotorGuionado(listOf(com.forge.pixpin.ia.Respuesta(respuesta)))
+        val a = com.forge.pixpin.asistente.AnotarInteligente(c, d, java.util.concurrent.atomic.AtomicBoolean(false))
+        val h = a.anotarEn(cand, j("""{"pedido":"señala lo importante"}"""), motor)
+        assertEquals(2, h.puestas)
+        assertTrue(h.resumen, h.resumen.contains("acero corrugado"))
+        // El modelo vio el texto renglón a renglón.
+        val visto = motor.recibido.single().mensajes.last().toString()
+        assertTrue(visto, visto.contains("L2: El cemento Portland tipo I"))
+        val escena = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(c, AnotacionesDelAdjunto.dePagina("u123", 0)))!!
+        assertTrue(escena.elements.isNotEmpty() && escena.elements.all { e -> e.groupIds.any { it.startsWith(com.forge.pixpin.ia.Anotacion.GRUPO_TURNO) } })
+        assertTrue(escena.elements.any { it.type == ElementType.TEXT && it.text!!.contains("cemento") })
+        // Sin la nube no se hace (el local no se toca).
+        try { a.hacer(j("""{"pedido":"x"}"""), motor, esNube = false); fail() } catch (e: IllegalStateException) { assertTrue(e.message!!.contains("nube")) }
+    }
+
     @Test fun `en el plano busca entera o por palabras y el grande primero`() {
         val (d, _) = conElPdf()
         fun t(s: String, x: Double, alto: Double) = s to doubleArrayOf(x, 10.0, alto)

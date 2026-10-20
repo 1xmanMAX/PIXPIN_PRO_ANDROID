@@ -44,4 +44,24 @@ object LectorDeLetras {
             lector.close()
         }
     }.getOrDefault(emptyList())
+
+    /**
+     * **Los renglones del OCR, con la caja de cada palabra** (para anotar: PC `renglones_de_ocr`). Null
+     * si el OCR no está (sin Google Play), para decirlo en vez de «no hay texto».
+     */
+    fun renglones(mapa: Bitmap): List<List<Calcar.Palabra>>? = runCatching {
+        val lector = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        try {
+            val texto = Tasks.await(lector.process(InputImage.fromBitmap(mapa, 0)), 30, TimeUnit.SECONDS)
+            texto.textBlocks.flatMap { it.lines }.map { l ->
+                l.elements.mapNotNull { w ->
+                    val c = w.boundingBox ?: return@mapNotNull null
+                    if (w.text.isBlank()) null
+                    else Calcar.Palabra(w.text, c.left.toDouble(), c.top.toDouble(), c.width().toDouble(), c.height().toDouble())
+                }
+            }.filter { it.isNotEmpty() }
+        } finally {
+            lector.close()
+        }
+    }.getOrNull()
 }
