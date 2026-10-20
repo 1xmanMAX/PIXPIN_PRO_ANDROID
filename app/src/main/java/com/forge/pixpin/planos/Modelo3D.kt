@@ -12,7 +12,7 @@ import kotlin.math.tan
 
 /**
  * **Un modelo 3D ya leído** —un plano DWG/DXF visto en 3D, un LandXML o un fichero de puntos de
- * Civil 3D, un IFC o un Revit—, en el formato del visor de modelos del PC (PX3D v3,
+ * Civil 3D, un IFC o un Revit—, en el formato del visor de modelos del PC (PX3D v4,
  * `Modelo3d::a_bytes` de `crates/pixpin-cad/src/modelo3d.rs`). Lo escribe `libpixpincad.so` en el
  * proceso `:planos`; aquí se lee proyectado en memoria y se sube tal cual a la tarjeta.
  *
@@ -38,7 +38,9 @@ class Modelo3D private constructor(
     val niveles: List<Nivel>,
 ) {
     /** Un elemento: [nivel] es su índice en [niveles] o -1. */
-    data class Elemento(val tipo: String, val nombre: String, val nivel: Int = -1, val medidas: Medidas = Medidas())
+    data class Elemento(val tipo: String, val nombre: String, val nivel: Int = -1, val medidas: Medidas = Medidas(),
+        /** **Su clave estable** (PX3D v4, 20-oct-2026): el GlobalId del IFC; vacía si el formato no trae. */
+        val clave: String = "")
 
     /**
      * Lo que mide un elemento, sacado de sus triángulos en el PC (`medir` de `modelo3d.rs`), en
@@ -48,7 +50,32 @@ class Modelo3D private constructor(
     data class Medidas(val volumen: Float = 0f, val planta: Float = 0f, val alzado: Float = 0f, val superficie: Float = 0f, val cerrado: Boolean = false)
 
     /** Un nivel: el `IfcBuildingStorey` o el Level de Revit, con su cota en metros. */
-    data class Nivel(val nombre: String, val cota: Double)
+    data class Nivel(val nombre: String, val cota: Double,
+        /** El GlobalId del `IfcBuildingStorey`; vacía si no lo hay (entonces cuentan el nombre y la cota). */
+        val clave: String = "")
+
+    /**
+     * **La clave estable del elemento [el]** (la que guardan los marcadores, PC `clave_de_elemento`): su
+     * GlobalId; si no, `~<tipo>|<nombre>|<k>`, con `k` el orden entre los de su tipo y nombre sin clave.
+     */
+    fun claveDeElemento(el: Int): String? {
+        val e = elementos.getOrNull(el) ?: return null
+        if (e.clave.isNotEmpty()) return e.clave
+        val k = (0 until el).count { val o = elementos[it]; o.clave.isEmpty() && o.tipo == e.tipo && o.nombre == e.nombre }
+        return "~${e.tipo}|${e.nombre}|$k"
+    }
+
+    fun elementoDeClave(clave: String): Int? =
+        if (!clave.startsWith("~")) elementos.indexOfFirst { it.clave == clave }.takeIf { it >= 0 }
+        else elementos.indices.firstOrNull { claveDeElemento(it) == clave }
+
+    /** La clave estable del nivel [k]: su GlobalId; si no, `<nombre>@<cota en mm>`. */
+    fun claveDeNivel(k: Int): String? {
+        val n = niveles.getOrNull(k) ?: return null
+        return n.clave.ifEmpty { "${n.nombre}@${Math.round(n.cota * 1000.0)}" }
+    }
+
+    fun nivelDeClave(clave: String): Int? = niveles.indices.firstOrNull { claveDeNivel(it) == clave }
 
     fun x(v: Int) = vertices.getFloat(v * 24)
     fun y(v: Int) = vertices.getFloat(v * 24 + 4)
@@ -118,15 +145,15 @@ class Modelo3D private constructor(
             if (ne < 0 || ne > d.limit()) throw NoSeLee("Modelo leído roto")
             fun texto(): String { val n = u(); if (n < 0) throw NoSeLee("Modelo leído roto"); hay(n.toLong()); val by = ByteArray(n); for (k in 0 until n) by[k] = d.get(i + k); i += n; return String(by, Charsets.UTF_8) }
             val elementos = List(ne) {
-                val tipo = texto(); val nombre = texto()
+                val tipo = texto(); val nombre = texto(); val clave = texto()
                 val nivel = u()
                 hay(17)
                 val md = Medidas(f(), f(), f(), f(), d.get(i) != 0.toByte()).also { i += 1 }
-                Elemento(tipo, nombre, if (nivel == -1) -1 else nivel, md)
+                Elemento(tipo, nombre, if (nivel == -1) -1 else nivel, md, clave)
             }
             val nn = u()
             if (nn < 0 || nn > d.limit()) throw NoSeLee("Modelo leído roto")
-            val niveles = List(nn) { val n = texto(); hay(8); Nivel(n, d.getDouble(i).also { i += 8 }) }
+            val niveles = List(nn) { val n = texto(); hay(8); val cota = d.getDouble(i).also { i += 8 }; Nivel(n, cota, texto()) }
             if (elementos.any { it.nivel < -1 || it.nivel >= nn }) throw NoSeLee("Modelo leído roto")
             return Modelo3D(origen, caja, metros, vertices, nv, op, nOp, tr, nTr, ar, nAr, li, nLi, pu, nPu, elementos, niveles)
         }

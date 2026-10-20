@@ -50,6 +50,17 @@ class MarcadoresCadTest {
     }
 
     @Test
+    fun `lo aislado va por su clave estable y manda sobre el numero`() {
+        val t = """{"version":1,"plano":[],"modelo":[{"id":"m1","estado":{"objetivo":[0,0,0],"rumbo":0,"altura":0,"dist":5,"aislado":12,"aislado_clave":"0K7w7JxVz4MRkRhRWvQ${'$'}a9","ocultos":["n:=2gRXFgjRn2HPE${'$'}YoDLX3FV"]}}]}"""
+        val e = MarcadoresCad.deTextos(t, null).modelo.single().estado
+        assertEquals("0K7w7JxVz4MRkRhRWvQ${'$'}a9", e.aisladoClave)
+        assertEquals(e, MarcadoresCad.deTextos(MarcadoresCad(modelo = listOf(Marcador3d("m1", "", e))).textoDeVistas(), null).modelo.single().estado)
+        // Con la clave en los dos, el número (de otro lector) no cuenta.
+        assertTrue(MarcadoresCad.coincide(e.copy(aislado = 3), e))
+        assertFalse(MarcadoresCad.coincide(e.copy(aisladoClave = "otra"), e))
+    }
+
+    @Test
     fun `los marcos del 19-oct dentro de vistas se leen y el normal va y vuelve`() {
         val viejo = """{"version":1,"plano":[],"modelo":[],"marcos":[{"caja":[-0.2,-0.1,0.3,0.2],"estado":{"objetivo":[0,0,0],"rumbo":0,"altura":0,"dist":1}}]}"""
         val c = MarcadoresCad.deTextos(viejo, null)

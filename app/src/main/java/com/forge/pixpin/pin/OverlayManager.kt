@@ -697,6 +697,11 @@ class OverlayManager(private val app: PixPinApp) {
         createPin(state)
     }
 
+    /** **Cierra todos los pines** (el asistente, `cerrar_pines`): el último se puede devolver. */
+    fun cerrarTodos() {
+        pins.values.toList().forEach { runCatching { it.close() } }
+    }
+
     fun restoreLastClosed() {
         val state = history.removeLastOrNull() ?: run {
             toast(R.string.pin_history_empty)

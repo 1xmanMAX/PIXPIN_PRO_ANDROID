@@ -73,6 +73,26 @@ object Acciones {
     const val LARGO_TEXTO = 2000
     const val LARGO_LARGO = 8000
     const val POR_RESOLVER = "?"
+    /** Lo que hace el ejecutor del chat y le devuelve al modelo lo que salió (PC `EN_EL_CHAT`). */
+    const val EN_EL_CHAT = "(en el chat)"
+    val MODOS_DE_CAPTURA = listOf("zona", "copiar", "pin", "en_vivo", "anotar", "texto", "scroll", "repetir", "retardo")
+    val OPERACIONES_DE_PINES = listOf("ocultar_mostrar", "devolver_ultimo", "paso_de_clics")
+    /**
+     * **Las filas del 15-oct, solo para la nube** (PC `acciones::SOLO_NUBE`): el usuario, «la IA local
+     * aún déjala, no la toques». El modelo local no las ve en su selección por turno.
+     */
+    val SOLO_NUBE = setOf(
+        "capturar_con_modo", "abrir_otra_ventana", "ir_al_chat", "ir_a_pagina", "grabar_pantalla", "cerrar_pines", "manejar_pines",
+        "apuntar_en_timeline", "leer_en_voz_alta", "parar_lectura", "comprimir_pdf", "transcribir_audio", "leer_excel", "resumen_de_actividad",
+        "leer_documento", "lienzos_del_chat", "crear_lienzo", "usar_lienzo",
+        "buscar_en_conexion", "leer_de_conexion", "bajar_de_conexion", "subir_a_conexion", "ver_calendario"
+    )
+
+    fun esSoloNube(herramienta: String) = herramienta in SOLO_NUBE
+
+    const val LIENZOS_DEL_CHAT = "lienzos_del_chat"
+    const val CREAR_LIENZO = "crear_lienzo"
+    const val USAR_LIENZO = "usar_lienzo"
     const val CONSULTA = "(consulta)"
 
     private fun p(nombre: String, tipo: Tipo, obligatorio: Boolean, descripcion: String) =
@@ -183,6 +203,31 @@ object Acciones {
         Accion("capturar_pantalla", "capturar", "Empieza una captura de una zona de la pantalla (el usuario elige la zona).", Categoria.CAPTURAS,
             listOf("captura", "capturar", "pantallazo", "screenshot", "recorta la pantalla"), """{"modo":"zona"}""", emptyList(), null,
             "Elige la zona que quieres capturar."),
+        // --- 15-oct, solo para la nube (PC `SOLO_NUBE`): el modelo local sigue con las de arriba.
+        Accion("capturar_con_modo", "capturar", "Empieza una captura de pantalla de otra clase (el usuario elige la zona). modo: copiar (directo al portapapeles), pin (dejarla flotando), en_vivo (pin que se actualiza), anotar, texto (copiar el texto que se lea), scroll (captura larga), repetir (la ultima zona, sin elegir), retardo (tras una cuenta atras), zona (la de siempre, con barra).", Categoria.CAPTURAS,
+            listOf("captura", "copia el texto de la pantalla", "captura larga", "con scroll", "zona de la pantalla", "texto que sale"), "{}",
+            listOf(p("modo", Tipo.Opciones(MODOS_DE_CAPTURA), true, "que captura")), null, "Hecho: captura en marcha ({modo}); el usuario elige la zona."),
+        Accion("abrir_otra_ventana", "ventana", "Abre los ajustes de PixPin, el timeline o el buscador de PixPin.", Categoria.ABRIR,
+            listOf("ajustes", "configuracion", "timeline", "buscador"), "{}",
+            listOf(p("cual", op("ajustes", "timeline", "buscar"), true, "que ventana")), null, "Abriendo la ventana de {cual}."),
+        Accion("ir_al_chat", "ventana_principal", "Abre la ventana del chat en un chat concreto, por su nombre.", Categoria.ABRIR,
+            listOf("al chat", "el chat de", "el chat"), "{}", listOf(r(p("chat", Tipo.Texto, true, "nombre del chat"))), null, "Abriendo el chat «{chat}»."),
+        Accion("ir_a_pagina", "abrir", "Lleva un PDF, Word o PowerPoint (por su ruta) a una pagina o a un texto, abierto o no.", Categoria.ABRIR,
+            listOf("pagina", "ve a la pagina", "llevame a la pagina"), """{"que":{"tipo":"fichero"}}""",
+            listOf(
+                a("que.ruta", p("ruta", Tipo.Ruta, true, RUTA)),
+                a("que.pagina", p("pagina", Tipo.Entero, false, "pagina, desde 1")),
+                a("que.buscar", p("buscar", Tipo.Texto, false, "texto que buscar y marcar"))
+            ), null, "Llevando {ruta}[ a la página {pagina}][ a «{buscar}»]."),
+        Accion("grabar_pantalla", "capturar", "Graba como GIF animado una zona de la pantalla: sale el marco, el usuario lo ajusta y pulsa Grabar.", Categoria.CAPTURAS,
+            listOf("graba la pantalla", "grabar la pantalla", "grabar pantalla", "graba un video", "video de la pantalla", "gif", "screencast", "graba lo que hago"),
+            """{"modo":"gif"}""", emptyList(), null, "Hecho: ya sale el marco de grabar; el usuario lo ajusta y pulsa Grabar."),
+        Accion("cerrar_pines", "pines", "Cierra todos los pines de la pantalla.", Categoria.CAPTURAS,
+            listOf("cierra los pines", "cierra todos los pines", "quita los pines", "cerrar pines", "borra los pines", "todos los pines", "los pines que", "quitame", "cierra"),
+            """{"operacion":"cerrar"}""", emptyList(), "¿Cierro todos los pines de la pantalla?", "Pines cerrados (el último se puede devolver)."),
+        Accion("manejar_pines", "pines", "Los pines de la pantalla (para cerrarlos: cerrar_pines): ocultar_mostrar (esconderlos todos o devolverlos), devolver_ultimo (el ultimo que se cerro), paso_de_clics (que dejen pasar el clic).", Categoria.CAPTURAS,
+            listOf("oculta los pines", "esconde los pines", "muestra los pines", "devuelve el pin", "ultimo pin", "pines", "paso de clics"), "{}",
+            listOf(p("operacion", Tipo.Opciones(OPERACIONES_DE_PINES), true, "que hacer")), null, "Hecho ({operacion})."),
         Accion("pinear_ultima_captura", "pinear_ultima", "Saca a la pantalla como pin la captura mas reciente.", Categoria.CAPTURAS,
             listOf("pin", "pinea", "ultima captura", "fija"), "{}", emptyList(), null, "La última captura, como pin en la pantalla."),
         Accion("pinear_fichero", "pinear", "Saca un fichero (imagen, PDF...) a la pantalla como pin.", Categoria.CAPTURAS,
@@ -222,7 +267,48 @@ object Acciones {
                 a("receta.disparador.hora", p("hora", Tipo.Texto, false, "HH:MM")),
                 a("receta.pasos", l(LARGO_LARGO, p("pasos", Tipo.Texto, true, "lista JSON: texto para el asistente u {herramienta,args,proyecto}; {captura} {resultado}")))
             ),
-            "¿Creo la automatización «{nombre}» ({disparador}) con estos pasos: {pasos}?", "Automatización «{nombre}» creada.")
+            "¿Creo la automatización «{nombre}» ({disparador}) con estos pasos: {pasos}?", "Automatización «{nombre}» creada."),
+        // --- 15-oct: «que la gente pueda hacer TODO con PixPin a través del asistente».
+        Accion("apuntar_en_timeline", "timeline", "Apunta un momento en el timeline (lo que pasa ahora, con su hora).", Categoria.NOTAS,
+            listOf("timeline", "linea de tiempo", "bitacora", "diario de obra", "momento"), "{}",
+            listOf(l(LARGO_LARGO, p("texto", Tipo.Texto, true, "lo que paso; la primera frase es el titulo"))), null, "Apuntado en el timeline: «{texto}»."),
+        Accion("leer_en_voz_alta", EN_EL_CHAT, "Lee en voz alta un texto o un documento del chat (PDF, Word, nota...) con la voz de PixPin.", Categoria.AUDIO,
+            listOf("en voz alta", "leemelo", "lee en voz", "leelo en voz", "dimelo en voz", "escuchar el", "escuchar la", "narra", "voz alta"), "{}",
+            listOf(
+                l(LARGO_LARGO, p("texto", Tipo.Texto, false, "el texto que leer; omitir para leer un documento")),
+                p("archivo", Tipo.Texto, false, "nombre o descripcion del documento; omitir: el adjunto mas reciente")
+            ), null, "Leyendo en voz alta."),
+        Accion("parar_lectura", "leer_en_voz", "Calla la lectura en voz alta que este sonando («deja de leer», «callate», «basta»).", Categoria.AUDIO,
+            listOf("para de leer", "deja de leer", "callate", "deja de hablar", "para la voz", "deten la lectura"), """{"parar":true}""", emptyList(), null, "Lectura parada."),
+        Accion("comprimir_pdf", EN_EL_CHAT, "Comprime (aligera) un PDF y deja la copia ligera en el chat; el original no se toca.", Categoria.ABRIR,
+            listOf("comprime", "comprimir", "aligera", "aligerar", "reduce el pdf", "menos pesado", "pesa mucho", "achica el pdf", "ligero", "pesa", "por correo"), "{}",
+            listOf(p("archivo", Tipo.Texto, false, "nombre o descripcion del PDF; omitir: el PDF mas reciente del chat")), null, "PDF aligerado."),
+        Accion("transcribir_audio", EN_EL_CHAT, "Pasa a texto un audio o nota de voz del chat (Whisper, en este PC) y te devuelve lo dicho.", Categoria.AUDIO,
+            listOf("transcrib", "pasa a texto", "pasalo a texto", "que dice el audio", "que dice la nota de voz", "audio a texto", "este audio", "el audio de", "dictado"), "{}",
+            listOf(p("archivo", Tipo.Texto, false, "nombre o descripcion del audio; omitir: el audio mas reciente del chat")), null, "Audio pasado a texto."),
+        Accion("leer_excel", EN_EL_CHAT, "Lee las celdas de un Excel del chat (una hoja o un rango A1:D20) para contestar, calcular o hacer una grafica.", Categoria.NOTAS,
+            listOf("del excel", "el excel", "en el excel", "xlsx", "hoja de calculo", "celda", "rango", "columna", "suma de la", "total de la"), "{}",
+            listOf(
+                p("archivo", Tipo.Texto, false, "nombre o descripcion del Excel; omitir: el mas reciente del chat"),
+                p("hoja", Tipo.Texto, false, "nombre de la hoja; omitir: la activa"),
+                p("rango", Tipo.Texto, false, "rango como A1:D20; omitir: lo usado de la hoja")
+            ), null, "Excel leído."),
+        Accion("leer_documento", EN_EL_CHAT, "Lee el texto entero de un archivo del chat (PDF, Word, PowerPoint, Excel, nota, o una foto/escaneo con OCR), pagina a pagina, para resumirlo, contestar sobre el, revisarlo o sacar sus formulas. Usala ANTES de contestar sobre un archivo adjunto (buscar_en_mis_cosas solo da trozos sueltos). Si el archivo es una foto que ya ves, no hace falta.", Categoria.NOTAS,
+            emptyList(), "{}",
+            listOf(
+                p("archivo", Tipo.Texto, false, "nombre o descripcion del archivo; omitir: el mas reciente del chat"),
+                p("paginas", Tipo.Texto, false, "paginas o diapositivas, como \"3\" o \"2-5\"; omitir: todo")
+            ), null, "Documento leído."),
+        Accion("resumen_de_actividad", EN_EL_CHAT, "Cuenta lo hecho en PixPin hoy, esta semana o este mes: mensajes y notas, fotos, capturas, momentos del timeline y tareas.", Categoria.TAREAS,
+            listOf("cuanto hice", "que hice hoy", "mi actividad", "resumen del dia", "estadistic", "cuantas capturas", "cuantos mensajes", "productiv"), "{}",
+            listOf(d("\"hoy\"", p("periodo", op("hoy", "semana", "mes"), false, "de cuando"))), null, "Hecho."),
+        // 17-oct: el bot crea lienzos o usa los que hay, y los mira (cambian adónde va lo del turno).
+        Accion(LIENZOS_DEL_CHAT, EN_EL_CHAT, "Lista los lienzos de este chat (nombre y cuantas cosas tiene cada uno) y dice en cual trabajas ahora.", Categoria.NOTAS,
+            emptyList(), "{}", emptyList(), null, "Lienzos listados."),
+        Accion(CREAR_LIENZO, EN_EL_CHAT, "Crea un lienzo NUEVO con ese nombre en este chat, sin abrirlo, y lo deja como destino: lo que dibujes, edites o mires con ver_lienzo despues va a el.", Categoria.NOTAS,
+            emptyList(), "{}", listOf(p("nombre", Tipo.Texto, true, "nombre del lienzo nuevo")), null, "Lienzo «{nombre}» creado."),
+        Accion(USAR_LIENZO, EN_EL_CHAT, "Pasa a trabajar en un lienzo EXISTENTE de este chat por su nombre: devuelve el resumen de sus elementos (con #id) y lo deja como destino de lo que dibujes, edites o mires con ver_lienzo (para revisarlo y corregirlo).", Categoria.NOTAS,
+            emptyList(), "{}", listOf(p("nombre", Tipo.Texto, true, "nombre del lienzo (o un trozo)")), null, "Trabajando en «{nombre}».")
     )
 
     // ------------------------------------------------------------------------------- documentos

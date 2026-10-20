@@ -13,7 +13,7 @@ import org.junit.Test
 /**
  * **La selección por turno da lo mismo que el PC**: 100 pedidos (los 42 del banco del PC y 58
  * más de tareas, documentos, edición, estudiantes, ayuda y charla) pasados por
- * `seleccion::para_el_pedido` del PC de verdad (main 882d465) y por la nuestra.
+ * `seleccion::para_el_pedido` del PC de verdad (main 1984938, 20-oct-2026) y por la nuestra.
  */
 class SeleccionTest {
     private val casos = javaClass.getResource("/ia/seleccion-del-pc.jsonl")!!.readText().lines().filter { it.isNotBlank() }

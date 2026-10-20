@@ -48,7 +48,7 @@
 {"herramientas":["anadir_tarea"],"imagen":false,"mejor_vista":false,"pedido":"Apunta comprar pan mañana a las 10"}
 {"herramientas":["calcar_imagen"],"imagen":true,"mejor_vista":false,"pedido":"Saca las tareas de esta acta y ponlas en una lista nueva"}
 {"herramientas":["consultar_tareas","anadir_tarea"],"imagen":false,"mejor_vista":false,"pedido":"¿Qué tengo pendiente esta semana?"}
-{"herramientas":["marcar_tarea","anadir_tarea","trazar_a_mano"],"imagen":false,"mejor_vista":false,"pedido":"Marca como hecha la tarea de revisar encofrado"}
+{"herramientas":["marcar_tarea","anadir_tarea","trazar_a_mano","geometria_precisa"],"imagen":false,"mejor_vista":false,"pedido":"Marca como hecha la tarea de revisar encofrado"}
 {"herramientas":["lista_nueva","borrar_lista","transformar_elementos"],"imagen":false,"mejor_vista":false,"pedido":"Borra la lista Compras"}
 {"herramientas":["lista_nueva","mover_tarea","transformar_elementos"],"imagen":false,"mejor_vista":false,"pedido":"Mueve comprar clavos a la lista Obra"}
 {"herramientas":["abrir_ventana","abrir_por_nombre","abrir_fichero"],"imagen":false,"mejor_vista":false,"pedido":"Abre la galería"}

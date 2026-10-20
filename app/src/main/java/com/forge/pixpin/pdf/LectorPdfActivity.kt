@@ -114,6 +114,8 @@ class LectorPdfActivity : ComponentActivity() {
 
         private const val EXTRA_ANOTAR = "anotar"
         private const val EXTRA_MENSAJE = "mensaje"
+        /** La hoja a la que ir al abrir (desde 0; el asistente, `ir_a_pagina`). */
+        private const val EXTRA_PAGINA = "pagina"
 
         /**
          * Con [anotando], se abre ya con el editor rápido puesto sobre la primera página. [ruta] puede
@@ -121,13 +123,14 @@ class LectorPdfActivity : ComponentActivity() {
          * ([com.forge.pixpin.office.DocumentoOffice]); [mensaje], el del chat del que sale (para su
          * «Modo lectura»).
          */
-        fun abrir(context: Context, ruta: String, nombre: String, anotando: Boolean = false, mensaje: String? = null) {
+        fun abrir(context: Context, ruta: String, nombre: String, anotando: Boolean = false, mensaje: String? = null, pagina: Int? = null) {
             context.startActivity(
                 Intent(context, LectorPdfActivity::class.java)
                     .putExtra(EXTRA_RUTA, ruta)
                     .putExtra(EXTRA_NOMBRE, nombre)
                     .putExtra(EXTRA_ANOTAR, anotando)
                     .putExtra(EXTRA_MENSAJE, mensaje)
+                    .also { i -> pagina?.let { i.putExtra(EXTRA_PAGINA, it) } }
             )
         }
     }
@@ -409,6 +412,9 @@ class LectorPdfActivity : ComponentActivity() {
             zoomFirme = zoom
         }
         val estado = rememberLazyListState()
+        // A la hoja pedida al abrir (el asistente, `ir_a_pagina`).
+        val paginaPedida = remember { intent?.getIntExtra(EXTRA_PAGINA, -1) ?: -1 }
+        LaunchedEffect(cuantas) { if (paginaPedida >= 0 && cuantas > 0) estado.scrollToItem(paginaPedida.coerceAtMost(cuantas - 1) + if (cuantas == 1) 1 else 0) }
         val anchoPx = LocalWindowInfo.current.containerSize.width
         // **La hoja, en el centro, y un margen en blanco a cada lado donde anotar** (21-sep-2026).
         // La lista mide la hoja más sus dos márgenes —más ancha que la pantalla, centrada—; a su

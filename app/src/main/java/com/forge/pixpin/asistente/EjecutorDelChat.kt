@@ -59,8 +59,11 @@ class EjecutorDelChat(
     /** null si se pueden mandar trozos de documentos al modelo; si no, lo que se le contesta. */
     permisoDocumentos: () -> String? = { null },
     /** El lienzo nombrado con `@lienzo:` (su referencia): ahí se dibuja, sin abrirlo. */
-    private val destino: String? = null
+    destino: String? = null
 ) : Agente.Ejecutor {
+    /** El lienzo destino del turno: el de `@lienzo:`, o el que pongan crear_lienzo y usar_lienzo (PC 17-oct). */
+    @Volatile private var destino: String? = destino
+    private val enElChat = EnElChat(contexto, almacen, chat, { this.destino }) { ref -> this.destino = ref; if (ref != null) lienzo = ref }
 
     private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
     val documentos = DocumentosAcciones(contexto, almacen, chat, motor, parar, permisoDocumentos)
@@ -72,11 +75,16 @@ class EjecutorDelChat(
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
         is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg -> dibujar(llamada)
         is Llamada.Ocr -> leer(llamada.peticion)
-        is Llamada.App -> if (llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA) documentos.tablaDeImagen(llamada.accion) else acciones.hacer(llamada.accion)
+        is Llamada.App -> when {
+            llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA -> documentos.tablaDeImagen(llamada.accion)
+            llamada.accion.fila.accion == com.forge.pixpin.ia.Acciones.EN_EL_CHAT -> enElChat.hacer(llamada.accion)
+            else -> acciones.hacer(llamada.accion)
+        }
         is Llamada.Buscar -> documentos.buscar(llamada.peticion)
         is Llamada.Calcar -> calcar(llamada.parametros)
         is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
         is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
+        is Llamada.Geometria -> geometria(llamada.args)
     }
 
     // ------------------------------------------------------------------------------------- lienzo
@@ -112,6 +120,38 @@ class EjecutorDelChat(
         val semilla = System.currentTimeMillis()
         val que = "el calco (${calcado.trazos.size} figuras)"
         alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementosDeCalcado(calcado, origen, semilla)) }
+    }
+
+    /**
+     * **Geometría exacta** ([com.forge.pixpin.ia.GeometriaPrecisa]) en el lienzo destino del turno (el de
+     * `@lienzo:`, crear_lienzo o usar_lienzo, o el propio del asistente): ahí están las figuras que
+     * nombra «entre» o «a» por su #n. Sin ninguno, uno nuevo.
+     */
+    private fun geometria(args: kotlinx.serialization.json.JsonObject): Result<String> = runCatching {
+        val ref = destino?.takeIf { File(ExcalidrawStore.rutaDe(contexto, it)).isFile }
+            ?: ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia
+        if (ref == null) {
+            val nuevos = com.forge.pixpin.ia.GeometriaPrecisa.hacer(args, emptyList(), com.forge.pixpin.motor.Pt(0.0, 0.0))
+            return@runCatching alLienzo("la ${args["figura"]?.toString()?.trim('"') ?: "figura"}") { (x, y) ->
+                nuevos.map { it.copy(x = it.x + x, y = it.y + y) }
+            }
+        }
+        val ruta = ExcalidrawStore.rutaDe(contexto, ref)
+        val escena = ExcalidrawStore.cargar(ruta) ?: Scene()
+        val marco = marcoDe(escena.elements)
+        val nuevos = com.forge.pixpin.ia.GeometriaPrecisa.hacer(args, escena.elements, marco)
+        ExcalidrawStore.guardar(contexto, ref, escena.copy(elements = escena.elements + nuevos)) ?: error("no se pudo guardar el lienzo")
+        lienzo = ref
+        val n = com.forge.pixpin.ia.GeometriaPrecisa.numeradas(escena.elements).size
+        "hecho: ${args["figura"]?.toString()?.trim('"')} trazada (#${n + 1})"
+    }
+
+    /** Dónde empieza el marco de 800×600 del modelo en un lienzo: la esquina de lo que ya hay. */
+    fun marcoDe(elementos: List<Element>): com.forge.pixpin.motor.Pt {
+        val vivos = elementos.filter { !it.isDeleted }
+        if (vivos.isEmpty()) return com.forge.pixpin.motor.Pt(0.0, 0.0)
+        val b = com.forge.pixpin.motor.getCommonBounds(vivos)
+        return com.forge.pixpin.motor.Pt(b.x1, b.y1)
     }
 
     /** Una figura de la biblioteca, estampada en el lienzo (ids nuevos, en un grupo). */

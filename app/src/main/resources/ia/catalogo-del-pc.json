@@ -1,7 +1,7 @@
 [
   {
     "function": {
-      "description": "Dibuja figuras en el lienzo de PixPin (800x600, origen arriba a la izquierda). Cada elemento lleva su «color» (el que pidio el usuario) y, si va lleno, su «relleno». Tipos: rectangulo, elipse, rombo, triangulo, estrella y onda (con «caja»:[x,y,ancho,alto]; un circulo tambien con «centro»:[x,y] y «radio»); linea, flecha, curva (suave), poligono y lapiz (a mano alzada) (con «puntos»:[x1,y1,x2,y2,...]); texto (con «x», «y» y «texto»); punto (con «x», «y» y su letra en «texto»); instrumento (plano cartesiano con «ejes»:2, recta con 1, espacio con 3; «caja», «unidad» en px y «tabla»:[[x,y],...] de coordenadas). Opcionales: «grosor», «trazo» (solido, discontinuo, punteado), «opacidad» (0-100), «relleno_estilo» (solido, rayado, cruzado), «material» del lapiz (lisa, tiza, grafito) con su «dureza» (4H, 2H, HB, 2B, 4B, 6B, 8B) y «capa» (las mayores van encima). Una figura con «texto» lo lleva escrito dentro (o encima si es flecha). «grupo»: un nombre comun para agrupar varias. Ejemplo, una casa: {\"elementos\":[{\"tipo\":\"rectangulo\",\"caja\":[300,280,200,160],\"color\":\"marron\"},{\"tipo\":\"triangulo\",\"caja\":[280,170,240,110],\"color\":\"rojo\",\"relleno\":\"rojo\"},{\"tipo\":\"rectangulo\",\"caja\":[380,360,40,80],\"color\":\"azul\",\"relleno\":\"azul\"}]}. Un paso de un diagrama: {\"tipo\":\"rectangulo\",\"caja\":[60,260,160,70],\"texto\":\"Inicio\"},{\"tipo\":\"flecha\",\"puntos\":[220,295,320,295]}. Para copiar exacta una foto adjunta usa calcar_imagen; para dibujarla con figuras o a lapiz, interpretala con estas figuras. Para ilustraciones con curvas o mucho detalle, mejor dibujar_svg.",
+      "description": "Dibuja figuras en el lienzo de PixPin (800x600, origen arriba a la izquierda). Cada elemento lleva su «color» (el que pidio el usuario) y, si va lleno, su «relleno». Tipos: rectangulo, elipse, rombo, triangulo, estrella y onda (con «caja»:[x,y,ancho,alto]; un circulo tambien con «centro»:[x,y] y «radio»); linea, flecha, curva (suave), poligono y lapiz (a mano alzada) (con «puntos»:[x1,y1,x2,y2,...]); texto (con «x», «y» y «texto»); punto (con «x», «y» y su letra en «texto»); instrumento (plano cartesiano con «ejes»:2, recta con 1, espacio con 3; «caja», «unidad» en px y «tabla»:[[x,y],...] de coordenadas). Opcionales: «grosor», «trazo» (solido, discontinuo, punteado), «opacidad» (0-100), «relleno_estilo» (solido, rayado, cruzado), «material» del lapiz (lisa, tiza, grafito) con su «dureza» (4H, 2H, HB, 2B, 4B, 6B, 8B) y «capa» (las mayores van encima). Una figura con «texto» lo lleva escrito dentro (o encima si es flecha). «grupo»: un nombre comun para agrupar varias. Ejemplo, una casa: {\"elementos\":[{\"tipo\":\"rectangulo\",\"caja\":[300,280,200,160],\"color\":\"marron\"},{\"tipo\":\"triangulo\",\"caja\":[280,170,240,110],\"color\":\"rojo\",\"relleno\":\"rojo\"},{\"tipo\":\"rectangulo\",\"caja\":[380,360,40,80],\"color\":\"azul\",\"relleno\":\"azul\"}]}. Un paso de un diagrama: {\"tipo\":\"rectangulo\",\"caja\":[60,260,160,70],\"texto\":\"Inicio\"},{\"tipo\":\"flecha\",\"puntos\":[220,295,320,295]}. Para copiar exacta una foto adjunta usa calcar_imagen; para dibujarla con figuras o a lapiz, interpretala con estas figuras. Para ilustraciones con curvas o mucho detalle, mejor dibujar_svg. Para geometria exacta de lamina (arcos, semicircunferencias, cuadrantes, sectores, marcas de angulo, angulo recto, puntos con letra, degradados, raya-punto) usa geometria_precisa.",
       "name": "dibujar_en_lienzo",
       "parameters": {
         "properties": {
@@ -843,7 +843,8 @@
             "enum": [
               "solido",
               "discontinuo",
-              "punteado"
+              "punteado",
+              "raya_punto"
             ],
             "type": "string"
           }
@@ -925,7 +926,7 @@
   },
   {
     "function": {
-      "description": "Dibuja geometria exacta: recta por dos puntos o por punto, angulo y longitud; circulo por centro y radio o por tres puntos; arco; perpendicular o paralela a una recta que ya esta. Angulos en grados: 0 a la derecha, 90 arriba.",
+      "description": "Dibuja geometria exacta de lamina: recta (con flecha si se pide) por dos puntos o por punto, angulo y longitud; circulo por centro y radio o por tres puntos; arco por centro y angulos o por tres puntos; semicircunferencia sobre un diametro; cuadrante, sector y segmento circular (rellenos, tambien con degradado); marca de angulo entre dos lados (arquitos, relleno translucido, valor) y la del angulo recto; punto con su letra; perpendicular o paralela a una recta que ya esta. Angulos en grados: 0 a la derecha, 90 arriba.",
       "name": "geometria_precisa",
       "parameters": {
         "properties": {
@@ -937,8 +938,20 @@
             "description": "recta: grados",
             "type": "number"
           },
+          "arcos": {
+            "description": "marca_angulo: 1 a 3 arquitos",
+            "type": "number"
+          },
           "centro": {
-            "description": "circulo y arco: [x, y]",
+            "description": "circulo, arco, cuadrante, sector, segmento: [x, y]; punto: [x, y]",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 240,
+            "type": "array"
+          },
+          "cerca": {
+            "description": "marca_angulo con «entre»: [x, y] un punto dentro del angulo que se marca (de los cuatro del cruce); omitir: el de los extremos mas lejanos",
             "items": {
               "type": "number"
             },
@@ -947,6 +960,14 @@
           },
           "color": {
             "description": "rojo, azul, verde, amarillo, naranja, morado, rosa, gris, marron, negro, blanco o #rrggbb",
+            "type": "string"
+          },
+          "degradado": {
+            "description": "relleno degradado: de «relleno» a «relleno_hasta»",
+            "enum": [
+              "lineal",
+              "radial"
+            ],
             "type": "string"
           },
           "desde": {
@@ -961,27 +982,74 @@
             "description": "paralela: a cuantos px (positivo: a la izquierda de la recta)",
             "type": "number"
           },
+          "entre": {
+            "description": "marca_angulo, angulo_recto y punto: las DOS rectas que ya estan y se cruzan, por su #id («#3 #5»): el vertice (o el punto) y los lados salen exactos; MEJOR que dar coordenadas",
+            "type": "string"
+          },
           "figura": {
             "enum": [
               "recta",
               "circulo",
               "arco",
+              "semicircunferencia",
+              "cuadrante",
+              "sector",
+              "segmento",
+              "marca_angulo",
+              "angulo_recto",
+              "punto",
               "perpendicular",
               "paralela"
             ],
             "type": "string"
           },
           "fin": {
-            "description": "arco: grados donde acaba (antihorario)",
+            "description": "arco, sector, segmento: grados donde acaba",
             "type": "number"
+          },
+          "flecha": {
+            "description": "recta: puntas de flecha",
+            "enum": [
+              "ninguna",
+              "fin",
+              "inicio",
+              "ambas"
+            ],
+            "type": "string"
           },
           "grosor": {
             "description": "grosor del trazo, 1 a 40",
             "type": "number"
           },
           "inicio": {
-            "description": "arco: grados donde empieza",
+            "description": "arco, cuadrante, sector, segmento: grados donde empieza",
             "type": "number"
+          },
+          "lado": {
+            "description": "semicircunferencia: [x, y] un punto del lado al que va (omitir: arriba)",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 240,
+            "type": "array"
+          },
+          "letra": {
+            "description": "punto: su letra («A», «P», «O»); «siguiente»: la siguiente libre (con «entre» y sin letra, tambien)",
+            "type": "string"
+          },
+          "letra_hacia": {
+            "description": "punto: donde va la letra (omitir: donde no estorba)",
+            "enum": [
+              "arriba",
+              "abajo",
+              "izquierda",
+              "derecha",
+              "arriba_izquierda",
+              "arriba_derecha",
+              "abajo_izquierda",
+              "abajo_derecha"
+            ],
+            "type": "string"
           },
           "longitud": {
             "description": "recta, perpendicular: px",
@@ -995,8 +1063,16 @@
             "maxItems": 240,
             "type": "array"
           },
+          "punta": {
+            "description": "con «flecha»: la forma de la punta (omitir: rellena)",
+            "enum": [
+              "rellena",
+              "abierta"
+            ],
+            "type": "string"
+          },
           "puntos": {
-            "description": "recta: [x1, y1, x2, y2]; circulo por tres puntos: [x1, y1, x2, y2, x3, y3]",
+            "description": "recta: [x1, y1, x2, y2]; circulo por tres puntos: [x1, y1, x2, y2, x3, y3]; arco por tres puntos: [inicio, por donde pasa, fin]; semicircunferencia: [x1, y1, x2, y2] del diametro; cuadrante con «centro»: [ax, ay, bx, by] las puntas de sus dos radios; marca_angulo y angulo_recto: [x1, y1, x2, y2] un punto de cada lado; punto: [x, y]",
             "items": {
               "type": "number"
             },
@@ -1004,16 +1080,49 @@
             "type": "array"
           },
           "radio": {
-            "description": "circulo y arco",
+            "description": "circulo, arco, cuadrante, sector, segmento; marca_angulo: radio de la marca (22); angulo_recto: lado del cuadradito (14)",
+            "type": "number"
+          },
+          "relleno": {
+            "description": "cuadrante, sector, segmento, circulo: color de relleno; marca_angulo: el suyo (translucido; omitir: el del color)",
+            "type": "string"
+          },
+          "relleno_hasta": {
+            "description": "con «degradado»: el otro color (omitir: casi blanco)",
+            "type": "string"
+          },
+          "sentido": {
+            "description": "arco, cuadrante, sector, segmento: de «inicio» a «fin» (omitir: antihorario)",
+            "enum": [
+              "antihorario",
+              "horario"
+            ],
+            "type": "string"
+          },
+          "tam_letra": {
+            "description": "punto y marca_angulo: tamano de la letra",
             "type": "number"
           },
           "trazo": {
             "enum": [
               "solido",
               "discontinuo",
-              "punteado"
+              "punteado",
+              "raya_punto"
             ],
             "type": "string"
+          },
+          "valor": {
+            "description": "marca_angulo: lo que se escribe al lado («45°», «θ», «x»); «griega»: la siguiente letra griega libre (α, β, θ...); «medida»: los grados medidos. Con «entre», un angulo de 90° sale solo con su cuadradito",
+            "type": "string"
+          },
+          "vertice": {
+            "description": "marca_angulo y angulo_recto sin «entre»: [x, y] del vertice",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 240,
+            "type": "array"
           }
         },
         "required": [
@@ -1675,6 +1784,155 @@
   },
   {
     "function": {
+      "description": "Empieza una captura de pantalla de otra clase (el usuario elige la zona). modo: copiar (directo al portapapeles), pin (dejarla flotando), en_vivo (pin que se actualiza), anotar, texto (copiar el texto que se lea), scroll (captura larga), repetir (la ultima zona, sin elegir), retardo (tras una cuenta atras), zona (la de siempre, con barra).",
+      "name": "capturar_con_modo",
+      "parameters": {
+        "properties": {
+          "modo": {
+            "description": "que captura",
+            "enum": [
+              "zona",
+              "copiar",
+              "pin",
+              "en_vivo",
+              "anotar",
+              "texto",
+              "scroll",
+              "repetir",
+              "retardo"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "modo"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Abre los ajustes de PixPin, el timeline o el buscador de PixPin.",
+      "name": "abrir_otra_ventana",
+      "parameters": {
+        "properties": {
+          "cual": {
+            "description": "que ventana",
+            "enum": [
+              "ajustes",
+              "timeline",
+              "buscar"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "cual"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Abre la ventana del chat en un chat concreto, por su nombre.",
+      "name": "ir_al_chat",
+      "parameters": {
+        "properties": {
+          "chat": {
+            "description": "nombre del chat",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "chat"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lleva un PDF, Word o PowerPoint (por su ruta) a una pagina o a un texto, abierto o no.",
+      "name": "ir_a_pagina",
+      "parameters": {
+        "properties": {
+          "buscar": {
+            "description": "texto que buscar y marcar",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "pagina": {
+            "description": "pagina, desde 1",
+            "type": "integer"
+          },
+          "ruta": {
+            "description": "ruta absoluta del fichero en este PC",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "ruta"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Graba como GIF animado una zona de la pantalla: sale el marco, el usuario lo ajusta y pulsa Grabar.",
+      "name": "grabar_pantalla",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Cierra todos los pines de la pantalla.",
+      "name": "cerrar_pines",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Los pines de la pantalla (para cerrarlos: cerrar_pines): ocultar_mostrar (esconderlos todos o devolverlos), devolver_ultimo (el ultimo que se cerro), paso_de_clics (que dejen pasar el clic).",
+      "name": "manejar_pines",
+      "parameters": {
+        "properties": {
+          "operacion": {
+            "description": "que hacer",
+            "enum": [
+              "ocultar_mostrar",
+              "devolver_ultimo",
+              "paso_de_clics"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "operacion"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
       "description": "Saca a la pantalla como pin la captura mas reciente.",
       "name": "pinear_ultima_captura",
       "parameters": {
@@ -1898,6 +2156,214 @@
   },
   {
     "function": {
+      "description": "Apunta un momento en el timeline (lo que pasa ahora, con su hora).",
+      "name": "apuntar_en_timeline",
+      "parameters": {
+        "properties": {
+          "texto": {
+            "description": "lo que paso; la primera frase es el titulo",
+            "maxLength": 8000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "texto"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lee en voz alta un texto o un documento del chat (PDF, Word, nota...) con la voz de PixPin.",
+      "name": "leer_en_voz_alta",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del documento; omitir: el adjunto mas reciente",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "texto": {
+            "description": "el texto que leer; omitir para leer un documento",
+            "maxLength": 8000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Calla la lectura en voz alta que este sonando («deja de leer», «callate», «basta»).",
+      "name": "parar_lectura",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Comprime (aligera) un PDF y deja la copia ligera en el chat; el original no se toca.",
+      "name": "comprimir_pdf",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del PDF; omitir: el PDF mas reciente del chat",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Pasa a texto un audio o nota de voz del chat (Whisper, en este PC) y te devuelve lo dicho.",
+      "name": "transcribir_audio",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del audio; omitir: el audio mas reciente del chat",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lee las celdas de un Excel del chat (una hoja o un rango A1:D20) para contestar, calcular o hacer una grafica.",
+      "name": "leer_excel",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del Excel; omitir: el mas reciente del chat",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "hoja": {
+            "description": "nombre de la hoja; omitir: la activa",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "rango": {
+            "description": "rango como A1:D20; omitir: lo usado de la hoja",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lee el texto entero de un archivo del chat (PDF, Word, PowerPoint, Excel, nota, o una foto/escaneo con OCR), pagina a pagina, para resumirlo, contestar sobre el, revisarlo o sacar sus formulas. Usala ANTES de contestar sobre un archivo adjunto (buscar_en_mis_cosas solo da trozos sueltos). Si el archivo es una foto que ya ves, no hace falta.",
+      "name": "leer_documento",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del archivo; omitir: el mas reciente del chat",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "paginas": {
+            "description": "paginas o diapositivas, como \"3\" o \"2-5\"; omitir: todo",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Cuenta lo hecho en PixPin hoy, esta semana o este mes: mensajes y notas, fotos, capturas, momentos del timeline y tareas.",
+      "name": "resumen_de_actividad",
+      "parameters": {
+        "properties": {
+          "periodo": {
+            "description": "de cuando",
+            "enum": [
+              "hoy",
+              "semana",
+              "mes"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lista los lienzos de este chat (nombre y cuantas cosas tiene cada uno) y dice en cual trabajas ahora.",
+      "name": "lienzos_del_chat",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Crea un lienzo NUEVO con ese nombre en este chat, sin abrirlo, y lo deja como destino: lo que dibujes, edites o mires con ver_lienzo despues va a el.",
+      "name": "crear_lienzo",
+      "parameters": {
+        "properties": {
+          "nombre": {
+            "description": "nombre del lienzo nuevo",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "nombre"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Pasa a trabajar en un lienzo EXISTENTE de este chat por su nombre: devuelve el resumen de sus elementos (con #id) y lo deja como destino de lo que dibujes, edites o mires con ver_lienzo (para revisarlo y corregirlo).",
+      "name": "usar_lienzo",
+      "parameters": {
+        "properties": {
+          "nombre": {
+            "description": "nombre del lienzo (o un trozo)",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "nombre"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
       "description": "Pasa la tabla de una foto o un PDF (escaneado o no) a una tabla del chat o a un Excel. Las celdas las lee PixPin; tu solo eliges destino, nombre y si la primera fila es cabecera.",
       "name": "tabla_de_imagen",
       "parameters": {
@@ -2087,6 +2553,68 @@
   },
   {
     "function": {
+      "description": "Anota con criterio un PDF, Word, PowerPoint, Excel, foto/escaneo o plano: lee el texto de la pagina y pone en su capa recuadros sobre lo importante con la explicacion al margen, pasos numerados, errores con su correccion, el resumen de la pagina o de cada seccion, un glosario o preguntas de repaso. Usala para «señalame lo importante», «explicame esta formula al costado», «marca los errores», «resume cada seccion al margen». Para resaltar o encerrar un texto concreto que dice el usuario, anotar_documento.",
+      "name": "anotar_inteligente",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del documento (ej. «plano de senalizacion Tahuantinsuyo»); omitir: el adjunto mas reciente del chat",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "celdas": {
+            "description": "en un Excel, el rango a mirar (\"A1:F40\"); omitir: lo usado de la hoja",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "foco": {
+            "description": "el trozo exacto a explicar (una formula, una frase), si el usuario lo dijo",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "hasta": {
+            "description": "ultima pagina, para anotar varias seguidas (como mucho 5)",
+            "type": "integer"
+          },
+          "hoja": {
+            "description": "en un Excel, el nombre de la hoja; omitir: la primera",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "modo": {
+            "description": "que anotar; omitir: lo decide el pedido",
+            "enum": [
+              "importante",
+              "pasos",
+              "errores",
+              "resumen",
+              "glosario",
+              "preguntas",
+              "explicar",
+              "mixto"
+            ],
+            "type": "string"
+          },
+          "pagina": {
+            "description": "pagina desde 1; omitir: la que el usuario tiene abierta (o la 1)",
+            "type": "integer"
+          },
+          "pedido": {
+            "description": "lo que pidio el usuario, con sus palabras",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "pedido"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
       "description": "Pasa al lienzo una hoja (foto, escaneo o pagina de un PDF) interpretandola: parrafos y titulos como texto, tablas como tabla, formulas como ecuacion, fotos recortadas y rayas, en su sitio y en orden de lectura. Usala para «pasa esta hoja/foto/pagina al lienzo» o «digitaliza esto» (mejor que calcarla si tiene texto).",
       "name": "hoja_a_lienzo",
       "parameters": {
@@ -2110,6 +2638,160 @@
           },
           "pagina": {
             "description": "pagina del PDF, desde 1; omitir: la primera",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Busca archivos en el Google Drive del usuario (por nombre o por lo que dicen dentro) y da su nombre, tipo, fecha e id. Sin texto, lo ultimo modificado. Usala para «busca en mi Drive...», «¿tengo en Drive el contrato...?».",
+      "name": "buscar_en_conexion",
+      "parameters": {
+        "properties": {
+          "maximo": {
+            "description": "cuantos como mucho (1-25)",
+            "type": "integer"
+          },
+          "servicio": {
+            "description": "el servicio conectado; omitir: google_drive",
+            "enum": [
+              "google_drive"
+            ],
+            "type": "string"
+          },
+          "texto": {
+            "description": "lo que se busca; omitir: lo mas reciente",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "tipo": {
+            "description": "solo de este tipo",
+            "enum": [
+              "cualquiera",
+              "documento",
+              "hoja",
+              "presentacion",
+              "pdf",
+              "imagen",
+              "carpeta"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lee el texto de un archivo del Google Drive del usuario: un Documento o Presentacion de Google, una Hoja de calculo (en CSV), un PDF, Word o texto. Usala para resumirlo o contestar sobre el sin bajarlo.",
+      "name": "leer_de_conexion",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "id del archivo (el que da buscar_en_conexion) o su nombre exacto",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "parte": {
+            "description": "si el texto es largo, que trozo (1, 2, 3...)",
+            "type": "integer"
+          },
+          "servicio": {
+            "description": "el servicio conectado; omitir: google_drive",
+            "enum": [
+              "google_drive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "archivo"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Baja un archivo del Google Drive del usuario y lo deja en este chat (un Doc de Google sale como Word, una Hoja como Excel). Para trabajar despues con el en PixPin (anotarlo, abrirlo, pasarlo al lienzo).",
+      "name": "bajar_de_conexion",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "id del archivo (el que da buscar_en_conexion) o su nombre exacto",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "servicio": {
+            "description": "el servicio conectado; omitir: google_drive",
+            "enum": [
+              "google_drive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "archivo"
+        ],
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Sube un archivo de este chat al Google Drive del usuario (pide permiso antes). Opcional: la carpeta de Drive y otro nombre.",
+      "name": "subir_a_conexion",
+      "parameters": {
+        "properties": {
+          "archivo": {
+            "description": "nombre o descripcion del archivo del chat; omitir: el mas reciente",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "carpeta": {
+            "description": "carpeta de Drive (su id o su nombre); omitir: la raiz de Mi unidad",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "nombre": {
+            "description": "nombre con el que se guarda en Drive; omitir: el mismo",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "servicio": {
+            "description": "el servicio conectado; omitir: google_drive",
+            "enum": [
+              "google_drive"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Lee los eventos del Google Calendar del usuario (todos sus calendarios visibles): titulo, dia, hora, lugar.                       Usala para «¿que tengo hoy?», «¿tengo algo el jueves?», «mi agenda de esta semana». Solo lee: no crea ni cambia eventos.",
+      "name": "ver_calendario",
+      "parameters": {
+        "properties": {
+          "desde": {
+            "description": "el primer dia: hoy, mañana, un dia de la semana (jueves), semana (esta semana) o una fecha AAAA-MM-DD",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "dias": {
+            "description": "cuantos dias desde ese (1-31); con desde=semana, 7",
             "type": "integer"
           }
         },

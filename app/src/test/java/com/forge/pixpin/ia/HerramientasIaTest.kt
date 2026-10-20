@@ -34,7 +34,7 @@ class HerramientasIaTest {
     }
 
     @Test fun `el catalogo es el del PC, byte a byte tras ordenar las claves`() {
-        // `con_topes(catalogo(), 16)` del PC (main 882d465), volcado con `herramientas/oraculo-del-pc`.
+        // `con_topes(catalogo(), 16)` del PC (main 1984938, 20-oct-2026), volcado con `herramientas/oraculo-del-pc`.
         val delPc = Json.parseToJsonElement(javaClass.getResource("/ia/herramientas-del-pc.json")!!.readText()) as JsonArray
         val porNombre = delPc.associateBy { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
         val nuestro = Agente.conTopes(Herramientas.catalogo(), Agente.TOPE_LISTAS)

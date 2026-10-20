@@ -169,7 +169,7 @@ class LectorDePlanos : Service() {
         /** Sube cuando cambia cómo se leen las letras (las SHX de Hershey, el volteo, las TrueType de Windows): lo leído antes se rehace. */
         const val REVISION_DE_LETRAS = 3
         /** La de `MAGIA` en `modelo3d.rs` del PC (y en [Modelo3D]): con otra, el modelo se vuelve a leer. */
-        const val VERSION_3D = 3
+        const val VERSION_3D = 4
 
         fun esPlano(nombre: String?): Boolean {
             val n = nombre?.lowercase() ?: return false

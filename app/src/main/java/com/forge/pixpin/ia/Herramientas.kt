@@ -56,6 +56,9 @@ fun ordenado(e: JsonElement): JsonElement = when (e) {
 }
 
 /** Lo que pide el modelo, ya validado. */
+/** El nombre de la herramienta de geometría exacta (`edicion::GEOMETRIA` del PC). */
+const val GeometriaPrecisaNombre = "geometria_precisa"
+
 sealed class Llamada {
     abstract val nombre: String
 
@@ -74,6 +77,8 @@ sealed class Llamada {
     data class Calcar(val parametros: com.forge.pixpin.ia.Calcar.Parametros) : Llamada() { override val nombre get() = Herramientas.CALCAR }
     /** Guardar, poner o listar figuras de la biblioteca ([Figuras]). */
     data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
+    /** Geometría exacta de lámina ([GeometriaPrecisa]): el ejecutor la hace en el lienzo destino. */
+    data class Geometria(val args: JsonObject) : Llamada() { override val nombre get() = GeometriaPrecisaNombre }
 
     /** Si lo que pide se dibuja tal cual en el lienzo. */
     val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg
@@ -185,7 +190,11 @@ object Herramientas {
         "lienzo_nuevo", "grabar_voz", "reproducir_audio", "lista_nueva", "anadir_tarea", "anadir_tareas", "marcar_tarea",
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
         "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
-        Acciones.TABLA, Acciones.ABRIR
+        Acciones.TABLA, Acciones.ABRIR, GeometriaPrecisaNombre,
+        // 15-17 oct, solo con la nube (PC `SOLO_NUBE`): grabar la pantalla no (el teléfono no graba desde aquí).
+        "capturar_con_modo", "abrir_otra_ventana", "ir_al_chat", "ir_a_pagina", "cerrar_pines", "manejar_pines",
+        "apuntar_en_timeline", "leer_en_voz_alta", "parar_lectura", "comprimir_pdf", "transcribir_audio", "leer_excel",
+        "leer_documento", "resumen_de_actividad", Acciones.LIENZOS_DEL_CHAT, Acciones.CREAR_LIENZO, Acciones.USAR_LIENZO
     )
 
     /** **El catálogo entero del PC** (recurso `ia/catalogo-del-pc.json`), en su orden. */
@@ -290,6 +299,12 @@ object Herramientas {
             BUSCAR -> Llamada.Buscar(Documentos.validar(args))
             SVG -> Llamada.DibujoSvg(Svg.validar(args, avisos))
             CALCAR -> Llamada.Calcar(validarCalcar(args))
+            GeometriaPrecisaNombre -> {
+                val figura = textoEn(args, "figura") ?: throw mal("falta «figura»")
+                val validas = setOf("recta", "circulo", "arco", "semicircunferencia", "cuadrante", "sector", "segmento", "marca_angulo", "angulo_recto", "punto", "perpendicular", "paralela")
+                if (figura !in validas) throw mal("«figura» = «$figura» no existe; usa " + validas.joinToString(", "))
+                Llamada.Geometria(args)
+            }
             else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
                 ?: throw ErrorHerramienta.Desconocida(nombre)
         }

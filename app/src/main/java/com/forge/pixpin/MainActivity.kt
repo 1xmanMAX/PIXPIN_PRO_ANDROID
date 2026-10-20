@@ -90,6 +90,8 @@ const val EXTRA_PROYECTOS = "abrir_proyectos"
  * lo que acababa de pedir por su nombre.
  */
 const val EXTRA_PROYECTO = "abrir_proyecto"
+/** Entrar directamente en los ajustes (el asistente, `abrir_otra_ventana`). */
+const val EXTRA_AJUSTES_PEDIDOS = "abrir_ajustes"
 
 /**
  * **Volver a un proyecto dentro del montón**, no a él solo.
@@ -134,6 +136,10 @@ fun volverALosProyectos(context: android.content.Context, proyecto: String?) {
 }
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_AJUSTES = EXTRA_AJUSTES_PEDIDOS
+    }
+
 
     /**
      * Con qué se ha entrado esta vez.
@@ -195,7 +201,7 @@ fun OnboardingScreen(loQuePiden: Intent? = null) {
     val proyectoPedido = loQuePiden?.getStringExtra(EXTRA_PROYECTO)
     // Y a cuál ir dentro del montón, al volver de un lienzo, un croquis o una nota.
     val irA = loQuePiden?.getStringExtra(EXTRA_IR_A)
-    var enAjustes by remember { mutableStateOf(false) }
+    var enAjustes by remember(loQuePiden) { mutableStateOf(loQuePiden?.getBooleanExtra(EXTRA_AJUSTES_PEDIDOS, false) == true) }
 
     if (enAjustes) {
         PantallaDeAjustes(onVolver = { enAjustes = false })

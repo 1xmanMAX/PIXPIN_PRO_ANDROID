@@ -48,6 +48,9 @@ data class Estado3d(
     val dist: Double,
     val seccion: DoubleArray? = null,
     val aislado: Int? = null,
+    /** **Lo aislado por su clave estable** (GlobalId, PC 20-oct): manda sobre [aislado], que es solo una pista. */
+    val aisladoClave: String? = null,
+    /** Lo oculto: `n:=<clave del nivel>` (o el `n:<i>` de antes), `n:-`, `t:<Tipo>`. */
     val ocultos: List<String> = emptyList(),
     val claro: Boolean = false,
     val aristas: Boolean = true,
@@ -56,7 +59,7 @@ data class Estado3d(
 ) {
     override fun equals(other: Any?) = other is Estado3d && objetivo.contentEquals(other.objetivo) && rumbo == other.rumbo &&
         altura == other.altura && dist == other.dist && (seccion?.contentEquals(other.seccion ?: DoubleArray(0)) ?: (other.seccion == null)) &&
-        aislado == other.aislado && ocultos == other.ocultos && claro == other.claro && aristas == other.aristas
+        aislado == other.aislado && aisladoClave == other.aisladoClave && ocultos == other.ocultos && claro == other.claro && aristas == other.aristas
     override fun hashCode() = objetivo.contentHashCode() * 31 + dist.hashCode()
 }
 
@@ -89,7 +92,9 @@ data class MarcadoresCad(
                 a.seccion != null && b.seccion != null -> a.seccion.indices.all { kotlin.math.abs(a.seccion[it] - b.seccion[it]) <= escala * 1e-3 + 1e-6 }
                 else -> false
             }
-            return camara && seccion && a.aislado == b.aislado && a.ocultos == b.ocultos
+            // Lo aislado por su clave si las dos la traen; si no, por el número.
+            val mismoAislado = if (a.aisladoClave != null && b.aisladoClave != null) a.aisladoClave == b.aisladoClave else a.aislado == b.aislado
+            return camara && seccion && mismoAislado && a.ocultos == b.ocultos
         }
 
         /** Del píxel de la ventana al punto normalizado: desde el centro y en altos de ventana. */
@@ -108,11 +113,12 @@ data class MarcadoresCad(
         fun estadoDe(e: JsonElement?): Estado3d? {
             val o = e as? JsonObject ?: return null
             val obj = runCatching { o["objetivo"]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull!! } }.getOrNull()?.takeIf { it.size == 3 } ?: return null
-            val conocidos = setOf("objetivo", "rumbo", "altura", "dist", "seccion", "aislado", "ocultos", "claro", "aristas")
+            val conocidos = setOf("objetivo", "rumbo", "altura", "dist", "seccion", "aislado", "aislado_clave", "ocultos", "claro", "aristas")
             return Estado3d(
                 obj.toDoubleArray(), d(o["rumbo"]) ?: 0.0, d(o["altura"]) ?: 0.0, d(o["dist"]) ?: 1.0,
                 (o["seccion"] as? JsonArray)?.mapNotNull { d(it) }?.takeIf { it.size == 6 }?.toDoubleArray(),
                 (o["aislado"] as? JsonPrimitive)?.intOrNull,
+                texto(o["aislado_clave"]),
                 (o["ocultos"] as? JsonArray)?.mapNotNull { texto(it) }.orEmpty(),
                 (o["claro"] as? JsonPrimitive)?.booleanOrNull ?: false,
                 (o["aristas"] as? JsonPrimitive)?.booleanOrNull ?: true,
@@ -157,6 +163,7 @@ data class MarcadoresCad(
             put("rumbo", n(e.rumbo)); put("altura", n(e.altura)); put("dist", n(e.dist))
             put("seccion", e.seccion?.let { s -> JsonArray(s.map { n(it) }) } ?: JsonNull)
             put("aislado", e.aislado?.let { JsonPrimitive(it) } ?: JsonNull)
+            e.aisladoClave?.let { put("aislado_clave", JsonPrimitive(it)) }
             put("ocultos", JsonArray(e.ocultos.map { JsonPrimitive(it) }))
             put("claro", JsonPrimitive(e.claro)); put("aristas", JsonPrimitive(e.aristas))
         })

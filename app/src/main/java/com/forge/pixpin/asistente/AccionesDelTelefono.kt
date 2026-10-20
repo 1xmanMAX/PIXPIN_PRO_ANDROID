@@ -195,6 +195,68 @@ class AccionesDelTelefono(
                 enPantalla { com.forge.pixpin.lecciones.LeccionesActivity.abrir(contexto, null, texto(p, "consulta")) }
                 hecho
             }
+            // ---- 15-oct, solo con la nube (PC `SOLO_NUBE`) ----
+            "capturar_con_modo" -> {
+                val modo = texto(p, "modo") ?: "zona"
+                when (modo) {
+                    "zona", "copiar", "pin", "anotar", "texto" -> enPantalla { com.forge.pixpin.capture.CaptureFlow.requestCapture(contexto) }
+                    else -> error("en el teléfono la captura «$modo» no existe: hay la de zona (y desde ella copiar, pinear o anotar)")
+                }
+                "Elige la zona que quieres capturar (con la bola flotante)" + if (modo != "zona") "; luego «$modo» desde la barra de la captura." else "."
+            }
+            "abrir_otra_ventana" -> {
+                when (texto(p, "cual")) {
+                    "ajustes" -> abrir(Intent(contexto, com.forge.pixpin.MainActivity::class.java).putExtra(com.forge.pixpin.MainActivity.EXTRA_AJUSTES, true))
+                    "buscar" -> abrir(Intent(contexto, com.forge.pixpin.atajos.BuscarActivity::class.java))
+                    else -> error("el teléfono no tiene timeline")
+                }
+                hecho
+            }
+            "ir_al_chat" -> {
+                val nombre = a.porResolver["chat"]?.let { (it as? JsonPrimitive)?.content }?.trim().orEmpty()
+                val proyectos = app.proyectos.proyectos.value.filter { !it.archivado }
+                val q = com.forge.pixpin.guardados.sinAcentos(nombre)
+                val p2 = proyectos.firstOrNull { com.forge.pixpin.guardados.sinAcentos(it.nombre) == q }
+                    ?: proyectos.firstOrNull { com.forge.pixpin.guardados.sinAcentos(it.nombre).contains(q) }
+                val general = q.isEmpty() || q.contains("guardad") || q.contains("general")
+                if (p2 == null && !general) error("no hay ningun chat «$nombre»")
+                enPantalla {
+                    if (p2 != null) com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, p2.id, p2.nombre)
+                    else contexto.startActivity(Intent(contexto, com.forge.pixpin.guardados.MensajesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                "Abriendo el chat «${p2?.nombre ?: "Mensajes guardados"}»."
+            }
+            "ir_a_pagina" -> {
+                val que = p["que"] as JsonObject
+                val ruta = texto(que, "ruta")!!
+                val m = adjunto(ruta) ?: error("no encuentro «${File(ruta).name}» entre los adjuntos de los chats")
+                val pagina = (que["pagina"] as? JsonPrimitive)?.content?.toIntOrNull()
+                enPantalla { com.forge.pixpin.pdf.LectorPdfActivity.abrir(contexto, m.ruta!!, m.nombre.ifBlank { File(m.ruta).name }, mensaje = m.id, pagina = pagina?.minus(1)) }
+                hecho.replace(ruta, m.nombre.ifBlank { File(m.ruta).name })
+            }
+            "grabar_pantalla" -> error("en el teléfono no se graba la pantalla desde PixPin: usa la grabación de pantalla del sistema")
+            "cerrar_pines" -> {
+                enPantalla { app.overlayManager.cerrarTodos() }
+                hecho
+            }
+            "manejar_pines" -> {
+                when (texto(p, "operacion")) {
+                    "ocultar_mostrar" -> enPantalla { app.overlayManager.toggleHideAll() }
+                    "devolver_ultimo" -> enPantalla { app.overlayManager.restoreLastClosed() }
+                    else -> error("en el teléfono los pines no dejan pasar el toque desde aquí: mantén el pin y elige «Dejar pasar los toques»")
+                }
+                hecho
+            }
+            "apuntar_en_timeline" -> {
+                // El teléfono no tiene timeline: el momento queda como nota con su hora en el chat.
+                val t = texto(p, "texto")!!
+                nota("🕒 " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date()) + " · " + t, chat)
+                "Apuntado como nota con su hora (el teléfono no tiene timeline): «${t.take(60)}»."
+            }
+            "parar_lectura" -> {
+                enPantalla { VozDelAsistente.callar(contexto) }
+                hecho
+            }
             Acciones.ABRIR -> abrirPorNombre(texto(p, "descripcion")!!)
             else -> error("«${a.herramienta}» no se puede hacer en el teléfono")
         }

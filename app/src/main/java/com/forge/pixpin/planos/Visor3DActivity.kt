@@ -217,12 +217,14 @@ class Visor3DActivity : ComponentActivity() {
         val sitio = remember(original) { MarcadoresDelPlano(this@Visor3DActivity, original) }
         var cad by remember(original) { mutableStateOf(sitio.leer()) }
         fun guardarCad(nuevo: com.forge.pixpin.motor.MarcadoresCad) { cad = sitio.guardar(nuevo, delPlano = false) }
+        // Los niveles por su clave estable (PC 20-oct): `n:=<clave>`; el `n:<i>` de antes se sigue leyendo.
         fun claveATexto(k: ArbolDelModelo.Clave) = when (k) {
-            is ArbolDelModelo.Clave.Nivel -> if (k.indice < 0) "n:-" else "n:${k.indice}"
+            is ArbolDelModelo.Clave.Nivel -> if (k.indice < 0) "n:-" else modelo?.claveDeNivel(k.indice)?.let { "n:=$it" } ?: "n:${k.indice}"
             is ArbolDelModelo.Clave.Tipo -> "t:${k.nombre}"
         }
         fun textoAClave(t: String): ArbolDelModelo.Clave? = when {
             t == "n:-" -> ArbolDelModelo.Clave.Nivel(-1)
+            t.startsWith("n:=") -> modelo?.nivelDeClave(t.removePrefix("n:="))?.let { ArbolDelModelo.Clave.Nivel(it) }
             t.startsWith("n:") -> t.removePrefix("n:").toIntOrNull()?.let { ArbolDelModelo.Clave.Nivel(it) }
             t.startsWith("t:") -> ArbolDelModelo.Clave.Tipo(t.removePrefix("t:"))
             else -> null
@@ -234,6 +236,7 @@ class Visor3DActivity : ComponentActivity() {
                 doubleArrayOf(o.objetivo[0] + org[0], o.objetivo[1] + org[1], o.objetivo[2] + org[2]), o.rumbo, o.altura, o.dist,
                 seccion?.let { c -> DoubleArray(6) { c[it] + org[it % 3] } },
                 aislado.takeIf { it >= 0 },
+                aislado.takeIf { it >= 0 }?.let { modelo?.claveDeElemento(it) },
                 grupos.map { claveATexto(it) }.sorted(),
                 claro, aristas
             )
@@ -243,7 +246,7 @@ class Visor3DActivity : ComponentActivity() {
             grupos = e.ocultos.mapNotNull { textoAClave(it) }.toSet()
             sueltos = emptySet()
             aplicar()
-            e.aislado?.let { i -> if (modelo?.elementos?.indices?.contains(i) == true) { val n = ByteArray(modelo!!.elementos.size) { 1 }; n[i] = 0; aislado = i; esconder(n) } }
+            (e.aisladoClave?.let { modelo?.elementoDeClave(it) } ?: e.aislado)?.let { i -> if (modelo?.elementos?.indices?.contains(i) == true) { val n = ByteArray(modelo!!.elementos.size) { 1 }; n[i] = 0; aislado = i; esconder(n) } }
             ponerSeccion(e.seccion?.let { c -> FloatArray(6) { (c[it] - org[it % 3]).toFloat() } })
             orbita = Orbita(doubleArrayOf(e.objetivo[0] - org[0], e.objetivo[1] - org[1], e.objetivo[2] - org[2]), e.rumbo, e.altura, e.dist)
             if (claro != e.claro) { claro = e.claro; pintor?.claro = claro }

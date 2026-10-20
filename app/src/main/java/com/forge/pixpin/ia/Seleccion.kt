@@ -156,7 +156,7 @@ object Seleccion {
         }
         // La hoja al lienzo es solo para la nube: esta selección es la del modelo local.
         for (a in Acciones.TODAS) {
-            if (a.herramienta == Acciones.HOJA_A_LIENZO || !vale(a.herramienta)) continue
+            if (a.herramienta == Acciones.HOJA_A_LIENZO || Acciones.esSoloNube(a.herramienta) || !vale(a.herramienta)) continue
             puntuadas += puntuar(a.claves, q, palabras) to Acciones.herramienta(a)
         }
         for (f in Edicion.FILAS) {
@@ -235,7 +235,9 @@ object Edicion {
         )),
         Fila(GEOMETRIA, listOf(
             "recta", "circulo", "circunferencia", "arco", "perpendicular", "paralela", "radio", "centro", "angulo",
-            "grados", "tres puntos", "exact", "segmento"
+            "grados", "tres puntos", "exact", "segmento", "semicircunferencia", "semicirculo", "cuadrante", "sector",
+            "cuerda", "diametro", "tangente", "marca", "angulo recto", "degradado", "punteada", "raya punto",
+            "lamina", "geometria"
         )),
         Fila(CORTAR, listOf("corta", "cortar", "recorta la", "recorta el", "trim", "quita el trozo", "quita lo que sobra", "en el cruce", "interseccion")),
         Fila(EXTENDER, listOf("extiende", "extender", "alarga", "prolonga", "estira", "hasta que toque", "extend")),
