@@ -129,6 +129,9 @@ dependencies {
     implementation("androidx.camera:camera-view:1.5.0")
     // El QR del envío por Wi-Fi: dibujarlo y leerlo. Solo el núcleo de ZXing, sin servicios de Google.
     implementation("com.google.zxing:core:3.5.3")
+    // Leer las palabras de una foto (calcar: las letras salen como texto, como el OCR del PC). El
+    // modelo latino va dentro del APK: funciona sin internet y sin los servicios de Google.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     // Las voces de Microsoft Edge para leer en alto: hablan por WebSocket. Ver ui/VozDeEdge.kt.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 

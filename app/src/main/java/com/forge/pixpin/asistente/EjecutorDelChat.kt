@@ -114,12 +114,18 @@ class EjecutorDelChat(
         val rgba = java.nio.ByteBuffer.allocate(bm.width * bm.height * 4)
         bm.copyPixelsToBuffer(rgba)
         val (ancho, alto) = bm.width to bm.height
+        // El texto no se calca como forma (salían garabatos): lo que lee el OCR se tapa y va como
+        // texto editable (PC 15-oct). Sin OCR, como antes.
+        val pixeles = rgba.array()
+        val palabras = com.forge.pixpin.ia.Calcar.palabrasQueCuentan(LectorDeLetras.leer(bm), ancho, alto, p.zona)
+            .map { it.copy(color = com.forge.pixpin.ia.Calcar.colorDeTinta(pixeles, ancho, alto, it)) }
         bm.recycle()
-        val calcado = com.forge.pixpin.ia.Calcar.calcar(rgba.array(), ancho, alto, p)
-        if (calcado.trazos.isEmpty()) error("no salio nada al calcar: la imagen es lisa o casi vacia")
+        com.forge.pixpin.ia.Calcar.taparTexto(pixeles, ancho, alto, palabras)
+        val calcado = com.forge.pixpin.ia.Calcar.calcar(pixeles, ancho, alto, p)
+        if (calcado.trazos.isEmpty() && palabras.isEmpty()) error("no salio nada al calcar: la imagen es lisa o casi vacia")
         val semilla = System.currentTimeMillis()
-        val que = "el calco (${calcado.trazos.size} figuras)"
-        alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementosDeCalcado(calcado, origen, semilla)) }
+        val que = "el calco (${calcado.trazos.size} figuras" + (if (palabras.isNotEmpty()) " y ${palabras.size} palabras)" else ")")
+        alLienzo(que) { origen -> Lienzo.aElementos(Lienzo.elementosDeCalcado(calcado, origen, semilla) + Lienzo.textosDelCalco(calcado, palabras, origen, semilla)) }
     }
 
     /**

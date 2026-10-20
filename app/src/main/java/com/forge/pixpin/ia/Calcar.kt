@@ -64,6 +64,8 @@ object Calcar {
             override fun equals(other: Any?) = other is Fondo && color == other.color && caja.contentEquals(other.caja)
             override fun hashCode() = color.hashCode() * 31 + caja.contentHashCode()
         }
+        /** Una raya fina del dibujo, por su línea central, con su grosor (en el lienzo). PC 15-oct. */
+        data class Raya(val puntos: List<P>, val color: String, val grosor: Double) : Trazo()
     }
 
     data class Calcado(val trazos: List<Trazo>, val escala: Double, val desplazamiento: Pair<Double, Double>)
@@ -87,7 +89,11 @@ object Calcar {
         val f = min(lado.toDouble() / max(zw, zh), 1.0)
         val w = max(round(zw * f).toInt(), 1)
         val h = max(round(zh * f).toInt(), 1)
-        val img = reducir(rgba, ancho, zx, zy, zw, zh, w, h)
+        // Las rayas finas (1-3 px) se sacan antes, a toda resolución, por su línea central: reducida,
+        // una raya de un píxel se volvía una mancha borrosa o desaparecía (PC 15-oct, la lámina de
+        // geometría). Lo que queda (rellenos, manchas) se calca como siempre, sin ellas.
+        val (limpia, finas) = if (p.soloContornos) null to emptyList() else rayasFinas(rgba, ancho, zx, zy, zw, zh)
+        val img = reducir(limpia ?: rgba, ancho, zx, zy, zw, zh, w, h)
         val margen = 20.0
         val escRed = min((Herramientas.ANCHO_LIENZO - 2 * margen) / w, (Herramientas.ALTO_LIENZO - 2 * margen) / h)
         val dx = (Herramientas.ANCHO_LIENZO - w * escRed) / 2.0
@@ -110,7 +116,12 @@ object Calcar {
                 is Trazo.Mancha -> Trazo.Mancha(t.contorno.map(::aLienzo), t.huecos.map { it.map(::aLienzo) }, t.color)
                 is Trazo.Linea -> Trazo.Linea(t.puntos.map(::aLienzo), t.cerrada, t.color)
                 is Trazo.Fondo -> { val o = aLienzo(P(0.0, 0.0)); Trazo.Fondo(doubleArrayOf(o.x, o.y, w * escRed, h * escRed), t.color) }
+                is Trazo.Raya -> t
             }
+        }.toMutableList()
+        // Las rayas finas, encima de todo y ya en el lienzo.
+        for ((puntos, color, grosor) in finas) {
+            salida += Trazo.Raya(puntos.map { P(it.x * escala + desplazamiento.first, it.y * escala + desplazamiento.second) }, color, max(grosor * escala, 0.5))
         }
         return Calcado(salida, escala, desplazamiento)
     }
@@ -118,7 +129,130 @@ object Calcar {
     private fun tamano(t: Trazo): Double = when (t) {
         is Trazo.Mancha -> abs(Trazado.area(t.contorno))
         is Trazo.Linea -> t.puntos.zipWithNext { a, b -> Trazado.dist(a, b) }.sum() * 3.0
+        is Trazo.Raya -> t.puntos.zipWithNext { a, b -> Trazado.dist(a, b) }.sum() * 3.0
         is Trazo.Fondo -> Double.MAX_VALUE
+    }
+
+    // ------------------------------------------------------------- el texto, como texto
+
+    /** Una palabra leída por el OCR, con su caja en píxeles de la imagen y su color (null: negro). */
+    data class Palabra(val texto: String, val x: Double, val y: Double, val w: Double, val h: Double, val color: IntArray? = null) {
+        val cx get() = x + w / 2
+        val cy get() = y + h / 2
+        override fun equals(other: Any?) = other is Palabra && texto == other.texto && x == other.x && y == other.y && w == other.w && h == other.h && color.contentEquals(other.color)
+        override fun hashCode() = listOf(texto, x, y, w, h).hashCode()
+    }
+
+    /** Las palabras que cuentan (PC `calcar_fichero`): dos letras o cifras, con caja, y dentro de la zona. */
+    fun palabrasQueCuentan(v: List<Palabra>, ancho: Int, alto: Int, zona: DoubleArray?): List<Palabra> = v.filter { w ->
+        w.texto.count { it.isLetterOrDigit() } >= 2 && w.w > 0 && w.h > 0 &&
+            (zona == null || (w.cx in zona[0] * ancho..(zona[0] + zona[2]) * ancho && w.cy in zona[1] * alto..(zona[1] + zona[3]) * alto))
+    }
+
+    /**
+     * **El color de la tinta de una caja** (PC `hoja::imagen::color_de_tinta`): la media del núcleo del
+     * trazo (bastante más oscuro que [umbral]); sin croma (negro o gris), null.
+     */
+    fun colorDeTinta(rgba: ByteArray, ancho: Int, alto: Int, p: Palabra, umbral: Int = 150): IntArray? {
+        val x0 = p.x.coerceIn(0.0, ancho.toDouble()).toInt(); val y0 = p.y.coerceIn(0.0, alto.toDouble()).toInt()
+        val x1 = min((p.x + p.w).coerceIn(0.0, ancho.toDouble()).toInt(), ancho); val y1 = min((p.y + p.h).coerceIn(0.0, alto.toDouble()).toInt(), alto)
+        val s = LongArray(3); var n = 0L
+        val limite = max(umbral * 85 / 100, 40)
+        for (y in y0 until y1) for (x in x0 until x1) {
+            val i = (y * ancho + x) * 4
+            val r = rgba[i].toInt() and 255; val g = rgba[i + 1].toInt() and 255; val b = rgba[i + 2].toInt() and 255
+            if ((r * 299 + g * 587 + b * 114) / 1000 < limite) { s[0] += r.toLong(); s[1] += g.toLong(); s[2] += b.toLong(); n++ }
+        }
+        if (n < 4) return null
+        val m = IntArray(3) { (s[it] / n).toInt() }
+        return if (m.max() - m.min() < 45) null else m
+    }
+
+    /**
+     * **El texto de una imagen que se calca, como texto** (PC 15-oct, `tapar_texto`): lo que leyó el
+     * OCR se tapa con el color del papel antes de calcar y va al lienzo como texto editable
+     * ([Lienzo.textosDelCalco]). Antes salía como garabatos.
+     */
+    fun taparTexto(rgba: ByteArray, ancho: Int, alto: Int, palabras: List<Palabra>) {
+        if (palabras.isEmpty()) return
+        val papel = Mascara.fondo(Mascara.Img.deRgba(rgba, ancho, alto))
+        for (p in palabras) {
+            val x0 = (p.x - 2).coerceIn(0.0, ancho.toDouble()); val y0 = (p.y - 2).coerceIn(0.0, alto.toDouble())
+            val x1 = (p.x + p.w + 2).coerceIn(0.0, ancho.toDouble()); val y1 = (p.y + p.h + 2).coerceIn(0.0, alto.toDouble())
+            for (y in floor(y0).toInt() until min(ceil(y1).toInt(), alto)) for (x in floor(x0).toInt() until min(ceil(x1).toInt(), ancho)) {
+                val i = (y * ancho + x) * 4
+                rgba[i] = papel[0].toInt().coerceIn(0, 255).toByte(); rgba[i + 1] = papel[1].toInt().coerceIn(0, 255).toByte()
+                rgba[i + 2] = papel[2].toInt().coerceIn(0, 255).toByte(); rgba[i + 3] = 255.toByte()
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ rayas finas
+
+    /** Lo más grande (en píxeles) que se mira a toda resolución buscando rayas finas. */
+    private const val LADO_FINAS = 1600
+
+    /**
+     * **Las rayas finas** de la zona (PC `rayas_finas`): la tinta que no aguanta una erosión de 2 px,
+     * por su línea central (el esqueleto, alisado con las curvas), con su color y su grosor. Devuelve
+     * también la imagen sin ellas (pintadas del color del papel) para calcar el resto. En
+     * coordenadas de la imagen original.
+     */
+    private fun rayasFinas(rgba: ByteArray, ancho: Int, zx: Int, zy: Int, zw: Int, zh: Int): Pair<ByteArray?, List<Triple<List<P>, String, Double>>> {
+        val nada = null to emptyList<Triple<List<P>, String, Double>>()
+        if (max(zw, zh) > LADO_FINAS || zw < 8 || zh < 8) return nada
+        if ((zy + zh - 1).toLong() * ancho + zx + zw > rgba.size / 4) return nada
+        val img = Mascara.Img.deRgba(rgba, zw, zh, zy * ancho + zx, ancho)
+        val papel = Mascara.fondo(img)
+        val dpap = FloatArray(zw * zh) { Mascara.distColor(img.px[it], papel) }
+        val tinta = BooleanArray(zw * zh) { dpap[it] > 40f }
+        // Una foto (sin papel liso) no tiene «rayas» que sacar: su textura son mil rayitas.
+        val lisas = dpap.count { it < 12f }
+        if (lisas.toDouble() < 0.3 * (zw * zh)) return nada
+        val nucleo = Mascara.erosionar(tinta, zw, zh, 2.0f)
+        val grueso = Mascara.dilatar(nucleo, zw, zh, 2.6f)
+        val fino = BooleanArray(zw * zh) { tinta[it] && !grueso[it] }
+        val minimo = max(12.0, 0.02 * max(zw, zh))
+        val salida = ArrayList<Triple<List<P>, String, Double>>()
+        val quitar = BooleanArray(zw * zh)
+        for (comp in Mascara.componentes(fino, zw, zh)) {
+            if (comp.size < 10) continue
+            val (x0, y0, x1, y1) = Mascara.cajaDe(comp, zw)
+            val ox = max(x0 - 2, 0); val oy = max(y0 - 2, 0)
+            val gw = min(x1 + 3, zw) - ox; val gh = min(y1 + 3, zh) - oy
+            val m = BooleanArray(gw * gh)
+            for (i in comp) m[(i / zw - oy) * gw + (i % zw - ox)] = true
+            val esq = Mascara.esqueleto(m, gw, gh)
+            val cadenas = Mascara.cadenas(esq, gw, gh).filter { it.size >= 3 }
+            val largo = cadenas.sumOf { c -> c.zipWithNext { a, b -> Trazado.dist(a, b) }.sum() }
+            if (largo < minimo) continue
+            // Fina de verdad: lo que pesa entre lo que mide.
+            val peso = comp.sumOf { min(dpap[it].toDouble() / 180.0, 1.0) }
+            val grosor = peso / max(largo, 1.0)
+            if (grosor > 4.0) continue
+            val cs = comp.map { dpap[it] to img.px[it] }.sortedWith { a, b -> b.first.compareTo(a.first) }.take(max(comp.size / 2, 1))
+            val color = hex(Mascara.media(cs.asSequence().map { it.second }))
+            for (c in cadenas) {
+                val puntos = c.map { P(it.x + (ox + zx), it.y + (oy + zy)) }
+                val lisa = curva(puntos, false, 0.6, 0.3)
+                if (lisa.size >= 2) salida += Triple(lisa, color, max(grosor, 1.0))
+            }
+            for (i in comp) quitar[i] = true
+        }
+        if (salida.isEmpty()) return nada
+        // Lo que se quitó, del color del papel (y su halo de antialias).
+        val q = Mascara.dilatar(quitar, zw, zh, 1.0f)
+        val limpia = rgba.copyOf()
+        for (y in 0 until zh) for (x in 0 until zw) {
+            if (q[y * zw + x] && !grueso[y * zw + x]) {
+                val o = ((zy + y) * ancho + zx + x) * 4
+                limpia[o] = papel[0].toInt().coerceIn(0, 255).toByte()
+                limpia[o + 1] = papel[1].toInt().coerceIn(0, 255).toByte()
+                limpia[o + 2] = papel[2].toInt().coerceIn(0, 255).toByte()
+                limpia[o + 3] = 255.toByte()
+            }
+        }
+        return limpia to salida.sortedWith { a, b -> b.first.size.compareTo(a.first.size) }.take(400)
     }
 
     /** La zona reducida a `w x h` por **media de áreas**, en RGB sobre blanco. */

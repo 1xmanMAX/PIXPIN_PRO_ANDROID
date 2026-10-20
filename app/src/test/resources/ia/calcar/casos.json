@@ -64,5 +64,23 @@
 "ancho": 200,
 "alto": 200,
 "archivo": "anillo.rgba.gz"
+},
+{
+"nombre": "rayas",
+"ancho": 900,
+"alto": 600,
+"archivo": "rayas.rgba.gz"
+},
+{
+"nombre": "rayas-zona",
+"ancho": 900,
+"alto": 600,
+"archivo": "rayas.rgba.gz",
+"zona": [
+0.3,
+0.2,
+0.6,
+0.7
+]
 }
 ]

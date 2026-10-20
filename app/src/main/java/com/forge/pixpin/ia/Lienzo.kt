@@ -183,12 +183,38 @@ object Lienzo {
                 is Calcar.Trazo.Fondo -> f.caja("rectangle", t.caja, t.color, t.color)
                 is Calcar.Trazo.Mancha -> f.region(pares(t.contorno), t.color, t.color, t.huecos.map(::pares))
                 is Calcar.Trazo.Linea -> f.trazo("line", pares(t.puntos), t.color, null)
+                is Calcar.Trazo.Raya -> {
+                    f.trazo("line", pares(t.puntos), t.color, null)
+                    if (f.salida.size > antes) f.salida.last()["strokeWidth"] = JsonPrimitive(max(Math.round(t.grosor * 2.0) / 2.0, 0.5))
+                }
             }
             if (f.salida.size > antes) {
                 val e = f.salida.last()
                 e["roughness"] = JsonPrimitive(0)
-                if (t !is Calcar.Trazo.Linea) e["strokeWidth"] = JsonPrimitive(2)
+                if (t !is Calcar.Trazo.Linea && t !is Calcar.Trazo.Raya) e["strokeWidth"] = JsonPrimitive(2)
             }
+        }
+        return f.salida.map { JsonObject(it) }
+    }
+
+    /**
+     * **Las palabras del calco como textos del lienzo** (PC `textos_del_calco`), colocadas como el
+     * calco: en Work Sans, del alto de su caja, centradas en su renglón, con su color.
+     */
+    fun textosDelCalco(c: Calcar.Calcado, palabras: List<Calcar.Palabra>, origen: Pair<Double, Double>, semilla: Long): List<JsonObject> {
+        val f = Fabrica(semilla xor 0x7e57, origen.first, origen.second)
+        f.grupo = "ia-${java.lang.Long.toHexString(semilla)}-calco"
+        val k = 1.25
+        for (p in palabras) {
+            val x = p.x * c.escala + c.desplazamiento.first
+            val y = p.y * c.escala + c.desplazamiento.second
+            val alto = p.h * c.escala
+            val tam = max(Math.round(alto * 1.05 * 2.0) / 2.0, 5.0)
+            val color = p.color?.let { "#%02x%02x%02x".format(it[0], it[1], it[2]) } ?: "#1e1e1e"
+            f.texto(x, y + alto / 2 - tam * k / 2, p.texto, tam, color, "left")
+            val e = f.salida.last()
+            e["fontFamily"] = JsonPrimitive(com.forge.pixpin.motor.ItemStyle.FONT_WORK_SANS)
+            e["roughness"] = JsonPrimitive(0)
         }
         return f.salida.map { JsonObject(it) }
     }
