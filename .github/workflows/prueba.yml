@@ -76,7 +76,9 @@ jobs:
         # 20-oct-2026: dos veces se quedó colgado en packageRelease (en local tarda segundos). Si pasa de
         # 20 minutos, se vuelcan los hilos de Gradle (jstack) para ver dónde, y se corta.
         run: |
-          ./gradlew :app:assembleRelease --stacktrace ${{ inputs.rapido && '-Prapido' || '' }} &
+          # Con los 2 GB de gradle.properties, empaquetar se quedaba sin memoria (OutOfMemoryError en
+          # packageRelease, a veces sin romper: colgado hasta los 60 min). La máquina de GitHub tiene 16 GB.
+          ./gradlew :app:assembleRelease --stacktrace "-Dorg.gradle.jvmargs=-Xmx5g -Xms512m -Dfile.encoding=UTF-8" ${{ inputs.rapido && '-Prapido' || '' }} &
           G=$!
           for i in $(seq 1 120); do kill -0 $G 2>/dev/null || break; sleep 10; done
           if kill -0 $G 2>/dev/null; then
