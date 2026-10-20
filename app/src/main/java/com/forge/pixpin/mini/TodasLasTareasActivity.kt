@@ -107,7 +107,9 @@ class TodasLasTareasActivity : ComponentActivity() {
         val recordar: (Lista, Fila) -> Unit,
         val olvidarHora: (Lista, Fila) -> Unit,
         val notar: (Lista, Fila) -> Unit,
-        val fijar: (Lista, Fila) -> Unit
+        val fijar: (Lista, Fila) -> Unit,
+        /** Buscar una etiqueta (la chapita pulsada). */
+        val buscar: (String) -> Unit = {}
     )
 
     /** Una tarea recién quitada, mientras su aviso ofrece «Deshacer». */
@@ -295,7 +297,7 @@ class TodasLasTareasActivity : ComponentActivity() {
 
         val acciones = AccionesDeTarjeta(
             ::marcar, { l, f -> moviendo = l to f }, ::quitar, ::recordar, { a, b -> ponerHora(a, b, null) },
-            { l, f -> notando = l to f }, ::fijar
+            { l, f -> notando = l to f }, ::fijar, buscar = { consulta = it }
         )
 
         fun apuntarAhora() {
@@ -475,11 +477,11 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
     }
 
-    /** El color de la chapita de una prioridad (los de la franja del pin de tarea del PC). */
-    private fun colorDe(p: Prioridad): Color = when (p) {
-        Prioridad.ALTA -> Color(0xFFE5534B)
-        Prioridad.MEDIA -> Color(0xFFE8A33D)
-        Prioridad.BAJA -> Color(0xFF4CAF7A)
+    /** El color de la chapita de una urgencia (los de la franja del pin de tarea del PC). */
+    private fun colorDe(u: Urgencia): Color = when (u) {
+        Urgencia.MUY_URGENTE -> Color(0xFFE5534B)
+        Urgencia.URGENTE -> Color(0xFFE8A33D)
+        Urgencia.NORMAL -> Color(0xFF4CAF7A)
     }
 
     @Composable
@@ -516,21 +518,22 @@ class TodasLasTareasActivity : ComponentActivity() {
                     texto, color = Cristal.tinta, style = MaterialTheme.typography.bodyLarge,
                     textDecoration = if (f.hecha) TextDecoration.LineThrough else null
                 )
-                // La prioridad como chapita de color y las etiquetas, en una línea.
-                if (marcas.prioridad != null || marcas.etiquetas.isNotEmpty()) Row(
+                // La urgencia como chapita de color y las etiquetas como chapitas (PC 18-oct: tres a la
+                // vista y «+N»; tocar una busca esa etiqueta).
+                if (marcas.urgencia != Urgencia.NORMAL || marcas.etiquetas.isNotEmpty()) Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically
                 ) {
-                    marcas.prioridad?.let { p ->
-                        Text(
-                            when (p) { Prioridad.ALTA -> "Alta"; Prioridad.MEDIA -> "Media"; Prioridad.BAJA -> "Baja" },
-                            color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1,
-                            modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(colorDe(p)).padding(horizontal = 6.dp, vertical = 1.dp)
-                        )
-                    }
-                    if (marcas.etiquetas.isNotEmpty()) Text(
-                        marcas.etiquetas.joinToString(" ") { "#$it" }, color = Cristal.puesto,
-                        style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    if (marcas.urgencia != Urgencia.NORMAL) Text(
+                        marcas.urgencia.nombre,
+                        color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(colorDe(marcas.urgencia)).padding(horizontal = 6.dp, vertical = 1.dp)
                     )
+                    for (e in marcas.etiquetas.take(3)) Text(
+                        "#$e", color = Cristal.puesto, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Cristal.puesto.copy(alpha = 0.14f))
+                            .clickable { acc.buscar("#$e") }.padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                    if (marcas.etiquetas.size > 3) Text("+${marcas.etiquetas.size - 3}", color = Cristal.puesto, style = MaterialTheme.typography.labelMedium)
                 }
                 marcas.nota?.let { n ->
                     Text(

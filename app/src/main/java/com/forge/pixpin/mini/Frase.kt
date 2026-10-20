@@ -6,206 +6,281 @@ import com.forge.pixpin.ia.Fechas
 import com.forge.pixpin.ia.Momento
 
 /**
- * **Lo que se reconoce al escribir una tarea** (PC `bfdd89a`, `apps/pixpin/src/tareas/frase.rs`,
- * 17-oct-2026, portado tal cual con sus pruebas en `FraseTest`).
+ * **Lo que se reconoce al escribir una tarea** (PC `pixpin-frase/src/tarea.rs`, 17 y 18-oct-2026,
+ * portado tal cual con sus pruebas en `FraseTest`).
  *
- * Al apuntar «llamar al banco prioridad alta recordar a las 5 #casa» se guarda la tarea «llamar al
- * banco» con prioridad alta, la etiqueta `#casa` y su hora de recordar.
+ * El usuario: «que reconozca la prioridad y el recordatorio; ponerle tags con el hashtag» y después
+ * «que sea más inteligente»: un `#palabra` en CUALQUIER sitio es una etiqueta (sale del título y se
+ * enseña aparte), la urgencia tiene tres niveles (normal, urgente y muy urgente, con palabras que se
+ * cambian en Ajustes) y la fecha se escribe como se dice («18/10 17:00», «el 20 a las 9», «viernes
+ * 15:30», [Fechas]).
  *
- * **No hay campos nuevos**: como la fecha de creación (`➕`) y la hora de recordar (`⏰`), todo va
- * DENTRO del texto de la tarea, que es lo único que viaja:
+ * **No hay campos nuevos**: todo va DENTRO del texto de la tarea, que es lo único que viaja:
  *
  * ```
  * - [ ] llamar al banco ⏫ #casa 💬 no abren hasta el lunes ⏰ 2026-10-17 17:00 ➕ 2026-10-17
  * ```
  *
- * - La **prioridad** son los emoticonos de Obsidian Tasks: `⏫` alta, `🔼` media, `🔽` baja.
- * - Las **etiquetas** son `#palabra`: el buscador de Tareas las encuentra escribiendo `#casa`.
- * - La **nota** de por qué no se está haciendo (la del pin de la tarea) va tras `💬`, delante de la
- *   hora y de la fecha, que siguen al final para que [Tareas.partir] y [Tareas.horaDe] las lean.
+ * - La **urgencia** usa los emoticonos de Obsidian Tasks: `⏫` muy urgente y `🔼` urgente; normal no
+ *   lleva nada. El `🔽` de la «baja» de antes se lee como normal y se quita.
+ * - Las **etiquetas** son `#palabra`, detrás del título; se enseñan como chapitas.
+ * - La **nota** va tras `💬`, y la hora (`⏰`) al final, donde la buscan los avisos.
  *
- * La fecha dicha en español la entiende [Fechas] (el mismo que usa el asistente), sin reloj propio:
- * quien llama da el «ahora». Sin Android.
+ * Sin reloj propio: quien llama da el «ahora» local y las palabras de cada urgencia. Sin Android.
  */
-enum class Prioridad(val marca: String) {
-    BAJA("🔽"), MEDIA("🔼"), ALTA("⏫");
+enum class Urgencia(val marca: String?, val nombre: String) {
+    NORMAL(null, "Normal"), URGENTE("🔼", "Urgente"), MUY_URGENTE("⏫", "Muy urgente");
 
     companion object {
-        fun deMarca(p: String): Prioridad? = entries.firstOrNull { it.marca == p }
-
-        fun dePalabra(p: String): Prioridad? = when (p) {
-            "alta", "alto", "urgente", "maxima" -> ALTA
-            "media", "medio", "normal" -> MEDIA
-            "baja", "bajo", "minima" -> BAJA
+        /** La de un emoticono guardado. `🔽` (la «baja» de antes) es normal. */
+        fun deMarca(p: String): Urgencia? = when (p) {
+            "⏫" -> MUY_URGENTE
+            "🔼" -> URGENTE
+            "🔽" -> NORMAL
             else -> null
         }
     }
 }
 
 object Frase {
-
     /** Lo que marca la nota de una tarea. */
     const val NOTA = "💬"
+    /** Lo que marca la hora de recordar. */
+    const val RELOJ = "⏰"
 
-    /** Una tarea recién escrita, ya entendida. */
+    val URGENTE = listOf("urgente", "prioridad alta", "importante", "!")
+    val MUY_URGENTE = listOf("muy urgente", "urgentísimo", "prioridad máxima", "!!", "!!!")
+
+    /** Las palabras que hacen urgente o muy urgente una tarea (Ajustes); sin mayúsculas ni tildes. */
+    data class Palabras(val urgente: List<String> = URGENTE, val muyUrgente: List<String> = MUY_URGENTE) {
+        /** Cada frase partida en palabras llanas, con su nivel; las vacías fuera. */
+        internal fun partidas(): List<Pair<List<String>, Urgencia>> =
+            listOf(muyUrgente to Urgencia.MUY_URGENTE, urgente to Urgencia.URGENTE).flatMap { (lista, nivel) ->
+                lista.mapNotNull { f -> f.split(Regex("\\s+")).map { llana(it) }.filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }?.let { it to nivel } }
+            }
+
+        companion object {
+            /** Las de Ajustes, separadas por comas («urgente, importante, !»). Vacío: ninguna. */
+            fun deTextos(urgente: String?, muyUrgente: String?) = Palabras(
+                urgente?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: URGENTE,
+                muyUrgente?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: MUY_URGENTE
+            )
+        }
+    }
+
+    /** Una tarea escrita, ya entendida. */
     data class Leida(
         /** Lo que hay que hacer, sin lo reconocido. */
         val titulo: String,
-        val prioridad: Prioridad?,
+        val urgencia: Urgencia = Urgencia.NORMAL,
         /** Sin la almohadilla, en el orden escrito y sin repetir. */
-        val etiquetas: List<String>,
+        val etiquetas: List<String> = emptyList(),
         /** Cuándo recordarla, en hora local. */
-        val hora: Momento?
+        val hora: Momento? = null,
+        /** La nota de por qué no se está haciendo (tras `💬`). */
+        val nota: String? = null
     ) {
-        /** El texto que se guarda: el título con sus marcas detrás. */
+        /** **El texto que se guarda**: título, urgencia, etiquetas, nota y hora, en ese orden. */
         fun texto(): String {
-            val s = StringBuilder(titulo)
-            prioridad?.let { s.append(' ').append(it.marca) }
-            etiquetas.forEach { s.append(" #").append(it) }
-            var t = s.toString()
-            hora?.let { t = Tareas.sinHora(t).trimEnd() + " " + it.marca() }
-            return t.trim()
+            val s = StringBuilder(titulo.trim())
+            fun pon(t: String) { if (s.isNotEmpty()) s.append(' '); s.append(t) }
+            urgencia.marca?.let { pon(it) }
+            etiquetas.forEach { pon("#$it") }
+            nota?.trim()?.takeIf { it.isNotEmpty() }?.let { pon("$NOTA $it") }
+            hora?.let { pon(it.marca()) }
+            return s.toString()
+        }
+
+        /** **Lo que se entendió, en una línea** («Muy urgente · #casa · ⏰ mañana 17:00»). */
+        fun resumen(ahora: Momento): String {
+            val partes = ArrayList<String>()
+            if (urgencia != Urgencia.NORMAL) partes += urgencia.nombre
+            etiquetas.forEach { partes += "#$it" }
+            hora?.let { partes += "$RELOJ ${it.legible(ahora)}" }
+            return partes.joinToString(" · ")
         }
     }
 
     /** Los milisegundos locales de un momento. */
     fun msDe(m: Momento): Long = (m.dia * 1440 + m.minuto) * 60_000L
 
-    /** Lo que dice que lo que sigue es cuándo recordarla. */
-    private fun esAviso(p: String) = p in setOf(
-        "recordar", "recuerdame", "recordarme", "recordatorio", "recuerda",
-        "avisar", "avisame", "avisarme", "aviso", "alarma"
-    )
+    private fun alfanum(c: Char) = c.isLetterOrDigit()
 
-    /** Una palabra para compararla: minúsculas, sin tildes ni puntuación. */
-    private fun llana(p: String): String =
-        Acciones.normalizar(p.trim { !it.isLetterOrDigit() && it != '!' })
+    /** Una palabra para compararla: minúsculas, sin tildes ni la puntuación de los bordes (los `!` se quedan). */
+    fun llana(p: String): String = Acciones.normalizar(p.trim { !alfanum(it) && it != '!' })
 
-    /**
-     * La etiqueta de una palabra `#algo`, sin la almohadilla ni la puntuación de detrás. null si no
-     * lo es (`#` suelto; `#1` sigue siendo un número).
-     */
+    /** Si la palabra llana [t] es [w] («urgente!» también es «urgente»). */
+    private fun igual(t: String, w: String) = t == w || (t.any { alfanum(it) } && t.trimEnd('!') == w)
+
+    /** La etiqueta de una palabra `#algo`, sin la almohadilla ni la puntuación de detrás; null si no lo es. */
     fun etiquetaDe(p: String): String? {
-        if (!p.startsWith('#')) return null
-        val e = p.substring(1).trimEnd { !it.isLetterOrDigit() }
-        val valida = e.isNotEmpty() && e.any { it.isLetter() } && e.all { it.isLetterOrDigit() || it == '_' || it == '-' }
-        return if (valida) e else null
+        if (!p.startsWith("#")) return null
+        val e = p.substring(1).trimEnd { !alfanum(it) }
+        val valida = e.isNotEmpty() && e.any { it.isLetter() } && e.all { alfanum(it) || it == '_' || it == '-' }
+        return e.takeIf { valida }
     }
 
+    /** La marca `⏰ AAAA-MM-DD HH:MM` de un texto: dónde empieza y su momento. */
+    fun marcaDeHora(texto: String): Pair<Int, Momento>? {
+        val i = texto.lastIndexOf(RELOJ).takeIf { it >= 0 } ?: return null
+        val resto = texto.substring(i + RELOJ.length).trimStart()
+        if (resto.length < 14 || resto[4] != '-' || resto[7] != '-' || resto[13] != ':') return null
+        return Momento.deMarca(texto.substring(i))?.let { i to it }
+    }
+
+    private fun esAviso(p: String) = p in setOf(
+        "recordar", "recuerdame", "recordarme", "recordatorio", "recuerda", "avisar", "avisame", "avisarme", "aviso", "alarma"
+    )
+
+    private fun empiezaFecha(p: String) = p in setOf("hoy", "manana", "pasado", "el", "este", "esta", "proximo", "proxima", "dentro", "en") ||
+        p in setOf("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo") || p.firstOrNull()?.isDigit() == true
+
+    private fun palabrasDe(t: String) = t.split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+    private fun interpretar(f: String, ahora: Momento): Result<Momento> = runCatching { Fechas.interpretar(f, ahora) }
+    private fun noEntiende(r: Result<Momento>) = r.exceptionOrNull() is ErrorFecha.NoEntiendo
+
     /**
-     * **Entiende una tarea recién escrita.** [ahora]: el momento local.
-     *
-     * Lo que no se entiende se queda en el título, nunca se adivina: una fecha que no existe o que ya
-     * pasó («recordar el 31 de febrero») no pone hora y se lee tal cual.
+     * **Entiende una tarea escrita.** Lo que no se entiende se queda en el título, nunca se adivina.
+     * Vale también para un texto ya guardado: sus marcas se vuelven a leer y sale el mismo texto.
      */
-    fun leer(texto: String, ahora: Momento): Leida {
-        var prioridad: Prioridad? = null
+    fun leer(texto: String, ahora: Momento, palabras: Palabras = Palabras()): Leida {
+        var cuerpo = texto
+        var horaGuardada: Momento? = null
+        marcaDeHora(cuerpo)?.let { (i, m) -> horaGuardada = m; cuerpo = cuerpo.substring(0, i) }
+        var nota: String? = null
+        val iNota = cuerpo.indexOf(NOTA)
+        if (iNota >= 0) {
+            nota = palabrasDe(cuerpo.substring(iNota + NOTA.length)).joinToString(" ").takeIf { it.isNotEmpty() }
+            cuerpo = cuerpo.substring(0, iNota)
+        }
+        val crudas = palabrasDe(cuerpo)
+        val (urgencia, etiquetas, quedan) = urgenciaYEtiquetas(crudas, palabras)
+        val resto = quedan.map { crudas[it] }.toMutableList()
+        var hora: Momento? = null
+        hallarHora(resto, ahora)?.let { (r, m) -> hora = m; repeat(r.last - r.first + 1) { resto.removeAt(r.first) } }
+        val titulo = resto.joinToString(" ").trimEnd(',', ';', ':', ' ', '-').trim()
+        return Leida(titulo, urgencia, etiquetas, hora ?: horaGuardada, nota)
+    }
+
+    private fun urgenciaYEtiquetas(crudas: List<String>, palabras: Palabras): Triple<Urgencia, List<String>, List<Int>> {
+        val frases = palabras.partidas()
+        val llanas = crudas.map { llana(it) }
+        var urgencia = Urgencia.NORMAL
         val etiquetas = ArrayList<String>()
-        // 1. Las etiquetas y la prioridad, estén donde estén.
-        val crudas = texto.split(BLANCOS).filter { it.isNotEmpty() }
-        val quedan = ArrayList<String>(crudas.size)
+        val quedan = ArrayList<Int>()
         var i = 0
         while (i < crudas.size) {
             val p = crudas[i]
             val e = etiquetaDe(p)
             if (e != null) {
-                if (etiquetas.none { it.equals(e, ignoreCase = true) }) etiquetas += e
+                if (etiquetas.none { it.lowercase() == e.lowercase() }) etiquetas += e
                 i++; continue
             }
-            val l = llana(p)
-            val sig = crudas.getOrNull(i + 1)?.let { llana(it) }
-            // «prioridad alta», «prio alta», «con prioridad alta».
-            if (l in setOf("prioridad", "prio", "prioritaria")) {
-                val pr = sig?.let { Prioridad.dePalabra(it) }
-                if (pr != null) {
-                    prioridad = pr
-                    if (quedan.lastOrNull()?.let { llana(it) } == "con") quedan.removeAt(quedan.size - 1)
-                    i += 2; continue
-                }
+            val u = Urgencia.deMarca(p)
+            if (u != null) { if (u > urgencia) urgencia = u; i++; continue }
+            // La frase de urgencia más larga que empiece aquí (a igual largo, la de «muy urgente»).
+            val hallada = frases.filter { (w, _) -> i + w.size <= llanas.size && w.indices.all { k -> igual(llanas[i + k], w[k]) } }
+                .maxWithOrNull(compareBy({ it.first.size }, { it.second }))
+            if (hallada != null) {
+                if (hallada.second > urgencia) urgencia = hallada.second
+                // «con prioridad alta»: el «con» también sobra.
+                if (quedan.isNotEmpty() && llanas[quedan.last()] == "con") quedan.removeAt(quedan.size - 1)
+                i += hallada.first.size
+                continue
             }
-            // «alta prioridad».
-            val prSuelta = Prioridad.dePalabra(l)
-            if (prSuelta != null && sig == "prioridad") {
-                prioridad = prSuelta
-                if (quedan.lastOrNull()?.let { llana(it) } == "con") quedan.removeAt(quedan.size - 1)
-                i += 2; continue
-            }
-            // «!alta», «!!!» y «urgente» sueltos.
-            val prExcl = if (l.startsWith('!')) Prioridad.dePalabra(l.substring(1)) else null
-            if (prExcl != null) { prioridad = prExcl; i++; continue }
-            if (p == "!!!" || l == "urgente") { prioridad = Prioridad.ALTA; i++; continue }
-            val prMarca = Prioridad.deMarca(p)
-            if (prMarca != null) { prioridad = prMarca; i++; continue }
-            quedan += p
+            quedan += i
             i++
         }
-        // 2. La hora: tras «recordar» / «avísame»…, o una fecha al final.
-        var hora: Momento? = null
-        var palabras: MutableList<String> = quedan.toMutableList()
-        val k = palabras.indexOfFirst { esAviso(llana(it)) }
+        return Triple(urgencia, etiquetas, quedan)
+    }
+
+    /** **Dónde dice la hora** una lista de palabras: las que hay que quitar (índices) y el momento. */
+    private fun hallarHora(p: List<String>, ahora: Momento): Pair<IntRange, Momento?>? {
+        val k = p.indexOfFirst { esAviso(llana(it)) }
         if (k >= 0) {
-            // La cola más larga tras la palabra que sea una fecha entera; lo que sobre detrás vuelve
-            // al título («recordar mañana comprar pan»).
-            var hallada: Pair<Int, Momento>? = null
-            for (j in palabras.size downTo k + 2) {
-                val m = fechaDe(palabras.subList(k + 1, j).joinToString(" "), ahora)
-                if (m != null) { hallada = j to m; break }
+            for (j in p.size downTo k + 2) {
+                val cola = p.subList(k + 1, j).joinToString(" ")
+                val r = interpretar(cola, ahora)
+                if (r.isSuccess) return (k until j) to (porLaTarde(cola, ahora) ?: r.getOrThrow())
+                if (!noEntiende(r)) break
             }
-            if (hallada != null) {
-                hora = hallada.second
-                palabras.subList(k, hallada.first).clear()
-            } else if (k > 0 && k + 1 == palabras.size) {
-                // «recordar» suelto al final: no dice cuándo; se quita igual.
-                palabras.removeAt(k)
+            if (k > 0 && k + 1 == p.size) return (k..k) to null
+        }
+        val frase = p.joinToString(" ")
+        val separada = runCatching { Fechas.separar(frase, ahora) }.getOrNull()
+        if (separada != null && separada.second != null) {
+            val (cabeza, m) = separada
+            val cola = frase.substring(cabeza.length).trim()
+            if (cola.toULongOrNull() == null) {
+                val n = palabrasDe(cabeza).size
+                return (n until p.size) to (porLaTarde(cola, ahora) ?: m)
             }
         }
-        if (hora == null) {
-            val frase = palabras.joinToString(" ")
-            val separada = try { Fechas.separar(frase, ahora) } catch (e: ErrorFecha) { null }
-            val m = separada?.second
-            if (separada != null && m != null) {
-                val cola = frase.substring(separada.first.length)
-                // Un número suelto al final («leer el capítulo 5») no es una hora: sin «recordar»
-                // delante, la hora tiene que decirse como hora.
-                if (cola.trim().toULongOrNull() == null) {
-                    hora = porLaTarde(cola, ahora) ?: m
-                    palabras = separada.first.split(BLANCOS).filter { it.isNotEmpty() }.toMutableList()
-                }
+        if (p.size >= 2 && empiezaFecha(llana(p[0]))) {
+            for (j in p.size - 1 downTo 1) {
+                val cabeza = p.subList(0, j).joinToString(" ")
+                if (j == 1 && cabeza.toULongOrNull() != null) continue
+                val r = interpretar(cabeza, ahora)
+                if (r.isSuccess) return (0 until j) to (porLaTarde(cabeza, ahora) ?: r.getOrThrow())
+                if (!noEntiende(r)) break
             }
         }
-        val titulo = palabras.joinToString(" ").trimEnd(',', ';', ':', ' ', '-').trim()
-        return Leida(titulo, prioridad, etiquetas, hora)
+        return null
     }
 
-    /** Una fecha dicha, con la hora de la tarde si es lo que se quería decir. */
-    private fun fechaDe(frase: String, ahora: Momento): Momento? {
-        val m = try { Fechas.interpretar(frase, ahora) } catch (e: ErrorFecha) { return null }
-        return porLaTarde(frase, ahora) ?: m
+    /** **Lo escrito sin la fecha dicha con palabras**, con lo demás en su sitio: lo que hace el selector de día y hora. */
+    fun sinFechaDicha(texto: String, ahora: Momento, palabras: Palabras = Palabras()): String {
+        val crudas = palabrasDe(texto)
+        val (_, _, quedan) = urgenciaYEtiquetas(crudas, palabras)
+        val otras = quedan.map { crudas[it] }
+        val (r, m) = hallarHora(otras, ahora) ?: return texto.trim()
+        if (m == null) return texto.trim()
+        val fuera = r.map { quedan[it] }.toSet()
+        return crudas.filterIndexed { k, _ -> k !in fuera }.joinToString(" ")
     }
 
-    /**
-     * **«A las 5» es por la tarde.** Nadie apunta una tarea para las cinco de la madrugada sin
-     * decirlo: una hora suelta de la 1 a las 7, sin «de la mañana», «am» ni minutos, se lee como de
-     * la tarde. null si la frase no es de esas o ya dice la franja.
-     */
+    /** **«A las 5» es por la tarde**: una hora suelta de la 1 a las 7 tras «las», sin franja ni minutos. */
     private fun porLaTarde(frase: String, ahora: Momento): Momento? {
         val q = Acciones.normalizar(frase)
-        val palabras = q.split(BLANCOS).filter { it.isNotEmpty() }
+        val ps = palabrasDe(q)
         val franja = listOf("de la manana", "por la manana", "madrugada", "tarde", "noche", "mediodia").any { q.contains(it) } ||
-            palabras.any { it == "am" || it == "pm" }
+            ps.any { it.endsWith("am") || it.endsWith("pm") }
         if (franja) return null
-        val suelta = palabras.zipWithNext().any { (a, b) -> (a == "las" || a == "la") && b.toIntOrNull()?.let { it in 1..7 } == true }
+        val suelta = ps.zipWithNext().any { (a, b) -> a in setOf("las", "la") && b.toIntOrNull()?.let { it in 1..7 } == true }
         if (!suelta) return null
-        return try { Fechas.interpretar("$frase de la tarde", ahora) } catch (e: ErrorFecha) { null }
+        return interpretar("$frase de la tarde", ahora).getOrNull()
     }
 
-    // ---- Leer lo guardado ------------------------------------------------
+    /** Lo que lleva una tarea ya guardada (`marcas` del PC). [texto]: lo que se ve (sin `➕` ni imágenes). */
+    fun marcasDe(texto: String): Leida {
+        var base = texto
+        var hora: Momento? = null
+        marcaDeHora(base)?.let { (i, m) -> hora = m; base = base.substring(0, i) }
+        var nota: String? = null
+        val iNota = base.indexOf(NOTA)
+        if (iNota >= 0) {
+            nota = base.substring(iNota + NOTA.length).trim().takeIf { it.isNotEmpty() }
+            base = base.substring(0, iNota)
+        }
+        var urgencia = Urgencia.NORMAL
+        val etiquetas = ArrayList<String>()
+        val quedan = ArrayList<String>()
+        for (p in palabrasDe(base)) {
+            val u = Urgencia.deMarca(p)
+            if (u != null) { if (u > urgencia) urgencia = u; continue }
+            val e = etiquetaDe(p)
+            if (e != null) { if (e !in etiquetas) etiquetas += e; continue }
+            quedan += p
+        }
+        return Leida(quedan.joinToString(" "), urgencia, etiquetas, hora, nota)
+    }
 
     /** Lo que lleva una tarea ya guardada, para enseñarla. */
     data class Marcas(
-        /** Lo que se lee: sin prioridad, etiquetas, nota ni hora. */
+        /** Lo que se lee: sin urgencia, etiquetas, nota ni hora. */
         val titulo: String = "",
-        val prioridad: Prioridad? = null,
+        val urgencia: Urgencia = Urgencia.NORMAL,
         val etiquetas: List<String> = emptyList(),
         val nota: String? = null,
         /** La hora de recordar, en ms locales. */
@@ -222,48 +297,27 @@ object Frase {
             nota = base.substring(i + NOTA.length).trim().ifEmpty { null }
             base = base.substring(0, i)
         }
-        var prioridad: Prioridad? = null
+        var urgencia = Urgencia.NORMAL
         val etiquetas = ArrayList<String>()
         val quedan = ArrayList<String>()
         for (p in base.split(BLANCOS)) {
             if (p.isEmpty()) continue
-            val pr = Prioridad.deMarca(p)
-            if (pr != null) { prioridad = pr; continue }
+            val u = Urgencia.deMarca(p)
+            if (u != null) { if (u > urgencia) urgencia = u; continue }
             val e = etiquetaDe(p)
             if (e != null) { if (e !in etiquetas) etiquetas += e; continue }
             quedan += p
         }
-        return Marcas(quedan.joinToString(" "), prioridad, etiquetas, nota, hora)
-    }
-
-    /**
-     * **Lo que enseña la tarjeta** de una tarea: el título con sus `#etiquetas` detrás y, si tiene,
-     * la hora de recordar legible («⏰ hoy 17:00») y la nota; y su prioridad aparte, para la chapita.
-     * (El PC saca además los emoticonos como chapitas; aquí se quedan en el texto.)
-     */
-    fun aLaVista(texto: String, ahora: Momento?): Pair<String, Prioridad?> {
-        val m = marcas(texto)
-        val s = StringBuilder(m.titulo)
-        m.etiquetas.forEach { s.append(" #").append(it) }
-        m.hora?.let { h ->
-            val mm = Momento.deMsLocales(h)
-            val cuando = if (ahora != null) mm.legible(ahora) else {
-                val (y, mo, d) = Fechas.fechaDe(mm.dia)
-                "$d/$mo/$y %02d:%02d".format(mm.minuto / 60, mm.minuto % 60)
-            }
-            s.append(" · ⏰ ").append(cuando)
-        }
-        m.nota?.let { s.append(" · ").append(NOTA).append(' ').append(it) }
-        return s.toString().trim() to m.prioridad
+        return Marcas(quedan.joinToString(" "), urgencia, etiquetas, nota, hora)
     }
 
     /**
      * **Lo que se guarda de lo escrito** en la caja de apuntar: lo reconocido como marcas detrás del
      * título; si no queda título (solo «#casa», por ejemplo), lo escrito tal cual, como el PC.
      */
-    fun paraGuardar(texto: String, ahora: Momento): String {
+    fun paraGuardar(texto: String, ahora: Momento, palabras: Palabras = Palabras()): String {
         val limpio = Tareas.saneado(texto)
-        val f = leer(limpio, ahora)
+        val f = leer(limpio, ahora, palabras)
         return if (f.titulo.isEmpty()) limpio else f.texto()
     }
 
@@ -278,7 +332,7 @@ object Frase {
             m.etiquetas.forEach { add("#$it") }
         }.joinToString(" ")
         return listOfNotNull(
-            "☑ " + m.titulo.ifBlank { "Tarea" } + (m.prioridad?.let { " ${it.marca}" } ?: ""),
+            "☑ " + m.titulo.ifBlank { "Tarea" } + (m.urgencia.marca?.let { " $it" } ?: ""),
             linea.ifBlank { null },
             m.nota?.let { "$NOTA $it" }
         ).joinToString("\n")
