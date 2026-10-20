@@ -148,163 +148,176 @@ object Fechas {
         "para", "el", "al", "la", "de", "del", "este", "esta", "dia", "en", "a", "las", "los", "y", "sobre", "hacia", "antes"
     )
 
-    /** **La fecha de una frase entera.** [ahora]: el momento local de ahora. */
+    /** Lo que se va leyendo de la frase. */
+    private class Leido {
+        var dia: Long? = null
+        var minuto: Int? = null
+        /** El día salió de una fecha sin año (si ya pasó, la del año que viene). */
+        var sinAnio = false
+        /** El día salió de un número solo («el 20»): del mes en curso, o del siguiente si ya pasó. */
+        var sinMes = false
+    }
+
+    /**
+     * **La fecha de una frase entera.** [ahora]: el momento local de ahora. Desde el 18-oct-2026 (PC
+     * `pixpin-frase/src/fechas.rs`): «5pm» y «5:30pm» pegados, «el 20 (a las 9)», y una fecha sin año
+     * ya pasada es la del año que viene («el 3» ya pasado, la del mes que viene).
+     */
     fun interpretar(frase: String, ahora: Momento): Momento {
         val original = frase.trim().trimEnd('.', ',', ';').trim()
         val q = Acciones.normalizar(original)
-        val palabras = q.split(Regex("[\\s,]")).filter { it.isNotEmpty() }
+        val palabras = q.split(Regex("[\\s,]+")).filter { it.isNotEmpty() }.flatMap { p ->
+            val n = p.removeSuffix("pm").takeIf { it != p } ?: p.removeSuffix("am").takeIf { it != p }
+            if (n != null && n.isNotEmpty() && n.all { it.isDigit() || it == ':' }) listOf(n, p.substring(n.length)) else listOf(p)
+        }
         if (palabras.isEmpty()) throw ErrorFecha.NoEntiendo(original)
         fun noEntiendo() = ErrorFecha.NoEntiendo(original)
         fun noExiste() = ErrorFecha.NoExiste(original)
-        var dia: Long? = null
-        var minutoLeido: Int? = null
-        var sinAnio = false
+        val l = Leido()
         var i = 0
         var tarde: Boolean? = null
-        fun ponerDia(d: Long) {
-            if (dia != null) throw noEntiendo()
-            dia = d
-        }
+        fun ponerDia(d: Long) { if (l.dia != null) throw noEntiendo(); l.dia = d }
         while (i < palabras.size) {
             val p = palabras[i]
             val sig = palabras.getOrNull(i + 1)
-            if (p == "hoy") {
-                ponerDia(ahora.dia)
-            } else if (p == "pasado" && sig == "manana") {
-                ponerDia(ahora.dia + 2); i++
-            } else if (p == "manana") {
-                val franja = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "de" && minutoLeido != null
-                val porLa = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "por"
-                if (franja || porLa) {
-                    tarde = false
-                    if (porLa && minutoLeido == null) minutoLeido = 9 * 60
-                } else ponerDia(ahora.dia + 1)
-            } else if (p == "tarde" || p == "noche") {
-                val franjaDe = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "de"
-                if (franjaDe && minutoLeido != null) {
-                    tarde = true
-                } else if (minutoLeido == null) {
-                    minutoLeido = if (p == "tarde") 17 * 60 else 20 * 60
-                    tarde = null
-                    if (i >= 1 && palabras[i - 1] == "esta" && dia == null) dia = ahora.dia
-                } else throw noEntiendo()
-            } else if (p == "mediodia") {
-                if (minutoLeido != null) throw noEntiendo()
-                minutoLeido = 12 * 60
-            } else if (p == "am" || p == "pm") {
-                tarde = p == "pm"
-            } else if (p == "por" && sig == "la") {
-                // Lo hace la siguiente palabra.
-            } else if (diaSemana(p) != null) {
-                val ds = diaSemana(p)!!
-                val hoy = diaDeLaSemana(ahora.dia)
-                var salto = Math.floorMod(ds - hoy, 7L)
-                if (salto == 0L) salto = 7
-                if (sig == "que" && palabras.getOrNull(i + 2) == "viene") i += 2
-                ponerDia(ahora.dia + salto)
-            } else if (p == "proximo" || p == "proxima" || p == "siguiente") {
-                // Lo pone la palabra que sigue.
-            } else if (p == "semana") {
-                val antes = i >= 1 && palabras[i - 1] in setOf("proxima", "siguiente")
-                val despues = sig == "que" && palabras.getOrNull(i + 2) == "viene"
-                if (!(antes || despues)) throw noEntiendo()
-                if (despues) i += 2
-                val hoy = diaDeLaSemana(ahora.dia)
-                ponerDia(ahora.dia + (7 - hoy))
-            } else if ((p == "dentro" && sig == "de") || enUnidad(p, sig, palabras.getOrNull(i + 2))) {
-                val j = if (p == "dentro") i + 2 else i + 1
-                val n = palabras.getOrNull(j)?.let { numero(it) } ?: throw noEntiendo()
-                when (palabras.getOrNull(j + 1) ?: throw noEntiendo()) {
-                    "dia", "dias" -> ponerDia(ahora.dia + n)
-                    "semana", "semanas" -> ponerDia(ahora.dia + 7 * n)
-                    "hora", "horas" -> {
-                        val total = ahora.dia * 1440 + ahora.minuto + 60 * n
-                        ponerDia(Math.floorDiv(total, 1440L))
-                        if (minutoLeido != null) throw noEntiendo()
-                        minutoLeido = Math.floorMod(total, 1440L).toInt()
-                    }
-                    else -> throw noEntiendo()
+            when {
+                p == "hoy" -> ponerDia(ahora.dia)
+                p == "pasado" && sig == "manana" -> { ponerDia(ahora.dia + 2); i++ }
+                p == "manana" -> {
+                    val franja = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "de" && l.minuto != null
+                    val porLa = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "por"
+                    if (franja || porLa) {
+                        tarde = false
+                        if (porLa && l.minuto == null) l.minuto = 9 * 60
+                    } else ponerDia(ahora.dia + 1)
                 }
-                i = j + 1
-            } else if (fechaNumerica(p, ahora) != null) {
-                val (y, m, d) = fechaNumerica(p, ahora)!!
-                if (!existe(y.first, m, d)) throw noExiste()
-                sinAnio = sinAnio || y.second
-                ponerDia(diasDe(y.first, m, d))
-            } else if (':' in p || (p.endsWith('h') && p.length <= 3 && p.dropLast(1).toIntOrNull()?.let { it >= 0 } == true)) {
-                val (h, mi) = if (':' in p) {
-                    val (a, b) = p.split(':', limit = 2)
-                    (a.toLongOrNull() ?: throw noEntiendo()) to (b.trimEnd('h').toLongOrNull() ?: throw noEntiendo())
-                } else (p.dropLast(1).toLongOrNull() ?: throw noEntiendo()) to 0L
-                if (h !in 0..23 || mi !in 0..59) throw noExiste()
-                if (minutoLeido != null) throw noEntiendo()
-                minutoLeido = (h * 60 + mi).toInt()
-            } else if (numero(p) != null) {
-                val n = numero(p)!!
-                val trasLas = (i >= 1 && palabras[i - 1] in setOf("las", "la") && i >= 2 && palabras[i - 2] == "a") ||
-                    (i >= 1 && palabras[i - 1] == "las")
-                val mesDetras = when {
-                    sig == "de" && palabras.getOrNull(i + 2) != null -> mes(palabras[i + 2])
-                    sig != null -> mes(sig)
-                    else -> null
+                p == "tarde" || p == "noche" -> {
+                    val franjaDe = i >= 2 && palabras[i - 1] == "la" && palabras[i - 2] == "de"
+                    if (franjaDe && l.minuto != null) tarde = true
+                    else if (l.minuto == null) {
+                        l.minuto = if (p == "tarde") 17 * 60 else 20 * 60
+                        tarde = null
+                        if (i >= 1 && palabras[i - 1] == "esta" && l.dia == null) l.dia = ahora.dia
+                    } else throw noEntiendo()
                 }
-                if (mesDetras != null && !trasLas) {
-                    i += if (sig == "de") 2 else 1
-                    var y: Long? = null
-                    val a = palabras.getOrNull(i + 1)
-                    val b = palabras.getOrNull(i + 2)
-                    val xa = a?.toLongOrNull()?.takeIf { it >= 1000 }
-                    val xb = b?.toLongOrNull()?.takeIf { it >= 1000 }
-                    if (xa != null) { y = xa; i += 1 }
-                    else if ((a == "de" || a == "del") && xb != null) { y = xb; i += 2 }
-                    val anio = y ?: fechaDe(ahora.dia).first
-                    if (!existe(anio, mesDetras, n)) throw noExiste()
-                    sinAnio = sinAnio || y == null
-                    ponerDia(diasDe(anio, mesDetras, n))
-                } else if (trasLas || sig in setOf("de", "en", "am", "pm", "y") || i + 1 == palabras.size) {
-                    if (n !in 0..24) throw noExiste()
-                    if (minutoLeido != null) throw noEntiendo()
-                    var minuto = (n * 60).toInt()
-                    if (sig == "y") {
-                        when (palabras.getOrNull(i + 2)) {
-                            "media" -> minuto += 30
-                            "cuarto" -> minuto += 15
-                            else -> throw noEntiendo()
+                p == "mediodia" -> { if (l.minuto != null) throw noEntiendo(); l.minuto = 12 * 60 }
+                p == "am" || p == "pm" -> tarde = p == "pm"
+                p == "por" && sig == "la" -> {}
+                diaSemana(p) != null -> {
+                    val ds = diaSemana(p)!!
+                    val hoy = diaDeLaSemana(ahora.dia)
+                    var salto = Math.floorMod(ds - hoy, 7L)
+                    if (salto == 0L) salto = 7
+                    if (sig == "que" && palabras.getOrNull(i + 2) == "viene") i += 2
+                    ponerDia(ahora.dia + salto)
+                }
+                p == "proximo" || p == "proxima" || p == "siguiente" -> {}
+                p == "semana" -> {
+                    val antes = i >= 1 && palabras[i - 1] in setOf("proxima", "siguiente")
+                    val despues = sig == "que" && palabras.getOrNull(i + 2) == "viene"
+                    if (!(antes || despues)) throw noEntiendo()
+                    if (despues) i += 2
+                    ponerDia(ahora.dia + (7 - diaDeLaSemana(ahora.dia)))
+                }
+                (p == "dentro" && sig == "de") || enUnidad(p, sig, palabras.getOrNull(i + 2)) -> {
+                    val j = if (p == "dentro") i + 2 else i + 1
+                    val n = palabras.getOrNull(j)?.let { numero(it) } ?: throw noEntiendo()
+                    when (palabras.getOrNull(j + 1) ?: throw noEntiendo()) {
+                        "dia", "dias" -> ponerDia(ahora.dia + n)
+                        "semana", "semanas" -> ponerDia(ahora.dia + 7 * n)
+                        "hora", "horas" -> {
+                            val total = ahora.dia * 1440 + ahora.minuto + 60 * n
+                            ponerDia(Math.floorDiv(total, 1440L))
+                            if (l.minuto != null) throw noEntiendo()
+                            l.minuto = Math.floorMod(total, 1440L).toInt()
                         }
-                        i += 2
+                        else -> throw noEntiendo()
                     }
-                    if (minuto >= 24 * 60) throw noExiste()
-                    minutoLeido = minuto
-                } else throw noEntiendo()
-            } else if (mes(p) != null && i >= 1 && palabras[i - 1] == "de" && dia == null) {
-                throw noEntiendo()
-            } else if (relleno(p) || p == "que" || p == "viene") {
-                // nada
-            } else throw noEntiendo()
+                    i = j + 1
+                }
+                fechaNumerica(p, ahora) != null -> {
+                    val (y, m, d) = fechaNumerica(p, ahora)!!
+                    if (!existe(y.first, m, d)) throw noExiste()
+                    l.sinAnio = l.sinAnio || y.second
+                    ponerDia(diasDe(y.first, m, d))
+                }
+                p.contains(':') || (p.endsWith('h') && p.length <= 3 && p.dropLast(1).toIntOrNull() != null) -> {
+                    val (h, mi) = if (p.contains(':')) {
+                        val (a, b) = p.split(':', limit = 2)
+                        (a.toLongOrNull() ?: throw noEntiendo()) to (b.trimEnd('h').toLongOrNull() ?: throw noEntiendo())
+                    } else (p.dropLast(1).toLongOrNull() ?: throw noEntiendo()) to 0L
+                    if (h !in 0..23 || mi !in 0..59) throw noExiste()
+                    if (l.minuto != null) throw noEntiendo()
+                    l.minuto = (h * 60 + mi).toInt()
+                }
+                numero(p) != null -> {
+                    val n = numero(p)!!
+                    val trasLas = (i >= 1 && palabras[i - 1] in setOf("las", "la") && i >= 2 && palabras[i - 2] == "a") || (i >= 1 && palabras[i - 1] == "las")
+                    val mesDetras = when {
+                        sig == "de" && palabras.getOrNull(i + 2) != null -> mes(palabras[i + 2])
+                        sig != null -> mes(sig)
+                        else -> null
+                    }
+                    if (mesDetras != null && !trasLas) {
+                        i += if (sig == "de") 2 else 1
+                        var y: Long? = null
+                        val a = palabras.getOrNull(i + 1)
+                        val b = palabras.getOrNull(i + 2)
+                        val ax = a?.toLongOrNull()?.takeIf { it >= 1000 }
+                        val bx = b?.toLongOrNull()?.takeIf { it >= 1000 }
+                        if (ax != null) { y = ax; i += 1 }
+                        else if (a in setOf("de", "del") && bx != null) { y = bx; i += 2 }
+                        val anio = y ?: fechaDe(ahora.dia).first
+                        if (!existe(anio, mesDetras, n)) throw noExiste()
+                        l.sinAnio = l.sinAnio || y == null
+                        ponerDia(diasDe(anio, mesDetras, n))
+                    } else if (!trasLas && l.dia == null && i >= 1 && palabras[i - 1] in setOf("el", "dia") && n in 1..31) {
+                        // «el 20 (a las 9)»: el día 20 del mes en curso (18-oct-2026).
+                        val (y, m, _) = fechaDe(ahora.dia)
+                        val dia = (0 until 12).map { k -> (y + (m - 1 + k) / 12) to ((m - 1 + k) % 12 + 1) }
+                            .firstOrNull { (yy, mm) -> existe(yy, mm, n) }?.let { (yy, mm) -> diasDe(yy, mm, n) } ?: throw noExiste()
+                        l.sinMes = true
+                        ponerDia(dia)
+                    } else if (trasLas || sig in setOf("de", "en", "am", "pm", "y") || i + 1 == palabras.size) {
+                        if (n !in 0..24) throw noExiste()
+                        if (l.minuto != null) throw noEntiendo()
+                        var minuto = (n * 60).toInt()
+                        if (sig == "y") {
+                            minuto += when (palabras.getOrNull(i + 2)) { "media" -> 30; "cuarto" -> 15; else -> throw noEntiendo() }
+                            i += 2
+                        }
+                        if (minuto >= 24 * 60) throw noExiste()
+                        l.minuto = minuto
+                    } else throw noEntiendo()
+                }
+                mes(p) != null && i >= 1 && palabras[i - 1] == "de" && l.dia == null -> throw noEntiendo()
+                relleno(p) || p == "que" || p == "viene" -> {}
+                else -> throw noEntiendo()
+            }
             i++
         }
-        if (dia == null && minutoLeido == null) throw noEntiendo()
-        var minuto = minutoLeido ?: HORA_POR_OMISION
+        if (l.dia == null && l.minuto == null) throw noEntiendo()
+        var minuto = l.minuto ?: HORA_POR_OMISION
         if (tarde == true && minuto < 12 * 60) minuto += 12 * 60
         else if (tarde == false && minuto >= 12 * 60 && minuto < 13 * 60) minuto -= 12 * 60
-        var d = dia ?: if (minuto > ahora.minuto) ahora.dia else ahora.dia + 1
-        if (sinAnio && d < ahora.dia) {
-            val (y, m, dd) = fechaDe(d)
-            if (existe(y + 1, m, dd)) d = diasDe(y + 1, m, dd)
+        var dia = l.dia ?: if (minuto > ahora.minuto) ahora.dia else ahora.dia + 1
+        if (l.sinMes && dia < ahora.dia) {
+            val (y, m, d) = fechaDe(dia)
+            (1..12).map { k -> (y + (m - 1 + k) / 12) to ((m - 1 + k) % 12 + 1) }
+                .firstOrNull { (yy, mm) -> existe(yy, mm, d) }?.let { (yy, mm) -> dia = diasDe(yy, mm, d) }
         }
-        val r = Momento(d, minuto)
+        if (l.sinAnio && dia < ahora.dia) {
+            val (y, m, d) = fechaDe(dia)
+            if (existe(y + 1, m, d)) dia = diasDe(y + 1, m, d)
+        }
+        val r = Momento(dia, minuto)
         if (r < ahora) throw ErrorFecha.Pasada(original)
         return r
     }
 
-    /** «2026-10-20», «20/10», «20/10/2026», «20-10-26», «20.10»: ((año, sin año), mes, día). */
+    /** «2026-10-20», «20/10», «20/10/2026», «20-10-26», «20.10»: ((año, sin año), mes, día), o null. */
     private fun fechaNumerica(p: String, ahora: Momento): Triple<Pair<Long, Boolean>, Long, Long>? {
-        val sep = when {
-            '/' in p -> '/'
-            '-' in p -> '-'
-            '.' in p -> '.'
-            else -> return null
-        }
+        val sep = when { '/' in p -> '/'; '-' in p -> '-'; '.' in p -> '.'; else -> return null }
         val trozos = p.split(sep)
         val n = trozos.map { it.toLongOrNull() ?: return null }
         val este = fechaDe(ahora.dia).first
@@ -334,7 +347,7 @@ object Fechas {
                 val m = interpretar(cola, ahora)
                 return cabeza.trimEnd(',', ' ') to m
             } catch (e: ErrorFecha.NoEntiendo) {
-                // sigue
+                // sigue: NoExiste y Pasada salen (para no apuntar «pagar el 31 de febrero» como texto)
             }
         }
         return frase.trim() to null

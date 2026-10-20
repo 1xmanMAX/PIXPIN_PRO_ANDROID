@@ -183,6 +183,33 @@ class Visor3DActivity : ComponentActivity() {
 
         fun repintar() { pintar(); camara++ }
 
+        fun esconder(nuevos: ByteArray) { ocultos = nuevos; pintor?.ocultos = nuevos; repintar() }
+        fun ponerSeccion(c: FloatArray?) { seccion = c; pintor?.seccion = c; repintar() }
+        fun soltar() { elegido = null; elegidoIdx = -1; pintor?.elegido = -1 }
+        /** Lo escondido de nuevo, con lo oculto del panel y a mano (sin aislar). */
+        fun aplicar() {
+            val mm = modelo ?: return
+            val n = arbol?.escondidos(mm, grupos) ?: ByteArray(mm.elementos.size)
+            for (e in sueltos) if (e in n.indices) n[e] = 1
+            aislado = -1; cajaAislada = null
+            esconder(n)
+        }
+        fun mostrarTodo() { grupos = emptySet(); sueltos = emptySet(); aplicar() }
+        fun aislar(e: Int) {
+            val m = modelo ?: return
+            val nuevos = ByteArray(m.elementos.size) { 1 }
+            if (e in nuevos.indices) nuevos[e] = 0
+            aislado = e
+            esconder(nuevos)
+            lifecycleScope.launch {
+                val c = withContext(Dispatchers.Default) { ElegirEn3D.cajaDe(m, e) } ?: return@launch
+                if (aislado != e) return@launch
+                cajaAislada = c
+                orbita = orbita?.encuadrarCon(c, ancho, alto)
+                repintar()
+            }
+        }
+
         // ---- **Marcadores con toda la vista, marcos para imprimir y la tinta de cada marcador** (PC
         // 19/20-oct-2026, `pixpin-cad/src/marcadores.rs`). Un marcador guarda la cámara, el corte, lo
         // aislado y lo oculto; lo anotado sobre él solo se ve cuando la vista **es** la suya. Los de un
@@ -228,32 +255,6 @@ class Visor3DActivity : ComponentActivity() {
             @Suppress("UNUSED_EXPRESSION") camara
             val e = estadoDeAhora() ?: return null
             return cad.modelo.firstOrNull { com.forge.pixpin.motor.MarcadoresCad.coincide(e, it.estado) }
-        }
-        fun esconder(nuevos: ByteArray) { ocultos = nuevos; pintor?.ocultos = nuevos; repintar() }
-        fun ponerSeccion(c: FloatArray?) { seccion = c; pintor?.seccion = c; repintar() }
-        fun soltar() { elegido = null; elegidoIdx = -1; pintor?.elegido = -1 }
-        /** Lo escondido de nuevo, con lo oculto del panel y a mano (sin aislar). */
-        fun aplicar() {
-            val mm = modelo ?: return
-            val n = arbol?.escondidos(mm, grupos) ?: ByteArray(mm.elementos.size)
-            for (e in sueltos) if (e in n.indices) n[e] = 1
-            aislado = -1; cajaAislada = null
-            esconder(n)
-        }
-        fun mostrarTodo() { grupos = emptySet(); sueltos = emptySet(); aplicar() }
-        fun aislar(e: Int) {
-            val m = modelo ?: return
-            val nuevos = ByteArray(m.elementos.size) { 1 }
-            if (e in nuevos.indices) nuevos[e] = 0
-            aislado = e
-            esconder(nuevos)
-            lifecycleScope.launch {
-                val c = withContext(Dispatchers.Default) { ElegirEn3D.cajaDe(m, e) } ?: return@launch
-                if (aislado != e) return@launch
-                cajaAislada = c
-                orbita = orbita?.encuadrarCon(c, ancho, alto)
-                repintar()
-            }
         }
 
         LaunchedEffect(original) {
