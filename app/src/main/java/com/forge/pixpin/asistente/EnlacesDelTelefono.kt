@@ -48,6 +48,66 @@ class EnlacesDelTelefono(private val contexto: Context) {
         return Leido(ps)
     }
 
+    /**
+     * **`al_lienzo`** (PC 17-oct): el lienzo que se llame así (sin tildes ni mayúsculas; del `proyecto`
+     * dicho o, sin él, de cualquier chat; si no hay ninguno, uno nuevo en `proyecto` o en Mensajes
+     * guardados), y en él, apiladas, las fotos y debajo el texto (sin los `[img NN]`). Abierto, en vivo.
+     */
+    internal fun alLienzo(pedido: JsonObject, almacen: MensajesStore): String {
+        fun texto(k: String) = (pedido[k] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+        val nombre = texto("lienzo") ?: error("falta el nombre del lienzo")
+        val proyecto = texto("proyecto")
+        // Sin tildes ni mayúsculas, como el PC.
+        fun llano(t: String) = java.text.Normalizer.normalize(t.trim().lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+        val buscado = llano(nombre)
+        val lienzos = almacen.leer().filter { it.clase == Clase.DIBUJO && it.referencia != null && llano(it.nombre) == buscado }
+        val ahora = System.currentTimeMillis()
+        val id = ((if (proyecto != null) lienzos.lastOrNull { it.proyecto == proyecto } else null) ?: lienzos.lastOrNull())?.referencia
+            ?: ("dib-$ahora").also { nuevo ->
+                com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, nuevo, com.forge.pixpin.motor.Scene()) ?: error("no se pudo crear el lienzo")
+                almacen.anadir(Mensaje(id = UUID.randomUUID().toString(), cuando = ahora, clase = Clase.DIBUJO, nombre = nombre, referencia = nuevo, proyecto = proyecto))
+            }
+        val fotos = (pedido["imagenes"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }.mapNotNull { r ->
+            val f = File(r).takeIf { it.isFile } ?: return@mapNotNull null
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(f.path, o)
+            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "image/png"
+            com.forge.pixpin.motor.ExcalidrawStore.guardarImagen(contexto, f, mime)?.let { Triple(it, o.outWidth, o.outHeight) }
+        }
+        val dicho = texto("texto")?.replace(Regex("\\[img \\d+\\]"), "")?.trim()?.takeIf { it.isNotEmpty() }
+        // El texto nace como al pegarlo en el lienzo (la letra y el tamaño de siempre), y luego va a la pila.
+        val elTexto = dicho?.let { t ->
+            com.forge.pixpin.motor.DrawController(com.forge.pixpin.motor.Scene()).pegarTexto(t, com.forge.pixpin.motor.Pt(0.0, 0.0), com.forge.pixpin.motor.PilaDelLienzo.ANCHO_COLUMNA,
+                { r, fam, tam -> com.forge.pixpin.motor.DrawFonts.medirTexto(contexto, r, fam, tam).first },
+                { r, fam, tam -> com.forge.pixpin.motor.DrawFonts.medirTexto(contexto, r, fam, tam) })
+        }
+        if (fotos.isEmpty() && elTexto == null) error("falta el texto o alguna imagen")
+        val abierto = com.forge.pixpin.motor.LienzoAlFrente.actual() as? com.forge.pixpin.motor.EditaElLienzo
+        // En el hilo de la interfaz, sin `runBlocking(Main)` (se cuelga si ya se está en él).
+        val enVivo = abierto != null && enLaInterfaz {
+            val a = abierto.paraEditar()?.takeIf { it.id == id } ?: return@enLaInterfaz false
+            val apilada = com.forge.pixpin.motor.PilaDelLienzo.apilar(a.escena, fotos, elTexto, ahora)
+            abierto.ponerEscena(apilada.elements, apilada.files)
+        }
+        if (!enVivo) {
+            val ruta = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, id)
+            val escena = com.forge.pixpin.motor.ExcalidrawStore.cargar(ruta) ?: com.forge.pixpin.motor.Scene()
+            com.forge.pixpin.motor.ExcalidrawStore.guardar(contexto, id, com.forge.pixpin.motor.PilaDelLienzo.apilar(escena, fotos, elTexto, ahora))
+                ?: error("no se pudo guardar el lienzo")
+        }
+        return "Apilado en el lienzo «$nombre»."
+    }
+
+    private fun enLaInterfaz(bloque: () -> Boolean): Boolean {
+        val principal = android.os.Looper.getMainLooper()
+        if (android.os.Looper.myLooper() == principal) return bloque()
+        val hecho = java.util.concurrent.CountDownLatch(1)
+        var r = false
+        android.os.Handler(principal).post { try { r = bloque() } catch (_: Throwable) { } finally { hecho.countDown() } }
+        hecho.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        return r
+    }
+
     /** Lo que se le enseña al usuario antes de hacer algo que no es inofensivo (PC `orden-motivo-…`). */
     fun motivo(seguridad: String): String = when (seguridad.substringAfter(':')) {
         "ficheros" -> "abre o manda ficheros de este teléfono"
@@ -105,6 +165,8 @@ class EnlacesDelTelefono(private val contexto: Context) {
                 com.forge.pixpin.guardados.MensajesActivity.irAlMensaje(app, chat, Asistente.asegurarChat(app).nombre, nota.id)
                 "Preguntado al asistente."
             }
+            // Fotos y texto a un lienzo por su nombre, apilados (PC `pila_lienzo.rs`).
+            "al_lienzo" -> alLienzo(pedido, almacen)
             "leer_en_voz" -> {
                 val t = texto("texto") ?: error("falta el texto")
                 android.os.Handler(android.os.Looper.getMainLooper()).post { VozDelAsistente.leer(app, t) }
