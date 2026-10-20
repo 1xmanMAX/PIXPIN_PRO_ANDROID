@@ -109,6 +109,79 @@ object Automatizaciones {
         return null
     }
 
+    /**
+     * **Una automatización desde la receta del pedido** (PC `de_receta`, la fila `crear_automatizacion`):
+     * `nombre`, `disparador.tipo` (y `hora`, `dias`) y `pasos` (una lista o un texto con una lista JSON;
+     * cada paso, un texto —un pedido al asistente— u `{herramienta, args?, proyecto?, imagenes?}` o
+     * `{asistente: "…"}`). El JSON sale con la forma del PC (`tipo` en el disparador y en cada paso). Sin
+     * `aparato`: el teléfono no corre automatizaciones, así que corre en el PC. Lanza el motivo si no vale.
+     */
+    fun deReceta(receta: JsonObject, id: String, ahora: Long): JsonObject {
+        fun cad(o: JsonObject?, k: String) = (o?.get(k) as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val nombre = cad(receta, "nombre")?.trim()?.takeIf { it.isNotEmpty() } ?: throw IllegalArgumentException("falta el nombre")
+        val d = receta["disparador"]
+        val tipo = (if (d is JsonObject) cad(d, "tipo") else (d as? JsonPrimitive)?.takeIf { it.isString }?.content).orEmpty()
+        val disparador = when (Acciones.normalizar(tipo.trim()).replace(' ', '_').replace('-', '_')) {
+            "al_capturar" -> buildJsonObject { put("tipo", "al_capturar") }
+            "al_sincronizar" -> buildJsonObject { put("tipo", "al_sincronizar") }
+            "a_mano" -> buildJsonObject { put("tipo", "a_mano") }
+            "a_la_hora" -> {
+                val hora = cad(d as? JsonObject, "hora").orEmpty().trim()
+                if (minutoDelDia(hora) == null) throw IllegalArgumentException("la hora «$hora» no se entiende (HH:MM)")
+                val dias = ((d as? JsonObject)?.get("dias") as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.longOrNull }.orEmpty()
+                if (dias.any { it !in 1..7 }) throw IllegalArgumentException("los días van del 1 (lunes) al 7 (domingo)")
+                buildJsonObject { put("tipo", "a_la_hora"); put("hora", hora); if (dias.isNotEmpty()) put("dias", JsonArray(dias.map { JsonPrimitive(it) })) }
+            }
+            else -> throw IllegalArgumentException("disparador desconocido «$tipo»")
+        }
+        val pasosV: JsonArray = when (val p = receta["pasos"]) {
+            is JsonArray -> p
+            is JsonPrimitive -> if (p.isString) runCatching { Json.parseToJsonElement(p.content) as JsonArray }.getOrNull()
+                ?: p.content.trim().takeIf { it.isNotEmpty() }?.let { JsonArray(listOf(JsonPrimitive(it))) }
+                ?: throw IllegalArgumentException("faltan los pasos") else throw IllegalArgumentException("faltan los pasos")
+            else -> throw IllegalArgumentException("faltan los pasos")
+        }
+        val pasos = pasosV.mapIndexed { i, v ->
+            fun malo(m: String): Nothing = throw IllegalArgumentException("paso ${i + 1}: $m")
+            when {
+                v is JsonPrimitive && v.isString && v.content.isNotBlank() -> buildJsonObject { put("tipo", "asistente"); put("pedido", v.content.trim()) }
+                v is JsonObject -> {
+                    val imagenes = (v["imagenes"] as? JsonArray)?.filter { it is JsonPrimitive && it.isString }.orEmpty()
+                    if (cad(v, "tipo") == "asistente" || cad(v, "tipo") == "accion") v
+                    else (cad(v, "asistente") ?: cad(v, "pedido"))?.let { pedido ->
+                        buildJsonObject { put("tipo", "asistente"); put("pedido", pedido); cad(v, "proyecto")?.let { put("proyecto", it) }; if (imagenes.isNotEmpty()) put("imagenes", JsonArray(imagenes)) }
+                    } ?: run {
+                        val herramienta = cad(v, "herramienta") ?: cad(v, "accion") ?: malo("ni «herramienta» ni «asistente»")
+                        val fila = Acciones.porNombre(herramienta) ?: malo("no hay ninguna acción «$herramienta»")
+                        // Que no se dispare a sí misma ni cree otras (PC `bloqueado`).
+                        if (fila.accion == "automatizacion") malo("una automatización no puede crear ni tocar automatizaciones")
+                        val tipoDisparo = (disparador["tipo"] as JsonPrimitive).content
+                        if ((tipoDisparo == "al_capturar" && fila.accion == "capturar") || (tipoDisparo == "al_sincronizar" && fila.accion == "sincronizar")) {
+                            malo("«${fila.accion}» haría saltar otra vez esta automatización: sería un bucle")
+                        }
+                        try { Acciones.validar(fila, (v["args"] as? JsonObject) ?: JsonObject(emptyMap())) } catch (e: ErrorHerramienta) {
+                            // Las variables ({captura}, {resultado}) se ponen al correr: aquí solo cuentan los que faltan.
+                            if (e.message?.startsWith("falta") == true) malo(e.message!!)
+                        }
+                        buildJsonObject {
+                            put("tipo", "accion"); put("herramienta", herramienta)
+                            (v["args"] as? JsonObject)?.takeIf { it.isNotEmpty() }?.let { put("args", it) }
+                            cad(v, "proyecto")?.let { put("proyecto", it) }
+                            if (imagenes.isNotEmpty()) put("imagenes", JsonArray(imagenes))
+                        }
+                    }
+                }
+                else -> malo("un paso es un texto o un objeto")
+            }
+        }
+        if (pasos.isEmpty()) throw IllegalArgumentException("no tiene pasos")
+        if (pasos.size > MAX_PASOS) throw IllegalArgumentException("tiene ${pasos.size} pasos; como mucho $MAX_PASOS")
+        return buildJsonObject {
+            put("id", id); put("nombre", nombre); put("activa", true); put("disparador", disparador)
+            put("pasos", JsonArray(pasos)); put("creada", ahora); put("tocada", ahora)
+        }
+    }
+
     fun minutoDelDia(hora: String): Int? {
         val (h, m) = hora.trim().split(':').takeIf { it.size == 2 } ?: return null
         val hh = h.toIntOrNull() ?: return null

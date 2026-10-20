@@ -378,6 +378,7 @@ class PlanoActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        vistaPedida = intent?.getDoubleArrayExtra(EXTRA_VISTA)?.takeIf { it.size >= 3 }
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -405,9 +406,18 @@ class PlanoActivity : ComponentActivity() {
         principal.postDelayed(encimaNitida, 160)
     }
 
+    /** **Abrir mirando un sitio** (el asistente: «busca … en el plano»): `[x, y, ancho]` en coordenadas del dibujo. Una vez. */
+    private var vistaPedida: DoubleArray? = null
+
     private fun verTodo() {
         val m = modelo ?: return
         if (ancho <= 0 || alto <= 0) return
+        vistaPedida?.let { v ->
+            vistaPedida = null
+            camara = CamaraPlano(v[0] - m.origenX, v[1] - m.origenY, (v[2] / ancho).coerceAtLeast(1e-9))
+            pintar()
+            return
+        }
         // Lo que importa, no la caja entera: un objeto suelto a kilómetros dejaba el plano diminuto.
         camara = CamaraPlano.encuadrar(m.cajaUtil, ancho, alto)
         pintar()
@@ -1403,9 +1413,12 @@ class PlanoActivity : ComponentActivity() {
 
         fun esPlano(nombre: String?): Boolean = LectorDePlanos.esPlano(nombre)
 
-        fun abrir(c: Context, ruta: String, nombre: String?) {
+        private const val EXTRA_VISTA = "vista"
+
+        fun abrir(c: Context, ruta: String, nombre: String?, vista: DoubleArray? = null) {
             c.startActivity(
                 Intent(c, PlanoActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_NOMBRE, nombre)
+                    .apply { if (vista != null) putExtra(EXTRA_VISTA, vista) }
                     .apply { if (c !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             )
         }

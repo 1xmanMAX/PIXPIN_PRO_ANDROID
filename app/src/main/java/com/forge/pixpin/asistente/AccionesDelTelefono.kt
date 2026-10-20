@@ -258,8 +258,74 @@ class AccionesDelTelefono(
                 hecho
             }
             Acciones.ABRIR -> abrirPorNombre(texto(p, "descripcion")!!)
+            // Las capturas (PC «conservar» y «a la papelera»): las de la galería de PixPin, por su nombre.
+            "conservar_captura" -> {
+                val c = captura(texto(p, "ruta")!!)
+                val raiz = com.forge.pixpin.capture.BarrenderoDeCapturas.raiz(contexto)
+                if (!com.forge.pixpin.guardados.AlChat.meter(contexto, c.uri, null, c.nombre)) error("no se pudo meter «${c.nombre}» en Mensajes guardados")
+                com.forge.pixpin.capture.CaducidadDeCapturas.cambiar(raiz, System.currentTimeMillis()) { it.copy(conservadas = it.conservadas + c.nombre) }
+                "Captura «${c.nombre}» conservada: está en Mensajes guardados y ya no se borra."
+            }
+            "borrar_captura" -> {
+                val c = captura(texto(p, "ruta")!!)
+                if (com.forge.pixpin.capture.BarrenderoDeCapturas.aLaPapelera(contexto, listOf(c.uri)).isNotEmpty()) {
+                    error("«${c.nombre}» no es de PixPin: bórrala desde la galería de capturas (pide permiso al sistema)")
+                }
+                val raiz = com.forge.pixpin.capture.BarrenderoDeCapturas.raiz(contexto)
+                runCatching { com.forge.pixpin.capture.CaducidadDeCapturas.cambiar(raiz, System.currentTimeMillis()) { com.forge.pixpin.capture.CaducidadDeCapturas.sinEstas(it, listOf(c.nombre)) } }
+                "Captura «${c.nombre}» en la papelera (se recupera desde la galería)."
+            }
+            // La caja flotante del PC: en el teléfono, el chat con el selector de archivos abierto.
+            "soltar" -> {
+                enPantalla { com.forge.pixpin.guardados.MensajesActivity.adjuntar(contexto, chat, nombreDelChat(chat)) }
+                "Elige los archivos: entran al chat «${nombreDelChat(chat)}»."
+            }
+            // Sincronizar ahora con los aparatos del grupo que se vean (el PC, el portátil…).
+            "sincronizar" -> {
+                enPantalla { com.forge.pixpin.sincro.SincronizarActivity.abrir(contexto, ya = true) }
+                "Sincronizando con los aparatos del grupo que estén en la Wi-Fi."
+            }
+            // Mandar fotos a lo que tengan abierto los otros aparatos (en el PC, «al móvil»; aquí, al PC).
+            "enviar_al_movil" -> enviarAlGrupo(p)
+            "automatizacion" -> {
+                val receta = p["receta"] as? JsonObject ?: error("falta la receta")
+                val ahora = System.currentTimeMillis()
+                val a = try {
+                    com.forge.pixpin.ia.Automatizaciones.deReceta(receta, com.forge.pixpin.ia.Automatizaciones.idNuevo(ahora), ahora)
+                } catch (e: IllegalArgumentException) { error("la automatización no vale: ${e.message}") }
+                RecetasDelTelefono.cambiar(contexto) { it.anadir(a) }
+                val disparo = (a["disparador"] as JsonObject)["tipo"].toString().trim('"')
+                "$hecho Corre en el PC (el teléfono no lanza automatizaciones solas; ${if (disparo == "a_mano") "a mano, desde Ajustes → Asistente" else "se dispara sola allí"})."
+            }
             else -> error("«${a.herramienta}» no se puede hacer en el teléfono")
         }
+    }
+
+    /** Una captura de la galería de PixPin por su nombre (o su ruta). */
+    private fun captura(ruta: String): com.forge.pixpin.capture.BarrenderoDeCapturas.Captura {
+        val nombre = File(ruta).name
+        val todas = com.forge.pixpin.capture.BarrenderoDeCapturas.listar(contexto) ?: error("no se pudo leer la galería de capturas")
+        return todas.firstOrNull { it.nombre == nombre } ?: todas.firstOrNull { it.nombre.equals(nombre, true) }
+            ?: error("no hay ninguna captura «$nombre» en la galería de PixPin")
+    }
+
+    /** **Fotos a los aparatos del grupo** por el canal cifrado (`suelto`, como «p s» del PC): a lo que tengan abierto. */
+    private fun enviarAlGrupo(p: JsonObject): String {
+        val rutas = (p["imagenes"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
+        val ficheros = rutas.map(::File).filter { it.isFile }
+        if (ficheros.isEmpty()) error("no encuentro ninguna de esas imágenes en el teléfono")
+        val disco = com.forge.pixpin.sincro.Red.disco(contexto)
+        val quien = texto(p, "aparato")?.takeIf { it != "todos" }
+        val vistos = runCatching { kotlinx.coroutines.runBlocking { com.forge.pixpin.sincro.AlDia.aparatos(contexto) } }.getOrDefault(emptyList()).associateBy { it.id }
+        val grupo = com.forge.pixpin.sincro.AlGrupo.aparatos(disco).filter { quien == null || it.id == quien || it.nombre.equals(quien, true) }
+        if (grupo.isEmpty()) error(if (quien != null) "no hay ningún aparato «$quien» en el grupo" else "este teléfono no está en ningún grupo: únelo en Sincronizar")
+        val dichos = grupo.map { a ->
+            val hecho = com.forge.pixpin.sincro.AlGrupo.mandarYa(disco, a.id, ficheros.map { com.forge.pixpin.sincro.AlGrupo.Fichero(it, it.name) },
+                miPuerto = runCatching { com.forge.pixpin.sincro.Presencia.red.puerto }.getOrDefault(0),
+                localizar = { vistos[it.id]?.let { v -> v.host to v.puerto } ?: it.direccion })
+            com.forge.pixpin.sincro.AlGrupo.aviso(hecho)
+        }
+        return "Enviado: " + dichos.joinToString("; ")
     }
 
     private fun sinPermisoDeSuperponer() {

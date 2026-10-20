@@ -32,6 +32,9 @@ object PlanoNativo {
 
     /** Un DWG pasado a DXF (lo escribe `opencadcodec`). Null si salió bien. */
     @JvmStatic external fun aDxf(entrada: String, salida: String): String?
+
+    /** Los textos del plano con su sitio, en JSON `[[texto, x, y, alto], …]` (PC `plano_cad::textos`). Null si salió bien. */
+    @JvmStatic external fun textos(entrada: String, salida: String): String?
 }
 
 /**
@@ -74,6 +77,7 @@ class LectorDePlanos : Service() {
                                 MODO_REVIT -> PlanoNativo.revitAIfc(entrada.absolutePath, salida.absolutePath)
                                 MODO_CAPAS -> PlanoNativo.capas(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
                                 MODO_DXF -> PlanoNativo.aDxf(entrada.absolutePath, salida.absolutePath)
+                                MODO_TEXTOS -> PlanoNativo.textos(entrada.absolutePath, salida.absolutePath)
                                 else -> PlanoNativo.convertir(entrada.absolutePath, salida.absolutePath, carpetasShx(this))
                             }
                         } catch (e: Throwable) {
@@ -101,6 +105,7 @@ class LectorDePlanos : Service() {
         private const val MODO_REVIT = "revit"
         private const val MODO_CAPAS = "capas"
         private const val MODO_DXF = "dxf"
+        private const val MODO_TEXTOS = "textos"
 
         /** Lo que se ve en el visor 3D aunque no sea un plano: Revit, LandXML y puntos (estos, mirando dentro). */
         fun esRevit(nombre: String?) = nombre?.lowercase()?.endsWith(".rvt") == true
@@ -157,6 +162,10 @@ class LectorDePlanos : Service() {
             val letras = huellaDeLetras(c).let { if (it.isEmpty()) "" else "-$it" }
             return pedir(c, plano, File(carpeta(c), clave(plano) + ".v$VERSION_DEL_FORMATO-$REVISION_DE_LETRAS$letras.pxcapas"), MODO_CAPAS, tope)
         }
+
+        /** **Los textos del plano** con su sitio (para buscar y anotar), de la caché o leyéndolos aparte. Bloquea. */
+        fun textos(c: Context, plano: File, tope: Long = 300_000L): Resultado =
+            pedir(c, plano, File(carpeta(c), clave(plano) + "-textos.json"), MODO_TEXTOS, tope)
 
         /** **Un DWG como DXF**, para quien no tenga con qué abrir el DWG. Bloquea. */
         fun aDxf(c: Context, plano: File, tope: Long = 300_000L): Resultado =

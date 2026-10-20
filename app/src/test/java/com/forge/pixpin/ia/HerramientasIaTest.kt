@@ -37,7 +37,8 @@ class HerramientasIaTest {
         // `con_topes(catalogo(), 16)` del PC (main 1984938, 20-oct-2026), volcado con `herramientas/oraculo-del-pc`.
         val delPc = Json.parseToJsonElement(javaClass.getResource("/ia/herramientas-del-pc.json")!!.readText()) as JsonArray
         val porNombre = delPc.associateBy { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
-        val nuestro = Agente.conTopes(Herramientas.catalogo(), Agente.TOPE_LISTAS)
+        // Las tres que el teléfono describe mirando al PC (DESCRIPCION_EN_EL_TELEFONO), con la descripción del PC.
+        val nuestro = Agente.conTopes(Herramientas.catalogo().map { h -> if (h.nombre in Herramientas.DESCRIPCION_EN_EL_TELEFONO) Herramientas.delPc(h.nombre)!! else h }, Agente.TOPE_LISTAS)
         assertEquals(Herramientas.DISPONIBLES.size, nuestro.size)
         for (h in nuestro) {
             // Igual también SIN ordenar: el PC escribe las claves en orden alfabético y la
@@ -55,9 +56,13 @@ class HerramientasIaTest {
         }
     }
 
-    @Test fun `lo que solo es de Windows no se ofrece en el telefono`() {
-        for (n in listOf("caja_para_soltar", "sincronizar_movil", "enviar_al_movil", Acciones.HOJA_A_LIENZO))
-            assertFalse(n, n in Herramientas.catalogo().map { it.nombre })
+    @Test fun `lo del PC con «el movil» se ofrece en el telefono mirando al PC`() {
+        val c = Herramientas.catalogo().associateBy { it.nombre }
+        // El PC dice «el móvil»; aquí es el PC (o el grupo), con los mismos parámetros.
+        assertTrue(c["sincronizar_movil"]!!.descripcion.contains("PC"))
+        assertTrue(c["enviar_al_movil"]!!.descripcion.contains("PC"))
+        assertEquals(Herramientas.delPc("enviar_al_movil")!!.parametros, c["enviar_al_movil"]!!.parametros)
+        assertTrue(c["caja_para_soltar"]!!.descripcion.contains("selector"))
         assertTrue(Herramientas.DISPONIBLES.all { Herramientas.delPc(it) != null })
     }
 

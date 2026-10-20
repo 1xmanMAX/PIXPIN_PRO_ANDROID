@@ -209,8 +209,9 @@ object Herramientas {
         "lienzo_nuevo", "grabar_voz", "reproducir_audio", "lista_nueva", "anadir_tarea", "anadir_tareas", "marcar_tarea",
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
         "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
-        Acciones.TABLA, Acciones.ABRIR, GeometriaPrecisaNombre,
+        Acciones.TABLA, Acciones.ABRIR, Acciones.ANOTAR, Acciones.BUSCAR_EN, Acciones.EXPORTAR, GeometriaPrecisaNombre,
         CronogramaIa.NOMBRE, EscribirEcuacion.NOMBRE, Funciones.NOMBRE, Fisica.NOMBRE, Problema.NOMBRE,
+        "conservar_captura", "borrar_captura", "caja_para_soltar", "sincronizar_movil", "enviar_al_movil", "crear_automatizacion",
         // Editar lo que ya hay (PC 14-oct, `edicion.rs`).
         Edicion.SELECCIONAR, Edicion.TRANSFORMAR, Edicion.ESTILO, Edicion.TRAZAR, Edicion.CORTAR, Edicion.EXTENDER, Edicion.IMAGEN,
         // 15-17 oct, solo con la nube (PC `SOLO_NUBE`): grabar la pantalla no (el teléfono no graba desde aquí).
@@ -258,6 +259,18 @@ object Herramientas {
      * [Seleccion.paraElPedido].
      */
     fun catalogo(): List<Herramienta> = DEL_PC.filter { it.nombre in DISPONIBLES }
+        .map { h -> DESCRIPCION_EN_EL_TELEFONO[h.nombre]?.let { h.copy(descripcion = it) } ?: h }
+
+    /**
+     * **Lo que en el teléfono es «el otro»**: el PC dice «el móvil» donde aquí es el PC (o cualquier
+     * aparato del grupo), y su caja flotante es aquí el selector de archivos del chat. Mismos
+     * parámetros y misma validación; solo cambia lo que lee el modelo.
+     */
+    val DESCRIPCION_EN_EL_TELEFONO = mapOf(
+        "sincronizar_movil" to "Sincroniza ahora con el PC y los demás aparatos del grupo que estén en la Wi-Fi.",
+        "enviar_al_movil" to "Manda imagenes a lo que tengan abierto el PC u otro aparato del grupo (su lienzo o su chat).",
+        "caja_para_soltar" to "Abre el chat con el selector de archivos, para meter ficheros en él."
+    )
 
     /** El catálogo como texto JSON (la lista `tools`). */
     fun catalogoJson(): String = JsonArray(catalogo().map { it.aJson() }).toString()

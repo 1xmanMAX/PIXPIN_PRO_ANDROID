@@ -41,7 +41,7 @@ class SeleccionTest {
         assertEquals(listOf(Herramientas.AYUDA), Herramientas.paraElPedido("¿Cómo hago una captura?").map { it.nombre })
         val tareas = Herramientas.paraElPedido("Apunta comprar pan mañana a las 10").map { it.nombre }
         assertTrue(tareas.toString(), "anadir_tarea" in tareas)
-        // Lo de Windows no sale aunque se pida.
-        assertFalse(Herramientas.paraElPedido("Sincroniza con el móvil").any { it.nombre == "sincronizar_movil" })
+        // Sincronizar ya lo hace el teléfono (con el PC y el grupo).
+        assertTrue(Herramientas.paraElPedido("Sincroniza con el PC").any { it.nombre == "sincronizar_movil" })
     }
 }

@@ -288,6 +288,44 @@ pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_aDxf<'a>(
     resultado(&mut env, r)
 }
 
+/// `PlanoNativo.textos(entrada, salida): String?` — **los textos del plano** con su sitio (PC
+/// `plano_cad::textos`, 14-oct-2026: buscar en un plano y anotar sobre un texto): JSON
+/// `[[texto, x, y, alto], …]` en coordenadas del dibujo; null si salió bien.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_textos<'a>(
+    mut env: jni::JNIEnv<'a>, _c: jni::objects::JClass<'a>, entrada: jni::objects::JString<'a>, salida: jni::objects::JString<'a>,
+) -> jni::sys::jstring {
+    let (e, s) = (texto_de(&mut env, &entrada), texto_de(&mut env, &salida));
+    let r = std::panic::catch_unwind(|| convertir::textos_del_fichero(Path::new(&e)))
+        .map_err(|_| "la lectura del plano se cayó".to_string())
+        .and_then(|r| r)
+        .and_then(|t| std::fs::write(&s, textos_a_json(&t)).map_err(|e| e.to_string()));
+    resultado(&mut env, r)
+}
+
+/// Los textos como el PC los guarda en su caché (`plano_cad::textos::a_json`).
+fn textos_a_json(t: &[convertir::TextoDelPlano]) -> String {
+    let mut s = String::from("[");
+    for (i, x) in t.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str("[\"");
+        for c in x.texto.chars() {
+            match c {
+                '"' => s.push_str("\\\""),
+                '\\' => s.push_str("\\\\"),
+                c if (c as u32) < 0x20 => s.push_str(&format!("\\u{:04x}", c as u32)),
+                c => s.push(c),
+            }
+        }
+        let n = |v: f64| if v.is_finite() { format!("{v}") } else { "0".into() };
+        s.push_str(&format!("\",{},{},{}]", n(x.x), n(x.y), n(x.alto)));
+    }
+    s.push(']');
+    s
+}
+
 /// `PlanoNativo.esDeCivil(ruta): Boolean` — un LandXML o un fichero de puntos (mirando dentro).
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_forge_pixpin_planos_PlanoNativo_esDeCivil<'a>(

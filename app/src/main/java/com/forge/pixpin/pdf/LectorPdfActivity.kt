@@ -131,6 +131,7 @@ class LectorPdfActivity : ComponentActivity() {
                     .putExtra(EXTRA_ANOTAR, anotando)
                     .putExtra(EXTRA_MENSAJE, mensaje)
                     .also { i -> pagina?.let { i.putExtra(EXTRA_PAGINA, it) } }
+                    .also { i -> if (context !is android.app.Activity) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             )
         }
     }
@@ -1790,7 +1791,7 @@ private fun proporcionDeLaHoja(rutaPdf: String, i: Int): Double =
     medidaDeLaHoja(rutaPdf, i)?.let { (an, al) -> an / al }?.takeIf { it > 0.01 } ?: 0.7
 
 /** Dónde está la hoja en las unidades del lector y del editor: siempre la misma. */
-private fun marcoDeLaHoja(rutaPdf: String, i: Int) =
+internal fun marcoDeLaHoja(rutaPdf: String, i: Int) =
     com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco.deHoja(PdfDoc.PAGE_WIDTH.toDouble(), proporcionDeLaHoja(rutaPdf, i))
 
 /**

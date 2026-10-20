@@ -285,9 +285,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     /** El mensaje al que saltar al entrar, si lo pidió un enlace. */
     private var irAlMensajePedido by mutableStateOf<String?>(null)
 
+    /** Abrir el selector de archivos al entrar (la «caja para soltar» del PC, pedida al asistente). */
+    private var adjuntarPedido by mutableStateOf(false)
+
     /** De qué conversación viene este intento. */
     private fun aplicar(intent: Intent?) {
         intent?.getStringExtra(EXTRA_IR_AL_MENSAJE)?.let { irAlMensajePedido = it; intent.removeExtra(EXTRA_IR_AL_MENSAJE) }
+        if (intent?.getBooleanExtra(EXTRA_ADJUNTAR, false) == true) { adjuntarPedido = true; intent.removeExtra(EXTRA_ADJUNTAR) }
         chatDe = intent?.getStringExtra(EXTRA_CHAT_DE)
         nombreDelChat = intent?.getStringExtra(EXTRA_NOMBRE_DEL_CHAT).orEmpty()
         // Llegando por un intento de fuera, atrás cierra esta pantalla y devuelve a
@@ -308,6 +312,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         private const val EXTRA_NOMBRE_DEL_CHAT = "chat_nombre"
         private const val EXTRA_ABRIR = "abrir_mensaje"
         private const val EXTRA_IR_AL_MENSAJE = "ir_al_mensaje"
+        private const val EXTRA_ADJUNTAR = "adjuntar_al_entrar"
+
+        /** **El chat con el selector de archivos abierto** (el teléfono no tiene «caja para soltar»: esto hace lo mismo). */
+        fun adjuntar(context: android.content.Context, proyecto: String?, nombre: String) {
+            context.startActivity(
+                Intent(context, MensajesActivity::class.java)
+                    .also { if (proyecto != null) it.putExtra(EXTRA_CHAT_DE, proyecto).putExtra(EXTRA_NOMBRE_DEL_CHAT, nombre) }
+                    .putExtra(EXTRA_ADJUNTAR, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
 
         /**
          * **Abre el chat [proyecto] (o el general, con null) en el mensaje [mensaje]**, con el
@@ -690,6 +705,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val elegirArchivo = androidx.activity.compose.rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument()
         ) { uri -> uri?.let { guardarArchivo(it); refrescar() } }
+        LaunchedEffect(adjuntarPedido) {
+            if (adjuntarPedido) { adjuntarPedido = false; runCatching { elegirArchivo.launch(arrayOf("*/*")) } }
+        }
 
         // **Varias fotos de una vez, con su cuadro de enviar** (4-oct-2026, el del PC): se
         // eligen, se ordenan, se quitan o se añaden más y se mandan con su descripción. Si el

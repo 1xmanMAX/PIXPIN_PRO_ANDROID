@@ -148,6 +148,7 @@ class SincronizarActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        yaPedido = intent?.getBooleanExtra(EXTRA_YA, false) == true
         disco = Red.disco(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent { PixPinTheme { Pantalla() } }
@@ -838,6 +839,13 @@ class SincronizarActivity : ComponentActivity() {
             // **Todos de una vez** (16-sep-2026): con tres aparatos, sincronizar de uno en uno
             // son seis pulsaciones y hay que acordarse del orden. Ver [sincronizarConTodos].
             val disponibles = lista.filter { it.cerca && it.host != null }
+            // Pedido por el asistente («sincroniza ahora», PC `sincronizar_movil`): en cuanto se ven.
+            LaunchedEffect(disponibles.map { it.nombre }) {
+                if (yaPedido && disponibles.isNotEmpty()) {
+                    yaPedido = false
+                    if (disponibles.size > 1) sincronizarConTodos(disponibles) else disponibles[0].let { sincronizarCon(it.host!!, it.puerto, it.nombre) }
+                }
+            }
             if (disponibles.size > 1) {
                 Button(
                     onClick = { sincronizarConTodos(disponibles) },
@@ -1146,9 +1154,15 @@ class SincronizarActivity : ComponentActivity() {
         }
     }
 
+    /** Sincronizar en cuanto se vean los aparatos (lo pidió el asistente). */
+    private var yaPedido = false
+
     companion object {
-        fun abrir(context: Context) {
-            context.startActivity(Intent(context, SincronizarActivity::class.java))
+        private const val EXTRA_YA = "sincronizar_ya"
+
+        fun abrir(context: Context, ya: Boolean = false) {
+            context.startActivity(Intent(context, SincronizarActivity::class.java).putExtra(EXTRA_YA, ya)
+                .also { if (context !is android.app.Activity) it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
         }
     }
 }

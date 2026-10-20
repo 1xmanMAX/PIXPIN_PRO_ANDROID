@@ -101,6 +101,9 @@ class EjecutorDelChat(
         is Llamada.Ocr -> leer(llamada.peticion)
         is Llamada.App -> when {
             llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA -> documentos.tablaDeImagen(llamada.accion)
+            llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.ANOTAR -> anotarDocumento(llamada.accion.pedido)
+            llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.BUSCAR_EN -> buscarEnDocumento(llamada.accion.pedido)
+            llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.EXPORTAR -> exportarDocumento(llamada.accion.pedido)
             llamada.accion.fila.accion == com.forge.pixpin.ia.Acciones.EN_EL_CHAT -> enElChat.hacer(llamada.accion)
             else -> acciones.hacer(llamada.accion)
         }
@@ -115,6 +118,39 @@ class EjecutorDelChat(
     /** Lo que mide un texto en la letra de la pizarra (Fraunces), la de verdad. */
     private val medirFraunces: com.forge.pixpin.motor.MedidaDeTexto = { t, tam ->
         com.forge.pixpin.motor.DrawFonts.medirTexto(contexto, t, com.forge.pixpin.motor.ItemStyle.FONT_FRAUNCES, tam)
+    }
+
+    private val docs by lazy { DocumentosDelAsistente(contexto, almacen, chat) }
+
+    private fun textoDe(p: kotlinx.serialization.json.JsonObject, k: String) =
+        (p[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** **Anotar un PDF, Word, PowerPoint o plano** (PC `anotar`), y abrirlo donde quedó. */
+    private fun anotarDocumento(p: kotlinx.serialization.json.JsonObject): Result<String> = runCatching {
+        val c = try { docs.elegir(textoDe(p, "archivo"), DocumentosDelAsistente.Sirve.DOCUMENTO) } catch (e: IllegalStateException) { error(e.message ?: "no hay documento") }
+        val hecho = try { docs.anotarEn(c, p) } catch (e: IllegalStateException) { error(e.message ?: "no se pudo") }
+        docs.abrirEn(c, hecho.pagina, hecho.vista)
+        val tipo = textoDe(p, "tipo") ?: "anotado"
+        "hecho: $tipo en «${c.nombre}»${hecho.pagina?.let { ", pagina ${it + 1}" } ?: ""}: marcado en ${hecho.sitios} sitio(s)" +
+            (if (hecho.hallados > hecho.sitios) " (aparece ${hecho.hallados} veces en todo el documento; se marco lo de esta pagina o, al encerrar, lo primero)" else "") +
+            " (${hecho.figuras} figuras); ya esta abierto ahi y viaja al PC al sincronizar"
+    }
+
+    /** **Buscar dentro** de un plano, PDF o Word y abrir el visor ahí (PC `buscar_en`). */
+    private fun buscarEnDocumento(p: kotlinx.serialization.json.JsonObject): Result<String> = runCatching {
+        val consulta = textoDe(p, "texto") ?: error("falta «texto»")
+        val c = try { docs.elegir(textoDe(p, "archivo"), DocumentosDelAsistente.Sirve.DOCUMENTO) } catch (e: IllegalStateException) { error(e.message ?: "no hay documento") }
+        val abrir = (p["abrir"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: true
+        try { docs.buscarDentro(c, consulta, abrir) }
+        catch (e: IllegalStateException) { error(e.message ?: "no aparece") }
+    }
+
+    /** **Exportar** un archivo del chat por el componente común (PC `exportar`): lo hecho entra en el chat. */
+    private fun exportarDocumento(p: kotlinx.serialization.json.JsonObject): Result<String> = runCatching {
+        val formato = textoDe(p, "formato") ?: error("falta «formato»")
+        val c = try { docs.elegir(textoDe(p, "archivo"), DocumentosDelAsistente.Sirve.CUALQUIERA) } catch (e: IllegalStateException) { error(e.message ?: "no hay archivo") }
+        val hechos = try { docs.exportar(c, formato) } catch (e: IllegalStateException) { error(e.message ?: "no se pudo") }
+        "hecho: «${c.nombre}» exportado a $formato (${hechos.joinToString(", ") { it.name.substringAfter('-') }}), ya esta en el chat"
     }
 
     /** **Los ojos**: la vista del lienzo destino del turno (PC `Ejecutor::ver`). */
