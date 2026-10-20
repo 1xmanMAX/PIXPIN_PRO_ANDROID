@@ -131,3 +131,9 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
   (compartir solo ofrece el `.pixpin`, el de un lienzo con el lienzo como su hoja, copiado de `EnviarActivity.deLienzo`
   del móvil). El teléfono ya lo hacía así; quitada la última cadena «Compartir como .excalidraw» (sin usar). Los
   `.excalidraw` siguen abriéndose y el almacén interno sigue igual (el PC tampoco lo cambió).
+
+17. **Lo del PC del 20-oct (tarde)**, `5787f61`. **Hecho**: (a) `assets/lector-md.html` de `5787f61` (el formato de la
+    nota se rehace cuando el analizador acaba el árbol: se quedaba en crudo hasta el primer toque). (b) El redondel
+    de un marcador del PDF pegado al canto de su hoja: en el teléfono los marcadores van en el riel común
+    (`RielDeMarcas`), no se pintan en la página: nada que cambiar. (c) El icono de la clase de ventanas y
+    `PIXPIN_PRUEBA_GLOBO`: solo de Windows. Un `.md` ya abre en su lector de notas en el teléfono.
