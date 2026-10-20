@@ -136,3 +136,50 @@ pub extern "system" fn Java_com_forge_pixpin_ia_HojaNativa_lamina<'a>(
     };
     devolver(&mut env, v)
 }
+
+/// `tabla(ruta: String, puente: Puente): String`: **la tabla de una foto con su aspecto** (PC
+/// `documentos_acciones::tabla` con destino Excel, 16-oct): las celdas de `leer_tabla` corregidas con la
+/// rejilla medida (`filas_de`), si parece cabecera, y, si la rejilla cuadra con la tabla, el fondo de cada
+/// celda (`#rrggbb` o null) y el ancho de cada columna a la letra de la hoja (unos 15 px), como
+/// `escribir_excel_con`. `{"filas", "cabecera", "fondos"?, "anchos"?}` o `{"error"}`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_forge_pixpin_ia_HojaNativa_tabla<'a>(
+    mut env: JNIEnv<'a>,
+    _c: JClass<'a>,
+    ruta: JString<'a>,
+    puente: JObject<'a>,
+) -> jstring {
+    let ruta = texto(&mut env, &ruta);
+    let _sesion = match puente::empezar(&mut env, &puente) {
+        Ok(s) => s,
+        Err(e) => return devolver(&mut env, json!({ "error": e })),
+    };
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<Value, String> {
+        use asistente::documentos_acciones as d;
+        let ruta = std::path::Path::new(&ruta);
+        let leida = d::leer_tabla(ruta, None)?;
+        let cabecera = leida.parece_cabecera();
+        let aspecto = d::aspecto_de_tabla(ruta, None);
+        let filas = match &aspecto {
+            Some((m, _)) => d::filas_de(&leida, m, ruta),
+            None => leida.filas.clone(),
+        };
+        let mut v = json!({ "filas": filas, "cabecera": cabecera });
+        let columnas = filas.first().map_or(0, Vec::len);
+        if let Some((m, _)) = aspecto.as_ref().filter(|(m, _)| m.cuadra(filas.len(), columnas)) {
+            let fondos: Vec<Vec<Option<String>>> =
+                m.fondos.iter().map(|f| f.iter().map(|c| c.map(pixpin_ia::tabla_aspecto::hex)).collect()).collect();
+            let k = 15.0 / m.tam_letra.max(1.0);
+            let anchos: Vec<u32> = m.anchos().iter().map(|a| ((a * k).round() as u32).clamp(30, 600)).collect();
+            v["fondos"] = json!(fondos);
+            v["anchos"] = json!(anchos);
+        }
+        Ok(v)
+    }));
+    let v = match r {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) => json!({ "error": e }),
+        Err(_) => json!({ "error": "la tabla fallo por dentro (un fallo del motor del PC)" }),
+    };
+    devolver(&mut env, v)
+}

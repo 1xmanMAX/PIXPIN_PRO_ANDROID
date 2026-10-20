@@ -44,6 +44,12 @@ object HojaNativa {
      */
     @JvmStatic external fun lamina(ruta: String, ancho: Double, semilla: Long, puente: Puente): String
 
+    /**
+     * **La tabla de una foto con su aspecto** (PC `documentos_acciones::tabla`): `{"filas", "cabecera",
+     * "fondos"?, "anchos"?}` (fondos `#rrggbb` por celda y anchos de columna, si la rejilla cuadra) o `{"error"}`.
+     */
+    @JvmStatic external fun tabla(ruta: String, puente: Puente): String
+
     /** El texto (JSON) que devuelve [hacer]: lo hecho, o el fallo. */
     fun resultado(json: String): Result<String> = runCatching {
         val o = kotlinx.serialization.json.Json.parseToJsonElement(json) as kotlinx.serialization.json.JsonObject

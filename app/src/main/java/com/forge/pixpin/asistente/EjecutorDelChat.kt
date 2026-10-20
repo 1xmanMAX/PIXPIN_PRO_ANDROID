@@ -68,7 +68,7 @@ class EjecutorDelChat(
     private val enElChat = EnElChat(contexto, almacen, chat, { this.destino }) { ref -> this.destino = ref; if (ref != null) lienzo = ref }
 
     private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
-    val documentos = DocumentosAcciones(contexto, almacen, chat, motor, parar, permisoDocumentos)
+    val documentos = DocumentosAcciones(contexto, almacen, chat, motor, parar, permisoDocumentos) { if (com.forge.pixpin.ia.HojaNativa.disponible) hoja() else null }
 
     /** El lienzo donde dibujó (su `referencia`), para `lienzoIa` y la tarjeta «Abrir lienzo». */
     @Volatile var lienzo: String? = null

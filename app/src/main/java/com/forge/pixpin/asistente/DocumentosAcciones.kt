@@ -19,6 +19,7 @@ import com.forge.pixpin.motor.PlanoDePdf
 import com.forge.pixpin.motor.TablaDeCalculo
 import com.forge.pixpin.motor.leerPdf
 import kotlinx.serialization.json.JsonPrimitive
+import com.forge.pixpin.ia.HojaNativa
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import java.io.File
@@ -41,7 +42,9 @@ class DocumentosAcciones(
     private val motor: Motor,
     private val parar: AtomicBoolean,
     /** Si se pueden mandar trozos de documentos al modelo (la nube pregunta, §4.8). */
-    private val permisoDocumentos: () -> String?
+    private val permisoDocumentos: () -> String?,
+    /** El puente de la biblioteca del PC (la tabla de una foto con su aspecto); null sin ella. */
+    private val puenteNativo: () -> HojaNativa.Puente? = { null }
 ) {
     /** Las citas de este turno, numeradas seguidas entre búsquedas. */
     val citas = Documentos.Citas()
@@ -78,16 +81,24 @@ class DocumentosAcciones(
         val ruta = File(m.ruta!!)
         val nombreDoc = m.nombre.ifBlank { ruta.name }
         val pagina = (p["pagina"] as? JsonPrimitive)?.intOrNull
-        val (filas, conVision) = if (ruta.name.lowercase().endsWith(".pdf")) tablaDePdf(ruta, pagina) to false else tablaDeFoto(ruta)
+        // La foto, primero como el PC (`documentos_acciones::tabla`): celdas por la rejilla medida, y con
+        // sus fondos y anchos para el Excel. Sin la biblioteca, o si no ve la tabla, la de siempre.
+        val esPdf = ruta.name.lowercase().endsWith(".pdf")
+        val nativa = if (esPdf) null else tablaNativa(ruta)
+        val (filas, conVision) = when {
+            nativa != null -> nativa.filas to false
+            esPdf -> tablaDePdf(ruta, pagina) to false
+            else -> tablaDeFoto(ruta)
+        }
         if (filas.size < 2 || (filas.maxOfOrNull { it.size } ?: 0) < 2) error("no se ve una tabla en «$nombreDoc»")
         val nombre = texto("nombre")?.trim()?.takeIf { it.isNotEmpty() } ?: "Tabla"
-        val cabecera = (p["cabecera"] as? JsonPrimitive)?.booleanOrNull ?: TablaEscaneada.TablaLeida(filas).pareceCabecera()
+        val cabecera = (p["cabecera"] as? JsonPrimitive)?.booleanOrNull ?: nativa?.cabecera ?: TablaEscaneada.TablaLeida(filas).pareceCabecera()
         val columnas = filas.maxOf { it.size }
         val aviso = if (conVision) " (la leyó la visión del modelo: revisa los números)" else ""
         if (texto("destino") == "excel") {
             val ahora = System.currentTimeMillis()
             val f = File(almacen.carpetaDeAdjuntos(), "tabla-$ahora.xlsx")
-            f.outputStream().use { Xlsx.escribir(it, nombre, filas, cabecera) }
+            f.outputStream().use { Xlsx.escribir(it, nombre, filas, cabecera, nativa?.fondos, nativa?.anchos) }
             almacen.anadir(Mensaje(id = UUID.randomUUID().toString(), cuando = ahora, clase = Clase.ARCHIVO, ruta = f.path,
                 nombre = "$nombre.xlsx", bytes = f.length(), proyecto = chat))
             "Excel «$nombre.xlsx» con ${filas.size} filas y $columnas columnas, en el chat$aviso."
@@ -100,7 +111,16 @@ class DocumentosAcciones(
         }
     }
 
-    /** La tabla de una página de un PDF con texto: sus palabras con caja, por [TablaEscaneada]. */
+    /** Lo que da la biblioteca del PC de una foto con tabla: [fondos] y [anchos], solo si la rejilla cuadra. */
+    class TablaConAspecto(val filas: List<List<String>>, val cabecera: Boolean, val fondos: List<List<String?>>?, val anchos: List<Int>?)
+
+    private fun tablaNativa(f: File): TablaConAspecto? {
+        val puente = puenteNativo() ?: return null
+        if (!HojaNativa.disponible) return null
+        return runCatching { leerTablaNativa(HojaNativa.tabla(f.path, puente)) }.getOrNull()
+    }
+
+    /** **La tabla de una página de un PDF con texto: sus palabras con caja, por [TablaEscaneada]. */
     private fun tablaDePdf(f: File, pagina: Int?): List<List<String>> {
         val archivo = leerPdf(f.readBytes()) ?: error("no se pudo leer el PDF")
         if (archivo.cifrado) error("el PDF está protegido con contraseña")
@@ -142,5 +162,19 @@ class DocumentosAcciones(
         ) { if (parar.get()) Seguir.PARAR else Seguir.SI }
         return ChatDelAsistente.sinPensado(r.texto).lines().map { it.trim().trim('|') }.filter { it.isNotBlank() && !it.all { c -> c in "-|: \t" } }
             .map { l -> (if ('\t' in l) l.split('\t') else l.split('|')).map { it.trim() } } to true
+    }
+
+    companion object {
+        /** El JSON de [HojaNativa.tabla]; null si no trae una tabla de al menos 2×2. */
+        fun leerTablaNativa(json: String): TablaConAspecto? {
+            val o = kotlinx.serialization.json.Json.parseToJsonElement(json) as? kotlinx.serialization.json.JsonObject ?: return null
+            if (o["error"] != null) return null
+            fun lista(e: kotlinx.serialization.json.JsonElement?) = e as? kotlinx.serialization.json.JsonArray
+            val filas = lista(o["filas"])?.map { f -> lista(f).orEmpty().map { (it as? JsonPrimitive)?.content.orEmpty() } } ?: return null
+            if (filas.size < 2 || filas.maxOf { it.size } < 2) return null
+            val fondos = lista(o["fondos"])?.map { f -> lista(f).orEmpty().map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content } }
+            val anchos = lista(o["anchos"])?.mapNotNull { (it as? JsonPrimitive)?.intOrNull }
+            return TablaConAspecto(filas, (o["cabecera"] as? JsonPrimitive)?.booleanOrNull ?: false, fondos, anchos)
+        }
     }
 }

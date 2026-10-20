@@ -113,6 +113,9 @@ botones—, «siempre encima», Flow, Microsoft Print to PDF.
   y `hoja_a_lienzo.rs` con su planificador y supervisor, traídos sin tocar por `traer-del-pc.py`); Kotlin pone el puente
   (`asistente/HojaAlLienzo.kt`: leer, OCR de ML Kit, nube, cada zona al lienzo y pintar para comprobar). Calcar una
   lámina con la nube la pasa como hoja, como el PC.
+- **12, tabla de una foto como el PC (16-oct, `tabla_aspecto`)**: `HojaNativa.tabla` (la rejilla medida corrige las
+  celdas; fondos y anchos si cuadra) y `Xlsx.escribir(…, fondos, anchos)` como `escribir_excel_con` (ancho px/7).
+  Con destino lienzo va la tabla del chat sin aspecto, igual que el PC (`tabla_nueva` solo lleva filas). `XlsxConAspectoTest`.
 - **13 hecho por la biblioteca nativa**: el calcar agéntico del PC (`plan.rs`, `supervisor.rs`, `hoja_a_lienzo.rs`
   hasta `49eb7ac`) corre tal cual en `libpixpinia.so`; calcar una lámina se desvía a ella (`HojaNativa.lamina`).
   Lo que es solo trazado a mano (calcar sin nube) sigue el de Kotlin. Y `al_lienzo` (fotos y texto a un lienzo
