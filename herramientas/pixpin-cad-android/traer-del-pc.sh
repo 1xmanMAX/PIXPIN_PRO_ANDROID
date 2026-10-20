@@ -51,14 +51,8 @@ t = t[:ini] + '''pub fn fuentes_instaladas() -> &'static HashMap<String, std::pa
 }
 ''' + t[fin:]
 (d / "texto.rs").write_text(t)
-# Las letras que faltan se apuntan para decirlas en la app.
-cambiar("texto.rs", "                crate::shx::buscar(&clave, carpetas_shx())\n                    .and_then(|r| crate::shx::abrir(&r))\n",
-        "                crate::shx::buscar(&clave, carpetas_shx())\n                    .and_then(|r| crate::shx::abrir(&r))\n                    .or_else(|| { crate::falta_shx(&clave); None })\n")
-cambiar("texto.rs", "            for nombre in fichero_para(&clave) {", "            crate::revisar_ttf(&clave, CARPETA_FUENTES);\n            for nombre in fichero_para(&clave) {")
-cambiar("texto.rs", "    r.map(|p| format!(\"ttf:{}\", p.display()))\n}", "    let r = r.map(|p| format!(\"ttf:{}\", p.display()));\n    if r.is_none() {\n        crate::falta(familia.trim().trim_matches('\"'));\n    }\n    r\n}")
-# Las letras de Windows: la de PixPin que mide igual (Liberation, Carlito, Caladea) si la hay.
-cambiar("texto.rs", "let ruta = std::path::Path::new(CARPETA_FUENTES).join(&nombre);",
-        "let ruta = crate::ruta_de_fuente(CARPETA_FUENTES, &nombre);")
+# Desde el 20-oct el PC apunta él las letras que faltan y busca las del usuario por
+# `crate::letras::` (lo que antes se le añadía aquí): `src/letras.rs` lo lleva a lo de Android.
 # Roboto es tan ancha como Arial: donde el PC usa Arial Narrow (estilos SHX sin su fuente, o
 # «arial narrow»), aquí se estrecha al ancho de esa (≈ 0,82). Sin esto los textos se montaban.
 cambiar("texto.rs", "    escala_ttf: f32,\n}", "    escala_ttf: f32,\n    /// Android: cuánto se estrecha la letra (Roboto haciendo de Arial Narrow).\n    estrecho: f32,\n}")
@@ -86,8 +80,5 @@ s = (d / "shx.rs").read_text()
 if s.count('include_bytes!("../fuentes-shx/') != 8:
     sys.exit("shx.rs: no encuentro las 8 SHX de PixPin que el PC lleva dentro")
 (d / "shx.rs").write_text(s.replace('include_bytes!("../fuentes-shx/', 'include_bytes!("../../../../app/src/main/assets/fuentes-shx/'))
-# Fuentes SHX: la carpeta que diga la app (AutoCAD no está en un teléfono).
-cambiar("shx.rs", 'pub fn carpetas() -> Vec<PathBuf> {\n    let mut v = Vec::new();',
-        'pub fn carpetas() -> Vec<PathBuf> {\n    let mut v: Vec<PathBuf> = crate::carpetas_shx_android();')
 FIN
 echo "Traído del PC $(cat "$AQUI/src/pc/COMMIT_DEL_PC"). Compila con ./compilar.sh"

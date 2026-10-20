@@ -31,6 +31,7 @@ pub mod teselar;
 pub mod texto;
 /// El plano por capas y a DXF, para exportarlo (14-oct-2026).
 pub mod capas;
+pub mod letras;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
