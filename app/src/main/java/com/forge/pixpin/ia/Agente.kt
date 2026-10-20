@@ -73,6 +73,9 @@ object Agente {
     fun interface Ejecutor {
         /** `Result.success` con un resumen corto para el modelo; `failure` con el motivo. */
         fun ejecutar(llamada: Llamada): Result<String>
+
+        /** **Pinta el lienzo** para que el modelo lo vea (`ver_lienzo` y la revisión). Por omisión no hay nada que mirar. */
+        fun ver(mirada: Ojos.Mirada): Result<Ojos.Vista> = Result.failure(Ojos.Fallo("aqui no hay lienzo que mirar"))
     }
 
     data class Final(val texto: String, val herramientasHechas: Int, val reintentos: Int, val cortado: Boolean)
@@ -93,7 +96,11 @@ object Agente {
         /** El catálogo entero: el plan puede añadir herramientas que la selección no dio. */
         val ampliar: List<com.forge.pixpin.ia.Herramienta>? = null,
         /** El camino rápido ([Rapido]) con esta hora local; null: siempre contesta el modelo. */
-        val rapido: Momento? = null
+        val rapido: Momento? = null,
+        /** **Los ojos** (PC 15-oct): ofrecer `ver_lienzo` si el motor ve imágenes. */
+        val ojos: Boolean = false,
+        /** Rondas de revisión tras un turno que dibujó o editó (0: ninguna). Solo con [ojos]. */
+        val revisar: Int = 0
     )
 
     /**
@@ -278,17 +285,61 @@ object Agente {
             val instr = historial.firstOrNull()?.takeIf { it.rol == Rol.SISTEMA }?.textoEntero ?: instrucciones()
             Contexto.ponerSistema(historial, Contexto.sistemaConHoja(instr, opciones.hoja ?: HojaTrabajo.Hoja(), plan))
         }
+        val est = Estado()
+        // Los ojos (PC 15-oct): `ver_lienzo` solo si el motor ve imágenes.
+        val ojos = opciones.ojos && motor.veImagenes
+        herramientas.removeAll { it.nombre == Ojos.NOMBRE }
+        if (ojos) herramientas += Ojos.herramienta()
+        val dicho = vueltas(motor, historial, herramientas, ejecutor, contexto, opciones, crono, est, ojos, alEvento)
+        val texto = when {
+            dicho != null -> {
+                // **La revisión** (15-oct): el usuario ya ve lo dibujado; ahora el modelo lo mira y corrige.
+                var t: String = dicho
+                if (ojos && opciones.revisar > 0 && est.cambios > 0 && !est.cortado) {
+                    revisar(motor, historial, herramientas, ejecutor, contexto, opciones, crono, est, alEvento)?.let { t += "\n\n" + it }
+                }
+                t
+            }
+            est.cortado -> ""
+            est.hechas > 0 -> HECHO_EN_PARTE
+            else -> NO_SUPE
+        }
+        return Final(texto, est.hechas, est.reintentos, est.cortado)
+    }
+
+    /** Lo que llevan las vueltas de un turno (y la revisión, que sigue con las mismas cuentas). */
+    private class Estado {
         var hechas = 0
         var reintentos = 0
         var cortado = false
-        // Con la gramática de llama.cpp el modelo NO PUEDE pasarse de estas listas; bajan si una
-        // llamada salió cortada.
+        /** Con la gramática de llama.cpp el modelo NO PUEDE pasarse de estas listas; bajan si una llamada salió cortada. */
         var tope = TOPE_LISTAS
-        // `buscar_historial` vale UNA vuelta por turno (medido en el PC: si no, el 2B la llama seis veces).
+        /** `buscar_historial` vale UNA vuelta por turno (medido en el PC: si no, el 2B la llama seis veces). */
         var yaBusco = false
+        /** Las llamadas que cambiaron lo que se ve (lo que merece una revisión). */
+        var cambios = 0
+        var vistas = 0
+    }
+
+    /**
+     * **Las vueltas** del turno: pedir, hacer las llamadas y volver hasta que el modelo contesta sin
+     * llamar. Devuelve su texto; null si se acabaron las vueltas o los reintentos, o se cortó.
+     */
+    private fun vueltas(
+        motor: Motor,
+        historial: MutableList<MensajeIa>,
+        herramientas: List<com.forge.pixpin.ia.Herramienta>,
+        ejecutor: Ejecutor,
+        contexto: Int,
+        opciones: Opciones,
+        crono: Pensar.Cronometro,
+        est: Estado,
+        ojos: Boolean,
+        alEvento: (Evento) -> Seguir
+    ): String? {
         repeat(VUELTAS + REINTENTOS) {
             if (opciones.ventana > 0) vigilarContexto(historial, herramientas, opciones.ventana, alEvento)
-            val ofrecidas = conTopes(herramientas.filter { !(yaBusco && it.nombre == Herramientas.BUSCAR_HISTORIAL) }, tope)
+            val ofrecidas = conTopes(herramientas.filter { !(est.yaBusco && it.nombre == Herramientas.BUSCAR_HISTORIAL) }, est.tope)
             var peticion = Peticion(historial.toList(), ofrecidas)
             peticion = peticion.copy(maxTokens = topeDeTokens(peticion, contexto))
             val sep = Pensar.Separador()
@@ -296,13 +347,13 @@ object Agente {
                 motor.completar(peticion) { t -> repartir(t, sep, crono, null, alEvento) }
             } catch (e: ErrorIa.Protocolo) {
                 // `llama-server` no deja pasar una llamada cuyo JSON no cierra (HTTP 500): es una
-                // llamada cortada por el tope; se pide MÁS CORTA y la gramática se lo impone.
+                // llamada cortada por el est.tope; se pide MÁS CORTA y la gramática se lo impone.
                 if (!llamadaRota(e.detalle)) throw e
-                reintentos++
-                if (reintentos > REINTENTOS) return final(hechas, reintentos, cortado)
-                tope = TOPE_LISTAS_REINTENTO
+                est.reintentos++
+                if (est.reintentos > REINTENTOS) run { est.cortado = est.cortado || est.cortado; return null }
+                est.tope = TOPE_LISTAS_REINTENTO
                 val motivo = pedirMasCorto()
-                if (alEvento(Evento.Reintento(motivo)) == Seguir.PARAR) return final(hechas, reintentos, true)
+                if (alEvento(Evento.Reintento(motivo)) == Seguir.PARAR) run { est.cortado = true; return null }
                 historial += MensajeIa.usuario(motivo)
                 return@repeat
             } finally {
@@ -311,26 +362,44 @@ object Agente {
             val respuesta = if (respuesta0.texto.contains("</think>")) respuesta0.copy(texto = Pensar.separar(respuesta0.texto).second) else respuesta0
             val texto = quitarPensado(respuesta.texto)
             historial += MensajeIa(Rol.ASISTENTE, listOf(Parte.Texto(texto)), respuesta.llamadas)
-            if (respuesta.fin == Fin.CORTADO) return final(hechas, reintentos, true)
+            if (respuesta.fin == Fin.CORTADO) run { est.cortado = true; return null }
             if (respuesta.llamadas.isEmpty()) {
                 val dicho = when {
                     texto.isNotBlank() -> texto
-                    hechas > 0 -> HECHO
+                    est.hechas > 0 -> HECHO
                     else -> SIN_PALABRAS
                 }
-                return Final(dicho, hechas, reintentos, false)
+                return dicho
             }
             var algunaMal = false
             var buscoBien = false
             // Lo que pidió el usuario, para los colores que el modelo olvide.
-            val pedido = historial.lastOrNull { it.rol == Rol.USUARIO }?.textoEntero.orEmpty()
-            for (cruda in respuesta.llamadas) {
+            // Sin el resumen del lienzo pegado detrás: sus «recta roja» no son lo que pidió.
+            // Ni la vista del lienzo, que también va como mensaje del usuario.
+            val pedido = historial.lastOrNull { it.rol == Rol.USUARIO && !Ojos.esVista(it) }?.textoEntero.orEmpty().substringBefore(Edicion.MARCA_DEL_RESUMEN)
+            // Lo que dibuja, antes que lo demás (PC `orden_de_ejecucion`): un modelo pequeño pide a veces
+            // «corta la de abajo» y «dibuja dos rectas», en ese orden, y al revés no hay nada que cortar.
+            // Las vistas pedidas: se pintan DESPUÉS de lo demás de la misma respuesta («dibuja y mira cómo quedó»).
+            val miradas = mutableListOf<Pair<String, Ojos.Mirada>>()
+            for (cruda in respuesta.llamadas.sortedBy { it.nombre.trim() !in Herramientas.DIBUJAN }) {
+                // `ver_lienzo` no es del chat: la imagen la pinta el ejecutor y va en un mensaje aparte.
+                if (ojos && cruda.nombre.trim() == Ojos.NOMBRE) {
+                    try {
+                        miradas += cruda.id to Ojos.leer(cruda.argumentos)
+                    } catch (e: Ojos.Fallo) {
+                        algunaMal = true
+                        val motivo = "ERROR: ${e.message}"
+                        if (alEvento(Evento.Reintento(motivo)) == Seguir.PARAR) est.cortado = true
+                        historial += MensajeIa.resultado(cruda.id, motivo)
+                    }
+                    continue
+                }
                 // `buscar_historial` no es del chat: lo contesta el propio turno.
                 val buscar = opciones.buscar
                 if (buscar != null && cruda.nombre.trim() == Herramientas.BUSCAR_HISTORIAL) {
                     val consulta = Contexto.consultaDe(cruda.argumentos)
                     val t = when {
-                        yaBusco -> "Ya buscaste en este turno: contesta ahora con lo que encontraste."
+                        est.yaBusco -> "Ya buscaste en este turno: contesta ahora con lo que encontraste."
                         consulta != null -> buscar(consulta)
                         else -> "ERROR: falta «consulta». Llama a buscar_historial con {\"consulta\": \"que buscar\"}."
                     }
@@ -346,46 +415,94 @@ object Agente {
                 } catch (e: ErrorHerramienta) {
                     algunaMal = true
                     // La siguiente, corta: una llamada larga que sale mal es la que más tarda en repetirse.
-                    tope = TOPE_LISTAS_REINTENTO
+                    est.tope = TOPE_LISTAS_REINTENTO
                     val motivo = if (e is ErrorHerramienta.JsonRoto || respuesta.fin == Fin.LONGITUD) pedirMasCorto()
                     else e.paraElModelo(herramientas)
-                    if (alEvento(Evento.Reintento(motivo)) == Seguir.PARAR) cortado = true
+                    if (alEvento(Evento.Reintento(motivo)) == Seguir.PARAR) est.cortado = true
                     historial += MensajeIa.resultado(cruda.id, motivo)
                     continue
                 }
                 val llamada = when (val l = validada.llamada) {
                     is Llamada.Dibujar -> l.copy(figuras = Herramientas.coloresDelPedido(l.figuras, pedido))
                     is Llamada.Calcar -> l.copy(parametros = Calcar.ajustarAlPedido(l.parametros, pedido))
+                    is Llamada.Editar -> l.copy(pedido = Edicion.ajustarAlPedido(l.pedido, pedido))
                     else -> l
                 }
                 alEvento(Evento.Herramienta(llamada, validada.avisos))
                 val r = runCatching { ejecutor.ejecutar(llamada) }.getOrElse { Result.failure(it) }
                 val ok = r.isSuccess
                 val dicho = r.getOrElse { "ERROR: ${it.message ?: "no se pudo"}" }
-                if (ok) hechas++
+                if (ok) est.hechas++
+                if (ok && Ojos.cambiaLoQueSeVe(llamada)) est.cambios++
                 alEvento(Evento.Resultado(llamada.nombre, ok, dicho))
                 var paraElModelo = recortarResultado(dicho)
                 if (validada.avisos.isNotEmpty()) paraElModelo += " (avisos: ${validada.avisos.joinToString("; ")})"
                 historial += MensajeIa.resultado(cruda.id, paraElModelo)
             }
-            yaBusco = yaBusco || buscoBien
-            if (cortado) return final(hechas, reintentos, true)
+            val vistas = mutableListOf<Ojos.Vista>()
+            for ((id, m) in miradas) {
+                val t = if (est.vistas >= Ojos.VISTAS_POR_TURNO) "Ya miraste ${Ojos.VISTAS_POR_TURNO} veces en este turno: sigue con lo que viste."
+                else {
+                    est.vistas++
+                    alEvento(Evento.Llamando(Ojos.NOMBRE))
+                    ejecutor.ver(m).fold({ v -> vistas += v; "hecho: la imagen va en el mensaje siguiente (${v.ancho}x${v.alto} px)" }, { "ERROR: ${it.message}" })
+                }
+                alEvento(Evento.Resultado(Ojos.NOMBRE, !t.startsWith("ERROR"), t))
+                historial += MensajeIa.resultado(id, t)
+            }
+            // Detrás de los resultados, como mensaje del usuario: lo único que admiten igual Claude, DeepSeek y llama.cpp.
+            for (v in vistas) historial += Ojos.mensajeDeVista(v)
+            est.yaBusco = est.yaBusco || buscoBien
+            if (est.cortado) run { est.cortado = true; return null }
             if (algunaMal) {
-                reintentos++
-                if (reintentos > REINTENTOS) return final(hechas, reintentos, false)
+                est.reintentos++
+                if (est.reintentos > REINTENTOS) return null
             }
         }
-        return final(hechas, reintentos, cortado)
+        return null
     }
 
-    /** Se acabaron las vueltas o los reintentos (o se cortó): se dice claro en vez de una burbuja vacía. */
-    private fun final(hechas: Int, reintentos: Int, cortado: Boolean): Final {
-        val texto = when {
-            cortado -> ""
-            hechas > 0 -> HECHO_EN_PARTE
-            else -> NO_SUPE
+    /**
+     * **La revisión** (PC `revisar`, 15-oct): se le enseña al modelo cómo quedó lo que dibujó o editó,
+     * una o dos veces, y corrige lo que vea mal. Devuelve lo que dijo de lo corregido (null: estaba
+     * bien, no se pudo mirar o no cambió nada). Mientras, su texto no va a la burbuja.
+     */
+    private fun revisar(
+        motor: Motor, historial: MutableList<MensajeIa>, herramientas: List<com.forge.pixpin.ia.Herramienta>,
+        ejecutor: Ejecutor, contexto: Int, opciones: Opciones, crono: Pensar.Cronometro, est: Estado,
+        alEvento: (Evento) -> Seguir
+    ): String? {
+        val pedido = historial.lastOrNull { it.rol == Rol.USUARIO && !Ojos.esVista(it) }?.textoEntero.orEmpty().substringBefore(Edicion.MARCA_DEL_RESUMEN)
+        val dicho = mutableListOf<String>()
+        for (ronda in 1..minOf(opciones.revisar, Ojos.REVISIONES_MAXIMAS)) {
+            if (alEvento(Evento.Llamando(Ojos.NOMBRE)) == Seguir.PARAR) { est.cortado = true; break }
+            val vista = ejecutor.ver(Ojos.Mirada(Ojos.Zona.Turno)).getOrNull() ?: break
+            val marca = historial.size
+            historial += Ojos.mensajeDeVista(vista, Ojos.pedidoDeRevision(pedido, ronda))
+            val cambiosAntes = est.cambios
+            val dice = StringBuilder()
+            val filtro: (Evento) -> Seguir = { e ->
+                when (e) {
+                    // Lo que dice se guarda; mientras, la burbuja dice «mirando el lienzo».
+                    is Evento.Texto -> { dice.append(e.texto); alEvento(Evento.Llamando(Ojos.NOMBRE)) }
+                    is Evento.Pensando, is Evento.PensoListo, is Evento.Peticion -> Seguir.SI
+                    else -> alEvento(e)
+                }
+            }
+            val r = runCatching { vueltas(motor, historial, herramientas, ejecutor, contexto, opciones, crono, est, true, filtro) }
+            val corrigio = est.cambios > cambiosAntes
+            if (r.isFailure || !corrigio) {
+                // Bien a la primera (o no supo qué cambiar): ni se dice ni se queda la imagen.
+                if (!corrigio) while (historial.size > marca) historial.removeAt(historial.size - 1)
+                break
+            }
+            val t = r.getOrNull() ?: dice.toString()
+            val frase = if (Ojos.esTodoBien(t) || t.isBlank()) "Lo revisé y corregí." else t.trim()
+            alEvento(Evento.Texto("\n\n$frase"))
+            dicho += frase
+            if (est.cortado) break
         }
-        return Final(texto, hechas, reintentos, cortado)
+        return dicho.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
     /** Qwen a veces escribe su `<think>…</think>` aunque no se le pida pensar: fuera. */

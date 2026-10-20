@@ -159,13 +159,17 @@ interface Motor {
      * en vez de las pocas que elige [Seleccion] (el modelo local).
      */
     val catalogoCompleto: Boolean get() = false
+
+    /** **Si ve imágenes** (PC `ve_imagenes`): la nube sí; el local, por ahora no (el usuario, 15-oct). */
+    val veImagenes: Boolean get() = false
 }
 
 /**
  * **Un motor de mentira** que contesta lo que se le dice, en orden (`MotorGuionado` del PC). Para
  * las pruebas del agente y del chat sin bajar nada.
  */
-class MotorGuionado(guion: List<Respuesta>) : Motor {
+class MotorGuionado(guion: List<Respuesta>, private val vision: Boolean = false) : Motor {
+    override val veImagenes: Boolean get() = vision
     private val guion = ArrayDeque(guion)
     val recibido = mutableListOf<Peticion>()
 

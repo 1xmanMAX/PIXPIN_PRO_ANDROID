@@ -79,6 +79,8 @@ sealed class Llamada {
     data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
     /** Geometría exacta de lámina ([GeometriaPrecisa]): el ejecutor la hace en el lienzo destino. */
     data class Geometria(val args: JsonObject) : Llamada() { override val nombre get() = GeometriaPrecisaNombre }
+    /** Editar lo que ya hay en el lienzo ([Edicion], PC `edicion.rs`): el ejecutor lo hace en el lienzo destino. */
+    data class Editar(val pedido: Edicion.Pedido) : Llamada() { override val nombre get() = pedido.herramienta }
 
     /** Si lo que pide se dibuja tal cual en el lienzo. */
     val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg
@@ -184,6 +186,9 @@ object Herramientas {
      * y por qué, en `docs/asistente.md` (las de Windows —pines del escritorio, caja para soltar,
      * sincronizar o mandar «al móvil»— no tienen sentido en el teléfono).
      */
+    /** Las que dibujan algo nuevo (PC `Llamada::dibuja`): se hacen antes que las de editar. */
+    val DIBUJAN = setOf(DIBUJAR, GRAFICA, SVG, "graficar_funcion", "escribir_ecuacion", "cronograma", "diagrama_fisica", "problema_en_limpio")
+
     val DISPONIBLES: Set<String> = linkedSetOf(
         DIBUJAR, GRAFICA, SVG, FIGURAS, OCR, CALCAR, AYUDA, BUSCAR,
         "abrir_chat", "abrir_fichero", "abrir_mensaje", "abrir_nota", "abrir_hoja", "escribir_en_chat", "nota_nueva",
@@ -191,6 +196,8 @@ object Herramientas {
         "mover_tarea", "editar_tarea", "quitar_tarea", "borrar_lista", "consultar_tareas", "abrir_ventana",
         "capturar_pantalla", "pinear_ultima_captura", "pinear_fichero", "copiar_imagen", "leccion_nueva", "buscar_lecciones",
         Acciones.TABLA, Acciones.ABRIR, GeometriaPrecisaNombre,
+        // Editar lo que ya hay (PC 14-oct, `edicion.rs`).
+        Edicion.SELECCIONAR, Edicion.TRANSFORMAR, Edicion.ESTILO, Edicion.TRAZAR, Edicion.CORTAR, Edicion.EXTENDER, Edicion.IMAGEN,
         // 15-17 oct, solo con la nube (PC `SOLO_NUBE`): grabar la pantalla no (el teléfono no graba desde aquí).
         "capturar_con_modo", "abrir_otra_ventana", "ir_al_chat", "ir_a_pagina", "cerrar_pines", "manejar_pines",
         "apuntar_en_timeline", "leer_en_voz_alta", "parar_lectura", "comprimir_pdf", "transcribir_audio", "leer_excel",
@@ -305,6 +312,7 @@ object Herramientas {
                 if (figura !in validas) throw mal("«figura» = «$figura» no existe; usa " + validas.joinToString(", "))
                 Llamada.Geometria(args)
             }
+            in Edicion.NOMBRES -> try { Llamada.Editar(Edicion.validar(nombre, args)) } catch (e: Edicion.Fallo) { throw mal(e.message ?: "mal puesto") }
             else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
                 ?: throw ErrorHerramienta.Desconocida(nombre)
         }

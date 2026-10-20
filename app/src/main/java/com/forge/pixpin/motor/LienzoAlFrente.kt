@@ -21,6 +21,20 @@ interface RecibeElementos {
 }
 
 /**
+ * **Lo que deja al asistente editar el lienzo abierto** (PC 14-oct, herramientas de editar): la escena
+ * tal como está, lo que el usuario tiene elegido («lo elegido») y la esquina de lo que se ve (el marco
+ * de las coordenadas del modelo); y ponerle la escena editada en un solo paso de deshacer. Llamar en
+ * el hilo de la interfaz.
+ */
+interface EditaElLienzo {
+    /** Null si el lienzo solo se mira. */
+    fun paraEditar(): LienzoAbierto?
+    fun ponerEscena(elementos: List<Element>, archivos: Map<String, SceneFile>): Boolean
+}
+
+data class LienzoAbierto(val id: String, val escena: Scene, val elegidos: Set<String>, val esquina: Pt)
+
+/**
  * **Quién se puso delante el último**, entre el lienzo ([LienzoAlFrente]) y el chat
  * (`guardados/ChatAlFrente`). Con la pantalla partida pueden estar los dos a la vista: manda el
  * del `onResume` más reciente.

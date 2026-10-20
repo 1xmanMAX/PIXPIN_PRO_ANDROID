@@ -339,15 +339,30 @@ object Asistente {
         val hoja = PensadoDelChat.hojaDelChat(app, anteriores)
         val ventana = if (conNube) VENTANA_NUBE else com.forge.pixpin.ia.ServidorLlama.CONTEXTO
         val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido0, foto != null)
+        // El lienzo destino y sus #n (PC `anadir_resumen`): si el pedido habla de dibujar o de editar,
+        // su resumen va pegado detrás, entre corchetes, para que el modelo nombre lo que ya hay.
+        val lienzoDelTurno = LienzoDelTurno(app, { almacen.leer() }, pregunta.proyecto)
+        val conLienzo = pedido0 + (if (com.forge.pixpin.ia.Edicion.vieneACuento(pedido0)) runCatching { lienzoDelTurno.resumen(destino) }.getOrNull()?.let { "\n\n[$it]" } ?: "" else "")
         // Con la nube, la hora al minuto y la de cada archivo del chat (PC 17-oct).
         val conLaHora = if (conNube) {
             val desfase = ChatDelAsistente.desfaseLocal()
-            pedido0 + ChatDelAsistente.archivosConFecha(delChat, desfase) + ChatDelAsistente.notaDeAhora(System.currentTimeMillis(), desfase)
-        } else pedido0
+            conLienzo + ChatDelAsistente.archivosConFecha(delChat, desfase) + ChatDelAsistente.notaDeAhora(System.currentTimeMillis(), desfase)
+        } else conLienzo
         val (historial, reiniciado) = if (enSuChat) {
             val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(conLaHora, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(conLaHora)
             PensadoDelChat.historial(Agente.instrucciones(), hoja, anteriores, nuevo, ventana, herramientas)
-        } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta.copy(texto = pedido0), enSuChat, foto) to false
+        } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta.copy(texto = conLienzo), enSuChat, foto) to false
+        // «Corrige», «alinea», «¿qué falta?»: depende de lo que se ve; además del resumen, la vista (PC 15-oct).
+        if (motor.veImagenes && com.forge.pixpin.ia.Ojos.pideMirar(pedido0)) {
+            runCatching { lienzoDelTurno.ver(destino, com.forge.pixpin.ia.Ojos.Mirada()) }.getOrNull()?.let { v ->
+                val i = historial.indexOfLast { it.rol == com.forge.pixpin.ia.Rol.USUARIO }
+                if (i >= 0) {
+                    val m = historial[i]
+                    historial[i] = m.copy(partes = listOf(com.forge.pixpin.ia.Parte.Imagen(v.png, "image/png")) + m.partes +
+                        com.forge.pixpin.ia.Parte.Texto("\n\n(La imagen adjunta es la vista del lienzo ahora; ${v.texto.removePrefix(com.forge.pixpin.ia.Ojos.MARCA).trim()})"))
+                }
+            }
+        }
         val fuentesDelChat = PensadoDelChat.fuentes(anteriores, hoja)
         val ligero = !conNube && modelo(app, ajustes.asistenteModelo).id == com.forge.pixpin.ia.Modelos.QWEN35_08B.id
         val opciones = Agente.Opciones(
@@ -358,7 +373,10 @@ object Asistente {
             ventana = ventana,
             buscar = if (enSuChat && (reiniciado || hoja.reinicios > 0)) { c -> com.forge.pixpin.ia.Contexto.buscar(fuentesDelChat, c, 3) } else null,
             ampliar = Herramientas.catalogo(),
-            rapido = com.forge.pixpin.ia.Momento.ahora()
+            rapido = com.forge.pixpin.ia.Momento.ahora(),
+            // Los ojos y la revisión (PC 15-oct): con la nube, una ronda.
+            ojos = true,
+            revisar = if (motor.catalogoCompleto) 1 else 0
         )
         val recogido = PensadoDelChat.Recogido()
         var vivo = EnVivo(respuesta.proyecto, respuesta.id, ChatDelAsistente.PENSANDO, reiniciado = reiniciado)
@@ -372,7 +390,7 @@ object Asistente {
                 preguntas += ChatDelAsistente.lineaDePregunta(q, r)
                 r == true
             },
-            pedido = pedido, foto = fotoArchivo, destino = destino,
+            pedido = pedido, foto = fotoArchivo, destino = destino, lienzoDelTurno = lienzoDelTurno,
             permisoDocumentos = {
                 if (!conNube) null
                 else when (runBlocking { app.settings.settings.first().asistenteDocumentosNube }) {

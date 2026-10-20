@@ -183,7 +183,7 @@ import kotlinx.coroutines.withContext
  * herramientas y un panel de estilos no caben en una ventana pequeña. El pin
  * sigue enseñando el resultado y sirve para copiarlo.
  */
-class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos {
+class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos, EditaElLienzo {
 
     companion object {
         /** Lo que se guarda al pasar de un lienzo a otro: vive más que la pantalla. */
@@ -5464,6 +5464,20 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         llegoDeFuera.intValue++   // repinta y guarda, como una foto que llega del PC
         dibujoId
     }.getOrNull()
+
+    override fun paraEditar(): LienzoAbierto? = runCatching {
+        if (controller.soloMirar) return null
+        LienzoAbierto(dibujoId, controller.scene, controller.selectedIds, controller.scene.viewport.toScene(0.0, 0.0))
+    }.getOrNull()
+
+    override fun ponerEscena(elementos: List<Element>, archivos: Map<String, SceneFile>): Boolean = runCatching {
+        if (controller.soloMirar) return false
+        // Las fotos que pegó el asistente, a la caché de lo que se pinta.
+        for ((id, f) in archivos) if (id !in bitmaps) ImageStore.load(f.path)?.let { bitmaps[id] = paraPintar(f.path, it) }
+        controller.reemplazar(elementos, archivos)
+        llegoDeFuera.intValue++   // repinta y guarda, como lo que llega del PC
+        true
+    }.getOrDefault(false)
 
     override fun recibirImagen(archivo: File, mime: String): Boolean = runCatching {
         val file = ExcalidrawStore.guardarImagen(this, archivo, mime) ?: return false

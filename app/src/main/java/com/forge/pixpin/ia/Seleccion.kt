@@ -159,7 +159,7 @@ object Seleccion {
             if (a.herramienta == Acciones.HOJA_A_LIENZO || Acciones.esSoloNube(a.herramienta) || !vale(a.herramienta)) continue
             puntuadas += puntuar(a.claves, q, palabras) to Acciones.herramienta(a)
         }
-        for (f in Edicion.FILAS) {
+        for (f in Edicion.TODAS) {
             if (!vale(f.nombre)) continue
             puntuadas += puntuar(f.claves, q, palabras) to (Herramientas.delPc(f.nombre) ?: continue)
         }
@@ -202,47 +202,3 @@ object Seleccion {
     }
 }
 
-/**
- * **Las herramientas de editar lo que ya hay en el lienzo** (`edicion.rs` del PC): su nombre y sus
- * claves, para la selección. Sus esquemas vienen del catálogo del PC.
- */
-object Edicion {
-    data class Fila(val nombre: String, val claves: List<String>)
-
-    const val SELECCIONAR = "seleccionar_en_lienzo"
-    const val TRANSFORMAR = "transformar_elementos"
-    const val ESTILO = "cambiar_estilo"
-    const val TRAZAR = "trazar_a_mano"
-    const val GEOMETRIA = "geometria_precisa"
-    const val CORTAR = "cortar_linea"
-    const val EXTENDER = "extender_linea"
-    const val IMAGEN = "imagen_en_lienzo"
-
-    val FILAS = listOf(
-        Fila(SELECCIONAR, listOf("elige", "selecciona", "busca en el lienzo", "cual es", "que hay en el lienzo")),
-        Fila(TRANSFORMAR, listOf(
-            "mueve", "mover", "desplaza", "escala", "agranda", "achica", "encoge", "gira", "rota", "duplica", "copia el",
-            "copia la", "borra", "elimina", "quita", "agrupa", "desagrupa", "voltea", "espejo", "al frente", "al fondo",
-            "detras", "delante", "mas grande", "mas pequen"
-        )),
-        Fila(ESTILO, listOf(
-            "color", "pinta de", "pintalo", "pintala", "rellena", "relleno", "grosor", "mas grueso", "mas fino",
-            "discontinu", "punteado", "opacidad", "transparente", "cambia"
-        )),
-        Fila(TRAZAR, listOf(
-            "subraya", "resalta", "marca", "rodea", "encierra", "tacha", "repasa", "a mano", "lapiz", "grafito",
-            "resaltador", "marcador", "fosforito"
-        )),
-        Fila(GEOMETRIA, listOf(
-            "recta", "circulo", "circunferencia", "arco", "perpendicular", "paralela", "radio", "centro", "angulo",
-            "grados", "tres puntos", "exact", "segmento", "semicircunferencia", "semicirculo", "cuadrante", "sector",
-            "cuerda", "diametro", "tangente", "marca", "angulo recto", "degradado", "punteada", "raya punto",
-            "lamina", "geometria"
-        )),
-        Fila(CORTAR, listOf("corta", "cortar", "recorta la", "recorta el", "trim", "quita el trozo", "quita lo que sobra", "en el cruce", "interseccion")),
-        Fila(EXTENDER, listOf("extiende", "extender", "alarga", "prolonga", "estira", "hasta que toque", "extend")),
-        Fila(IMAGEN, listOf("pega", "pegar", "inserta", "recorta", "recortar", "foto", "imagen", "portapapeles", "captura"))
-    )
-
-    fun fila(nombre: String) = FILAS.firstOrNull { it.nombre == nombre }
-}

@@ -276,6 +276,7 @@ object ChatDelAsistente {
         "dibujar_en_lienzo" -> "✏️ dibujando en el lienzo…"
         "grafica" -> "📊 haciendo la gráfica…"
         "ocr" -> "🔎 leyendo el documento…"
+        com.forge.pixpin.ia.Ojos.NOMBRE -> "👀 mirando el lienzo…"
         "buscar_historial" -> "🗂️ buscando en la conversación…"
         "calcar_imagen" -> "🖼️ calcando la imagen…"
         "ayuda_app" -> "📖 mirando la ayuda…"

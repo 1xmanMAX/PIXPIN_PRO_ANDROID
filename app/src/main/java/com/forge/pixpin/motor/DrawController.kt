@@ -3238,6 +3238,18 @@ class DrawController(initial: Scene = Scene()) {
      * importado — miles de trazos marcados son miles de adornos de selección
      * por fotograma, y el grupo se marca igual con un toque cuando haga falta.
      */
+    /**
+     * **La escena que dejó el asistente al editar** (mover, cortar, cambiar el estilo…), en un solo
+     * paso de deshacer; lo elegido que ya no está se suelta.
+     */
+    fun reemplazar(elementos: List<Element>, archivos: Map<String, SceneFile> = scene.files) {
+        val before = scene.elements
+        scene = scene.copy(elements = elementos, files = archivos)
+        val vivos = elementos.filter { !it.isDeleted }.map { it.id }.toSet()
+        selectedIds = selectedIds.filter { it in vivos }.toSet()
+        anotar(before)
+    }
+
     fun insertar(elementos: List<Element>, marcar: Boolean = true) {
         if (elementos.isEmpty()) return
         val before = scene.elements

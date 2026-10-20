@@ -50,6 +50,9 @@ private fun trazadoEnElMundo(e: Element): List<Pt> {
     return pts.map { pointRotateRads(it, centro, e.angle) }
 }
 
+/** El recorrido de [e] en el mundo, para quien elige dónde cortar sin dedo (el asistente). */
+fun recorridoDe(e: Element): List<Pt> = trazadoEnElMundo(e)
+
 fun cortesDe(e: Element, otros: List<Element>): List<Double> {
     val camino = trazadoEnElMundo(e)
     if (camino.size < 2) return emptyList()

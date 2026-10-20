@@ -53,7 +53,7 @@ object GeometriaPrecisa {
      * **Hace la figura** y devuelve los elementos nuevos (ya en coordenadas de la escena). [existentes]:
      * lo que hay en el lienzo destino (para «entre», «a» y las letras libres).
      */
-    fun hacer(args: JsonObject, existentes: List<Element>, marco: Pt, estiloBase: ItemStyle = ItemStyle()): List<Element> {
+    fun hacer(args: JsonObject, existentes: List<Element>, marco: Pt, estiloBase: ItemStyle = ItemStyle(), numeracion: Edicion.Numeracion? = null): List<Element> {
         val p = Pedido(args)
         val figura = p.texto("figura") ?: "recta"
         fun aEscena(x: Double, y: Double) = Pt(marco.x + x, marco.y + y)
@@ -63,6 +63,8 @@ object GeometriaPrecisa {
         val vivos = numeradas(existentes)
         fun ref(t: String): Element {
             val n = Regex("#(\\d+)").find(t)?.groupValues?.get(1)?.toIntOrNull() ?: mal("«$t»: nombra la figura por su #n (del resumen del lienzo)")
+            // Con los #n del turno ([Edicion.Numeracion]), los del resumen; sin ellos, el orden de lo que se ve.
+            if (numeracion != null) return numeracion.id(n)?.let { id -> vivos.firstOrNull { it.id == id } } ?: mal("no hay ninguna figura #$n en el lienzo")
             return vivos.getOrNull(n - 1) ?: mal("no hay ninguna figura #$n en el lienzo")
         }
         val nuevo: Element = when (figura) {

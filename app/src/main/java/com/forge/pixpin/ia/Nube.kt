@@ -499,6 +499,7 @@ object Nube {
         private val pensar = AtomicBoolean(!ligero)
 
         override val catalogoCompleto: Boolean get() = true
+        override val veImagenes: Boolean get() = true
 
         override fun toString() = "Nube.Motor(${proveedor.id}, ${enmascarar(clave)})"
 
@@ -649,6 +650,7 @@ object Nube {
         @Volatile private var caidoHasta = 0L
 
         override val catalogoCompleto: Boolean get() = nube.catalogoCompleto
+        override val veImagenes: Boolean get() = nube.veImagenes
 
         override fun completar(peticion: Peticion, alTrozo: (Trozo) -> Seguir): Respuesta {
             if (local != null && reloj() < caidoHasta) return local.completar(paraElLocal(peticion, disponibles), alTrozo)

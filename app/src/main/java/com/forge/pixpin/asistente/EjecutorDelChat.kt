@@ -59,7 +59,9 @@ class EjecutorDelChat(
     /** null si se pueden mandar trozos de documentos al modelo; si no, lo que se le contesta. */
     permisoDocumentos: () -> String? = { null },
     /** El lienzo nombrado con `@lienzo:` (su referencia): ahí se dibuja, sin abrirlo. */
-    destino: String? = null
+    destino: String? = null,
+    /** El lienzo destino del turno con sus `#n` y su marco (el mismo con que se hizo el resumen del pedido). */
+    private val lienzoDelTurno: LienzoDelTurno = LienzoDelTurno(contexto, { almacen.leer() }, chat)
 ) : Agente.Ejecutor {
     /** El lienzo destino del turno: el de `@lienzo:`, o el que pongan crear_lienzo y usar_lienzo (PC 17-oct). */
     @Volatile private var destino: String? = destino
@@ -85,6 +87,28 @@ class EjecutorDelChat(
         is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
         is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
         is Llamada.Geometria -> geometria(llamada.args)
+        is Llamada.Editar -> editar(llamada.pedido)
+    }
+
+    /** **Los ojos**: la vista del lienzo destino del turno (PC `Ejecutor::ver`). */
+    override fun ver(mirada: com.forge.pixpin.ia.Ojos.Mirada): Result<com.forge.pixpin.ia.Ojos.Vista> = runCatching {
+        if (mirada.zona == com.forge.pixpin.ia.Ojos.Zona.Documento) error("aqui solo se mira el lienzo: los documentos anotados se ven al abrirlos")
+        lienzoDelTurno.ver(destino, mirada)
+    }
+
+    /** **Editar lo que ya hay** ([com.forge.pixpin.ia.Edicion]) en el lienzo destino del turno. */
+    private fun editar(p: com.forge.pixpin.ia.Edicion.Pedido): Result<String> = runCatching {
+        val fotos = {
+            almacen.leer().filter { it.proyecto == chat && it.clase == Clase.IMAGEN && it.ruta != null && File(it.ruta).isFile }
+                .map { it.nombre to File(it.ruta!!) }
+        }
+        val (hecho, ref) = try {
+            lienzoDelTurno.editar(destino, p) { LienzoDelTurno.FotosDelChat(contexto, fotos) }
+        } catch (e: com.forge.pixpin.ia.Edicion.Fallo) {
+            error(e.message ?: "no se pudo")
+        }
+        if (p.herramienta != com.forge.pixpin.ia.Edicion.SELECCIONAR) lienzo = ref
+        hecho
     }
 
     // ------------------------------------------------------------------------------------- lienzo
@@ -134,22 +158,21 @@ class EjecutorDelChat(
      * nombra «entre» o «a» por su #n. Sin ninguno, uno nuevo.
      */
     private fun geometria(args: kotlinx.serialization.json.JsonObject): Result<String> = runCatching {
-        val ref = destino?.takeIf { File(ExcalidrawStore.rutaDe(contexto, it)).isFile }
-            ?: ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia
-        if (ref == null) {
-            val nuevos = com.forge.pixpin.ia.GeometriaPrecisa.hacer(args, emptyList(), com.forge.pixpin.motor.Pt(0.0, 0.0))
-            return@runCatching alLienzo("la ${args["figura"]?.toString()?.trim('"') ?: "figura"}") { (x, y) ->
-                nuevos.map { it.copy(x = it.x + x, y = it.y + y) }
+        val figura = args["figura"]?.toString()?.trim('"') ?: "figura"
+        // En el lienzo del turno (el abierto, el de @lienzo: o el propio), con sus #n y su marco.
+        val hecho = try {
+            lienzoDelTurno.geometria(destino) { escena, num, marco ->
+                com.forge.pixpin.ia.GeometriaPrecisa.hacer(args, escena.elements, marco, numeracion = num)
             }
+        } catch (e: com.forge.pixpin.ia.Edicion.Fallo) {
+            error(e.message ?: "no se pudo")
         }
-        val ruta = ExcalidrawStore.rutaDe(contexto, ref)
-        val escena = ExcalidrawStore.cargar(ruta) ?: Scene()
-        val marco = marcoDe(escena.elements)
-        val nuevos = com.forge.pixpin.ia.GeometriaPrecisa.hacer(args, escena.elements, marco)
-        ExcalidrawStore.guardar(contexto, ref, escena.copy(elements = escena.elements + nuevos)) ?: error("no se pudo guardar el lienzo")
-        lienzo = ref
-        val n = com.forge.pixpin.ia.GeometriaPrecisa.numeradas(escena.elements).size
-        "hecho: ${args["figura"]?.toString()?.trim('"')} trazada (#${n + 1})"
+        if (hecho == null) {
+            val nuevos = com.forge.pixpin.ia.GeometriaPrecisa.hacer(args, emptyList(), com.forge.pixpin.motor.Pt(0.0, 0.0))
+            return@runCatching alLienzo("la $figura") { (x, y) -> nuevos.map { it.copy(x = it.x + x, y = it.y + y) } }
+        }
+        lienzo = hecho.second
+        "hecho: $figura trazada (${hecho.first})"
     }
 
     /** Dónde empieza el marco de 800×600 del modelo en un lienzo: la esquina de lo que ya hay. */
@@ -183,7 +206,7 @@ class EjecutorDelChat(
             val id = runBlocking { withContext(Dispatchers.Main) { abierto.recibirElementos(nuevos) } }
             if (id != null) {
                 lienzo = id
-                return "dibujada $que en el lienzo abierto"
+                return "dibujada $que en el lienzo abierto" + conSusNumeros(id, nuevos)
             }
         }
         // 2. El lienzo nombrado con `@lienzo:`, o el propio del asistente en este chat; a la
@@ -199,7 +222,7 @@ class EjecutorDelChat(
                 ?: error("no se pudo guardar el lienzo")
             lienzo = propio
             val nombre = almacen.leer().lastOrNull { it.referencia == propio }?.let(ChatDelAsistente::nombreDeLienzo) ?: ChatDelAsistente.NOMBRE_DEL_LIENZO
-            return "dibujada $que en el lienzo «$nombre»"
+            return "dibujada $que en el lienzo «$nombre»" + conSusNumeros(propio, corridos)
         }
         // 3. Uno nuevo, que entra al chat como dibujo del asistente.
         val id = "ia-$semilla"
@@ -217,8 +240,12 @@ class EjecutorDelChat(
             )
         )
         lienzo = id
-        return "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+        return "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»" + conSusNumeros(id, nuevos)
     }
+
+    /** Los `#n` de lo recién dibujado (PC `resumen_de_lo_anadido`), para que la llamada siguiente lo edite. */
+    private fun conSusNumeros(ref: String, nuevos: List<Element>): String =
+        runCatching { lienzoDelTurno.anadidos(ref, nuevos.map { it.id }) }.getOrNull()?.let { "\n" + it.removePrefix("hecho: ") } ?: ""
 
     /** Que al abrir el lienzo nuevo se vea lo dibujado (está en el 800×600 del modelo). */
     private fun vistaPara(elementos: List<Element>): com.forge.pixpin.motor.Viewport {
