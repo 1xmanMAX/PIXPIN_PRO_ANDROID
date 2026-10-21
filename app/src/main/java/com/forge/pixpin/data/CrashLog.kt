@@ -113,13 +113,6 @@ object CrashLog {
     }.getOrNull()
 
     /**
-     * Recoge las muertes que el capturador de arriba **no puede ver**: los
-     * reventones nativos (el rasterizador, la GPU) y los ANR. De esos no salta
-     * ninguna excepción de JVM — el proceso muere entero— pero Android guarda
-     * el motivo, y al siguiente arranque se puede leer y dejar en el informe.
-     * Sin esto, «la app se cierra al hacer zoom» no dejaba ni una línea.
-     */
-    /**
      * **Qué muertes van al informe.** Los fallos siempre; la falta de memoria solo si la app
      * se estaba usando o tenía un servicio. Estando en caché (importancia 400 o más) Android
      * la cierra para hacer sitio a otras apps: es lo normal y no dice nada de PixPin, y
@@ -134,6 +127,13 @@ object CrashLog {
         else -> false
     }
 
+    /**
+     * Recoge las muertes que el capturador de arriba **no puede ver**: los
+     * reventones nativos (el rasterizador, la GPU) y los ANR. De esos no salta
+     * ninguna excepción de JVM — el proceso muere entero— pero Android guarda
+     * el motivo, y al siguiente arranque se puede leer y dejar en el informe.
+     * Sin esto, «la app se cierra al hacer zoom» no dejaba ni una línea.
+     */
     fun recogerMuertesDelSistema(context: Context) {
         if (Build.VERSION.SDK_INT < 30) return
         runCatching {
