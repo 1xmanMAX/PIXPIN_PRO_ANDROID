@@ -119,6 +119,21 @@ object CrashLog {
      * el motivo, y al siguiente arranque se puede leer y dejar en el informe.
      * Sin esto, «la app se cierra al hacer zoom» no dejaba ni una línea.
      */
+    /**
+     * **Qué muertes van al informe.** Los fallos siempre; la falta de memoria solo si la app
+     * se estaba usando o tenía un servicio. Estando en caché (importancia 400 o más) Android
+     * la cierra para hacer sitio a otras apps: es lo normal y no dice nada de PixPin, y
+     * llenaba el informe de muertes de madrugada con 60 MB.
+     */
+    internal fun merecePonerse(motivo: Int, importancia: Int): Boolean = when (motivo) {
+        android.app.ApplicationExitInfo.REASON_CRASH,
+        android.app.ApplicationExitInfo.REASON_CRASH_NATIVE,
+        android.app.ApplicationExitInfo.REASON_ANR -> true
+        android.app.ApplicationExitInfo.REASON_LOW_MEMORY ->
+            importancia < android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_CACHED
+        else -> false
+    }
+
     fun recogerMuertesDelSistema(context: Context) {
         if (Build.VERSION.SDK_INT < 30) return
         runCatching {
@@ -128,14 +143,13 @@ object CrashLog {
                 as android.app.ActivityManager
             val muertes = am.getHistoricalProcessExitReasons(context.packageName, 0, 8)
             var masReciente = yaVisto
-            val interesantes = muertes.filter {
-                it.timestamp > yaVisto && (
-                    it.reason == android.app.ApplicationExitInfo.REASON_CRASH ||
-                        it.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
-                        it.reason == android.app.ApplicationExitInfo.REASON_ANR ||
-                        it.reason == android.app.ApplicationExitInfo.REASON_LOW_MEMORY
-                    )
-            }
+            val interesantes = muertes
+                .filter { it.timestamp > yaVisto && merecePonerse(it.reason, it.importance) }
+                .sortedByDescending { it.timestamp }
+            // La pantalla apuntada es la de la vida que acaba de terminar, o sea, la de la
+            // muerte más reciente; ponerla en todas hacía creer que PlanoActivity mató la app
+            // a las 07:34 cuando se abrió a las 11:23.
+            val laUltima = muertes.maxOfOrNull { it.timestamp }
             if (interesantes.isEmpty()) {
                 muertes.maxOfOrNull { it.timestamp }?.let {
                     prefs.edit().putLong("ultima_muerte", it).apply()
@@ -173,7 +187,9 @@ object CrashLog {
                         } + " (importancia ${m.importance})"
                     )
                     appendLine("Memoria al morir: PSS ${m.pss / 1024} MB, RSS ${m.rss / 1024} MB")
-                    pantallaAnterior?.let { appendLine("Última pantalla abierta: $it") }
+                    if (m.timestamp == laUltima) {
+                        pantallaAnterior?.let { appendLine("Última pantalla abierta: $it") }
+                    }
                     // La traza que el sistema guardó, si la hay (ANR y nativos).
                     runCatching {
                         m.traceInputStream?.use { flujo ->
@@ -189,7 +205,7 @@ object CrashLog {
                     "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\n" +
                     "${Build.MANUFACTURER} ${Build.MODEL}\n" + texto
             )
-            prefs.edit().putLong("ultima_muerte", masReciente).apply()
+            prefs.edit().putLong("ultima_muerte", maxOf(masReciente, laUltima ?: 0L)).apply()
         }
     }
 }
