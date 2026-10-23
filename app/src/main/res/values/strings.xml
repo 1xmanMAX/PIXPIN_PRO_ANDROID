@@ -346,6 +346,15 @@
     <string name="tool_image">Imagen</string>
     <string name="tool_mosaic">Pixelar</string>
     <string name="guardados_adj_archivo">Un archivo</string>
+    <!-- Escanear con «Escáner Pro Max» desde el clip del chat (23-oct-2026). -->
+    <string name="guardados_adj_escanear">Escanear</string>
+    <string name="guardados_escaner_falta_titulo">Falta el escáner</string>
+    <string name="guardados_escaner_falta">Para escanear desde el chat hace falta instalar la aplicación «Escáner Pro Max». Cuando esté instalada, este botón abrirá su cámara y el documento entrará solo en el chat.</string>
+    <plurals name="guardados_escaner_error">
+        <item quantity="one">No se pudo leer el documento escaneado</item>
+        <item quantity="many">No se pudieron leer %d archivos escaneados</item>
+        <item quantity="other">No se pudieron leer %d archivos escaneados</item>
+    </plurals>
     <string name="guardados_adj_fotos">Fotos</string>
     <!-- El cuadro de enviar varias fotos (4-oct-2026, el del PC). -->
     <plurals name="guardados_envio_fotos">
