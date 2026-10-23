@@ -738,14 +738,21 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val escanear = androidx.activity.compose.rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { res -> adjuntarEscaneo(EscanerProMax.resultado(res.resultCode, res.data)) }
-        val pedirEscaneo = {
-            if (!EscanerProMax.estaInstalado(packageManager)) faltaElEscaner = true
-            else runCatching {
-                chatDelEscaneo = chatDe
-                escaneoPendiente = true
+        val pedirEscaneo: () -> Unit = pedir@{
+            if (!EscanerProMax.estaInstalado(packageManager)) {
+                faltaElEscaner = true
+                return@pedir
+            }
+            chatDelEscaneo = chatDe
+            escaneoPendiente = true
+            try {
                 escanear.launch(EscanerProMax.peticion())
-            }.onFailure {
-                // Lo desinstalaron entre comprobar y abrir, o no deja abrirse.
+            } catch (e: android.content.ActivityNotFoundException) {
+                // Lo desinstalaron entre comprobar y abrir.
+                escaneoPendiente = false
+                faltaElEscaner = true
+            } catch (e: SecurityException) {
+                // No deja que se le abra desde fuera.
                 escaneoPendiente = false
                 faltaElEscaner = true
             }
