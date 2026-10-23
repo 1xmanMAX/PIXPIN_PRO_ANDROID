@@ -75,6 +75,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -225,6 +227,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     private var renombrandoMensaje by mutableStateOf<Mensaje?>(null)
     /** La foto o el archivo cuya descripción se está escribiendo. Ver [Descripcion]. */
     private var describiendo by mutableStateOf<Mensaje?>(null)
+    /**
+     * El escaneo que se ha pedido editar en el escáner («Editar en el escáner», la chapa o el menú):
+     * la pantalla lo recoge y abre el escáner. Ver [EscanerProMax.peticionDeEdicion].
+     */
+    private var escaneoPorEditar by mutableStateOf<Mensaje?>(null)
     /** El mensaje que se va a meter en una nota (como «Insertar en una nota» del PC). */
     private var insertandoEnNota by mutableStateOf<Mensaje?>(null)
     private var nombreDelChat by mutableStateOf("")
@@ -273,11 +280,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      */
     private var escaneoPendiente = false
     private var chatDelEscaneo: String? = null
+    /**
+     * **Qué mensaje se está editando en el escáner** (su id), por lo mismo que [chatDelEscaneo]: el
+     * resultado puede llegar a una pantalla rehecha, y tiene que saber a quién cambiarle el archivo.
+     */
+    private var mensajeEnEdicion: String? = null
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(GUARDADO_ESCANEO_PENDIENTE, escaneoPendiente)
         outState.putString(GUARDADO_CHAT_DEL_ESCANEO, chatDelEscaneo)
+        outState.putString(GUARDADO_MENSAJE_EN_EDICION, mensajeEnEdicion)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -286,6 +299,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         savedInstanceState?.let {
             escaneoPendiente = it.getBoolean(GUARDADO_ESCANEO_PENDIENTE)
             chatDelEscaneo = it.getString(GUARDADO_CHAT_DEL_ESCANEO)
+            mensajeEnEdicion = it.getString(GUARDADO_MENSAJE_EN_EDICION)
         }
         aplicar(intent)
         // La portada solo se comprueba en la general: entrando al chat de un proyecto ya
@@ -746,6 +760,99 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = { faltaElEscaner = false }) {
                         Text(getString(android.R.string.ok))
+                    }
+                }
+            )
+        }
+
+        // **Editar un escaneo en el escáner** (23-oct-2026, lo pidió el usuario: «le doy a Editar y me
+        // lleva directamente al escáner, a ese documento»). La chapa «Escaneado» de la burbuja o el
+        // menú del mensaje dejan [escaneoPorEditar]; aquí se abre el escáner con la acción EDIT y, al
+        // volver con «Guardar en PixPin», [reemplazarEscaneo] le cambia el archivo al mensaje.
+        // [problemaAlEditar]: por qué no se pudo (falta el escáner, es antiguo, ya no tiene el
+        // documento), con la salida de escanear otra vez.
+        var problemaAlEditar by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+        val editarEnEscaner = androidx.activity.compose.rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { res ->
+            val id = mensajeEnEdicion
+            mensajeEnEdicion = null
+            when (val r = EscanerProMax.resultado(res.resultCode, res.data)) {
+                is EscanerProMax.Resultado.Archivos -> if (id != null) reemplazarEscaneo(id, r)
+                EscanerProMax.Resultado.NoExiste -> problemaAlEditar = EscanerProMax.AlEditar.SIN_DOCUMENTO.name
+                EscanerProMax.Resultado.Nada -> Unit
+            }
+        }
+        LaunchedEffect(escaneoPorEditar) {
+            val m = escaneoPorEditar ?: return@LaunchedEffect
+            escaneoPorEditar = null
+            val documento = EscanerProMax.documentoDe(m)
+            val que = EscanerProMax.queHacerAlEditar(
+                instalado = EscanerProMax.estaInstalado(packageManager),
+                sabeEditar = EscanerProMax.sabeEditar(packageManager),
+                documento = documento
+            )
+            if (que != EscanerProMax.AlEditar.ABRIR || documento == null) {
+                problemaAlEditar = que.name
+                return@LaunchedEffect
+            }
+            mensajeEnEdicion = m.id
+            try {
+                editarEnEscaner.launch(EscanerProMax.peticionDeEdicion(documento))
+            } catch (e: android.content.ActivityNotFoundException) {
+                mensajeEnEdicion = null
+                problemaAlEditar = EscanerProMax.AlEditar.FALTA_EL_ESCANER.name
+            } catch (e: SecurityException) {
+                mensajeEnEdicion = null
+                problemaAlEditar = EscanerProMax.AlEditar.FALTA_EL_ESCANER.name
+            }
+        }
+        problemaAlEditar?.let { cual ->
+            val que = runCatching { EscanerProMax.AlEditar.valueOf(cual) }.getOrDefault(EscanerProMax.AlEditar.SIN_DOCUMENTO)
+            val cerrar = { problemaAlEditar = null }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = cerrar,
+                icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                title = {
+                    Text(getString(
+                        when (que) {
+                            EscanerProMax.AlEditar.FALTA_EL_ESCANER -> com.forge.pixpin.R.string.guardados_escaner_falta_titulo
+                            EscanerProMax.AlEditar.ESCANER_ANTIGUO -> com.forge.pixpin.R.string.guardados_escaner_antiguo_titulo
+                            else -> com.forge.pixpin.R.string.guardados_escaner_no_esta_titulo
+                        }
+                    ))
+                },
+                text = {
+                    Text(getString(
+                        when (que) {
+                            EscanerProMax.AlEditar.FALTA_EL_ESCANER -> com.forge.pixpin.R.string.guardados_escaner_falta_editar
+                            EscanerProMax.AlEditar.ESCANER_ANTIGUO -> com.forge.pixpin.R.string.guardados_escaner_antiguo
+                            else -> com.forge.pixpin.R.string.guardados_escaner_no_esta
+                        }
+                    ))
+                },
+                confirmButton = {
+                    // Sin escáner no hay nada que abrir: solo «Entendido».
+                    if (que != EscanerProMax.AlEditar.FALTA_EL_ESCANER) {
+                        androidx.compose.material3.TextButton(onClick = { cerrar(); pedirEscaneo() }) {
+                            Text(getString(com.forge.pixpin.R.string.guardados_escaner_escanear_otra_vez))
+                        }
+                    } else {
+                        androidx.compose.material3.TextButton(onClick = cerrar) { Text(getString(android.R.string.ok)) }
+                    }
+                },
+                dismissButton = {
+                    if (que != EscanerProMax.AlEditar.FALTA_EL_ESCANER) Row {
+                        // El escáner normal, en su biblioteca: allí puede estar el documento con otro nombre.
+                        packageManager.getLaunchIntentForPackage(EscanerProMax.PAQUETE)?.let { abrir ->
+                            androidx.compose.material3.TextButton(onClick = {
+                                cerrar()
+                                runCatching { startActivity(abrir) }
+                            }) { Text(getString(com.forge.pixpin.R.string.guardados_escaner_abrir)) }
+                        }
+                        androidx.compose.material3.TextButton(onClick = cerrar) {
+                            Text(getString(android.R.string.cancel))
+                        }
                     }
                 }
             )
@@ -2940,6 +3047,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 if (Renombrar.sePuede(m)) {
                     DelMenu(com.forge.pixpin.R.string.guardados_cambiar_nombre, Icons.Filled.Edit) {
                         menuAbierto = false; renombrandoMensaje = m
+                    }
+                }
+                // **Editar en el escáner** (23-oct-2026): lo escaneado vuelve a ese documento del
+                // escáner, para recortar, cambiar el filtro, reordenar o añadir hojas.
+                if (EscanerProMax.esEscaneo(m)) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_escaner_editar, Icons.Filled.DocumentScanner) {
+                        menuAbierto = false; escaneoPorEditar = m
                     }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_responder,
@@ -5263,6 +5377,37 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         Row(verticalAlignment = Alignment.CenterVertically, content = nombre)
     }
 
+    /**
+     * **La chapa «Escaneado»** (23-oct-2026, lo pidió el usuario): dice de un vistazo que el archivo
+     * salió del escáner y, tocándola, lo abre allí en ese documento («Editar en el escáner», igual
+     * que en el menú del mensaje). Pequeña y del color de acento suave, como las pastillas de la
+     * burbuja; el lápiz del final avisa de que se puede tocar.
+     */
+    @Composable
+    private fun ChapaDeEscaneado(m: Mensaje, modifier: Modifier = Modifier) {
+        val editar = getString(com.forge.pixpin.R.string.guardados_escaner_editar)
+        Row(
+            modifier
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f))
+                .clickable(onClickLabel = editar) { escaneoPorEditar = m }
+                .semantics { contentDescription = getString(com.forge.pixpin.R.string.guardados_escaneado) + ". " + editar }
+                .padding(start = 7.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val tinta = MaterialTheme.colorScheme.onSecondaryContainer
+            Icon(Icons.Filled.DocumentScanner, contentDescription = null, tint = tinta, modifier = Modifier.size(13.dp))
+            Text(
+                getString(com.forge.pixpin.R.string.guardados_escaneado),
+                fontSize = 12.sp,
+                color = tinta,
+                maxLines = 1,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+            Icon(Icons.Filled.Edit, contentDescription = null, tint = tinta.copy(alpha = 0.7f), modifier = Modifier.padding(start = 4.dp).size(11.dp))
+        }
+    }
+
     @Composable
     private fun FilaDeArchivo(m: Mensaje) {
         // **El botón redondo de 44 puntos** (`ChatMessageCell.java:13996`). No es
@@ -5331,6 +5476,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                // La chapa de lo escaneado, que también lleva al escáner. Ver [ChapaDeEscaneado].
+                if (EscanerProMax.esEscaneo(m)) ChapaDeEscaneado(m, Modifier.padding(top = 4.dp))
             }
             // **Y el atajo para sacarlo a la pantalla**, al lado, como el de pasar a texto
             // en una nota de voz. Lo pidió el usuario el 8-sep-2026: sacar un PDF a un pin
@@ -6224,7 +6371,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         if (r !is EscanerProMax.Resultado.Archivos) return
         lifecycleScope.launch(Dispatchers.IO) {
             // En su orden, uno tras otro: el chat los enseña por su hora.
-            val fallidos = r.uris.count { !copiarLoElegido(it, chat = chat, tipo = r.tipo) }
+            // Con su etiqueta: es un escaneo, y este es su documento en el escáner. Ver [Mensaje.escaneado].
+            val etiqueta = EscanerProMax.etiqueta(r.documento)
+            val fallidos = r.uris.count { !copiarLoElegido(it, chat = chat, tipo = r.tipo, escaneado = etiqueta) }
             if (fallidos > 0) withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@MensajesActivity,
@@ -6254,47 +6403,117 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * pidió) y [tipo] el MIME que dijo quien lo manda, por si el proveedor no lo sabe. Dice si
      * entró: hasta el escaneo nadie lo miraba, y sigue sin hacer falta mirarlo.
      */
-    private suspend fun copiarLoElegido(uri: Uri, pie: String = "", chat: String? = chatDe, tipo: String? = null): Boolean =
+    private suspend fun copiarLoElegido(
+        uri: Uri,
+        pie: String = "",
+        chat: String? = chatDe,
+        tipo: String? = null,
+        /** La etiqueta de escaneo, si viene del escáner. Ver [Mensaje.escaneado]. */
+        escaneado: Escaneado? = null
+    ): Boolean =
         runCatching {
-            val nombre = nombreDe(uri)
-            val temporal = File(cacheDir, "adj_${System.currentTimeMillis()}")
-            contentResolver.openInputStream(uri)?.use { entrada ->
-                temporal.outputStream().use { entrada.copyTo(it) }
-            } ?: return false
-            val antes = temporal.length()
-            val ruta = almacen.copiarAdjunto(temporal, nombre)
-            temporal.delete()
-            if (ruta == null) return false
-            // **Lo que pesa ya guardado**, no lo que pesaba al llegar: un PDF se aligera al entrar
-            // y el mensaje tiene que decir el peso de verdad. Ver [MensajesStore.copiarAdjunto].
-            val bytes = File(ruta).length()
-            // Y se dice, que si no parece que no haya pasado nada: cinco megas que entran pesando
-            // uno es justo lo que el usuario no veía (14-sep-2026).
-            if (bytes in 1 until (antes * 9 / 10)) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@MensajesActivity,
-                        "PDF aligerado: ${com.forge.pixpin.motor.Detalle.legible(antes)} → ${com.forge.pixpin.motor.Detalle.legible(bytes)}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-            val esImagen = (runCatching { contentResolver.getType(uri) }.getOrNull() ?: tipo)?.startsWith("image/") == true
+            val copia = copiaPropia(uri, tipo) ?: return false
             almacen.anadir(
                 Mensaje(
                     id = UUID.randomUUID().toString(),
                     cuando = horaSinRepetir(),
-                    clase = if (esImagen) Clase.IMAGEN else Clase.ARCHIVO,
+                    clase = if (copia.esImagen) Clase.IMAGEN else Clase.ARCHIVO,
                     proyecto = chat,
-                    ruta = ruta,
-                    nombre = nombre,
-                    bytes = bytes,
-                    texto = pie
+                    ruta = copia.ruta,
+                    nombre = copia.nombre,
+                    bytes = copia.bytes,
+                    texto = pie,
+                    escaneado = escaneado
                 )
             )
             withContext(Dispatchers.Main) { recargarLaLista?.invoke() }
             true
         }.getOrDefault(false)
+
+    /** Lo que queda de un archivo de fuera, ya copiado al almacén. Ver [copiaPropia]. */
+    private class CopiaPropia(val ruta: String, val nombre: String, val bytes: Long, val esImagen: Boolean)
+
+    /**
+     * **La copia propia de lo que llega de fuera**: se lee entero (el permiso del otro es
+     * temporal), entra al almacén (un PDF se aligera, una foto se endereza) y se dice lo que pesa
+     * ya guardado. La usan «Un archivo», el escaneo y el escaneo editado. Nulo si no se pudo.
+     */
+    private suspend fun copiaPropia(uri: Uri, tipo: String?): CopiaPropia? = runCatching {
+        val nombre = nombreDe(uri)
+        val temporal = File(cacheDir, "adj_${System.currentTimeMillis()}")
+        contentResolver.openInputStream(uri)?.use { entrada ->
+            temporal.outputStream().use { entrada.copyTo(it) }
+        } ?: return null
+        val antes = temporal.length()
+        val ruta = almacen.copiarAdjunto(temporal, nombre)
+        temporal.delete()
+        if (ruta == null) return null
+        // **Lo que pesa ya guardado**, no lo que pesaba al llegar: un PDF se aligera al entrar
+        // y el mensaje tiene que decir el peso de verdad. Ver [MensajesStore.copiarAdjunto].
+        val bytes = File(ruta).length()
+        // Y se dice, que si no parece que no haya pasado nada: cinco megas que entran pesando
+        // uno es justo lo que el usuario no veía (14-sep-2026).
+        if (bytes in 1 until (antes * 9 / 10)) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MensajesActivity,
+                    "PDF aligerado: ${com.forge.pixpin.motor.Detalle.legible(antes)} → ${com.forge.pixpin.motor.Detalle.legible(bytes)}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        val esImagen = (runCatching { contentResolver.getType(uri) }.getOrNull() ?: tipo)?.startsWith("image/") == true
+        CopiaPropia(ruta, nombre, bytes, esImagen)
+    }.getOrNull()
+
+    /**
+     * **El escaneo editado sustituye al de antes**, en el mismo mensaje (mismo sitio en el chat,
+     * misma descripción, mismas respuestas): copia propia como al adjuntar, ruta y peso nuevos y la
+     * etiqueta que sigue. Al cambiar el mensaje cambia su resumen, así que la próxima
+     * sincronización lo manda al PC con su archivo. El archivo de antes se borra cuando el mensaje
+     * ya apunta al nuevo. Si el mensaje se borró mientras se editaba, entra como uno nuevo.
+     */
+    private fun reemplazarEscaneo(id: String, r: EscanerProMax.Resultado.Archivos) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val uri = r.uris.first()
+            val copia = copiaPropia(uri, r.tipo)
+            val aviso: Int
+            if (copia == null) {
+                aviso = com.forge.pixpin.R.string.guardados_escaner_editado_error
+            } else {
+                var antes: String? = null
+                var estaba = false
+                almacen.actualizar(id) { m ->
+                    estaba = true
+                    antes = m.ruta
+                    EscanerProMax.conArchivoNuevo(m, copia.ruta, copia.bytes, copia.nombre, r.documento)
+                }
+                if (estaba) {
+                    antes?.takeIf { it != copia.ruta }?.let { almacen.borrarAdjunto(it) }
+                    aviso = com.forge.pixpin.R.string.guardados_escaner_editado
+                } else {
+                    // Lo borraron mientras estaba en el escáner: no se pierde lo editado.
+                    almacen.anadir(
+                        Mensaje(
+                            id = UUID.randomUUID().toString(),
+                            cuando = horaSinRepetir(),
+                            clase = if (copia.esImagen) Clase.IMAGEN else Clase.ARCHIVO,
+                            proyecto = chatDe,
+                            ruta = copia.ruta,
+                            nombre = copia.nombre,
+                            bytes = copia.bytes,
+                            escaneado = EscanerProMax.etiqueta(r.documento)
+                        )
+                    )
+                    aviso = com.forge.pixpin.R.string.guardados_escaner_editado_nuevo
+                }
+            }
+            withContext(Dispatchers.Main) {
+                recargarLaLista?.invoke()
+                Toast.makeText(this@MensajesActivity, aviso, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     /**
      * Cómo se le dice a la pantalla que vuelva a leer.
@@ -7370,6 +7589,7 @@ private const val ALFA_DE_LA_PILDORA = 0.6f
 /** Las claves con que el escaneo en curso sobrevive a que se rehaga la pantalla. */
 private const val GUARDADO_ESCANEO_PENDIENTE = "escaneo_pendiente"
 private const val GUARDADO_CHAT_DEL_ESCANEO = "chat_del_escaneo"
+private const val GUARDADO_MENSAJE_EN_EDICION = "mensaje_en_edicion"
 
 /**
  * Las etiquetas que se ofrecen.

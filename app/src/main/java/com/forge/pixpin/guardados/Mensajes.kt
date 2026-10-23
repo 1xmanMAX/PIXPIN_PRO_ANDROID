@@ -324,7 +324,29 @@ data class Mensaje(
      * cual** por lo mismo que [lienzoIa].
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val fuentesIa: kotlinx.serialization.json.JsonArray? = null
+    val fuentesIa: kotlinx.serialization.json.JsonArray? = null,
+
+    /**
+     * **Es un escaneo** (23-oct-2026, lo pidió el usuario): entró por «Escanear» del clip y se puede
+     * volver a abrir en el escáner con «Editar en el escáner». En el JSON, `"escaneado":
+     * {"app":"com.scannerpromax","documento":"<id>"}`; viaja con el mensaje (sincronización, envíos,
+     * `.pixpin`) y el PC lo guarda en el `resto` de su mensaje aunque no lo entienda. No se escribe
+     * si no hay. Ver [EscanerProMax].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val escaneado: Escaneado? = null
+)
+
+/**
+ * La etiqueta de un escaneo: con qué aplicación se hizo ([app], el paquete) y qué documento es en
+ * ella ([documento], el `DOCUMENT_ID` que devolvió; nulo si el escáner no lo dio y no se puede
+ * reabrir). Ver [Mensaje.escaneado].
+ */
+@Serializable
+data class Escaneado(
+    val app: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val documento: String? = null
 )
 
 /** El lienzo del que salió una zona: qué dice el vínculo y cómo volver a él. */

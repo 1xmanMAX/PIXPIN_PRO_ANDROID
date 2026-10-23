@@ -59,6 +59,10 @@
         <intent>
             <action android:name="com.scannerpromax.action.SCAN" />
         </intent>
+        <!-- «Editar en el escáner»: reabre un escaneo del chat en su documento (acción EDIT). -->
+        <intent>
+            <action android:name="com.scannerpromax.action.EDIT" />
+        </intent>
         <!-- «Abrir con» un DWG u otro tipo que Android no conoce: las aplicaciones que lo abren
              solo se ven si se declara que se buscan. Es la lista de data/TiposDeArchivo.kt. -->
         <intent>
