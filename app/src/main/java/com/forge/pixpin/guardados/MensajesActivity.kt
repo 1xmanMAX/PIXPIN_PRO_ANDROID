@@ -63,6 +63,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -263,9 +264,29 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      */
     private var chatDelAsistente by mutableStateOf<String?>(null)
 
+    /**
+     * **A qué conversación va el escaneo en curso**, apuntado al pulsar «Escanear». Mientras el
+     * escáner está abierto se puede perder esta pantalla (el sistema la cierra por memoria, o se
+     * rehace por un cambio que no maneja): al volver, [chatDe] sale otra vez del intento, que no
+     * tiene por qué ser el chat desde el que se escaneó. Por eso se guarda aparte y sobrevive en
+     * [onSaveInstanceState]. [escaneoPendiente] distingue «la general» (nulo) de «nada pendiente».
+     */
+    private var escaneoPendiente = false
+    private var chatDelEscaneo: String? = null
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(GUARDADO_ESCANEO_PENDIENTE, escaneoPendiente)
+        outState.putString(GUARDADO_CHAT_DEL_ESCANEO, chatDelEscaneo)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         almacen = MensajesStore(this)
+        savedInstanceState?.let {
+            escaneoPendiente = it.getBoolean(GUARDADO_ESCANEO_PENDIENTE)
+            chatDelEscaneo = it.getString(GUARDADO_CHAT_DEL_ESCANEO)
+        }
         aplicar(intent)
         // La portada solo se comprueba en la general: entrando al chat de un proyecto ya
         // se está dentro de la aplicación, y saltar a los permisos ahí sería secuestrar
@@ -688,6 +709,40 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val elegirArchivo = androidx.activity.compose.rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument()
         ) { uri -> uri?.let { guardarArchivo(it); refrescar() } }
+
+        // **Escanear con «Escáner Pro Max»** (23-oct-2026): cámara directa y lo escaneado entra
+        // solo, como «Un archivo». El lanzador de Compose guarda su clave con `rememberSaveable`,
+        // así que si la pantalla se rehace mientras se escanea el resultado llega igual aquí.
+        // Ver [EscanerProMax] y [adjuntarEscaneo].
+        var faltaElEscaner by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+        val escanear = androidx.activity.compose.rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { res -> adjuntarEscaneo(EscanerProMax.resultado(res.resultCode, res.data)) }
+        val pedirEscaneo = {
+            if (!EscanerProMax.estaInstalado(packageManager)) faltaElEscaner = true
+            else runCatching {
+                chatDelEscaneo = chatDe
+                escaneoPendiente = true
+                escanear.launch(EscanerProMax.peticion())
+            }.onFailure {
+                // Lo desinstalaron entre comprobar y abrir, o no deja abrirse.
+                escaneoPendiente = false
+                faltaElEscaner = true
+            }
+        }
+        if (faltaElEscaner) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { faltaElEscaner = false },
+                icon = { Icon(Icons.Filled.DocumentScanner, contentDescription = null) },
+                title = { Text(getString(com.forge.pixpin.R.string.guardados_escaner_falta_titulo)) },
+                text = { Text(getString(com.forge.pixpin.R.string.guardados_escaner_falta)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { faltaElEscaner = false }) {
+                        Text(getString(android.R.string.ok))
+                    }
+                }
+            )
+        }
 
         // **Varias fotos de una vez, con su cuadro de enviar** (4-oct-2026, el del PC): se
         // eligen, se ordenan, se quitan o se añaden más y se mandan con su descripción. Si el
@@ -2026,6 +2081,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     ) {
                         eligiendoQue = false
                         pedirFotos()
+                    }
+                    // **Escanear**, siempre a la vista: sin el escáner instalado dice qué falta.
+                    BotonDeAdjuntar(
+                        Icons.Filled.DocumentScanner,
+                        com.forge.pixpin.R.string.guardados_adj_escanear,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        pedirEscaneo()
                     }
                     BotonDeAdjuntar(
                         Icons.Filled.Description,
@@ -6137,6 +6201,34 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     }
 
     /**
+     * **Lo escaneado entra solo**, en la conversación desde la que se pidió y por el mismo camino
+     * que «Un archivo» ([copiarLoElegido]): copia propia, PDF aligerado, mensaje enviado. El
+     * permiso de lectura del escáner es temporal, así que se copia en cuanto vuelve. Cancelar no
+     * hace nada; un archivo que no se deja leer se dice.
+     *
+     * El texto reconocido (OCR) no se pide: el único sitio para guardarlo sería el pie del
+     * mensaje, que se ve, y la búsqueda del chat ya encuentra el PDF por su nombre.
+     */
+    private fun adjuntarEscaneo(r: EscanerProMax.Resultado) {
+        val pendiente = escaneoPendiente
+        val chat = if (pendiente) chatDelEscaneo else chatDe
+        escaneoPendiente = false
+        chatDelEscaneo = null
+        if (r !is EscanerProMax.Resultado.Archivos) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            // En su orden, uno tras otro: el chat los enseña por su hora.
+            val fallidos = r.uris.count { !copiarLoElegido(it, chat = chat, tipo = r.tipo) }
+            if (fallidos > 0) withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@MensajesActivity,
+                    resources.getQuantityString(com.forge.pixpin.R.plurals.guardados_escaner_error, fallidos, fallidos),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    /**
      * La última hora dada a un mensaje que entra: dos fotos copiadas en el mismo milisegundo
      * saldrían con la misma y el chat podría enseñarlas al revés (lo mismo que `hora_sin_repetir`
      * del PC).
@@ -6148,18 +6240,24 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         return ultimaHora.updateAndGet { maxOf(ahora, it + 1) }
     }
 
-    /** Copia lo elegido al chat; con [pie], de descripción suya. Ver [Descripcion]. */
-    private suspend fun copiarLoElegido(uri: Uri, pie: String = "") {
+    /**
+     * Copia lo elegido al chat; con [pie], de descripción suya. Ver [Descripcion].
+     *
+     * [chat] es la conversación a la que va (la de ahora, salvo un escaneo, que va a la que lo
+     * pidió) y [tipo] el MIME que dijo quien lo manda, por si el proveedor no lo sabe. Dice si
+     * entró: hasta el escaneo nadie lo miraba, y sigue sin hacer falta mirarlo.
+     */
+    private suspend fun copiarLoElegido(uri: Uri, pie: String = "", chat: String? = chatDe, tipo: String? = null): Boolean =
         runCatching {
             val nombre = nombreDe(uri)
             val temporal = File(cacheDir, "adj_${System.currentTimeMillis()}")
             contentResolver.openInputStream(uri)?.use { entrada ->
                 temporal.outputStream().use { entrada.copyTo(it) }
-            } ?: return
+            } ?: return false
             val antes = temporal.length()
             val ruta = almacen.copiarAdjunto(temporal, nombre)
             temporal.delete()
-            if (ruta == null) return
+            if (ruta == null) return false
             // **Lo que pesa ya guardado**, no lo que pesaba al llegar: un PDF se aligera al entrar
             // y el mensaje tiene que decir el peso de verdad. Ver [MensajesStore.copiarAdjunto].
             val bytes = File(ruta).length()
@@ -6174,13 +6272,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     ).show()
                 }
             }
-            val esImagen = contentResolver.getType(uri)?.startsWith("image/") == true
+            val esImagen = (runCatching { contentResolver.getType(uri) }.getOrNull() ?: tipo)?.startsWith("image/") == true
             almacen.anadir(
                 Mensaje(
                     id = UUID.randomUUID().toString(),
                     cuando = horaSinRepetir(),
                     clase = if (esImagen) Clase.IMAGEN else Clase.ARCHIVO,
-                    proyecto = chatDe,
+                    proyecto = chat,
                     ruta = ruta,
                     nombre = nombre,
                     bytes = bytes,
@@ -6188,8 +6286,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 )
             )
             withContext(Dispatchers.Main) { recargarLaLista?.invoke() }
-        }
-    }
+            true
+        }.getOrDefault(false)
 
     /**
      * Cómo se le dice a la pantalla que vuelva a leer.
@@ -7261,6 +7359,10 @@ private val RADIO_DE_LA_FOTO = RADIO_BURBUJA.dp
 
 /** Lo tapada que queda la foto tras la píldora de la hora. */
 private const val ALFA_DE_LA_PILDORA = 0.6f
+
+/** Las claves con que el escaneo en curso sobrevive a que se rehaga la pantalla. */
+private const val GUARDADO_ESCANEO_PENDIENTE = "escaneo_pendiente"
+private const val GUARDADO_CHAT_DEL_ESCANEO = "chat_del_escaneo"
 
 /**
  * Las etiquetas que se ofrecen.
