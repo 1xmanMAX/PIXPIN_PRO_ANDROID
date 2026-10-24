@@ -118,7 +118,9 @@ fun CapaDeMarcos(
     modifier: Modifier = Modifier,
     /** A trazos y de grosor fijo, como los del lienzo; los de los documentos, lisos. */
     discontinuo: Boolean = false,
-    alDosDedos: ((pan: Offset, zoom: Float, centro: Offset) -> Unit)? = null
+    alDosDedos: ((pan: Offset, zoom: Float, centro: Offset) -> Unit)? = null,
+    /** Si los ya puestos los pinta el propio visor (la hoja de Excel), aquí solo el que se arrastra. */
+    pintarLosPuestos: Boolean = true
 ) {
     val aPantallaYa by rememberUpdatedState(aPantalla)
     val aDocumentoYa by rememberUpdatedState(aDocumento)
@@ -188,7 +190,7 @@ fun CapaDeMarcos(
                 val b = aPantallaYa(m.x1, m.y1, m.parte) ?: return null
                 return Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y))
             }
-            estado.lista.forEachIndexed { i, m ->
+            if (pintarLosPuestos) estado.lista.forEachIndexed { i, m ->
                 val r = caja(m) ?: return@forEachIndexed
                 if (r.left > size.width + 40 * e || r.top > size.height + 40 * e || r.right < -40 * e || r.bottom < -40 * e) return@forEachIndexed
                 drawRect(AZUL, r.topLeft, r.size, style = trazo)

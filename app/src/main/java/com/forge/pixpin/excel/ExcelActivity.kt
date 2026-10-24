@@ -266,7 +266,8 @@ class ExcelActivity : ComponentActivity() {
                 com.forge.pixpin.ui.CapaDeMarcos(
                     marcosDoc,
                     // Los pinta la hoja (van con ella sin retraso); aquí, el gesto y las fichas.
-                    aPantalla = { _, _, _ -> null },
+                    aPantalla = { x, y, _ -> vista?.aVista(x, y)?.let { androidx.compose.ui.geometry.Offset(it.x, it.y) } },
+                    pintarLosPuestos = false,
                     aDocumento = { o -> vista?.deVista(o.x, o.y)?.let { com.forge.pixpin.ui.PuntoDelDocumento(it[0], it[1], vista?.indice ?: 0) } },
                     pxPorUnidad = { vista?.escala ?: 1.0 },
                     alIr = { m -> irAlMarco(m, vista) { activa = it } },
