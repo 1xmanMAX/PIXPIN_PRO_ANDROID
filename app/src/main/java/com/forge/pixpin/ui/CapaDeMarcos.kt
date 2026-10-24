@@ -225,7 +225,7 @@ fun CapaDeMarcos(
 
 /** Las fichas 1, 2, 3… y la pista, abajo a la izquierda (`fichas_de` del PC). */
 @Composable
-private fun PistaDeMarcos(estado: MarcosDelVisor, alIr: (Marco) -> Unit, alImprimir: () -> Unit, modifier: Modifier) {
+internal fun PistaDeMarcos(estado: MarcosDelVisor, alIr: (Marco) -> Unit, alImprimir: () -> Unit, modifier: Modifier) {
     Row(
         modifier.navigationBarsPadding().padding(12.dp).horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically

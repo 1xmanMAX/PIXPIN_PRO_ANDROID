@@ -251,6 +251,30 @@ class PinWindowController(
 
     private var actionBar: OverlayComposeWindow? = null
     private var annotateBar: OverlayComposeWindow? = null
+    /** **El riel del pin** (24-oct-2026, `riel_pin.rs` del PC): lápiz y marco, al lado del pin. */
+    private var rielDelPin: OverlayComposeWindow? = null
+    /** La barrita de los marcos: fichas, quitar el último, borrar, imprimir y listo. */
+    private var barraDeMarcos: OverlayComposeWindow? = null
+
+    // ---- **Los marcos numerados del pin de imagen** (como `pines/marcos.rs` del PC) ----
+    // En píxeles de la imagen guardada, sin girar: se quedan en su sitio de la foto aunque el pin se
+    // agrande o se encuadre. Junto a la imagen (`<imagen>.pixpin-marcos`), o con su mensaje
+    // (`anot-<uid>.marcos.json`) si la foto es un adjunto del chat: entonces viajan.
+    private val marcando = mutableStateOf(false)
+    private var marcosDelPin: com.forge.pixpin.ui.MarcosDelVisor? = null
+    /** El marco que se arrastra: sus dos esquinas en píxeles de la imagen. */
+    private val marcoVivo = mutableStateOf<Pair<com.forge.pixpin.motor.Pt, com.forge.pixpin.motor.Pt>?>(null)
+
+    private fun marcos(): com.forge.pixpin.ui.MarcosDelVisor {
+        marcosDelPin?.let { return it }
+        val ruta = pin.value.imagePath
+        val archivo = ruta?.let { r ->
+            com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(context.filesDir, r)
+                ?.let { uid -> com.forge.pixpin.motor.MarcosDelDocumento.archivo(context.filesDir, com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(uid)) }
+                ?: java.io.File("$r.pixpin-marcos")
+        }
+        return com.forge.pixpin.ui.MarcosDelVisor(archivo).also { marcosDelPin = it }
+    }
     private var emojiPicker: OverlayComposeWindow? = null
 
     private var touchHandler: OverlayTouchHandler? = null
@@ -558,6 +582,8 @@ class PinWindowController(
     }
 
     fun close() {
+        salirDeMarcos()
+        cerrarElRiel()
         cerrarTirador()
         hideView()
         imagenesDelDibujo.clear()
@@ -565,6 +591,8 @@ class PinWindowController(
     }
 
     fun destroy() {
+        salirDeMarcos()
+        cerrarElRiel()
         hideView()
         imagenesDelDibujo.clear()
         callbacks.onPinDestroyed(this)
@@ -1465,6 +1493,7 @@ class PinWindowController(
             wm.añadirVistaFluida(bar.view, params)
             bar.onAttached()
         }.onFailure { actionBar = null }
+        abrirElRiel()
     }
 
     private fun closeActionBar() {
@@ -1472,6 +1501,166 @@ class PinWindowController(
         runCatching { wm.removeView(bar.view) }
         bar.onDetached()
         actionBar = null
+        if (!annotating.value && !marcando.value) cerrarElRiel()
+    }
+
+    /**
+     * **El riel del pin**, fuera de él y a su derecha (a la izquierda si no cabe), como en el PC: el
+     * lápiz y el marco. Sale con la barra y, anotando o poniendo marcos, se queda con su botón
+     * encendido; tocarlo otra vez sale. Sin marcador: un pin es una imagen que se ve entera.
+     */
+    private fun abrirElRiel() {
+        if (rielDelPin != null || pin.value.type != PinType.IMAGE) return
+        val p = lp ?: return
+        val v = window?.view ?: return
+        val metrics = context.resources.displayMetrics
+        val density = metrics.density
+        val ancho = (60 * density).toInt()
+        val derecha = p.x + v.width + (6 * density).toInt()
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = if (derecha + ancho <= metrics.widthPixels) derecha else (p.x - ancho).coerceAtLeast(0)
+            y = p.y.coerceAtLeast(0)
+        }
+        val riel = OverlayComposeWindow(context) { RielDelPinContent() }
+        rielDelPin = riel
+        runCatching {
+            wm.añadirVistaFluida(riel.view, params)
+            riel.onAttached()
+        }.onFailure { rielDelPin = null }
+    }
+
+    private fun cerrarElRiel() {
+        val riel = rielDelPin ?: return
+        runCatching { wm.removeView(riel.view) }
+        riel.onDetached()
+        rielDelPin = null
+    }
+
+    @Composable
+    private fun RielDelPinContent() {
+        com.forge.pixpin.ui.RielDelVisor(
+            poniendoMarca = false, anotando = annotating.value, marcando = marcando.value,
+            onMarcador = null,
+            onLapiz = { if (annotating.value) exitAnnotateMode() else { salirDeMarcos(); enterAnnotateMode() } },
+            onMarco = { if (marcando.value) salirDeMarcos() else { exitAnnotateMode(); entrarEnMarcos() } }
+        )
+    }
+
+    /** El modo de los marcos: un dedo arrastra uno nuevo sobre la foto, y el pin no se mueve. */
+    private fun entrarEnMarcos() {
+        if (marcando.value || pin.value.type != PinType.IMAGE) return
+        closeActionBar()
+        abrirElRiel()
+        val m = marcos()
+        m.activo = true
+        marcando.value = true
+        window?.setTouchHandler(
+            StrokeTouchReader(
+                onBegin = { x, y, _ -> toEscena(x, y)?.let { marcoVivo.value = it to it } },
+                onExtend = { x, y, _ -> val a = marcoVivo.value?.first; toEscena(x, y)?.let { if (a != null) marcoVivo.value = a to it } },
+                onFinish = {
+                    val par = marcoVivo.value
+                    marcoVivo.value = null
+                    if (par != null) com.forge.pixpin.motor.MarcosDelDocumento.conNuevo(
+                        m.lista, par.first.x, par.first.y, par.second.x, par.second.y, zoomEscena()
+                    )?.let { m.poner(it) }
+                },
+                onCancel = { marcoVivo.value = null },
+                onModifier = { }
+            )
+        )
+        abrirBarraDeMarcos()
+    }
+
+    private fun salirDeMarcos() {
+        if (!marcando.value) return
+        marcando.value = false
+        marcosDelPin?.activo = false
+        marcoVivo.value = null
+        window?.setTouchHandler(newTouchHandler())
+        barraDeMarcos?.let { b -> runCatching { wm.removeView(b.view) }; b.onDetached() }
+        barraDeMarcos = null
+        if (actionBar == null) cerrarElRiel()
+    }
+
+    private fun abrirBarraDeMarcos() {
+        if (barraDeMarcos != null) return
+        val p = lp ?: return
+        val v = window?.view ?: return
+        val density = context.resources.displayMetrics.density
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = p.x
+            y = p.y + v.height + (6 * density).toInt()
+        }
+        val bar = OverlayComposeWindow(context) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                com.forge.pixpin.ui.PistaDeMarcos(marcos(), alIr = { }, alImprimir = { imprimirLosMarcos() }, modifier = Modifier)
+                Text(
+                    "Listo", color = Color.White,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xE6141417))
+                        .clickable { salirDeMarcos() }.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
+        barraDeMarcos = bar
+        runCatching {
+            wm.añadirVistaFluida(bar.view, params)
+            bar.onAttached()
+        }.onFailure { barraDeMarcos = null }
+    }
+
+    /**
+     * **Imprimir los marcos del pin** (como el PC): cada marco se recorta de la imagen entera con lo
+     * anotado encima, a su tamaño real —no de la pantalla—, una hoja por marco. Desde un pin no hay
+     * pantalla de la app delante para el diálogo de imprimir: el PDF se abre en el visor del teléfono,
+     * que imprime.
+     */
+    private fun imprimirLosMarcos() {
+        val lista = marcos().lista
+        val bmp = bitmapState.value ?: return
+        if (lista.isEmpty()) return
+        val escena = annotator.scene
+        Thread {
+            runCatching {
+                val entera = bmp.copy(Bitmap.Config.ARGB_8888, true)
+                val lona = android.graphics.Canvas(entera)
+                com.forge.pixpin.motor.Renderer(
+                    imageProvider = { id -> imagenDelDibujo(id, escena.files) },
+                    typefaces = com.forge.pixpin.motor.DrawFonts.provider(context),
+                    backdrop = bmp,
+                    paraExportar = true
+                ).renderScene(lona, escena.copy(viewport = com.forge.pixpin.motor.Viewport()), entera.width.toDouble(), entera.height.toDouble())
+                val fotos = lista.mapNotNull { m ->
+                    val x0 = m.x0.toInt().coerceIn(0, entera.width - 1); val y0 = m.y0.toInt().coerceIn(0, entera.height - 1)
+                    val x1 = m.x1.toInt().coerceIn(x0 + 1, entera.width); val y1 = m.y1.toInt().coerceIn(y0 + 1, entera.height)
+                    runCatching { Bitmap.createBitmap(entera, x0, y0, x1 - x0, y1 - y0) }.getOrNull()
+                }
+                val pdf = com.forge.pixpin.ui.ImprimirMarcos.aPdf(fotos)
+                val destino = java.io.File(java.io.File(context.cacheDir, "share").apply { mkdirs() }, "marcos-del-pin.pdf")
+                destino.writeBytes(pdf)
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", destino)
+                context.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf")
+                        .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.onFailure { e -> android.os.Handler(android.os.Looper.getMainLooper()).post { toast("No se pudieron imprimir los marcos: ${e.message}") } }
+        }.start()
     }
 
     // ---- Modo anotación (dibujar sobre el pin sin abrir ninguna pantalla) ----
@@ -1483,8 +1672,9 @@ class PinWindowController(
      */
     private fun enterAnnotateMode() {
         if (annotating.value || pin.value.type != PinType.IMAGE) return
-        closeActionBar()
         annotating.value = true
+        closeActionBar()
+        abrirElRiel()
         annotationsAtEnter = annotator.scene.visible
         // **Se conserva `StrokeTouchReader`.** Trae el rechazo de palma y las
         // muestras históricas del lápiz —un digitalizador va a cientos de hercios
@@ -1586,6 +1776,7 @@ class PinWindowController(
         annotator.cancel()
         window?.setTouchHandler(newTouchHandler())
         closeAnnotateBar()
+        if (actionBar == null && !marcando.value) cerrarElRiel()
         pin.value = snapshot()
         callbacks.onPinChanged(this)
         // Se acabó el botón de guardar: si has dibujado algo, la versión con lo
@@ -2708,14 +2899,9 @@ class PinWindowController(
                 // encima; en un dibujo o una nota, editarlo; en un PDF, abrirlo. Es lo
                 // que se viene a hacer con ese pin el noventa por ciento de las veces.
                 when {
-                    // El lápiz de todos los visores (24-oct-2026, PC 963300e: «los mismos iconos en
-                    // todos los visores para no confundirse»).
-                    s.type == PinType.IMAGE -> IconButton(onClick = { enterAnnotateMode() }) {
-                        Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = context.getString(R.string.cd_anotar_aqui)
-                        )
-                    }
+                    // El lápiz de una imagen va en el riel de al lado (PC 963300e: «la barra
+                    // flotante ya no lleva otro lápiz»).
+                    s.type == PinType.IMAGE -> {}
                     s.type == PinType.DRAW -> IconButton(onClick = {
                         // Con el id del dibujo y no el del pin: si no, el editor
                         // guardaría lo dibujado en un archivo nuevo y lo que se ve en la
@@ -3480,6 +3666,7 @@ class PinWindowController(
             if (annotating.value || annotator.scene.visible.isNotEmpty()) {
                 CapaDeDibujo(bmp)
             }
+            if (pin.value.type == PinType.IMAGE && (marcando.value || marcos().lista.isNotEmpty())) CapaDeMarcosDelPin(bmp)
         }
     }
 
@@ -3491,6 +3678,56 @@ class PinWindowController(
      * el dibujo iría un fotograma por detrás y se le vería perseguir a la foto
      * al pellizcar. Es la misma razón por la que estaba así antes.
      */
+    /**
+     * **Los marcos del pin**, con la foto y con su misma transformación (en una ventana, la del
+     * encuadre): raya azul, su número en el cuadrito y el que se está arrastrando.
+     */
+    @Composable
+    private fun CapaDeMarcosDelPin(bmp: Bitmap) {
+        val s = pin.value
+        val enVentana = s.ventana
+        val lista = marcos().lista
+        val vivo = marcoVivo.value
+        val texto = androidx.compose.runtime.remember {
+            android.graphics.Paint().apply { isAntiAlias = true; color = android.graphics.Color.WHITE; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+        }
+        androidx.compose.foundation.Canvas(
+            Modifier.fillMaxSize().then(
+                if (!enVentana) Modifier else Modifier.graphicsLayer {
+                    scaleX = s.encuadreZoom; scaleY = s.encuadreZoom; rotationZ = s.encuadreGiro
+                    val z = scale.floatValue.takeIf { it > 0f } ?: 1f
+                    translationX = s.encuadreX * z; translationY = s.encuadreY * z
+                    clip = true
+                }
+            )
+        ) {
+            if (bmp.width < 1) return@Canvas
+            val (dx, dy, k) = if (enVentana) {
+                val encaje = encajeDeLaFoto(IntSize(size.width.toInt(), size.height.toInt()), bmp) ?: return@Canvas
+                Triple(encaje.izquierda, encaje.arriba, encaje.escala)
+            } else Triple(0f, 0f, size.width / bmp.width)
+            val azul = Color(com.forge.pixpin.motor.MarcosDelDocumento.AZUL)
+            val d = density
+            lista.forEachIndexed { i, m ->
+                val tl = Offset(dx + (m.x0 * k).toFloat(), dy + (m.y0 * k).toFloat())
+                val tam = androidx.compose.ui.geometry.Size((m.ancho * k).toFloat(), (m.alto * k).toFloat())
+                drawRect(azul, tl, tam, style = androidx.compose.ui.graphics.drawscope.Stroke(2f * d))
+                val n = (i + 1).toString()
+                texto.textSize = 12 * d
+                drawRect(azul, tl, androidx.compose.ui.geometry.Size(texto.measureText(n) + 12 * d, 20 * d))
+                drawContext.canvas.nativeCanvas.drawText(n, tl.x + 6 * d, tl.y + 14.5f * d, texto)
+            }
+            vivo?.let { (a, b) ->
+                val x0 = minOf(a.x, b.x); val y0 = minOf(a.y, b.y)
+                drawRect(
+                    azul, Offset(dx + (x0 * k).toFloat(), dy + (y0 * k).toFloat()),
+                    androidx.compose.ui.geometry.Size((kotlin.math.abs(b.x - a.x) * k).toFloat(), (kotlin.math.abs(b.y - a.y) * k).toFloat()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(1.5f * d)
+                )
+            }
+        }
+    }
+
     @Composable
     private fun CapaDeDibujo(bmp: Bitmap) {
         // Ni el zoom ni el contador se leen al componer: los dos se miran dentro

@@ -18,12 +18,12 @@ pastilla de arriba, que se queda con lo propio de cada formato.
 | Lienzo | ✓ (como antes) | **Abre siempre mirando**; el lápiz pasa a editar con la barra entera y atrás vuelve a mirar | ✓ coge la herramienta Marco (fuera de la barra de arriba, como el PC) |
 | PDF y Word/PowerPoint por hojas | ✓ y **con su vista** (zoom y sitio, `.vistas.json`) | ✓ (anotar) | ✓ |
 | Word y libros (lectura), PDF como texto | ✓ | ✓ | ✓ |
-| Página web (HTML) del chat | ✓ (nuevo, `anot-<uid>.marcas` en fracción) | — | ✓ |
+| Página web (HTML) del chat | ✓ (nuevo, `anot-<uid>.marcas` en fracción) | ✓ (nuevo: tinta en píxeles CSS, `anot-<uid>.excalidraw.gz` sin columna ni `.hoja`) | ✓ |
 | Excel | ✓ (nuevo: `id:columna:hoja·10⁷+fila:emoji`, con vista) | ✓ (nuevo: tinta por hoja, `anot-<uid>-h<i>`) | ✓ (`parte` = hoja) |
 | Plano DWG/DXF | ✓ (nuevo: la vista entera, `Marcador2d`) | ✓ (el anotar de antes) | ✓ (los marcos del plano de antes) |
-| Modelo 3D (IFC/Revit) | ✓ (nuevo: la cámara y el corte, `Marcador3d`) | — | — |
-| Notas | ✓ (fracción) | **Abre mirando**; el lápiz pasa a escribir | — |
-| Pin de imagen flotante | — | el mismo icono `Edit` | — |
+| Modelo 3D (IFC/Revit) | ✓ (nuevo: la cámara y el corte, `Marcador3d`) | ✓ (nuevo: anota sobre la vista de un marcador, `anot-<uid>-m<id>.excalidraw.gz` + `.hoja` `-2500,-2500,2500,2500`, en milésimas del alto; fuera de un marcador, pone el de esa vista) | ✓ (nuevo: marcos 3D con su vista, `{"version":1,"marcos":[…]}`; solo se ven en su vista) |
+| Notas | ✓ (fracción) | ✓ **Abre mirando**; el lápiz anota encima (`anot-<uid>.excalidraw.gz`); escribir el texto va en su botón de arriba (`EditNote`, como el PC) | ✓ |
+| Pin de imagen flotante | — (como el PC: una imagen se ve entera) | ✓ en su riel, al lado del pin | ✓ en píxeles de la imagen; imprimir recorta cada marco de la foto entera con lo anotado |
 
 ## Marcos numerados (`motor/MarcosDelDocumento.kt`, `ui/CapaDeMarcos.kt`)
 
@@ -65,10 +65,10 @@ dónde.
 
 ## Lo que no, y por qué
 
-- **Tinta en páginas web y en el 3D, marcos en el 3D y en las notas**: el PC los hace dentro de
-  WebView2 o con su cámara 3D; aquí faltan la capa de tinta en esas vistas y la foto del 3D.
-- **El riel junto al pin de imagen flotante** (lápiz y marco en una columna aparte): el pin es una
-  ventana superpuesta; se igualó el icono del lápiz.
+- **Notas: unidades de la tinta y los marcos.** El PC las mide en píxeles CSS de su lector web; aquí
+  en dp del texto compuesto. Caen en el mismo sitio mientras el texto se parta igual en los dos.
+- **Imprimir desde un pin flotante** abre el PDF en el visor del teléfono (un pin no tiene pantalla
+  propia donde sacar el diálogo de imprimir).
 - **Aislar y ocultar por clave estable en los marcadores 3D** (`aislado_clave`, `n:=`): se conserva
   lo que trae el PC, pero este teléfono aún no lo aplica.
 - **Figuras de serie** (266 plantillas y símbolos): llegan ya en `figuras.json` al sincronizar; la
