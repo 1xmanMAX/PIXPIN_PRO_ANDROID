@@ -53,6 +53,16 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- «Escanear» en el clip del chat: el escáner del usuario, «Escáner Pro Max». Sin esto,
+             en Android 11+ no se ve y el botón diría siempre que falta. Ver guardados/EscanerProMax.kt. -->
+        <package android:name="com.scannerpromax" />
+        <intent>
+            <action android:name="com.scannerpromax.action.SCAN" />
+        </intent>
+        <!-- «Editar en el escáner»: reabre un escaneo del chat en su documento (acción EDIT). -->
+        <intent>
+            <action android:name="com.scannerpromax.action.EDIT" />
+        </intent>
         <!-- «Abrir con» un DWG u otro tipo que Android no conoce: las aplicaciones que lo abren
              solo se ven si se declara que se buscan. Es la lista de data/TiposDeArchivo.kt. -->
         <intent>

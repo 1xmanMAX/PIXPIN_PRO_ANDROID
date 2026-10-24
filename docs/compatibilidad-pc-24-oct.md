@@ -83,3 +83,15 @@ dónde.
 
 Todo lo de la interfaz: el riel, los marcos y su impresión (PixelCopy), la tinta de Excel, los
 marcadores de planos y 3D, y que un marco puesto aquí caiga en el mismo sitio en el PC.
+
+## Escanear con «Escáner Pro Max» (solo Android)
+
+La otra app del usuario (`1xmanMAX/Centroide-poligono`, paquete `com.scannerpromax`) hace de brazo
+de PixPin: **Adjuntar → Escanear** abre directamente su cámara (`com.scannerpromax.action.SCAN`, PDF
+de varias páginas, `REVIEW=false`, `CALLER_LABEL=PixPin`); al pulsar «Adjuntar» en el escáner, el PDF
+entra solo en el chat que se está viendo. El mensaje queda con la chapa **«Escaneado»**
+(`"escaneado": {"app":"com.scannerpromax","documento":"<DOCUMENT_ID>"}`, viaja con él) y **«Editar en
+el escáner»** lo reabre en ese documento (`com.scannerpromax.action.EDIT`) y sustituye el archivo al
+volver con «Guardar en PixPin». Si falta el escáner, o es una versión que no sabe editar, se avisa.
+Código: `guardados/EscanerProMax.kt` y el clip de `MensajesActivity`; `<queries>` en el manifiesto.
+Viene de la rama `ccr-4d2f0b52-3ktfkq` (23-oct), unida aquí; coincide con el contrato del escáner v20.
