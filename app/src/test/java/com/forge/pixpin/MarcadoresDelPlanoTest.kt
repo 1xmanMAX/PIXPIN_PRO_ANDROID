@@ -34,4 +34,18 @@ class MarcadoresDelPlanoTest {
         assertEquals("⭐", m.emoji)
         assertEquals("📍", m.copy(nombre = "Fachada").emoji)
     }
+
+    @Test fun losDelModeloVanYVuelvenYConservanLoQueNoSeAplica() {
+        val delPc = """{"version":1,"plano":[],"modelo":[{"id":"m2","nombre":"","estado":{"objetivo":[1,2,3],"rumbo":0.5,"altura":0.2,"dist":40,
+            "seccion":null,"aislado":7,"aislado_clave":"2O2Fr${'$'}t4X7Zf8NOew3FLOH","ocultos":["n:=abc"],"claro":false,"aristas":true}}]}"""
+        val a = MarcadoresDelPlano.deTexto(delPc)
+        assertEquals(1, a.modelo.size)
+        assertEquals(40.0, a.modelo[0].dist, 0.0)
+        val nuevo = MarcadoresDelPlano.Marcador3d("m3", "⭐", doubleArrayOf(0.0, 0.0, 1.0), 1.0, 0.3, 10.0)
+        val texto = a.conModelo(a.modelo + nuevo).aTexto()
+        assertTrue("lo aislado por su clave sigue", texto.contains("aislado_clave"))
+        val vuelta = MarcadoresDelPlano.deTexto(texto)
+        assertEquals(listOf("m2", "m3"), vuelta.modelo.map { it.id })
+        assertEquals(nuevo, vuelta.modelo[1])
+    }
 }

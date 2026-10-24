@@ -35,9 +35,49 @@ object MarcadoresDelPlano {
         val emoji: String get() = nombre.trim().takeIf { it.isNotEmpty() && it.length <= 8 && it.none { c -> c.isLetterOrDigit() } } ?: "📍"
     }
 
-    /** El archivo entero: los del plano y todo lo demás tal cual. */
+    /**
+     * **Un marcador de un modelo 3D** (`Marcador3d` del PC): la cámara en órbita, con el objetivo en
+     * coordenadas **absolutas** del mundo (Z arriba) y, si había, la caja del corte. Lo demás de su
+     * `estado` (lo aislado y lo oculto por sus claves, `claro`, `aristas`) se guarda tal cual en
+     * [estado] y se reescribe igual: este teléfono aún no lo aplica.
+     */
+    data class Marcador3d(
+        val id: String, val nombre: String,
+        val objetivo: DoubleArray, val rumbo: Double, val altura: Double, val dist: Double,
+        val seccion: DoubleArray? = null,
+        val estado: JsonObject? = null
+    ) {
+        val emoji: String get() = Marcador(id, nombre, 0.0, 0.0, 0.0, 0.0).emoji
+
+        fun aJson(): JsonObject = buildJsonObject {
+            put("id", id); put("nombre", nombre)
+            put("estado", buildJsonObject {
+                put("objetivo", JsonArray(objetivo.map { JsonPrimitive(it) }))
+                put("rumbo", rumbo); put("altura", altura.coerceIn(-1.5697, 1.5697)); put("dist", dist)
+                put("seccion", seccion?.let { c -> JsonArray(c.map { JsonPrimitive(it) }) } ?: kotlinx.serialization.json.JsonNull)
+                val antes = estado
+                if (antes == null) {
+                    put("aislado", kotlinx.serialization.json.JsonNull)
+                    put("ocultos", JsonArray(emptyList()))
+                    put("claro", false); put("aristas", true)
+                } else for ((k, v) in antes) if (k !in setOf("objetivo", "rumbo", "altura", "dist", "seccion")) put(k, v)
+            })
+        }
+
+        override fun equals(other: Any?) = other is Marcador3d && id == other.id && nombre == other.nombre &&
+            objetivo.contentEquals(other.objetivo) && rumbo == other.rumbo && altura == other.altura && dist == other.dist &&
+            (seccion?.contentEquals(other.seccion ?: DoubleArray(0)) ?: (other.seccion == null))
+        override fun hashCode() = id.hashCode()
+    }
+
+    /** El archivo entero: los del plano, los del modelo y todo lo demás tal cual. */
     class Archivo(val plano: List<Marcador>, private val resto: Map<String, JsonElement>) {
         fun con(nueva: List<Marcador>) = Archivo(nueva, resto)
+
+        /** Los del modelo 3D (los que se entienden; los rotos se quedan en el archivo tal cual). */
+        val modelo: List<Marcador3d> get() = (resto["modelo"] as? JsonArray).orEmpty().mapNotNull { modelo3dDe(it) }
+
+        fun conModelo(nueva: List<Marcador3d>) = Archivo(plano, resto + ("modelo" to JsonArray(nueva.map { it.aJson() })))
 
         fun aTexto(): String {
             val o = buildJsonObject {
@@ -68,6 +108,20 @@ object MarcadoresDelPlano {
                 n("ancho") ?: return@mapNotNull null, n("alto") ?: return@mapNotNull null)
         }
         return Archivo(plano, o.filterKeys { it != "plano" })
+    }
+
+    private fun modelo3dDe(e: JsonElement): Marcador3d? {
+        val m = e as? JsonObject ?: return null
+        val id = (m["id"] as? JsonPrimitive)?.contentOrNull ?: return null
+        val est = m["estado"] as? JsonObject ?: return null
+        fun n(k: String) = (est[k] as? JsonPrimitive)?.doubleOrNull
+        fun lista(k: String) = (est[k] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }?.toDoubleArray()
+        val objetivo = lista("objetivo")?.takeIf { it.size == 3 } ?: return null
+        return Marcador3d(
+            id, (m["nombre"] as? JsonPrimitive)?.contentOrNull.orEmpty(), objetivo,
+            n("rumbo") ?: 0.0, n("altura") ?: 0.0, n("dist") ?: return null,
+            lista("seccion")?.takeIf { it.size == 6 }, est
+        )
     }
 
     /** Un id nuevo, como los del PC (`m` y el reloj en base 36). */

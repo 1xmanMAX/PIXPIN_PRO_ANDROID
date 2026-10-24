@@ -235,8 +235,22 @@ class Visor3DActivity : ComponentActivity() {
                 pintor?.fallo?.let { estado = getString(com.forge.pixpin.R.string.plano_tarjeta, it); listo = false; return@LaunchedEffect }
             }
         }
+        // ---- **Los marcadores del modelo** (24-oct-2026, como el PC `Marcador3d`): la cámara
+        // entera, en `anot-<uid>.vistas.json` (`"modelo":[…]`), junto a los del plano si los hay. ----
+        var archivoDeVistas by remember { mutableStateOf<java.io.File?>(null) }
+        var vistas by remember { mutableStateOf(MarcadoresDelPlano.deTexto(null)) }
+        var poniendoMarca by remember { mutableStateOf(false) }
+        LaunchedEffect(original) {
+            val f = withContext(Dispatchers.IO) {
+                com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@Visor3DActivity, original)
+                    ?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) }
+            }
+            archivoDeVistas = f
+            vistas = MarcadoresDelPlano.deTexto(f?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it) })
+        }
         BackHandler {
             when {
+                poniendoMarca -> poniendoMarca = false
                 viendoPiezas -> viendoPiezas = false
                 midiendo -> { midiendo = false; medida.clear(); camara++ }
                 elegido != null -> { soltar(); repintar() }
@@ -477,6 +491,40 @@ class Visor3DActivity : ComponentActivity() {
                 }
             }
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+            // **El riel de la derecha**: aquí, el marcador (el lápiz y los marcos del 3D del PC aún no).
+            if (listo) com.forge.pixpin.ui.RielDelVisor(
+                poniendoMarca = poniendoMarca, anotando = false, marcando = false,
+                onMarcador = { poniendoMarca = !poniendoMarca }, onLapiz = null, onMarco = null,
+                marcas = vistas.modelo.size, emojiDe = { i -> vistas.modelo[i].emoji },
+                alElegirMarca = { i ->
+                    val v = vistas.modelo.getOrNull(i)
+                    val mm = modelo
+                    if (v != null && mm != null) {
+                        val o = mm.origen
+                        orbita = Orbita(doubleArrayOf(v.objetivo[0] - o[0], v.objetivo[1] - o[1], v.objetivo[2] - o[2]), v.rumbo, v.altura, v.dist)
+                        ponerSeccion(v.seccion?.let { c -> FloatArray(6) { k -> (c[k] - o[k % 3]).toFloat() } })
+                    }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+            if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
+                onCerrar = { poniendoMarca = false }
+            ) { emoji ->
+                poniendoMarca = false
+                val ob = orbita
+                val mm = modelo
+                if (ob != null && mm != null) {
+                    val o = mm.origen
+                    val id = MarcadoresDelPlano.idNuevo(System.currentTimeMillis(), vistas.modelo.map { it.id } + vistas.plano.map { it.id })
+                    val nuevo = MarcadoresDelPlano.Marcador3d(
+                        id, emoji, doubleArrayOf(ob.objetivo[0] + o[0], ob.objetivo[1] + o[1], ob.objetivo[2] + o[2]), ob.rumbo, ob.altura, ob.dist,
+                        seccion?.let { c -> DoubleArray(6) { k -> c[k] + o[k % 3] } }
+                    )
+                    vistas = vistas.conModelo(vistas.modelo + nuevo)
+                    archivoDeVistas?.let { com.forge.pixpin.motor.MarcosDelDocumento.escribir(it, vistas.aTexto(), vacio = false) }
+                }
+            }
             // Niveles y categorías (PC 9625d0d): un toque muestra u oculta, mantener deja solo ese.
             val ar = arbol
             if (viendoPiezas && m != null && ar != null) {
