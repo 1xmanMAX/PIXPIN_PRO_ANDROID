@@ -310,8 +310,44 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             if (y < height) canvas.drawRect(cabAncho, y - 1f, width.toFloat(), y, relleno)
         }
         pintarSeleccion(canvas, g)
+        pintarTinta?.let { pinta ->
+            canvas.save()
+            canvas.clipRect(cabAncho, cabAlto, width.toFloat(), height.toFloat())
+            pinta(canvas)
+            canvas.restore()
+        }
         pintarMarcosNumerados(canvas)
         pintarEncabezados(canvas, g)
+        alPintar?.invoke()
+    }
+
+    /** **La tinta mirando**: la pinta la hoja, en su pasada, para que vaya con ella sin retraso. */
+    var pintarTinta: ((Canvas) -> Unit)? = null
+
+    /** Tras cada pintado: la tinta de encima se pone al día con lo que se ve. */
+    var alPintar: (() -> Unit)? = null
+
+    /**
+     * **La vista de la tinta** (`anot-<uid>-h<i>`, en píxeles de la hoja al 100 %, como el PC): la
+     * del panel que se desplaza. Desde ella se lleva la hoja a donde la deje la tinta.
+     */
+    fun vistaDeLaTinta(): com.forge.pixpin.motor.Viewport? {
+        val o = aVista(0.0, 0.0) ?: return null
+        val e = e.toDouble()
+        return com.forge.pixpin.motor.Viewport(scrollX = o.x / e, scrollY = o.y / e, zoom = e)
+    }
+
+    fun desdeLaTinta(v: com.forge.pixpin.motor.Viewport) {
+        val g = hoja?.geo ?: return
+        est.zoom = (v.zoom / densidad).coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
+        val e = e.toDouble()
+        val anchoFijo = min(g.x(g.columnasFijas) * e, (width - cabAncho).coerceAtLeast(0f).toDouble())
+        val altoFijo = min(g.y(g.filasFijas) * e, (height - cabAlto).coerceAtLeast(0f).toDouble())
+        est.x = (cabAncho + anchoFijo) / e - v.scrollX
+        est.y = (cabAlto + altoFijo) / e - v.scrollY
+        est.iniciado = true
+        acotar()
+        invalidate()
     }
 
     // ---- **Los marcos numerados** (24-oct-2026, como `visor_hoja/marcos.rs` del PC) ----

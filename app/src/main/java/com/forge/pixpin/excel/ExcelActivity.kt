@@ -1,5 +1,8 @@
 package com.forge.pixpin.excel
 
+
+import androidx.compose.runtime.collectAsState
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -104,6 +107,17 @@ class ExcelActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** A un marco: su hoja, acercada hasta llenar la zona de las celdas y centrado. */
+    private fun irAlMarco(m: com.forge.pixpin.motor.MarcosDelDocumento.Marco, v: VistaHoja?, alCambiarDeHoja: (Int) -> Unit) {
+        v ?: return
+        if (m.parte != v.indice) { v.ponerHoja(m.parte); alCambiarDeHoja(m.parte) }
+        val px = com.forge.pixpin.motor.MarcosDelDocumento.pxParaLlenar(m, v.anchoDeCeldas.toDouble(), v.altoDeCeldas.toDouble())
+        val densidad = resources.displayMetrics.density
+        val z = px / densidad
+        val e = (z * densidad).coerceAtLeast(1e-6)
+        v.mirarDesde(m.centroX - v.anchoDeCeldas / 2.0 / e, m.centroY - v.altoDeCeldas / 2.0 / e, z)
+    }
+
     @Composable
     private fun Pantalla(ruta: String, nombre: String, mensaje: String?) {
         var abierto by remember { mutableStateOf<LibroExcel?>(null) }
@@ -137,6 +151,63 @@ class ExcelActivity : ComponentActivity() {
         // que sale al tocar y se va sola; abajo, flotando, la línea de la celda y las pestañas.
         var aLaVista by remember { mutableStateOf(true) }
         var toques by remember { mutableIntStateOf(0) }
+
+        // ---- **El riel de todos los visores** (24-oct-2026, como el PC `visor_hoja/riel.rs`):
+        // marcadores en una celda, el lápiz con la tinta de cada hoja y los marcos numerados. Lo del
+        // chat va con el código de su mensaje y viaja:
+        // - `anot-<uid>.marcas`: `id:columna:hoja·10⁷+fila:emoji` ([POR_HOJA]);
+        // - `anot-<uid>.vistas.json`: el aumento y la esquina de cada marcador;
+        // - `anot-<uid>-h<i>.excalidraw.gz`: la tinta de la hoja `i`, en píxeles de la hoja al 100 %;
+        // - `anot-<uid>.marcos.json`: los marcos, con `parte` = la hoja. ----
+        var base by remember { mutableStateOf<String?>(null) }
+        var listo by remember { mutableStateOf(false) }
+        LaunchedEffect(ruta) {
+            base = withContext(Dispatchers.IO) {
+                com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(filesDir, ruta)?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
+            }
+            listo = true
+        }
+        val marcosDoc = remember(base) { com.forge.pixpin.ui.MarcosDelVisor(base?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it) }) }
+        val vistas = remember(base) { com.forge.pixpin.ui.VistasDelVisor(base?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) }) }
+        val archivoDeMarcas = remember(base) { base?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.marcas(filesDir, it) } }
+        var marcas by remember(base) {
+            mutableStateOf(com.forge.pixpin.motor.Marcas.deTexto(archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it) }))
+        }
+        fun guardarMarcas() { archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, com.forge.pixpin.motor.Marcas.aTexto(marcas)) } }
+        var poniendoMarca by remember { mutableStateOf(false) }
+        var anotando by remember { mutableStateOf(false) }
+        var cambiosDeTinta by remember { mutableIntStateOf(0) }
+        // La tinta de la hoja que se ve: su propio dibujo, y su vista la de la hoja.
+        val idDeLaTinta = base?.let { "$it-h$activa" }
+        val tinta = remember(idDeLaTinta) {
+            com.forge.pixpin.motor.DrawController(
+                idDeLaTinta?.let { com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@ExcelActivity, it)) }
+                    ?: com.forge.pixpin.motor.Scene()
+            ).also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+        }
+        var tickDeTinta by remember { mutableIntStateOf(0) }
+        val pintorDeTinta = remember(oscuro) {
+            com.forge.pixpin.motor.Renderer(
+                imageProvider = { f -> tinta.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                typefaces = com.forge.pixpin.motor.DrawFonts.provider(this@ExcelActivity),
+                dark = oscuro
+            )
+        }
+        fun guardarTinta() {
+            val id = idDeLaTinta ?: return
+            if (cambiosDeTinta == 0) return
+            cambiosDeTinta = 0
+            com.forge.pixpin.motor.ExcalidrawStore.guardar(this@ExcelActivity, id, tinta.scene)
+        }
+        DisposableEffect(tinta) { onDispose { guardarTinta() } }
+        androidx.activity.compose.BackHandler(enabled = anotando || marcosDoc.activo || poniendoMarca) {
+            when {
+                anotando -> { anotando = false; guardarTinta() }
+                poniendoMarca -> poniendoMarca = false
+                else -> marcosDoc.activo = false
+            }
+        }
+        val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
         LaunchedEffect(aLaVista, toques) { if (aLaVista) { kotlinx.coroutines.delay(3500); aLaVista = false } }
         Box(Modifier.fillMaxSize().background(if (oscuro) Color(com.forge.pixpin.office.Oscuro.PAPEL) else Color.White)) {
             val l = abierto
@@ -150,6 +221,7 @@ class ExcelActivity : ComponentActivity() {
                             nueva.oscuro = oscuro
                             nueva.alCambiar = { marca.intValue++ }
                             nueva.alTocar = { aLaVista = true; toques++ }
+                            nueva.marcos = { marcosDoc.lista }
                             l.alCambiar = { nueva.post { nueva.invalidate(); marca.intValue++ } }
                             nueva.ponerHoja(activa)
                             vista = nueva
@@ -157,9 +229,67 @@ class ExcelActivity : ComponentActivity() {
                     }
                 )
                 DisposableEffect(l) { onDispose { l.alCambiar = null } }
+                // La tinta va con la hoja: cada pintado de la hoja le pasa su vista.
+                vista?.let { v ->
+                    v.marcos = { marcosDoc.lista }
+                    v.marcosOcultos = marcosDoc.imprimiendo
+                    v.alPintar = null
+                    // Mirando, la tinta la pinta la hoja con su misma vista: los dedos siguen siendo de la hoja.
+                    v.pintarTinta = if (anotando) null else ({ canvas ->
+                        val vp = v.vistaDeLaTinta()
+                        val vivos = tinta.scene.elements.filter { !it.isDeleted }
+                        if (vp != null && vivos.isNotEmpty()) {
+                            canvas.save()
+                            canvas.scale(vp.zoom.toFloat(), vp.zoom.toFloat())
+                            canvas.translate(vp.scrollX.toFloat(), vp.scrollY.toFloat())
+                            for (e in vivos) pintorDeTinta.renderElement(canvas, e)
+                            canvas.restore()
+                        }
+                    })
+                    v.invalidate()
+                }
+                if (anotando) com.forge.pixpin.motor.DrawCanvas(
+                    controller = tinta,
+                    modifier = Modifier.fillMaxSize(),
+                    imageProvider = { f -> tinta.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                    dark = oscuro,
+                    cambios = tickDeTinta,
+                    onChange = { trazando ->
+                        cambiosDeTinta++
+                        // Dos dedos mueven la tinta: la hoja la sigue.
+                        vista?.desdeLaTinta(tinta.scene.viewport)
+                        if (!trazando) tickDeTinta++
+                    }
+                )
+            }
+            if (l != null && !anotando) {
+                com.forge.pixpin.ui.CapaDeMarcos(
+                    marcosDoc,
+                    // Los pinta la hoja (van con ella sin retraso); aquí, el gesto y las fichas.
+                    aPantalla = { _, _, _ -> null },
+                    aDocumento = { o -> vista?.deVista(o.x, o.y)?.let { com.forge.pixpin.ui.PuntoDelDocumento(it[0], it[1], vista?.indice ?: 0) } },
+                    pxPorUnidad = { vista?.escala ?: 1.0 },
+                    alIr = { m -> irAlMarco(m, vista) { activa = it } },
+                    alImprimir = {
+                        lifecycleScope.launch {
+                            com.forge.pixpin.ui.ImprimirMarcos.imprimir(
+                                this@ExcelActivity, marcosDoc, nombre.substringBeforeLast('.'),
+                                ir = { m -> irAlMarco(m, vista) { activa = it }; vista?.invalidate() },
+                                cajaEnVentana = { m ->
+                                    val v = vista ?: return@imprimir null
+                                    val a = v.aVista(m.x0, m.y0) ?: return@imprimir null
+                                    val b = v.aVista(m.x1, m.y1) ?: return@imprimir null
+                                    val en = IntArray(2).also { v.getLocationInWindow(it) }
+                                    androidx.compose.ui.geometry.Rect(a.x + en[0], a.y + en[1], b.x + en[0], b.y + en[1])
+                                }
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             com.forge.pixpin.ui.PastillaDeLector(
-                visible = aLaVista,
+                visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
                 nombre = nombre.substringBeforeLast('.').ifBlank { "Excel" },
                 botones = listOfNotNull(
                     com.forge.pixpin.ui.BotonDeLector(if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro") {
@@ -182,8 +312,59 @@ class ExcelActivity : ComponentActivity() {
                 modifier = Modifier.align(Alignment.TopCenter)
             )
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+            if (l != null && !marcosDoc.imprimiendo) com.forge.pixpin.ui.RielDelVisor(
+                poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcosDoc.activo,
+                onMarcador = { if (anotando) { anotando = false; guardarTinta() }; marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
+                onLapiz = if (base == null && listo) null else ({
+                    if (anotando) { anotando = false; guardarTinta() }
+                    else { marcosDoc.activo = false; poniendoMarca = false; vista?.vistaDeLaTinta()?.let { tinta.setViewport(it) }; anotando = true }
+                }),
+                onMarco = { if (anotando) { anotando = false; guardarTinta() }; poniendoMarca = false; marcosDoc.alternar() },
+                marcas = if (anotando) 0 else marcas.size, emojiDe = { i -> marcas[i].emoji },
+                alElegirMarca = { i ->
+                    marcas.getOrNull(i)?.let { m ->
+                        val h = (m.y / POR_HOJA).toInt()
+                        val f = (m.y - h * POR_HOJA).toInt()
+                        if (h != activa) { activa = h; vista?.ponerHoja(h) }
+                        val vv = vistas.de(m.id)
+                        if (vv != null) vista?.mirarDesde(vv.second, vv.third, vv.first) else vista?.irA(f, m.x.toInt())
+                    }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+            if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
+                onCerrar = { poniendoMarca = false }
+            ) { emoji ->
+                poniendoMarca = false
+                val v = vista ?: return@ElegirEmojiDeMarca
+                // La celda de arriba a la izquierda de lo que se ve, con el aumento de ahora.
+                val esquina = v.deVista(v.width - v.anchoDeCeldas + 1f, v.height - v.altoDeCeldas + 1f) ?: return@ElegirEmojiDeMarca
+                val (f, c) = v.celdaEn(v.width - v.anchoDeCeldas + 2f, v.height - v.altoDeCeldas + 2f) ?: (0 to 0)
+                marcas = com.forge.pixpin.motor.Marcas.con(marcas, c.toDouble(), activa * POR_HOJA + f, emoji, System.currentTimeMillis())
+                guardarMarcas()
+                marcas.maxByOrNull { it.id }?.let { vistas.poner(it.id, v.zoom, esquina[0], esquina[1]) }
+            }
+            if (anotando) {
+                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                    @Suppress("UNUSED_EXPRESSION") tickDeTinta
+                    SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
+                        com.forge.pixpin.motor.DrawToolbar(
+                            tool = tinta.tool,
+                            onTool = { tinta.selectTool(it); tickDeTinta++ },
+                            style = tinta.scene.style,
+                            onStyle = { nuevo -> tinta.cambiarEstilo(nuevo) { it }; tickDeTinta++ },
+                            canUndo = tinta.canUndo,
+                            onUndo = { tinta.undo(); cambiosDeTinta++; tickDeTinta++ },
+                            permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                            grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA)
+                                .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                        )
+                    }
+                }
+            }
             // Abajo, flotando: la línea de la celda (con algo elegido) y las pestañas de las hojas.
-            if (l != null) Column(
+            if (l != null && !anotando && !marcosDoc.activo && !poniendoMarca && !marcosDoc.imprimiendo) Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -355,6 +536,9 @@ class ExcelActivity : ComponentActivity() {
         private const val EXTRA_RUTA = "ruta"
         private const val EXTRA_NOMBRE = "nombre"
         private const val EXTRA_MENSAJE = "mensaje"
+
+        /** Un marcador de Excel en una sola cifra: `hoja · 10⁷ + fila` (`POR_HOJA` del PC). */
+        const val POR_HOJA = 10_000_000.0
 
         /** Si [nombre] (o [ruta]) se abre en el visor: un libro moderno, con el .so, y que es un ZIP. */
         fun seAbre(nombre: String?, ruta: String?): Boolean = LibroExcel.seAbre(nombre, ruta)
