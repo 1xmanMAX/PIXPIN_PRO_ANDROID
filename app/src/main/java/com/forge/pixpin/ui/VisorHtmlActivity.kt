@@ -1138,6 +1138,8 @@ class VisorHtmlActivity : ComponentActivity() {
         var preguntandoSiSalir by remember { mutableStateOf(false) }
         fun salir() {
             when {
+                // Atrás sale antes del modo de los marcos (el Esc del PC).
+                marcosDoc.activo -> marcosDoc.activo = false
                 aPantalla != null -> dejarLaPantallaCompleta()
                 anotando -> { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
                 autoDesplazando -> dejarDeAutoDesplazar()

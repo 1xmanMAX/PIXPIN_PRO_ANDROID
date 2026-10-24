@@ -580,6 +580,8 @@ class LectorPdfActivity : ComponentActivity() {
                 com.forge.pixpin.motor.MarcosDelDocumento.ColumnaDeHojas((0 until cuantas).map { runCatching { medidaDeLaHoja(ruta, it) }.getOrNull() })
             }
         }
+        // Atrás sale antes del modo de los marcos que del lector (el Esc del PC).
+        androidx.activity.compose.BackHandler(enabled = marcosDoc.activo) { marcosDoc.activo = false }
         var anchoDeLaCaja by remember { mutableStateOf(0) }
         var cajaEnVentana by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
         // Con una sola hoja, la lista lleva un hueco delante: la hoja es el elemento 1.
