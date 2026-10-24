@@ -563,7 +563,114 @@ class LectorPdfActivity : ComponentActivity() {
             return primera.index to ((-primera.offset).toDouble() / alto).coerceIn(0.0, 1.0)
         }
         /** A esa página y a esa altura, con la marca **arriba**: es lo que se fue a ver. */
+        // ---- **Los marcos numerados y las vistas de los marcadores** (24-oct-2026, como el PC desde
+        // el 19-oct). Van en las unidades del lector del PC (1400 de ancho por hoja, las hojas
+        // seguidas con 18 de hueco: [com.forge.pixpin.motor.MarcosDelDocumento.ColumnaDeHojas]), así
+        // un marco puesto aquí cae en el mismo sitio allí. Ver [com.forge.pixpin.ui.CapaDeMarcos]. ----
+        val marcosDoc = remember(baseSuelta) {
+            com.forge.pixpin.ui.MarcosDelVisor(baseSuelta?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it) })
+        }
+        val vistasDeMarcas = remember(baseSuelta) {
+            com.forge.pixpin.ui.VistasDelVisor(baseSuelta?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) })
+        }
+        var columna by remember(ruta, cuantas) { mutableStateOf<com.forge.pixpin.motor.MarcosDelDocumento.ColumnaDeHojas?>(null) }
+        LaunchedEffect(ruta, cuantas) {
+            if (cuantas <= 0) return@LaunchedEffect
+            columna = withContext(Dispatchers.IO) {
+                com.forge.pixpin.motor.MarcosDelDocumento.ColumnaDeHojas((0 until cuantas).map { runCatching { medidaDeLaHoja(ruta, it) }.getOrNull() })
+            }
+        }
+        var anchoDeLaCaja by remember { mutableStateOf(0) }
+        var cajaEnVentana by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+        // Con una sola hoja, la lista lleva un hueco delante: la hoja es el elemento 1.
+        val antesDeLaPrimera = if (cuantas == 1) 1 else 0
+        /** El alto en píxeles de la lista (sin aumento) de la hoja [i]. */
+        fun altoPxDe(c: com.forge.pixpin.motor.MarcosDelDocumento.ColumnaDeHojas, i: Int) =
+            c.altos[i] / com.forge.pixpin.motor.MarcosDelDocumento.ANCHO_HOJA * anchoPx
+        /** Dónde empieza la hoja [i] en la lista (sin aumento), aunque no se vea: de la primera que se ve. */
+        fun arribaPxDe(c: com.forge.pixpin.motor.MarcosDelDocumento.ColumnaDeHojas, i: Int): Double? {
+            val vistos = estado.layoutInfo.visibleItemsInfo.filter { it.index - antesDeLaPrimera in 0 until c.cuantas }
+            vistos.firstOrNull { it.index - antesDeLaPrimera == i }?.let { return it.offset.toDouble() }
+            val ref = vistos.firstOrNull() ?: return null
+            var y = ref.offset.toDouble()
+            var j = ref.index - antesDeLaPrimera
+            while (j < i) { y += altoPxDe(c, j); j++ }
+            while (j > i) { j--; y -= altoPxDe(c, j) }
+            return y
+        }
+        /** El origen de la lista en la caja, su centro y lo que hay que sumar: lo de la `graphicsLayer`. */
+        fun listaEnLaCaja(): Pair<Offset, Offset> {
+            val anchoLista = anchoPx + izquierdaPx + derechaPx
+            val altoLista = (altoDeLaCaja / zoom.coerceAtMost(1f)).coerceAtLeast(1f)
+            val c = Offset(anchoDeLaCaja / 2f, altoDeLaCaja / 2f)
+            return Offset((anchoDeLaCaja - anchoLista) / 2f, (altoDeLaCaja - altoLista) / 2f) to c
+        }
+        fun docAPantalla(x: Double, y: Double): Offset? {
+            val c = columna ?: return null
+            if (c.cuantas == 0) return null
+            val i = c.en(y)
+            val arriba = arribaPxDe(c, i) ?: return null
+            val ly = arriba + (y - c.arriba[i]) / c.altos[i] * altoPxDe(c, i)
+            val lx = izquierdaPx + x / com.forge.pixpin.motor.MarcosDelDocumento.ANCHO_HOJA * anchoPx
+            val (origen, centro) = listaEnLaCaja()
+            return Offset(
+                centro.x + (origen.x + lx.toFloat() - centro.x) * zoom + desplazado.x,
+                centro.y + (origen.y + ly.toFloat() - centro.y) * zoom + desplazado.y
+            )
+        }
+        fun pantallaADoc(p: Offset): com.forge.pixpin.ui.PuntoDelDocumento? {
+            val c = columna ?: return null
+            if (c.cuantas == 0) return null
+            val (origen, centro) = listaEnLaCaja()
+            val lx = (p.x - desplazado.x - centro.x) / zoom + centro.x - origen.x
+            val ly = ((p.y - desplazado.y - centro.y) / zoom + centro.y - origen.y).toDouble()
+            // La hoja bajo el dedo: la última que empieza por encima.
+            var i = 0
+            for (j in 0 until c.cuantas) { val a = arribaPxDe(c, j) ?: break; if (a <= ly) i = j else break }
+            val arriba = arribaPxDe(c, i) ?: return null
+            return com.forge.pixpin.ui.PuntoDelDocumento(
+                (lx - izquierdaPx).toDouble() / anchoPx * com.forge.pixpin.motor.MarcosDelDocumento.ANCHO_HOJA,
+                c.arriba[i] + (ly - arriba) / altoPxDe(c, i) * c.altos[i]
+            )
+        }
+        /** Píxeles de pantalla por unidad del documento, con el aumento de ahora. */
+        fun pxPorUnidad() = anchoPx / com.forge.pixpin.motor.MarcosDelDocumento.ANCHO_HOJA * zoom
+        /**
+         * **Lleva la vista a que el punto ([x], [y]) del documento quede arriba a la izquierda** con
+         * el aumento [z] (lo que guarda la vista de un marcador, `"zoom x y"`).
+         */
+        suspend fun irAlPunto(x: Double, y: Double, z: Float) {
+            val c = columna ?: return
+            if (c.cuantas == 0 || anchoDeLaCaja == 0) return
+            val minimo = if (espacios == 0) 1f else Lectura.ALEJADO_DEL_PDF
+            val nuevo = z.coerceIn(minimo, 6f)
+            zoom = nuevo
+            zoomFirme = nuevo
+            kotlinx.coroutines.yield()
+            val i = c.en(y.coerceAtLeast(0.0))
+            val ly = (y.coerceAtLeast(0.0) - c.arriba[i]) / c.altos[i] * altoPxDe(c, i)
+            val (origen, centro) = listaEnLaCaja()
+            // Arriba de la caja cae, en la lista, la altura Y; ahí tiene que quedar el punto.
+            val alto = centro.y - centro.y / nuevo - origen.y
+            estado.scrollToItem(i + antesDeLaPrimera, (ly - alto).toInt().coerceAtLeast(0))
+            val lx = izquierdaPx + x / com.forge.pixpin.motor.MarcosDelDocumento.ANCHO_HOJA * anchoPx
+            val deLosLados = (izquierdaPx + derechaPx) / anchoPx.coerceAtLeast(1).toFloat()
+            val topeX = (((1f + deLosLados) * nuevo - 1f) * anchoDeLaCaja / 2f).coerceAtLeast(0f)
+            val dx = -centro.x - (origen.x + lx.toFloat() - centro.x) * nuevo
+            desplazado = Offset(if (sinLado) desplazado.x else dx.coerceIn(-topeX, topeX), 0f)
+        }
+        /** **A un marco**: acercado hasta llenar la pantalla y centrado (las fichas y al imprimir). */
+        suspend fun irAlMarco(m: com.forge.pixpin.motor.MarcosDelDocumento.Marco) {
+            if (anchoDeLaCaja == 0 || altoDeLaCaja == 0) return
+            val llenar = com.forge.pixpin.motor.MarcosDelDocumento.pxParaLlenar(m, anchoDeLaCaja.toDouble(), altoDeLaCaja.toDouble())
+            val k = anchoPx / com.forge.pixpin.motor.MarcosDelDocumento.ANCHO_HOJA
+            val z = (llenar / k).toFloat()
+            val porUnidad = k * z.coerceIn(Lectura.ALEJADO_DEL_PDF, 6f)
+            irAlPunto(m.centroX - anchoDeLaCaja / 2.0 / porUnidad, m.centroY - altoDeLaCaja / 2.0 / porUnidad, z)
+        }
         suspend fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
+            // **Con su vista** (zoom y sitio, `.vistas.json`): justo donde se puso.
+            vistasDeMarcas.de(m.id)?.let { (z, x, y) -> irAlPunto(x, y, z.toFloat()); return }
             val pagina = com.forge.pixpin.motor.Marcas.paginaDe(m)
             val dentro = com.forge.pixpin.motor.Marcas.altoEnLaPagina(m)
             val alto = estado.layoutInfo.visibleItemsInfo.firstOrNull { it.index == pagina }?.size
@@ -574,7 +681,8 @@ class LectorPdfActivity : ComponentActivity() {
             Modifier
                 .fillMaxSize()
                 .background(Color(0xFF1B1B1B))
-                .onSizeChanged { altoDeLaCaja = it.height }
+                .onSizeChanged { altoDeLaCaja = it.height; anchoDeLaCaja = it.width }
+                .onGloballyPositioned { cajaEnVentana = it.boundsInWindow() }
                 // **El pellizco se coge solo con dos dedos, y entonces sí se consume.**
                 //
                 // Estaba con `detectTransformGestures` sobre la lista, y la lista se comía los
@@ -617,7 +725,7 @@ class LectorPdfActivity : ComponentActivity() {
                             // candado puesto, a lo ancho se queda donde está.
                             if (!cogido) {
                                 val c = evento.changes.firstOrNull { it.pressed }
-                                if (c != null && !anotando) {
+                                if (c != null && !anotando && !marcosDoc.activo) {
                                     val d = c.position - c.previousPosition
                                     recorrido += d.getDistance()
                                     val tope = topeX(zoom)
@@ -727,9 +835,35 @@ class LectorPdfActivity : ComponentActivity() {
                     aSolas?.let { i -> VistaDeLaPagina(ruta, i, recortes[i].orEmpty(), anchoPx, invertido && !esOffice, oscuroOffice) { aSolas = null } }
                 }
             }
+            // **Los marcos numerados**, pegados a las hojas: se pintan con el aumento y el
+            // desplazamiento de este fotograma, así que no se quedan atrás. Ver [com.forge.pixpin.ui.CapaDeMarcos].
+            if (cuantas > 0 && aSolas == null && !anotando && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) {
+                com.forge.pixpin.ui.CapaDeMarcos(
+                    marcosDoc,
+                    aPantalla = { x, y, _ -> docAPantalla(x, y) },
+                    aDocumento = { pantallaADoc(it) },
+                    pxPorUnidad = { pxPorUnidad() },
+                    alIr = { m -> alcance.launch { irAlMarco(m) } },
+                    alImprimir = {
+                        alcance.launch {
+                            com.forge.pixpin.ui.ImprimirMarcos.imprimir(
+                                this@LectorPdfActivity, marcosDoc, nombre.substringBeforeLast('.').ifBlank { "PDF" },
+                                ir = { m -> irAlMarco(m) },
+                                cajaEnVentana = { m ->
+                                    val a = docAPantalla(m.x0, m.y0); val b = docAPantalla(m.x1, m.y1)
+                                    if (a == null || b == null) null
+                                    else androidx.compose.ui.geometry.Rect(a, b).translate(cajaEnVentana.topLeft)
+                                }
+                            )
+                        }
+                    },
+                    // Dos dedos: el pellizco de siempre, el de la caja de fuera.
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             // **Los mandos de los lados** (espacio a la izquierda, candado, espacio a la derecha) y
             // **la pastilla de arriba**: los mismos del lector de Word. Salen al tocar y se van solos.
-            if (cuantas > 0 && aSolas == null && !anotando && !autoDesplazando && !poniendoMarca) {
+            if (cuantas > 0 && aSolas == null && !anotando && !autoDesplazando && !poniendoMarca && !marcosDoc.activo) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = aLaVista, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
                     modifier = Modifier.align(Alignment.BottomCenter)
@@ -747,13 +881,12 @@ class LectorPdfActivity : ComponentActivity() {
                     )
                 }
             }
-            if (cuantas > 0 && aSolas == null && !anotando) {
+            if (cuantas > 0 && aSolas == null && !anotando && !marcosDoc.imprimiendo) {
                 com.forge.pixpin.ui.PastillaDeLector(
                     visible = aLaVista,
                     nombre = nombre.substringBeforeLast('.').ifBlank { "PDF" },
                     botones = listOf(
-                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Edit, "Anotar") { anotando = true },
-                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.BookmarkAdd, "Marcador aquí") { poniendoMarca = !poniendoMarca },
+                        // El lápiz y el marcador van en el riel de la derecha, como en el PC. Ver [com.forge.pixpin.ui.RielDelVisor].
                         // **Presentar** un PowerPoint: las diapositivas a pantalla completa, en vectores.
                         if (esOffice && esPresentacion) com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Slideshow, "Presentar") {
                             presentando = dondeEstoy().first
@@ -862,12 +995,18 @@ class LectorPdfActivity : ComponentActivity() {
                 suena = null, noche = true,
                 modifier = Modifier.align(Alignment.CenterStart)
             )
-            // El riel va a la derecha y **solo mirando**: anotando, ese canto es del lápiz.
-            if (cuantas > 0 && aSolas == null && !anotando && marcas.isNotEmpty()) {
-                com.forge.pixpin.ui.RielDeMarcas(
-                    marcas.size, { i -> marcas[i].emoji },
-                    Modifier.align(Alignment.CenterEnd)
-                ) { i -> marcas.getOrNull(i)?.let { m -> alcance.launch { irALaMarca(m) } } }
+            // **El riel de la derecha** (24-oct-2026, como el PC): marcador, lápiz y marco, y debajo
+            // los marcadores. Anotando se queda, con el lápiz encendido: tocarlo deja de anotar.
+            if (cuantas > 0 && aSolas == null && !marcosDoc.imprimiendo) {
+                com.forge.pixpin.ui.RielDelVisor(
+                    poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcosDoc.activo,
+                    onMarcador = { if (anotando) dejarDeAnotar(); marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
+                    onLapiz = { if (anotando) dejarDeAnotar() else { marcosDoc.activo = false; poniendoMarca = false; anotando = true } },
+                    onMarco = { if (anotando) dejarDeAnotar(); poniendoMarca = false; marcosDoc.alternar() },
+                    marcas = if (anotando) 0 else marcas.size, emojiDe = { i -> marcas[i].emoji },
+                    alElegirMarca = { i -> marcas.getOrNull(i)?.let { m -> alcance.launch { irALaMarca(m) } } },
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
             }
             // Por encima de los dos botones de la esquina: pegada al canto los tapaba.
             if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
@@ -883,6 +1022,10 @@ class LectorPdfActivity : ComponentActivity() {
                 val sinVerde = if (verde) marcas.filterNot { it.emoji == Lectura.EMOJI_DE_VOZ } else marcas
                 marcas = com.forge.pixpin.motor.Marcas.con(sinVerde, x, y, emoji, System.currentTimeMillis())
                 guardarLasMarcas()
+                // Y su vista: el aumento y la esquina de arriba a la izquierda, para volver justo ahí.
+                val nueva = marcas.maxByOrNull { it.id }
+                val esquina = pantallaADoc(Offset.Zero)
+                if (nueva != null && esquina != null) vistasDeMarcas.poner(nueva.id, zoom.toDouble(), esquina.x, esquina.y)
                 if (verde) android.widget.Toast.makeText(this@LectorPdfActivity, "Marcador verde en la hoja ${pagina + 1}: se leerá desde aquí", android.widget.Toast.LENGTH_SHORT).show()
             }
             if (compartiendo && cuantas > 0) {

@@ -1849,42 +1849,43 @@ class Renderer(
 
         if (paraExportar) return
 
+        // **El marco, como en los visores y en el PC** (22/24-oct-2026, `pintar_marcos` de
+        // `ventana_editor/marcas.rs`): raya azul a trazos **de grosor fijo** —se divide por el zoom,
+        // así no engorda al acercarse— y su número blanco en un cuadrito azul en la esquina de
+        // arriba a la izquierda. Se pinta **con la escena**, en la misma pasada que el dibujo:
+        // por eso el número no llega tarde al mover el lienzo. Lo impreso y lo exportado van sin él.
+        val z = zoomDeAdornos
+        val d = DENSIDAD
         paint.reset()
         paint.isAntiAlias = true
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = FRAME_STROKE
-        paint.color = tema(FRAME_COLOR)
-        canvas.drawRoundRect(
-            c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(),
-            FRAME_RADIUS, FRAME_RADIUS, paint
-        )
+        paint.strokeWidth = (1.5 * d / z).toFloat()
+        paint.color = MarcosDelDocumento.AZUL
+        paint.pathEffect = android.graphics.DashPathEffect(floatArrayOf((6 * d / z).toFloat(), (4 * d / z).toFloat()), 0f)
+        canvas.drawRect(c.x1.toFloat(), c.y1.toFloat(), c.x2.toFloat(), c.y2.toFloat(), paint)
+        paint.pathEffect = null
 
-        // **El número de página, dentro y abajo a la derecha**, donde lo lleva un libro.
-        //
-        // Dentro y no fuera con el nombre: con seis hojas seguidas, los rótulos de fuera
-        // caen todos en el hueco entre dos y no se sabe de cuál es cada uno. Y abajo a la
-        // derecha porque es donde el ojo lo busca sin tener que buscarlo.
-        ordenDeHojas[e.id]?.let { numero ->
+        val numero = ordenDeHojas[e.id]
+        if (numero != null) {
+            val tam = (12 * d / z).toFloat()
             paint.style = Paint.Style.FILL
-            paint.textSize = FRAME_LABEL_SIZE
-            paint.textAlign = Paint.Align.RIGHT
-            paint.typeface = typefaces(null)
-            canvas.drawText(
-                numero.toString(),
-                (c.x2 - MARGEN_DEL_FOLIO).toFloat(),
-                (c.y2 - MARGEN_DEL_FOLIO).toFloat(),
-                paint
-            )
-            paint.textAlign = Paint.Align.LEFT
+            paint.textSize = tam
+            paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            val texto = numero.toString()
+            val w = paint.measureText(texto)
+            paint.color = MarcosDelDocumento.AZUL
+            canvas.drawRect(c.x1.toFloat(), c.y1.toFloat(), (c.x1 + w + 12 * d / z).toFloat(), (c.y1 + 20 * d / z).toFloat(), paint)
+            paint.color = android.graphics.Color.WHITE
+            canvas.drawText(texto, (c.x1 + 6 * d / z).toFloat(), (c.y1 + 14.5 * d / z).toFloat(), paint)
         }
 
-        // El nombre va FUERA, encima de la esquina: dentro se comería el sitio
-        // útil de la hoja, que es justo lo que el marco existe para dar.
+        // El nombre va FUERA, encima de la esquina y en azul: dentro se comería el sitio útil.
         val nombre = e.name ?: return
         paint.style = Paint.Style.FILL
-        paint.textSize = FRAME_LABEL_SIZE
+        paint.color = MarcosDelDocumento.AZUL
+        paint.textSize = (12 * d / z).toFloat()
         paint.typeface = typefaces(null)
-        canvas.drawText(nombre, c.x1.toFloat(), (c.y1 - FRAME_LABEL_GAP).toFloat(), paint)
+        canvas.drawText(nombre, c.x1.toFloat(), (c.y1 - 5 * d / z).toFloat(), paint)
     }
 
     /**
@@ -3927,6 +3928,8 @@ class Renderer(
 
         /** El marco: contorno fino y gris, como en el original. */
         const val FRAME_STROKE = 3f
+        /** Los píxeles de un dp: lo que mide la raya y el número del marco en la pantalla. */
+        private val DENSIDAD: Double get() = runCatching { android.content.res.Resources.getSystem().displayMetrics.density.toDouble() }.getOrDefault(2.0).takeIf { it > 0 } ?: 2.0
         const val FRAME_RADIUS = 8f
         const val FRAME_LABEL_SIZE = 13f
         const val FRAME_LABEL_GAP = 6f

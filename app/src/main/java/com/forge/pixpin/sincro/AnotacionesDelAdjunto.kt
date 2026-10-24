@@ -25,6 +25,8 @@ import java.io.File
  *   ella la tinta no se pinta —el visor solo la enseña con la columna fijada— o cae en otro sitio.
  * - `anot-<uid>.voz`: el marcador verde de la voz (`párrafo:fracción`; vacío, sin verde).
  * - `anot-<uid>.sitio`: por dónde se iba leyendo (fracción del alto), para seguir en el otro aparato.
+ * - `anot-<uid>.marcos.json`: los marcos numerados para imprimir; `anot-<uid>.vistas.json`: el zoom
+ *   de cada marcador (24-oct-2026, como el PC). Ver [com.forge.pixpin.motor.MarcosDelDocumento].
  * - `anot-<uid>-p<n>.hoja`, `anot-<uid>.hoja`: **el marco de la tinta** ([Marco]), dónde está la hoja
  *   en las unidades en que están escritos los puntos de su tinta.
  *
@@ -308,7 +310,12 @@ object AnotacionesDelAdjunto {
     // `.asistente.json`: lo que pensó el asistente del PC y su hoja de trabajo, uno por respuesta
     // (`ASISTENTE` de `pixpin-sincro/src/anotado.rs`, 14-oct-2026). Viaja con su nota y se borra
     // con ella, como los comentarios; el teléfono aún no lo escribe ni lo enseña.
-    private val TERMINACIONES = listOf(".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json")
+    // `.marcos.json` y `.vistas.json` (PC c31f974, 19-oct): los marcos numerados de un documento y
+    // lo que guarda cada marcador además de su sitio. Ver [com.forge.pixpin.motor.MarcosDelDocumento].
+    private val TERMINACIONES = listOf(
+        ".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json",
+        ".marcos.json", ".vistas.json"
+    )
 
     /**
      * **Lo anotado que hay en disco, por código de mensaje**, en rutas relativas a `files`. Para

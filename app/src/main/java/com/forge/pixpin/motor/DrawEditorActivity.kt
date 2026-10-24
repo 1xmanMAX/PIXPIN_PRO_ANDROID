@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -412,14 +413,11 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
 
         ensenarAMedirElTexto()
         aPantallaCompleta()
-        // **Se entra mirando** (14-sep-2026): un lienzo con algo dentro, o una página de un PDF,
-        // se abre en el modo visualización —mover, ampliar, imprimir, presentar— y se pasa a
-        // editar con un toque. Un lienzo vacío se abre editando: ahí no hay nada que ver.
-        if (!intent.getBooleanExtra(EXTRA_EDITAR, false) &&
-            (pdfDeFondo != null || controller.scene.contenidoVisible.isNotEmpty())
-        ) {
-            entrarEnVista()
-        }
+        // **Se entra mirando, siempre** (14-sep-2026; desde el 24-oct-2026 también un lienzo vacío,
+        // como el PC en `mirar_editar.rs`: «cuando entro al canvas siempre entre en modo
+        // visualización y con el lápiz de la barra lateral pueda activar el modo edición»). El
+        // lápiz del riel de la derecha pasa a editar con la barra entera, y otra vez vuelve a mirar.
+        if (!intent.getBooleanExtra(EXTRA_EDITAR, false)) entrarEnVista()
         if (intent.getBooleanExtra(EXTRA_PRESENTAR, false)) empezarAPresentar()
         // Este lienzo entra en la rueda de la multitarea. Ver [apuntarComoAbierto].
         apuntarComoAbierto()
@@ -1469,6 +1467,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 ajustesAbiertos -> ajustesAbiertos = false
                 pidiendoFuncionesWeb -> pidiendoFuncionesWeb = false
                 soloElDibujo -> soloElDibujo = false
+                // **Editando, atrás vuelve a mirar** (el Esc del PC, `escape_vuelve_a_mirar`).
+                !modoVista && intent?.getBooleanExtra(EXTRA_EDITAR, false) != true -> entrarEnVista()
                 else -> cerrarYVolver()
             }
         }
@@ -1784,13 +1784,55 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 // lo pidió el usuario —«que la interfaz sea igual en todas partes»—. Con la mano
                 // zurda el panel de estilo ocupa ese canto, así que el riel se aparta lo que
                 // mida, en vez de quedarse debajo.
-                if (!soloElDibujo) com.forge.pixpin.ui.RielDeMarcas(
-                    marcas.size, { i -> marcas[i].emoji },
-                    Modifier
+                // **El riel de la derecha, el de todos los visores** (24-oct-2026, PC `ba59dd6`):
+                // marcador, lápiz —mirar o editar— y marco, y debajo los marcadores.
+                @Suppress("UNUSED_EXPRESSION") tick
+                if (!soloElDibujo) com.forge.pixpin.ui.RielDelVisor(
+                    poniendoMarca = poniendoMarca,
+                    anotando = !modoVista,
+                    marcando = !modoVista && controller.tool == Tool.FRAME,
+                    onMarcador = { emojiPorPoner = null; poniendoMarca = !poniendoMarca },
+                    onLapiz = { if (modoVista) pasarAEditar() else entrarEnVista(); cambiado() },
+                    onMarco = {
+                        if (!modoVista && controller.tool == Tool.FRAME) controller.selectTool(herramientaAntesDelMarco ?: Tool.FREEDRAW)
+                        else {
+                            if (modoVista) pasarAEditar()
+                            herramientaAntesDelMarco = controller.tool.takeIf { it != Tool.FRAME }
+                            controller.selectTool(Tool.FRAME)
+                        }
+                        cambiado()
+                    },
+                    rotuloDelLapiz = if (modoVista) "Editar" else "Volver a mirar",
+                    marcas = marcas.size, emojiDe = { i -> marcas[i].emoji },
+                    alElegirMarca = { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } },
+                    modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .esquivarLaCamara()
-                        .padding(end = if (zurdo) with(LocalDensity.current) { anchoDelPanelLateral.toDp() } else 0.dp)
-                ) { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } }
+                        .padding(end = if (zurdo && !modoVista) with(LocalDensity.current) { anchoDelPanelLateral.toDp() } else 0.dp)
+                )
+                // **Las fichas de los marcos** con el marco del riel puesto: 1, 2, 3… abajo a la
+                // izquierda; tocar una va a ese marco (`fichas_de` del PC).
+                if (!soloElDibujo && !modoVista && controller.tool == Tool.FRAME) {
+                    val hojas = hojasEnOrden(controller.scene)
+                    if (hojas.isNotEmpty()) Row(
+                        Modifier.align(Alignment.BottomStart).then(Modifier.navigationBarsPadding())
+                            .padding(start = 12.dp, bottom = with(LocalDensity.current) { altoDeLoDeAbajo.toDp() } + 12.dp)
+                            .horizontalScroll(rememberScrollState())
+                    ) {
+                        hojas.forEachIndexed { i, h ->
+                            Box(
+                                Modifier.padding(end = 6.dp).size(30.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                    .background(Color(MarcosDelDocumento.AZUL))
+                                    .clickable(onClickLabel = "Ir al marco ${i + 1}") {
+                                        val b = getElementBounds(h)
+                                        encajarEn(b.x1, b.y1, b.width, b.height); cambiado()
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) { Text("${i + 1}", color = Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
+                        }
+                    }
+                }
             }
 
             // Lo que hay marcado y lo que se le puede tocar: lo miran tanto los mandos
@@ -3145,14 +3187,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                     contentDescription = getString(R.string.cd_encuadrar)
                 )
             }
-            // **Marcar este sitio.** El mismo marcador con emoticono de los lectores; aquí, un
-            // punto del lienzo al que se vuelve de un toque. Ver [CapaDeMarcas].
-            IconButton(onClick = { emojiPorPoner = null; poniendoMarca = !poniendoMarca }) {
-                Icon(
-                    Icons.Filled.BookmarkAdd,
-                    contentDescription = "Marcador aquí"
-                )
-            }
+            // El marcador y «volver a mirar» están en el riel de la derecha (24-oct-2026). Ver [com.forge.pixpin.ui.RielDelVisor].
             // **Añadir hoja**, que es lo que convierte el lienzo en un cuaderno.
             //
             // Aquí y no en la barra de herramientas: no se dibuja nada con ella, se
@@ -3247,11 +3282,6 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             // **La hoja de compartir de toda la aplicación** (13-sep-2026): los formatos, qué
             // páginas —el lienzo completo o cada marco— y cuánto pesará. Ver [com.forge.pixpin.ui.HojaDeCompartir].
             @Suppress("UNUSED_EXPRESSION") formatos
-            // **Volver a mirar**: el modo visualización. Imprimir y presentar viven solo allí
-            // (lo pidió el usuario el 15-sep-2026: editando estorbaban). Ver [entrarEnVista].
-            IconButton(onClick = { entrarEnVista(); cambiado() }) {
-                Icon(Icons.Filled.Visibility, contentDescription = "Modo visualización")
-            }
             IconButton(onClick = { abrirCompartir() }, enabled = !exportando) {
                 if (exportando) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Filled.IosShare, contentDescription = "Compartir")
@@ -4354,8 +4384,9 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             verticalAlignment = Alignment.CenterVertically
         ) {
             DrawToolbar(
-                permitidas = ajustes.editorToolSet,
-                grupos = ajustes.editorGroupList,
+                // Sin el marco: lo pone el riel de la derecha (PC 22-oct, `permitidas.rs`).
+                permitidas = ajustes.editorToolSet - Tool.FRAME,
+                grupos = ajustes.editorGroupList.map { g -> g - Tool.FRAME }.filter { it.isNotEmpty() },
                 // El estilo y el deshacer se tocan los dos en el lateral: tenerlos
                 // también aquí sería el mismo control dos veces, y entre ambos se
                 // llevaban una fila entera de barra sobre el dibujo. Ver
@@ -5454,6 +5485,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
     /** Mirando: sin la barra de herramientas, solo mover, imprimir, presentar y editar. */
     private var modoVista by mutableStateOf(false)
     private var herramientaAntesDeVer: Tool? = null
+    /** La herramienta de antes de coger el marco del riel, para devolverla al soltarlo. */
+    private var herramientaAntesDelMarco: Tool? = null
 
     private fun entrarEnVista() {
         if (!modoVista) herramientaAntesDeVer = controller.tool.takeIf { it != Tool.HAND }
@@ -5506,7 +5539,6 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.CenterFocusWeak, "Encuadrar", { encuadrar() })
             com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Print, "Imprimir", { imprimir() })
             com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Slideshow, "Mostrar", { empezarAPresentar() }, descripcion = "Presentar")
-            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Edit, "Editar", { pasarAEditar() }, puesto = true)
         }
     }
 
