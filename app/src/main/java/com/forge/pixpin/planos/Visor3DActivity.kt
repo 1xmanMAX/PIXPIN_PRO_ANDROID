@@ -1,5 +1,13 @@
 package com.forge.pixpin.planos
 
+import androidx.compose.runtime.collectAsState
+
+import androidx.compose.ui.graphics.nativeCanvas
+
+import androidx.compose.ui.layout.boundsInWindow
+
+import androidx.compose.ui.layout.onGloballyPositioned
+
 import android.content.Context
 import android.content.Intent
 import android.opengl.GLSurfaceView
@@ -240,16 +248,99 @@ class Visor3DActivity : ComponentActivity() {
         var archivoDeVistas by remember { mutableStateOf<java.io.File?>(null) }
         var vistas by remember { mutableStateOf(MarcadoresDelPlano.deTexto(null)) }
         var poniendoMarca by remember { mutableStateOf(false) }
+        var base by remember { mutableStateOf<String?>(null) }
+        var marcos3d by remember { mutableStateOf(MarcadoresDelPlano.marcosDeTexto(null)) }
+        var leidos by remember { mutableStateOf(false) }
         LaunchedEffect(original) {
-            val f = withContext(Dispatchers.IO) {
-                com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@Visor3DActivity, original)
-                    ?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) }
-            }
+            val b = withContext(Dispatchers.IO) { com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@Visor3DActivity, original) }
+            base = b
+            val f = b?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) }
             archivoDeVistas = f
             vistas = MarcadoresDelPlano.deTexto(f?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it) })
+            marcos3d = MarcadoresDelPlano.marcosDeTexto(b?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it)) })
+            leidos = true
+        }
+        fun guardarVistas(nuevas: MarcadoresDelPlano.Archivo) {
+            vistas = nuevas
+            archivoDeVistas?.let { com.forge.pixpin.motor.MarcosDelDocumento.escribir(it, nuevas.aTexto(), vacio = false) }
+        }
+        /** La vista de ahora como un `Estado3d` del PC, en coordenadas absolutas. */
+        fun estadoAhora(): MarcadoresDelPlano.Marcador3d? {
+            val ob = orbita ?: return null
+            val o = modelo?.origen ?: return null
+            return MarcadoresDelPlano.Marcador3d(
+                "", "", doubleArrayOf(ob.objetivo[0] + o[0], ob.objetivo[1] + o[1], ob.objetivo[2] + o[2]), ob.rumbo, ob.altura, ob.dist,
+                seccion?.let { c -> DoubleArray(6) { k -> c[k] + o[k % 3] } }
+            )
+        }
+        /** Ir a una vista guardada (un marcador o un marco). */
+        fun ponerEstado(v: MarcadoresDelPlano.Marcador3d) {
+            val o = modelo?.origen ?: return
+            orbita = Orbita(doubleArrayOf(v.objetivo[0] - o[0], v.objetivo[1] - o[1], v.objetivo[2] - o[2]), v.rumbo, v.altura, v.dist)
+            ponerSeccion(v.seccion?.let { c -> FloatArray(6) { k -> (c[k] - o[k % 3]).toFloat() } })
+        }
+
+        // ---- **Lo anotado sobre cada marcador** (como el PC, `ventana3d.rs`): una capa por marcador,
+        // `anot-<uid>-m<id>.excalidraw.gz` con su `.hoja` `-2500,-2500,2500,2500`, en milésimas del alto de
+        // la pantalla desde su centro. Solo se ve en la vista de su marcador. El lápiz, fuera de un
+        // marcador, pone el de esta vista y anota sobre él. ----
+        var anotando by remember { mutableStateOf<String?>(null) }
+        var tickDeTinta by remember { mutableIntStateOf(0) }
+        val capas = remember { HashMap<String, com.forge.pixpin.motor.DrawController>() }
+        fun capaDe(id: String): com.forge.pixpin.motor.DrawController? {
+            val b = base ?: return null
+            return capas.getOrPut(id) {
+                com.forge.pixpin.motor.DrawController(
+                    com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@Visor3DActivity, MarcadoresDelPlano.baseDeLaTinta(b, id)))
+                        ?: com.forge.pixpin.motor.Scene()
+                ).also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+            }
+        }
+        fun dejarDeAnotar() {
+            val id = anotando ?: return
+            anotando = null
+            val b = base ?: return
+            val c = capas[id] ?: return
+            val tinta = MarcadoresDelPlano.baseDeLaTinta(b, id)
+            com.forge.pixpin.motor.ExcalidrawStore.guardar(this@Visor3DActivity, tinta, c.scene)
+            runCatching { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribirMarco(com.forge.pixpin.sincro.AnotacionesDelAdjunto.hoja(filesDir, tinta), MarcadoresDelPlano.HOJA_DE_LA_TINTA) }
+            camara++
+        }
+        fun empezarAAnotar() {
+            val ahora = estadoAhora() ?: return
+            if (base == null) { android.widget.Toast.makeText(this@Visor3DActivity, "Solo se anota un modelo del chat", android.widget.Toast.LENGTH_SHORT).show(); return }
+            val ya = vistas.modelo.firstOrNull { MarcadoresDelPlano.coincide(ahora, it) }
+            val m = ya ?: ahora.copy(id = MarcadoresDelPlano.idNuevo(System.currentTimeMillis(), vistas.modelo.map { it.id } + vistas.plano.map { it.id }))
+                .also { guardarVistas(vistas.conModelo(vistas.modelo + it)) }
+            capaDe(m.id)?.setViewport(MarcadoresDelPlano.vistaDeTinta(ancho, alto))
+            anotando = m.id
+        }
+        // ---- **Los marcos 3D** (`anot-<uid>.marcos.json` del modelo): cada uno con la vista en la que se
+        // puso, y solo se ve en ella. En la lista común su `vista` es su id. ----
+        val marcosDoc = remember(leidos) {
+            com.forge.pixpin.ui.MarcosDelVisor(
+                null,
+                inicial = marcos3d.marcos.map { m -> com.forge.pixpin.motor.MarcosDelDocumento.Marco(m.caja[0], m.caja[1], m.caja[2], m.caja[3], 0, m.id) },
+                alGuardar = { nueva ->
+                    val porId = marcos3d.marcos.associateBy { it.id }
+                    val usados = HashSet<String>(porId.keys)
+                    val ahora = estadoAhora()
+                    val salida = nueva.mapNotNull { m ->
+                        val viejo = porId[m.vista]
+                        val est = viejo?.estado ?: ahora ?: return@mapNotNull null
+                        val id = viejo?.id ?: MarcadoresDelPlano.idNuevo(System.currentTimeMillis(), usados).also { usados += it }
+                        MarcadoresDelPlano.Marco3d(id, doubleArrayOf(m.x0, m.y0, m.x1, m.y1), est)
+                    }
+                    marcos3d = marcos3d.con(salida)
+                    base?.let { b -> com.forge.pixpin.motor.MarcosDelDocumento.escribir(com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, b), marcos3d.aTexto(), vacio = false) }
+                    salida.map { m -> com.forge.pixpin.motor.MarcosDelDocumento.Marco(m.caja[0], m.caja[1], m.caja[2], m.caja[3], 0, m.id) }
+                }
+            )
         }
         BackHandler {
             when {
+                anotando != null -> dejarDeAnotar()
+                marcosDoc.activo -> marcosDoc.activo = false
                 poniendoMarca -> poniendoMarca = false
                 viendoPiezas -> viendoPiezas = false
                 midiendo -> { midiendo = false; medida.clear(); camara++ }
@@ -491,20 +582,106 @@ class Visor3DActivity : ComponentActivity() {
                 }
             }
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
-            // **El riel de la derecha**: aquí, el marcador (el lápiz y los marcos del 3D del PC aún no).
-            if (listo) com.forge.pixpin.ui.RielDelVisor(
-                poniendoMarca = poniendoMarca, anotando = false, marcando = false,
-                onMarcador = { poniendoMarca = !poniendoMarca }, onLapiz = null, onMarco = null,
-                marcas = vistas.modelo.size, emojiDe = { i -> vistas.modelo[i].emoji },
-                alElegirMarca = { i ->
-                    val v = vistas.modelo.getOrNull(i)
-                    val mm = modelo
-                    if (v != null && mm != null) {
-                        val o = mm.origen
-                        orbita = Orbita(doubleArrayOf(v.objetivo[0] - o[0], v.objetivo[1] - o[1], v.objetivo[2] - o[2]), v.rumbo, v.altura, v.dist)
-                        ponerSeccion(v.seccion?.let { c -> FloatArray(6) { k -> (c[k] - o[k % 3]).toFloat() } })
+            // **Lo anotado del marcador de esta vista**: mirando, se pinta encima; anotando, el lienzo.
+            @Suppress("UNUSED_EXPRESSION") camara
+            val ahora = if (listo) estadoAhora() else null
+            val vigente = ahora?.let { a -> vistas.modelo.firstOrNull { MarcadoresDelPlano.coincide(a, it) } }
+            val idAnotando = anotando
+            if (listo && idAnotando != null) {
+                val c = capaDe(idAnotando)
+                if (c != null) {
+                    @Suppress("UNUSED_EXPRESSION") tickDeTinta
+                    com.forge.pixpin.motor.DrawCanvas(
+                        controller = c,
+                        modifier = Modifier.fillMaxSize(),
+                        imageProvider = { f -> c.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                        dark = !claro,
+                        vistaFija = true,
+                        cambios = tickDeTinta,
+                        onChange = { trazando -> if (!trazando) tickDeTinta++ }
+                    )
+                    val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+                    Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                        com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                            com.forge.pixpin.motor.DrawToolbar(
+                                tool = c.tool,
+                                onTool = { c.selectTool(it); tickDeTinta++ },
+                                style = c.scene.style,
+                                onStyle = { nuevo -> c.cambiarEstilo(nuevo) { it }; tickDeTinta++ },
+                                canUndo = c.canUndo,
+                                onUndo = { c.undo(); tickDeTinta++ },
+                                permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                                grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO)
+                                    .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                            )
+                        }
                     }
-                },
+                    Text(
+                        "Lo anotado solo se ve en la vista de este marcador",
+                        color = Color.White, style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp)
+                            .background(Color(0xCC14182B), androidx.compose.foundation.shape.RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            } else if (listo && vigente != null && base != null) {
+                val c = capaDe(vigente.id)
+                if (c != null && c.scene.elements.any { !it.isDeleted }) {
+                    val pintorDeTinta = remember(claro) {
+                        com.forge.pixpin.motor.Renderer(
+                            { f -> c.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                            com.forge.pixpin.motor.DrawFonts.provider(this@Visor3DActivity), dark = !claro
+                        )
+                    }
+                    Canvas(Modifier.fillMaxSize()) {
+                        val escena = c.scene.copy(viewport = MarcadoresDelPlano.vistaDeTinta(size.width.toInt(), size.height.toInt()))
+                        drawContext.canvas.nativeCanvas.let { pintorDeTinta.renderScene(it, escena, size.width.toDouble(), size.height.toDouble()) }
+                    }
+                }
+            }
+            // **Los marcos 3D**: los de esta vista, pegados a la pantalla.
+            var cajaDelVisor by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+            if (listo && anotando == null && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) {
+                val porId = marcos3d.marcos.associateBy { it.id }
+                com.forge.pixpin.ui.CapaDeMarcos(
+                    marcosDoc,
+                    aPantalla = { x, y, _ -> MarcadoresDelPlano.deNormal(x, y, ancho, alto).let { Offset(it[0].toFloat(), it[1].toFloat()) } },
+                    aDocumento = { p -> MarcadoresDelPlano.aNormal(p.x.toDouble(), p.y.toDouble(), ancho, alto).let { com.forge.pixpin.ui.PuntoDelDocumento(it[0], it[1]) } },
+                    pxPorUnidad = { alto.toDouble() },
+                    seVe = { m -> val e = porId[m.vista]?.estado; val a = estadoAhora(); e != null && a != null && MarcadoresDelPlano.coincide(a, e) },
+                    alIr = { m -> porId[m.vista]?.estado?.let { ponerEstado(it) } },
+                    alImprimir = {
+                        lifecycleScope.launch {
+                            val volver = estadoAhora()
+                            com.forge.pixpin.ui.ImprimirMarcos.imprimir(
+                                this@Visor3DActivity, marcosDoc, nombre.substringBeforeLast('.'),
+                                ir = { m -> marcos3d.marcos.firstOrNull { it.id == m.vista }?.estado?.let { ponerEstado(it) } },
+                                cajaEnVentana = { m ->
+                                    val a = MarcadoresDelPlano.deNormal(m.x0, m.y0, ancho, alto); val b = MarcadoresDelPlano.deNormal(m.x1, m.y1, ancho, alto)
+                                    androidx.compose.ui.geometry.Rect(a[0].toFloat(), a[1].toFloat(), b[0].toFloat(), b[1].toFloat()).translate(cajaDelVisor.topLeft)
+                                }
+                            )
+                            volver?.let { ponerEstado(it) }
+                        }
+                    },
+                    alDosDedos = { pan, factor, _ ->
+                        orbita?.let { o ->
+                            var n = o.mover(pan.x.toDouble(), pan.y.toDouble(), alto)
+                            if (factor > 0f && factor != 1f) n = n.zoom(1.0 / factor, n.objetivo)
+                            orbita = n
+                            repintar()
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDelVisor = it.boundsInWindow() }
+                )
+            }
+            // **El riel de la derecha**: marcador, lápiz (anotar sobre esta vista) y marcos, como el PC.
+            if (listo && !marcosDoc.imprimiendo) com.forge.pixpin.ui.RielDelVisor(
+                poniendoMarca = poniendoMarca, anotando = anotando != null, marcando = marcosDoc.activo,
+                onMarcador = { dejarDeAnotar(); marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
+                onLapiz = { if (anotando != null) dejarDeAnotar() else { poniendoMarca = false; marcosDoc.activo = false; empezarAAnotar() } },
+                onMarco = { dejarDeAnotar(); poniendoMarca = false; marcosDoc.alternar() },
+                marcas = if (anotando != null) 0 else vistas.modelo.size, emojiDe = { i -> vistas.modelo[i].emoji },
+                alElegirMarca = { i -> vistas.modelo.getOrNull(i)?.let { ponerEstado(it) } },
                 modifier = Modifier.align(Alignment.CenterEnd)
             )
             if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
@@ -521,8 +698,7 @@ class Visor3DActivity : ComponentActivity() {
                         id, emoji, doubleArrayOf(ob.objetivo[0] + o[0], ob.objetivo[1] + o[1], ob.objetivo[2] + o[2]), ob.rumbo, ob.altura, ob.dist,
                         seccion?.let { c -> DoubleArray(6) { k -> c[k] + o[k % 3] } }
                     )
-                    vistas = vistas.conModelo(vistas.modelo + nuevo)
-                    archivoDeVistas?.let { com.forge.pixpin.motor.MarcosDelDocumento.escribir(it, vistas.aTexto(), vacio = false) }
+                    guardarVistas(vistas.conModelo(vistas.modelo + nuevo))
                 }
             }
             // Niveles y categorías (PC 9625d0d): un toque muestra u oculta, mantener deja solo ese.

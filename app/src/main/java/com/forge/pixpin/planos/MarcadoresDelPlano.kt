@@ -51,7 +51,11 @@ object MarcadoresDelPlano {
 
         fun aJson(): JsonObject = buildJsonObject {
             put("id", id); put("nombre", nombre)
-            put("estado", buildJsonObject {
+            put("estado", estadoJson())
+        }
+
+        /** El `Estado3d` del PC: la cámara, el corte y lo demás tal como vino. */
+        fun estadoJson(): JsonObject = buildJsonObject {
                 put("objetivo", JsonArray(objetivo.map { JsonPrimitive(it) }))
                 put("rumbo", rumbo); put("altura", altura.coerceIn(-1.5697, 1.5697)); put("dist", dist)
                 put("seccion", seccion?.let { c -> JsonArray(c.map { JsonPrimitive(it) }) } ?: kotlinx.serialization.json.JsonNull)
@@ -61,8 +65,12 @@ object MarcadoresDelPlano {
                     put("ocultos", JsonArray(emptyList()))
                     put("claro", false); put("aristas", true)
                 } else for ((k, v) in antes) if (k !in setOf("objetivo", "rumbo", "altura", "dist", "seccion")) put(k, v)
-            })
         }
+
+        /** Lo aislado (por su clave si la hay, si no por su número) y lo oculto, para [coincide]. */
+        internal val aisladoClave: String? get() = (estado?.get("aislado_clave") as? JsonPrimitive)?.contentOrNull
+        internal val aisladoNumero: Double? get() = (estado?.get("aislado") as? JsonPrimitive)?.doubleOrNull
+        internal val ocultos: List<String> get() = (estado?.get("ocultos") as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
 
         override fun equals(other: Any?) = other is Marcador3d && id == other.id && nombre == other.nombre &&
             objetivo.contentEquals(other.objetivo) && rumbo == other.rumbo && altura == other.altura && dist == other.dist &&
@@ -122,6 +130,99 @@ object MarcadoresDelPlano {
             n("rumbo") ?: 0.0, n("altura") ?: 0.0, n("dist") ?: return null,
             lista("seccion")?.takeIf { it.size == 6 }, est
         )
+    }
+
+    /**
+     * **Si la vista [a] es la del marcador [b]** (`coincide` de `marcadores.rs`): la cámara a menos
+     * de ~2e-3 (relativo a su distancia), el corte a menos de 1e-3·dist, y lo aislado y lo oculto
+     * iguales. Lo anotado sobre un marcador solo se ve en su vista.
+     */
+    fun coincide(a: Marcador3d, b: Marcador3d): Boolean {
+        val d = kotlin.math.sqrt((0 until 3).sumOf { k -> (a.objetivo[k] - b.objetivo[k]).let { it * it } })
+        val escala = kotlin.math.abs(b.dist).coerceAtLeast(1e-6)
+        val tau = 2 * Math.PI
+        var dr = (a.rumbo - b.rumbo) % tau
+        if (dr > Math.PI) dr -= tau else if (dr < -Math.PI) dr += tau
+        val camara = d < escala * 2e-3 && kotlin.math.abs(dr) < 2e-3 &&
+            kotlin.math.abs(a.altura - b.altura) < 2e-3 && kotlin.math.abs(a.dist / escala - 1) < 2e-3
+        val sa = a.seccion; val sb = b.seccion
+        val seccion = when {
+            sa == null && sb == null -> true
+            sa != null && sb != null -> sa.indices.all { kotlin.math.abs(sa[it] - sb[it]) <= escala * 1e-3 + 1e-6 }
+            else -> false
+        }
+        val ka = a.aisladoClave; val kb = b.aisladoClave
+        val aislado = if (ka != null && kb != null) ka == kb else a.aisladoNumero == b.aisladoNumero
+        return camara && seccion && aislado && a.ocultos == b.ocultos
+    }
+
+    /** Un punto de la pantalla, desde su centro y en unidades de su alto (`a_normal`). */
+    fun aNormal(x: Double, y: Double, w: Int, h: Int): DoubleArray {
+        val hh = h.coerceAtLeast(1).toDouble()
+        return doubleArrayOf((x - w / 2.0) / hh, (y - hh / 2) / hh)
+    }
+
+    /** Y de vuelta, al píxel (`de_normal`). */
+    fun deNormal(x: Double, y: Double, w: Int, h: Int): DoubleArray {
+        val hh = h.coerceAtLeast(1).toDouble()
+        return doubleArrayOf(x * hh + w / 2.0, y * hh + hh / 2)
+    }
+
+    /**
+     * **La vista de la tinta de un marcador 3D** (`vista_de_tinta` del PC): la pantalla contada desde
+     * su centro y en milésimas de su alto, así lo anotado no se separa del modelo aunque la pantalla
+     * cambie de tamaño. Con el `.hoja` `-2500,-2500,2500,2500`.
+     */
+    fun vistaDeTinta(w: Int, h: Int): com.forge.pixpin.motor.Viewport {
+        val z = h.coerceAtLeast(1) / 1000.0
+        return com.forge.pixpin.motor.Viewport(scrollX = w / 2.0 / z, scrollY = 500.0, zoom = z)
+    }
+
+    /** El marco de la tinta de un marcador 3D. */
+    val HOJA_DE_LA_TINTA = com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco(-2500.0, -2500.0, 2500.0, 2500.0)
+
+    /** La base de la tinta de un marcador: `anot-<uid>-m<id>`, el id saneado a `[A-Za-z0-9_-]`. */
+    fun baseDeLaTinta(base: String, id: String) = "$base-m" + id.filter { it.isLetterOrDigit() && it.code < 128 || it == '_' || it == '-' }
+
+    // ---- Los marcos 3D: `anot-<uid>.marcos.json` de un modelo ----
+
+    /** Un marco del modelo: su recuadro normalizado ([aNormal]) y la vista de la que es. */
+    data class Marco3d(val id: String, val caja: DoubleArray, val estado: Marcador3d) {
+        override fun equals(other: Any?) = other is Marco3d && id == other.id && caja.contentEquals(other.caja) && estado == other.estado
+        override fun hashCode() = id.hashCode()
+    }
+
+    /** `{"version":1,"marcos":[{id, caja, estado}]}`, con lo que no se conoce tal cual. */
+    class ArchivoDeMarcos(val marcos: List<Marco3d>, private val resto: Map<String, JsonElement>) {
+        fun con(nuevos: List<Marco3d>) = ArchivoDeMarcos(nuevos, resto)
+
+        fun aTexto(): String {
+            val o = buildJsonObject {
+                put("version", (resto["version"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 1)
+                put("marcos", JsonArray(marcos.map { m ->
+                    buildJsonObject {
+                        put("id", m.id)
+                        put("caja", JsonArray(m.caja.map { JsonPrimitive(it) }))
+                        put("estado", m.estado.estadoJson())
+                    }
+                }))
+                for ((k, v) in resto) if (k != "version" && k != "marcos") put(k, v)
+            }
+            return JSON.encodeToString(JsonObject.serializer(), o)
+        }
+    }
+
+    fun marcosDeTexto(texto: String?): ArchivoDeMarcos {
+        val o = texto?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() } as? JsonObject
+            ?: return ArchivoDeMarcos(emptyList(), emptyMap())
+        val marcos = (o["marcos"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val m = e as? JsonObject ?: return@mapNotNull null
+            val id = (m["id"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
+            val caja = (m["caja"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }?.takeIf { it.size == 4 } ?: return@mapNotNull null
+            val est = modelo3dDe(buildJsonObject { put("id", id); put("estado", m["estado"] ?: return@mapNotNull null) }) ?: return@mapNotNull null
+            Marco3d(id, caja.toDoubleArray(), est)
+        }
+        return ArchivoDeMarcos(marcos, o.filterKeys { it != "marcos" })
     }
 
     /** Un id nuevo, como los del PC (`m` y el reloj en base 36). */

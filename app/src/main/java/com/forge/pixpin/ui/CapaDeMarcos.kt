@@ -48,8 +48,16 @@ import java.io.File
  *
  * [archivo] null: solo esta sesión (un documento que no es de ningún chat).
  */
-class MarcosDelVisor(private val archivo: File?) {
-    var lista by mutableStateOf(archivo?.let { MarcosDelDocumento.leer(it) } ?: emptyList())
+class MarcosDelVisor(
+    private val archivo: File?,
+    /**
+     * Para un visor con su propio archivo (el modelo 3D, `{"version":1,"marcos":[…]}`): lo que había
+     * y quién guarda. Con esto, [archivo] no se usa.
+     */
+    inicial: List<Marco>? = null,
+    private val alGuardar: ((List<Marco>) -> List<Marco>)? = null
+) {
+    var lista by mutableStateOf(inicial ?: archivo?.let { MarcosDelDocumento.leer(it) } ?: emptyList())
         private set
     /** Si se están poniendo (el marco del riel, en azul). */
     var activo by mutableStateOf(false)
@@ -57,6 +65,8 @@ class MarcosDelVisor(private val archivo: File?) {
     var imprimiendo by mutableStateOf(false)
 
     fun poner(nueva: List<Marco>) {
+        val f = alGuardar
+        if (f != null) { lista = f(nueva); return }
         lista = nueva
         archivo?.let { runCatching { MarcosDelDocumento.guardar(it, nueva) } }
     }
@@ -120,7 +130,9 @@ fun CapaDeMarcos(
     discontinuo: Boolean = false,
     alDosDedos: ((pan: Offset, zoom: Float, centro: Offset) -> Unit)? = null,
     /** Si los ya puestos los pinta el propio visor (la hoja de Excel), aquí solo el que se arrastra. */
-    pintarLosPuestos: Boolean = true
+    pintarLosPuestos: Boolean = true,
+    /** Cuáles se ven ahora (en el 3D, los de la vista de ahora); los demás siguen en las fichas. */
+    seVe: (Marco) -> Boolean = { true }
 ) {
     val aPantallaYa by rememberUpdatedState(aPantalla)
     val aDocumentoYa by rememberUpdatedState(aDocumento)
@@ -191,6 +203,7 @@ fun CapaDeMarcos(
                 return Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y))
             }
             if (pintarLosPuestos) estado.lista.forEachIndexed { i, m ->
+                if (!seVe(m)) return@forEachIndexed
                 val r = caja(m) ?: return@forEachIndexed
                 if (r.left > size.width + 40 * e || r.top > size.height + 40 * e || r.right < -40 * e || r.bottom < -40 * e) return@forEachIndexed
                 drawRect(AZUL, r.topLeft, r.size, style = trazo)

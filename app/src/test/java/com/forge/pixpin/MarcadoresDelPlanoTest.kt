@@ -48,4 +48,33 @@ class MarcadoresDelPlanoTest {
         assertEquals(listOf("m2", "m3"), vuelta.modelo.map { it.id })
         assertEquals(nuevo, vuelta.modelo[1])
     }
+
+    @Test fun coincideComoElPc() {
+        val a = MarcadoresDelPlano.Marcador3d("a", "", doubleArrayOf(0.0, 0.0, 0.0), 1.0, 0.3, 100.0)
+        assertTrue(MarcadoresDelPlano.coincide(a.copy(objetivo = doubleArrayOf(0.1, 0.0, 0.0)), a))
+        org.junit.Assert.assertFalse("lejos", MarcadoresDelPlano.coincide(a.copy(objetivo = doubleArrayOf(1.0, 0.0, 0.0)), a))
+        assertTrue("una vuelta entera es la misma", MarcadoresDelPlano.coincide(a.copy(rumbo = 1.0 + 2 * Math.PI), a))
+        org.junit.Assert.assertFalse("con corte y sin él", MarcadoresDelPlano.coincide(a.copy(seccion = DoubleArray(6)), a))
+        // Lo aislado en el PC no es esta vista (aquí no se aísla por clave).
+        val delPc = MarcadoresDelPlano.deTexto("""{"modelo":[{"id":"m","estado":{"objetivo":[0,0,0],"rumbo":1,"altura":0.3,"dist":100,"aislado":3,"ocultos":[]}}]}""").modelo[0]
+        org.junit.Assert.assertFalse(MarcadoresDelPlano.coincide(a, delPc))
+    }
+
+    @Test fun losMarcos3DVanYVuelvenYLaTintaEnMilesimasDelAlto() {
+        val est = MarcadoresDelPlano.Marcador3d("", "", doubleArrayOf(1.0, 2.0, 3.0), 0.5, 0.1, 9.0)
+        val f = MarcadoresDelPlano.marcosDeTexto(null).con(listOf(MarcadoresDelPlano.Marco3d("m1", doubleArrayOf(-0.2, -0.1, 0.3, 0.2), est)))
+        val vuelta = MarcadoresDelPlano.marcosDeTexto(f.aTexto())
+        assertEquals(1, vuelta.marcos.size)
+        assertEquals(0.3, vuelta.marcos[0].caja[2], 0.0)
+        assertTrue(MarcadoresDelPlano.coincide(vuelta.marcos[0].estado, est))
+        // El centro de la pantalla es el (0,0) de la tinta, y la mitad del alto son 500.
+        val v = MarcadoresDelPlano.vistaDeTinta(1000, 2000)
+        val centro = v.toScreen(com.forge.pixpin.motor.Pt(0.0, 0.0))
+        assertEquals(500.0, centro.x, 1e-9); assertEquals(1000.0, centro.y, 1e-9)
+        assertEquals(2000.0, v.toScreen(com.forge.pixpin.motor.Pt(0.0, 500.0)).y, 1e-9)
+        val n = MarcadoresDelPlano.aNormal(750.0, 500.0, 1000, 2000)
+        assertEquals(0.125, n[0], 1e-12); assertEquals(-0.25, n[1], 1e-12)
+        assertEquals(750.0, MarcadoresDelPlano.deNormal(n[0], n[1], 1000, 2000)[0], 1e-9)
+        assertEquals("anot-X-mm18f_a-b", MarcadoresDelPlano.baseDeLaTinta("anot-X", "m18f_a-b.é"))
+    }
 }
