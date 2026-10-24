@@ -573,10 +573,37 @@ class PlanoActivity : ComponentActivity() {
             if (puntos.size >= 2) hechas = hechas + listOf(puntos)
             puntos = emptyList(); enganchado = null; marcos++
         }
+        fun dejarDeAnotar() {
+            anotando = false; capa?.let { c -> CapaDelPlano.leer(c.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms } }; guardarCapa(); cambiosEnLaCapa++; marcos++
+        }
+        fun empezarAAnotar() {
+            val laCapa = capa ?: return
+            vistaDeLaCapa()?.let { laCapa.setViewport(it) }
+            acotando = false; marcando = false; terminarCadena()
+            anotando = true
+        }
+        // ---- **Los marcadores del plano** (24-oct-2026, como el PC): cada uno, la vista entera, en
+        // `anot-<uid>.vistas.json` (`{"version":1,"plano":[…]}`). Ver [MarcadoresDelPlano]. ----
+        var archivoDeVistas by remember { mutableStateOf<java.io.File?>(null) }
+        var marcadores by remember { mutableStateOf(MarcadoresDelPlano.deTexto(null)) }
+        var poniendoMarca by remember { mutableStateOf(false) }
+        LaunchedEffect(original) {
+            val f = withContext(Dispatchers.IO) {
+                com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@PlanoActivity, original)
+                    ?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) }
+            }
+            archivoDeVistas = f
+            marcadores = MarcadoresDelPlano.deTexto(f?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it) })
+        }
+        fun guardarMarcadores(nuevos: List<MarcadoresDelPlano.Marcador>) {
+            marcadores = marcadores.con(nuevos)
+            archivoDeVistas?.let { com.forge.pixpin.motor.MarcosDelDocumento.escribir(it, marcadores.aTexto(), vacio = false) }
+        }
         BackHandler {
             when {
+                poniendoMarca -> poniendoMarca = false
                 acotando && puntos.isNotEmpty() -> terminarCadena()
-                anotando -> { anotando = false; capa?.let { c -> CapaDelPlano.leer(c.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms } }; guardarCapa(); cambiosEnLaCapa++; marcos++ }
+                anotando -> dejarDeAnotar()
                 acotando -> acotando = false
                 marcando -> marcando = false
                 else -> finish()
@@ -857,20 +884,7 @@ class PlanoActivity : ComponentActivity() {
                         IconButton(onClick = { Visor3DActivity.abrir(this@PlanoActivity, original.absolutePath, nombre); toques++ }, modifier = Modifier.size(38.dp)) {
                             Text("3D", color = blanco.copy(alpha = 0.9f), fontWeight = FontWeight.Bold)
                         }
-                        IconButton(onClick = {
-                            val laCapa = capa ?: return@IconButton
-                            vistaDeLaCapa()?.let { laCapa.setViewport(it) }
-                            acotando = false; marcando = false; terminarCadena()
-                            anotando = true
-                        }, modifier = Modifier.size(38.dp)) {
-                            Icon(Icons.Filled.Edit, contentDescription = getString(com.forge.pixpin.R.string.plano_anotar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                        }
-                        IconButton(onClick = { marcando = !marcando; if (marcando) { acotando = false; terminarCadena() }; toques++ }, modifier = Modifier.size(38.dp)) {
-                            Icon(
-                                Icons.Filled.Print, contentDescription = getString(com.forge.pixpin.R.string.plano_marcos),
-                                tint = if (marcando) Color(0xFF3D8BFF) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
-                            )
-                        }
+                        // Anotar y los marcos para imprimir van en el riel de la derecha (24-oct-2026, como el PC).
                         IconButton(onClick = { acotando = !acotando; if (acotando) marcando = false else terminarCadena(); toques++ }, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 Icons.Filled.Straighten, contentDescription = getString(com.forge.pixpin.R.string.plano_acotar),
@@ -889,6 +903,40 @@ class PlanoActivity : ComponentActivity() {
                             Icon(com.forge.pixpin.ui.IconoDeCompartir, contentDescription = "Exportar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                         }
                     }
+                }
+            }
+            // **El riel de la derecha** (24-oct-2026): marcador, lápiz y marcos, como en todos los visores.
+            if (listo) com.forge.pixpin.ui.RielDelVisor(
+                poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcando,
+                onMarcador = { if (anotando) dejarDeAnotar(); marcando = false; poniendoMarca = !poniendoMarca },
+                onLapiz = { if (anotando) dejarDeAnotar() else { poniendoMarca = false; empezarAAnotar() } },
+                onMarco = {
+                    if (anotando) dejarDeAnotar()
+                    poniendoMarca = false
+                    marcando = !marcando; if (marcando) { acotando = false; terminarCadena() }; toques++
+                },
+                marcas = if (anotando) 0 else marcadores.plano.size,
+                emojiDe = { i -> marcadores.plano[i].emoji },
+                alElegirMarca = { i ->
+                    val m = marcadores.plano.getOrNull(i)
+                    val mo = modelo
+                    if (m != null && mo != null && ancho > 0 && alto > 0) {
+                        camara = MarcadoresDelPlano.camaraDe(m, mo.origenX, mo.origenY, ancho, alto)
+                        pintar()
+                    }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+            if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),
+                onCerrar = { poniendoMarca = false }
+            ) { emoji ->
+                poniendoMarca = false
+                val c = camara
+                val mo = modelo
+                if (c != null && mo != null && ancho > 0 && alto > 0) {
+                    val id = MarcadoresDelPlano.idNuevo(System.currentTimeMillis(), marcadores.plano.map { it.id })
+                    guardarMarcadores(marcadores.plano + MarcadoresDelPlano.deLaVista(c, mo.origenX, mo.origenY, ancho, alto, emoji, id))
                 }
             }
             if (viendoLetras) {
