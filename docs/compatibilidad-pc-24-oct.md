@@ -56,6 +56,13 @@ dónde.
 | Galería: el `texto` OCR de cada captura | `GaleriaCompartida.Entrada.texto`; al juntar no se olvida |
 | Un solo chat Asistente | Con varios marcados, el más antiguo (`creado`, id), el mismo que elige el PC |
 
+## Más del PC
+
+| Del PC | En Android |
+|---|---|
+| Tareas inteligentes (`pixpin-frase/src/tarea.rs`, 17/18-oct): urgencia ⏫/🔼, `#etiquetas`, nota tras 💬, ⏰ y ➕, fechas como se dicen | `mini/TareaInteligente.kt` (con sus pruebas, las mismas del PC) y `ChapitasDeTarea.kt`: las listas, el widget y los avisos enseñan el título limpio con chapitas; lo escrito se guarda como lo guarda el PC. `ia/Fechas.kt` al día con el `fechas.rs` del 18-oct («5pm», «el 20») |
+| Lo grabado bajito se oye más alto (`pixpin-audio/src/volumen.rs`, cd0cc30) | `audio/RealceDeVolumen.kt` (las cuentas) y `RealceAlOir.kt` (un `LoudnessEnhancer` con esa ganancia) en el reproductor del chat, las notas, las lecciones y el pin |
+
 ## Lo que no, y por qué
 
 - **Tinta en páginas web y en el 3D, marcos en el 3D y en las notas**: el PC los hace dentro de
@@ -66,6 +73,7 @@ dónde.
   lo que trae el PC, pero este teléfono aún no lo aplica.
 - **Figuras de serie** (266 plantillas y símbolos): llegan ya en `figuras.json` al sincronizar; la
   ventana de figuras con previsualizador del PC no se portó.
+- **Palabras de urgencia a gusto y vista Kanban de las tareas**: Android no tiene Ajustes → Tareas.
 - **Asistente** (orquesta, revisión con rúbrica, memoria, seguir con el chat cerrado, Drive,
   Calendar), **horario semanal**, **Anki** y **calcar**: o son del PC o necesitan más que un porte.
 - Lo del escritorio: WebView2, Office por COM, MCP, Flow Launcher, extensión del navegador, grabar el

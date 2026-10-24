@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -313,14 +315,16 @@ class MiniActivity : ComponentActivity() {
             corrector.cargar(visible)
             corrigiendo = i
         }
+        // Lo escrito se entiende al guardarlo, como en el PC (tareas inteligentes, 18-oct-2026):
+        // «urgente», «#casa» o «mañana a las 10» pasan a sus marcas `🔼 #casa ⏰ …`.
         fun guardarCorreccion(i: Int) {
-            conLasTareas(Tareas.renombrar(tareas, i, corrector.componer()))
+            conLasTareas(Tareas.renombrar(tareas, i, TareaInteligente.aGuardar(corrector.componer())))
             corrigiendo = null
         }
         fun anadir() {
             if (nueva.texto.isBlank() && nueva.imagenes.isEmpty()) return
             val compuesto = nueva.componer()
-            if (compuesto.isNotBlank()) conLasTareas(Tareas.anadir(tareas, compuesto))
+            if (compuesto.isNotBlank()) conLasTareas(Tareas.anadir(tareas, TareaInteligente.paraApuntar(compuesto)))
         }
 
         // **Quitar una con su aspa, con «Deshacer»** (4-oct-2026, como el PC): se va al momento y
@@ -331,7 +335,7 @@ class MiniActivity : ComponentActivity() {
             elegida = null
             dejarDeCorregir()
             // Una de solo imágenes se nombra por su primera, como el PC: «[img 01]» quitada.
-            val dice = Tareas.legible(quitada.texto).ifEmpty { Tareas.fichaDeImagen(1) }
+            val dice = TareaInteligente.tituloDe(quitada.texto).ifEmpty { Tareas.legible(quitada.texto) }.ifEmpty { Tareas.fichaDeImagen(1) }
             alcance.launch {
                 avisos.currentSnackbarData?.dismiss()
                 val r = avisos.showSnackbar(
@@ -441,6 +445,9 @@ class MiniActivity : ComponentActivity() {
                         // Lo que se lee y las imágenes, aparte: la fila enseña el texto limpio y,
                         // detrás, una miniatura por imagen.
                         val (limpio, enlaces) = remember(texto) { Tareas.imagenes(texto) }
+                        // Y de lo que se lee, el título limpio: la urgencia, las #etiquetas y la nota,
+                        // aparte (tareas inteligentes del PC, 18-oct-2026).
+                        val marcas = remember(limpio) { TareaInteligente.marcas(limpio) }
                         val esLaElegida = elegida == i
                         Row(
                             Modifier.fillMaxWidth()
@@ -476,18 +483,38 @@ class MiniActivity : ComponentActivity() {
                                     // Lo hecho se tacha en vez de irse: ver lo tachado es la mitad de
                                     // la satisfacción de una lista, y además dice lo que ya no hace
                                     // falta volver a pensar. El texto cede su sitio a las miniaturas.
-                                    Text(
-                                        limpio,
-                                        fontSize = 16.sp,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textDecoration = if (t.hecha) TextDecoration.LineThrough else null,
-                                        color = if (t.hecha) MaterialTheme.colorScheme.onSurfaceVariant
-                                        else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
+                                    val tinta = if (t.hecha) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                                    Column(Modifier.weight(1f, fill = false).padding(vertical = 4.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            // La marca de la urgencia: roja (muy urgente) o ámbar (urgente).
+                                            ChapitasDeTarea.colorDe(marcas.urgencia)?.let { c ->
+                                                androidx.compose.foundation.layout.Box(
+                                                    Modifier.size(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).background(c)
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                            }
+                                            Text(
+                                                marcas.titulo,
+                                                fontSize = 16.sp,
+                                                overflow = TextOverflow.Ellipsis,
+                                                textDecoration = if (t.hecha) TextDecoration.LineThrough else null,
+                                                color = tinta
+                                            )
+                                        }
+                                        FilaDeChapitas(marcas.urgencia, marcas.etiquetas, tinta, apagada = t.hecha)
+                                        marcas.nota?.let {
+                                            Text(
+                                                "${TareaInteligente.NOTA} $it",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                     if (enlaces.isNotEmpty()) {
                                         Row(
-                                            Modifier.padding(start = if (limpio.isEmpty()) 0.dp else 8.dp),
+                                            Modifier.padding(start = if (marcas.titulo.isEmpty()) 0.dp else 8.dp),
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             enlaces.forEach { e ->

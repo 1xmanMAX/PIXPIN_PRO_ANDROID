@@ -48,7 +48,7 @@ object AlarmasDeTareas {
                 val hora = Tareas.horaDe(t.texto) ?: return@mapNotNull null
                 val cuando = hora.atZone(zona).toInstant().toEpochMilli()
                 if (cuando <= ahora) return@mapNotNull null
-                Alarma(idDe(m.id, hora), cuando, "☑ " + Tareas.legible(t.texto).ifBlank { "Tarea con imagen" })
+                Alarma(idDe(m.id, hora), cuando, "☑ " + dicho(t.texto))
             }
         }.distinctBy { it.id }
 
@@ -62,6 +62,17 @@ object AlarmasDeTareas {
         if (i < 0) return null
         val t = tareas[i]
         val nuevas = tareas.toMutableList().also { it[i] = t.copy(texto = Tareas.conHora(t.texto, null)) }
-        return Tareas.escribir(Cabecera.titulo(documento), nuevas) to Tareas.legible(t.texto).ifBlank { "Tarea con imagen" }
+        return Tareas.escribir(Cabecera.titulo(documento), nuevas) to dicho(t.texto)
+    }
+
+    /**
+     * **Lo que dice el aviso**: el título limpio (sin `⏫ #casa 💬 …`, tareas inteligentes del PC,
+     * 24-oct-2026) con la urgencia delante si la tiene («Urgente · llamar al banco»). Una tarea de
+     * solo imágenes dice que lo es. La hora `⏰` se sigue leyendo con [Tareas.horaDe], como siempre.
+     */
+    internal fun dicho(texto: String): String {
+        val p = TareaInteligente.analizar(texto)
+        val titulo = p.titulo.ifBlank { Tareas.legible(texto) }.ifBlank { "Tarea con imagen" }
+        return if (p.urgencia == TareaInteligente.Urgencia.NORMAL) titulo else "${p.urgencia.nombre} · $titulo"
     }
 }

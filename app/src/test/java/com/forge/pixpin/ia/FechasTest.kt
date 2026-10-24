@@ -41,6 +41,31 @@ class FechasTest {
         assertEquals("⏰ 2026-10-15 10:30", en("mañana a las 10 y media"))
     }
 
+    /** El 18-oct-2026 del PC: día, mes y hora sin año son del año en curso; si ya pasó, del siguiente. */
+    @Test fun `dia mes y hora como se apuntan en una tarea`() {
+        assertEquals("⏰ 2026-10-18 17:00", en("18/10 17:00"))
+        assertEquals("⏰ 2026-10-18 17:00", en("18-10 5pm"))
+        assertEquals("⏰ 2026-10-18 17:30", en("18-10 5:30pm"))
+        assertEquals("⏰ 2026-10-18 17:00", en("18 oct 17:00"))
+        assertEquals("⏰ 2026-10-20 09:00", en("el 20 a las 9"))
+        assertEquals("«el 20» es un día, no las 20:00", "⏰ 2026-10-20 09:00", en("el 20"))
+        assertEquals("⏰ 2026-10-20 08:30", en("20 de octubre 8:30"))
+        assertEquals("⏰ 2026-10-15 07:00", en("mañana 7"))
+        assertEquals("⏰ 2026-10-16 15:30", en("viernes 15:30"))
+        assertEquals("⏰ 2026-10-15 08:00", en("a las 8am"))
+        // Ya pasado este año: el que viene; «el 3» ya pasado: el mes que viene.
+        assertEquals("⏰ 2027-10-02 17:00", en("2/10 17:00"))
+        assertEquals("⏰ 2027-10-13 09:00", en("13 oct"))
+        assertEquals("⏰ 2026-11-03 10:00", en("el 3 a las 10"))
+        // «el 31» en un mes de 30 días no existe: el siguiente que lo tenga.
+        val finDeNov = Momento(Fechas.diasDe(2026, 11, 2), 600)
+        assertEquals("⏰ 2026-12-31 09:00", Fechas.interpretar("el 31", finDeNov).marca())
+        // Negativos: sigue sin adivinar.
+        for (f in listOf("el 32", "18/13 17:00", "5xm"))
+            assertTrue(f, runCatching { Fechas.interpretar(f, ahora) }.isFailure)
+        assertTrue(runCatching { Fechas.interpretar("el 32", ahora) }.exceptionOrNull() is ErrorFecha.NoExiste)
+    }
+
     @Test fun `lo imposible y lo pasado no se adivinan`() {
         for (f in listOf("el 31 de febrero", "30/02/2027", "mañana a las 25:00", "el 32 de octubre"))
             assertTrue(f, runCatching { Fechas.interpretar(f, ahora) }.exceptionOrNull() is ErrorFecha.NoExiste)

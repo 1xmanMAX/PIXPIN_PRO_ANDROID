@@ -156,7 +156,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                     todos.map { m ->
                         if (m.id != l.codigo) m
                         else TodasLasTareas.quitar(m.texto, f)?.let { (doc, t) ->
-                            hecha = Quitada(l.codigo, f.indice, t, f.texto); m.copy(texto = doc)
+                            hecha = Quitada(l.codigo, f.indice, t, f.marcas.titulo.ifBlank { f.texto }); m.copy(texto = doc)
                         } ?: m
                     }
                 }
@@ -237,12 +237,15 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
 
         fun apuntarAhora() {
-            val t = apuntar
-            if (Tareas.saneado(t).isEmpty()) return
+            // Lo escrito se entiende antes de guardarlo (tareas inteligentes del PC): «urgente»,
+            // «#casa» o «mañana a las 10» pasan a sus marcas `🔼 #casa ⏰ …`.
+            val t = TareaInteligente.paraApuntar(apuntar)
+            if (t.isEmpty()) return
             apuntar = ""
             app.scope.launch(Dispatchers.IO) {
                 TareaRapidaActivity.alInbox(applicationContext, t)
-                withContext(Dispatchers.Main) { avisar("«${Tareas.saneado(t)}» añadida a «${TodasLasTareas.INBOX}».") }
+                val dice = TareaInteligente.tituloDe(t).ifBlank { Tareas.saneado(t) }
+                withContext(Dispatchers.Main) { avisar("«$dice» añadida a «${TodasLasTareas.INBOX}».") }
             }
         }
 
@@ -396,10 +399,13 @@ class TodasLasTareasActivity : ComponentActivity() {
         val hora = remember(f.crudo) { Tareas.horaDe(f.crudo) }
         val atenuada = if (f.hecha) 0.55f else 1f
         val resalte = Color(0x61B38F00)
-        val texto = remember(f.texto, palabras) {
+        // Tareas inteligentes (PC, 18-oct-2026): el título limpio; la urgencia, las etiquetas y la
+        // nota, aparte. Lo encontrado se resalta en el título.
+        val marcas = f.marcas
+        val texto = remember(marcas.titulo, palabras) {
             buildAnnotatedString {
-                append(f.texto)
-                TodasLasTareas.resaltes(f.texto, palabras).forEach { addStyle(SpanStyle(background = resalte), it.first, it.last + 1) }
+                append(marcas.titulo)
+                TodasLasTareas.resaltes(marcas.titulo, palabras).forEach { addStyle(SpanStyle(background = resalte), it.first, it.last + 1) }
             }
         }
         var menu by remember { mutableStateOf(false) }
@@ -415,10 +421,24 @@ class TodasLasTareasActivity : ComponentActivity() {
         ) {
             Checkbox(checked = f.hecha, onCheckedChange = { marcar(l, f, it) })
             Column(Modifier.weight(1f).padding(vertical = 6.dp).alpha(atenuada), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (f.texto.isNotEmpty()) Text(
-                    texto, color = Cristal.tinta, style = MaterialTheme.typography.bodyLarge,
-                    textDecoration = if (f.hecha) TextDecoration.LineThrough else null
-                )
+                if (marcas.titulo.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                    // La marca de la urgencia delante del título: roja (muy urgente) o ámbar (urgente).
+                    ChapitasDeTarea.colorDe(marcas.urgencia)?.let { c ->
+                        Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(c))
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        texto, color = Cristal.tinta, style = MaterialTheme.typography.bodyLarge,
+                        textDecoration = if (f.hecha) TextDecoration.LineThrough else null
+                    )
+                }
+                FilaDeChapitas(marcas.urgencia, marcas.etiquetas, Cristal.tinta, apagada = f.hecha)
+                marcas.nota?.let {
+                    Text(
+                        "${TareaInteligente.NOTA} $it", color = Cristal.tinta.copy(alpha = 0.6f),
+                        style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis
+                    )
+                }
                 if (f.imagenes.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     f.imagenes.forEach { Miniatura(it) }
                 }
@@ -495,7 +515,7 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun MoverA(f: Fila, otras: List<Lista>, cerrar: () -> Unit, elegir: (Lista) -> Unit) {
         AlertDialog(
             onDismissRequest = cerrar,
-            title = { Text("Mover «${f.texto.ifBlank { "Tarea" }.take(40)}» a…", maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            title = { Text("Mover «${f.marcas.titulo.ifBlank { f.texto }.ifBlank { "Tarea" }.take(40)}» a…", maxLines = 2, overflow = TextOverflow.Ellipsis) },
             text = {
                 if (otras.isEmpty()) Text("Aún no hay otros grupos de tareas. Crea una lista de tareas en un chat y saldrá aquí.")
                 else LazyColumn(Modifier.heightIn(max = 420.dp)) {

@@ -152,13 +152,19 @@ object Fechas {
     fun interpretar(frase: String, ahora: Momento): Momento {
         val original = frase.trim().trimEnd('.', ',', ';').trim()
         val q = Acciones.normalizar(original)
-        val palabras = q.split(Regex("[\\s,]")).filter { it.isNotEmpty() }
+        // «5pm» y «5:30pm» se leen como «5 pm» y «5:30 pm» (18-oct-2026, como el PC).
+        val palabras = q.split(Regex("[\\s,]")).filter { it.isNotEmpty() }.flatMap { p ->
+            val n = p.removeSuffix("pm").takeIf { it != p } ?: p.removeSuffix("am").takeIf { it != p }
+            if (n != null && n.isNotEmpty() && n.all { it in '0'..'9' || it == ':' }) listOf(n, p.substring(n.length)) else listOf(p)
+        }
         if (palabras.isEmpty()) throw ErrorFecha.NoEntiendo(original)
         fun noEntiendo() = ErrorFecha.NoEntiendo(original)
         fun noExiste() = ErrorFecha.NoExiste(original)
         var dia: Long? = null
         var minutoLeido: Int? = null
         var sinAnio = false
+        // Si el día salió de un número solo («el 20»): del mes en curso, o del siguiente si ya pasó.
+        var sinMes = false
         var i = 0
         var tarde: Boolean? = null
         fun ponerDia(d: Long) {
@@ -261,6 +267,14 @@ object Fechas {
                     if (!existe(anio, mesDetras, n)) throw noExiste()
                     sinAnio = sinAnio || y == null
                     ponerDia(diasDe(anio, mesDetras, n))
+                } else if (!trasLas && dia == null && i >= 1 && palabras[i - 1] in setOf("el", "dia") && n in 1L..31L) {
+                    // «el 20 (a las 9)»: el día 20 del mes en curso (18-oct-2026, como el PC).
+                    val (y, m, _) = fechaDe(ahora.dia)
+                    val elDia = (0 until 12).map { k -> (y + (m - 1 + k) / 12) to ((m - 1 + k) % 12 + 1) }
+                        .firstOrNull { (yy, mm) -> existe(yy, mm, n) }
+                        ?.let { (yy, mm) -> diasDe(yy, mm, n) } ?: throw noExiste()
+                    sinMes = true
+                    ponerDia(elDia)
                 } else if (trasLas || sig in setOf("de", "en", "am", "pm", "y") || i + 1 == palabras.size) {
                     if (n !in 0..24) throw noExiste()
                     if (minutoLeido != null) throw noEntiendo()
@@ -288,6 +302,13 @@ object Fechas {
         if (tarde == true && minuto < 12 * 60) minuto += 12 * 60
         else if (tarde == false && minuto >= 12 * 60 && minuto < 13 * 60) minuto -= 12 * 60
         var d = dia ?: if (minuto > ahora.minuto) ahora.dia else ahora.dia + 1
+        if (sinMes && d < ahora.dia) {
+            // «el 3» dicho el 18: el 3 del mes que viene (el primero que lo tenga).
+            val (y, m, dd) = fechaDe(d)
+            (1..12).map { k -> (y + (m - 1 + k) / 12) to ((m - 1 + k) % 12 + 1) }
+                .firstOrNull { (yy, mm) -> existe(yy, mm, dd) }
+                ?.let { (yy, mm) -> d = diasDe(yy, mm, dd) }
+        }
         if (sinAnio && d < ahora.dia) {
             val (y, m, dd) = fechaDe(d)
             if (existe(y + 1, m, dd)) d = diasDe(y + 1, m, dd)

@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/1xmanMAX/PIXPIN_PRO_ANDROID/releases/latest"><img alt="Descargar" src="https://img.shields.io/github/v/release/1xmanMAX/PIXPIN_PRO_ANDROID?include_prereleases&label=descargar%20APK&color=6965DB&style=for-the-badge"></a>
   <img alt="Android 10+" src="https://img.shields.io/badge/Android-10%2B-2F9E44?style=for-the-badge&logo=android&logoColor=white">
-  <img alt="Pruebas" src="https://img.shields.io/badge/pruebas-2.668-1971C2?style=for-the-badge">
+  <img alt="Pruebas" src="https://img.shields.io/badge/pruebas-3.174-1971C2?style=for-the-badge">
   <img alt="Sin anuncios" src="https://img.shields.io/badge/sin%20anuncios%20ni%20rastreo-✓-F08C00?style=for-the-badge">
 </p>
 
@@ -68,7 +68,7 @@ Cualquier dibujo, proyecto, croquis 3D o tabla se exporta como **una página web
 | Tecnología | Para qué | Por qué esta y no otra |
 |---|---|---|
 | **Kotlin + Jetpack Compose** | Toda la app | La forma moderna de hacer Android: menos código y pantallas fluidas a 120 Hz |
-| **Motor en Kotlin puro** | Dibujo, fórmulas, sincronización | Al no depender de Android se prueba entero en segundos: **2.668 pruebas** en cada cambio |
+| **Motor en Kotlin puro** | Dibujo, fórmulas, sincronización | Al no depender de Android se prueba entero en segundos: **3.174 pruebas** en cada cambio |
 | **Archivos JSON y carpetas** | Guardar | Legibles, fáciles de copiar y de sincronizar; sin base de datos que se corrompa |
 | **AES-GCM + PBKDF2** | Cifrar la sincronización | Criptografía estándar y revisada, no inventada en casa |
 | **Whisper y Vosk** (en el teléfono) | Pasar voz a texto | Whisper entiende el habla natural; Vosk va rápido en cualquier móvil. La voz no sale del aparato |

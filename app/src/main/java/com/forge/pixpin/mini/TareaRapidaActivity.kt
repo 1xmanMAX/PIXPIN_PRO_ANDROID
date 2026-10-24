@@ -73,8 +73,14 @@ class TareaRapidaActivity : ComponentActivity() {
          * Añade [texto]: sin [proyecto], al Inbox de «Mensajes guardados» ([alInbox]); con él, a la
          * última lista de ese chat (o a una nueva «Tareas»), como `anadir_tarea` del PC. Trabajo de
          * disco, rápido.
+         *
+         * **Lo escrito se entiende** antes de guardarlo (tareas inteligentes del PC, 18-oct-2026;
+         * [TareaInteligente.paraApuntar]): «llamar al banco urgente #casa mañana a las 10» se guarda
+         * `llamar al banco 🔼 #casa ⏰ … ➕ …`, igual que si se apuntara en el PC.
          */
-        fun anadir(context: Context, texto: String, proyecto: String? = null) {
+        fun anadir(context: Context, escrito: String, proyecto: String? = null) {
+            val texto = TareaInteligente.paraApuntar(escrito)
+            if (texto.isEmpty()) return
             if (proyecto == null) {
                 alInbox(context, texto)
                 Toast.makeText(context, "Tarea apuntada en el Inbox", Toast.LENGTH_SHORT).show()

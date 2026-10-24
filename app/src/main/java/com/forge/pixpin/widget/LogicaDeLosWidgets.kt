@@ -74,8 +74,24 @@ object LogicaDeLosWidgets {
 
     private val BLANCOS = Regex("""\s+""")
 
-    /** El texto de la fila, en una línea; una tarea que solo era una foto dice que lo es. */
-    fun textoDeFila(texto: String): String = texto.replace(BLANCOS, " ").trim().ifEmpty { SOLO_IMAGEN }
+    /**
+     * El texto de la fila, en una línea; una tarea que solo era una foto dice que lo es.
+     *
+     * **Con las marcas de las tareas inteligentes** (PC, 18-oct-2026; [TareaInteligente.marcas]):
+     * el título limpio con sus `#etiquetas` detrás y, delante, un círculo rojo (muy urgente) o
+     * naranja (urgente) en vez del `⏫`/`🔼`. La nota (`💬`) no cabe en una fila del widget y no sale.
+     */
+    fun textoDeFila(texto: String): String {
+        val m = com.forge.pixpin.mini.TareaInteligente.marcas(texto)
+        val urgencia = when (m.urgencia) {
+            com.forge.pixpin.mini.TareaInteligente.Urgencia.MUY_URGENTE -> "🔴"
+            com.forge.pixpin.mini.TareaInteligente.Urgencia.URGENTE -> "🟠"
+            com.forge.pixpin.mini.TareaInteligente.Urgencia.NORMAL -> null
+        }
+        val cuerpo = (listOf(m.titulo) + m.etiquetas.map { "#$it" }).joinToString(" ").replace(BLANCOS, " ").trim()
+        if (cuerpo.isEmpty()) return m.nota?.let { "${com.forge.pixpin.mini.TareaInteligente.NOTA} $it" } ?: SOLO_IMAGEN
+        return if (urgencia == null) cuerpo else "$urgencia $cuerpo"
+    }
 
     /**
      * «Inbox», «Pendientes · Obra Miraflores», con «· hace 3 días» detrás si lleva fecha. El chat

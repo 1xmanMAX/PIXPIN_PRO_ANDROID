@@ -117,7 +117,8 @@ object Tareas {
 
     /**
      * **El texto que se enseña y la fecha de creación**, si la lleva. Una fecha que no existe
-     * (`2026-02-30`) se queda como texto, igual que en el PC (`mini::partir`).
+     * (`2026-02-30`) se queda como texto, igual que en el PC (`mini::partir`). La `➕` se encuentra
+     * delante o detrás de la hora `⏰` (ver [sinHora]).
      */
     fun partir(texto: String): Pair<String, java.time.LocalDate?> {
         // La hora de recordar va detrás de todo (`pan ➕ 2026-10-02 ⏰ 2026-10-09 10:00`, como la
@@ -159,8 +160,23 @@ object Tareas {
     /** La hora local a la que se recuerda una tarea, si tiene. */
     fun horaDe(texto: String): java.time.LocalDateTime? = marcaEn(texto)?.second
 
-    /** El texto sin la marca de la hora. */
-    fun sinHora(texto: String): String = marcaEn(texto)?.let { texto.substring(0, it.first).trimEnd() } ?: texto
+    /**
+     * El texto sin la marca de la hora.
+     *
+     * **Lo que va detrás de la hora se pierde con ella, salvo la fecha de creación** (24-oct-2026):
+     * el PC, desde las tareas inteligentes del 18-oct (`mini::anadir_el`), apunta la `➕` detrás de
+     * todo (`llamar ⏰ 2026-10-17 17:00 ➕ 2026-10-17`), y el teléfono la pone delante de la hora
+     * (`pan ➕ 2026-10-02 ⏰ …`). Con los dos órdenes, quitar o cambiar la hora (al sonar, «No
+     * recordar») conserva el día en que se creó, y [partir] la sigue encontrando al final.
+     */
+    fun sinHora(texto: String): String {
+        val (i, _) = marcaEn(texto) ?: return texto
+        val cabeza = texto.substring(0, i).trimEnd()
+        // `⏰ AAAA-MM-DD HH:MM` son 16 caracteres tras el reloj; lo que siga, solo si es la `➕`.
+        val cola = texto.substring(i + 1).trimStart().drop(16).trim()
+        if (cola.isEmpty() || !CREADA.matches(" $cola")) return cabeza
+        return if (cabeza.isEmpty()) cola else "$cabeza $cola"
+    }
 
     /**
      * **La hora para enseñarla**: «hoy 10:00», «mañana 08:30», «ayer 18:00» o «12 oct 10:00» (con

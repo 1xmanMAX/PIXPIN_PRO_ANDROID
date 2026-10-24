@@ -49,7 +49,13 @@ object TodasLasTareas {
         /** El día en que se creó, si lo lleva (`➕ AAAA-MM-DD`). */
         val creada: LocalDate?,
         /** Los enlaces de sus imágenes, en orden. Se resuelven con [archivoDeEnlace]. */
-        val imagenes: List<String>
+        val imagenes: List<String>,
+        /**
+         * **Lo que lleva [texto], por partes** (tareas inteligentes del PC, 18-oct-2026): el título
+         * limpio, la urgencia (`⏫`/`🔼`), las `#etiquetas` y la nota (`💬`). La tarjeta enseña esto;
+         * buscar sigue mirando [texto] entero, así que «#casa» o «⏫» también encuentran.
+         */
+        val marcas: TareaInteligente.Frase = TareaInteligente.marcas(texto)
     )
 
     /** Una lista de tareas de un chat. */
