@@ -1,5 +1,13 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.material.icons.filled.EditNote
+
+import androidx.compose.ui.graphics.nativeCanvas
+
+import androidx.compose.ui.layout.boundsInWindow
+
+import androidx.compose.ui.layout.onGloballyPositioned
+
 import androidx.compose.runtime.rememberCoroutineScope
 
 import com.forge.pixpin.motormd.Adjuntos
@@ -478,6 +486,31 @@ private fun Pantalla(
         } ?: emptyList()
     }
     val alcanceDeMarcas = rememberCoroutineScope()
+    // ---- **La tinta y los marcos de la nota** (24-oct-2026, como el lector de notas del PC): en
+    // unidades del documento —dp desde la esquina del texto, lo más parecido a los píxeles CSS del
+    // PC—, `anot-<uid>.excalidraw.gz` (sin `.hoja`) y `anot-<uid>.marcos.json`. El lápiz anota;
+    // escribir el texto va en su propio botón de arriba (`EDIT_NOTE` del PC). ----
+    val baseDeLaNota = archivoDeMarcas?.name?.removeSuffix(".marcas")
+    val densidadDeLaNota = androidx.compose.ui.platform.LocalDensity.current.density.toDouble()
+    var anotandoLaNota by remember { mutableStateOf(false) }
+    var tickDeLaTinta by remember { mutableIntStateOf(0) }
+    val tintaDeLaNota = remember(baseDeLaNota) {
+        com.forge.pixpin.motor.DrawController(
+            baseDeLaNota?.let { com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contextoDelEditor, it)) }
+                ?: com.forge.pixpin.motor.Scene()
+        ).also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+    }
+    val marcosDeLaNota = remember(baseDeLaNota) {
+        MarcosDelVisor(baseDeLaNota?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(contextoDelEditor.filesDir, it) })
+    }
+    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = -desplazado.value / densidadDeLaNota, zoom = densidadDeLaNota)
+    fun dejarDeAnotarLaNota() {
+        if (!anotandoLaNota) return
+        anotandoLaNota = false
+        baseDeLaNota?.let { com.forge.pixpin.motor.ExcalidrawStore.guardar(contextoDelEditor, it, tintaDeLaNota.scene) }
+    }
+    var cajaDeLaNota by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+    androidx.compose.runtime.DisposableEffect(tintaDeLaNota) { onDispose { dejarDeAnotarLaNota() } }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
     var viendoAdjuntar by remember { mutableStateOf(false) }
@@ -657,7 +690,14 @@ private fun Pantalla(
                     }
                 },
                 actions = {
-                    // Ver y escribir van en el lápiz del riel de la derecha (24-oct-2026).
+                    // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
+                    IconButton(onClick = { dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; viendo = !viendo }) {
+                        Icon(
+                            if (viendo) Icons.Filled.EditNote else Icons.Filled.Visibility,
+                            contentDescription = if (viendo) "Escribir" else "Ver la nota",
+                            tint = if (!viendo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                     // Deshacer y rehacer arriba a la derecha, como su
                     // `historyButtons`. `pasos` está solo para que Compose sepa
                     // que hay que volver a mirar si están habilitados: el
@@ -799,14 +839,84 @@ private fun Pantalla(
                     }
                 }
             }
-            // **El riel de la derecha**: marcador y lápiz (mirar o escribir), como en los visores.
-            RielDelVisor(
-                poniendoMarca = poniendoMarca, anotando = !viendo, marcando = false,
-                onMarcador = if (archivoDeMarcas == null) null else ({ poniendoMarca = !poniendoMarca }),
-                onLapiz = { viendo = !viendo; poniendoMarca = false },
-                onMarco = null,
-                rotuloDelLapiz = if (viendo) "Escribir" else "Ver la nota",
-                marcas = if (viendo) marcadores.size else 0,
+            // **La tinta**: mirando, encima del texto y con él; anotando, el lienzo, y el texto lo sigue.
+            if (viendo && anotandoLaNota) {
+                @Suppress("UNUSED_EXPRESSION") tickDeLaTinta
+                com.forge.pixpin.motor.DrawCanvas(
+                    controller = tintaDeLaNota,
+                    modifier = Modifier.fillMaxSize(),
+                    imageProvider = { f -> tintaDeLaNota.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
+                    zoomBloqueado = true,
+                    cambios = tickDeLaTinta,
+                    onChange = { trazando ->
+                        // Dos dedos mueven la nota: solo de alto, y sin salirse.
+                        val vp = tintaDeLaNota.scene.viewport
+                        val y = (-vp.scrollY * densidadDeLaNota).toInt().coerceIn(0, desplazado.maxValue)
+                        tintaDeLaNota.setViewport(vp.copy(scrollX = 0.0, scrollY = -y / densidadDeLaNota))
+                        alcanceDeMarcas.launch { desplazado.scrollTo(y) }
+                        if (!trazando) tickDeLaTinta++
+                    }
+                )
+            } else if (viendo && tintaDeLaNota.scene.elements.any { !it.isDeleted }) {
+                val pintor = remember { com.forge.pixpin.motor.Renderer({ f -> tintaDeLaNota.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } }, com.forge.pixpin.motor.DrawFonts.provider(contextoDelEditor)) }
+                androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                    @Suppress("UNUSED_EXPRESSION") tickDeLaTinta
+                    val escena = tintaDeLaNota.scene.copy(viewport = vistaDeLaTinta())
+                    drawContext.canvas.nativeCanvas.let { pintor.renderScene(it, escena, size.width.toDouble(), size.height.toDouble()) }
+                }
+            }
+            if (viendo && !anotandoLaNota && (marcosDeLaNota.activo || marcosDeLaNota.lista.isNotEmpty())) CapaDeMarcos(
+                marcosDeLaNota,
+                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota).toFloat(), (y * densidadDeLaNota - desplazado.value).toFloat()) },
+                aDocumento = { o -> PuntoDelDocumento(o.x / densidadDeLaNota, (o.y + desplazado.value) / densidadDeLaNota) },
+                pxPorUnidad = { densidadDeLaNota },
+                alIr = { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.y0 * densidadDeLaNota).toInt()) } },
+                alImprimir = {
+                    val actividad = contextoDelEditor as? android.app.Activity
+                    if (actividad != null) alcanceDeMarcas.launch {
+                        ImprimirMarcos.imprimir(
+                            actividad, marcosDeLaNota, "Nota",
+                            ir = { m -> desplazado.scrollTo((m.y0 * densidadDeLaNota).toInt()) },
+                            cajaEnVentana = { m ->
+                                androidx.compose.ui.geometry.Rect(
+                                    (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota - desplazado.value).toFloat(),
+                                    (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota - desplazado.value).toFloat()
+                                ).translate(cajaDeLaNota.topLeft)
+                            }
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDeLaNota = it.boundsInWindow() }
+            )
+            if (viendo && anotandoLaNota) {
+                val ajustesDeLaNota by (contextoDelEditor.applicationContext as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
+                    @Suppress("UNUSED_EXPRESSION") tickDeLaTinta
+                    com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
+                        com.forge.pixpin.motor.DrawToolbar(
+                            tool = tintaDeLaNota.tool,
+                            onTool = { tintaDeLaNota.selectTool(it); tickDeLaTinta++ },
+                            style = tintaDeLaNota.scene.style,
+                            onStyle = { nuevo -> tintaDeLaNota.cambiarEstilo(nuevo) { it }; tickDeLaTinta++ },
+                            canUndo = tintaDeLaNota.canUndo,
+                            onUndo = { tintaDeLaNota.undo(); tickDeLaTinta++ },
+                            permitidas = ajustesDeLaNota.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                            grupos = ajustesDeLaNota.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA)
+                                .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                        )
+                    }
+                }
+            }
+            // **El riel de la derecha**: marcador, lápiz (anotar encima) y marcos, como en los visores.
+            if (viendo && !marcosDeLaNota.imprimiendo) RielDelVisor(
+                poniendoMarca = poniendoMarca, anotando = anotandoLaNota, marcando = marcosDeLaNota.activo,
+                onMarcador = if (archivoDeMarcas == null) null else ({ dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = !poniendoMarca }),
+                onLapiz = {
+                    if (anotandoLaNota) dejarDeAnotarLaNota()
+                    else { poniendoMarca = false; marcosDeLaNota.activo = false; tintaDeLaNota.setViewport(vistaDeLaTinta()); anotandoLaNota = true }
+                },
+                onMarco = { dejarDeAnotarLaNota(); poniendoMarca = false; marcosDeLaNota.alternar() },
+                marcas = if (!anotandoLaNota) marcadores.size else 0,
                 emojiDe = { i -> marcadores[i].emoji },
                 alElegirMarca = { i ->
                     marcadores.getOrNull(i)?.let { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.fraccion * desplazado.maxValue).toInt()) } }
