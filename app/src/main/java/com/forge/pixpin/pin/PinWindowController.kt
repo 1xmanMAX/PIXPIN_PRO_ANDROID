@@ -2708,9 +2708,11 @@ class PinWindowController(
                 // encima; en un dibujo o una nota, editarlo; en un PDF, abrirlo. Es lo
                 // que se viene a hacer con ese pin el noventa por ciento de las veces.
                 when {
+                    // El lápiz de todos los visores (24-oct-2026, PC 963300e: «los mismos iconos en
+                    // todos los visores para no confundirse»).
                     s.type == PinType.IMAGE -> IconButton(onClick = { enterAnnotateMode() }) {
                         Icon(
-                            Icons.Filled.Brush,
+                            Icons.Filled.Edit,
                             contentDescription = context.getString(R.string.cd_anotar_aqui)
                         )
                     }

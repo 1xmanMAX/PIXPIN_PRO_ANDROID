@@ -109,4 +109,13 @@ class GaleriaCompartidaTest {
         assertEquals(T + 8 * DIA_MS, n.fijadas["a.png"])
         assertTrue(n.prorrogadas.isEmpty())
     }
+
+    @Test fun elTextoDelPcNoSeOlvidaAlJuntar() {
+        // El PC trae el texto de la captura; aquí gana una entrada más nueva sin él: el texto se queda.
+        val delPc = GaleriaCompartida.Entrada("a.png", 1, cambiado = 5, texto = "factura 123")
+        val aqui = GaleriaCompartida.Entrada("a.png", 1, cambiado = 9, conservada = true)
+        val j = GaleriaCompartida.juntar(listOf(aqui), listOf(delPc)).single()
+        org.junit.Assert.assertTrue(j.conservada)
+        org.junit.Assert.assertEquals("factura 123", j.texto)
+    }
 }

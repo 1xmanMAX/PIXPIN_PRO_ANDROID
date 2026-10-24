@@ -992,7 +992,26 @@ data class Element(
      * que el PC), y sirve para que lo que traiga un `.excalidraw` de la web o del PC no se pierda
      * al guardarlo aquí. Nulo en casi todo: con `explicitNulls = false` no se escribe.
      */
-    val customData: kotlinx.serialization.json.JsonObject? = null
+    val customData: kotlinx.serialization.json.JsonObject? = null,
+
+    /**
+     * **Lo nuevo del lienzo del PC, conservado tal cual** (15/24-oct-2026; `docs/texto-rico-del-lienzo.md`
+     * y `docs/manual-geometria-android.md` del PC). Aquí aún no se pinta, pero se lee y se vuelve a
+     * escribir: sin esto, guardar en el teléfono un dibujo del PC le quitaba el texto rico, los
+     * sectores, las marcas de ángulo y los degradados, y la fusión figura a figura se lo llevaba
+     * también al PC. Mientras tanto se ve la reserva de cada uno (el `text` plano, el arco abierto,
+     * el `backgroundColor`, el discontinuo).
+     *
+     * - [textoRico]: la fuente del texto con su formato. Si alguien cambia el `text` aquí, el PC ve
+     *   que ya no casan (`plano(textoRico) != text`) y se queda con el `text`.
+     * - [cierreArco] `"sector"`/`"segmento"`, [marcaAngulo] `{arcos, recto, valor}`,
+     *   [degradado] `{tipo, desde, hasta, origen, destino}` y [trazoRayaPunto].
+     */
+    val textoRico: String? = null,
+    val cierreArco: String? = null,
+    val marcaAngulo: kotlinx.serialization.json.JsonObject? = null,
+    val degradado: kotlinx.serialization.json.JsonObject? = null,
+    val trazoRayaPunto: Boolean? = null
 ) {
     companion object {
         const val DEFAULT_STROKE_COLOR = "#1e1e1e"

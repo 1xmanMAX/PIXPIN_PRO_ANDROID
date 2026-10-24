@@ -44,7 +44,13 @@ object GaleriaCompartida {
         /** Cuándo cambió por última vez algo de lo de arriba: lo más nuevo gana al juntar. */
         val cambiado: Long = 0,
         /** El aparato donde se hizo, solo para enseñarlo. */
-        val de: String = ""
+        val de: String = "",
+        /**
+         * **Lo que pone dentro** (PC 8258b31, 17-oct): el texto reconocido de la captura, con el que la
+         * galería la encuentra al buscar. Lo pone el PC; aquí se conserva y viaja, y al juntar nunca
+         * se olvida un texto que ya se tenía. Vacío: sin leer o sin texto, y no se escribe.
+         */
+        val texto: String = ""
     ) {
         /** Ya pasó su fecha: cada aparato la barre solo, no hace falta pasarla. */
         fun caducada(ahora: Long) = !borrada && !conservada && seVa != null && seVa <= ahora
@@ -126,7 +132,11 @@ object GaleriaCompartida {
 
     private val orden = compareBy<Entrada>({ it.cambiado }, { it.borrada }, { it.conservada }, { it.seVa ?: Long.MAX_VALUE }, { it.bytes })
 
-    private fun ganadora(x: Entrada, y: Entrada): Entrada = if (orden.compare(x, y) >= 0) x else y
+    private fun ganadora(x: Entrada, y: Entrada): Entrada {
+        val (g, otra) = if (orden.compare(x, y) >= 0) x to y else y to x
+        // El texto es de la imagen, no de lo que se decidió sobre ella: si la que gana no lo trae, el de la otra.
+        return if (g.texto.isEmpty() && otra.texto.isNotEmpty()) g.copy(texto = otra.texto) else g
+    }
 
     /**
      * **Lo acordado, en el registro de caducidad**: conservadas y fechas fijadas. Las borradas se

@@ -324,7 +324,21 @@ data class Mensaje(
      * cual** por lo mismo que [lienzoIa].
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val fuentesIa: kotlinx.serialization.json.JsonArray? = null
+    val fuentesIa: kotlinx.serialization.json.JsonArray? = null,
+
+    /**
+     * **Una clase o una reunión grabada en el PC** (24-oct-2026, `ventana_chat/grabar_clase.rs`): la
+     * nota de voz lleva sus capturas por minuto (`capturas: [{ms, id}]`) y `grabacion: "clase"`, y
+     * cada captura dice de qué grabación es y en qué minuto (`enGrabacion: {de, ms}`). El teléfono
+     * aún no las enseña juntas, pero **las conserva tal cual**: al reescribir el mensaje aquí (fijarlo,
+     * reaccionar) se perderían, y la fusión lo tomaría por un borrado.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val capturas: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val grabacion: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val enGrabacion: kotlinx.serialization.json.JsonObject? = null
 )
 
 /** El lienzo del que salió una zona: qué dice el vínculo y cómo volver a él. */
