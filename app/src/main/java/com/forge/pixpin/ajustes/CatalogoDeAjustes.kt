@@ -141,6 +141,21 @@ object CatalogoDeAjustes {
             "Las de anotar encima de una hoja de cálculo. Sin tocar, las mismas que el lector.",
             "formato_hoja", "excel xlsx hoja calculo anotar formato"
         ),
+        opcionDeBarra(
+            Sitio.WEB, "Barra de las páginas web",
+            "Las de anotar encima de una página HTML. Sin tocar, las mismas que el lector.",
+            "formato_web", "html web pagina anotar formato"
+        ),
+        opcionDeBarra(
+            Sitio.NOTA, "Barra de las notas",
+            "Las de anotar encima de una nota. Sin tocar, las mismas que el lector.",
+            "formato_nota", "nota markdown md anotar formato"
+        ),
+        opcionDeBarra(
+            Sitio.MODELO, "Barra del modelo 3D",
+            "Las de anotar encima de un modelo IFC o Revit. Sin tocar, las mismas que el lector.",
+            "formato_modelo", "3d ifc revit bim modelo anotar formato"
+        ),
         Opcion(
             "editor-plano", Seccion.DIBUJAR, "Editor del plano",
             "Al anotar un plano DWG o DXF: el editor avanzado (estilo en el lateral, deshacer y rehacer) o el sencillo.",
@@ -198,7 +213,7 @@ object CatalogoDeAjustes {
             Sitio.LIENZO -> s.editorGroups
             Sitio.LECTOR -> s.lectorGroups
             Sitio.PLANO -> s.planoGroups
-            Sitio.PDF, Sitio.DOCUMENTO, Sitio.HOJA -> s.formatoGroups[sitio.nombre] ?: s.lectorGroups
+            else -> s.formatoGroups[sitio.nombre] ?: s.lectorGroups
         }
         // Lo que lleva la barra, sin restar la lista general: apagar una en todos no es tocar esta.
         gruposDe(grupos, s.sitioGuardado(sitio))

@@ -61,6 +61,7 @@ class AjustesV2Test {
             "iman_borde_guia", "iman_borde_figura", "zurdo", "herramientas_apagadas", "editor_tools", "editor_groups",
             "pin_tools", "pin_groups", "capa_tools", "capa_groups", "lector_tools", "lector_groups", "plano_tools", "plano_groups",
             "formato_pdf_tools", "formato_pdf_groups", "formato_documento_tools", "formato_documento_groups", "formato_hoja_tools", "formato_hoja_groups",
+            "formato_web_tools", "formato_web_groups", "formato_nota_tools", "formato_nota_groups", "formato_modelo_tools", "formato_modelo_groups",
             "plano_avanzado", "palabras_magicas",
             "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
             "asistente_modelo", "asistente_motor", "asistente_respaldo_local", "asistente_pensar", "asistente_documentos_nube",

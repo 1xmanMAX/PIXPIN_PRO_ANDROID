@@ -41,10 +41,13 @@ object HerramientasPorSitio {
          */
         PDF("pdf", "PDF"),
         DOCUMENTO("documento", "Word y libros"),
-        HOJA("hoja", "Excel");
+        HOJA("hoja", "Excel"),
+        WEB("web", "Páginas web"),
+        NOTA("nota", "Notas"),
+        MODELO("modelo", "Modelo 3D");
 
         /** Un sitio por formato, que hereda la barra del lector mientras no se toque. */
-        val esFormato: Boolean get() = this == PDF || this == DOCUMENTO || this == HOJA
+        val esFormato: Boolean get() = this == PDF || this == DOCUMENTO || this == HOJA || this == WEB || this == NOTA || this == MODELO
 
         val porDefecto: Set<Tool>
             get() = when (this) {
@@ -53,7 +56,7 @@ object HerramientasPorSitio {
                 LIENZO -> ALL_TOOLS.toSet()
                 LECTOR -> LECTOR_TOOLS_POR_DEFECTO
                 PLANO -> PLANO_TOOLS_POR_DEFECTO
-                PDF, DOCUMENTO, HOJA -> LECTOR_TOOLS_POR_DEFECTO
+                PDF, DOCUMENTO, HOJA, WEB, NOTA, MODELO -> LECTOR_TOOLS_POR_DEFECTO
             }
     }
 

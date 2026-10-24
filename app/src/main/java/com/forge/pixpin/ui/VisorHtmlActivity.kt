@@ -810,10 +810,16 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun guardarElMarco(archivo: File?, marco: com.forge.pixpin.sincro.AnotacionesDelAdjunto.Marco?) {
         if (archivo != null && marco != null) runCatching { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribirMarco(archivo, marco) }
     }
-    private val hayAnotaciones: Boolean get() = columnaDeAnotar != null && laCapa.scene.elements.any { !it.isDeleted }
+    /**
+     * **Si se anota**: un Word o un libro con su columna fijada, o **una página web** (24-oct-2026,
+     * como el PC `visor_html/riel.rs`): su tinta va en píxeles CSS del documento, en
+     * `anot-<uid>.excalidraw.gz`, **sin** la regla de la columna ni `.hoja`.
+     */
+    private val anotable: Boolean get() = columnaDeAnotar != null || !esDocumento
+    private val hayAnotaciones: Boolean get() = anotable && laCapa.scene.elements.any { !it.isDeleted }
 
     private fun guardarLaCapa() {
-        if (columnaDeAnotar == null) return
+        if (!anotable) return
         val escena = laCapa.scene
         val id = idDeLaCapa
         val contexto = applicationContext
@@ -837,7 +843,7 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     private fun ponerLaTintaEnLaPagina() {
         val vista = web ?: return
-        if (columnaDeAnotar == null) return
+        if (!anotable) return
         val escena = laCapa.scene
         val deNoche = esDeNoche()
         lifecycleScope.launch {
@@ -880,6 +886,11 @@ class VisorHtmlActivity : ComponentActivity() {
     @Suppress("DEPRECATION")
     private fun empezarAAnotar() {
         val vista = web ?: return
+        // Una página web se anota tal cual está: ni columna ni márgenes.
+        if (!esDocumento) {
+            anchoDeLaPaginaWeb = (vista.width / vista.scale.coerceAtLeast(0.1f)).toDouble()
+            ponerLaCapaDondeElDocumento(); esconderLaTintaDeLaPagina(); anotando = true; return
+        }
         if (columnaDeAnotar != null) { ponerLaCapaDondeElDocumento(); esconderLaTintaDeLaPagina(); anotando = true; return }
         val columna = (vista.width / vista.scale.coerceAtLeast(0.1f)).toInt().coerceAtLeast(200)
         columnaDeAnotar = columna
@@ -921,6 +932,9 @@ class VisorHtmlActivity : ComponentActivity() {
 
     private var xDelLienzoAlPosar = Double.NaN
 
+    /** Lo ancha que es la página web anotada, en píxeles CSS (al empezar a anotar). */
+    private var anchoDeLaPaginaWeb = 0.0
+
     /** **Anotando**: lo mismo, moviendo la vista del lienzo, que es quien lleva el documento. */
     private fun encajarElLienzoEnElCentro() {
         val columna = columnaDeAnotar ?: return
@@ -941,12 +955,13 @@ class VisorHtmlActivity : ComponentActivity() {
     /** Anotando manda el lienzo: el documento va a donde él vaya, sin salirse de sus bordes. */
     private fun llevarElDocumentoConLaCapa() {
         val vista = web ?: return
-        val columna = columnaDeAnotar ?: return
+        val ancho = columnaDeAnotar?.let { (it + espacioIzq + espacioDer).toDouble() }
+            ?: anchoDeLaPaginaWeb.takeIf { !esDocumento } ?: return
         val v = laCapa.scene.viewport
         val e = v.zoom.coerceAtLeast(0.1)
         val (x, y) = com.forge.pixpin.motor.Lectura.dentroDelDocumento(
             -v.scrollX, -v.scrollY,
-            (columna + espacioIzq + espacioDer).toDouble(), vista.contentHeight.toDouble(),
+            ancho, vista.contentHeight.toDouble(),
             vista.width / e, vista.height / e
         )
         if (x != -v.scrollX || y != -v.scrollY) laCapa.setViewport(v.copy(scrollX = -x, scrollY = -y))
@@ -1217,7 +1232,7 @@ class VisorHtmlActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                             factory = { contexto -> nuevoWeb(contexto, pagina) }
                         )
-                        if (esDocumento && columnaDeAnotar != null) CapaDeAnotar()
+                        if (anotable) CapaDeAnotar()
                     }
                 }
                 if (pagina != null && !anotando && !presentando && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) {
@@ -1251,7 +1266,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDelVisor = it.boundsInWindow() }
                     )
                 }
-                if (esDocumento && anotando) MandosDeAnotar()
+                if (anotando) MandosDeAnotar()
                 if (esDocumento) BucleDeAutoDesplazar()
                 if (!presentando) androidx.compose.animation.AnimatedVisibility(
                     visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
@@ -1317,7 +1332,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     }
                 }
                 // **El riel de la derecha** (24-oct-2026, como el PC): marcador, lápiz y marco, y los
-                // marcadores debajo. Una página web no se anota aquí (su tinta va en la página del PC).
+                // marcadores debajo. En una página web el lápiz anota en píxeles CSS, como el PC.
                 if (!presentando && !marcosDoc.imprimiendo && pagina != null) {
                     val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
                     RielDelVisor(
@@ -1326,7 +1341,7 @@ class VisorHtmlActivity : ComponentActivity() {
                             if (anotando) salir()
                             marcosDoc.activo = false; conLaLetra = false; poniendoMarcador = !poniendoMarcador
                         }),
-                        onLapiz = if (!esDocumento) null else ({
+                        onLapiz = ({
                             if (anotando) salir()
                             else { marcosDoc.activo = false; conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }
                         }),
@@ -1550,8 +1565,8 @@ class VisorHtmlActivity : ComponentActivity() {
                     canUndo = laCapa.canUndo,
                     onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
                     // La barra de este formato (24-oct-2026): sin tocar, la del lector.
-                            permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                    grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                            permitidas = ajustes.formatoToolSet(if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.formatoGroupList(if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
                 )
             }
         }
@@ -1953,7 +1968,7 @@ class VisorHtmlActivity : ComponentActivity() {
 
     /** Lo anotado, al disco **antes de seguir**: quien exporta lee el archivo, no la memoria. */
     private suspend fun guardarLaCapaYa() {
-        if (columnaDeAnotar == null) return
+        if (!anotable) return
         val escena = laCapa.scene
         val id = idDeLaCapa
         val contexto = applicationContext
@@ -2168,7 +2183,7 @@ class VisorHtmlActivity : ComponentActivity() {
             if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)
             // La página recién cargada no tiene la tinta: se le pone. Ver [ponerLaTintaEnLaPagina].
             tintaEnLaPagina = false
-            if (esDocumento && columnaDeAnotar != null) ponerLaTintaEnLaPagina()
+            if (anotable) ponerLaTintaEnLaPagina()
             // Una página recargada (otra letra, los márgenes de anotar) pierde los números de sus párrafos.
             if (esDocumento && escuchando) view.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) {
                 val i = lector.estado.value.parrafo

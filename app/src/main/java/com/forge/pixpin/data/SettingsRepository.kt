@@ -368,9 +368,7 @@ data class Settings(
             herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet()) + com.forge.pixpin.motor.Tool.ZONA
         com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> herramientas(lectorTools, com.forge.pixpin.motor.LECTOR_TOOLS_POR_DEFECTO)
         com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO -> herramientas(planoTools, com.forge.pixpin.motor.PLANO_TOOLS_POR_DEFECTO)
-        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF,
-        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO,
-        com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA ->
+        else ->
             herramientas(formatoTools[s.nombre], sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR))
     }
 
