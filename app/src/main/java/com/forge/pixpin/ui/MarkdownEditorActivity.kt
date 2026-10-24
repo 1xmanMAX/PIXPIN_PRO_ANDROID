@@ -1,5 +1,7 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.runtime.rememberCoroutineScope
+
 import com.forge.pixpin.motormd.Adjuntos
 import com.forge.pixpin.motormd.BarraDeEstilosUi
 import com.forge.pixpin.motormd.BarraDeFamiliasUi
@@ -459,7 +461,23 @@ private fun Pantalla(
     // **Ver la nota como va a quedar**, sin salir: el editor por bloques enseña
     // cada bloque ya compuesto, pero solo de uno en uno; esto es la página
     // entera, seguida, como la verá quien la reciba.
-    var viendo by remember { mutableStateOf(false) }
+    // **Se abre mirando** (24-oct-2026, como todos los visores): una nota con algo escrito sale ya
+    // compuesta, y el lápiz del riel de la derecha pasa a escribir. Una nueva, o abierta desde un
+    // bloque concreto, empieza escribiendo.
+    var viendo by remember { mutableStateOf(inicial.isNotBlank() && desde < 0) }
+    val desplazado = rememberScrollState()
+    // Los marcadores de la nota, en fracción del alto: el formato del PC para notas y páginas.
+    var marcadores by remember { mutableStateOf(emptyList<com.forge.pixpin.motor.Lectura.Marcador>()) }
+    var poniendoMarca by remember { mutableStateOf(false) }
+    val archivoDeMarcas = comentarios?.archivoDeMarcas
+    LaunchedEffect(archivoDeMarcas) {
+        marcadores = archivoDeMarcas?.let { f ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.forge.pixpin.motor.Lectura.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(f))
+            }
+        } ?: emptyList()
+    }
+    val alcanceDeMarcas = rememberCoroutineScope()
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
     var viendoAdjuntar by remember { mutableStateOf(false) }
@@ -639,14 +657,7 @@ private fun Pantalla(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viendo = !viendo }) {
-                        Icon(
-                            if (viendo) Icons.Filled.Edit else Icons.Filled.Visibility,
-                            contentDescription = if (viendo) "Seguir escribiendo" else "Ver la nota",
-                            tint = if (viendo) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    // Ver y escribir van en el lápiz del riel de la derecha (24-oct-2026).
                     // Deshacer y rehacer arriba a la derecha, como su
                     // `historyButtons`. `pasos` está solo para que Compose sepa
                     // que hay que volver a mirar si están habilitados: el
@@ -726,10 +737,11 @@ private fun Pantalla(
                 .padding(hueco)
                 .imePadding()
         ) {
+            Box(Modifier.weight(1f)) {
             Box(
                 Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
+                    .fillMaxSize()
+                    .verticalScroll(desplazado)
                     .padding(16.dp)
             ) {
                 if (viendo) {
@@ -786,6 +798,27 @@ private fun Pantalla(
                     )
                     }
                 }
+            }
+            // **El riel de la derecha**: marcador y lápiz (mirar o escribir), como en los visores.
+            RielDelVisor(
+                poniendoMarca = poniendoMarca, anotando = !viendo, marcando = false,
+                onMarcador = if (archivoDeMarcas == null) null else ({ poniendoMarca = !poniendoMarca }),
+                onLapiz = { viendo = !viendo; poniendoMarca = false },
+                onMarco = null,
+                rotuloDelLapiz = if (viendo) "Escribir" else "Ver la nota",
+                marcas = if (viendo) marcadores.size else 0,
+                emojiDe = { i -> marcadores[i].emoji },
+                alElegirMarca = { i ->
+                    marcadores.getOrNull(i)?.let { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.fraccion * desplazado.maxValue).toInt()) } }
+                },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+            if (poniendoMarca) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarca = false }) { emoji ->
+                poniendoMarca = false
+                val f = if (desplazado.maxValue <= 0) 0f else desplazado.value.toFloat() / desplazado.maxValue
+                marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, f, emoji, System.currentTimeMillis())
+                archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, com.forge.pixpin.motor.Lectura.aTexto(marcadores)) }
+            }
             }
 
             if (!viendo) run {

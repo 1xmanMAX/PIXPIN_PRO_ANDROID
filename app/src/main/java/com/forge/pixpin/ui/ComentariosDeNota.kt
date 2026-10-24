@@ -37,7 +37,12 @@ import java.io.File
  * NOTA del chat o el `.md` de un mensaje (código del mensaje). Sin código —una nota suelta de un
  * pin—, la nota no se puede comentar: el archivo no tendría con qué viajar.
  */
-class ComentariosDeNota private constructor(private val archivo: File, private val quien: Comentarios.Quien) {
+class ComentariosDeNota private constructor(
+    private val archivo: File,
+    private val quien: Comentarios.Quien,
+    /** Los marcadores de la nota (`anot-<uid>.marcas`, `id:fracción:emoji`, como el PC): viajan con ella. */
+    val archivoDeMarcas: File? = null
+) {
 
     /** Lo que había en disco al abrir o tras el último guardado: la base para juntar. */
     private var base: Comentarios.Fichero = Comentarios.Fichero()
@@ -93,7 +98,10 @@ class ComentariosDeNota private constructor(private val archivo: File, private v
                 identidad?.nombre?.ifBlank { null } ?: android.os.Build.MODEL ?: "Teléfono",
                 Codigos.deEsteAparato(app.filesDir).orEmpty()
             )
-            return ComentariosDeNota(AnotacionesDelAdjunto.comentarios(app.filesDir, uid), quien)
+            return ComentariosDeNota(
+                AnotacionesDelAdjunto.comentarios(app.filesDir, uid), quien,
+                AnotacionesDelAdjunto.marcas(app.filesDir, AnotacionesDelAdjunto.delPdf(uid))
+            )
         }
 
         /** Bloque del editor → cuántos comentarios abiertos caen en él. */

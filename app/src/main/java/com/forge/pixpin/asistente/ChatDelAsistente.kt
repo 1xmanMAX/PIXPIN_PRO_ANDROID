@@ -112,7 +112,12 @@ object ChatDelAsistente {
     /** **El chat del asistente**, si ya hay uno (ver arriba el orden). */
     fun buscar(proyectos: List<Proyecto>, mensajes: List<Mensaje>): Proyecto? {
         val vivos = proyectos.filter { !it.archivado }
-        vivos.firstOrNull { it.asistente == true }?.let { return it }
+        // Con varios marcados (llegaron de dos aparatos antes de que el PC los junte), **el más
+        // antiguo**, por `creado` y luego por id: el mismo que elige el PC al unificarlos
+        // (`asistente_unico.rs`, 22-oct-2026), así ninguno escribe en el que va a desaparecer.
+        vivos.filter { it.asistente == true }
+            .minWithOrNull(compareBy<Proyecto>({ it.creado.coerceAtLeast(0) }, { it.id }))
+            ?.let { return it }
         val conIdsDelPc = mensajes.asSequence().filter { it.id in IDS_DEL_PC }.mapNotNull { it.proyecto }.toSet()
         vivos.firstOrNull { it.id in conIdsDelPc }?.let { return it }
         val conIa = mensajes.asSequence().filter { esRespuesta(it) }.mapNotNull { it.proyecto }.toSet()
