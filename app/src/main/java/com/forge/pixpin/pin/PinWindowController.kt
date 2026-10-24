@@ -4354,10 +4354,13 @@ class PinWindowController(
                 start()
             }
         }.getOrNull()
+        // Lo grabado bajito, más alto (24-oct-2026): ver `RealceAlOir`.
+        reproductor?.let { com.forge.pixpin.audio.RealceAlOir.enganchar(it, ruta) }
         sonando.value = reproductor != null
     }
 
     private fun pararLaNota() {
+        com.forge.pixpin.audio.RealceAlOir.soltar(reproductor)
         runCatching { reproductor?.stop() }
         runCatching { reproductor?.release() }
         reproductor = null

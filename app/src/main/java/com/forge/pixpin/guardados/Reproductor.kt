@@ -73,6 +73,8 @@ object Reproductor {
             }
         }.getOrNull() ?: return
         reproductor = p
+        // Lo grabado bajito se oye más alto (24-oct-2026, como el PC): ver [RealceAlOir].
+        com.forge.pixpin.audio.RealceAlOir.enganchar(p, ruta)
         val velocidad = estado.value.velocidad
         estado.value = Estado(ruta, titulo, false, 0, runCatching { p.duration }.getOrDefault(0), velocidad)
         if (arrancar) seguir()
@@ -100,6 +102,7 @@ object Reproductor {
     /** Descarga lo que hubiera: la barra desaparece. */
     fun parar() {
         reloj.removeCallbacks(latido)
+        com.forge.pixpin.audio.RealceAlOir.soltar(reproductor)
         runCatching { reproductor?.release() }
         reproductor = null
         estado.value = Estado(velocidad = estado.value.velocidad)

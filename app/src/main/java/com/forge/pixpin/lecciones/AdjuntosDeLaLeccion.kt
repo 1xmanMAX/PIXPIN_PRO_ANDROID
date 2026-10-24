@@ -38,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.forge.pixpin.audio.RealceAlOir
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.guardados.MensajesStore
@@ -105,8 +106,8 @@ fun AdjuntosDeLaLeccion(
     // Un solo reproductor para toda la tira.
     var sonando by remember { mutableStateOf<String?>(null) }
     val reproductor = remember { arrayOfNulls<MediaPlayer>(1) }
-    DisposableEffect(Unit) { onDispose { runCatching { reproductor[0]?.release() } } }
-    fun pararDeSonar() { runCatching { reproductor[0]?.release() }; reproductor[0] = null; sonando = null }
+    DisposableEffect(Unit) { onDispose { RealceAlOir.soltar(reproductor[0]); runCatching { reproductor[0]?.release() } } }
+    fun pararDeSonar() { RealceAlOir.soltar(reproductor[0]); runCatching { reproductor[0]?.release() }; reproductor[0] = null; sonando = null }
 
     // Grabar aquí mismo, sin salir de la hoja.
     var grabador by remember { mutableStateOf<com.forge.pixpin.audio.Grabador?>(null) }
@@ -140,10 +141,12 @@ fun AdjuntosDeLaLeccion(
     }
 
     fun tocar(m: Mensaje) {
-        runCatching { reproductor[0]?.release() }; reproductor[0] = null
+        RealceAlOir.soltar(reproductor[0]); runCatching { reproductor[0]?.release() }; reproductor[0] = null
         if (sonando == m.id) { sonando = null; return }
         val p = runCatching { MediaPlayer().apply { setDataSource(m.ruta); prepare(); start() } }.getOrNull() ?: return
         p.setOnCompletionListener { sonando = null }
+        // Lo grabado bajito, más alto (24-oct-2026): ver [RealceAlOir].
+        m.ruta?.let { RealceAlOir.enganchar(p, it) }
         reproductor[0] = p; sonando = m.id
     }
 

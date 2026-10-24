@@ -519,7 +519,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
     var sonando by remember(medio.ruta) { mutableStateOf(false) }
     val reproductor = remember(medio.ruta) { arrayOfNulls<android.media.MediaPlayer>(1) }
     androidx.compose.runtime.DisposableEffect(medio.ruta) {
-        onDispose { runCatching { reproductor[0]?.release() }; reproductor[0] = null }
+        onDispose { com.forge.pixpin.audio.RealceAlOir.soltar(reproductor[0]); runCatching { reproductor[0]?.release() }; reproductor[0] = null }
     }
     // Solo donde se lee la nota de verdad: en la vista previa de un proyecto la tarjeta
     // se llevaba el toque —y la pulsación larga— y no se podía abrir ni elegir la hoja.
@@ -542,6 +542,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
                 else Modifier.clickable {
                     val actual = reproductor[0]
                     if (sonando && actual != null) {
+                        com.forge.pixpin.audio.RealceAlOir.soltar(actual)
                         runCatching { actual.stop(); actual.release() }
                         reproductor[0] = null
                         sonando = false
@@ -552,7 +553,11 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
                                 setOnCompletionListener { sonando = false }
                                 prepare(); start()
                             }
-                        }.getOrNull()?.let { reproductor[0] = it; sonando = true }
+                        }.getOrNull()?.let {
+                            // Lo grabado bajito, más alto (24-oct-2026): ver `RealceAlOir`.
+                            com.forge.pixpin.audio.RealceAlOir.enganchar(it, medio.ruta)
+                            reproductor[0] = it; sonando = true
+                        }
                     }
                 }
             )
