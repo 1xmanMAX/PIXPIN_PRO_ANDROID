@@ -33,7 +33,18 @@ object HerramientasPorSitio {
         LIENZO("lienzo", "Lienzo"),
         LECTOR("lector", "Lector"),
         /** El visor de planos DWG/DXF (9-oct-2026): anotar encima del plano. */
-        PLANO("plano", "Plano");
+        PLANO("plano", "Plano"),
+        /**
+         * **Uno por formato** (24-oct-2026, el usuario: «en configuración se debería poder configurar
+         * según cada tipo de formato qué herramientas quiero mantener»). Mientras nadie los toque
+         * llevan lo mismo que el lector ([heredaDe]); en cuanto se cambia uno, va por su cuenta.
+         */
+        PDF("pdf", "PDF"),
+        DOCUMENTO("documento", "Word y libros"),
+        HOJA("hoja", "Excel");
+
+        /** Un sitio por formato, que hereda la barra del lector mientras no se toque. */
+        val esFormato: Boolean get() = this == PDF || this == DOCUMENTO || this == HOJA
 
         val porDefecto: Set<Tool>
             get() = when (this) {
@@ -42,6 +53,7 @@ object HerramientasPorSitio {
                 LIENZO -> ALL_TOOLS.toSet()
                 LECTOR -> LECTOR_TOOLS_POR_DEFECTO
                 PLANO -> PLANO_TOOLS_POR_DEFECTO
+                PDF, DOCUMENTO, HOJA -> LECTOR_TOOLS_POR_DEFECTO
             }
     }
 

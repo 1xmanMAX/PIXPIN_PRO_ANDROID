@@ -125,6 +125,22 @@ object CatalogoDeAjustes {
             "Las de anotar encima de un plano DWG o DXF. La cota del motor viene apagada: el plano tiene la suya.",
             "plano", "dwg dxf autocad cad anotar"
         ),
+        // **Una barra por formato** (24-oct-2026): mientras no se toquen, las del lector.
+        opcionDeBarra(
+            Sitio.PDF, "Barra del PDF",
+            "Las de anotar un PDF. Sin tocar, las mismas que el lector.",
+            "formato_pdf", "pdf anotar formato"
+        ),
+        opcionDeBarra(
+            Sitio.DOCUMENTO, "Barra de Word y libros",
+            "Las de anotar un Word, un PowerPoint o un libro EPUB. Sin tocar, las mismas que el lector.",
+            "formato_documento", "word docx epub libro powerpoint anotar formato"
+        ),
+        opcionDeBarra(
+            Sitio.HOJA, "Barra de Excel",
+            "Las de anotar encima de una hoja de cálculo. Sin tocar, las mismas que el lector.",
+            "formato_hoja", "excel xlsx hoja calculo anotar formato"
+        ),
         Opcion(
             "editor-plano", Seccion.DIBUJAR, "Editor del plano",
             "Al anotar un plano DWG o DXF: el editor avanzado (estilo en el lateral, deshacer y rehacer) o el sencillo.",
@@ -182,6 +198,7 @@ object CatalogoDeAjustes {
             Sitio.LIENZO -> s.editorGroups
             Sitio.LECTOR -> s.lectorGroups
             Sitio.PLANO -> s.planoGroups
+            Sitio.PDF, Sitio.DOCUMENTO, Sitio.HOJA -> s.formatoGroups[sitio.nombre] ?: s.lectorGroups
         }
         // Lo que lleva la barra, sin restar la lista general: apagar una en todos no es tocar esta.
         gruposDe(grupos, s.sitioGuardado(sitio))

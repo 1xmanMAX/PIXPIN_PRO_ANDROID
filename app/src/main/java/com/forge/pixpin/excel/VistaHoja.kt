@@ -310,7 +310,81 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             if (y < height) canvas.drawRect(cabAncho, y - 1f, width.toFloat(), y, relleno)
         }
         pintarSeleccion(canvas, g)
+        pintarMarcosNumerados(canvas)
         pintarEncabezados(canvas, g)
+    }
+
+    // ---- **Los marcos numerados** (24-oct-2026, como `visor_hoja/marcos.rs` del PC) ----
+    // En píxeles de la hoja al 100 % y con `parte` = la hoja (desde 0). Se pintan aquí, con la
+    // hoja, y no en una capa encima: así van con ella en el mismo fotograma al desplazarla.
+
+    /** Los marcos del libro (todas las hojas); los de esta se pintan. */
+    var marcos: () -> List<com.forge.pixpin.motor.MarcosDelDocumento.Marco> = { emptyList() }
+    /** Al imprimirlos, sin raya ni número. */
+    var marcosOcultos = false
+    private val pinturaDeMarco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = com.forge.pixpin.motor.MarcosDelDocumento.AZUL }
+    private val numeroDeMarco = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+
+    /** Píxeles de pantalla por píxel de la hoja. */
+    val escala: Double get() = e.toDouble()
+
+    /** Un punto de la hoja (px al 100 %) en la vista, por el panel que se desplaza. */
+    fun aVista(x: Double, y: Double): android.graphics.PointF? {
+        val g = hoja?.geo ?: return null
+        val e = e
+        val anchoFijo = min(g.x(g.columnasFijas) * e, (width - cabAncho).coerceAtLeast(0f))
+        val altoFijo = min(g.y(g.filasFijas) * e, (height - cabAlto).coerceAtLeast(0f))
+        val ox = max(est.x, g.x(g.columnasFijas).toDouble())
+        val oy = max(est.y, g.y(g.filasFijas).toDouble())
+        return android.graphics.PointF((cabAncho + anchoFijo + (x - ox) * e).toFloat(), (cabAlto + altoFijo + (y - oy) * e).toFloat())
+    }
+
+    /** Y al revés: el punto de la hoja bajo un punto de la vista. */
+    fun deVista(px: Float, py: Float): DoubleArray? {
+        val g = hoja?.geo ?: return null
+        val e = e.toDouble()
+        val anchoFijo = min(g.x(g.columnasFijas) * e, (width - cabAncho).coerceAtLeast(0f).toDouble())
+        val altoFijo = min(g.y(g.filasFijas) * e, (height - cabAlto).coerceAtLeast(0f).toDouble())
+        val ox = max(est.x, g.x(g.columnasFijas).toDouble())
+        val oy = max(est.y, g.y(g.filasFijas).toDouble())
+        return doubleArrayOf(ox + (px - cabAncho - anchoFijo) / e, oy + (py - cabAlto - altoFijo) / e)
+    }
+
+    /** Mira desde ([x], [y]) de la hoja con el aumento [z] (las vistas de los marcadores y los marcos). */
+    fun mirarDesde(x: Double, y: Double, z: Double) {
+        est.zoom = z.coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
+        est.x = x; est.y = y; est.iniciado = true
+        acotar()
+        invalidate()
+        alCambiar?.invoke()
+    }
+
+    /** Lo que ocupa la zona de las celdas, para encajar un marco. */
+    val anchoDeCeldas: Float get() = (width - cabAncho).coerceAtLeast(1f)
+    val altoDeCeldas: Float get() = (height - cabAlto).coerceAtLeast(1f)
+
+    private fun pintarMarcosNumerados(canvas: Canvas) {
+        if (marcosOcultos) return
+        val lista = marcos()
+        if (lista.isEmpty()) return
+        val yo = indice
+        canvas.save()
+        canvas.clipRect(cabAncho, cabAlto, width.toFloat(), height.toFloat())
+        pinturaDeMarco.strokeWidth = 2f * densidad
+        numeroDeMarco.textSize = 12f * densidad
+        lista.forEachIndexed { i, m ->
+            if (m.parte != yo) return@forEachIndexed
+            val a = aVista(m.x0, m.y0) ?: return@forEachIndexed
+            val b = aVista(m.x1, m.y1) ?: return@forEachIndexed
+            pinturaDeMarco.style = Paint.Style.STROKE
+            canvas.drawRect(a.x, a.y, b.x, b.y, pinturaDeMarco)
+            val n = (i + 1).toString()
+            val w = numeroDeMarco.measureText(n)
+            pinturaDeMarco.style = Paint.Style.FILL
+            canvas.drawRect(a.x, a.y, a.x + w + 12 * densidad, a.y + 20 * densidad, pinturaDeMarco)
+            canvas.drawText(n, a.x + 6 * densidad, a.y + 14.5f * densidad, numeroDeMarco)
+        }
+        canvas.restore()
     }
 
     /** Pide los trozos que se ven y uno más por cada lado (al desplazar ya están). */

@@ -1,5 +1,9 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.ui.layout.boundsInWindow
+
+import androidx.compose.ui.layout.onGloballyPositioned
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -304,6 +308,26 @@ class VisorHtmlActivity : ComponentActivity() {
      */
     private var baseDelMensaje: String? = null
     private val elDocumento: File? get() = comparte ?: elOriginal
+
+    /**
+     * **Los marcos numerados** (24-oct-2026, como el PC): en píxeles CSS del documento, en
+     * `anot-<uid>.marcos.json` si es del chat. Ver [MarcosDelVisor] y [CapaDeMarcos].
+     */
+    private var marcosDoc by mutableStateOf(MarcosDelVisor(null))
+    private var cajaDelVisor = androidx.compose.ui.geometry.Rect.Zero
+
+    /** Lleva la vista a un marco: acercada hasta llenarla (lo que deje el `WebView`) y con él arriba a la izquierda. */
+    @Suppress("DEPRECATION")
+    private suspend fun irAlMarco(m: com.forge.pixpin.motor.MarcosDelDocumento.Marco) {
+        val vista = web ?: return
+        val quiere = com.forge.pixpin.motor.MarcosDelDocumento.pxParaLlenar(m, vista.width.toDouble(), vista.height.toDouble()).toFloat()
+        val factor = (quiere / vista.scale.coerceAtLeast(0.01f)).coerceIn(0.02f, 50f)
+        if (kotlin.math.abs(factor - 1f) > 0.02f) { vista.zoomBy(factor); kotlinx.coroutines.delay(250) }
+        val e = vista.scale.coerceAtLeast(0.01f)
+        val aire = ((vista.width - m.ancho * e) / 2).coerceAtLeast(0.0)
+        val aireY = ((vista.height - m.alto * e) / 2).coerceAtLeast(0.0)
+        vista.scrollTo((m.x0 * e - aire).toInt().coerceAtLeast(0), (m.y0 * e - aireY).toInt().coerceAtLeast(0))
+    }
 
     /** La columna fijada, la letra con que se fijó y los espacios, a su sitio. */
     private fun guardarLaMaqueta() {
@@ -1040,6 +1064,13 @@ class VisorHtmlActivity : ComponentActivity() {
         escucharAlCargar = intent?.getBooleanExtra(EXTRA_ESCUCHAR, false) == true
         hojaPedida = intent?.getIntExtra(EXTRA_DESDE_HOJA, 0) ?: 0
         elOriginal = File(ruta)
+        // **Una página web del chat también lleva marcadores y marcos** (como el PC, `visor_html/riel.rs`):
+        // los marcadores en fracción del alto (`anot-<uid>.marcas`), los marcos en píxeles CSS.
+        if (!esDocumento) elDocumento?.let { d ->
+            baseDelMensaje = ExportarDocumentoAnotado.baseDe(this, d)
+            marcadores = com.forge.pixpin.motor.Lectura.deTexto(ExportarDocumentoAnotado.marcadores(this, d, baseDelMensaje))
+            marcosDoc = MarcosDelVisor(baseDelMensaje?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it) })
+        }
         if (esDocumento) {
             tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
             grosorDeLetra = prefsDeLectura.getInt("grosor", 1)
@@ -1049,6 +1080,7 @@ class VisorHtmlActivity : ComponentActivity() {
             marcadores = com.forge.pixpin.motor.Lectura.deTexto(doc?.let { ExportarDocumentoAnotado.marcadores(this, it, baseDelMensaje) })
             // Y se vuelve a donde se dejó de leer.
             fraccionPendiente = doc?.let { ExportarDocumentoAnotado.sitioDe(this, it, baseDelMensaje) } ?: -1f
+            marcosDoc = MarcosDelVisor(baseDelMensaje?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it) })
             // **Un documento anotado conserva su letra y su columna**, las de cuando se anotó
             // —aquí o en el otro aparato, que la tinta sin su columna caería en otro sitio—.
             sinLado = prefsDeLectura.getBoolean("sinLado", false)
@@ -1186,10 +1218,41 @@ class VisorHtmlActivity : ComponentActivity() {
                         if (esDocumento && columnaDeAnotar != null) CapaDeAnotar()
                     }
                 }
+                if (pagina != null && !anotando && !presentando && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) {
+                    CapaDeMarcos(
+                        marcosDoc,
+                        aPantalla = { x, y, _ ->
+                            val e = escalaWeb.coerceAtLeast(0.01f)
+                            androidx.compose.ui.geometry.Offset((x * e - corridoX).toFloat(), (y * e - corridoY).toFloat())
+                        },
+                        aDocumento = { o ->
+                            val e = escalaWeb.coerceAtLeast(0.01f)
+                            PuntoDelDocumento(((o.x + corridoX) / e).toDouble(), ((o.y + corridoY) / e).toDouble())
+                        },
+                        pxPorUnidad = { escalaWeb.toDouble() },
+                        alIr = { m -> lifecycleScope.launch { irAlMarco(m) } },
+                        alImprimir = {
+                            lifecycleScope.launch {
+                                ImprimirMarcos.imprimir(
+                                    this@VisorHtmlActivity, marcosDoc, sinExtension(nombre),
+                                    ir = { m -> irAlMarco(m) },
+                                    cajaEnVentana = { m ->
+                                        val e = escalaWeb.coerceAtLeast(0.01f)
+                                        androidx.compose.ui.geometry.Rect(
+                                            (m.x0 * e - corridoX).toFloat(), (m.y0 * e - corridoY).toFloat(),
+                                            (m.x1 * e - corridoX).toFloat(), (m.y1 * e - corridoY).toFloat()
+                                        ).translate(cajaDelVisor.topLeft)
+                                    }
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDelVisor = it.boundsInWindow() }
+                    )
+                }
                 if (esDocumento && anotando) MandosDeAnotar()
                 if (esDocumento) BucleDeAutoDesplazar()
                 if (!presentando) androidx.compose.animation.AnimatedVisibility(
-                    visible = aLaVista && !anotando,
+                    visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
                     enter = androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.fadeOut(),
                     modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
@@ -1233,13 +1296,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         // botones van con la pastilla: salen al tocar y se van al mover.
                         if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
                         else {
-                            // **Anotar**: una capa del motor del lienzo encima del documento. Ver [CapaDeAnotar].
-                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.Edit, contentDescription = "Anotar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
-                            IconButton(onClick = { poniendoMarcador = true; conLaLetra = false }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.BookmarkAdd, contentDescription = "Marcador aquí", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                            }
+                            // El lápiz (anotar) y el marcador van en el riel de la derecha, como en el PC. Ver [RielDelVisor].
                             // **Escuchar**: la voz de Google del teléfono lee desde lo que asoma arriba. Ver [empezarAEscuchar].
                             IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAEscuchar() }, modifier = Modifier.size(38.dp)) {
                                 Icon(Icons.Filled.RecordVoiceOver, contentDescription = "Escuchar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
@@ -1257,8 +1314,32 @@ class VisorHtmlActivity : ComponentActivity() {
                         }
                     }
                 }
+                // **El riel de la derecha** (24-oct-2026, como el PC): marcador, lápiz y marco, y los
+                // marcadores debajo. Una página web no se anota aquí (su tinta va en la página del PC).
+                if (!presentando && !marcosDoc.imprimiendo && pagina != null) {
+                    val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
+                    RielDelVisor(
+                        poniendoMarca = poniendoMarcador, anotando = anotando, marcando = marcosDoc.activo,
+                        onMarcador = if (elDocumento == null) null else ({
+                            if (anotando) salir()
+                            marcosDoc.activo = false; conLaLetra = false; poniendoMarcador = !poniendoMarcador
+                        }),
+                        onLapiz = if (!esDocumento) null else ({
+                            if (anotando) salir()
+                            else { marcosDoc.activo = false; conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }
+                        }),
+                        onMarco = { if (anotando) salir(); poniendoMarcador = false; marcosDoc.alternar() },
+                        marcas = if (anotando) 0 else lista.size, emojiDe = { i -> lista[i].emoji },
+                        alElegirMarca = { i -> lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) } },
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    )
+                }
+                if (!esDocumento && poniendoMarcador) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarcador = false }) { emoji ->
+                    poniendoMarcador = false
+                    marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
+                    guardarMarcadores()
+                }
                 if (esDocumento && !presentando && !anotando) {
-                    LateralDeMarcadores(Modifier.align(Alignment.CenterEnd))
                     RielDeLectura(Modifier.align(Alignment.CenterStart))
                     if (compartiendo) {
                         val original = comparte ?: elOriginal
@@ -1466,8 +1547,9 @@ class VisorHtmlActivity : ComponentActivity() {
                     onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
                     canUndo = laCapa.canUndo,
                     onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
-                    permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                    grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                    // La barra de este formato (24-oct-2026): sin tocar, la del lector.
+                            permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
                 )
             }
         }
@@ -1522,20 +1604,6 @@ class VisorHtmlActivity : ComponentActivity() {
                 corridoDelAumento = androidx.compose.ui.geometry.Offset(movido.x.coerceIn(-topeX, topeX), movido.y.coerceIn(-topeY, topeY))
                 if (!anotando) e.changes.forEach { if (it.pressed) it.consume() }
             }
-        }
-    }
-
-    /**
-     * Los marcadores del documento, en el riel común de toda la aplicación: el mismo que llevan
-     * el lienzo 2D y el lector de PDF. Ver [com.forge.pixpin.ui.RielDeMarcas].
-     */
-    @Composable
-    private fun LateralDeMarcadores(modifier: Modifier) {
-        // Los del usuario y, entre ellos, **el verde de donde se dejó de escuchar**.
-        val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
-        if (lista.isEmpty()) return
-        RielDeMarcas(lista.size, { i -> lista[i].emoji }, modifier) { i ->
-            lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) }
         }
     }
 

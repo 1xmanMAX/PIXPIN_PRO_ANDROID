@@ -521,6 +521,9 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             "barra-pantalla" -> BarraDeLaCapaCard()
             "barra-lector" -> BarraDelLectorCard()
             "barra-plano" -> BarraDelPlanoCard()
+            "barra-pdf" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF, "Barra del PDF", "Las herramientas al anotar un PDF. Sin tocar, las del lector.")
+            "barra-documento" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO, "Barra de Word y libros", "Las herramientas al anotar un Word, un PowerPoint o un libro. Sin tocar, las del lector.")
+            "barra-hoja" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA, "Barra de Excel", "Las herramientas al anotar una hoja de cálculo. Sin tocar, las del lector.")
             "editor-plano" -> EditorDelPlanoCard()
             "palabras" -> PalabrasMagicasCard()
             "voz" -> MotorDeVozCard()
@@ -819,6 +822,22 @@ private fun BarraDelPlanoCard() {
     )
 }
 
+/** **La barra de un formato** (PDF, Word y libros, Excel; 24-oct-2026): como las demás, arrastrando. */
+@Composable
+private fun BarraDeFormatoCard(sitio: com.forge.pixpin.motor.HerramientasPorSitio.Sitio, titulo: String, descripcion: String) {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+    BarraCard(
+        titulo = titulo,
+        descripcion = descripcion,
+        grupos = settings.formatoGroupList(sitio),
+        puestas = settings.formatoToolSet(sitio),
+        onCambio = { grupos -> guardarBarra(app, scope, settings, sitio, grupos) }
+    )
+}
+
 /** Con qué editor se anota un plano: el avanzado (de fábrica) o el sencillo. */
 @Composable
 private fun EditorDelPlanoCard() {
@@ -891,14 +910,23 @@ private fun BarraCard(
     grupos: List<List<com.forge.pixpin.motor.Tool>>,
     puestas: Set<com.forge.pixpin.motor.Tool>,
     onCambio: (List<List<com.forge.pixpin.motor.Tool>>) -> Unit
+) = BarraCard(stringResource(titulo), stringResource(descripcion), grupos, puestas, onCambio)
+
+@Composable
+private fun BarraCard(
+    titulo: String,
+    descripcion: String,
+    grupos: List<List<com.forge.pixpin.motor.Tool>>,
+    puestas: Set<com.forge.pixpin.motor.Tool>,
+    onCambio: (List<List<com.forge.pixpin.motor.Tool>>) -> Unit
 ) {
     val fuera = com.forge.pixpin.motor.ALL_TOOLS.filter { it !in puestas }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text(stringResource(titulo), style = MaterialTheme.typography.titleSmall)
+            Text(titulo, style = MaterialTheme.typography.titleSmall)
             Text(
-                stringResource(descripcion),
+                descripcion,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
