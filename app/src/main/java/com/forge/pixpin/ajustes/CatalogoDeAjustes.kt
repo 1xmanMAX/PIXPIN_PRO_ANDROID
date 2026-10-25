@@ -176,9 +176,9 @@ object CatalogoDeAjustes {
         ) { it.palabras },
         Opcion(
             "voz", Seccion.VOZ, "Motor de voz",
-            "Con qué se pasan los audios a texto (Google, Vosk o Whisper), en qué idioma y el segundo idioma.",
+            "Con qué se pasan los audios a texto (Google, Vosk, Whisper o Qwen3-ASR), en qué idioma y el segundo idioma.",
             listOf("motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas"),
-            "transcribir audio whisper vosk google idioma modelo"
+            "transcribir audio whisper vosk google qwen qwen3 asr idioma modelo clase reunion"
         ) { listOf(it.motorDeVoz, it.idiomaDeVoz, it.segundoIdiomaDeVoz, it.modeloWhisper, it.modoDeIdiomas) },
         Opcion(
             "asistente", Seccion.ASISTENTE, "Asistente",

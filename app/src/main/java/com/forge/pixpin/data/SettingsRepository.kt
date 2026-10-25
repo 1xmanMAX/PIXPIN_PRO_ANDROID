@@ -174,7 +174,14 @@ data class Settings(
     val modoNoche: ModoNoche = ModoNoche.COSMOS,
 
 
-    /** Con qué se pasan a texto los audios: [MOTOR_VOSK] (rápido, 38 MB) o [MOTOR_WHISPER] (más fino, 105 MB). */
+    /**
+     * Con qué se pasan a texto los audios: [MOTOR_VOSK] (rápido, 38 MB), [MOTOR_WHISPER] (más
+     * fino, 105 MB), [MOTOR_GOOGLE] o [MOTOR_QWEN3].
+     *
+     * **[MOTOR_QWEN3]** (25-oct-2026, `[voz] motor = "qwen3"` del PC): Qwen3-ASR-0.6B, que se baja
+     * aparte (988 MB) solo al elegirlo y solo se ofrece con 6 GB de memoria o más. Sin bajar, o si
+     * falla, se pasa con Whisper. Es de este teléfono: los ajustes no se sincronizan.
+     */
     val motorDeVoz: String = MOTOR_VOSK,
 
     /**
@@ -946,6 +953,8 @@ enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO, COSMOS }
 const val MOTOR_VOSK = "vosk"
 const val MOTOR_WHISPER = "whisper"
 const val MOTOR_GOOGLE = "google"
+/** Qwen3-ASR-0.6B, con Whisper de reserva. Ver [com.forge.pixpin.guardados.qwen3.MotorQwen3]. */
+const val MOTOR_QWEN3 = "qwen3"
 /** Whisper con dos idiomas: cada trozo en el idioma en que se dijo. */
 const val MODO_CADA_IDIOMA = "cada_uno"
 /** Whisper: todo en el primer idioma, traducido lo que se dijo en el otro. */

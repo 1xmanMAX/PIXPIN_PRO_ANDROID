@@ -137,4 +137,8 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     // Para probar el andamiaje de las ventanas overlay (vistas reales, sin dispositivo)
     testImplementation("org.robolectric:robolectric:4.15.1")
+    // **La JNA de escritorio, solo para las pruebas** (25-oct-2026): el AAR de arriba trae el
+    // `libjnidispatch.so` de los teléfonos; el jar, el de esta máquina. Con él, Qwen3DeVerdadTest
+    // corre Qwen3-ASR entero por el mismo OrtPorJna que el teléfono, con un libonnxruntime.so de aquí.
+    testImplementation("net.java.dev.jna:jna:5.13.0")
 }

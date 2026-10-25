@@ -1091,7 +1091,7 @@ private fun MotorDeVozCard() {
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 androidx.compose.material3.FilterChip(
                     selected = settings.motorDeVoz == com.forge.pixpin.data.MOTOR_GOOGLE,
-                    onClick = { scope.launch { app.settings.setMotorDeVoz(com.forge.pixpin.data.MOTOR_GOOGLE) } },
+                    onClick = { com.forge.pixpin.guardados.qwen3.MotorQwen3.Descarga.cancelar(); scope.launch { app.settings.setMotorDeVoz(com.forge.pixpin.data.MOTOR_GOOGLE) } },
                     label = { Text(stringResource(R.string.motor_voz_google)) }
                 )
                 Spacer(Modifier.width(10.dp))
@@ -1117,7 +1117,7 @@ private fun MotorDeVozCard() {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.FilterChip(
                         selected = settings.motorDeVoz == motor,
-                        onClick = { scope.launch { app.settings.setMotorDeVoz(motor) } },
+                        onClick = { com.forge.pixpin.guardados.qwen3.MotorQwen3.Descarga.cancelar(); scope.launch { app.settings.setMotorDeVoz(motor) } },
                         label = { Text(texto) }
                     )
                     Spacer(Modifier.width(10.dp))
@@ -1137,6 +1137,7 @@ private fun MotorDeVozCard() {
                     }
                 }
             }
+            Qwen3Asr(settings.motorDeVoz == com.forge.pixpin.data.MOTOR_QWEN3, version) { scope.launch { app.settings.setMotorDeVoz(com.forge.pixpin.data.MOTOR_QWEN3) } }
             // **El tamaño de Whisper**: tiny, base o small. Cada uno se baja aparte.
             Text(stringResource(R.string.motor_voz_tamano_whisper), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1202,6 +1203,70 @@ private fun MotorDeVozCard() {
             TextButton(onClick = { com.forge.pixpin.guardados.MotorWhisper.enlaces(modeloWhisper).forEach { abrir(it) } }) { Text(stringResource(R.string.motor_voz_enlace_whisper, modeloWhisper)) }
             TextButton(onClick = { importar.launch(arrayOf("*/*")) }) { Text(stringResource(R.string.motor_voz_importar)) }
             TextButton(onClick = { abrir("https://alphacephei.com/vosk/models") }) { Text(stringResource(R.string.motor_voz_enlace)) }
+        }
+    }
+}
+
+/**
+ * **Qwen3-ASR en Ajustes › Voz** (25-oct-2026, Ajustes › Voz del PC): elegirlo empieza a bajarlo
+ * (988 MB, con el sha256 de cada fichero), con su avance en la propia fila; volver a otro motor lo
+ * corta. La línea de debajo dice lo que pesa, la memoria que pide y su licencia, o el avance, o el
+ * fallo. «Borrar» quita lo bajado. Solo se puede elegir en teléfonos de 64 bits con 6 GB o más
+ * ([com.forge.pixpin.guardados.qwen3.MotorQwen3.seOfrece]); en los demás se dice por qué no. Mientras
+ * no esté bajado, las notas van con Whisper.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun Qwen3Asr(elegido: Boolean, version: Int, elegir: () -> Unit) {
+    val context = LocalContext.current
+    val q = com.forge.pixpin.guardados.qwen3.MotorQwen3
+    val bajada = com.forge.pixpin.guardados.qwen3.MotorQwen3.Descarga
+    val cat = com.forge.pixpin.guardados.qwen3.CatalogoQwen3
+    val seOfrece = remember { q.seOfrece(context) }
+    val descarga by bajada.estado.collectAsState()
+    val carpeta = remember { q.carpeta(context) }
+    val listo = remember(descarga.vuelta, version) { q.modeloListo(carpeta) }
+    val algo = remember(descarga.vuelta, version) { q.algoBajado(carpeta) }
+    val megas = remember(descarga.vuelta, version) { q.megasABajar(carpeta) }
+    val ram = String.format(java.util.Locale.ROOT, "%.1f", cat.MEGAS_DE_RAM / 1000f).replace('.', ',')
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.FilterChip(
+            selected = elegido,
+            enabled = seOfrece,
+            onClick = { elegir(); if (!listo) bajada.empezar(context) },
+            label = { Text(stringResource(R.string.motor_voz_qwen3, cat.megas().toInt())) }
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            when {
+                descarga.bajando -> stringResource(R.string.motor_voz_descargando, (descarga.avance * 100).toInt())
+                listo -> stringResource(R.string.motor_voz_descargado)
+                else -> stringResource(R.string.motor_voz_sin_descargar)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+    }
+    val fallo = descarga.fallo
+    Text(
+        when {
+            descarga.bajando -> stringResource(R.string.motor_voz_qwen3_bajando, (descarga.avance * 100).toInt())
+            fallo != null -> stringResource(R.string.motor_voz_qwen3_fallo, fallo)
+            !seOfrece -> stringResource(R.string.motor_voz_qwen3_sin_memoria)
+            listo && elegido -> stringResource(R.string.motor_voz_qwen3_listo, cat.megas().toInt(), cat.LICENCIA, ram)
+            listo -> stringResource(R.string.motor_voz_qwen3_sin_elegir)
+            else -> stringResource(R.string.motor_voz_qwen3_desc, megas.toInt(), ram, cat.LICENCIA)
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TextButton(onClick = {
+            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(cat.ENLACE_LICENCIA))) }
+        }) { Text(stringResource(R.string.motor_voz_qwen3_ficha)) }
+        if (algo || descarga.bajando) {
+            TextButton(onClick = { bajada.borrar(context) }) { Text(stringResource(R.string.motor_voz_qwen3_borrar)) }
         }
     }
 }

@@ -225,7 +225,7 @@ object Transcriptor {
         }
     }
 
-    /** Un PCM entero por el motor que haya elegido el usuario: Google, Vosk o Whisper. */
+    /** Un PCM entero por el motor que haya elegido el usuario: Google, Vosk, Whisper o Qwen3-ASR (con Whisper de reserva). */
     private fun reconocerPcm(context: Context, pcm: File, idioma: String, avance: (Float) -> Unit): Resultado {
         run {
             val motor = ajustes(context)?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_VOSK
@@ -238,12 +238,20 @@ object Transcriptor {
                 }
                 MotorGoogle.reconocer(context, pcm, etiqueta) { avance(0.1f + 0.9f * it) }
                     ?: return Resultado.Fallo(FALLO_INTERNO, "el reconocedor de Google no contestó")
-            } else if (motor == com.forge.pixpin.data.MOTOR_WHISPER) {
-                if (!MotorWhisper.soportado()) return Resultado.Fallo(SIN_MOTOR)
-                if (!MotorWhisper.modeloListo(context)) {
-                    MotorWhisper.asegurarModelo(context) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
+            } else if (motor == com.forge.pixpin.data.MOTOR_WHISPER || motor == com.forge.pixpin.data.MOTOR_QWEN3) {
+                // **Qwen3-ASR, si se eligió y toca** (25-oct-2026, docs/voz-qwen3.md del PC): bajado,
+                // en un teléfono de 6 GB o más y con un idioma que sabe. Si no toca, o falla, Whisper,
+                // que es el de reserva. Si Qwen3-ASR va a transcribir, no se baja Whisper.
+                val deQwen3 = if (motor == com.forge.pixpin.data.MOTOR_QWEN3)
+                    com.forge.pixpin.guardados.qwen3.MotorQwen3.reconocerSiToca(context, pcm, idioma, segundoIdioma(context), todoEnUno(context)) { avance(0.05f + 0.95f * it) }
+                else null
+                deQwen3 ?: run {
+                    if (!MotorWhisper.soportado()) return Resultado.Fallo(SIN_MOTOR)
+                    if (!MotorWhisper.modeloListo(context)) {
+                        MotorWhisper.asegurarModelo(context) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
+                    }
+                    MotorWhisper.reconocer(context, pcm, idioma, segundoIdioma(context), todoEnUno(context)) { avance(0.35f + 0.65f * it) }
                 }
-                MotorWhisper.reconocer(context, pcm, idioma, segundoIdioma(context), todoEnUno(context)) { avance(0.35f + 0.65f * it) }
             } else {
                 if (!MotorVosk.modeloListo(context, idioma)) {
                     MotorVosk.asegurarModelo(context, idioma) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma

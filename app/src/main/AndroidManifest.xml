@@ -18,6 +18,10 @@
     <!-- «Grabar clase»: el micrófono sigue abierto mientras se está en Meet o en las
          diapositivas. Ver guardados/GrabarClaseService.kt. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Qwen3-ASR (25-oct-2026): pasar una grabación a texto (mediaProcessing, Android 15) y bajar el
+         modelo (dataSync) en un servicio en primer plano. Ver guardados/PasarATextoService.kt. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <!-- Solo para bajar el modelo de voz de Vosk (unos 40 MB) la primera vez. Ver MotorVosk. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Instalar un APK recibido por Wi-Fi o guardado en el chat. Ver ui/AbrirCon.kt. -->
@@ -682,6 +686,12 @@
             android:name=".guardados.GrabarClaseService"
             android:exported="false"
             android:foregroundServiceType="microphone|mediaProjection" />
+
+        <!-- Qwen3-ASR pasando a texto o bajándose: ver PasarATextoService. -->
+        <service
+            android:name=".guardados.PasarATextoService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProcessing" />
 
         <service
             android:name=".capture.CaptureService"

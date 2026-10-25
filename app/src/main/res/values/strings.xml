@@ -650,6 +650,16 @@
     <string name="motor_voz_descargando">Descargando… %1$d %%</string>
     <string name="motor_voz_no_se_pudo">No se pudo descargar. Comprueba la conexión.</string>
     <string name="motor_voz_enlace">Ver los modelos disponibles</string>
+    <!-- Qwen3-ASR (25-oct-2026, docs/voz-qwen3.md del PC): opcional, con Whisper de reserva. -->
+    <string name="motor_voz_qwen3">Qwen3-ASR (%1$d MB)</string>
+    <string name="motor_voz_qwen3_desc">Para notas de voz y grabaciones de clases o reuniones: entiende mucho mejor que Whisper el castellano, las reuniones y las aulas (la mitad de errores o menos). Elegirlo baja %1$d MB, pide unos %2$s GB de memoria mientras transcribe y tarda bastante más que Whisper. Licencia %3$s.</string>
+    <string name="motor_voz_qwen3_listo">Qwen3-ASR está bajado (%1$d MB, licencia %2$s) y pasa a texto las notas y grabaciones. Pide unos %3$s GB de memoria mientras transcribe; si alguna vez falla, se pasa con Whisper.</string>
+    <string name="motor_voz_qwen3_sin_elegir">Qwen3-ASR está bajado: elígelo para usarlo, o bórralo abajo.</string>
+    <string name="motor_voz_qwen3_sin_memoria">Qwen3-ASR necesita un teléfono de 64 bits con 6 GB de memoria o más; en este se pasa con Whisper.</string>
+    <string name="motor_voz_qwen3_bajando">Bajando Qwen3-ASR… %1$d %%. Mientras tanto se pasa con Whisper.</string>
+    <string name="motor_voz_qwen3_fallo">No se pudo bajar Qwen3-ASR: %1$s. Vuelve a elegirlo para reintentar; mientras, se pasa con Whisper.</string>
+    <string name="motor_voz_qwen3_ficha">Ficha de Qwen3-ASR (Apache-2.0)</string>
+    <string name="motor_voz_qwen3_borrar">Borrar Qwen3-ASR</string>
     <string name="guardados_unir_a">Unir a un proyecto…</string>
     <string name="guardados_nada_que_unir">No hay nada que se pueda unir: solo fotos, dibujos, notas y PDF</string>
     <plurals name="guardados_unidas">
