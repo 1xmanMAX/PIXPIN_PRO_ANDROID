@@ -511,6 +511,36 @@ private fun Pantalla(
     }
     var cajaDeLaNota by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     androidx.compose.runtime.DisposableEffect(tintaDeLaNota) { onDispose { dejarDeAnotarLaNota() } }
+    fun tituloParaImprimir() = valor.text.lineSequence().firstOrNull()?.trim()?.trimStart('#')?.trim()?.takeIf { it.isNotEmpty() } ?: "Nota"
+    fun imprimirLosMarcosDeLaNota() {
+        val actividad = contextoDelEditor as? android.app.Activity ?: return
+        alcanceDeMarcas.launch {
+            ImprimirMarcos.imprimir(
+                actividad, marcosDeLaNota, tituloParaImprimir(),
+                ir = { m -> desplazado.scrollTo((m.y0 * densidadDeLaNota).toInt()) },
+                cajaEnVentana = { m ->
+                    androidx.compose.ui.geometry.Rect(
+                        (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota - desplazado.value).toFloat(),
+                        (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota - desplazado.value).toFloat()
+                    ).translate(cajaDeLaNota.topLeft)
+                }
+            )
+        }
+    }
+    /** «Imprimir todo»: la nota entera en PDF, con su letra (el mismo PDF de las notas). */
+    fun imprimirLaNota() {
+        val actividad = contextoDelEditor as? android.app.Activity ?: return
+        val texto = valor.text
+        alcanceDeMarcas.launch {
+            val pdf = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    com.forge.pixpin.motor.PdfDeNota.aniadir(com.forge.pixpin.motor.PdfUnion.enBlanco(), texto, letras = com.forge.pixpin.motor.Detalle.letrasParaPdf())
+                }.getOrNull()
+            }
+            if (pdf == null) Toast.makeText(actividad, "No se pudo preparar la impresión", Toast.LENGTH_SHORT).show()
+            else com.forge.pixpin.guardados.Imprimir.pdf(actividad, pdf, tituloParaImprimir())
+        }
+    }
     var viendoCatalogo by remember { mutableStateOf(false) }
     var pidiendoArchivo by remember { mutableStateOf<TipoDeBloque?>(null) }
     var viendoAdjuntar by remember { mutableStateOf(false) }
@@ -676,7 +706,8 @@ private fun Pantalla(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(titulo, maxLines = 1) },
+                // Con el icono del formato delante, como en los visores.
+                title = { Row(verticalAlignment = Alignment.CenterVertically) { IconoDeFormato("nota.md", Modifier.padding(end = 10.dp)); Text(titulo, maxLines = 1) } },
                 navigationIcon = {
                     // Con algo escrito se pregunta: la flecha está pegada al
                     // borde y se toca sin querer más de lo que parece.
@@ -871,21 +902,7 @@ private fun Pantalla(
                 aDocumento = { o -> PuntoDelDocumento(o.x / densidadDeLaNota, (o.y + desplazado.value) / densidadDeLaNota) },
                 pxPorUnidad = { densidadDeLaNota },
                 alIr = { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.y0 * densidadDeLaNota).toInt()) } },
-                alImprimir = {
-                    val actividad = contextoDelEditor as? android.app.Activity
-                    if (actividad != null) alcanceDeMarcas.launch {
-                        ImprimirMarcos.imprimir(
-                            actividad, marcosDeLaNota, "Nota",
-                            ir = { m -> desplazado.scrollTo((m.y0 * densidadDeLaNota).toInt()) },
-                            cajaEnVentana = { m ->
-                                androidx.compose.ui.geometry.Rect(
-                                    (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota - desplazado.value).toFloat(),
-                                    (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota - desplazado.value).toFloat()
-                                ).translate(cajaDeLaNota.topLeft)
-                            }
-                        )
-                    }
-                },
+                alImprimir = { imprimirLosMarcosDeLaNota() },
                 modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDeLaNota = it.boundsInWindow() }
             )
             if (viendo && anotandoLaNota) {
@@ -916,6 +933,8 @@ private fun Pantalla(
                     else { poniendoMarca = false; marcosDeLaNota.activo = false; tintaDeLaNota.setViewport(vistaDeLaTinta()); anotandoLaNota = true }
                 },
                 onMarco = { dejarDeAnotarLaNota(); poniendoMarca = false; marcosDeLaNota.alternar() },
+                imprimirMarcos = if (marcosDeLaNota.lista.isEmpty()) null else ({ imprimirLosMarcosDeLaNota() }),
+                imprimirTodo = { imprimirLaNota() },
                 marcas = if (!anotandoLaNota) marcadores.size else 0,
                 emojiDe = { i -> marcadores[i].emoji },
                 alElegirMarca = { i ->

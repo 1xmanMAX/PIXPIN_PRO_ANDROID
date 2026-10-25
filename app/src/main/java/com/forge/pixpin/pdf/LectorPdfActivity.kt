@@ -236,6 +236,27 @@ class LectorPdfActivity : ComponentActivity() {
     }
 
     /** Imprimir: el documento en vectores con lo anotado encima, por el servicio de impresión del teléfono. */
+    /**
+     * **Imprimir el PDF entero con lo anotado** (mantener el marco del riel, 25-oct-2026): las hojas
+     * del documento con su tinta encima, en vectores.
+     */
+    private fun imprimirElPdf(ruta: String, nombre: String, escenaDe: (Int) -> com.forge.pixpin.motor.Scene?) {
+        android.widget.Toast.makeText(this, "Preparando la impresión…", android.widget.Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching {
+                    val original = java.io.File(ruta).readBytes()
+                    com.forge.pixpin.motor.PdfConAnotaciones.hacer(
+                        applicationContext, original, escenaDe, izquierda = false, derecha = false,
+                        marcadores = emptyList(), hojaPintada = { i -> PdfDoc.render(ruta, i, PdfDoc.PAGE_WIDTH) }
+                    ) ?: original
+                }.getOrNull()
+            }
+            if (bytes == null) android.widget.Toast.makeText(this@LectorPdfActivity, "No se pudo preparar la impresión", android.widget.Toast.LENGTH_SHORT).show()
+            else com.forge.pixpin.guardados.Imprimir.pdf(this@LectorPdfActivity, bytes, nombre.substringBeforeLast('.'))
+        }
+    }
+
     private fun imprimirOffice(ruta: String, nombre: String, escenaDe: (Int) -> com.forge.pixpin.motor.Scene?) {
         android.widget.Toast.makeText(this, "Preparando la impresión…", android.widget.Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
@@ -670,6 +691,19 @@ class LectorPdfActivity : ComponentActivity() {
             val porUnidad = k * z.coerceIn(Lectura.ALEJADO_DEL_PDF, 6f)
             irAlPunto(m.centroX - anchoDeLaCaja / 2.0 / porUnidad, m.centroY - altoDeLaCaja / 2.0 / porUnidad, z)
         }
+        fun imprimirLosMarcos() {
+            alcance.launch {
+                com.forge.pixpin.ui.ImprimirMarcos.imprimir(
+                    this@LectorPdfActivity, marcosDoc, nombre.substringBeforeLast('.').ifBlank { "PDF" },
+                    ir = { m -> irAlMarco(m) },
+                    cajaEnVentana = { m ->
+                        val a = docAPantalla(m.x0, m.y0); val b = docAPantalla(m.x1, m.y1)
+                        if (a == null || b == null) null
+                        else androidx.compose.ui.geometry.Rect(a, b).translate(cajaEnVentana.topLeft)
+                    }
+                )
+            }
+        }
         suspend fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
             // **Con su vista** (zoom y sitio, `.vistas.json`): justo donde se puso.
             vistasDeMarcas.de(m.id)?.let { (z, x, y) -> irAlPunto(x, y, z.toFloat()); return }
@@ -846,19 +880,7 @@ class LectorPdfActivity : ComponentActivity() {
                     aDocumento = { pantallaADoc(it) },
                     pxPorUnidad = { pxPorUnidad() },
                     alIr = { m -> alcance.launch { irAlMarco(m) } },
-                    alImprimir = {
-                        alcance.launch {
-                            com.forge.pixpin.ui.ImprimirMarcos.imprimir(
-                                this@LectorPdfActivity, marcosDoc, nombre.substringBeforeLast('.').ifBlank { "PDF" },
-                                ir = { m -> irAlMarco(m) },
-                                cajaEnVentana = { m ->
-                                    val a = docAPantalla(m.x0, m.y0); val b = docAPantalla(m.x1, m.y1)
-                                    if (a == null || b == null) null
-                                    else androidx.compose.ui.geometry.Rect(a, b).translate(cajaEnVentana.topLeft)
-                                }
-                            )
-                        }
-                    },
+                    alImprimir = { imprimirLosMarcos() },
                     // Dos dedos: el pellizco de siempre, el de la caja de fuera.
                     modifier = Modifier.fillMaxSize()
                 )
@@ -887,6 +909,7 @@ class LectorPdfActivity : ComponentActivity() {
                 com.forge.pixpin.ui.PastillaDeLector(
                     visible = aLaVista,
                     nombre = nombre.substringBeforeLast('.').ifBlank { "PDF" },
+                    archivo = nombre.takeIf { it.contains('.') } ?: "documento.pdf",
                     botones = listOf(
                         // El lápiz y el marcador van en el riel de la derecha, como en el PC. Ver [com.forge.pixpin.ui.RielDelVisor].
                         // **Presentar** un PowerPoint: las diapositivas a pantalla completa, en vectores.
@@ -1008,6 +1031,12 @@ class LectorPdfActivity : ComponentActivity() {
                     onMarco = { if (anotando) dejarDeAnotar(); poniendoMarca = false; marcosDoc.alternar() },
                     marcas = if (anotando) 0 else marcas.size, emojiDe = { i -> marcas[i].emoji },
                     alElegirMarca = { i -> marcas.getOrNull(i)?.let { m -> alcance.launch { irALaMarca(m) } } },
+                    imprimirMarcos = if (marcosDoc.lista.isEmpty()) null else ({ imprimirLosMarcos() }),
+                    imprimirTodo = {
+                        capas.guardarTodo()
+                        if (esOffice) imprimirOffice(rutaPedida, nombre) { i -> capas.escenaDe(i) }
+                        else imprimirElPdf(ruta, nombre) { i -> capas.escenaDe(i) }
+                    },
                     modifier = Modifier.align(Alignment.CenterEnd)
                 )
             }
@@ -1080,7 +1109,8 @@ class LectorPdfActivity : ComponentActivity() {
                 comoTextoRotulo = if (!esOffice) "Ver como texto" to "como un Word" else if (esPresentacion) null else "Modo lectura" to "El Word como texto, con su letra y su voz",
                 conVoz = !(esOffice && esPresentacion),
                 onPresentar = if (esOffice && esPresentacion) ({ conElEngranaje = false; presentando = dondeEstoy().first }) else null,
-                onImprimir = if (esOffice) ({ conElEngranaje = false; capas.guardarTodo(); imprimirOffice(rutaPedida, nombre) { i -> capas.escenaDe(i) } }) else null,
+                // Imprimir: mantener el marco del riel (25-oct-2026).
+                onImprimir = null,
                 onCopiarHoja = if (esOffice) ({
                     conElEngranaje = false
                     val hoja = dondeEstoy().first

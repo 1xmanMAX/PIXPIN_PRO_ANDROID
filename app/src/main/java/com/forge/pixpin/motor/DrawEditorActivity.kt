@@ -50,6 +50,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -1805,6 +1806,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                     rotuloDelLapiz = if (modoVista) "Editar" else "Volver a mirar",
                     marcas = marcas.size, emojiDe = { i -> marcas[i].emoji },
                     alElegirMarca = { i -> marcas.getOrNull(i)?.let { irALaMarca(it) } },
+                    // Mantener el marco: imprimir (con marcos, el diálogo de siempre elige qué hojas).
+                    imprimirTodo = { imprimir() },
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .esquivarLaCamara()
@@ -3423,6 +3426,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             border = androidx.compose.foundation.BorderStroke(1.dp, com.forge.pixpin.ui.theme.Cristal.filo)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                // El icono del formato, como en los demás visores (un lienzo es un .pixpin).
+                com.forge.pixpin.ui.IconoDeFormato("lienzo.pixpin", Modifier.padding(end = 8.dp))
                 Text(
                     nombre.ifBlank { "Sin nombre" },
                     style = MaterialTheme.typography.labelMedium,
@@ -3454,6 +3459,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             forma = RoundedCornerShape(18.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                com.forge.pixpin.ui.IconoDeFormato("hoja.pdf", Modifier.padding(start = 6.dp, end = 2.dp))
                 // **Y se pasa de hoja aquí mismo.**
                 //
                 // Anotar un plano es ir y venir entre páginas, y hasta ahora
@@ -5523,22 +5529,35 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
      */
     @Composable
     private fun BarraDeVista(modifier: Modifier = Modifier) {
-        // En dos pisos: los botones y, debajo, el nombre y las páginas. En uno solo no cabe en
-        // el ancho de un teléfono.
-        androidx.compose.foundation.layout.Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-            BotonesDeVista()
-            androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+        // **Sin la fila de botones** (25-oct-2026, el usuario: «esa barra superior quítala: sus
+        // herramientas ya están en la lateral»). Imprimir es mantener el marco del riel; editar, su
+        // lápiz. Arriba queda el nombre, con lo poco que no está en el riel tras sus tres puntos.
+        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
             if (pdfDeFondo != null) RotuloDeLaHoja() else RotuloDelLienzo()
-        }
-    }
-
-    @Composable
-    private fun BotonesDeVista() {
-        com.forge.pixpin.ui.theme.BarraDeCristal {
-            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Close, "Cerrar", { cerrarYVolver() }, descripcion = getString(R.string.cd_close))
-            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.CenterFocusWeak, "Encuadrar", { encuadrar() })
-            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Print, "Imprimir", { imprimir() })
-            com.forge.pixpin.ui.theme.BotonDeBarra(Icons.Filled.Slideshow, "Mostrar", { empezarAPresentar() }, descripcion = "Presentar")
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { menu = true },
+                    modifier = Modifier.padding(start = 6.dp).size(34.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape).background(Color(0x8C14182B))
+                ) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Más", tint = Color.White.copy(alpha = 0.85f))
+                }
+                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Encuadrar") }, leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null) },
+                        onClick = { menu = false; encuadrar() }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Presentar") }, leadingIcon = { Icon(Icons.Filled.Slideshow, null) },
+                        onClick = { menu = false; empezarAPresentar() }
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Cerrar") }, leadingIcon = { Icon(Icons.Filled.Close, null) },
+                        onClick = { menu = false; cerrarYVolver() }
+                    )
+                }
+            }
         }
     }
 

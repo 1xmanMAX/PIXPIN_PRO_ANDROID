@@ -541,6 +541,7 @@ class Visor3DActivity : ComponentActivity() {
             ) {
                 Row(Modifier.clip(RoundedCornerShape(50)).background(Color(0x8C14182B)).padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     val blanco = Color.White
+                    com.forge.pixpin.ui.IconoDeFormato(nombre.takeIf { it.contains('.') } ?: original.name, Modifier.padding(end = 8.dp))
                     Text(nombre.substringBeforeLast('.'), color = blanco, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false).widthIn(max = 180.dp).padding(vertical = 10.dp))
                     Spacer(Modifier.width(4.dp))
@@ -640,6 +641,31 @@ class Visor3DActivity : ComponentActivity() {
             }
             // **Los marcos 3D**: los de esta vista, pegados a la pantalla.
             var cajaDelVisor by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
+            var ocultarParaImprimir by remember { mutableStateOf(false) }
+            fun imprimirLosMarcos() {
+                lifecycleScope.launch {
+                    val volver = estadoAhora()
+                    com.forge.pixpin.ui.ImprimirMarcos.imprimir(
+                        this@Visor3DActivity, marcosDoc, nombre.substringBeforeLast('.'),
+                        ir = { m -> marcos3d.marcos.firstOrNull { it.id == m.vista }?.estado?.let { ponerEstado(it) } },
+                        cajaEnVentana = { m ->
+                            val a = MarcadoresDelPlano.deNormal(m.x0, m.y0, ancho, alto); val b = MarcadoresDelPlano.deNormal(m.x1, m.y1, ancho, alto)
+                            androidx.compose.ui.geometry.Rect(a[0].toFloat(), a[1].toFloat(), b[0].toFloat(), b[1].toFloat()).translate(cajaDelVisor.topLeft)
+                        }
+                    )
+                    volver?.let { ponerEstado(it) }
+                }
+            }
+            /** «Imprimir todo»: la vista de ahora, entera y sin los mandos. */
+            fun imprimirLaVista() {
+                val ventana = window?.decorView ?: return
+                lifecycleScope.launch {
+                    com.forge.pixpin.ui.ImprimirMarcos.imprimirLoQueSeVe(
+                        this@Visor3DActivity, androidx.compose.ui.geometry.Rect(0f, 0f, ventana.width.toFloat(), ventana.height.toFloat()),
+                        nombre.substringBeforeLast('.')
+                    ) { ocultarParaImprimir = it; aLaVista = !it && aLaVista }
+                }
+            }
             if (listo && anotando == null && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) {
                 val porId = marcos3d.marcos.associateBy { it.id }
                 com.forge.pixpin.ui.CapaDeMarcos(
@@ -649,20 +675,7 @@ class Visor3DActivity : ComponentActivity() {
                     pxPorUnidad = { alto.toDouble() },
                     seVe = { m -> val e = porId[m.vista]?.estado; val a = estadoAhora(); e != null && a != null && MarcadoresDelPlano.coincide(a, e) },
                     alIr = { m -> porId[m.vista]?.estado?.let { ponerEstado(it) } },
-                    alImprimir = {
-                        lifecycleScope.launch {
-                            val volver = estadoAhora()
-                            com.forge.pixpin.ui.ImprimirMarcos.imprimir(
-                                this@Visor3DActivity, marcosDoc, nombre.substringBeforeLast('.'),
-                                ir = { m -> marcos3d.marcos.firstOrNull { it.id == m.vista }?.estado?.let { ponerEstado(it) } },
-                                cajaEnVentana = { m ->
-                                    val a = MarcadoresDelPlano.deNormal(m.x0, m.y0, ancho, alto); val b = MarcadoresDelPlano.deNormal(m.x1, m.y1, ancho, alto)
-                                    androidx.compose.ui.geometry.Rect(a[0].toFloat(), a[1].toFloat(), b[0].toFloat(), b[1].toFloat()).translate(cajaDelVisor.topLeft)
-                                }
-                            )
-                            volver?.let { ponerEstado(it) }
-                        }
-                    },
+                    alImprimir = { imprimirLosMarcos() },
                     alDosDedos = { pan, factor, _ ->
                         orbita?.let { o ->
                             var n = o.mover(pan.x.toDouble(), pan.y.toDouble(), alto)
@@ -675,13 +688,15 @@ class Visor3DActivity : ComponentActivity() {
                 )
             }
             // **El riel de la derecha**: marcador, lápiz (anotar sobre esta vista) y marcos, como el PC.
-            if (listo && !marcosDoc.imprimiendo) com.forge.pixpin.ui.RielDelVisor(
+            if (listo && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
                 poniendoMarca = poniendoMarca, anotando = anotando != null, marcando = marcosDoc.activo,
                 onMarcador = { dejarDeAnotar(); marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
                 onLapiz = { if (anotando != null) dejarDeAnotar() else { poniendoMarca = false; marcosDoc.activo = false; empezarAAnotar() } },
                 onMarco = { dejarDeAnotar(); poniendoMarca = false; marcosDoc.alternar() },
                 marcas = if (anotando != null) 0 else vistas.modelo.size, emojiDe = { i -> vistas.modelo[i].emoji },
                 alElegirMarca = { i -> vistas.modelo.getOrNull(i)?.let { ponerEstado(it) } },
+                imprimirMarcos = if (marcosDoc.lista.isEmpty()) null else ({ imprimirLosMarcos() }),
+                imprimirTodo = { imprimirLaVista() },
                 modifier = Modifier.align(Alignment.CenterEnd)
             )
             if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(

@@ -1550,7 +1550,13 @@ class PinWindowController(
             poniendoMarca = false, anotando = annotating.value, marcando = marcando.value,
             onMarcador = null,
             onLapiz = { if (annotating.value) exitAnnotateMode() else { salirDeMarcos(); enterAnnotateMode() } },
-            onMarco = { if (marcando.value) salirDeMarcos() else { exitAnnotateMode(); entrarEnMarcos() } }
+            onMarco = { if (marcando.value) salirDeMarcos() else { exitAnnotateMode(); entrarEnMarcos() } },
+            // Mantener el marco: imprimir los marcos o la foto entera, con lo anotado.
+            imprimirMarcos = if (marcos().lista.isEmpty()) null else ({ imprimirLosMarcos() }),
+            imprimirTodo = {
+                val b = bitmapState.value
+                if (b != null) imprimirLosMarcos(listOf(com.forge.pixpin.motor.MarcosDelDocumento.Marco(0.0, 0.0, b.width.toDouble(), b.height.toDouble())))
+            }
         )
     }
 
@@ -1631,8 +1637,7 @@ class PinWindowController(
      * pantalla de la app delante para el diálogo de imprimir: el PDF se abre en el visor del teléfono,
      * que imprime.
      */
-    private fun imprimirLosMarcos() {
-        val lista = marcos().lista
+    private fun imprimirLosMarcos(lista: List<com.forge.pixpin.motor.MarcosDelDocumento.Marco> = marcos().lista) {
         val bmp = bitmapState.value ?: return
         if (lista.isEmpty()) return
         val escena = annotator.scene

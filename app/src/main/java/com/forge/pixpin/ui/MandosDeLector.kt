@@ -80,16 +80,22 @@ fun PastillaDeLector(
     botones: List<BotonDeLector>,
     modifier: Modifier = Modifier,
     alTocarElNombre: (() -> Unit)? = null,
-    nombreEditable: (@Composable () -> Unit)? = null
+    nombreEditable: (@Composable () -> Unit)? = null,
+    /**
+     * **El archivo, para su icono** (25-oct-2026, el usuario: «arriba debería aparecer el icono del
+     * formato, un cuadradito de su color con PDF, XLS, DOCX…»): el de [IconoDeArchivo], delante del nombre.
+     */
+    archivo: String? = null
 ) {
     AnimatedVisibility(
         visible = visible, enter = fadeIn(), exit = fadeOut(),
         modifier = modifier.statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
     ) {
         Row(
-            Modifier.clip(RoundedCornerShape(50)).background(FONDO_DE_PASTILLA).padding(start = 14.dp, end = 4.dp),
+            Modifier.clip(RoundedCornerShape(50)).background(FONDO_DE_PASTILLA).padding(start = if (archivo != null) 8.dp else 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (archivo != null) IconoDeFormato(archivo, Modifier.padding(end = 8.dp))
             if (nombreEditable != null) nombreEditable()
             else Text(
                 nombre, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -317,3 +323,7 @@ fun RielDeLecturaDeLector(progreso: () -> Float, suena: Float?, noche: Boolean, 
         drawPath(punta, if (suena != null) AMBAR else linea.copy(alpha = 0.75f))
     }
 }
+
+/** El icono del formato en una barra de arriba: la hoja de su color con la extensión, pequeña. */
+@Composable
+fun IconoDeFormato(archivo: String, modifier: Modifier = Modifier) = IconoDeArchivo(archivo, modifier, lado = 26.dp)

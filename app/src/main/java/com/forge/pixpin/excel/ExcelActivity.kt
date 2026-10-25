@@ -200,6 +200,31 @@ class ExcelActivity : ComponentActivity() {
             com.forge.pixpin.motor.ExcalidrawStore.guardar(this@ExcelActivity, id, tinta.scene)
         }
         DisposableEffect(tinta) { onDispose { guardarTinta() } }
+        var ocultarParaImprimir by remember { mutableStateOf(false) }
+        fun imprimirLosMarcos() {
+            lifecycleScope.launch {
+                com.forge.pixpin.ui.ImprimirMarcos.imprimir(
+                    this@ExcelActivity, marcosDoc, nombre.substringBeforeLast('.'),
+                    ir = { m -> irAlMarco(m, vista) { activa = it }; vista?.invalidate() },
+                    cajaEnVentana = { m ->
+                        val v = vista ?: return@imprimir null
+                        val a = v.aVista(m.x0, m.y0) ?: return@imprimir null
+                        val b = v.aVista(m.x1, m.y1) ?: return@imprimir null
+                        val en = IntArray(2).also { v.getLocationInWindow(it) }
+                        androidx.compose.ui.geometry.Rect(a.x + en[0], a.y + en[1], b.x + en[0], b.y + en[1])
+                    }
+                )
+            }
+        }
+        /** «Imprimir todo»: la hoja tal como se ve, con lo anotado y sin los mandos. */
+        fun imprimirLaHoja() {
+            val v = vista ?: return
+            val en = IntArray(2).also { v.getLocationInWindow(it) }
+            val caja = androidx.compose.ui.geometry.Rect(en[0].toFloat(), en[1].toFloat(), (en[0] + v.width).toFloat(), (en[1] + v.height).toFloat())
+            lifecycleScope.launch {
+                com.forge.pixpin.ui.ImprimirMarcos.imprimirLoQueSeVe(this@ExcelActivity, caja, nombre.substringBeforeLast('.')) { ocultarParaImprimir = it; v.marcosOcultos = it; v.invalidate() }
+            }
+        }
         androidx.activity.compose.BackHandler(enabled = anotando || marcosDoc.activo || poniendoMarca) {
             when {
                 anotando -> { anotando = false; guardarTinta() }
@@ -232,7 +257,7 @@ class ExcelActivity : ComponentActivity() {
                 // La tinta va con la hoja: cada pintado de la hoja le pasa su vista.
                 vista?.let { v ->
                     v.marcos = { marcosDoc.lista }
-                    v.marcosOcultos = marcosDoc.imprimiendo
+                    v.marcosOcultos = marcosDoc.imprimiendo || ocultarParaImprimir
                     v.alPintar = null
                     // Mirando, la tinta la pinta la hoja con su misma vista: los dedos siguen siendo de la hoja.
                     v.pintarTinta = if (anotando) null else ({ canvas ->
@@ -271,27 +296,14 @@ class ExcelActivity : ComponentActivity() {
                     aDocumento = { o -> vista?.deVista(o.x, o.y)?.let { com.forge.pixpin.ui.PuntoDelDocumento(it[0], it[1], vista?.indice ?: 0) } },
                     pxPorUnidad = { vista?.escala ?: 1.0 },
                     alIr = { m -> irAlMarco(m, vista) { activa = it } },
-                    alImprimir = {
-                        lifecycleScope.launch {
-                            com.forge.pixpin.ui.ImprimirMarcos.imprimir(
-                                this@ExcelActivity, marcosDoc, nombre.substringBeforeLast('.'),
-                                ir = { m -> irAlMarco(m, vista) { activa = it }; vista?.invalidate() },
-                                cajaEnVentana = { m ->
-                                    val v = vista ?: return@imprimir null
-                                    val a = v.aVista(m.x0, m.y0) ?: return@imprimir null
-                                    val b = v.aVista(m.x1, m.y1) ?: return@imprimir null
-                                    val en = IntArray(2).also { v.getLocationInWindow(it) }
-                                    androidx.compose.ui.geometry.Rect(a.x + en[0], a.y + en[1], b.x + en[0], b.y + en[1])
-                                }
-                            )
-                        }
-                    },
+                    alImprimir = { imprimirLosMarcos() },
                     modifier = Modifier.fillMaxSize()
                 )
             }
             com.forge.pixpin.ui.PastillaDeLector(
-                visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
+                visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo && !ocultarParaImprimir,
                 nombre = nombre.substringBeforeLast('.').ifBlank { "Excel" },
+                archivo = nombre.takeIf { it.contains('.') } ?: "libro.xlsx",
                 botones = listOfNotNull(
                     com.forge.pixpin.ui.BotonDeLector(if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro") {
                         oscuro = !oscuro
@@ -300,7 +312,9 @@ class ExcelActivity : ComponentActivity() {
                         toques++
                     },
                     if (abierto != null) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.ContentCopy, "Copiar") { vista?.let { copiar(it) }; toques++ } else null,
-                    com.forge.pixpin.ui.BotonDeLector(Icons.Filled.TableChart, "A tabla") { aTabla(ruta, nombre, mensaje, alFallar = false) },
+                    // «A tabla» (editar los datos en la vista de Tablas) **desactivado, no quitado** (25-oct-2026,
+                    // el usuario): de momento el Excel solo se mira y se anota. Ver [EDITAR_EN_TABLAS].
+                    if (EDITAR_EN_TABLAS) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.TableChart, "A tabla") { aTabla(ruta, nombre, mensaje, alFallar = false) } else null,
                     abierto?.let { l ->
                         com.forge.pixpin.ui.BotonDeLector(com.forge.pixpin.ui.IconoDeCompartir, "Exportar") {
                             val hojas = l.libro.hojas.filter { it.visible && it.tipo == 0 }.map { it.nombre }
@@ -313,7 +327,7 @@ class ExcelActivity : ComponentActivity() {
                 modifier = Modifier.align(Alignment.TopCenter)
             )
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
-            if (l != null && !marcosDoc.imprimiendo) com.forge.pixpin.ui.RielDelVisor(
+            if (l != null && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
                 poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcosDoc.activo,
                 onMarcador = { if (anotando) { anotando = false; guardarTinta() }; marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
                 onLapiz = if (base == null && listo) null else ({
@@ -321,6 +335,8 @@ class ExcelActivity : ComponentActivity() {
                     else { marcosDoc.activo = false; poniendoMarca = false; vista?.vistaDeLaTinta()?.let { tinta.setViewport(it) }; anotando = true }
                 }),
                 onMarco = { if (anotando) { anotando = false; guardarTinta() }; poniendoMarca = false; marcosDoc.alternar() },
+                imprimirMarcos = if (marcosDoc.lista.isEmpty()) null else ({ imprimirLosMarcos() }),
+                imprimirTodo = { imprimirLaHoja() },
                 marcas = if (anotando) 0 else marcas.size, emojiDe = { i -> marcas[i].emoji },
                 alElegirMarca = { i ->
                     marcas.getOrNull(i)?.let { m ->
@@ -365,7 +381,7 @@ class ExcelActivity : ComponentActivity() {
                 }
             }
             // Abajo, flotando: la línea de la celda (con algo elegido) y las pestañas de las hojas.
-            if (l != null && !anotando && !marcosDoc.activo && !poniendoMarca && !marcosDoc.imprimiendo) Column(
+            if (l != null && !anotando && !marcosDoc.activo && !poniendoMarca && !marcosDoc.imprimiendo && !ocultarParaImprimir) Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -537,6 +553,12 @@ class ExcelActivity : ComponentActivity() {
         private const val EXTRA_RUTA = "ruta"
         private const val EXTRA_NOMBRE = "nombre"
         private const val EXTRA_MENSAJE = "mensaje"
+
+        /**
+         * **Editar los datos de un Excel en la vista de Tablas**: apagado de momento (25-oct-2026, el
+         * usuario: «desactívala nomás, no la quites»). Con `true` vuelve el botón «A tabla».
+         */
+        const val EDITAR_EN_TABLAS = false
 
         /** Un marcador de Excel en una sola cifra: `hoja · 10⁷ + fila` (`POR_HOJA` del PC). */
         const val POR_HOJA = 10_000_000.0

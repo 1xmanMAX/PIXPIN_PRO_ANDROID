@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +56,11 @@ import androidx.compose.ui.unit.sp
  * dedo en un botón dice su nombre a su izquierda (el «globo» del PC).
  *
  * Un visor que no tiene una de las tres —un pin no tiene sitio al que volver— pasa null.
+ *
+ * **Mantener el marco imprime** (25-oct-2026, el usuario: «que al mantener presionado ese botón un
+ * segundo me mande a imprimir los marcos, o si no, el documento entero»): con marcos puestos salen
+ * las dos opciones; sin ninguno, el documento entero directamente. Así no hace falta otro botón de
+ * imprimir en la barra de arriba.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -71,8 +77,13 @@ fun RielDelVisor(
     marcas: Int = 0,
     emojiDe: (Int) -> String = { "" },
     alElegirMarca: (Int) -> Unit = {},
-    visible: Boolean = true
+    visible: Boolean = true,
+    /** Imprimir los marcos puestos (una hoja por marco); null si no hay ninguno. */
+    imprimirMarcos: (() -> Unit)? = null,
+    /** Imprimir el documento entero. */
+    imprimirTodo: (() -> Unit)? = null
 ) {
+    var eligiendoQueImprimir by remember { mutableStateOf(false) }
     var globo by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(globo) { if (globo != null) { kotlinx.coroutines.delay(1600); globo = null } }
     val vibrar = LocalHapticFeedback.current
@@ -90,23 +101,46 @@ fun RielDelVisor(
                     Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xEB26262C)).padding(4.dp)
                 ) {
                     @Composable
-                    fun Boton(icono: ImageVector, nombre: String, puesto: Boolean, al: () -> Unit) {
+                    fun Boton(icono: ImageVector, nombre: String, puesto: Boolean, alMantener: (() -> Unit)? = null, al: () -> Unit) {
                         Box(
                             Modifier.size(40.dp).clip(RoundedCornerShape(7.dp))
                                 .background(if (puesto) Color(0xFF0060DF) else Color.Transparent)
                                 .semantics { contentDescription = nombre }
                                 .combinedClickable(
                                     onClick = al,
-                                    onLongClick = { vibrar.performHapticFeedback(HapticFeedbackType.LongPress); globo = nombre }
+                                    onLongClick = {
+                                        vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (alMantener != null) alMantener() else globo = nombre
+                                    }
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(icono, contentDescription = null, tint = if (puesto) Color.White else Color(0xFFE4E2E6), modifier = Modifier.size(22.dp))
                         }
                     }
-                    if (onMarcador != null) Boton(Icons.Filled.BookmarkAdd, "Marcador", poniendoMarca, onMarcador)
-                    if (onLapiz != null) Boton(Icons.Filled.Edit, rotuloDelLapiz, anotando, onLapiz)
-                    if (onMarco != null) Boton(Icons.Filled.CropFree, "Marcos para imprimir", marcando, onMarco)
+                    if (onMarcador != null) Boton(Icons.Filled.BookmarkAdd, "Marcador", poniendoMarca, al = onMarcador)
+                    if (onLapiz != null) Boton(Icons.Filled.Edit, rotuloDelLapiz, anotando, al = onLapiz)
+                    if (onMarco != null) Box {
+                        val alMantener: (() -> Unit)? = when {
+                            imprimirMarcos != null && imprimirTodo != null -> ({ eligiendoQueImprimir = true })
+                            imprimirMarcos != null -> imprimirMarcos
+                            imprimirTodo != null -> imprimirTodo
+                            else -> null
+                        }
+                        Boton(Icons.Filled.CropFree, "Marcos para imprimir (mantener: imprimir)", marcando, alMantener, al = onMarco)
+                        androidx.compose.material3.DropdownMenu(expanded = eligiendoQueImprimir, onDismissRequest = { eligiendoQueImprimir = false }) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Imprimir los marcos") },
+                                leadingIcon = { Icon(Icons.Filled.CropFree, null) },
+                                onClick = { eligiendoQueImprimir = false; imprimirMarcos?.invoke() }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Imprimir todo") },
+                                leadingIcon = { Icon(androidx.compose.material.icons.Icons.Filled.Print, null) },
+                                onClick = { eligiendoQueImprimir = false; imprimirTodo?.invoke() }
+                            )
+                        }
+                    }
                 }
             }
         }

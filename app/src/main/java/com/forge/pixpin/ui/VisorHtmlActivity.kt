@@ -316,6 +316,35 @@ class VisorHtmlActivity : ComponentActivity() {
     private var marcosDoc by mutableStateOf(MarcosDelVisor(null))
     private var cajaDelVisor = androidx.compose.ui.geometry.Rect.Zero
 
+    private fun imprimirLosMarcos() {
+        lifecycleScope.launch {
+            ImprimirMarcos.imprimir(
+                this@VisorHtmlActivity, marcosDoc, sinExtension(elDocumento?.name ?: "PixPin"),
+                ir = { m -> irAlMarco(m) },
+                cajaEnVentana = { m ->
+                    val e = escalaWeb.coerceAtLeast(0.01f)
+                    androidx.compose.ui.geometry.Rect(
+                        (m.x0 * e - corridoX).toFloat(), (m.y0 * e - corridoY).toFloat(),
+                        (m.x1 * e - corridoX).toFloat(), (m.y1 * e - corridoY).toFloat()
+                    ).translate(cajaDelVisor.topLeft)
+                }
+            )
+        }
+    }
+
+    /**
+     * **Imprimir la página entera** (mantener el marco del riel, 25-oct-2026): la del propio
+     * `WebView`, con lo anotado, que va dentro de ella.
+     */
+    private fun imprimirTodo() {
+        val vista = web ?: return
+        if (anotando) { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
+        val titulo = sinExtension(elDocumento?.name ?: "PixPin").ifBlank { "PixPin" }
+        val gestor = getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
+        runCatching { gestor.print(titulo, vista.createPrintDocumentAdapter(titulo), null) }
+            .onFailure { Toast.makeText(this, "No se pudo imprimir", Toast.LENGTH_SHORT).show() }
+    }
+
     /** Lleva la vista a un marco: acercada hasta llenarla (lo que deje el `WebView`) y con él arriba a la izquierda. */
     @Suppress("DEPRECATION")
     private suspend fun irAlMarco(m: com.forge.pixpin.motor.MarcosDelDocumento.Marco) {
@@ -1248,21 +1277,7 @@ class VisorHtmlActivity : ComponentActivity() {
                         },
                         pxPorUnidad = { escalaWeb.toDouble() },
                         alIr = { m -> lifecycleScope.launch { irAlMarco(m) } },
-                        alImprimir = {
-                            lifecycleScope.launch {
-                                ImprimirMarcos.imprimir(
-                                    this@VisorHtmlActivity, marcosDoc, sinExtension(nombre),
-                                    ir = { m -> irAlMarco(m) },
-                                    cajaEnVentana = { m ->
-                                        val e = escalaWeb.coerceAtLeast(0.01f)
-                                        androidx.compose.ui.geometry.Rect(
-                                            (m.x0 * e - corridoX).toFloat(), (m.y0 * e - corridoY).toFloat(),
-                                            (m.x1 * e - corridoX).toFloat(), (m.y1 * e - corridoY).toFloat()
-                                        ).translate(cajaDelVisor.topLeft)
-                                    }
-                                )
-                            }
-                        },
+                        alImprimir = { imprimirLosMarcos() },
                         modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDelVisor = it.boundsInWindow() }
                     )
                 }
@@ -1282,6 +1297,8 @@ class VisorHtmlActivity : ComponentActivity() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val blanco = androidx.compose.ui.graphics.Color.White
+                        // El icono del formato (DOCX, EPUB, HTML…), como en todos los visores.
+                        IconoDeFormato(suNombre.takeIf { it.contains('.') } ?: (elDocumento?.name ?: "pagina.html"), Modifier.padding(end = 8.dp))
                         if (cambiando) {
                             var texto by remember { mutableStateOf(sinExtension(suNombre)) }
                             val foco = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -1348,6 +1365,8 @@ class VisorHtmlActivity : ComponentActivity() {
                         onMarco = { if (anotando) salir(); poniendoMarcador = false; marcosDoc.alternar() },
                         marcas = if (anotando) 0 else lista.size, emojiDe = { i -> lista[i].emoji },
                         alElegirMarca = { i -> lista.getOrNull(i)?.let { irALaFraccion(it.fraccion, intentos = 0) } },
+                        imprimirMarcos = if (marcosDoc.lista.isEmpty()) null else ({ imprimirLosMarcos() }),
+                        imprimirTodo = { imprimirTodo() },
                         modifier = Modifier.align(Alignment.CenterEnd)
                     )
                 }
@@ -1389,7 +1408,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     if (autoDesplazando && !escuchando && !poniendoMarcador) BarraDeAutoDesplazar(Modifier.align(Alignment.BottomCenter))
                     // Con la pastilla, y si abajo no hay otra barra: espacio a cada lado y el candado del lado.
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = aLaVista && !escuchando && !autoDesplazando && !poniendoMarcador && !conLaLetra,
+                        visible = aLaVista && !escuchando && !autoDesplazando && !poniendoMarcador && !conLaLetra && !marcosDoc.activo,
                         enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
                         modifier = Modifier.align(Alignment.BottomCenter)
                     ) { MandosDeLosLados(Modifier) }

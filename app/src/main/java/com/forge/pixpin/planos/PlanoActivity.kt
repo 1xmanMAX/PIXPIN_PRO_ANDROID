@@ -447,6 +447,8 @@ class PlanoActivity : ComponentActivity() {
         var tickDeAnotar by remember { mutableIntStateOf(0) }
         var hojas by remember { mutableStateOf<List<ImprimirPlano.Marco>>(emptyList()) }
         var preparandoLamina by remember { mutableStateOf(false) }
+        /** «Imprimir todo» (mantener el marco del riel): el plano entero en una hoja, en vez de los marcos. */
+        var imprimirElPlanoEntero by remember { mutableStateOf(false) }
         // **Exportar** (14-oct-2026): la hoja de compartir de siempre con los formatos del plano. Ver [ExportarPlano].
         var exportando by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
         // Las cotas: cadenas hechas y la que se está poniendo (puntos del plano).
@@ -854,6 +856,7 @@ class PlanoActivity : ComponentActivity() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val blanco = Color.White
+                    com.forge.pixpin.ui.IconoDeFormato(nombre.takeIf { it.contains('.') } ?: original.name, Modifier.padding(end = 8.dp))
                     Text(
                         nombre.substringBeforeLast('.'), color = blanco, fontWeight = FontWeight.Bold, maxLines = 1,
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).widthIn(max = 220.dp).padding(vertical = 10.dp)
@@ -917,6 +920,8 @@ class PlanoActivity : ComponentActivity() {
                 },
                 marcas = if (anotando) 0 else marcadores.plano.size,
                 emojiDe = { i -> marcadores.plano[i].emoji },
+                imprimirMarcos = if (hojas.isEmpty()) null else ({ imprimirElPlanoEntero = false; preparandoLamina = true }),
+                imprimirTodo = { imprimirElPlanoEntero = true; preparandoLamina = true },
                 alElegirMarca = { i ->
                     val m = marcadores.plano.getOrNull(i)
                     val mo = modelo
@@ -1004,9 +1009,7 @@ class PlanoActivity : ComponentActivity() {
                     IconButton(onClick = { hojas = hojas.dropLast(1); marcos2++ }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Undo, contentDescription = getString(com.forge.pixpin.R.string.plano_quitar_marco), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
                     }
-                    IconButton(onClick = { preparandoLamina = true }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.Print, contentDescription = getString(com.forge.pixpin.R.string.plano_imprimir), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
-                    }
+                    // Imprimir: mantener el marco del riel (25-oct-2026).
                     IconButton(onClick = { marcando = false }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Close, contentDescription = getString(com.forge.pixpin.R.string.plano_dejar_de_marcar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
                     }
@@ -1027,8 +1030,11 @@ class PlanoActivity : ComponentActivity() {
                         )
                     }
                 }
-                if (m != null) ImprimirPlano.imprimir(
-                    this@PlanoActivity, m, hojas, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina, tinta
+                val todo = imprimirElPlanoEntero
+                imprimirElPlanoEntero = false
+                val cuales = if (todo && m != null) m.cajaUtil.let { c -> listOf(ImprimirPlano.Marco.entre(c[0].toDouble(), c[1].toDouble(), c[2].toDouble(), c[3].toDouble())) } else hojas
+                if (m != null && cuales.isNotEmpty()) ImprimirPlano.imprimir(
+                    this@PlanoActivity, m, cuales, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina, tinta
                 )
             }
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }

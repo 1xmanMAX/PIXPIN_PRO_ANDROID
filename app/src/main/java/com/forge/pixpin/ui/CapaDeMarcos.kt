@@ -227,7 +227,9 @@ fun CapaDeMarcos(
 @Composable
 internal fun PistaDeMarcos(estado: MarcosDelVisor, alIr: (Marco) -> Unit, alImprimir: () -> Unit, modifier: Modifier) {
     Row(
-        modifier.navigationBarsPadding().padding(12.dp).horizontalScroll(rememberScrollState()),
+        // **Más arriba que los mandos de los lados** (25-oct-2026: en el PDF y el Word se pisaban con
+        // los botones de añadir espacio a un lado, que van abajo del todo).
+        modifier.navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 64.dp).horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically
     ) {
         estado.lista.forEachIndexed { i, m ->
@@ -253,7 +255,7 @@ internal fun PistaDeMarcos(estado: MarcosDelVisor, alIr: (Marco) -> Unit, alImpr
             if (estado.lista.isNotEmpty()) {
                 Accion("Quitar el último") { estado.quitarUltimo() }
                 Accion("Borrar") { estado.borrar() }
-                Accion("Imprimir (${estado.lista.size})", alImprimir)
+                // Imprimir: mantener el marco del riel (ver [RielDelVisor]).
             }
         }
     }
@@ -293,6 +295,25 @@ object ImprimirMarcos {
             return
         }
         val pdf = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { aPdf(fotos) }
+        com.forge.pixpin.guardados.Imprimir.pdf(actividad, pdf, nombre)
+    }
+
+    /**
+     * **Imprimir lo que se ve, entero** (el «Imprimir todo» de un visor que no tiene un documento
+     * que mandar tal cual, como el modelo 3D): una foto de [caja] (en la ventana) sin la interfaz,
+     * que [ocultar] esconde mientras se toma.
+     */
+    suspend fun imprimirLoQueSeVe(actividad: Activity, caja: Rect, nombre: String, ocultar: (Boolean) -> Unit) {
+        ocultar(true)
+        val foto = try {
+            kotlinx.coroutines.delay(350)
+            fotografiar(actividad, caja)
+        } finally { ocultar(false) }
+        if (foto == null) {
+            android.widget.Toast.makeText(actividad, "No se pudo preparar la impresión", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val pdf = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { aPdf(listOf(foto)) }
         com.forge.pixpin.guardados.Imprimir.pdf(actividad, pdf, nombre)
     }
 

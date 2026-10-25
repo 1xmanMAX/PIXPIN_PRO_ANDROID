@@ -95,3 +95,20 @@ el escáner»** lo reabre en ese documento (`com.scannerpromax.action.EDIT`) y s
 volver con «Guardar en PixPin». Si falta el escáner, o es una versión que no sabe editar, se avisa.
 Código: `guardados/EscanerProMax.kt` y el clip de `MensajesActivity`; `<queries>` en el manifiesto.
 Viene de la rama `ccr-4d2f0b52-3ktfkq` (23-oct), unida aquí; coincide con el contrato del escáner v20.
+
+## Ajustes del 25-oct (lo que vio el usuario)
+
+- **Las fichas de los marcos ya no pisan los botones de espacio a los lados** (PDF, Word): van más
+  arriba, y con el modo de los marcos puesto esos botones se esconden.
+- **Mantener el marco del riel imprime**: con marcos, «Imprimir los marcos» o «Imprimir todo»; sin
+  marcos, el documento entero directamente. Fuera los otros botones de imprimir (la barra del lienzo,
+  el engranaje del Word, la barra de los marcos del plano, «Imprimir (n)» de la pista).
+  Qué es «todo» en cada uno: el PDF con lo anotado; el Word/PowerPoint por hojas; la página web por el
+  propio navegador; el lienzo, su diálogo de siempre; el plano entero en una hoja; la nota en PDF; la
+  foto del pin con lo anotado; Excel y 3D, lo que se ve (sin los mandos).
+- **Lienzo sin la barra de arriba** (cerrar, encuadrar, imprimir, presentar): queda el nombre con un
+  ⋮ para encuadrar, presentar y cerrar; editar e imprimir están en el riel.
+- **Excel**: fuera el botón «A tabla» (la otra vista, la de Tablas, con la que se editaban los datos).
+  Desactivado, no quitado: `ExcelActivity.EDITAR_EN_TABLAS = false`.
+- **El icono del formato** (la hoja de su color con PDF, DOCX, XLSX, HTML, DWG, IFC, MD…) delante del
+  nombre en la barra de arriba de todos los visores, el lienzo y las notas.
