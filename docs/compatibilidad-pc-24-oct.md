@@ -112,3 +112,28 @@ Viene de la rama `ccr-4d2f0b52-3ktfkq` (23-oct), unida aquí; coincide con el co
   Desactivado, no quitado: `ExcelActivity.EDITAR_EN_TABLAS = false`.
 - **El icono del formato** (la hoja de su color con PDF, DOCX, XLSX, HTML, DWG, IFC, MD…) delante del
   nombre en la barra de arriba de todos los visores, el lienzo y las notas.
+
+## Ajustes del 25-oct, segunda tanda (estilo del visor de Revit)
+
+- **Siempre a pantalla completa**: fuera el botón «Ver todo» de las pastillas del plano y del 3D (se
+  leía como achicar/agrandar la ventana); ver todo es el doble toque en el vacío.
+- **El lápiz abre el editor avanzado en todos los visores** (`ui/EditorAvanzadoDeVisor.kt`): PDF,
+  Word/PowerPoint, página web, Excel, plano, 3D y notas. Arriba la pastilla de cristal con «Listo»;
+  abajo la barra agrupada del lienzo y, a un lado, deshacer y rehacer; **el estilo plegado** en un
+  botón redondo con el color de ahora (al lado contrario de la mano): al tocarlo sale el panel del
+  lienzo con color, grosor, opacidad, trazo, letra y su tamaño, y al tocarlo otra vez se recoge, para
+  que el documento se vea entero. Las herramientas son las de Ajustes para ese formato.
+- **Todo con el cristal del visor de Revit** (`#14182B` al 55 %): el riel es una pastilla vertical con
+  botones redondos; la barra de los marcos también. En el 3D, piezas, medir y «al croquis» entran en
+  el mismo riel, debajo de una raya (antes era otra columna en el mismo sitio y se pisaban).
+- **Una sola barra de marcos** (`BarraDeMarcos`): fichas numeradas, «Quitar el último» y «Borrar».
+  El plano tenía la suya con deshacer y cerrar: ahora es la misma; salir es el marco del riel y
+  imprimir es mantenerlo, como en todos.
+- **3D: en la vista de un marcador con caja de sección**, el corte se ve pero la caja no (ni aristas
+  ni tiradores, y no se agarra); al mover la cámara vuelve a salir.
+- **El icono del formato como el del PC** (`lector_pin::cuadro_de_tipo`): un cuadradito redondeado
+  del color de su familia con la extensión en mayúsculas (DOCX en azul, PDF en rojo, XLSX en verde,
+  DWG en amarillo…), sin la hoja doblada que a ese tamaño parecía un recuadro gris. En el lector, un
+  Word sin extensión en el nombre la toma de su ruta (antes salía como PDF).
+- Lo que queda con la barra simple: el lápiz de los **pines flotantes** de imagen (es una ventana
+  superpuesta, no una pantalla; el panel de estilo del lienzo no cabe al lado del pin).

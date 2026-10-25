@@ -907,22 +907,16 @@ private fun Pantalla(
             )
             if (viendo && anotandoLaNota) {
                 val ajustesDeLaNota by (contextoDelEditor.applicationContext as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
-                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-                    @Suppress("UNUSED_EXPRESSION") tickDeLaTinta
-                    com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-                        com.forge.pixpin.motor.DrawToolbar(
-                            tool = tintaDeLaNota.tool,
-                            onTool = { tintaDeLaNota.selectTool(it); tickDeLaTinta++ },
-                            style = tintaDeLaNota.scene.style,
-                            onStyle = { nuevo -> tintaDeLaNota.cambiarEstilo(nuevo) { it }; tickDeLaTinta++ },
-                            canUndo = tintaDeLaNota.canUndo,
-                            onUndo = { tintaDeLaNota.undo(); tickDeLaTinta++ },
-                            permitidas = ajustesDeLaNota.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                            grupos = ajustesDeLaNota.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA)
-                                .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
-                        )
-                    }
-                }
+                // **El editor avanzado de todos los visores** (25-oct-2026). Ver [EditorAvanzadoDeVisor].
+                EditorAvanzadoDeVisor(
+                    capa = tintaDeLaNota, ajustes = ajustesDeLaNota,
+                    permitidas = ajustesDeLaNota.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustesDeLaNota.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA)
+                        .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
+                    noche = false, tick = tickDeLaTinta,
+                    alListo = { dejarDeAnotarLaNota() },
+                    cambiado = { tickDeLaTinta++ }
+                )
             }
             // **El riel de la derecha**: marcador, lápiz (anotar encima) y marcos, como en los visores.
             if (viendo && !marcosDeLaNota.imprimiendo) RielDelVisor(

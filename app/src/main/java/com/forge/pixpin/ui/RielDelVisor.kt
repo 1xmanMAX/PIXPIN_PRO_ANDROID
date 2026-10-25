@@ -51,8 +51,10 @@ import androidx.compose.ui.unit.sp
  *    barra entera de herramientas y otra vez vuelve a mirar.
  * 3. **Marco** (`CropFree`): los marcos numerados para imprimir ([CapaDeMarcos]).
  *
- * La isla de cristal oscuro del PC (`#26262C` al 92 %), botones de 40 dp, y lo puesto en el azul
- * `#0060DF` con el icono blanco. Debajo, los puntos de los marcadores ([RielDeMarcas]). Mantener el
+ * La pastilla de cristal del visor de Revit ([CRISTAL_DE_VISOR], 25-oct-2026: «que los demás
+ * visores copien ese estilo»), botones redondos de 42 dp, y lo puesto en el azul `#0060DF` con el
+ * icono blanco. Lo propio de un formato que va a un lado (el 3D: piezas, medir, al croquis) entra
+ * debajo, en [extras], con [BotonDelRiel]: una sola columna, nada que se pise. Debajo, los puntos de los marcadores ([RielDeMarcas]). Mantener el
  * dedo en un botón dice su nombre a su izquierda (el «globo» del PC).
  *
  * Un visor que no tiene una de las tres —un pin no tiene sitio al que volver— pasa null.
@@ -81,7 +83,9 @@ fun RielDelVisor(
     /** Imprimir los marcos puestos (una hoja por marco); null si no hay ninguno. */
     imprimirMarcos: (() -> Unit)? = null,
     /** Imprimir el documento entero. */
-    imprimirTodo: (() -> Unit)? = null
+    imprimirTodo: (() -> Unit)? = null,
+    /** Los botones propios del formato, debajo de los tres y tras una raya. */
+    extras: (@Composable () -> Unit)? = null
 ) {
     var eligiendoQueImprimir by remember { mutableStateOf(false) }
     var globo by remember { mutableStateOf<String?>(null) }
@@ -94,30 +98,19 @@ fun RielDelVisor(
                     Text(
                         g, color = Color.White, fontSize = 13.sp,
                         modifier = Modifier.padding(top = 8.dp, end = 6.dp).clip(RoundedCornerShape(50))
-                            .background(Color(0xEB26262C)).padding(horizontal = 10.dp, vertical = 6.dp)
+                            .background(CRISTAL_FUERTE).padding(horizontal = 10.dp, vertical = 6.dp)
                     )
                 }
                 Column(
-                    Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xEB26262C)).padding(4.dp)
+                    Modifier.clip(RoundedCornerShape(50)).background(CRISTAL_DE_VISOR).padding(vertical = 4.dp, horizontal = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     @Composable
-                    fun Boton(icono: ImageVector, nombre: String, puesto: Boolean, alMantener: (() -> Unit)? = null, al: () -> Unit) {
-                        Box(
-                            Modifier.size(40.dp).clip(RoundedCornerShape(7.dp))
-                                .background(if (puesto) Color(0xFF0060DF) else Color.Transparent)
-                                .semantics { contentDescription = nombre }
-                                .combinedClickable(
-                                    onClick = al,
-                                    onLongClick = {
-                                        vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        if (alMantener != null) alMantener() else globo = nombre
-                                    }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(icono, contentDescription = null, tint = if (puesto) Color.White else Color(0xFFE4E2E6), modifier = Modifier.size(22.dp))
-                        }
-                    }
+                    fun Boton(icono: ImageVector, nombre: String, puesto: Boolean, alMantener: (() -> Unit)? = null, al: () -> Unit) =
+                        BotonDelRiel(icono, nombre, puesto, alMantener = {
+                            vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (alMantener != null) alMantener() else globo = nombre
+                        }, al = al)
                     if (onMarcador != null) Boton(Icons.Filled.BookmarkAdd, "Marcador", poniendoMarca, al = onMarcador)
                     if (onLapiz != null) Boton(Icons.Filled.Edit, rotuloDelLapiz, anotando, al = onLapiz)
                     if (onMarco != null) Box {
@@ -141,6 +134,10 @@ fun RielDelVisor(
                             )
                         }
                     }
+                    if (extras != null) {
+                        Box(Modifier.padding(vertical = 4.dp).size(width = 22.dp, height = 1.dp).background(Color.White.copy(alpha = 0.25f)))
+                        extras()
+                    }
                 }
             }
         }
@@ -148,5 +145,26 @@ fun RielDelVisor(
             Spacer(Modifier.height(10.dp))
             RielDeMarcas(marcas, emojiDe, Modifier, alElegirMarca)
         }
+    }
+}
+
+/** El cristal del globo con el nombre: el de las barras, algo más tupido para leerse sobre cualquier cosa. */
+private val CRISTAL_FUERTE = Color(0xE014182B)
+
+/**
+ * Un botón del riel: redondo, 42 dp, el icono claro y, puesto, el fondo azul `#0060DF`. Público para
+ * que lo propio de un formato ([RielDelVisor] `extras`) se vea igual que los tres de siempre.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun BotonDelRiel(icono: ImageVector, nombre: String, puesto: Boolean = false, alMantener: (() -> Unit)? = null, al: () -> Unit) {
+    Box(
+        Modifier.size(42.dp).clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (puesto) Color(0xFF0060DF) else Color.Transparent)
+            .semantics { contentDescription = nombre }
+            .combinedClickable(onClick = al, onLongClick = alMantener),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icono, contentDescription = null, tint = if (puesto) Color.White else Color.White.copy(alpha = 0.9f), modifier = Modifier.size(21.dp))
     }
 }

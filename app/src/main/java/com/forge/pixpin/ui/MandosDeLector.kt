@@ -50,6 +50,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 
 /**
  * **Los mandos de los lectores rápidos, uno para todos** (23-sep-2026, pedido por el usuario:
@@ -324,6 +327,30 @@ fun RielDeLecturaDeLector(progreso: () -> Float, suena: Float?, noche: Boolean, 
     }
 }
 
-/** El icono del formato en una barra de arriba: la hoja de su color con la extensión, pequeña. */
+/**
+ * **El recuadro del formato en una barra de arriba**, como el del PC (`lector_pin::cuadro_de_tipo`,
+ * 25-oct-2026; el usuario: «aparece Word con un recuadro gris, no es tan intuitivo»): un cuadradito
+ * redondeado del color de su familia —rojo PDF, azul Word, verde Excel, amarillo planos…— con la
+ * extensión en mayúsculas, la letra más grande que quepa. Sin la esquina doblada: a este tamaño la
+ * hoja doblada se leía como un recuadro gris y la extensión no se veía.
+ */
 @Composable
-fun IconoDeFormato(archivo: String, modifier: Modifier = Modifier) = IconoDeArchivo(archivo, modifier, lado = 26.dp)
+fun IconoDeFormato(archivo: String, modifier: Modifier = Modifier, lado: androidx.compose.ui.unit.Dp = 30.dp) {
+    val familia = androidx.compose.runtime.remember(archivo) { com.forge.pixpin.motor.ColorDeExtension.de(archivo) }
+    val rotulo = androidx.compose.runtime.remember(archivo) { com.forge.pixpin.motor.ColorDeExtension.rotulo(archivo).uppercase() }
+    val color = androidx.compose.ui.graphics.Color(0xFF000000 or familia.color.toLong())
+    Box(
+        modifier.size(lado).clip(RoundedCornerShape(lado * 0.2f)).background(color)
+            .semantics { contentDescription = "Formato ${rotulo.ifEmpty { familia.nombre }}" },
+        contentAlignment = Alignment.Center
+    ) {
+        if (rotulo.isNotEmpty()) Text(
+            rotulo,
+            color = if (familia.textoOscuro) androidx.compose.ui.graphics.Color(0xFF3A2B00) else androidx.compose.ui.graphics.Color.White,
+            // Como el PC: la más grande que deja la extensión dentro, con un margen.
+            fontSize = (lado.value * if (rotulo.length <= 3) 0.36f else 0.29f).sp,
+            fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
+            letterSpacing = (-0.3).sp
+        )
+    }
+}

@@ -1544,27 +1544,17 @@ class VisorHtmlActivity : ComponentActivity() {
         val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
         @Suppress("UNUSED_EXPRESSION") tickDeAnotar
         EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
-        Row(
-            Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 8.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                .background(androidx.compose.ui.graphics.Color(0xB314182B)),
-            verticalAlignment = Alignment.CenterVertically
+        // **El editor avanzado de todos los visores** (25-oct-2026). Ver [EditorAvanzadoDeVisor].
+        val sitio = if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB
+        EditorAvanzadoDeVisor(
+            capa = laCapa, ajustes = ajustes,
+            permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+            grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
+            noche = esDeNoche(), tick = tickDeAnotar,
+            alListo = { anotando = false; guardarLaCapa(); cambiosEnLaCapa++; ponerLaTintaEnLaPagina() },
+            cambiado = { contenido -> tickDeAnotar++; if (contenido) cambiosEnLaCapa++ }
         ) {
-            Row(
-                Modifier
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                    .clickable { anotando = false; guardarLaCapa(); cambiosEnLaCapa++; ponerLaTintaEnLaPagina() }
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Check, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(18.dp))
-                Text("Listo", color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 6.dp))
-            }
-            // **Con lápiz, el dedo mueve el papel** (se enciende solo); aquí se apaga, que perder el
-            // lápiz no puede dejar sin anotar. Solo desde que se vio un lápiz.
+            // **Con lápiz, el dedo mueve el papel** (se enciende solo); aquí se apaga. Solo desde que se vio un lápiz.
             if (vioLapiz) Text(
                 if (conLapiz) "Dedo: mover" else "Dedo: dibujar",
                 color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
@@ -1573,21 +1563,6 @@ class VisorHtmlActivity : ComponentActivity() {
                     .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
                     .padding(horizontal = 12.dp, vertical = 9.dp)
             )
-        }
-        Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-                com.forge.pixpin.motor.DrawToolbar(
-                    tool = laCapa.tool,
-                    onTool = { laCapa.selectTool(it); tickDeAnotar++ },
-                    style = laCapa.scene.style,
-                    onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
-                    canUndo = laCapa.canUndo,
-                    onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
-                    // La barra de este formato (24-oct-2026): sin tocar, la del lector.
-                            permitidas = ajustes.formatoToolSet(if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                    grupos = ajustes.formatoGroupList(if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
-                )
-            }
         }
     }
 

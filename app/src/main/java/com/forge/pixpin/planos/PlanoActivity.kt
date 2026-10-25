@@ -1,5 +1,6 @@
 package com.forge.pixpin.planos
 
+import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import android.content.Context
 import android.content.Intent
 import android.opengl.GLSurfaceView
@@ -804,46 +805,21 @@ class PlanoActivity : ComponentActivity() {
                     laCapa, tickDeAnotar, enSitio = true, noche = !claro,
                     fondo = (if (claro) PintorDePlano.FONDO_CLARO else PintorDePlano.FONDO_OSCURO).let { Color(it[0], it[1], it[2], 0.85f) }
                 ) { tickDeAnotar++; cambiosEnLaCapa++ }
-                Row(
-                    Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
-                        .clip(RoundedCornerShape(50)).background(Color(0xB314182B)),
-                    verticalAlignment = Alignment.CenterVertically
+                // **Siempre el editor avanzado** (25-oct-2026, el usuario: «nunca el simple»), el de
+                // todos los visores. Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
+                EditorAvanzadoDeVisor(
+                    capa = laCapa, ajustes = ajustes,
+                    permitidas = ajustes.planoToolSet, grupos = ajustes.planoGroupList,
+                    noche = !claro, tick = tickDeAnotar,
+                    alListo = { dejarDeAnotar() },
+                    cambiado = { cambiosDeContenido -> tickDeAnotar++; if (cambiosDeContenido) cambiosEnLaCapa++ }
                 ) {
-                    Row(
-                        Modifier.clip(RoundedCornerShape(50))
-                            .clickable { anotando = false; CapaDelPlano.leer(laCapa.scene, encaje).let { (cs, ms) -> hechas = cs; hojas = ms }; guardarCapa(); cambiosEnLaCapa++; marcos++ }
-                            .padding(horizontal = 14.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Text(getString(com.forge.pixpin.R.string.plano_listo), color = Color.White, modifier = Modifier.padding(start = 6.dp))
-                    }
                     if (vioLapiz) Text(
                         if (conLapiz) "Dedo: mover" else "Dedo: dibujar", color = Color.White.copy(alpha = 0.85f),
                         modifier = Modifier.clip(RoundedCornerShape(50))
                             .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
                             .padding(horizontal = 12.dp, vertical = 9.dp)
                     )
-                }
-                if (ajustes.planoAvanzado) {
-                    EditorAvanzado(laCapa, ajustes, !claro, tickDeAnotar) { cambiosDeContenido ->
-                        tickDeAnotar++
-                        if (cambiosDeContenido) cambiosEnLaCapa++
-                    }
-                } else Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-                    com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
-                        com.forge.pixpin.motor.DrawToolbar(
-                            tool = laCapa.tool,
-                            onTool = { laCapa.selectTool(it); tickDeAnotar++ },
-                            style = laCapa.scene.style,
-                            onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
-                            canUndo = laCapa.canUndo,
-                            onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
-                            // **Las del motor, las que diga Ajustes** («Barra del plano»), sin otras nuestras.
-                            permitidas = ajustes.planoToolSet,
-                            grupos = ajustes.planoGroupList
-                        )
-                    }
                 }
             }
             if (!anotando) AnimatedVisibility(
@@ -863,9 +839,7 @@ class PlanoActivity : ComponentActivity() {
                     )
                     Spacer(Modifier.size(6.dp))
                     if (listo) {
-                        IconButton(onClick = { verTodo(); toques++ }, modifier = Modifier.size(38.dp)) {
-                            Icon(Icons.Filled.FitScreen, contentDescription = getString(com.forge.pixpin.R.string.plano_ver_todo), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
-                        }
+                        // «Ver todo» ya no va en la barra (parecía de pantalla completa): doble toque.
                         IconButton(onClick = {
                             claro = !claro
                             prefs.edit().putBoolean("claro", claro).apply()
@@ -992,29 +966,15 @@ class PlanoActivity : ComponentActivity() {
                     dismissButton = { TextButton(onClick = { viendoLetras = false }) { Text(getString(com.forge.pixpin.R.string.plano_listo)) } }
                 )
             }
-            // Marcando: la pista, quitar el último marco, imprimir y salir.
-            if (marcando) {
-                Row(
-                    Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
-                        .clip(RoundedCornerShape(50)).background(Color(0xCC14182B)).padding(start = 16.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    val blanco = Color.White
-                    Text(
-                        if (hojas.isEmpty()) getString(com.forge.pixpin.R.string.plano_pista_marcos)
-                        else getString(com.forge.pixpin.R.string.plano_hojas, hojas.size),
-                        color = blanco, maxLines = 2, modifier = Modifier.weight(1f, fill = false).padding(vertical = 10.dp)
-                    )
-                    IconButton(onClick = { hojas = hojas.dropLast(1); marcos2++ }, enabled = hojas.isNotEmpty(), modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.Undo, contentDescription = getString(com.forge.pixpin.R.string.plano_quitar_marco), tint = blanco.copy(alpha = if (hojas.isNotEmpty()) 0.9f else 0.35f), modifier = Modifier.size(20.dp))
-                    }
-                    // Imprimir: mantener el marco del riel (25-oct-2026).
-                    IconButton(onClick = { marcando = false }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = getString(com.forge.pixpin.R.string.plano_dejar_de_marcar), tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
+            // Marcando: la barra de los marcos de todos los visores (salir: el marco del riel otra vez;
+            // imprimir: mantenerlo).
+            if (marcando) com.forge.pixpin.ui.BarraDeMarcos(
+                cuantos = hojas.size, alIr = null,
+                alQuitarUltimo = { hojas = hojas.dropLast(1); marcos2++ },
+                alBorrar = { hojas = emptyList(); marcos2++ },
+                modifier = Modifier.align(Alignment.BottomStart),
+                pista = if (hojas.isEmpty()) getString(com.forge.pixpin.R.string.plano_pista_marcos) else "Arrastra para otro"
+            )
             if (preparandoLamina) DatosDeLaLamina(nombre.substringBeforeLast('.'), onCerrar = { preparandoLamina = false }) { lamina ->
                 preparandoLamina = false
                 val m = modelo
@@ -1233,95 +1193,6 @@ class PlanoActivity : ComponentActivity() {
                 val s = 7 * densidad
                 raya.color = android.graphics.Color.rgb(0x30, 0xD1, 0x58); raya.strokeWidth = 1.8f * densidad
                 lienzo.drawRect(sx(g) - s, sy(g) - s, sx(g) + s, sy(g) + s, raya)
-            }
-        }
-    }
-
-    /**
-     * **El editor avanzado encima del plano** (13-oct-2026, el usuario: «el editor que aparece en
-     * AutoCAD es el sencillo, quiero el avanzado según se ponga en configuración»): como en el
-     * lienzo a pantalla completa, el estilo en el lateral ([com.forge.pixpin.motor.PanelLateralDeEstilo],
-     * del lado contrario a la mano), deshacer y rehacer abajo ([com.forge.pixpin.motor.CajaDeDeshacer])
-     * y la barra solo con las herramientas, las de «Barra del plano». Mismo motor, mismas piezas: nada
-     * de mandos propios del plano. [cambiado] con true: cambió lo dibujado (hay que repintarlo encima).
-     */
-    @Composable
-    private fun androidx.compose.foundation.layout.BoxScope.EditorAvanzado(
-        laCapa: com.forge.pixpin.motor.DrawController,
-        ajustes: com.forge.pixpin.data.Settings,
-        noche: Boolean,
-        /** Sube con cada cambio del motor: sin él, esto no se volvería a componer. */
-        tick: Int,
-        cambiado: (Boolean) -> Unit
-    ) {
-        @Suppress("UNUSED_EXPRESSION") tick
-        val zurdo = ajustes.zurdo
-        val seleccionado = laCapa.selectedElements()
-        val aplican = com.forge.pixpin.motor.propiedadesPara(laCapa.tool, seleccionado)
-        fun aplicarEstilo(nuevo: com.forge.pixpin.motor.ItemStyle) {
-            // Como en el editor: un texto al que se le cambia la letra se vuelve a medir.
-            laCapa.cambiarEstilo(nuevo) { e ->
-                if (e.type != com.forge.pixpin.motor.ElementType.TEXT) return@cambiarEstilo e
-                val (w, h) = com.forge.pixpin.motor.DrawFonts.medirTexto(
-                    this@PlanoActivity, e.text.orEmpty(), e.fontFamily ?: nuevo.fontFamily, e.fontSize ?: nuevo.fontSize
-                )
-                e.copy(width = w, height = h)
-            }
-        }
-        val marcasDeColor = remember(ajustes.coloresMarcados) {
-            ajustes.coloresMarcados.split(',').map { it.trim() }.filter { it.startsWith("#") && it.length == 7 }
-        }
-        if (aplican.isNotEmpty()) Column(
-            Modifier.align(if (zurdo) Alignment.CenterEnd else Alignment.CenterStart),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            com.forge.pixpin.motor.PanelLateralDeEstilo(
-                aplican = aplican,
-                estilo = laCapa.estiloActivo(),
-                rellenoObligatorio = laCapa.tool == com.forge.pixpin.motor.Tool.RELLENO || seleccionado.any { it.type == com.forge.pixpin.motor.ElementType.REGION },
-                zurdo = zurdo,
-                marcas = remember(ajustes.marcasDeDeslizadores) { com.forge.pixpin.motor.marcasDeTexto(ajustes.marcasDeDeslizadores) },
-                onMarcas = { cual, valores ->
-                    val todas = com.forge.pixpin.motor.marcasDeTexto(ajustes.marcasDeDeslizadores) + (cual to valores)
-                    lifecycleScope.launch {
-                        (application as com.forge.pixpin.PixPinApp).settings.setMarcas(com.forge.pixpin.motor.marcasATexto(todas))
-                    }
-                },
-                onEstilo = { nuevo -> aplicarEstilo(nuevo); cambiado(seleccionado.isNotEmpty()) },
-                // El panel habla en pantalla: el grosor elegido ya va a la escala de lo que se ve.
-                zoom = { (laCapa.scene.viewport.zoom * laCapa.escalaDeLoNuevo).toFloat() },
-                marcasDeColor = marcasDeColor,
-                noche = noche
-            )
-        }
-        Column(
-            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            com.forge.pixpin.motor.CajaDeDeshacer(
-                puedeDeshacer = laCapa.canUndo,
-                puedeRehacer = laCapa.canRedo,
-                onDeshacer = { laCapa.undo(); cambiado(true) },
-                onRehacer = { laCapa.redo(); cambiado(true) },
-                enFila = true,
-                modifier = Modifier.align(if (zurdo) Alignment.Start else Alignment.End)
-            )
-            Spacer(Modifier.size(6.dp))
-            com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
-                com.forge.pixpin.motor.DrawToolbar(
-                    tool = laCapa.tool,
-                    onTool = { laCapa.selectTool(it); cambiado(false) },
-                    style = laCapa.scene.style,
-                    onStyle = { nuevo -> aplicarEstilo(nuevo); cambiado(false) },
-                    canUndo = laCapa.canUndo,
-                    onUndo = { laCapa.undo(); cambiado(true) },
-                    // El estilo y el deshacer, en el lateral y en su caja: aquí serían lo mismo dos veces.
-                    mostrarEstilo = false,
-                    mostrarDeshacer = false,
-                    dark = noche,
-                    permitidas = ajustes.planoToolSet,
-                    grupos = ajustes.planoGroupList
-                )
             }
         }
     }

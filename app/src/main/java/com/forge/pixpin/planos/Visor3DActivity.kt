@@ -1,5 +1,6 @@
 package com.forge.pixpin.planos
 
+import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.runtime.collectAsState
 
 import androidx.compose.ui.graphics.nativeCanvas
@@ -273,6 +274,11 @@ class Visor3DActivity : ComponentActivity() {
                 seccion?.let { c -> DoubleArray(6) { k -> c[k] + o[k % 3] } }
             )
         }
+        /** Lo que se ve es la vista de un marcador (su cámara y su corte): su caja no se pinta. */
+        fun cajaEscondida(): Boolean {
+            val a = estadoAhora() ?: return false
+            return a.seccion != null && vistas.modelo.any { MarcadoresDelPlano.coincide(a, it) }
+        }
         /** Ir a una vista guardada (un marcador o un marco). */
         fun ponerEstado(v: MarcadoresDelPlano.Marcador3d) {
             val o = modelo?.origen ?: return
@@ -373,7 +379,8 @@ class Visor3DActivity : ComponentActivity() {
                         // **Un tirador de la caja**: su cara sigue al dedo a lo largo de su eje.
                         val caja = seccion
                         val mvp = matriz()
-                        val tirador = if (caja != null && mvp != null) tiradorEn(caja, mvp, abajo.position, 24f * densidad) else null
+                        // En la vista de un marcador la caja no se ve (solo su corte): tampoco se agarra.
+                        val tirador = if (caja != null && mvp != null && !cajaEscondida()) tiradorEn(caja, mvp, abajo.position, 24f * densidad) else null
                         if (caja != null && mvp != null && tirador != null) {
                             val k = tirador
                             val p = centroDeCara(caja, k)
@@ -489,7 +496,9 @@ class Visor3DActivity : ComponentActivity() {
                 Canvas(Modifier.fillMaxSize()) {
                     if (camara < 0) return@Canvas
                     val mvp = matriz() ?: return@Canvas
-                    seccion?.let { c ->
+                    // **Mirando un marcador con corte, el corte sí y la caja no** (25-oct-2026, el
+                    // usuario): fuera las aristas y los tiradores mientras la vista sea la del marcador.
+                    seccion?.takeIf { !cajaEscondida() }?.let { c ->
                         val raya = azul.copy(alpha = 0.75f)
                         for ((a, b) in aristasDeCaja(c)) {
                             val p = enPantalla(mvp, a); val q = enPantalla(mvp, b)
@@ -546,7 +555,7 @@ class Visor3DActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f, fill = false).widthIn(max = 180.dp).padding(vertical = 10.dp))
                     Spacer(Modifier.width(4.dp))
                     if (listo) {
-                        Boton(Icons.Filled.FitScreen, com.forge.pixpin.R.string.plano_ver_todo, al = { verTodo(); camara++; toques++ })
+                        // «Ver todo» ya no va en la barra (parecía de pantalla completa): doble toque en el vacío.
                         Boton(if (claro) Icons.Filled.DarkMode else Icons.Filled.LightMode, com.forge.pixpin.R.string.plano_tema, al = {
                             claro = !claro; prefs.edit().putBoolean("claro", claro).apply(); pintor?.claro = claro; pintar(); toques++
                         })
@@ -569,19 +578,6 @@ class Visor3DActivity : ComponentActivity() {
                     }
                 }
             }
-            // A la derecha: piezas, medir y llevar al croquis (lo que el croquis tenía en su panel).
-            AnimatedVisibility(
-                visible = listo && (aLaVista || viendoPiezas || midiendo), enter = fadeIn(), exit = fadeOut(),
-                modifier = Modifier.align(Alignment.CenterEnd).navigationBarsPadding().padding(end = 10.dp)
-            ) {
-                Column(Modifier.clip(RoundedCornerShape(50)).background(Color(0x8C14182B)).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (m != null && m.elementos.isNotEmpty()) Boton(Icons.Filled.Layers, com.forge.pixpin.R.string.modelo3d_piezas, viendoPiezas, 42, al = { viendoPiezas = !viendoPiezas; toques++ })
-                    Boton(Icons.Filled.Straighten, com.forge.pixpin.R.string.modelo3d_medir, midiendo, 42, al = { midiendo = !midiendo; medida.clear(); camara++; toques++ })
-                    if (m != null && m.nOpacos + m.nTransparentes > 0 && esModeloBim(nombre)) Boton(Icons.Filled.ViewInAr, com.forge.pixpin.R.string.modelo3d_al_croquis, tamano = 42, al = {
-                        com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(this@Visor3DActivity, original, nombre)
-                    })
-                }
-            }
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
             // **Lo anotado del marcador de esta vista**: mirando, se pinta encima; anotando, el lienzo.
             @Suppress("UNUSED_EXPRESSION") camara
@@ -602,25 +598,20 @@ class Visor3DActivity : ComponentActivity() {
                         onChange = { trazando -> if (!trazando) tickDeTinta++ }
                     )
                     val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
-                    Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-                        com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-                            com.forge.pixpin.motor.DrawToolbar(
-                                tool = c.tool,
-                                onTool = { c.selectTool(it); tickDeTinta++ },
-                                style = c.scene.style,
-                                onStyle = { nuevo -> c.cambiarEstilo(nuevo) { it }; tickDeTinta++ },
-                                canUndo = c.canUndo,
-                                onUndo = { c.undo(); tickDeTinta++ },
-                                permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                                grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO)
-                                    .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
-                            )
-                        }
-                    }
+                    // **El editor avanzado de todos los visores** (25-oct-2026). Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
+                    EditorAvanzadoDeVisor(
+                        capa = c, ajustes = ajustes,
+                        permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                        grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO)
+                            .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
+                        noche = !claro, tick = tickDeTinta,
+                        alListo = { dejarDeAnotar() },
+                        cambiado = { tickDeTinta++ }
+                    )
                     Text(
                         "Lo anotado solo se ve en la vista de este marcador",
                         color = Color.White, style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 10.dp)
+                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 62.dp)
                             .background(Color(0xCC14182B), androidx.compose.foundation.shape.RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -697,7 +688,16 @@ class Visor3DActivity : ComponentActivity() {
                 alElegirMarca = { i -> vistas.modelo.getOrNull(i)?.let { ponerEstado(it) } },
                 imprimirMarcos = if (marcosDoc.lista.isEmpty()) null else ({ imprimirLosMarcos() }),
                 imprimirTodo = { imprimirLaVista() },
-                modifier = Modifier.align(Alignment.CenterEnd)
+                modifier = Modifier.align(Alignment.CenterEnd),
+                // **Piezas, medir y al croquis, en el mismo riel** (25-oct-2026): antes una columna aparte
+                // en el mismo sitio, que se pisaba con él. Una sola columna, como el visor de Revit.
+                extras = if (anotando != null) null else ({
+                    if (m != null && m.elementos.isNotEmpty()) com.forge.pixpin.ui.BotonDelRiel(Icons.Filled.Layers, getString(com.forge.pixpin.R.string.modelo3d_piezas), viendoPiezas) { viendoPiezas = !viendoPiezas; toques++ }
+                    com.forge.pixpin.ui.BotonDelRiel(Icons.Filled.Straighten, getString(com.forge.pixpin.R.string.modelo3d_medir), midiendo) { midiendo = !midiendo; medida.clear(); camara++; toques++ }
+                    if (m != null && m.nOpacos + m.nTransparentes > 0 && esModeloBim(nombre)) com.forge.pixpin.ui.BotonDelRiel(Icons.Filled.ViewInAr, getString(com.forge.pixpin.R.string.modelo3d_al_croquis)) {
+                        com.forge.pixpin.croquis3d.Croquis3DActivity.abrirConModelo(this@Visor3DActivity, original, nombre)
+                    }
+                })
             )
             if (poniendoMarca) com.forge.pixpin.ui.ElegirEmojiDeMarca(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 84.dp),

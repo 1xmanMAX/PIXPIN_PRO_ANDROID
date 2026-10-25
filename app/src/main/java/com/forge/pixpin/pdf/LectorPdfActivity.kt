@@ -1,5 +1,6 @@
 package com.forge.pixpin.pdf
 
+import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -909,7 +910,7 @@ class LectorPdfActivity : ComponentActivity() {
                 com.forge.pixpin.ui.PastillaDeLector(
                     visible = aLaVista,
                     nombre = nombre.substringBeforeLast('.').ifBlank { "PDF" },
-                    archivo = nombre.takeIf { it.contains('.') } ?: "documento.pdf",
+                    archivo = nombre.takeIf { it.contains('.') } ?: java.io.File(rutaPedida).name.takeIf { it.contains('.') } ?: "documento.pdf",
                     botones = listOf(
                         // El lápiz y el marcador van en el riel de la derecha, como en el PC. Ver [com.forge.pixpin.ui.RielDelVisor].
                         // **Presentar** un PowerPoint: las diapositivas a pantalla completa, en vectores.
@@ -950,20 +951,21 @@ class LectorPdfActivity : ComponentActivity() {
             if (anotando) {
                 val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
                 var enProyecto by remember { mutableStateOf(capas.esDeUnProyecto()) }
-                Row(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .padding(top = 8.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                        .background(Color(0xB314182B))
-                        .padding(horizontal = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // El texto plantado en una hoja se escribe aquí. Ver [com.forge.pixpin.ui.EscribirEnElLienzo].
+                capas.ultima()?.let { c -> com.forge.pixpin.ui.EscribirEnElLienzo(c, tickDeLaBarra) { capas.ensuciarLaUltima(); tickDeLaBarra++ } }
+                // **El editor avanzado de todos los visores** (25-oct-2026): la barra agrupada abajo, el
+                // estilo plegado a un lado y deshacer de la hoja que se anota. Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
+                val sitio = if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF
+                EditorAvanzadoDeVisor(
+                    capa = maestro, ajustes = ajustes,
+                    permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
+                    noche = invertido, tick = tickDeLaBarra,
+                    alListo = { dejarDeAnotar() },
+                    cambiado = { contenido -> if (contenido) capas.ensuciarLaUltima(); tickDeLaBarra++ },
+                    historia = { capas.ultima() },
+                    alCambiarEstilo = { nuevo -> capas.ultima()?.cambiarEstilo(nuevo) { it } }
                 ) {
-                    Text(
-                        "Listo", color = Color.White,
-                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { dejarDeAnotar() }.padding(horizontal = 12.dp, vertical = 9.dp)
-                    )
                     // Solo desde que se vio un lápiz: sin él, el dedo es lo único que dibuja.
                     if (vioLapiz) Text(
                         if (conLapiz) "Dedo: mover" else "Dedo: dibujar", color = Color.White.copy(alpha = 0.85f),
@@ -971,12 +973,7 @@ class LectorPdfActivity : ComponentActivity() {
                             .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
                             .padding(horizontal = 12.dp, vertical = 9.dp)
                     )
-                    Text(
-                        "Exportar", color = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable { capas.guardarTodo(); compartiendo = true }.padding(horizontal = 12.dp, vertical = 9.dp)
-                    )
-                    // **Solo si se pide**: la edición rápida no crea ningún proyecto. Con esto el
-                    // PDF pasa a proyectos con lo anotado, para seguir con el editor completo.
+                    // **Solo si se pide**: la edición rápida no crea ningún proyecto.
                     if (!enProyecto) Text(
                         "Al proyecto", color = Color.White.copy(alpha = 0.85f),
                         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable {
@@ -990,24 +987,6 @@ class LectorPdfActivity : ComponentActivity() {
                             }
                         }.padding(horizontal = 12.dp, vertical = 9.dp)
                     )
-                }
-                // El texto plantado en una hoja se escribe aquí. Ver [com.forge.pixpin.ui.EscribirEnElLienzo].
-                capas.ultima()?.let { c -> com.forge.pixpin.ui.EscribirEnElLienzo(c, tickDeLaBarra) { capas.ensuciarLaUltima(); tickDeLaBarra++ } }
-                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-                    @Suppress("UNUSED_EXPRESSION") tickDeLaBarra
-                    com.forge.pixpin.ui.theme.SuperficieDeCristal(Modifier, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)) {
-                        com.forge.pixpin.motor.DrawToolbar(
-                            tool = maestro.tool,
-                            onTool = { maestro.selectTool(it); tickDeLaBarra++ },
-                            style = maestro.scene.style,
-                            onStyle = { nuevo -> maestro.cambiarEstilo(nuevo) { it }; capas.ultima()?.cambiarEstilo(nuevo) { it }; tickDeLaBarra++ },
-                            canUndo = capas.ultima()?.canUndo == true,
-                            onUndo = { capas.ultima()?.undo(); capas.ensuciarLaUltima(); tickDeLaBarra++ },
-                            // La barra de este formato (24-oct-2026): sin tocar, la del lector.
-                            permitidas = ajustes.formatoToolSet((if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF)) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                            grupos = ajustes.formatoGroupList((if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF)).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
-                        )
-                    }
                 }
             }
             // **El riel de lectura**, a la izquierda como en el lector de Word: la flechita baja con

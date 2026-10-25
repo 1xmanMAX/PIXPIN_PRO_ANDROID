@@ -225,37 +225,56 @@ fun CapaDeMarcos(
 
 /** Las fichas 1, 2, 3… y la pista, abajo a la izquierda (`fichas_de` del PC). */
 @Composable
-internal fun PistaDeMarcos(estado: MarcosDelVisor, alIr: (Marco) -> Unit, alImprimir: () -> Unit, modifier: Modifier) {
+internal fun PistaDeMarcos(estado: MarcosDelVisor, alIr: (Marco) -> Unit, alImprimir: () -> Unit, modifier: Modifier) =
+    BarraDeMarcos(
+        cuantos = estado.lista.size,
+        alIr = { i -> estado.lista.getOrNull(i)?.let(alIr) },
+        alQuitarUltimo = { estado.quitarUltimo() },
+        alBorrar = { estado.borrar() },
+        modifier = modifier
+    )
+
+/**
+ * **La barra de los marcos, la misma en todos los visores** (25-oct-2026, el usuario: «en el AutoCAD,
+ * al darle a los frames, abajo aparece imprimir y retroceder… uniformízalo»): las fichas 1, 2, 3… que
+ * llevan a cada marco, y en la pastilla de cristal del visor la pista, «Quitar el último» y «Borrar».
+ * Ni imprimir (mantener el marco del riel) ni cerrar (el marco del riel otra vez): nada de más.
+ */
+@Composable
+fun BarraDeMarcos(
+    cuantos: Int,
+    alIr: ((Int) -> Unit)?,
+    alQuitarUltimo: () -> Unit,
+    alBorrar: () -> Unit,
+    modifier: Modifier = Modifier,
+    pista: String = if (cuantos == 0) "Arrastra para poner un marco" else "Arrastra para otro"
+) {
     Row(
         // **Más arriba que los mandos de los lados** (25-oct-2026: en el PDF y el Word se pisaban con
         // los botones de añadir espacio a un lado, que van abajo del todo).
         modifier.navigationBarsPadding().padding(start = 12.dp, end = 12.dp, bottom = 64.dp).horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        estado.lista.forEachIndexed { i, m ->
+        for (i in 0 until cuantos) {
             Box(
                 Modifier.padding(end = 6.dp).size(30.dp).clip(RoundedCornerShape(6.dp)).background(AZUL)
-                    .clickable(onClickLabel = "Ir al marco ${i + 1}") { alIr(m) },
+                    .then(if (alIr != null) Modifier.clickable(onClickLabel = "Ir al marco ${i + 1}") { alIr(i) } else Modifier),
                 contentAlignment = Alignment.Center
             ) { Text("${i + 1}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
         }
         Row(
-            Modifier.padding(start = 4.dp).clip(RoundedCornerShape(50)).background(Color(0xE6141417)).padding(horizontal = 4.dp),
+            Modifier.padding(start = 4.dp).clip(RoundedCornerShape(50)).background(CRISTAL_DE_VISOR).padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                if (estado.lista.isEmpty()) "Arrastra para poner un marco" else "Arrastra para otro",
-                color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
-            )
+            Text(pista, color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
             @Composable
             fun Accion(t: String, al: () -> Unit) = Text(
                 t, color = Color(0xFF8AB4F8), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = al).padding(horizontal = 8.dp, vertical = 8.dp)
             )
-            if (estado.lista.isNotEmpty()) {
-                Accion("Quitar el último") { estado.quitarUltimo() }
-                Accion("Borrar") { estado.borrar() }
-                // Imprimir: mantener el marco del riel (ver [RielDelVisor]).
+            if (cuantos > 0) {
+                Accion("Quitar el último", alQuitarUltimo)
+                Accion("Borrar", alBorrar)
             }
         }
     }

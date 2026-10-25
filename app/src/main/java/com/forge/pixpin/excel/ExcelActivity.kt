@@ -1,6 +1,7 @@
 package com.forge.pixpin.excel
 
 
+import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.runtime.collectAsState
 
 import android.content.ClipData
@@ -363,22 +364,16 @@ class ExcelActivity : ComponentActivity() {
                 marcas.maxByOrNull { it.id }?.let { vistas.poner(it.id, v.zoom, esquina[0], esquina[1]) }
             }
             if (anotando) {
-                Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 8.dp, start = 6.dp, end = 6.dp)) {
-                    @Suppress("UNUSED_EXPRESSION") tickDeTinta
-                    SuperficieDeCristal(Modifier, RoundedCornerShape(22.dp)) {
-                        com.forge.pixpin.motor.DrawToolbar(
-                            tool = tinta.tool,
-                            onTool = { tinta.selectTool(it); tickDeTinta++ },
-                            style = tinta.scene.style,
-                            onStyle = { nuevo -> tinta.cambiarEstilo(nuevo) { it }; tickDeTinta++ },
-                            canUndo = tinta.canUndo,
-                            onUndo = { tinta.undo(); cambiosDeTinta++; tickDeTinta++ },
-                            permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                            grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA)
-                                .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
-                        )
-                    }
-                }
+                // **El editor avanzado de todos los visores** (25-oct-2026). Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
+                EditorAvanzadoDeVisor(
+                    capa = tinta, ajustes = ajustes,
+                    permitidas = ajustes.formatoToolSet(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.formatoGroupList(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA)
+                        .map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
+                    noche = oscuro, tick = tickDeTinta,
+                    alListo = { anotando = false; guardarTinta() },
+                    cambiado = { contenido -> if (contenido) cambiosDeTinta++; tickDeTinta++ }
+                )
             }
             // Abajo, flotando: la línea de la celda (con algo elegido) y las pestañas de las hojas.
             if (l != null && !anotando && !marcosDoc.activo && !poniendoMarca && !marcosDoc.imprimiendo && !ocultarParaImprimir) Column(
