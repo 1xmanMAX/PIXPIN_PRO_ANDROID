@@ -72,4 +72,21 @@ class HerramientasPorSitioTest {
         assertTrue(HerramientasPorSitio.leer(null).isEmpty())
         assertEquals(PIN_TOOLS_POR_DEFECTO, Reparto(emptySet(), emptyMap()).visibles(Sitio.PIN))
     }
+
+    @Test fun cadaFormatoLlevaLoDelLectorHastaQueSeToca() {
+        // Sin tocar: el PDF, el Word y el Excel salen con la barra del lector.
+        val lector = Settings(lectorTools = setOf(Tool.FREEDRAW.name, Tool.ERASER.name))
+        for (s in listOf(Sitio.PDF, Sitio.DOCUMENTO, Sitio.HOJA)) assertEquals(setOf(Tool.FREEDRAW, Tool.ERASER), lector.formatoToolSet(s))
+        // Tocado el PDF, va por su cuenta y los demás siguen con el lector.
+        val tocado = lector.copy(formatoTools = mapOf("pdf" to setOf(Tool.HIGHLIGHTER.name)))
+        assertEquals(setOf(Tool.HIGHLIGHTER), tocado.formatoToolSet(Sitio.PDF))
+        assertEquals(setOf(Tool.FREEDRAW, Tool.ERASER), tocado.formatoToolSet(Sitio.HOJA))
+        // Apagada en todos, tampoco sale en un formato.
+        val apagada = tocado.copy(herramientasApagadas = setOf(Tool.HIGHLIGHTER.name))
+        assertFalse(Tool.HIGHLIGHTER in apagada.formatoToolSet(Sitio.PDF))
+        // Y el reparto la apaga solo en el Excel sin tocar el PDF.
+        val r = tocado.reparto.alternarEn(Sitio.HOJA, Tool.ERASER)
+        assertFalse(r.activaEn(Sitio.HOJA, Tool.ERASER))
+        assertTrue(r.activaEn(Sitio.PDF, Tool.HIGHLIGHTER))
+    }
 }

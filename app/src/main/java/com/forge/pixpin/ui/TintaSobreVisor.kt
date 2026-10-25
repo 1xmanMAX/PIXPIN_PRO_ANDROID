@@ -49,7 +49,9 @@ fun TintaSobreVisor(
     alAcabar: () -> Unit,
     oscuro: Boolean = false,
     /** La vista no se mueve (la tinta de un marcador 3D va clavada a la pantalla). */
-    vistaFija: Boolean = false
+    vistaFija: Boolean = false,
+    /** De qué formato es el visor: su barra de herramientas (Ajustes → Herramientas, 24-oct). */
+    sitio: com.forge.pixpin.motor.HerramientasPorSitio.Sitio = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR
 ) {
     val c = controlador ?: return
     val contexto = LocalContext.current
@@ -97,8 +99,8 @@ fun TintaSobreVisor(
                     onStyle = { nuevo -> c.cambiarEstilo(nuevo) { it }; tick++ },
                     canUndo = c.canUndo,
                     onUndo = { c.undo(); tick++; alCambiar() },
-                    permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                    grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                    permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
                 )
             }
         }

@@ -696,7 +696,8 @@ class Visor3DActivity : ComponentActivity() {
         if (actual != null || anotando) com.forge.pixpin.ui.TintaSobreVisor(
             controlador = tinta, anotando = anotando, pulso = camara,
             vistaDelVisor = { vistaDeLaTinta() }, alSeguir = { }, alCambiar = { guardarLaTinta() },
-            alAcabar = { guardarLaTinta(); anotando = false }, vistaFija = true
+            alAcabar = { guardarLaTinta(); anotando = false }, vistaFija = true,
+            sitio = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO
         )
         // Los marcos de esta vista.
         val e = estadoDeAhora()

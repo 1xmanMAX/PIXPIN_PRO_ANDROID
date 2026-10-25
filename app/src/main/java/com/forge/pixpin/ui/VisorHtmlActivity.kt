@@ -1199,6 +1199,8 @@ class VisorHtmlActivity : ComponentActivity() {
                 aPantalla != null -> dejarLaPantallaCompleta()
                 anotando -> { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
                 autoDesplazando -> dejarDeAutoDesplazar()
+                // Atrás sale antes del modo de los marcos (el Esc del PC).
+                marcosDoc.activo -> alternarMarcos()
                 web?.canGoBack() == true -> web?.goBack()
                 // **Salir con cambios sin guardar avisa.** Se le pregunta a la propia página.
                 sinGuion || web == null -> finish()
@@ -1559,8 +1561,8 @@ class VisorHtmlActivity : ComponentActivity() {
                     onStyle = { nuevo -> laCapa.cambiarEstilo(nuevo) { it }; tickDeAnotar++ },
                     canUndo = laCapa.canUndo,
                     onUndo = { laCapa.undo(); tickDeAnotar++; cambiosEnLaCapa++ },
-                    permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                    grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                    permitidas = ajustes.formatoToolSet(if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                    grupos = ajustes.formatoGroupList(if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
                 )
             }
         }

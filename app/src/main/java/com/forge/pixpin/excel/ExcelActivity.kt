@@ -272,7 +272,8 @@ class ExcelActivity : ComponentActivity() {
                         alSeguir = { vp -> v.seguirALaTinta(vp.scrollX, vp.scrollY, vp.zoom) },
                         alCambiar = { guardarLaTinta() },
                         alAcabar = { guardarLaTinta(); anotando = false },
-                        oscuro = oscuro
+                        oscuro = oscuro,
+                        sitio = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA
                     )
                     if (!anotando && (marcosDoc.activo || marcosDoc.lista.isNotEmpty())) com.forge.pixpin.ui.CapaDeMarcos(
                         marcos = marcosDoc, version = versionDeMarcos,

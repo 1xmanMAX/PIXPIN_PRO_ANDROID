@@ -136,6 +136,13 @@ data class Settings(
     val planoTools: Set<String>? = null,
     val planoGroups: String? = null,
     /**
+     * **Las barras de cada formato** (24-oct-2026): PDF, Word y libros, Excel. Por el nombre del
+     * sitio ([com.forge.pixpin.motor.HerramientasPorSitio.Sitio.nombre]); uno que falta es «no lo he
+     * tocado» y lleva lo del lector.
+     */
+    val formatoTools: Map<String, Set<String>> = emptyMap(),
+    val formatoGroups: Map<String, String> = emptyMap(),
+    /**
      * Anotar en el plano con **el editor avanzado** (panel lateral de estilo, deshacer y rehacer,
      * la barra sin estilos) o con el sencillo de antes (todo en la barra de abajo). 13-oct-2026,
      * el usuario: «el editor que aparece en AutoCAD es el sencillo, quiero el avanzado».
@@ -367,7 +374,17 @@ data class Settings(
             herramientas(editorTools, com.forge.pixpin.motor.ALL_TOOLS.toSet()) + com.forge.pixpin.motor.Tool.ZONA
         com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> herramientas(lectorTools, com.forge.pixpin.motor.LECTOR_TOOLS_POR_DEFECTO)
         com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO -> herramientas(planoTools, com.forge.pixpin.motor.PLANO_TOOLS_POR_DEFECTO)
+        else ->
+            herramientas(formatoTools[s.nombre], sitioGuardado(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR))
     }
+
+    /** Lo que sale de verdad en un formato (sin las apagadas en todos ni las que un lector no lleva). */
+    fun formatoToolSet(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio): Set<com.forge.pixpin.motor.Tool> =
+        sitioGuardado(s) - apagadasTools
+
+    /** Y cómo se agrupa: lo suyo o, sin tocar, como el lector. */
+    fun formatoGroupList(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio): List<List<com.forge.pixpin.motor.Tool>> =
+        com.forge.pixpin.motor.gruposDe(formatoGroups[s.nombre] ?: lectorGroups, formatoToolSet(s))
 
     /** Las palabras mágicas ya resueltas contra las de fábrica. */
     val palabras: Map<String, com.forge.pixpin.clipboard.MiniApp>
@@ -489,6 +506,9 @@ class SettingsRepository(private val context: Context) {
         val TAREAS_MUY_URGENTE = stringPreferencesKey("tareas_muy_urgente")
         val DIAS_CADUCIDAD = intPreferencesKey("dias_caducidad")
         val HERRAMIENTAS_APAGADAS = stringSetPreferencesKey("herramientas_apagadas")
+        /** Las barras de cada formato: `formato_pdf_tools`, `formato_pdf_groups`… */
+        fun herramientasDe(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio) = stringSetPreferencesKey("formato_${s.nombre}_tools")
+        fun gruposDe(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio) = stringPreferencesKey("formato_${s.nombre}_groups")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
@@ -507,6 +527,10 @@ class SettingsRepository(private val context: Context) {
             lectorGroups = prefs[Keys.LECTOR_GROUPS],
             planoTools = prefs[Keys.PLANO_TOOLS],
             planoGroups = prefs[Keys.PLANO_GROUPS],
+            formatoTools = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.entries.filter { it.esFormato }
+                .mapNotNull { s -> prefs[Keys.herramientasDe(s)]?.let { s.nombre to it } }.toMap(),
+            formatoGroups = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.entries.filter { it.esFormato }
+                .mapNotNull { s -> prefs[Keys.gruposDe(s)]?.let { s.nombre to it } }.toMap(),
             planoAvanzado = prefs[Keys.PLANO_AVANZADO] ?: true,
             editorTools = prefs[Keys.EDITOR_TOOLS],
             editorGroups = prefs[Keys.EDITOR_GROUPS],
@@ -628,6 +652,7 @@ class SettingsRepository(private val context: Context) {
                     com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LIENZO -> Keys.EDITOR_TOOLS to Keys.EDITOR_GROUPS
                     com.forge.pixpin.motor.HerramientasPorSitio.Sitio.LECTOR -> Keys.LECTOR_TOOLS to Keys.LECTOR_GROUPS
                     com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PLANO -> Keys.PLANO_TOOLS to Keys.PLANO_GROUPS
+                    else -> Keys.herramientasDe(s) to Keys.gruposDe(s)
                 }
                 if (despues.enSitio(s) != antes.enSitio(s)) p[tools] = H.escribir(despues.enSitio(s))
                 if (grupos?.first == s) p[gruposKey] = com.forge.pixpin.motor.escribirGrupos(grupos.second)

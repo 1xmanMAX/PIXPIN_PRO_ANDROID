@@ -727,6 +727,8 @@ class LectorPdfActivity : ComponentActivity() {
             if (!marcosDoc.activo) { if (anotando) dejarDeAnotar(); poniendoMarca = false }
             marcosDoc.alternar(); versionDeMarcos++
         }
+        // Atrás sale antes del modo de los marcos que del lector (el Esc del PC).
+        androidx.activity.compose.BackHandler(enabled = versionDeMarcos >= 0 && marcosDoc.activo) { alternarMarcos() }
         suspend fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
             // Con su vista (PC 19-oct), justo a ese aumento y a ese sitio; sin ella, a su hoja, como antes.
             com.forge.pixpin.motor.VistasDoc.zoomDeTexto(vistasDoc.deMarca(m.id.toString()))?.let { (z, x, y) ->
@@ -1054,8 +1056,8 @@ class LectorPdfActivity : ComponentActivity() {
                             onStyle = { nuevo -> maestro.cambiarEstilo(nuevo) { it }; capas.ultima()?.cambiarEstilo(nuevo) { it }; tickDeLaBarra++ },
                             canUndo = capas.ultima()?.canUndo == true,
                             onUndo = { capas.ultima()?.undo(); capas.ensuciarLaUltima(); tickDeLaBarra++ },
-                            permitidas = ajustes.lectorToolSet - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
-                            grupos = ajustes.lectorGroupList.map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
+                            permitidas = ajustes.formatoToolSet(if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                            grupos = ajustes.formatoGroupList(if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() }
                         )
                     }
                 }

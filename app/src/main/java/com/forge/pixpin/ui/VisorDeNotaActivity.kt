@@ -264,7 +264,8 @@ if(window.visualViewport){visualViewport.addEventListener('scroll',pronto,{passi
                             alSeguir = { v -> seguir(v) },
                             alCambiar = { guardarLaTinta() },
                             alAcabar = { anotando = false; guardarLaTinta(); ponerEnLaPagina() },
-                            oscuro = esDeNoche()
+                            oscuro = esDeNoche(),
+                            sitio = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA
                         )
                         if (!anotando && marcosDoc.activo) CapaDeMarcos(
                             marcos = marcosDoc, version = versionDeMarcos,
