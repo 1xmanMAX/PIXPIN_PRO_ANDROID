@@ -110,11 +110,37 @@ object CarpetasDelChat {
         var yaEstaba = false
         cambiar(context, carpeta.id) { c ->
             if (c.contiene(m.id)) { yaEstaba = true; return@cambiar null }
+            // **A una grabación entra como adjunto a la clase**, con su nombre (25-oct-2026, PC
+            // e1150e8): no es de lo grabado y no lleva minuto, así que se ve aparte.
+            if (c.esGrabacion) {
+                titulo = nombreDeHoja(m).ifBlank { m.nombre.trim() }
+                return@cambiar c.adjuntar(m.id, titulo)
+            }
             titulo = c.tituloAlAnadir(nombreDeHoja(m), PAGINA)
             c.anadir(m.id, titulo)
         } ?: return Anadida.NoEsta
         val nombre = carpeta.nombre.ifBlank { NOMBRE_DE_SERIE }
         return if (yaEstaba) Anadida.YaEstaba(nombre) else Anadida.Puesta(nombre, titulo)
+    }
+
+    /**
+     * **«Adjuntar a la clase»** (25-oct-2026, `adjuntar_a_la_clase` del PC): el fichero [uri] entra en el
+     * chat como si se compartiera a él y en la carpeta de la grabación [carpetaId] como adjunto, con
+     * su nombre sin extensión. No sale suelto en el chat: está en la carpeta. Devuelve ese nombre, o
+     * null si no entró.
+     */
+    fun adjuntarALaClase(context: Context, carpetaId: String, uri: android.net.Uri): String? {
+        val carpeta = MensajesStore(context).leer().firstOrNull { it.id == carpetaId } ?: return null
+        val m = AlChat.meterYDevolver(context, uri, carpeta.proyecto) ?: return null
+        val titulo = m.nombre.replace(EXTENSION, "").ifBlank { m.nombre }
+        cambiar(context, carpetaId) { it.adjuntar(m.id, titulo) } ?: return null
+        return m.nombre
+    }
+
+    /** **El detalle de una grabación**: «1:30:00 · 5 capturas» (`carpeta-grabacion-detalle` del PC). */
+    fun detalleDeGrabacion(c: CarpetaDePaginas): String {
+        val n = c.capturas().size
+        return GrabarClase.minuto(c.duracionMs) + " · " + if (n == 1) "1 captura" else "$n capturas"
     }
 
     /**

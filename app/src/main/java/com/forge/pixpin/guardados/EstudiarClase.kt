@@ -276,7 +276,20 @@ object EstudiarClase {
      */
     fun notaDe(m: Mensaje, todos: List<Mensaje>): Mensaje? {
         if (esDeUnaClase(m)) return m
+        // **La carpeta de una grabación** se estudia desde su nota (25-oct-2026, `clase_que_estudia`
+        // del PC, e1150e8): es su vista natural. Sin nota (no se pudo cerrar), no hay qué estudiar.
+        CarpetaDePaginas.deMensaje(m)?.takeIf { it.esGrabacion && it.voz.isNotEmpty() }?.let { c ->
+            return todos.firstOrNull { it.id == c.voz }
+        }
         val de = runCatching { m.enGrabacion?.get("de")?.jsonPrimitive?.contentOrNull }.getOrNull() ?: return null
         return todos.firstOrNull { it.id == de }?.takeIf { esDeUnaClase(it) }
     }
+
+    /**
+     * **Lo que se enseña como posición mientras se arrastra la barra** (25-oct-2026, `posicion_a_la_vista`
+     * del PC, 8d7fe93): donde está el dedo, no donde dice el reproductor. El vídeo, al buscar, cae en
+     * el fotograma clave más cercano y en una grabación de pantalla dos claves pueden estar a medio
+     * vídeo: el tirador saltaba lejos del dedo.
+     */
+    fun posicionALaVista(medioMs: Long, arrastrando: Long?): Long = arrastrando ?: medioMs
 }

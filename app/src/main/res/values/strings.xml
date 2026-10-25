@@ -383,6 +383,7 @@
     <string name="guardados_adj_miniapp">Una mini-app</string>
     <string name="guardados_adj_carpeta">Carpeta de páginas</string>
     <string name="guardados_anadir_a_carpeta">Añadir a carpeta…</string>
+    <string name="guardados_abrir_la_carpeta">Abrir la carpeta</string>
     <string name="guardados_adj_figura">Figura</string>
     <string name="guardados_adj_conversacion">Una conversación</string>
     <string name="guardados_fondo">Fondo del chat</string>

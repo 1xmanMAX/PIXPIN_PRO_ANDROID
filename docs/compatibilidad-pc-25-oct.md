@@ -136,3 +136,15 @@ edición, solo ver y anotar con el editor avanzado; el de Windows, limpio, con l
   siempre (marcador, lápiz con el editor avanzado, marcos; mantener el marco imprime).
 - Anotaciones: `anot-<uid del mensaje>` (igual que el PC); las tablas de proyecto, por su página.
   El PC aún no guarda tinta en las tablas del chat: la del teléfono viaja pero el PC no la enseña.
+
+## v0.140.0: la carpeta de una grabación (PC e935dba..31b45c2)
+
+- Al grabar una clase, la nota, el vídeo y las capturas entran en una carpeta `MINIAPP`
+  `carpeta` con `tipo:"grabacion"`, `voz`, `video`, `duracionMs` y el `ms` de cada página; lo
+  adjuntado a la clase va con `adjunto:true`. En el chat, una sola tarjeta («● Grabación»,
+  duración, capturas, «Estudiar»); lo que está dentro de una carpeta no sale suelto.
+- Sincroniza con la regla §7.2 de siempre: un adjunto en cada aparato deja los dos.
+- Compartir una grabación: página web, PDF, Word, Markdown, texto y Anki (CSS y JS del PC tal
+  cual). Lo que en el PC son varios ficheros, aquí va en un ZIP.
+- Estudiar la clase como los visores: claro/oscuro, acercar con los dedos, el riel con marcador y
+  lápiz (anota sobre la captura; con el vídeo, primero guarda el fotograma como captura).

@@ -560,6 +560,14 @@ class GrabarClaseService : Service() {
         almacen.anadir(voz)
         elVideo?.let { almacen.anadir(it) }
         imagenes.forEach { almacen.anadir(it) }
+        // **Y todo dentro de su carpeta** (25-oct-2026, como el PC desde `e015e2b`): en el chat se ve
+        // UNA tarjeta y no la nota, el vídeo y cada captura sueltos. Los enlaces de arriba no cambian
+        // («Estudiar la clase» va por ellos); si la carpeta no entra, lo de dentro sigue suelto.
+        runCatching {
+            val carpeta = GrabarClase.carpetaDeLaGrabacion(vozId, duracion.toLong(), elVideo?.id, enlazadas)
+            val cuando = CarpetaDePaginas.cuandoLibre(System.currentTimeMillis(), almacen.leer())
+            almacen.anadir(CarpetaDePaginas.mensajeNuevo(nombre, cuando, proyecto, carpeta))
+        }.onFailure { android.util.Log.w("PixPinClase", "la clase quedó sin su carpeta", it) }
         // **Y se pasa a texto**, como el PC al terminar: es lo que se va a querer leer junto a
         // las imágenes. Si no hay reconocedor, se guarda igual y se dice dónde pedirlo luego.
         val conTexto = Transcriptor.disponible(context)
