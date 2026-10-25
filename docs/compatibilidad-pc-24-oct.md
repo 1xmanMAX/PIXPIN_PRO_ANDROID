@@ -1,4 +1,4 @@
-# Lo del PC del 15 al 24-oct, en Android (v0.127.0)
+# Lo del PC del 15 al 24-oct, en Android (v0.130.0)
 
 Del PC (`1xmanMAX/PIXPIN_PRO_WINDOWS`, 158 commits entre el 15 y el 24-oct) y del pedido del
 usuario del 24-oct: «que la previsualización tenga una barra superior y una barra lateral; en la
