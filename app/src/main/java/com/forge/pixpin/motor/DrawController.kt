@@ -3169,15 +3169,30 @@ class DrawController(initial: Scene = Scene()) {
     /** Si hay algo clavado en el dibujo. Para saber si ofrecer soltarlo. */
     val hayClavados: Boolean get() = scene.elements.any { it.locked && !it.isDeleted }
 
-    /** Cambia el texto de un elemento de texto (lo que escribe el teclado). */
-    fun updateText(id: String, text: String, measuredWidth: Double, measuredHeight: Double) {
+    /**
+     * Cambia el texto de un elemento de texto (lo que escribe el teclado).
+     *
+     * **Con su fuente rica** (25-oct-2026, [TextoRico]): quien edita la fuente pasa
+     * `conFuente = true` y la [textoRico] nueva (o `null` si ya no lleva marcas), y se guardan las
+     * dos, como pide el PC. Quien solo sabe del texto plano no la pasa: si no cambió el texto, la
+     * fuente se queda; si lo cambió, se quita (estaría vieja, y el PC la descartaría igual).
+     */
+    fun updateText(
+        id: String, text: String, measuredWidth: Double, measuredHeight: Double,
+        textoRico: String? = null, conFuente: Boolean = false
+    ) {
+        fun fuenteDe(viejo: Element): String? =
+            if (conFuente) textoRico else viejo.textoRico.takeIf { viejo.text == text }
         mutate { elements ->
             val texto = elements.firstOrNull { it.id == id }
             val contenedor = texto?.let { contenedorDe(it, elements) }
             if (texto == null || contenedor == null) {
                 return@mutate elements.map {
                     if (it.id == id) {
-                        it.copy(text = text, width = measuredWidth, height = measuredHeight)
+                        it.copy(
+                            text = text, width = measuredWidth, height = measuredHeight,
+                            textoRico = fuenteDe(it)
+                        )
                             .touched()
                     } else it
                 }
@@ -3198,7 +3213,7 @@ class DrawController(initial: Scene = Scene()) {
             val donde = sitioDelTextoDentro(caja, measuredWidth to measuredHeight)
             val nuevoTexto = texto.copy(
                 text = text, width = measuredWidth, height = measuredHeight,
-                x = donde.x, y = donde.y
+                x = donde.x, y = donde.y, textoRico = fuenteDe(texto)
             ).touched()
 
             elements.map {
