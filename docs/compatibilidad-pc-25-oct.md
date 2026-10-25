@@ -158,3 +158,14 @@ edición, solo ver y anotar con el editor avanzado; el de Windows, limpio, con l
   Tareas, con las tareas con hora de la semana como chapitas en su día; el mosaico Horario abre
   Tareas en esa vista. La vista se recuerda (`tareas`/`vista`: tarjetas, kanban, horario).
 - Flow Launcher y los atajos de teclado del PC no se portan (son del escritorio).
+
+## v0.142.0: foto del chat, buscar en todos los chats y sincronizar que gira (PC 9620ac8b..455ea973)
+
+- **Foto del chat** (imagen, emoji o color): campo `avatar` del `Proyecto`
+  (`{tipo, emoji, color, color2, ruta, cuando}`, guardado tal cual para no perder tipos nuevos); la
+  imagen en `files/guardados/avatar-<ms>.png`, cuadrada y ≤256 px. Se junta campo a campo como en el
+  PC. Los logos viejos del teléfono pasan a ser la foto del chat al arrancar, así ya viajan.
+  Probado contra el PC de verdad (`herramientas/pc-simulado`) en los dos sentidos.
+- **Buscar en todos los chats**: la lupa de la lista busca también dentro de los chats (sección
+  «Mensajes») y filtra sin mirar tildes.
+- **El botón de sincronizar gira** mientras hay una vuelta y se marca en rojo si falló.
