@@ -50,3 +50,33 @@ class FigurasDelPcTest {
         assertEquals(10.0, FigurasDeSerie.leerTexto(aqui)[0].elementos[0].points!![1].x, 0.0)
     }
 }
+
+class InstalarFigurasDeSerieTest {
+    private fun f(id: String, nombre: String) = com.forge.pixpin.motor.FiguraGuardada(id, nombre, propia = true)
+
+    @Test fun quita_las_de_antes_y_pone_las_de_ahora_al_final_sin_tocar_las_mias() {
+        val lista = listOf(f("serie-vieja", "Diario · Viejo"), f("a", "Mía"), f("b", "Otra mía"))
+        val catalogo = listOf(f("serie-1", "Diario · Gratitud"), f("serie-2", "Blocs · Cuadros"))
+        val r = com.forge.pixpin.motor.FigurasDeSerie.instalarEn(lista, catalogo)
+        assertEquals(listOf("a", "b", "serie-1", "serie-2"), r.map { it.id })
+    }
+
+    @Test fun si_una_mia_se_llama_igual_gana_la_mia() {
+        val r = com.forge.pixpin.motor.FigurasDeSerie.instalarEn(
+            listOf(f("a", "diario · gratitud")), listOf(f("serie-1", "Diario · Gratitud"))
+        )
+        assertEquals(listOf("a"), r.map { it.id })
+    }
+
+    @Test fun instalar_dos_veces_deja_lo_mismo() {
+        val catalogo = listOf(f("serie-1", "Diario · Gratitud"))
+        val una = com.forge.pixpin.motor.FigurasDeSerie.instalarEn(listOf(f("a", "Mía")), catalogo)
+        assertEquals(una, com.forge.pixpin.motor.FigurasDeSerie.instalarEn(una, catalogo))
+    }
+
+    @Test fun el_catalogo_en_claro_como_queda_en_el_apk_tambien_se_lee() {
+        val gz = listOf("src/main/assets/figuras/serie.json.gz", "app/src/main/assets/figuras/serie.json.gz").map(::File).first { it.exists() }
+        val claro = java.util.zip.GZIPInputStream(gz.inputStream()).readBytes()
+        assertEquals(627, com.forge.pixpin.motor.FigurasDeSerie.leer(claro.inputStream()).size)
+    }
+}

@@ -47,9 +47,16 @@ object BibliotecaStore {
     fun cargar(context: Context): List<FiguraGuardada> = runCatching {
         val f = archivo(context)
         if (!f.exists()) return emptyList()
+        // **Leída una vez por versión del fichero** (25-oct-2026): con las 627 de serie dentro son
+        // 10 MB, y el lienzo lo abre cada vez. Cambia el fichero (lo guardamos o llega del PC) →
+        // cambia su fecha o su tamaño → se vuelve a leer.
+        val sello = f.lastModified() to f.length()
+        leida?.let { (s, l) -> if (s == sello) return l }
         // Con los puntos del PC (`[x, y]`) o los de aquí: ver [FigurasDeSerie.leerTexto].
-        FigurasDeSerie.leerTexto(f.readText())
+        FigurasDeSerie.leerTexto(f.readText()).also { leida = sello to it }
     }.getOrDefault(emptyList())
+
+    @Volatile private var leida: Pair<Pair<Long, Long>, List<FiguraGuardada>>? = null
 
     /** Escribe la lista entera. Devuelve si se pudo. */
     fun guardar(context: Context, figuras: List<FiguraGuardada>): Boolean = runCatching {

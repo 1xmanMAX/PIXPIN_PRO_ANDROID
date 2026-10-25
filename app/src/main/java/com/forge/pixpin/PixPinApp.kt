@@ -114,7 +114,11 @@ class PixPinApp : Application() {
         scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.Asistente.limpiarModelosLocales(this@PixPinApp) } }
         // La biblioteca de figuras viaja por el chat «Asistente» (mensaje `auto-figuras`).
         com.forge.pixpin.motor.BibliotecaStore.alCambiar = { c ->
-            scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.FigurasQueViajan.asegurarMensaje(c) } }
+            scope.launch(Dispatchers.IO) {
+                // Antes, las figuras de serie en `figuras.json` (como el PC): así viajan con él.
+                runCatching { com.forge.pixpin.motor.FigurasDeSerie.instalarDeSerie(c) }
+                runCatching { com.forge.pixpin.asistente.FigurasQueViajan.asegurarMensaje(c) }
+            }
         }
         settings = SettingsRepository(this)
         scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }

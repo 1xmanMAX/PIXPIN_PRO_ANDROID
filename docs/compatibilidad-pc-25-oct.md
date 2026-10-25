@@ -44,3 +44,16 @@ sincronizable». **Nada de esto se ha probado en un teléfono**: compila y pasan
   de pantalla entera.
 - Carpetas: sin marcadores en el PDF ni tapar lo oculto; reordenar con flechas.
 - Anki: sin aviso de duplicadas. Horario: sin Google Calendar; no viaja (tampoco en el PC).
+
+## v0.132.0: las figuras de serie, de verdad
+
+- **No salían en el teléfono**: al empaquetar el APK, AAPT descomprime los `.gz` de `assets/` y
+  les quita la extensión; se abría `figuras/serie.json.gz`, no estaba, y la lista quedaba vacía sin
+  decir nada (las pruebas leían el fichero del repositorio, no el del APK). Ahora se prueban los dos
+  nombres y se mira la cabecera gzip, no el nombre.
+- **Sincronizables como en el PC** (`biblioteca_figuras::instalar_de_serie`): una vez por versión del
+  catálogo (marca que no viaja) se instalan en `pins/draw/figuras.json` —quitar las `serie-` de
+  antes, poner las de ahora al final, gana la del usuario si se llama igual—, el fichero que viaja
+  por el mensaje `auto-figuras` del chat «Asistente». Antes, guardar una figura en el teléfono
+  mandaba al PC una biblioteca sin las de serie, y el PC no las volvía a poner.
+- `figuras.json` se lee una vez por versión del fichero (con las de serie son 10 MB).

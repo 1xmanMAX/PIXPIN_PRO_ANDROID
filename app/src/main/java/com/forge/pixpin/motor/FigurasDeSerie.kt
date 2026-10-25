@@ -20,8 +20,13 @@ import java.util.zip.GZIPInputStream
  * estampada aquí o allí es la misma pieza, y si el `figuras.json` que llega del PC trae las suyas
  * no salen dos veces ([sinLasDeSerie]).
  *
- * No se meten en `figuras.json`: son 10 MB de JSON que no hace falta mandar por el chat de
- * sincronizar; se leen del APK la primera vez que se abre la lista y se quedan en memoria.
+ * **Se instalan en `figuras.json` como en el PC** (`biblioteca_figuras::instalar_de_serie`): una vez
+ * por [VERSION] del catálogo, apuntada en una preferencia que no viaja, cada aparato quita las de
+ * serie de antes y pone las de ahora al final, sin tocar las del usuario (ni su orden; si una suya
+ * se llama igual, gana la suya). Como `figuras.json` viaja entero y gana el último que lo toca, si
+ * el teléfono no las pusiera, al guardar una figura propia le quitaría al PC las suyas, y el PC no
+ * las vuelve a poner (ya tiene su marca). Con ids fijos, dos aparatos que las ponen dejan lo mismo.
+ * El panel las enseña del APK ([todas]) y las del fichero las quita [sinLasDeSerie].
  *
  * Para regenerarlas al cambiar el catálogo del PC (su `VERSION`): ver
  * `herramientas/figuras-de-serie/volcar.sh`.
@@ -32,7 +37,8 @@ object FigurasDeSerie {
     /** Entre la categoría y el nombre («Diario · Gratitud»), como en el PC. */
     const val SEPARADOR = " · "
     const val PREFIJO_ID = "serie-"
-    private const val ASSET = "figuras/serie.json.gz"
+    /** En el APK sale sin el `.gz` (ver [todas]); el otro, por si algún día se empaqueta tal cual. */
+    private val ASSETS = listOf("figuras/serie.json", "figuras/serie.json.gz")
 
     /** Las categorías, en el orden del menú del PC (`CATEGORIAS`). */
     val CATEGORIAS = listOf(
@@ -47,17 +53,36 @@ object FigurasDeSerie {
 
     @Volatile private var enMemoria: List<FiguraGuardada>? = null
 
-    /** Todas, leídas del APK una vez. Si el asset falta o no se lee, ninguna. */
+    /**
+     * Todas, leídas del APK una vez. Si el asset falta o no se lee, ninguna.
+     *
+     * **Con `.gz` o sin él** (25-oct-2026, el usuario: «las figuras no fueron importadas»): al
+     * empaquetar, AAPT descomprime los `.gz` de `assets/` y les quita la extensión, así que en el
+     * APK está `figuras/serie.json` en claro y abrir `serie.json.gz` fallaba: la lista salía vacía.
+     * Se prueban los dos nombres y [leer] mira la cabecera, no el nombre. Un fallo no se guarda:
+     * la próxima vez se vuelve a intentar.
+     */
     fun todas(context: Context): List<FiguraGuardada> =
         enMemoria ?: synchronized(this) {
-            enMemoria ?: runCatching { context.assets.open(ASSET).use(::leer) }.getOrDefault(emptyList()).also { enMemoria = it }
+            enMemoria ?: (ASSETS.firstNotNullOfOrNull { a ->
+                runCatching { context.assets.open(a).use(::leer) }
+                    .onFailure { android.util.Log.w("FigurasDeSerie", "No se leyó $a", it) }
+                    .getOrNull()?.takeIf { it.isNotEmpty() }
+            } ?: emptyList()).also { if (it.isNotEmpty()) enMemoria = it }
         }
 
     /**
-     * El `.json.gz` del catálogo a figuras. El PC escribe los puntos como en Excalidraw, `[x, y]`;
-     * aquí un [Pt] es `{"x", "y"}`: se pasan al leer (los de `points` y los de cada hueco).
+     * El catálogo a figuras, venga comprimido (`.json.gz`, el del repositorio) o en claro (el del
+     * APK). El PC escribe los puntos como en Excalidraw, `[x, y]`; aquí un [Pt] es `{"x", "y"}`: se
+     * pasan al leer (los de `points` y los de cada hueco).
      */
-    fun leer(entrada: InputStream): List<FiguraGuardada> = leerTexto(GZIPInputStream(entrada).bufferedReader().readText())
+    fun leer(entrada: InputStream): List<FiguraGuardada> {
+        val b = java.io.BufferedInputStream(entrada)
+        b.mark(2)
+        val gz = b.read() == 0x1f && b.read() == 0x8b
+        b.reset()
+        return leerTexto((if (gz) GZIPInputStream(b) else b).bufferedReader().readText())
+    }
 
     /**
      * Una lista de figuras en el formato de `figuras.json`, la escriba el PC (puntos `[x, y]`) o
@@ -87,6 +112,34 @@ object FigurasDeSerie {
     }
 
     fun esDeSerie(f: FiguraGuardada) = f.id.startsWith(PREFIJO_ID)
+
+    /**
+     * **Pone el catálogo en una lista**, el `instalar_en` del PC: quita las de serie de antes y mete
+     * las de ahora al final, sin tocar las del usuario ni su orden. Si el usuario tiene una figura
+     * con el mismo nombre que una de serie, gana la suya y la de serie no entra.
+     */
+    fun instalarEn(lista: List<FiguraGuardada>, catalogo: List<FiguraGuardada>): List<FiguraGuardada> {
+        val propias = lista.filterNot(::esDeSerie)
+        val nombres = propias.map { it.nombre.lowercase() }.toSet()
+        return propias + catalogo.filter { it.nombre.lowercase() !in nombres }
+    }
+
+    private const val PREFS = "figuras_de_serie"
+    private const val CLAVE_VERSION = "version"
+
+    /**
+     * **Las pone en `figuras.json` una vez por [VERSION]** (fuera de la pantalla: son 10 MB). La marca
+     * no viaja, como `figuras-de-serie.version` del PC. Si no se pudo leer el catálogo o escribir, no
+     * se marca y se reintenta al arrancar otra vez.
+     */
+    fun instalarDeSerie(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(CLAVE_VERSION, 0) == VERSION) return
+        val catalogo = todas(context)
+        if (catalogo.isEmpty()) return
+        val lista = instalarEn(BibliotecaStore.cargar(context), catalogo)
+        if (BibliotecaStore.guardar(context, lista)) prefs.edit().putInt(CLAVE_VERSION, VERSION).apply()
+    }
 
     /** Las del usuario sin las de serie que haya traído el `figuras.json` del PC. */
     fun sinLasDeSerie(lista: List<FiguraGuardada>) = lista.filterNot(::esDeSerie)
