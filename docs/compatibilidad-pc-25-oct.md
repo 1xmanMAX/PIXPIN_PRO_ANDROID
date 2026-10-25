@@ -121,3 +121,18 @@ Android no compila Rust). Ninguno está pedido como hecho; aquí va lo puro y lo
 | Leer en otro hilo, «Leyendo…», precargar | no hace falta: los pines y la captura de Android no leen texto (no hay OCR); el asistente ya lee fuera del hilo de la interfaz | — |
 
 El canal de Indra (imagen, detección, LM, orden) no se porta sin el runtime que lo corra.
+
+## v0.139.0: un solo visor de hojas, solo para ver y anotar
+
+Pedido del usuario: «quita la visualización de Excel antigua, todo en la nueva; de momento sin
+edición, solo ver y anotar con el editor avanzado; el de Windows, limpio, con la UI de los demás».
+
+- Todo abre en `ExcelActivity`: .xlsx/.xlsm/.xls/.ods/.csv/.tsv, las tablas del chat (también las
+  editadas en el PC, regla `hoja_pin::libro_para_ver`), las de los proyectos y la rueda de abiertos.
+  Tablas (`TablaActivity`) ya no se abre desde ningún sitio, pero no se quita (como
+  `EDITAR_EN_TABLAS = false`); sus datos y su sincronización siguen igual.
+- Diseño como el visor de hojas del PC: pestañas planas con el subrayado verde, la línea de la
+  celda en la pastilla de cristal, arriba solo claro/oscuro, exportar y «Abrir con»; el riel de
+  siempre (marcador, lápiz con el editor avanzado, marcos; mantener el marco imprime).
+- Anotaciones: `anot-<uid del mensaje>` (igual que el PC); las tablas de proyecto, por su página.
+  El PC aún no guarda tinta en las tablas del chat: la del teléfono viaja pero el PC no la enseña.

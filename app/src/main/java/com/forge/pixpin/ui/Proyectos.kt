@@ -1400,7 +1400,10 @@ private fun BarraDeAcciones(
         }
         // **Una tabla con fórmulas.** Nace vacía y el editor la crea al guardar; el proyecto
         // guarda solo por dónde encontrarla. Ver [com.forge.pixpin.tabla.TablaActivity].
-        BotonDeAccion(
+        // **Desactivado, no quitado** (25-oct-2026, el usuario: «de momento quita la edición de
+        // Excel»): una tabla nueva solo sirve para escribirla, y la vista de Tablas ya no se abre.
+        // Vuelve con [com.forge.pixpin.excel.ExcelActivity.EDITAR_EN_TABLAS].
+        if (com.forge.pixpin.excel.ExcelActivity.EDITAR_EN_TABLAS) BotonDeAccion(
             Icons.Filled.TableChart, R.string.proyecto_tabla_corta, R.string.proyecto_tabla_nueva
         ) {
             val ahora = System.currentTimeMillis()
@@ -2019,7 +2022,10 @@ internal fun abrirHoja(
 ) {
     val h = pagina.hoja
     when {
-        h.tabla != null -> com.forge.pixpin.tabla.TablaActivity.abrir(contexto, h.tabla!!, desdeProyecto = p.id)
+        // **Una tabla del proyecto se ve en el visor de hojas, sin editar** (25-oct-2026, el usuario:
+        // «quita la edición de Excel y solo ponlo en visualización normal»); se anota con el riel,
+        // con el código de su hoja. Ver [com.forge.pixpin.excel.EntradaDeHojas].
+        h.tabla != null -> com.forge.pixpin.excel.ExcelActivity.abrirDestino(contexto, com.forge.pixpin.excel.EntradaDeHojas.destino(h.tabla))
 
         // **La lámina de un croquis en el espacio abre el croquis, no la lámina.**
         //

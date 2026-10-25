@@ -21,7 +21,60 @@ import java.util.concurrent.Executors
  * La vista ([VistaHoja]) solo lee lo ya traído y pide lo que le falte; cuando llega algo, se le
  * avisa con [alCambiar] (desde ese hilo).
  */
-class LibroExcel private constructor(private val h: Long, val ruta: String, val libro: Pxhj.Libro) {
+class LibroExcel private constructor(private val origen: Origen, val ruta: String?, val libro: Pxhj.Libro) {
+    /**
+     * **De dónde salen las hojas** (25-oct-2026, «todo lo incorporas en la nueva»): el .so (un archivo
+     * de Excel) o unas tablas de PixPin ya en memoria ([TablasEnElVisor]). Lo de arriba —trozos,
+     * tandas, el hilo— es lo mismo para las dos. Se llama siempre desde [hilo].
+     */
+    internal interface Origen {
+        fun abrirHoja(i: Int, hasta: Int): Boolean
+        fun ultimoError(): String?
+        /** 1 ya entera, 0 falta, -1 no se pudo. */
+        fun cargar(i: Int, celdas: Int): Int
+        fun geometria(i: Int): Pxhj.Geometria?
+        fun trozo(i: Int, f0: Int, f1: Int, conocidos: Int): Pxhj.Trozo?
+        fun copiar(i: Int, f0: Int, c0: Int, f1: Int, c1: Int): String?
+        fun lista(i: Int, f: Int, c: Int): String?
+        fun imagen(ruta: String): ByteArray?
+        fun cerrar()
+    }
+
+    /** El libro leído por `libpixpinoffice.so`, con su número [h]. */
+    private class DelNativo(private val h: Long) : Origen {
+        override fun abrirHoja(i: Int, hasta: Int) = HojasNativo.abrirHoja(h, i, hasta)
+        override fun ultimoError() = HojasNativo.ultimoError()
+        override fun cargar(i: Int, celdas: Int) = HojasNativo.cargar(h, i, celdas)
+        override fun geometria(i: Int): Pxhj.Geometria? {
+            val b = HojasNativo.geometria(h, i) ?: return null
+            return runCatching { Pxhj.geometria(b) }.onFailure { android.util.Log.w(TAG, "geometría ilegible: ${it.message}") }.getOrNull()
+        }
+        override fun trozo(i: Int, f0: Int, f1: Int, conocidos: Int): Pxhj.Trozo? {
+            val b = HojasNativo.trozo(h, i, f0, f1, conocidos) ?: return null
+            return runCatching { Pxhj.trozo(b) }.onFailure { android.util.Log.w(TAG, "trozo ${f0 / FILAS_POR_TROZO} ilegible: ${it.message}") }.getOrNull()
+        }
+        override fun copiar(i: Int, f0: Int, c0: Int, f1: Int, c1: Int) = HojasNativo.copiar(h, i, f0, c0, f1, c1)
+        override fun lista(i: Int, f: Int, c: Int) = HojasNativo.lista(h, i, f, c)
+        override fun imagen(ruta: String) = HojasNativo.imagen(h, ruta)
+        override fun cerrar() = HojasNativo.cerrar(h)
+    }
+
+    /** Unas tablas ya pasadas a hojas del visor: todo en memoria y entero desde el principio. */
+    private class DeTablas(private val hojas: List<TablasEnElVisor.Hoja>) : Origen {
+        override fun abrirHoja(i: Int, hasta: Int) = i in hojas.indices
+        override fun ultimoError(): String? = null
+        override fun cargar(i: Int, celdas: Int) = if (i in hojas.indices) 1 else -1
+        override fun geometria(i: Int) = hojas.getOrNull(i)?.geometria
+        override fun trozo(i: Int, f0: Int, f1: Int, conocidos: Int) = hojas.getOrNull(i)?.trozo(f0, f1, conocidos)
+        override fun copiar(i: Int, f0: Int, c0: Int, f1: Int, c1: Int) = hojas.getOrNull(i)?.copiar(f0, c0, f1, c1)
+        override fun lista(i: Int, f: Int, c: Int): String? = null
+        override fun imagen(ruta: String): ByteArray? = null
+        override fun cerrar() {}
+    }
+
+    /** Si las hojas son tablas de PixPin (y no la lectura del .so). */
+    val deTablas: Boolean get() = origen is DeTablas
+
     @Volatile private var cerrado = false
 
     /** Se llama (desde el hilo del .so) cuando llega algo nuevo que pintar. */
@@ -69,11 +122,7 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
                 if (cerrado) return
                 val conocidos = estilos.size
                 val f0 = k * FILAS_POR_TROZO
-                val b = HojasNativo.trozo(h, indice, f0, f0 + FILAS_POR_TROZO - 1, conocidos) ?: return
-                val t = runCatching { Pxhj.trozo(b) }.getOrElse {
-                    android.util.Log.w(TAG, "trozo $k ilegible: ${it.message}")
-                    return
-                }
+                val t = origen.trozo(indice, f0, f0 + FILAS_POR_TROZO - 1, conocidos) ?: return
                 if (t.desde != conocidos) return
                 if (t.estilos.isNotEmpty()) estilos = estilos + t.estilos
                 synchronized(trozos) { trozos[k] = t }
@@ -87,10 +136,9 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
         }
 
         internal fun refrescarGeometria() {
-            val b = HojasNativo.geometria(h, indice) ?: return
-            runCatching { Pxhj.geometria(b) }
-                .onSuccess { geo = it; if (it.completa) completa = true }
-                .onFailure { android.util.Log.w(TAG, "geometría ilegible: ${it.message}") }
+            val g = origen.geometria(indice) ?: return
+            geo = g
+            if (g.completa) completa = true
         }
 
         /** Ya leída entera: lo que va al final de la hoja cambia los trozos traídos. */
@@ -113,8 +161,8 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
         hilo.execute {
             if (cerrado) return@execute
             val t0 = System.nanoTime()
-            if (!HojasNativo.abrirHoja(h, i, PRIMERA_PANTALLA)) {
-                nueva.fallo = HojasNativo.ultimoError() ?: "no se pudo abrir la hoja"
+            if (!origen.abrirHoja(i, PRIMERA_PANTALLA)) {
+                nueva.fallo = origen.ultimoError() ?:"no se pudo abrir la hoja"
                 avisar(); return@execute
             }
             nueva.refrescarGeometria()
@@ -130,7 +178,7 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
     private fun leerElResto(hoja: Hoja, t0: Long) {
         hilo.execute {
             if (cerrado || hoja.completa) return@execute
-            when (HojasNativo.cargar(h, hoja.indice, TANDA)) {
+            when (origen.cargar(hoja.indice, TANDA)) {
                 1 -> {
                     hoja.alCompletar()
                     android.util.Log.i(TAG, "hoja ${hoja.indice + 1} entera en ${(System.nanoTime() - t0) / 1_000_000} ms (${hoja.filasLeidas} filas)")
@@ -148,12 +196,12 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
 
     /** Lo elegido como texto con tabuladores; [listo] se llama desde el hilo del .so. */
     fun copiar(hoja: Int, r: Pxhj.Rango, listo: (String?) -> Unit) {
-        hilo.execute { listo(if (cerrado) null else HojasNativo.copiar(h, hoja, r.f0, r.c0, r.f1, r.c1)) }
+        hilo.execute { listo(if (cerrado) null else origen.copiar(hoja, r.f0, r.c0, r.f1, r.c1)) }
     }
 
     /** Los valores de la lista desplegable de la celda (solo para ver), en el hilo del .so; null si no tiene. */
     fun lista(hoja: Int, f: Int, c: Int, listo: (List<String>?) -> Unit) {
-        hilo.execute { listo(if (cerrado) null else HojasNativo.lista(h, hoja, f, c)?.split('\n')?.filter { it.isNotEmpty() }) }
+        hilo.execute { listo(if (cerrado) null else origen.lista(hoja, f, c)?.split('\n')?.filter { it.isNotEmpty() }) }
     }
 
     private val imagenes = ConcurrentHashMap<String, Bitmap>()
@@ -164,7 +212,7 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
         imagenes[ruta]?.let { return it }
         if (cerrado || !sinImagen.add(ruta)) return null
         hilo.execute {
-            val b = HojasNativo.imagen(h, ruta)
+            val b = origen.imagen(ruta)
             val bmp = b?.let { decodificar(it) }
             if (bmp != null) { imagenes[ruta] = bmp; avisar() }
         }
@@ -186,7 +234,7 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
     fun cerrar() {
         if (cerrado) return
         cerrado = true
-        hilo.execute { HojasNativo.cerrar(h) }
+        hilo.execute { origen.cerrar() }
     }
 
     companion object {
@@ -271,8 +319,17 @@ class LibroExcel private constructor(private val h: Long, val ruta: String, val 
                     return null
                 }
                 android.util.Log.i(TAG, "libro abierto en ${(System.nanoTime() - t0) / 1_000_000} ms: ${File(ruta).name}")
-                LibroExcel(h, ruta, libro)
+                LibroExcel(DelNativo(h), ruta, libro)
             }.getOrNull()
+        }
+
+        /**
+         * **Unas tablas de PixPin como libro** (25-oct-2026), ya pasadas con [TablasEnElVisor.hoja]
+         * (que calcula: fuera de la pantalla). [ruta]: el archivo del que salieron, si lo hay.
+         */
+        fun deTablas(hojas: List<TablasEnElVisor.Hoja>, ruta: String? = null, activa: Int = 0): LibroExcel? {
+            if (hojas.isEmpty()) return null
+            return LibroExcel(DeTablas(hojas), ruta, TablasEnElVisor.libro(hojas, activa))
         }
     }
 }
