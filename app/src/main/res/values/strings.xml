@@ -377,6 +377,8 @@
     <string name="guardados_adj_pagina">Una página de un proyecto</string>
     <string name="guardados_adj_proyecto">Un proyecto entero</string>
     <string name="guardados_adj_miniapp">Una mini-app</string>
+    <string name="guardados_adj_carpeta">Carpeta de páginas</string>
+    <string name="guardados_anadir_a_carpeta">Añadir a carpeta…</string>
     <string name="guardados_adj_conversacion">Una conversación</string>
     <string name="guardados_fondo">Fondo del chat</string>
     <string name="guardados_a_texto">Pasar a texto</string>

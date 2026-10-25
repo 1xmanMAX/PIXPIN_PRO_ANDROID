@@ -141,7 +141,9 @@ internal fun vistazo(m: Mensaje): String = when (m.clase) {
     Clase.TABLA -> "📊 " + m.nombre.ifBlank { "Tabla" }
     Clase.CROQUIS -> "🧊 " + m.nombre.ifBlank { "Croquis 3D" }
     Clase.PROYECTO -> "📁 " + m.nombre.ifBlank { "Proyecto" }
-    Clase.MINIAPP -> "☑️ " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim('#', ' ')
+    // Una carpeta de páginas: su nombre, no su JSON (25-oct-2026). Ver [com.forge.pixpin.guardados.CarpetaDePaginas].
+    Clase.MINIAPP -> if (com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m)) "📒 " + m.nombre.ifBlank { "Carpeta de páginas" }
+    else "☑️ " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim('#', ' ')
     Clase.ARCHIVO -> "📄 " + m.nombre.ifBlank { "Archivo" }
     Clase.NOTA -> m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
 }

@@ -62,6 +62,9 @@ class MotorSeparadoTest {
         // dedo a qué valor sale— viven aparte en `Deslizadores.kt`, que sí es
         // núcleo y sí se comprueba sin dispositivo.
         "PanelLateral.kt",
+        // Las figuras de serie del PC se leen del APK (`assets`) con su `Context`; leerlas de un
+        // `InputStream` ([com.forge.pixpin.motor.FigurasDeSerie.leer]) sí se prueba sin aparato.
+        "FigurasDeSerie.kt",
         // El mando de lo elegido es interfaz entera: un disco que se dibuja y unos
         // arrastres que se atienden. Lo que le hace a lo elegido —mover, girar, escalar,
         // estirar— vive en `DrawController` y en `Transform.kt`, que sí son núcleo y sí se
