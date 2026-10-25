@@ -73,6 +73,10 @@ import kotlinx.coroutines.withContext
  * proyecto (el proyecto entero) y el botón «Enviar» de Sincronizar (elegir archivos). Enseña un
  * código y su QR; cada aparato que lo use sale en la lista y se le manda cuando se aprueba. El
  * código vale mientras esta pantalla esté abierta: al cerrarla deja de existir. Ver [Destino].
+ *
+ * **Encima del código, tus aparatos** (25-oct-2026, como «Enviar por Wi-Fi» del PC): los del grupo,
+ * con quién se ve en la Wi-Fi, y un toque manda directo por el canal cifrado del grupo, sin código
+ * ni aprobar nada. El código y el QR siguen debajo para los de fuera. Ver [AlGrupo].
  */
 class EnviarActivity : ComponentActivity() {
 
@@ -115,6 +119,16 @@ class EnviarActivity : ComponentActivity() {
     private fun cambiar(id: Long, como: (Destino) -> Destino) {
         runOnUiThread { destinos = destinos.map { if (it.id == id) como(it) else it } }
     }
+
+    /**
+     * **Los del grupo, para mandarles sin código.** Nulo: aún no se sabe (o lo que se envía no es
+     * de archivos sueltos, ver [AlGrupo.sePuede]); vacío: este aparato no tiene a nadie en su grupo.
+     */
+    private var grupo by mutableStateOf<List<AlGrupo.Fila>?>(null)
+    /** Mientras se mira quién contesta en la Wi-Fi. Ver [AlDia.aparatos]. */
+    private var buscandoGrupo by mutableStateOf(false)
+    /** Cómo va lo mandado a cada uno, por su id. */
+    private val alGrupo = androidx.compose.runtime.mutableStateMapOf<String, AlGrupo.Estado>()
 
     private var estado by mutableStateOf<Estado>(Estado.Preparando)
     private var cosas by mutableStateOf<List<Pair<Envio.Elemento, File>>>(emptyList())
@@ -292,7 +306,56 @@ class EnviarActivity : ComponentActivity() {
         val lista = withContext(Dispatchers.IO) { runCatching(que).getOrDefault(emptyList()) }
         if (lista.isEmpty()) { estado = Estado.Fallo("No se pudo preparar lo que querías enviar."); return }
         cosas = lista
+        if (AlGrupo.sePuede(lista.map { it.first.tipo })) lifecycleScope.launch { buscarAlGrupo() }
         abrirLaPuerta(lista)
+    }
+
+    // ------------------------------------------------- directo al grupo
+
+    /**
+     * **Quién del grupo se ve ahora en la Wi-Fi.** Primero salen todos sin ver (al instante, de la
+     * identidad), y luego se marcan los que contestan: la dirección recordada con su PING, o su
+     * anuncio en la red ([AlDia.aparatos], lo mismo que «Ponerse al día»).
+     */
+    private suspend fun buscarAlGrupo() {
+        if (buscandoGrupo) return
+        val identidad = withContext(Dispatchers.IO) { IdentidadEnDisco(filesDir).leer() }
+        val todos = AlGrupo.filas(identidad, emptyList())
+        if (grupo == null) grupo = todos
+        if (todos.isEmpty()) return
+        buscandoGrupo = true
+        try {
+            val presentes = withContext(Dispatchers.IO) { runCatching { AlDia.aparatos(this@EnviarActivity) }.getOrDefault(emptyList()) }
+            grupo = AlGrupo.filas(identidad, presentes)
+        } finally {
+            buscandoGrupo = false
+        }
+    }
+
+    /**
+     * **Directo a un aparato del grupo, sin código**: el `suelto` de «p s» del PC por el canal del
+     * grupo ([AlGrupo.mandarA]). Si ya hay algo saliendo hacia él, no se manda dos veces.
+     */
+    private fun mandarAlGrupo(fila: AlGrupo.Fila) {
+        val id = fila.aparato.id
+        if (alGrupo[id] is AlGrupo.Estado.Saliendo || cosas.isEmpty() || !fila.seVe) return
+        alGrupo[id] = AlGrupo.Estado.Saliendo()
+        val archivos = cosas.map { (e, f) -> AlGrupo.Archivo(f, e.nombre, e.mime?.takeIf { it.isNotBlank() } ?: AlGrupo.mimeDe(e.nombre)) }
+        val miPuerto = runCatching { Presencia.red.puerto }.getOrDefault(0)
+        lifecycleScope.launch(Dispatchers.IO) {
+            var ultimo = 0L
+            val hecho = AlGrupo.mandarA(Red.disco(this@EnviarActivity), fila, archivos, miPuerto) { hechos, total ->
+                // Sin inundar la pantalla: un aviso cada décima de segundo como mucho.
+                val ahora = System.currentTimeMillis()
+                if (ahora - ultimo >= 100 || hechos >= total) {
+                    ultimo = ahora
+                    runOnUiThread { if (alGrupo[id] is AlGrupo.Estado.Saliendo) alGrupo[id] = AlGrupo.Estado.Saliendo(hechos, total) }
+                }
+            }
+            runOnUiThread {
+                alGrupo[id] = hecho.fold({ AlGrupo.Estado.Hecho(it) }, { AlGrupo.Estado.Fallo(AlGrupo.falloDe(it)) })
+            }
+        }
     }
 
     // ------------------------------------------------------------- la red
@@ -369,6 +432,7 @@ class EnviarActivity : ComponentActivity() {
                 Spacer(Modifier.height(8.dp))
                 LoQueSeEnvia()
                 Spacer(Modifier.height(16.dp))
+                TusAparatos()
                 LosAparatos()
                 when (val e = estado) {
                     Estado.Preparando -> Cargando("Preparando…")
@@ -437,6 +501,70 @@ class EnviarActivity : ComponentActivity() {
             }
         }
         Spacer(Modifier.height(16.dp))
+    }
+
+    /**
+     * **Tus aparatos · sin código**: los del grupo, cada uno con su «Enviar» directo y, si se ven
+     * dos o más, «Enviar a todos los que se ven» (`del_grupo` de `enviar_wifi.rs` del PC).
+     */
+    @Composable
+    private fun TusAparatos() {
+        val filas = grupo ?: return
+        if (filas.isEmpty()) return
+        Caja {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Tus aparatos · sin código", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f)
+                )
+                if (buscandoGrupo) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                else androidx.compose.material3.TextButton(onClick = { lifecycleScope.launch { buscarAlGrupo() } }) { Text("Buscar otra vez") }
+            }
+            Text(
+                "Están en tu grupo: se envía directo, sin escanear. Llega a lo que tengan abierto (un chat; un lienzo solo acepta fotos) o a Mensajes guardados.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            for (f in filas) {
+                val en = alGrupo[f.aparato.id]
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Punto(if (f.seVe) VERDE else MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(f.aparato.nombre.ifBlank { "Un aparato" }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            if (en == null && buscandoGrupo && !f.seVe) "Buscando en la Wi-Fi…" else AlGrupo.texto(en, f.seVe),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (en) {
+                                is AlGrupo.Estado.Hecho -> VERDE
+                                is AlGrupo.Estado.Fallo -> MaterialTheme.colorScheme.error
+                                else -> if (f.seVe) VERDE else MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                        if (en is AlGrupo.Estado.Saliendo && en.total > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            LinearProgressIndicator(progress = { en.hechos.toFloat() / en.total }, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    if (en is AlGrupo.Estado.Saliendo) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    else Button(
+                        onClick = { mandarAlGrupo(f) }, enabled = f.seVe,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp)
+                    ) { Text("Enviar") }
+                }
+            }
+            val todos = AlGrupo.aTodos(filas, alGrupo)
+            if (todos.size > 1) {
+                Button(
+                    onClick = { filas.filter { it.aparato.id in todos }.forEach { mandarAlGrupo(it) } },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                ) { Text("Enviar a todos los que se ven") }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("o, a alguien de fuera del grupo", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(10.dp))
     }
 
     /**

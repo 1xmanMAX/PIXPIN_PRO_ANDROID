@@ -8,6 +8,11 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +31,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -57,6 +73,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.roundToInt
 
 /**
  * **Tareas**: las listas de tareas de TODOS los chats en una pantalla, como la ventana de
@@ -70,7 +87,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  * tachado se queda unos segundos en su sitio. Cada tarjeta lleva sus imágenes, cuántos días
  * lleva y su menú: «Mover a…» otra lista y «Quitar» (con «Deshacer»).
  *
- * Toda la lógica está en [TodasLasTareas], sin Android y probada. Leer el chat y agrupar va
+ * **O en tablero Kanban** (25-oct-2026, como el PC del 17-oct): una columna por lista, lo pendiente
+ * arriba y lo hecho plegado al pie; mantener pulsada una tarjeta y soltarla en otra columna la pasa
+ * a esa lista, igual que «Mover a…». El botón de arriba cambia de una vista a otra y la elegida se
+ * recuerda al volver. Ver [Kanban].
+ *
+ * Toda la lógica está en [TodasLasTareas] y [Kanban], sin Android y probada. Leer el chat y agrupar va
  * fuera del hilo que pinta; aquí solo se enseña lo ya calculado.
  */
 class TodasLasTareasActivity : ComponentActivity() {
@@ -81,7 +103,13 @@ class TodasLasTareasActivity : ComponentActivity() {
     }
 
     /** Lo que se enseña, calculado fuera del hilo que pinta. */
-    private data class Vista(val listas: List<Lista>, val grupos: List<TodasLasTareas.Grupo>, val hoy: LocalDate)
+    private data class Vista(
+        val listas: List<Lista>,
+        val grupos: List<TodasLasTareas.Grupo>,
+        val hoy: LocalDate,
+        /** Las columnas del tablero: como [grupos], y sin buscar también las listas vacías. Ver [Kanban.columnas]. */
+        val columnas: List<TodasLasTareas.Grupo>
+    )
 
     /** Una tarea recién quitada, mientras su aviso ofrece «Deshacer». */
     private data class Quitada(val codigo: String, val indice: Int, val tarea: Tarea, val texto: String)
@@ -103,6 +131,12 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
 
         var consulta by remember { mutableStateOf("") }
+        // Lista o tablero: la última elegida (`tareas-vista.txt` del PC; aquí, las preferencias).
+        var modo by remember { mutableStateOf(Kanban.Vista.deTexto(runCatching { preferencias().getString(VISTA, null) }.getOrNull())) }
+        fun cambiarModo(m: Kanban.Vista) {
+            modo = m
+            runCatching { preferencias().edit().putString(VISTA, m.texto).apply() }
+        }
         var apuntar by remember { mutableStateOf("") }
         // Las recién tachadas (clave de la lista + texto crudo) y cuándo.
         val recien = remember { mutableStateMapOf<String, Long>() }
@@ -129,7 +163,8 @@ class TodasLasTareasActivity : ComponentActivity() {
             if (palabras.isNotEmpty()) delay(80)
             vista = withContext(Dispatchers.Default) {
                 val hoy = LocalDate.now()
-                Vista(ls, TodasLasTareas.agrupar(ls, palabras, hoy) { l, f -> clave(l, f) in recienes }, hoy)
+                val sigue = { l: Lista, f: Fila -> clave(l, f) in recienes }
+                Vista(ls, TodasLasTareas.agrupar(ls, palabras, hoy, sigue), hoy, Kanban.columnas(ls, palabras, hoy, sigue))
             }
         }
 
@@ -267,6 +302,14 @@ class TodasLasTareasActivity : ComponentActivity() {
                             style = MaterialTheme.typography.labelMedium, color = Cristal.tinta.copy(alpha = 0.7f)
                         )
                     }
+                    // Lista ⇄ tablero Kanban.
+                    val kanban = modo == Kanban.Vista.KANBAN
+                    BotonRedondo(
+                        if (kanban) Icons.Filled.ViewAgenda else Icons.Filled.ViewKanban,
+                        if (kanban) "Ver en lista" else "Ver en tablero Kanban",
+                        { cambiarModo(if (kanban) Kanban.Vista.LISTA else Kanban.Vista.KANBAN) },
+                        tamano = 44.dp
+                    )
                 }
 
                 // Buscador.
@@ -318,6 +361,14 @@ class TodasLasTareasActivity : ComponentActivity() {
                 when {
                     v == null -> Box(Modifier.weight(1f).fillMaxWidth())
                     v.grupos.isEmpty() && palabras.isNotEmpty() -> SinResultados(consulta, Modifier.weight(1f)) { consulta = "" }
+                    v.grupos.isEmpty() && v.listas.isEmpty() -> Vacia(Modifier.weight(1f))
+                    modo == Kanban.Vista.KANBAN -> Tablero(
+                        v, palabras, abiertas, Modifier.weight(1f),
+                        tarjeta = { l, f, color, mod ->
+                            Tarjeta(l, f, color, palabras, v.hoy, false, ::marcar, { moviendo = l to f }, ::quitar, ::recordar, mod) { a, b -> ponerHora(a, b, null) }
+                        },
+                        soltar = { desde, f, hasta -> mover(desde, f, hasta) }
+                    )
                     v.grupos.isEmpty() -> Vacia(Modifier.weight(1f))
                     else -> LazyColumn(
                         Modifier.weight(1f).fillMaxWidth(),
@@ -366,6 +417,159 @@ class TodasLasTareasActivity : ComponentActivity() {
 
     private fun clave(l: Lista, f: Fila) = l.clave + "\u0000" + f.crudo
 
+    private fun preferencias() = getSharedPreferences(PREFERENCIAS, Context.MODE_PRIVATE)
+
+    /** Una tarjeta agarrada en el tablero: cuál, de qué columna, dónde se cogió y cuánto mide. */
+    private data class Agarre(val lista: Lista, val fila: Fila, val columna: Int, val agarre: Offset, val ancho: Int)
+
+    /**
+     * **El tablero Kanban** (`tareas/kanban.rs` del PC): una columna por lista, una al lado de otra
+     * y desplazándose de lado; dentro, el encabezado, lo pendiente y al pie «Hechas (N)», plegado.
+     *
+     * **Arrastrar**: se mantiene pulsada una tarjeta (un toque sigue siendo marcar o abrir su menú,
+     * y deslizar sin esperar desplaza la columna) y se lleva a otra columna, que se ilumina; al
+     * soltarla ahí pasa a esa lista con [soltar] —el mismo `mover` de «Mover a…»—. Soltada en su
+     * columna o fuera, no pasa nada. Cerca de un borde el tablero se desplaza solo, para llegar a
+     * las columnas que no se ven ([Kanban.desplazamientoAlBorde]). Todo en coordenadas de la
+     * ventana: al desplazar, la tarjeta se mueve con su columna pero el dedo no.
+     */
+    @Composable
+    private fun Tablero(
+        v: Vista,
+        palabras: List<String>,
+        abiertas: MutableMap<String, Boolean>,
+        modifier: Modifier,
+        tarjeta: @Composable (Lista, Fila, Color, Modifier) -> Unit,
+        soltar: (Lista, Fila, Lista) -> Unit
+    ) {
+        val actual by rememberUpdatedState(v)
+        val colores = remember(v.listas) { TodasLasTareas.coloresDeListas(v.listas.map { it.clave to it.filas.isNotEmpty() }) }
+        fun colorDe(li: Int) = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[li]])
+        val lado = rememberScrollState()
+        val cajas = remember { mutableStateMapOf<Int, Rect>() }
+        var origen by remember { mutableStateOf(Offset.Zero) }
+        var anchoTablero by remember { mutableFloatStateOf(0f) }
+        var agarrada by remember { mutableStateOf<Agarre?>(null) }
+        var punto by remember { mutableStateOf(Offset.Zero) }
+        val densidad = LocalDensity.current
+        fun cajasDe() = cajas.map { (li, r) -> Kanban.Caja(li, r.left, r.top, r.right, r.bottom) }
+        LaunchedEffect(v.columnas) { cajas.keys.retainAll(v.columnas.map { it.lista }.toSet()) }
+
+        // Cerca del borde, el tablero se desplaza solo.
+        val arrastrando = agarrada != null
+        LaunchedEffect(arrastrando) {
+            if (!arrastrando) return@LaunchedEffect
+            val borde = with(densidad) { 56.dp.toPx() }
+            val paso = with(densidad) { 16.dp.toPx() }
+            while (agarrada != null) {
+                val d = Kanban.desplazamientoAlBorde(punto.x - origen.x, anchoTablero, borde, paso)
+                if (d != 0f) lado.scrollBy(d)
+                delay(16)
+            }
+        }
+        val sobre = agarrada?.let { Kanban.destinoAlSoltar(cajasDe(), it.columna, punto.x, punto.y) }
+
+        /** Una tarjeta que se puede agarrar. Sabe dónde está, para pasar el dedo a la ventana. */
+        @Composable
+        fun Agarrable(li: Int, fi: Int) {
+            val l = v.listas[li]
+            val f = l.filas[fi]
+            val donde = remember { arrayOfNulls<LayoutCoordinates>(1) }
+            val esta = agarrada?.let { it.lista.clave == l.clave && it.fila.indice == fi } == true
+            tarjeta(
+                l, f, colorDe(li),
+                Modifier.onGloballyPositioned { donde[0] = it }
+                    .graphicsLayer { alpha = if (esta) 0.3f else 1f }
+                    .pointerInput(l.clave, fi, f.crudo) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { p ->
+                                val c = donde[0]
+                                if (c != null && c.isAttached) {
+                                    agarrada = Agarre(l, f, li, p, c.size.width)
+                                    punto = c.localToWindow(p)
+                                }
+                            },
+                            onDrag = { cambio, _ ->
+                                cambio.consume()
+                                donde[0]?.takeIf { it.isAttached }?.let { punto = it.localToWindow(cambio.position) }
+                            },
+                            onDragEnd = {
+                                val a = agarrada
+                                agarrada = null
+                                if (a != null) {
+                                    val d = Kanban.destinoAlSoltar(cajasDe(), a.columna, punto.x, punto.y)
+                                    if (d != null) actual.listas.getOrNull(d)?.let { hasta -> soltar(a.lista, a.fila, hasta) }
+                                }
+                            },
+                            onDragCancel = { agarrada = null }
+                        )
+                    }
+            )
+        }
+
+        BoxWithConstraints(
+            modifier.fillMaxWidth().onGloballyPositioned { origen = it.positionInWindow(); anchoTablero = it.size.width.toFloat() }
+        ) {
+            val ancho = (maxWidth * 0.84f).coerceAtMost(320.dp)
+            Row(
+                Modifier.fillMaxSize().horizontalScroll(lado).padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                v.columnas.forEach { g ->
+                    key(v.listas[g.lista].clave) {
+                        val l = v.listas[g.lista]
+                        val color = colorDe(g.lista)
+                        Column(
+                            Modifier.width(ancho).fillMaxHeight()
+                                .onGloballyPositioned { cajas[g.lista] = it.boundsInWindow() }
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(color.copy(alpha = if (sobre == g.lista) 0.34f else 0.12f))
+                                .verticalScroll(rememberScrollState())
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Encabezado(l, g.pendientes(l), color)
+                            g.arriba.forEach { i -> key("a" + l.filas[i].crudo + i) { Agarrable(g.lista, i) } }
+                            if (g.arriba.isEmpty() && g.hechas.isEmpty()) Text(
+                                "Suelta aquí una tarea para pasarla a esta lista",
+                                color = Cristal.tinta.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)
+                            )
+                            if (g.hechas.isNotEmpty()) {
+                                // Buscando, lo hecho que coincide se ve.
+                                val abierta = palabras.isNotEmpty() || abiertas[l.clave] == true
+                                Row(
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                        .clickable { abiertas[l.clave] = !abierta }.padding(horizontal = 8.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                }
+                                if (abierta) g.hechas.forEach { i -> key("h" + l.filas[i].crudo + i) { Agarrable(g.lista, i) } }
+                            }
+                        }
+                    }
+                }
+            }
+            // La tarjeta bajo el dedo, por encima de todas las columnas.
+            agarrada?.let { a ->
+                val x = punto.x - origen.x - a.agarre.x
+                val y = punto.y - origen.y - a.agarre.y
+                Box(
+                    Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                        .width(with(densidad) { a.ancho.toDp() })
+                        .zIndex(1f)
+                        .graphicsLayer { rotationZ = 2f }
+                        .shadow(12.dp, RoundedCornerShape(16.dp))
+                ) {
+                    tarjeta(a.lista, a.fila, colorDe(a.columna.coerceIn(0, colores.size - 1)), Modifier)
+                }
+            }
+        }
+    }
+
     @Composable
     private fun Encabezado(l: Lista, pendientes: Int, color: Color) {
         Row(
@@ -394,7 +598,7 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun Tarjeta(
         l: Lista, f: Fila, color: Color, palabras: List<String>, hoy: LocalDate, conSuLista: Boolean,
         marcar: (Lista, Fila, Boolean) -> Unit, moverA: () -> Unit, quitar: (Lista, Fila) -> Unit,
-        recordar: (Lista, Fila) -> Unit, olvidarHora: (Lista, Fila) -> Unit
+        recordar: (Lista, Fila) -> Unit, modifier: Modifier = Modifier, olvidarHora: (Lista, Fila) -> Unit
     ) {
         val hora = remember(f.crudo) { Tareas.horaDe(f.crudo) }
         val atenuada = if (f.hecha) 0.55f else 1f
@@ -410,7 +614,7 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
         var menu by remember { mutableStateOf(false) }
         Row(
-            Modifier.fillMaxWidth().cristal(RoundedCornerShape(16.dp))
+            modifier.fillMaxWidth().cristal(RoundedCornerShape(16.dp))
                 // La raya de su grupo, a la izquierda: las tareas de una lista se reconocen de lejos.
                 .drawBehind {
                     val m = 10.dp.toPx()
@@ -560,6 +764,10 @@ class TodasLasTareasActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val PREFERENCIAS = "tareas"
+        /** Cómo se ven: [Kanban.Vista.texto]. */
+        private const val VISTA = "vista"
+
         fun abrir(context: Context) = context.startActivity(
             Intent(context, TodasLasTareasActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
