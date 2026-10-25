@@ -329,9 +329,10 @@ data class Mensaje(
     /**
      * **Una clase o una reunión grabada en el PC** (24-oct-2026, `ventana_chat/grabar_clase.rs`): la
      * nota de voz lleva sus capturas por minuto (`capturas: [{ms, id}]`) y `grabacion: "clase"`, y
-     * cada captura dice de qué grabación es y en qué minuto (`enGrabacion: {de, ms}`). El teléfono
-     * aún no las enseña juntas, pero **las conserva tal cual**: al reescribir el mensaje aquí (fijarlo,
-     * reaccionar) se perderían, y la fusión lo tomaría por un borrado.
+     * cada captura dice de qué grabación es y en qué minuto (`enGrabacion: {de, ms}`). **Se conservan
+     * tal cual**: al reescribir el mensaje aquí (fijarlo, reaccionar) se perderían, y la fusión lo
+     * tomaría por un borrado. Desde el 25-oct-2026 el teléfono también las crea («Grabar clase») y la
+     * letra las enseña junto al texto. Ver [GrabarClase].
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val capturas: kotlinx.serialization.json.JsonArray? = null,
@@ -339,6 +340,13 @@ data class Mensaje(
     val grabacion: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val enGrabacion: kotlinx.serialization.json.JsonObject? = null,
+    /**
+     * **El vídeo de la pantalla de esa clase** (25-oct-2026, PC `df01da9`): en la nota de voz,
+     * `video: {id}` con el id del `.mp4` (un `ARCHIVO` con `enGrabacion: {de, ms: 0}`). Desde hoy
+     * el teléfono también lo crea y lo escribe ([GrabarClase.videoEnJson]); se conserva igual.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val video: kotlinx.serialization.json.JsonObject? = null,
 
     /**
      * **Es un escaneo** (23-oct-2026, lo pidió el usuario): entró por «Escanear» del clip y se puede

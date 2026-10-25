@@ -23,8 +23,18 @@ interface Grabador {
     /** Para y suelta el micrófono. False si no llegó a grabarse nada que sirva. */
     fun parar(): Boolean
 
+    /**
+     * **Pausa o sigue** sin soltar el micrófono (25-oct-2026, «Grabar clase», como la pausa del
+     * PC): lo que suena en pausa no entra en el fichero, y al seguir la nota continúa sin hueco.
+     * Por omisión no hace nada: quien no la necesita no la implementa.
+     */
+    fun pausar(pausa: Boolean) {}
+
     class DelSistema(private val r: MediaRecorder) : Grabador {
         override fun pico() = runCatching { r.maxAmplitude }.getOrDefault(0).coerceAtLeast(0)
+        override fun pausar(pausa: Boolean) {
+            runCatching { if (pausa) r.pause() else r.resume() }
+        }
         override fun parar(): Boolean {
             val bien = runCatching { r.stop() }.isSuccess
             runCatching { r.release() }
@@ -44,6 +54,8 @@ interface Grabador {
     ) : Grabador {
         @Volatile private var corriendo = true
         @Volatile private var maximo = 0
+        /** En pausa se sigue leyendo el micrófono (no se suelta) pero no se escribe nada. */
+        @Volatile private var enPausa = false
         private var pista = -1
         private var arrancado = false
         private var muestras = 0L
@@ -56,12 +68,15 @@ interface Grabador {
 
         override fun pico(): Int { val m = maximo; maximo = 0; return m }
 
+        override fun pausar(pausa: Boolean) { enPausa = pausa }
+
         private fun bucle() {
             val buf = ShortArray(muestreo / 10)
             try {
                 while (corriendo) {
                     val n = record.read(buf, 0, buf.size)
                     if (n <= 0) continue
+                    if (enPausa) { sacar(false); continue }
                     realce.procesar(buf, 0, n)
                     var m = maximo
                     for (i in 0 until n) { val a = kotlin.math.abs(buf[i].toInt()); if (a > m) m = a }
