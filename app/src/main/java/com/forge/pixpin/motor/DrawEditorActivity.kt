@@ -5600,6 +5600,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 com.forge.pixpin.ui.ModoDePresentacion.LAPIZ -> Tool.FREEDRAW
                 com.forge.pixpin.ui.ModoDePresentacion.RESALTADOR -> Tool.HIGHLIGHTER
                 com.forge.pixpin.ui.ModoDePresentacion.BORRADOR -> Tool.ERASER
+                com.forge.pixpin.ui.ModoDePresentacion.LASER -> Tool.LASER
             }
         )
     }

@@ -301,6 +301,9 @@ fun PanelLateralDeEstilo(
             LaLineaQueHay(estilo, onEstilo, neutro, haciaLaIzquierda, bola)
         }
 
+        // El cierre del arco, el degradado, el ángulo y la nube. Ver [LosMandosDeLaminas].
+        LosMandosDeLaminas(aplican, estilo, onEstilo, neutro, tintaDelFondo, haciaLaIzquierda, bola)
+
         // **De qué está hecha la tinta**: lisa, encendida o con grano. En un plano el color
         // no basta para decir qué es una cosa —una sección se raya, una sombra se cruza, un
         // terreno se puntea, un tubo encendido resplandece— y hoy todo eso se hacía con el
@@ -1136,15 +1139,22 @@ private fun LaLineaQueHay(
     haciaLaIzquierda: Boolean,
     bola: Dp
 ) {
-    val lineas = StrokeStyle.entries
+    // **Y el raya-punto** (25-oct-2026, el de los ejes y las líneas de centro del PC): en el
+    // fichero es `dashed` con `trazoRayaPunto`, así que aquí es un discontinuo con la marca puesta.
+    val lineas = StrokeStyle.entries.map { it to false } + (StrokeStyle.DASHED to true)
+    val ahora = estilo.strokeStyle to (estilo.rayaPunto && estilo.strokeStyle == StrokeStyle.DASHED)
     ElMandoDeOpciones(
         descripcion = "Tipo de línea",
         opciones = lineas,
-        actual = lineas.indexOf(estilo.strokeStyle).coerceAtLeast(0),
-        onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it])) },
+        actual = lineas.indexOf(ahora).coerceAtLeast(0),
+        onElegir = { onEstilo(estilo.copy(strokeStyle = lineas[it].first, rayaPunto = lineas[it].second)) },
         haciaLaIzquierda = haciaLaIzquierda,
         bola = bola
-    ) { ss -> Canvas(Modifier.size(width = 22.dp, height = 20.dp)) { dibujarLinea(ss, tinta) } }
+    ) { (ss, rayaPunto) ->
+        Canvas(Modifier.size(width = 22.dp, height = 20.dp)) {
+            if (rayaPunto) dibujarRayaPunto(tinta) else dibujarLinea(ss, tinta)
+        }
+    }
 }
 
 /**
@@ -1624,7 +1634,9 @@ private val EN_EL_LATERAL = setOf(
     Propiedad.ESQUINAS, Propiedad.FORMA_FLECHA, Propiedad.MOSAICO, Propiedad.LUPA,
     Propiedad.VOLUMEN,
     Propiedad.GROSOR, Propiedad.MATERIAL, Propiedad.DUREZA, Propiedad.LUPA, Propiedad.ZONA, Propiedad.OSCURECER,
-    Propiedad.OPACIDAD, Propiedad.FUENTE
+    Propiedad.OPACIDAD, Propiedad.FUENTE,
+    Propiedad.CIERRE_ARCO, Propiedad.DEGRADADO, Propiedad.ANGULO, Propiedad.MODO_ANGULO,
+    Propiedad.LETRA_ANGULO, Propiedad.NUBE
 )
 
 /** De cinco en cinco, que es como se dice cuánto se apaga o cuánto tapa algo. */
@@ -2001,7 +2013,7 @@ private fun MuestraAlArrastrar(
  * dos gestos distintos según qué bolita se cogiera— así que ahora hay una sola.
  */
 @Composable
-private fun <T> SelectorArrastrable(
+internal fun <T> SelectorArrastrable(
     opciones: List<T>,
     actual: Int,
     haciaLaIzquierda: Boolean,

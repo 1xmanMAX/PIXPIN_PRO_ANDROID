@@ -96,6 +96,10 @@ class DrawController(initial: Scene = Scene()) {
             Tool.FREEDRAW, Tool.HIGHLIGHTER -> conElGrafitoEnLaMano = false
             else -> Unit
         }
+        // El láser no deja nada al irse, y el estilo tomado se suelta: volver a coger el
+        // cuentagotas empieza por el modelo, como en el PC.
+        if (next != Tool.LASER) punteroLaser.vaciar()
+        if (next != tool || next != Tool.COPIAR_ESTILO) estiloTomado = null
         tool = next
         // La bolita también conserva lo elegido: es una forma de seleccionar más, y su
         // gesto es justo ir sumando — cambiar a ella para seguir cogiendo y perder lo que se
@@ -204,6 +208,16 @@ class DrawController(initial: Scene = Scene()) {
      * lo que hacía siempre.
      */
     var altoDelTexto: ((Element, Double) -> Double)? = null
+
+    /** La estela del láser: no es de la escena ni del historial. Ver [PunteroLaser]. */
+    val punteroLaser = PunteroLaser()
+
+    /** El estilo que lleva el cuentagotas, o null si aún no ha tocado el modelo. Ver [EstiloCopiado]. */
+    var estiloTomado: EstiloCopiado? = null
+        private set
+
+    /** La última marca de ángulo que se puso: tocarla otra vez le cambia la letra. */
+    private var ultimaMarca: String? = null
 
     /** Lo que se ensancha cada zona de toque con el modo dedo puesto. */
     private fun margenDelDedo(zoom: Double): Double =
@@ -316,6 +330,24 @@ class DrawController(initial: Scene = Scene()) {
 
             Tool.RECTANGLE, Tool.DIAMOND, Tool.MOSAIC,
             Tool.FRAME, Tool.ESCALA_GRAFICA -> beginCreate(elementTypeOf(tool), p)
+
+            // **La nube nace como un rectángulo**: se arrastra su caja. Por dentro es la `line`
+            // que viaja al PC, con su festón. Ver [NubeDeRevision].
+            Tool.NUBE -> {
+                beginCreate(ElementType.LINE, p)
+                (gesture as? Gesture.Creating)?.let { g ->
+                    scene.byId(g.elementId)?.let {
+                        val s = scene.style
+                        replace(NubeDeRevision.nueva(it, s.nubeRadio, NubeDeRevision.Base.desdePalabra(s.nubeBase)))
+                    }
+                }
+            }
+
+            // El láser apunta y no dibuja: ni escena ni historial. Ver [PunteroLaser].
+            Tool.LASER -> {
+                punteroLaser.pulsar(pRaw, PunteroLaser.ahora())
+                gesture = Gesture.None
+            }
 
             // La bolita: un barrido, y lo que toque entra o sale. No crea nada, así que no
             // hay elemento en curso ni nada que soltar al levantar.
@@ -451,7 +483,8 @@ class DrawController(initial: Scene = Scene()) {
             // había anotado en el historial no se deshace solo.
             //
             // Esperando al final, mover el dedo o apoyar el segundo lo anula.
-            Tool.RELLENO, Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO, Tool.PUNTO ->
+            Tool.RELLENO, Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO, Tool.PUNTO,
+            Tool.ANGULO, Tool.COPIAR_ESTILO ->
                 gesture = Gesture.Tocando(p)
 
             // La imagen la coloca la interfaz, que es quien abre el selector.
@@ -475,7 +508,64 @@ class DrawController(initial: Scene = Scene()) {
             Tool.RECORTAR -> recortar(inicio, z)
             Tool.EXTENDER -> extender(inicio, z)
             Tool.NUDO -> soldar(inicio, z)
+            Tool.ANGULO -> marcarAngulo(inicio, z)
+            Tool.COPIAR_ESTILO -> copiarEstiloEn(inicio, z)
             else -> Unit
+        }
+    }
+
+    /**
+     * **La herramienta Ángulo** (`pulsar_geometria` del PC): un toque cerca de donde se juntan dos
+     * rayas pone la marca entre las dos que encierran el toque. Tocar una marca que ya hay (la
+     * última puesta o cualquiera) le pasa a la letra griega siguiente libre: es la rueda y las
+     * flechas del PC, hechas con el dedo.
+     */
+    private fun marcarAngulo(p: Pt, zoom: Double) {
+        val vivos = editables
+        val tocada = vivos.lastOrNull { e ->
+            val m = Laminas.marcaDe(e) ?: return@lastOrNull false
+            !m.recto && kotlin.math.hypot(p.x - (e.x + e.width / 2), p.y - (e.y + e.height / 2)) <=
+                e.width / 2 + margenDelDedo(zoom)
+        }
+        if (tocada != null) {
+            val m = Laminas.marcaDe(tocada) ?: return
+            val usadas = Laminas.letrasUsadas(scene.elements, excepto = tocada.id)
+            val nueva = Laminas.letraVecina(m.valor, 1, usadas)
+            if (nueva != m.valor) {
+                mutate { lista -> lista.map { if (it.id == tocada.id) it.copy(marcaAngulo = Laminas.marcaJson(m.copy(valor = nueva))).touched() else it } }
+            }
+            ultimaMarca = tocada.id
+            return
+        }
+        val sinMarcas = vivos.filter { it.marcaAngulo == null }
+        val (v, a, b) = Laminas.anguloEn(sinMarcas, p, Laminas.ALCANCE_PX / zoom) ?: return
+        val estilo = scene.style
+        val r = kotlin.math.hypot(p.x - v.x, p.y - v.y).coerceIn(8.0, 120.0)
+        val marca = Laminas.marcaNueva(
+            newElement(ElementType.ARC, v.x, v.y, estilo).copy(reference = modoReferencia),
+            Laminas.ModoAngulo.desdePalabra(estilo.modoAngulo), v, a, b, r, estilo.arcosAngulo,
+            Laminas.letrasUsadas(scene.elements)
+        )
+        mutate { it + marca }
+        selectedIds = emptySet()
+        ultimaMarca = marca.id
+    }
+
+    /**
+     * **El cuentagotas de estilo**: el primer toque coge el estilo de lo que hay debajo; los
+     * siguientes lo pegan, cada uno en su paso de deshacer. Tocar el vacío lo suelta, para coger
+     * otro modelo sin cambiar de herramienta.
+     */
+    private fun copiarEstiloEn(p: Pt, zoom: Double) {
+        val tocado = getElementAtPosition(editables, p, margenDelDedo(zoom), scene.vista)
+        val tomado = estiloTomado
+        when {
+            tocado == null -> estiloTomado = null
+            tomado == null -> estiloTomado = EstiloCopiado.de(tocado)
+            else -> {
+                val nuevo = tomado.pegarEn(tocado)
+                if (nuevo !== tocado) mutate { lista -> lista.map { if (it.id == tocado.id) nuevo else it } }
+            }
         }
     }
 
@@ -788,6 +878,10 @@ class DrawController(initial: Scene = Scene()) {
         /** La hora del evento. Ver [pointerDown]. */
         cuando: Long = 0L
     ) {
+        if (tool == Tool.LASER) {
+            punteroLaser.mover(pRaw, PunteroLaser.ahora())
+            return
+        }
         zoomDelTrazo = zoom
         // **Lo quieto que está el dedo se mide en pantalla.** A un aumento pequeño, un
         // temblor de dos píxeles son metros de la escena: midiéndolo en unidades del
@@ -1192,6 +1286,7 @@ class DrawController(initial: Scene = Scene()) {
 
     /** El dedo se levanta: se cierra el gesto y se anota en el historial. */
     fun pointerUp(p: Pt, zoom: Double = 1.0) {
+        if (tool == Tool.LASER) punteroLaser.soltar(PunteroLaser.ahora())
         anclajeActivo = null
         apoyoActivo = null
         olvidarElDedoParado()
@@ -3474,6 +3569,8 @@ class DrawController(initial: Scene = Scene()) {
      * sin que se mueva nada en la pantalla.
      */
     private fun anotar(before: List<Element>) {
+        // Las nubes estiradas o recién hechas, con los festones de su caja de ahora. Ver [NubeDeRevision.nubesAlDia].
+        NubeDeRevision.nubesAlDia(scene.elements).let { if (it !== scene.elements) scene = scene.copy(elements = it) }
         history.record(before, scene.elements)
         sceneAtGestureStart = scene.elements
     }

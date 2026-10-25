@@ -40,6 +40,10 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material.icons.filled.Cyclone
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Architecture
+import androidx.compose.material.icons.filled.FlashlightOn
+import androidx.compose.material.icons.filled.FormatPaint
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -1067,7 +1071,13 @@ val EXTRA_TOOLS: List<Tool> = listOf(
     Tool.PUNTO,
     Tool.SOLIDO,
     Tool.EXTRUIR,
-    Tool.REVOLUCION
+    Tool.REVOLUCION,
+    // Las láminas del PC (25-oct-2026): la nube de revisión, la marca de ángulo, el láser y el
+    // cuentagotas de estilo. Ver [NubeDeRevision], [Laminas], [PunteroLaser] y [EstiloCopiado].
+    Tool.NUBE,
+    Tool.ANGULO,
+    Tool.LASER,
+    Tool.COPIAR_ESTILO
 )
 
 /**
@@ -1188,6 +1198,10 @@ fun iconFor(tool: Tool): ImageVector = when (tool) {
     Tool.SOLIDO -> Icons.Filled.ViewInAr
     Tool.EXTRUIR -> Icons.Filled.Upgrade
     Tool.REVOLUCION -> Icons.Filled.Cyclone
+    Tool.NUBE -> Icons.Filled.Cloud
+    Tool.ANGULO -> Icons.Filled.Architecture
+    Tool.LASER -> Icons.Filled.FlashlightOn
+    Tool.COPIAR_ESTILO -> Icons.Filled.FormatPaint
 }
 
 @StringRes
@@ -1225,6 +1239,10 @@ fun labelFor(tool: Tool): Int = when (tool) {
     Tool.SOLIDO -> R.string.tool_solido
     Tool.EXTRUIR -> R.string.tool_extruir
     Tool.REVOLUCION -> R.string.tool_revolucion
+    Tool.NUBE -> R.string.tool_nube
+    Tool.ANGULO -> R.string.tool_angulo
+    Tool.LASER -> R.string.tool_laser
+    Tool.COPIAR_ESTILO -> R.string.tool_copiar_estilo
 }
 
 /**

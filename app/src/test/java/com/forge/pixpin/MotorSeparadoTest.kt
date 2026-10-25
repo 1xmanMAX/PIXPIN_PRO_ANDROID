@@ -110,7 +110,11 @@ class MotorSeparadoTest {
         // cortina de notificaciones dibujando a pantalla completa: puro Android.
         // La ventana de «ponerme al día con este lienzo»: interfaz y red. Lo que decide qué
         // versión hay que traer es `sincro/AlDia.kt`.
-        "PonerseAlDia.kt"
+        "PonerseAlDia.kt",
+        // Las láminas del PC (25-oct-2026): quien las pinta en un `Canvas`, sus mandos del
+        // lateral y la estela del láser. La geometría y las cuentas —[Laminas],
+        // [NubeDeRevision], [PunteroLaser], [EstiloCopiado]— sí son núcleo y se prueban aquí.
+        "PintorDeLaminas.kt", "MandosDeLaminas.kt", "PintarElLaser.kt"
     )
 
     private fun archivos(): List<File> =
