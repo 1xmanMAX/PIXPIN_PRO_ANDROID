@@ -119,7 +119,11 @@ class MotorSeparadoTest {
         "PonerseAlDia.kt",
         // El texto rico: pintarlo en un `Canvas` y su barra de botones. Leerlo, su plano y
         // componerlo —`TextoRico.kt`, `FormulaRica.kt`, `CajasRicas.kt`— sí son núcleo.
-        "PintorDeTextoRico.kt", "BarraDeTextoRico.kt"
+        "PintorDeTextoRico.kt", "BarraDeTextoRico.kt",
+        // Las láminas del PC (25-oct-2026): quien las pinta en un `Canvas`, sus mandos del
+        // lateral y la estela del láser. La geometría y las cuentas —[Laminas],
+        // [NubeDeRevision], [PunteroLaser], [EstiloCopiado]— sí son núcleo y se prueban aquí.
+        "PintorDeLaminas.kt", "MandosDeLaminas.kt", "PintarElLaser.kt"
     )
 
     private fun archivos(): List<File> =

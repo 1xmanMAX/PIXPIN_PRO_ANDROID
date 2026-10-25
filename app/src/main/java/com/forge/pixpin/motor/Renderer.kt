@@ -228,6 +228,9 @@ class Renderer(
     /** Pasa un color por el filtro del modo noche. En modo día no toca nada. */
     private fun tema(argb: Int): Int = DrawTheme.adaptar(argb, papelActual)
 
+    /** La nube, los sectores, las marcas de ángulo y el degradado del PC. Ver [PintorDeLaminas]. */
+    private val laminas = PintorDeLaminas({ tema(it) }, { e, a -> strokePaint(e, a) })
+
     /** El papel de la escena que se está pintando: contra él se adapta cada tinta. Ver [DrawTheme.adaptar]. */
     private var papelActual: Int = if (dark) 0xFF121212.toInt() else 0xFFFFFFFF.toInt()
 
@@ -1352,6 +1355,7 @@ class Renderer(
         // que cruza la pantalla mete cientos de miles de píxeles — lo relleno
         // desaparece o la app revienta, según el aparato. Al exportar no: ahí
         // la salida es un archivo a escala uno. Ver [pintarRecortadoALaVista].
+        if (laminas.pintar(canvas, element, alpha)) return
         if (!paraExportar && pintarRecortadoALaVista(canvas, element, alpha)) return
         when (element.type) {
             ElementType.RECTANGLE, ElementType.DIAMOND, ElementType.ELLIPSE,
@@ -2685,6 +2689,7 @@ class Renderer(
     /** El fondo de una forma: liso o rayado, siempre recortado a su silueta. */
     private fun drawFill(canvas: Canvas, e: Element, shape: CachedShape, alpha: Int) {
         if (!e.hasBackground || isTransparent(e.backgroundColor)) return
+        if (laminas.rellenarConDegradado(canvas, e, shape.outlinePath, alpha)) return
 
         fillPaint.reset()
         fillPaint.isAntiAlias = true
@@ -3656,7 +3661,8 @@ class Renderer(
             StrokeStyle.SOLID -> e.strokeWidth
             else -> e.strokeWidth + 0.5
         }.toFloat()
-        paint.pathEffect = efectoDe(e.strokeStyle, e.strokeWidth)
+        paint.pathEffect = if (Laminas.esRayaPunto(e)) laminas.efectoRayaPunto(e.strokeWidth)
+        else efectoDe(e.strokeStyle, e.strokeWidth)
         return paint
     }
 

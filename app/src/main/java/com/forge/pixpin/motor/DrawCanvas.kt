@@ -331,6 +331,22 @@ fun DrawCanvas(
     }
 
 
+    // **El láser se apaga solo**, sin que lleguen toques: mientras le quede estela se repinta a
+    // cada fotograma, y luego una vez más para borrar lo último. Parado, se mira cada décima.
+    LaunchedEffect(controller) {
+        var encendido = false
+        while (true) {
+            if (controller.punteroLaser.vivo(PunteroLaser.ahora())) {
+                encendido = true
+                withFrameNanos { }
+                tick++
+            } else {
+                if (encendido) { encendido = false; tick++ }
+                kotlinx.coroutines.delay(100)
+            }
+        }
+    }
+
     val renderer =
         remember(
             imageProvider, dark, backdrop, mosaico, laminaFina, planoVectorial, papelALaVista,
@@ -1292,6 +1308,11 @@ fun DrawCanvas(
             val r = RADIO_DE_LA_BOLITA.toFloat()
             drawCircle(SELECTION_FILL, radius = r, center = donde)
             drawCircle(SELECTION_COLOR, radius = r, center = donde, style = Stroke(width = 2f))
+        }
+
+        // La estela del láser, encima del dibujo. Ver [PunteroLaser].
+        pintarElLaser(controller.punteroLaser, PunteroLaser.ahora()) { q ->
+            vp.toScreen(q).let { Offset(it.x.toFloat(), it.y.toFloat()) }
         }
 
         val lasso = controller.lassoPath

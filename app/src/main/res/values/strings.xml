@@ -323,6 +323,10 @@
 
     <!-- Barra de dibujo: los cinco grupos y las herramientas de cada uno -->
     <string name="tool_punto">Punto</string>
+    <string name="tool_nube">Nube de revisión</string>
+    <string name="tool_angulo">Ángulo</string>
+    <string name="tool_laser">Puntero láser</string>
+    <string name="tool_copiar_estilo">Copiar estilo</string>
     <string name="punto_sin_sitio">Los puntos van en cruces, extremos, medios o el centro de un círculo</string>
     <string name="tool_selection">Seleccionar</string>
     <string name="tool_lasso">Lazo</string>

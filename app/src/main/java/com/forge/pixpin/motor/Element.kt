@@ -1011,7 +1011,15 @@ data class Element(
     val cierreArco: String? = null,
     val marcaAngulo: kotlinx.serialization.json.JsonObject? = null,
     val degradado: kotlinx.serialization.json.JsonObject? = null,
-    val trazoRayaPunto: Boolean? = null
+    val trazoRayaPunto: Boolean? = null,
+    /**
+     * **La nube de revisión** (25-oct-2026, porte de `nube_revision.rs`). El radio del festón, en
+     * píxeles de escena, y sobre qué va (`"rectangulo"`/`"elipse"`), con las mismas claves y tipos
+     * que escribe el PC. Antes se perdían al guardar: la nube volvía al PC como una línea suelta y
+     * dejaba de estirarse como nube. Ver [NubeDeRevision].
+     */
+    val nubeRadio: Double? = null,
+    val nubeBase: String? = null
 ) {
     companion object {
         const val DEFAULT_STROKE_COLOR = "#1e1e1e"
@@ -1103,7 +1111,9 @@ fun recorteEnPixeles(crop: Crop, ancho: Int, alto: Int): IntArray {
 // -------------------------------------------------------------------------
 
 val Element.isLinear: Boolean
-    get() = type == ElementType.LINE || type == ElementType.ARROW ||
+    // **La nube no es «de puntos»** (25-oct-2026): es una `line` en el fichero, pero se estira, se
+    // gira y se coge por su caja, como el rectángulo que rodea. Ver [NubeDeRevision].
+    get() = (type == ElementType.LINE && !esNube) || type == ElementType.ARROW ||
         type == ElementType.MEASURE
 
 val Element.isFreeDraw: Boolean get() = type == ElementType.FREEDRAW

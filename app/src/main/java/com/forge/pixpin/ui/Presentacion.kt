@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AutoFixNormal
 import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Gesture
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,7 +43,12 @@ import kotlin.math.abs
  * Qué es una diapositiva lo decide quien lo hospeda: la página de un PDF (y un PowerPoint
  * importado es un PDF), o cada hoja del cuaderno. Ver `DrawEditorActivity.empezarAPresentar`.
  */
-enum class ModoDePresentacion { PASAR, LAPIZ, RESALTADOR, BORRADOR }
+enum class ModoDePresentacion {
+    PASAR, LAPIZ, RESALTADOR, BORRADOR,
+
+    /** **El puntero láser** (25-oct-2026): señalar mientras se habla sin dejar nada escrito. */
+    LASER
+}
 
 /**
  * **Pasar con el dedo**, solo en el modo PASAR: un toque en el tercio derecho o un barrido a
@@ -131,7 +137,8 @@ fun PastillaDePresentacion(
                     ModoDePresentacion.PASAR to Icons.Filled.TouchApp,
                     ModoDePresentacion.LAPIZ to Icons.Filled.Gesture,
                     ModoDePresentacion.RESALTADOR to Icons.Filled.BorderColor,
-                    ModoDePresentacion.BORRADOR to Icons.Filled.AutoFixNormal
+                    ModoDePresentacion.BORRADOR to Icons.Filled.AutoFixNormal,
+                    ModoDePresentacion.LASER to Icons.Filled.FlashlightOn
                 )) {
                     val puesto = m == modo
                     Surface(

@@ -165,13 +165,41 @@ enum class Tool {
      * orden se pierde—. Tocando primero lo que se tornea y después la raya, no hay nada
      * que explicar. Ver [DrawController.figuraATornear].
      */
-    REVOLUCION;
+    REVOLUCION,
+
+    /**
+     * **La nube de revisión** (25-oct-2026, la de Bluebeam; `nube_revision.rs` del PC): se
+     * arrastra la caja y sale el contorno en festones, que al estirarla no se deforman: caben más.
+     * En el PC se pone desde la galería; aquí, que no hay galería de marcas, es una herramienta.
+     * Ver [NubeDeRevision].
+     */
+    NUBE,
+
+    /**
+     * **La marca de un ángulo** (25-oct-2026, `gesto/geometria.rs` del PC): un toque dentro del
+     * ángulo, cerca de donde se juntan dos rayas, y queda su arquito con la siguiente letra
+     * griega (α, β, θ…), o el cuadradito si es recto. Tocar una marca ya puesta le pasa a la
+     * letra siguiente libre. Ver [Laminas.anguloEn].
+     */
+    ANGULO,
+
+    /**
+     * **El puntero láser** (25-oct-2026, `puntero_laser.rs`): una estela roja que se apaga sola en
+     * un segundo. No deja nada en el dibujo ni en el historial. Ver [PunteroLaser].
+     */
+    LASER,
+
+    /**
+     * **Copiar el estilo** (25-oct-2026, el cuentagotas de estilo del PC): un toque coge el
+     * estilo de una figura y los siguientes lo pegan en las que se toquen. Ver [EstiloCopiado].
+     */
+    COPIAR_ESTILO;
 
     /** Las que crean una forma con caja al arrastrar. */
     val isShape: Boolean
         get() = this == RECTANGLE || this == DIAMOND || this == ELLIPSE ||
             this == MOSAIC || this == LUPA || this == FRAME ||
-            this == ESCALA_GRAFICA
+            this == ESCALA_GRAFICA || this == NUBE
 
     /** Las que crean un elemento de puntos. */
     val isLinear: Boolean
@@ -247,7 +275,20 @@ data class ItemStyle(
      * estaban donde se guarda lo que se toca una vez. En el estilo van al lateral, que es
      * donde uno mira, y además se quedan cargadas para la siguiente pieza.
      */
-    val esqueleto: Boolean = false
+    val esqueleto: Boolean = false,
+    /**
+     * **Lo de las láminas del PC** (25-oct-2026): el raya-punto, el cierre del arco, el relleno
+     * degradado (`"lineal"`/`"radial"`), los arquitos, el modo y la letra de la herramienta Ángulo,
+     * y el festón y la base de la nube de revisión. Ver [EstiloDeLaminas] y [Laminas].
+     */
+    val rayaPunto: Boolean = false,
+    val cierreArco: String? = null,
+    val degradado: String? = null,
+    val arcosAngulo: Int = 1,
+    val modoAngulo: String = "griega",
+    val letraAngulo: String? = null,
+    val nubeRadio: Double = NubeDeRevision.RADIO_DE_FABRICA,
+    val nubeBase: String = "rectangulo"
 ) {
     companion object {
         /** Los cuatro grosores del original (`STROKE_WIDTH`). */
@@ -689,7 +730,14 @@ fun newElement(
     // La pieza que se dibuja con la herramienta es siempre una caja: la forma de un
     // volumen sale de levantar una figura, no de una lista. Ver [extruido].
     esqueleto = type == ElementType.SOLIDO && style.esqueleto
-)
+).let { e ->
+    // El raya-punto, el degradado y el cierre del panel también para lo que nace. Ver [EstiloDeLaminas].
+    conEstiloDeLamina(
+        e, style,
+        conLasDeLamina(e, propiedadesDeTipo(type)) intersect
+            setOf(Propiedad.LINEA, Propiedad.DEGRADADO, Propiedad.CIERRE_ARCO)
+    )
+}
 
 private val ElementType.acceptsRoundness: Boolean
     get() = this == ElementType.RECTANGLE || this == ElementType.DIAMOND ||
@@ -918,7 +966,7 @@ fun estiloDe(e: Element): ItemStyle {
         // aplicaba pero el mando volvía a saltar a caja al recomponerse. Desde fuera se
         // veía exactamente como lo que se veía: que solo se podía poner la cúbica.
         esqueleto = e.esqueleto
-    )
+    ).let { estiloDeLamina(e, it) }
 }
 
 /**
@@ -930,7 +978,7 @@ fun estiloDe(e: Element): ItemStyle {
  * que no tiene.
  */
 fun conEstilo(e: Element, s: ItemStyle): Element {
-    val aplican = propiedadesDeTipo(e.type)
+    val aplican = conLasDeLamina(e, propiedadesDeTipo(e.type))
     var out = e
     if (Propiedad.TRAZO in aplican) out = out.copy(strokeColor = s.strokeColor)
     if (Propiedad.FONDO in aplican) out = out.copy(backgroundColor = s.backgroundColor)
@@ -968,7 +1016,7 @@ fun conEstilo(e: Element, s: ItemStyle): Element {
     if (Propiedad.ZONA in aplican) out = conZona(out, s.zona)
     if (Propiedad.PRESION in aplican) out = out.copy(presionFirme = s.presionFirme)
     if (Propiedad.VOLUMEN in aplican) out = out.copy(esqueleto = s.esqueleto)
-    return out
+    return conEstiloDeLamina(out, s, aplican)
 }
 
 /**
@@ -1032,7 +1080,7 @@ fun conCambios(destino: ItemStyle, anterior: ItemStyle, nuevo: ItemStyle): ItemS
     // —lo siguiente que se dibujara sí salía en alambre— pero la pieza ya marcada se
     // quedaba exactamente igual, que es lo que se veía: «el esqueleto no funciona».
     if (nuevo.esqueleto != anterior.esqueleto) out = out.copy(esqueleto = nuevo.esqueleto)
-    return out
+    return cambiosDeLamina(out, anterior, nuevo)
 }
 
 /**

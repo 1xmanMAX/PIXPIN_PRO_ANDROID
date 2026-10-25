@@ -87,7 +87,15 @@ enum class Propiedad {
      * que se cambie figura a figura, así que vive en la configuración. Está aquí
      * para que el motor sepa a qué elementos se le escribe. Ver [conEstilo].
      */
-    PRESION
+    PRESION,
+
+    /**
+     * **Las láminas del PC** (25-oct-2026, ver [EstiloDeLaminas]): cómo se cierra un arco
+     * (abierto, sector, segmento), el relleno degradado (liso, lineal, radial), los arquitos de
+     * una marca de ángulo, qué pone la herramienta Ángulo (letra griega, sola o el cuadradito), la
+     * letra de una marca elegida y el festón de la nube de revisión.
+     */
+    CIERRE_ARCO, DEGRADADO, ANGULO, MODO_ANGULO, LETRA_ANGULO, NUBE
 }
 
 /**
@@ -103,12 +111,13 @@ fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
     if (seleccion.isNotEmpty()) {
         return seleccion.flatMap { propiedadesDe(it) }.toSet()
     }
+    if (tool == Tool.ANGULO) return lasDeLaminaDeHerramienta(tool, emptySet())
     val tipo = tipoQueCrea(tool) ?: return emptySet()
     // **El bote pinta con el color que hay puesto**, así que ofrece el mando del color: sin él,
     // con el bote en la mano no había manera de elegir de qué color rellenar.
-    if (tool == Tool.RELLENO) return propiedadesDeTipo(tipo) - Propiedad.FONDO + Propiedad.TRAZO
+    if (tool == Tool.RELLENO) return propiedadesDeTipo(tipo) - Propiedad.FONDO + Propiedad.TRAZO + Propiedad.DEGRADADO
     if (tool == Tool.GRAFITO) return propiedadesDeTipo(tipo) + Propiedad.DUREZA
-    return propiedadesDeTipo(tipo)
+    return lasDeLaminaDeHerramienta(tool, propiedadesDeTipo(tipo))
 }
 
 /**
@@ -121,7 +130,7 @@ fun propiedadesPara(tool: Tool, seleccion: List<Element>): Set<Propiedad> {
  * ofreciendo algo que no iba a pasar: se elegía un color y no cambiaba nada.
  */
 fun propiedadesDe(e: Element): Set<Propiedad> {
-    val base = propiedadesDeTipo(e.type)
+    val base = conLasDeLamina(e, propiedadesDeTipo(e.type))
     val abierta = (e.type == ElementType.LINE || e.type == ElementType.FREEDRAW) &&
         !isPathALoop(e.points)
     val conDureza = if (e.material == MaterialDeTinta.CUADRITOS) base + Propiedad.DUREZA else base
@@ -159,6 +168,11 @@ fun tipoQueCrea(tool: Tool): ElementType? = when (tool) {
     Tool.SOLIDO -> ElementType.SOLIDO
     // No crean figuras: transforman las que ya hay.
     Tool.EXTRUIR, Tool.REVOLUCION -> null
+    // La nube nace como la `line` que viaja; la marca de ángulo, como un arco. Ver [NubeDeRevision].
+    Tool.NUBE -> ElementType.LINE
+    Tool.ANGULO -> ElementType.ARC
+    // El láser no deja nada y copiar el estilo se lo lleva de otra figura: ningún mando.
+    Tool.LASER, Tool.COPIAR_ESTILO -> null
     // Recortar y extender no crean nada: arreglan lo que ya hay, y lo que
     // hacen no depende de ningún color ni de ningún grosor.
     Tool.SELECTION, Tool.LASSO, Tool.ZONA, Tool.HAND, Tool.ERASER,

@@ -29,14 +29,15 @@ private const val SEPARA_HERRAMIENTA = ","
  * toque parte de algo entendible en vez de una lista plana.
  */
 val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
-    listOf(Tool.SELECTION, Tool.LASSO, Tool.BOLITA, Tool.HAND, Tool.ZONA),
+    // El láser y el cuentagotas tampoco dibujan: señalan y copian, como seleccionar.
+    listOf(Tool.SELECTION, Tool.LASSO, Tool.BOLITA, Tool.HAND, Tool.ZONA, Tool.LASER, Tool.COPIAR_ESTILO),
     // Lo que pinta: el lápiz, el marcador y el bote. El bote no traza, pero lo
     // que se hace con él es dar color, que es de lo que va este grupo.
     listOf(Tool.FREEDRAW, Tool.GRAFITO, Tool.HIGHLIGHTER, Tool.RELLENO),
     // La caja en volumen va con las formas planas y no en un grupo aparte: es la
     // misma faena —poner un bulto donde uno quiere— y quien busca «un cuadrado»
     // mira ahí. En un grupo propio sería una herramienta más que nadie encuentra.
-    listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND, Tool.SOLIDO),
+    listOf(Tool.RECTANGLE, Tool.ELLIPSE, Tool.DIAMOND, Tool.NUBE, Tool.SOLIDO),
     // Las dos que llevan lo plano al volumen, juntas y al lado de las formas: se dibuja
     // la planta con las de arriba y se levanta o se tornea con estas.
     listOf(Tool.EXTRUIR, Tool.REVOLUCION),
@@ -46,7 +47,8 @@ val GRUPOS_DE_FABRICA: List<List<Tool>> = listOf(
     listOf(Tool.RECORTAR, Tool.EXTENDER, Tool.NUDO),
     // El punto va con el texto y el numerito: los tres son para nombrar
     // cosas del dibujo, no para dibujarlas.
-    listOf(Tool.TEXT, Tool.SERIAL, Tool.PUNTO),
+    // Y el ángulo con su letra griega, al lado del punto con la suya.
+    listOf(Tool.TEXT, Tool.SERIAL, Tool.PUNTO, Tool.ANGULO),
     listOf(Tool.MOSAIC, Tool.LUPA, Tool.SPOTLIGHT),
     listOf(Tool.MEASURE, Tool.SCALE, Tool.ESCALA_GRAFICA),
     listOf(Tool.FRAME, Tool.IMAGE),
