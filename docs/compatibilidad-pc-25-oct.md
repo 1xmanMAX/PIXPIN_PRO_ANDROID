@@ -148,3 +148,13 @@ edición, solo ver y anotar con el editor avanzado; el de Windows, limpio, con l
   cual). Lo que en el PC son varios ficheros, aquí va en un ZIP.
 - Estudiar la clase como los visores: claro/oscuro, acercar con los dedos, el riel con marcador y
   lápiz (anota sobre la captura; con el vídeo, primero guarda el fotograma como captura).
+
+## v0.141.0: Chat · Funciones y Tareas en tarjetas, Kanban u horario (PC 31b45c2..9620ac8b)
+
+- Arriba de la lista de chats, el interruptor **Chat · Funciones**; Funciones son los mosaicos del PC
+  (mismo orden, nombres, colores). Los atajos de Tareas, Lecciones y Galería salen de la cabecera
+  de Proyectos.
+- **Tareas**: Tarjetas, Kanban y Horario (sin la vista Lista). El horario semanal vive dentro de
+  Tareas, con las tareas con hora de la semana como chapitas en su día; el mosaico Horario abre
+  Tareas en esa vista. La vista se recuerda (`tareas`/`vista`: tarjetas, kanban, horario).
+- Flow Launcher y los atajos de teclado del PC no se portan (son del escritorio).
