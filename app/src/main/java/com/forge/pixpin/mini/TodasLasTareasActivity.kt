@@ -310,6 +310,9 @@ class TodasLasTareasActivity : ComponentActivity() {
                         { cambiarModo(if (kanban) Kanban.Vista.LISTA else Kanban.Vista.KANBAN) },
                         tamano = 44.dp
                     )
+                    // **El horario de clases** (25-oct-2026): cada asignatura es una lista de tareas.
+                    // Ver [com.forge.pixpin.horario.HorarioActivity].
+                    BotonRedondo(Icons.Filled.CalendarMonth, "Horario", { com.forge.pixpin.horario.HorarioActivity.abrir(this@TodasLasTareasActivity) }, tamano = 44.dp)
                 }
 
                 // Buscador.

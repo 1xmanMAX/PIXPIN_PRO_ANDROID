@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- «Enviar a Anki» del menú de un mensaje (`anki-enviar` del PC). Ver anki/EnviarAAnkiActivity.kt. -->
+    <string name="guardados_enviar_anki">Enviar a Anki</string>
+</resources>
