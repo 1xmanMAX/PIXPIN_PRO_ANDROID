@@ -47,7 +47,8 @@ object BibliotecaStore {
     fun cargar(context: Context): List<FiguraGuardada> = runCatching {
         val f = archivo(context)
         if (!f.exists()) return emptyList()
-        ExcalidrawJson.decodeFromString<List<FiguraGuardada>>(f.readText())
+        // Con los puntos del PC (`[x, y]`) o los de aquí: ver [FigurasDeSerie.leerTexto].
+        FigurasDeSerie.leerTexto(f.readText())
     }.getOrDefault(emptyList())
 
     /** Escribe la lista entera. Devuelve si se pudo. */

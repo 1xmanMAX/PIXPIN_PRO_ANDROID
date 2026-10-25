@@ -69,7 +69,9 @@ fun PanelDeFiguras(
     /** Abrir el diálogo de la gráfica de una función. Ver [Graficas]. */
     onGrafica: () -> Unit = {},
     /** Pegar el texto del portapapeles como un texto del dibujo. Ver [DrawController.pegarTexto]. */
-    onPegarTexto: () -> Unit = {}
+    onPegarTexto: () -> Unit = {},
+    /** Las de serie del PC, ver [FigurasDeSerie]: van por categorías. */
+    deSerie: List<FiguraGuardada> = emptyList()
 ) {
     /**
      * El nombre a medio escribir, o null si no se está guardando nada.
@@ -81,9 +83,26 @@ fun PanelDeFiguras(
 
     val propias = figuras.filter { it.propia }
     val fabrica = figuras.filter { !it.propia }
+    // **Por categorías, como el menú de figuras del PC** (25-oct-2026): «Mías» y «Básicas» primero,
+    // luego las 35 de serie. Con 627 figuras la lista de antes, todo seguido, no servía.
+    val grupos = remember(deSerie) { FigurasDeSerie.porCategoria(deSerie) }
+    val pestanas = remember(grupos, propias.isEmpty()) {
+        listOfNotNull("Mías".takeIf { propias.isNotEmpty() }, "Básicas") + grupos.map { it.first }
+    }
+    var pestana by remember { mutableStateOf(if (propias.isNotEmpty()) "Mías" else "Básicas") }
+    var buscando by remember { mutableStateOf("") }
+    val visibles: List<FiguraGuardada> = remember(pestana, buscando, figuras, grupos) {
+        val q = buscando.trim().lowercase()
+        if (q.isNotEmpty()) (propias + fabrica + deSerie).filter { it.nombre.lowercase().contains(q) }
+        else when (pestana) {
+            "Mías" -> propias
+            "Básicas" -> fabrica
+            else -> grupos.firstOrNull { it.first == pestana }?.second.orEmpty()
+        }
+    }
 
     Surface(shape = RoundedCornerShape(16.dp), shadowElevation = 8.dp, modifier = modifier) {
-        Column(Modifier.widthIn(max = 340.dp).padding(12.dp)) {
+        Column(Modifier.widthIn(max = 560.dp).padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     stringResource(R.string.figuras_titulo),
@@ -100,17 +119,42 @@ fun PanelDeFiguras(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Column(
-                Modifier
-                    .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = 8.dp)
+            OutlinedTextField(
+                value = buscando, onValueChange = { buscando = it }, singleLine = true,
+                placeholder = { Text("Buscar figura (cama, resistencia, semanal…)") },
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            )
+            if (buscando.isBlank()) androidx.compose.foundation.lazy.LazyRow(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Apartado(stringResource(R.string.figuras_de_fabrica), fabrica, onInsertar, null)
-                Apartado(
-                    stringResource(R.string.figuras_mias), propias, onInsertar, onQuitar,
-                    vacio = stringResource(R.string.figuras_sin_mias)
-                )
+                items(pestanas.size) { i ->
+                    val c = pestanas[i]
+                    androidx.compose.material3.FilterChip(
+                        selected = c == pestana, onClick = { pestana = c },
+                        label = { Text(c, maxLines = 1) }
+                    )
+                }
+            }
+            // Perezosa: solo se pintan las miniaturas que se ven (una plantilla de página tiene
+            // cientos de piezas).
+            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(LADO_DE_LA_CASILLA - 10.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (visibles.isEmpty()) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        if (buscando.isNotBlank()) "Ninguna se llama así" else stringResource(R.string.figuras_sin_mias),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+                items(visibles.size, key = { visibles[it].id }) { i ->
+                    val f = visibles[i]
+                    Casilla(f, onInsertar, if (f.propia) onQuitar else null)
+                }
             }
 
             if (nombre != null) {
@@ -503,7 +547,7 @@ private fun Casilla(
             }
         }
         Text(
-            figura.nombre,
+            FigurasDeSerie.nombreCorto(figura.nombre),
             style = MaterialTheme.typography.labelSmall,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -520,4 +564,4 @@ private fun Casilla(
  * debajo de esto un plano y una cuadrícula se ven igual. Lo que se paga es
  * desplazar más, que es barato — la lista es perezosa.
  */
-private val LADO_DE_LA_CASILLA = 130.dp
+private val LADO_DE_LA_CASILLA = 120.dp

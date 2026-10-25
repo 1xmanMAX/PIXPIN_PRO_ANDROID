@@ -2429,8 +2429,10 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                     }
                 }
                 Velo {
+                    val deSerie = remember { FigurasDeSerie.todas(this@DrawEditorActivity) }
                     PanelDeFiguras(
-                        figuras = deFabrica + misFiguras,
+                        figuras = deFabrica + FigurasDeSerie.sinLasDeSerie(misFiguras),
+                        deSerie = deSerie,
                         onInsertar = { figura ->
                             controller.insertar(estampar(figura, centroDeLaVista()))
                             figurasAbiertas = false
@@ -5533,31 +5535,9 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         // herramientas ya están en la lateral»). Imprimir es mantener el marco del riel; editar, su
         // lápiz. Arriba queda el nombre, con lo poco que no está en el riel tras sus tres puntos.
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+            // **Sin el ⋮ de encuadrar, presentar y cerrar** (25-oct-2026, el usuario: «quita ese botón:
+            // en modo visualización solo tiene que aparecer la barra lateral»). Cerrar es atrás.
             if (pdfDeFondo != null) RotuloDeLaHoja() else RotuloDelLienzo()
-            var menu by remember { mutableStateOf(false) }
-            Box {
-                IconButton(
-                    onClick = { menu = true },
-                    modifier = Modifier.padding(start = 6.dp).size(34.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape).background(Color(0x8C14182B))
-                ) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "Más", tint = Color.White.copy(alpha = 0.85f))
-                }
-                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Encuadrar") }, leadingIcon = { Icon(Icons.Filled.CenterFocusWeak, null) },
-                        onClick = { menu = false; encuadrar() }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Presentar") }, leadingIcon = { Icon(Icons.Filled.Slideshow, null) },
-                        onClick = { menu = false; empezarAPresentar() }
-                    )
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text("Cerrar") }, leadingIcon = { Icon(Icons.Filled.Close, null) },
-                        onClick = { menu = false; cerrarYVolver() }
-                    )
-                }
-            }
         }
     }
 
