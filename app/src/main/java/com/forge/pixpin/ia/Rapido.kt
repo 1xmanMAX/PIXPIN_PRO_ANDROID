@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * **El camino rápido** (`rapido.rs` del PC, portado tal cual): las órdenes simples —«abre la
  * galería», «apunta comprar pan mañana a las 10», «¿qué tengo pendiente?»— se convierten en su
- * llamada **sin preguntar al modelo** (milisegundos en vez de un minuto del 0.8B en un teléfono).
+ * llamada **sin preguntar al modelo** (milisegundos en vez de una vuelta por la nube, y sin clave).
  *
  * No hace nada si duda: dos órdenes en una, una pregunta que no es de tareas, algo largo… y
  * **nunca lo que borra**. Entonces contesta el modelo, como siempre.

@@ -62,10 +62,10 @@ object Conocimiento {
             "En Sincronizar, los aparatos con el mismo codigo de grupo se encuentran en la misma Wi-Fi (tambien el PC con PixPin para Windows) y juntan lo cambiado. «Enviar una vez» da un codigo de seis cifras y un QR."),
         e("Ajustes", listOf("ajustes", "configuracion", "opciones", "preferencias", "modo oscuro", "noche", "tema"),
             "Los Ajustes estan en el menu de la pantalla principal; cada herramienta del lienzo, gesto o funcion se enciende o apaga ahi. El modo noche se ajusta solo por la hora y la luz."),
-        e("El asistente: bajarlo", listOf("asistente", "ia", "inteligencia", "modelo", "qwen", "bajar", "descargar"),
-            "En el chat fijo «Asistente», la tarjeta «Bajar» baja el modelo una vez. Se elige en Ajustes → Asistente: Qwen3.5 2B o 0.8B (ligero), o Claude o DeepSeek con tu clave."),
+        e("El asistente: ponerlo", listOf("asistente", "ia", "inteligencia", "modelo", "clave", "claude", "deepseek", "nube"),
+            "El asistente contesta con la nube: en Ajustes → Asistente se elige Claude o DeepSeek y se pega tu clave, que se guarda cifrada y no viaja."),
         e("El asistente: que hace", listOf("que haces", "que sabes", "puedes", "asistente", "@asistente"),
-            "Funciona sin internet: contesta, dibuja en el lienzo, hace graficas, lee PDFs, busca en tus cosas y usa la app (notas, tareas, lienzos, lecciones, capturas). En otro chat se le llama con @asistente."),
+            "Con internet y tu clave: contesta, dibuja en el lienzo, hace graficas, lee PDFs, busca en tus cosas y usa la app (notas, tareas, lienzos, lecciones, capturas). En otro chat se le llama con @asistente."),
         e("Reproductor de audio", listOf("audio", "musica", "reproduc", "escuchar", "cancion"),
             "Las notas de voz suenan en su burbuja. La Biblioteca de audio (menu de Mensajes guardados) las junta todas.")
     )

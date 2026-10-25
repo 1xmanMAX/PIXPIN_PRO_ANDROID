@@ -174,13 +174,13 @@ object CatalogoDeAjustes {
         ) { listOf(it.motorDeVoz, it.idiomaDeVoz, it.segundoIdiomaDeVoz, it.modeloWhisper, it.modoDeIdiomas) },
         Opcion(
             "asistente", Seccion.ASISTENTE, "Asistente",
-            "Quién contesta: el modelo del teléfono, sin internet (2B dibuja y ve mejor; 0.8B pesa menos), o Claude o DeepSeek con tu clave, que se guarda cifrada y no viaja. Pensar, documentos a la nube y voz.",
+            "Quién contesta: Claude o DeepSeek con tu clave, que se guarda cifrada y no viaja. Pensar, documentos a la nube y voz.",
             listOf(
-                "asistente_modelo", "asistente_motor", "asistente_respaldo_local", "asistente_pensar", "asistente_documentos_nube",
-                "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_mejor_vista"
+                "asistente_motor", "asistente_pensar", "asistente_documentos_nube",
+                "asistente_revisar_dicho", "asistente_leer_respuestas"
             ),
-            "ia inteligencia artificial qwen modelo bajar local llama chat claude deepseek nube clave api pensar voz gemma"
-        ) { listOf(it.asistenteModelo, it.asistenteMotor, it.asistenteRespaldoLocal, it.asistentePensar, it.asistenteDocumentosNube, it.asistenteRevisarDicho, it.asistenteLeerRespuestas, it.asistenteMejorVista) },
+            "ia inteligencia artificial modelo chat claude deepseek nube clave api pensar voz"
+        ) { listOf(it.asistenteMotor, it.asistentePensar, it.asistenteDocumentosNube, it.asistenteRevisarDicho, it.asistenteLeerRespuestas) },
         Opcion(
             "fluidez", Seccion.ASPECTO, "Máxima fluidez",
             "Pide a la pantalla su tasa más alta (90 o 120 Hz). Más suave, algo más de batería.",

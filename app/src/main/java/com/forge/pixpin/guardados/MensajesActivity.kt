@@ -505,15 +505,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val contestandoAqui by remember {
             androidx.compose.runtime.derivedStateOf { com.forge.pixpin.asistente.Asistente.contestandoEn(chatDe) }
         }
-        // Al entrar en el chat «Asistente» se carga el modelo, para que la primera respuesta no espere.
-        val enElDelAsistente = chatDe != null && chatDe == idDelAsistente
-        LaunchedEffect(enElDelAsistente) {
-            if (!enElDelAsistente) return@LaunchedEffect
-            val ajuste = withContext(Dispatchers.IO) {
-                runCatching { (application as? PixPinApp)?.settings?.settings?.first()?.asistenteModelo }.getOrNull()
-            }
-            com.forge.pixpin.asistente.Asistente.precalentar(this@MensajesActivity, com.forge.pixpin.asistente.Asistente.modelo(this@MensajesActivity, ajuste))
-        }
 
         // **Con `rememberSaveable` para que el giro no se lo lleve.** Girar el móvil
         // recreaba la pantalla entera: volvías a «Todo», sin búsqueda y con lo escrito a

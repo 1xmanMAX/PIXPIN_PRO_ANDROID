@@ -23,7 +23,7 @@ import kotlinx.serialization.json.doubleOrNull
  *
  * El bucle no sabe dibujar ni leer: eso lo hace el [Ejecutor] del chat. Así el mismo bucle sirve
  * para las pruebas (con un motor y un ejecutor de mentira) y para el teléfono. Mismos topes que el
- * PC: [VUELTAS] vueltas, [REINTENTOS] reintentos, listas acotadas por la gramática de llama.cpp
+ * PC: [VUELTAS] vueltas, [REINTENTOS] reintentos, listas acotadas
  * ([conTopes]) y respuesta que cabe en el contexto ([topeDeTokens]).
  */
 object Agente {
@@ -139,14 +139,14 @@ object Agente {
     /**
      * **Un turno.** [historial] trae el mensaje nuevo del usuario al final; al acabar trae también
      * lo que dijo el asistente (con sus llamadas y resultados), listo para la vuelta siguiente.
-     * [contexto]: los tokens con los que se arrancó el modelo.
+     * [contexto]: los tokens de la ventana del motor.
      */
     fun turno(
         motor: Motor,
         historial: MutableList<MensajeIa>,
         herramientas: List<com.forge.pixpin.ia.Herramienta>,
         ejecutor: Ejecutor,
-        contexto: Int = ServidorLlama.CONTEXTO,
+        contexto: Int = Nube.VENTANA,
         opciones: Opciones = Opciones(),
         alEvento: (Evento) -> Seguir
     ): Final {
@@ -388,7 +388,7 @@ object Agente {
         return Final(texto, hechas, reintentos, cortado)
     }
 
-    /** Qwen a veces escribe su `<think>…</think>` aunque no se le pida pensar: fuera. */
+    /** Si el modelo escribe su `<think>…</think>` aunque no se le pida pensar: fuera. */
     internal fun quitarPensado(t: String): String {
         val cierre = t.lastIndexOf("</think>")
         return if (cierre >= 0) t.substring(cierre + "</think>".length).trimStart() else t

@@ -297,17 +297,11 @@ class NubeTest {
         assertTrue(error { Nube.Motor(Nube.Proveedor.CLAUDE, "sk-ant-x-0123456789abcd", url = "http://example.com/v1/messages", esperas = emptyList()).completar(peticion("a")) { Seguir.SI } } is ErrorIa.Nube)
     }
 
-    @Test fun `si la nube falla sigue el local, y la siguiente va directa`() {
-        val s = Servidor("/v1/messages", listOf(Falsa(401, """{"type":"error","error":{"type":"authentication_error","message":"x"}}""")))
-        val local = MotorGuionado(listOf(Respuesta.deTexto("respuesta local"), Respuesta.deTexto("otra local")))
-        val m = Nube.ConRespaldo(claude(s.url), local, "Claude Haiku 5.5")
-        val visto = StringBuilder()
-        assertEquals("respuesta local", m.completar(peticion("hola")) { t -> if (t is Trozo.Texto) visto.append(t.texto); Seguir.SI }.texto)
-        assertTrue(visto.toString(), visto.contains("no acepta la clave") && visto.contains("Sigo con el asistente local"))
-        assertEquals("otra local", m.completar(peticion("hola")) { Seguir.SI }.texto)
-        assertEquals(1, s.recibidas.size)
-        val solo = Nube.ConRespaldo(Nube.Motor(Nube.Proveedor.CLAUDE, ""), null, "Claude")
-        assertTrue(error { solo.completar(peticion("a")) { Seguir.SI } } is ErrorIa.Nube)
+    @Test fun `sin ajuste o con uno que no existe contesta Claude`() {
+        assertEquals(Nube.Proveedor.CLAUDE, Nube.Proveedor.elegido(""))
+        assertEquals(Nube.Proveedor.CLAUDE, Nube.Proveedor.elegido(null))
+        assertEquals(Nube.Proveedor.CLAUDE, Nube.Proveedor.elegido("qwen3.5-2b"))
+        assertEquals(Nube.Proveedor.DEEPSEEK, Nube.Proveedor.elegido(" deepseek "))
     }
 
     @Test fun `la clave no sale por toString, y se enmascara como en el PC`() {
@@ -320,12 +314,8 @@ class NubeTest {
         assertFalse(Nube.pareceClave("corta"))
     }
 
-    @Test fun `el catalogo entero va a la nube y el respaldo solo lo que toca`() {
-        assertTrue(Nube.Motor(Nube.Proveedor.CLAUDE, "x").catalogoCompleto)
-        assertFalse(MotorGuionado(emptyList()).catalogoCompleto)
+    @Test fun `el catalogo entero va a la nube`() {
         val p = peticion("dibuja una estrella roja").copy(herramientas = Herramientas.catalogo())
-        val q = Nube.paraElLocal(p, Herramientas.DISPONIBLES)
-        assertTrue(q.herramientas.size <= Seleccion.MAXIMO && q.herramientas.any { it.nombre == Herramientas.DIBUJAR })
         val c = Nube.Claude.cuerpo(p, emptyMap(), 100)
         assertEquals(Herramientas.catalogo().size, c["tools"]!!.jsonArray.size)
         assertTrue(c["tools"]!!.jsonArray.all { it.jsonObject["strict"] == null })

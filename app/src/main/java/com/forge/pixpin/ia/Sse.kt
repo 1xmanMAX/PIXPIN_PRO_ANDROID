@@ -14,7 +14,7 @@ import java.io.ByteArrayOutputStream
 /**
  * **Leer la respuesta en vivo** (Server-Sent Events al estilo OpenAI; `sse.rs` del PC).
  *
- * `llama-server` manda líneas `data: {json}` con trocitos (`delta`) de texto, de razonamiento y
+ * DeepSeek (y `llama-server` en el PC) manda líneas `data: {json}` con trocitos (`delta`) de texto, de razonamiento y
  * de llamadas a herramientas; las llamadas llegan por pedazos (`index` + nombre una vez +
  * argumentos poco a poco) y hay que juntarlas. Al final, `data: [DONE]`. No sabe nada de
  * sockets: se le dan bytes y devuelve trozos, para probarla sin red.

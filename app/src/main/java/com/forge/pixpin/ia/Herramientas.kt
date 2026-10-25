@@ -223,8 +223,7 @@ object Herramientas {
 
     /**
      * **El catálogo del teléfono**: las del PC que se saben hacer aquí, en el orden del PC y con
-     * su esquema exacto. Con la nube se manda entero; con el modelo local, lo que elija
-     * [Seleccion.paraElPedido].
+     * su esquema exacto. A la nube se le manda entero en cada turno.
      */
     fun catalogo(): List<Herramienta> = DEL_PC.filter { it.nombre in DISPONIBLES }
 
@@ -801,8 +800,4 @@ object Herramientas {
 
     /** Minúsculas y sin tildes (`acciones::normalizar`). */
     fun normalizar(s: String): String = Acciones.normalizar(s)
-
-    /** **Las herramientas de este turno** con el modelo local ([Seleccion], como el PC). */
-    fun paraElPedido(pedido: String, conImagen: Boolean = false): List<Herramienta> =
-        Seleccion.paraElPedido(pedido, conImagen, DISPONIBLES)
 }
