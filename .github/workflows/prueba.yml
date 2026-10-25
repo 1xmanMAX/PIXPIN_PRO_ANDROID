@@ -73,7 +73,10 @@ jobs:
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 SHA256
 
       - name: Compilar
-        run: ./gradlew :app:assembleRelease --stacktrace ${{ inputs.rapido && '-Prapido' || '' }}
+        # **Más memoria para Gradle aquí** (25-oct-2026): con los 2 GB de gradle.properties el
+        # empaquetado del APK se quedaba sin memoria (ApkFlinger, «Java heap space»). La máquina
+        # de GitHub tiene 16 GB; gradle.properties se queda como está para los equipos pequeños.
+        run: ./gradlew :app:assembleRelease --stacktrace "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx4g ${{ inputs.rapido && '-Prapido' || '' }}
 
       - name: Firmar para repartir
         run: |
