@@ -108,11 +108,10 @@ import kotlin.math.roundToInt
  * la regla de Android 14 de un consentimiento por sesión, y si la bola ya tenía la sesión abierta
  * no se vuelve a preguntar. Si la abrió esta grabación, se cierra al acabar.
  *
- * ## La zona, como el PC: se elige una vez y se repite
+ * ## La pantalla entera al instante, y el recorte para un trozo (25-oct-2026, como el PC)
  *
- * La primera «Captura» congela la pantalla y deja arrastrar la zona (o tomar la pantalla
- * entera); las siguientes recortan la misma zona con un toque. «Cambiar la zona» vuelve a
- * preguntar. La barra y la bola se esconden un instante para no salir en la foto, como en
+ * En el modo «Audio y capturas», «Captura» guarda la pantalla entera sin preguntar nada; el
+ * botón del recorte congela la pantalla y deja arrastrar la zona, solo para esa captura. La barra y la bola se esconden un instante para no salir en la foto, como en
  * [CaptureFlow.captureNow]. El minuto de cada captura es el **de cuando se pulsó**, sin pausas
  * ([GrabarClase.Cronometro]).
  *
@@ -198,8 +197,6 @@ class GrabarClaseService : Service() {
     private var cronometro: GrabarClase.Cronometro? = null
     private val picos = Picos()
     private val hechas = mutableListOf<Hecha>()
-    private var zona: GrabarClase.Zona? = null
-    private var zonaElegida = false
     private var fotografiando = false
     private var abrimosLaSesion = false
     private var terminado = false
@@ -267,7 +264,7 @@ class GrabarClaseService : Service() {
                 toast(getString(R.string.clase_sin_video))
             }
         }
-        if (g == null) g = Voz.empezar(this, f)
+        if (g == null) g = Voz.empezar(this, f, paraUnaClase = true)
         if (g == null) {
             f.delete()
             toast(getString(R.string.clase_no_arranca))
@@ -340,20 +337,20 @@ class GrabarClaseService : Service() {
                 avisar(getString(R.string.clase_sin_zona))
                 return
             }
-            if (!zonaElegida || cambiarZona) {
+            // **«Captura», la pantalla entera al instante** (25-oct-2026, el modo «Audio y capturas»
+            // del PC): sin pedir zona. El recorte de la barra elige un trozo para esa sola captura.
+            val elegida = if (cambiarZona) {
                 val eleccion = elegirZona(foto)
                 ventana?.isContentVisible = true
                 if (eleccion == null || terminado) {
                     foto.recycle()
                     return
                 }
-                zona = eleccion.zona
-                zonaElegida = true
-                barra.update { it.copy(conZona = true) }
+                eleccion.zona
             } else {
                 ventana?.isContentVisible = true
+                null
             }
-            val elegida = zona
             val archivo = withContext(Dispatchers.IO) { recortarYGuardar(foto, elegida, ms) }
             if (archivo == null) {
                 avisar(getString(R.string.clase_sin_zona))
@@ -461,6 +458,7 @@ class GrabarClaseService : Service() {
             withContext(Dispatchers.Main) {
                 if (cerrarLaSesion) CaptureService.stopSession(app)
                 toast(dicho)
+                notaGuardada?.let { avisarParaEstudiar(it) }
                 stopSelf()
             }
         }
@@ -499,6 +497,7 @@ class GrabarClaseService : Service() {
         val ahora = System.currentTimeMillis()
         val nombre = context.getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))
         val vozId = UUID.randomUUID().toString()
+        notaGuardada = vozId
         // **El vídeo, justo detrás de la nota** (como el PC): se renombra en su sitio, sin copiar
         // un fichero que puede pesar un giga.
         val elVideo = video?.let { v ->
@@ -715,7 +714,8 @@ class GrabarClaseService : Service() {
                         color = claro, fontSize = 13.sp
                     )
                 }
-                if (b.conZona) {
+                // El recorte, siempre a mano en el modo de capturas (con vídeo no hay zonas).
+                if (!conVideo) {
                     IconButton(onClick = { captura(cambiarZona = true) }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.Crop, contentDescription = getString(R.string.clase_zona), tint = claro)
                     }
@@ -826,6 +826,32 @@ class GrabarClaseService : Service() {
 
     private fun toast(texto: String) {
         Toast.makeText(applicationContext, texto, Toast.LENGTH_LONG).show()
+    }
+
+    /** La nota de la clase recién guardada, para el aviso de «Abrir para estudiar». */
+    @Volatile private var notaGuardada: String? = null
+
+    /**
+     * **«Abrir para estudiar»** (25-oct-2026, como el final de la grabación del PC): un aviso que
+     * abre la clase en [EstudiarClaseActivity]. Sin permiso de avisos, no sale y no pasa nada: la
+     * nota ya está en el chat, con su «Estudiar la clase» en el menú.
+     */
+    private fun avisarParaEstudiar(nota: String) {
+        runCatching {
+            val abrir = PendingIntent.getActivity(
+                this, 1, EstudiarClaseActivity.intento(this, nota),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val n = NotificationCompat.Builder(this, CANAL)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle(getString(R.string.estudiar_titulo))
+                .setContentText(getString(R.string.clase_abrir_para_estudiar))
+                .setContentIntent(abrir)
+                .addAction(0, getString(R.string.clase_abrir_para_estudiar), abrir)
+                .setAutoCancel(true)
+                .build()
+            getSystemService(NotificationManager::class.java)?.notify(AVISO + 1, n)
+        }
     }
 
     private fun aviso(): Notification {

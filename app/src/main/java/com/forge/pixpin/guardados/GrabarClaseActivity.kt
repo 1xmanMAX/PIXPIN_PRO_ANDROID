@@ -82,6 +82,8 @@ class GrabarClaseActivity : ComponentActivity() {
         }
         aPantallaCompleta()
         perfil = PerfilDeVideo.deClave(runCatching { prefs().getString(PERFIL, null) }.getOrNull())
+        // **El modo, recordado** (25-oct-2026, como el PC: «pantalla» o «capturas»).
+        conVideo = runCatching { prefs().getString(MODO, null) }.getOrNull() == MODO_PANTALLA
         setContent { PixPinTheme { Pantalla() } }
     }
 
@@ -118,13 +120,30 @@ class GrabarClaseActivity : ComponentActivity() {
                         modifier = Modifier.padding(top = 16.dp)
                     )
                 }
+                // **Dos modos** (25-oct-2026, como el selector de Preparar del PC): «Pantalla y sonido»
+                // (el vídeo de esta pantalla con el micrófono, y su calidad) o «Audio y capturas»
+                // (solo el sonido; «Captura» guarda la pantalla entera al instante).
                 androidx.compose.foundation.layout.Row(
                     Modifier.fillMaxWidth().padding(top = 16.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(getString(R.string.clase_con_video), Modifier.weight(1f))
-                    androidx.compose.material3.Switch(checked = conVideo, onCheckedChange = { conVideo = it })
+                    for ((pantalla, rotulo) in listOf(false to R.string.clase_modo_capturas, true to R.string.clase_modo_pantalla)) {
+                        androidx.compose.material3.FilterChip(
+                            selected = conVideo == pantalla,
+                            onClick = {
+                                conVideo = pantalla
+                                runCatching { prefs().edit().putString(MODO, if (pantalla) MODO_PANTALLA else MODO_CAPTURAS).apply() }
+                            },
+                            label = { Text(getString(rotulo)) }
+                        )
+                    }
                 }
+                Text(
+                    getString(if (conVideo) R.string.clase_modo_pantalla_sub else R.string.clase_modo_capturas_sub),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
                 if (conVideo) {
                     Text(
                         getString(R.string.clase_video_explicacion),
@@ -221,6 +240,10 @@ class GrabarClaseActivity : ComponentActivity() {
     companion object {
         private const val EL_PROYECTO = "clase_proyecto"
         private const val PERFIL = "perfil_video"
+        private const val MODO = "modo_de_grabar"
+        /** Las claves del modo, las del PC (`voz/modo-de-grabar.txt`). */
+        private const val MODO_PANTALLA = "pantalla"
+        private const val MODO_CAPTURAS = "capturas"
 
         /** Abre la preparación para grabar en el chat [proyecto] (null, el general). */
         fun abrir(context: Context, proyecto: String?) {

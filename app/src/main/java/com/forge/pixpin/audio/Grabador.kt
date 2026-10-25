@@ -47,10 +47,11 @@ interface Grabador {
      * picos y de comprimir: la onda que se dibuja es la de lo que se oirá.
      */
     class Realzado private constructor(
-        private val record: AudioRecord,
+        private var record: AudioRecord,
         private val codec: MediaCodec,
         private val muxer: MediaMuxer,
-        private val muestreo: Int
+        private val muestreo: Int,
+        private val fuente: Int
     ) : Grabador {
         @Volatile private var corriendo = true
         @Volatile private var maximo = 0
@@ -71,10 +72,22 @@ interface Grabador {
         override fun pausar(pausa: Boolean) { enPausa = pausa }
 
         private fun bucle() {
+            // **Con la prioridad del audio** (25-oct-2026, lo que aprendió el PC de OBS y Oboe,
+            // `docs/motor-de-audio.md` §8): un hilo normal pierde bloques cuando el teléfono va
+            // cargado, y lo perdido no se recupera.
+            runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO) }
             val buf = ShortArray(muestreo / 10)
             try {
                 while (corriendo) {
                     val n = record.read(buf, 0, buf.size)
+                    if (n == AudioRecord.ERROR_DEAD_OBJECT) {
+                        // El micrófono se fue (unos cascos que se quitan, otra app que lo coge): se
+                        // vuelve a abrir, y el hueco se rellena con silencio **por el reloj**, como
+                        // el motor del PC, para que lo de después siga en su minuto (las capturas
+                        // de una clase van atadas a él).
+                        reabrir()
+                        continue
+                    }
                     if (n <= 0) continue
                     if (enPausa) { sacar(false); continue }
                     realce.procesar(buf, 0, n)
@@ -87,6 +100,31 @@ interface Grabador {
                 meter(buf, 0, fin = true)
                 sacar(true)
             } catch (_: Throwable) {
+            }
+        }
+
+        /** Vuelve a abrir el micrófono tras perderlo, con el hueco en silencio. Ver [bucle]. */
+        private fun reabrir() {
+            val desde = System.nanoTime()
+            runCatching { record.release() }
+            var nuevo: AudioRecord? = null
+            var intentos = 0
+            while (corriendo && nuevo == null && intentos++ < 50) {
+                nuevo = abrirMicrofono(fuente, muestreo)?.takeIf {
+                    runCatching { it.startRecording() }.isSuccess && it.recordingState == AudioRecord.RECORDSTATE_RECORDING
+                } ?: run { runCatching { Thread.sleep(200) }; null }
+            }
+            if (nuevo == null) { corriendo = false; return }
+            record = nuevo
+            if (enPausa) return
+            val perdidas = ((System.nanoTime() - desde) / 1_000_000L * muestreo / 1000L).coerceIn(0L, muestreo * 60L)
+            val cero = ShortArray(muestreo / 10)
+            var quedan = perdidas
+            while (quedan > 0) {
+                val k = minOf(quedan, cero.size.toLong()).toInt()
+                meter(cero, k, fin = false)
+                sacar(false)
+                quedan -= k
             }
         }
 
@@ -152,17 +190,44 @@ interface Grabador {
         }
 
         companion object {
-            /** Empieza a grabar en [destino] con el realce; null si este teléfono no deja. */
+            /**
+             * **Notas de voz y dictado**: `VOICE_RECOGNITION`, sin el control de ganancia ni la
+             * supresión agresiva del fabricante; el realce lo pone [Realce], como el motor del PC.
+             */
+            const val PRESET_DE_VOZ = MediaRecorder.AudioSource.VOICE_RECOGNITION
+
+            /** **Una clase** (el teléfono lejos, en la mesa): `CAMCORDER`, orientado al frente y con su AGC. */
+            const val PRESET_DE_CLASE = MediaRecorder.AudioSource.CAMCORDER
+
+            /**
+             * **El micrófono con su preset** (25-oct-2026, `docs/motor-de-audio.md` §8 del PC): si
+             * este teléfono no lo tiene, el `MIC` de siempre. Null si no hay micrófono.
+             */
             @SuppressLint("MissingPermission")
-            fun empezar(destino: File, muestreo: Int, bitsPorSegundo: Int): Realzado? {
+            internal fun abrirMicrofono(fuente: Int, muestreo: Int): AudioRecord? {
+                val minimo = AudioRecord.getMinBufferSize(muestreo, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                if (minimo <= 0) return null
+                for (f in listOf(fuente, MediaRecorder.AudioSource.MIC).distinct()) {
+                    val r = runCatching {
+                        AudioRecord(f, muestreo, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minimo, muestreo / 5) * 2)
+                    }.getOrNull() ?: continue
+                    if (r.state == AudioRecord.STATE_INITIALIZED) return r
+                    runCatching { r.release() }
+                }
+                return null
+            }
+
+            /**
+             * Empieza a grabar en [destino] con el realce; null si este teléfono no deja. [fuente]
+             * es el preset del micrófono ([PRESET_DE_VOZ] o [PRESET_DE_CLASE]).
+             */
+            @SuppressLint("MissingPermission")
+            fun empezar(destino: File, muestreo: Int, bitsPorSegundo: Int, fuente: Int = PRESET_DE_VOZ): Realzado? {
                 var record: AudioRecord? = null
                 var codec: MediaCodec? = null
                 var muxer: MediaMuxer? = null
                 return runCatching {
-                    val minimo = AudioRecord.getMinBufferSize(muestreo, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-                    if (minimo <= 0) return null
-                    record = AudioRecord(MediaRecorder.AudioSource.MIC, muestreo, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minimo, muestreo / 5) * 2)
-                    if (record!!.state != AudioRecord.STATE_INITIALIZED) error("sin micrófono")
+                    record = abrirMicrofono(fuente, muestreo) ?: error("sin micrófono")
                     val formato = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, muestreo, 1).apply {
                         setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
                         setInteger(MediaFormat.KEY_BIT_RATE, bitsPorSegundo)
@@ -173,8 +238,13 @@ interface Grabador {
                     }
                     muxer = MediaMuxer(destino.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
                     record!!.startRecording()
-                    if (record!!.recordingState != AudioRecord.RECORDSTATE_RECORDING) error("ocupado")
-                    Realzado(record!!, codec!!, muxer!!, muestreo)
+                    if (record!!.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+                        // Con el preset ocupado o rechazado, el micrófono de siempre.
+                        runCatching { record?.release() }
+                        record = abrirMicrofono(MediaRecorder.AudioSource.MIC, muestreo)?.also { it.startRecording() }
+                        if (record?.recordingState != AudioRecord.RECORDSTATE_RECORDING) error("ocupado")
+                    }
+                    Realzado(record!!, codec!!, muxer!!, muestreo, fuente)
                 }.getOrElse {
                     runCatching { record?.release() }; runCatching { codec?.release() }; runCatching { muxer?.release() }
                     destino.delete()

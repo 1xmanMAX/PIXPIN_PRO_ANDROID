@@ -1008,7 +1008,7 @@
     <string name="guardados_adj_clase">Grabar clase</string>
     <string name="clase_titulo">Grabar clase o reunión</string>
     <string name="clase_sub">Graba el audio y pon capturas en su minuto</string>
-    <string name="clase_explicacion">Sale una barra flotante encima de todo: «Captura» guarda una zona de la pantalla en ese minuto. La primera vez eliges la zona (o la pantalla entera) y las siguientes la repiten con un toque. Al terminar, la nota entra en este chat con sus capturas y se pasa a texto.</string>
+    <string name="clase_explicacion">Sale una barra flotante encima de todo: «Captura» guarda la pantalla entera en ese minuto, y el recorte, solo un trozo que eliges. Al terminar, la nota entra en este chat con sus capturas y se pasa a texto.</string>
     <string name="clase_solo_microfono">En el teléfono se graba el micrófono. Si la reunión es en este mismo teléfono, Android puede silenciarlo mientras la llamada lo usa.</string>
     <string name="clase_guardar_en">Guardar en: %1$s</string>
     <string name="clase_general">la conversación general</string>
@@ -1038,6 +1038,25 @@
     <string name="clase_captura_de">Captura del %1$s</string>
     <string name="clase_con_video">Grabar también el vídeo de la pantalla</string>
     <string name="clase_video_explicacion">Ocupa más que la nota sola (mira la calidad). Las capturas salen del propio vídeo, a pantalla entera, y Android enseña que se está grabando la pantalla.</string>
+    <string name="clase_modo_pantalla">Pantalla y sonido</string>
+    <string name="clase_modo_capturas">Audio y capturas</string>
+    <string name="clase_modo_pantalla_sub">Graba el vídeo de esta pantalla con el micrófono</string>
+    <string name="clase_modo_capturas_sub">Graba el audio; «Captura» guarda la pantalla entera al instante y el recorte, solo un trozo</string>
+    <string name="clase_abrir_para_estudiar">Abrir para estudiar</string>
+    <!-- Estudiar la clase (25-oct-2026, como la ventana del PC). Ver EstudiarClaseActivity. -->
+    <string name="estudiar_titulo">Estudiar la clase</string>
+    <string name="estudiar_transcripcion">Transcripción</string>
+    <string name="estudiar_capturas">Capturas</string>
+    <string name="estudiar_marcador">Marcador</string>
+    <string name="estudiar_seguir">Seguir</string>
+    <string name="estudiar_nota_del_marcador">Escribe una nota para este minuto (puede ir vacía)</string>
+    <string name="estudiar_marcador_guardado">Marcador guardado</string>
+    <string name="estudiar_no_se_guardo">No se pudo guardar</string>
+    <string name="estudiar_sin_texto">Aún no hay transcripción: pulsa «Pasar a texto» en la nota del chat y aparecerá aquí sola.</string>
+    <string name="estudiar_sin_capturas">Esta clase no tiene capturas.</string>
+    <string name="estudiar_sin_sonido">No se encuentra el audio de esta clase</string>
+    <string name="estudiar_quitar_marcador">Mantén pulsado un marcador para quitarlo</string>
+    <string name="estudiar_guardar">Guardar</string>
     <string name="clase_calidad">Calidad del vídeo</string>
     <string name="clase_calidad_ligero">Ligero</string>
     <string name="clase_calidad_normal">Normal</string>

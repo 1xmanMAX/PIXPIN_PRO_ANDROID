@@ -88,12 +88,18 @@ class VideoDeLaClase private constructor(
                 var medidas: Pair<Int, Int>? = null
                 for (p in probar) {
                     val (ancho, alto) = GrabarClase.medidasDelVideo(metricas.widthPixels, metricas.heightPixels, p)
+                    // **Antes de configurar, si el H.264 del teléfono lo admite** (25-oct-2026, lo que
+                    // hace AOSP `screenrecord`, `docs/motor-de-video.md` del PC): un `prepare` que pasa
+                    // con un tamaño que el codificador no da revienta luego al empezar.
+                    if (!admiteH264(ancho, alto, p.porSegundo)) continue
                     val (media, _) = PerfilDeVideo.bitsPorSegundo(p, ancho, alto)
                     val g = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
                     else @Suppress("DEPRECATION") MediaRecorder())
                     val lista = runCatching {
                         g.apply {
-                            setAudioSource(MediaRecorder.AudioSource.MIC)
+                            // El micrófono de una clase: `CAMCORDER`, orientado al frente y con su AGC
+                            // (`docs/motor-de-audio.md` §8 del PC).
+                            setAudioSource(MediaRecorder.AudioSource.CAMCORDER)
                             setVideoSource(MediaRecorder.VideoSource.SURFACE)
                             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                             setOutputFile(destino.absolutePath)
@@ -103,7 +109,10 @@ class VideoDeLaClase private constructor(
                             setVideoFrameRate(p.porSegundo)
                             // La media del PC para este tamaño: una hora de «Normal» ≈ 300 MB.
                             setVideoEncodingBitRate(media)
-                            setAudioSamplingRate(44_100)
+                            // El `.m4a` de la nota sale de esta pista: mono a 48 000 y 96 kb/s, el de
+                            // la Grabadora del PC.
+                            setAudioChannels(1)
+                            setAudioSamplingRate(48_000)
                             setAudioEncodingBitRate(96_000)
                             prepare()
                         }
@@ -136,6 +145,21 @@ class VideoDeLaClase private constructor(
                 null
             }
         }
+
+        /**
+         * Si algún codificador H.264 del teléfono (los de hardware primero no importa aquí: basta
+         * uno) admite [ancho]×[alto] a [fps]. Si no se puede saber, sí: que lo diga `prepare`.
+         */
+        private fun admiteH264(ancho: Int, alto: Int, fps: Int): Boolean = runCatching {
+            android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+                .filter { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
+                .any { info ->
+                    runCatching {
+                        info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).videoCapabilities
+                            .areSizeAndRateSupported(ancho, alto, fps.toDouble())
+                    }.getOrDefault(false)
+                }
+        }.getOrDefault(true)
 
         private fun metricas(context: Context): DisplayMetrics? {
             val dm = context.getSystemService(DisplayManager::class.java) ?: return null

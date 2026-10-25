@@ -52,10 +52,19 @@ object Voz {
      * micrófono cogido, o el permiso se acaba de retirar. Quien llame se lo dice al
      * usuario y sigue; reventar aquí dejaría la pantalla de grabar colgada.
      */
-    fun empezar(context: Context, destino: File): com.forge.pixpin.audio.Grabador? {
+    fun empezar(
+        context: Context, destino: File,
+        /**
+         * Una clase y no una nota (25-oct-2026): el preset `CAMCORDER` en vez de
+         * `VOICE_RECOGNITION`, como recomienda `docs/motor-de-audio.md` §8 del PC.
+         */
+        paraUnaClase: Boolean = false
+    ): com.forge.pixpin.audio.Grabador? {
         // **Con el realce de la voz**, como el PC (3-oct-2026): una voz baja sale clara. Si este
         // teléfono no deja montar el codificador, la grabadora de siempre.
-        com.forge.pixpin.audio.Grabador.Realzado.empezar(destino, MUESTREO, BITS_POR_SEGUNDO)?.let { return it }
+        val preset = if (paraUnaClase) com.forge.pixpin.audio.Grabador.Realzado.PRESET_DE_CLASE
+        else com.forge.pixpin.audio.Grabador.Realzado.PRESET_DE_VOZ
+        com.forge.pixpin.audio.Grabador.Realzado.empezar(destino, MUESTREO, BITS_POR_SEGUNDO, preset)?.let { return it }
         return runCatching {
             val grabador = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(context)

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.TextDecrease
 import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material3.Icon
@@ -116,6 +117,12 @@ class LetraActivity : ComponentActivity() {
                         }
                     ) { Icon(Icons.Filled.Flag, contentDescription = getString(R.string.letra_marcar)) }
                     IconButton(onClick = { m?.let { editar(it) } }) { Icon(Icons.Filled.Edit, contentDescription = getString(R.string.letra_editar)) }
+                    // **Estudiar la clase** (25-oct-2026, como la pastilla del PC junto a la de texto).
+                    if (m != null && EstudiarClase.esDeUnaClase(m)) {
+                        IconButton(onClick = { EstudiarClaseActivity.abrir(this@LetraActivity, m.id) }) {
+                            Icon(androidx.compose.material.icons.Icons.Filled.School, contentDescription = getString(R.string.estudiar_titulo))
+                        }
+                    }
                 }
                 if (m != null && m.marcas.isNotEmpty()) {
                     LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {

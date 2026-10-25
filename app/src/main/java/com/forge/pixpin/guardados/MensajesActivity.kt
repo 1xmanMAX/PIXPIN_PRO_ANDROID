@@ -1300,6 +1300,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
                                 devolver = if (m.proyecto != null) { { devolverAlProyecto(m) } } else null,
                                 letra = if (m.clase == Clase.VOZ && m.ruta != null) { { LetraActivity.abrir(this@MensajesActivity, m.id) } } else null,
+                                estudiar = EstudiarClase.notaDe(m, mensajes)?.let { nota -> { EstudiarClaseActivity.abrir(this@MensajesActivity, nota.id) } },
                                 transcribir = if (m.clase == Clase.VOZ && m.ruta != null && Transcriptor.disponible(this@MensajesActivity)) {
                                     {
                                         Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.guardados_transcribiendo), Toast.LENGTH_SHORT).show()
@@ -2995,6 +2996,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val transcribir: (() -> Unit)?,
         /** La letra o el texto de un audio, a pantalla completa; nulo si no es un audio. */
         val letra: (() -> Unit)?,
+        /**
+         * **«Estudiar la clase»** (25-oct-2026, como el PC): en la nota de voz de una clase, en una
+         * captura suya o en su vídeo. Nulo si el mensaje no es de ninguna. Ver [EstudiarClaseActivity].
+         */
+        val estudiar: (() -> Unit)? = null,
         val responder: () -> Unit,
         val copiar: (() -> Unit)?,
         val fijar: () -> Unit,
@@ -3321,6 +3327,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 Icons.Filled.LibraryAdd) {
                             menuAbierto = false; verMas = false; devolver()
                         }
+                    }
+                }
+                acciones.estudiar?.let { estudiar ->
+                    DelMenu(com.forge.pixpin.R.string.estudiar_titulo, Icons.Filled.School) {
+                        menuAbierto = false; verMas = false; estudiar()
                     }
                 }
                 acciones.letra?.let { letra ->
