@@ -5093,12 +5093,23 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         val esquina = vp.toScreen(Pt(e.x, e.y))
         val tam = e.fontSize ?: controller.scene.style.fontSize
         val familia = e.fontFamily ?: controller.scene.style.fontFamily
-        var texto by remember(id) { mutableStateOf(e.text.orEmpty()) }
+        // **Se edita la fuente** (25-oct-2026, [TextoRico]): un texto rico se vuelve a abrir con
+        // sus marcas (`**X**`, `$\frac{a}{b}$`), como en el PC; uno de siempre, con su texto.
+        var valor by remember(id) {
+            val fuente = TextoRico.paraEditar(e)
+            mutableStateOf(
+                androidx.compose.ui.text.input.TextFieldValue(
+                    fuente, androidx.compose.ui.text.TextRange(fuente.length)
+                )
+            )
+        }
         val foco = remember(id) { androidx.compose.ui.focus.FocusRequester() }
 
         LaunchedEffect(id) { runCatching { foco.requestFocus() } }
 
         fun cerrar() {
+            // Con marcas, se guardan las dos: la fuente en `textoRico` y su plano en `text`.
+            val (texto, fuente) = TextoRico.escrito(valor.text)
             if (texto.isBlank()) {
                 // Un texto vacío no deja rastro: sería un elemento invisible que
                 // roba toques al picar.
@@ -5114,13 +5125,30 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 // parte quien escribe, donde quiera.
                 val caja = controller.scene.byId(id)
                     ?.let { contenedorDe(it, controller.scene.elements) }
+                if (fuente != null) {
+                    // Rico: se mide compuesto; dentro de una figura lo parte el compositor.
+                    val actual = controller.scene.byId(id) ?: e
+                    val medidor = PintorDeTextoRico(DrawFonts.provider(this@DrawEditorActivity))
+                        .medidor(familia)
+                    val opciones = TextoRico.opcionesDe(actual.copy(fontSize = tam))
+                    val (ancho, alto) = if (caja == null) TextoRico.medida(fuente, opciones, medidor)
+                    else {
+                        val cabe = anchoQueCabe(caja)
+                        val m = TextoRico.componer(fuente, opciones.copy(anchoMax = cabe), medidor)
+                        cabe to m.alto
+                    }
+                    controller.updateText(id, texto, ancho, alto, textoRico = fuente, conFuente = true)
+                    controller.clearPendingText()
+                    onCerrar(null)
+                    return
+                }
                 val definitivo =
                     if (caja == null) texto
                     else repartirEnLineas(texto, anchoQueCabe(caja)) { trozo ->
                         medirTexto(trozo, familia, tam).first
                     }.joinToString("\n")
                 val (ancho, alto) = medirTexto(definitivo, familia, tam)
-                controller.updateText(id, definitivo, ancho, alto)
+                controller.updateText(id, definitivo, ancho, alto, textoRico = null, conFuente = true)
             }
             controller.clearPendingText()
             onCerrar(null)
@@ -5138,8 +5166,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         )
 
         androidx.compose.foundation.text.BasicTextField(
-            value = texto,
-            onValueChange = { texto = it },
+            value = valor,
+            onValueChange = { valor = it },
             textStyle = androidx.compose.ui.text.TextStyle(
                 fontFamily = composeFontFamily(familia),
                 // **En píxeles de pantalla, no en `sp`.** Los `sp` los escala
@@ -5174,6 +5202,18 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 .widthIn(min = 120.dp)
                 .focusRequester(foco)
         )
+
+        // La barra del texto rico, justo encima del cuadro (debajo si no cabe arriba).
+        val altoDeLaBarra = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
+        BarraDeTextoRico(
+            valor = valor,
+            onCambio = { valor = it },
+            modifier = Modifier.offset {
+                val arriba = esquina.y - altoDeLaBarra
+                val y = if (arriba >= 0) arriba else esquina.y + tam * vp.zoom * INTERLINEADO + 8
+                IntOffset(esquina.x.toInt().coerceAtLeast(0), y.toInt())
+            }
+        )
     }
 
     /**
@@ -5184,8 +5224,14 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
      * cualquier caja de texto. Ver [DrawController.altoDelTexto].
      */
     private fun ensenarAMedirElTexto() {
-        controller.altoDelTexto = { e, ancho ->
+        controller.altoDelTexto = medir@{ e, ancho ->
             val tam = e.fontSize ?: com.forge.pixpin.motor.ItemStyle().fontSize
+            // Uno rico no se parte suelto (como en el PC): su alto es el de lo compuesto.
+            val fuente = TextoRico.fuenteVigente(e)
+            if (fuente != null) {
+                val medidor = PintorDeTextoRico(DrawFonts.provider(this)).medidor(e.fontFamily)
+                return@medir TextoRico.medida(fuente, TextoRico.opcionesDe(e), medidor).second
+            }
             val regla = DrawFonts.reglaDeAnchos(this, e.fontFamily, tam)
             val renglones = renglonesQueCaben(e.text.orEmpty(), ancho, regla)
             altoDeRenglones(renglones.size, tam)

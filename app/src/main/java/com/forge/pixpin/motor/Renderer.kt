@@ -3537,6 +3537,16 @@ class Renderer(
         }
         val c = getElementAbsoluteCoords(e)
 
+        // **El texto rico** (25-oct-2026, [TextoRico]): tramos de color, negrita, subrayado,
+        // tamaños, renglones centrados y fórmulas `$...$`. Solo si su fuente sigue casando con el
+        // `text` (la regla de coherencia del PC); si no, se pinta el texto plano de siempre.
+        TextoRico.fuenteVigente(e)?.let { fuente ->
+            pintorDeTextoRico.pintar(
+                canvas, e, fuente, c.x1, c.y1, c.x2 - c.x1, tema(parseColor(e.strokeColor, alpha))
+            ) { argb -> tema((argb and 0x00FFFFFF) or (alpha shl 24)) }
+            return
+        }
+
         paint.reset()
         paint.isAntiAlias = true
         paint.color = tema(parseColor(e.strokeColor, alpha))
@@ -3593,6 +3603,9 @@ class Renderer(
             y += lineHeight
         }
     }
+
+    /** Lo que pinta el texto rico, con sus maquetas recordadas. Ver [PintorDeTextoRico]. */
+    private val pintorDeTextoRico by lazy { PintorDeTextoRico(typefaces) }
 
     private val renglonesCache = object : LinkedHashMap<String, RenglonesCacheados>(
         64, 0.75f, true

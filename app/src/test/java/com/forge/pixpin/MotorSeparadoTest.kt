@@ -110,7 +110,10 @@ class MotorSeparadoTest {
         // cortina de notificaciones dibujando a pantalla completa: puro Android.
         // La ventana de «ponerme al día con este lienzo»: interfaz y red. Lo que decide qué
         // versión hay que traer es `sincro/AlDia.kt`.
-        "PonerseAlDia.kt"
+        "PonerseAlDia.kt",
+        // El texto rico: pintarlo en un `Canvas` y su barra de botones. Leerlo, su plano y
+        // componerlo —`TextoRico.kt`, `FormulaRica.kt`, `CajasRicas.kt`— sí son núcleo.
+        "PintorDeTextoRico.kt", "BarraDeTextoRico.kt"
     )
 
     private fun archivos(): List<File> =
