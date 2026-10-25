@@ -56,6 +56,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Hearing
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -2249,6 +2250,16 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     ) {
                         eligiendoQue = false
                         PronunciarActivity.abrir(this@MensajesActivity, chatDe)
+                    }
+                    // **Grabar una clase o una reunión** con capturas en su minuto (25-oct-2026,
+                    // como el PC). Ver [GrabarClaseActivity].
+                    BotonDeAdjuntar(
+                        Icons.Filled.School,
+                        com.forge.pixpin.R.string.guardados_adj_clase,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        GrabarClaseActivity.abrir(this@MensajesActivity, chatDe)
                     }
                     // Las mini-apps: cosas que se llevan la cuenta solas —lo que falta
                     // por hacer, lo que se lleva gastado— y que en una conversación con

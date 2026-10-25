@@ -10,7 +10,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,6 +61,9 @@ import com.forge.pixpin.ui.theme.PixPinTheme
  *   que va el audio; salen como fichas, un toque vuelve a ese punto y mantener pulsado
  *   la quita.
  * - El lápiz abre el editor de notas; lo guardado vuelve al mensaje (o a su hoja).
+ * - **Una clase grabada** (25-oct-2026, como el PC): la imagen del minuto que suena junto al texto
+ *   y una ficha por captura que lleva el audio ahí; si trae vídeo, una ficha que lo abre. Ver
+ *   [PanelDeCapturas] y [GrabarClase].
  *
  * Lo pidió el usuario (5-sep-2026).
  */
@@ -80,7 +85,11 @@ class LetraActivity : ComponentActivity() {
         var version by remember { mutableIntStateOf(0) }
         // Se vuelve a leer cada vez que el almacén cambia: al volver del editor, la letra nueva.
         LaunchedEffect(Unit) { MensajesStore.cambios.collect { version++ } }
-        val m = remember(version) { almacen.leer().firstOrNull { it.id == id } }
+        val todos = remember(version) { almacen.leer() }
+        val m = remember(todos) { todos.firstOrNull { it.id == id } }
+        // **Una clase grabada** (25-oct-2026, como el PC): sus capturas y su vídeo. Ver [PanelDeCapturas].
+        val capturas = remember(todos, m) { m?.let { capturasDeLaLetra(it, todos) }.orEmpty() }
+        val video = remember(todos, m) { m?.let { videoDeLaLetra(it, todos) } }
         var tamano by remember { mutableIntStateOf(22) }
         val estado by Reproductor.estado.collectAsState()
         val titulo = m?.let { tituloDeAudio(this, it) } ?: ""
@@ -128,6 +137,26 @@ class LetraActivity : ComponentActivity() {
                         }
                     }
                 }
+                // **El texto a un lado y la imagen del minuto que suena al otro**, como el PC
+                // (`reparto_de_la_clase`): con sitio (560 dp, tableta o en horizontal), al lado; en
+                // un teléfono en vertical, la imagen encima. Sin capturas ni vídeo, la letra entera.
+                val conPanel = m != null && (capturas.isNotEmpty() || video != null)
+                val panel: @Composable (Modifier) -> Unit = { modificador ->
+                    PanelDeCapturas(
+                        capturas,
+                        posicionMs = if (esteAudio) estado.posicionMs.toLong() else 0L,
+                        modifier = modificador,
+                        alVerVideo = video?.let { v -> { com.forge.pixpin.ui.AbrirCon.abrir(this@LetraActivity, java.io.File(v)) } }
+                    ) { ms -> m?.let { saltarA(it, ms.toInt()) } }
+                }
+                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val alLado = conPanel && maxWidth >= 560.dp
+                val altoDeLaImagen = maxHeight * 0.42f
+                Row(Modifier.fillMaxSize()) {
+                Column(Modifier.weight(if (alLado) 0.52f else 1f).fillMaxHeight()) {
+                if (conPanel && !alLado) {
+                    panel(Modifier.fillMaxWidth().height(if (capturas.isEmpty()) 44.dp else altoDeLaImagen))
+                }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     if (parrafos.isEmpty()) {
                         Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -166,6 +195,10 @@ class LetraActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+                }
+                if (alLado) panel(Modifier.weight(0.48f).fillMaxHeight().padding(top = 8.dp, end = 8.dp))
+                }
                 }
                 if (m?.ruta != null) {
                     // Con el audio cargado aunque no suene: los mandos a mano desde el primer momento.

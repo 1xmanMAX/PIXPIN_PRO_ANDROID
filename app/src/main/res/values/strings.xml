@@ -971,4 +971,42 @@
     <!-- Los widgets de la pantalla de inicio (widget/). Lo que dice el selector de widgets. -->
     <string name="widget_tareas_descripcion">Lo pendiente de todas tus listas: márcalo ahí mismo o apunta con «+»</string>
     <string name="widget_galeria_descripcion">Tus últimas capturas y los días que les quedan</string>
+    <!-- Grabar una clase o una reunión con capturas en su minuto (25-oct-2026, como el PC:
+         `clase-*` de main.ftl). Ver guardados/GrabarClase.kt. -->
+    <string name="guardados_adj_clase">Grabar clase</string>
+    <string name="clase_titulo">Grabar clase o reunión</string>
+    <string name="clase_sub">Graba el audio y pon capturas en su minuto</string>
+    <string name="clase_explicacion">Sale una barra flotante encima de todo: «Captura» guarda una zona de la pantalla en ese minuto. La primera vez eliges la zona (o la pantalla entera) y las siguientes la repiten con un toque. Al terminar, la nota entra en este chat con sus capturas y se pasa a texto.</string>
+    <string name="clase_solo_microfono">En el teléfono se graba el micrófono. Si la reunión es en este mismo teléfono, Android puede silenciarlo mientras la llamada lo usa.</string>
+    <string name="clase_guardar_en">Guardar en: %1$s</string>
+    <string name="clase_general">la conversación general</string>
+    <string name="clase_empezar">Empezar a grabar</string>
+    <string name="clase_ya">Ya hay una clase grabándose</string>
+    <string name="clase_sin_microfono">Sin permiso del micrófono no se puede grabar</string>
+    <string name="clase_no_arranca">No se pudo abrir el micrófono: puede que otra app lo esté usando</string>
+    <string name="clase_captura">Captura</string>
+    <string name="clase_zona">Cambiar la zona</string>
+    <string name="clase_pausa">Pausa</string>
+    <string name="clase_seguir">Seguir</string>
+    <string name="clase_terminar">Terminar</string>
+    <string name="clase_tirar_boton">Tirar</string>
+    <string name="clase_elige_zona">Arrastra para elegir la zona de las capturas</string>
+    <string name="clase_pantalla_entera">Pantalla entera</string>
+    <string name="clase_usar_zona">Usar esta zona</string>
+    <string name="clase_captura_hecha">Captura guardada en el %1$s</string>
+    <string name="clase_en_pausa">En pausa: no se graba nada</string>
+    <string name="clase_tirar">Pulsa ✕ otra vez para tirar la grabación</string>
+    <string name="clase_sin_zona">No se pudo capturar la zona</string>
+    <string name="clase_nombre">Clase %1$s</string>
+    <string name="clase_lista_con_texto">Clase guardada con %1$d capturas. Pasando a texto…</string>
+    <string name="clase_lista_sin_texto">Clase guardada con %1$d capturas. Para el texto, pulsa «Pasar a texto» en la nota del chat.</string>
+    <string name="clase_tirada">Grabación tirada</string>
+    <string name="clase_canal">Grabar clase</string>
+    <string name="clase_notif">Grabando la clase</string>
+    <string name="clase_captura_de">Captura del %1$s</string>
+    <string name="clase_con_video">Grabar también el vídeo de la pantalla</string>
+    <string name="clase_video_explicacion">Ocupa mucho más (≈1 GB por hora). Las capturas salen del propio vídeo, a pantalla entera, y Android enseña que se está grabando la pantalla.</string>
+    <string name="clase_sin_video">No se pudo grabar la pantalla: se graba solo el audio</string>
+    <string name="clase_sin_audio">El vídeo entró en el chat, pero sin audio no hay nota que pasar a texto</string>
+    <string name="clase_ver_video">Vídeo</string>
 </resources>
